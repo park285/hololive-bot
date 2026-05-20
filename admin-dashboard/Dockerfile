@@ -45,10 +45,10 @@ FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS healthcheck-builder
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 
-WORKDIR /workspace/hololive-bot/hololive/hololive-stream-ingester
+WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-producer
 
-COPY hololive/hololive-stream-ingester/go.mod hololive/hololive-stream-ingester/go.sum ./
-COPY hololive/hololive-stream-ingester/cmd/runtime/healthcheck ./cmd/runtime/healthcheck
+COPY hololive/hololive-youtube-producer/go.mod hololive/hololive-youtube-producer/go.sum ./
+COPY hololive/hololive-youtube-producer/cmd/runtime/healthcheck ./cmd/runtime/healthcheck
 
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group

@@ -25,7 +25,6 @@ required_tokens=(
   membernews.subscription
   majorevent.subscription
   alarm.dispatch
-  YOUTUBE_INGESTION_ENABLED=false
   YOUTUBE_INGESTION_ENABLED=true
 )
 
@@ -109,8 +108,8 @@ check_no_imports "shared-go module" \
   "shared-go" \
   'github.com/kapu/hololive-|github.com/park285/llm-kakao-bots/hololive'
 
-check_no_imports "youtube-scraper direct YouTube dispatch" \
-  "hololive/hololive-stream-ingester" \
+check_no_imports "youtube-producer direct YouTube dispatch" \
+  "hololive/hololive-youtube-producer" \
   'pkg/service/delivery|delivery\.NewIrisMessageSender|outbox\.NewDispatcher|OutboxDispatcher|YouTube outbox dispatcher started'
 
 major_event_hits="$(

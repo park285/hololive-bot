@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -25,11 +26,49 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 		return budgetResult, err
 	}
 
+	claim, claimed, err := r.tryClaimPendingPublishedAtCandidate(ctx, candidate, resolveTimeout, failureBackoffTTL)
+	if err != nil {
+		return publishedAtResolverCandidateResult{}, err
+	}
+	if !claimed {
+		return publishedAtResolverCandidateResult{}, nil
+	}
+	releaseClaim := true
+	defer func() {
+		if releaseClaim && claim != nil {
+			r.releasePendingPublishedAtCandidateClaim(ctx, candidate, claim)
+		}
+	}()
+
+	result, completed, err := r.processClaimedPendingPublishedAtCandidate(
+		ctx,
+		repo,
+		tracking,
+		candidate,
+		resolveTimeout,
+		failureBackoffTTL,
+		claim,
+	)
+	if completed {
+		releaseClaim = false
+	}
+	return result, err
+}
+
+func (r *PendingPublishedAtResolver) processClaimedPendingPublishedAtCandidate(
+	ctx context.Context,
+	repo *publishedAtResolverRepository,
+	tracking *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	resolveTimeout time.Duration,
+	failureBackoffTTL time.Duration,
+	claim JobClaim,
+) (publishedAtResolverCandidateResult, bool, error) {
 	result := publishedAtResolverCandidateResult{processed: 1}
 	observePublishedAtResolutionAttempt(candidate.Kind)
 	publishedAt, err := r.resolveCandidateWithTimeout(ctx, candidate, resolveTimeout)
 	if err != nil {
-		return r.handlePendingPublishedAtResolveError(
+		result, err := r.handlePendingPublishedAtResolveError(
 			ctx,
 			tracking,
 			candidate,
@@ -38,21 +77,137 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 			resolveTimeout,
 			failureBackoffTTL,
 		)
+		return result, false, err
 	}
 	if publishedAt == nil || publishedAt.IsZero() {
 		r.handleEmptyPendingPublishedAt(ctx, tracking, candidate, failureBackoffTTL)
-		return result, nil
+		return result, false, nil
 	}
 	observePublishedAtResolutionSuccess(candidate.Kind)
 
 	finalizeResult, err := repo.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, *publishedAt, r.routeDecider)
 	if err != nil {
 		r.handlePendingPublishedAtFinalizeError(ctx, tracking, candidate, err, failureBackoffTTL)
-		return result, nil
+		return result, false, nil
 	}
 
 	r.reportPendingPublishedAtCandidateResult(candidate, publishedAt, finalizeResult)
-	return result, nil
+	if err := r.completePendingPublishedAtCandidateClaim(ctx, candidate, claim, failureBackoffTTL); err != nil {
+		return result, false, err
+	}
+	return result, true, nil
+}
+
+func (r *PendingPublishedAtResolver) tryClaimPendingPublishedAtCandidate(
+	ctx context.Context,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	resolveTimeout time.Duration,
+	failureBackoffTTL time.Duration,
+) (JobClaim, bool, error) {
+	if r == nil || r.candidateClaimer == nil {
+		return nil, true, nil
+	}
+
+	leaseTTL := max(resolveTimeout+5*time.Second, time.Minute)
+	status, claim, err := r.candidateClaimer.TryClaim(
+		ctx,
+		PendingPublishedAtResolverCandidatePollerName,
+		publishedAtCandidateClaimID(candidate),
+		leaseTTL,
+		failureBackoffTTL,
+	)
+	if err != nil {
+		observeJobClaim(PendingPublishedAtResolverCandidatePollerName, string(JobClaimUnavailable))
+		return nil, false, fmt.Errorf("claim pending published_at candidate: %w", err)
+	}
+	observeJobClaim(PendingPublishedAtResolverCandidatePollerName, string(status.Result))
+	return r.resolvePendingPublishedAtCandidateClaimStatus(candidate, status, claim)
+}
+
+func (r *PendingPublishedAtResolver) resolvePendingPublishedAtCandidateClaimStatus(
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	status JobClaimStatus,
+	claim JobClaim,
+) (JobClaim, bool, error) {
+	switch status.Result {
+	case JobClaimAcquired:
+		return requirePendingPublishedAtCandidateClaimHandle(claim)
+	case JobClaimPeerOwned, JobClaimAlreadyCompleted:
+		observePublishedAtResolverSkipped(candidate.Kind, string(status.Result))
+		return nil, false, nil
+	case JobClaimUnavailable:
+		return nil, false, fmt.Errorf("claim pending published_at candidate: unavailable")
+	default:
+		return nil, false, fmt.Errorf("claim pending published_at candidate: unexpected result %q", status.Result)
+	}
+}
+
+func requirePendingPublishedAtCandidateClaimHandle(claim JobClaim) (JobClaim, bool, error) {
+	if claim == nil {
+		return nil, false, fmt.Errorf("claim pending published_at candidate: acquired without claim")
+	}
+	return claim, true, nil
+}
+
+func publishedAtCandidateClaimID(candidate trackingrepo.PublishedAtResolutionCandidate) string {
+	contentID := strings.TrimSpace(candidate.ContentID)
+	if contentID == "" {
+		contentID = strings.TrimSpace(candidate.PostID)
+	}
+	if contentID == "" {
+		return string(candidate.Kind)
+	}
+	return string(candidate.Kind) + ":" + contentID
+}
+
+func (r *PendingPublishedAtResolver) completePendingPublishedAtCandidateClaim(
+	ctx context.Context,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	claim JobClaim,
+	cooldownTTL time.Duration,
+) error {
+	if claim == nil {
+		return nil
+	}
+	completed, err := claim.MarkCompleted(ctx, cooldownTTL)
+	observeJobMarkCompleted(PendingPublishedAtResolverCandidatePollerName, boolResult(completed, err))
+	if err != nil {
+		return fmt.Errorf("complete pending published_at candidate claim: %w", err)
+	}
+	if !completed {
+		return fmt.Errorf("complete pending published_at candidate claim: ownership lost")
+	}
+	r.logger.Debug("Pending published_at candidate claim completed",
+		slog.String("kind", string(candidate.Kind)),
+		slog.String("post_id", candidate.PostID),
+		slog.String("content_id", candidate.ContentID),
+	)
+	return nil
+}
+
+func (r *PendingPublishedAtResolver) releasePendingPublishedAtCandidateClaim(
+	ctx context.Context,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	claim JobClaim,
+) {
+	released, err := claim.Release(ctx)
+	observeJobRelease(PendingPublishedAtResolverCandidatePollerName, boolResult(released, err))
+	if err != nil {
+		r.logger.Warn("Pending published_at candidate claim release failed",
+			slog.String("kind", string(candidate.Kind)),
+			slog.String("post_id", candidate.PostID),
+			slog.String("content_id", candidate.ContentID),
+			slog.Any("error", err),
+		)
+		return
+	}
+	if !released {
+		r.logger.Warn("Pending published_at candidate claim release skipped after ownership loss",
+			slog.String("kind", string(candidate.Kind)),
+			slog.String("post_id", candidate.PostID),
+			slog.String("content_id", candidate.ContentID),
+		)
+	}
 }
 
 func checkPendingPublishedAtCandidateBudget(

@@ -699,7 +699,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByFinalizedObserva
 		},
 	}).Error)
 	require.NoError(t, db.Create([]sqliteTelemetryObservationBaselineModel{{
-		RuntimeName:       "youtube-scraper",
+		RuntimeName:       "youtube-producer",
 		BigBangCutoverAt:  cutoverAt,
 		Kind:              string(domain.OutboxKindCommunityPost),
 		PostID:            timelyOutbox.ContentID,
@@ -749,7 +749,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByFinalizedObserva
 	}).Error)
 
 	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, "youtube-scraper", cutoverAt)
+	rows, err := repo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, timelyOutbox.ContentID, rows[0].ContentID)

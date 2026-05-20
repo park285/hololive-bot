@@ -11,7 +11,7 @@ diff_targets=(
   "hololive-shared/pkg/config"
   "hololive-shared/pkg/service/youtube/poller"
   "hololive-shared/pkg/service/youtube/scraper"
-  "hololive-stream-ingester/internal/runtime"
+  "hololive-youtube-producer/internal/runtime"
 )
 
 if [[ ! -d "${LIVE_DIR}" ]]; then

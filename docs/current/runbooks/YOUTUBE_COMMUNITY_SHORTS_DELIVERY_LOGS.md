@@ -50,7 +50,7 @@
 
 | Field | Meaning | Type | Example |
 | --- | --- | --- | --- |
-| `observation_runtime_name` | 매칭된 24시간 관찰 구간의 runtime 이름입니다. 전체 운영 채널이 `youtube-scraper` 로 수렴했는지 확인합니다. | `string` | `youtube-scraper` |
+| `observation_runtime_name` | 매칭된 24시간 관찰 구간의 runtime 이름입니다. 전체 운영 채널이 `youtube-producer` 로 수렴했는지 확인합니다. | `string` | `youtube-producer` |
 | `observation_bigbang_cutover_at` | 관찰 구간을 식별하는 big-bang cutover 시각입니다. 같은 운영 전환 창 로그만 묶을 때 사용합니다. | `RFC3339 timestamp string` | `2026-04-10T00:00:00Z` |
 | `observation_started_at` | 매칭된 관찰 구간 시작 시각입니다. | `RFC3339 timestamp string` | `2026-04-10T00:00:00Z` |
 | `observation_ended_at` | 매칭된 관찰 구간 종료 시각입니다. | `RFC3339 timestamp string` | `2026-04-11T00:00:00Z` |
@@ -135,19 +135,19 @@
 repo root에서 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs -window 24h
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs -window 30m -limit 500 -format json
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs -window 24h
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs -window 30m -limit 500 -format json
 ```
 
 특정 관찰 구간만 보려면 observation key를 함께 지정합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs \
+  -observation-runtime youtube-producer \
   -observation-cutover 2026-04-10T00:00:00Z
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs \
+  -observation-runtime youtube-producer \
   -observation-cutover 2026-04-10T00:00:00Z \
   -limit 1000 \
   -format json
@@ -223,7 +223,7 @@ SELECT
     failure_reason
 FROM youtube_notification_delivery_telemetry
 WHERE observation_status = 'matched'
-  AND observation_runtime_name = 'youtube-scraper'
+  AND observation_runtime_name = 'youtube-producer'
   AND observation_bigbang_cutover_at = '2026-04-10T00:00:00Z'
 ORDER BY event_at ASC, id ASC
 LIMIT 200;

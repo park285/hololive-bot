@@ -154,7 +154,7 @@ func (s *ChannelHealthStore) Get(ctx context.Context, channelID string, source F
 
 func (s *ChannelHealthStore) persist(ctx context.Context, channelID string, source FailureSource, health ChannelSourceHealth, operation string) {
 	if err := s.store.Set(ctx, channelHealthStateKey(channelID, source), health, s.policy.TTL); err != nil {
-		slog.Warn("failed to persist youtube scraper channel health",
+		slog.Warn("failed to persist youtube producer channel health",
 			"operation", operation,
 			"channel_id", channelID,
 			"source", source,
@@ -195,5 +195,5 @@ func (s *ChannelHealthStore) delayBounds(reason FailureReason) (time.Duration, t
 }
 
 func channelHealthStateKey(channelID string, source FailureSource) string {
-	return fmt.Sprintf("youtube:scraper:channel-health:%s:%s", strings.TrimSpace(string(source)), strings.TrimSpace(channelID))
+	return fmt.Sprintf("youtube:producer:channel-health:%s:%s", strings.TrimSpace(string(source)), strings.TrimSpace(channelID))
 }

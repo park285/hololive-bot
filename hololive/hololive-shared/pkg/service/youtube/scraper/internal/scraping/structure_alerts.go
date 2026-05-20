@@ -30,7 +30,7 @@ func logStructureWarning(surface, channelID, detail string, attrs ...any) {
 		"detail", detail,
 	)
 	baseAttrs = append(baseAttrs, attrs...)
-	slog.Warn("YouTube scraper structure signal", baseAttrs...)
+	slog.Warn("YouTube producer structure signal", baseAttrs...)
 }
 
 func looksEmptyChannelStats(stats *ChannelStats) bool {

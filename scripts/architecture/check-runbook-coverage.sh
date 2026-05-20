@@ -13,8 +13,7 @@ required_runtimes=(
   admin-api
   alarm-worker
   llm-scheduler
-  stream-ingester
-  youtube-scraper
+  youtube-producer
 )
 
 required_sections=(

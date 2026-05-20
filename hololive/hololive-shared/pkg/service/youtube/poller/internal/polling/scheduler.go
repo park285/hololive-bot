@@ -52,6 +52,32 @@ type Job struct {
 	index               int // heap 인덱스
 }
 
+type JobClaimResult string
+
+const (
+	JobClaimAcquired         JobClaimResult = "acquired"
+	JobClaimPeerOwned        JobClaimResult = "peer_owned"
+	JobClaimAlreadyCompleted JobClaimResult = "already_completed"
+	JobClaimUnavailable      JobClaimResult = "unavailable"
+)
+
+type JobClaimStatus struct {
+	Result     JobClaimResult
+	RetryAfter time.Duration
+	LeaseTTL   time.Duration
+	OwnerToken string
+}
+
+type JobClaim interface {
+	Renew(ctx context.Context, ttl time.Duration) (bool, error)
+	MarkCompleted(ctx context.Context, cooldownTTL time.Duration) (bool, error)
+	Release(ctx context.Context) (bool, error)
+}
+
+type JobClaimer interface {
+	TryClaim(ctx context.Context, pollerName, channelID string, leaseTTL, cooldownTTL time.Duration) (JobClaimStatus, JobClaim, error)
+}
+
 type Priority int
 
 const (
@@ -70,6 +96,7 @@ type Scheduler struct {
 	pollTimeout     time.Duration
 	errorBackoffMin time.Duration
 	errorBackoffMax time.Duration
+	jobClaimer      JobClaimer
 	stopCh          chan struct{}
 	stopCancel      context.CancelFunc
 	wakeCh          chan struct{}
@@ -91,6 +118,7 @@ type SchedulerConfig struct {
 	PollTimeout     time.Duration // 폴러 1회 실행 최대 시간 (기본: 45초)
 	ErrorBackoffMin time.Duration // 실패 후 최소 재시도 지연 (기본: 30초)
 	ErrorBackoffMax time.Duration // 실패 후 최대 재시도 지연 (기본: 5분)
+	JobClaimer      JobClaimer
 }
 
 func DefaultSchedulerConfig() SchedulerConfig {
@@ -140,6 +168,7 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 		pollTimeout:     cfg.PollTimeout,
 		errorBackoffMin: cfg.ErrorBackoffMin,
 		errorBackoffMax: cfg.ErrorBackoffMax,
+		jobClaimer:      cfg.JobClaimer,
 		stopCh:          make(chan struct{}),
 		wakeCh:          make(chan struct{}, 1),
 	}

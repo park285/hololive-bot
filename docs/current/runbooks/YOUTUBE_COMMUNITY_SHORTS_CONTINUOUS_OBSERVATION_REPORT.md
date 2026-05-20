@@ -1,6 +1,6 @@
 # YouTube Community Shorts Continuous Observation Report
 
-`youtube-scraper` 빅뱅 배포 완료 직후부터 24시간 동안 같은 observation key로 운영 채널 전체 baseline, 채널 요약, 게시물 exact-once 상태, delivery audit 로그, 지연 요약/원인 보고서를 끊김 없이 파일로 누적할 때 사용하는 운영 절차입니다.
+`youtube-producer` 빅뱅 배포 완료 직후부터 24시간 동안 같은 observation key로 운영 채널 전체 baseline, 채널 요약, 게시물 exact-once 상태, delivery audit 로그, 지연 요약/원인 보고서를 끊김 없이 파일로 누적할 때 사용하는 운영 절차입니다.
 
 ## Scope
 
@@ -16,16 +16,16 @@
 one-shot snapshot:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts continuous-observation-report \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts continuous-observation-report \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT>
 ```
 
 continuous 24h snapshot loop:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts continuous-observation-report \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts continuous-observation-report \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT> \
   -watch
 ```
@@ -33,8 +33,8 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts cont
 JSON output with an explicit directory:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts continuous-observation-report \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts continuous-observation-report \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT> \
   -watch \
   -format json \

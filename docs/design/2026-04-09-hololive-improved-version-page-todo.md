@@ -16,7 +16,7 @@ Source review: `hololive_improved_version_review.md`
 
 1. Page 1. Alarm Runtime and Settings Propagation
 2. Page 2. Scraper Scheduler Core
-3. Page 3. YouTube Scraper Deploy/Config Page
+3. Page 3. YouTube Producer Deploy/Config Page
 4. Page 4. Workspace and Deploy Hermeticity Page
 5. Page 5. Architecture Gate Page
 6. Page 6. Admin Backend Holo Contract Page
@@ -35,7 +35,7 @@ Source review: `hololive_improved_version_review.md`
 |------|---------|----------|------------|
 | 1 | Alarm runtime/settings | P0 | none |
 | 2 | Scraper scheduler core | P0 | none |
-| 3 | YouTube scraper deploy/config | P0 | Page 2 |
+| 3 | YouTube producer deploy/config | P0 | Page 2 |
 | 4 | Workspace/deploy hermeticity | P1 | none |
 | 5 | Architecture gate | P1 | none |
 | 6 | Admin backend holo contract | P1 | none |
@@ -100,13 +100,13 @@ Actual dashboard route entrypoints:
   worker count option 반영 테스트 1건
   기본 cadence 계산 근거 문서 업데이트
 
-## Page 3. YouTube Scraper Deploy/Config Page
+## Page 3. YouTube Producer Deploy/Config Page
 
 - Scope: 운영자가 compose만 보고도 scraper cadence와 capacity를 조정할 수 있게 env를 노출한다.
 - Owning seam: deploy/config boundary
 - Boundary:
   `docker-compose.prod.yml`
-  `docs/runbook_execution/YOUTUBE_SCRAPER_RUNBOOK.md`
+  `docs/runbook_execution/YOUTUBE_PRODUCER_RUNBOOK.md`
 - Contract risk: 코드에서만 설정 가능하고 운영 compose에는 드러나지 않으면 runtime tuning 계약이 깨진다.
 - TODO:
   `SCRAPER_VIDEOS_SECONDS`
@@ -285,11 +285,11 @@ Actual dashboard route entrypoints:
 - Scope: duplicate helper/wrapper/provider와 `hololive-shared` monolith pressure를 별도 리팩터 축으로 관리한다.
 - Owning seam: runtime app bootstrap packages and `hololive/hololive-shared`
 - Boundary:
-  `hololive/hololive-stream-ingester/internal/app/runtime_helpers.go`
+  `hololive/hololive-youtube-producer/internal/app/runtime_helpers.go`
   `hololive/hololive-kakao-bot-go/internal/app/bootstrap_bot_proxy_toggle.go`
-  `hololive/hololive-stream-ingester/internal/app/providers/infra_resources.go`
+  `hololive/hololive-youtube-producer/internal/app/providers/infra_resources.go`
   `hololive/hololive-kakao-bot-go/internal/app/providers/infra_resources.go`
-  `hololive/hololive-stream-ingester/internal/app/providers/youtube.go`
+  `hololive/hololive-youtube-producer/internal/app/providers/youtube.go`
   `hololive/hololive-kakao-bot-go/internal/app/providers/youtube.go`
 - Contract risk: P0가 닫히기 전에 대규모 dedupe를 섞으면 reviewable scope가 무너진다.
 - TODO:

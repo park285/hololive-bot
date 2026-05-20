@@ -12,7 +12,7 @@ The shared helper now lives at:
 The remaining runtime-local wrappers are intentionally thin:
 
 - `hololive/hololive-kakao-bot-go/internal/app/bootstrap_bot_proxy_toggle.go`
-- `hololive/hololive-stream-ingester/internal/app/runtime_helpers.go`
+- `hololive/hololive-youtube-producer/internal/app/runtime_helpers.go`
 
 This means the page-14 code slice already removed the duplicated proxy-toggle body, but did not yet reduce the surrounding runtime/provider duplication.
 
@@ -24,7 +24,7 @@ These files still carry the same nil-guard plus `CleanupCloser.Close()` wrapper 
 - `hololive/hololive-kakao-bot-go/internal/app/container.go`
 - `hololive/hololive-kakao-bot-go/internal/app/db_integration_runtime.go`
 - `hololive/hololive-kakao-bot-go/internal/app/fetch_profiles_runtime.go`
-- `hololive/hololive-stream-ingester/internal/app/stream_ingester_runtime_runner.go`
+- `hololive/hololive-youtube-producer/internal/app/youtube_producer_runtime_runner.go`
 - `hololive/hololive-llm-sched/internal/app/bootstrap_llm_scheduler.go`
 - `shared-go/pkg/runtime/lifecycle/cleanup.go`
 
@@ -39,17 +39,17 @@ Inventory note:
 These two provider functions are byte-for-byte duplicates:
 
 - `hololive/hololive-kakao-bot-go/internal/app/providers/infra_resources.go`
-- `hololive/hololive-stream-ingester/internal/app/providers/infra_resources.go`
+- `hololive/hololive-youtube-producer/internal/app/providers/infra_resources.go`
 
 Their returned struct is also duplicated:
 
 - `hololive/hololive-kakao-bot-go/internal/app/providers/types.go`
-- `hololive/hololive-stream-ingester/internal/app/providers/types.go`
+- `hololive/hololive-youtube-producer/internal/app/providers/types.go`
 
 Both runtimes immediately unwrap the same resource bag into runtime-local infra structs:
 
 - `hololive/hololive-kakao-bot-go/internal/app/bootstrap_core.go`
-- `hololive/hololive-stream-ingester/internal/app/bootstrap.go`
+- `hololive/hololive-youtube-producer/internal/app/bootstrap.go`
 
 Shared primitive ownership already exists underneath this seam:
 
@@ -66,23 +66,23 @@ Inventory note:
 These two provider functions are also byte-for-byte duplicates:
 
 - `hololive/hololive-kakao-bot-go/internal/app/providers/youtube.go`
-- `hololive/hololive-stream-ingester/internal/app/providers/youtube.go`
+- `hololive/hololive-youtube-producer/internal/app/providers/youtube.go`
 
 The stack type itself is already shared through a type alias rather than duplicated concrete fields:
 
 - `hololive/hololive-kakao-bot-go/internal/app/providers/types.go`
-- `hololive/hololive-stream-ingester/internal/app/providers/types.go`
+- `hololive/hololive-youtube-producer/internal/app/providers/types.go`
 - `hololive/hololive-shared/pkg/providers/youtube_providers.go`
 
 Current runtime-owned call sites:
 
 - `hololive/hololive-kakao-bot-go/internal/app/bootstrap_services_alarm_stack.go`
-- `hololive/hololive-stream-ingester/internal/app/stream_ingester_runtime_builder.go`
+- `hololive/hololive-youtube-producer/internal/app/youtube_producer_runtime_builder.go`
 
 Inventory note:
 
 - The provider body is duplicated, but the surrounding assembly pressure is higher than `ProvideInfraResources`.
-- The bot runtime passes alarm dispatch and formatter dependencies; the stream-ingester runtime passes `nil` for those runtime-specific seams.
+- The bot runtime passes alarm dispatch and formatter dependencies; the youtube-producer runtime passes `nil` for those runtime-specific seams.
 - Moving this too early risks smuggling runtime orchestration decisions into `hololive-shared` instead of keeping the app packages responsible for their own wiring.
 
 ## Runtime orchestration pressure
@@ -91,8 +91,8 @@ The remaining pressure is not just duplicate functions. It is that runtime assem
 
 - `hololive/hololive-kakao-bot-go/internal/app/bootstrap_services_alarm_stack.go`
 - `hololive/hololive-kakao-bot-go/internal/app/bootstrap_core.go`
-- `hololive/hololive-stream-ingester/internal/app/stream_ingester_runtime_builder.go`
-- `hololive/hololive-stream-ingester/internal/app/bootstrap.go`
+- `hololive/hololive-youtube-producer/internal/app/youtube_producer_runtime_builder.go`
+- `hololive/hololive-youtube-producer/internal/app/bootstrap.go`
 - `hololive/hololive-shared/pkg/providers/infra_providers.go`
 
 Observed boundary:

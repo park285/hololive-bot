@@ -183,7 +183,7 @@ func (r *RateLimiter) nextDistributedWait(ctx context.Context, bucket string) (t
 }
 
 func distributedBucketFromURL(pageURL string) string {
-	base := constants.YouTubeScraperDistributedRateLimitConfig.BucketBase
+	base := constants.YouTubeProducerDistributedRateLimitConfig.BucketBase
 	parsed, err := url.Parse(pageURL)
 	if err != nil {
 		return base + ":unknown"

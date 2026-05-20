@@ -124,6 +124,8 @@ func loadScraperConfig() ScraperConfig {
 		ChannelHealth:     loadScraperChannelHealthConfig(),
 		BrowserDiagnostic: loadScraperBrowserDiagnosticConfig(),
 		PollTiering:       loadScraperPollTieringConfig(),
+		Backfill:          loadScraperBackfillConfig(),
+		ActiveActive:      loadScraperActiveActiveConfig(),
 	}
 }
 
@@ -158,6 +160,29 @@ func loadScraperPollTieringConfig() ScraperPollTieringConfig {
 	defaults := DefaultScraperPollTieringConfig()
 	return ScraperPollTieringConfig{
 		Enabled: sharedenv.Bool("SCRAPER_POLL_TIERING_ENABLED", defaults.Enabled),
+	}
+}
+
+func loadScraperBackfillConfig() ScraperBackfillConfig {
+	defaults := DefaultScraperBackfillConfig()
+	return ScraperBackfillConfig{
+		Enabled:           sharedenv.Bool("SCRAPER_BACKFILL_ENABLED", defaults.Enabled),
+		ShortsEnabled:     sharedenv.Bool("SCRAPER_BACKFILL_SHORTS_ENABLED", defaults.ShortsEnabled),
+		ShortsInterval:    time.Duration(sharedenv.Int("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS", int(defaults.ShortsInterval/time.Second))) * time.Second,
+		CommunityEnabled:  sharedenv.Bool("SCRAPER_BACKFILL_COMMUNITY_ENABLED", defaults.CommunityEnabled),
+		CommunityInterval: time.Duration(sharedenv.Int("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS", int(defaults.CommunityInterval/time.Second))) * time.Second,
+		LiveEnabled:       sharedenv.Bool("SCRAPER_BACKFILL_LIVE_ENABLED", defaults.LiveEnabled),
+		LiveInterval:      time.Duration(sharedenv.Int("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", int(defaults.LiveInterval/time.Second))) * time.Second,
+		TargetGroup:       strings.TrimSpace(sharedenv.String("SCRAPER_BACKFILL_TARGET_GROUP", defaults.TargetGroup)),
+	}
+}
+
+func loadScraperActiveActiveConfig() ScraperActiveActiveConfig {
+	defaults := DefaultScraperActiveActiveConfig()
+	return ScraperActiveActiveConfig{
+		Enabled:    sharedenv.Bool("YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED", defaults.Enabled),
+		InstanceID: strings.TrimSpace(sharedenv.String("YOUTUBE_PRODUCER_INSTANCE_ID", "")),
+		Namespace:  strings.TrimSpace(sharedenv.String("YOUTUBE_PRODUCER_LEASE_NAMESPACE", defaults.Namespace)),
 	}
 }
 

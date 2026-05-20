@@ -108,13 +108,13 @@ bash docs/history/plan-kits/hololive-main-server-logs-mirror-v2/scripts/verify-m
 
 이 worklog의 미완료 축은 아래 기준으로 닫혔다.
 
-1. `hololive-stream-ingester` 내부 구조 cleanup
+1. `hololive-youtube-producer` 내부 구조 cleanup
    - Evidence: `cmd/runtime`, `cmd/ops`, `internal/runtime/*`, `internal/ops/communityshorts/*`로 runtime/ops 경계가 분리되어 있다.
-   - Verification: `go test ./hololive/hololive-stream-ingester/...`
+   - Verification: `go test ./hololive/hololive-youtube-producer/...`
 
 2. `hololive-shared` slimming
-   - Evidence: stream-ingester 전용 `IngestionLease`를 `hololive-shared/pkg/providers`에서 `hololive-stream-ingester/internal/runtime/ingestionlease`로 이동해 shared provider surface를 줄였다. YouTube timestamp repository 변경은 `hololive-shared/pkg/service/youtube/poller`와 `hololive-shared/pkg/service/youtube/tracking`의 domain/service persistence 경계 안에 머물렀다.
-   - Verification: `go test ./hololive/hololive-stream-ingester/internal/runtime/ingestionlease ./hololive/hololive-stream-ingester/internal/runtime`, `go test ./hololive/hololive-shared/pkg/providers ./hololive/hololive-shared/pkg/service/youtube/poller ./hololive/hololive-shared/pkg/service/youtube/tracking`, `go test ./hololive/hololive-shared/...`
+   - Evidence: youtube-producer 전용 `IngestionLease`를 `hololive-shared/pkg/providers`에서 `hololive-youtube-producer/internal/runtime/ingestionlease`로 이동해 shared provider surface를 줄였다. YouTube timestamp repository 변경은 `hololive-shared/pkg/service/youtube/poller`와 `hololive-shared/pkg/service/youtube/tracking`의 domain/service persistence 경계 안에 머물렀다.
+   - Verification: `go test ./hololive/hololive-youtube-producer/internal/runtime/ingestionlease ./hololive/hololive-youtube-producer/internal/runtime`, `go test ./hololive/hololive-shared/pkg/providers ./hololive/hololive-shared/pkg/service/youtube/poller ./hololive/hololive-shared/pkg/service/youtube/tracking`, `go test ./hololive/hololive-shared/...`
 
 3. `hololive-llm-sched` scheduler/runtime 구조 정리
    - Evidence: `internal/schedulerkit`는 major event scheduler와 member news scheduler가 공유하는 guarded lifecycle runtime으로 사용 중이며, duplicate lifecycle behavior는 `schedulerkit.Runtime` tests로 고정되어 있다.
@@ -134,6 +134,6 @@ bash docs/history/plan-kits/hololive-main-server-logs-mirror-v2/scripts/verify-m
 
 7. repo-wide build/test
    - Evidence: Go workspace and Docker image build still pass after the `IngestionLease` package move and docs relocation.
-   - Verification: `go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-admin-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-kakao-bot-go/... ./hololive/hololive-llm-sched/... ./hololive/hololive-stream-ingester/...`, `go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-admin-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-kakao-bot-go/... ./hololive/hololive-llm-sched/... ./hololive/hololive-stream-ingester/...`, `DB_PASSWORD=local-verification CACHE_PASSWORD=local-verification ADMIN_PASS_BCRYPT=local-verification SESSION_SECRET=local-verification IRIS_BOT_TOKEN=local-verification IRIS_WEBHOOK_TOKEN=local-verification ./build-all.sh --no-bump --build-only --skip-local-ci`
+   - Verification: `go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-admin-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-kakao-bot-go/... ./hololive/hololive-llm-sched/... ./hololive/hololive-youtube-producer/...`, `go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-admin-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-kakao-bot-go/... ./hololive/hololive-llm-sched/... ./hololive/hololive-youtube-producer/...`, `DB_PASSWORD=local-verification CACHE_PASSWORD=local-verification ADMIN_PASS_BCRYPT=local-verification SESSION_SECRET=local-verification IRIS_BOT_TOKEN=local-verification IRIS_WEBHOOK_TOKEN=local-verification ./build-all.sh --no-bump --build-only --skip-local-ci`
 
 No production deploy or restart was performed in this worklog update.

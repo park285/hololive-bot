@@ -62,7 +62,7 @@ hololive/
 ├── hololive-admin-api/          # admin-api
 ├── hololive-alarm-worker/       # alarm-worker
 ├── hololive-llm-sched/          # llm-scheduler
-├── hololive-stream-ingester/    # stream-ingester
+├── hololive-youtube-producer/    # youtube-producer
 ├── hololive-shared/             # 공통 domain/service/providers/server
 └── shared-go/                   # 공통 유틸리티
 ```
@@ -73,7 +73,7 @@ hololive/
 - `hololive-admin-api/cmd/admin-api` → `/api/holo/*`, `/api/auth/*`, `/oauth/callback`, `/internal/alarm/*`
 - `hololive-alarm-worker/cmd/alarm-worker` → alarm scheduler / checker / queue publisher/consumer/proactive egress
 - `cmd/llm-scheduler` → `hololive-llm-sched/cmd/llm-scheduler`
-- `cmd/stream-ingester` → `hololive-stream-ingester/cmd/stream-ingester`
+- `cmd/youtube-producer` → `hololive-youtube-producer/cmd/youtube-producer`
 - 서비스별 Dockerfile → 각 모듈 루트 `Dockerfile`
 
 ## 📂 (레거시) 단일 모듈 구조 스냅샷

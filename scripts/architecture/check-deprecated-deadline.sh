@@ -9,7 +9,7 @@ python3 - "$TODAY" \
     "${ROOT_DIR}/hololive/hololive-shared/pkg" \
     "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal" \
     "${ROOT_DIR}/hololive/hololive-llm-sched/internal" \
-    "${ROOT_DIR}/hololive/hololive-stream-ingester/internal" <<'PY'
+    "${ROOT_DIR}/hololive/hololive-youtube-producer/internal" <<'PY'
 import datetime
 import re
 import sys

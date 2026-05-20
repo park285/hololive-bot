@@ -385,6 +385,143 @@ func TestLoad_ScraperPollLegacyEnvFallback(t *testing.T) {
 	})
 }
 
+func TestLoad_ScraperBackfillDefaults(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	backfill := cfg.Scraper.Backfill
+	if backfill.Enabled {
+		t.Fatal("Scraper.Backfill.Enabled = true, want false")
+	}
+	if !backfill.ShortsEnabled {
+		t.Fatal("Scraper.Backfill.ShortsEnabled = false, want true")
+	}
+	if backfill.ShortsInterval != 5*time.Minute {
+		t.Fatalf("Scraper.Backfill.ShortsInterval = %s, want 5m", backfill.ShortsInterval)
+	}
+	if !backfill.CommunityEnabled {
+		t.Fatal("Scraper.Backfill.CommunityEnabled = false, want true")
+	}
+	if backfill.CommunityInterval != 10*time.Minute {
+		t.Fatalf("Scraper.Backfill.CommunityInterval = %s, want 10m", backfill.CommunityInterval)
+	}
+	if !backfill.LiveEnabled {
+		t.Fatal("Scraper.Backfill.LiveEnabled = false, want true")
+	}
+	if backfill.LiveInterval != 3*time.Minute {
+		t.Fatalf("Scraper.Backfill.LiveInterval = %s, want 3m", backfill.LiveInterval)
+	}
+	if backfill.TargetGroup != "notification" {
+		t.Fatalf("Scraper.Backfill.TargetGroup = %q, want notification", backfill.TargetGroup)
+	}
+}
+
+func TestLoad_ScraperBackfillEnvOverrides(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_BACKFILL_ENABLED", "true")
+	t.Setenv("SCRAPER_BACKFILL_SHORTS_ENABLED", "false")
+	t.Setenv("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS", "420")
+	t.Setenv("SCRAPER_BACKFILL_COMMUNITY_ENABLED", "false")
+	t.Setenv("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS", "660")
+	t.Setenv("SCRAPER_BACKFILL_LIVE_ENABLED", "false")
+	t.Setenv("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", "180")
+	t.Setenv("SCRAPER_BACKFILL_TARGET_GROUP", " notification ")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	backfill := cfg.Scraper.Backfill
+	if !backfill.Enabled {
+		t.Fatal("Scraper.Backfill.Enabled = false, want true")
+	}
+	if backfill.ShortsEnabled {
+		t.Fatal("Scraper.Backfill.ShortsEnabled = true, want false")
+	}
+	if backfill.ShortsInterval != 7*time.Minute {
+		t.Fatalf("Scraper.Backfill.ShortsInterval = %s, want 7m", backfill.ShortsInterval)
+	}
+	if backfill.CommunityEnabled {
+		t.Fatal("Scraper.Backfill.CommunityEnabled = true, want false")
+	}
+	if backfill.CommunityInterval != 11*time.Minute {
+		t.Fatalf("Scraper.Backfill.CommunityInterval = %s, want 11m", backfill.CommunityInterval)
+	}
+	if backfill.LiveEnabled {
+		t.Fatal("Scraper.Backfill.LiveEnabled = true, want false")
+	}
+	if backfill.LiveInterval != 3*time.Minute {
+		t.Fatalf("Scraper.Backfill.LiveInterval = %s, want 3m", backfill.LiveInterval)
+	}
+	if backfill.TargetGroup != "notification" {
+		t.Fatalf("Scraper.Backfill.TargetGroup = %q, want notification", backfill.TargetGroup)
+	}
+}
+
+func TestLoad_ScraperBackfillValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     map[string]string
+		wantErr string
+	}{
+		{
+			name: "rejects unsupported target group",
+			env: map[string]string{
+				"SCRAPER_BACKFILL_ENABLED":      "true",
+				"SCRAPER_BACKFILL_TARGET_GROUP": "all",
+			},
+			wantErr: "SCRAPER_BACKFILL_TARGET_GROUP must be notification",
+		},
+		{
+			name: "rejects enabled shorts zero interval",
+			env: map[string]string{
+				"SCRAPER_BACKFILL_ENABLED":                    "true",
+				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS":    "0",
+				"SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS": "600",
+				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":      "180",
+			},
+			wantErr: "SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS must be positive when backfill shorts is enabled",
+		},
+		{
+			name: "allows disabled backfill zero intervals",
+			env: map[string]string{
+				"SCRAPER_BACKFILL_ENABLED":                    "false",
+				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS":    "0",
+				"SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS": "0",
+				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":      "0",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setRequiredLoadEnv(t)
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			_, err := Load()
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Load() error = %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("Load() error = nil, want error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Load() error = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestLoad_ScraperWorkerCountEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_SCHEDULER_WORKER_COUNT", "6")

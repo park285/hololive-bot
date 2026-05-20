@@ -4,4 +4,4 @@ membernews_digest|owner=llm-scheduler|writers=hololive-llm-sched|readers=hololiv
 membernews_subscription|owner=llm-scheduler|writers=hololive-llm-sched|readers=hololive-kakao-bot-go
 alarm_dispatch|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive-alarm-worker
 alarm_state|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive-alarm-worker,hololive-admin-api
-youtube_outbox|owner=youtube-scraper|writers=hololive-stream-ingester|readers=hololive-alarm-worker
+youtube_outbox|owner=youtube-producer|writers=hololive-youtube-producer|readers=hololive-alarm-worker

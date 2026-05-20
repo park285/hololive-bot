@@ -129,8 +129,8 @@ linters:
               desc: "llm-sched -> admin 교차 의존 금지"
             - pkg: "github.com/kapu/hololive-kakao-bot-go"
               desc: "llm-sched -> kakao-bot 교차 의존 금지"
-            - pkg: "github.com/kapu/hololive-stream-ingester"
-              desc: "llm-sched -> stream-ingester 교차 의존 금지"
+            - pkg: "github.com/kapu/hololive-youtube-producer"
+              desc: "llm-sched -> youtube-producer 교차 의존 금지"
 
     wrapcheck:
       extra-ignore-sigs:

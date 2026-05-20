@@ -5,7 +5,10 @@ import (
 	"fmt"
 )
 
-const PendingPublishedAtResolverPollerName = "pending_published_at_resolver"
+const (
+	PendingPublishedAtResolverPollerName          = "pending_published_at_resolver"
+	PendingPublishedAtResolverCandidatePollerName = "pending_published_at_candidate"
+)
 
 type PendingPublishedAtResolverPoller struct {
 	resolver *PendingPublishedAtResolver

@@ -82,6 +82,37 @@ func TestCollectShortIdentityAliasesReturnsSortedSlices(t *testing.T) {
 	}, aliases)
 }
 
+func TestNotificationChunksByKindDeduplicatesSameKindContentID(t *testing.T) {
+	t.Parallel()
+
+	notifications := []*domain.YouTubeNotificationOutbox{
+		{
+			Kind:      domain.OutboxKindNewVideo,
+			ContentID: "video-1",
+			Payload:   `{"kind":"first"}`,
+		},
+		{
+			Kind:      domain.OutboxKindNewShort,
+			ContentID: "video-1",
+			Payload:   `{"kind":"short"}`,
+		},
+		{
+			Kind:      domain.OutboxKindNewVideo,
+			ContentID: "video-1",
+			Payload:   `{"kind":"duplicate"}`,
+		},
+	}
+
+	chunks := notificationChunksByKind(notifications)
+
+	require.Len(t, chunks, 2)
+	require.Len(t, chunks[0], 1)
+	require.Equal(t, domain.OutboxKindNewVideo, chunks[0][0].Kind)
+	require.Equal(t, `{"kind":"first"}`, chunks[0][0].Payload)
+	require.Len(t, chunks[1], 1)
+	require.Equal(t, domain.OutboxKindNewShort, chunks[1][0].Kind)
+}
+
 func sortedCopy(values []string) []string {
 	cloned := append([]string(nil), values...)
 	sort.Strings(cloned)

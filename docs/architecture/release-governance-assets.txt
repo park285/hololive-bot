@@ -9,7 +9,7 @@ docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md|release-governance-tem
 .github/pull_request_template.md|release-governance-template-version: 2026-03-03.v1|./scripts/architecture/ci-boundary-gate.sh|docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md
 .github/pull_request_template.md|release-governance-template-version: 2026-03-03.v1|docs/current/CONTRACT_MAP.md|docs/current/SERVICE_OWNERSHIP.md|docs/current/runbooks/README.md
 docs/current/DEPLOYMENT_BASELINE.md||docker-compose.prod.yml|Docker Compose|Runtime Services
-docs/current/SERVICE_OWNERSHIP.md||Service Ownership|bot|youtube-scraper
+docs/current/SERVICE_OWNERSHIP.md||Service Ownership|bot|youtube-producer
 docs/current/CONTRACT_MAP.md||Contract Map|membernews|iris-boundary
 docs/current/ERROR_CONTRACT.md||Error Contract|Client Interpretation Rules|notification_in_progress
 docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md||Queue And Pub/Sub Contracts|alarm:dispatch:queue|config:update

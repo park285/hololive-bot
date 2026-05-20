@@ -16,12 +16,12 @@
 repo root에서 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts shorts-alarm-sent-history \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts shorts-alarm-sent-history \
+  -observation-runtime youtube-producer \
   -observation-cutover 2026-04-10T00:00:00Z
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts shorts-alarm-sent-history \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts shorts-alarm-sent-history \
+  -observation-runtime youtube-producer \
   -observation-cutover 2026-04-10T00:00:00Z \
   -format json
 ```
@@ -63,7 +63,7 @@ FROM youtube_community_shorts_observation_post_baselines AS base
 INNER JOIN youtube_content_alarm_tracking AS track
     ON track.kind = base.kind
    AND track.canonical_content_id = base.post_id
-WHERE base.runtime_name = 'youtube-scraper'
+WHERE base.runtime_name = 'youtube-producer'
   AND base.bigbang_cutover_at = '2026-04-10T00:00:00Z'
   AND base.kind = 'NEW_SHORT'
   AND track.delivery_status = 'SENT'

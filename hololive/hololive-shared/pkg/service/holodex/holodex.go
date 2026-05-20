@@ -40,7 +40,7 @@ var NewHolodexService = holodexprovider.NewHolodexService
 
 var NewScraperService = holodexprovider.NewScraperService
 
-var NewScraperServiceWithYouTubeScraper = holodexprovider.NewScraperServiceWithYouTubeScraper
+var NewScraperServiceWithYouTubeProducer = holodexprovider.NewScraperServiceWithYouTubeProducer
 
 var IsStructureError = holodexprovider.IsStructureError
 

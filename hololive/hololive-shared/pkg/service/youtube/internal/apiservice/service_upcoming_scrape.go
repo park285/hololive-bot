@@ -39,7 +39,7 @@ func (ys *serviceImpl) scrapeUpcomingStreams(ctx context.Context, channelIDs []s
 				Message:    detail.Message,
 			})
 			mu.Unlock()
-			observeYouTubeScraperFailure("upcoming_streams", string(detail.Source), string(detail.Reason))
+			observeYouTubeProducerScrapeFailure("upcoming_streams", string(detail.Source), string(detail.Reason))
 			ys.logger.Warn("youtube_upcoming_scraper_channel_failed",
 				slog.String("channelID", channelID),
 				slog.String("source", string(detail.Source)),

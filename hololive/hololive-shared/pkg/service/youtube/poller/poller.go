@@ -28,6 +28,14 @@ type PollerTargetSync = polling.PollerTargetSync
 
 type SchedulerConfig = polling.SchedulerConfig
 
+type JobClaimResult = polling.JobClaimResult
+
+type JobClaimStatus = polling.JobClaimStatus
+
+type JobClaim = polling.JobClaim
+
+type JobClaimer = polling.JobClaimer
+
 type ChannelStatsPoller = polling.ChannelStatsPoller
 
 type VideosPoller = polling.VideosPoller
@@ -41,12 +49,18 @@ type LivePoller = polling.LivePoller
 type LiveStatusProvider = polling.LiveStatusProvider
 
 const (
-	PendingPublishedAtResolverPollerName = polling.PendingPublishedAtResolverPollerName
+	PendingPublishedAtResolverPollerName          = polling.PendingPublishedAtResolverPollerName
+	PendingPublishedAtResolverCandidatePollerName = polling.PendingPublishedAtResolverCandidatePollerName
 
 	PriorityLow    = polling.PriorityLow
 	PriorityNormal = polling.PriorityNormal
 	PriorityHigh   = polling.PriorityHigh
 	PriorityBoost  = polling.PriorityBoost
+
+	JobClaimAcquired         = polling.JobClaimAcquired
+	JobClaimPeerOwned        = polling.JobClaimPeerOwned
+	JobClaimAlreadyCompleted = polling.JobClaimAlreadyCompleted
+	JobClaimUnavailable      = polling.JobClaimUnavailable
 )
 
 var DefaultViewerSampleCleanerConfig = polling.DefaultViewerSampleCleanerConfig

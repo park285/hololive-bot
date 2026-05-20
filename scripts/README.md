@@ -43,7 +43,7 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/logs.sh canary`
 - `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh canary-cron`
 - `./scripts/logs/osaka-status.sh`
-- `./scripts/logs/osaka-logs.sh [youtube-scraper|stream-ingester|all]`
+- `./scripts/logs/osaka-logs.sh [youtube-producer|all]`
 - `./scripts/logs/osaka-smoke.sh`
 - `./scripts/logs/osaka-install-log-rollup.sh` - legacy Osaka log rollup timer를 masked 상태로 유지합니다.
 

@@ -117,6 +117,7 @@ type scraperSchedulerOptions struct {
 	pollTimeout                time.Duration
 	errorBackoffMin            time.Duration
 	errorBackoffMax            time.Duration
+	jobClaimer                 poller.JobClaimer
 	channelIDs                 []string
 }
 
@@ -145,6 +146,12 @@ func WithSchedulerErrorBackoff(minBackoff, maxBackoff time.Duration) ScraperSche
 	return func(options *scraperSchedulerOptions) {
 		options.errorBackoffMin = minBackoff
 		options.errorBackoffMax = maxBackoff
+	}
+}
+
+func WithSchedulerJobClaimer(claimer poller.JobClaimer) ScraperSchedulerOption {
+	return func(options *scraperSchedulerOptions) {
+		options.jobClaimer = claimer
 	}
 }
 

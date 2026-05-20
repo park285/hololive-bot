@@ -1243,7 +1243,7 @@ func TestRepositoryListCommunityAlarmSentHistoriesByFinalizedObservationWindow(t
 
 	require.NoError(t, repo.db.Create([]domain.YouTubeCommunityShortsObservationPostBaseline{
 		{
-			RuntimeName:       "youtube-scraper",
+			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
 			Kind:              domain.OutboxKindCommunityPost,
 			PostID:            firstCanonicalPostID,
@@ -1253,7 +1253,7 @@ func TestRepositoryListCommunityAlarmSentHistoriesByFinalizedObservationWindow(t
 			FinalizedAt:       finalizedAt,
 		},
 		{
-			RuntimeName:       "youtube-scraper",
+			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
 			Kind:              domain.OutboxKindCommunityPost,
 			PostID:            secondCanonicalPostID,
@@ -1263,7 +1263,7 @@ func TestRepositoryListCommunityAlarmSentHistoriesByFinalizedObservationWindow(t
 			FinalizedAt:       finalizedAt,
 		},
 		{
-			RuntimeName:      "youtube-scraper",
+			RuntimeName:      "youtube-producer",
 			BigBangCutoverAt: cutoverAt,
 			Kind:             domain.OutboxKindCommunityPost,
 			PostID:           pendingCanonicalPostID,
@@ -1272,7 +1272,7 @@ func TestRepositoryListCommunityAlarmSentHistoriesByFinalizedObservationWindow(t
 			FinalizedAt:      finalizedAt,
 		},
 		{
-			RuntimeName:       "youtube-scraper",
+			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
 			Kind:              domain.OutboxKindNewShort,
 			PostID:            shortCanonicalPostID,
@@ -1283,7 +1283,7 @@ func TestRepositoryListCommunityAlarmSentHistoriesByFinalizedObservationWindow(t
 		},
 	}).Error)
 
-	rows, err := repo.ListCommunityAlarmSentHistoriesByFinalizedObservationWindow(ctx, "youtube-scraper", cutoverAt)
+	rows, err := repo.ListCommunityAlarmSentHistoriesByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 
@@ -1390,7 +1390,7 @@ func TestRepositoryListShortsAlarmSentHistoriesByFinalizedObservationWindow(t *t
 
 	require.NoError(t, repo.db.Create([]domain.YouTubeCommunityShortsObservationPostBaseline{
 		{
-			RuntimeName:       "youtube-scraper",
+			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
 			Kind:              domain.OutboxKindCommunityPost,
 			PostID:            communityCanonicalPostID,
@@ -1400,7 +1400,7 @@ func TestRepositoryListShortsAlarmSentHistoriesByFinalizedObservationWindow(t *t
 			FinalizedAt:       finalizedAt,
 		},
 		{
-			RuntimeName:       "youtube-scraper",
+			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
 			Kind:              domain.OutboxKindNewShort,
 			PostID:            firstShortCanonicalPostID,
@@ -1410,7 +1410,7 @@ func TestRepositoryListShortsAlarmSentHistoriesByFinalizedObservationWindow(t *t
 			FinalizedAt:       finalizedAt,
 		},
 		{
-			RuntimeName:       "youtube-scraper",
+			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
 			Kind:              domain.OutboxKindNewShort,
 			PostID:            secondShortCanonicalPostID,
@@ -1420,7 +1420,7 @@ func TestRepositoryListShortsAlarmSentHistoriesByFinalizedObservationWindow(t *t
 			FinalizedAt:       finalizedAt,
 		},
 		{
-			RuntimeName:      "youtube-scraper",
+			RuntimeName:      "youtube-producer",
 			BigBangCutoverAt: cutoverAt,
 			Kind:             domain.OutboxKindNewShort,
 			PostID:           pendingShortCanonicalPostID,
@@ -1430,7 +1430,7 @@ func TestRepositoryListShortsAlarmSentHistoriesByFinalizedObservationWindow(t *t
 		},
 	}).Error)
 
-	rows, err := repo.ListShortsAlarmSentHistoriesByFinalizedObservationWindow(ctx, "youtube-scraper", cutoverAt)
+	rows, err := repo.ListShortsAlarmSentHistoriesByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 

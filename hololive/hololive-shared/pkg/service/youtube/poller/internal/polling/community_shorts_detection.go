@@ -58,7 +58,7 @@ func observeCommunityShortsDetectionBatch(ctx context.Context, channelID string,
 	}
 
 	ensureMetrics()
-	communityShortsDetectedPostsTotal.WithLabelValues(channelID, string(alarmType)).Add(float64(detectedCount))
+	communityShortsDetectedPostsTotal.WithLabelValues(string(alarmType)).Add(float64(detectedCount))
 	slog.LogAttrs(ctx, slog.LevelInfo, logschema.CommunityShortsDetectionBatchMessage,
 		slog.String(logschema.FieldChannelID, channelID),
 		slog.String(logschema.FieldAlarmType, string(alarmType)),

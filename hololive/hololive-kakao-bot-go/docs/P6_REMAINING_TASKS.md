@@ -1,4 +1,4 @@
-# P6 종료 메모 (Stream Ingester 분리)
+# P6 종료 메모 (YouTube Producer 분리)
 
 > 마지막 업데이트: 2026-03-07
 > 범위: `hololive-kakao-bot-go` P6 종료 상태와 후속 운영 메모
@@ -8,9 +8,9 @@
 ## 현재 상태 요약
 
 - 완료:
-  - `stream-ingester` 바이너리/런타임 1차 분리
-  - bot ingestion 코드 제거, stream-ingester 단독 운영 고정
-  - Holodex/YouTube scraper 분산 rate limiter 적용
+  - `youtube-producer` 바이너리/런타임 1차 분리
+  - bot ingestion 코드 제거, youtube-producer 단독 운영 고정
+  - Holodex/YouTube producer 분산 rate limiter 적용
   - 기본 Runbook/설계 문서 작성
   - ingestion 분산 락 가드 추가 (`lock:ingestion:runtime`, SetNX + compare-and-expire renew + release)
   - ingestion 락 이벤트 운영 로그 규칙 반영 (`ingestion_lease_*`, `stream_ingestion_enabled`)
@@ -30,9 +30,9 @@
 
 - 목표:
   - `hololive-bot`는 ingestion 코드 미포함
-  - `stream-ingester`만 ingestion 활성
+  - `youtube-producer`만 ingestion 활성
 - 확인 항목:
-  - 스케줄러/아웃박스/photo sync가 `stream-ingester`에서만 동작
+  - 스케줄러/아웃박스/photo sync가 `youtube-producer`에서만 동작
   - bot에서 ingestion 시작 로그가 없어야 함
 - 상태:
   - 운영자 결정으로 P6 종료 조건에서 제외 (2026-02-27)
@@ -40,18 +40,18 @@
 ## 2) 중복 실행 가드 보강 (완료)
 
 - 목표:
-  - ingestion ownership이 `stream-ingester`에만 고정되도록 보장
+  - ingestion ownership이 `youtube-producer`에만 고정되도록 보장
 - 작업:
   - bot ingestion 코드 제거
   - 운영 체크리스트에서 bot 우회/토글 검증 제거
 - 현재 반영:
-  - stream-ingester 시작 시 Valkey 분산 락 획득 강제
+  - youtube-producer 시작 시 Valkey 분산 락 획득 강제
   - 락 미획득 시 프로세스 시작 실패(명시적 에러)
   - 런타임 renew loop + shutdown release 적용
 - 남은 작업:
   - (없음) 완료
 
-## 3) stream-ingester 메트릭/대시보드 분리 (권장)
+## 3) youtube-producer 메트릭/대시보드 분리 (권장)
 
 - 목표:
   - ingestion SLA를 bot과 분리 관측
@@ -59,14 +59,14 @@
   - 서비스별 지표/로그 태그 정리
   - 장애 기준(지연/실패율) 임계치 문서화
 - 완료 기준:
-  - stream-ingester 전용 모니터링 기준 수립
+  - youtube-producer 전용 모니터링 기준 수립
 
 ## 4) 배포/롤백 절차 확정 (권장)
 
 - 목표:
-  - 장애 시 stream-ingester 복구 절차 확정
+  - 장애 시 youtube-producer 복구 절차 확정
 - 작업:
-  - [x] `stream-ingester` 단독 재기동 절차
+  - [x] `youtube-producer` 단독 재기동 절차
   - [x] bot 측 ingestion 우회 절차 제거
   - [ ] (선택) 실제 운영 리허설(재기동 1회) 결과 기록
 - 완료 기준:
@@ -89,5 +89,5 @@
 ```bash
 go test ./internal/service/ratelimit ./internal/service/holodex ./internal/service/youtube/scraper ./internal/app
 go build ./...
-docker compose -f docker-compose.prod.yml ps stream-ingester
+docker compose -f docker-compose.prod.yml ps youtube-producer
 ```

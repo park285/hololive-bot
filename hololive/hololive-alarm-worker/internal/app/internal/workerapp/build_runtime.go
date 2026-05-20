@@ -188,9 +188,9 @@ func buildAlarmFoundation(
 	logger *slog.Logger,
 ) (*alarmFoundation, error) {
 	memberData := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-	sharedRL, err := providers.ProvideYouTubeScraperRateLimiter(infra.Cache, logger)
+	sharedRL, err := providers.ProvideYouTubeProducerRateLimiter(infra.Cache, logger)
 	if err != nil {
-		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
+		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}
 
 	scraperService := providers.ProvideScraperService(

@@ -77,12 +77,12 @@ if ! TARGET="$(compose_service_resolve_redeploy_target "$SERVICE")"; then
     exit 1
 fi
 
-if [ "$TARGET" = "youtube-scraper" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_SCRAPER:-}" != "true" ]; then
-    echo "[ERROR] youtube-scraper is Osaka-owned. Refusing central redeploy without ALLOW_CENTRAL_YOUTUBE_SCRAPER=true."
+if [ "$TARGET" = "youtube-producer" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]; then
+    echo "[ERROR] youtube-producer is Osaka-owned. Refusing central redeploy without ALLOW_CENTRAL_YOUTUBE_PRODUCER=true."
     exit 1
 fi
-if [ -z "$TARGET" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_SCRAPER:-}" != "true" ]; then
-    echo "[ERROR] COMPOSE_PROFILES=oracle would include youtube-scraper, which is Osaka-owned. Refusing central all-service deploy."
+if [ -z "$TARGET" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]; then
+    echo "[ERROR] COMPOSE_PROFILES=oracle would include youtube-producer, which is Osaka-owned. Refusing central all-service deploy."
     exit 1
 fi
 

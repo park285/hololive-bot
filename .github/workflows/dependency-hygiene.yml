@@ -29,8 +29,8 @@ jobs:
             slug: hololive-alarm-worker
           - module: hololive/hololive-llm-sched
             slug: hololive-llm-sched
-          - module: hololive/hololive-stream-ingester
-            slug: hololive-stream-ingester
+          - module: hololive/hololive-youtube-producer
+            slug: hololive-youtube-producer
     defaults:
       run:
         working-directory: ${{ matrix.module }}

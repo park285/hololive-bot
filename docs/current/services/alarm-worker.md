@@ -46,7 +46,7 @@ Alarm checker/scheduler, alarm dispatch queue publishing/consumption, generic no
 
 ## Must not own
 
-- YouTube scraping/outbox production, owned by `youtube-scraper`
+- YouTube scraping/outbox production, owned by `youtube-producer`
 - Kakao command parsing, owned by `bot`
 - LLM summary generation, owned by `llm-scheduler`
 
