@@ -95,6 +95,16 @@ for script in "${scripts[@]}"; do
   commit_all "${workdir}" "rename dashboard in"
   expect_fail "$(basename "${script}")-admin-dashboard-rename-in" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
 
+  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-admin-dashboard-dockerfile-healthcheck"
+  setup_repo "${workdir}"
+  mkdir -p "${workdir}/admin-dashboard"
+  printf 'COPY hololive/hololive-stream-ingester/cmd/runtime/healthcheck ./cmd/runtime/healthcheck\n' >"${workdir}/admin-dashboard/Dockerfile"
+  commit_all "${workdir}" "base"
+  base_ref="$(git -C "${workdir}" rev-parse HEAD)"
+  printf 'COPY hololive/hololive-youtube-producer/cmd/runtime/healthcheck ./cmd/runtime/healthcheck\n' >"${workdir}/admin-dashboard/Dockerfile"
+  commit_all "${workdir}" "dashboard healthcheck source"
+  expect_pass "$(basename "${script}")-admin-dashboard-dockerfile-healthcheck" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
+
   workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-clean"
   setup_repo "${workdir}"
   mkdir -p "${workdir}/other"

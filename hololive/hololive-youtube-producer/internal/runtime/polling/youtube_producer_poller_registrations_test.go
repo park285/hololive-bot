@@ -164,7 +164,7 @@ func assertBackfillRegistration(t *testing.T, registrations []providers.ChannelP
 
 func manyChannelIDs(count int) []string {
 	ids := make([]string, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		ids = append(ids, "UC_BACKFILL_"+time.Unix(int64(i), 0).Format("150405"))
 	}
 	return ids
