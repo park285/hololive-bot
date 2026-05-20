@@ -37,9 +37,23 @@ while IFS= read -r path; do
     echo "files-from path does not exist: $path" >&2
     exit 1
   }
+  case "$path" in
+    hololive/hololive-youtube-producer/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum) ;;
+    go.sum|*/go.sum)
+      echo "files-from list contains unapproved go.sum path: $path" >&2
+      exit 1
+      ;;
+  esac
+  case "$path" in
+    hololive/hololive-shared/pkg/domain/internal/model/data/*) ;;
+    data|data/*|*/data/*)
+      echo "files-from list contains unapproved data path: $path" >&2
+      exit 1
+      ;;
+  esac
 done < "$FILES_FROM"
 
-if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|go\.sum|_test\.go|docs|data|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM"; then
+if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM"; then
   echo "files-from list contains forbidden deployment scope" >&2
   exit 1
 fi
@@ -67,8 +81,12 @@ rsync_preview() {
 
 validate_preview() {
   local preview_file="$1"
-  if rg -n '(\.env|\.key|\.pem|hololive-alarm-worker|go\.sum|_test\.go|docs/|/data/|/logs/|/runtime-config/|/backups/|artifacts/)' "$preview_file"; then
+  if rg -n '(\.env|\.key|\.pem|hololive-alarm-worker|_test\.go|docs/|/logs/|/runtime-config/|/backups/|artifacts/)' "$preview_file"; then
     echo "rsync preview contains forbidden deployment scope" >&2
+    exit 1
+  fi
+  if rg -n '(^|/)data/' "$preview_file" | rg -v 'hololive/hololive-shared/pkg/domain/internal/model/data/'; then
+    echo "rsync preview contains unapproved data path" >&2
     exit 1
   fi
 }

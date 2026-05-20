@@ -129,6 +129,9 @@ func buildIngestionRuntimeYouTubeDependencies(
 		return deps, err
 	}
 	jobClaimer = newReadinessReportingJobClaimer(jobClaimer, readinessState)
+	if cfg.Scraper.ActiveActive.Enabled {
+		probeReadinessJobClaimer(ctx, jobClaimer, logger)
+	}
 	deps.publishedAtResolver = publishedat.BuildPendingResolver(
 		cfg.Scraper,
 		infra.postgresService,

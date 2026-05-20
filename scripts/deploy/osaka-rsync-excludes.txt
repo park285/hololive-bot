@@ -20,6 +20,7 @@ logs/
 runtime-config/
 artifacts/
 tmp/
+*_test.go
 node_modules/
 dist/
 coverage/

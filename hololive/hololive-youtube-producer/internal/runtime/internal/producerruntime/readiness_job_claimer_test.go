@@ -13,6 +13,7 @@ import (
 
 type readinessClaimStub struct {
 	status poller.JobClaimStatus
+	claim  poller.JobClaim
 	err    error
 }
 
@@ -23,7 +24,24 @@ func (s readinessClaimStub) TryClaim(
 	time.Duration,
 	time.Duration,
 ) (poller.JobClaimStatus, poller.JobClaim, error) {
-	return s.status, nil, s.err
+	return s.status, s.claim, s.err
+}
+
+type readinessProbeClaimStub struct {
+	released bool
+}
+
+func (s *readinessProbeClaimStub) Renew(context.Context, time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (s *readinessProbeClaimStub) MarkCompleted(context.Context, time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (s *readinessProbeClaimStub) Release(context.Context) (bool, error) {
+	s.released = true
+	return true, nil
 }
 
 func TestReadinessReportingJobClaimerMarksLeaseUnavailable(t *testing.T) {
@@ -73,5 +91,53 @@ func TestReadinessReportingJobClaimerMarksLeaseAvailable(t *testing.T) {
 	}
 	if payload["valkey_available"] != true {
 		t.Fatalf("valkey_available = %v, want true", payload["valkey_available"])
+	}
+}
+
+func TestProbeReadinessJobClaimerMarksLeaseAvailableAndReleasesSyntheticClaim(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{
+		YouTubeEnabled:      true,
+		ActiveActiveEnabled: true,
+	})
+	state.MarkRunning()
+	claim := &readinessProbeClaimStub{}
+	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+		status: poller.JobClaimStatus{Result: poller.JobClaimAcquired},
+		claim:  claim,
+	}, state)
+
+	probeReadinessJobClaimer(context.Background(), claimer, nil)
+
+	if !claim.released {
+		t.Fatal("probe claim was not released")
+	}
+	statusCode, payload := state.Response()
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["valkey_available"] != true {
+		t.Fatalf("valkey_available = %v, want true", payload["valkey_available"])
+	}
+}
+
+func TestProbeReadinessJobClaimerKeepsLeaseUnavailableOnFailure(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{
+		YouTubeEnabled:      true,
+		ActiveActiveEnabled: true,
+	})
+	state.MarkRunning()
+	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+		status: poller.JobClaimStatus{Result: poller.JobClaimUnavailable},
+		err:    fmt.Errorf("valkey unavailable"),
+	}, state)
+
+	probeReadinessJobClaimer(context.Background(), claimer, nil)
+
+	statusCode, payload := state.Response()
+	if statusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
+	}
+	if payload["scraping_paused"] != true {
+		t.Fatalf("scraping_paused = %v, want true", payload["scraping_paused"])
 	}
 }
