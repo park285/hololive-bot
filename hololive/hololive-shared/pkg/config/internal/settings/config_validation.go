@@ -91,6 +91,12 @@ func validateScraperConfig(cfg ScraperConfig) error {
 	if err := validateScraperPublishedAtResolverConfig(cfg.PublishedAtResolver); err != nil {
 		return err
 	}
+	if err := validateScraperBackfillConfig(cfg.Backfill); err != nil {
+		return err
+	}
+	if err := validateScraperActiveActiveConfig(cfg.ActiveActive); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -163,6 +169,35 @@ func validateScraperPublishedAtResolverConfig(cfg ScraperPublishedAtResolverConf
 		if !check.valid {
 			return errors.New(check.message)
 		}
+	}
+	return nil
+}
+
+func validateScraperActiveActiveConfig(cfg ScraperActiveActiveConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(cfg.Namespace) == "" {
+		return fmt.Errorf("YOUTUBE_PRODUCER_LEASE_NAMESPACE must not be empty when active-active is enabled")
+	}
+	return nil
+}
+
+func validateScraperBackfillConfig(cfg ScraperBackfillConfig) error {
+	if strings.TrimSpace(cfg.TargetGroup) != "notification" {
+		return fmt.Errorf("SCRAPER_BACKFILL_TARGET_GROUP must be notification")
+	}
+	if !cfg.Enabled {
+		return nil
+	}
+	if cfg.ShortsEnabled && cfg.ShortsInterval <= 0 {
+		return fmt.Errorf("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS must be positive when backfill shorts is enabled")
+	}
+	if cfg.CommunityEnabled && cfg.CommunityInterval <= 0 {
+		return fmt.Errorf("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS must be positive when backfill community is enabled")
+	}
+	if cfg.LiveEnabled && cfg.LiveInterval <= 0 {
+		return fmt.Errorf("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS must be positive when backfill live is enabled")
 	}
 	return nil
 }

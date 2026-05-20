@@ -7,8 +7,7 @@ compose_service_resolve_build_target() {
         bot|hololive-bot|hololive-kakao-bot-go) printf '%s\n' "hololive-bot" ;;
         admin-api|hololive-admin-api) printf '%s\n' "hololive-admin-api" ;;
         alarm-worker|hololive-alarm-worker) printf '%s\n' "hololive-alarm-worker" ;;
-        stream-ingester) printf '%s\n' "stream-ingester" ;;
-        youtube-scraper) printf '%s\n' "youtube-scraper" ;;
+        youtube-producer) printf '%s\n' "youtube-producer" ;;
         llm-scheduler) printf '%s\n' "llm-scheduler" ;;
         admin-dashboard) printf '%s\n' "admin-dashboard" ;;
         *) return 1 ;;
@@ -20,8 +19,7 @@ compose_service_build_targets_text() {
         "bot hololive-bot hololive-kakao-bot-go" \
         "admin-api hololive-admin-api" \
         "alarm-worker hololive-alarm-worker" \
-        "stream-ingester" \
-        "youtube-scraper" \
+        "youtube-producer" \
         "llm-scheduler" \
         "admin-dashboard"
 }
@@ -34,8 +32,7 @@ compose_service_resolve_redeploy_target() {
         hololive-admin-api|admin-api) printf '%s\n' "hololive-admin-api" ;;
         hololive-alarm-worker|alarm-worker) printf '%s\n' "hololive-alarm-worker" ;;
         llm-scheduler|llm) printf '%s\n' "llm-scheduler" ;;
-        stream-ingester|ingester) printf '%s\n' "stream-ingester" ;;
-        youtube-scraper|yt-scraper) printf '%s\n' "youtube-scraper" ;;
+        youtube-producer) printf '%s\n' "youtube-producer" ;;
         holo-postgres|postgres) printf '%s\n' "holo-postgres" ;;
         valkey-cache|valkey) printf '%s\n' "valkey-cache" ;;
         hololive-db-migrate|migrate) printf '%s\n' "hololive-db-migrate" ;;
@@ -53,8 +50,7 @@ compose_service_redeploy_usage_lines() {
         "  hololive-admin-api | admin-api" \
         "  hololive-alarm-worker | alarm-worker" \
         "  llm-scheduler | llm" \
-        "  stream-ingester | ingester" \
-        "  youtube-scraper | yt-scraper" \
+        "  youtube-producer" \
         "  holo-postgres | postgres" \
         "  valkey-cache | valkey" \
         "  hololive-db-migrate | migrate" \
@@ -69,37 +65,39 @@ compose_service_resolve_log_target() {
 
     case "${key}" in
         bot|hololive-bot) printf '%s\n' "hololive-bot" ;;
-        ingester|stream-ingester) printf '%s\n' "stream-ingester" ;;
+        youtube-producer) printf '%s\n' "youtube-producer" ;;
         llm|llm-scheduler) printf '%s\n' "llm-scheduler" ;;
         *) return 1 ;;
     esac
 }
 
 compose_service_log_targets_text() {
-    printf '%s\n' "bot hololive-bot ingester stream-ingester llm llm-scheduler"
+    printf '%s\n' "bot hololive-bot youtube-producer llm llm-scheduler"
 }
 
 compose_service_resolve_osaka_log_targets() {
     local key="$1"
 
     case "${key}" in
-        youtube|scraper|youtube-scraper) printf '%s\n' "youtube-scraper" ;;
-        stream|ingester|stream-ingester) printf '%s\n' "stream-ingester" ;;
-        all) printf '%s\n' "youtube-scraper" "stream-ingester" ;;
+        youtube-producer) printf '%s\n' "youtube-producer-a" "youtube-producer-b" ;;
+        youtube-producer-a) printf '%s\n' "youtube-producer-a" ;;
+        youtube-producer-b) printf '%s\n' "youtube-producer-b" ;;
+        all) printf '%s\n' "youtube-producer-a" "youtube-producer-b" ;;
         *) return 1 ;;
     esac
 }
 
 compose_service_osaka_log_targets_text() {
-    printf '%s\n' "youtube-scraper stream-ingester all"
+    printf '%s\n' "youtube-producer youtube-producer-a youtube-producer-b all"
 }
 
 compose_service_resolve_osaka_container() {
     local service="$1"
 
     case "${service}" in
-        youtube-scraper) printf '%s\n' "hololive-youtube-scraper" ;;
-        stream-ingester) printf '%s\n' "hololive-stream-ingester" ;;
+        youtube-producer-a) printf '%s\n' "hololive-youtube-producer-a" ;;
+        youtube-producer-b) printf '%s\n' "hololive-youtube-producer-b" ;;
+        youtube-producer) printf '%s\n' "hololive-youtube-producer-a" ;;
         *) return 1 ;;
     esac
 }
@@ -108,8 +106,9 @@ compose_service_resolve_osaka_log_file() {
     local service="$1"
 
     case "${service}" in
-        youtube-scraper) printf '%s\n' "logs/youtube-scraper.log" ;;
-        stream-ingester) printf '%s\n' "logs/stream-ingester.log" ;;
+        youtube-producer-a) printf '%s\n' "logs/youtube-producer-a.log" ;;
+        youtube-producer-b) printf '%s\n' "logs/youtube-producer-b.log" ;;
+        youtube-producer) printf '%s\n' "logs/youtube-producer-a.log" ;;
         *) return 1 ;;
     esac
 }

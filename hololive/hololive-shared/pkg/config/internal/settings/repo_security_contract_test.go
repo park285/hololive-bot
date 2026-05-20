@@ -62,8 +62,8 @@ func TestRepoCompose_PostgresUsesHostGatewayWithSecureDefaultTLSMode(t *testing.
 	if got := strings.Count(content, "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}"); got != 1 {
 		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE secure default anchor count = %d, want 1", got)
 	}
-	if got := strings.Count(content, "*postgres-env"); got != 6 {
-		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 6", got)
+	if got := strings.Count(content, "*postgres-env"); got != 5 {
+		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 5", got)
 	}
 
 	required := []string{

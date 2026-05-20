@@ -8,7 +8,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
-func (s *ScraperService) fetchFromYouTubeScraper(ctx context.Context, channelID string) ([]*domain.Stream, error) {
+func (s *ScraperService) fetchFromYouTubeProducer(ctx context.Context, channelID string) ([]*domain.Stream, error) {
 	var (
 		events []*scraper.UpcomingEvent
 		err    error
@@ -17,13 +17,13 @@ func (s *ScraperService) fetchFromYouTubeScraper(ctx context.Context, channelID 
 	switch {
 	case s.fetchUpcoming != nil:
 		events, err = s.fetchUpcoming(ctx, channelID)
-	case s.youtubeScraper != nil:
-		events, err = s.youtubeScraper.GetUpcomingEvents(ctx, channelID)
+	case s.youtubeProducer != nil:
+		events, err = s.youtubeProducer.GetUpcomingEvents(ctx, channelID)
 	default:
-		return nil, fmt.Errorf("youtube scraper not configured")
+		return nil, fmt.Errorf("youtube producer not configured")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("youtube scraper error: %w", err)
+		return nil, fmt.Errorf("youtube producer error: %w", err)
 	}
 
 	streams := make([]*domain.Stream, 0, len(events))

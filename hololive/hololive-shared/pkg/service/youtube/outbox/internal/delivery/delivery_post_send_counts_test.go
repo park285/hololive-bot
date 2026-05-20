@@ -674,7 +674,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 	}).Error)
 	finalizedRows := []sqliteTelemetryObservationBaselineModel{
 		{
-			RuntimeName:       "youtube-scraper",
+			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
 			Kind:              string(domain.OutboxKindCommunityPost),
 			PostID:            timelyOutbox.ContentID,
@@ -684,7 +684,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 			FinalizedAt:       finalizedAt,
 		},
 		{
-			RuntimeName:      "youtube-scraper",
+			RuntimeName:      "youtube-producer",
 			BigBangCutoverAt: cutoverAt,
 			Kind:             string(domain.OutboxKindNewShort),
 			PostID:           "short:zero-send",
@@ -731,7 +731,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 	}).Error)
 
 	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListPostSendCountsByFinalizedObservationWindow(ctx, "youtube-scraper", cutoverAt)
+	rows, err := repo.ListPostSendCountsByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 

@@ -131,8 +131,8 @@ YouTube API / Scraper
          │
          ▼
 ┌──────────────────────────────┐
-│  stream-ingester pollers     │ → 새 쇼츠/커뮤니티 감지
-│  (stream-ingester runtime)   │
+│  youtube-producer pollers     │ → 새 쇼츠/커뮤니티 감지
+│  (youtube-producer runtime)   │
 └──────────────┬───────────────┘
          │
          ▼

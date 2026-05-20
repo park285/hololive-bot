@@ -66,6 +66,7 @@ func TestCommunityPollerPollPersistsPublishedAtAndDetectedAt(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	defer slog.SetDefault(previousDefaultLogger)
 
+	metricBefore := testutil.ToFloat64(communityShortsDetectedPostsTotal.WithLabelValues(string(domain.AlarmTypeCommunity)))
 	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
 
 	canonicalPublishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
@@ -113,7 +114,8 @@ func TestCommunityPollerPollPersistsPublishedAtAndDetectedAt(t *testing.T) {
 	assert.Equal(t, string(domain.AlarmTypeCommunity), batchEntry[logschema.FieldAlarmType])
 	assert.Equal(t, float64(1), batchEntry[logschema.FieldDetectedCount])
 	assert.Equal(t, yttimestamp.Format(tracking.DetectedAt), batchEntry[logschema.FieldDetectedAt])
-	assert.Equal(t, float64(1), testutil.ToFloat64(communityShortsDetectedPostsTotal.WithLabelValues("UC_TEST", string(domain.AlarmTypeCommunity))))
+	metricAfter := testutil.ToFloat64(communityShortsDetectedPostsTotal.WithLabelValues(string(domain.AlarmTypeCommunity)))
+	assert.Equal(t, float64(1), metricAfter-metricBefore)
 }
 
 func TestCommunityPollerPollTreatsCanonicalWatermarkAsSameUpstreamPostID(t *testing.T) {

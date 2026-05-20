@@ -19,7 +19,7 @@
 
 규칙:
 
-- 24시간 관찰 시작 시점에는 `go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts target-baseline` 를 실행해 `channels[]` snapshot을 남기고, 그 산출물을 해당 observation session의 roster 증적으로 사용합니다.
+- 24시간 관찰 시작 시점에는 `go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts target-baseline` 를 실행해 `channels[]` snapshot을 남기고, 그 산출물을 해당 observation session의 roster 증적으로 사용합니다.
 - `owner_label` 은 표시용이며 대조 키로 쓰지 않습니다. 채널 축의 canonical 값은 항상 `channel_id` 입니다.
 - 운영 채널 전체 roster는 “관찰 대상 universe”를 뜻합니다. 실제 알람 누락/중복 대조는 그중 `routes[].alarm_enabled = true` 인 `channel_id + alarm_type` 조합에 한정합니다.
 - route 상태 drift를 보기 위해 baseline을 다시 수집할 수는 있지만, 같은 24시간 관찰 구간의 최초 scope 판정은 시작 시점 snapshot을 기준으로 유지합니다.
@@ -168,32 +168,32 @@
 1. 관찰 시작 직후 baseline snapshot
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts target-baseline
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts target-baseline
 ```
 
 2. 같은 시점의 observation key 기록
 
-- `observation_runtime_name`: 예시 `youtube-scraper`
+- `observation_runtime_name`: 예시 `youtube-producer`
 - `observation_bigbang_cutover_at`: UTC RFC3339 한 값만 사용
 
 3. 같은 observation key로 게시물별 exact-once / sent-history 수집
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts send-counts \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts send-counts \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT>
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts alarm-sent-history-dataset \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts alarm-sent-history-dataset \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT>
 
 # optional focused drill-down
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts community-alarm-sent-history \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts community-alarm-sent-history \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT>
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts shorts-alarm-sent-history \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts shorts-alarm-sent-history \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT>
 ```
 
@@ -218,15 +218,15 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts shor
 
 ## Source Of Truth
 
-- 운영 채널 계산: `hololive/hololive-stream-ingester/internal/communityshorts/target_baseline.go`
-- baseline 수집: `hololive/hololive-stream-ingester/internal/communityshorts/target_baseline.go`
+- 운영 채널 계산: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
+- baseline 수집: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
 - repo-known official roster data: `hololive/hololive-shared/pkg/domain/internal/model/data/official_talents.json`
 - repo-known official channel profile data: `hololive/hololive-shared/pkg/domain/internal/model/data/official_profiles_raw.json`
 - manual non-Hololive member roster seed: `hololive/hololive-kakao-bot-go/scripts/migrations/016-add-multi-group-support.sql`, `017-add-stellive-chzzk-support.sql`, `018-add-twitch-user-id-and-vspo-members.sql`, `040_unify_indie_org.sql`
 - typed subscriber key: `hololive/hololive-shared/pkg/service/alarm/keys/keys.go`
 - canonical post ID 정규화: `hololive/hololive-shared/pkg/service/youtube/contentid/canonical.go`
 - send-count / observation 조인: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_post_send_counts.go`
-- sent-history dataset collection: `hololive/hololive-stream-ingester/internal/ops/communityshorts/internal/reports/community_shorts_alarm_sent_history_dataset.go`
+- sent-history dataset collection: `hololive/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/community_shorts_alarm_sent_history_dataset.go`
 - observation frozen baseline schema: `hololive/hololive-kakao-bot-go/scripts/migrations/054_create_youtube_community_shorts_observation_post_baselines.sql`
 - single-send state schema: `hololive/hololive-kakao-bot-go/scripts/migrations/055_create_youtube_community_shorts_alarm_states.sql`
 - channel summary time-basis note: `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_CHANNEL_SUMMARY_LAST_24H.md`

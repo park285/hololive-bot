@@ -9,6 +9,6 @@ use (
 	./hololive/hololive-kakao-bot-go
 	./hololive/hololive-llm-sched
 	./hololive/hololive-shared
-	./hololive/hololive-stream-ingester
+	./hololive/hololive-youtube-producer
 	./shared-go
 )

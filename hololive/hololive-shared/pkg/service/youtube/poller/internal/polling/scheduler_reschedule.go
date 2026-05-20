@@ -61,6 +61,31 @@ func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 	s.notifyDispatcher()
 }
 
+func (s *Scheduler) rescheduleJobAfterClaimSkip(job *Job, retryAfter time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if job == nil || job.retired {
+		return
+	}
+	current, ok := s.jobMap[job.key]
+	if !ok || current != job {
+		return
+	}
+	if retryAfter <= 0 {
+		retryAfter = s.errorBackoffMin
+	}
+
+	job.consecutiveFailures = 0
+	job.NextRunAt = time.Now().Add(retryAfter)
+	if job.index >= 0 {
+		heap.Fix(&s.jobs, job.index)
+	} else {
+		heap.Push(&s.jobs, job)
+	}
+	s.notifyDispatcher()
+}
+
 func (s *Scheduler) updateJobNextRunAfterPoll(job *Job, pollErr error, now time.Time) {
 	if pollErr != nil && !errors.Is(pollErr, context.Canceled) {
 		s.updateJobNextRunAfterFailure(job, pollErr, now)

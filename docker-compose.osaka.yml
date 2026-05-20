@@ -6,6 +6,14 @@ x-osaka-ap-env: &osaka-ap-env
   POSTGRES_HOST: ${OSAKA_POSTGRES_HOST:-100.100.1.3}
   POSTGRES_PORT: ${OSAKA_POSTGRES_PORT:-5433}
   CLIPROXY_BASE_URL: ${OSAKA_CLIPROXY_BASE_URL:-http://100.100.1.3:8787/v1}
+  SCRAPER_BACKFILL_ENABLED: "${SCRAPER_BACKFILL_ENABLED:-false}"
+  SCRAPER_BACKFILL_SHORTS_ENABLED: "${SCRAPER_BACKFILL_SHORTS_ENABLED:-true}"
+  SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS: "${SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS:-300}"
+  SCRAPER_BACKFILL_COMMUNITY_ENABLED: "${SCRAPER_BACKFILL_COMMUNITY_ENABLED:-true}"
+  SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS: "${SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS:-600}"
+  SCRAPER_BACKFILL_LIVE_ENABLED: "${SCRAPER_BACKFILL_LIVE_ENABLED:-true}"
+  SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS: "${SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS:-180}"
+  SCRAPER_BACKFILL_TARGET_GROUP: "${SCRAPER_BACKFILL_TARGET_GROUP:-notification}"
 
 x-osaka-ap-logging: &osaka-ap-logging
   driver: "json-file"
@@ -14,11 +22,13 @@ x-osaka-ap-logging: &osaka-ap-logging
     max-file: "3"
 
 services:
-  stream-ingester:
+  youtube-producer:
+    profiles: !override ["retired-youtube-producer"]
     env_file: !override
       - /run/hololive-bot/env
     environment:
       <<: *osaka-ap-env
+      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
     volumes: !override
       - ./data:/app/data
       - ./logs:/app/logs
@@ -28,20 +38,65 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 768m
 
-  youtube-scraper:
-    env_file: !override
+  youtube-producer-a:
+    extends:
+      file: docker-compose.prod.yml
+      service: youtube-producer
+    profiles: ["oracle"]
+    container_name: hololive-youtube-producer-a
+    env_file:
       - /run/hololive-bot/env
     environment:
       <<: *osaka-ap-env
-      YOUTUBE_SCRAPER_RUNTIME_ALLOWED: "true"
+      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
+      YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"
+      YOUTUBE_PRODUCER_INSTANCE_ID: "youtube-producer-a"
+      YOUTUBE_PRODUCER_LEASE_NAMESPACE: ${YOUTUBE_PRODUCER_LEASE_NAMESPACE:-production}
+      SCRAPER_SCHEDULER_WORKER_COUNT: ${YOUTUBE_PRODUCER_AP_WORKER_COUNT:-2}
+      SERVER_PORT: 30005
+      PHOTO_SYNC_ENABLED: "true"
+    ports: !override
+      - "127.0.0.1:30005:30005"
     volumes: !override
       - ./data:/app/data
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
     logging: *osaka-ap-logging
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  youtube-producer-b:
+    extends:
+      file: docker-compose.prod.yml
+      service: youtube-producer
+    profiles: ["oracle"]
+    container_name: hololive-youtube-producer-b
+    env_file:
+      - /run/hololive-bot/env
+    environment:
+      <<: *osaka-ap-env
+      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
+      YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"
+      YOUTUBE_PRODUCER_INSTANCE_ID: "youtube-producer-b"
+      YOUTUBE_PRODUCER_LEASE_NAMESPACE: ${YOUTUBE_PRODUCER_LEASE_NAMESPACE:-production}
+      SCRAPER_SCHEDULER_WORKER_COUNT: ${YOUTUBE_PRODUCER_AP_WORKER_COUNT:-2}
+      SERVER_PORT: 30015
+      PHOTO_SYNC_ENABLED: "false"
+    ports: !override
+      - "127.0.0.1:30015:30015"
+    volumes: !override
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+    logging: *osaka-ap-logging
+    healthcheck:
+      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30015/health"]
     deploy:
       resources:
         limits:

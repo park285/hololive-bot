@@ -47,10 +47,10 @@ build-llm-scheduler:
 	mkdir -p bin
 	CGO_ENABLED=0 $(GO) build -tags go_json -trimpath -ldflags="-X main.Version=$(VERSION)" -o bin/llm-scheduler ../hololive-llm-sched/cmd/llm-scheduler
 
-.PHONY: build-stream-ingester
-build-stream-ingester:
+.PHONY: build-youtube-producer
+build-youtube-producer:
 	mkdir -p bin
-	CGO_ENABLED=0 $(GO) build -tags go_json -trimpath -ldflags="-X main.Version=$(VERSION)" -o bin/stream-ingester ../hololive-stream-ingester/cmd/stream-ingester
+	CGO_ENABLED=0 $(GO) build -tags go_json -trimpath -ldflags="-X main.Version=$(VERSION)" -o bin/youtube-producer ../hololive-youtube-producer/cmd/youtube-producer
 
 .PHONY: version
 version:

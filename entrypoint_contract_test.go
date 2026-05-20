@@ -86,14 +86,14 @@ func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 	}
 }
 
-func TestDocsUseConsolidatedStreamIngesterOpsCommand(t *testing.T) {
+func TestDocsUseConsolidatedYouTubeProducerOpsCommand(t *testing.T) {
 	t.Parallel()
 
 	deprecatedCommandPaths := []string{
-		"hololive/hololive-stream-ingester/cmd/youtube-",
-		"hololive/hololive-stream-ingester/cmd/ops/youtube-community-alarm-sent-history",
-		"hololive/hololive-stream-ingester/cmd/ops/youtube-shorts-alarm-sent-history",
-		"hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-",
+		"hololive/hololive-youtube-producer/cmd/youtube-",
+		"hololive/hololive-youtube-producer/cmd/ops/youtube-community-alarm-sent-history",
+		"hololive/hololive-youtube-producer/cmd/ops/youtube-shorts-alarm-sent-history",
+		"hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts-",
 	}
 
 	if err := filepath.WalkDir(filepath.Join("docs", "current"), func(path string, d os.DirEntry, err error) error {

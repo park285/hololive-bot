@@ -5,6 +5,7 @@
 ## Core
 
 - `PROJECT_MAP.md` - 현재 module/runtime 운영 인벤토리
+- `CODEBASE_OVERVIEW.md` - 코드베이스 온보딩용 구조/흐름 요약
 - `DEPLOYMENT_BASELINE.md` - Docker Compose 운영 baseline
 - `SERVICE_OWNERSHIP.md` - 6개 runtime ownership 기준
 - `CONTRACT_MAP.md` - 내부 HTTP/Queue/PubSub/external boundary 계약 지도
@@ -18,8 +19,7 @@
 - `services/admin-api.md`
 - `services/alarm-worker.md`
 - `services/llm-scheduler.md`
-- `services/stream-ingester.md`
-- `services/youtube-scraper.md`
+- `services/youtube-producer.md`
 
 ## Contracts
 

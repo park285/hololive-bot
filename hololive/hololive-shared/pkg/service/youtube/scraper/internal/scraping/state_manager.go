@@ -132,8 +132,8 @@ func (cs *cacheState) clear(ctx context.Context, key, stateKey string) {
 }
 
 const (
-	communityMissingKeyPrefix = "youtube:scraper:community-missing:"
-	videoRSSBackoffKeyPrefix  = "youtube:scraper:video-rss-backoff:"
+	communityMissingKeyPrefix = "youtube:producer:community-missing:"
+	videoRSSBackoffKeyPrefix  = "youtube:producer:video-rss-backoff:"
 )
 
 func (c *Client) communityMissingStateKey(channelID string) string {

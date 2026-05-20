@@ -134,6 +134,14 @@ x-scraper-env: &scraper-env
   SCRAPER_STATS_SECONDS: "${SCRAPER_STATS_SECONDS:-21600}"
   SCRAPER_POLL_LIVE_INTERVAL_SECONDS: "${SCRAPER_POLL_LIVE_INTERVAL_SECONDS:-0}"
   SCRAPER_LIVE_SECONDS: "${SCRAPER_LIVE_SECONDS:-120}"
+  SCRAPER_BACKFILL_ENABLED: "${SCRAPER_BACKFILL_ENABLED:-false}"
+  SCRAPER_BACKFILL_SHORTS_ENABLED: "${SCRAPER_BACKFILL_SHORTS_ENABLED:-true}"
+  SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS: "${SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS:-300}"
+  SCRAPER_BACKFILL_COMMUNITY_ENABLED: "${SCRAPER_BACKFILL_COMMUNITY_ENABLED:-true}"
+  SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS: "${SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS:-600}"
+  SCRAPER_BACKFILL_LIVE_ENABLED: "${SCRAPER_BACKFILL_LIVE_ENABLED:-true}"
+  SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS: "${SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS:-180}"
+  SCRAPER_BACKFILL_TARGET_GROUP: "${SCRAPER_BACKFILL_TARGET_GROUP:-notification}"
 
 x-go-volumes: &go-volumes
   - ./data:/app/data
@@ -355,6 +363,7 @@ services:
       NOTIFICATION_EGRESS_ROLE: "owner"
       NOTIFICATION_SCHEDULER_ROLE: "worker"
       YOUTUBE_OUTBOX_DISPATCHER_ENABLED: ${YOUTUBE_OUTBOX_DISPATCHER_ENABLED:-true}
+      YOUTUBE_OUTBOX_KARING_ENABLED: ${YOUTUBE_OUTBOX_KARING_ENABLED:-false}
       DELIVERY_DISPATCHER_ENABLED: ${DELIVERY_DISPATCHER_ENABLED:-true}
       ALARM_WORKER_EGRESS_LEASE_ENABLED: ${ALARM_WORKER_EGRESS_LEASE_ENABLED:-true}
       SERVER_PORT: 30007
@@ -363,7 +372,7 @@ services:
       POSTGRES_POOL_MAX_IDLE_CONNS: ${ALARM_WORKER_POSTGRES_POOL_MAX_IDLE_CONNS:-4}
       ALARM_DISPATCH_PUBLISH_MODE: ${ALARM_DISPATCH_PUBLISH_MODE:-pg_first}
       ALARM_DISPATCH_CONSUMER_MODE: ${ALARM_DISPATCH_CONSUMER_MODE:-pg}
-      ALARM_DISPATCH_KARING_ENABLED: ${ALARM_DISPATCH_KARING_ENABLED:-true}
+      ALARM_DISPATCH_KARING_ENABLED: ${ALARM_DISPATCH_KARING_ENABLED:-false}
       ALARM_DISPATCH_SHADOW_FATAL: ${ALARM_DISPATCH_SHADOW_FATAL:-false}
       ALARM_DISPATCH_WAKEUP_ENABLED: ${ALARM_DISPATCH_WAKEUP_ENABLED:-true}
       ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH: ${ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH:-1000}
@@ -402,60 +411,24 @@ services:
         aliases:
           - hololive-alarm-worker
 
-  stream-ingester:
+  youtube-producer:
     <<: *app-service
     profiles: ["oracle"]
-    image: hololive-stream-ingester:prod
+    image: hololive-youtube-producer:prod
     build:
       <<: *go-build-base
-      dockerfile: hololive/hololive-stream-ingester/Dockerfile
+      dockerfile: hololive/hololive-youtube-producer/Dockerfile
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-    container_name: hololive-stream-ingester
-    environment:
-      <<: [*app-file-log-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
-      NOTIFICATION_EGRESS_ROLE: "producer"
-      SERVER_PORT: 30004
-      YOUTUBE_INGESTION_ENABLED: "false"
-      PHOTO_SYNC_ENABLED: "true"
-      YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED: "false"
-      GOGC: "100"
-      GOMEMLIMIT: "320MiB"
-      GIN_MODE: release
-      LOG_DIR: /app/logs
-    dns: *public-dns
-    ports:
-      - "127.0.0.1:30004:30004"
-    volumes: *go-volumes
-    extra_hosts: *host-extra-hosts
-    depends_on: *db-cache-depends
-    deploy: *deploy-384m
-    healthcheck:
-      <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30004/health"]
-    networks:
-      hololive-net:
-        aliases:
-          - stream-ingester
-
-  youtube-scraper:
-    <<: *app-service
-    profiles: ["oracle"]
-    image: hololive-youtube-scraper:prod
-    build:
-      <<: *go-build-base
-      dockerfile: hololive/hololive-stream-ingester/Dockerfile.youtube-scraper
-      args:
-        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-    container_name: hololive-youtube-scraper
+    container_name: hololive-youtube-producer
     environment:
       <<: [*app-file-log-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
       NOTIFICATION_EGRESS_ROLE: "producer"
       YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
-      YOUTUBE_SCRAPER_RUNTIME_ALLOWED: "false"
+      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "false"
       SERVER_PORT: 30005
       YOUTUBE_INGESTION_ENABLED: "true"
-      PHOTO_SYNC_ENABLED: "false"
+      PHOTO_SYNC_ENABLED: "true"
       YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED: "true"
       GOGC: "100"
       GOMEMLIMIT: "320MiB"
@@ -474,7 +447,7 @@ services:
     networks:
       hololive-net:
         aliases:
-          - youtube-scraper
+          - youtube-producer
 
   llm-scheduler:
     <<: *app-service

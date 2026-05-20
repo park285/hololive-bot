@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
-# 원격 split-host app file log를 메인 서버 /logs 경로로 mirror합니다.
-#
-# 권장 결과:
-#   /logs/youtube-scraper.log -> /logs/remote/osaka/youtube-scraper.log
-#   /logs/stream-ingester.log -> /logs/remote/osaka/stream-ingester.log
-#
-# /logs/*.log에 직접 쓰지 않고 symlink를 둬서 local runtime 오기동 시
-# writer 충돌을 피하고 원격 원본 위치를 계속 드러냅니다.
+# 원격 split-host app file log를 /logs/remote/<target>로 mirror하고 기본 대상은 /logs/<service>.log symlink로 노출합니다.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,7 +11,8 @@ FORCE_MAIN_LOG_LINKS="${FORCE_MAIN_LOG_LINKS:-0}"
 OSAKA_USER_HOST="${HOL_LOG_OSAKA_USER_HOST:-ubuntu@kapu-iris-osaka-1}"
 OSAKA_SSH_KEY="${HOL_LOG_OSAKA_SSH_KEY:-${REPO_ROOT}/KR.key}"
 OSAKA_REMOTE_LOG_DIR="${HOL_LOG_OSAKA_LOG_DIR:-/home/ubuntu/hololive-bot/logs}"
-OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-scraper stream-ingester}"
+OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-producer-a youtube-producer-b}"
+OSAKA_EXPLICIT_SERVICES="${HOL_LOG_OSAKA_EXPLICIT_SERVICES:-${OSAKA_SERVICES}}"
 
 usage() {
   cat <<'USAGE'
@@ -30,17 +24,6 @@ Usage:
   remote-sync-main-logs.sh tail osaka <service>
   remote-sync-main-logs.sh docker-tail osaka <service> [--since 15m] [--tail 200]
 
-Environment:
-  LOG_ROOT=/logs
-  HOL_LOG_OSAKA_USER_HOST=ubuntu@kapu-iris-osaka-1
-  HOL_LOG_OSAKA_SSH_KEY=./KR.key
-  HOL_LOG_OSAKA_LOG_DIR=/home/ubuntu/hololive-bot/logs
-  FORCE_MAIN_LOG_LINKS=1  # replace existing regular /logs/<service>.log after backup
-
-Examples:
-  ./scripts/logs/remote-sync-main-logs.sh once osaka
-  tail -f /logs/youtube-scraper.log
-  ./scripts/logs/remote-sync-main-logs.sh query osaka youtube-scraper --tail 1000 --grep 'ERR|WRN|outbox'
 USAGE
 }
 
@@ -62,7 +45,8 @@ validate_target_service() {
   local service="$2"
   local candidate
 
-  for candidate in $(target_services "${target}"); do
+  [[ "${target}" == "osaka" ]] || { echo "ERROR: unknown target: ${target}" >&2; exit 1; }
+  for candidate in ${OSAKA_EXPLICIT_SERVICES}; do
     if [[ "${candidate}" == "${service}" ]]; then
       return 0
     fi
@@ -72,11 +56,24 @@ validate_target_service() {
   exit 1
 }
 
+is_default_target_service() {
+  local target="$1"
+  local service="$2"
+  local candidate
+
+  for candidate in $(target_services "${target}"); do
+    if [[ "${candidate}" == "${service}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 osaka_container_for() {
   local service="$1"
   case "${service}" in
-    youtube-scraper) printf '%s\n' "hololive-youtube-scraper" ;;
-    stream-ingester) printf '%s\n' "hololive-stream-ingester" ;;
+    youtube-producer-a) printf '%s\n' "hololive-youtube-producer-a" ;;
+    youtube-producer-b) printf '%s\n' "hololive-youtube-producer-b" ;;
     *) echo "ERROR: unknown service for osaka: ${service}" >&2; exit 1 ;;
   esac
 }
@@ -232,12 +229,27 @@ daemon_osaka() {
 }
 
 service_log_path() {
-  local service="$1"
-  printf '%s/%s.log\n' "${LOG_ROOT}" "${service}"
+  local target="$1"
+  local service="$2"
+  local main_file mirror_file
+  main_file="${LOG_ROOT}/${service}.log"
+  mirror_file="$(target_dir "${target}")/${service}.log"
+
+  if ! is_default_target_service "${target}" "${service}" && [[ -e "${mirror_file}" ]]; then
+    printf '%s\n' "${mirror_file}"
+  elif [[ -e "${main_file}" ]]; then
+    printf '%s\n' "${main_file}"
+  elif [[ -e "${mirror_file}" ]]; then
+    printf '%s\n' "${mirror_file}"
+  else
+    printf '%s\n' "${main_file}"
+  fi
 }
 
 query_service() {
-  local service="$1"
+  local target="$1"
+  local service="$2"
+  shift || true
   shift || true
 
   local tail_lines="500"
@@ -261,7 +273,7 @@ query_service() {
     esac
   done
 
-  file="$(service_log_path "${service}")"
+  file="$(service_log_path "${target}" "${service}")"
   if [[ ! -e "${file}" ]]; then
     echo "ERROR: log file not found: ${file}" >&2
     exit 1
@@ -275,9 +287,10 @@ query_service() {
 }
 
 tail_service() {
-  local service="$1"
+  local target="$1"
+  local service="$2"
   local file
-  file="$(service_log_path "${service}")"
+  file="$(service_log_path "${target}" "${service}")"
 
   if [[ ! -e "${file}" ]]; then
     echo "ERROR: log file not found: ${file}" >&2
@@ -354,7 +367,7 @@ case "${cmd}" in
     [[ -n "${service}" ]] || { echo "ERROR: service is required" >&2; exit 1; }
     validate_target_service "${target}" "${service}"
     shift 3 || true
-    query_service "${service}" "$@"
+    query_service "${target}" "${service}" "$@"
     ;;
   tail)
     target="${2:-}"
@@ -362,7 +375,7 @@ case "${cmd}" in
     [[ "${target}" == "osaka" ]] || { echo "ERROR: only target 'osaka' is currently configured" >&2; exit 1; }
     [[ -n "${service}" ]] || { echo "ERROR: service is required" >&2; exit 1; }
     validate_target_service "${target}" "${service}"
-    tail_service "${service}"
+    tail_service "${target}" "${service}"
     ;;
   docker-tail)
     target="${2:-}"

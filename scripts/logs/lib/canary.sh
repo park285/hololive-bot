@@ -42,7 +42,7 @@ cmd_prune() {
 }
 
 cmd_canary() {
-  local service="stream-ingester"
+  local service="youtube-producer"
   local since="30m"
   local limit="5000"
   local warn_failure_rate="0.10"
@@ -196,7 +196,7 @@ cmd_canary_cron() {
   local since="${OUTBOX_CANARY_SINCE:-30m}"
   local limit="${OUTBOX_CANARY_LIMIT:-5000}"
   local warn_failure_rate="${OUTBOX_CANARY_WARN_FAILURE_RATE:-0.10}"
-  local service="${OUTBOX_CANARY_SERVICE:-stream-ingester}"
+  local service="${OUTBOX_CANARY_SERVICE:-youtube-producer}"
   local max_aggregate_failures="${OUTBOX_CANARY_MAX_AGGREGATE_FAILURES:-0}"
   local max_enqueue_failures="${OUTBOX_CANARY_MAX_ENQUEUE_FAILURES:-0}"
   local min_delivery_claimed="${OUTBOX_CANARY_MIN_DELIVERY_CLAIMED:-10}"

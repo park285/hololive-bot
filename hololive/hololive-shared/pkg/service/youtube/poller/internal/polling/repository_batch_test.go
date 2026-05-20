@@ -24,10 +24,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -121,6 +123,9 @@ func TestGormBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t 
 	repo := newBatchRepository(db)
 	ctx := context.Background()
 
+	videoSuccessBefore := testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "success"))
+	videoConflictBefore := testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "conflict"))
+	shortSuccessBefore := testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewShort), "success"))
 	notifications := []*domain.YouTubeNotificationOutbox{
 		{
 			Kind:      domain.OutboxKindNewVideo,
@@ -161,6 +166,104 @@ func TestGormBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t 
 	var outboxCount int64
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
 	require.EqualValues(t, 2, outboxCount)
+	require.Equal(t, videoSuccessBefore+1, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "success")))
+	require.Equal(t, videoConflictBefore, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "conflict")))
+	require.Equal(t, shortSuccessBefore+1, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewShort), "success")))
+}
+
+func TestGormBatchRepositoryPersistVideosConcurrentOutboxInsertIsIdempotent(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	require.NoError(t, db.Exec("PRAGMA busy_timeout = 5000").Error)
+	ctx := context.Background()
+
+	runPersist := func() error {
+		repo := newBatchRepository(db)
+		return persistVideos(repo, ctx, []*domain.YouTubeVideo{{
+			VideoID:   "video-race",
+			ChannelID: "channel-1",
+			Title:     "title-video-race",
+			ViewCount: 1,
+		}}, []*domain.YouTubeNotificationOutbox{{
+			Kind:      domain.OutboxKindNewVideo,
+			ChannelID: "channel-1",
+			ContentID: "video-race",
+			Payload:   `{"video_id":"video-race"}`,
+			Status:    domain.OutboxStatusPending,
+		}}, &domain.YouTubeContentWatermark{
+			ChannelID:     "channel-1",
+			WatermarkType: domain.WatermarkTypeVideo,
+			Initialized:   true,
+			LastContentID: "video-race",
+		})
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for range 2 {
+		wg.Go(func() {
+			errs <- runPersist()
+		})
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).
+		Where("kind = ? AND content_id = ?", domain.OutboxKindNewVideo, "video-race").
+		Count(&outboxCount).Error)
+	require.EqualValues(t, 1, outboxCount)
+}
+
+func TestGormBatchRepositoryPersistVideosPrimaryAndBackfillSameContentLeaveOneOutboxRow(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	repo := newBatchRepository(db)
+	ctx := context.Background()
+	video := &domain.YouTubeVideo{
+		VideoID:   "short-backfill",
+		ChannelID: "channel-1",
+		Title:     "title-short-backfill",
+		IsShort:   true,
+		ViewCount: 1,
+	}
+	watermark := &domain.YouTubeContentWatermark{
+		ChannelID:     "channel-1",
+		WatermarkType: domain.WatermarkTypeShort,
+		Initialized:   true,
+		LastContentID: "short-backfill",
+	}
+
+	require.NoError(t, persistVideos(repo, ctx, []*domain.YouTubeVideo{video}, []*domain.YouTubeNotificationOutbox{{
+		Kind:      domain.OutboxKindNewShort,
+		ChannelID: "channel-1",
+		ContentID: "short:short-backfill",
+		Payload:   buildShortNotificationPayload(video, "short:short-backfill"),
+		Status:    domain.OutboxStatusPending,
+	}}, watermark))
+	require.NoError(t, persistVideos(repo, ctx, []*domain.YouTubeVideo{video}, []*domain.YouTubeNotificationOutbox{{
+		Kind:      domain.OutboxKindNewShort,
+		ChannelID: "channel-1",
+		ContentID: "short:short-backfill",
+		Payload:   buildShortNotificationPayload(video, "short:short-backfill"),
+		Status:    domain.OutboxStatusPending,
+	}}, watermark))
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).
+		Where("kind = ? AND content_id = ?", domain.OutboxKindNewShort, "short:short-backfill").
+		Count(&outboxCount).Error)
+	require.EqualValues(t, 1, outboxCount)
 }
 
 func TestGormBatchRepositoryPersistVideosPersistsShortPublishedAt(t *testing.T) {

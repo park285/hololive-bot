@@ -9,13 +9,13 @@
 리포지토리 루트에서 다음 명령을 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts target-baseline
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts target-baseline
 ```
 
 운영자용 Markdown 리포트가 필요하면 다음 명령을 사용합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts route-report
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts route-report
 ```
 
 필요 조건:
@@ -26,8 +26,7 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts rout
 ## 출력 의미
 
 - `runtime.final_delivery_owner`
-  - `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true` 이면 `youtube-scraper`
-  - 아니면 `stream-ingester`
+  - `youtube-producer`
 - `path_mappings`
   - `legacy_alarm_queue` 는 `COMMUNITY`/`SHORTS` 에 대해 차단된 legacy 경로입니다.
   - `legacy_path_active=false` 이면 구 경로가 비활성화된 상태입니다.
@@ -45,13 +44,13 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts rout
 
 ## 기준 코드
 
-- 운영 채널 SSOT: `hololive/hololive-stream-ingester/internal/communityshorts/target_baseline.go`
-- baseline 수집: `hololive/hololive-stream-ingester/internal/communityshorts/target_baseline.go`
+- 운영 채널 SSOT: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
+- baseline 수집: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
 - typed key SSOT: `hololive/hololive-shared/pkg/service/alarm/keys/keys.go`
 - legacy 차단: `hololive/hololive-shared/pkg/domain/internal/model/alarm.go`
 - 신규 경로 fan-out: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher.go`
-- cutover 라우팅 정책: `hololive/hololive-stream-ingester/internal/communityshorts/route_policy.go`
-- 운영 런타임 owner: `hololive/hololive-stream-ingester/internal/runtime/internal/ingesterruntime/bootstrap_stream_ingester.go`
+- cutover 라우팅 정책: `hololive/hololive-youtube-producer/internal/communityshorts/route_policy.go`
+- 운영 런타임 owner: `hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/bootstrap_youtube_producer.go`
 
 ## 검증
 
@@ -65,5 +64,5 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts rout
 
 로컬 검증 명령:
 
-- `go test ./hololive/hololive-stream-ingester/internal/app -run '^TestBuildCommunityShortsTargetBaseline$'`
-- `go test ./hololive/hololive-stream-ingester/cmd/...`
+- `go test ./hololive/hololive-youtube-producer/internal/communityshorts -run '^TestBuildTargetBaseline$'`
+- `go test ./hololive/hololive-youtube-producer/cmd/...`

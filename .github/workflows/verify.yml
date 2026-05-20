@@ -63,7 +63,7 @@ jobs:
             hololive/hololive-admin-api/go.sum
             hololive/hololive-alarm-worker/go.sum
             hololive/hololive-llm-sched/go.sum
-            hololive/hololive-stream-ingester/go.sum
+            hololive/hololive-youtube-producer/go.sum
 
       - uses: dtolnay/rust-toolchain@master
         with:

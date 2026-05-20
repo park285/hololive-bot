@@ -35,6 +35,11 @@ var (
 	schedulerRegisteredJobs           prometheus.Gauge
 	schedulerDispatchDefer            *prometheus.CounterVec
 	schedulerPollDuration             *prometheus.HistogramVec
+	jobClaimTotal                     *prometheus.CounterVec
+	jobLeaseRenewTotal                *prometheus.CounterVec
+	jobMarkCompletedTotal             *prometheus.CounterVec
+	jobReleaseTotal                   *prometheus.CounterVec
+	outboxInsertTotal                 *prometheus.CounterVec
 	communityShortsDetectedPostsTotal *prometheus.CounterVec
 	publishedAtResolutionAttemptTotal *prometheus.CounterVec
 	publishedAtResolutionSuccessTotal *prometheus.CounterVec
@@ -47,52 +52,88 @@ var (
 
 func ensureMetrics() {
 	pollerMetricsOnce.Do(func() {
-		schedulerRegisteredJobs = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "youtube_poller_scheduler_job_count",
-			Help: "현재 YouTube poller scheduler에 등록된 job 수",
-		})
-		schedulerDispatchDefer = promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "youtube_poller_scheduler_dispatch_deferred_total",
-			Help: "worker channel 포화 등으로 scheduler dispatch가 defer된 횟수",
-		}, []string{"reason"})
-		schedulerPollDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "youtube_poller_poll_duration_seconds",
-			Help:    "poller별 channel poll 실행 시간",
-			Buckets: prometheus.DefBuckets,
-		}, []string{"poller", "status"})
-		communityShortsDetectedPostsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "youtube_poller_community_shorts_detected_posts_total",
-			Help: "채널별 커뮤니티/쇼츠 감지 게시물 수",
-		}, []string{"channel_id", "alarm_type"})
-		publishedAtResolutionAttemptTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "youtube_poller_published_at_resolution_attempt_total",
-			Help: "resolver published_at 해석 시도 횟수",
-		}, []string{"kind"})
-		publishedAtResolutionSuccessTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "youtube_poller_published_at_resolution_success_total",
-			Help: "resolver published_at 해석 성공 횟수",
-		}, []string{"kind"})
-		publishedAtResolutionFailureTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "youtube_poller_published_at_resolution_failure_total",
-			Help: "resolver published_at 해석 실패 횟수",
-		}, []string{"kind"})
-		publishedAtResolverSkippedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "youtube_poller_published_at_resolver_skipped_total",
-			Help: "resolver가 후보를 enqueue 없이 건너뛴 횟수",
-		}, []string{"kind", "reason"})
-		publishedAtResolverEnqueuedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "youtube_poller_published_at_resolver_enqueued_total",
-			Help: "resolver가 enqueue한 알림 수",
-		}, []string{"kind"})
-		publishedAtResolverPageCandidates = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "youtube_poller_published_at_resolver_page_candidates",
-			Help: "현재 resolver iteration에서 마지막으로 조회한 candidate page 길이",
-		})
-		publishedAtResolverScannedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "youtube_poller_published_at_resolver_scanned_total",
-			Help: "resolver가 iteration 동안 스캔한 candidate 수",
-		}, []string{"kind"})
+		registerSchedulerMetrics()
+		registerJobClaimMetrics()
+		registerContentMetrics()
 	})
+}
+
+func registerSchedulerMetrics() {
+	schedulerRegisteredJobs = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "youtube_poller_scheduler_job_count",
+		Help: "현재 YouTube poller scheduler에 등록된 job 수",
+	})
+	schedulerDispatchDefer = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_scheduler_dispatch_deferred_total",
+		Help: "worker channel 포화 등으로 scheduler dispatch가 defer된 횟수",
+	}, []string{"reason"})
+	schedulerPollDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "youtube_poller_poll_duration_seconds",
+		Help:    "poller별 channel poll 실행 시간",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"poller", "status"})
+}
+
+func registerJobClaimMetrics() {
+	jobClaimTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_job_claim_total",
+		Help: "poller별 distributed job claim 결과",
+	}, []string{"poller", "result"})
+	jobLeaseRenewTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_job_lease_renew_total",
+		Help: "poller별 distributed job lease renew 결과",
+	}, []string{"poller", "result"})
+	jobMarkCompletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_job_mark_completed_total",
+		Help: "poller별 distributed job completion marker 결과",
+	}, []string{"poller", "result"})
+	jobReleaseTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_job_release_total",
+		Help: "poller별 distributed job lease release 결과",
+	}, []string{"poller", "result"})
+}
+
+func registerContentMetrics() {
+	outboxInsertTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_outbox_insert_total",
+		Help: "YouTube notification outbox insert 결과",
+	}, []string{"kind", "result"})
+	communityShortsDetectedPostsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_community_shorts_detected_posts_total",
+		Help: "커뮤니티/쇼츠 감지 게시물 수",
+	}, []string{"alarm_type"})
+	registerPublishedAtResolverMetrics()
+}
+
+func registerPublishedAtResolverMetrics() {
+	publishedAtResolutionAttemptTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_published_at_resolution_attempt_total",
+		Help: "resolver published_at 해석 시도 횟수",
+	}, []string{"kind"})
+	publishedAtResolutionSuccessTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_published_at_resolution_success_total",
+		Help: "resolver published_at 해석 성공 횟수",
+	}, []string{"kind"})
+	publishedAtResolutionFailureTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_published_at_resolution_failure_total",
+		Help: "resolver published_at 해석 실패 횟수",
+	}, []string{"kind"})
+	publishedAtResolverSkippedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_published_at_resolver_skipped_total",
+		Help: "resolver가 후보를 enqueue 없이 건너뛴 횟수",
+	}, []string{"kind", "reason"})
+	publishedAtResolverEnqueuedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_published_at_resolver_enqueued_total",
+		Help: "resolver가 enqueue한 알림 수",
+	}, []string{"kind"})
+	publishedAtResolverPageCandidates = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "youtube_poller_published_at_resolver_page_candidates",
+		Help: "현재 resolver iteration에서 마지막으로 조회한 candidate page 길이",
+	})
+	publishedAtResolverScannedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_published_at_resolver_scanned_total",
+		Help: "resolver가 iteration 동안 스캔한 candidate 수",
+	}, []string{"kind"})
 }
 
 func init() {
@@ -102,6 +143,44 @@ func init() {
 func observePublishedAtResolutionAttempt(kind domain.OutboxKind) {
 	ensureMetrics()
 	publishedAtResolutionAttemptTotal.WithLabelValues(string(kind)).Inc()
+}
+
+func observeJobClaim(pollerName, result string) {
+	ensureMetrics()
+	jobClaimTotal.WithLabelValues(pollerName, result).Inc()
+}
+
+func observeJobLeaseRenew(pollerName, result string) {
+	ensureMetrics()
+	jobLeaseRenewTotal.WithLabelValues(pollerName, result).Inc()
+}
+
+func observeJobMarkCompleted(pollerName, result string) {
+	ensureMetrics()
+	jobMarkCompletedTotal.WithLabelValues(pollerName, result).Inc()
+}
+
+func observeJobRelease(pollerName, result string) {
+	ensureMetrics()
+	jobReleaseTotal.WithLabelValues(pollerName, result).Inc()
+}
+
+func observeOutboxInsert(kind domain.OutboxKind, result string, count int64) {
+	if count <= 0 {
+		return
+	}
+	ensureMetrics()
+	outboxInsertTotal.WithLabelValues(string(kind), result).Add(float64(count))
+}
+
+func boolResult(ok bool, err error) string {
+	if err != nil {
+		return "error"
+	}
+	if ok {
+		return "success"
+	}
+	return "lost"
 }
 
 func observePublishedAtResolutionSuccess(kind domain.OutboxKind) {

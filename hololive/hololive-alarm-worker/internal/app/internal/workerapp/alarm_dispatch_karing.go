@@ -37,7 +37,7 @@ func buildAlarmDispatchKaringContentListRequests(group alarmDispatchGroup) ([]ir
 		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(items))
 		chunk := items[start:end]
 		req := iris.KaringContentListRequest{
-			ClientRequestID: stringPtr(alarmDispatchClientRequestID(group, start, end)),
+			ClientRequestID: new(alarmDispatchClientRequestID(group, start, end)),
 			Items:           chunk,
 			ExtraArgs:       buildAlarmDispatchKaringExtraArgs(group, len(chunk)),
 			TemplateID:      alarmDispatchKaringTemplateID(len(chunk)),
@@ -78,10 +78,6 @@ func alarmDispatchEnvelopeClientRequestIDParts(envelope domain.AlarmQueueEnvelop
 		}
 	}
 	return parts
-}
-
-func stringPtr(value string) *string {
-	return &value
 }
 
 func applyAlarmDispatchKaringReceiver(req *iris.KaringContentListRequest, roomID string) {

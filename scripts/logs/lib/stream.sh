@@ -35,7 +35,7 @@ cmd_stream() {
   local name=""
   local pid=""
   local svc=""
-  local services=(bot stream-ingester llm-scheduler)
+  local services=(bot youtube-producer llm-scheduler)
 
   case "${command}" in
     start)

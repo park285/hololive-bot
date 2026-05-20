@@ -41,7 +41,7 @@ func buildNotificationEgress(
 	runners := []namedRuntimeScheduler{
 		{name: "alarm-dispatch", scheduler: buildAlarmDispatchRunner(infra, irisSender, logger)},
 		{name: "alarm-dispatch-maintenance", scheduler: buildAlarmDispatchMaintenanceRunner(infra, logger)},
-		{name: "youtube-outbox", scheduler: buildYouTubeOutboxDispatcher(infra, newYouTubeOutboxKaringSender(irisSender), logger)},
+		{name: "youtube-outbox", scheduler: buildYouTubeOutboxDispatcher(infra, buildYouTubeOutboxSender(irisSender), logger)},
 		{name: "notification-delivery-outbox", scheduler: buildDeliveryOutboxDispatcher(infra, irisSender, logger)},
 	}
 	return notificationEgressRunner{
@@ -123,6 +123,13 @@ func buildAlarmDispatchRunner(
 
 func parseAlarmDispatchKaringEnabled() bool {
 	return parseBoolEnv("ALARM_DISPATCH_KARING_ENABLED", false)
+}
+
+func buildYouTubeOutboxSender(irisSender *egress.IrisMessageSender) delivery.MessageSender {
+	if !parseBoolEnv("YOUTUBE_OUTBOX_KARING_ENABLED", false) {
+		return irisSender
+	}
+	return newYouTubeOutboxKaringSender(irisSender)
 }
 
 func buildYouTubeOutboxDispatcher(

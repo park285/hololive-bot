@@ -1,6 +1,6 @@
 # YouTube Community Shorts Post-Deploy First 24h Verification
 
-`youtube-scraper` 빅뱅 배포 직후 24시간 동안 유튜브 커뮤니티/쇼츠 알람이 실제 게시 시각 기준 2분 SLA와 게시물당 정확히 1회 발송 조건을 유지하는지 확인하는 운영 검증 문서입니다.
+`youtube-producer` 빅뱅 배포 직후 24시간 동안 유튜브 커뮤니티/쇼츠 알람이 실제 게시 시각 기준 2분 SLA와 게시물당 정확히 1회 발송 조건을 유지하는지 확인하는 운영 검증 문서입니다.
 
 ## 검증 개요
 
@@ -34,7 +34,7 @@
 ### 1. 배포 직후 observation key를 고정합니다
 
 1. 배포 완료 시각을 `CUTOVER_AT` 으로 기록합니다.
-2. 이후 `send-counts`, `delivery-logs`, `latency-cause-report` 등 observation query는 모두 같은 `-observation-runtime youtube-scraper -observation-cutover "$CUTOVER_AT"` 조합으로 실행합니다. 운영자는 가능하면 `youtube-community-shorts continuous-observation-report -watch` 를 먼저 켜서 같은 observation key의 baseline, channel summary, send counts, delivery logs, latency report snapshot을 계속 파일로 남깁니다.
+2. 이후 `send-counts`, `delivery-logs`, `latency-cause-report` 등 observation query는 모두 같은 `-observation-runtime youtube-producer -observation-cutover "$CUTOVER_AT"` 조합으로 실행합니다. 운영자는 가능하면 `youtube-community-shorts continuous-observation-report -watch` 를 먼저 켜서 같은 observation key의 baseline, channel summary, send counts, delivery logs, latency report snapshot을 계속 파일로 남깁니다.
 3. `youtube-community-shorts continuous-observation-report -watch` 가 첫 snapshot을 썼는지 확인하고, `latest.md` 또는 `latest.json` 에 channel summary / send counts / latency report 섹션이 모두 보이는지 확인합니다.
 4. `route-report` 를 먼저 1회 실행해 `runtime final owner = alarm-worker`, `big-bang enabled = true` 를 확인합니다.
 
@@ -167,26 +167,26 @@
 배포 시점의 observation key를 이미 기록해 두었다면 아래 명령을 기준 절차로 사용합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts continuous-observation-report \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts continuous-observation-report \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT> \
   -watch
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts send-counts \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts send-counts \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT>
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT>
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-cause-report \
-  -observation-runtime youtube-scraper \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts latency-cause-report \
+  -observation-runtime youtube-producer \
   -observation-cutover <CUTOVER_AT>
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts route-report -window=24h
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts route-report -window=24h
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-period-summary \
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts latency-period-summary \
   -period last_15m=15m \
   -period last_1h=1h \
   -period last_24h=24h
@@ -231,7 +231,7 @@ verification_closed_at_utc: <YYYY-MM-DDTHH:MM:SSZ>
 author: <name-or-handle>
 reviewer: <name-or-handle-or-n/a>
 observation_key:
-  runtime_name: youtube-scraper
+  runtime_name: youtube-producer
   bigbang_cutover_at: <CUTOVER_AT RFC3339 UTC>
   observation_window_id: <id-or-n/a>
 artifact_root: artifacts/youtube-community-shorts-continuous-observation/<runtime>-<cutover>/

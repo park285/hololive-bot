@@ -30,7 +30,7 @@ func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot Snaps
 		return
 	}
 	if err := c.snapshotSink.Capture(ctx, snapshot); err != nil {
-		slog.Warn("failed to capture youtube scraper snapshot",
+		slog.Warn("failed to capture youtube producer snapshot",
 			"operation", snapshot.Operation,
 			"channel_id", snapshot.ChannelID,
 			"source", snapshot.Source,
@@ -57,7 +57,7 @@ func (c *Client) allowSnapshotInterval(ctx context.Context, snapshot Snapshot, i
 		return false
 	}
 	if err := c.stateStore.Set(ctx, key, true, interval); err != nil {
-		slog.Warn("failed to persist youtube scraper snapshot interval marker", "key", key, "error", err)
+		slog.Warn("failed to persist youtube producer snapshot interval marker", "key", key, "error", err)
 	}
 	return true
 }
@@ -67,7 +67,7 @@ func (c *Client) reserveSnapshotInterval(ctx context.Context, snapshot Snapshot)
 }
 
 func snapshotIntervalStateKey(snapshot Snapshot) string {
-	return fmt.Sprintf("youtube:scraper:snapshot-interval:%s:%s:%s:%s",
+	return fmt.Sprintf("youtube:producer:snapshot-interval:%s:%s:%s:%s",
 		strings.TrimSpace(snapshot.Operation),
 		strings.TrimSpace(snapshot.ChannelID),
 		strings.TrimSpace(snapshot.Stage),

@@ -26,8 +26,7 @@ Runtime service names:
 - `hololive-admin-api`
 - `hololive-alarm-worker`
 - `llm-scheduler`
-- `stream-ingester`
-- `youtube-scraper`
+- `youtube-producer`
 
 ## Contract Rollback
 
