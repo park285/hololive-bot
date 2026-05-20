@@ -18,8 +18,7 @@
 | `admin-api` | `hololive-admin-api` | 30006 | app file log, cache, PostgreSQL | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
 | `alarm-worker` | `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
 | `llm-scheduler` | `llm-scheduler` | 30003 | app file log, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
-| `stream-ingester` | `stream-ingester` | 30004 | app file log, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
-| `youtube-scraper` | `youtube-scraper` | 30005 | app file log, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
+| `youtube-producer` | `youtube-producer` | 30005 | app file log, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
 
 ## Infra Services
 
@@ -39,7 +38,7 @@
 | Iris / Redroid KakaoTalk automation | `bot`, `alarm-worker` | `contracts/iris-boundary.md` |
 | PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-kakao-bot-go/scripts/migrations` |
 | Valkey | cache, alarm queue, config Pub/Sub | `QUEUE_AND_PUBSUB_CONTRACTS.md` |
-| CLIPROXY/OpenAI-compatible LLM proxy | `bot`, `llm-scheduler`, ingestion runtimes where configured | 검토 필요 |
+| CLIPROXY/OpenAI-compatible LLM proxy | `bot`, `llm-scheduler`, `youtube-producer` where configured | 검토 필요 |
 
 ## Validation
 
