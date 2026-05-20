@@ -58,9 +58,12 @@ func New(runtimeName string, features Features) *State {
 		activeActive:     features.ActiveActiveEnabled,
 		instanceID:       strings.TrimSpace(features.ActiveActiveInstance),
 	}
-	state.leaseAvailable.Store(true)
 	state.leaseReason.Store("")
 	state.lastError.Store("")
+	state.leaseAvailable.Store(true)
+	if features.ActiveActiveEnabled {
+		state.MarkLeaseUnavailable("valkey_unavailable_active_active_fail_closed")
+	}
 	return state
 }
 

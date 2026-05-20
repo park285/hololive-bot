@@ -5,6 +5,50 @@ import (
 	"testing"
 )
 
+func TestStateResponseActiveActiveStartsLeaseUnavailable(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:       true,
+		ActiveActiveEnabled:  true,
+		ActiveActiveInstance: "youtube-producer-a",
+	})
+	state.MarkRunning()
+
+	statusCode, payload := state.Response()
+
+	if statusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
+	}
+	if payload["valkey_available"] != false {
+		t.Fatalf("valkey_available = %v, want false", payload["valkey_available"])
+	}
+	if payload["scraping_paused"] != true {
+		t.Fatalf("scraping_paused = %v, want true", payload["scraping_paused"])
+	}
+	if payload["reason"] != "valkey_unavailable_active_active_fail_closed" {
+		t.Fatalf("reason = %v, want valkey_unavailable_active_active_fail_closed", payload["reason"])
+	}
+}
+
+func TestStateResponseSingleOwnerStartsLeaseAvailable(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:      true,
+		ActiveActiveEnabled: false,
+	})
+	state.MarkRunning()
+
+	statusCode, payload := state.Response()
+
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["valkey_available"] != true {
+		t.Fatalf("valkey_available = %v, want true", payload["valkey_available"])
+	}
+	if payload["scraping_paused"] != false {
+		t.Fatalf("scraping_paused = %v, want false", payload["scraping_paused"])
+	}
+}
+
 func TestStateResponseActiveActiveLeaseUnavailableIsNotReady(t *testing.T) {
 	state := New("youtube-producer", Features{
 		YouTubeEnabled:       true,

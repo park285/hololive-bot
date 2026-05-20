@@ -10,6 +10,12 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
 )
 
+const (
+	readinessProbePollerName = "__readiness_probe__"
+	readinessProbeChannelID  = "__valkey__"
+	readinessProbeTTL        = 15 * time.Second
+)
+
 type readinessReportingJobClaimer struct {
 	inner     poller.JobClaimer
 	readiness *readiness.State
@@ -47,4 +53,22 @@ func (c readinessReportingJobClaimer) TryClaim(
 	c.readiness.MarkLeaseAvailable()
 	slog.Debug("active_active_lease_available", slog.String("poller", pollerName))
 	return status, claim, nil
+}
+
+func probeReadinessJobClaimer(ctx context.Context, claimer poller.JobClaimer, logger *slog.Logger) {
+	if claimer == nil {
+		return
+	}
+	status, claim, err := claimer.TryClaim(ctx, readinessProbePollerName, readinessProbeChannelID, readinessProbeTTL, readinessProbeTTL)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("active_active_readiness_probe_failed", slog.Any("error", err))
+		}
+		return
+	}
+	if status.Result == poller.JobClaimAcquired && claim != nil {
+		if _, err := claim.Release(ctx); err != nil && logger != nil {
+			logger.Warn("active_active_readiness_probe_release_failed", slog.Any("error", err))
+		}
+	}
 }
