@@ -24,6 +24,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -292,6 +293,108 @@ func (c *schedulerClaimHandleStub) Release(context.Context) (bool, error) {
 	return true, nil
 }
 
+type sharedSchedulerClaimState struct {
+	mu            sync.Mutex
+	owner         bool
+	completed     bool
+	results       map[JobClaimResult]int
+	markCompleted int
+	releases      int
+}
+
+func newSharedSchedulerClaimState() *sharedSchedulerClaimState {
+	return &sharedSchedulerClaimState{results: make(map[JobClaimResult]int)}
+}
+
+func (s *sharedSchedulerClaimState) TryClaim(
+	context.Context,
+	string,
+	string,
+	time.Duration,
+	time.Duration,
+) (JobClaimStatus, JobClaim, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.completed {
+		s.results[JobClaimAlreadyCompleted]++
+		return JobClaimStatus{Result: JobClaimAlreadyCompleted, RetryAfter: time.Minute}, nil, nil
+	}
+	if s.owner {
+		s.results[JobClaimPeerOwned]++
+		return JobClaimStatus{Result: JobClaimPeerOwned, RetryAfter: time.Minute}, nil, nil
+	}
+	s.owner = true
+	s.results[JobClaimAcquired]++
+	return JobClaimStatus{Result: JobClaimAcquired}, &sharedSchedulerClaimHandle{state: s}, nil
+}
+
+func (s *sharedSchedulerClaimState) resultCount(result JobClaimResult) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.results[result]
+}
+
+func (s *sharedSchedulerClaimState) completedCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.markCompleted
+}
+
+type sharedSchedulerClaimHandle struct {
+	state *sharedSchedulerClaimState
+}
+
+func (h *sharedSchedulerClaimHandle) Renew(context.Context, time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (h *sharedSchedulerClaimHandle) MarkCompleted(context.Context, time.Duration) (bool, error) {
+	h.state.mu.Lock()
+	defer h.state.mu.Unlock()
+	h.state.completed = true
+	h.state.owner = false
+	h.state.markCompleted++
+	return true, nil
+}
+
+func (h *sharedSchedulerClaimHandle) Release(context.Context) (bool, error) {
+	h.state.mu.Lock()
+	defer h.state.mu.Unlock()
+	h.state.owner = false
+	h.state.releases++
+	return true, nil
+}
+
+type blockingCountingPollerStub struct {
+	name    string
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+	mu      sync.Mutex
+	calls   int
+}
+
+func (p *blockingCountingPollerStub) Poll(ctx context.Context, _ string) error {
+	p.mu.Lock()
+	p.calls++
+	p.mu.Unlock()
+	p.once.Do(func() { close(p.entered) })
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.release:
+		return nil
+	}
+}
+
+func (p *blockingCountingPollerStub) Name() string { return p.name }
+
+func (p *blockingCountingPollerStub) callCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls
+}
+
 func TestSchedulerExecuteJobSkipsPeerOwnedWithoutPolling(t *testing.T) {
 	scheduler := NewScheduler(SchedulerConfig{
 		WorkerCount:     1,
@@ -336,6 +439,77 @@ func TestSchedulerExecuteJobSkipsAlreadyCompletedWithoutPolling(t *testing.T) {
 
 	require.Equal(t, 0, p.calls)
 	require.Equal(t, 0, job.consecutiveFailures)
+}
+
+func TestSchedulerActiveActiveSharedClaimerAllowsOnlyOnePoll(t *testing.T) {
+	claimer := newSharedSchedulerClaimState()
+	p := &blockingCountingPollerStub{
+		name:    "videos",
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	schedulerA := NewScheduler(SchedulerConfig{
+		WorkerCount:     1,
+		RequestInterval: 0,
+		JobClaimer:      claimer,
+	})
+	schedulerB := NewScheduler(SchedulerConfig{
+		WorkerCount:     1,
+		RequestInterval: 200 * time.Millisecond,
+		JobClaimer:      claimer,
+	})
+	require.NoError(t, schedulerB.rateLimiter.Wait(context.Background()))
+	schedulerA.Register("channel-shared", p, PriorityNormal, time.Minute)
+	schedulerB.Register("channel-shared", p, PriorityNormal, time.Minute)
+	jobA := schedulerA.jobMap["channel-shared:videos"]
+	jobB := schedulerB.jobMap["channel-shared:videos"]
+	require.NotNil(t, jobA)
+	require.NotNil(t, jobB)
+	heap.Remove(&schedulerA.jobs, jobA.index)
+	heap.Remove(&schedulerB.jobs, jobB.index)
+
+	doneA := make(chan struct{})
+	go func() {
+		defer close(doneA)
+		schedulerA.executeJob(context.Background(), jobA, 1)
+	}()
+	select {
+	case <-p.entered:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler A did not start polling")
+	}
+
+	doneB := make(chan struct{})
+	startB := time.Now()
+	go func() {
+		defer close(doneB)
+		schedulerB.executeJob(context.Background(), jobB, 2)
+	}()
+	select {
+	case <-doneB:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler B did not skip peer-owned claim")
+	}
+	elapsedB := time.Since(startB)
+	close(p.release)
+	select {
+	case <-doneA:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler A did not finish polling")
+	}
+
+	require.Equal(t, 1, p.callCount())
+	require.Equal(t, 1, claimer.resultCount(JobClaimAcquired))
+	require.Equal(t, 1, claimer.resultCount(JobClaimPeerOwned))
+	require.Equal(t, 1, claimer.completedCount())
+	require.Equal(t, 0, jobB.consecutiveFailures)
+	assert.Less(t, elapsedB, 100*time.Millisecond)
+
+	schedulerB.executeJob(context.Background(), jobB, 2)
+
+	require.Equal(t, 1, p.callCount())
+	require.Equal(t, 1, claimer.resultCount(JobClaimAlreadyCompleted))
+	require.Equal(t, 0, jobB.consecutiveFailures)
 }
 
 func TestSchedulerExecuteJobFailsClosedWhenClaimUnavailable(t *testing.T) {

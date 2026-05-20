@@ -18,7 +18,7 @@ YouTube scraping/polling, `youtube_notification_outbox` production, Osaka active
 ## Owns
 
 - YouTube polling/scraping scheduler when `YOUTUBE_INGESTION_ENABLED=true`
-- Holodex photo sync on the explicitly enabled AP, guarded by a Valkey singleton lease in active-active mode
+- Holodex photo sync on AP-A only; AP-B scraping failover does not include PhotoSync failover. The enabled AP is still guarded by a Valkey singleton lease in active-active mode.
 - Community/shorts/live/stats polling configuration
 - `youtube_notification_outbox` production paths for YouTube-derived events
 
@@ -49,6 +49,7 @@ YouTube scraping/polling, `youtube_notification_outbox` production, Osaka active
 - `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true` on Osaka active-active APs
 - `YOUTUBE_PRODUCER_INSTANCE_ID` unique per AP
 - `YOUTUBE_PRODUCER_LEASE_NAMESPACE` shared by APs in the same environment
+- `PHOTO_SYNC_ENABLED=true` on `youtube-producer-a` and `PHOTO_SYNC_ENABLED=false` on `youtube-producer-b`
 - scraper interval env values
 
 ## Shutdown behavior

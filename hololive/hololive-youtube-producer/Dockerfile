@@ -30,19 +30,20 @@ ARG TARGETARCH
 RUN apk add --no-cache git
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
-ENV GOWORK=/workspace/hololive-bot/go.work
+ENV GOWORK=off
 
 WORKDIR /workspace/hololive-bot
 
 COPY go.mod go.work go.work.sum ./
-COPY --from=shared_go_workspace . ./shared-go
-COPY --from=iris_client_go_workspace . /workspace/iris-client-go
-COPY hololive/hololive-kakao-bot-go ./hololive/hololive-kakao-bot-go
-COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
+COPY scripts/deploy/osaka-active-active-rsync-files.txt ./scripts/deploy/osaka-active-active-rsync-files.txt
+COPY shared-go ./shared-go
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
-COPY hololive/hololive-admin-api ./hololive/hololive-admin-api
-COPY hololive/hololive-alarm-worker ./hololive/hololive-alarm-worker
+RUN set -eu; \
+    find hololive/hololive-shared hololive/hololive-youtube-producer shared-go -type f -print | \
+      while IFS= read -r file; do \
+        grep -Fxq "$file" scripts/deploy/osaka-active-active-rsync-files.txt || rm -f "$file"; \
+      done
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-producer
 

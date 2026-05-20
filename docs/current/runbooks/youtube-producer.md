@@ -27,7 +27,7 @@
 |---|---|---|
 | `SERVER_PORT` | HTTP health port | yes |
 | `YOUTUBE_INGESTION_ENABLED` | must be true for this service | yes |
-| `PHOTO_SYNC_ENABLED` | enabled only on APs allowed to run photo sync; active-active wraps it in a Valkey singleton lease | yes |
+| `PHOTO_SYNC_ENABLED` | AP-A owned photo sync; active-active wraps the enabled AP in a Valkey singleton lease | yes |
 | `SCRAPER_SCHEDULER_WORKER_COUNT` | per-AP worker cap; Osaka active-active defaults each AP to `2` | Osaka yes |
 | `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED` | enables per-job JobRunGuard and disables global runtime lease gate | Osaka yes |
 | `YOUTUBE_PRODUCER_INSTANCE_ID` | unique active-active owner token prefix per AP | Osaka yes |
@@ -49,6 +49,8 @@ Expected startup and sync markers:
 - `Photo sync service started`
 - `Photo sync completed`
 
+Osaka policy: only `youtube-producer-a` has `PHOTO_SYNC_ENABLED=true`. `youtube-producer-b` is a scraping/polling failover peer only; AP-B failover does not include PhotoSync failover unless compose is deliberately changed and a live failover test is approved.
+
 ## Metrics
 
 - `youtube_poller_job_claim_total{poller,result}`: active-active claim distribution and Valkey fail-closed errors.
@@ -56,6 +58,10 @@ Expected startup and sync markers:
 - `youtube_poller_job_mark_completed_total{poller,result}` and `youtube_poller_job_release_total{poller,result}`: completion/release ownership outcomes.
 - `youtube_poller_outbox_insert_total{kind,result}`: outbox insert success/conflict/error counts.
 - `youtube_poller_published_at_resolver_*`: pending `published_at` resolver attempts, successes, failures, skips, and enqueue counts.
+
+Active-active `/ready` fails closed on startup until a lightweight Valkey JobRunGuard probe or later job claim proves lease availability. During that state it reports `valkey_available=false` and `scraping_paused=true` while `/health` can still be up.
+
+`/ready` is readiness state, not recent activity telemetry. Use the `youtube_poller_job_*` metrics above to confirm recent `acquired`, `peer_owned`, `already_completed`, renew, mark-completed, and release activity.
 
 ## Cadence tuning
 
@@ -152,6 +158,12 @@ Mitigation:
 - Keep fail-closed behavior: do not disable JobRunGuard to recover active-active traffic.
 - Roll back by scaling down to one AP first, then redeploying the previous config.
 
+Lease TTL policy:
+- Scheduler job lease TTL is `SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS + 15s`.
+- The minimum lease TTL is 1 minute.
+- There is no hard maximum clamp. Do not add one without also constraining poll timeout, because a clamp shorter than a valid in-flight poll can create duplicate work.
+- Each successful poll writes a cooldown equal to that job's scheduler interval, so peer APs should report `already_completed` until that cooldown expires.
+
 ### 3. Photo sync fails or stalls
 
 Symptoms:
@@ -166,6 +178,7 @@ curl http://127.0.0.1:30005/health
 
 Mitigation:
 - Check `PHOTO_SYNC_ENABLED=true`, PostgreSQL, Valkey, and Holodex/API errors.
+- Confirm the issue is on `youtube-producer-a`; `youtube-producer-b` intentionally does not run PhotoSync in the current Osaka policy.
 
 Rollback:
 - Roll back the previous `youtube-producer` image/config if the startup-owned photo sync path regresses.
