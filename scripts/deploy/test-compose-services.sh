@@ -73,10 +73,18 @@ OSAKA_ACTIVE_ACTIVE_FILES="${ROOT_DIR}/scripts/deploy/osaka-active-active-rsync-
 while IFS= read -r path; do
     [[ -n "${path}" ]] || continue
     [[ -e "${ROOT_DIR}/${path}" ]] || fail "osaka active-active files list path exists: ${path}"
+    case "${path}" in
+        hololive/hololive-youtube-producer/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum) ;;
+        go.sum|*/go.sum) fail "osaka active-active files list excludes unapproved go.sum path: ${path}" ;;
+    esac
+    case "${path}" in
+        hololive/hololive-shared/pkg/domain/internal/model/data/*) ;;
+        data|data/*|*/data/*) fail "osaka active-active files list excludes unapproved data path: ${path}" ;;
+    esac
 done < "${OSAKA_ACTIVE_ACTIVE_FILES}"
 pass "osaka active-active files list paths exist"
 
-if grep -En '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|go\.sum|_test\.go|docs|data|logs|runtime-config|backups|artifacts)(/|$)' "${OSAKA_ACTIVE_ACTIVE_FILES}"; then
+if grep -En '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "${OSAKA_ACTIVE_ACTIVE_FILES}"; then
     fail "osaka active-active files list excludes forbidden deployment scope"
 fi
 pass "osaka active-active files list excludes forbidden deployment scope"
