@@ -70,6 +70,113 @@ func TestPendingPublishedAtResolver_EnqueuesOnceAfterResolution(t *testing.T) {
 	assert.Contains(t, outboxRows[0].Payload, `"published_at":"2026-04-10T01:11:12Z"`)
 }
 
+func TestPendingPublishedAtResolver_SkipsCandidateWhenPeerOwned(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	seedPendingShortResolution(t, db, "channel-1", "short-peer", detectedAt)
+
+	resolveCalls := 0
+	claimer := &schedulerClaimStub{
+		status: JobClaimStatus{Result: JobClaimPeerOwned, RetryAfter: time.Minute},
+	}
+	resolver := &PendingPublishedAtResolver{
+		db:               db,
+		client:           newShortPublishedAtResolverTestClient(t, publishedAt, &resolveCalls),
+		interval:         15 * time.Second,
+		batchSize:        50,
+		candidateClaimer: claimer,
+		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+
+	assert.Equal(t, 1, claimer.tryCalls)
+	assert.Equal(t, PendingPublishedAtResolverCandidatePollerName, claimer.poller)
+	assert.Equal(t, "NEW_SHORT:short:short-peer", claimer.channelID)
+	assert.Equal(t, 0, resolveCalls)
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
+	assert.Zero(t, outboxCount)
+}
+
+func TestPendingPublishedAtResolver_CompletesCandidateClaimAfterFinalize(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+		&domain.YouTubeNotificationDeliveryTelemetry{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	seedPendingShortResolution(t, db, "channel-1", "short-claim", detectedAt)
+
+	resolveCalls := 0
+	claim := &schedulerClaimHandleStub{}
+	claimer := &schedulerClaimStub{
+		status: JobClaimStatus{Result: JobClaimAcquired},
+		claim:  claim,
+	}
+	resolver := &PendingPublishedAtResolver{
+		db:     db,
+		client: newShortPublishedAtResolverTestClient(t, publishedAt, &resolveCalls),
+		routeDecider: func(NotificationRouteRequest) bool {
+			return true
+		},
+		interval:         15 * time.Second,
+		batchSize:        50,
+		candidateClaimer: claimer,
+		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+
+	assert.Equal(t, 1, resolveCalls)
+	assert.Equal(t, 1, claim.markCompletedCalls)
+	assert.Equal(t, 0, claim.releaseCalls)
+}
+
+func TestPendingPublishedAtResolver_FailsClosedWhenCandidateClaimUnavailable(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	seedPendingShortResolution(t, db, "channel-1", "short-unavailable", detectedAt)
+
+	resolveCalls := 0
+	resolver := &PendingPublishedAtResolver{
+		db:     db,
+		client: newShortPublishedAtResolverTestClient(t, publishedAt, &resolveCalls),
+		candidateClaimer: &schedulerClaimStub{
+			status: JobClaimStatus{Result: JobClaimUnavailable},
+			err:    assert.AnError,
+		},
+		interval:  15 * time.Second,
+		batchSize: 50,
+		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	err := resolver.runOnce(context.Background(), detectedAt.Add(time.Minute))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "claim pending published_at candidate")
+	assert.Equal(t, 0, resolveCalls)
+}
+
 func TestPendingPublishedAtResolver_BackfillsMetadataWithoutDuplicateWhenAlarmStateAlreadyClaimed(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},

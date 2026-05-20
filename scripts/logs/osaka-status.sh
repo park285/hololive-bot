@@ -23,23 +23,20 @@ remote 'cd ~/hololive-bot && sudo -n test -r /run/hololive-bot/env && (test -w /
 
 echo
 echo "== Health =="
-remote 'printf "youtube-scraper: "; curl -fsS http://127.0.0.1:30005/health; printf "\nstream-ingester: "; curl -fsS http://127.0.0.1:30004/health; printf "\n"'
+remote 'printf "youtube-producer-a: "; curl -fsS http://127.0.0.1:30005/health; printf "\nyoutube-producer-b: "; curl -fsS http://127.0.0.1:30015/health; printf "\n"'
 
 echo
 echo "== Runtime directory =="
 remote 'cd ~/hololive-bot && find . -maxdepth 1 -mindepth 1 -printf "%f\n" | sort'
 
 echo
-echo "== Recent youtube-scraper signals =="
-signals hololive-youtube-scraper 'Cache store connected|postgres_pool_connected|ingestion_lease_acquired|ERR|pre-send claim|ingestion_lease_lost|panic|permission denied'
+echo "== Recent youtube-producer signals =="
+signals hololive-youtube-producer-a 'Cache store connected|postgres_pool_connected|job_claim|Photo sync service started|Photo sync completed|ERR|pre-send claim|ingestion_lease_lost|panic|permission denied'
+signals hololive-youtube-producer-b 'Cache store connected|postgres_pool_connected|job_claim|Photo sync service started|Photo sync completed|ERR|pre-send claim|ingestion_lease_lost|panic|permission denied'
 
 echo
 echo "== Recent alarm-worker egress signals =="
 signals hololive-alarm-worker 'YouTube outbox dispatcher started by alarm-worker|Outbox dispatcher started|Outbox per-room enqueue completed|Outbox per-room dispatch completed|ERR|panic|permission denied'
-
-echo
-echo "== Recent stream-ingester signals =="
-signals hololive-stream-ingester 'Cache store connected|postgres_pool_connected|ingestion_lease_acquired|ERR|panic|permission denied|photo sync|runtime'
 
 echo
 echo "== Unused split-host volumes =="

@@ -18,8 +18,7 @@ Current Go runtime services:
 - `hololive-admin-api`
 - `hololive-alarm-worker`
 - `llm-scheduler`
-- `stream-ingester`
-- `youtube-scraper`
+- `youtube-producer`
 
 ## Required Checks
 
@@ -70,7 +69,6 @@ curl -k https://127.0.0.1:30001/health
 curl http://127.0.0.1:30006/health
 curl http://127.0.0.1:30007/health
 curl http://127.0.0.1:30003/health
-curl http://127.0.0.1:30004/health
 curl http://127.0.0.1:30005/health
 ```
 

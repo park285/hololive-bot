@@ -34,7 +34,7 @@ func TestBuildDeliveryAuditLogAttrsIncludesObservationWindowFields(t *testing.T)
 		AlarmSentAt:                 new(detectedAt.Add(time.Minute)),
 		AlarmLatencyMillis:          new(int64(55 * time.Second / time.Millisecond)),
 		ObservationStatus:           deliveryTelemetryObservationStatusMatched,
-		ObservationRuntimeName:      "youtube-scraper",
+		ObservationRuntimeName:      "youtube-producer",
 		ObservationBigBangCutoverAt: &cutoverAt,
 		ObservationStartedAt:        &observationStartedAt,
 		ObservationEndedAt:          &observationEndedAt,
@@ -56,7 +56,7 @@ func TestBuildDeliveryAuditLogAttrsIncludesObservationWindowFields(t *testing.T)
 	require.Contains(t, logLine, `"alarm_latency_exceeded":false`)
 	require.Contains(t, logLine, `"detected_at":`)
 	require.Contains(t, logLine, `"observation_status":"matched"`)
-	require.Contains(t, logLine, `"observation_runtime_name":"youtube-scraper"`)
+	require.Contains(t, logLine, `"observation_runtime_name":"youtube-producer"`)
 	require.Contains(t, logLine, `"observation_bigbang_cutover_at":`)
 	require.Contains(t, logLine, `"observation_started_at":`)
 	require.Contains(t, logLine, `"observation_ended_at":`)

@@ -499,7 +499,7 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 	require.Contains(t, logBuffer.String(), "\"delivery_path\":\""+communityShortsDeliveryPath+"\"")
 	require.Contains(t, logBuffer.String(), "\"post_id\":\"short-emit\"")
 	require.Contains(t, logBuffer.String(), "\"observation_status\":\"matched\"")
-	require.Contains(t, logBuffer.String(), "\"observation_runtime_name\":\"youtube-scraper\"")
+	require.Contains(t, logBuffer.String(), "\"observation_runtime_name\":\"youtube-producer\"")
 	require.Contains(t, logBuffer.String(), "\"actual_published_at\":")
 	require.Contains(t, logBuffer.String(), "\"alarm_latency_exceeded\":true")
 	require.Contains(t, logBuffer.String(), "\"latency_classification\":{")

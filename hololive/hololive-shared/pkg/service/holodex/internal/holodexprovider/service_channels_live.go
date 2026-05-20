@@ -121,8 +121,8 @@ func stringSet(values []string) map[string]bool {
 	return set
 }
 
-// /users/live 엔드포인트를 우선 사용하고, retryable 오류에서만 채널별 YouTube scraper 경로로 제한 폴백합니다.
-// 이 경로는 공식 스케줄 페이지 재조회 없이 YouTube scraper 결과만 사용합니다.
+// /users/live 엔드포인트를 우선 사용하고, retryable 오류에서만 채널별 YouTube producer 경로로 제한 폴백합니다.
+// 이 경로는 공식 스케줄 페이지 재조회 없이 YouTube producer 결과만 사용합니다.
 // 주의: org, status, sort 필터링 미지원 - live+upcoming 모두 반환됨
 // 사용 시나리오: 알림 체크, 대시보드 상태 표시 등 빠른 상태 확인
 func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
@@ -255,7 +255,7 @@ func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelI
 	var lastErr error
 
 	for _, channelID := range channelIDs {
-		streams, err := h.scraper.fetchFromYouTubeScraper(ctx, channelID)
+		streams, err := h.scraper.fetchFromYouTubeProducer(ctx, channelID)
 		if err != nil {
 			lastErr = err
 			continue

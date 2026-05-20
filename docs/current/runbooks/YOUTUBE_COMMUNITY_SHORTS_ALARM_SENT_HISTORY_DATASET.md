@@ -23,9 +23,9 @@
 repo root에서 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts alarm-sent-history-dataset   -observation-runtime youtube-scraper   -observation-cutover 2026-04-10T00:00:00Z
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts alarm-sent-history-dataset   -observation-runtime youtube-producer   -observation-cutover 2026-04-10T00:00:00Z
 
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts alarm-sent-history-dataset   -observation-runtime youtube-scraper   -observation-cutover 2026-04-10T00:00:00Z   -format json
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts alarm-sent-history-dataset   -observation-runtime youtube-producer   -observation-cutover 2026-04-10T00:00:00Z   -format json
 ```
 
 - `-observation-runtime`, `-observation-cutover` 는 반드시 함께 줘야 합니다.

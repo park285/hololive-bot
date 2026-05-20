@@ -7,7 +7,7 @@ GO_WORKSPACE_MODULES=(
     hololive/hololive-admin-api
     hololive/hololive-alarm-worker
     hololive/hololive-llm-sched
-    hololive/hololive-stream-ingester
+    hololive/hololive-youtube-producer
 )
 
 go_workspace_package_patterns() {

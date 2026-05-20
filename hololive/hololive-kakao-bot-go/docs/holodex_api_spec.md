@@ -107,7 +107,7 @@
 
 ⚠️ **fallback 동작**
 - `/users/live` 호출 실패 시 **retryable 오류(5xx/timeout/circuit/key rotation)** 에서만 fallback 시도
-- fallback은 채널별 **YouTube scraper** 결과만 사용
+- fallback은 채널별 **YouTube producer** 결과만 사용
 - live-status batch fallback에서는 **공식 스케줄 페이지를 재조회하지 않음**
 
 ---
@@ -162,7 +162,7 @@
 
 **fallback 메모:**
 - Holodex `/live` 호출이 retryable 오류로 실패하면 scraper fallback 사용
-- scraper는 **YouTube scraper 우선**, 해당 scraper 오류일 때만 **공식 스케줄 페이지**로 한 번 더 내려감
+- scraper는 **YouTube producer 우선**, 해당 scraper 오류일 때만 **공식 스케줄 페이지**로 한 번 더 내려감
 
 ---
 
@@ -208,7 +208,7 @@
 | 캐시 TTL | `constants.CacheTTL.ChannelInfo` |
 
 **fallback 메모:**
-- retryable 오류(5xx/timeout/circuit/key rotation)에서만 YouTube scraper fallback 시도
+- retryable 오류(5xx/timeout/circuit/key rotation)에서만 YouTube producer fallback 시도
 - 4xx 등 non-retryable 오류는 그대로 반환
 - fallback 자체가 실패하면 `(nil, nil)`로 숨기지 않고 명시적 에러 반환
 

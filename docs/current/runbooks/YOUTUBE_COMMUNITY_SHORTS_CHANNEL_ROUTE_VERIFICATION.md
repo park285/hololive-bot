@@ -15,13 +15,13 @@
 리포지토리 루트에서 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts route-report
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts route-report
 ```
 
 더 긴 관측 창이 필요하면 `-window` 를 지정합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts route-report -window=72h
+go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts route-report -window=72h
 ```
 
 필요 조건:
@@ -76,17 +76,17 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts rout
 
 ## 근거 코드
 
-- 리포트 수집/렌더링: `hololive/hololive-stream-ingester/internal/ops/communityshorts/internal/reports/community_shorts_route_report.go`
-- baseline SSOT: `hololive/hololive-stream-ingester/internal/communityshorts/target_baseline.go`
+- 리포트 수집/렌더링: `hololive/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/community_shorts_route_report.go`
+- baseline SSOT: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
 - 신규 경로 fan-out: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_send.go`
 - 실제 경로 조회: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_path_usage.go`
 - 게시물별 발송 집계: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_post_send_counts.go`
 
 ## 로컬 검증
 
-- `go test ./hololive/hololive-stream-ingester/internal/ops/communityshorts/internal/reports -run '^TestBuildCommunityShortsRouteVerificationReport`
+- `go test ./hololive/hololive-youtube-producer/internal/ops/communityshorts/internal/reports -run '^TestBuildCommunityShortsRouteVerificationReport`
 `
-- `go test ./hololive/hololive-stream-ingester/cmd/...`
+- `go test ./hololive/hololive-youtube-producer/cmd/...`
 
 관련 참고:
 

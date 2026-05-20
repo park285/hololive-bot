@@ -22,6 +22,7 @@ type PendingPublishedAtResolver struct {
 	resolveTimeout    time.Duration
 	minDetectedAge    time.Duration
 	failureBackoffTTL time.Duration
+	candidateClaimer  JobClaimer
 	logger            *slog.Logger
 }
 
@@ -119,6 +120,13 @@ func (r *PendingPublishedAtResolver) Start(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (r *PendingPublishedAtResolver) SetCandidateClaimer(claimer JobClaimer) {
+	if r == nil {
+		return
+	}
+	r.candidateClaimer = claimer
 }
 
 func (r *PendingPublishedAtResolver) canStart() bool {

@@ -141,13 +141,13 @@ var YouTubeConfig = struct {
 	VideoRSSBackoffTTL:    6 * time.Hour,    // 5xx 반복 채널은 6시간 RSS 우선
 }
 
-var YouTubeScraperRateLimitConfig = struct {
+var YouTubeProducerRateLimitConfig = struct {
 	RequestInterval time.Duration
 }{
 	RequestInterval: 3 * time.Second,
 }
 
-var YouTubeScraperDistributedRateLimitConfig = struct {
+var YouTubeProducerDistributedRateLimitConfig = struct {
 	Enabled    bool
 	Limit      int
 	Window     time.Duration
@@ -156,9 +156,9 @@ var YouTubeScraperDistributedRateLimitConfig = struct {
 }{
 	Enabled:    true,
 	Limit:      1,
-	Window:     YouTubeScraperRateLimitConfig.RequestInterval,
+	Window:     YouTubeProducerRateLimitConfig.RequestInterval,
 	KeyPrefix:  "ratelimit:sliding",
-	BucketBase: "youtube:scraper",
+	BucketBase: "youtube:producer",
 }
 
 var OfficialScheduleConfig = struct {

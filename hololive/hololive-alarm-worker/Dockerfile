@@ -38,7 +38,7 @@ COPY go.mod go.work go.work.sum ./
 COPY --from=shared_go_workspace . ./shared-go
 COPY --from=iris_client_go_workspace . /workspace/iris-client-go
 COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
-COPY hololive/hololive-stream-ingester ./hololive/hololive-stream-ingester
+COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-kakao-bot-go ./hololive/hololive-kakao-bot-go
 COPY hololive/hololive-admin-api ./hololive/hololive-admin-api
@@ -52,7 +52,7 @@ RUN \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/alarm-worker ./cmd/alarm-worker && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ../hololive-stream-ingester/cmd/runtime/healthcheck && \
+    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ../hololive-youtube-producer/cmd/runtime/healthcheck && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/ && \
     cp ../hololive-kakao-bot-go/config.example.json ../hololive-kakao-bot-go/official_japanese_names.json /dist/

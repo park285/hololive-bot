@@ -256,7 +256,7 @@ func TestGetChannels_DoesNotFallbackOnNonRetryableListError(t *testing.T) {
 	}
 }
 
-func TestGetChannelsLiveStatus_UsesYouTubeScraperWithoutOfficialScheduleFallback(t *testing.T) {
+func TestGetChannelsLiveStatus_UsesYouTubeProducerWithoutOfficialScheduleFallback(t *testing.T) {
 	var officialRequests atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

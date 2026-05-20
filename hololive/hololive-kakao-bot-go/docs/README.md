@@ -5,7 +5,7 @@
 - `hololive-kakao-bot-go` : bot 전용
 - `hololive-admin` : admin-api
 - `hololive-llm-sched` : llm-scheduler
-- `hololive-stream-ingester` : stream-ingester
+- `hololive-youtube-producer` : youtube-producer
 - `hololive-shared` : 공통 패키지(domain/service/providers/server)
 
 ## API 문서
@@ -22,8 +22,8 @@
 |:---|:---|
 | [database.md](database.md) | 데이터베이스 스키마 및 설정 |
 | [LLM_SCHEDULER_RUNBOOK.md](LLM_SCHEDULER_RUNBOOK.md) | llm-scheduler 장애/재실행/수동 트리거 운영 절차 |
-| [DISTRIBUTED_RATE_LIMITING.md](DISTRIBUTED_RATE_LIMITING.md) | Holodex/YouTube scraper 분산 레이트 리미터 설계/운영 가이드 |
-| [STREAM_INGESTER_RUNBOOK.md](STREAM_INGESTER_RUNBOOK.md) | stream-ingester 단독 ingestion 운영/장애 대응 절차 |
+| [DISTRIBUTED_RATE_LIMITING.md](DISTRIBUTED_RATE_LIMITING.md) | Holodex/YouTube producer 분산 레이트 리미터 설계/운영 가이드 |
+| [STREAM_INGESTER_RUNBOOK.md](STREAM_INGESTER_RUNBOOK.md) | youtube-producer 단독 ingestion 운영/장애 대응 절차 |
 | [P6_REMAINING_TASKS.md](P6_REMAINING_TASKS.md) | P6 종료 상태와 후속 운영 메모 |
 
 ## 로컬 기능 문서

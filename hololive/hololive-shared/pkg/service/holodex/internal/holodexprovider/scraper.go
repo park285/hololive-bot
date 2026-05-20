@@ -40,18 +40,18 @@ import (
 )
 
 type ScraperService struct {
-	httpClient     *http.Client
-	cache          cache.Client
-	membersData    domain.MemberDataProvider
-	memberNameMap  map[string]string
-	logger         *slog.Logger
-	baseURL        string
-	youtubeScraper *scraper.Client
-	fetchUpcoming  func(ctx context.Context, channelID string) ([]*scraper.UpcomingEvent, error)
-	officialPageMu sync.RWMutex
-	officialPage   officialSchedulePageCache
-	officialGroup  singleflight.Group
-	nowFunc        func() time.Time
+	httpClient      *http.Client
+	cache           cache.Client
+	membersData     domain.MemberDataProvider
+	memberNameMap   map[string]string
+	logger          *slog.Logger
+	baseURL         string
+	youtubeProducer *scraper.Client
+	fetchUpcoming   func(ctx context.Context, channelID string) ([]*scraper.UpcomingEvent, error)
+	officialPageMu  sync.RWMutex
+	officialPage    officialSchedulePageCache
+	officialGroup   singleflight.Group
+	nowFunc         func() time.Time
 }
 
 const (
@@ -71,7 +71,7 @@ func NewScraperService(
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
 ) *ScraperService {
-	return NewScraperServiceWithYouTubeScraper(
+	return NewScraperServiceWithYouTubeProducer(
 		cacheSvc,
 		membersData,
 		scraper.NewClient(scraper.WithProxy(youtubeProxyConfig), scraper.WithRateLimiter(sharedRL)),
@@ -79,10 +79,10 @@ func NewScraperService(
 	)
 }
 
-func NewScraperServiceWithYouTubeScraper(
+func NewScraperServiceWithYouTubeProducer(
 	cacheSvc cache.Client,
 	membersData domain.MemberDataProvider,
-	youtubeScraper *scraper.Client,
+	youtubeProducer *scraper.Client,
 	logger *slog.Logger,
 ) *ScraperService {
 	if logger == nil {
@@ -99,13 +99,13 @@ func NewScraperServiceWithYouTubeScraper(
 		slog.Int("name_mappings", len(nameMap)))
 
 	return &ScraperService{
-		httpClient:     httputil.NewExternalAPIClient(constants.OfficialScheduleConfig.Timeout),
-		cache:          cacheSvc,
-		membersData:    membersData,
-		memberNameMap:  nameMap,
-		logger:         logger,
-		baseURL:        constants.OfficialScheduleConfig.BaseURL,
-		youtubeScraper: youtubeScraper,
+		httpClient:      httputil.NewExternalAPIClient(constants.OfficialScheduleConfig.Timeout),
+		cache:           cacheSvc,
+		membersData:     membersData,
+		memberNameMap:   nameMap,
+		logger:          logger,
+		baseURL:         constants.OfficialScheduleConfig.BaseURL,
+		youtubeProducer: youtubeProducer,
 	}
 }
 
@@ -116,16 +116,16 @@ func (s *ScraperService) FetchChannel(ctx context.Context, channelID string) ([]
 		return cached, nil
 	}
 
-	if s.youtubeScraper != nil || s.fetchUpcoming != nil {
+	if s.youtubeProducer != nil || s.fetchUpcoming != nil {
 		policy := fallback.Policy{Trigger: fallback.TriggerOnFailures}
-		streams, err := s.fetchFromYouTubeScraper(ctx, channelID)
+		streams, err := s.fetchFromYouTubeProducer(ctx, channelID)
 		fallback.ObservePrimaryPhase("holodex", "channel_schedule", 1, boolToInt(len(streams) > 0), boolToInt(err != nil))
 		if !policy.ShouldRun(len(streams), boolToInt(err != nil)) {
 			s.finishYouTubeChannelSchedule(ctx, cacheKey, channelID, streams, policy)
 			return streams, nil
 		}
 		if err != nil {
-			s.logger.Debug("YouTube scraper failed, falling back to official schedule",
+			s.logger.Debug("YouTube producer failed, falling back to official schedule",
 				slog.String("channel", channelID),
 				slog.Any("error", err))
 		}
@@ -143,7 +143,7 @@ func (s *ScraperService) finishYouTubeChannelSchedule(
 ) {
 	fallback.ObserveExecution("holodex", "channel_schedule", policy.Trigger, "skipped")
 	s.cache.SetStreams(ctx, cacheKey, streams, constants.OfficialScheduleConfig.CacheExpiry)
-	s.logger.Info("YouTube scraper channel schedule resolved",
+	s.logger.Info("YouTube producer channel schedule resolved",
 		slog.String("channel", channelID),
 		slog.Int("streams", len(streams)))
 }
@@ -206,17 +206,17 @@ func (s *ScraperService) FetchAllStreams(ctx context.Context) ([]*domain.Stream,
 }
 
 func (s *ScraperService) SetYouTubeProxyEnabled(enabled bool) bool {
-	if s == nil || s.youtubeScraper == nil {
+	if s == nil || s.youtubeProducer == nil {
 		return false
 	}
-	return s.youtubeScraper.SetProxyEnabled(enabled)
+	return s.youtubeProducer.SetProxyEnabled(enabled)
 }
 
 func (s *ScraperService) YouTubeProxyEnabled() bool {
-	if s == nil || s.youtubeScraper == nil {
+	if s == nil || s.youtubeProducer == nil {
 		return false
 	}
-	return s.youtubeScraper.ProxyEnabled()
+	return s.youtubeProducer.ProxyEnabled()
 }
 
 func (s *ScraperService) ValidateStructure(ctx context.Context) error {
@@ -242,11 +242,11 @@ func IsStructureError(err error) bool {
 }
 
 func (s *ScraperService) GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*scraper.Video, error) {
-	if s.youtubeScraper == nil {
-		return nil, fmt.Errorf("youtube scraper not initialized")
+	if s.youtubeProducer == nil {
+		return nil, fmt.Errorf("youtube producer not initialized")
 	}
 
-	videos, err := s.youtubeScraper.GetRecentVideos(ctx, channelID, maxResults)
+	videos, err := s.youtubeProducer.GetRecentVideos(ctx, channelID, maxResults)
 	if err != nil {
 		return nil, fmt.Errorf("youtube recent videos scraper error: %w", err)
 	}
@@ -259,11 +259,11 @@ func (s *ScraperService) GetRecentVideos(ctx context.Context, channelID string, 
 }
 
 func (s *ScraperService) GetChannelStats(ctx context.Context, channelID string) (*scraper.ChannelStats, error) {
-	if s.youtubeScraper == nil {
-		return nil, fmt.Errorf("youtube scraper not initialized")
+	if s.youtubeProducer == nil {
+		return nil, fmt.Errorf("youtube producer not initialized")
 	}
 
-	stats, err := s.youtubeScraper.GetChannelStats(ctx, channelID)
+	stats, err := s.youtubeProducer.GetChannelStats(ctx, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("youtube channel stats scraper error: %w", err)
 	}
@@ -276,11 +276,11 @@ func (s *ScraperService) GetChannelStats(ctx context.Context, channelID string) 
 }
 
 func (s *ScraperService) GetChannelSnippet(ctx context.Context, channelID string) (*scraper.ChannelSnippet, error) {
-	if s.youtubeScraper == nil {
-		return nil, fmt.Errorf("youtube scraper not initialized")
+	if s.youtubeProducer == nil {
+		return nil, fmt.Errorf("youtube producer not initialized")
 	}
 
-	snippet, err := s.youtubeScraper.GetChannelSnippet(ctx, channelID)
+	snippet, err := s.youtubeProducer.GetChannelSnippet(ctx, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("youtube channel snippet scraper error: %w", err)
 	}
@@ -294,11 +294,11 @@ func (s *ScraperService) GetChannelSnippet(ctx context.Context, channelID string
 }
 
 func (s *ScraperService) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*scraper.Video, error) {
-	if s.youtubeScraper == nil {
-		return nil, fmt.Errorf("youtube scraper not initialized")
+	if s.youtubeProducer == nil {
+		return nil, fmt.Errorf("youtube producer not initialized")
 	}
 
-	videos, err := s.youtubeScraper.GetPopularVideos(ctx, channelID, maxResults)
+	videos, err := s.youtubeProducer.GetPopularVideos(ctx, channelID, maxResults)
 	if err != nil {
 		return nil, fmt.Errorf("youtube popular videos scraper error: %w", err)
 	}

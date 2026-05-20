@@ -48,9 +48,9 @@ check_forbidden_global_go_hits \
   -g '!hololive/hololive-alarm-worker/internal/app/**'
 
 check_forbidden_scoped_go_hits \
-  "stream-ingester does not own YouTube outbox dispatch or Iris egress capability" \
+  "youtube-producer does not own YouTube outbox dispatch or Iris egress capability" \
   'pkg/service/delivery|delivery\.NewIrisMessageSender|outbox\.NewDispatcher|OutboxDispatcher|YouTube outbox dispatcher started|ProvideIrisClient|iris\.WithBaseURL|iris\.WithBotToken|IrisClient:' \
-  "hololive/hololive-stream-ingester"
+  "hololive/hololive-youtube-producer"
 
 check_forbidden_scoped_go_hits \
   "llm-sched does not start proactive delivery dispatch or Iris delivery" \
@@ -63,7 +63,7 @@ check_forbidden_scoped_go_hits \
   "hololive/hololive-admin-api"
 
 compose="${ROOT_DIR}/docker-compose.prod.yml"
-for service in stream-ingester youtube-scraper llm-scheduler; do
+for service in youtube-producer llm-scheduler; do
   block="$(awk -v service="  ${service}:" '
     $0 == service {in_block=1; print; next}
     in_block && $0 ~ /^  [A-Za-z0-9_-]+:/ {exit}

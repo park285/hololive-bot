@@ -17,7 +17,7 @@ SSH_OSAKA=(ssh -F /dev/null -i "$SSH_KEY" -o IdentitiesOnly=yes -o SetEnv=LC_ALL
 usage() {
   cat <<'USAGE'
 Usage:
-  osaka-logs.sh [youtube-scraper|stream-ingester|all]
+  osaka-logs.sh [youtube-producer|all]
 
 Environment:
   SINCE=30m              docker log since window
@@ -28,8 +28,8 @@ Environment:
   SOURCE=docker|file     read docker logs or /home/ubuntu/hololive-bot/logs/*.log
 
 Examples:
-  osaka-logs.sh youtube-scraper
-  SINCE=2h PATTERN='pre-send claim|ERR' osaka-logs.sh youtube-scraper
+  osaka-logs.sh youtube-producer
+  SINCE=2h PATTERN='pre-send claim|ERR' osaka-logs.sh youtube-producer
   FOLLOW=1 osaka-logs.sh all
   FULL=1 osaka-logs.sh all
   SOURCE=file TAIL=500 osaka-logs.sh all

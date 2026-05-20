@@ -15,6 +15,7 @@ fi
 allowed_files=(
   "README.md"
   "PROJECT_MAP.md"
+  "CODEBASE_OVERVIEW.md"
   "DEPLOYMENT_BASELINE.md"
   "SERVICE_OWNERSHIP.md"
   "CONTRACT_MAP.md"

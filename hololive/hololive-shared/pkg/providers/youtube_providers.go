@@ -55,13 +55,13 @@ func ProvideScraperService(
 	return holodex.NewScraperService(cacheSvc, members, proxyConfig, sharedRL, logger)
 }
 
-func ProvideScraperServiceWithYouTubeScraper(
+func ProvideScraperServiceWithYouTubeProducer(
 	cacheSvc cache.Client,
 	members member.DataProvider,
-	youtubeScraper *scraper.Client,
+	youtubeProducer *scraper.Client,
 	logger *slog.Logger,
 ) *holodex.ScraperService {
-	return holodex.NewScraperServiceWithYouTubeScraper(cacheSvc, members, youtubeScraper, logger)
+	return holodex.NewScraperServiceWithYouTubeProducer(cacheSvc, members, youtubeProducer, logger)
 }
 
 // ProvideHolodexService - Holodex API 서비스 생성
@@ -129,7 +129,7 @@ func ProvideScraperScheduler(
 		slog.Float64("expected_total_rpm", totalRPM),
 		slog.Float64("expected_total_retry_amplified_rpm_max", totalRetryAmplifiedRPM))
 
-	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
+	budgetRPM := 60.0 / constants.YouTubeProducerRateLimitConfig.RequestInterval.Seconds()
 	if totalRPM > budgetRPM {
 		log.Warn("scraper_poll_budget_exceeds_rate_limit",
 			slog.Float64("expected_total_rpm", totalRPM),
@@ -157,6 +157,7 @@ func newScraperScheduler(opts scraperSchedulerOptions) *poller.Scheduler {
 	if opts.errorBackoffMax > 0 {
 		schedulerCfg.ErrorBackoffMax = opts.errorBackoffMax
 	}
+	schedulerCfg.JobClaimer = opts.jobClaimer
 	return poller.NewScheduler(schedulerCfg)
 }
 

@@ -150,6 +150,12 @@ type ScraperPollTieringConfig struct {
 	Enabled bool
 }
 
+type ScraperActiveActiveConfig struct {
+	Enabled    bool
+	InstanceID string
+	Namespace  string
+}
+
 type ScraperConfig struct {
 	ProxyEnabled        bool
 	ProxyURL            string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
@@ -162,6 +168,8 @@ type ScraperConfig struct {
 	ChannelHealth       ScraperChannelHealthConfig
 	BrowserDiagnostic   ScraperBrowserDiagnosticConfig
 	PollTiering         ScraperPollTieringConfig
+	Backfill            ScraperBackfillConfig
+	ActiveActive        ScraperActiveActiveConfig
 }
 
 type ScraperSchedulerConfig struct {
@@ -204,7 +212,7 @@ func DefaultScraperPublishedAtResolverConfig() ScraperPublishedAtResolverConfig 
 func DefaultScraperSnapshotConfig() ScraperSnapshotConfig {
 	return ScraperSnapshotConfig{
 		Enabled:      false,
-		Dir:          "./artifacts/youtube-scraper",
+		Dir:          "./artifacts/youtube-producer",
 		MaxBodyBytes: 512 << 10,
 		MinInterval:  30 * time.Minute,
 	}
@@ -229,6 +237,13 @@ func DefaultScraperChannelHealthConfig() ScraperChannelHealthConfig {
 
 func DefaultScraperPollTieringConfig() ScraperPollTieringConfig {
 	return ScraperPollTieringConfig{Enabled: false}
+}
+
+func DefaultScraperActiveActiveConfig() ScraperActiveActiveConfig {
+	return ScraperActiveActiveConfig{
+		Enabled:   false,
+		Namespace: "production",
+	}
 }
 
 func DefaultScraperBrowserDiagnosticConfig() ScraperBrowserDiagnosticConfig {

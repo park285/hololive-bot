@@ -135,7 +135,7 @@ func TestDeliveryTelemetryRepository_EnqueueEnrichesObservationWindowContext(t *
 	require.NotNil(t, saved.AlarmLatencyMillis)
 	require.Equal(t, int64(90*time.Second/time.Millisecond), *saved.AlarmLatencyMillis)
 	require.Equal(t, deliveryTelemetryObservationStatusMatched, saved.ObservationStatus)
-	require.Equal(t, "youtube-scraper", saved.ObservationRuntimeName)
+	require.Equal(t, "youtube-producer", saved.ObservationRuntimeName)
 	require.NotNil(t, saved.ObservationBigBangCutoverAt)
 	require.Equal(t, cutoverAt, saved.ObservationBigBangCutoverAt.UTC())
 	require.NotNil(t, saved.ObservationStartedAt)
@@ -240,7 +240,7 @@ func TestDeliveryTelemetryRepository_ListByObservationWindowReturnsMatchedOnly(t
 		},
 	}))
 
-	rows, err := repo.ListByObservationWindow(ctx, "youtube-scraper", cutoverAt)
+	rows, err := repo.ListByObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, int64(201), rows[0].DeliveryID)
@@ -267,7 +267,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
 	finalizedAt := observationStartedAt.Add(24 * time.Hour)
 	require.NoError(t, db.Create(&observationTestWindowModel{
-		RuntimeName:             "youtube-scraper",
+		RuntimeName:             "youtube-producer",
 		BigBangCutoverAt:        cutoverAt,
 		AppVersion:              "v-test",
 		TargetChannelCount:      1,
@@ -326,7 +326,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 		},
 	}).Error)
 	require.NoError(t, db.Create([]sqliteTelemetryObservationBaselineModel{{
-		RuntimeName:       "youtube-scraper",
+		RuntimeName:       "youtube-producer",
 		BigBangCutoverAt:  cutoverAt,
 		Kind:              string(domain.OutboxKindCommunityPost),
 		PostID:            "post-inside",
@@ -371,7 +371,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 	}).Error)
 
 	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListByFinalizedObservationWindow(ctx, "youtube-scraper", cutoverAt)
+	rows, err := repo.ListByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, int64(301), rows[0].DeliveryID)
@@ -381,7 +381,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 func seedObservationWindow(t *testing.T, db *gorm.DB, cutoverAt, observationStartedAt time.Time) {
 	t.Helper()
 	require.NoError(t, db.Create(&observationTestWindowModel{
-		RuntimeName:           "youtube-scraper",
+		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "v-test",
 		TargetChannelCount:    1,

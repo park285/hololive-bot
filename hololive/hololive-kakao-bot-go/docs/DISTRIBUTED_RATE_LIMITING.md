@@ -22,7 +22,7 @@
   - `bucket_base=holodex:api`
 
 ### 2) YouTube HTML Scraper 경로
-- 설정: `constants.YouTubeScraperDistributedRateLimitConfig`
+- 설정: `constants.YouTubeProducerDistributedRateLimitConfig`
 - 연동:
   - `internal/app/bootstrap.go`
   - `internal/app/bootstrap_admin.go`
@@ -31,7 +31,7 @@
 - 기본값:
   - `limit=1`
   - `window=3s`
-  - `bucket_base=youtube:scraper`
+  - `bucket_base=youtube:producer`
 
 ## 동작 방식
 
@@ -49,6 +49,6 @@ go build ./...
 ## 운영 시 확인 포인트
 
 - `llm-valkey-cache` 연결 상태 (`/health`, logs)
-- `holodex`/`youtube scraper` 호출 지연 증가 여부
+- `holodex`/`youtube producer` 호출 지연 증가 여부
 - 과도한 거부(deny) 로그 발생 여부
-- `stream-ingester` 단일 ingestion 리스 유지 여부 (`event=ingestion_lease_acquired`)
+- `youtube-producer` 단일 ingestion 리스 유지 여부 (`event=ingestion_lease_acquired`)

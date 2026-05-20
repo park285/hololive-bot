@@ -48,25 +48,19 @@
     ]
   },
   {
-    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts/main.go",
+    "path": "hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts/main.go",
     "must_contain": [
       "communityshortscli.Run("
     ]
   },
   {
-    "path": "hololive/hololive-stream-ingester/cmd/runtime/healthcheck/main.go",
+    "path": "hololive/hololive-youtube-producer/cmd/runtime/healthcheck/main.go",
     "must_contain": [
       "checkURL("
     ]
   },
   {
-    "path": "hololive/hololive-stream-ingester/cmd/runtime/stream-ingester/main.go",
-    "must_contain": [
-      "bootstrap.Run("
-    ]
-  },
-  {
-    "path": "hololive/hololive-stream-ingester/cmd/runtime/youtube-scraper/main.go",
+    "path": "hololive/hololive-youtube-producer/cmd/runtime/youtube-producer/main.go",
     "must_contain": [
       "bootstrap.Run("
     ]

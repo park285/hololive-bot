@@ -162,7 +162,7 @@ func (ys *serviceImpl) observeUpcomingFallbackRecoveries(scrapeResult upcomingSc
 		if !ok {
 			continue
 		}
-		observeYouTubeScraperRecovery("upcoming_streams", failure.Source, failure.Reason, string(scraper.FailureSourceAPI))
+		observeYouTubeProducerScrapeRecovery("upcoming_streams", failure.Source, failure.Reason, string(scraper.FailureSourceAPI))
 		ys.logger.Info("youtube_upcoming_api_fallback_recovered_channel",
 			slog.String("channelID", channelID),
 			slog.String("failedSource", failure.Source),

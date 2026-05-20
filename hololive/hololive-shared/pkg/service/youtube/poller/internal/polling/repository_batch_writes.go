@@ -188,7 +188,49 @@ func (r *gormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *
 	}
 
 	now := time.Now()
-	args := make([]any, 0, len(activeNotifications)*8)
+	for _, chunk := range notificationChunksByKind(activeNotifications) {
+		if err := r.insertNotificationsSameKindChunk(ctx, tx, chunk, now); err != nil {
+			return err
+		}
+	}
+	if err := rearmFailedDeliveryRows(ctx, tx, collectFailedNotificationOutboxIDs(reactivationRows), now); err != nil {
+		return fmt.Errorf("rearm failed delivery rows: %w", err)
+	}
+
+	return nil
+}
+
+func notificationChunksByKind(notifications []*domain.YouTubeNotificationOutbox) [][]*domain.YouTubeNotificationOutbox {
+	chunks := make([][]*domain.YouTubeNotificationOutbox, 0, len(notifications))
+	chunkByKind := make(map[domain.OutboxKind]int)
+	seenByIdentity := make(map[string]struct{}, len(notifications))
+	for _, notification := range notifications {
+		if notification == nil {
+			continue
+		}
+		identityKey := notificationIdentityKey(notification.Kind, notification.ContentID)
+		if _, ok := seenByIdentity[identityKey]; ok {
+			continue
+		}
+		seenByIdentity[identityKey] = struct{}{}
+		idx, ok := chunkByKind[notification.Kind]
+		if !ok {
+			chunkByKind[notification.Kind] = len(chunks)
+			chunks = append(chunks, nil)
+			idx = len(chunks) - 1
+		}
+		chunks[idx] = append(chunks[idx], notification)
+	}
+	return chunks
+}
+
+func (r *gormBatchRepository) insertNotificationsSameKindChunk(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox, now time.Time) error {
+	if len(notifications) == 0 {
+		return nil
+	}
+
+	kind := notifications[0].Kind
+	args := make([]any, 0, len(notifications)*8)
 	var sb strings.Builder
 	sb.WriteString(`
 		INSERT INTO youtube_notification_outbox
@@ -196,7 +238,7 @@ func (r *gormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *
 		VALUES
 	`)
 
-	for i, notification := range activeNotifications {
+	for i, notification := range notifications {
 		appendNotificationInsertArgs(&sb, &args, i, notification, now)
 	}
 
@@ -214,12 +256,13 @@ func (r *gormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *
 		  AND youtube_notification_outbox.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 	`)
 
-	if err := tx.WithContext(ctx).Exec(sb.String(), args...).Error; err != nil {
-		return fmt.Errorf("exec notification insert chunk (%d rows): %w", len(activeNotifications), err)
+	result := tx.WithContext(ctx).Exec(sb.String(), args...)
+	if result.Error != nil {
+		observeOutboxInsert(kind, "error", int64(len(notifications)))
+		return fmt.Errorf("exec notification insert chunk (%d rows): %w", len(notifications), result.Error)
 	}
-	if err := rearmFailedDeliveryRows(ctx, tx, collectFailedNotificationOutboxIDs(reactivationRows), now); err != nil {
-		return fmt.Errorf("rearm failed delivery rows: %w", err)
-	}
+	observeOutboxInsert(kind, "success", result.RowsAffected)
+	observeOutboxInsert(kind, "conflict", int64(len(notifications))-result.RowsAffected)
 
 	return nil
 }

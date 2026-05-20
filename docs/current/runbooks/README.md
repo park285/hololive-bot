@@ -10,8 +10,7 @@
 | `admin-api` | `admin-api.md` |
 | `alarm-worker` | `alarm-worker.md` |
 | `llm-scheduler` | `llm-scheduler.md` |
-| `stream-ingester` | `stream-ingester.md` |
-| `youtube-scraper` | `youtube-scraper.md` |
+| `youtube-producer` | `youtube-producer.md` |
 
 ## Infra And Release
 
