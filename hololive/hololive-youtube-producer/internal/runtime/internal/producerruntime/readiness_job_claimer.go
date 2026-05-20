@@ -61,14 +61,22 @@ func probeReadinessJobClaimer(ctx context.Context, claimer poller.JobClaimer, lo
 	}
 	status, claim, err := claimer.TryClaim(ctx, readinessProbePollerName, readinessProbeChannelID, readinessProbeTTL, readinessProbeTTL)
 	if err != nil {
-		if logger != nil {
-			logger.Warn("active_active_readiness_probe_failed", slog.Any("error", err))
-		}
+		logReadinessProbeWarning(logger, "active_active_readiness_probe_failed", err)
 		return
 	}
 	if status.Result == poller.JobClaimAcquired && claim != nil {
-		if _, err := claim.Release(ctx); err != nil && logger != nil {
-			logger.Warn("active_active_readiness_probe_release_failed", slog.Any("error", err))
-		}
+		releaseReadinessProbeClaim(ctx, claim, logger)
+	}
+}
+
+func releaseReadinessProbeClaim(ctx context.Context, claim poller.JobClaim, logger *slog.Logger) {
+	if _, err := claim.Release(ctx); err != nil {
+		logReadinessProbeWarning(logger, "active_active_readiness_probe_release_failed", err)
+	}
+}
+
+func logReadinessProbeWarning(logger *slog.Logger, message string, err error) {
+	if logger != nil {
+		logger.Warn(message, slog.Any("error", err))
 	}
 }

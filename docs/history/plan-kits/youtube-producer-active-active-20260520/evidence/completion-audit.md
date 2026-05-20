@@ -10,7 +10,7 @@
 
 ## Objective
 
-Execute `/root/work/hololive-bot/docs/history/plan-kits/youtube-producer-active-active-20260520` through the last page using explicit subagent review for every phase and non-functional quality gates.
+Execute `docs/history/plan-kits/youtube-producer-active-active-20260520` through the last page using explicit subagent review for every phase and non-functional quality gates.
 
 ## Phase Status
 

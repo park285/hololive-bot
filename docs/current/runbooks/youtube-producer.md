@@ -104,7 +104,7 @@ youtube_poller_outbox_insert_total{kind=...,result="conflict"}
 
 ## Osaka rollout
 
-Use the scoped deployment wrapper for Osaka active-active rollout. It syncs only the active-active runtime files listed in `scripts/deploy/osaka-active-active-rsync-files.txt`; it intentionally excludes `docker-compose.prod.yml`, secrets, docs, tests, `go.sum`, `hololive-alarm-worker/**`, and runtime data.
+Use the scoped deployment wrapper for Osaka active-active rollout. It syncs only the active-active runtime files listed in `scripts/deploy/osaka-active-active-rsync-files.txt`; it intentionally excludes secrets, docs, tests, `hololive-alarm-worker/**`, runtime data, and all data paths except the embedded `hololive-shared` profile data required by the producer image.
 
 ```bash
 ./scripts/deploy/osaka-active-active-deploy.sh --dry-run
