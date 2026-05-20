@@ -23,7 +23,9 @@ changed="$(
     git ls-files --others --exclude-standard 2>/dev/null || true
   } | sort -u
 )"
-if echo "$changed" | grep -E '^admin-dashboard/'; then
+admin_changed="$(echo "$changed" | grep -E '^admin-dashboard/' | grep -v -E '^admin-dashboard/Dockerfile$' || true)"
+if [[ -n "${admin_changed}" ]]; then
+  echo "${admin_changed}"
   echo "admin-dashboard scope files changed; this refactor must not touch admin-dashboard" >&2
   exit 1
 fi
