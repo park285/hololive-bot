@@ -58,30 +58,43 @@ func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
 		return &Provider{}, nil
 	}
 
-	// Resource: 서비스 메타데이터 정의
-	res := resource.NewWithAttributes(
+	exporter, err := otlptracegrpc.New(ctx, buildOTLPExporterOptions(cfg)...)
+	if err != nil {
+		return nil, fmt.Errorf("create exporter: %w", err)
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(buildResource(cfg)),
+		sdktrace.WithSampler(buildSampler(cfg)),
+	)
+	installGlobalProvider(tp)
+
+	return &Provider{tracerProvider: tp}, nil
+}
+
+func buildResource(cfg Config) *resource.Resource {
+	return resource.NewWithAttributes(
 		semconv.SchemaURL,
 		semconv.ServiceName(cfg.ServiceName),
 		semconv.ServiceVersion(cfg.ServiceVersion),
 		semconv.DeploymentEnvironment(cfg.Environment),
 	)
+}
 
-	// OTLP Exporter 설정
-	var exporterOpts []otlptracegrpc.Option
-	exporterOpts = append(exporterOpts, otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint))
+func buildOTLPExporterOptions(cfg Config) []otlptracegrpc.Option {
+	opts := []otlptracegrpc.Option{
+		otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint),
+	}
 	if cfg.OTLPInsecure {
-		exporterOpts = append(exporterOpts,
+		opts = append(opts,
 			otlptracegrpc.WithDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
 		)
 	}
+	return opts
+}
 
-	exporter, err := otlptracegrpc.New(ctx, exporterOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("create exporter: %w", err)
-	}
-
-	// Sampler 설정
-	// ParentBased로 감싸서 부모가 샘플링했으면 자식도 무조건 샘플링
+func buildSampler(cfg Config) sdktrace.Sampler {
 	var rootSampler sdktrace.Sampler
 	if cfg.SampleRate >= 1.0 {
 		rootSampler = sdktrace.AlwaysSample()
@@ -90,25 +103,17 @@ func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
 	} else {
 		rootSampler = sdktrace.TraceIDRatioBased(cfg.SampleRate)
 	}
-	sampler := sdktrace.ParentBased(rootSampler)
+	return sdktrace.ParentBased(rootSampler)
+}
 
-	// TracerProvider 생성
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sampler),
-	)
-
-	// 글로벌 설정
+func installGlobalProvider(tp *sdktrace.TracerProvider) {
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(
 		propagation.NewCompositeTextMapPropagator(
-			propagation.TraceContext{}, // W3C Trace Context
-			propagation.Baggage{},      // W3C Baggage
+			propagation.TraceContext{},
+			propagation.Baggage{},
 		),
 	)
-
-	return &Provider{tracerProvider: tp}, nil
 }
 
 // 버퍼에 남은 span들을 flush하여 데이터 유실을 방지합니다.
