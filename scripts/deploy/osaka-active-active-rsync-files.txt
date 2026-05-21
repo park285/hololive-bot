@@ -658,13 +658,16 @@ shared-go/Makefile
 shared-go/pkg/envutil/env.go
 shared-go/pkg/ginjson/ginjson.go
 shared-go/pkg/httputil/client.go
+shared-go/pkg/httputil/doc.go
 shared-go/pkg/httputil/json_client.go
 shared-go/pkg/httputil/response.go
 shared-go/pkg/json/json.go
+shared-go/pkg/jsonutil/doc.go
 shared-go/pkg/jsonutil/extract.go
 shared-go/pkg/jsonutil/gjson.go
 shared-go/pkg/logging/attrs.go
 shared-go/pkg/logging/context.go
+shared-go/pkg/logging/doc.go
 shared-go/pkg/logging/id.go
 shared-go/pkg/logging/log.go
 shared-go/pkg/logging/logging.go
@@ -679,5 +682,6 @@ shared-go/pkg/runtime/lifecycle/cleanup.go
 shared-go/pkg/runtime/lifecycle/managed.go
 shared-go/pkg/runtime/lifecycle/skeleton.go
 shared-go/pkg/stringutil/stringutil.go
+shared-go/pkg/telemetry/doc.go
 shared-go/pkg/telemetry/telemetry.go
 shared-go/pkg/workerpool/pool.go
