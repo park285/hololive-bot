@@ -106,9 +106,9 @@ compose_service_resolve_osaka_log_file() {
     local service="$1"
 
     case "${service}" in
-        youtube-producer-a) printf '%s\n' "logs/youtube-producer-a.log" ;;
-        youtube-producer-b) printf '%s\n' "logs/youtube-producer-b.log" ;;
-        youtube-producer) printf '%s\n' "logs/youtube-producer-a.log" ;;
+        youtube-producer-a) printf '%s\n' "logs/youtube-producer.log" ;;
+        youtube-producer-b) printf '%s\n' "logs/youtube-producer.log" ;;
+        youtube-producer) printf '%s\n' "logs/youtube-producer.log" ;;
         *) return 1 ;;
     esac
 }

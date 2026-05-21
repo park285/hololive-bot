@@ -11,6 +11,7 @@ admin-dashboard/backend/src/auth/session.rs:720
 admin-dashboard/backend/src/handlers/auth.rs:1320
 admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
 scripts/logs/logs.sh:760
+scripts/logs/remote-sync-main-logs.sh:500
 hololive/hololive-kakao-bot-go/scripts/bot.sh:560
 hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/youtube_checker.go:480
 hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier.go:460
