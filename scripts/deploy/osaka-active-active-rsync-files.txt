@@ -669,6 +669,8 @@ shared-go/pkg/logging/id.go
 shared-go/pkg/logging/log.go
 shared-go/pkg/logging/logging.go
 shared-go/pkg/logging/logging_archive.go
+shared-go/pkg/logging/logging_archive_backups.go
+shared-go/pkg/logging/logging_archive_permissions.go
 shared-go/pkg/logging/operation.go
 shared-go/pkg/logging/sanitize.go
 shared-go/pkg/runtime/automaxprocs/automaxprocs.go
