@@ -157,15 +157,27 @@ func buildIngestionRuntimeYouTubeDependencies(
 	if err != nil {
 		return deps, err
 	}
-	if cfg.Scraper.ActiveActive.Enabled {
-		_ = startRecoveryLoop(ctx, jobClaimer, readinessState, 5*time.Second, 60*time.Second, logger, func() {
-			deps.scraperScheduler.NudgeAllJobs()
-			logger.Info("active_active_resumed_nudge")
-		})
-	}
+	startActiveActiveRecoveryLoopIfEnabled(ctx, cfg, jobClaimer, readinessState, deps.scraperScheduler, logger)
 	deps.pollTargetRefresher = buildPollTargetRefresher(cfg, infra, deps, state, logger)
 	deps.youtubeScheduler = infra.ytStack.Scheduler
 	return deps, nil
+}
+
+func startActiveActiveRecoveryLoopIfEnabled(
+	ctx context.Context,
+	cfg *config.Config,
+	jobClaimer poller.JobClaimer,
+	readinessState *readiness.State,
+	scraperScheduler *poller.Scheduler,
+	logger *slog.Logger,
+) {
+	if !cfg.Scraper.ActiveActive.Enabled {
+		return
+	}
+	_ = startRecoveryLoop(ctx, jobClaimer, readinessState, 5*time.Second, 60*time.Second, logger, func() {
+		scraperScheduler.NudgeAllJobs()
+		logger.Info("active_active_resumed_nudge")
+	})
 }
 
 func buildIngestionRuntimeJobClaimer(

@@ -63,12 +63,11 @@ func runRecoveryLoop(
 	onResume func(),
 ) {
 	backoff := baseInterval
-	wasUnavailable := !state.LeaseAvailable()
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		wait, nextBackoff, nextWasUnavailable := recoveryLoopIteration(
+		wait, nextBackoff := recoveryLoopIteration(
 			ctx,
 			claimer,
 			state,
@@ -77,10 +76,8 @@ func runRecoveryLoop(
 			backoff,
 			logger,
 			onResume,
-			wasUnavailable,
 		)
 		backoff = nextBackoff
-		wasUnavailable = nextWasUnavailable
 		if !sleepRecoveryLoop(ctx, wait) {
 			return
 		}
@@ -96,20 +93,18 @@ func recoveryLoopIteration(
 	backoff time.Duration,
 	logger *slog.Logger,
 	onResume func(),
-	wasUnavailable bool,
-) (time.Duration, time.Duration, bool) {
+) (time.Duration, time.Duration) {
 	if state.LeaseAvailable() {
-		return baseInterval, baseInterval, false
+		return baseInterval, baseInterval
 	}
-	wasUnavailable = true
 	status, claim, err := claimer.TryClaim(ctx, readinessProbePollerName, readinessProbeChannelID, readinessProbeTTL, readinessProbeTTL)
 	if err != nil || status.Result == poller.JobClaimUnavailable {
 		logRecoveryLoopDebug(logger, "active_active_recovery_probe_failed", err, status.Result)
-		return backoff, nextRecoveryBackoff(backoff, maxInterval), true
+		return backoff, nextRecoveryBackoff(backoff, maxInterval)
 	}
 	available := handleRecoveryLoopClaim(ctx, status, claim, state, logger)
-	notifyRecoveryResume(wasUnavailable, available, onResume)
-	return baseInterval, baseInterval, !available
+	notifyRecoveryResume(available, onResume)
+	return baseInterval, baseInterval
 }
 
 func handleRecoveryLoopClaim(
@@ -137,8 +132,8 @@ func handleRecoveryLoopClaim(
 	}
 }
 
-func notifyRecoveryResume(wasUnavailable bool, available bool, onResume func()) {
-	if wasUnavailable && available && onResume != nil {
+func notifyRecoveryResume(available bool, onResume func()) {
+	if available && onResume != nil {
 		onResume()
 	}
 }
