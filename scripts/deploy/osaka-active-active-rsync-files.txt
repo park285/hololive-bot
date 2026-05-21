@@ -532,6 +532,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/message_fo
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/metrics.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/sent_at.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry_post_id.go
+hololive/hololive-shared/pkg/service/youtube/outbox/doc.go
 hololive/hololive-shared/pkg/service/youtube/outbox/outbox.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/polling/channel_stats_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/polling/cleaner.go
