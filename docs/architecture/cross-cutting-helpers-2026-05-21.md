@@ -82,11 +82,13 @@ func ComputeExponentialBackoff(attempt int, base, maxInterval, jitter time.Durat
 
 ### 호출부 sample
 
-- `hololive/hololive-shared/internal/retry/retry.go:52` — `ComputeBackoffDelay(attempt int, base, jitter time.Duration)` 는 `base * 2^attempt + jitter` attempt-based 모델.
-- `hololive/hololive-youtube-producer/internal/runtime/ingestionlease/lease.go:276` — lease retry 가 `leaseBackoffDelay(attempt, opts.BaseDelay, opts.Jitter)` 를 호출.
-- `hololive/hololive-youtube-producer/internal/runtime/ingestionlease/lease.go:283` — `leaseBackoffDelay` 는 attempt 횟수만큼 두 배 증가시키고 `time.Now().UnixNano()` 기반 jitter 를 더함.
+- `hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/photo_sync.go:117` — `delay := retry.ComputeBackoffDelay(attempt-1, 5*time.Second, 2*time.Second)` 로 attempt-based backoff 를 사용.
+- `hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/api_client_rate_limit.go:42` — rate limit retry 에서 `delay := retry.ComputeBackoffDelay(attempt, constants.RetryConfig.BaseDelay, constants.RetryConfig.Jitter)` 호출.
+- `hololive/hololive-shared/internal/retry/retry.go:152` — `WithRetry` 내부가 `delay := ComputeBackoffDelay(attempt, opts.BaseDelay, opts.Jitter)` 로 helper 를 실제 호출.
+- `hololive/hololive-youtube-producer/internal/runtime/ingestionlease/lease.go:276` — lease retry 가 `delay := leaseBackoffDelay(attempt, opts.BaseDelay, opts.Jitter)` 로 attempt-based backoff 를 호출.
 - `hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/readiness_recovery_loop.go:103` — recovery 실패 시 현재 `backoff` 로 대기하고 `nextRecoveryBackoff(backoff, maxInterval)` 로 다음 값을 계산.
-- `hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/readiness_recovery_loop.go:141` — `nextRecoveryBackoff(current, maxInterval)` 는 current-based 모델이며 `10s -> 30s` 점프 정책이 포함됨.
+
+위 목록은 실제 호출부만 인용한다. 기존 helper 정의 위치인 `hololive/hololive-shared/internal/retry/retry.go:52`, `hololive/hololive-youtube-producer/internal/runtime/ingestionlease/lease.go:283`, `hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/readiness_recovery_loop.go:141` 은 호환성 / 마이그레이션 대상 정의로만 다룬다.
 
 ### 기존 helper 와의 호환성
 
@@ -110,21 +112,38 @@ claim token 생성, claim 결과 캐시, `CompareAndExpire` 기반 renew/release
 ### 권장 시그니처
 
 ```go
+type ClaimKey struct {
+	Scope   string // 예: "youtube_outbox_delivery", "alarm_state"
+	Subject string // 예: video_id, alarm_id
+}
+
+type ClaimStatus struct {
+	Holder     string
+	AcquiredAt time.Time
+	ExpiresAt  time.Time
+	RetryAfter time.Duration
+}
+
+type ReuseCache interface {
+	Claim(ctx context.Context, key ClaimKey, holder string, ttl time.Duration) (ClaimStatus, error)
+	Release(ctx context.Context, key ClaimKey, holder string) error
+}
+
 type ClaimStore interface {
 	TryClaim(ctx context.Context, key ClaimKey, ownerToken string, leaseTTL time.Duration, cooldownTTL time.Duration) (ClaimStatus, error)
 	Renew(ctx context.Context, key ClaimKey, ownerToken string, ttl time.Duration) (bool, error)
 	Release(ctx context.Context, key ClaimKey, ownerToken string) (bool, error)
 }
 
-func ResolveClaim(ctx context.Context, cache *ReuseCache, identity string, claim func(context.Context) (ClaimStatus, error)) (ClaimStatus, bool, error)
+func ResolveClaim(ctx context.Context, cache ReuseCache, identity string, claim func(context.Context) (ClaimStatus, error)) (ClaimStatus, bool, error)
 ```
 
-결정: 공통 helper 는 claim decision reuse 와 token lifecycle orchestration 까지만 맡고, Valkey Lua script / SQL upsert 는 adapter 가 맡는다. `bool` 반환값은 cache 재사용 여부다.
+결정: 공통 helper 는 claim decision reuse 와 token lifecycle orchestration 까지만 맡고, Valkey Lua script / SQL upsert 는 adapter 가 맡는다. `bool` 반환값은 cache 재사용 여부다. `ClaimKey`, `ClaimStatus`, `ReuseCache` 의 세부 필드는 후속 brainstorming 에서 조정할 수 있으나, Phase 2.B.2 진입 전 최소 형태는 위 시그니처로 고정한다.
 
 대안:
 
 ```go
-func TryClaimWithCache(ctx context.Context, cache *ReuseCache, identity string, ttl time.Duration, claim func(context.Context) (ClaimStatus, ClaimToken, error)) (ClaimStatus, ClaimToken, bool, error)
+func TryClaimWithCache(ctx context.Context, cache ReuseCache, identity string, ttl time.Duration, claim func(context.Context) (ClaimStatus, ClaimToken, error)) (ClaimStatus, ClaimToken, bool, error)
 ```
 
 token 을 value 로 직접 반환하면 outbox 호출부 diff 는 줄지만 DB claim 처럼 token 이 `authorizedAt` 인 경우와 Valkey owner token 인 경우를 하나의 struct 로 뭉개게 된다. Phase 2.B.2 에서는 `ClaimStatus` 중심으로 adapter 를 두는 쪽을 권장한다.
@@ -252,14 +271,14 @@ func LogAndWrapError(ctx context.Context, logger *slog.Logger, event, message, o
 - 권장: `shared-go/pkg/logging` — 이미 `ErrorAttrs(err)`, `Error(ctx, logger, event, message, attrs...)`, `RunOperation` 이 있다.
 - 보류: `hololive/hololive-shared/pkg/logschema` — YouTube service log schema 에 가까운 호출부에는 유용하지만 cross-runtime helper 로는 좁다.
 
+호환성 검증: `hololive/hololive-shared/go.mod` 에 `github.com/park285/llm-kakao-bots/shared-go` 의존성이 이미 있음 (`grep "shared-go" hololive/hololive-shared/go.mod` 결과). 따라서 `hololive-shared` 측 1378 회 패턴이 `shared-go/pkg/logging` 의 `LogAndWrapError` 를 import 가능.
+
 ### 호출부 sample
 
-- `shared-go/pkg/logging/attrs.go:42` — `ErrorAttrs(err)` 가 `error_type`, `error_message`, `error_code`, `retryable` 를 제공.
-- `shared-go/pkg/logging/operation.go:37` — `RunOperation` 이 실패 시 `ErrorAttrs(err)` 를 붙여 `logging.Error` 로 기록.
-- `hololive/hololive-shared/pkg/service/delivery/dispatcher.go:144` — fetch 실패 시 `logger.Error("Failed to fetch outbox items", slog.String("error", err.Error()))` 로 기록.
-- `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher.go:250` — outbox fetch 실패 시 `logger.Error("Failed to fetch outbox items", slog.Any("error", err))` 로 기록.
-- `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_claim_gate.go:216` — transaction 실패를 `fmt.Errorf("recover successful community/shorts sent state transaction: %w", err)` 로 wrap.
-- `docs/agent-workflows/plans/2026-05-21-monorepo-refactor-master.md:55` — `hololive-shared` 내 error wrap + log 패턴이 1378회로 조사됨.
+- `hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service_mutation.go:99` / `:101` — `as.logger.Error("Failed to add alarm", slog.Any("error", opErr))` 직후 `return 0, fmt.Errorf("rebuild add cache from repository: %w", opErr)` 로 wrap.
+- `hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service_mutation.go:160` / `:162` — persist 실패를 `as.logger.Error("Failed to persist alarm before cache write", slog.Any("error", err))` 로 기록한 뒤 `return fmt.Errorf("persist alarm before cache write: %w", err)` 반환.
+- `hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service_mutation.go:270` / `:272` — alarm removal persist 실패를 log 후 `return fmt.Errorf("delete alarm before cache removal: %w", err)` 로 wrap.
+- `hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service_mutation.go:367` / `:369` — room alarm clear persist 실패를 log 후 `return fmt.Errorf("delete room alarms before cache clear: %w", err)` 로 wrap.
 
 ### slog 컨벤션 침해 회피 검토
 
@@ -285,9 +304,9 @@ func LogAndWrapError(ctx context.Context, logger *slog.Logger, event, message, o
 ## Phase 2.B 진입 순서 권장
 
 1. **2.B.1 RunTickerLoop / NextExponentialBackoff** 먼저 — 다른 helper 가 이를 사용할 가능성이 있고 변경 범위가 테스트로 고정하기 쉽다.
-2. **2.B.4 LogAndWrapError** 다음 — schema 영향이 가장 큼, 별도 PR 권장.
+2. **2.B.2 claim cache** — 3개 구현체의 TTL / retry-after / token semantics 차이 분석 후 별도 brainstorming 으로 진입한다.
 3. **2.B.3 HTTP server lifecycle** — 이미 `shared-go/pkg/runtime/lifecycle` 와 `hololive-shared/pkg/server/internal/httpserver` 에 기반 helper 가 있어 wrapping 작업 위주다.
-4. **2.B.2 claim cache** — 3개 구현체의 TTL / retry-after / token semantics 차이 분석 후 별도 brainstorming 으로 진입한다.
+4. **2.B.4 LogAndWrapError** — schema 영향이 가장 큼, 별도 PR 권장.
 
 각 sub-phase 는 한 세션 = 한 PR.
 
