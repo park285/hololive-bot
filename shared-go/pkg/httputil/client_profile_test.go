@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestApplyTransportProfile(t *testing.T) {
@@ -37,6 +38,7 @@ func TestApplyTransportProfile(t *testing.T) {
 		if transport.DialContext == nil {
 			t.Fatal("DialContext is nil")
 		}
+		requireDialContextTimeout(t, transport.DialContext, profile.DialTimeout)
 		_, err := transport.DialContext(context.Background(), "", "")
 		if errors.Is(err, sentinelErr) {
 			t.Fatal("DialContext was not replaced")
@@ -95,6 +97,42 @@ func TestApplyTransportProfile(t *testing.T) {
 			t.Fatalf("MaxIdleConnsPerHost = %d, want 15", transport.MaxIdleConnsPerHost)
 		}
 	})
+
+	t.Run("positive DialTimeout preserves zero fields", func(t *testing.T) {
+		t.Parallel()
+
+		sentinelErr := errors.New("sentinel dial")
+		transport := &http.Transport{
+			DialContext: func(context.Context, string, string) (net.Conn, error) {
+				return nil, sentinelErr
+			},
+			TLSHandshakeTimeout:   11 * time.Second,
+			ResponseHeaderTimeout: 12 * time.Second,
+			IdleConnTimeout:       13 * time.Second,
+			MaxConnsPerHost:       14,
+			MaxIdleConnsPerHost:   15,
+		}
+		profile := TransportProfile{DialTimeout: 3 * time.Second}
+
+		applyTransportProfile(transport, profile)
+
+		requireDialContextTimeout(t, transport.DialContext, profile.DialTimeout)
+		if transport.TLSHandshakeTimeout != 11*time.Second {
+			t.Fatalf("TLSHandshakeTimeout = %s, want %s", transport.TLSHandshakeTimeout, 11*time.Second)
+		}
+		if transport.ResponseHeaderTimeout != 12*time.Second {
+			t.Fatalf("ResponseHeaderTimeout = %s, want %s", transport.ResponseHeaderTimeout, 12*time.Second)
+		}
+		if transport.IdleConnTimeout != 13*time.Second {
+			t.Fatalf("IdleConnTimeout = %s, want %s", transport.IdleConnTimeout, 13*time.Second)
+		}
+		if transport.MaxConnsPerHost != 14 {
+			t.Fatalf("MaxConnsPerHost = %d, want 14", transport.MaxConnsPerHost)
+		}
+		if transport.MaxIdleConnsPerHost != 15 {
+			t.Fatalf("MaxIdleConnsPerHost = %d, want 15", transport.MaxIdleConnsPerHost)
+		}
+	})
 }
 
 func TestApplyTransportProfileHTTP2(t *testing.T) {
@@ -122,19 +160,30 @@ func TestApplyTransportProfileHTTP2(t *testing.T) {
 	t.Run("DisableHTTP2 false preserves TLSNextProto", func(t *testing.T) {
 		t.Parallel()
 
-		transport := &http.Transport{
-			TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{
-				"custom": func(string, *tls.Conn) http.RoundTripper { return nil },
-			},
+		customHandler := func(string, *tls.Conn) http.RoundTripper { return nil }
+		baseline := map[string]func(string, *tls.Conn) http.RoundTripper{
+			"custom": customHandler,
 		}
+		transport := &http.Transport{
+			TLSNextProto: baseline,
+		}
+		baselineMapPointer := tlsNextProtoMapPointer(baseline)
+		baselineHandlerPointer := reflect.ValueOf(customHandler).Pointer()
 
 		applyTransportProfile(transport, TransportProfile{DisableHTTP2: false})
 
+		if tlsNextProtoMapPointer(transport.TLSNextProto) != baselineMapPointer {
+			t.Fatal("TLSNextProto map identity was not preserved")
+		}
 		if len(transport.TLSNextProto) != 1 {
 			t.Fatalf("TLSNextProto len = %d, want 1", len(transport.TLSNextProto))
 		}
-		if _, ok := transport.TLSNextProto["custom"]; !ok {
+		custom, ok := transport.TLSNextProto["custom"]
+		if !ok {
 			t.Fatal("TLSNextProto custom entry was not preserved")
+		}
+		if reflect.ValueOf(custom).Pointer() != baselineHandlerPointer {
+			t.Fatal("TLSNextProto custom handler identity was not preserved")
 		}
 	})
 }
@@ -220,4 +269,28 @@ func mustClientTransport(t *testing.T, client *http.Client) *http.Transport {
 		t.Fatalf("Transport type = %T, want *http.Transport", client.Transport)
 	}
 	return transport
+}
+
+func requireDialContextTimeout(t *testing.T, dialContext func(context.Context, string, string) (net.Conn, error), want time.Duration) {
+	t.Helper()
+
+	if dialContext == nil {
+		t.Fatal("DialContext is nil")
+	}
+	funcValuePointer := *(*unsafe.Pointer)(unsafe.Pointer(&dialContext))
+	if funcValuePointer == nil {
+		t.Fatal("DialContext func value is nil")
+	}
+	fields := (*[2]unsafe.Pointer)(funcValuePointer)
+	dialer := (*net.Dialer)(fields[1])
+	if dialer == nil {
+		t.Fatal("DialContext dialer capture is nil")
+	}
+	if dialer.Timeout != want {
+		t.Fatalf("DialContext dialer timeout = %s, want %s", dialer.Timeout, want)
+	}
+}
+
+func tlsNextProtoMapPointer(m map[string]func(string, *tls.Conn) http.RoundTripper) uintptr {
+	return *(*uintptr)(unsafe.Pointer(&m))
 }
