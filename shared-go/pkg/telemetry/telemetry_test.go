@@ -2,10 +2,16 @@ package telemetry
 
 import (
 	"context"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
@@ -129,35 +135,109 @@ func TestBuildSampler_TraceIDRatioBased(t *testing.T) {
 }
 
 func TestBuildOTLPExporterOptions_Endpoint(t *testing.T) {
-	opts := buildOTLPExporterOptions(Config{
-		OTLPEndpoint: "otel-collector:4317",
-		OTLPInsecure: false,
-	})
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "env-collector:4317")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "env-traces:4317")
 
-	if len(opts) != 1 {
-		t.Fatalf("expected endpoint option only, got %d options", len(opts))
+	for _, tt := range []struct {
+		name     string
+		endpoint string
+	}{
+		{name: "non-empty endpoint", endpoint: "otel-collector:4317"},
+		{name: "empty endpoint", endpoint: ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := buildOTLPExporterOptions(Config{
+				OTLPEndpoint: tt.endpoint,
+				OTLPInsecure: false,
+			})
+
+			if len(opts) != 1 {
+				t.Fatalf("expected endpoint option only, got %d options", len(opts))
+			}
+			if got := otlpClientEndpoint(t, opts); got != tt.endpoint {
+				t.Fatalf("expected client endpoint %q, got %q", tt.endpoint, got)
+			}
+			assertOptionConfigType(t, opts[0], "*otlpconfig.genericOption")
+		})
 	}
 }
 
 func TestBuildOTLPExporterOptions_InsecureTrue(t *testing.T) {
-	opts := buildOTLPExporterOptions(Config{
+	cfg := Config{
 		OTLPEndpoint: "otel-collector:4317",
 		OTLPInsecure: true,
-	})
+	}
+	opts := buildOTLPExporterOptions(cfg)
 
 	if len(opts) != 2 {
 		t.Fatalf("expected endpoint and insecure dial options, got %d options", len(opts))
 	}
+	if got := otlpClientEndpoint(t, opts); got != cfg.OTLPEndpoint {
+		t.Fatalf("expected client endpoint %q, got %q", cfg.OTLPEndpoint, got)
+	}
+	assertOptionConfigType(t, opts[0], "*otlpconfig.genericOption")
+	assertOptionConfigType(t, opts[1], "*otlpconfig.grpcOption")
 }
 
 func TestBuildOTLPExporterOptions_InsecureFalse(t *testing.T) {
-	opts := buildOTLPExporterOptions(Config{
+	cfg := Config{
 		OTLPEndpoint: "otel-collector:4317",
 		OTLPInsecure: false,
-	})
+	}
+	opts := buildOTLPExporterOptions(cfg)
 
 	if len(opts) != 1 {
 		t.Fatalf("expected insecure=false to keep only endpoint option, got %d options", len(opts))
+	}
+	if got := otlpClientEndpoint(t, opts); got != cfg.OTLPEndpoint {
+		t.Fatalf("expected client endpoint %q, got %q", cfg.OTLPEndpoint, got)
+	}
+	assertOptionConfigType(t, opts[0], "*otlpconfig.genericOption")
+}
+
+func TestInstallGlobalProvider_SetsGlobals(t *testing.T) {
+	prevTP := otel.GetTracerProvider()
+	prevProp := otel.GetTextMapPropagator()
+	sentinelTP := sdktrace.NewTracerProvider()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		otel.SetTextMapPropagator(prevProp)
+		_ = sentinelTP.Shutdown(context.Background())
+	})
+
+	installGlobalProvider(sentinelTP)
+
+	if got := otel.GetTracerProvider(); got != sentinelTP {
+		t.Fatalf("expected installed tracer provider identity %p, got %T", sentinelTP, got)
+	}
+
+	fields := otel.GetTextMapPropagator().Fields()
+	assertContainsField(t, fields, "traceparent")
+	assertContainsField(t, fields, "tracestate")
+	assertContainsField(t, fields, "baggage")
+
+	carrier := propagation.MapCarrier{}
+	ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{0x01, 0x02, 0x03},
+		SpanID:     trace.SpanID{0x04, 0x05, 0x06},
+		TraceFlags: trace.FlagsSampled,
+	}))
+	member, err := baggage.NewMember("tenant", "test")
+	if err != nil {
+		t.Fatalf("create baggage member: %v", err)
+	}
+	bag, err := baggage.New(member)
+	if err != nil {
+		t.Fatalf("create baggage: %v", err)
+	}
+	ctx = baggage.ContextWithBaggage(ctx, bag)
+
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	if carrier.Get("traceparent") == "" {
+		t.Fatal("expected traceparent to be injected")
+	}
+	if got := carrier.Get("baggage"); got != "tenant=test" {
+		t.Fatalf("expected baggage to be injected, got %q", got)
 	}
 }
 
@@ -187,4 +267,42 @@ func assertAttributeValue(t *testing.T, attrs map[attribute.Key]string, key attr
 	if got, ok := attrs[key]; !ok || got != want {
 		t.Fatalf("expected attribute %s=%q, got %q (present=%v)", key, want, got, ok)
 	}
+}
+
+func otlpClientEndpoint(t *testing.T, opts []otlptracegrpc.Option) string {
+	t.Helper()
+
+	client := otlptracegrpc.NewClient(opts...)
+	value := reflect.ValueOf(client)
+	if value.Kind() != reflect.Pointer {
+		t.Fatalf("expected OTLP client pointer, got %T", client)
+	}
+	field := value.Elem().FieldByName("endpoint")
+	if !field.IsValid() {
+		t.Fatalf("expected OTLP client %T to expose endpoint field", client)
+	}
+	return field.String()
+}
+
+func assertOptionConfigType(t *testing.T, opt otlptracegrpc.Option, want string) {
+	t.Helper()
+
+	value := reflect.ValueOf(opt)
+	field := value.FieldByName("GRPCOption")
+	if !field.IsValid() {
+		t.Fatalf("expected option %T to expose GRPCOption field", opt)
+	}
+	got := reflect.TypeOf(field.Interface()).String()
+	if got != want {
+		t.Fatalf("expected option config type %q, got %q", want, got)
+	}
+}
+
+func assertContainsField(t *testing.T, fields []string, want string) {
+	t.Helper()
+
+	if slices.Contains(fields, want) {
+		return
+	}
+	t.Fatalf("expected propagator fields to contain %q, got %v", want, fields)
 }
