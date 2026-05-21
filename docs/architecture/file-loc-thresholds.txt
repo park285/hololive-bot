@@ -43,4 +43,4 @@ hololive/hololive-llm-sched/internal/service/majorevent/scraper/link_checker.go:
 hololive/hololive-llm-sched/internal/llm/openai_client.go:430
 hololive/hololive-admin-api/internal/server/internal/api/api_member.go:430
 hololive/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/community_shorts_alarm_sent_history_dataset_render.go:420
-shared-go/pkg/logging/logging.go:520
+shared-go/pkg/logging/logging.go:215
