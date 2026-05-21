@@ -656,6 +656,9 @@ hololive/hololive-shared/pkg/util/time.go
 hololive/hololive-shared/pkg/util/valkey.go
 shared-go/.golangci.yml
 shared-go/Makefile
+shared-go/pkg/backoff/backoff.go
+shared-go/pkg/backoff/backoff_test.go
+shared-go/pkg/backoff/doc.go
 shared-go/pkg/envutil/env.go
 shared-go/pkg/ginjson/ginjson.go
 shared-go/pkg/httputil/client.go
@@ -682,6 +685,9 @@ shared-go/pkg/runtime/bootstrap/bootstrap.go
 shared-go/pkg/runtime/lifecycle/cleanup.go
 shared-go/pkg/runtime/lifecycle/managed.go
 shared-go/pkg/runtime/lifecycle/skeleton.go
+shared-go/pkg/runtime/loop/doc.go
+shared-go/pkg/runtime/loop/loop.go
+shared-go/pkg/runtime/loop/loop_test.go
 shared-go/pkg/stringutil/stringutil.go
 shared-go/pkg/telemetry/doc.go
 shared-go/pkg/telemetry/telemetry.go
