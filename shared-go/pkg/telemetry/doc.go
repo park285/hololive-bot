@@ -5,7 +5,8 @@
 //
 // 이 패키지는 OpenTelemetry 기반 분산 추적을 서비스 공통 방식으로 구성합니다.
 // Config로 service metadata, OTLP gRPC endpoint, TLS 사용 여부, sampler 비율을
-// 지정하고 NewProvider가 exporter, resource, sampler, global provider를 설치합니다.
+// 지정하고 cfg.Enabled=true일 때 NewProvider가 exporter, resource, sampler,
+// global provider를 설치합니다. Enabled=false이면 no-op Provider를 반환합니다.
 //
 // trace context 전파는 OpenTelemetry TextMapPropagator를 통해 처리합니다.
 // HTTP header, gRPC metadata, Valkey message value처럼 key/value 형태의 carrier에

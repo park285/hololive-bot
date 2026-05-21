@@ -19,7 +19,8 @@
 //   - ContextAttrs: context 값을 slog.Attr 목록으로 변환합니다.
 //   - Event, Runtime, Component, Operation, RequestID, JobID, DurationMS, SinceMS, ErrorAttrs: 표준 로그 attr helper입니다.
 //   - OperationOptions, RunOperation: start/success/failure lifecycle 로그와 duration/error attr를 자동화합니다.
-//   - NewID: "<sanitized_prefix>_<unixMillis>_<hex>" 형식의 correlation ID를 생성합니다.
+//   - NewID: 정상 경로에서 "<sanitized_prefix>_<unixMillis>_<hex>" 형식의 correlation ID를 생성합니다.
+//     단, rand.Read 실패 시 "<sanitized_prefix>_<unixNano>" 형식으로 폴백합니다.
 //   - Config, ParseLevel, NewLogger, NewLoggerWithLevel, NewTestLogger, NewTestLoggerWithOutput: 로거 설정과 생성 진입점입니다.
 //   - EnableFileLogging, EnableFileLoggingWithLevel, EnableFileLoggingWithOTel: 콘솔/파일 로깅, archive, OTel 상관관계를 구성합니다.
 //   - OTelHandler, NewOTelHandler: 활성 span의 trace_id와 span_id를 record에 추가합니다.

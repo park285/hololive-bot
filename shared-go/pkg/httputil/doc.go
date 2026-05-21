@@ -31,7 +31,11 @@
 //	if err != nil {
 //	    return err
 //	}
+//	defer resp.Body.Close()
 //	if err := httputil.CheckStatus(resp); err != nil {
+//	    return err
+//	}
+//	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 //	    return err
 //	}
 //
@@ -41,6 +45,17 @@
 //	    return err
 //	}
 //	resp, err := api.Do(req)
+//	if err != nil {
+//	    return err
+//	}
+//	defer resp.Body.Close()
+//	if err := api.CheckStatus(resp); err != nil {
+//	    return err
+//	}
+//	var out jobResponse
+//	if err := api.DecodeJSON(resp, &out); err != nil {
+//	    return err
+//	}
 //
 // # 내부 helper 정책
 //
