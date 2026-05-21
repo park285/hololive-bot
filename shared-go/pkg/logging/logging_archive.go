@@ -1,5 +1,3 @@
-// Package logging: 공통 로깅 유틸리티를 제공합니다.
-// slog + tint 기반의 구조화된 로깅, archive-aware file rotation, OpenTelemetry 상관관계를 지원합니다.
 package logging
 
 import (

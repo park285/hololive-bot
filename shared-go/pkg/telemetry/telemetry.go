@@ -1,4 +1,3 @@
-// Package telemetry: OpenTelemetry 기반 분산 추적 기능을 제공합니다.
 package telemetry
 
 import (
