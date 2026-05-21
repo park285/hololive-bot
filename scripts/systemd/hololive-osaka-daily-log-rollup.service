@@ -1,0 +1,13 @@
+[Unit]
+Description=Hololive Osaka daily youtube-producer log rollup into archive tar.gz
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ubuntu/hololive-bot
+Environment=LOG_ROOT=/home/ubuntu/hololive-bot/logs
+Environment=LOG_ROLLUP_FILES=youtube-producer.log
+ExecStart=/home/ubuntu/hololive-bot/scripts/logs/daily-rollup-logs.sh once
+UMask=0027
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
