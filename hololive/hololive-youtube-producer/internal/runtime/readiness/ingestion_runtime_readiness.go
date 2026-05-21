@@ -102,6 +102,13 @@ func (s *State) MarkLeaseAvailable() {
 	s.leaseReason.Store("")
 }
 
+func (s *State) LeaseAvailable() bool {
+	if s == nil {
+		return false
+	}
+	return s.leaseAvailable.Load()
+}
+
 func (s *State) MarkLeaseUnavailable(reason string) {
 	if s == nil {
 		return

@@ -22,8 +22,10 @@
 package polling
 
 import (
+	"container/heap"
 	"context"
 	"log/slog"
+	"time"
 )
 
 func (s *Scheduler) Start(ctx context.Context) {
@@ -91,6 +93,27 @@ func (s *Scheduler) Stop() {
 	}
 	s.wg.Wait()
 	slog.Info("Scheduler stopped")
+}
+
+func (s *Scheduler) NudgeAllJobs() {
+	s.mu.Lock()
+	now := time.Now()
+	changed := false
+	for _, job := range s.jobMap {
+		if job == nil || job.retired {
+			continue
+		}
+		job.consecutiveFailures = 0
+		job.NextRunAt = now
+		if job.index >= 0 {
+			heap.Fix(&s.jobs, job.index)
+		}
+		changed = true
+	}
+	s.mu.Unlock()
+	if changed {
+		s.notifyDispatcher()
+	}
 }
 
 func (s *Scheduler) notifyDispatcher() {

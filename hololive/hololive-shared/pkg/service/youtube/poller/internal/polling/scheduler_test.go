@@ -126,6 +126,40 @@ func TestSchedulerRegisterSignalsWakeChannel(t *testing.T) {
 	}
 }
 
+func TestSchedulerNudgeAllJobsResetsBackoffAndWakesDispatcher(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	poller := &togglePollerStub{name: "videos"}
+
+	require.NoError(t, scheduler.RegisterChecked("channel-1", poller, PriorityNormal, time.Minute))
+	require.NoError(t, scheduler.RegisterChecked("channel-2", poller, PriorityNormal, time.Minute))
+
+	future := time.Now().Add(10 * time.Minute)
+	scheduler.mu.Lock()
+	for _, job := range scheduler.jobMap {
+		job.consecutiveFailures = 5
+		job.NextRunAt = future
+	}
+	select {
+	case <-scheduler.wakeCh:
+	default:
+	}
+	scheduler.mu.Unlock()
+
+	scheduler.NudgeAllJobs()
+
+	scheduler.mu.Lock()
+	defer scheduler.mu.Unlock()
+	for _, job := range scheduler.jobMap {
+		assert.Equal(t, 0, job.consecutiveFailures, "consecutive_failures must reset")
+		assert.False(t, job.NextRunAt.After(time.Now().Add(time.Second)), "NextRunAt must be due immediately")
+	}
+	select {
+	case <-scheduler.wakeCh:
+	default:
+		t.Fatal("dispatcher wake channel was not signalled")
+	}
+}
+
 func TestSchedulerSyncPollerTargetsAddsAndRemovesJobs(t *testing.T) {
 	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	p := &togglePollerStub{name: "videos"}

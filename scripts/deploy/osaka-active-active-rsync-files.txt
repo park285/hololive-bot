@@ -30,6 +30,7 @@ hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/ing
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/photo_sync_guard.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/readiness_adapter.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/readiness_job_claimer.go
+hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/readiness_recovery_loop.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/runtime_config_subscriber.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/youtube_producer_runtime_builder.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/youtube_producer_runtime_lifecycle.go
