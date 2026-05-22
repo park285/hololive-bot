@@ -38,12 +38,12 @@ import (
 )
 
 func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
-	cacheSvc := newCheckerTestCacheClient(t)
+	cache := newCheckerTestCacheClient(t)
 	ctx := t.Context()
 
-	require.NoError(t, cacheSvc.HSet(ctx, notification.TwitchLoginMapKey, "aqua", "yt-1"))
+	require.NoError(t, cache.HSet(ctx, notification.TwitchLoginMapKey, "aqua", "yt-1"))
 
-	_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
+	_, err := cache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
 	require.NoError(t, err)
 
 	startedAt := time.Now().UTC().Truncate(time.Second).Format(time.RFC3339)
@@ -75,7 +75,7 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 	})
 
 	checker, err := NewTwitchChecker(
-		cacheSvc,
+		cache,
 		twitch.NewClient(twitch.ClientConfig{
 			ClientID:     "client-id",
 			ClientSecret: "client-secret",
@@ -101,14 +101,14 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 	t.Run("client not configured", func(t *testing.T) {
 		t.Parallel()
 
-		cacheSvc := newCheckerTestCacheClient(t)
+		cache := newCheckerTestCacheClient(t)
 		ctx := t.Context()
-		require.NoError(t, cacheSvc.HSet(ctx, notification.TwitchLoginMapKey, "aqua", "yt-1"))
+		require.NoError(t, cache.HSet(ctx, notification.TwitchLoginMapKey, "aqua", "yt-1"))
 
-		_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
+		_, err := cache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
 		require.NoError(t, err)
 
-		checker, err := NewTwitchChecker(cacheSvc, twitch.NewClient(twitch.ClientConfig{}, newCheckerTestLogger()), newCheckerTestLogger())
+		checker, err := NewTwitchChecker(cache, twitch.NewClient(twitch.ClientConfig{}, newCheckerTestLogger()), newCheckerTestLogger())
 		require.NoError(t, err)
 
 		notifications, checkErr := checker.Check(ctx)
@@ -118,11 +118,11 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 	})
 
 	t.Run("server 5xx", func(t *testing.T) {
-		cacheSvc := newCheckerTestCacheClient(t)
+		cache := newCheckerTestCacheClient(t)
 		ctx := t.Context()
-		require.NoError(t, cacheSvc.HSet(ctx, notification.TwitchLoginMapKey, "aqua", "yt-1"))
+		require.NoError(t, cache.HSet(ctx, notification.TwitchLoginMapKey, "aqua", "yt-1"))
 
-		_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
+		_, err := cache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
 		require.NoError(t, err)
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -153,7 +153,7 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 		})
 
 		checker, err := NewTwitchChecker(
-			cacheSvc,
+			cache,
 			twitch.NewClient(twitch.ClientConfig{
 				ClientID:     "client-id",
 				ClientSecret: "client-secret",
@@ -221,15 +221,15 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 			t.Parallel()
 
 			setNXInvokes := 0
-			cacheSvc := &cachemocks.Client{
+			cache := &cachemocks.Client{
 				SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
 					setNXInvokes++
 					return false, errors.New("checker must not preclaim dedup")
 				},
 			}
 			checker := &TwitchChecker{
-				cacheSvc: cacheSvc,
-				logger:   newCheckerTestLogger(),
+				cacheClient: cache,
+				logger:      newCheckerTestLogger(),
 			}
 
 			notifications, err := checker.buildLiveNotifications(

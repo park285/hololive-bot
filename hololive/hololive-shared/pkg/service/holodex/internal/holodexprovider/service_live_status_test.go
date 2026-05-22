@@ -40,9 +40,9 @@ func TestGetChannelsLiveStatus_FillsIndieOrgWhenUsersLiveOmitsIt(t *testing.T) {
 		},
 	}
 
-	svc := newServiceForFallbackTest(mockReq)
+	service := newServiceForFallbackTest(mockReq)
 
-	streams, err := svc.GetChannelsLiveStatus(context.Background(), []string{channelID})
+	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{channelID})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}
@@ -83,9 +83,9 @@ func TestGetChannelsLiveStatus_FillsIndieChannelWhenUsersLiveOmitsChannelObject(
 		},
 	}
 
-	svc := newServiceForFallbackTest(mockReq)
+	service := newServiceForFallbackTest(mockReq)
 
-	streams, err := svc.GetChannelsLiveStatus(context.Background(), []string{channelID})
+	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{channelID})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}
@@ -133,9 +133,9 @@ func TestGetChannelsLiveStatus_DoesNotHydrateNonIndieMissingOrg(t *testing.T) {
 		},
 	}
 
-	svc := newServiceForFallbackTest(mockReq)
+	service := newServiceForFallbackTest(mockReq)
 
-	streams, err := svc.GetChannelsLiveStatus(context.Background(), []string{channelID})
+	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{channelID})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}

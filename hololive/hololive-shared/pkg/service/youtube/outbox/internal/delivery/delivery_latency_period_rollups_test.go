@@ -250,8 +250,8 @@ func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPo
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	summaries, err := repo.ListPostLatencyPeriodSummaries(ctx, []PostLatencyPeriod{
+	repository := NewDeliveryTelemetryRepository(db)
+	summaries, err := repository.ListPostLatencyPeriodSummaries(ctx, []PostLatencyPeriod{
 		{Label: "last_hour", StartAt: now.Add(-time.Hour), EndAt: now},
 		{Label: "last_day", StartAt: now.Add(-24 * time.Hour), EndAt: now},
 	})

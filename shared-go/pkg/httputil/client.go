@@ -1,4 +1,3 @@
-// Package httputil: HTTP 클라이언트 공통 유틸리티
 package httputil
 
 import (

@@ -61,7 +61,7 @@ const (
 func NewMaintenanceScheduler(
 	repository maintenanceRepository,
 	linkChecker *LinkChecker,
-	cfg MaintenanceConfig,
+	config MaintenanceConfig,
 	logger *slog.Logger,
 ) (*MaintenanceScheduler, error) {
 	if repository == nil {
@@ -74,7 +74,7 @@ func NewMaintenanceScheduler(
 		logger = slog.Default()
 	}
 
-	normalized := cfg
+	normalized := config
 	defaults := DefaultMaintenanceConfig()
 	if normalized.RunTimeout <= 0 {
 		normalized.RunTimeout = defaults.RunTimeout

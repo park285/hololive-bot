@@ -27,7 +27,7 @@ func (s *stubYouTubeCommunityShortsOpsRepository) ListPostSendCountsSince(
 	return s.listPostSendCountsSince(ctx, since)
 }
 
-func TestStatsAPIHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
+func TestStatsHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	now := time.Now().UTC()
@@ -45,7 +45,7 @@ func TestStatsAPIHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
 	secondEventAt := secondPublishedAt.Add(2 * time.Minute)
 	thirdEventAt := thirdPublishedAt.Add(70 * time.Second)
 
-	handler := &StatsAPIHandler{APIHandler: &APIHandler{
+	handler := &StatsHandler{Handler: &Handler{
 		communityShortsOps: &stubYouTubeCommunityShortsOpsRepository{
 			listPostSendCountsSince: func(_ context.Context, since time.Time) ([]outbox.PostSendCount, error) {
 				if since.IsZero() {
@@ -170,20 +170,20 @@ func TestStatsAPIHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
 	}
 }
 
-func TestStatsAPIHandler_GetYouTubeCommunityShortsOps_RepositoryUnavailable(t *testing.T) {
+func TestStatsHandler_GetYouTubeCommunityShortsOps_RepositoryUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := &StatsAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
+	handler := &StatsHandler{Handler: &Handler{logger: newDiscardLogger()}}
 	ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/stats/youtube/community-shorts", nil)
 	handler.GetYouTubeCommunityShortsOps(ctx)
 
 	assertErrorResponse(t, rec, http.StatusServiceUnavailable, "YouTube community/shorts ops repository not available")
 }
 
-func TestStatsAPIHandler_GetYouTubeCommunityShortsOps_RepositoryError(t *testing.T) {
+func TestStatsHandler_GetYouTubeCommunityShortsOps_RepositoryError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := &StatsAPIHandler{APIHandler: &APIHandler{
+	handler := &StatsHandler{Handler: &Handler{
 		communityShortsOps: &stubYouTubeCommunityShortsOpsRepository{
 			listPostSendCountsSince: func(context.Context, time.Time) ([]outbox.PostSendCount, error) {
 				return nil, errors.New("boom")

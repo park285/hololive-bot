@@ -30,7 +30,7 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
-func (h *AlarmAPIHandler) GetAlarms(c *gin.Context) {
+func (h *AlarmHandler) GetAlarms(c *gin.Context) {
 	if !h.requireAlarm(c) {
 		return
 	}
@@ -53,7 +53,7 @@ func (h *AlarmAPIHandler) GetAlarms(c *gin.Context) {
 	})
 }
 
-func (h *AlarmAPIHandler) DeleteAlarm(c *gin.Context) {
+func (h *AlarmHandler) DeleteAlarm(c *gin.Context) {
 	var req struct {
 		RoomID    string `json:"roomId" binding:"required"`
 		ChannelID string `json:"channelId" binding:"required"`

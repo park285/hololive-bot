@@ -48,14 +48,14 @@ const (
 
 var initYouTubeProducerInfrastructureFn = initYouTubeProducerInfrastructure
 
-func BuildYouTubeProducerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*YouTubeProducerRuntime, error) {
-	if err := validateIngestionRuntimeInputs(cfg, logger); err != nil {
+func BuildYouTubeProducerRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*YouTubeProducerRuntime, error) {
+	if err := validateIngestionRuntimeInputs(appConfig, logger); err != nil {
 		return nil, err
 	}
 	if !youtubeProducerRuntimeAllowed() {
 		return nil, fmt.Errorf("youtube producer runtime disabled: set %s=true on the owning host", youtubeProducerRuntimeAllowedEnv)
 	}
-	return buildIngestionRuntime(ctx, cfg, logger, youtubeProducerSpec(cfg))
+	return buildIngestionRuntime(ctx, appConfig, logger, youtubeProducerSpec(appConfig))
 }
 
 func youtubeProducerRuntimeAllowed() bool {
@@ -63,8 +63,8 @@ func youtubeProducerRuntimeAllowed() bool {
 	return err == nil && allowed
 }
 
-func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, spec ingestionRuntimeSpec) (*YouTubeProducerRuntime, error) {
-	if err := validateIngestionRuntimeInputs(cfg, logger); err != nil {
+func buildIngestionRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger, spec ingestionRuntimeSpec) (*YouTubeProducerRuntime, error) {
+	if err := validateIngestionRuntimeInputs(appConfig, logger); err != nil {
 		return nil, err
 	}
 
@@ -75,12 +75,12 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 
 	logIngestionRuntimeConfigured(logger, spec.name, features)
 
-	infra, err := initYouTubeProducerInfrastructureFn(ctx, cfg, logger)
+	infra, err := initYouTubeProducerInfrastructureFn(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	youtubeState, err := resolveIngestionRuntimeYouTubeState(ctx, cfg, logger, spec, features, infra)
+	youtubeState, err := resolveIngestionRuntimeYouTubeState(ctx, appConfig, logger, spec, features, infra)
 	if err != nil {
 		infra.cleanup()
 		return nil, err
@@ -97,7 +97,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		return nil, err
 	}
 
-	youtubeDeps, err := buildIngestionRuntimeYouTubeDependencies(ctx, cfg, logger, infra, features.youtubeEnabled, youtubeState, readiness)
+	youtubeDeps, err := buildIngestionRuntimeYouTubeDependencies(ctx, appConfig, logger, infra, features.youtubeEnabled, youtubeState, readiness)
 	if err != nil {
 		infra.cleanup()
 		return nil, err
@@ -106,17 +106,17 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 	configSubscriber := buildRuntimeConfigSubscriber(features, infra, youtubeDeps.scraperScheduler, logger)
 	observationWindowWriter := buildIngestionRuntimeObservationWindowWriter(spec.name, youtubeState.communityShortsPolicy, infra)
 
-	httpServer, err := buildYouTubeProducerHTTPServer(ctx, cfg, logger, spec.name, readiness)
+	httpServer, err := buildYouTubeProducerHTTPServer(ctx, appConfig, logger, spec.name, readiness)
 	if err != nil {
 		infra.cleanup()
 		return nil, err
 	}
 
-	return newYouTubeProducerRuntime(cfg, logger, spec.name, features, readiness, infra, youtubeState, youtubeDeps, configSubscriber, observationWindowWriter, httpServer), nil
+	return newYouTubeProducerRuntime(appConfig, logger, spec.name, features, readiness, infra, youtubeState, youtubeDeps, configSubscriber, observationWindowWriter, httpServer), nil
 }
 
-func validateIngestionRuntimeInputs(cfg *config.Config, logger *slog.Logger) error {
-	if cfg == nil {
+func validateIngestionRuntimeInputs(appConfig *config.Config, logger *slog.Logger) error {
+	if appConfig == nil {
 		return fmt.Errorf("config must not be nil")
 	}
 	if logger == nil {
@@ -156,7 +156,7 @@ func acquireIngestionLeaseIfEnabled(
 }
 
 func newYouTubeProducerRuntime(
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	runtimeName string,
 	features ingestionRuntimeFeatures,
@@ -174,15 +174,15 @@ func newYouTubeProducerRuntime(
 
 	return &YouTubeProducerRuntime{
 		RuntimeName:                            runtimeName,
-		Config:                                 cfg,
+		Config:                                 appConfig,
 		Logger:                                 logger,
 		Scheduler:                              youtubeDeps.youtubeScheduler,
 		ScraperScheduler:                       youtubeDeps.scraperScheduler,
 		PublishedAtResolver:                    youtubeDeps.publishedAtResolver,
-		PhotoSync:                              buildRuntimePhotoSyncService(cfg, features, infra, logger),
+		PhotoSync:                              buildRuntimePhotoSyncService(appConfig, features, infra, logger),
 		ConfigSubscriber:                       configSubscriber,
 		PollTargetRefresher:                    youtubeDeps.pollTargetRefresher,
-		ServerAddr:                             fmt.Sprintf(":%d", cfg.Server.Port),
+		ServerAddr:                             fmt.Sprintf(":%d", appConfig.Server.Port),
 		HttpServer:                             httpServer,
 		Readiness:                              readinessState,
 		CommunityShortsBigBangPolicy:           youtubeState.communityShortsPolicy,
@@ -193,7 +193,7 @@ func newYouTubeProducerRuntime(
 }
 
 func buildRuntimePhotoSyncService(
-	cfg *config.Config,
+	appConfig *config.Config,
 	features ingestionRuntimeFeatures,
 	infra *youtubeProducerInfrastructure,
 	logger *slog.Logger,
@@ -202,24 +202,24 @@ func buildRuntimePhotoSyncService(
 		return nil
 	}
 	service := infra.photoSync
-	if !cfg.Scraper.ActiveActive.Enabled {
+	if !appConfig.Scraper.ActiveActive.Enabled {
 		return service
 	}
 	guard := ingestionlease.NewJobRunGuard(infra.cacheService, ingestionlease.JobRunGuardConfig{
-		Namespace:  cfg.Scraper.ActiveActive.Namespace,
-		InstanceID: cfg.Scraper.ActiveActive.InstanceID,
+		Namespace:  appConfig.Scraper.ActiveActive.Namespace,
+		InstanceID: appConfig.Scraper.ActiveActive.InstanceID,
 	})
 	return newLeasedPhotoSyncService(service, guard, logger)
 }
 
 func buildYouTubeProducerHTTPServer(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	runtimeName string,
 	readinessState *readiness.State,
 ) (*http.Server, error) {
-	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, cfg.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
+	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, appConfig.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
 		opts.EnableGzip = true
 		opts.ReadyResponder = func(c *gin.Context) {
 			statusCode, payload := readinessState.Response()
@@ -230,7 +230,7 @@ func buildYouTubeProducerHTTPServer(
 		return nil, fmt.Errorf("build youtube producer router: %w", err)
 	}
 	return sharedserver.NewH2CServer(
-		fmt.Sprintf(":%d", cfg.Server.Port),
+		fmt.Sprintf(":%d", appConfig.Server.Port),
 		router,
 		readiness.HTTPServerOperationName(runtimeName),
 	), nil

@@ -35,13 +35,13 @@ func runContinuousObservationCommand(ctx commandContext, args []string) error {
 		return err
 	}
 
-	cfg, err := config.Load()
+	appConfig, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load community/shorts continuous observation config: %w", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(ctx.stderr, nil))
-	return runContinuousObservationReport(ctx, cfg, logger, options)
+	return runContinuousObservationReport(ctx, appConfig, logger, options)
 }
 
 func parseContinuousObservationCLIOptions(ctx commandContext, args []string) (continuousObservationCLIOptions, error) {
@@ -89,7 +89,7 @@ func validateContinuousObservationCLIOptions(options continuousObservationCLIOpt
 
 func runContinuousObservationReport(
 	ctx commandContext,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	cliOptions continuousObservationCLIOptions,
 ) error {
@@ -100,19 +100,19 @@ func runContinuousObservationReport(
 	}
 
 	if cliOptions.watch {
-		return runContinuousObservationWatch(cfg, logger, options, cliOptions)
+		return runContinuousObservationWatch(appConfig, logger, options, cliOptions)
 	}
-	return runContinuousObservationOnce(ctx, cfg, logger, options, cliOptions)
+	return runContinuousObservationOnce(ctx, appConfig, logger, options, cliOptions)
 }
 
 func runContinuousObservationOnce(
 	ctx commandContext,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	options opsapp.CommunityShortsContinuousObservationCollectOptions,
 	cliOptions continuousObservationCLIOptions,
 ) error {
-	report, err := collectContinuousObservationWithWait(cfg, logger, options, cliOptions.waitTimeout)
+	report, err := collectContinuousObservationWithWait(appConfig, logger, options, cliOptions.waitTimeout)
 	if err != nil {
 		return fmt.Errorf("failed to collect continuous observation report: %w", err)
 	}
@@ -120,7 +120,7 @@ func runContinuousObservationOnce(
 }
 
 func runContinuousObservationWatch(
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	options opsapp.CommunityShortsContinuousObservationCollectOptions,
 	cliOptions continuousObservationCLIOptions,
@@ -130,16 +130,16 @@ func runContinuousObservationWatch(
 		return err
 	}
 
-	report, err := collectContinuousObservationWithWait(cfg, logger, options, cliOptions.waitTimeout)
+	report, err := collectContinuousObservationWithWait(appConfig, logger, options, cliOptions.waitTimeout)
 	if err != nil {
 		return fmt.Errorf("failed to collect continuous observation report: %w", err)
 	}
 
-	return runContinuousObservationWatchLoop(cfg, logger, options, cliOptions, dir, report)
+	return runContinuousObservationWatchLoop(appConfig, logger, options, cliOptions, dir, report)
 }
 
 func runContinuousObservationWatchLoop(
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	options opsapp.CommunityShortsContinuousObservationCollectOptions,
 	cliOptions continuousObservationCLIOptions,
@@ -155,7 +155,7 @@ func runContinuousObservationWatchLoop(
 		}
 
 		time.Sleep(nextContinuousObservationInterval(report))
-		refreshedReport, err := collectContinuousObservationOnce(cfg, logger, options)
+		refreshedReport, err := collectContinuousObservationOnce(appConfig, logger, options)
 		if err != nil {
 			return fmt.Errorf("failed to refresh continuous observation report: %w", err)
 		}
@@ -217,14 +217,14 @@ func writeContinuousObservationWatchSnapshot(logger *slog.Logger, dir string, fo
 }
 
 func collectContinuousObservationWithWait(
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	options opsapp.CommunityShortsContinuousObservationCollectOptions,
 	waitTimeout time.Duration,
 ) (opsapp.CommunityShortsContinuousObservationReport, error) {
 	deadline := time.Now().Add(waitTimeout)
 	for {
-		report, err := collectContinuousObservationOnce(cfg, logger, options)
+		report, err := collectContinuousObservationOnce(appConfig, logger, options)
 		if err == nil {
 			return report, nil
 		}
@@ -236,14 +236,14 @@ func collectContinuousObservationWithWait(
 }
 
 func collectContinuousObservationOnce(
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	options opsapp.CommunityShortsContinuousObservationCollectOptions,
 ) (opsapp.CommunityShortsContinuousObservationReport, error) {
 	now := time.Now().UTC()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	return opsapp.CollectCommunityShortsContinuousObservationReport(ctx, cfg, logger, now, options)
+	return opsapp.CollectCommunityShortsContinuousObservationReport(ctx, appConfig, logger, now, options)
 }
 
 func nextContinuousObservationInterval(report opsapp.CommunityShortsContinuousObservationReport) time.Duration {

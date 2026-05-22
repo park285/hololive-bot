@@ -79,10 +79,10 @@ func newServiceForFallbackTest(requester Requester) *Service {
 	}
 }
 
-func newServiceForFallbackTestWithScraper(requester Requester, scraperSvc *ScraperService) *Service {
-	svc := newServiceForFallbackTest(requester)
-	svc.scraper = scraperSvc
-	return svc
+func newServiceForFallbackTestWithScraper(requester Requester, scraperService *ScraperService) *Service {
+	service := newServiceForFallbackTest(requester)
+	service.scraper = scraperService
+	return service
 }
 
 func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
@@ -126,13 +126,13 @@ func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
 		},
 	}
 
-	svc := newServiceForFallbackTest(mockReq)
+	service := newServiceForFallbackTest(mockReq)
 	channelIDs := []string{
 		"c01", "c02", "c03", "c04", "c05", "c06",
 		"c07", "c08", "c09", "c10", "c11", "c12",
 	}
 
-	got, err := svc.GetChannels(context.Background(), channelIDs)
+	got, err := service.GetChannels(context.Background(), channelIDs)
 	if err != nil {
 		t.Fatalf("GetChannels() error = %v", err)
 	}
@@ -174,12 +174,12 @@ func TestGetChannels_FallbackStopsWhenContextCanceled(t *testing.T) {
 		},
 	}
 
-	svc := newServiceForFallbackTest(mockReq)
+	service := newServiceForFallbackTest(mockReq)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := svc.GetChannels(ctx, []string{"c1", "c2", "c3"})
+	_, err := service.GetChannels(ctx, []string{"c1", "c2", "c3"})
 	if err == nil {
 		t.Fatal("GetChannels() error = nil, want non-nil")
 	}
@@ -192,13 +192,13 @@ func TestGetChannels_FallbackStopsWhenContextCanceled(t *testing.T) {
 }
 
 func TestCollectIndividualChannelFetchResultsReturnsOnCancel(t *testing.T) {
-	svc := newServiceForFallbackTest(&MockRequester{})
+	service := newServiceForFallbackTest(&MockRequester{})
 	ctx, cancel := context.WithCancel(context.Background())
 	resultChan := make(chan channelFetchResult)
 	done := make(chan error, 1)
 
 	go func() {
-		_, err := svc.collectIndividualChannelFetchResults(ctx, []string{"c1"}, map[string]*domain.Channel{}, resultChan)
+		_, err := service.collectIndividualChannelFetchResults(ctx, []string{"c1"}, map[string]*domain.Channel{}, resultChan)
 		done <- err
 	}()
 
@@ -239,9 +239,9 @@ func TestGetChannels_DoesNotFallbackOnNonRetryableListError(t *testing.T) {
 		},
 	}
 
-	svc := newServiceForFallbackTest(mockReq)
+	service := newServiceForFallbackTest(mockReq)
 
-	got, err := svc.GetChannels(context.Background(), []string{"c1", "c2"})
+	got, err := service.GetChannels(context.Background(), []string{"c1", "c2"})
 	if err == nil {
 		t.Fatal("GetChannels() error = nil, want non-nil")
 	}
@@ -282,7 +282,7 @@ func TestGetChannelsLiveStatus_UsesYouTubeProducerWithoutOfficialScheduleFallbac
 		},
 	}
 
-	scraperSvc := &ScraperService{
+	scraperService := &ScraperService{
 		httpClient: server.Client(),
 		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		baseURL:    server.URL,
@@ -306,9 +306,9 @@ func TestGetChannelsLiveStatus_UsesYouTubeProducerWithoutOfficialScheduleFallbac
 		},
 	}
 
-	svc := newServiceForFallbackTestWithScraper(mockReq, scraperSvc)
+	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	streams, err := svc.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
+	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}
@@ -341,7 +341,7 @@ func TestGetChannelsLiveStatus_DoesNotFallbackOnNonRetryableError(t *testing.T) 
 		},
 	}
 
-	scraperSvc := &ScraperService{
+	scraperService := &ScraperService{
 		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 		baseURL: "http://example.invalid",
 		fetchUpcoming: func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
@@ -350,9 +350,9 @@ func TestGetChannelsLiveStatus_DoesNotFallbackOnNonRetryableError(t *testing.T) 
 		},
 	}
 
-	svc := newServiceForFallbackTestWithScraper(mockReq, scraperSvc)
+	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	streams, err := svc.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
+	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
 	if err == nil {
 		t.Fatal("GetChannelsLiveStatus() error = nil, want non-nil")
 	}
@@ -384,12 +384,12 @@ func TestGetChannel_DoesNotFallbackOnNonRetryableAPIError(t *testing.T) {
 		},
 	}
 
-	scraperSvc := &ScraperService{
+	scraperService := &ScraperService{
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
-	svc := newServiceForFallbackTestWithScraper(mockReq, scraperSvc)
+	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	channel, err := svc.GetChannel(context.Background(), "c1")
+	channel, err := service.GetChannel(context.Background(), "c1")
 	if err == nil {
 		t.Fatal("GetChannel() error = nil, want non-nil")
 	}
@@ -421,12 +421,12 @@ func TestGetChannel_ReturnsErrorWhenRetryableFallbackAlsoFails(t *testing.T) {
 		},
 	}
 
-	scraperSvc := &ScraperService{
+	scraperService := &ScraperService{
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
-	svc := newServiceForFallbackTestWithScraper(mockReq, scraperSvc)
+	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	channel, err := svc.GetChannel(context.Background(), "c1")
+	channel, err := service.GetChannel(context.Background(), "c1")
 	if err == nil {
 		t.Fatal("GetChannel() error = nil, want non-nil")
 	}

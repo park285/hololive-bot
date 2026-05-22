@@ -23,6 +23,16 @@ func TestExtract(t *testing.T) {
 			wantJSON: `{"value": 42}`,
 		},
 		{
+			name:     "코드펜스 invalid JSON 뒤 유효한 JSON으로 폴백",
+			input:    "```json\n{bad}\n```\nvalid payload: {\"ok\": true}",
+			wantJSON: `{"ok": true}`,
+		},
+		{
+			name:     "코드펜스 JSON을 브라켓 후보보다 우선",
+			input:    "```json\n{\"source\": \"fence\"}\n```\n{\"source\": \"fallback\"}",
+			wantJSON: `{"source": "fence"}`,
+		},
+		{
 			name:     "마크다운 텍스트와 함께",
 			input:    "Here is the result:\n```json\n{\"status\": \"ok\"}\n```\nDone!",
 			wantJSON: `{"status": "ok"}`,
@@ -48,9 +58,44 @@ func TestExtract(t *testing.T) {
 			wantJSON: `{"message": "Hello {world}"}`,
 		},
 		{
+			name:     "문자열 내 닫는 괄호 처리",
+			input:    `{"a":"}"}`,
+			wantJSON: `{"a":"}"}`,
+		},
+		{
 			name:     "이스케이프 처리",
 			input:    `{"quote": "He said \"hi\""}`,
 			wantJSON: `{"quote": "He said \"hi\""}`,
+		},
+		{
+			name:     "이스케이프된 quote 처리",
+			input:    `{"a":"b\"c"}`,
+			wantJSON: `{"a":"b\"c"}`,
+		},
+		{
+			name:     "다중 JSON object 중 첫 번째 valid만 추출",
+			input:    `{"a":1}{"b":2}`,
+			wantJSON: `{"a":1}`,
+		},
+		{
+			name:     "깊은 중첩 JSON 추출",
+			input:    `prefix {"a":{"b":[{"c":{"d":{"e":[1]}}}]}} suffix`,
+			wantJSON: `{"a":{"b":[{"c":{"d":{"e":[1]}}}]}}`,
+		},
+		{
+			name:      "비매칭 bracket",
+			input:     `{"a":[1,2,3}`,
+			wantError: ErrNoJSONFound,
+		},
+		{
+			name:      "빈 입력",
+			input:     "",
+			wantError: ErrNoJSONFound,
+		},
+		{
+			name:      "공백만 입력",
+			input:     " \n\t ",
+			wantError: ErrNoJSONFound,
 		},
 		{
 			name:      "JSON 없음",

@@ -18,7 +18,7 @@ import (
 
 type AlarmYouTubeStackComponents struct {
 	AlarmMode       *AlarmModeComponents
-	MemberMatcher   *matcher.MemberMatcher
+	Matcher   *matcher.Matcher
 	YouTubeStack    *sharedproviders.YouTubeStack
 	ActivityLogger  *activity.Logger
 	SettingsService settings.ReadWriter
@@ -26,7 +26,7 @@ type AlarmYouTubeStackComponents struct {
 
 func InitAlarmYouTubeStack(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *ScraperHolodexProfileFoundation,
 	irisClient iris.Sender,
@@ -37,7 +37,7 @@ func InitAlarmYouTubeStack(
 
 	alarmMode, err := InitAlarmModeComponents(
 		ctx,
-		cfg,
+		appConfig,
 		infra,
 		foundation.HolodexService,
 		foundation.MemberServiceAdapter,
@@ -48,7 +48,7 @@ func InitAlarmYouTubeStack(
 		return nil, err
 	}
 
-	memberMatcher := ProvideMemberMatcher(
+	memberMatcher := ProvideMatcher(
 		ctx,
 		alarmMode.MemberDataSource,
 		infra.Cache,
@@ -57,22 +57,22 @@ func InitAlarmYouTubeStack(
 	)
 	statsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
 	apiStack := sharedmodules.BuildYouTubeAPIStack(ctx, sharedmodules.YouTubeAPIStackParams{
-		YouTubeConfig:   cfg.YouTube,
-		ScraperConfig:   cfg.Scraper,
+		YouTubeConfig:   appConfig.YouTube,
+		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,
-		StatsRepo:       statsRepository,
+		StatsRepository:       statsRepository,
 		SharedRateLimit: foundation.SharedRL,
 		Logger:          logger,
 	})
 
 	return &AlarmYouTubeStackComponents{
 		AlarmMode:      alarmMode,
-		MemberMatcher:  memberMatcher,
+		Matcher:  memberMatcher,
 		YouTubeStack:   apiStack,
 		ActivityLogger: ProvideActivityLogger(logger),
 		SettingsService: sharedmodules.BuildSettingsService(
-			cfg.Notification.AdvanceMinutes,
-			cfg.Scraper.ProxyEnabled,
+			appConfig.Notification.AdvanceMinutes,
+			appConfig.Scraper.ProxyEnabled,
 			logger,
 		),
 	}, nil

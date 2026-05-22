@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -77,40 +78,40 @@ func DefaultDispatcherConfig() DispatcherConfig {
 }
 
 type Dispatcher struct {
-	repo          deliveryRepository
+	repository          deliveryRepository
 	sender        MessageSender
 	logger        *slog.Logger
-	cfg           DispatcherConfig
+	config           DispatcherConfig
 	lastCleanupAt time.Time
 }
 
-func NewDispatcher(repo deliveryRepository, sender MessageSender, logger *slog.Logger, cfg DispatcherConfig) *Dispatcher {
+func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, config DispatcherConfig) *Dispatcher {
 	defaults := DefaultDispatcherConfig()
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = defaults.BatchSize
+	if config.BatchSize <= 0 {
+		config.BatchSize = defaults.BatchSize
 	}
-	if cfg.MaxConcurrent <= 0 {
-		cfg.MaxConcurrent = defaults.MaxConcurrent
+	if config.MaxConcurrent <= 0 {
+		config.MaxConcurrent = defaults.MaxConcurrent
 	}
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = defaults.MaxRetries
+	if config.MaxRetries <= 0 {
+		config.MaxRetries = defaults.MaxRetries
 	}
-	if cfg.LockTimeout <= 0 {
-		cfg.LockTimeout = defaults.LockTimeout
+	if config.LockTimeout <= 0 {
+		config.LockTimeout = defaults.LockTimeout
 	}
-	if cfg.PollInterval <= 0 {
-		cfg.PollInterval = defaults.PollInterval
+	if config.PollInterval <= 0 {
+		config.PollInterval = defaults.PollInterval
 	}
-	if cfg.RetryBackoff <= 0 {
-		cfg.RetryBackoff = defaults.RetryBackoff
+	if config.RetryBackoff <= 0 {
+		config.RetryBackoff = defaults.RetryBackoff
 	}
-	if cfg.CleanupAfter <= 0 {
-		cfg.CleanupAfter = defaults.CleanupAfter
+	if config.CleanupAfter <= 0 {
+		config.CleanupAfter = defaults.CleanupAfter
 	}
-	if cfg.CleanupInterval <= 0 {
-		cfg.CleanupInterval = defaults.CleanupInterval
+	if config.CleanupInterval <= 0 {
+		config.CleanupInterval = defaults.CleanupInterval
 	}
-	return &Dispatcher{repo: repo, sender: sender, logger: logger, cfg: cfg}
+	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: config}
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
@@ -118,28 +119,17 @@ func (d *Dispatcher) Start(ctx context.Context) {
 }
 
 func (d *Dispatcher) run(ctx context.Context) {
-	ticker := time.NewTicker(d.cfg.PollInterval)
-	defer ticker.Stop()
-
 	d.processOnce(ctx)
 
-	for d.waitNextDispatchTick(ctx, ticker.C) {
+	_ = loop.RunTickerLoop(ctx, d.config.PollInterval, func(ctx context.Context) error {
 		d.processOnce(ctx)
-	}
-}
-
-func (d *Dispatcher) waitNextDispatchTick(ctx context.Context, ticks <-chan time.Time) bool {
-	select {
-	case <-ctx.Done():
-		d.logger.Info("Delivery dispatcher stopped")
-		return false
-	case <-ticks:
-		return true
-	}
+		return nil
+	})
+	d.logger.Info("Delivery dispatcher stopped")
 }
 
 func (d *Dispatcher) processOnce(ctx context.Context) {
-	items, err := d.repo.FetchAndLock(ctx, d.cfg.BatchSize, d.cfg.LockTimeout)
+	items, err := d.repository.FetchAndLock(ctx, d.config.BatchSize, d.config.LockTimeout)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.String("error", err.Error()))
 		return
@@ -155,14 +145,14 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 }
 
 func (d *Dispatcher) logAccumulatedFailures(ctx context.Context) {
-	if cnt, _ := d.repo.CountByStatus(ctx, domain.DeliveryStatusFailed); cnt > 5 {
+	if cnt, _ := d.repository.CountByStatus(ctx, domain.DeliveryStatusFailed); cnt > 5 {
 		d.logger.Error("delivery outbox accumulated failures", slog.Int64("count", cnt))
 	}
 }
 
 func (d *Dispatcher) cleanupIfDue(ctx context.Context) {
-	if d.cfg.CleanupEnabled && time.Since(d.lastCleanupAt) >= d.cfg.CleanupInterval {
-		if cleaned, cleanErr := d.repo.Cleanup(ctx, d.cfg.CleanupAfter); cleanErr != nil {
+	if d.config.CleanupEnabled && time.Since(d.lastCleanupAt) >= d.config.CleanupInterval {
+		if cleaned, cleanErr := d.repository.Cleanup(ctx, d.config.CleanupAfter); cleanErr != nil {
 			d.logger.Warn("Outbox cleanup failed", slog.String("error", cleanErr.Error()))
 		} else if cleaned > 0 {
 			d.logger.Info("Outbox cleanup completed", slog.Int64("removed", cleaned))
@@ -186,13 +176,13 @@ func (d *Dispatcher) processBatch(ctx context.Context, items []domain.Notificati
 }
 
 func (d *Dispatcher) batchConcurrency(itemCount int) int {
-	if itemCount == 1 || d.cfg.MaxConcurrent <= 1 {
+	if itemCount == 1 || d.config.MaxConcurrent <= 1 {
 		return 1
 	}
-	if d.cfg.MaxConcurrent > itemCount {
+	if d.config.MaxConcurrent > itemCount {
 		return itemCount
 	}
-	return d.cfg.MaxConcurrent
+	return d.config.MaxConcurrent
 }
 
 func (d *Dispatcher) processBatchSequential(ctx context.Context, items []domain.NotificationDeliveryOutbox) {
@@ -244,7 +234,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		d.logger.Error("Failed to unmarshal outbox payload",
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))
-		_ = d.repo.MarkFailed(ctx, item.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, "payload unmarshal: "+err.Error())
+		_ = d.repository.MarkFailed(ctx, item.ID, d.config.MaxRetries, d.config.RetryBackoff, "payload unmarshal: "+err.Error())
 		return
 	}
 
@@ -253,11 +243,11 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 			slog.Int64("id", item.ID),
 			slog.String("room_id", item.RoomID),
 			slog.String("error", err.Error()))
-		_ = d.repo.MarkFailed(ctx, item.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, err.Error())
+		_ = d.repository.MarkFailed(ctx, item.ID, d.config.MaxRetries, d.config.RetryBackoff, err.Error())
 		return
 	}
 
-	if err := d.repo.MarkSent(ctx, item.ID); err != nil {
+	if err := d.repository.MarkSent(ctx, item.ID); err != nil {
 		d.logger.Error("Failed to mark outbox item as sent",
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))

@@ -100,7 +100,41 @@ func TestStateResponseLeaseAvailableRestoresReadiness(t *testing.T) {
 	if payload["valkey_available"] != true {
 		t.Fatalf("valkey_available = %v, want true", payload["valkey_available"])
 	}
+	if payload["scraping_paused"] != false {
+		t.Fatalf("scraping_paused = %v, want false", payload["scraping_paused"])
+	}
 	if _, exists := payload["reason"]; exists {
 		t.Fatal("reason should be omitted when lease is available")
+	}
+}
+
+func TestStateResponseActiveActiveRecoversFromStartupFailClosed(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:       true,
+		ActiveActiveEnabled:  true,
+		ActiveActiveInstance: "youtube-producer-a",
+	})
+	state.MarkRunning()
+
+	state.MarkLeaseAvailable()
+	statusCode, payload := state.Response()
+
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["status"] != "ready" {
+		t.Fatalf("status = %v, want ready", payload["status"])
+	}
+	if payload["valkey_available"] != true {
+		t.Fatalf("valkey_available = %v, want true", payload["valkey_available"])
+	}
+	if payload["scraping_paused"] != false {
+		t.Fatalf("scraping_paused = %v, want false", payload["scraping_paused"])
+	}
+	if _, exists := payload["reason"]; exists {
+		t.Fatal("reason should be omitted after active-active fail-closed recovery")
+	}
+	if state.LeaseAvailable() != true {
+		t.Fatal("LeaseAvailable() = false, want true after recovery")
 	}
 }

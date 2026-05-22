@@ -2,35 +2,35 @@ package server
 
 import api "github.com/kapu/hololive-admin-api/internal/server/internal/api"
 
-type APIHandler = api.APIHandler
-type AlarmAPIHandler = api.AlarmAPIHandler
+type Handler = api.Handler
+type AlarmHandler = api.AlarmHandler
 type AuthHandler = api.AuthHandler
 type ConfigPublisher = api.ConfigPublisher
 type DataEntry = api.DataEntry
-type DomainAPIHandlers = api.DomainAPIHandlers
-type MajorEventAPIHandler = api.MajorEventAPIHandler
+type DomainHandlers = api.DomainHandlers
+type MajorEventHandler = api.MajorEventHandler
 type MajorEventMonthlyScheduler = api.MajorEventMonthlyScheduler
 type MajorEventScheduler = api.MajorEventScheduler
-type MemberAPIHandler = api.MemberAPIHandler
-type MilestoneAPIHandler = api.MilestoneAPIHandler
-type OAuthAPIHandler = api.OAuthAPIHandler
-type ProfileAPIHandler = api.ProfileAPIHandler
+type MemberHandler = api.MemberHandler
+type MilestoneHandler = api.MilestoneHandler
+type OAuthHandler = api.OAuthHandler
+type ProfileHandler = api.ProfileHandler
 type ProfileData = api.ProfileData
 type ProfileResponse = api.ProfileResponse
-type RoomAPIHandler = api.RoomAPIHandler
+type RoomHandler = api.RoomHandler
 type SettingsAPIHandler = api.SettingsAPIHandler
 type SettingsActivityLogger = api.SettingsActivityLogger
 type SettingsHandler = api.SettingsHandler
 type SettingsReadRecentLogsFunc = api.SettingsReadRecentLogsFunc
 type SocialLink = api.SocialLink
-type StatsAPIHandler = api.StatsAPIHandler
-type StreamAPIHandler = api.StreamAPIHandler
-type TemplateAPIHandler = api.TemplateAPIHandler
+type StatsHandler = api.StatsHandler
+type StreamHandler = api.StreamHandler
+type TemplateHandler = api.TemplateHandler
 type TranslatedData = api.TranslatedData
 type YouTubeCommunityShortsOpsChannel = api.YouTubeCommunityShortsOpsChannel
 type YouTubeCommunityShortsOpsOverview = api.YouTubeCommunityShortsOpsOverview
 type YouTubeCommunityShortsOpsRepository = api.YouTubeCommunityShortsOpsRepository
 type YouTubeCommunityShortsOpsResponse = api.YouTubeCommunityShortsOpsResponse
 
-var NewAPIHandler = api.NewAPIHandler
+var NewHandler = api.NewHandler
 var NewAuthHandler = api.NewAuthHandler

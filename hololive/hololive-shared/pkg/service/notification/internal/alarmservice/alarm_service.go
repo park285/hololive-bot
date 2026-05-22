@@ -42,11 +42,11 @@ func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]str
 }
 
 func (as *AlarmService) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	if as.alarmRepo == nil {
+	if as.alarmRepository == nil {
 		return nil, stdErrors.New("alarm repository not configured")
 	}
 
-	alarms, err := as.alarmRepo.FindByRoom(ctx, roomID)
+	alarms, err := as.alarmRepository.FindByRoom(ctx, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("find room alarms: %w", err)
 	}

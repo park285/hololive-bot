@@ -41,7 +41,7 @@ import (
 )
 
 func buildBotDependencyModules(
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	alarmMode *appbootstrap.AlarmModeComponents,
 	holodexService *holodex.Service,
@@ -49,19 +49,19 @@ func buildBotDependencyModules(
 	formatter *adapter.ResponseFormatter,
 	irisClient appbootstrap.BotIrisClient,
 	profileService *member.ProfileService,
-	memberMatcher *matcher.MemberMatcher,
+	memberMatcher *matcher.Matcher,
 	youTubeStack *providers.YouTubeStack,
 	activityLogger *activity.Logger,
 	settingsService settings.ReadWriter,
 	aclService *acl.Service,
-	majorEventRepo command.MajorEventRepository,
+	majorEventRepository command.MajorEventRepository,
 	memberNewsService command.MemberNewsService,
 	commandBuilders []bot.CommandBuilder,
 	workerPool *workerpool.Pool,
 	logger *slog.Logger,
 ) appbootstrap.BotDependencyModules {
 	return appbootstrap.BuildBotDependencyModules(
-		cfg,
+		appConfig,
 		infra,
 		alarmMode,
 		holodexService,
@@ -74,7 +74,7 @@ func buildBotDependencyModules(
 		activityLogger,
 		settingsService,
 		aclService,
-		majorEventRepo,
+		majorEventRepository,
 		memberNewsService,
 		commandBuilders,
 		workerPool,

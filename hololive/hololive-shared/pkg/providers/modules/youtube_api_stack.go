@@ -16,7 +16,7 @@ type YouTubeAPIStackParams struct {
 	YouTubeConfig   config.YouTubeConfig
 	ScraperConfig   config.ScraperConfig
 	CacheService    cache.Client
-	StatsRepo       *ytstats.StatsRepository
+	StatsRepository       *ytstats.StatsRepository
 	SharedRateLimit *scraper.RateLimiter
 	Logger          *slog.Logger
 }
@@ -26,10 +26,10 @@ func BuildYouTubeAPIStack(ctx context.Context, params YouTubeAPIStackParams) *pr
 		if params.Logger != nil {
 			params.Logger.Info("YouTube quota building disabled; stats repository only")
 		}
-		return &providers.YouTubeStack{StatsRepo: params.StatsRepo}
+		return &providers.YouTubeStack{StatsRepository: params.StatsRepository}
 	}
 
-	svc, err := youtube.NewYouTubeService(ctx, params.YouTubeConfig.APIKey, params.CacheService, scraper.ProxyConfig{
+	service, err := youtube.NewYouTubeService(ctx, params.YouTubeConfig.APIKey, params.CacheService, scraper.ProxyConfig{
 		Enabled: params.ScraperConfig.ProxyEnabled,
 		URL:     params.ScraperConfig.ProxyURL,
 	}, params.SharedRateLimit, params.Logger)
@@ -37,11 +37,11 @@ func BuildYouTubeAPIStack(ctx context.Context, params YouTubeAPIStackParams) *pr
 		if params.Logger != nil {
 			params.Logger.Warn("YouTube service init failed (optional feature)", slog.Any("error", err))
 		}
-		return &providers.YouTubeStack{StatsRepo: params.StatsRepo}
+		return &providers.YouTubeStack{StatsRepository: params.StatsRepository}
 	}
 
 	return &providers.YouTubeStack{
-		Service:   svc,
-		StatsRepo: params.StatsRepo,
+		Service:   service,
+		StatsRepository: params.StatsRepository,
 	}
 }

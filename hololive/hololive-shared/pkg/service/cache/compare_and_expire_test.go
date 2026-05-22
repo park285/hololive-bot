@@ -37,9 +37,9 @@ func TestCompareAndExpire(t *testing.T) {
 	}{
 		{
 			name: "value matches - should expire key after ttl",
-			setup: func(svc *Service, ctx context.Context) {
-				cmd := svc.client.B().Set().Key("cas-expire:match").Value("owner-a").Build()
-				svc.client.Do(ctx, cmd)
+			setup: func(service *Service, ctx context.Context) {
+				cmd := service.client.B().Set().Key("cas-expire:match").Value("owner-a").Build()
+				service.client.Do(ctx, cmd)
 			},
 			key:        "cas-expire:match",
 			expected:   "owner-a",
@@ -48,9 +48,9 @@ func TestCompareAndExpire(t *testing.T) {
 		},
 		{
 			name: "value mismatch - should keep key",
-			setup: func(svc *Service, ctx context.Context) {
-				cmd := svc.client.B().Set().Key("cas-expire:mismatch").Value("owner-b").Build()
-				svc.client.Do(ctx, cmd)
+			setup: func(service *Service, ctx context.Context) {
+				cmd := service.client.B().Set().Key("cas-expire:mismatch").Value("owner-b").Build()
+				service.client.Do(ctx, cmd)
 			},
 			key:        "cas-expire:mismatch",
 			expected:   "owner-other",
@@ -69,14 +69,14 @@ func TestCompareAndExpire(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, mini := newTestCacheService(t)
+			service, mini := newTestCacheService(t)
 			ctx := context.Background()
 
 			if tt.setup != nil {
-				tt.setup(svc, ctx)
+				tt.setup(service, ctx)
 			}
 
-			got, err := svc.CompareAndExpire(ctx, tt.key, tt.expected, time.Second)
+			got, err := service.CompareAndExpire(ctx, tt.key, tt.expected, time.Second)
 			if err != nil {
 				t.Fatalf("CompareAndExpire() error = %v", err)
 			}
@@ -85,7 +85,7 @@ func TestCompareAndExpire(t *testing.T) {
 			}
 
 			mini.FastForward(2 * time.Second)
-			exists, err := svc.Exists(ctx, tt.key)
+			exists, err := service.Exists(ctx, tt.key)
 			if err != nil {
 				t.Fatalf("Exists() error = %v", err)
 			}
@@ -97,23 +97,23 @@ func TestCompareAndExpire(t *testing.T) {
 }
 
 func TestCompareAndExpireInvalidTTL(t *testing.T) {
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
-	if _, err := svc.CompareAndExpire(ctx, "k", "v", 0); err == nil {
+	if _, err := service.CompareAndExpire(ctx, "k", "v", 0); err == nil {
 		t.Fatalf("expected error for zero ttl")
 	}
 }
 
 func TestCompareAndExpireCeilSeconds(t *testing.T) {
-	svc, mini := newTestCacheService(t)
+	service, mini := newTestCacheService(t)
 	ctx := context.Background()
 
-	if err := svc.GetClient().Do(ctx, svc.B().Set().Key("cas-expire:ceil").Value("owner").Build()).Error(); err != nil {
+	if err := service.GetClient().Do(ctx, service.B().Set().Key("cas-expire:ceil").Value("owner").Build()).Error(); err != nil {
 		t.Fatalf("set key: %v", err)
 	}
 
-	ok, err := svc.CompareAndExpire(ctx, "cas-expire:ceil", "owner", 1500*time.Millisecond)
+	ok, err := service.CompareAndExpire(ctx, "cas-expire:ceil", "owner", 1500*time.Millisecond)
 	if err != nil {
 		t.Fatalf("CompareAndExpire() error = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestCompareAndExpireCeilSeconds(t *testing.T) {
 	}
 
 	mini.FastForward(1400 * time.Millisecond)
-	exists, err := svc.Exists(ctx, "cas-expire:ceil")
+	exists, err := service.Exists(ctx, "cas-expire:ceil")
 	if err != nil {
 		t.Fatalf("Exists() error = %v", err)
 	}
@@ -131,7 +131,7 @@ func TestCompareAndExpireCeilSeconds(t *testing.T) {
 	}
 
 	mini.FastForward(700 * time.Millisecond)
-	exists, err = svc.Exists(ctx, "cas-expire:ceil")
+	exists, err = service.Exists(ctx, "cas-expire:ceil")
 	if err != nil {
 		t.Fatalf("Exists() error = %v", err)
 	}

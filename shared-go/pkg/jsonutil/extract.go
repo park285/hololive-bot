@@ -1,4 +1,3 @@
-// Package jsonutil: LLM 응답에서 JSON을 추출하는 유틸리티
 package jsonutil
 
 import (

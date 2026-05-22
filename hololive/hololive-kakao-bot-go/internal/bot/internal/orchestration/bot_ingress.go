@@ -55,13 +55,13 @@ type MessageIngress struct {
 
 func NewMessageIngress(
 	messageAdapter *adapter.MessageAdapter,
-	aclSvc *acl.Service,
+	aclService *acl.Service,
 	logger *slog.Logger,
 	selfSender string,
 ) *MessageIngress {
 	return &MessageIngress{
 		messageAdapter: messageAdapter,
-		acl:            aclSvc,
+		acl:            aclService,
 		logger:         logger,
 		selfSender:     selfSender,
 	}

@@ -35,10 +35,10 @@ func TestCompareAndDelete(t *testing.T) {
 	}{
 		{
 			name: "value matches - should delete and return true",
-			setup: func(svc *Service, ctx context.Context) {
+			setup: func(service *Service, ctx context.Context) {
 				// 직접 SET으로 raw 값 저장 (json 래핑 없이)
-				cmd := svc.client.B().Set().Key("cas:match").Value("secret-token").Build()
-				svc.client.Do(ctx, cmd)
+				cmd := service.client.B().Set().Key("cas:match").Value("secret-token").Build()
+				service.client.Do(ctx, cmd)
 			},
 			key:        "cas:match",
 			expected:   "secret-token",
@@ -46,9 +46,9 @@ func TestCompareAndDelete(t *testing.T) {
 		},
 		{
 			name: "value does not match - should not delete and return false",
-			setup: func(svc *Service, ctx context.Context) {
-				cmd := svc.client.B().Set().Key("cas:mismatch").Value("actual-value").Build()
-				svc.client.Do(ctx, cmd)
+			setup: func(service *Service, ctx context.Context) {
+				cmd := service.client.B().Set().Key("cas:mismatch").Value("actual-value").Build()
+				service.client.Do(ctx, cmd)
 			},
 			key:        "cas:mismatch",
 			expected:   "wrong-value",
@@ -65,14 +65,14 @@ func TestCompareAndDelete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, _ := newTestCacheService(t)
+			service, _ := newTestCacheService(t)
 			ctx := context.Background()
 
 			if tt.setup != nil {
-				tt.setup(svc, ctx)
+				tt.setup(service, ctx)
 			}
 
-			got, err := svc.CompareAndDelete(ctx, tt.key, tt.expected)
+			got, err := service.CompareAndDelete(ctx, tt.key, tt.expected)
 			if err != nil {
 				t.Fatalf("CompareAndDelete() error = %v", err)
 			}

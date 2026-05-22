@@ -46,7 +46,7 @@ type MonthlyScheduler struct {
 	service    model.DigestService
 	formatter  model.DigestFormatter
 	locker     delivery.NotificationLocker
-	outboxRepo outboxEnqueuer
+	outboxRepository outboxEnqueuer
 	logger     *slog.Logger
 	runtime    *schedulerkit.Runtime
 }
@@ -55,7 +55,7 @@ func NewMonthlyScheduler(
 	service model.DigestService,
 	formatter model.DigestFormatter,
 	locker delivery.NotificationLocker,
-	outboxRepo outboxEnqueuer,
+	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 ) *MonthlyScheduler {
 	if logger == nil {
@@ -69,7 +69,7 @@ func NewMonthlyScheduler(
 		service:    service,
 		formatter:  formatter,
 		locker:     locker,
-		outboxRepo: outboxRepo,
+		outboxRepository: outboxRepository,
 		logger:     logger,
 		runtime:    schedulerkit.NewRuntime(),
 	}
@@ -153,7 +153,7 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 
 // processRoomDigest: 단일 room의 월간 다이제스트 생성 + outbox enqueue.
 func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, monthKey, roomID string) delivery.SendResult {
-	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepo, s.logger,
+	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.logger,
 		model.PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID, "📅 이번달 구독 멤버 뉴스")
 }
 

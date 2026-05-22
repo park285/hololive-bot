@@ -11,6 +11,50 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
+func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return fmt.Errorf("rate limiter wait failed: %w", err)
+	}
+	return c.waitForDistributedRateLimiter(ctx, path)
+}
+
+func (c *APIClient) waitForDistributedRateLimiter(ctx context.Context, path string) error {
+	if c.distributed == nil || !constants.HolodexDistributedRateLimitConfig.Enabled {
+		return nil
+	}
+
+	return c.waitForDistributedRateLimitBucket(ctx, distributedRateLimitBucket(path))
+}
+
+func (c *APIClient) waitForDistributedRateLimitBucket(ctx context.Context, bucket string) error {
+	for {
+		decision, err := c.allowDistributedRateLimit(ctx, bucket)
+		if err != nil {
+			return err
+		}
+		done, err := waitDistributedRateLimitDecision(ctx, bucket, decision)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+	}
+}
+
+func (c *APIClient) allowDistributedRateLimit(ctx context.Context, bucket string) (ratelimit.Decision, error) {
+	decision, err := c.distributed.Allow(
+		ctx,
+		bucket,
+		constants.HolodexDistributedRateLimitConfig.Limit,
+		constants.HolodexDistributedRateLimitConfig.Window,
+	)
+	if err != nil {
+		return ratelimit.Decision{}, fmt.Errorf("distributed rate limiter allow failed: %w", err)
+	}
+	return decision, nil
+}
+
 func waitDistributedRateLimitDecision(ctx context.Context, bucket string, decision ratelimit.Decision) (bool, error) {
 	if decision.Allowed {
 		return true, nil

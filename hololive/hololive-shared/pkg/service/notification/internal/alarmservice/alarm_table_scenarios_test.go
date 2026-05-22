@@ -32,9 +32,9 @@ import (
 
 type alarmCacheScenario struct {
 	name   string
-	seed   func(t *testing.T, svc *AlarmService, ctx context.Context)
-	run    func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error)
-	assert func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool)
+	seed   func(t *testing.T, service *AlarmService, ctx context.Context)
+	run    func(t *testing.T, service *AlarmService, ctx context.Context) (bool, error)
+	assert func(t *testing.T, service *AlarmService, ctx context.Context, changed bool)
 }
 
 func alarmAddRemoveCacheScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
@@ -49,52 +49,52 @@ func alarmAddRegistryScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScena
 	return []alarmCacheScenario{
 		{
 			name: "add 신규 알람은 cache/registry를 갱신한다",
-			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
+			run: func(t *testing.T, service *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
 
-				return svc.AddAlarm(ctx, baseReq)
+				return service.AddAlarm(ctx, baseReq)
 			},
-			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
+			assert: func(t *testing.T, service *AlarmService, ctx context.Context, changed bool) {
 				t.Helper()
 				assert.True(t, changed)
 
-				roomChannels, err := svc.cache.SMembers(ctx, AlarmKeyPrefix+baseReq.RoomID)
+				roomChannels, err := service.cache.SMembers(ctx, AlarmKeyPrefix+baseReq.RoomID)
 				require.NoError(t, err)
 				assert.Equal(t, []string{baseReq.ChannelID}, roomChannels)
 
-				rooms, err := svc.cache.SMembers(ctx, AlarmRegistryKey)
+				rooms, err := service.cache.SMembers(ctx, AlarmRegistryKey)
 				require.NoError(t, err)
 				assert.Contains(t, rooms, baseReq.RoomID)
 
-				channels, err := svc.cache.SMembers(ctx, AlarmChannelRegistryKey)
+				channels, err := service.cache.SMembers(ctx, AlarmChannelRegistryKey)
 				require.NoError(t, err)
 				assert.Contains(t, channels, baseReq.ChannelID)
 			},
 		},
 		{
 			name: "add 알람 타입 지정 시 타입별 subscriber 키를 정확히 갱신한다",
-			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
+			run: func(t *testing.T, service *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
 
 				req := baseReq
 
 				req.AlarmTypes = domain.AlarmTypes{domain.AlarmTypeCommunity}
 
-				return svc.AddAlarm(ctx, req)
+				return service.AddAlarm(ctx, req)
 			},
-			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
+			assert: func(t *testing.T, service *AlarmService, ctx context.Context, changed bool) {
 				t.Helper()
 				assert.True(t, changed)
 
-				communitySubs, err := svc.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeCommunity)
+				communitySubs, err := service.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeCommunity)
 				require.NoError(t, err)
 				assert.Contains(t, communitySubs, baseReq.RoomID)
 
-				liveSubs, err := svc.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeLive)
+				liveSubs, err := service.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeLive)
 				require.NoError(t, err)
 				assert.Empty(t, liveSubs)
 
-				shortsSubs, err := svc.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeShorts)
+				shortsSubs, err := service.GetChannelSubscribersByType(ctx, baseReq.ChannelID, domain.AlarmTypeShorts)
 				require.NoError(t, err)
 				assert.Empty(t, shortsSubs)
 			},
@@ -106,23 +106,23 @@ func alarmAddDuplicateScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScen
 	return []alarmCacheScenario{
 		{
 			name: "duplicate add는 false를 반환하고 channel set 크기를 유지한다",
-			seed: func(t *testing.T, svc *AlarmService, ctx context.Context) {
+			seed: func(t *testing.T, service *AlarmService, ctx context.Context) {
 				t.Helper()
 
-				added, err := svc.AddAlarm(ctx, baseReq)
+				added, err := service.AddAlarm(ctx, baseReq)
 				require.NoError(t, err)
 				require.True(t, added)
 			},
-			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
+			run: func(t *testing.T, service *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
 
-				return svc.AddAlarm(ctx, baseReq)
+				return service.AddAlarm(ctx, baseReq)
 			},
-			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
+			assert: func(t *testing.T, service *AlarmService, ctx context.Context, changed bool) {
 				t.Helper()
 				assert.False(t, changed)
 
-				roomChannels, err := svc.cache.SMembers(ctx, AlarmKeyPrefix+baseReq.RoomID)
+				roomChannels, err := service.cache.SMembers(ctx, AlarmKeyPrefix+baseReq.RoomID)
 				require.NoError(t, err)
 				assert.Equal(t, []string{baseReq.ChannelID}, roomChannels)
 			},
@@ -138,10 +138,10 @@ func alarmRemovePartialScenarios(baseReq domain.AddAlarmRequest) []alarmCacheSce
 	return []alarmCacheScenario{
 		{
 			name: "다중 채널 구독에서 한 채널 제거 시 room registry와 나머지 채널 구독은 유지된다",
-			seed: func(t *testing.T, svc *AlarmService, ctx context.Context) {
+			seed: func(t *testing.T, service *AlarmService, ctx context.Context) {
 				t.Helper()
 
-				added, err := svc.AddAlarm(ctx, baseReq)
+				added, err := service.AddAlarm(ctx, baseReq)
 				require.NoError(t, err)
 				require.True(t, added)
 
@@ -150,28 +150,28 @@ func alarmRemovePartialScenarios(baseReq domain.AddAlarmRequest) []alarmCacheSce
 				secondReq.ChannelID = "UC_TEST_2"
 				secondReq.MemberName = "두번째 멤버"
 
-				added, err = svc.AddAlarm(ctx, secondReq)
+				added, err = service.AddAlarm(ctx, secondReq)
 				require.NoError(t, err)
 				require.True(t, added)
 			},
-			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
+			run: func(t *testing.T, service *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
 
-				return svc.RemoveAlarm(ctx, baseReq.RoomID, baseReq.ChannelID, nil)
+				return service.RemoveAlarm(ctx, baseReq.RoomID, baseReq.ChannelID, nil)
 			},
-			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
+			assert: func(t *testing.T, service *AlarmService, ctx context.Context, changed bool) {
 				t.Helper()
 				assert.True(t, changed)
 
-				roomChannels, err := svc.cache.SMembers(ctx, AlarmKeyPrefix+baseReq.RoomID)
+				roomChannels, err := service.cache.SMembers(ctx, AlarmKeyPrefix+baseReq.RoomID)
 				require.NoError(t, err)
 				assert.ElementsMatch(t, []string{"UC_TEST_2"}, roomChannels)
 
-				rooms, err := svc.cache.SMembers(ctx, AlarmRegistryKey)
+				rooms, err := service.cache.SMembers(ctx, AlarmRegistryKey)
 				require.NoError(t, err)
 				assert.Contains(t, rooms, baseReq.RoomID)
 
-				channelRegistry, err := svc.cache.SMembers(ctx, AlarmChannelRegistryKey)
+				channelRegistry, err := service.cache.SMembers(ctx, AlarmChannelRegistryKey)
 				require.NoError(t, err)
 				assert.NotContains(t, channelRegistry, baseReq.ChannelID)
 				assert.Contains(t, channelRegistry, "UC_TEST_2")
@@ -184,37 +184,37 @@ func alarmRemoveTerminalScenarios(baseReq domain.AddAlarmRequest) []alarmCacheSc
 	return []alarmCacheScenario{
 		{
 			name: "remove existing alarm은 room 알람과 registry를 정리한다",
-			seed: func(t *testing.T, svc *AlarmService, ctx context.Context) {
+			seed: func(t *testing.T, service *AlarmService, ctx context.Context) {
 				t.Helper()
 
-				added, err := svc.AddAlarm(ctx, baseReq)
+				added, err := service.AddAlarm(ctx, baseReq)
 				require.NoError(t, err)
 				require.True(t, added)
 			},
-			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
+			run: func(t *testing.T, service *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
 
-				return svc.RemoveAlarm(ctx, baseReq.RoomID, baseReq.ChannelID, nil)
+				return service.RemoveAlarm(ctx, baseReq.RoomID, baseReq.ChannelID, nil)
 			},
-			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
+			assert: func(t *testing.T, service *AlarmService, ctx context.Context, changed bool) {
 				t.Helper()
 				assert.True(t, changed)
 
-				roomChannels, err := svc.cache.SMembers(ctx, AlarmKeyPrefix+baseReq.RoomID)
+				roomChannels, err := service.cache.SMembers(ctx, AlarmKeyPrefix+baseReq.RoomID)
 				require.NoError(t, err)
 				assert.Empty(t, roomChannels)
 
-				rooms, err := svc.cache.SMembers(ctx, AlarmRegistryKey)
+				rooms, err := service.cache.SMembers(ctx, AlarmRegistryKey)
 				require.NoError(t, err)
 				assert.NotContains(t, rooms, baseReq.RoomID)
 			},
 		},
 		{
 			name: "remove missing alarm은 false를 반환한다",
-			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
+			run: func(t *testing.T, service *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
 
-				return svc.RemoveAlarm(ctx, baseReq.RoomID, "UC_UNKNOWN", nil)
+				return service.RemoveAlarm(ctx, baseReq.RoomID, "UC_UNKNOWN", nil)
 			},
 			assert: func(t *testing.T, _ *AlarmService, _ context.Context, changed bool) {
 				t.Helper()
@@ -240,19 +240,19 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := newTestAlarmService(t)
+			service := newTestAlarmService(t)
 
-			svc.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
+			service.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
 
 			ctx := t.Context()
 
 			if tc.seed != nil {
-				tc.seed(t, svc, ctx)
+				tc.seed(t, service, ctx)
 			}
 
-			changed, err := tc.run(t, svc, ctx)
+			changed, err := tc.run(t, service, ctx)
 			require.NoError(t, err)
-			tc.assert(t, svc, ctx, changed)
+			tc.assert(t, service, ctx, changed)
 		})
 	}
 }
@@ -262,7 +262,7 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 
 	type scenario struct {
 		name string
-		run  func(t *testing.T, svc *AlarmService, ctx context.Context)
+		run  func(t *testing.T, service *AlarmService, ctx context.Context)
 	}
 
 	roundTripStart := time.Date(2026, time.March, 5, 11, 25, 42, 0, time.UTC)
@@ -270,13 +270,13 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 	scenarios := []scenario{
 		{
 			name: "MarkAsNotified roundtrip은 분 단위 정규화 + SentAt map을 유지한다",
-			run: func(t *testing.T, svc *AlarmService, ctx context.Context) {
+			run: func(t *testing.T, service *AlarmService, ctx context.Context) {
 				t.Helper()
-				require.NoError(t, svc.MarkAsNotified(ctx, "stream-roundtrip", roundTripStart, 5))
-				require.NoError(t, svc.MarkAsNotified(ctx, "stream-roundtrip", roundTripStart, 3))
+				require.NoError(t, service.MarkAsNotified(ctx, "stream-roundtrip", roundTripStart, 5))
+				require.NoError(t, service.MarkAsNotified(ctx, "stream-roundtrip", roundTripStart, 3))
 
 				var data NotifiedData
-				require.NoError(t, svc.cache.Get(ctx, NotifiedKeyPrefix+"stream-roundtrip", &data))
+				require.NoError(t, service.cache.Get(ctx, NotifiedKeyPrefix+"stream-roundtrip", &data))
 				assert.Equal(t, normalizeScheduledMinute(roundTripStart).Format(time.RFC3339), data.StartScheduled)
 				assert.True(t, data.SentAt[5])
 				assert.True(t, data.SentAt[3])
@@ -284,17 +284,17 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 		},
 		{
 			name: "MarkAsNotified는 스케줄 변경 시 이전 SentAt 맵을 초기화한다",
-			run: func(t *testing.T, svc *AlarmService, ctx context.Context) {
+			run: func(t *testing.T, service *AlarmService, ctx context.Context) {
 				t.Helper()
 
 				firstStart := time.Date(2026, time.March, 5, 11, 25, 42, 0, time.UTC)
 				secondStart := firstStart.Add(7 * time.Minute)
 
-				require.NoError(t, svc.MarkAsNotified(ctx, "stream-reset", firstStart, 5))
-				require.NoError(t, svc.MarkAsNotified(ctx, "stream-reset", secondStart, 3))
+				require.NoError(t, service.MarkAsNotified(ctx, "stream-reset", firstStart, 5))
+				require.NoError(t, service.MarkAsNotified(ctx, "stream-reset", secondStart, 3))
 
 				var data NotifiedData
-				require.NoError(t, svc.cache.Get(ctx, NotifiedKeyPrefix+"stream-reset", &data))
+				require.NoError(t, service.cache.Get(ctx, NotifiedKeyPrefix+"stream-reset", &data))
 				assert.Equal(t, normalizeScheduledMinute(secondStart).Format(time.RFC3339), data.StartScheduled)
 				assert.False(t, data.SentAt[5])
 				assert.True(t, data.SentAt[3])
@@ -302,7 +302,7 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 		},
 		{
 			name: "UpcomingEvent roundtrip은 TTL 윈도우 내 true, 즉시 만료 설정 시 false",
-			run: func(t *testing.T, svc *AlarmService, ctx context.Context) {
+			run: func(t *testing.T, service *AlarmService, ctx context.Context) {
 				t.Helper()
 
 				start := time.Now().UTC().Add(10 * time.Minute).Truncate(time.Minute)
@@ -313,9 +313,9 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 					StartScheduled: &start,
 				}
 
-				require.NoError(t, svc.MarkUpcomingEventNotified(ctx, "room-1", "channel-1", stream))
-				assert.True(t, svc.WasUpcomingEventNotifiedRecently(ctx, "room-1", "channel-1", stream, time.Minute))
-				assert.False(t, svc.WasUpcomingEventNotifiedRecently(ctx, "room-1", "channel-1", stream, 0))
+				require.NoError(t, service.MarkUpcomingEventNotified(ctx, "room-1", "channel-1", stream))
+				assert.True(t, service.WasUpcomingEventNotifiedRecently(ctx, "room-1", "channel-1", stream, time.Minute))
+				assert.False(t, service.WasUpcomingEventNotifiedRecently(ctx, "room-1", "channel-1", stream, 0))
 			},
 		},
 	}
@@ -324,9 +324,9 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := newTestAlarmService(t)
+			service := newTestAlarmService(t)
 			ctx := t.Context()
-			tc.run(t, svc, ctx)
+			tc.run(t, service, ctx)
 		})
 	}
 }

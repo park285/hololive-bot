@@ -22,48 +22,48 @@ package api
 
 // API domain handlers split API responsibilities by route group.
 type (
-	MemberAPIHandler     struct{ *APIHandler }
-	AlarmAPIHandler      struct{ *APIHandler }
-	RoomAPIHandler       struct{ *APIHandler }
-	StreamAPIHandler     struct{ *APIHandler }
-	StatsAPIHandler      struct{ *APIHandler }
-	SettingsAPIHandler   struct{ *APIHandler }
-	TemplateAPIHandler   struct{ *APIHandler }
-	MilestoneAPIHandler  struct{ *APIHandler }
-	ProfileAPIHandler    struct{ *APIHandler }
-	MajorEventAPIHandler struct{ *APIHandler }
-	OAuthAPIHandler      struct{ *APIHandler }
+	MemberHandler     struct{ *Handler }
+	AlarmHandler      struct{ *Handler }
+	RoomHandler       struct{ *Handler }
+	StreamHandler     struct{ *Handler }
+	StatsHandler      struct{ *Handler }
+	SettingsAPIHandler   struct{ *Handler }
+	TemplateHandler   struct{ *Handler }
+	MilestoneHandler  struct{ *Handler }
+	ProfileHandler    struct{ *Handler }
+	MajorEventHandler struct{ *Handler }
+	OAuthHandler      struct{ *Handler }
 )
 
-// DomainAPIHandlers groups domain-scoped API handlers for route registration.
-type DomainAPIHandlers struct {
-	Member     *MemberAPIHandler
-	Alarm      *AlarmAPIHandler
-	Room       *RoomAPIHandler
-	Stream     *StreamAPIHandler
-	Stats      *StatsAPIHandler
+// DomainHandlers groups domain-scoped API handlers for route registration.
+type DomainHandlers struct {
+	Member     *MemberHandler
+	Alarm      *AlarmHandler
+	Room       *RoomHandler
+	Stream     *StreamHandler
+	Stats      *StatsHandler
 	Settings   *SettingsAPIHandler
-	Template   *TemplateAPIHandler
-	Milestone  *MilestoneAPIHandler
-	Profile    *ProfileAPIHandler
-	MajorEvent *MajorEventAPIHandler
-	OAuth      *OAuthAPIHandler
+	Template   *TemplateHandler
+	Milestone  *MilestoneHandler
+	Profile    *ProfileHandler
+	MajorEvent *MajorEventHandler
+	OAuth      *OAuthHandler
 }
 
-func (h *APIHandler) DomainHandlers() *DomainAPIHandlers {
+func (h *Handler) DomainHandlers() *DomainHandlers {
 	h = h.ensureDefaults()
 
-	return &DomainAPIHandlers{
-		Member:     &MemberAPIHandler{APIHandler: h},
-		Alarm:      &AlarmAPIHandler{APIHandler: h},
-		Room:       &RoomAPIHandler{APIHandler: h},
-		Stream:     &StreamAPIHandler{APIHandler: h},
-		Stats:      &StatsAPIHandler{APIHandler: h},
-		Settings:   &SettingsAPIHandler{APIHandler: h},
-		Template:   &TemplateAPIHandler{APIHandler: h},
-		Milestone:  &MilestoneAPIHandler{APIHandler: h},
-		Profile:    &ProfileAPIHandler{APIHandler: h},
-		MajorEvent: &MajorEventAPIHandler{APIHandler: h},
-		OAuth:      &OAuthAPIHandler{APIHandler: h},
+	return &DomainHandlers{
+		Member:     &MemberHandler{Handler: h},
+		Alarm:      &AlarmHandler{Handler: h},
+		Room:       &RoomHandler{Handler: h},
+		Stream:     &StreamHandler{Handler: h},
+		Stats:      &StatsHandler{Handler: h},
+		Settings:   &SettingsAPIHandler{Handler: h},
+		Template:   &TemplateHandler{Handler: h},
+		Milestone:  &MilestoneHandler{Handler: h},
+		Profile:    &ProfileHandler{Handler: h},
+		MajorEvent: &MajorEventHandler{Handler: h},
+		OAuth:      &OAuthHandler{Handler: h},
 	}
 }

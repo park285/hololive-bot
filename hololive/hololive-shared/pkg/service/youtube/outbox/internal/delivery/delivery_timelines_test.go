@@ -175,8 +175,8 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListPostDeliveryTimelinesSince(ctx, windowStart)
+	repository := NewDeliveryTelemetryRepository(db)
+	rows, err := repository.ListPostDeliveryTimelinesSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 
@@ -311,8 +311,8 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 		NextAttemptAt:     firstAttemptFinishedAt,
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	require.NoError(t, repo.PersistPostLatencyClassificationsByIdentities(ctx, []PostTrackingIdentity{{
+	repository := NewDeliveryTelemetryRepository(db)
+	require.NoError(t, repository.PersistPostLatencyClassificationsByIdentities(ctx, []PostTrackingIdentity{{
 		Kind:      domain.OutboxKindCommunityPost,
 		ContentID: outboxRow.ContentID,
 	}}))
@@ -509,13 +509,13 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinPublishedWin
 		NextAttemptAt:  eventAt,
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	insideRows, err := repo.ListPostDeliveryTimelinesWithinPublishedWindow(ctx, publishedAt.Add(-time.Minute), publishedAt.Add(time.Minute))
+	repository := NewDeliveryTelemetryRepository(db)
+	insideRows, err := repository.ListPostDeliveryTimelinesWithinPublishedWindow(ctx, publishedAt.Add(-time.Minute), publishedAt.Add(time.Minute))
 	require.NoError(t, err)
 	require.Len(t, insideRows, 1)
 	require.Equal(t, outboxRow.ContentID, insideRows[0].ContentID)
 
-	outsideRows, err := repo.ListPostDeliveryTimelinesWithinPublishedWindow(ctx, publishedAt.Add(10*time.Minute), publishedAt.Add(20*time.Minute))
+	outsideRows, err := repository.ListPostDeliveryTimelinesWithinPublishedWindow(ctx, publishedAt.Add(10*time.Minute), publishedAt.Add(20*time.Minute))
 	require.NoError(t, err)
 	require.Empty(t, outsideRows)
 }
@@ -620,8 +620,8 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinObservationW
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListPostDeliveryTimelinesWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
+	repository := NewDeliveryTelemetryRepository(db)
+	rows, err := repository.ListPostDeliveryTimelinesWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, timelyOutbox.ContentID, rows[0].ContentID)
@@ -748,8 +748,8 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByFinalizedObserva
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
+	repository := NewDeliveryTelemetryRepository(db)
+	rows, err := repository.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, timelyOutbox.ContentID, rows[0].ContentID)

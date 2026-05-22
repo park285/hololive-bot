@@ -36,7 +36,7 @@ import (
 
 // Notifier는 dedup claim + 큐 발행 + 발송 마킹을 담당한다.
 type Notifier struct {
-	dedupSvc       *dedup.Service
+	dedupService   *dedup.Service
 	queuePublisher *queue.Publisher
 	tierScheduler  *tier.TieredScheduler
 	logger         *slog.Logger
@@ -44,12 +44,12 @@ type Notifier struct {
 
 // NewNotifier는 알림 발행기를 생성한다.
 func NewNotifier(
-	dedupSvc *dedup.Service,
+	dedupService *dedup.Service,
 	queuePublisher *queue.Publisher,
 	tierScheduler *tier.TieredScheduler,
 	logger *slog.Logger,
 ) (*Notifier, error) {
-	if dedupSvc == nil {
+	if dedupService == nil {
 		return nil, errors.New("new notifier: dedup service is nil")
 	}
 
@@ -58,7 +58,7 @@ func NewNotifier(
 	}
 
 	return &Notifier{
-		dedupSvc:       dedupSvc,
+		dedupService:   dedupService,
 		queuePublisher: queuePublisher,
 		tierScheduler:  tierScheduler,
 		logger:         safeLogger(logger),
@@ -319,7 +319,7 @@ func resolveChannelID(stream *domain.Stream) string {
 }
 
 func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string, bool, error) {
-	notifyClaimKey, notifyClaimed, err := n.dedupSvc.TryClaimNotification(
+	notifyClaimKey, notifyClaimed, err := n.dedupService.TryClaimNotification(
 		ctx,
 		payload.notification.RoomID,
 		payload.streamID,
@@ -334,7 +334,7 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string
 		return nil, false, nil
 	}
 
-	logicalClaimKey, logicalClaimed, err := n.dedupSvc.TryClaimLogicalEvent(
+	logicalClaimKey, logicalClaimed, err := n.dedupService.TryClaimLogicalEvent(
 		ctx,
 		payload.notification.RoomID,
 		payload.channelID,
@@ -373,7 +373,7 @@ func (n *Notifier) claimScheduleChangeDedup(ctx context.Context, payload *sendIn
 		return nil, true, nil
 	}
 
-	claimKeys, claimed, err := n.dedupSvc.TryClaimNotificationScheduleChange(
+	claimKeys, claimed, err := n.dedupService.TryClaimNotificationScheduleChange(
 		ctx,
 		payload.notification.RoomID,
 		payload.channelID,

@@ -27,7 +27,7 @@ import (
 
 // GET /oauth/callback?code=XXX&state=YYY
 // -> hololive-app://callback?code=XXX&state=YYY
-func (h *OAuthAPIHandler) OAuthCallbackHandler(c *gin.Context) {
+func (h *OAuthHandler) OAuthCallbackHandler(c *gin.Context) {
 	code := c.Query("code")
 	state := c.Query("state")
 	errorParam := c.Query("error")

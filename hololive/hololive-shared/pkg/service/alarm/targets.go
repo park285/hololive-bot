@@ -35,11 +35,11 @@ func withoutCancelPreserveDeadline(ctx context.Context, fallback time.Duration) 
 
 func LookupChannelSubscribersByType(
 	ctx context.Context,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	channelID string,
 	alarmType domain.AlarmType,
 ) ([]string, error) {
-	if cacheSvc == nil {
+	if cacheClient == nil {
 		return nil, fmt.Errorf("lookup channel subscribers by type: cache service is nil")
 	}
 
@@ -49,7 +49,7 @@ func LookupChannelSubscribersByType(
 	}
 
 	key := sharedalarmkeys.BuildChannelSubscriberKey(normalizedChannelID, alarmType)
-	subscribers, err := cacheSvc.SMembers(ctx, key)
+	subscribers, err := cacheClient.SMembers(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"lookup channel subscribers by type: channel %s type %s: %w",
@@ -64,7 +64,7 @@ func LookupChannelSubscribersByType(
 
 func ResolveChannelSubscribersByType(
 	ctx context.Context,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	db *gorm.DB,
 	channelID string,
 	alarmType domain.AlarmType,
@@ -74,24 +74,24 @@ func ResolveChannelSubscribersByType(
 		return nil, nil
 	}
 
-	if cacheSvc != nil {
-		subscribers, resolved, err := resolveChannelSubscribersFromCache(ctx, cacheSvc, normalizedChannelID, alarmType, db == nil)
+	if cacheClient != nil {
+		subscribers, resolved, err := resolveChannelSubscribersFromCache(ctx, cacheClient, normalizedChannelID, alarmType, db == nil)
 		if resolved || err != nil {
 			return subscribers, err
 		}
 	}
 
-	return resolveChannelSubscribersFromDB(ctx, cacheSvc, db, normalizedChannelID, alarmType)
+	return resolveChannelSubscribersFromDB(ctx, cacheClient, db, normalizedChannelID, alarmType)
 }
 
 func resolveChannelSubscribersFromCache(
 	ctx context.Context,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	channelID string,
 	alarmType domain.AlarmType,
 	requireCacheSuccess bool,
 ) ([]string, bool, error) {
-	subscribers, err := LookupChannelSubscribersByType(ctx, cacheSvc, channelID, alarmType)
+	subscribers, err := LookupChannelSubscribersByType(ctx, cacheClient, channelID, alarmType)
 	if err != nil {
 		if requireCacheSuccess {
 			return nil, true, fmt.Errorf("resolve channel subscribers by type: %w", err)
@@ -104,7 +104,7 @@ func resolveChannelSubscribersFromCache(
 		return normalizedSubscribers, true, nil
 	}
 
-	isKnownEmpty, err := cacheSvc.Exists(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType))
+	isKnownEmpty, err := cacheClient.Exists(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType))
 	if err == nil && isKnownEmpty {
 		return nil, true, nil
 	}
@@ -116,7 +116,7 @@ func resolveChannelSubscribersFromCache(
 
 func resolveChannelSubscribersFromDB(
 	ctx context.Context,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	db *gorm.DB,
 	channelID string,
 	alarmType domain.AlarmType,
@@ -130,29 +130,29 @@ func resolveChannelSubscribersFromDB(
 	subscribers := extractSubscriberIDsByType(alarms, alarmType)
 	if len(subscribers) == 0 {
 		observeAlarmSubscriberDBFallback("miss")
-		markEmptyChannelSubscriberCache(ctx, cacheSvc, channelID, alarmType)
+		markEmptyChannelSubscriberCache(ctx, cacheClient, channelID, alarmType)
 		return nil, nil
 	}
 	observeAlarmSubscriberDBFallback("hit")
 
-	warmChannelSubscriberCache(ctx, cacheSvc, alarms, channelID, alarmType)
+	warmChannelSubscriberCache(ctx, cacheClient, alarms, channelID, alarmType)
 
 	return subscribers, nil
 }
 
-func markEmptyChannelSubscriberCache(ctx context.Context, cacheSvc cache.Client, channelID string, alarmType domain.AlarmType) {
-	if cacheSvc == nil {
+func markEmptyChannelSubscriberCache(ctx context.Context, cacheClient cache.Client, channelID string, alarmType domain.AlarmType) {
+	if cacheClient == nil {
 		return
 	}
-	_ = cacheSvc.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType), "1", emptyChannelSubscriberCacheTTL)
+	_ = cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType), "1", emptyChannelSubscriberCacheTTL)
 }
 
-func warmChannelSubscriberCache(ctx context.Context, cacheSvc cache.Client, alarms []*domain.Alarm, channelID string, alarmType domain.AlarmType) {
-	if cacheSvc == nil {
+func warmChannelSubscriberCache(ctx context.Context, cacheClient cache.Client, alarms []*domain.Alarm, channelID string, alarmType domain.AlarmType) {
+	if cacheClient == nil {
 		return
 	}
-	_, _ = WarmSubscriberCacheFromAlarms(ctx, cacheSvc, alarms)
-	_ = cacheSvc.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType))
+	_, _ = WarmSubscriberCacheFromAlarms(ctx, cacheClient, alarms)
+	_ = cacheClient.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType))
 }
 
 func loadChannelSubscriberAlarms(ctx context.Context, db *gorm.DB, channelID string) ([]*domain.Alarm, error) {

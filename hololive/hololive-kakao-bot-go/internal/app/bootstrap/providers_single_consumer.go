@@ -14,29 +14,29 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
-func ProvideChzzkClient(httpClient *http.Client, cfg config.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
+func ProvideChzzkClient(httpClient *http.Client, chzzkConfig config.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
 	return chzzk.NewClientWithConfig(chzzk.ClientConfig{
 		HTTPClient:   httpClient,
 		BaseURL:      chzzk.DefaultBaseURL,
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
+		ClientID:     chzzkConfig.ClientID,
+		ClientSecret: chzzkConfig.ClientSecret,
 		Logger:       logger,
 	})
 }
 
-func ProvideTwitchClient(cfg config.TwitchConfig, logger *slog.Logger) *twitch.Client {
+func ProvideTwitchClient(twitchConfig config.TwitchConfig, logger *slog.Logger) *twitch.Client {
 	return twitch.NewClient(twitch.ClientConfig{
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
+		ClientID:     twitchConfig.ClientID,
+		ClientSecret: twitchConfig.ClientSecret,
 	}, logger)
 }
 
 func ProvideMemberCacheWithoutValkey(
 	ctx context.Context,
-	repo *member.Repository,
+	repository *member.Repository,
 	logger *slog.Logger,
 ) (*member.Cache, error) {
-	memberCache, err := member.NewMemberCache(ctx, repo, nil, logger, member.CacheConfig{
+	memberCache, err := member.NewMemberCache(ctx, repository, nil, logger, member.CacheConfig{
 		WarmUp:    true,
 		ValkeyTTL: constants.MemberCacheDefaults.ValkeyTTL,
 	})

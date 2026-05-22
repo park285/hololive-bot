@@ -26,12 +26,12 @@ import (
 	"github.com/kapu/hololive-admin-api/internal/server"
 )
 
-func registerAlarmRoutes(holoAPI *gin.RouterGroup, handler *server.AlarmAPIHandler) {
+func registerAlarmRoutes(holoAPI *gin.RouterGroup, handler *server.AlarmHandler) {
 	holoAPI.GET("/alarms", handler.GetAlarms)
 	holoAPI.DELETE("/alarms", handler.DeleteAlarm)
 }
 
-func registerMemberRoutes(holoAPI *gin.RouterGroup, handler *server.MemberAPIHandler) {
+func registerMemberRoutes(holoAPI *gin.RouterGroup, handler *server.MemberHandler) {
 	holoAPI.GET("/members", handler.GetMembers)
 	holoAPI.POST("/members", handler.AddMember)
 	holoAPI.POST("/members/:id/aliases", handler.AddAlias)
@@ -41,25 +41,25 @@ func registerMemberRoutes(holoAPI *gin.RouterGroup, handler *server.MemberAPIHan
 	holoAPI.PATCH("/members/:id/name", handler.UpdateMemberName)
 }
 
-func registerRoomRoutes(holoAPI *gin.RouterGroup, handler *server.RoomAPIHandler) {
+func registerRoomRoutes(holoAPI *gin.RouterGroup, handler *server.RoomHandler) {
 	holoAPI.GET("/rooms", handler.GetRooms)
 	holoAPI.POST("/rooms", handler.AddRoom)
 	holoAPI.DELETE("/rooms", handler.RemoveRoom)
 	holoAPI.POST("/rooms/acl", handler.SetACL)
 }
 
-func registerMajorEventRoutes(holoAPI *gin.RouterGroup, handler *server.MajorEventAPIHandler) {
+func registerMajorEventRoutes(holoAPI *gin.RouterGroup, handler *server.MajorEventHandler) {
 	holoAPI.POST("/majorevent/trigger", handler.TriggerMajorEventNotification)
 	holoAPI.POST("/majorevent/monthly-trigger", handler.TriggerMajorEventMonthlyNotification)
 }
 
-func registerMilestoneRoutes(holoAPI *gin.RouterGroup, handler *server.MilestoneAPIHandler) {
+func registerMilestoneRoutes(holoAPI *gin.RouterGroup, handler *server.MilestoneHandler) {
 	holoAPI.GET("/milestones", handler.GetMilestones)
 	holoAPI.GET("/milestones/near", handler.GetNearMilestoneMembers)
 	holoAPI.GET("/milestones/stats", handler.GetMilestoneStats)
 }
 
-func registerProfileRoutes(holoAPI *gin.RouterGroup, handler *server.ProfileAPIHandler) {
+func registerProfileRoutes(holoAPI *gin.RouterGroup, handler *server.ProfileHandler) {
 	holoAPI.GET("/profiles", handler.GetProfile)
 	holoAPI.GET("/profiles/name", handler.GetProfileByName)
 }
@@ -73,7 +73,7 @@ func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *server.SettingsAP
 	holoAPI.POST("/names/user", handler.SetUserName)
 }
 
-func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *server.StatsAPIHandler, streamHandler *server.StreamAPIHandler) {
+func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *server.StatsHandler, streamHandler *server.StreamHandler) {
 	holoAPI.GET("/stats", statsHandler.GetStats)
 	holoAPI.GET("/stats/system", statsHandler.StreamSystemStats)
 	holoAPI.GET("/stats/channels", streamHandler.GetChannelStats)
@@ -82,12 +82,12 @@ func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *server.StatsAPI
 	holoAPI.GET("/channels/search", streamHandler.SearchChannels)
 }
 
-func registerStreamRoutes(holoAPI *gin.RouterGroup, handler *server.StreamAPIHandler) {
+func registerStreamRoutes(holoAPI *gin.RouterGroup, handler *server.StreamHandler) {
 	holoAPI.GET("/streams/live", handler.GetLiveStreams)
 	holoAPI.GET("/streams/upcoming", handler.GetUpcomingStreams)
 }
 
-func registerTemplateRoutes(holoAPI *gin.RouterGroup, handler *server.TemplateAPIHandler) {
+func registerTemplateRoutes(holoAPI *gin.RouterGroup, handler *server.TemplateHandler) {
 	holoAPI.GET("/templates", handler.GetTemplates)
 	holoAPI.GET("/templates/:key", handler.GetTemplateByKey)
 	holoAPI.PUT("/templates/:key", handler.UpsertTemplate)

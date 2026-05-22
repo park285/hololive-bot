@@ -143,13 +143,13 @@ func assertErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, want strin
 	assert.Len(t, payload, 1)
 }
 
-func newMajorEventRouter(t *testing.T, apiKey string, repo *majorevent.Repository) *http.ServeMux {
+func newMajorEventRouter(t *testing.T, apiKey string, repository *majorevent.Repository) *http.ServeMux {
 	t.Helper()
 
 	engine, err := buildHealthOnlyRouter(context.Background(), newTestLogger(), "")
 	require.NoError(t, err)
 
-	registerMajorEventInternalRoutes(engine, apiKey, repo)
+	registerMajorEventInternalRoutes(engine, apiKey, repository)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", engine)

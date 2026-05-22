@@ -39,14 +39,14 @@ const twitchLiveNotifiedKeyPrefix = "notified:twitch:live:"
 
 // TwitchChecker는 Twitch 라이브 상태를 배치 조회해 알림 후보를 만든다.
 type TwitchChecker struct {
-	cacheSvc     cache.Client
+	cacheClient  cache.Client
 	twitchClient *twitch.Client
 	logger       *slog.Logger
 }
 
 // NewTwitchChecker는 Twitch 체커를 생성한다.
-func NewTwitchChecker(cacheSvc cache.Client, twitchClient *twitch.Client, logger *slog.Logger) (*TwitchChecker, error) {
-	if cacheSvc == nil {
+func NewTwitchChecker(cacheClient cache.Client, twitchClient *twitch.Client, logger *slog.Logger) (*TwitchChecker, error) {
+	if cacheClient == nil {
 		return nil, errors.New("new twitch checker: cache service is nil")
 	}
 
@@ -55,7 +55,7 @@ func NewTwitchChecker(cacheSvc cache.Client, twitchClient *twitch.Client, logger
 	}
 
 	return &TwitchChecker{
-		cacheSvc:     cacheSvc,
+		cacheClient:  cacheClient,
 		twitchClient: twitchClient,
 		logger:       safeLogger(logger),
 	}, nil
@@ -93,7 +93,7 @@ type twitchCheckInputs struct {
 }
 
 func (c *TwitchChecker) loadCheckInputs(ctx context.Context) (twitchCheckInputs, error) {
-	loginMappingsRaw, err := c.cacheSvc.HGetAll(ctx, sharedalarmkeys.TwitchLoginMapKey)
+	loginMappingsRaw, err := c.cacheClient.HGetAll(ctx, sharedalarmkeys.TwitchLoginMapKey)
 	if err != nil {
 		return twitchCheckInputs{}, fmt.Errorf("check twitch streams: read login mappings: %w", err)
 	}
@@ -103,12 +103,12 @@ func (c *TwitchChecker) loadCheckInputs(ctx context.Context) (twitchCheckInputs,
 		return twitchCheckInputs{}, nil
 	}
 
-	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
+	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheClient, youtubeChannelIDs)
 	if err != nil {
 		return twitchCheckInputs{}, fmt.Errorf("check twitch streams: load subscriber rooms: %w", err)
 	}
 
-	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
+	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheClient, youtubeChannelIDs)
 	if err != nil {
 		return twitchCheckInputs{}, fmt.Errorf("check twitch streams: load member names: %w", err)
 	}

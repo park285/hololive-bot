@@ -85,7 +85,7 @@ func TestMonthlyScheduler_LifecycleNilGuards(t *testing.T) {
 func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
-	outbox := newMockOutboxRepo()
+	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil)
@@ -107,7 +107,7 @@ func TestMonthlyScheduler_PartialEnqueueNoError(t *testing.T) {
 		},
 	}
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
-	outbox := newMockOutboxRepo()
+	outbox := newMockOutboxRepository()
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
 	now := time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST)
 

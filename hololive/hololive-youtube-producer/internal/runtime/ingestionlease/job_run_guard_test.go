@@ -14,8 +14,8 @@ func TestJobRunGuardClaimBlocksSameJobAndAllowsDifferentChannels(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cacheSvc := sharedtestutil.NewTestCacheService(t, ctx)
-	guard := NewJobRunGuard(cacheSvc, JobRunGuardConfig{
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	guard := NewJobRunGuard(cache, JobRunGuardConfig{
 		Namespace:  "test",
 		InstanceID: "ap-a",
 	})
@@ -42,8 +42,8 @@ func TestJobRunGuardMarkCompletedCreatesCooldown(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cacheSvc := sharedtestutil.NewTestCacheService(t, ctx)
-	guard := NewJobRunGuard(cacheSvc, JobRunGuardConfig{
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	guard := NewJobRunGuard(cache, JobRunGuardConfig{
 		Namespace:  "test",
 		InstanceID: "ap-a",
 	})
@@ -68,9 +68,9 @@ func TestJobRunGuardWinnerCompleteMakesPeerAlreadyCompleted(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cacheSvc := sharedtestutil.NewTestCacheService(t, ctx)
-	winner := NewJobRunGuard(cacheSvc, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-a"})
-	peer := NewJobRunGuard(cacheSvc, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-b"})
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	winner := NewJobRunGuard(cache, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-a"})
+	peer := NewJobRunGuard(cache, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-b"})
 	identity := JobIdentity{PollerName: "videos", ChannelID: "UC_RACE", Interval: 250 * time.Millisecond}
 
 	status, claim, err := winner.TryClaim(ctx, identity, time.Second, identity.Interval)
@@ -96,9 +96,9 @@ func TestJobRunGuardExpiredLeaseCanFailOverToPeer(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cacheSvc, mini := sharedtestutil.NewTestCacheServiceWithMini(t, ctx)
-	first := NewJobRunGuard(cacheSvc, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-a"})
-	second := NewJobRunGuard(cacheSvc, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-b"})
+	cache, mini := sharedtestutil.NewTestCacheServiceWithMini(t, ctx)
+	first := NewJobRunGuard(cache, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-a"})
+	second := NewJobRunGuard(cache, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-b"})
 	identity := JobIdentity{PollerName: "live", ChannelID: "UC_FAILOVER", Interval: time.Second}
 
 	status, claim, err := first.TryClaim(ctx, identity, 20*time.Millisecond, identity.Interval)
@@ -117,8 +117,8 @@ func TestJobRunGuardMarkCompletedUsesOwnerCAS(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cacheSvc := sharedtestutil.NewTestCacheService(t, ctx)
-	guard := NewJobRunGuard(cacheSvc, JobRunGuardConfig{
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	guard := NewJobRunGuard(cache, JobRunGuardConfig{
 		Namespace:  "test",
 		InstanceID: "ap-a",
 	})
@@ -126,13 +126,13 @@ func TestJobRunGuardMarkCompletedUsesOwnerCAS(t *testing.T) {
 
 	_, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
-	require.NoError(t, cacheSvc.GetClient().Do(ctx, cacheSvc.B().Set().Key(claim.LeaseKey()).Value("peer-owner").Build()).Error())
+	require.NoError(t, cache.GetClient().Do(ctx, cache.B().Set().Key(claim.LeaseKey()).Value("peer-owner").Build()).Error())
 
 	completed, err := claim.MarkCompleted(ctx, identity.Interval)
 	require.NoError(t, err)
 	require.False(t, completed)
 
-	_, hit, err := cacheSvc.GetString(ctx, claim.CooldownKey())
+	_, hit, err := cache.GetString(ctx, claim.CooldownKey())
 	require.NoError(t, err)
 	require.False(t, hit)
 }
@@ -141,8 +141,8 @@ func TestJobRunGuardRenewAndReleaseUseOwnerCAS(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cacheSvc := sharedtestutil.NewTestCacheService(t, ctx)
-	guard := NewJobRunGuard(cacheSvc, JobRunGuardConfig{
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	guard := NewJobRunGuard(cache, JobRunGuardConfig{
 		Namespace:  "test",
 		InstanceID: "ap-a",
 	})
@@ -155,13 +155,13 @@ func TestJobRunGuardRenewAndReleaseUseOwnerCAS(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, renewed)
 
-	require.NoError(t, cacheSvc.GetClient().Do(ctx, cacheSvc.B().Set().Key(claim.LeaseKey()).Value("peer-owner").Build()).Error())
+	require.NoError(t, cache.GetClient().Do(ctx, cache.B().Set().Key(claim.LeaseKey()).Value("peer-owner").Build()).Error())
 
 	released, err := claim.Release(ctx)
 	require.NoError(t, err)
 	require.False(t, released)
 
-	value, hit, err := cacheSvc.GetString(ctx, claim.LeaseKey())
+	value, hit, err := cache.GetString(ctx, claim.LeaseKey())
 	require.NoError(t, err)
 	require.True(t, hit)
 	require.Equal(t, "peer-owner", value)

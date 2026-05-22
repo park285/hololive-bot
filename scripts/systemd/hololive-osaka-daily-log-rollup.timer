@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Hololive Osaka daily youtube-producer log rollup after midnight
+
+[Timer]
+OnCalendar=*-*-* 00:05:00
+Persistent=true
+AccuracySec=1m
+Unit=hololive-osaka-daily-log-rollup.service
+
+[Install]
+WantedBy=timers.target

@@ -30,26 +30,26 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type APIHandler struct {
+type Handler struct {
 	alarm  domain.AlarmCRUD
 	logger *slog.Logger
 }
 
-func NewAPIHandler(alarm domain.AlarmCRUD, logger *slog.Logger) *APIHandler {
-	return &APIHandler{
+func NewHandler(alarm domain.AlarmCRUD, logger *slog.Logger) *Handler {
+	return &Handler{
 		alarm:  alarm,
 		logger: logger,
 	}
 }
 
-func (h *APIHandler) RegisterRoutes(rg *gin.RouterGroup) {
+func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	h.RegisterInternalRoutes(rg)
 
 	rg.GET("/health", h.Health)
 	rg.GET("/ready", h.Ready)
 }
 
-func (h *APIHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
+func (h *Handler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal := rg.Group(contractsalarm.BasePath)
 	internal.POST(contractsalarm.AddRoute, h.AddAlarm)
 	internal.POST(contractsalarm.RemoveRoute, h.RemoveAlarm)
@@ -63,7 +63,7 @@ func (h *APIHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal.GET(contractsalarm.KeysRoute, h.GetAllAlarmKeys)
 }
 
-func (h *APIHandler) AddAlarm(c *gin.Context) {
+func (h *Handler) AddAlarm(c *gin.Context) {
 	var req AddAlarmRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
@@ -97,7 +97,7 @@ func (h *APIHandler) AddAlarm(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"added": added}})
 }
 
-func (h *APIHandler) RemoveAlarm(c *gin.Context) {
+func (h *Handler) RemoveAlarm(c *gin.Context) {
 	var req RemoveAlarmRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
@@ -121,7 +121,7 @@ func (h *APIHandler) RemoveAlarm(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"removed": removed}})
 }
 
-func (h *APIHandler) GetRoomAlarmsWithTypes(c *gin.Context) {
+func (h *Handler) GetRoomAlarmsWithTypes(c *gin.Context) {
 	roomID := c.Param("id")
 	ctx := c.Request.Context()
 
@@ -135,7 +135,7 @@ func (h *APIHandler) GetRoomAlarmsWithTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: alarms})
 }
 
-func (h *APIHandler) GetRoomAlarmsView(c *gin.Context) {
+func (h *Handler) GetRoomAlarmsView(c *gin.Context) {
 	roomID := c.Param("id")
 	ctx := c.Request.Context()
 
@@ -149,7 +149,7 @@ func (h *APIHandler) GetRoomAlarmsView(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: entries})
 }
 
-func (h *APIHandler) ClearRoomAlarms(c *gin.Context) {
+func (h *Handler) ClearRoomAlarms(c *gin.Context) {
 	var req ClearAlarmsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
@@ -168,7 +168,7 @@ func (h *APIHandler) ClearRoomAlarms(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"deleted": count}})
 }
 
-func (h *APIHandler) GetNextStreamInfo(c *gin.Context) {
+func (h *Handler) GetNextStreamInfo(c *gin.Context) {
 	channelID := c.Param("id")
 	ctx := c.Request.Context()
 
@@ -187,7 +187,7 @@ func (h *APIHandler) GetNextStreamInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: info})
 }
 
-func (h *APIHandler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
+func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 	var req UpdateAdvanceMinutesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
@@ -198,7 +198,7 @@ func (h *APIHandler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"target_minutes": targets}})
 }
 
-func (h *APIHandler) SetRoomName(c *gin.Context) {
+func (h *Handler) SetRoomName(c *gin.Context) {
 	var req SetRoomNameRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
@@ -216,7 +216,7 @@ func (h *APIHandler) SetRoomName(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true})
 }
 
-func (h *APIHandler) SetUserName(c *gin.Context) {
+func (h *Handler) SetUserName(c *gin.Context) {
 	var req SetUserNameRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
@@ -234,7 +234,7 @@ func (h *APIHandler) SetUserName(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true})
 }
 
-func (h *APIHandler) GetAllAlarmKeys(c *gin.Context) {
+func (h *Handler) GetAllAlarmKeys(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	keys, err := h.alarm.GetAllAlarmKeys(ctx)
@@ -247,10 +247,10 @@ func (h *APIHandler) GetAllAlarmKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: keys})
 }
 
-func (h *APIHandler) Health(c *gin.Context) {
+func (h *Handler) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-func (h *APIHandler) Ready(c *gin.Context) {
+func (h *Handler) Ready(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ready"})
 }

@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -95,10 +97,7 @@ func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation addA
 		return added, nil
 	}
 	opErr := as.rebuildAlarmCacheFromRepository(ctx, "add", fmt.Errorf("add alarm: %w", err))
-	if as.logger != nil {
-		as.logger.Error("Failed to add alarm", slog.Any("error", opErr))
-	}
-	return 0, fmt.Errorf("rebuild add cache from repository: %w", opErr)
+	return 0, sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild add cache from repository", opErr)
 }
 
 func normalizeAddAlarmRequest(req domain.AddAlarmRequest) (domain.AddAlarmRequest, error) {
@@ -156,10 +155,7 @@ func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation ad
 		err = as.persistAlarm(ctx, mutation.record)
 	}
 	if err != nil {
-		if as.logger != nil {
-			as.logger.Error("Failed to persist alarm before cache write", slog.Any("error", err))
-		}
-		return fmt.Errorf("persist alarm before cache write: %w", err)
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm before cache write", err)
 	}
 	return nil
 }
@@ -167,8 +163,10 @@ func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation ad
 func (as *AlarmService) afterAddAlarm(ctx context.Context, req domain.AddAlarmRequest, newlyAddedTypes domain.AlarmTypes) {
 	as.logAlarmAdded(req, newlyAddedTypes)
 	if syncErr := as.syncPlatformMappingForChannel(ctx, req.ChannelID); syncErr != nil && as.logger != nil {
-		as.logger.Warn("Failed to sync platform alarm mapping after add",
-			slog.Any("error", syncErr),
+		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
+			"sync platform alarm mapping after add.failed",
+			"Failed to sync platform alarm mapping after add",
+			syncErr,
 			slog.String("channel_id", req.ChannelID),
 			slog.String("room_id", req.RoomID),
 		)
@@ -211,7 +209,7 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 	}
 	as.afterRemoveAlarm(ctx, roomID, channelID, mutation)
 
-	if as.alarmRepo != nil {
+	if as.alarmRepository != nil {
 		return true, nil
 	}
 
@@ -266,20 +264,14 @@ func (as *AlarmService) persistRemoveAlarmMutation(ctx context.Context, roomID s
 
 func (as *AlarmService) deleteAlarmBeforeCacheRemoval(ctx context.Context, roomID string, channelID string) error {
 	if err := as.deleteAlarm(ctx, roomID, channelID); err != nil {
-		if as.logger != nil {
-			as.logger.Error("Failed to persist alarm removal before cache write", slog.Any("error", err))
-		}
-		return fmt.Errorf("delete alarm before cache removal: %w", err)
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "delete alarm before cache removal", err)
 	}
 	return nil
 }
 
 func (as *AlarmService) updateAlarmTypesBeforeCacheRemoval(ctx context.Context, updated *domain.Alarm) error {
 	if err := as.updateAlarmTypes(ctx, updated); err != nil {
-		if as.logger != nil {
-			as.logger.Error("Failed to persist alarm type update before cache write", slog.Any("error", err))
-		}
-		return fmt.Errorf("persist alarm type update before cache removal: %w", err)
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm type update before cache removal", err)
 	}
 	return nil
 }
@@ -288,25 +280,21 @@ func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID str
 	removed, err := as.removeAlarmFromCache(ctx, roomID, channelID, mutation.effectiveRemovalTypes, mutation.removeRoomChannel)
 	if err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "remove", fmt.Errorf("remove alarm: %w", err))
-		if as.logger != nil {
-			as.logger.Error("Failed to remove alarm", slog.Any("error", opErr))
-		}
-		return false, fmt.Errorf("rebuild remove cache from repository: %w", opErr)
+		return false, sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild remove cache from repository", opErr)
 	}
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "remove_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
-		if as.logger != nil {
-			as.logger.Error("Failed to mark alarm cache changed after remove", slog.Any("error", opErr))
-		}
-		return false, fmt.Errorf("rebuild remove cache version from repository: %w", opErr)
+		return false, sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr)
 	}
 	return removed, nil
 }
 
 func (as *AlarmService) afterRemoveAlarm(ctx context.Context, roomID string, channelID string, mutation removeAlarmMutation) {
 	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
-		as.logger.Warn("Failed to sync platform alarm mapping after remove",
-			slog.Any("error", syncErr),
+		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
+			"sync platform alarm mapping after remove.failed",
+			"Failed to sync platform alarm mapping after remove",
+			syncErr,
 			slog.String("channel_id", channelID),
 			slog.String("room_id", roomID),
 		)
@@ -354,7 +342,7 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 
 	as.afterClearRoomAlarms(ctx, roomID, channelIDs)
 
-	if as.alarmRepo != nil {
+	if as.alarmRepository != nil {
 		return len(channelIDs), nil
 	}
 
@@ -363,10 +351,7 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 
 func (as *AlarmService) deleteRoomAlarmsBeforeCacheClear(ctx context.Context, roomID string) error {
 	if err := as.deleteRoomAlarms(ctx, roomID); err != nil {
-		if as.logger != nil {
-			as.logger.Error("Failed to persist room alarm clear before cache write", slog.Any("error", err))
-		}
-		return fmt.Errorf("delete room alarms before cache clear: %w", err)
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "delete room alarms before cache clear", err)
 	}
 	return nil
 }
@@ -375,17 +360,11 @@ func (as *AlarmService) clearRoomAlarmsCacheMutation(ctx context.Context, roomID
 	removed, err := as.clearRoomAlarmsFromCache(ctx, roomID, channelIDs)
 	if err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear", fmt.Errorf("clear room alarms: %w", err))
-		if as.logger != nil {
-			as.logger.Error("Failed to clear room alarms", slog.Any("error", opErr))
-		}
-		return 0, fmt.Errorf("rebuild clear cache from repository: %w", opErr)
+		return 0, sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild clear cache from repository", opErr)
 	}
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
-		if as.logger != nil {
-			as.logger.Error("Failed to mark alarm cache changed after clear", slog.Any("error", opErr))
-		}
-		return 0, fmt.Errorf("rebuild clear cache version from repository: %w", opErr)
+		return 0, sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr)
 	}
 	return removed, nil
 }
@@ -404,16 +383,20 @@ func (as *AlarmService) afterClearRoomAlarms(ctx context.Context, roomID string,
 
 func (as *AlarmService) cleanupClearedRoomAlarmChannel(ctx context.Context, roomID string, channelID string) {
 	if err := as.cleanupChannelRegistryIfEmpty(ctx, channelID); err != nil && as.logger != nil {
-		as.logger.Warn("Failed to cleanup channel registry during room alarm clear",
+		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
+			"cleanup channel registry during room alarm clear.failed",
+			"Failed to cleanup channel registry during room alarm clear",
+			err,
 			slog.String("room_id", roomID),
 			slog.String("channel_id", channelID),
-			slog.Any("error", err),
 		)
 	}
 
 	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
-		as.logger.Warn("Failed to sync platform alarm mapping after clear",
-			slog.Any("error", syncErr),
+		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
+			"sync platform alarm mapping after clear.failed",
+			"Failed to sync platform alarm mapping after clear",
+			syncErr,
 			slog.String("room_id", roomID),
 			slog.String("channel_id", channelID),
 		)

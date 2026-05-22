@@ -63,14 +63,14 @@ func TestInitializeMemberDatabaseAndGetMemberChannelID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			svc, _ := newTestCacheService(t)
+			service, _ := newTestCacheService(t)
 			ctx := context.Background()
 
-			if err := svc.InitializeMemberDatabase(ctx, tt.memberData); err != nil {
+			if err := service.InitializeMemberDatabase(ctx, tt.memberData); err != nil {
 				t.Fatalf("InitializeMemberDatabase() error = %v", err)
 			}
 
-			gotID, err := svc.GetMemberChannelID(ctx, tt.lookupKey)
+			gotID, err := service.GetMemberChannelID(ctx, tt.lookupKey)
 			if err != nil {
 				t.Fatalf("GetMemberChannelID() error = %v", err)
 			}
@@ -84,10 +84,10 @@ func TestInitializeMemberDatabaseAndGetMemberChannelID(t *testing.T) {
 func TestGetMemberChannelID_EmptyName(t *testing.T) {
 	t.Parallel()
 
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
-	gotID, err := svc.GetMemberChannelID(ctx, "")
+	gotID, err := service.GetMemberChannelID(ctx, "")
 	if err != nil {
 		t.Fatalf("GetMemberChannelID(\"\") error = %v", err)
 	}
@@ -129,14 +129,14 @@ func TestGetMemberChannelIDWithOrg(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			svc, _ := newTestCacheService(t)
+			service, _ := newTestCacheService(t)
 			ctx := context.Background()
 
-			if err := svc.InitializeMemberDatabase(ctx, tt.memberData); err != nil {
+			if err := service.InitializeMemberDatabase(ctx, tt.memberData); err != nil {
 				t.Fatalf("InitializeMemberDatabase() error = %v", err)
 			}
 
-			gotID, err := svc.GetMemberChannelIDWithOrg(ctx, tt.lookupName, tt.lookupOrg)
+			gotID, err := service.GetMemberChannelIDWithOrg(ctx, tt.lookupName, tt.lookupOrg)
 			if err != nil {
 				t.Fatalf("GetMemberChannelIDWithOrg() error = %v", err)
 			}
@@ -187,14 +187,14 @@ func TestGetMemberChannelIDs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			svc, _ := newTestCacheService(t)
+			service, _ := newTestCacheService(t)
 			ctx := context.Background()
 
-			if err := svc.InitializeMemberDatabase(ctx, tt.memberData); err != nil {
+			if err := service.InitializeMemberDatabase(ctx, tt.memberData); err != nil {
 				t.Fatalf("InitializeMemberDatabase() error = %v", err)
 			}
 
-			gotIDs, err := svc.GetMemberChannelIDs(ctx, tt.lookupName)
+			gotIDs, err := service.GetMemberChannelIDs(ctx, tt.lookupName)
 			if err != nil {
 				t.Fatalf("GetMemberChannelIDs() error = %v", err)
 			}

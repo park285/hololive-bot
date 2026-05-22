@@ -53,7 +53,7 @@ type Scheduler struct {
 	service    model.DigestService
 	formatter  model.DigestFormatter
 	locker     delivery.NotificationLocker
-	outboxRepo outboxEnqueuer
+	outboxRepository outboxEnqueuer
 	logger     *slog.Logger
 	runtime    *schedulerkit.Runtime
 }
@@ -62,7 +62,7 @@ func NewScheduler(
 	service model.DigestService,
 	formatter model.DigestFormatter,
 	locker delivery.NotificationLocker,
-	outboxRepo outboxEnqueuer,
+	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 ) *Scheduler {
 	if logger == nil {
@@ -76,7 +76,7 @@ func NewScheduler(
 		service:    service,
 		formatter:  formatter,
 		locker:     locker,
-		outboxRepo: outboxRepo,
+		outboxRepository: outboxRepository,
 		logger:     logger,
 		runtime:    schedulerkit.NewRuntime(),
 	}
@@ -160,7 +160,7 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 
 // processRoomDigest: 단일 room의 주간 다이제스트 생성 + outbox enqueue.
 func (s *Scheduler) processRoomDigest(ctx context.Context, weekKey, roomID string) delivery.SendResult {
-	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepo, s.logger,
+	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.logger,
 		model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, weekKey, roomID, "🗞️ 이번주 구독 멤버 뉴스")
 }
 

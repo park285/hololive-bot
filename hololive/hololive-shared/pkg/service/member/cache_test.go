@@ -38,24 +38,24 @@ func TestCacheInvalidateAll_UsesScanKeysAndDelMany(t *testing.T) {
 	ctx := context.Background()
 
 	member := &domain.Member{Name: "pekora", ChannelID: "UC_1"}
-	cacheSvc := cachemocks.NewStrictClient()
+	cache := cachemocks.NewStrictClient()
 
 	var scannedPattern string
 	var scannedBatchSize int64
-	cacheSvc.ScanKeysFunc = func(_ context.Context, pattern string, batchSize int64) ([]string, error) {
+	cache.ScanKeysFunc = func(_ context.Context, pattern string, batchSize int64) ([]string, error) {
 		scannedPattern = pattern
 		scannedBatchSize = batchSize
 		return []string{"member:channel:UC_1", "member:name:pekora"}, nil
 	}
 
 	var deletedKeys []string
-	cacheSvc.DelManyFunc = func(_ context.Context, keys []string) (int64, error) {
+	cache.DelManyFunc = func(_ context.Context, keys []string) (int64, error) {
 		deletedKeys = append([]string(nil), keys...)
 		return int64(len(keys)), nil
 	}
 
 	c := &Cache{
-		cache:  cacheSvc,
+		cache:  cache,
 		logger: logger,
 	}
 	c.byChannelID.Store(member.ChannelID, member)

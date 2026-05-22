@@ -32,11 +32,11 @@ import (
 
 func buildMemberCache(
 	ctx context.Context,
-	repo *member.Repository,
-	cacheSvc cache.Client,
+	repository *member.Repository,
+	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*member.Cache, error) {
-	memberCache, err := member.NewMemberCache(ctx, repo, cacheSvc, logger, member.CacheConfig{
+	memberCache, err := member.NewMemberCache(ctx, repository, cacheClient, logger, member.CacheConfig{
 		WarmUp:    true,
 		ValkeyTTL: constants.MemberCacheDefaults.ValkeyTTL,
 	})

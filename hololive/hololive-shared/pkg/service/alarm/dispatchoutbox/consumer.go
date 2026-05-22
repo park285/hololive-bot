@@ -13,7 +13,7 @@ import (
 )
 
 type Consumer struct {
-	repo              Repository
+	repository              Repository
 	workerID          string
 	lease             time.Duration
 	recoveryBatchSize int
@@ -57,13 +57,13 @@ func WithRecoveryBatchSize(size int) ConsumerOption {
 	}
 }
 
-func NewConsumer(repo Repository, logger *slog.Logger, opts ...ConsumerOption) *Consumer {
+func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOption) *Consumer {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	host, _ := os.Hostname()
 	consumer := &Consumer{
-		repo:              repo,
+		repository:              repository,
 		workerID:          "dispatcher-" + host,
 		lease:             60 * time.Second,
 		recoveryBatchSize: 100,
@@ -78,7 +78,7 @@ func NewConsumer(repo Repository, logger *slog.Logger, opts ...ConsumerOption) *
 }
 
 func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
-	if c == nil || c.repo == nil {
+	if c == nil || c.repository == nil {
 		return nil, fmt.Errorf("drain outbox batch: repository is nil")
 	}
 	if err := c.maybeRecover(ctx); err != nil {
@@ -88,7 +88,7 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	if err != nil {
 		return nil, err
 	}
-	events, err := c.repo.LoadEventsByID(ctx, distinctEventIDs(records))
+	events, err := c.repository.LoadEventsByID(ctx, distinctEventIDs(records))
 	if err != nil {
 		return nil, fmt.Errorf("drain outbox batch: load events: %w", err)
 	}
@@ -174,7 +174,7 @@ func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events 
 }
 
 func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error) {
-	records, err := c.repo.ClaimDue(ctx, c.workerID, maxItems, c.lease)
+	records, err := c.repository.ClaimDue(ctx, c.workerID, maxItems, c.lease)
 	if err != nil {
 		return nil, fmt.Errorf("drain outbox batch: claim due: %w", err)
 	}
@@ -183,7 +183,7 @@ func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error
 }
 
 func (c *Consumer) moveRecordToDLQ(ctx context.Context, id int64, terminalError string, action string) error {
-	if err := c.repo.MoveToDLQ(ctx, []TerminalUpdate{{ID: id, Error: terminalError}}, c.workerID); err != nil {
+	if err := c.repository.MoveToDLQ(ctx, []TerminalUpdate{{ID: id, Error: terminalError}}, c.workerID); err != nil {
 		return fmt.Errorf("drain outbox batch: %s: %w", action, err)
 	}
 	observePGDLQ(1)
@@ -196,14 +196,14 @@ func (c *Consumer) maybeRecover(ctx context.Context) error {
 		return nil
 	}
 	c.lastRecoveryAt = now
-	recoveredLeased, leasedErr := c.repo.RecoverExpiredLeased(ctx, c.recoveryBatchSize)
+	recoveredLeased, leasedErr := c.repository.RecoverExpiredLeased(ctx, c.recoveryBatchSize)
 	if leasedErr != nil {
 		observeRecoveryFailure(recoveryTypeLeased)
 		c.logger.Warn("Recover expired leased dispatch rows failed", slog.Any("error", leasedErr))
 	} else {
 		observeRecoveryRows(recoveryTypeLeased, recoveredLeased)
 	}
-	recoveredSending, sendingErr := c.repo.QuarantineStaleSending(ctx, c.lease, c.recoveryBatchSize)
+	recoveredSending, sendingErr := c.repository.QuarantineStaleSending(ctx, c.lease, c.recoveryBatchSize)
 	if sendingErr != nil {
 		observeRecoveryFailure(recoveryTypeSending)
 		c.logger.Warn("Quarantine stale sending dispatch rows failed", slog.Any("error", sendingErr))
@@ -221,7 +221,7 @@ func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueu
 	if len(ids) == 0 {
 		return nil
 	}
-	if err := c.repo.MarkSending(ctx, ids, c.workerID, c.lease); err != nil {
+	if err := c.repository.MarkSending(ctx, ids, c.workerID, c.lease); err != nil {
 		observePGMarkSendingFailure()
 		return err
 	}
@@ -233,7 +233,7 @@ func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQ
 	if len(ids) == 0 {
 		return nil
 	}
-	if err := c.repo.MarkSent(ctx, ids, c.workerID); err != nil {
+	if err := c.repository.MarkSent(ctx, ids, c.workerID); err != nil {
 		observePGMarkSentFailure()
 		return err
 	}
@@ -254,7 +254,7 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 		}
 		updates = append(updates, update)
 	}
-	if err := c.repo.ScheduleRetry(ctx, updates, c.workerID); err != nil {
+	if err := c.repository.ScheduleRetry(ctx, updates, c.workerID); err != nil {
 		return err
 	}
 	observePGRetryScheduled(len(updates))
@@ -289,7 +289,7 @@ func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueE
 		}
 		updates = append(updates, update)
 	}
-	if err := c.repo.MoveToDLQ(ctx, updates, c.workerID); err != nil {
+	if err := c.repository.MoveToDLQ(ctx, updates, c.workerID); err != nil {
 		return err
 	}
 	observePGDLQ(len(updates))
@@ -307,7 +307,7 @@ func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueue
 			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, Error: reason})
 		}
 	}
-	if err := c.repo.Quarantine(ctx, updates, c.workerID); err != nil {
+	if err := c.repository.Quarantine(ctx, updates, c.workerID); err != nil {
 		return err
 	}
 	observePGQuarantined(len(updates))

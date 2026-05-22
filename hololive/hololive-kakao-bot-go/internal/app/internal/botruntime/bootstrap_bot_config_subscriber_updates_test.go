@@ -163,16 +163,16 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { publisher.Close() })
 
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client { return client },
 	}
-	settingsSvc := &trackingSettingsReadWriter{
+	settingsService := &trackingSettingsReadWriter{
 		current: settings.Settings{
 			AlarmAdvanceMinutes: 5,
 			ScraperProxyEnabled: false,
 		},
 	}
-	youtubeSvc := &trackingYouTubeSvc{}
+	youtubeService := &trackingYouTubeService{}
 	scheduler := poller.NewScheduler(poller.SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: time.Millisecond,
@@ -181,11 +181,11 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
 	deps := botConfigSubscriberDependencies{
-		Cache:    cacheSvc,
-		Settings: settingsSvc,
+		Cache:    cache,
+		Settings: settingsService,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
-		YouTubeService: youtubeSvc,
+		YouTubeService: youtubeService,
 	}
 	subscriber := appbootstrap.BuildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)
@@ -204,12 +204,12 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	require.Eventually(t, func() bool {
 		publishConfigUpdate(t, publisher, contractssettings.UpdateTypeScraperProxy, contractssettings.ScraperProxyPayloadV1{Enabled: true})
 
-		got := settingsSvc.Get()
+		got := settingsService.Get()
 
-		return got.ScraperProxyEnabled && youtubeSvc.isProxyEnabled() && trackingPoller.isEnabled()
+		return got.ScraperProxyEnabled && youtubeService.isProxyEnabled() && trackingPoller.isEnabled()
 	}, 2*time.Second, 50*time.Millisecond)
 
-	assert.GreaterOrEqual(t, settingsSvc.calls(), 1)
+	assert.GreaterOrEqual(t, settingsService.calls(), 1)
 
 	cancel()
 
@@ -233,24 +233,24 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { publisher.Close() })
 
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client { return client },
 	}
-	settingsSvc := &trackingSettingsReadWriter{
+	settingsService := &trackingSettingsReadWriter{
 		current: settings.Settings{
 			AlarmAdvanceMinutes: 5,
 			ScraperProxyEnabled: false,
 		},
 		updateErr: errors.New("persist failed"),
 	}
-	alarmSvc := &trackingAlarmAdvanceCRUD{targets: []int{15, 30}}
+	alarmService := &trackingAlarmAdvanceCRUD{targets: []int{15, 30}}
 
 	deps := botConfigSubscriberDependencies{
-		Cache:    cacheSvc,
-		Settings: settingsSvc,
+		Cache:    cache,
+		Settings: settingsService,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
-		AlarmCRUD: alarmSvc,
+		AlarmCRUD: alarmService,
 	}
 	subscriber := appbootstrap.BuildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
 	require.NotNil(t, subscriber)
@@ -269,15 +269,15 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	require.Eventually(t, func() bool {
 		publishConfigUpdate(t, publisher, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 30})
 
-		calls, last := alarmSvc.callSnapshot()
+		calls, last := alarmService.callSnapshot()
 
 		return calls >= 1 && last == 30
 	}, 2*time.Second, 50*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		return settingsSvc.calls() >= 1
+		return settingsService.calls() >= 1
 	}, 2*time.Second, 50*time.Millisecond)
-	assert.Equal(t, 5, settingsSvc.Get().AlarmAdvanceMinutes)
+	assert.Equal(t, 5, settingsService.Get().AlarmAdvanceMinutes)
 
 	cancel()
 
@@ -301,24 +301,24 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 	require.NoError(t, err)
 	t.Cleanup(func() { publisher.Close() })
 
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client { return client },
 	}
-	settingsSvc := &trackingSettingsReadWriter{
+	settingsService := &trackingSettingsReadWriter{
 		current: settings.Settings{
 			AlarmAdvanceMinutes: 5,
 			ScraperProxyEnabled: false,
 		},
 	}
-	alarmSvc, err := notification.NewAlarmService(nil, nil, nil, nil, nil, nil, logger, []int{5, 3, 1})
+	alarmService, err := notification.NewAlarmService(nil, nil, nil, nil, nil, nil, logger, []int{5, 3, 1})
 	require.NoError(t, err)
 
 	deps := botConfigSubscriberDependencies{
-		Cache:    cacheSvc,
-		Settings: settingsSvc,
+		Cache:    cache,
+		Settings: settingsService,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
-		AlarmCRUD: alarmSvc,
+		AlarmCRUD: alarmService,
 	}
 	subscriber := appbootstrap.BuildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
 	require.NotNil(t, subscriber)
@@ -336,9 +336,9 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 	require.Eventually(t, func() bool {
 		publishConfigUpdate(t, publisher, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 12})
 
-		return assert.ObjectsAreEqual([]int{12, 3, 1}, alarmSvc.GetTargetMinutes()) &&
-			settingsSvc.Get().AlarmAdvanceMinutes == 12 &&
-			assert.ObjectsAreEqual([]int{12, 3, 1}, settingsSvc.Get().TargetMinutes)
+		return assert.ObjectsAreEqual([]int{12, 3, 1}, alarmService.GetTargetMinutes()) &&
+			settingsService.Get().AlarmAdvanceMinutes == 12 &&
+			assert.ObjectsAreEqual([]int{12, 3, 1}, settingsService.Get().TargetMinutes)
 	}, 2*time.Second, 50*time.Millisecond)
 
 	cancel()
@@ -363,17 +363,17 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { publisherClient.Close() })
 
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client { return client },
 	}
-	settingsSvc := &trackingSettingsReadWriter{
+	settingsService := &trackingSettingsReadWriter{
 		current: settings.Settings{
 			AlarmAdvanceMinutes: 5,
 			ScraperProxyEnabled: false,
 		},
 	}
-	youtubeSvc := &trackingYouTubeSvc{}
-	alarmSvc := &trackingAlarmAdvanceCRUD{targets: []int{15, 30}}
+	youtubeService := &trackingYouTubeService{}
+	alarmService := &trackingAlarmAdvanceCRUD{targets: []int{15, 30}}
 	scheduler := poller.NewScheduler(poller.SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: time.Millisecond,
@@ -382,12 +382,12 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
 	deps := botConfigSubscriberDependencies{
-		Cache:    cacheSvc,
-		Settings: settingsSvc,
+		Cache:    cache,
+		Settings: settingsService,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
-		YouTubeService: youtubeSvc,
-		AlarmCRUD:      alarmSvc,
+		YouTubeService: youtubeService,
+		AlarmCRUD:      alarmService,
 	}
 	subscriber := appbootstrap.BuildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)
@@ -409,9 +409,9 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 			return false
 		}
 
-		got := settingsSvc.Get()
+		got := settingsService.Get()
 
-		return got.ScraperProxyEnabled && youtubeSvc.isProxyEnabled() && trackingPoller.isEnabled()
+		return got.ScraperProxyEnabled && youtubeService.isProxyEnabled() && trackingPoller.isEnabled()
 	}, 2*time.Second, 50*time.Millisecond)
 
 	require.Eventually(t, func() bool {
@@ -419,12 +419,12 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 			return false
 		}
 
-		calls, last := alarmSvc.callSnapshot()
+		calls, last := alarmService.callSnapshot()
 
-		return calls >= 1 && last == 30 && settingsSvc.Get().AlarmAdvanceMinutes == 30
+		return calls >= 1 && last == 30 && settingsService.Get().AlarmAdvanceMinutes == 30
 	}, 2*time.Second, 50*time.Millisecond)
 
-	assert.GreaterOrEqual(t, settingsSvc.calls(), 2)
+	assert.GreaterOrEqual(t, settingsService.calls(), 2)
 
 	cancel()
 

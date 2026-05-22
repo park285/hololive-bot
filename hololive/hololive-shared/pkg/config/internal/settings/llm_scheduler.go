@@ -45,11 +45,11 @@ type LLMSchedulerConfig struct {
 func LoadLLMScheduler() (*LLMSchedulerConfig, error) {
 	_ = godotenv.Load()
 
-	cfg := buildLLMSchedulerConfig()
-	if err := cfg.validate(); err != nil {
+	config := buildLLMSchedulerConfig()
+	if err := config.validate(); err != nil {
 		return nil, fmt.Errorf("llm scheduler config validation failed: %w", err)
 	}
-	return cfg, nil
+	return config, nil
 }
 
 func buildLLMSchedulerConfig() *LLMSchedulerConfig {

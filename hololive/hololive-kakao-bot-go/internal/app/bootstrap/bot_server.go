@@ -19,54 +19,54 @@ import (
 
 func BuildBotServer(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 	logger *slog.Logger,
 ) (*http.Server, error) {
-	botRouter, err := apphttp.ProvideBotRouter(ctx, cfg, logger, webhookHandler, triggerHandler)
+	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler)
 	if err != nil {
 		return nil, fmt.Errorf("build bot server: provide bot router: %w", err)
 	}
 
-	addr := cfg.Server.H2CAddr
+	addr := appConfig.Server.H2CAddr
 	if addr == "" {
-		addr = fmt.Sprintf(":%d", cfg.Server.Port)
+		addr = fmt.Sprintf(":%d", appConfig.Server.Port)
 	}
 	return sharedserver.NewH2CServer(addr, botRouter, "hololive-bot.http"), nil
 }
 
 func BuildBotHTTP3Server(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 	logger *slog.Logger,
 ) (*http3.Server, error) {
-	botRouter, err := apphttp.ProvideBotRouter(ctx, cfg, logger, webhookHandler, triggerHandler)
+	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler)
 	if err != nil {
 		return nil, fmt.Errorf("build bot h3 server: provide bot router: %w", err)
 	}
 
-	cert, err := tls.LoadX509KeyPair(cfg.Server.H3CertFile, cfg.Server.H3KeyFile)
+	cert, err := tls.LoadX509KeyPair(appConfig.Server.H3CertFile, appConfig.Server.H3KeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("load h3 certificate: %w", err)
 	}
 
-	quicCfg := &quic.Config{
+	quicConfig := &quic.Config{
 		InitialPacketSize: 1200,
 		KeepAlivePeriod:   10 * time.Second,
 		MaxIdleTimeout:    60 * time.Second,
 	}
 
 	return &http3.Server{
-		Addr:    cfg.Server.H3Addr,
+		Addr:    appConfig.Server.H3Addr,
 		Handler: botRouter,
 		TLSConfig: http3.ConfigureTLSConfig(&tls.Config{
 			MinVersion:   tls.VersionTLS13,
 			Certificates: []tls.Certificate{cert},
 		}),
-		QUICConfig:     quicCfg,
+		QUICConfig:     quicConfig,
 		MaxHeaderBytes: http.DefaultMaxHeaderBytes,
 	}, nil
 }

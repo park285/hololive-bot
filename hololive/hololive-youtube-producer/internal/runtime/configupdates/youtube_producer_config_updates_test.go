@@ -75,13 +75,13 @@ func TestApplyScraperProxyToggle_NilDeps(t *testing.T) {
 func TestApplyScraperProxyToggle_EnableDisable(t *testing.T) {
 	t.Parallel()
 
-	svc := &fakeYouTubeService{}
+	service := &fakeYouTubeService{}
 
-	sharedsettings.ApplyScraperProxyToggle(true, svc, nil, nil, testLogger())
-	assert.Equal(t, 1, svc.setCalls)
-	assert.True(t, svc.lastEnabled)
+	sharedsettings.ApplyScraperProxyToggle(true, service, nil, nil, testLogger())
+	assert.Equal(t, 1, service.setCalls)
+	assert.True(t, service.lastEnabled)
 
-	sharedsettings.ApplyScraperProxyToggle(false, svc, nil, nil, testLogger())
-	assert.Equal(t, 2, svc.setCalls)
-	assert.False(t, svc.lastEnabled)
+	sharedsettings.ApplyScraperProxyToggle(false, service, nil, nil, testLogger())
+	assert.Equal(t, 2, service.setCalls)
+	assert.False(t, service.lastEnabled)
 }

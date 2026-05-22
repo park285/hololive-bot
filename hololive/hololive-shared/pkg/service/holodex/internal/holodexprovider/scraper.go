@@ -65,14 +65,14 @@ type officialSchedulePageCache struct {
 }
 
 func NewScraperService(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	membersData domain.MemberDataProvider,
 	youtubeProxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
 ) *ScraperService {
 	return NewScraperServiceWithYouTubeProducer(
-		cacheSvc,
+		cacheClient,
 		membersData,
 		scraper.NewClient(scraper.WithProxy(youtubeProxyConfig), scraper.WithRateLimiter(sharedRL)),
 		logger,
@@ -80,7 +80,7 @@ func NewScraperService(
 }
 
 func NewScraperServiceWithYouTubeProducer(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	membersData domain.MemberDataProvider,
 	youtubeProducer *scraper.Client,
 	logger *slog.Logger,
@@ -100,7 +100,7 @@ func NewScraperServiceWithYouTubeProducer(
 
 	return &ScraperService{
 		httpClient:      httputil.NewExternalAPIClient(constants.OfficialScheduleConfig.Timeout),
-		cache:           cacheSvc,
+		cache:           cacheClient,
 		membersData:     membersData,
 		memberNameMap:   nameMap,
 		logger:          logger,

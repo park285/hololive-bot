@@ -179,10 +179,10 @@ func TestShortsPollerDuplicatePollEnqueuesExactlyOnceWithInlineFallback(t *testi
 	require.EqualValues(t, 1, videoCount)
 }
 
-func newDuplicatePollTestDispatcher(db *gorm.DB, cacheSvc *cachemocks.Client, sender *duplicatePollTestSender) *outbox.Dispatcher {
+func newDuplicatePollTestDispatcher(db *gorm.DB, cache *cachemocks.Client, sender *duplicatePollTestSender) *outbox.Dispatcher {
 	return outbox.NewDispatcher(
 		db,
-		cacheSvc,
+		cache,
 		sender,
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),

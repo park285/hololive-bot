@@ -298,32 +298,32 @@ func TestNormalizeFallbackTTL(t *testing.T) {
 
 func TestService_TryClaimNotification_ClaimKeyCategoryAndSchedulePolicy(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	start := time.Date(2026, 3, 4, 9, 15, 5, 0, time.UTC)
 
-	keyTarget, acquired, err := svc.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
+	keyTarget, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
 	require.NoError(t, err)
 	assert.True(t, acquired)
 	assert.Equal(t, keys.BuildNotifyClaimKey("room1", "vid1", start, "target"), keyTarget)
 
-	keyTargetAgain, acquired, err := svc.TryClaimNotification(t.Context(), "room1", "vid1", start, 3)
+	keyTargetAgain, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 3)
 	require.NoError(t, err)
 	assert.False(t, acquired)
 	assert.Equal(t, keyTarget, keyTargetAgain)
 
-	keySameMinute, acquired, err := svc.TryClaimNotification(t.Context(), "room1", "vid1", start.Add(30*time.Second), 5)
+	keySameMinute, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start.Add(30*time.Second), 5)
 	require.NoError(t, err)
 	assert.False(t, acquired)
 	assert.Equal(t, keyTarget, keySameMinute)
 
-	keyNonTarget, acquired, err := svc.TryClaimNotification(t.Context(), "room1", "vid1", start, 10)
+	keyNonTarget, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 10)
 	require.NoError(t, err)
 	assert.True(t, acquired)
 	assert.Equal(t, keys.BuildNotifyClaimKey("room1", "vid1", start, "10"), keyNonTarget)
 	assert.NotEqual(t, keyTarget, keyNonTarget)
 
-	keyDifferentSchedule, acquired, err := svc.TryClaimNotification(t.Context(), "room1", "vid1", start.Add(time.Minute), 5)
+	keyDifferentSchedule, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start.Add(time.Minute), 5)
 	require.NoError(t, err)
 	assert.True(t, acquired)
 	assert.NotEqual(t, keyTarget, keyDifferentSchedule)
@@ -331,7 +331,7 @@ func TestService_TryClaimNotification_ClaimKeyCategoryAndSchedulePolicy(t *testi
 
 func TestService_TryClaimLogicalEventAndScheduleTransition(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	start := time.Date(2026, 3, 4, 9, 30, 0, 0, time.UTC)
 	stream := &domain.Stream{
@@ -340,22 +340,22 @@ func TestService_TryClaimLogicalEventAndScheduleTransition(t *testing.T) {
 		StartScheduled: &start,
 	}
 
-	logicalKey, acquired, err := svc.TryClaimLogicalEvent(t.Context(), "room1", "UC_TEST", stream, 5)
+	logicalKey, acquired, err := service.TryClaimLogicalEvent(t.Context(), "room1", "UC_TEST", stream, 5)
 	require.NoError(t, err)
 	assert.True(t, acquired)
 	assert.Equal(t, keys.BuildLogicalEventClaimKey("room1", "UC_TEST", stream.ID, stream.Title, start, "target"), logicalKey)
 
-	logicalKeyAgain, acquired, err := svc.TryClaimLogicalEvent(t.Context(), "room1", "UC_TEST", stream, 3)
+	logicalKeyAgain, acquired, err := service.TryClaimLogicalEvent(t.Context(), "room1", "UC_TEST", stream, 3)
 	require.NoError(t, err)
 	assert.False(t, acquired)
 	assert.Equal(t, logicalKey, logicalKeyAgain)
 
-	transitionKey, acquired, err := svc.TryClaimScheduleTransition(t.Context(), stream.ID, start, start.Add(30*time.Minute))
+	transitionKey, acquired, err := service.TryClaimScheduleTransition(t.Context(), stream.ID, start, start.Add(30*time.Minute))
 	require.NoError(t, err)
 	assert.True(t, acquired)
 	assert.Equal(t, keys.BuildScheduleTransitionKey(stream.ID, start, start.Add(30*time.Minute)), transitionKey)
 
-	transitionKeyAgain, acquired, err := svc.TryClaimScheduleTransition(t.Context(), stream.ID, start, start.Add(30*time.Minute))
+	transitionKeyAgain, acquired, err := service.TryClaimScheduleTransition(t.Context(), stream.ID, start, start.Add(30*time.Minute))
 	require.NoError(t, err)
 	assert.False(t, acquired)
 	assert.Equal(t, transitionKey, transitionKeyAgain)
@@ -363,35 +363,35 @@ func TestService_TryClaimLogicalEventAndScheduleTransition(t *testing.T) {
 
 func TestService_DetectScheduleChange(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	streamID := "stream-schedule-change"
 	start := time.Date(2026, 3, 4, 9, 30, 45, 0, time.UTC)
 	delayed := time.Date(2026, 3, 4, 9, 45, 12, 0, time.UTC)
 	early := time.Date(2026, 3, 4, 9, 15, 33, 0, time.UTC)
 
-	require.NoError(t, svc.MarkAsNotified(t.Context(), streamID, start, 5))
+	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 5))
 
-	message, err := svc.DetectScheduleChange(t.Context(), streamID, delayed)
+	message, err := service.DetectScheduleChange(t.Context(), streamID, delayed)
 	require.NoError(t, err)
 	assert.Equal(t, "일정이 늦춰졌습니다.", message)
 
-	message, err = svc.DetectScheduleChange(t.Context(), streamID, delayed)
+	message, err = service.DetectScheduleChange(t.Context(), streamID, delayed)
 	require.NoError(t, err)
 	assert.Equal(t, "일정이 늦춰졌습니다.", message, "감지는 claim 없이 반복 가능해야 발행 실패 후 재시도할 수 있음")
 
-	message, err = svc.DetectScheduleChange(t.Context(), streamID, early)
+	message, err = service.DetectScheduleChange(t.Context(), streamID, early)
 	require.NoError(t, err)
 	assert.Equal(t, "일정이 앞당겨졌습니다.", message)
 
-	message, err = svc.DetectScheduleChange(t.Context(), streamID, start.Add(10*time.Second))
+	message, err = service.DetectScheduleChange(t.Context(), streamID, start.Add(10*time.Second))
 	require.NoError(t, err)
 	assert.Empty(t, message, "분 단위가 같으면 변경으로 보지 않음")
 }
 
 func TestService_DetectNotificationScheduleChange_LogicalWaitingRoomReplacement(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	previousScheduled := time.Date(2026, 3, 4, 9, 30, 0, 0, time.UTC)
 	currentScheduled := time.Date(2026, 3, 4, 9, 45, 0, 0, time.UTC)
@@ -406,22 +406,22 @@ func TestService_DetectNotificationScheduleChange_LogicalWaitingRoomReplacement(
 		StartScheduled: &currentScheduled,
 	}
 
-	require.NoError(t, svc.MarkUpcomingEventNotified(t.Context(), "room-1", "UC_TEST", previousStream))
+	require.NoError(t, service.MarkUpcomingEventNotified(t.Context(), "room-1", "UC_TEST", previousStream))
 
-	change, err := svc.DetectNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", currentStream)
+	change, err := service.DetectNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", currentStream)
 	require.NoError(t, err)
 	require.NotNil(t, change)
 	assert.Equal(t, "일정이 늦춰졌습니다.", change.Message)
 	assert.Equal(t, keys.FormatScheduled(previousScheduled), change.PreviousScheduledString())
 
-	change, err = svc.DetectNotificationScheduleChange(t.Context(), "room-2", "UC_TEST", currentStream)
+	change, err = service.DetectNotificationScheduleChange(t.Context(), "room-2", "UC_TEST", currentStream)
 	require.NoError(t, err)
 	assert.Nil(t, change, "이전 알림을 받지 않은 방에는 교체 지연을 만들지 않음")
 }
 
 func TestService_TryClaimNotificationScheduleChange_PerRoomDedup(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	start := time.Date(2026, 3, 4, 9, 30, 0, 0, time.UTC)
 	delayed := time.Date(2026, 3, 4, 9, 45, 0, 0, time.UTC)
@@ -431,78 +431,78 @@ func TestService_TryClaimNotificationScheduleChange_PerRoomDedup(t *testing.T) {
 		StartScheduled: &delayed,
 	}
 
-	claimKeys, claimed, err := svc.TryClaimNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", stream, keys.FormatScheduled(start))
+	claimKeys, claimed, err := service.TryClaimNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", stream, keys.FormatScheduled(start))
 	require.NoError(t, err)
 	assert.True(t, claimed)
 	assert.Len(t, claimKeys, 2)
 
-	_, claimed, err = svc.TryClaimNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", stream, keys.FormatScheduled(start))
+	_, claimed, err = service.TryClaimNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", stream, keys.FormatScheduled(start))
 	require.NoError(t, err)
 	assert.False(t, claimed)
 
-	_, claimed, err = svc.TryClaimNotificationScheduleChange(t.Context(), "room-2", "UC_TEST", stream, keys.FormatScheduled(start))
+	_, claimed, err = service.TryClaimNotificationScheduleChange(t.Context(), "room-2", "UC_TEST", stream, keys.FormatScheduled(start))
 	require.NoError(t, err)
 	assert.True(t, claimed, "다른 방에는 같은 지연 전환을 독립적으로 보낼 수 있어야 함")
 }
 
 func TestService_MarkAsNotified_TargetMinutePolicyAndScheduleReset(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	streamID := "vid-notified"
 	start := time.Date(2026, 3, 4, 10, 0, 12, 0, time.UTC)
 
-	require.NoError(t, svc.MarkAsNotified(t.Context(), streamID, start, 5))
+	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 5))
 
-	already, err := svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
+	already, err := service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
 	require.NoError(t, err)
 	assert.True(t, already, "target 분은 같은 스케줄에서 1회만 허용")
 
-	already, err = svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 10)
+	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 10)
 	require.NoError(t, err)
 	assert.False(t, already, "non-target 분은 개별 분 기준")
 
-	require.NoError(t, svc.MarkAsNotified(t.Context(), streamID, start, 10))
-	already, err = svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 10)
+	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 10))
+	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 10)
 	require.NoError(t, err)
 	assert.True(t, already)
 
-	anyNotified, err := svc.IsAlreadyNotified(t.Context(), streamID)
+	anyNotified, err := service.IsAlreadyNotified(t.Context(), streamID)
 	require.NoError(t, err)
 	assert.True(t, anyNotified)
 
 	changed := start.Add(2 * time.Hour)
-	already, err = svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, changed, 5)
+	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, changed, 5)
 	require.NoError(t, err)
 	assert.False(t, already, "스케줄이 바뀌면 이전 이력은 무시")
 
-	require.NoError(t, svc.MarkAsNotified(t.Context(), streamID, changed, 5))
+	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, changed, 5))
 
-	already, err = svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
+	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
 	require.NoError(t, err)
 	assert.False(t, already, "새 스케줄 기록 후 기존 스케줄은 차단되지 않아야 함")
 
-	already, err = svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, changed, 5)
+	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, changed, 5)
 	require.NoError(t, err)
 	assert.True(t, already)
 }
 
 func TestService_UpdateTargetMinutes_AffectsTargetPolicy(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	streamID := "vid-dynamic-targets"
 	start := time.Date(2026, 3, 4, 10, 0, 0, 0, time.UTC)
 
-	require.NoError(t, svc.MarkAsNotified(t.Context(), streamID, start, 10))
+	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 10))
 
-	already, err := svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
+	already, err := service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
 	require.NoError(t, err)
 	assert.False(t, already, "10분은 아직 target이 아니라서 3분을 막으면 안 됨")
 
-	svc.UpdateTargetMinutes([]int{10, 3, 1})
+	service.UpdateTargetMinutes([]int{10, 3, 1})
 
-	already, err = svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
+	already, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
 	require.NoError(t, err)
 	assert.True(t, already, "10분이 target으로 승격되면 같은 스케줄의 3분 target은 차단돼야 함")
 }
@@ -516,9 +516,9 @@ func TestIsAlreadyNotified_PropagatesCacheError(t *testing.T) {
 		return nil, cacheErr
 	}
 
-	svc := NewService(mockCache, []int{5, 3, 1}, newTestLogger())
+	service := NewService(mockCache, []int{5, 3, 1}, newTestLogger())
 
-	_, err := svc.IsAlreadyNotified(t.Context(), "stream-error-test")
+	_, err := service.IsAlreadyNotified(t.Context(), "stream-error-test")
 	if err == nil {
 		t.Fatal("expected error from IsAlreadyNotified when cache fails, got nil")
 	}
@@ -526,19 +526,19 @@ func TestIsAlreadyNotified_PropagatesCacheError(t *testing.T) {
 
 func TestService_RecentlyNotifiedStreamIDs(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	start := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
-	require.NoError(t, svc.MarkAsNotified(t.Context(), "stream-1", start, 5))
+	require.NoError(t, service.MarkAsNotified(t.Context(), "stream-1", start, 5))
 
-	recent, err := svc.RecentlyNotifiedStreamIDs(t.Context(), []string{"stream-1", "stream-2", "stream-1", ""})
+	recent, err := service.RecentlyNotifiedStreamIDs(t.Context(), []string{"stream-1", "stream-2", "stream-1", ""})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]struct{}{"stream-1": {}}, recent)
 }
 
 func TestService_LegacyStringNotifiedData_MigratesToHash(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	streamID := "vid-legacy"
 	start := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
@@ -551,7 +551,7 @@ func TestService_LegacyStringNotifiedData_MigratesToHash(t *testing.T) {
 	require.NoError(t, err)
 	state.setRawString(key, string(legacyJSON))
 
-	already, err := svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
+	already, err := service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
 	require.NoError(t, err)
 	assert.True(t, already)
 
@@ -565,7 +565,7 @@ func TestService_LegacyStringNotifiedData_MigratesToHash(t *testing.T) {
 	assert.Equal(t, keys.FormatScheduled(start), hashFields["start_scheduled"])
 	assert.Equal(t, "1", hashFields["5"])
 
-	require.NoError(t, svc.MarkAsNotified(t.Context(), streamID, start, 3))
+	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 3))
 
 	state.mu.Lock()
 	hashFields = maps.Clone(state.hashes[key])
@@ -577,7 +577,7 @@ func TestService_LegacyStringNotifiedData_MigratesToHash(t *testing.T) {
 
 func TestService_UpcomingEventRecentlyWindow(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	start := time.Date(2026, 3, 4, 11, 0, 0, 0, time.UTC)
 	stream := &domain.Stream{
@@ -586,9 +586,9 @@ func TestService_UpcomingEventRecentlyWindow(t *testing.T) {
 		StartScheduled: &start,
 	}
 
-	require.NoError(t, svc.MarkUpcomingEventNotified(t.Context(), "room1", "UC_TEST", stream))
+	require.NoError(t, service.MarkUpcomingEventNotified(t.Context(), "room1", "UC_TEST", stream))
 
-	recent, err := svc.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
+	recent, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
 	require.NoError(t, err)
 	assert.True(t, recent)
 
@@ -600,14 +600,14 @@ func TestService_UpcomingEventRecentlyWindow(t *testing.T) {
 	require.NoError(t, err)
 	state.setRawString(key, string(staleJSON))
 
-	recent, err = svc.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
+	recent, err = service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
 	require.NoError(t, err)
 	assert.False(t, recent)
 }
 
 func TestService_WasUpcomingEventNotifiedRecently_InvalidPayloadReturnsError(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	start := time.Date(2026, 3, 4, 11, 0, 0, 0, time.UTC)
 	stream := &domain.Stream{
@@ -618,7 +618,7 @@ func TestService_WasUpcomingEventNotifiedRecently_InvalidPayloadReturnsError(t *
 	key := keys.BuildUpcomingEventKey("room1", "UC_TEST", stream.ID, stream.Title, start)
 	state.setRawString(key, "{invalid-json")
 
-	_, err := svc.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
+	_, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "was upcoming event notified recently: get cache data")
 }
@@ -632,21 +632,21 @@ func TestService_TryClaimNotification_FallbackClaimOnSetNXFailure(t *testing.T) 
 			return int64(len(keys)), nil
 		},
 	}
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	start := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
 
-	key, acquired, err := svc.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
+	key, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
 	require.NoError(t, err)
 	assert.True(t, acquired)
 
-	_, acquired, err = svc.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
+	_, acquired, err = service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
 	require.NoError(t, err)
 	assert.False(t, acquired, "SETNX 실패 시에도 로컬 폴백으로 중복 차단돼야 함")
 
-	require.NoError(t, svc.ReleaseClaims(t.Context(), []string{key}))
+	require.NoError(t, service.ReleaseClaims(t.Context(), []string{key}))
 
-	_, acquired, err = svc.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
+	_, acquired, err = service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
 	require.NoError(t, err)
 	assert.True(t, acquired, "release 후에는 재 claim 가능해야 함")
 }
@@ -658,34 +658,34 @@ func TestService_ReleaseClaims_WrapsDelManyError(t *testing.T) {
 			return 0, expectedErr
 		},
 	}
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
-	err := svc.ReleaseClaims(t.Context(), []string{"claim:key"})
+	err := service.ReleaseClaims(t.Context(), []string{"claim:key"})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "release claims: del many keys")
 	assert.ErrorIs(t, err, expectedErr)
 }
 
 func TestService_TryClaimNotification_ZeroTime(t *testing.T) {
-	svc := NewService(nil, []int{5, 3, 1}, newTestLogger())
-	key, acquired, err := svc.TryClaimNotification(t.Context(), "room1", "vid1", time.Time{}, 5)
+	service := NewService(nil, []int{5, 3, 1}, newTestLogger())
+	key, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", time.Time{}, 5)
 	require.NoError(t, err)
 	assert.Empty(t, key)
 	assert.False(t, acquired)
 }
 
 func TestService_TryClaimLogicalEvent_NilSchedule(t *testing.T) {
-	svc := NewService(nil, []int{5, 3, 1}, newTestLogger())
+	service := NewService(nil, []int{5, 3, 1}, newTestLogger())
 	stream := &domain.Stream{ID: "vid1", Title: "test"}
-	key, acquired, err := svc.TryClaimLogicalEvent(t.Context(), "room1", "UC_A", stream, 5)
+	key, acquired, err := service.TryClaimLogicalEvent(t.Context(), "room1", "UC_A", stream, 5)
 	require.NoError(t, err)
 	assert.Empty(t, key)
 	assert.False(t, acquired)
 }
 
 func TestService_TryClaimLogicalEvent_NilStream(t *testing.T) {
-	svc := NewService(nil, []int{5, 3, 1}, newTestLogger())
-	key, acquired, err := svc.TryClaimLogicalEvent(t.Context(), "room1", "UC_A", nil, 5)
+	service := NewService(nil, []int{5, 3, 1}, newTestLogger())
+	key, acquired, err := service.TryClaimLogicalEvent(t.Context(), "room1", "UC_A", nil, 5)
 	require.NoError(t, err)
 	assert.Empty(t, key)
 	assert.False(t, acquired)
@@ -693,7 +693,7 @@ func TestService_TryClaimLogicalEvent_NilStream(t *testing.T) {
 
 func TestService_ReadNotifiedData_LegacyJSONMigrated(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
-	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	key := keys.NotifiedKey("legacy-stream")
 	legacy := NotifiedData{
@@ -706,7 +706,7 @@ func TestService_ReadNotifiedData_LegacyJSONMigrated(t *testing.T) {
 	require.NoError(t, err)
 	state.setRawString(key, string(legacyJSON))
 
-	notified, err := svc.IsAlreadyNotifiedForSchedule(
+	notified, err := service.IsAlreadyNotifiedForSchedule(
 		t.Context(),
 		"legacy-stream",
 		time.Date(2026, 3, 4, 10, 0, 1, 0, time.UTC),

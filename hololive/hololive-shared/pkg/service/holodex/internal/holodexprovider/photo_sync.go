@@ -29,11 +29,12 @@ import (
 	"github.com/kapu/hololive-shared/internal/ctxutil"
 	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 )
 
 type PhotoSyncService struct {
 	holodex    *Service
-	memberRepo *member.Repository
+	memberRepository *member.Repository
 	logger     *slog.Logger
 
 	syncInterval   time.Duration // 동기화 주기 (기본: 24시간)
@@ -42,12 +43,12 @@ type PhotoSyncService struct {
 
 func NewPhotoSyncService(
 	holodex *Service,
-	memberRepo *member.Repository,
+	memberRepository *member.Repository,
 	logger *slog.Logger,
 ) *PhotoSyncService {
 	return &PhotoSyncService{
 		holodex:        holodex,
-		memberRepo:     memberRepo,
+		memberRepository:     memberRepository,
 		logger:         logger.With(slog.String("service", "photo_sync")),
 		syncInterval:   7 * 24 * time.Hour, // 7일마다 동기화 (프로필은 자주 변하지 않음)
 		staleThreshold: 7 * 24 * time.Hour, // 7일 이상 된 photo는 재동기화
@@ -79,24 +80,11 @@ func (ps *PhotoSyncService) waitBeforeInitialSync(ctx context.Context) bool {
 }
 
 func (ps *PhotoSyncService) runPeriodicSync(ctx context.Context) {
-	ticker := time.NewTicker(ps.syncInterval)
-	defer ticker.Stop()
-
-	for {
-		if !ps.waitForNextPeriodicSync(ctx, ticker) {
-			return
-		}
+	if err := loop.RunTickerLoop(ctx, ps.syncInterval, func(ctx context.Context) error {
 		ps.syncWithRetry(ctx, 3)
-	}
-}
-
-func (ps *PhotoSyncService) waitForNextPeriodicSync(ctx context.Context, ticker *time.Ticker) bool {
-	select {
-	case <-ctx.Done():
+		return nil
+	}); err != nil && ctx.Err() != nil {
 		ps.logger.Info("Photo sync service stopped")
-		return false
-	case <-ticker.C:
-		return true
 	}
 }
 
@@ -162,9 +150,9 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 
 func (ps *PhotoSyncService) photoSyncChannelIDs(ctx context.Context, forceAll bool) ([]string, error) {
 	if forceAll {
-		return ps.memberRepo.GetAllChannelIDs(ctx)
+		return ps.memberRepository.GetAllChannelIDs(ctx)
 	}
-	return ps.memberRepo.GetMembersNeedingPhotoSync(ctx, ps.staleThreshold)
+	return ps.memberRepository.GetMembersNeedingPhotoSync(ctx, ps.staleThreshold)
 }
 
 func (ps *PhotoSyncService) fetchPhotoMap(ctx context.Context) (map[string]string, error) {
@@ -192,7 +180,7 @@ func (ps *PhotoSyncService) updateMemberPhotos(ctx context.Context, channelIDs [
 			continue
 		}
 
-		if err := ps.memberRepo.UpdatePhoto(ctx, channelID, photo); err != nil {
+		if err := ps.memberRepository.UpdatePhoto(ctx, channelID, photo); err != nil {
 			ps.logger.Warn("Failed to update photo",
 				slog.String("channel_id", channelID),
 				slog.Any("error", err),

@@ -33,7 +33,7 @@ import (
 type VideosPoller struct {
 	client     *scraper.Client
 	db         *gorm.DB
-	repo       batchRepository
+	repository       batchRepository
 	maxResults int
 }
 
@@ -44,7 +44,7 @@ func NewVideosPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int)
 	return &VideosPoller{
 		client:     scraperClient,
 		db:         db,
-		repo:       newBatchRepository(db),
+		repository:       newBatchRepository(db),
 		maxResults: maxResults,
 	}
 }
@@ -160,7 +160,7 @@ func (p *VideosPoller) persistVideoPollResults(
 	dbVideos []*domain.YouTubeVideo,
 	notifications []*domain.YouTubeNotificationOutbox,
 ) error {
-	return p.repo.PersistVideos(ctx, dbVideos, notifications, nil, &domain.YouTubeContentWatermark{
+	return p.repository.PersistVideos(ctx, dbVideos, notifications, nil, &domain.YouTubeContentWatermark{
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeVideo,
 		Initialized:   true,

@@ -68,23 +68,23 @@ type SummarizerConsensusConfig struct {
 
 type SummarizerOption func(*EventSummarizer)
 
-func WithSummarizerConsensus(reviewer, adjudicator LLMClient, cfg SummarizerConsensusConfig) SummarizerOption {
+func WithSummarizerConsensus(reviewer, adjudicator LLMClient, config SummarizerConsensusConfig) SummarizerOption {
 	return func(s *EventSummarizer) {
 		s.reviewer = reviewer
 		s.adjudicator = adjudicator
-		s.consensus = normalizeConsensusConfig(cfg)
+		s.consensus = normalizeConsensusConfig(config)
 	}
 }
 
-func normalizeConsensusConfig(cfg SummarizerConsensusConfig) SummarizerConsensusConfig {
+func normalizeConsensusConfig(config SummarizerConsensusConfig) SummarizerConsensusConfig {
 	// ConfidenceThreshold는 config 레이어(clampConfidence)에서 이미 보장됨
-	if cfg.ReviewTimeout < 5*time.Second {
-		cfg.ReviewTimeout = 30 * time.Second
+	if config.ReviewTimeout < 5*time.Second {
+		config.ReviewTimeout = 30 * time.Second
 	}
-	if cfg.AdjudicateTimeout < 5*time.Second {
-		cfg.AdjudicateTimeout = 45 * time.Second
+	if config.AdjudicateTimeout < 5*time.Second {
+		config.AdjudicateTimeout = 45 * time.Second
 	}
-	return cfg
+	return config
 }
 
 // llm이 nil이면 Summarize()는 항상 빈 문자열을 반환합니다.

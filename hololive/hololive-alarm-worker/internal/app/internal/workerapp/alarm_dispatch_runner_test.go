@@ -17,6 +17,8 @@ var errAlarmDispatchRunnerTestSend = errors.New("send failed")
 
 type alarmDispatchRunnerTestConsumer struct {
 	batches           [][]domain.AlarmQueueEnvelope
+	drainErr          error
+	onDrain           func()
 	markSending       []domain.AlarmQueueEnvelope
 	markDispatched    []domain.AlarmQueueEnvelope
 	quarantined       []domain.AlarmQueueEnvelope
@@ -32,6 +34,12 @@ type alarmDispatchRunnerTestConsumer struct {
 }
 
 func (c *alarmDispatchRunnerTestConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
+	if c.onDrain != nil {
+		c.onDrain()
+	}
+	if c.drainErr != nil {
+		return nil, c.drainErr
+	}
 	if len(c.batches) == 0 {
 		return nil, nil
 	}
@@ -652,6 +660,49 @@ func TestAlarmDispatchRunnerYieldsAfterMaxBatchesPerWake(t *testing.T) {
 	assert.Zero(t, yieldCount)
 	assert.True(t, runner.runStep(t.Context()))
 	assert.Equal(t, 1, yieldCount)
+}
+
+func TestAlarmDispatchRunnerStartProcessesBatchesUntilIdleWaitStops(t *testing.T) {
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{
+		{alarmDispatchRunnerTestEnvelope("room-1", nil)},
+		{alarmDispatchRunnerTestEnvelope("room-2", nil)},
+	}}
+	waiter := &alarmDispatchRunnerTestIdleWaiter{returnValue: false}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := &alarmDispatchRunner{
+		consumer:   consumer,
+		sender:     sender,
+		maxBatch:   10,
+		idleWaiter: waiter,
+	}
+
+	err := runner.Start(t.Context())
+
+	require.NoError(t, err)
+	require.Len(t, consumer.markDispatched, 2)
+	assert.Equal(t, []string{"room-1", "room-2"}, []string{consumer.markDispatched[0].Notification.RoomID, consumer.markDispatched[1].Notification.RoomID})
+	assert.Len(t, sender.messages, 2)
+	assert.Equal(t, 2, waiter.resets)
+	assert.Equal(t, 1, waiter.waits)
+	assert.Zero(t, runner.batchesSinceWake)
+}
+
+func TestAlarmDispatchRunnerRunStepStopsWhenDrainErrorArrivesAfterCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	consumer := &alarmDispatchRunnerTestConsumer{
+		drainErr: errors.New("drain failed"),
+		onDrain:  cancel,
+	}
+	runner := alarmDispatchRunner{
+		consumer: consumer,
+		sender:   &alarmDispatchRunnerTestSender{},
+		maxBatch: 10,
+	}
+
+	keepGoing := runner.runStep(ctx)
+
+	assert.False(t, keepGoing)
+	assert.Empty(t, consumer.markDispatched)
 }
 
 func TestGroupAlarmDispatchEnvelopesSeparatesScheduledMinuteBuckets(t *testing.T) {

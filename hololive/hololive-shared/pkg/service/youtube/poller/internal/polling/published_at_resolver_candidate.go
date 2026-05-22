@@ -14,7 +14,7 @@ import (
 
 func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 	ctx context.Context,
-	repo *publishedAtResolverRepository,
+	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	runDeadline time.Time,
@@ -42,7 +42,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 
 	result, completed, err := r.processClaimedPendingPublishedAtCandidate(
 		ctx,
-		repo,
+		repository,
 		tracking,
 		candidate,
 		resolveTimeout,
@@ -57,7 +57,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 
 func (r *PendingPublishedAtResolver) processClaimedPendingPublishedAtCandidate(
 	ctx context.Context,
-	repo *publishedAtResolverRepository,
+	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	resolveTimeout time.Duration,
@@ -85,7 +85,7 @@ func (r *PendingPublishedAtResolver) processClaimedPendingPublishedAtCandidate(
 	}
 	observePublishedAtResolutionSuccess(candidate.Kind)
 
-	finalizeResult, err := repo.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, *publishedAt, r.routeDecider)
+	finalizeResult, err := repository.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, *publishedAt, r.routeDecider)
 	if err != nil {
 		r.handlePendingPublishedAtFinalizeError(ctx, tracking, candidate, err, failureBackoffTTL)
 		return result, false, nil

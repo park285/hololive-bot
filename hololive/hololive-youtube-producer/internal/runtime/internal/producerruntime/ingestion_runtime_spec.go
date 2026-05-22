@@ -20,8 +20,8 @@ type ingestionRuntimeSpec struct {
 	features          ingestionRuntimeFeatures
 }
 
-func youtubeProducerSpec(cfg *config.Config) ingestionRuntimeSpec {
-	requested := requestedFeatures(cfg)
+func youtubeProducerSpec(appConfig *config.Config) ingestionRuntimeSpec {
+	requested := requestedFeatures(appConfig)
 
 	return ingestionRuntimeSpec{
 		name:              youtubeProducerRuntimeName,
@@ -36,17 +36,17 @@ func youtubeProducerSpec(cfg *config.Config) ingestionRuntimeSpec {
 	}
 }
 
-func requestedFeatures(cfg *config.Config) ingestionRuntimeFeatures {
-	if cfg == nil {
+func requestedFeatures(appConfig *config.Config) ingestionRuntimeFeatures {
+	if appConfig == nil {
 		return ingestionRuntimeFeatures{}
 	}
 
 	return ingestionRuntimeFeatures{
-		youtubeEnabled:                cfg.Ingestion.YouTubeEnabled,
-		photoSyncEnabled:              cfg.Ingestion.PhotoSyncEnabled,
-		communityShortsBigBangEnabled: cfg.Ingestion.CommunityShortsBigBangEnabled,
-		activeActiveEnabled:           cfg.Scraper.ActiveActive.Enabled,
-		activeActiveInstanceID:        cfg.Scraper.ActiveActive.InstanceID,
+		youtubeEnabled:                appConfig.Ingestion.YouTubeEnabled,
+		photoSyncEnabled:              appConfig.Ingestion.PhotoSyncEnabled,
+		communityShortsBigBangEnabled: appConfig.Ingestion.CommunityShortsBigBangEnabled,
+		activeActiveEnabled:           appConfig.Scraper.ActiveActive.Enabled,
+		activeActiveInstanceID:        appConfig.Scraper.ActiveActive.InstanceID,
 	}
 }
 

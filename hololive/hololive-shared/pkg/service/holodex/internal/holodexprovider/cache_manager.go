@@ -38,9 +38,9 @@ type CacheManager struct {
 	logger *slog.Logger
 }
 
-func NewCacheManager(cacheSvc cache.Client, logger *slog.Logger) *CacheManager {
+func NewCacheManager(cacheClient cache.Client, logger *slog.Logger) *CacheManager {
 	return &CacheManager{
-		cache:  cacheSvc,
+		cache:  cacheClient,
 		logger: logger,
 	}
 }

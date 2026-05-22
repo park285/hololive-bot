@@ -71,7 +71,7 @@ func (d *Dispatcher) markFailed(ctx context.Context, id int64, errMsg string) {
 	}
 
 	newAttemptCount := item.AttemptCount + 1
-	if newAttemptCount >= d.cfg.MaxRetries {
+	if newAttemptCount >= d.config.MaxRetries {
 		d.markFailedPermanently(ctx, id, newAttemptCount, errMsg)
 		return
 	}
@@ -99,7 +99,7 @@ func (d *Dispatcher) markFailedPermanently(ctx context.Context, id int64, attemp
 }
 
 func (d *Dispatcher) scheduleFailedRetry(ctx context.Context, id int64, attemptCount int, errMsg string) {
-	nextAttempt := time.Now().Add(d.cfg.RetryBackoff * time.Duration(attemptCount))
+	nextAttempt := time.Now().Add(d.config.RetryBackoff * time.Duration(attemptCount))
 	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
 		Where("id = ?", id).
 		Updates(map[string]any{

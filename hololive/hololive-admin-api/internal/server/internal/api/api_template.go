@@ -62,7 +62,7 @@ type templateRevisionsResponse struct {
 	Revisions   []*domain.NotificationTemplateRevision `json:"revisions"`
 }
 
-func (h *TemplateAPIHandler) GetTemplates(c *gin.Context) {
+func (h *TemplateHandler) GetTemplates(c *gin.Context) {
 	if !h.requireTemplateAdmin(c) {
 		return
 	}
@@ -93,7 +93,7 @@ func (h *TemplateAPIHandler) GetTemplates(c *gin.Context) {
 	c.JSON(200, templateListResponse{Templates: templates})
 }
 
-func (h *TemplateAPIHandler) GetTemplateByKey(c *gin.Context) {
+func (h *TemplateHandler) GetTemplateByKey(c *gin.Context) {
 	if !h.requireTemplateAdmin(c) {
 		return
 	}
@@ -123,7 +123,7 @@ func (h *TemplateAPIHandler) GetTemplateByKey(c *gin.Context) {
 	})
 }
 
-func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
+func (h *TemplateHandler) UpsertTemplate(c *gin.Context) {
 	var req templateUpsertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
@@ -156,12 +156,12 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 	c.JSON(200, tmpl)
 }
 
-func (h *TemplateAPIHandler) respondTemplateSaveError(c *gin.Context, key domain.TemplateKey, err error) {
+func (h *TemplateHandler) respondTemplateSaveError(c *gin.Context, key domain.TemplateKey, err error) {
 	h.safeLogger().Warn("Failed to save template", slog.String("key", string(key)), slog.Any("error", err))
 	respondTemplateMutationError(c, err, "failed to save template")
 }
 
-func (h *TemplateAPIHandler) DeleteTemplateOverride(c *gin.Context) {
+func (h *TemplateHandler) DeleteTemplateOverride(c *gin.Context) {
 	if !h.requireTemplateAdmin(c) {
 		return
 	}
@@ -187,7 +187,7 @@ func (h *TemplateAPIHandler) DeleteTemplateOverride(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "override deleted; default template is now active"})
 }
 
-func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
+func (h *TemplateHandler) PreviewTemplate(c *gin.Context) {
 	var req templatePreviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
@@ -217,7 +217,7 @@ func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 	})
 }
 
-func (h *TemplateAPIHandler) respondTemplatePreviewError(c *gin.Context, key domain.TemplateKey, err error) {
+func (h *TemplateHandler) respondTemplatePreviewError(c *gin.Context, key domain.TemplateKey, err error) {
 	h.safeLogger().Warn("Failed to preview template", slog.String("key", string(key)), slog.Any("error", err))
 	respondTemplateMutationError(c, err, "failed to preview template")
 }
@@ -235,7 +235,7 @@ func respondTemplateMutationError(c *gin.Context, err error, defaultMessage stri
 	}
 }
 
-func (h *TemplateAPIHandler) GetTemplateRevisions(c *gin.Context) {
+func (h *TemplateHandler) GetTemplateRevisions(c *gin.Context) {
 	if !h.requireTemplateAdmin(c) {
 		return
 	}
@@ -264,7 +264,7 @@ func (h *TemplateAPIHandler) GetTemplateRevisions(c *gin.Context) {
 	})
 }
 
-func (h *TemplateAPIHandler) GetTemplateRevision(c *gin.Context) {
+func (h *TemplateHandler) GetTemplateRevision(c *gin.Context) {
 	if !h.requireTemplateAdmin(c) {
 		return
 	}

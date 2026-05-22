@@ -62,10 +62,10 @@ func containsWildcard(origins []string) bool {
 	return false
 }
 
-func newAPICORSConfig(cfg *config.Config, enforce bool) cors.Config {
+func newAPICORSConfig(appConfig *config.Config, enforce bool) cors.Config {
 	corsConfig := cors.DefaultConfig()
 
-	origins := normalizedOrigins(cfg.CORS.AllowedOrigins)
+	origins := normalizedOrigins(appConfig.CORS.AllowedOrigins)
 	if !enforce {
 		// 모니터 모드에서는 guard가 차단하지 않으므로 CORS middleware도
 		// 요청 Origin을 반사하도록 둔다. enforce=true에서는 아래에서 명시 origin만 허용한다.

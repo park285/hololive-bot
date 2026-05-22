@@ -115,15 +115,15 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cacheSvc, mini := newDispatcherTestCache(t)
+	cache, mini := newDispatcherTestCache(t)
 	defer mini.Close()
 	defer func() {
-		if err := cacheSvc.Close(); err != nil {
+		if err := cache.Close(); err != nil {
 			t.Fatalf("close cache service: %v", err)
 		}
 	}()
 
-	dispatcher := NewDispatcher(nil, cacheSvc, &testSender{
+	dispatcher := NewDispatcher(nil, cache, &testSender{
 		failRoom: map[string]bool{"room-fail": true},
 	}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		DeliveryParallelism: 1,

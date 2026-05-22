@@ -48,13 +48,13 @@ type AdminAPIConfig struct {
 func LoadAdminAPI() (*AdminAPIConfig, error) {
 	_ = godotenv.Load()
 
-	cfg := buildAdminAPIConfig()
+	config := buildAdminAPIConfig()
 
-	if err := cfg.validate(); err != nil {
+	if err := config.validate(); err != nil {
 		return nil, fmt.Errorf("admin api config validation failed: %w", err)
 	}
 
-	return cfg, nil
+	return config, nil
 }
 
 func buildAdminAPIConfig() *AdminAPIConfig {

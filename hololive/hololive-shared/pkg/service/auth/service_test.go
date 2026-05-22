@@ -133,7 +133,7 @@ func newTestCacheWithMini(t *testing.T) (*cache.Service, *miniredis.Miniredis, f
 		t.Fatalf("failed to parse port: %v", err)
 	}
 
-	cacheSvc, err := cache.NewCacheService(context.Background(), cache.Config{
+	cacheClient, err := cache.NewCacheService(context.Background(), cache.Config{
 		Host:              host,
 		Port:              port,
 		DisableCache:      true,
@@ -145,18 +145,18 @@ func newTestCacheWithMini(t *testing.T) (*cache.Service, *miniredis.Miniredis, f
 	}
 
 	cleanup := func() {
-		_ = cacheSvc.Close()
+		_ = cacheClient.Close()
 		mr.Close()
 	}
 
-	return cacheSvc, mr, cleanup
+	return cacheClient, mr, cleanup
 }
 
 func newTestCache(t *testing.T) (*cache.Service, func()) {
 	t.Helper()
 
-	cacheSvc, _, cleanup := newTestCacheWithMini(t)
-	return cacheSvc, cleanup
+	cacheClient, _, cleanup := newTestCacheWithMini(t)
+	return cacheClient, cleanup
 }
 
 func assertAuthCode(t *testing.T, err error, want ErrorCode) {
@@ -173,17 +173,17 @@ func assertAuthCode(t *testing.T, err error, want ErrorCode) {
 
 func TestRegister_DuplicateEmail(t *testing.T) {
 	db := newTestDB(t)
-	svc, err := NewService(context.Background(), db, nil, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), db, nil, newTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "USER@example.com", "Password1", "User2")
+	_, err = service.Register(context.Background(), "USER@example.com", "Password1", "User2")
 	if err == nil {
 		t.Fatalf("expected duplicate error, got nil")
 	}
@@ -192,24 +192,24 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 
 func TestLogin_SessionFlow(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.SessionTTL = 30 * time.Minute
-	cfg.UserSessionsTTL = 2 * time.Hour
+	config := DefaultConfig()
+	config.SessionTTL = 30 * time.Minute
+	config.UserSessionsTTL = 2 * time.Hour
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, user, err := svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, user, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestLogin_SessionFlow(t *testing.T) {
 		t.Fatalf("expected user")
 	}
 
-	me, err := svc.Me(context.Background(), session.Token)
+	me, err := service.Me(context.Background(), session.Token)
 	if err != nil {
 		t.Fatalf("me failed: %v", err)
 	}
@@ -228,27 +228,27 @@ func TestLogin_SessionFlow(t *testing.T) {
 		t.Fatalf("unexpected me user: got=%s want=%s", me.ID, user.ID)
 	}
 
-	refreshed, err := svc.Refresh(context.Background(), session.Token)
+	refreshed, err := service.Refresh(context.Background(), session.Token)
 	if err != nil {
 		t.Fatalf("refresh failed: %v", err)
 	}
 
-	_, err = svc.Me(context.Background(), session.Token)
+	_, err = service.Me(context.Background(), session.Token)
 	if err == nil {
 		t.Fatalf("expected old token to be invalid after refresh")
 	}
 	assertAuthCode(t, err, CodeUnauthorized)
 
-	_, err = svc.Me(context.Background(), refreshed.Token)
+	_, err = service.Me(context.Background(), refreshed.Token)
 	if err != nil {
 		t.Fatalf("me with refreshed token failed: %v", err)
 	}
 
-	if err := svc.Logout(context.Background(), refreshed.Token); err != nil {
+	if err := service.Logout(context.Background(), refreshed.Token); err != nil {
 		t.Fatalf("logout failed: %v", err)
 	}
 
-	_, err = svc.Me(context.Background(), refreshed.Token)
+	_, err = service.Me(context.Background(), refreshed.Token)
 	if err == nil {
 		t.Fatalf("expected token to be invalid after logout")
 	}
@@ -257,36 +257,36 @@ func TestLogin_SessionFlow(t *testing.T) {
 
 func TestLogin_RateLimited(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.LoginRateLimitPerMinute = 2
-	cfg.LoginFailLimit = 100 // 레이트리밋 테스트에서 락 영향 제거
+	config := DefaultConfig()
+	config.LoginRateLimitPerMinute = 2
+	config.LoginFailLimit = 100 // 레이트리밋 테스트에서 락 영향 제거
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	_, _, err = svc.Login(context.Background(), "user@example.com", "WrongPass1", "1.2.3.4")
+	_, _, err = service.Login(context.Background(), "user@example.com", "WrongPass1", "1.2.3.4")
 	if err == nil {
 		t.Fatalf("expected login failure")
 	}
 	assertAuthCode(t, err, CodeInvalidCredentials)
 
-	_, _, err = svc.Login(context.Background(), "user@example.com", "WrongPass1", "1.2.3.4")
+	_, _, err = service.Login(context.Background(), "user@example.com", "WrongPass1", "1.2.3.4")
 	if err == nil {
 		t.Fatalf("expected login failure")
 	}
 	assertAuthCode(t, err, CodeInvalidCredentials)
 
-	_, _, err = svc.Login(context.Background(), "user@example.com", "WrongPass1", "1.2.3.4")
+	_, _, err = service.Login(context.Background(), "user@example.com", "WrongPass1", "1.2.3.4")
 	if err == nil {
 		t.Fatalf("expected rate limited error")
 	}
@@ -295,34 +295,34 @@ func TestLogin_RateLimited(t *testing.T) {
 
 func TestLogin_AccountLocked(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.LoginRateLimitPerMinute = 1000
-	cfg.LoginFailLimit = 3
-	cfg.LoginFailWindow = 10 * time.Minute
-	cfg.LoginLockDuration = 10 * time.Minute
+	config := DefaultConfig()
+	config.LoginRateLimitPerMinute = 1000
+	config.LoginFailLimit = 3
+	config.LoginFailWindow = 10 * time.Minute
+	config.LoginLockDuration = 10 * time.Minute
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
 	for i := range 3 {
-		_, _, err = svc.Login(context.Background(), "user@example.com", "WrongPass1", "127.0.0.1")
+		_, _, err = service.Login(context.Background(), "user@example.com", "WrongPass1", "127.0.0.1")
 		if err == nil {
 			t.Fatalf("expected login failure at attempt %d", i+1)
 		}
 		assertAuthCode(t, err, CodeInvalidCredentials)
 	}
 
-	_, _, err = svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	_, _, err = service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
 	if err == nil {
 		t.Fatalf("expected account locked error")
 	}
@@ -331,28 +331,28 @@ func TestLogin_AccountLocked(t *testing.T) {
 
 func TestPasswordReset_RevokesSessions(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.LoginRateLimitPerMinute = 1000
+	config := DefaultConfig()
+	config.LoginRateLimitPerMinute = 1000
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, _, err := svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, _, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
-	resetToken, err := svc.RequestPasswordReset(context.Background(), "user@example.com", "127.0.0.1")
+	resetToken, err := service.RequestPasswordReset(context.Background(), "user@example.com", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("reset-request failed: %v", err)
 	}
@@ -360,23 +360,23 @@ func TestPasswordReset_RevokesSessions(t *testing.T) {
 		t.Fatalf("expected reset token")
 	}
 
-	if err := svc.ResetPassword(context.Background(), resetToken, "NewPassw0rd1"); err != nil {
+	if err := service.ResetPassword(context.Background(), resetToken, "NewPassw0rd1"); err != nil {
 		t.Fatalf("reset failed: %v", err)
 	}
 
-	_, err = svc.Me(context.Background(), session.Token)
+	_, err = service.Me(context.Background(), session.Token)
 	if err == nil {
 		t.Fatalf("expected old session revoked after reset")
 	}
 	assertAuthCode(t, err, CodeUnauthorized)
 
-	_, _, err = svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	_, _, err = service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
 	if err == nil {
 		t.Fatalf("expected old password to be invalid")
 	}
 	assertAuthCode(t, err, CodeInvalidCredentials)
 
-	_, _, err = svc.Login(context.Background(), "user@example.com", "NewPassw0rd1", "127.0.0.1")
+	_, _, err = service.Login(context.Background(), "user@example.com", "NewPassw0rd1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("expected login with new password: %v", err)
 	}
@@ -384,33 +384,33 @@ func TestPasswordReset_RevokesSessions(t *testing.T) {
 
 func TestPasswordResetRequest_RateLimited(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.PasswordResetRequestRateLimitPerMinute = 2
+	config := DefaultConfig()
+	config.PasswordResetRequestRateLimitPerMinute = 2
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	_, err = svc.RequestPasswordReset(context.Background(), "user@example.com", "10.0.0.1")
+	_, err = service.RequestPasswordReset(context.Background(), "user@example.com", "10.0.0.1")
 	if err != nil {
 		t.Fatalf("first reset-request failed: %v", err)
 	}
 
-	_, err = svc.RequestPasswordReset(context.Background(), "user@example.com", "10.0.0.1")
+	_, err = service.RequestPasswordReset(context.Background(), "user@example.com", "10.0.0.1")
 	if err != nil {
 		t.Fatalf("second reset-request failed: %v", err)
 	}
 
-	_, err = svc.RequestPasswordReset(context.Background(), "user@example.com", "10.0.0.1")
+	_, err = service.RequestPasswordReset(context.Background(), "user@example.com", "10.0.0.1")
 	if err == nil {
 		t.Fatalf("expected rate limited error")
 	}
@@ -423,19 +423,19 @@ func TestCreateSession_RollsBackSessionWhenIndexAddFails(t *testing.T) {
 	defer cleanup()
 
 	userID := "user-1"
-	cacheSvc := &failingCacheClient{
+	cacheClient := &failingCacheClient{
 		Client:      baseCache,
 		failSAddKey: userSessionsKeyPrefix + userID,
 		failSAddErr: stdErrors.New("sadd failed"),
 		failDelKeys: map[string]error{},
 	}
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.createSession(context.Background(), userID)
+	_, err = service.createSession(context.Background(), userID)
 	if err == nil {
 		t.Fatalf("expected createSession error")
 	}
@@ -456,19 +456,19 @@ func TestCreateSession_RollsBackSessionWhenIndexExpireFails(t *testing.T) {
 	defer cleanup()
 
 	userID := "user-1"
-	cacheSvc := &failingCacheClient{
+	cacheClient := &failingCacheClient{
 		Client:        baseCache,
 		failExpireKey: userSessionsKeyPrefix + userID,
 		failExpireErr: stdErrors.New("expire failed"),
 		failDelKeys:   map[string]error{},
 	}
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.createSession(context.Background(), userID)
+	_, err = service.createSession(context.Background(), userID)
 	if err == nil {
 		t.Fatalf("expected createSession error")
 	}
@@ -488,28 +488,28 @@ func TestRefresh_RollsBackNewSessionWhenOldInvalidationFails(t *testing.T) {
 	baseCache, cleanup := newTestCache(t)
 	defer cleanup()
 
-	svc, err := NewService(context.Background(), db, baseCache, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), db, baseCache, newTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, user, err := svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, user, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
 	oldKey := sessionKeyPrefix + sha256Hex(session.Token)
-	svc.cacheSvc = &failingCacheClient{
+	service.cacheClient = &failingCacheClient{
 		Client:      baseCache,
 		failDelKeys: map[string]error{oldKey: stdErrors.New("delete old session failed")},
 	}
 
-	_, err = svc.Refresh(context.Background(), session.Token)
+	_, err = service.Refresh(context.Background(), session.Token)
 	if err == nil {
 		t.Fatalf("expected refresh error")
 	}
@@ -537,30 +537,30 @@ func TestRefresh_KeepsNewSessionWhenOldIndexRemovalFails(t *testing.T) {
 	baseCache, cleanup := newTestCache(t)
 	defer cleanup()
 
-	svc, err := NewService(context.Background(), db, baseCache, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), db, baseCache, newTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, user, err := svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, user, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
 	oldHash := sha256Hex(session.Token)
 	oldKey := sessionKeyPrefix + oldHash
-	svc.cacheSvc = &failingCacheClient{
+	service.cacheClient = &failingCacheClient{
 		Client:      baseCache,
 		failSRemKey: userSessionsKeyPrefix + user.ID,
 		failSRemErr: stdErrors.New("remove old session index failed"),
 	}
 
-	newSession, err := svc.Refresh(context.Background(), session.Token)
+	newSession, err := service.Refresh(context.Background(), session.Token)
 	if err != nil {
 		t.Fatalf("refresh should succeed when old session key is removed: %v", err)
 	}
@@ -586,7 +586,7 @@ func TestRefresh_KeepsNewSessionWhenOldIndexRemovalFails(t *testing.T) {
 		t.Fatalf("expected new session key to remain")
 	}
 
-	if _, err := svc.Me(context.Background(), newSession.Token); err != nil {
+	if _, err := service.Me(context.Background(), newSession.Token); err != nil {
 		t.Fatalf("expected new session token to be valid: %v", err)
 	}
 }
@@ -596,52 +596,52 @@ func TestResetPassword_IgnoresSessionRevocationFailureAfterCommit(t *testing.T) 
 	baseCache, cleanup := newTestCache(t)
 	defer cleanup()
 
-	svc, err := NewService(context.Background(), db, baseCache, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), db, baseCache, newTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, _, err := svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, _, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
-	resetToken, err := svc.RequestPasswordReset(context.Background(), "user@example.com", "127.0.0.1")
+	resetToken, err := service.RequestPasswordReset(context.Background(), "user@example.com", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("request password reset failed: %v", err)
 	}
 
-	svc.cacheSvc = &failingCacheClient{
+	service.cacheClient = &failingCacheClient{
 		Client:      baseCache,
 		failDelMany: stdErrors.New("delete sessions failed"),
 	}
 
-	err = svc.ResetPassword(context.Background(), resetToken, "NewPassw0rd1")
+	err = service.ResetPassword(context.Background(), resetToken, "NewPassw0rd1")
 	if err != nil {
 		t.Fatalf("reset password should succeed after password commit: %v", err)
 	}
 
-	if _, err := svc.Me(context.Background(), session.Token); err != nil {
+	if _, err := service.Me(context.Background(), session.Token); err != nil {
 		t.Fatalf("expected existing session to remain when revocation fails: %v", err)
 	}
 
-	if _, _, err := svc.Login(context.Background(), "user@example.com", "NewPassw0rd1", "127.0.0.1"); err != nil {
+	if _, _, err := service.Login(context.Background(), "user@example.com", "NewPassw0rd1", "127.0.0.1"); err != nil {
 		t.Fatalf("expected login with new password to succeed: %v", err)
 	}
 }
 
 func TestIncrWithTTL_SetsTTLOnFirstIncrementAndKeepsIt(t *testing.T) {
-	cacheSvc, mini, cleanup := newTestCacheWithMini(t)
+	cacheClient, mini, cleanup := newTestCacheWithMini(t)
 	defer cleanup()
 
 	key := "auth:test:counter"
 
-	count, err := incrWithTTL(context.Background(), cacheSvc, key, 500*time.Millisecond)
+	count, err := incrWithTTL(context.Background(), cacheClient, key, 500*time.Millisecond)
 	if err != nil {
 		t.Fatalf("first incr failed: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestIncrWithTTL_SetsTTLOnFirstIncrementAndKeepsIt(t *testing.T) {
 		t.Fatalf("expected first ttl to ceil to 1s, got=%v", firstTTL)
 	}
 
-	count, err = incrWithTTL(context.Background(), cacheSvc, key, 2*time.Second)
+	count, err = incrWithTTL(context.Background(), cacheClient, key, 2*time.Second)
 	if err != nil {
 		t.Fatalf("second incr failed: %v", err)
 	}

@@ -20,7 +20,7 @@ import (
 )
 
 func BuildBotDependencyModules(
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	alarmMode *AlarmModeComponents,
 	holodexService *holodex.Service,
@@ -28,32 +28,32 @@ func BuildBotDependencyModules(
 	formatter *adapter.ResponseFormatter,
 	irisClient BotIrisClient,
 	profileService *member.ProfileService,
-	memberMatcher *matcher.MemberMatcher,
+	memberMatcher *matcher.Matcher,
 	youTubeStack *providers.YouTubeStack,
 	activityLogger *activity.Logger,
 	settingsService settings.ReadWriter,
 	aclService *acl.Service,
-	majorEventRepo command.MajorEventRepository,
+	majorEventRepository command.MajorEventRepository,
 	memberNewsService command.MemberNewsService,
 	commandBuilders []bot.CommandBuilder,
 	workerPool *workerpool.Pool,
 	logger *slog.Logger,
 ) BotDependencyModules {
 	return BotDependencyModules{
-		Core:      buildBotCoreModule(cfg, logger),
+		Core:      buildBotCoreModule(appConfig, logger),
 		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter),
 		Data:      buildBotDataModule(infra, alarmMode, profileService),
 		Stream:    buildBotStreamModule(alarmMode, holodexService, memberMatcher, youTubeStack),
 		Support:   buildBotSupportModule(activityLogger, settingsService, aclService, workerPool),
-		Feature:   buildBotFeatureModule(majorEventRepo, memberNewsService, commandBuilders),
+		Feature:   buildBotFeatureModule(majorEventRepository, memberNewsService, commandBuilders),
 	}
 }
 
-func buildBotCoreModule(cfg *config.Config, logger *slog.Logger) BotCoreModule {
+func buildBotCoreModule(appConfig *config.Config, logger *slog.Logger) BotCoreModule {
 	return BotCoreModule{
-		BotSelfUser:  cfg.Bot.SelfUser,
-		IrisBaseURL:  cfg.Iris.BaseURL,
-		Notification: cfg.Notification,
+		BotSelfUser:  appConfig.Bot.SelfUser,
+		IrisBaseURL:  appConfig.Iris.BaseURL,
+		Notification: appConfig.Notification,
 		Logger:       logger,
 	}
 }
@@ -76,9 +76,9 @@ func buildBotDataModule(
 	profileService *member.ProfileService,
 ) BotDataModule {
 	return BotDataModule{
-		CacheSvc:    infra.Cache,
+		Cache:       infra.Cache,
 		Postgres:    infra.Postgres,
-		MemberRepo:  infra.MemberRepo,
+		MemberRepository:  infra.MemberRepository,
 		MemberCache: infra.MemberCache,
 		Profiles:    profileService,
 		MembersData: alarmMode.MemberDataSource,
@@ -88,14 +88,14 @@ func buildBotDataModule(
 func buildBotStreamModule(
 	alarmMode *AlarmModeComponents,
 	holodexService *holodex.Service,
-	memberMatcher *matcher.MemberMatcher,
+	memberMatcher *matcher.Matcher,
 	youTubeStack *providers.YouTubeStack,
 ) BotStreamModule {
 	return BotStreamModule{
-		HolodexSvc:   holodexService,
+		Holodex:      holodexService,
 		ChzzkClient:  alarmMode.ChzzkClient,
 		TwitchClient: alarmMode.TwitchClient,
-		AlarmSvc:     alarmMode.AlarmCRUD,
+		Alarm:        alarmMode.AlarmCRUD,
 		MemberMatch:  memberMatcher,
 		YTStack:      youTubeStack,
 	}
@@ -109,20 +109,20 @@ func buildBotSupportModule(
 ) BotSupportModule {
 	return BotSupportModule{
 		ActivityLogger: activityLogger,
-		SettingsSvc:    settingsService,
-		ACLSvc:         aclService,
+		Settings:       settingsService,
+		ACL:            aclService,
 		WorkerPool:     workerPool,
 	}
 }
 
 func buildBotFeatureModule(
-	majorEventRepo command.MajorEventRepository,
+	majorEventRepository command.MajorEventRepository,
 	memberNewsService command.MemberNewsService,
 	commandBuilders []bot.CommandBuilder,
 ) BotFeatureModule {
 	return BotFeatureModule{
-		MajorEventRepo:  majorEventRepo,
-		MemberNewsSvc:   memberNewsService,
+		MajorEventRepository:  majorEventRepository,
+		MemberNews:      memberNewsService,
 		CommandBuilders: bot.CloneCommandBuilders(commandBuilders),
 	}
 }

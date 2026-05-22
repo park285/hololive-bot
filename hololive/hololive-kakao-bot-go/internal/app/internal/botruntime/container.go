@@ -39,8 +39,8 @@ type Container struct {
 	lifecycle.Managed
 }
 
-func Build(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Container, error) {
-	built, err := appwiring.BuildContainer(ctx, cfg, logger, appwiring.BuildHooks{
+func Build(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*Container, error) {
+	built, err := appwiring.BuildContainer(ctx, appConfig, logger, appwiring.BuildHooks{
 		InitializeBotDependencies: InitializeBotDependencies,
 	})
 	if err != nil {
@@ -48,7 +48,7 @@ func Build(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Conta
 	}
 
 	return &Container{
-		Config:  cfg,
+		Config:  appConfig,
 		Logger:  logger,
 		botDeps: built.BotDependencies,
 		Managed: lifecycle.NewManaged(built.Cleanup),

@@ -56,7 +56,7 @@ func defaultCommunityShortsContinuousObservationCollectorWiring() communityShort
 func collectCommunityShortsContinuousObservationArtifacts(
 	ctx context.Context,
 	session *communityShortsOpsSession,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityShortsContinuousObservationCollectOptions,
@@ -67,7 +67,7 @@ func collectCommunityShortsContinuousObservationArtifacts(
 		return communityShortsContinuousObservationArtifacts{}, err
 	}
 
-	targetBaseline, err := wiring.collectTargetBaseline(ctx, session, cfg, logger, now)
+	targetBaseline, err := wiring.collectTargetBaseline(ctx, session, appConfig, logger, now)
 	if err != nil {
 		return communityShortsContinuousObservationArtifacts{}, fmt.Errorf("target baseline: %w", err)
 	}
@@ -200,7 +200,7 @@ func collectCommunityShortsContinuousObservationAlarmSentHistoryDataset(
 func collectCommunityShortsTargetBaselineWithSession(
 	ctx context.Context,
 	session *communityShortsOpsSession,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 ) (communityshorts.TargetBaseline, error) {
@@ -221,7 +221,7 @@ func collectCommunityShortsTargetBaselineWithSession(
 	}
 
 	channels := communityshorts.BuildOperationalChannelsFromMembers(members)
-	baseline, err := communityshorts.BuildTargetBaseline(channels, alarms, cfg.Ingestion, now)
+	baseline, err := communityshorts.BuildTargetBaseline(channels, alarms, appConfig.Ingestion, now)
 	if err != nil {
 		return communityshorts.TargetBaseline{}, fmt.Errorf("build target baseline: %w", err)
 	}

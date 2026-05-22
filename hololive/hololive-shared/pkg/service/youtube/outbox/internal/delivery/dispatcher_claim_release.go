@@ -17,9 +17,9 @@ func (d *Dispatcher) releaseDeliveryClaims(ctx context.Context, claims []deliver
 		return nil
 	}
 
-	repo := trackingrepo.NewRepository(d.db)
+	repository := trackingrepo.NewRepository(d.db)
 	for i := range claims {
-		if _, err := repo.ReleaseAlarmStateClaim(ctx, claims[i].kind, claims[i].postID, claims[i].authorizedAt); err != nil {
+		if _, err := repository.ReleaseAlarmStateClaim(ctx, claims[i].kind, claims[i].postID, claims[i].authorizedAt); err != nil {
 			return fmt.Errorf("release claim at index %d: %w", i, err)
 		}
 	}
@@ -28,8 +28,8 @@ func (d *Dispatcher) releaseDeliveryClaims(ctx context.Context, claims []deliver
 
 func (d *Dispatcher) deliveryClaimTimeout() time.Duration {
 	claimTimeout := maxCommunityShortsClaimHold
-	if d != nil && d.cfg.LockTimeout > 0 && d.cfg.LockTimeout < claimTimeout {
-		claimTimeout = d.cfg.LockTimeout
+	if d != nil && d.config.LockTimeout > 0 && d.config.LockTimeout < claimTimeout {
+		claimTimeout = d.config.LockTimeout
 	}
 	if claimTimeout <= 0 {
 		return maxCommunityShortsClaimHold

@@ -74,9 +74,9 @@ func TestGetLiveStreamsByOrg_CachesFilteredResults(t *testing.T) {
 		},
 	}
 
-	svc := newServiceForFallbackTest(requester)
+	service := newServiceForFallbackTest(requester)
 
-	first, err := svc.GetLiveStreamsByOrg(context.Background(), hololive)
+	first, err := service.GetLiveStreamsByOrg(context.Background(), hololive)
 	if err != nil {
 		t.Fatalf("GetLiveStreamsByOrg() error = %v", err)
 	}
@@ -84,7 +84,7 @@ func TestGetLiveStreamsByOrg_CachesFilteredResults(t *testing.T) {
 		t.Fatalf("GetLiveStreamsByOrg() = %+v, want live-1 only", first)
 	}
 
-	second, err := svc.GetLiveStreamsByOrg(context.Background(), hololive)
+	second, err := service.GetLiveStreamsByOrg(context.Background(), hololive)
 	if err != nil {
 		t.Fatalf("GetLiveStreamsByOrg() second call error = %v", err)
 	}
@@ -149,9 +149,9 @@ func TestGetUpcomingStreamsByOrg_CachesFilteredResults(t *testing.T) {
 		},
 	}
 
-	svc := newServiceForFallbackTest(requester)
+	service := newServiceForFallbackTest(requester)
 
-	first, err := svc.GetUpcomingStreamsByOrg(context.Background(), 24, hololive)
+	first, err := service.GetUpcomingStreamsByOrg(context.Background(), 24, hololive)
 	if err != nil {
 		t.Fatalf("GetUpcomingStreamsByOrg() error = %v", err)
 	}
@@ -159,7 +159,7 @@ func TestGetUpcomingStreamsByOrg_CachesFilteredResults(t *testing.T) {
 		t.Fatalf("GetUpcomingStreamsByOrg() = %+v, want upcoming-1 only", first)
 	}
 
-	second, err := svc.GetUpcomingStreamsByOrg(context.Background(), 24, hololive)
+	second, err := service.GetUpcomingStreamsByOrg(context.Background(), 24, hololive)
 	if err != nil {
 		t.Fatalf("GetUpcomingStreamsByOrg() second call error = %v", err)
 	}

@@ -43,16 +43,16 @@ func TestDependenciesViews_NilSafety(t *testing.T) {
 	if got := deps.messagingDeps(); got.client != nil || got.messageAdapter != nil || got.formatter != nil {
 		t.Fatal("messagingDeps nil-safety failed")
 	}
-	if got := deps.dataDeps(); got.cache != nil || got.postgres != nil || got.memberRepo != nil || got.memberCache != nil {
+	if got := deps.dataDeps(); got.cache != nil || got.postgres != nil || got.memberRepository != nil || got.memberCache != nil {
 		t.Fatal("dataDeps nil-safety failed")
 	}
-	if got := deps.streamDeps(); got.holodex != nil || got.youTubeStatsRepo != nil {
+	if got := deps.streamDeps(); got.holodex != nil || got.youTubeStatsRepository != nil {
 		t.Fatal("streamDeps nil-safety failed")
 	}
 	if got := deps.supportDeps(); got.acl != nil || got.workerPool != nil {
 		t.Fatal("supportDeps nil-safety failed")
 	}
-	if got := deps.featureDeps(); len(got.commandBuilders) != 0 || got.majorEventRepo != nil || got.memberNews != nil {
+	if got := deps.featureDeps(); len(got.commandBuilders) != 0 || got.majorEventRepository != nil || got.memberNews != nil {
 		t.Fatal("featureDeps nil-safety failed")
 	}
 }
@@ -61,9 +61,9 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	messageAdapter := &adapter.MessageAdapter{}
 	formatter := &adapter.ResponseFormatter{}
-	cacheSvc := &cache.Service{}
-	postgresSvc := &database.PostgresService{}
-	memberRepo := &member.Repository{}
+	cache := &cache.Service{}
+	postgresService := &database.PostgresService{}
+	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	workerPool := &workerpool.Pool{}
 	externalBuilder := CommandBuilder(func(_ *command.Dependencies) command.Command {
@@ -71,19 +71,19 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	})
 
 	deps := &Dependencies{
-		BotSelfUser:     "bot-self",
-		IrisBaseURL:     "https://iris.internal",
-		Notification:    config.NotificationConfig{},
-		Logger:          logger,
-		Client:          &fakeIrisClient{},
-		MessageAdapter:  messageAdapter,
-		Formatter:       formatter,
-		Cache:           cacheSvc,
-		Postgres:        postgresSvc,
-		MemberRepo:      memberRepo,
-		MemberCache:     memberCache,
-		CommandBuilders: []CommandBuilder{externalBuilder},
-		WorkerPool:      workerPool,
+		BotSelfUser:      "bot-self",
+		IrisBaseURL:      "https://iris.internal",
+		Notification:     config.NotificationConfig{},
+		Logger:           logger,
+		Client:           &fakeIrisClient{},
+		MessageAdapter:   messageAdapter,
+		Formatter:        formatter,
+		Cache:            cache,
+		Postgres:         postgresService,
+		MemberRepository: memberRepository,
+		MemberCache:      memberCache,
+		CommandBuilders:  []CommandBuilder{externalBuilder},
+		WorkerPool:       workerPool,
 	}
 
 	core := deps.coreDeps()
@@ -97,7 +97,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	}
 
 	data := deps.dataDeps()
-	if data.cache != cacheSvc || data.postgres != postgresSvc || data.memberRepo != memberRepo || data.memberCache != memberCache {
+	if data.cache != cache || data.postgres != postgresService || data.memberRepository != memberRepository || data.memberCache != memberCache {
 		t.Fatal("dataDeps mapping mismatch")
 	}
 

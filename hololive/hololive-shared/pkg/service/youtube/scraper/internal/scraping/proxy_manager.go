@@ -41,9 +41,9 @@ type ProxyConfig struct {
 	URL     string
 }
 
-func WithProxy(cfg ProxyConfig) ClientOption {
+func WithProxy(config ProxyConfig) ClientOption {
 	return func(c *Client) {
-		c.proxyConfig = cfg
+		c.proxyConfig = config
 	}
 }
 
@@ -206,10 +206,10 @@ func closeIdleClientTransport(seen map[*http.Transport]struct{}, client *http.Cl
 }
 
 // createHTTPClient: 프록시 설정에 따라 HTTP 클라이언트 생성
-func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, *http.Transport, error) {
+func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, error) {
 	baseTransport := newScraperTransport(true)
 
-	if !proxyCfg.Enabled || proxyCfg.URL == "" {
+	if !proxyConfig.Enabled || proxyConfig.URL == "" {
 		slog.Info("Scraper using direct connection (no proxy)")
 		baseTransport.DialContext = newDirectDialContext()
 		return &http.Client{
@@ -218,7 +218,7 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, *http.Transport, erro
 		}, baseTransport, nil
 	}
 
-	parsedURL, err := url.Parse(proxyCfg.URL)
+	parsedURL, err := url.Parse(proxyConfig.URL)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid proxy URL: %w", err)
 	}

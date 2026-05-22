@@ -15,7 +15,7 @@ import (
 
 type publishedAtResolverRepository struct {
 	db        *gorm.DB
-	batchRepo *gormBatchRepository
+	batchRepository *gormBatchRepository
 }
 
 type publishedAtFinalizeResult struct {
@@ -50,7 +50,7 @@ const (
 func newPublishedAtResolverRepository(db *gorm.DB) *publishedAtResolverRepository {
 	return &publishedAtResolverRepository{
 		db:        db,
-		batchRepo: &gormBatchRepository{db: db},
+		batchRepository: &gormBatchRepository{db: db},
 	}
 }
 
@@ -70,8 +70,8 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 	normalizedPublishedAt := yttimestamp.Normalize(publishedAt)
 	result := publishedAtFinalizeResult{}
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		txRepo := trackingrepo.NewRepository(tx)
-		eligibility, err := r.loadFinalizeEligibility(ctx, txRepo, candidate)
+		txRepository := trackingrepo.NewRepository(tx)
+		eligibility, err := r.loadFinalizeEligibility(ctx, txRepository, candidate)
 		if err != nil {
 			return err
 		}
@@ -79,7 +79,7 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 		notification, reason, err := r.finalizeCandidateState(
 			ctx,
 			tx,
-			txRepo,
+			txRepository,
 			candidate,
 			normalizedPublishedAt,
 			routeDecider,
@@ -90,7 +90,7 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 		}
 		result.reason = selectPublishedAtFinalizeReason(eligibility.reason, reason)
 
-		return r.completeFinalizePublishedAt(ctx, tx, txRepo, candidate, notification, &result)
+		return r.completeFinalizePublishedAt(ctx, tx, txRepository, candidate, notification, &result)
 	})
 	if err != nil {
 		return publishedAtFinalizeResult{}, fmt.Errorf("finalize published_at transaction: %w", err)
@@ -101,7 +101,7 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 func (r *publishedAtResolverRepository) finalizeCandidateState(
 	ctx context.Context,
 	tx *gorm.DB,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider NotificationRouteDecider,
@@ -109,9 +109,9 @@ func (r *publishedAtResolverRepository) finalizeCandidateState(
 ) (*domain.YouTubeNotificationOutbox, string, error) {
 	switch candidate.Kind {
 	case domain.OutboxKindNewShort:
-		return r.finalizeShort(ctx, tx, txRepo, candidate, publishedAt, routeDecider, enqueueAllowed)
+		return r.finalizeShort(ctx, tx, txRepository, candidate, publishedAt, routeDecider, enqueueAllowed)
 	case domain.OutboxKindCommunityPost:
-		return r.finalizeCommunity(ctx, tx, txRepo, candidate, publishedAt, routeDecider, enqueueAllowed)
+		return r.finalizeCommunity(ctx, tx, txRepository, candidate, publishedAt, routeDecider, enqueueAllowed)
 	default:
 		return nil, "", fmt.Errorf("finalize published_at: unsupported kind %s", candidate.Kind)
 	}
@@ -119,12 +119,12 @@ func (r *publishedAtResolverRepository) finalizeCandidateState(
 
 func (r *publishedAtResolverRepository) loadFinalizeEligibility(
 	ctx context.Context,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 ) (publishedAtFinalizeEligibility, error) {
 	eligibility := publishedAtFinalizeEligibility{enqueuable: true}
 
-	stateEligibility, resolved, err := r.loadFinalizeAlarmStateEligibility(ctx, txRepo, candidate)
+	stateEligibility, resolved, err := r.loadFinalizeAlarmStateEligibility(ctx, txRepository, candidate)
 	if err != nil {
 		return publishedAtFinalizeEligibility{}, err
 	}
@@ -132,7 +132,7 @@ func (r *publishedAtResolverRepository) loadFinalizeEligibility(
 		return stateEligibility, nil
 	}
 
-	trackingEligibility, resolved, err := loadFinalizeTrackingEligibility(ctx, txRepo, candidate)
+	trackingEligibility, resolved, err := loadFinalizeTrackingEligibility(ctx, txRepository, candidate)
 	if err != nil {
 		return publishedAtFinalizeEligibility{}, err
 	}
@@ -145,10 +145,10 @@ func (r *publishedAtResolverRepository) loadFinalizeEligibility(
 
 func (r *publishedAtResolverRepository) loadFinalizeAlarmStateEligibility(
 	ctx context.Context,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 ) (publishedAtFinalizeEligibility, bool, error) {
-	stateRow, err := txRepo.FindAlarmStateByPostID(ctx, candidate.Kind, candidate.PostID)
+	stateRow, err := txRepository.FindAlarmStateByPostID(ctx, candidate.Kind, candidate.PostID)
 	if err != nil {
 		return publishedAtFinalizeEligibility{}, false, fmt.Errorf("load alarm state row: %w", err)
 	}
@@ -162,7 +162,7 @@ func (r *publishedAtResolverRepository) loadFinalizeAlarmStateEligibility(
 		return publishedAtFinalizeEligibility{}, false, nil
 	}
 
-	return r.resolveFinalizeAlarmStateClaimEligibility(ctx, txRepo, candidate, *stateRow.AuthorizedAt)
+	return r.resolveFinalizeAlarmStateClaimEligibility(ctx, txRepository, candidate, *stateRow.AuthorizedAt)
 }
 
 func isPublishedAtAlarmStateSent(stateRow *domain.YouTubeCommunityShortsAlarmState) bool {
@@ -175,7 +175,7 @@ func isPublishedAtAlarmStateClaimed(stateRow *domain.YouTubeCommunityShortsAlarm
 
 func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibility(
 	ctx context.Context,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	authorizedAt time.Time,
 ) (publishedAtFinalizeEligibility, bool, error) {
@@ -183,7 +183,7 @@ func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibilit
 		return publishedAtFinalizeEligibility{reason: "already_claimed"}, true, nil
 	}
 
-	exists, err := r.outboxExistsForCandidate(ctx, txRepo, candidate)
+	exists, err := r.outboxExistsForCandidate(ctx, txRepository, candidate)
 	if err != nil {
 		return publishedAtFinalizeEligibility{}, false, err
 	}
@@ -191,7 +191,7 @@ func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibilit
 		return publishedAtFinalizeEligibility{reason: "already_claimed"}, true, nil
 	}
 
-	released, err := txRepo.ReleaseAlarmStateClaim(ctx, candidate.Kind, candidate.PostID, authorizedAt)
+	released, err := txRepository.ReleaseAlarmStateClaim(ctx, candidate.Kind, candidate.PostID, authorizedAt)
 	if err != nil {
 		return publishedAtFinalizeEligibility{}, false, fmt.Errorf("release stale alarm state claim: %w", err)
 	}
@@ -204,10 +204,10 @@ func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibilit
 
 func loadFinalizeTrackingEligibility(
 	ctx context.Context,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 ) (publishedAtFinalizeEligibility, bool, error) {
-	trackingRow, err := txRepo.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
+	trackingRow, err := txRepository.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
 	if err != nil {
 		return publishedAtFinalizeEligibility{}, false, fmt.Errorf("load tracking row: %w", err)
 	}
@@ -232,10 +232,10 @@ func isPublishedAtClaimFresh(authorizedAt time.Time) bool {
 
 func (r *publishedAtResolverRepository) outboxExistsForCandidate(
 	ctx context.Context,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 ) (bool, error) {
-	trackingRow, err := txRepo.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
+	trackingRow, err := txRepository.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
 	if err != nil {
 		return false, fmt.Errorf("load tracking row: %w", err)
 	}

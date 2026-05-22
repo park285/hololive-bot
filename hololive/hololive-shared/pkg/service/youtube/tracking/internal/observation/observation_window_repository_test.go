@@ -18,12 +18,12 @@ import (
 func TestObservationWindowRepositoryEnsureAndFind(t *testing.T) {
 	t.Parallel()
 
-	repo := NewRepository(newObservationWindowTestDB(t))
+	repository := NewRepository(newObservationWindowTestDB(t))
 	ctx := context.Background()
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	deploymentCompletedAt := time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
 
-	require.NoError(t, repo.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
+	require.NoError(t, repository.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "2.0.0",
@@ -33,7 +33,7 @@ func TestObservationWindowRepositoryEnsureAndFind(t *testing.T) {
 		ObservationEndedAt:    deploymentCompletedAt.Add(24 * time.Hour),
 	}))
 
-	record, err := repo.FindCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt)
+	record, err := repository.FindCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	require.Equal(t, "youtube-producer", record.RuntimeName)
@@ -49,13 +49,13 @@ func TestObservationWindowRepositoryEnsureAndFind(t *testing.T) {
 func TestObservationWindowRepositoryEnsurePreservesEarliestDeploymentWindowOnReplay(t *testing.T) {
 	t.Parallel()
 
-	repo := NewRepository(newObservationWindowTestDB(t))
+	repository := NewRepository(newObservationWindowTestDB(t))
 	ctx := context.Background()
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	firstCompletedAt := time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
 	secondCompletedAt := firstCompletedAt.Add(90 * time.Minute)
 
-	require.NoError(t, repo.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
+	require.NoError(t, repository.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "2.0.0",
@@ -64,7 +64,7 @@ func TestObservationWindowRepositoryEnsurePreservesEarliestDeploymentWindowOnRep
 		ObservationStartedAt:  firstCompletedAt,
 		ObservationEndedAt:    firstCompletedAt.Add(24 * time.Hour),
 	}))
-	require.NoError(t, repo.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
+	require.NoError(t, repository.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "2.0.1",
@@ -74,7 +74,7 @@ func TestObservationWindowRepositoryEnsurePreservesEarliestDeploymentWindowOnRep
 		ObservationEndedAt:    secondCompletedAt.Add(24 * time.Hour),
 	}))
 
-	record, err := repo.FindCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt)
+	record, err := repository.FindCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	require.Equal(t, "2.0.0", record.AppVersion)
@@ -88,13 +88,13 @@ func TestObservationWindowRepositoryEnsurePreservesEarliestDeploymentWindowOnRep
 func TestObservationWindowRepositoryFindClosedClosesWindowAtEnd(t *testing.T) {
 	t.Parallel()
 
-	repo := NewRepository(newObservationWindowTestDB(t))
+	repository := NewRepository(newObservationWindowTestDB(t))
 	ctx := context.Background()
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	deploymentCompletedAt := time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
 	observationEndedAt := deploymentCompletedAt.Add(24 * time.Hour)
 
-	require.NoError(t, repo.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
+	require.NoError(t, repository.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "2.0.0",
@@ -104,13 +104,13 @@ func TestObservationWindowRepositoryFindClosedClosesWindowAtEnd(t *testing.T) {
 		ObservationEndedAt:    observationEndedAt,
 	}))
 
-	record, err := repo.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(time.Minute))
+	record, err := repository.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(time.Minute))
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	require.NotNil(t, record.ClosedAt)
 	require.Equal(t, observationEndedAt, record.ClosedAt.UTC())
 
-	reloaded, err := repo.FindCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt)
+	reloaded, err := repository.FindCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.NotNil(t, reloaded)
 	require.NotNil(t, reloaded.ClosedAt)
@@ -120,13 +120,13 @@ func TestObservationWindowRepositoryFindClosedClosesWindowAtEnd(t *testing.T) {
 func TestObservationWindowRepositoryFindClosedRejectsOpenWindow(t *testing.T) {
 	t.Parallel()
 
-	repo := NewRepository(newObservationWindowTestDB(t))
+	repository := NewRepository(newObservationWindowTestDB(t))
 	ctx := context.Background()
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	deploymentCompletedAt := time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
 	observationEndedAt := deploymentCompletedAt.Add(24 * time.Hour)
 
-	require.NoError(t, repo.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
+	require.NoError(t, repository.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "2.0.0",
@@ -136,11 +136,11 @@ func TestObservationWindowRepositoryFindClosedRejectsOpenWindow(t *testing.T) {
 		ObservationEndedAt:    observationEndedAt,
 	}))
 
-	record, err := repo.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(-time.Minute))
+	record, err := repository.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(-time.Minute))
 	require.Nil(t, record)
 	require.ErrorContains(t, err, "still open")
 
-	reloaded, findErr := repo.FindCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt)
+	reloaded, findErr := repository.FindCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, findErr)
 	require.NotNil(t, reloaded)
 	require.Nil(t, reloaded.ClosedAt)
@@ -149,8 +149,8 @@ func TestObservationWindowRepositoryFindClosedRejectsOpenWindow(t *testing.T) {
 func TestObservationWindowRepositoryRejectsInvalidWindow(t *testing.T) {
 	t.Parallel()
 
-	repo := NewRepository(newObservationWindowTestDB(t))
-	err := repo.EnsureCommunityShortsObservationWindow(context.Background(), &domain.YouTubeCommunityShortsObservationWindow{
+	repository := NewRepository(newObservationWindowTestDB(t))
+	err := repository.EnsureCommunityShortsObservationWindow(context.Background(), &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC),
 		AppVersion:            "2.0.0",
@@ -165,12 +165,12 @@ func TestObservationWindowRepositoryRejectsInvalidWindow(t *testing.T) {
 func TestObservationWindowRepositoryRejectsInvalidClosedAt(t *testing.T) {
 	t.Parallel()
 
-	repo := NewRepository(newObservationWindowTestDB(t))
+	repository := NewRepository(newObservationWindowTestDB(t))
 	deploymentCompletedAt := time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
 	observationEndedAt := deploymentCompletedAt.Add(24 * time.Hour)
 	invalidClosedAt := observationEndedAt.Add(time.Minute)
 
-	err := repo.EnsureCommunityShortsObservationWindow(context.Background(), &domain.YouTubeCommunityShortsObservationWindow{
+	err := repository.EnsureCommunityShortsObservationWindow(context.Background(), &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC),
 		AppVersion:            "2.0.0",
@@ -186,7 +186,7 @@ func TestObservationWindowRepositoryRejectsInvalidClosedAt(t *testing.T) {
 func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselines(t *testing.T) {
 	t.Parallel()
 
-	repo := NewRepository(newObservationWindowTestDB(t))
+	repository := NewRepository(newObservationWindowTestDB(t))
 	ctx := context.Background()
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	deploymentCompletedAt := time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
@@ -195,7 +195,7 @@ func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselines(
 	detectedAt := publishedAt.Add(30 * time.Second)
 	lateDetectedAt := observationEndedAt.Add(time.Minute)
 
-	require.NoError(t, repo.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
+	require.NoError(t, repository.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "2.0.0",
@@ -204,7 +204,7 @@ func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselines(
 		ObservationStartedAt:  deploymentCompletedAt,
 		ObservationEndedAt:    observationEndedAt,
 	}))
-	require.NoError(t, repo.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{
+	require.NoError(t, repository.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{
 		{
 			Kind:              domain.OutboxKindCommunityPost,
 			PostID:            "community:post-timely",
@@ -220,14 +220,14 @@ func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselines(
 		},
 	}))
 
-	window, err := repo.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(time.Minute))
+	window, err := repository.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(time.Minute))
 	require.NoError(t, err)
 	require.NotNil(t, window)
 	require.NotNil(t, window.FinalizedPostBaselineAt)
 	require.Equal(t, observationEndedAt, window.FinalizedPostBaselineAt.UTC())
 	require.Equal(t, 1, window.FinalizedPostCount)
 
-	rows, err := repo.ListCommunityShortsObservationPostBaselines(ctx, "youtube-producer", cutoverAt)
+	rows, err := repository.ListCommunityShortsObservationPostBaselines(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, domain.OutboxKindCommunityPost, rows[0].Kind)
@@ -242,13 +242,13 @@ func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselines(
 func TestObservationWindowRepositoryFindClosedFinalizesEmptyObservationPostBaseline(t *testing.T) {
 	t.Parallel()
 
-	repo := NewRepository(newObservationWindowTestDB(t))
+	repository := NewRepository(newObservationWindowTestDB(t))
 	ctx := context.Background()
 	cutoverAt := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
 	deploymentCompletedAt := time.Date(2026, 4, 11, 1, 15, 0, 0, time.UTC)
 	observationEndedAt := deploymentCompletedAt.Add(24 * time.Hour)
 
-	require.NoError(t, repo.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
+	require.NoError(t, repository.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "2.0.0",
@@ -258,14 +258,14 @@ func TestObservationWindowRepositoryFindClosedFinalizesEmptyObservationPostBasel
 		ObservationEndedAt:    observationEndedAt,
 	}))
 
-	window, err := repo.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(time.Minute))
+	window, err := repository.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(time.Minute))
 	require.NoError(t, err)
 	require.NotNil(t, window)
 	require.NotNil(t, window.FinalizedPostBaselineAt)
 	require.Equal(t, observationEndedAt, window.FinalizedPostBaselineAt.UTC())
 	require.Equal(t, 0, window.FinalizedPostCount)
 
-	rows, err := repo.ListCommunityShortsObservationPostBaselines(ctx, "youtube-producer", cutoverAt)
+	rows, err := repository.ListCommunityShortsObservationPostBaselines(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Empty(t, rows)
 }
@@ -273,7 +273,7 @@ func TestObservationWindowRepositoryFindClosedFinalizesEmptyObservationPostBasel
 func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselinesByPublishedWindow(t *testing.T) {
 	t.Parallel()
 
-	repo := NewRepository(newObservationWindowTestDB(t))
+	repository := NewRepository(newObservationWindowTestDB(t))
 	ctx := context.Background()
 	cutoverAt := time.Date(2026, 4, 12, 1, 11, 12, 0, time.UTC)
 	deploymentCompletedAt := time.Date(2026, 4, 12, 1, 15, 0, 0, time.UTC)
@@ -286,7 +286,7 @@ func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselinesB
 	lateDetectionPublishedAt := deploymentCompletedAt.Add(5 * time.Minute)
 	lateDetectedAt := observationEndedAt.Add(time.Minute)
 
-	require.NoError(t, repo.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
+	require.NoError(t, repository.EnsureCommunityShortsObservationWindow(ctx, &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "2.0.0",
@@ -295,7 +295,7 @@ func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselinesB
 		ObservationStartedAt:  deploymentCompletedAt,
 		ObservationEndedAt:    observationEndedAt,
 	}))
-	require.NoError(t, repo.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{
+	require.NoError(t, repository.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{
 		{
 			Kind:              domain.OutboxKindCommunityPost,
 			PostID:            "community:published-before-window",
@@ -325,14 +325,14 @@ func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselinesB
 		},
 	}))
 
-	window, err := repo.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(time.Minute))
+	window, err := repository.FindClosedCommunityShortsObservationWindow(ctx, "youtube-producer", cutoverAt, observationEndedAt.Add(time.Minute))
 	require.NoError(t, err)
 	require.NotNil(t, window)
 	require.NotNil(t, window.FinalizedPostBaselineAt)
 	require.Equal(t, observationEndedAt, window.FinalizedPostBaselineAt.UTC())
 	require.Equal(t, 2, window.FinalizedPostCount)
 
-	rows, err := repo.ListCommunityShortsObservationPostBaselines(ctx, "youtube-producer", cutoverAt)
+	rows, err := repository.ListCommunityShortsObservationPostBaselines(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 

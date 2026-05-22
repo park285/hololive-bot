@@ -139,22 +139,22 @@ func (s *Scheduler) WorkerCount() int {
 	return s.workerCount
 }
 
-func NewScheduler(cfg SchedulerConfig) *Scheduler {
+func NewScheduler(config SchedulerConfig) *Scheduler {
 	defaults := DefaultSchedulerConfig()
-	if cfg.WorkerCount <= 0 {
-		cfg.WorkerCount = defaults.WorkerCount
+	if config.WorkerCount <= 0 {
+		config.WorkerCount = defaults.WorkerCount
 	}
-	if cfg.PollTimeout <= 0 {
-		cfg.PollTimeout = defaults.PollTimeout
+	if config.PollTimeout <= 0 {
+		config.PollTimeout = defaults.PollTimeout
 	}
-	if cfg.ErrorBackoffMin <= 0 {
-		cfg.ErrorBackoffMin = defaults.ErrorBackoffMin
+	if config.ErrorBackoffMin <= 0 {
+		config.ErrorBackoffMin = defaults.ErrorBackoffMin
 	}
-	if cfg.ErrorBackoffMax <= 0 {
-		cfg.ErrorBackoffMax = defaults.ErrorBackoffMax
+	if config.ErrorBackoffMax <= 0 {
+		config.ErrorBackoffMax = defaults.ErrorBackoffMax
 	}
-	if cfg.ErrorBackoffMax < cfg.ErrorBackoffMin {
-		cfg.ErrorBackoffMax = cfg.ErrorBackoffMin
+	if config.ErrorBackoffMax < config.ErrorBackoffMin {
+		config.ErrorBackoffMax = config.ErrorBackoffMin
 	}
 	// RequestInterval이 0이면 NewRateLimiter(0)이 생성되어 Wait()가 즉시 반환.
 	// 외부 RateLimiter에 rate limiting을 위임하는 경우에 사용.
@@ -163,12 +163,12 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 	return &Scheduler{
 		jobs:            make(jobHeap, 0),
 		jobMap:          make(map[string]*Job),
-		rateLimiter:     NewRateLimiter(cfg.RequestInterval),
-		workerCount:     cfg.WorkerCount,
-		pollTimeout:     cfg.PollTimeout,
-		errorBackoffMin: cfg.ErrorBackoffMin,
-		errorBackoffMax: cfg.ErrorBackoffMax,
-		jobClaimer:      cfg.JobClaimer,
+		rateLimiter:     NewRateLimiter(config.RequestInterval),
+		workerCount:     config.WorkerCount,
+		pollTimeout:     config.PollTimeout,
+		errorBackoffMin: config.ErrorBackoffMin,
+		errorBackoffMax: config.ErrorBackoffMax,
+		jobClaimer:      config.JobClaimer,
 		stopCh:          make(chan struct{}),
 		wakeCh:          make(chan struct{}, 1),
 	}

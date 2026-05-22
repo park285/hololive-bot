@@ -425,9 +425,9 @@ func TestBuildYouTubeProducerChannelPollerRegistrations(t *testing.T) {
 func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewLenientClient()
+	cache := cachemocks.NewLenientClient()
 	sharedRL := scraper.NewRateLimiter(time.Second)
-	cfg := config.ScraperConfig{
+	appConfig := config.ScraperConfig{
 		ProxyEnabled:        true,
 		ProxyURL:            "socks5://proxy.internal:1080",
 		PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
@@ -439,10 +439,10 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 			Live:      3 * time.Minute,
 		},
 	}
-	sharedClient := polling.BuildSharedClient(cfg, cacheSvc, sharedRL)
+	sharedClient := polling.BuildSharedClient(appConfig, cache, sharedRL)
 	registrations := polling.BuildRegistrationsWithClient(
 		&databasemocks.Client{},
-		cfg,
+		appConfig,
 		sharedClient,
 		nil,
 		nil,
@@ -450,7 +450,7 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 		[]string{"UC_STATS_A"},
 	)
 	resolver := publishedat.BuildPendingResolver(
-		cfg,
+		appConfig,
 		&databasemocks.Client{},
 		sharedClient,
 		func(poller.NotificationRouteRequest) bool { return false },
@@ -490,7 +490,7 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_NilRouteDeciderDisablesInlinePublishedAtFallback(t *testing.T) {
 	t.Parallel()
 
-	cfg := config.ScraperConfig{
+	appConfig := config.ScraperConfig{
 		PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		Poll: config.ScraperPoll{
 			Videos:    7 * time.Minute,
@@ -503,8 +503,8 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_NilRouteDecide
 
 	registrations := polling.BuildRegistrationsWithClient(
 		&databasemocks.Client{},
-		cfg,
-		polling.BuildSharedClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
+		appConfig,
+		polling.BuildSharedClient(appConfig, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
 		nil,
 		[]string{"UC_NOTIFY_A"},
@@ -519,7 +519,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_NilRouteDecide
 func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_DisabledResolverEnablesInlinePublishedAtFallbackForRoutedPollers(t *testing.T) {
 	t.Parallel()
 
-	cfg := config.ScraperConfig{
+	appConfig := config.ScraperConfig{
 		PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 			Enabled: false,
 		},
@@ -534,8 +534,8 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_DisabledResolv
 
 	registrations := polling.BuildRegistrationsWithClient(
 		&databasemocks.Client{},
-		cfg,
-		polling.BuildSharedClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
+		appConfig,
+		polling.BuildSharedClient(appConfig, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		[]string{"UC_NOTIFY_A"},
@@ -550,7 +550,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_DisabledResolv
 func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
 	t.Parallel()
 
-	cfg := config.ScraperConfig{
+	appConfig := config.ScraperConfig{
 		PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 			Enabled:           true,
 			Interval:          12 * time.Second,
@@ -564,7 +564,7 @@ func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
 	}
 
 	resolver := publishedat.BuildPendingResolver(
-		cfg,
+		appConfig,
 		&databasemocks.Client{},
 		scraper.NewClient(),
 		func(poller.NotificationRouteRequest) bool { return true },

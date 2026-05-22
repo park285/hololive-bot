@@ -49,7 +49,7 @@ func newCheckerTestCacheClient(t *testing.T) cache.Client {
 		t.Fatalf("Atoi() error = %v", err)
 	}
 
-	cacheSvc, err := cache.NewCacheService(
+	cacheClient, err := cache.NewCacheService(
 		t.Context(),
 		cache.Config{
 			Host:              host,
@@ -64,9 +64,9 @@ func newCheckerTestCacheClient(t *testing.T) cache.Client {
 	}
 
 	t.Cleanup(func() {
-		_ = cacheSvc.Close()
+		_ = cacheClient.Close()
 		mini.Close()
 	})
 
-	return cacheSvc
+	return cacheClient
 }

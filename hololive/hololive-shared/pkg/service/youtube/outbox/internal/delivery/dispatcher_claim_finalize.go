@@ -15,12 +15,12 @@ import (
 
 func (d *Dispatcher) finalizeClaimSuccess(
 	ctx context.Context,
-	repo *trackingrepo.GormRepository,
+	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 	claimAt time.Time,
 ) (deliveryClaimDecision, *deliveryClaimToken, error) {
-	state, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repo, outbox, postID, "reload alarm state after claim success")
+	state, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repository, outbox, postID, "reload alarm state after claim success")
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, err
 	}
@@ -40,11 +40,11 @@ func (d *Dispatcher) finalizeClaimSuccess(
 
 func (d *Dispatcher) finalizeClaimMiss(
 	ctx context.Context,
-	repo *trackingrepo.GormRepository,
+	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 ) (deliveryClaimDecision, *deliveryClaimToken, error) {
-	_, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repo, outbox, postID, "reload alarm state after claim miss")
+	_, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repository, outbox, postID, "reload alarm state after claim miss")
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, err
 	}
@@ -57,17 +57,17 @@ func (d *Dispatcher) finalizeClaimMiss(
 
 func (d *Dispatcher) reloadAlarmStateClaimStatus(
 	ctx context.Context,
-	repo *trackingrepo.GormRepository,
+	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 	action string,
 ) (*domain.YouTubeCommunityShortsAlarmState, bool, error) {
-	state, err := repo.FindAlarmStateByPostID(ctx, outbox.Kind, postID)
+	state, err := repository.FindAlarmStateByPostID(ctx, outbox.Kind, postID)
 	if err != nil {
 		return nil, false, fmt.Errorf("%s: %w", action, err)
 	}
 
-	alreadyCompleted, err := d.isCommunityShortsDeliveryAlreadyCompleted(ctx, repo, outbox, state)
+	alreadyCompleted, err := d.isCommunityShortsDeliveryAlreadyCompleted(ctx, repository, outbox, state)
 	if err != nil {
 		return nil, false, err
 	}
@@ -77,7 +77,7 @@ func (d *Dispatcher) reloadAlarmStateClaimStatus(
 
 func (d *Dispatcher) loadClaimTrackingRow(
 	ctx context.Context,
-	repo *trackingrepo.GormRepository,
+	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 ) (*domain.YouTubeContentAlarmTracking, error) {
@@ -85,7 +85,7 @@ func (d *Dispatcher) loadClaimTrackingRow(
 		return nil, nil
 	}
 
-	trackingRow, err := repo.FindByIdentity(ctx, outbox.Kind, outbox.ContentID)
+	trackingRow, err := repository.FindByIdentity(ctx, outbox.Kind, outbox.ContentID)
 	if err != nil {
 		return nil, fmt.Errorf("load tracking row: %w", err)
 	}

@@ -320,14 +320,14 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	// 최신 env만 설정
 	t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 
-	cfg, err := config.Load()
+	appConfig, err := config.Load()
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
 
 	var buf bytes.Buffer
 	logger := logging.NewTestLoggerWithOutput(&buf)
-	client := ProvideMemberNewsLLMClient(cfg.Cliproxy, cfg.LLM, logger)
+	client := ProvideMemberNewsLLMClient(appConfig.Cliproxy, appConfig.LLM, logger)
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}

@@ -60,9 +60,9 @@ func TestRuntimeAllowsAlarmScheduler(t *testing.T) {
 func TestLoadAlarmDispatchPublishConfigRejectsUnknownMode(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg-frist")
 
-	cfg, err := loadAlarmDispatchPublishConfig()
+	appConfig, err := loadAlarmDispatchPublishConfig()
 	require.Error(t, err)
-	assert.Equal(t, queue.PublishConfig{}, cfg)
+	assert.Equal(t, queue.PublishConfig{}, appConfig)
 	assert.True(t, strings.Contains(err.Error(), "ALARM_DISPATCH_PUBLISH_MODE"))
 }
 
@@ -70,18 +70,18 @@ func TestLoadAlarmDispatchPublishConfigRejectsForbiddenConsumerModePair(t *testi
 	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
 	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "valkey")
 
-	cfg, err := loadAlarmDispatchPublishConfig()
+	appConfig, err := loadAlarmDispatchPublishConfig()
 	require.Error(t, err)
-	assert.Equal(t, queue.PublishConfig{}, cfg)
+	assert.Equal(t, queue.PublishConfig{}, appConfig)
 	assert.Contains(t, err.Error(), "forbidden alarm dispatch mode combination")
 }
 
 func TestLoadAlarmDispatchPublishConfigRejectsPGFirstWithoutPeerConsumerMode(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
 
-	cfg, err := loadAlarmDispatchPublishConfig()
+	appConfig, err := loadAlarmDispatchPublishConfig()
 	require.Error(t, err)
-	assert.Equal(t, queue.PublishConfig{}, cfg)
+	assert.Equal(t, queue.PublishConfig{}, appConfig)
 	assert.Contains(t, err.Error(), "ALARM_DISPATCH_CONSUMER_MODE is required")
 }
 
@@ -89,15 +89,15 @@ func TestLoadAlarmDispatchPublishConfigAllowsMatchingPGPair(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
 	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "pg")
 
-	cfg, err := loadAlarmDispatchPublishConfig()
+	appConfig, err := loadAlarmDispatchPublishConfig()
 	require.NoError(t, err)
-	assert.Equal(t, queue.PublishModePGFirst, cfg.Mode)
+	assert.Equal(t, queue.PublishModePGFirst, appConfig.Mode)
 }
 
 func TestNotificationEgressRunnerRetriesHeldLeaseUntilAcquired(t *testing.T) {
 	var setNXCalls atomic.Int32
 	var schedulerStarts atomic.Int32
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
 			return setNXCalls.Add(1) > 1, nil
 		},
@@ -106,7 +106,7 @@ func TestNotificationEgressRunnerRetriesHeldLeaseUntilAcquired(t *testing.T) {
 		},
 	}
 	runner := notificationEgressRunner{
-		leaseCache:         cacheSvc,
+		leaseCache:         cache,
 		leaseEnabled:       true,
 		leaseRetryInterval: time.Millisecond,
 	}

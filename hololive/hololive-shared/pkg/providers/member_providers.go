@@ -39,20 +39,20 @@ func ProvideMemberRepository(postgres database.Client, logger *slog.Logger) *mem
 // ProvideMemberCache - 멤버 캐시 생성 (초기 워밍업 포함)
 func ProvideMemberCache(
 	ctx context.Context,
-	repo *member.Repository,
-	cacheSvc cache.Client,
+	repository *member.Repository,
+	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*member.Cache, error) {
-	memberCache, err := buildMemberCache(ctx, repo, cacheSvc, logger)
+	memberCache, err := buildMemberCache(ctx, repository, cacheClient, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	if cacheSvc == nil {
+	if cacheClient == nil {
 		logger.Warn("Cache service is nil; member database init skipped")
 		return memberCache, nil
 	}
-	if err := initializeMemberDatabase(ctx, repo, cacheSvc, logger); err != nil {
+	if err := initializeMemberDatabase(ctx, repository, cacheClient, logger); err != nil {
 		return nil, err
 	}
 
@@ -61,11 +61,11 @@ func ProvideMemberCache(
 
 func initializeMemberDatabase(
 	ctx context.Context,
-	repo *member.Repository,
-	cacheSvc cache.Client,
+	repository *member.Repository,
+	cacheClient cache.Client,
 	logger *slog.Logger,
 ) error {
-	members, err := repo.GetAllMembers(ctx)
+	members, err := repository.GetAllMembers(ctx)
 	if err != nil {
 		logger.Warn("Failed to load members for member database init", slog.Any("error", err))
 		members = []*domain.Member{}
@@ -79,7 +79,7 @@ func initializeMemberDatabase(
 		}
 	}
 
-	if err := cacheSvc.InitializeMemberDatabase(ctx, memberMap); err != nil {
+	if err := cacheClient.InitializeMemberDatabase(ctx, memberMap); err != nil {
 		return fmt.Errorf("failed to initialize member database: %w", err)
 	}
 	return nil
@@ -99,14 +99,14 @@ func ProvideMemberServiceAdapter(ctx context.Context, memberCache *member.Cache,
 // ProvideProfileService - 프로필 서비스 생성 (번역 사전 로드 포함)
 func ProvideProfileService(
 	ctx context.Context,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	members member.DataProvider,
 	logger *slog.Logger,
 ) (*member.ProfileService, error) {
-	svc, err := member.NewProfileService(cacheSvc, members, logger)
+	service, err := member.NewProfileService(cacheClient, members, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create profile service: %w", err)
 	}
-	svc.PreloadTranslations(ctx)
-	return svc, nil
+	service.PreloadTranslations(ctx)
+	return service, nil
 }

@@ -29,7 +29,7 @@ import (
 type YouTubeStack struct {
 	Service   youtube.Service
 	Scheduler youtube.Scheduler
-	StatsRepo *ytstats.StatsRepository
+	StatsRepository *ytstats.StatsRepository
 }
 
 func (s *YouTubeStack) GetService() youtube.Service {
@@ -46,9 +46,9 @@ func (s *YouTubeStack) GetScheduler() youtube.Scheduler {
 	return s.Scheduler
 }
 
-func (s *YouTubeStack) GetStatsRepo() *ytstats.StatsRepository {
+func (s *YouTubeStack) GetStatsRepository() *ytstats.StatsRepository {
 	if s == nil {
 		return nil
 	}
-	return s.StatsRepo
+	return s.StatsRepository
 }

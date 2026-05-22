@@ -44,7 +44,7 @@ func (d *Dispatcher) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTu
 
 	var items []domain.YouTubeNotificationOutbox
 	now := time.Now()
-	lockExpiry := now.Add(-d.cfg.LockTimeout)
+	lockExpiry := now.Add(-d.config.LockTimeout)
 
 	if err := d.db.WithContext(ctx).Raw(`
 		WITH claim AS (
@@ -73,7 +73,7 @@ func (d *Dispatcher) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTu
 		       attempt_count, next_attempt_at, created_at, locked_at, sent_at, error
 		FROM updated
 		ORDER BY created_at ASC
-	`, domain.OutboxStatusPending, lockExpiry, now, d.cfg.BatchSize, now).Scan(&items).Error; err != nil {
+	`, domain.OutboxStatusPending, lockExpiry, now, d.config.BatchSize, now).Scan(&items).Error; err != nil {
 		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)
 	}
 
@@ -82,7 +82,7 @@ func (d *Dispatcher) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTu
 
 func (d *Dispatcher) fetchAndLockForPerRoomSQLite(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
 	now := time.Now()
-	lockExpiry := now.Add(-d.cfg.LockTimeout)
+	lockExpiry := now.Add(-d.config.LockTimeout)
 
 	var items []domain.YouTubeNotificationOutbox
 	if err := d.db.WithContext(ctx).
@@ -90,7 +90,7 @@ func (d *Dispatcher) fetchAndLockForPerRoomSQLite(ctx context.Context) ([]domain
 		Where("(locked_at IS NULL OR locked_at < ?) AND next_attempt_at <= ?", lockExpiry, now).
 		Where("NOT EXISTS (SELECT 1 FROM youtube_notification_delivery d WHERE d.outbox_id = youtube_notification_outbox.id)").
 		Order("created_at ASC").
-		Limit(d.cfg.BatchSize).
+		Limit(d.config.BatchSize).
 		Find(&items).Error; err != nil {
 		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode (sqlite): %w", err)
 	}
@@ -125,7 +125,7 @@ func (d *Dispatcher) reconcileTerminalOutboxStatuses(ctx context.Context) {
 		return
 	}
 
-	outboxIDs, err := d.delivery.FindPendingOutboxIDsForAggregateSync(ctx, d.cfg.BatchSize)
+	outboxIDs, err := d.delivery.FindPendingOutboxIDsForAggregateSync(ctx, d.config.BatchSize)
 	if err != nil {
 		d.logger.Warn("Failed to find terminal outbox rows for aggregate sync", slog.Any("error", err))
 		return
@@ -241,7 +241,7 @@ func (d *Dispatcher) recordOutboxEnqueueStats(claimed int, stats outboxEnqueueSt
 }
 
 func (d *Dispatcher) processPendingDeliveries(ctx context.Context) int {
-	rows, err := d.delivery.FetchAndLock(ctx, d.cfg.BatchSize, d.cfg.LockTimeout)
+	rows, err := d.delivery.FetchAndLock(ctx, d.config.BatchSize, d.config.LockTimeout)
 	if err != nil {
 		d.logger.Error("Failed to fetch delivery rows", slog.Any("error", err))
 		return 0
@@ -262,7 +262,7 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) int {
 	if err != nil {
 		d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
 		outboxDeliveryProcessedTotal.WithLabelValues("failed").Add(float64(len(rows)))
-		_ = d.delivery.MarkFailedRetryBatch(ctx, collectDeliveryIDs(rows), d.cfg.MaxRetries, d.cfg.RetryBackoff, "load outbox rows")
+		_ = d.delivery.MarkFailedRetryBatch(ctx, collectDeliveryIDs(rows), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows")
 		return len(rows)
 	}
 
@@ -286,7 +286,7 @@ func (d *Dispatcher) markDispatchResult(ctx context.Context, result deliveryDisp
 		}
 	}
 	for reason, ids := range result.failureBuckets {
-		if err := d.delivery.MarkFailedRetryBatch(ctx, ids, d.cfg.MaxRetries, d.cfg.RetryBackoff, reason); err != nil {
+		if err := d.delivery.MarkFailedRetryBatch(ctx, ids, d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
 			d.logger.Error("Failed to mark delivery rows as failed",
 				slog.String("reason", reason),
 				slog.Any("error", err))

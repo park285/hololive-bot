@@ -1,5 +1,3 @@
-// Package logging: 공통 로깅 유틸리티를 제공합니다.
-// slog + tint 기반의 구조화된 로깅, archive-aware file rotation, OpenTelemetry 상관관계를 지원합니다.
 package logging
 
 import (
@@ -73,8 +71,8 @@ func NewLogger() *slog.Logger {
 }
 
 func NewLoggerWithLevel(level string) *slog.Logger {
-	cfg := Config{Level: level}
-	logger, err := EnableFileLogging(cfg, "")
+	config := Config{Level: level}
+	logger, err := EnableFileLogging(config, "")
 	if err != nil || logger == nil {
 		return NewLogger()
 	}
@@ -89,25 +87,25 @@ func NewTestLoggerWithOutput(w io.Writer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(w, nil))
 }
 
-func EnableFileLogging(cfg Config, fileName string) (*slog.Logger, error) {
-	return EnableFileLoggingWithOTel(cfg, fileName, false)
+func EnableFileLogging(config Config, fileName string) (*slog.Logger, error) {
+	return EnableFileLoggingWithOTel(config, fileName, false)
 }
 
-func EnableFileLoggingWithLevel(cfg Config, fileName, level string) (*slog.Logger, error) {
-	cfg.Level = level
-	return EnableFileLogging(cfg, fileName)
+func EnableFileLoggingWithLevel(config Config, fileName, level string) (*slog.Logger, error) {
+	config.Level = level
+	return EnableFileLogging(config, fileName)
 }
 
-func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*slog.Logger, error) {
-	level := ParseLevel(cfg.Level)
-	logDir := strings.TrimSpace(cfg.Dir)
+func EnableFileLoggingWithOTel(config Config, fileName string, enableOTel bool) (*slog.Logger, error) {
+	level := ParseLevel(config.Level)
+	logDir := strings.TrimSpace(config.Dir)
 	if logDir == "" {
 		logger := slog.New(newConsoleHandler(level, os.Stdout, enableOTel))
 		slog.SetDefault(logger)
 		return logger, nil
 	}
-	if cfg.MaxSizeMB <= 0 || cfg.MaxBackups <= 0 || cfg.MaxAgeDays <= 0 {
-		return nil, fmt.Errorf("invalid log config: size=%d backups=%d age_days=%d", cfg.MaxSizeMB, cfg.MaxBackups, cfg.MaxAgeDays)
+	if config.MaxSizeMB <= 0 || config.MaxBackups <= 0 || config.MaxAgeDays <= 0 {
+		return nil, fmt.Errorf("invalid log config: size=%d backups=%d age_days=%d", config.MaxSizeMB, config.MaxBackups, config.MaxAgeDays)
 	}
 
 	if err := ensureLogDirPerm(logDir); err != nil {
@@ -119,13 +117,13 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 		return nil, fmt.Errorf("prepare log file failed: %w", err)
 	}
 
-	logArchiver := newCompressedLogArchiver(logPath, cfg.MaxBackups, cfg.MaxAgeDays, cfg.Compress)
+	logArchiver := newCompressedLogArchiver(logPath, config.MaxBackups, config.MaxAgeDays, config.Compress)
 	logFile := &lumberjack.Logger{
 		Filename:   logPath,
-		MaxSize:    cfg.MaxSizeMB,
-		MaxBackups: cfg.MaxBackups,
-		MaxAge:     cfg.MaxAgeDays,
-		Compress:   cfg.Compress,
+		MaxSize:    config.MaxSizeMB,
+		MaxBackups: config.MaxBackups,
+		MaxAge:     config.MaxAgeDays,
+		Compress:   config.Compress,
 	}
 
 	w := io.MultiWriter(os.Stdout, &archiveAwareWriter{inner: logFile, archiver: logArchiver})

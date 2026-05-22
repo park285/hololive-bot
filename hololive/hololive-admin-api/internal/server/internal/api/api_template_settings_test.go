@@ -62,10 +62,10 @@ func (s *stubSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedset
 	}
 }
 
-func TestTemplateAPIHandler_ValidationBranches(t *testing.T) {
+func TestTemplateHandler_ValidationBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := &TemplateAPIHandler{APIHandler: &APIHandler{
+	handler := &TemplateHandler{Handler: &Handler{
 		templateAdmin: &template.AdminService{},
 		logger:        newDiscardLogger(),
 	}}
@@ -152,7 +152,7 @@ func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("invalid json branches", func(t *testing.T) {
-		handler := &SettingsAPIHandler{APIHandler: &APIHandler{
+		handler := &SettingsAPIHandler{Handler: &Handler{
 			logger: newDiscardLogger(),
 		}}
 
@@ -179,15 +179,15 @@ func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 
 	t.Run("get logs/settings and update success", func(t *testing.T) {
 		applier := &stubSettingsApplier{}
-		settingsSvc := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
+		settingsService := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
 			AlarmAdvanceMinutes: 5,
 			ScraperProxyEnabled: false,
 		}, newDiscardLogger())
 
-		handler := &SettingsAPIHandler{APIHandler: &APIHandler{
+		handler := &SettingsAPIHandler{Handler: &Handler{
 			logger:          newDiscardLogger(),
 			activity:        newActivityLoggerForTest(t),
-			settings:        settingsSvc,
+			settings:        settingsService,
 			settingsApplier: applier,
 		}}
 

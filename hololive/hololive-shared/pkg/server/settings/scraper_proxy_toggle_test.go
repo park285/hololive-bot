@@ -49,7 +49,7 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 	t.Parallel()
 
 	t.Run("applies to youtube service and scheduler", func(t *testing.T) {
-		youtubeSvc := &scraperProxyTestYouTubeService{}
+		youtubeService := &scraperProxyTestYouTubeService{}
 		scheduler := poller.NewScheduler(poller.SchedulerConfig{
 			WorkerCount:     1,
 			RequestInterval: 0,
@@ -57,11 +57,11 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 		trackingPoller := &scraperProxyTogglePoller{}
 		scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
-		ApplyScraperProxyToggle(true, youtubeSvc, nil, scheduler, slog.New(slog.DiscardHandler))
-		if youtubeSvc.setCalls != 1 {
-			t.Fatalf("SetScraperProxyEnabled calls = %d, want 1", youtubeSvc.setCalls)
+		ApplyScraperProxyToggle(true, youtubeService, nil, scheduler, slog.New(slog.DiscardHandler))
+		if youtubeService.setCalls != 1 {
+			t.Fatalf("SetScraperProxyEnabled calls = %d, want 1", youtubeService.setCalls)
 		}
-		if !youtubeSvc.ScraperProxyEnabled() {
+		if !youtubeService.ScraperProxyEnabled() {
 			t.Fatal("youtube proxy not enabled")
 		}
 
@@ -73,11 +73,11 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 			t.Fatal("scheduler proxy not enabled")
 		}
 
-		ApplyScraperProxyToggle(false, youtubeSvc, nil, scheduler, slog.New(slog.DiscardHandler))
-		if youtubeSvc.setCalls != 2 {
-			t.Fatalf("SetScraperProxyEnabled calls = %d, want 2", youtubeSvc.setCalls)
+		ApplyScraperProxyToggle(false, youtubeService, nil, scheduler, slog.New(slog.DiscardHandler))
+		if youtubeService.setCalls != 2 {
+			t.Fatalf("SetScraperProxyEnabled calls = %d, want 2", youtubeService.setCalls)
 		}
-		if youtubeSvc.ScraperProxyEnabled() {
+		if youtubeService.ScraperProxyEnabled() {
 			t.Fatal("youtube proxy still enabled")
 		}
 		enabled, known = scheduler.ProxyEnabled()

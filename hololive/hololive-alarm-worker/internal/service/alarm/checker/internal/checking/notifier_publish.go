@@ -69,7 +69,7 @@ func claimKeysFromItems(items []claimedSend) []string {
 }
 
 func (n *Notifier) markPublishedBestEffort(ctx context.Context, payload *sendInput) {
-	if err := n.dedupSvc.MarkAsNotified(
+	if err := n.dedupService.MarkAsNotified(
 		ctx,
 		payload.streamID,
 		payload.startScheduled,
@@ -82,7 +82,7 @@ func (n *Notifier) markPublishedBestEffort(ctx context.Context, payload *sendInp
 		)
 	}
 
-	if err := n.dedupSvc.MarkUpcomingEventNotified(
+	if err := n.dedupService.MarkUpcomingEventNotified(
 		ctx,
 		payload.notification.RoomID,
 		payload.channelID,
@@ -101,7 +101,7 @@ func (n *Notifier) releaseClaimsBestEffort(ctx context.Context, claimKeys []stri
 		return
 	}
 
-	if err := n.dedupSvc.ReleaseClaims(ctx, claimKeys); err != nil {
+	if err := n.dedupService.ReleaseClaims(ctx, claimKeys); err != nil {
 		n.logger.Warn(message, slog.Any("error", err))
 	}
 }

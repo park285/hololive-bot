@@ -93,7 +93,7 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 }
 
 func (c *YouTubeChecker) roomHasRecentUpcomingNotification(ctx context.Context, roomID, channelID string, stream *domain.Stream) (bool, error) {
-	recentlyUpcoming, err := c.dedupSvc.WasUpcomingEventNotifiedRecently(
+	recentlyUpcoming, err := c.dedupService.WasUpcomingEventNotifiedRecently(
 		ctx,
 		roomID,
 		channelID,

@@ -64,12 +64,12 @@ func TestSetStreamsAndGetStreams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			svc, _ := newTestCacheService(t)
+			service, _ := newTestCacheService(t)
 			ctx := context.Background()
 
-			svc.SetStreams(ctx, tt.key, tt.streams, tt.ttl)
+			service.SetStreams(ctx, tt.key, tt.streams, tt.ttl)
 
-			got, found := svc.GetStreams(ctx, tt.key)
+			got, found := service.GetStreams(ctx, tt.key)
 			if found != tt.wantFound {
 				t.Errorf("GetStreams() found = %v, want %v", found, tt.wantFound)
 			}
@@ -83,10 +83,10 @@ func TestSetStreamsAndGetStreams(t *testing.T) {
 func TestGetStreams_NonExistentKey(t *testing.T) {
 	t.Parallel()
 
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
-	got, found := svc.GetStreams(ctx, "streams:nonexistent")
+	got, found := service.GetStreams(ctx, "streams:nonexistent")
 	if found {
 		t.Errorf("GetStreams() found = true, want false for non-existent key")
 	}
@@ -98,16 +98,16 @@ func TestGetStreams_NonExistentKey(t *testing.T) {
 func TestSetStreams_TTLIsApplied(t *testing.T) {
 	t.Parallel()
 
-	svc, mini := newTestCacheService(t)
+	service, mini := newTestCacheService(t)
 	ctx := context.Background()
 
 	streams := []*domain.Stream{
 		{ID: "vid-ttl", Title: "TTL 테스트 방송"},
 	}
-	svc.SetStreams(ctx, "streams:ttl-test", streams, time.Second)
+	service.SetStreams(ctx, "streams:ttl-test", streams, time.Second)
 
 	// TTL 만료 전 조회 - 성공
-	_, found := svc.GetStreams(ctx, "streams:ttl-test")
+	_, found := service.GetStreams(ctx, "streams:ttl-test")
 	if !found {
 		t.Fatal("TTL 만료 전 GetStreams()에서 스트림을 찾지 못함")
 	}
@@ -116,7 +116,7 @@ func TestSetStreams_TTLIsApplied(t *testing.T) {
 	mini.FastForward(2 * time.Second)
 
 	// TTL 만료 후 조회 - 실패
-	_, found = svc.GetStreams(ctx, "streams:ttl-test")
+	_, found = service.GetStreams(ctx, "streams:ttl-test")
 	if found {
 		t.Error("TTL 만료 후에도 GetStreams()에서 스트림을 찾음 (기대: false)")
 	}
@@ -125,7 +125,7 @@ func TestSetStreams_TTLIsApplied(t *testing.T) {
 func TestSetStreams_ContentMatch(t *testing.T) {
 	t.Parallel()
 
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
 	channelName := "테스트 채널"
@@ -138,9 +138,9 @@ func TestSetStreams_ContentMatch(t *testing.T) {
 			Status:      domain.StreamStatusLive,
 		},
 	}
-	svc.SetStreams(ctx, "streams:match", streams, time.Minute)
+	service.SetStreams(ctx, "streams:match", streams, time.Minute)
 
-	got, found := svc.GetStreams(ctx, "streams:match")
+	got, found := service.GetStreams(ctx, "streams:match")
 	if !found {
 		t.Fatal("GetStreams() found = false, want true")
 	}

@@ -105,12 +105,12 @@ func TestSaveStats_DisablesLatestSnapshotOnUndefinedTable(t *testing.T) {
 			return pgconn.NewCommandTag("INSERT 0 1"), nil
 		},
 	}
-	repo := newTestStatsRepository(db)
+	repository := newTestStatsRepository(db)
 
-	if err := repo.SaveStats(context.Background(), newTestTimestampedStats("UC1")); err != nil {
+	if err := repository.SaveStats(context.Background(), newTestTimestampedStats("UC1")); err != nil {
 		t.Fatalf("first SaveStats returned error: %v", err)
 	}
-	if err := repo.SaveStats(context.Background(), newTestTimestampedStats("UC1")); err != nil {
+	if err := repository.SaveStats(context.Background(), newTestTimestampedStats("UC1")); err != nil {
 		t.Fatalf("second SaveStats returned error: %v", err)
 	}
 
@@ -120,7 +120,7 @@ func TestSaveStats_DisablesLatestSnapshotOnUndefinedTable(t *testing.T) {
 	if latestExecCount != 1 {
 		t.Fatalf("latestExecCount = %d, want 1", latestExecCount)
 	}
-	if repo.isLatestTableAvailable() {
+	if repository.isLatestTableAvailable() {
 		t.Fatal("latestTableAvailable should be false after undefined table error")
 	}
 }
@@ -136,16 +136,16 @@ func TestSaveStats_ReturnsErrorOnLatestSnapshotFailure(t *testing.T) {
 			return pgconn.NewCommandTag("INSERT 0 1"), nil
 		},
 	}
-	repo := newTestStatsRepository(db)
+	repository := newTestStatsRepository(db)
 
-	err := repo.SaveStats(context.Background(), newTestTimestampedStats("UC2"))
+	err := repository.SaveStats(context.Background(), newTestTimestampedStats("UC2"))
 	if err == nil {
 		t.Fatal("SaveStats error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "failed to save latest stats snapshot") {
 		t.Fatalf("error = %q, want contains %q", err.Error(), "failed to save latest stats snapshot")
 	}
-	if !repo.isLatestTableAvailable() {
+	if !repository.isLatestTableAvailable() {
 		t.Fatal("latestTableAvailable should remain true on non-undefined-table error")
 	}
 }
@@ -189,9 +189,9 @@ func TestGetLatestStats_FallsBackToHistoryWhenSnapshotTableMissing(t *testing.T)
 			}
 		},
 	}
-	repo := newTestStatsRepository(db)
+	repository := newTestStatsRepository(db)
 
-	got, err := repo.GetLatestStats(context.Background(), "UC3")
+	got, err := repository.GetLatestStats(context.Background(), "UC3")
 	if err != nil {
 		t.Fatalf("GetLatestStats error: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestGetLatestStats_FallsBackToHistoryWhenSnapshotTableMissing(t *testing.T)
 	if len(calls) != 2 || calls[0] != "snapshot" || calls[1] != "history" {
 		t.Fatalf("query call order = %#v, want [snapshot history]", calls)
 	}
-	if repo.isLatestTableAvailable() {
+	if repository.isLatestTableAvailable() {
 		t.Fatal("latestTableAvailable should be false after snapshot table missing")
 	}
 }

@@ -267,7 +267,7 @@ func TestBuildYouTubeProducerHTTPServer(t *testing.T) {
 
 	ctx := t.Context()
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			Port: 31004,
 		},
@@ -277,7 +277,7 @@ func TestBuildYouTubeProducerHTTPServer(t *testing.T) {
 		youtubeEnabled:   false,
 		photoSyncEnabled: true,
 	})
-	server, err := buildYouTubeProducerHTTPServer(ctx, cfg, testLogger(), youtubeProducerRuntimeName, readiness)
+	server, err := buildYouTubeProducerHTTPServer(ctx, appConfig, testLogger(), youtubeProducerRuntimeName, readiness)
 	if err != nil {
 		t.Fatalf("buildYouTubeProducerHTTPServer() error = %v", err)
 	}

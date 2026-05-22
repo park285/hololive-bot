@@ -35,14 +35,14 @@ import (
 // Admin API 라우트(members, alarms, rooms, stats, settings 등)는 이 라우터에서 제외합니다.
 func ProvideBotRouter(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
-		APIKey:         cfg.Server.APIKey,
-		RegisterRoutes: botRouteRegistrar(cfg.Server.APIKey, webhookHandler, triggerHandler),
+		APIKey:         appConfig.Server.APIKey,
+		RegisterRoutes: botRouteRegistrar(appConfig.Server.APIKey, webhookHandler, triggerHandler),
 	})
 }
 

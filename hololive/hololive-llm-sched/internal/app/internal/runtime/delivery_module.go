@@ -34,11 +34,11 @@ type DeliveryModule struct {
 }
 
 func BuildDeliveryModule(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	postgres database.Client,
 	logger *slog.Logger,
 ) *DeliveryModule {
-	locker := delivery.NewLocker(cacheSvc, logger)
+	locker := delivery.NewLocker(cacheClient, logger)
 	repository := delivery.NewOutboxRepository(postgres.GetGormDB(), logger)
 
 	return &DeliveryModule{

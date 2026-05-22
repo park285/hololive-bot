@@ -11,7 +11,7 @@ import (
 )
 
 func buildPendingPublishedAtResolver(
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	postgresService database.Client,
 	scraperClient *scraper.Client,
 	routeDecider poller.NotificationRouteDecider,
@@ -20,8 +20,8 @@ func buildPendingPublishedAtResolver(
 	if postgresService == nil || scraperClient == nil {
 		return nil
 	}
-	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
-	if !resolverCfg.Enabled {
+	resolverConfig := effectivePublishedAtResolverConfig(scraperConfig)
+	if !resolverConfig.Enabled {
 		return nil
 	}
 	if routeDecider == nil {
@@ -35,25 +35,25 @@ func buildPendingPublishedAtResolver(
 		postgresService.GetGormDB(),
 		scraperClient,
 		routeDecider,
-		resolverCfg.Interval,
-		resolverCfg.BatchSize,
-		resolverCfg.MaxResolvePerRun,
-		resolverCfg.MaxRunDuration,
-		resolverCfg.ResolveTimeout,
-		resolverCfg.MinDetectedAge,
-		resolverCfg.FailureBackoffTTL,
+		resolverConfig.Interval,
+		resolverConfig.BatchSize,
+		resolverConfig.MaxResolvePerRun,
+		resolverConfig.MaxRunDuration,
+		resolverConfig.ResolveTimeout,
+		resolverConfig.MinDetectedAge,
+		resolverConfig.FailureBackoffTTL,
 		logger,
 	)
 	if logger != nil {
 		logger.Info("published_at_resolver_configured",
-			slog.Duration("interval", resolverCfg.Interval),
-			slog.Int("batch_size", resolverCfg.BatchSize),
-			slog.Int("max_resolve_per_run", resolverCfg.MaxResolvePerRun),
-			slog.Duration("max_run_duration", resolverCfg.MaxRunDuration),
-			slog.Duration("resolve_timeout", resolverCfg.ResolveTimeout),
-			slog.Duration("min_detected_age", resolverCfg.MinDetectedAge),
-			slog.Duration("failure_backoff_ttl", resolverCfg.FailureBackoffTTL),
-			slog.Float64("estimated_max_rpm", estimatedPublishedAtResolverMaxRPM(resolverCfg)),
+			slog.Duration("interval", resolverConfig.Interval),
+			slog.Int("batch_size", resolverConfig.BatchSize),
+			slog.Int("max_resolve_per_run", resolverConfig.MaxResolvePerRun),
+			slog.Duration("max_run_duration", resolverConfig.MaxRunDuration),
+			slog.Duration("resolve_timeout", resolverConfig.ResolveTimeout),
+			slog.Duration("min_detected_age", resolverConfig.MinDetectedAge),
+			slog.Duration("failure_backoff_ttl", resolverConfig.FailureBackoffTTL),
+			slog.Float64("estimated_max_rpm", estimatedPublishedAtResolverMaxRPM(resolverConfig)),
 		)
 	}
 	return resolver
@@ -61,7 +61,7 @@ func buildPendingPublishedAtResolver(
 
 func buildPublishedAtResolverRegistration(
 	resolver *poller.PendingPublishedAtResolver,
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	logger *slog.Logger,
 ) *providers.ChannelPollerRegistration {
 	if resolver == nil {
@@ -73,59 +73,59 @@ func buildPublishedAtResolverRegistration(
 		return nil
 	}
 
-	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
+	resolverConfig := effectivePublishedAtResolverConfig(scraperConfig)
 	registration := providers.NewGlobalPollerRegistration(
 		resolverPoller,
 		poller.PriorityLow,
-		resolverCfg.Interval,
-	).WithRequestsPerRun(resolverCfg.MaxResolvePerRun).
+		resolverConfig.Interval,
+	).WithRequestsPerRun(resolverConfig.MaxResolvePerRun).
 		WithWorstCaseAttempts(scraper.MetadataResolveFetchPolicy.MaxAttempts).
-		WithWorstCaseRequestUnitsPerRun(float64(resolverCfg.MaxResolvePerRun * scraper.MetadataResolveFetchPolicy.MaxAttempts))
+		WithWorstCaseRequestUnitsPerRun(float64(resolverConfig.MaxResolvePerRun * scraper.MetadataResolveFetchPolicy.MaxAttempts))
 	if logger != nil {
 		logger.Info("published_at_resolver_registered_with_scraper_scheduler",
-			slog.Duration("interval", resolverCfg.Interval),
+			slog.Duration("interval", resolverConfig.Interval),
 			slog.String("target", providers.SyntheticGlobalPollerChannelID),
-			slog.Int("requests_per_run", resolverCfg.MaxResolvePerRun),
+			slog.Int("requests_per_run", resolverConfig.MaxResolvePerRun),
 			slog.Int("worst_case_attempts", scraper.MetadataResolveFetchPolicy.MaxAttempts),
 		)
 	}
 	return &registration
 }
 
-func effectivePublishedAtResolverConfig(scraperCfg config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
-	resolverCfg := scraperCfg.PublishedAtResolver
-	if !resolverCfg.Enabled {
-		return resolverCfg
+func effectivePublishedAtResolverConfig(scraperConfig config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
+	resolverConfig := scraperConfig.PublishedAtResolver
+	if !resolverConfig.Enabled {
+		return resolverConfig
 	}
 
 	defaults := config.DefaultScraperPublishedAtResolverConfig()
-	if resolverCfg.Interval <= 0 {
-		resolverCfg.Interval = defaults.Interval
+	if resolverConfig.Interval <= 0 {
+		resolverConfig.Interval = defaults.Interval
 	}
-	if resolverCfg.BatchSize <= 0 {
-		resolverCfg.BatchSize = defaults.BatchSize
+	if resolverConfig.BatchSize <= 0 {
+		resolverConfig.BatchSize = defaults.BatchSize
 	}
-	if resolverCfg.MaxResolvePerRun <= 0 {
-		resolverCfg.MaxResolvePerRun = defaults.MaxResolvePerRun
+	if resolverConfig.MaxResolvePerRun <= 0 {
+		resolverConfig.MaxResolvePerRun = defaults.MaxResolvePerRun
 	}
-	if resolverCfg.MaxRunDuration <= 0 {
-		resolverCfg.MaxRunDuration = defaults.MaxRunDuration
+	if resolverConfig.MaxRunDuration <= 0 {
+		resolverConfig.MaxRunDuration = defaults.MaxRunDuration
 	}
-	if resolverCfg.ResolveTimeout <= 0 {
-		resolverCfg.ResolveTimeout = defaults.ResolveTimeout
+	if resolverConfig.ResolveTimeout <= 0 {
+		resolverConfig.ResolveTimeout = defaults.ResolveTimeout
 	}
-	if resolverCfg.MinDetectedAge <= 0 {
-		resolverCfg.MinDetectedAge = defaults.MinDetectedAge
+	if resolverConfig.MinDetectedAge <= 0 {
+		resolverConfig.MinDetectedAge = defaults.MinDetectedAge
 	}
-	if resolverCfg.FailureBackoffTTL <= 0 {
-		resolverCfg.FailureBackoffTTL = defaults.FailureBackoffTTL
+	if resolverConfig.FailureBackoffTTL <= 0 {
+		resolverConfig.FailureBackoffTTL = defaults.FailureBackoffTTL
 	}
-	return resolverCfg
+	return resolverConfig
 }
 
-func estimatedPublishedAtResolverMaxRPM(cfg config.ScraperPublishedAtResolverConfig) float64 {
-	if cfg.Interval <= 0 || cfg.MaxResolvePerRun <= 0 {
+func estimatedPublishedAtResolverMaxRPM(resolverConfig config.ScraperPublishedAtResolverConfig) float64 {
+	if resolverConfig.Interval <= 0 || resolverConfig.MaxResolvePerRun <= 0 {
 		return 0
 	}
-	return float64(cfg.MaxResolvePerRun) * 60 / cfg.Interval.Seconds()
+	return float64(resolverConfig.MaxResolvePerRun) * 60 / resolverConfig.Interval.Seconds()
 }

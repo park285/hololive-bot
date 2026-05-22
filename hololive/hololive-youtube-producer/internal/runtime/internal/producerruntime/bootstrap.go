@@ -29,8 +29,8 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
-func initProducerInfra(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*sharedmodules.InfraModule, error) {
-	module, err := sharedmodules.BuildInfraModule(ctx, cfg, logger)
+func initProducerInfra(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*sharedmodules.InfraModule, error) {
+	module, err := sharedmodules.BuildInfraModule(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide infra resources: %w", err)
 	}

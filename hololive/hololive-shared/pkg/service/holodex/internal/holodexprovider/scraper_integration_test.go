@@ -35,7 +35,7 @@ import (
 func TestScraperLiveIntegration(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	svc := &ScraperService{
+	service := &ScraperService{
 		httpClient: &http.Client{
 			Timeout: constants.OfficialScheduleConfig.Timeout,
 		},
@@ -47,7 +47,7 @@ func TestScraperLiveIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	streams, err := svc.fetchAllStreams(ctx)
+	streams, err := service.fetchAllStreams(ctx)
 	if err != nil {
 		t.Fatalf("fetchAllStreams 실패: %v", err)
 	}

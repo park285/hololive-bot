@@ -26,9 +26,9 @@ import (
 func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
 	t.Helper()
 
-	cacheSvc := cachemocks.NewLenientClient()
+	cache := cachemocks.NewLenientClient()
 
-	return NewDispatcher(nil, cacheSvc, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	return NewDispatcher(nil, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -43,8 +43,8 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 
 	lookedUpKeys := make([]string, 0, 2)
 	var lookedUpKeysMu sync.Mutex
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		lookedUpKeysMu.Lock()
 		lookedUpKeys = append(lookedUpKeys, key)
 		lookedUpKeysMu.Unlock()
@@ -58,7 +58,7 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 		}
 	}
 
-	dispatcher := NewDispatcher(nil, cacheSvc, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
 	roomsByChannel := dispatcher.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCtarget", Kind: domain.OutboxKindNewShort},
 		{ChannelID: "UCtarget", Kind: domain.OutboxKindCommunityPost},
@@ -99,8 +99,8 @@ func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) 
 	secondStarted := make(chan struct{}, 1)
 	var callCount int32
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		callNumber := atomic.AddInt32(&callCount, 1)
 		if callNumber == 1 {
 			close(firstStarted)
@@ -119,7 +119,7 @@ func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) 
 		}
 	}
 
-	dispatcher := NewDispatcher(nil, cacheSvc, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		SubscriberLookupParallelism: 1,
 	})
 
@@ -1076,11 +1076,11 @@ func (b *safeBuffer) String() string {
 func newLoggedTestDispatcherForSend(t *testing.T, sender *testSender, renderer *template.Renderer) (*Dispatcher, *safeBuffer) {
 	t.Helper()
 
-	cacheSvc := cachemocks.NewLenientClient()
+	cache := cachemocks.NewLenientClient()
 	logBuffer := &safeBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	return NewDispatcher(nil, cacheSvc, sender, renderer, logger, Config{
+	return NewDispatcher(nil, cache, sender, renderer, logger, Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -1369,13 +1369,13 @@ func TestNewDispatcherAppliesDeliveryDefaults(t *testing.T) {
 	)
 
 	defaults := DefaultConfig()
-	if dispatcher.cfg.DeliveryParallelism != defaults.DeliveryParallelism {
-		t.Fatalf("DeliveryParallelism = %d, want %d", dispatcher.cfg.DeliveryParallelism, defaults.DeliveryParallelism)
+	if dispatcher.config.DeliveryParallelism != defaults.DeliveryParallelism {
+		t.Fatalf("DeliveryParallelism = %d, want %d", dispatcher.config.DeliveryParallelism, defaults.DeliveryParallelism)
 	}
-	if dispatcher.cfg.DeliverySendTimeout != defaults.DeliverySendTimeout {
-		t.Fatalf("DeliverySendTimeout = %s, want %s", dispatcher.cfg.DeliverySendTimeout, defaults.DeliverySendTimeout)
+	if dispatcher.config.DeliverySendTimeout != defaults.DeliverySendTimeout {
+		t.Fatalf("DeliverySendTimeout = %s, want %s", dispatcher.config.DeliverySendTimeout, defaults.DeliverySendTimeout)
 	}
-	if dispatcher.cfg.SubscriberLookupParallelism != defaults.SubscriberLookupParallelism {
-		t.Fatalf("SubscriberLookupParallelism = %d, want %d", dispatcher.cfg.SubscriberLookupParallelism, defaults.SubscriberLookupParallelism)
+	if dispatcher.config.SubscriberLookupParallelism != defaults.SubscriberLookupParallelism {
+		t.Fatalf("SubscriberLookupParallelism = %d, want %d", dispatcher.config.SubscriberLookupParallelism, defaults.SubscriberLookupParallelism)
 	}
 }

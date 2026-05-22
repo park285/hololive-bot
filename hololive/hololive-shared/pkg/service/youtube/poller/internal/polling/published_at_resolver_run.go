@@ -27,7 +27,7 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 		return fmt.Errorf("run pending published_at resolver: client is nil")
 	}
 
-	repo := newPublishedAtResolverRepository(r.db)
+	repository := newPublishedAtResolverRepository(r.db)
 	tracking := trackingrepo.NewRepository(r.db)
 	batchSize := r.resolverBatchSize()
 	run := publishedAtResolverRun{
@@ -37,7 +37,7 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 		failureBackoffTTL: r.resolverFailureBackoffTTL(),
 	}
 
-	return r.processPendingPublishedAtResolutionPages(ctx, repo, tracking, detectedBefore, batchSize, run)
+	return r.processPendingPublishedAtResolutionPages(ctx, repository, tracking, detectedBefore, batchSize, run)
 }
 
 type publishedAtResolverRun struct {
@@ -62,7 +62,7 @@ type publishedAtResolverPageStep struct {
 
 func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPages(
 	ctx context.Context,
-	repo *publishedAtResolverRepository,
+	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.GormRepository,
 	detectedBefore time.Time,
 	batchSize int,
@@ -71,7 +71,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPages(
 	processed := 0
 	var cursor *trackingrepo.PublishedAtResolutionCursor
 	for processed < run.maxResolvePerRun {
-		step, err := r.processPendingPublishedAtResolutionPageStep(ctx, repo, tracking, detectedBefore, batchSize, run, processed, cursor)
+		step, err := r.processPendingPublishedAtResolutionPageStep(ctx, repository, tracking, detectedBefore, batchSize, run, processed, cursor)
 		if err != nil {
 			return err
 		}
@@ -82,12 +82,12 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPages(
 		cursor = step.cursor
 	}
 
-	return r.recoverResolvedPublishedAtDispatchGaps(ctx, repo, detectedBefore, batchSize)
+	return r.recoverResolvedPublishedAtDispatchGaps(ctx, repository, detectedBefore, batchSize)
 }
 
 func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPageStep(
 	ctx context.Context,
-	repo *publishedAtResolverRepository,
+	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.GormRepository,
 	detectedBefore time.Time,
 	batchSize int,
@@ -98,11 +98,11 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPageStep
 	if time.Now().After(run.runDeadline) {
 		return publishedAtResolverPageStep{done: true}, nil
 	}
-	page, err := r.processPendingPublishedAtResolutionPage(ctx, repo, tracking, detectedBefore, batchSize, run, processed, cursor)
+	page, err := r.processPendingPublishedAtResolutionPage(ctx, repository, tracking, detectedBefore, batchSize, run, processed, cursor)
 	if err != nil {
 		return publishedAtResolverPageStep{}, err
 	}
-	done, err := r.finishPendingPublishedAtResolutionPage(ctx, repo, detectedBefore, batchSize, page)
+	done, err := r.finishPendingPublishedAtResolutionPage(ctx, repository, detectedBefore, batchSize, page)
 	if err != nil {
 		return publishedAtResolverPageStep{}, err
 	}
@@ -118,7 +118,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPageStep
 
 func (r *PendingPublishedAtResolver) finishPendingPublishedAtResolutionPage(
 	ctx context.Context,
-	repo *publishedAtResolverRepository,
+	repository *publishedAtResolverRepository,
 	detectedBefore time.Time,
 	batchSize int,
 	page publishedAtResolverPageResult,
@@ -127,7 +127,7 @@ func (r *PendingPublishedAtResolver) finishPendingPublishedAtResolutionPage(
 		return true, nil
 	}
 	if page.recoverGaps {
-		return true, r.recoverResolvedPublishedAtDispatchGaps(ctx, repo, detectedBefore, batchSize)
+		return true, r.recoverResolvedPublishedAtDispatchGaps(ctx, repository, detectedBefore, batchSize)
 	}
 
 	return false, nil
@@ -135,7 +135,7 @@ func (r *PendingPublishedAtResolver) finishPendingPublishedAtResolutionPage(
 
 func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPage(
 	ctx context.Context,
-	repo *publishedAtResolverRepository,
+	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.GormRepository,
 	detectedBefore time.Time,
 	batchSize int,
@@ -159,7 +159,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPage(
 	}
 	pageProcessed, stop, err := r.processPendingPublishedAtCandidates(
 		ctx,
-		repo,
+		repository,
 		tracking,
 		candidates,
 		run.runDeadline,
@@ -180,15 +180,15 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPage(
 
 func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGaps(
 	ctx context.Context,
-	repo *publishedAtResolverRepository,
+	repository *publishedAtResolverRepository,
 	detectedBefore time.Time,
 	limit int,
 ) error {
-	if repo == nil {
+	if repository == nil {
 		return fmt.Errorf("recover resolved published_at dispatch gaps: repository is nil")
 	}
 
-	gaps, err := repo.ListResolvedPublishedAtDispatchGaps(ctx, time.Now(), detectedBefore, limit)
+	gaps, err := repository.ListResolvedPublishedAtDispatchGaps(ctx, time.Now(), detectedBefore, limit)
 	if err != nil {
 		return fmt.Errorf("recover resolved published_at dispatch gaps: list candidates: %w", err)
 	}
@@ -196,12 +196,12 @@ func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGaps(
 		return nil
 	}
 
-	tracking := trackingrepo.NewRepository(repo.db)
+	tracking := trackingrepo.NewRepository(repository.db)
 	retryAfter := func() time.Time {
 		return time.Now().Add(r.resolverFailureBackoffTTL())
 	}
 	for i := range gaps {
-		r.recoverResolvedPublishedAtDispatchGap(ctx, repo, tracking, gaps[i], retryAfter)
+		r.recoverResolvedPublishedAtDispatchGap(ctx, repository, tracking, gaps[i], retryAfter)
 	}
 
 	return nil
@@ -209,14 +209,14 @@ func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGaps(
 
 func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGap(
 	ctx context.Context,
-	repo *publishedAtResolverRepository,
+	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.GormRepository,
 	gap resolvedPublishedAtDispatchGap,
 	retryAfter func() time.Time,
 ) {
 	candidate := gap.candidate
 	observePublishedAtResolverScanned(candidate.Kind)
-	finalizeResult, err := repo.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, gap.publishedAt, r.routeDecider)
+	finalizeResult, err := repository.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, gap.publishedAt, r.routeDecider)
 	if err != nil {
 		r.reportResolvedPublishedAtDispatchGapRecoveryFailure(tracking, ctx, candidate, gap.publishedAt, retryAfter(), err)
 		return
@@ -251,7 +251,7 @@ func (r *PendingPublishedAtResolver) reportResolvedPublishedAtDispatchGapRecover
 
 func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidates(
 	ctx context.Context,
-	repo *publishedAtResolverRepository,
+	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.GormRepository,
 	candidates []trackingrepo.PublishedAtResolutionCandidate,
 	runDeadline time.Time,
@@ -262,7 +262,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidates(
 	for i := range candidates {
 		result, err := r.processPendingPublishedAtCandidate(
 			ctx,
-			repo,
+			repository,
 			tracking,
 			candidates[i],
 			runDeadline,

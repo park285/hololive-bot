@@ -72,7 +72,7 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	logger := slog.New(slog.DiscardHandler)
-	base := &APIHandler{
+	base := &Handler{
 		logger: logger,
 		acl:    &acl.Service{},
 	}
@@ -86,27 +86,27 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 		{
 			name: "alarm delete",
 			path: "/api/holo/alarm/delete",
-			call: (&AlarmAPIHandler{APIHandler: base}).DeleteAlarm,
+			call: (&AlarmHandler{Handler: base}).DeleteAlarm,
 		},
 		{
 			name: "room add",
 			path: "/api/holo/rooms/add",
-			call: (&RoomAPIHandler{APIHandler: base}).AddRoom,
+			call: (&RoomHandler{Handler: base}).AddRoom,
 		},
 		{
 			name: "room remove",
 			path: "/api/holo/rooms/remove",
-			call: (&RoomAPIHandler{APIHandler: base}).RemoveRoom,
+			call: (&RoomHandler{Handler: base}).RemoveRoom,
 		},
 		{
 			name: "room acl",
 			path: "/api/holo/rooms/acl",
-			call: (&RoomAPIHandler{APIHandler: base}).SetACL,
+			call: (&RoomHandler{Handler: base}).SetACL,
 		},
 		{
 			name: "member add",
 			path: "/api/holo/members",
-			call: (&MemberAPIHandler{APIHandler: base}).AddMember,
+			call: (&MemberHandler{Handler: base}).AddMember,
 		},
 		{
 			name: "template upsert",
@@ -114,7 +114,7 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 			params: gin.Params{
 				{Key: "key", Value: "notice"},
 			},
-			call: (&TemplateAPIHandler{APIHandler: base}).UpsertTemplate,
+			call: (&TemplateHandler{Handler: base}).UpsertTemplate,
 		},
 		{
 			name: "template preview",
@@ -122,7 +122,7 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 			params: gin.Params{
 				{Key: "key", Value: "notice"},
 			},
-			call: (&TemplateAPIHandler{APIHandler: base}).PreviewTemplate,
+			call: (&TemplateHandler{Handler: base}).PreviewTemplate,
 		},
 	}
 

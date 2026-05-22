@@ -32,7 +32,7 @@ func TestYouTubeStackNilSafeAccessors(t *testing.T) {
 	if stack.GetScheduler() != nil {
 		t.Fatal("GetScheduler() must return nil for nil receiver")
 	}
-	if stack.GetStatsRepo() != nil {
-		t.Fatal("GetStatsRepo() must return nil for nil receiver")
+	if stack.GetStatsRepository() != nil {
+		t.Fatal("GetStatsRepository() must return nil for nil receiver")
 	}
 }

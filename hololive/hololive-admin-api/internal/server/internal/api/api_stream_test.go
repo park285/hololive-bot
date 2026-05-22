@@ -57,7 +57,7 @@ func TestBuildActiveMemberIndex(t *testing.T) {
 func TestGetActiveMemberIndex_ConcurrentBuildIsCoalesced(t *testing.T) {
 	var callCount atomic.Int32
 
-	handler := &StreamAPIHandler{APIHandler: &APIHandler{
+	handler := &StreamHandler{Handler: &Handler{
 		streamState: newStreamState(),
 		memberIndexLoader: func(context.Context) ([]*domain.Member, error) {
 			callCount.Add(1)

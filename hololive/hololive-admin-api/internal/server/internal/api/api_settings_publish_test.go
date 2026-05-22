@@ -49,15 +49,15 @@ func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T
 		client.Close()
 	})
 
-	settingsSvc := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
+	settingsService := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
 		AlarmAdvanceMinutes: 5,
 		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
 
-	handler := &SettingsAPIHandler{APIHandler: &APIHandler{
+	handler := &SettingsAPIHandler{Handler: &Handler{
 		logger:          newDiscardLogger(),
 		activity:        newActivityLoggerForTest(t),
-		settings:        settingsSvc,
+		settings:        settingsService,
 		settingsApplier: testSettingsApplier{},
 		valkeyCache: &cachemocks.Client{
 			GetClientFunc: func() valkey.Client {

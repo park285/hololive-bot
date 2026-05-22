@@ -36,7 +36,7 @@ import (
 
 func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
 	// nil receiver도 안전하게 동작해야 함
-	var nilHandler *APIHandler
+	var nilHandler *Handler
 
 	got := nilHandler.DomainHandlers()
 	if got == nil {
@@ -47,47 +47,47 @@ func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
 		t.Fatal("domain sub-handlers must not be nil")
 	}
 
-	if got.Member.APIHandler == nil {
-		t.Fatal("embedded APIHandler should be initialized")
+	if got.Member.Handler == nil {
+		t.Fatal("embedded Handler should be initialized")
 	}
 
 	if got.Member.streamState == nil {
-		t.Fatal("embedded APIHandler streamState should be initialized")
+		t.Fatal("embedded Handler streamState should be initialized")
 	}
 
 	if got.Member.startTime.IsZero() {
-		t.Fatal("embedded APIHandler startTime should be initialized")
+		t.Fatal("embedded Handler startTime should be initialized")
 	}
 
-	if got.Member.APIHandler != got.Alarm.APIHandler || got.Member.APIHandler != got.OAuth.APIHandler {
-		t.Fatal("all domain handlers should share same APIHandler instance")
+	if got.Member.Handler != got.Alarm.Handler || got.Member.Handler != got.OAuth.Handler {
+		t.Fatal("all domain handlers should share same Handler instance")
 	}
 
-	base := &APIHandler{}
+	base := &Handler{}
 
 	wired := base.DomainHandlers()
-	if wired.Member.APIHandler != base || wired.Template.APIHandler != base {
-		t.Fatal("expected all domain handlers to reference original APIHandler")
+	if wired.Member.Handler != base || wired.Template.Handler != base {
+		t.Fatal("expected all domain handlers to reference original Handler")
 	}
 
 	if wired.Member.streamState == nil {
-		t.Fatal("zero-value APIHandler should gain streamState defaults")
+		t.Fatal("zero-value Handler should gain streamState defaults")
 	}
 
 	if wired.Member.startTime.IsZero() {
-		t.Fatal("zero-value APIHandler should gain startTime defaults")
+		t.Fatal("zero-value Handler should gain startTime defaults")
 	}
 }
 
-func TestNewAPIHandler_BasicInitialization(t *testing.T) {
-	h := NewAPIHandler(
+func TestNewHandler_BasicInitialization(t *testing.T) {
+	h := NewHandler(
 		nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil,
 		slog.New(slog.DiscardHandler),
 	)
 	if h == nil {
-		t.Fatal("NewAPIHandler returned nil")
+		t.Fatal("NewHandler returned nil")
 	}
 
 	if h.streamState == nil {
@@ -95,26 +95,26 @@ func TestNewAPIHandler_BasicInitialization(t *testing.T) {
 	}
 
 	if h.memberIndexLoader != nil {
-		t.Fatal("memberIndexLoader should be nil when repo is nil")
+		t.Fatal("memberIndexLoader should be nil when repository is nil")
 	}
 
 	if h.ensureStreamState() != h.streamState {
 		t.Fatal("ensureStreamState should return same streamState pointer")
 	}
 
-	repoBacked := NewAPIHandler(
+	repoBacked := NewHandler(
 		&member.Repository{}, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil,
 		nil,
 	)
 	if repoBacked.memberIndexLoader == nil {
-		t.Fatal("memberIndexLoader should be set when repo is provided")
+		t.Fatal("memberIndexLoader should be set when repository is provided")
 	}
 }
 
-func TestAPIHandler_EnsureDefaults_BackfillsDerivedFields(t *testing.T) {
-	h := (&APIHandler{}).ensureDefaults()
+func TestHandler_EnsureDefaults_BackfillsDerivedFields(t *testing.T) {
+	h := (&Handler{}).ensureDefaults()
 	if h.streamState == nil {
 		t.Fatal("streamState should be initialized")
 	}
@@ -123,13 +123,13 @@ func TestAPIHandler_EnsureDefaults_BackfillsDerivedFields(t *testing.T) {
 		t.Fatal("startTime should be initialized")
 	}
 
-	repoBacked := (&APIHandler{repo: &member.Repository{}}).ensureDefaults()
+	repoBacked := (&Handler{repository: &member.Repository{}}).ensureDefaults()
 	if repoBacked.memberIndexLoader == nil {
-		t.Fatal("memberIndexLoader should be derived from repo")
+		t.Fatal("memberIndexLoader should be derived from repository")
 	}
 }
 
-func TestAPIHandler_RespondHelpers(t *testing.T) {
+func TestHandler_RespondHelpers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	logger := slog.New(slog.DiscardHandler)
@@ -174,7 +174,7 @@ func TestOAuthCallbackHandler_HTMLResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
-	oauth := &OAuthAPIHandler{}
+	oauth := &OAuthHandler{}
 	router.GET("/oauth/callback", oauth.OAuthCallbackHandler)
 
 	t.Run("success path", func(t *testing.T) {

@@ -143,8 +143,8 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListPostDeliveryPathUsageSince(ctx, windowStart)
+	repository := NewDeliveryTelemetryRepository(db)
+	rows, err := repository.ListPostDeliveryPathUsageSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, rows, 4)
 

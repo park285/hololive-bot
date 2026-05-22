@@ -56,8 +56,8 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	})
 
 	t.Run("alarm repository and worker pool", func(t *testing.T) {
-		repo := appbootstrap.ProvideAlarmRepository(&dbmocks.Client{}, logger)
-		require.NotNil(t, repo)
+		repository := appbootstrap.ProvideAlarmRepository(&dbmocks.Client{}, logger)
+		require.NotNil(t, repository)
 
 		pool, err := appbootstrap.ProvideAlarmWorkerPool()
 		require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 			_ = notification.CloseAllAlarmServices(t.Context())
 		})
 
-		svc, err := appbootstrap.ProvideAlarmService(
+		service, err := appbootstrap.ProvideAlarmService(
 			[]int{10, 3},
 			cachemocks.NewStrictClient(),
 			nil,
@@ -85,12 +85,12 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 			logger,
 		)
 		require.NoError(t, err)
-		require.NotNil(t, svc)
-		assert.Equal(t, []int{10, 3, 1}, svc.GetTargetMinutes())
+		require.NotNil(t, service)
+		assert.Equal(t, []int{10, 3, 1}, service.GetTargetMinutes())
 	})
 
 	t.Run("member matcher", func(t *testing.T) {
-		matcher := appbootstrap.ProvideMemberMatcher(t.Context(), &stubMemberDataProvider{}, cachemocks.NewStrictClient(), nil, logger)
+		matcher := appbootstrap.ProvideMatcher(t.Context(), &stubMemberDataProvider{}, cachemocks.NewStrictClient(), nil, logger)
 		require.NotNil(t, matcher)
 	})
 

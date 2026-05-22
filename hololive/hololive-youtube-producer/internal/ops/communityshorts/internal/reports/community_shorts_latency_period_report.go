@@ -32,7 +32,7 @@ func DefaultCommunityShortsLatencyPeriodSpecs() []CommunityShortsLatencyPeriodSp
 
 func CollectCommunityShortsLatencyPeriodReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	specs []CommunityShortsLatencyPeriodSpec,
@@ -40,7 +40,7 @@ func CollectCommunityShortsLatencyPeriodReport(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: config is nil")
 	}
 	if logger == nil {
@@ -57,7 +57,7 @@ func CollectCommunityShortsLatencyPeriodReport(
 		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: %w", err)
 	}
 
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, appConfig, logger)
 	if err != nil {
 		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: %w", err)
 	}
@@ -78,7 +78,7 @@ func collectCommunityShortsLatencyPeriodReportWithSession(
 		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: session is nil")
 	}
 
-	summaries, err := session.telemetryRepo.ListPostLatencyPeriodSummaries(ctx, periods)
+	summaries, err := session.telemetryRepository.ListPostLatencyPeriodSummaries(ctx, periods)
 	if err != nil {
 		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: list period summaries: %w", err)
 	}

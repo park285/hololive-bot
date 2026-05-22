@@ -38,17 +38,17 @@ type FeedFetcher struct {
 }
 
 // NewFeedFetcher는 FeedFetcher를 생성한다.
-func NewFeedFetcher(client *http.Client, cfg FeedFetcherConfig) *FeedFetcher {
+func NewFeedFetcher(client *http.Client, config FeedFetcherConfig) *FeedFetcher {
 	if client == nil {
 		client = httputil.NewExternalAPIClient(defaultFeedHTTPTimeout)
 	}
 
-	userAgent := strings.TrimSpace(cfg.UserAgent)
+	userAgent := strings.TrimSpace(config.UserAgent)
 	if userAgent == "" {
 		userAgent = defaultFeedUserAgent
 	}
 
-	maxBodyLen := cfg.MaxBodySize
+	maxBodyLen := config.MaxBodySize
 	if maxBodyLen <= 0 {
 		maxBodyLen = defaultMaxBodyBytes
 	}

@@ -193,8 +193,8 @@ func mergeSubscriberLookupResults(result map[string]channelAlarmRoomTargets, res
 }
 
 func (d *Dispatcher) subscriberLookupParallelism() int {
-	if d.cfg.SubscriberLookupParallelism <= 0 {
+	if d.config.SubscriberLookupParallelism <= 0 {
 		return DefaultConfig().SubscriberLookupParallelism
 	}
-	return d.cfg.SubscriberLookupParallelism
+	return d.config.SubscriberLookupParallelism
 }

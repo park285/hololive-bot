@@ -69,17 +69,17 @@ type CommunityShortsSendStateReport struct {
 
 func CollectCommunityShortsSendStateReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityShortsSendStateCollectOptions,
 ) (CommunityShortsSendStateReport, error) {
-	ctx, logger, now, query, err := prepareCommunityShortsSendStateCollectInputs(ctx, cfg, logger, now, options)
+	ctx, logger, now, query, err := prepareCommunityShortsSendStateCollectInputs(ctx, appConfig, logger, now, options)
 	if err != nil {
 		return CommunityShortsSendStateReport{}, err
 	}
 
-	session, cleanupDB, err := openCommunityShortsSendStateSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsSendStateSession(ctx, appConfig, logger)
 	if err != nil {
 		return CommunityShortsSendStateReport{}, err
 	}
@@ -104,7 +104,7 @@ func CollectCommunityShortsSendStateReport(
 
 func prepareCommunityShortsSendStateCollectInputs(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityShortsSendStateCollectOptions,
@@ -112,7 +112,7 @@ func prepareCommunityShortsSendStateCollectInputs(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return nil, nil, time.Time{}, CommunityShortsSendStateQuery{}, fmt.Errorf("collect community shorts send state report: config is nil")
 	}
 	if logger == nil {
@@ -140,10 +140,10 @@ func cleanupCommunityShortsSendStateSession(cleanupDB func()) {
 
 func openCommunityShortsSendStateSession(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 ) (*communityShortsOpsSession, func(), error) {
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, appConfig, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("collect community shorts send state report: %w", err)
 	}
@@ -189,14 +189,14 @@ func listCommunityShortsSendStateRows(
 	state communityShortsObservationQueryState,
 ) ([]outbox.PostSendCount, error) {
 	if state.Finalized {
-		rows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+		rows, err := session.telemetryRepository.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 		if err != nil {
 			return nil, fmt.Errorf("collect community shorts send state report: list finalized observation-window send states: %w", err)
 		}
 		return rows, nil
 	}
 
-	rows, err := session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	rows, err := session.telemetryRepository.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
 	if err != nil {
 		return nil, fmt.Errorf("collect community shorts send state report: list active observation-window send states: %w", err)
 	}

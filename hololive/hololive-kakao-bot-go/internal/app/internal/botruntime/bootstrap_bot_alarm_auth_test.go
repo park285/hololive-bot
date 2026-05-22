@@ -65,11 +65,11 @@ func (testAlarmCRUD) WarmCacheFromDB(context.Context) error { return nil }
 
 func TestBuildBotServer_IsIngressOnly(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{Port: 30001},
 	}
 
-	server, err := appbootstrap.BuildBotServer(t.Context(), cfg, nil, nil, logger)
+	server, err := appbootstrap.BuildBotServer(t.Context(), appConfig, nil, nil, logger)
 	if err != nil {
 		t.Fatalf("buildBotServer() error = %v", err)
 	}

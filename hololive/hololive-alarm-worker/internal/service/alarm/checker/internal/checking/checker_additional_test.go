@@ -52,9 +52,9 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cache service is nil")
 
-		cacheSvc := newCheckerTestCacheClient(t)
+		cache := newCheckerTestCacheClient(t)
 
-		_, err = NewChzzkChecker(cacheSvc, nil, newCheckerTestLogger())
+		_, err = NewChzzkChecker(cache, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "chzzk client is nil")
 	})
@@ -64,39 +64,39 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cache service is nil")
 
-		cacheSvc := newCheckerTestCacheClient(t)
+		cache := newCheckerTestCacheClient(t)
 
-		_, err = NewTwitchChecker(cacheSvc, nil, newCheckerTestLogger())
+		_, err = NewTwitchChecker(cache, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "twitch client is nil")
 	})
 
 	t.Run("new youtube checker validation and success", func(t *testing.T) {
-		cacheSvc := newCheckerTestCacheClient(t)
-		dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+		cache := newCheckerTestCacheClient(t)
+		dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
 		tierScheduler := tier.NewTieredScheduler(newCheckerTestLogger())
 
-		_, err := NewYouTubeChecker(nil, &holodex.Service{}, tierScheduler, dedupSvc, []int{5}, 0, newCheckerTestLogger())
+		_, err := NewYouTubeChecker(nil, &holodex.Service{}, tierScheduler, dedupService, []int{5}, 0, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cache service is nil")
 
-		_, err = NewYouTubeChecker(cacheSvc, nil, tierScheduler, dedupSvc, []int{5}, 0, newCheckerTestLogger())
+		_, err = NewYouTubeChecker(cache, nil, tierScheduler, dedupService, []int{5}, 0, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "holodex service is nil")
 
-		_, err = NewYouTubeChecker(cacheSvc, &holodex.Service{}, nil, dedupSvc, []int{5}, 0, newCheckerTestLogger())
+		_, err = NewYouTubeChecker(cache, &holodex.Service{}, nil, dedupService, []int{5}, 0, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "tier scheduler is nil")
 
-		_, err = NewYouTubeChecker(cacheSvc, &holodex.Service{}, tierScheduler, nil, []int{5}, 0, newCheckerTestLogger())
+		_, err = NewYouTubeChecker(cache, &holodex.Service{}, tierScheduler, nil, []int{5}, 0, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "dedup service is nil")
 
 		checker, err := NewYouTubeChecker(
-			cacheSvc,
+			cache,
 			&holodex.Service{},
 			tierScheduler,
-			dedupSvc,
+			dedupService,
 			[]int{10, 0, 10},
 			0,
 			newCheckerTestLogger(),
@@ -111,15 +111,15 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 	})
 
 	t.Run("new notifier nil deps", func(t *testing.T) {
-		cacheSvc := newCheckerTestCacheClient(t)
-		dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
-		queuePublisher := queue.NewPublisher(cacheSvc, newCheckerTestLogger())
+		cache := newCheckerTestCacheClient(t)
+		dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
+		queuePublisher := queue.NewPublisher(cache, newCheckerTestLogger())
 
 		_, err := NewNotifier(nil, queuePublisher, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "dedup service is nil")
 
-		_, err = NewNotifier(dedupSvc, nil, nil, newCheckerTestLogger())
+		_, err = NewNotifier(dedupService, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "queue publisher is nil")
 	})
@@ -210,13 +210,13 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 	t.Parallel()
 
 	t.Run("success", func(t *testing.T) {
-		cacheSvc := newCheckerTestCacheClient(t)
+		cache := newCheckerTestCacheClient(t)
 		ctx := t.Context()
 
-		_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"ch1", []string{"room1", "room2"})
+		_, err := cache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"ch1", []string{"room1", "room2"})
 		require.NoError(t, err)
 
-		result, err := loadSubscriberRoomsByChannel(ctx, cacheSvc, []string{"ch1", "ch1", "ch2"})
+		result, err := loadSubscriberRoomsByChannel(ctx, cache, []string{"ch1", "ch1", "ch2"})
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 		assert.ElementsMatch(t, []string{"room1", "room2"}, result["ch1"])
@@ -402,7 +402,7 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 	t.Run("success without checker-level dedup preclaim", func(t *testing.T) {
 		setNXCalls := 0
 		checker := &TwitchChecker{
-			cacheSvc: &cachemocks.Client{
+			cacheClient: &cachemocks.Client{
 				SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
 					setNXCalls++
 					return false, errors.New("checker must not preclaim dedup")
@@ -467,10 +467,10 @@ func TestYouTubeHelperFunctions(t *testing.T) {
 func TestYouTubeNotificationBuilders(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
-	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+	cache := newCheckerTestCacheClient(t)
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
 	checker := &YouTubeChecker{
-		dedupSvc:            dedupSvc,
+		dedupService:        dedupService,
 		targetPolicy:        sharedchecker.NewTargetMinutePolicy([]int{5, 3, 1}),
 		evaluationWindowCap: 75 * time.Second,
 		logger:              newCheckerTestLogger(),
@@ -499,7 +499,7 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		require.Len(t, notifications, 2)
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
-		require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 5))
+		require.NoError(t, dedupService.MarkAsNotified(ctx, stream.ID, start, 5))
 
 		notifications, err = checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, window)
 		require.NoError(t, err)
@@ -600,7 +600,7 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		require.Len(t, notifications, 2)
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
-		require.NoError(t, dedupSvc.MarkUpcomingEventNotified(ctx, "room1", "ch-live", stream))
+		require.NoError(t, dedupService.MarkUpcomingEventNotified(ctx, "room1", "ch-live", stream))
 
 		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 		require.NoError(t, err)
@@ -608,7 +608,7 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		assert.Equal(t, "room2", notifications[0].RoomID)
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
-		require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 5))
+		require.NoError(t, dedupService.MarkAsNotified(ctx, stream.ID, start, 5))
 
 		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 		require.NoError(t, err)
@@ -879,12 +879,12 @@ func TestYouTubeCheckerUsesDedupEvidenceWhenPgDispatchMissing(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
+	checker, dedupService := newTestYouTubeCheckerWithDedup(t)
 	source := &fakeYouTubeLiveSessionSource{}
 	checker.persistedLiveSource = source
 
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
-	require.NoError(t, dedupSvc.MarkAsNotified(ctx, "stream-dedup-evidence", start, 5))
+	require.NoError(t, dedupService.MarkAsNotified(ctx, "stream-dedup-evidence", start, 5))
 
 	dispatched, err := checker.recentlyDispatchedOrNotifiedLiveStreamIDs(
 		ctx,
@@ -920,7 +920,7 @@ func TestRecentLiveDispatchEvidenceIncludesSentRooms(t *testing.T) {
 func TestRecentLiveDispatchEvidenceContinuesWhenDeliveryLookupFailsButDispatchEvidenceExists(t *testing.T) {
 	t.Parallel()
 
-	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
+	checker, dedupService := newTestYouTubeCheckerWithDedup(t)
 	source := &fakeYouTubeLiveSessionSource{
 		recentDispatch:     map[string]bool{"stream-delivery-error": true},
 		recentSentRoomsErr: errors.New("sent delivery lookup failed"),
@@ -928,7 +928,7 @@ func TestRecentLiveDispatchEvidenceContinuesWhenDeliveryLookupFailsButDispatchEv
 	checker.persistedLiveSource = source
 
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
-	require.NoError(t, dedupSvc.MarkAsNotified(t.Context(), "stream-delivery-error", start, 5))
+	require.NoError(t, dedupService.MarkAsNotified(t.Context(), "stream-delivery-error", start, 5))
 
 	evidence, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
@@ -943,13 +943,13 @@ func TestRecentLiveDispatchEvidenceContinuesWhenDeliveryLookupFailsButDispatchEv
 func TestRecentLiveDispatchEvidenceContinuesWhenDeliveryLookupFailsButValkeyEvidenceExists(t *testing.T) {
 	t.Parallel()
 
-	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
+	checker, dedupService := newTestYouTubeCheckerWithDedup(t)
 	checker.persistedLiveSource = &fakeYouTubeLiveSessionSource{
 		recentSentRoomsErr: errors.New("sent delivery lookup failed"),
 	}
 
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
-	require.NoError(t, dedupSvc.MarkAsNotified(t.Context(), "stream-valkey-evidence", start, 5))
+	require.NoError(t, dedupService.MarkAsNotified(t.Context(), "stream-valkey-evidence", start, 5))
 
 	evidence, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
@@ -985,7 +985,7 @@ func TestLiveCatchupSuppressesRoomsAfterPublishedMarker(t *testing.T) {
 	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	start := now.Add(-2 * time.Minute)
 
-	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
+	checker, dedupService := newTestYouTubeCheckerWithDedup(t)
 
 	stream := &domain.Stream{
 		ID:             "live-dedup",
@@ -1002,8 +1002,8 @@ func TestLiveCatchupSuppressesRoomsAfterPublishedMarker(t *testing.T) {
 	require.Len(t, first, 2)
 	assert.Equal(t, 5, first[0].MinutesUntil)
 
-	require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 5))
-	require.NoError(t, dedupSvc.MarkUpcomingEventNotified(ctx, "room1", "ch-live", stream))
+	require.NoError(t, dedupService.MarkAsNotified(ctx, stream.ID, start, 5))
+	require.NoError(t, dedupService.MarkUpcomingEventNotified(ctx, "room1", "ch-live", stream))
 
 	second, err := checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 	require.NoError(t, err)
@@ -1020,8 +1020,8 @@ func TestLiveCatchupAllowsRescheduledStreamAfterPreviousScheduleNotified(t *test
 	oldStart := now.Add(-30 * time.Minute)
 	newStart := now.Add(-2 * time.Minute)
 
-	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
-	require.NoError(t, dedupSvc.MarkAsNotified(ctx, "live-rescheduled", oldStart, 5))
+	checker, dedupService := newTestYouTubeCheckerWithDedup(t)
+	require.NoError(t, dedupService.MarkAsNotified(ctx, "live-rescheduled", oldStart, 5))
 
 	stream := &domain.Stream{
 		ID:             "live-rescheduled",
@@ -1042,22 +1042,22 @@ func TestLiveCatchupAllowsRescheduledStreamAfterPreviousScheduleNotified(t *test
 func newTestYouTubeCheckerWithDedup(t *testing.T) (*YouTubeChecker, *dedup.Service) {
 	t.Helper()
 
-	cacheSvc := newCheckerTestCacheClient(t)
-	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+	cache := newCheckerTestCacheClient(t)
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
 	checker := &YouTubeChecker{
-		dedupSvc:            dedupSvc,
+		dedupService:        dedupService,
 		targetPolicy:        sharedchecker.NewTargetMinutePolicy([]int{5, 3, 1}),
 		evaluationWindowCap: 75 * time.Second,
 		logger:              newCheckerTestLogger(),
 	}
-	return checker, dedupSvc
+	return checker, dedupService
 }
 
 func TestNotifierReleaseClaimsBestEffort(t *testing.T) {
 	t.Parallel()
 
 	notifier := &Notifier{
-		dedupSvc: dedup.NewService(&cachemocks.Client{
+		dedupService: dedup.NewService(&cachemocks.Client{
 			DelManyFunc: func(context.Context, []string) (int64, error) {
 				return 0, errors.New("delmany failed")
 			},

@@ -48,7 +48,7 @@ type nearMilestoneWatchInput struct {
 }
 
 func (ys *schedulerImpl) loadNearMilestoneWatchInput(ctx context.Context) (nearMilestoneWatchInput, bool) {
-	nearMembers, err := ys.statsRepo.GetNearMilestoneMembers(ctx, MilestoneThresholdRatio, SubscriberMilestones, 50)
+	nearMembers, err := ys.statsRepository.GetNearMilestoneMembers(ctx, MilestoneThresholdRatio, SubscriberMilestones, 50)
 	if err != nil {
 		ys.logger.Error("Failed to get near milestone members", slog.Any("error", err))
 		return nearMilestoneWatchInput{}, false
@@ -141,7 +141,7 @@ func (ys *schedulerImpl) processWatchedMilestones(
 		SubscriberCount: currentSubs,
 		Timestamp:       now,
 	}
-	if err := ys.statsRepo.SaveStats(ctx, stats); err != nil {
+	if err := ys.statsRepository.SaveStats(ctx, stats); err != nil {
 		ys.logger.Warn("Failed to save Holodex stats",
 			slog.String("channel", nm.ChannelID),
 			slog.Any("error", err))
@@ -201,7 +201,7 @@ func (ys *schedulerImpl) checkApproachingAlert(ctx context.Context, nm ytstats.N
 		return
 	}
 
-	alreadyNotified, err := ys.statsRepo.HasApproachingNotified(ctx, nm.ChannelID, nm.NextMilestone)
+	alreadyNotified, err := ys.statsRepository.HasApproachingNotified(ctx, nm.ChannelID, nm.NextMilestone)
 	if err != nil {
 		ys.logger.Warn("Failed to check approaching notification status",
 			slog.String("channel", nm.ChannelID),
@@ -212,7 +212,7 @@ func (ys *schedulerImpl) checkApproachingAlert(ctx context.Context, nm ytstats.N
 		return
 	}
 
-	if err := ys.statsRepo.SaveApproachingNotification(ctx, nm.ChannelID, nm.NextMilestone, currentSubs, now); err != nil {
+	if err := ys.statsRepository.SaveApproachingNotification(ctx, nm.ChannelID, nm.NextMilestone, currentSubs, now); err != nil {
 		ys.logger.Warn("Failed to save approaching notification",
 			slog.String("channel", nm.ChannelID),
 			slog.Any("error", err))

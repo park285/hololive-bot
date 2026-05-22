@@ -33,8 +33,8 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 	t.Run("nil service", func(t *testing.T) {
 		t.Parallel()
 
-		var svc *Service
-		digest, err := svc.GenerateRoomDigest(context.Background(), "room-1", PeriodWeekly)
+		var service *Service
+		digest, err := service.GenerateRoomDigest(context.Background(), "room-1", PeriodWeekly)
 		if digest != nil {
 			t.Fatalf("digest = %#v, want nil", digest)
 		}
@@ -46,8 +46,8 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 	t.Run("nil repository", func(t *testing.T) {
 		t.Parallel()
 
-		svc := &Service{}
-		digest, err := svc.GenerateRoomDigest(context.Background(), "room-1", PeriodWeekly)
+		service := &Service{}
+		digest, err := service.GenerateRoomDigest(context.Background(), "room-1", PeriodWeekly)
 		if digest != nil {
 			t.Fatalf("digest = %#v, want nil", digest)
 		}
@@ -59,8 +59,8 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 	t.Run("room id required", func(t *testing.T) {
 		t.Parallel()
 
-		svc := &Service{repository: &Repository{}}
-		digest, err := svc.GenerateRoomDigest(context.Background(), "   ", PeriodWeekly)
+		service := &Service{repository: &Repository{}}
+		digest, err := service.GenerateRoomDigest(context.Background(), "   ", PeriodWeekly)
 		if digest != nil {
 			t.Fatalf("digest = %#v, want nil", digest)
 		}
@@ -74,17 +74,17 @@ func TestServiceSetClock_NilInputIsNoop(t *testing.T) {
 	t.Parallel()
 
 	fixed := time.Date(2026, 3, 5, 9, 30, 0, 0, time.UTC)
-	svc := &Service{
+	service := &Service{
 		now: func() time.Time {
 			return fixed
 		},
 	}
 
-	svc.SetClock(nil)
-	if got := svc.now(); !got.Equal(fixed) {
+	service.SetClock(nil)
+	if got := service.now(); !got.Equal(fixed) {
 		t.Fatalf("SetClock(nil) changed clock: got %v, want %v", got, fixed)
 	}
 
-	var nilSvc *Service
-	nilSvc.SetClock(nil)
+	var nilService *Service
+	nilService.SetClock(nil)
 }

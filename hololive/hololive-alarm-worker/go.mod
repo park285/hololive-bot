@@ -7,6 +7,7 @@ toolchain go1.26.3
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/glebarez/sqlite v1.11.0
+	github.com/jackc/pgx/v5 v5.9.1
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/iris-client-go v0.12.6-0.20260519075942-c55b288ce321
 	github.com/park285/llm-kakao-bots/shared-go v0.1.2
@@ -78,7 +79,6 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.9.1 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect

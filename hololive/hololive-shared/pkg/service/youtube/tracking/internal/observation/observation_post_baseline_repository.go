@@ -83,10 +83,10 @@ func normalizePendingCommunityShortsObservationPostBaselineWindow(
 
 func ensureCommunityShortsObservationPostBaselinesInTx(
 	ctx context.Context,
-	txRepo *GormRepository,
+	txRepository *GormRepository,
 	normalizedWindow *domain.YouTubeCommunityShortsObservationWindow,
 ) error {
-	normalizedCurrentWindow, shouldBuild, err := reloadPendingCommunityShortsObservationPostBaselineWindow(ctx, txRepo, normalizedWindow)
+	normalizedCurrentWindow, shouldBuild, err := reloadPendingCommunityShortsObservationPostBaselineWindow(ctx, txRepository, normalizedWindow)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func ensureCommunityShortsObservationPostBaselinesInTx(
 		return nil
 	}
 
-	sourcePosts, err := txRepo.ListSourcePostsWithinObservationWindow(
+	sourcePosts, err := txRepository.ListSourcePostsWithinObservationWindow(
 		ctx,
 		normalizedCurrentWindow.ObservationStartedAt,
 		normalizedCurrentWindow.ObservationEndedAt,
@@ -107,10 +107,10 @@ func ensureCommunityShortsObservationPostBaselinesInTx(
 	if err != nil {
 		return fmt.Errorf("build baseline rows: %w", err)
 	}
-	if err := txRepo.upsertCommunityShortsObservationPostBaselines(ctx, baselineRows); err != nil {
+	if err := txRepository.upsertCommunityShortsObservationPostBaselines(ctx, baselineRows); err != nil {
 		return fmt.Errorf("upsert baseline rows: %w", err)
 	}
-	if err := txRepo.markCommunityShortsObservationPostBaselineFinalized(
+	if err := txRepository.markCommunityShortsObservationPostBaselineFinalized(
 		ctx,
 		normalizedCurrentWindow.RuntimeName,
 		normalizedCurrentWindow.BigBangCutoverAt,
@@ -124,10 +124,10 @@ func ensureCommunityShortsObservationPostBaselinesInTx(
 
 func reloadPendingCommunityShortsObservationPostBaselineWindow(
 	ctx context.Context,
-	txRepo *GormRepository,
+	txRepository *GormRepository,
 	normalizedWindow *domain.YouTubeCommunityShortsObservationWindow,
 ) (*domain.YouTubeCommunityShortsObservationWindow, bool, error) {
-	currentWindow, err := txRepo.FindCommunityShortsObservationWindow(ctx, normalizedWindow.RuntimeName, normalizedWindow.BigBangCutoverAt)
+	currentWindow, err := txRepository.FindCommunityShortsObservationWindow(ctx, normalizedWindow.RuntimeName, normalizedWindow.BigBangCutoverAt)
 	if err != nil {
 		return nil, false, fmt.Errorf("reload observation window: %w", err)
 	}

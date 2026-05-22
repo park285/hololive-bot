@@ -35,7 +35,7 @@ func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, 
 		return nil, nil
 	}
 
-	if as.alarmRepo != nil {
+	if as.alarmRepository != nil {
 		return as.findAlarmRecordForMutationFromRepository(ctx, roomID, channelID)
 	}
 
@@ -43,7 +43,7 @@ func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, 
 }
 
 func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Context, roomID string, channelID string) (*domain.Alarm, error) {
-	alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepo, roomID)
+	alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepository, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("find room alarms: %w", err)
 	}
@@ -101,8 +101,8 @@ func (as *AlarmService) currentCachedAlarmTypes(ctx context.Context, channelID s
 }
 
 func (as *AlarmService) loadRoomAlarmsForMutation(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	if as.alarmRepo != nil {
-		alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepo, roomID)
+	if as.alarmRepository != nil {
+		alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepository, roomID)
 		if err != nil {
 			return nil, fmt.Errorf("find room alarms: %w", err)
 		}

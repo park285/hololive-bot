@@ -45,22 +45,22 @@ func main() {
 		},
 		LoadConfig:             config.LoadLLMScheduler,
 		LoadConfigErrorMessage: "Failed to load llm scheduler config",
-		LoggerConfig: func(cfg *config.LLMSchedulerConfig) sharedlogging.Config {
+		LoggerConfig: func(schedulerConfig *config.LLMSchedulerConfig) sharedlogging.Config {
 			return sharedlogging.Config{
-				Dir:        cfg.Logging.Dir,
-				MaxSizeMB:  cfg.Logging.MaxSizeMB,
-				MaxBackups: cfg.Logging.MaxBackups,
-				MaxAgeDays: cfg.Logging.MaxAgeDays,
-				Compress:   cfg.Logging.Compress,
+				Dir:        schedulerConfig.Logging.Dir,
+				MaxSizeMB:  schedulerConfig.Logging.MaxSizeMB,
+				MaxBackups: schedulerConfig.Logging.MaxBackups,
+				MaxAgeDays: schedulerConfig.Logging.MaxAgeDays,
+				Compress:   schedulerConfig.Logging.Compress,
 			}
 		},
 		LoggerFileName: "llm-scheduler.log",
-		LoggerLevel: func(cfg *config.LLMSchedulerConfig) string {
-			return cfg.Logging.Level
+		LoggerLevel: func(schedulerConfig *config.LLMSchedulerConfig) string {
+			return schedulerConfig.Logging.Level
 		},
 		StartupMessage: "LLM Scheduler starting...",
-		StartupFields: func(cfg *config.LLMSchedulerConfig) []any {
-			return []any{slog.Int("port", cfg.Server.Port)}
+		StartupFields: func(schedulerConfig *config.LLMSchedulerConfig) []any {
+			return []any{slog.Int("port", schedulerConfig.Server.Port)}
 		},
 		BuildTimeout:      time.Minute,
 		BuildRuntime:      app.BuildLLMSchedulerRuntime,

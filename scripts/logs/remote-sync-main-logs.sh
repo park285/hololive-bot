@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# 원격 split-host app file log를 /logs/remote/<target>로 mirror하고 기본 대상은 /logs/<service>.log symlink로 노출합니다.
+# 원격 split-host app file log를 logs/remote/<target>로 mirror하고 기본 대상은 logs/<service>.log symlink로 노출합니다.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
-LOG_ROOT="${LOG_ROOT:-/logs}"
+LOG_ROOT="${LOG_ROOT:-${REPO_ROOT}/logs}"
 REMOTE_MIRROR_ROOT="${REMOTE_MIRROR_ROOT:-${LOG_ROOT}/remote}"
 FORCE_MAIN_LOG_LINKS="${FORCE_MAIN_LOG_LINKS:-0}"
 
 OSAKA_USER_HOST="${HOL_LOG_OSAKA_USER_HOST:-ubuntu@kapu-iris-osaka-1}"
 OSAKA_SSH_KEY="${HOL_LOG_OSAKA_SSH_KEY:-${REPO_ROOT}/KR.key}"
+OSAKA_HOST_KEY_ALIAS="${HOL_LOG_OSAKA_HOST_KEY_ALIAS:-100.100.1.7}"
 OSAKA_REMOTE_LOG_DIR="${HOL_LOG_OSAKA_LOG_DIR:-/home/ubuntu/hololive-bot/logs}"
-OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-producer-a youtube-producer-b}"
-OSAKA_EXPLICIT_SERVICES="${HOL_LOG_OSAKA_EXPLICIT_SERVICES:-${OSAKA_SERVICES}}"
+OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-producer}"
+OSAKA_DOCKER_SERVICES="${HOL_LOG_OSAKA_DOCKER_SERVICES:-youtube-producer youtube-producer-a youtube-producer-b}"
 
 usage() {
   cat <<'USAGE'
@@ -24,6 +25,14 @@ Usage:
   remote-sync-main-logs.sh tail osaka <service>
   remote-sync-main-logs.sh docker-tail osaka <service> [--since 15m] [--tail 200]
 
+Environment:
+  LOG_ROOT=<repo>/logs
+  HOL_LOG_OSAKA_USER_HOST=ubuntu@kapu-iris-osaka-1
+  HOL_LOG_OSAKA_SSH_KEY=<repo>/KR.key
+  HOL_LOG_OSAKA_HOST_KEY_ALIAS=100.100.1.7
+  HOL_LOG_OSAKA_LOG_DIR=/home/ubuntu/hololive-bot/logs
+  HOL_LOG_OSAKA_SERVICES=youtube-producer
+  FORCE_MAIN_LOG_LINKS=1  # replace existing regular LOG_ROOT/<service>.log after backup
 USAGE
 }
 
@@ -46,13 +55,29 @@ validate_target_service() {
   local candidate
 
   [[ "${target}" == "osaka" ]] || { echo "ERROR: unknown target: ${target}" >&2; exit 1; }
-  for candidate in ${OSAKA_EXPLICIT_SERVICES}; do
+  for candidate in $(target_services "${target}"); do
     if [[ "${candidate}" == "${service}" ]]; then
       return 0
     fi
   done
 
   echo "ERROR: unknown service for ${target}: ${service}" >&2
+  exit 1
+}
+
+validate_docker_service() {
+  local target="$1"
+  local service="$2"
+  local candidate
+
+  [[ "${target}" == "osaka" ]] || { echo "ERROR: unknown target: ${target}" >&2; exit 1; }
+  for candidate in ${OSAKA_DOCKER_SERVICES}; do
+    if [[ "${candidate}" == "${service}" ]]; then
+      return 0
+    fi
+  done
+
+  echo "ERROR: unknown docker service for ${target}: ${service}" >&2
   exit 1
 }
 
@@ -72,6 +97,7 @@ is_default_target_service() {
 osaka_container_for() {
   local service="$1"
   case "${service}" in
+    youtube-producer) printf '%s\n' "hololive-youtube-producer-a" ;;
     youtube-producer-a) printf '%s\n' "hololive-youtube-producer-a" ;;
     youtube-producer-b) printf '%s\n' "hololive-youtube-producer-b" ;;
     *) echo "ERROR: unknown service for osaka: ${service}" >&2; exit 1 ;;
@@ -79,23 +105,36 @@ osaka_container_for() {
 }
 
 ssh_base() {
+  local host_key_alias_args=""
+  if [[ -n "${OSAKA_HOST_KEY_ALIAS}" ]]; then
+    host_key_alias_args="$(printf -- '-o HostKeyAlias=%q' "${OSAKA_HOST_KEY_ALIAS}")"
+  fi
   if [[ -n "${OSAKA_SSH_KEY}" ]]; then
-    printf 'ssh -i %q -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10' "${OSAKA_SSH_KEY}"
+    printf 'ssh -i %q -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 %s' "${OSAKA_SSH_KEY}" "${host_key_alias_args}"
   else
-    printf 'ssh -o BatchMode=yes -o ConnectTimeout=10'
+    printf 'ssh -o BatchMode=yes -o ConnectTimeout=10 %s' "${host_key_alias_args}"
   fi
 }
 
 rsync_ssh_base() {
+  local host_key_alias_args=()
+  if [[ -n "${OSAKA_HOST_KEY_ALIAS}" ]]; then
+    host_key_alias_args=(-o "HostKeyAlias=${OSAKA_HOST_KEY_ALIAS}")
+  fi
   if [[ -n "${OSAKA_SSH_KEY}" ]]; then
     printf 'ssh -i %s -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10' "${OSAKA_SSH_KEY}"
   else
     printf 'ssh -o BatchMode=yes -o ConnectTimeout=10'
   fi
+  printf ' %q' "${host_key_alias_args[@]}"
 }
 
 ensure_log_root() {
-  mkdir -p "${LOG_ROOT}" "${REMOTE_MIRROR_ROOT}"
+  mkdir -p "${LOG_ROOT}"
+  if [[ -L "${REMOTE_MIRROR_ROOT}" && ! -e "${REMOTE_MIRROR_ROOT}" ]]; then
+    rm -f "${REMOTE_MIRROR_ROOT}"
+  fi
+  mkdir -p "${REMOTE_MIRROR_ROOT}"
 }
 
 normalize_mirror_permissions() {
@@ -111,7 +150,7 @@ normalize_mirror_permissions() {
 sync_once_osaka() {
   ensure_log_root
 
-  local dst
+  local dst service
   dst="$(target_dir osaka)"
   mkdir -p "${dst}"
 
@@ -120,14 +159,19 @@ sync_once_osaka() {
     exit 1
   fi
 
+  local rsync_includes=()
+  for service in $(target_services osaka); do
+    rsync_includes+=(--include="${service}.log")
+    rsync_includes+=(--include="archive/${service}*")
+  done
+
   rsync -az \
     --partial \
     --delete-delay \
     --chmod=F0640,D0750 \
-    --include='*.log' \
+    --rsync-path='sudo -n rsync' \
     --include='archive/' \
-    --include='archive/***' \
-    --include='*.gz' \
+    "${rsync_includes[@]}" \
     --exclude='*' \
     -e "$(rsync_ssh_base)" \
     "${OSAKA_USER_HOST}:${OSAKA_REMOTE_LOG_DIR}/" \
@@ -382,7 +426,7 @@ case "${cmd}" in
     service="${3:-}"
     [[ "${target}" == "osaka" ]] || { echo "ERROR: only target 'osaka' is currently configured" >&2; exit 1; }
     [[ -n "${service}" ]] || { echo "ERROR: service is required" >&2; exit 1; }
-    validate_target_service "${target}" "${service}"
+    validate_docker_service "${target}" "${service}"
     shift 3 || true
     docker_tail_osaka "${service}" "$@"
     ;;

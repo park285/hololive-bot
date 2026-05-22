@@ -237,8 +237,8 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	summaries, err := repo.ListChannelPostDeliverySummariesSince(ctx, windowStart)
+	repository := NewDeliveryTelemetryRepository(db)
+	summaries, err := repository.ListChannelPostDeliverySummariesSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, summaries, 2)
 

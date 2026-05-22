@@ -74,7 +74,7 @@ func (ys *schedulerImpl) trackAllSubscribers(ctx context.Context) {
 	r.totalMilestoneCheckErrors = prepared.milestoneCheckErrors
 
 	if len(prepared.statsBatch) > 0 {
-		if err := ys.statsRepo.SaveStatsBatch(ctx, prepared.statsBatch); err != nil {
+		if err := ys.statsRepository.SaveStatsBatch(ctx, prepared.statsBatch); err != nil {
 			r.totalSaveErrors = len(prepared.statsBatch)
 			ys.logger.Warn("Failed to batch save subscriber stats",
 				slog.Int("count", len(prepared.statsBatch)),
@@ -116,13 +116,13 @@ func (ys *schedulerImpl) prepareWorkItems(
 	var latestErrors, milestoneCheckErrors int
 	milestonePreloadAvailable := true
 
-	latestStatsByChannel, latestErr := ys.statsRepo.GetLatestStatsForChannels(ctx, mapKeys(stats))
+	latestStatsByChannel, latestErr := ys.statsRepository.GetLatestStatsForChannels(ctx, mapKeys(stats))
 	if latestErr != nil {
 		latestErrors = len(stats)
 		latestStatsByChannel = make(map[string]*domain.TimestampedStats)
 	}
 
-	milestonesByChannel, milestoneBatchErr := ys.statsRepo.GetAchievedMilestones(ctx, mapKeys(stats), domain.MilestoneSubscribers)
+	milestonesByChannel, milestoneBatchErr := ys.statsRepository.GetAchievedMilestones(ctx, mapKeys(stats), domain.MilestoneSubscribers)
 	if milestoneBatchErr != nil {
 		milestoneCheckErrors = len(stats)
 		milestonesByChannel = make(map[string][]uint64)
@@ -192,7 +192,7 @@ func (ys *schedulerImpl) processAndRecordChanges(
 	}
 
 	if len(changeBatch) > 0 {
-		if err := ys.statsRepo.RecordChangeBatch(ctx, changeBatch); err != nil {
+		if err := ys.statsRepository.RecordChangeBatch(ctx, changeBatch); err != nil {
 			cr.recordErrors = len(changeBatch)
 			ys.logger.Warn("Failed to batch record changes",
 				slog.Int("count", len(changeBatch)),

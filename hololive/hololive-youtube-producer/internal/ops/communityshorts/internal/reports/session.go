@@ -18,19 +18,19 @@ type communityShortsOpsSession struct {
 	postgres           database.Client
 	db                 *gorm.DB
 	trackingRepository *trackingrepo.GormRepository
-	telemetryRepo      *outbox.DeliveryTelemetryRepository
+	telemetryRepository      *outbox.DeliveryTelemetryRepository
 }
 
 func openCommunityShortsOpsSession(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 ) (*communityShortsOpsSession, func(), error) {
-	if cfg == nil {
+	if appConfig == nil {
 		return nil, nil, fmt.Errorf("config is nil")
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, appConfig.Postgres, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}
@@ -45,6 +45,6 @@ func newCommunityShortsOpsSession(db *gorm.DB) *communityShortsOpsSession {
 		postgres:           nil,
 		db:                 db,
 		trackingRepository: trackingrepo.NewRepository(db),
-		telemetryRepo:      outbox.NewDeliveryTelemetryRepository(db),
+		telemetryRepository:      outbox.NewDeliveryTelemetryRepository(db),
 	}
 }

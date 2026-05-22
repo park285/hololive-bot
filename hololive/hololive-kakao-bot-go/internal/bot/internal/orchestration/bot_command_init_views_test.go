@@ -51,17 +51,17 @@ func (s *stubCommandInitStreamProvider) GetChannel(ctx context.Context, channelI
 }
 func (s *stubCommandInitStreamProvider) Stop() {}
 
-type stubCommandInitMajorEventRepo struct{}
+type stubCommandInitMajorEventRepository struct{}
 
-func (s *stubCommandInitMajorEventRepo) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
+func (s *stubCommandInitMajorEventRepository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	return false, nil
 }
 
-func (s *stubCommandInitMajorEventRepo) Subscribe(ctx context.Context, roomID, roomName string) error {
+func (s *stubCommandInitMajorEventRepository) Subscribe(ctx context.Context, roomID, roomName string) error {
 	return nil
 }
 
-func (s *stubCommandInitMajorEventRepo) Unsubscribe(ctx context.Context, roomID string) error {
+func (s *stubCommandInitMajorEventRepository) Unsubscribe(ctx context.Context, roomID string) error {
 	return nil
 }
 
@@ -163,7 +163,7 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 	registry := command.NewRegistry()
 	view := commandInitView{
 		logger:         slog.New(slog.DiscardHandler),
-		majorEventRepo: &stubCommandInitMajorEventRepo{},
+		majorEventRepository: &stubCommandInitMajorEventRepository{},
 		memberNews:     &stubCommandInitMemberNewsService{},
 		commandBuilders: []CommandBuilder{
 			nil,
@@ -262,6 +262,6 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 
 var (
 	_ streamRuntime                = (*stubCommandInitStreamProvider)(nil)
-	_ command.MajorEventRepository = (*stubCommandInitMajorEventRepo)(nil)
+	_ command.MajorEventRepository = (*stubCommandInitMajorEventRepository)(nil)
 	_ command.MemberNewsService    = (*stubCommandInitMemberNewsService)(nil)
 )

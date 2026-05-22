@@ -63,9 +63,9 @@ expect_eq "$(compose_service_resolve_osaka_log_targets all)" $'youtube-producer-
 expect_eq "$(compose_service_resolve_osaka_container youtube-producer-a)" "hololive-youtube-producer-a" "osaka youtube a container"
 expect_eq "$(compose_service_resolve_osaka_container youtube-producer-b)" "hololive-youtube-producer-b" "osaka youtube b container"
 expect_eq "$(compose_service_resolve_osaka_container youtube-producer)" "hololive-youtube-producer-a" "osaka youtube-producer container default"
-expect_eq "$(compose_service_resolve_osaka_log_file youtube-producer-a)" "logs/youtube-producer-a.log" "osaka youtube a log file"
-expect_eq "$(compose_service_resolve_osaka_log_file youtube-producer-b)" "logs/youtube-producer-b.log" "osaka youtube b log file"
-expect_eq "$(compose_service_resolve_osaka_log_file youtube-producer)" "logs/youtube-producer-a.log" "osaka youtube-producer log file default"
+expect_eq "$(compose_service_resolve_osaka_log_file youtube-producer-a)" "logs/youtube-producer.log" "osaka youtube a log file"
+expect_eq "$(compose_service_resolve_osaka_log_file youtube-producer-b)" "logs/youtube-producer.log" "osaka youtube b log file"
+expect_eq "$(compose_service_resolve_osaka_log_file youtube-producer)" "logs/youtube-producer.log" "osaka youtube-producer log file default"
 expect_fail "osaka log target rejects removed dispatcher" compose_service_resolve_osaka_log_targets dispatcher-go
 
 OSAKA_ACTIVE_ACTIVE_FILES="${ROOT_DIR}/scripts/deploy/osaka-active-active-rsync-files.txt"

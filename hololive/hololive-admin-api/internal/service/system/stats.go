@@ -147,9 +147,9 @@ func (c *Collector) collectCurrentStats(ctx context.Context) (*SystemStats, erro
 	// 합계 계산
 	totalGoroutines := localGoroutines
 
-	for _, svc := range serviceStats {
-		if svc.Available {
-			totalGoroutines += svc.Goroutines
+	for _, service := range serviceStats {
+		if service.Available {
+			totalGoroutines += service.Goroutines
 		}
 	}
 
