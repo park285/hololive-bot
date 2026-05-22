@@ -301,6 +301,62 @@ func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
 	}
 }
 
+func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {
+	var fetchCount atomic.Int32
+	firstFetch := make(chan struct{})
+	secondFetch := make(chan struct{})
+	var closeFirstFetch sync.Once
+	var closeSecondFetch sync.Once
+
+	repo := &mockDeliveryRepo{
+		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+			switch fetchCount.Add(1) {
+			case 1:
+				closeFirstFetch.Do(func() {
+					close(firstFetch)
+				})
+			case 2:
+				closeSecondFetch.Do(func() {
+					close(secondFetch)
+				})
+			}
+			return nil, nil
+		},
+	}
+
+	cfg := DefaultDispatcherConfig()
+	cfg.PollInterval = 10 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	d := NewDispatcher(repo, &mockSender{}, dispatcherLogger(), cfg)
+	done := make(chan struct{})
+	go func() {
+		d.run(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-firstFetch:
+	case <-time.After(250 * time.Millisecond):
+		cancel()
+		t.Fatal("dispatcher did not fetch before first ticker interval")
+	}
+
+	select {
+	case <-secondFetch:
+	case <-time.After(500 * time.Millisecond):
+		cancel()
+		t.Fatalf("fetch count = %d, want periodic tick fetch", fetchCount.Load())
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("dispatcher run loop did not stop after context cancellation")
+	}
+}
+
 func TestDispatcher_StartProcessesOnceBeforeFirstTick(t *testing.T) {
 	var fetchCount atomic.Int32
 	firstFetch := make(chan struct{})
