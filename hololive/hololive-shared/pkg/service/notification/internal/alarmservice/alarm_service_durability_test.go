@@ -1,9 +1,12 @@
 package alarmservice
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -155,6 +158,40 @@ func TestAddAlarm_PersistFailureDoesNotPolluteCache(t *testing.T) {
 	memberName, err := as.cache.HGet(ctx, MemberNameKey, "ch-1")
 	require.NoError(t, err)
 	assert.Empty(t, memberName)
+}
+
+func TestAddAlarm_PersistFailureLogKeepsErrorKey(t *testing.T) {
+	t.Parallel()
+
+	var logBuffer bytes.Buffer
+	as := newTestAlarmService(t)
+	as.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
+	as.alarmWriter = &stubAlarmWriter{
+		addFn: func(context.Context, *domain.Alarm) error {
+			return errors.New("db down")
+		},
+	}
+
+	added, err := as.AddAlarm(t.Context(), domain.AddAlarmRequest{
+		RoomID:     "room-1",
+		UserID:     "user-1",
+		ChannelID:  "ch-1",
+		MemberName: "Miko",
+		RoomName:   "메인방",
+		UserName:   "관리자",
+	})
+	require.Error(t, err)
+	assert.False(t, added)
+
+	var logRecord map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &logRecord))
+	assert.Equal(t, "persist alarm before cache write.failed", logRecord["event"])
+	assert.Contains(t, logRecord, "error")
+	assert.Equal(t, "persist alarm: stub add: db down", logRecord["error"])
+	assert.Equal(t, "wrapError", logRecord["error_type"])
+	assert.Equal(t, "persist alarm: stub add: db down", logRecord["error_message"])
 }
 
 func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {

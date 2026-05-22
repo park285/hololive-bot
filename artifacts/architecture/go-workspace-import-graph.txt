@@ -615,6 +615,7 @@ github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -
 github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -> github.com/kapu/hololive-shared/pkg/service/twitch
 github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -> github.com/kapu/hololive-shared/pkg/testutil
+github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -> github.com/park285/llm-kakao-bots/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -> github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/ratelimit -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/settings -> github.com/kapu/hololive-shared/pkg/service/alarm/checker

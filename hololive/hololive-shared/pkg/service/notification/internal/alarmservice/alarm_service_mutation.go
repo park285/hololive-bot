@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -156,10 +158,7 @@ func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation ad
 		err = as.persistAlarm(ctx, mutation.record)
 	}
 	if err != nil {
-		if as.logger != nil {
-			as.logger.Error("Failed to persist alarm before cache write", slog.Any("error", err))
-		}
-		return fmt.Errorf("persist alarm before cache write: %w", err)
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm before cache write", err, slog.Any("error", err))
 	}
 	return nil
 }
