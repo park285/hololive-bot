@@ -169,7 +169,7 @@ func TestAddAlarm_PersistFailureDoesNotPolluteCache(t *testing.T) {
 	assert.Empty(t, memberName)
 }
 
-func TestAddAlarm_PersistFailureLogKeepsErrorKey(t *testing.T) {
+func TestAddAlarm_PersistFailureLogsWrappedEvent(t *testing.T) {
 	t.Parallel()
 
 	var logBuffer bytes.Buffer
@@ -197,8 +197,7 @@ func TestAddAlarm_PersistFailureLogKeepsErrorKey(t *testing.T) {
 	var logRecord map[string]any
 	require.NoError(t, json.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &logRecord))
 	assert.Equal(t, "persist alarm before cache write.failed", logRecord["event"])
-	assert.Contains(t, logRecord, "error")
-	assert.Equal(t, "persist alarm: stub add: db down", logRecord["error"])
+	assert.NotContains(t, logRecord, "error")
 	assert.Equal(t, "wrapError", logRecord["error_type"])
 	assert.Equal(t, "persist alarm: stub add: db down", logRecord["error_message"])
 }
@@ -302,6 +301,69 @@ func TestRemoveAlarmPersistFailureLogsWrappedEvents(t *testing.T) {
 	}
 }
 
+func TestRemoveAlarmCacheMutationFailureLogsWrappedEvents(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(*cachemocks.Client, *cache.Service)
+		mutation  removeAlarmMutation
+		wantEvent string
+		wantError string
+	}{
+		{
+			name: "rebuild_remove_cache_from_repository",
+			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
+				cacheMock.SRemFunc = func(context.Context, string, []string) (int64, error) {
+					return 0, errors.New("srem failed")
+				}
+			},
+			mutation: removeAlarmMutation{
+				effectiveRemovalTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+				removeRoomChannel:     true,
+			},
+			wantEvent: "rebuild remove cache from repository.failed",
+			wantError: "remove alarm: remove room alarm: srem failed",
+		},
+		{
+			name: "mark_room_alarms_changed_in_cache",
+			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
+				cacheMock.DelFunc = func(context.Context, string) error {
+					return errors.New("del failed")
+				}
+			},
+			mutation: removeAlarmMutation{
+				removeRoomChannel: true,
+			},
+			wantEvent: "mark room alarms changed in cache.failed",
+			wantError: "mark alarm cache changed: clear empty subscriber cache marker: del failed",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			var logBuffer bytes.Buffer
+			cacheMock, cacheSvc := newLenientAlarmCacheMock(ctx, t, nil)
+			tt.setup(cacheMock, cacheSvc)
+
+			as := &AlarmService{
+				cache:  cacheMock,
+				logger: slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError})),
+			}
+
+			removed, err := as.removeAlarmCacheMutation(ctx, "room-1", "ch-1", tt.mutation)
+			require.Error(t, err)
+			assert.False(t, removed)
+
+			logRecord := decodeSingleJSONLog(t, &logBuffer)
+			assert.Equal(t, tt.wantEvent, logRecord["event"])
+			assert.NotContains(t, logRecord, "error")
+			assert.Equal(t, "wrapError", logRecord["error_type"])
+			assert.Equal(t, tt.wantError, logRecord["error_message"])
+		})
+	}
+}
+
 func TestClearRoomAlarmsPersistFailureLogsWrappedEvent(t *testing.T) {
 	t.Parallel()
 
@@ -322,6 +384,61 @@ func TestClearRoomAlarmsPersistFailureLogsWrappedEvent(t *testing.T) {
 	assert.NotContains(t, logRecord, "error")
 	assert.Equal(t, "wrapError", logRecord["error_type"])
 	assert.Equal(t, "delete room alarms: stub clear by room: db down", logRecord["error_message"])
+}
+
+func TestClearRoomAlarmsCacheMutationFailureLogsWrappedEvents(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(*cachemocks.Client, *cache.Service)
+		wantEvent string
+		wantError string
+	}{
+		{
+			name: "rebuild_clear_cache_from_repository",
+			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
+				cacheMock.SRemFunc = func(context.Context, string, []string) (int64, error) {
+					return 0, errors.New("srem failed")
+				}
+			},
+			wantEvent: "rebuild clear cache from repository.failed",
+			wantError: "clear room alarms: remove room alarms: srem failed",
+		},
+		{
+			name: "mark_room_alarms_changed_in_cache",
+			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
+				cacheMock.DelFunc = func(context.Context, string) error {
+					return errors.New("del failed")
+				}
+			},
+			wantEvent: "mark room alarms changed in cache.failed",
+			wantError: "mark alarm cache changed: clear empty subscriber cache marker: del failed",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			var logBuffer bytes.Buffer
+			cacheMock, cacheSvc := newLenientAlarmCacheMock(ctx, t, nil)
+			tt.setup(cacheMock, cacheSvc)
+
+			as := &AlarmService{
+				cache:  cacheMock,
+				logger: slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError})),
+			}
+
+			removed, err := as.clearRoomAlarmsCacheMutation(ctx, "room-1", []string{"ch-1"})
+			require.Error(t, err)
+			assert.Zero(t, removed)
+
+			logRecord := decodeSingleJSONLog(t, &logBuffer)
+			assert.Equal(t, tt.wantEvent, logRecord["event"])
+			assert.NotContains(t, logRecord, "error")
+			assert.Equal(t, "wrapError", logRecord["error_type"])
+			assert.Equal(t, tt.wantError, logRecord["error_message"])
+		})
+	}
 }
 
 func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {

@@ -155,7 +155,7 @@ func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation ad
 		err = as.persistAlarm(ctx, mutation.record)
 	}
 	if err != nil {
-		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm before cache write", err, slog.Any("error", err))
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm before cache write", err)
 	}
 	return nil
 }
@@ -278,17 +278,11 @@ func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID str
 	removed, err := as.removeAlarmFromCache(ctx, roomID, channelID, mutation.effectiveRemovalTypes, mutation.removeRoomChannel)
 	if err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "remove", fmt.Errorf("remove alarm: %w", err))
-		if as.logger != nil {
-			as.logger.Error("Failed to remove alarm", slog.Any("error", opErr))
-		}
-		return false, fmt.Errorf("rebuild remove cache from repository: %w", opErr)
+		return false, sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild remove cache from repository", opErr)
 	}
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "remove_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
-		if as.logger != nil {
-			as.logger.Error("Failed to mark alarm cache changed after remove", slog.Any("error", opErr))
-		}
-		return false, fmt.Errorf("rebuild remove cache version from repository: %w", opErr)
+		return false, sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr)
 	}
 	return removed, nil
 }
@@ -362,17 +356,11 @@ func (as *AlarmService) clearRoomAlarmsCacheMutation(ctx context.Context, roomID
 	removed, err := as.clearRoomAlarmsFromCache(ctx, roomID, channelIDs)
 	if err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear", fmt.Errorf("clear room alarms: %w", err))
-		if as.logger != nil {
-			as.logger.Error("Failed to clear room alarms", slog.Any("error", opErr))
-		}
-		return 0, fmt.Errorf("rebuild clear cache from repository: %w", opErr)
+		return 0, sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild clear cache from repository", opErr)
 	}
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
-		if as.logger != nil {
-			as.logger.Error("Failed to mark alarm cache changed after clear", slog.Any("error", opErr))
-		}
-		return 0, fmt.Errorf("rebuild clear cache version from repository: %w", opErr)
+		return 0, sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr)
 	}
 	return removed, nil
 }
