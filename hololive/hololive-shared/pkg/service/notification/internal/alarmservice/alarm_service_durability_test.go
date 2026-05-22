@@ -441,6 +441,98 @@ func TestClearRoomAlarmsCacheMutationFailureLogsWrappedEvents(t *testing.T) {
 	}
 }
 
+func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
+	tests := []struct {
+		name         string
+		setup        func(*cachemocks.Client)
+		run          func(context.Context, *AlarmService)
+		wantEvent    string
+		wantMessage  string
+		wantErrorTyp string
+		wantErrorMsg string
+	}{
+		{
+			name: "after_add_sync_platform_mapping",
+			run: func(ctx context.Context, as *AlarmService) {
+				as.afterAddAlarm(ctx, domain.AddAlarmRequest{
+					RoomID:    "room-1",
+					ChannelID: "ch-1",
+				}, domain.AlarmTypes{domain.AlarmTypeLive})
+			},
+			wantEvent:    "sync platform alarm mapping after add.failed",
+			wantMessage:  "Failed to sync platform alarm mapping after add",
+			wantErrorTyp: "errorString",
+			wantErrorMsg: "member data provider not configured",
+		},
+		{
+			name: "after_remove_sync_platform_mapping",
+			run: func(ctx context.Context, as *AlarmService) {
+				as.afterRemoveAlarm(ctx, "room-1", "ch-1", removeAlarmMutation{
+					effectiveRemovalTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+				})
+			},
+			wantEvent:    "sync platform alarm mapping after remove.failed",
+			wantMessage:  "Failed to sync platform alarm mapping after remove",
+			wantErrorTyp: "errorString",
+			wantErrorMsg: "member data provider not configured",
+		},
+		{
+			name: "clear_room_cleanup_channel_registry",
+			setup: func(cacheMock *cachemocks.Client) {
+				cacheMock.SRemFunc = func(context.Context, string, []string) (int64, error) {
+					return 0, errors.New("srem failed")
+				}
+			},
+			run: func(ctx context.Context, as *AlarmService) {
+				as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
+				as.cleanupClearedRoomAlarmChannel(ctx, "room-1", "ch-1")
+			},
+			wantEvent:    "cleanup channel registry during room alarm clear.failed",
+			wantMessage:  "Failed to cleanup channel registry during room alarm clear",
+			wantErrorTyp: "wrapError",
+			wantErrorMsg: "cleanup channel registry: remove channel registry entry: srem failed",
+		},
+		{
+			name: "clear_room_sync_platform_mapping",
+			run: func(ctx context.Context, as *AlarmService) {
+				as.cleanupClearedRoomAlarmChannel(ctx, "room-1", "ch-1")
+			},
+			wantEvent:    "sync platform alarm mapping after clear.failed",
+			wantMessage:  "Failed to sync platform alarm mapping after clear",
+			wantErrorTyp: "errorString",
+			wantErrorMsg: "member data provider not configured",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			var logBuffer bytes.Buffer
+			cacheMock, _ := newLenientAlarmCacheMock(ctx, t, nil)
+			if tt.setup != nil {
+				tt.setup(cacheMock)
+			}
+
+			as := &AlarmService{
+				cache:  cacheMock,
+				logger: slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn})),
+			}
+
+			tt.run(ctx, as)
+
+			logRecord := decodeSingleJSONLog(t, &logBuffer)
+			assert.Equal(t, tt.wantEvent, logRecord["event"])
+			assert.Equal(t, tt.wantMessage, logRecord["msg"])
+			assert.NotContains(t, logRecord, "error")
+			assert.Equal(t, tt.wantErrorTyp, logRecord["error_type"])
+			assert.Equal(t, tt.wantErrorMsg, logRecord["error_message"])
+			assert.Equal(t, "room-1", logRecord["room_id"])
+			assert.Equal(t, "ch-1", logRecord["channel_id"])
+		})
+	}
+}
+
 func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {
 	t.Parallel()
 

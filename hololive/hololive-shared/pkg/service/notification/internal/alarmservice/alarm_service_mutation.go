@@ -163,8 +163,10 @@ func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation ad
 func (as *AlarmService) afterAddAlarm(ctx context.Context, req domain.AddAlarmRequest, newlyAddedTypes domain.AlarmTypes) {
 	as.logAlarmAdded(req, newlyAddedTypes)
 	if syncErr := as.syncPlatformMappingForChannel(ctx, req.ChannelID); syncErr != nil && as.logger != nil {
-		as.logger.Warn("Failed to sync platform alarm mapping after add",
-			slog.Any("error", syncErr),
+		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
+			"sync platform alarm mapping after add.failed",
+			"Failed to sync platform alarm mapping after add",
+			syncErr,
 			slog.String("channel_id", req.ChannelID),
 			slog.String("room_id", req.RoomID),
 		)
@@ -289,8 +291,10 @@ func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID str
 
 func (as *AlarmService) afterRemoveAlarm(ctx context.Context, roomID string, channelID string, mutation removeAlarmMutation) {
 	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
-		as.logger.Warn("Failed to sync platform alarm mapping after remove",
-			slog.Any("error", syncErr),
+		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
+			"sync platform alarm mapping after remove.failed",
+			"Failed to sync platform alarm mapping after remove",
+			syncErr,
 			slog.String("channel_id", channelID),
 			slog.String("room_id", roomID),
 		)
@@ -379,16 +383,20 @@ func (as *AlarmService) afterClearRoomAlarms(ctx context.Context, roomID string,
 
 func (as *AlarmService) cleanupClearedRoomAlarmChannel(ctx context.Context, roomID string, channelID string) {
 	if err := as.cleanupChannelRegistryIfEmpty(ctx, channelID); err != nil && as.logger != nil {
-		as.logger.Warn("Failed to cleanup channel registry during room alarm clear",
+		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
+			"cleanup channel registry during room alarm clear.failed",
+			"Failed to cleanup channel registry during room alarm clear",
+			err,
 			slog.String("room_id", roomID),
 			slog.String("channel_id", channelID),
-			slog.Any("error", err),
 		)
 	}
 
 	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
-		as.logger.Warn("Failed to sync platform alarm mapping after clear",
-			slog.Any("error", syncErr),
+		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
+			"sync platform alarm mapping after clear.failed",
+			"Failed to sync platform alarm mapping after clear",
+			syncErr,
 			slog.String("room_id", roomID),
 			slog.String("channel_id", channelID),
 		)
