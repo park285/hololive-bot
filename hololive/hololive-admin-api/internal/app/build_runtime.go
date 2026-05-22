@@ -348,7 +348,7 @@ func buildScraperHolodexProfileFoundation(
 func buildAlarmModeComponents(
 	ctx context.Context,
 	cfg *config.Config,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	holodexSvc *holodex.Service,
 	memberData member.DataProvider,
 	alarmRepo *sharedalarm.Repository,
@@ -369,7 +369,7 @@ func buildAlarmModeComponents(
 		ClientSecret: cfg.Twitch.ClientSecret,
 	}, logger)
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
-	alarmService, err := notification.NewAlarmService(cacheSvc, holodexSvc, chzzkClient, twitchClient, memberData, alarmRepo, logger, resolved)
+	alarmService, err := notification.NewAlarmService(cacheClient, holodexSvc, chzzkClient, twitchClient, memberData, alarmRepo, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}

@@ -46,7 +46,7 @@ func ProvideAPIRouter(
 	authHandler *server.AuthHandler,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 ) (*gin.Engine, error) {
 	if err := validateAPIRouterInputs(cfg, domainHandlers, authHandler); err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func ProvideAPIRouter(
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
 	}
 
-	registerAPIRoutes(router, cfg.Server.APIKey, cacheSvc, logger, domainHandlers, authHandler)
+	registerAPIRoutes(router, cfg.Server.APIKey, cacheClient, logger, domainHandlers, authHandler)
 
 	logger.Info("api_key_auth_enabled")
 

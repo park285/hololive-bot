@@ -51,7 +51,7 @@ func abortWithRateLimitError(c *gin.Context) {
 func registerAPIRoutes(
 	router *gin.Engine,
 	apiKey string,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	logger *slog.Logger,
 	domainHandlers *server.DomainAPIHandlers,
 	authHandler *server.AuthHandler,
@@ -83,7 +83,7 @@ func registerAPIRoutes(
 	holoAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))
 
 	if constants.APIRateLimitConfig.Enabled {
-		holoAPI.Use(apiRateLimitMiddleware(cacheSvc, logger))
+		holoAPI.Use(apiRateLimitMiddleware(cacheClient, logger))
 	}
 
 	registerMemberRoutes(holoAPI, domains.Member)
@@ -98,17 +98,17 @@ func registerAPIRoutes(
 	registerMajorEventRoutes(holoAPI, domains.MajorEvent)
 }
 
-func apiRateLimitMiddleware(cacheSvc cache.Client, logger *slog.Logger) gin.HandlerFunc {
+func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) gin.HandlerFunc {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	if cacheSvc == nil {
+	if cacheClient == nil {
 		logger.Warn("api_rate_limit_disabled_no_cache")
 		return func(c *gin.Context) { c.Next() }
 	}
 
-	limiter, err := ratelimit.NewSlidingWindowLimiter(cacheSvc, "api:holo:ip", logger)
+	limiter, err := ratelimit.NewSlidingWindowLimiter(cacheClient, "api:holo:ip", logger)
 	if err != nil {
 		logger.Error("api_rate_limit_init_failed", slog.String("error", err.Error()))
 		return func(c *gin.Context) { c.Next() }

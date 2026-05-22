@@ -42,7 +42,7 @@ func ProvideAPIRouter(
 	authHandler *server.AuthHandler,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 ) (*gin.Engine, error) {
-	return apphttp.ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, webhookHandler, triggerHandler, cacheSvc)
+	return apphttp.ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, webhookHandler, triggerHandler, cacheClient)
 }
