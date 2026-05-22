@@ -415,7 +415,12 @@ hololive/hololive-shared/pkg/service/fallback/metrics.go
 hololive/hololive-shared/pkg/service/fallback/secondary.go
 hololive/hololive-shared/pkg/service/holodex/holodex.go
 hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/api_client.go
+hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/api_client_circuit.go
 hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/api_client_rate_limit.go
+hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/api_client_request.go
+hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/api_client_response.go
+hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/api_client_retry.go
+hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/api_client_semaphore.go
 hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/cache_manager.go
 hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/errors.go
 hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/filter.go
