@@ -301,6 +301,44 @@ func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
 	}
 }
 
+func TestDispatcher_StartProcessesOnceBeforeFirstTick(t *testing.T) {
+	var fetchCount atomic.Int32
+	firstFetch := make(chan struct{})
+	var closeFirstFetch sync.Once
+
+	repo := &mockDeliveryRepo{
+		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+			fetchCount.Add(1)
+			closeFirstFetch.Do(func() {
+				close(firstFetch)
+			})
+			return nil, nil
+		},
+	}
+
+	cfg := DefaultDispatcherConfig()
+	cfg.PollInterval = time.Hour
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	d := NewDispatcher(repo, &mockSender{}, dispatcherLogger(), cfg)
+	d.Start(ctx)
+
+	select {
+	case <-firstFetch:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("dispatcher did not process before first ticker interval")
+	}
+
+	cancel()
+	time.Sleep(30 * time.Millisecond)
+
+	if got := fetchCount.Load(); got != 1 {
+		t.Fatalf("fetch count = %d, want 1 before first ticker interval", got)
+	}
+}
+
 func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 	var current atomic.Int32
 	var maxRunning atomic.Int32
