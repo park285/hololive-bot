@@ -69,8 +69,8 @@ func InitializeWarmMemberCache(ctx context.Context, cfg *config.Config, logger *
 }
 
 // InitializeDBIntegrationRuntime - cmd/test_db_integration 전용.
-func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresConfig, logger *slog.Logger) (*DBIntegrationRuntime, func(), error) {
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, pgCfg, logger)
+func InitializeDBIntegrationRuntime(ctx context.Context, postgresConfig config.PostgresConfig, logger *slog.Logger) (*DBIntegrationRuntime, func(), error) {
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, postgresConfig, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}
