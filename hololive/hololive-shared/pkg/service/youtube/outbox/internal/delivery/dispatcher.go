@@ -33,6 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 )
 
 const defaultTelemetryRetention = 24 * time.Hour
@@ -202,11 +203,14 @@ func (d *Dispatcher) Start(ctx context.Context) {
 }
 
 func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
-	runDispatcherTickerLoop(ctx, d.cfg.AggregateSyncInterval, func() {
+	reconcileTerminalOutboxStatuses := func(context.Context) error {
 		d.reconcileTerminalOutboxStatuses(ctx)
-	}, func() {
-		d.reconcileTerminalOutboxStatuses(ctx)
-	})
+		return nil
+	}
+	if err := reconcileTerminalOutboxStatuses(ctx); err != nil {
+		return
+	}
+	_ = loop.RunTickerLoop(ctx, d.cfg.AggregateSyncInterval, reconcileTerminalOutboxStatuses)
 }
 
 // run: 메인 폴링 루프
@@ -218,11 +222,14 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("delivery_parallelism", d.cfg.DeliveryParallelism),
 		slog.Int("subscriber_lookup_parallelism", d.subscriberLookupParallelism()))
 
-	runDispatcherTickerLoop(ctx, d.cfg.PollInterval, func() {
+	processOnce := func(context.Context) error {
 		d.processOnce(ctx)
-	}, func() {
-		d.processOnce(ctx)
-	})
+		return nil
+	}
+	if err := processOnce(ctx); err != nil {
+		return
+	}
+	_ = loop.RunTickerLoop(ctx, d.cfg.PollInterval, processOnce)
 	d.logger.Info("Outbox dispatcher stopped")
 }
 
@@ -268,31 +275,10 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 
 // cleanupLoop: 오래된 완료 알림 정리 루프
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
-	runDispatcherTickerLoop(ctx, 1*time.Hour, nil, func() {
+	_ = loop.RunTickerLoop(ctx, 1*time.Hour, func(context.Context) error {
 		d.cleanup(ctx)
+		return nil
 	})
-}
-
-func runDispatcherTickerLoop(ctx context.Context, interval time.Duration, before func(), onTick func()) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	if before != nil {
-		before()
-	}
-
-	for waitForDispatcherTick(ctx, ticker.C) {
-		onTick()
-	}
-}
-
-func waitForDispatcherTick(ctx context.Context, ticks <-chan time.Time) bool {
-	select {
-	case <-ctx.Done():
-		return false
-	case <-ticks:
-		return true
-	}
 }
 
 // cleanup: 오래된 완료 알림 삭제
