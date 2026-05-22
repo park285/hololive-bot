@@ -13,7 +13,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.12.6-0.20260519075942-c55b288ce321
+	github.com/park285/iris-client-go v0.13.0
 	github.com/park285/llm-kakao-bots/shared-go v0.1.2
 	github.com/quic-go/quic-go v0.59.0
 	github.com/stretchr/testify v1.11.1
