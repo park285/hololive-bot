@@ -163,7 +163,7 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { publisher.Close() })
 
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client { return client },
 	}
 	settingsSvc := &trackingSettingsReadWriter{
@@ -181,7 +181,7 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
 	deps := botConfigSubscriberDependencies{
-		Cache:    cacheSvc,
+		Cache:    cache,
 		Settings: settingsSvc,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
@@ -233,7 +233,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { publisher.Close() })
 
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client { return client },
 	}
 	settingsSvc := &trackingSettingsReadWriter{
@@ -246,7 +246,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	alarmSvc := &trackingAlarmAdvanceCRUD{targets: []int{15, 30}}
 
 	deps := botConfigSubscriberDependencies{
-		Cache:    cacheSvc,
+		Cache:    cache,
 		Settings: settingsSvc,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
@@ -301,7 +301,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 	require.NoError(t, err)
 	t.Cleanup(func() { publisher.Close() })
 
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client { return client },
 	}
 	settingsSvc := &trackingSettingsReadWriter{
@@ -314,7 +314,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 	require.NoError(t, err)
 
 	deps := botConfigSubscriberDependencies{
-		Cache:    cacheSvc,
+		Cache:    cache,
 		Settings: settingsSvc,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
@@ -363,7 +363,7 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { publisherClient.Close() })
 
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client { return client },
 	}
 	settingsSvc := &trackingSettingsReadWriter{
@@ -382,7 +382,7 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
 	deps := botConfigSubscriberDependencies{
-		Cache:    cacheSvc,
+		Cache:    cache,
 		Settings: settingsSvc,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{

@@ -198,7 +198,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	t.Parallel()
 
 	logger := testBootstrapGuardLogger()
-	cacheSvc := &cache.Service{}
+	cache := &cache.Service{}
 	postgresSvc := &database.PostgresService{}
 	memberRepo := &member.Repository{}
 	memberCache := &member.Cache{}
@@ -219,7 +219,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Iris:         config.IrisConfig{BaseURL: "https://iris.example"},
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
-		&sharedmodules.InfraModule{Cache: cacheSvc, Postgres: postgresSvc, MemberRepo: memberRepo, MemberCache: memberCache},
+		&sharedmodules.InfraModule{Cache: cache, Postgres: postgresSvc, MemberRepo: memberRepo, MemberCache: memberCache},
 		&appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},
 		&holodex.Service{},
 		&adapter.MessageAdapter{},
@@ -240,7 +240,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 
 	assert.Equal(t, "self-user", modules.Core.BotSelfUser)
 	assert.Equal(t, "https://iris.example", modules.Core.IrisBaseURL)
-	assert.Same(t, cacheSvc, modules.Data.CacheSvc)
+	assert.Same(t, cache, modules.Data.CacheSvc)
 	assert.Same(t, postgresSvc, modules.Data.Postgres)
 	assert.Same(t, memberRepo, modules.Data.MemberRepo)
 	assert.Same(t, memberCache, modules.Data.MemberCache)

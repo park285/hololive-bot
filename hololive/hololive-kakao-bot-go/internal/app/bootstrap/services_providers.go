@@ -20,13 +20,13 @@ func ProvideACLService(
 	kakaoACLMode acl.ACLMode,
 	kakaoRooms []string,
 	postgres database.Client,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*acl.Service, error) {
 	svc, err := acl.NewACLService(
 		ctx,
 		postgres,
-		cacheSvc,
+		cacheClient,
 		logger,
 		kakaoACLEnabled,
 		kakaoACLMode,

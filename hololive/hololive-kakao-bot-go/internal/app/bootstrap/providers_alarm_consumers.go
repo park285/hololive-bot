@@ -20,7 +20,7 @@ import (
 
 func ProvideAlarmService(
 	advanceMinutes []int,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	holodexSvc *holodex.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
@@ -29,7 +29,7 @@ func ProvideAlarmService(
 	logger *slog.Logger,
 ) (*notification.AlarmService, error) {
 	svc, err := notification.NewAlarmService(
-		cacheSvc,
+		cacheClient,
 		holodexSvc,
 		chzzkClient,
 		twitchClient,
@@ -66,9 +66,9 @@ func ProvideAlarmWorkerPool() (*workerpool.Pool, error) {
 func ProvideMemberMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	holodexSvc *holodex.Service,
 	logger *slog.Logger,
 ) *matcher.MemberMatcher {
-	return matcher.NewMemberMatcher(ctx, membersData, cacheSvc, holodexSvc, nil, logger)
+	return matcher.NewMemberMatcher(ctx, membersData, cacheClient, holodexSvc, nil, logger)
 }

@@ -89,7 +89,7 @@ type MemberMatcher struct {
 func NewMemberMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	holodexSvc *holodex.Service,
 	selector ChannelSelector,
 	logger *slog.Logger,
@@ -97,7 +97,7 @@ func NewMemberMatcher(
 	mm := &MemberMatcher{
 		ctx:                   ctx,
 		membersData:           membersData,
-		cache:                 cacheSvc,
+		cache:                 cacheClient,
 		holodex:               holodexSvc,
 		selector:              selector,
 		logger:                logger,

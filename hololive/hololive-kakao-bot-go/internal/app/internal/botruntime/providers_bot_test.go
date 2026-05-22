@@ -88,7 +88,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	messageAdapter := &adapter.MessageAdapter{}
 	formatter := &adapter.ResponseFormatter{}
 
-	cacheSvc := &cache.Service{}
+	cache := &cache.Service{}
 	postgres := &database.PostgresService{}
 	memberRepo := &member.Repository{}
 	memberCache := &member.Cache{}
@@ -122,7 +122,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			Formatter:      formatter,
 		},
 		Data: appbootstrap.BotDataModule{
-			CacheSvc:    cacheSvc,
+			CacheSvc:    cache,
 			Postgres:    postgres,
 			MemberRepo:  memberRepo,
 			MemberCache: memberCache,
@@ -162,7 +162,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	if deps.Formatter != formatter {
 		t.Fatal("Formatter wiring mismatch")
 	}
-	if deps.Cache != cacheSvc || deps.Postgres != postgres {
+	if deps.Cache != cache || deps.Postgres != postgres {
 		t.Fatal("infra wiring mismatch")
 	}
 	if deps.MemberRepo != memberRepo || deps.MemberCache != memberCache {

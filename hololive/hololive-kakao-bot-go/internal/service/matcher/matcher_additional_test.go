@@ -267,13 +267,13 @@ func TestFindBestMatch_UsesDynamicStrategyAndCache(t *testing.T) {
 
 	provider := newStubMemberProvider(nil)
 	cacheCalls := 0
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			cacheCalls++
 			return map[string]string{"Aqua": "ch-aqua"}, nil
 		},
 	}
-	matcher := NewMemberMatcher(t.Context(), provider, cacheSvc, nil, nil, newMatcherTestLogger())
+	matcher := NewMemberMatcher(t.Context(), provider, cache, nil, nil, newMatcherTestLogger())
 
 	first, err := matcher.FindBestMatch(t.Context(), "Aqua")
 	require.NoError(t, err)
@@ -293,7 +293,7 @@ func TestFindBestMatch_UsesSnapshotAcrossDifferentQueries(t *testing.T) {
 
 	provider := newStubMemberProvider(nil)
 	cacheCalls := 0
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			cacheCalls++
 
@@ -303,7 +303,7 @@ func TestFindBestMatch_UsesSnapshotAcrossDifferentQueries(t *testing.T) {
 			}, nil
 		},
 	}
-	matcher := NewMemberMatcher(t.Context(), provider, cacheSvc, nil, nil, newMatcherTestLogger())
+	matcher := NewMemberMatcher(t.Context(), provider, cache, nil, nil, newMatcherTestLogger())
 
 	first, err := matcher.FindBestMatch(t.Context(), "Aqua")
 	require.NoError(t, err)
@@ -324,12 +324,12 @@ func TestFindBestMatch_ProviderLoadErrorIsNotCached(t *testing.T) {
 	provider := newErrorAwareMemberProvider([]*domain.Member{
 		{ChannelID: "ch-aqua", Name: "Aqua"},
 	}, 1, errors.New("member repo down"))
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			return map[string]string{}, nil
 		},
 	}
-	matcher := NewMemberMatcher(t.Context(), provider, cacheSvc, nil, nil, newMatcherTestLogger())
+	matcher := NewMemberMatcher(t.Context(), provider, cache, nil, nil, newMatcherTestLogger())
 
 	channel, err := matcher.FindBestMatch(t.Context(), "Aqua")
 	require.Error(t, err)
@@ -400,7 +400,7 @@ func TestFindBestMatchWithCandidates_DynamicLoadErrorIsNotSticky(t *testing.T) {
 
 	provider := newStubMemberProvider(nil)
 	cacheCalls := 0
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			cacheCalls++
 			if cacheCalls == 1 {
@@ -412,7 +412,7 @@ func TestFindBestMatchWithCandidates_DynamicLoadErrorIsNotSticky(t *testing.T) {
 			}, nil
 		},
 	}
-	matcher := NewMemberMatcher(t.Context(), provider, cacheSvc, nil, nil, newMatcherTestLogger())
+	matcher := NewMemberMatcher(t.Context(), provider, cache, nil, nil, newMatcherTestLogger())
 
 	channel, err := matcher.FindBestMatchWithCandidates(t.Context(), "Aqua")
 	require.Error(t, err)
@@ -428,7 +428,7 @@ func TestFindBestMatchWithCandidates_DynamicLoadErrorIsNotSticky(t *testing.T) {
 func TestFindBestMatchWithCandidates_AmbiguousAndOrgFilter(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			return map[string]string{
 				"Aqua:Hololive":  "ch-holo",
@@ -436,7 +436,7 @@ func TestFindBestMatchWithCandidates_AmbiguousAndOrgFilter(t *testing.T) {
 			}, nil
 		},
 	}
-	matcher := NewMemberMatcher(t.Context(), newStubMemberProvider(nil), cacheSvc, nil, nil, newMatcherTestLogger())
+	matcher := NewMemberMatcher(t.Context(), newStubMemberProvider(nil), cache, nil, nil, newMatcherTestLogger())
 
 	channel, err := matcher.FindBestMatchWithCandidates(t.Context(), "Aqua")
 	require.Error(t, err)
@@ -498,12 +498,12 @@ func TestFindBestMatchWithCandidates_FallbackAndErrors(t *testing.T) {
 	})
 
 	t.Run("fallback to FindBestMatch", func(t *testing.T) {
-		cacheSvc := &cachemocks.Client{
+		cache := &cachemocks.Client{
 			GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 				return map[string]string{}, nil
 			},
 		}
-		matcher := NewMemberMatcher(t.Context(), provider, cacheSvc, nil, nil, newMatcherTestLogger())
+		matcher := NewMemberMatcher(t.Context(), provider, cache, nil, nil, newMatcherTestLogger())
 
 		channel, err := matcher.FindBestMatchWithCandidates(t.Context(), "Sora")
 		require.NoError(t, err)

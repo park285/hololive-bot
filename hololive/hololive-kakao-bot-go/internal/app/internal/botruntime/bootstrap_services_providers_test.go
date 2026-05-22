@@ -50,7 +50,7 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 	dbClient := &dbmocks.Client{
 		GetGormDBFunc: func() *gorm.DB { return db },
 	}
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetFunc: func(context.Context, string, any, time.Duration) error { return nil },
 		DelFunc: func(context.Context, string) error { return nil },
 		SAddFunc: func(context.Context, string, []string) (int64, error) {
@@ -58,7 +58,7 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 		},
 	}
 
-	svc, err := appbootstrap.ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"room-a", "room-b"}, dbClient, cacheSvc, logger)
+	svc, err := appbootstrap.ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"room-a", "room-b"}, dbClient, cache, logger)
 	require.NoError(t, err)
 	require.NotNil(t, svc)
 	assert.True(t, svc.IsReady())

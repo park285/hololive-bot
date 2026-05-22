@@ -48,7 +48,7 @@ type BotLifecycle struct {
 
 func NewBotLifecycle(
 	logger *slog.Logger,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	irisClient irisClient,
 	irisBaseURL string,
 	stopCh chan struct{},
@@ -59,7 +59,7 @@ func NewBotLifecycle(
 ) *BotLifecycle {
 	return &BotLifecycle{
 		logger:      logger,
-		cache:       cacheSvc,
+		cache:       cacheClient,
 		irisClient:  irisClient,
 		irisBaseURL: irisBaseURL,
 		stopCh:      stopCh,

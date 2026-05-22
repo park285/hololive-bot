@@ -80,7 +80,7 @@ func TestContainerNewBot_FailsWhenDependenciesMissing(t *testing.T) {
 func TestContainerGetterMappings(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := &cache.Service{}
+	cache := &cache.Service{}
 	memberRepo := &member.Repository{}
 	memberCache := &member.Cache{}
 	alarmSvc := testAlarmCRUD{}
@@ -92,7 +92,7 @@ func TestContainerGetterMappings(t *testing.T) {
 
 	container := &Container{
 		botDeps: &bot.Dependencies{
-			Cache:       cacheSvc,
+			Cache:       cache,
 			MemberRepo:  memberRepo,
 			MemberCache: memberCache,
 			Alarm:       alarmSvc,
@@ -106,7 +106,7 @@ func TestContainerGetterMappings(t *testing.T) {
 
 	assert.Same(t, memberRepo, container.GetMemberRepo())
 	assert.Same(t, memberCache, container.GetMemberCache())
-	assert.Same(t, cacheSvc, container.GetCache())
+	assert.Same(t, cache, container.GetCache())
 	assert.Equal(t, alarmSvc, container.GetAlarmService())
 	assert.Same(t, streamSvc, container.GetHolodexService())
 	assert.Same(t, youtubeSvc, container.GetYouTubeService())
