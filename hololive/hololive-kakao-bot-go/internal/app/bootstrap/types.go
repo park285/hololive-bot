@@ -91,7 +91,7 @@ type BotMessagingModule struct {
 }
 
 type BotDataModule struct {
-	CacheSvc    cache.Client
+	Cache       cache.Client
 	Postgres    database.Client
 	MemberRepo  *member.Repository
 	MemberCache *member.Cache

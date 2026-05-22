@@ -122,7 +122,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			Formatter:      formatter,
 		},
 		Data: appbootstrap.BotDataModule{
-			CacheSvc:    cache,
+			Cache:       cache,
 			Postgres:    postgres,
 			MemberRepo:  memberRepo,
 			MemberCache: memberCache,

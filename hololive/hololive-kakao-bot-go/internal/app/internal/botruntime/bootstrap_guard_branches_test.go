@@ -240,7 +240,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 
 	assert.Equal(t, "self-user", modules.Core.BotSelfUser)
 	assert.Equal(t, "https://iris.example", modules.Core.IrisBaseURL)
-	assert.Same(t, cache, modules.Data.CacheSvc)
+	assert.Same(t, cache, modules.Data.Cache)
 	assert.Same(t, postgresSvc, modules.Data.Postgres)
 	assert.Same(t, memberRepo, modules.Data.MemberRepo)
 	assert.Same(t, memberCache, modules.Data.MemberCache)

@@ -76,7 +76,7 @@ func buildBotDataModule(
 	profileService *member.ProfileService,
 ) BotDataModule {
 	return BotDataModule{
-		CacheSvc:    infra.Cache,
+		Cache:       infra.Cache,
 		Postgres:    infra.Postgres,
 		MemberRepo:  infra.MemberRepo,
 		MemberCache: infra.MemberCache,
