@@ -15,6 +15,24 @@ func (e *logAndWrapTypedError) Error() string {
 	return e.message
 }
 
+type logAndWrapCodedRetryableError struct {
+	message   string
+	code      string
+	retryable bool
+}
+
+func (e *logAndWrapCodedRetryableError) Error() string {
+	return e.message
+}
+
+func (e *logAndWrapCodedRetryableError) Code() string {
+	return e.code
+}
+
+func (e *logAndWrapCodedRetryableError) Retryable() bool {
+	return e.retryable
+}
+
 func TestLogAndWrapError_NilErrorReturnsNil(t *testing.T) {
 	handler := newCaptureLogHandler(true)
 	logger := slog.New(handler)
@@ -76,6 +94,69 @@ func TestLogAndWrapError_IncludesErrorAttrs(t *testing.T) {
 	}
 	requireCapturedAttr(t, handler.records[0], "error_type", "logAndWrapTypedError")
 	requireCapturedAttr(t, handler.records[0], "error_message", "typed failure")
+}
+
+func TestLogAndWrap_AttrMergeCallerOverridesErrorAttrs(t *testing.T) {
+	handler := newCaptureLogHandler(true)
+	logger := slog.New(handler)
+
+	LogAndWrapError(
+		context.Background(),
+		logger,
+		"sync.poll",
+		errors.New("boom"),
+		slog.String("error_message", "custom"),
+	)
+
+	if len(handler.records) != 1 {
+		t.Fatalf("got %d records, want 1", len(handler.records))
+	}
+	requireCapturedAttr(t, handler.records[0], "error_message", "custom")
+}
+
+func TestLogAndWrap_IncludesErrorCodeAndRetryable(t *testing.T) {
+	handler := newCaptureLogHandler(true)
+	logger := slog.New(handler)
+	cause := &logAndWrapCodedRetryableError{
+		message:   "temporary failure",
+		code:      "TEMPORARY_FAILURE",
+		retryable: true,
+	}
+
+	LogAndWrapError(context.Background(), logger, "sync.poll", cause)
+
+	if len(handler.records) != 1 {
+		t.Fatalf("got %d records, want 1", len(handler.records))
+	}
+	record := handler.records[0]
+	requireCapturedAttr(t, record, "error_code", "TEMPORARY_FAILURE")
+
+	got, ok := record.attrs["retryable"]
+	if !ok {
+		t.Fatalf("record missing %q: %#v", "retryable", record.attrs)
+	}
+	if got.Kind() != slog.KindBool {
+		t.Fatalf("record[%q] kind = %v, want %v", "retryable", got.Kind(), slog.KindBool)
+	}
+	if !got.Bool() {
+		t.Fatalf("record[%q] = %v, want true", "retryable", got.Bool())
+	}
+}
+
+func TestLogAndWrap_PropagatesContextAttrs(t *testing.T) {
+	handler := newCaptureLogHandler(true)
+	logger := slog.New(handler)
+	ctx := WithJobID(context.Background(), "j1")
+	ctx = WithRequestID(ctx, "r1")
+
+	LogAndWrapError(ctx, logger, "sync.poll", errors.New("boom"))
+
+	if len(handler.records) != 1 {
+		t.Fatalf("got %d records, want 1", len(handler.records))
+	}
+	record := handler.records[0]
+	requireCapturedAttr(t, record, "job_id", "j1")
+	requireCapturedAttr(t, record, "request_id", "r1")
 }
 
 func TestLogAndWrapError_MergesExtraAttrs(t *testing.T) {
