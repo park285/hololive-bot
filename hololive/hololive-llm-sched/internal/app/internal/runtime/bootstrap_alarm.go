@@ -44,11 +44,11 @@ func initMemberNewsService(
 	llmCfg config.LLMConfig,
 	exaCfg config.ExaConfig,
 	postgres database.Client,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	membersData member.DataProvider,
 	logger *slog.Logger,
 ) *membernews.Service {
-	repo := membernews.NewRepository(postgres, cacheSvc, logger)
+	repo := membernews.NewRepository(postgres, cacheClient, logger)
 	llmClient := ProvideMemberNewsLLMClient(cliproxy, llmCfg, logger)
 	reviewer := ProvideMemberNewsReviewerClient(cliproxy, llmCfg, logger)
 	adjudicator := ProvideMemberNewsAdjudicatorClient(cliproxy, llmCfg, logger)

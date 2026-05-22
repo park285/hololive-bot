@@ -50,12 +50,12 @@ func provideExaSearcher(cfg config.ExaConfig, logger *slog.Logger) sharedmodel.W
 	return client
 }
 
-func buildMajorEventSummarizer(cfg *config.LLMSchedulerConfig, cacheSvc cache.Client, logger *slog.Logger) *mesummarizer.EventSummarizer {
+func buildMajorEventSummarizer(cfg *config.LLMSchedulerConfig, cacheClient cache.Client, logger *slog.Logger) *mesummarizer.EventSummarizer {
 	majorEventLLMClient := ProvideMajorEventLLMClient(cfg.Cliproxy, logger)
 	majorEventReviewer := ProvideMajorEventReviewerClient(cfg.Cliproxy, cfg.LLM, logger)
 	majorEventAdjudicator := ProvideMajorEventAdjudicatorClient(cfg.Cliproxy, cfg.LLM, logger)
 	exaSearcher := provideExaSearcher(cfg.Exa, logger)
-	return provideEventSummarizer(cfg.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheSvc, exaSearcher, logger)
+	return provideEventSummarizer(cfg.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheClient, exaSearcher, logger)
 }
 
 func provideEventSummarizer(
@@ -63,7 +63,7 @@ func provideEventSummarizer(
 	llmClient mesummarizer.LLMClient,
 	reviewerClient mesummarizer.LLMClient,
 	adjudicatorClient mesummarizer.LLMClient,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	searcher sharedmodel.WebSearcher,
 	logger *slog.Logger,
 ) *mesummarizer.EventSummarizer {
@@ -90,5 +90,5 @@ func provideEventSummarizer(
 		)
 	}
 
-	return mesummarizer.NewEventSummarizer(llmClient, cacheSvc, searcher, logger, opts...)
+	return mesummarizer.NewEventSummarizer(llmClient, cacheClient, searcher, logger, opts...)
 }
