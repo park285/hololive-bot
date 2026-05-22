@@ -22,6 +22,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -32,9 +33,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 )
 
 const systemStatsStreamInterval = 5 * time.Second
+
+var errSystemStatsStreamStopped = errors.New("system stats stream stopped")
 
 func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 	if !h.requireStatsDeps(c) {
@@ -123,28 +127,16 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 }
 
 func (h *StatsAPIHandler) streamSystemStats(ctx context.Context, conn *websocket.Conn) {
-	ticker := time.NewTicker(systemStatsStreamInterval)
-	defer ticker.Stop()
-
 	if !h.writeInitialSystemStats(ctx, conn) {
 		return
 	}
 
-	h.writeSystemStatsTicks(ctx, conn, ticker)
-}
-
-func (h *StatsAPIHandler) writeSystemStatsTicks(ctx context.Context, conn *websocket.Conn, ticker *time.Ticker) {
-	for h.writeNextSystemStatsTick(ctx, conn, ticker) {
-	}
-}
-
-func (h *StatsAPIHandler) writeNextSystemStatsTick(ctx context.Context, conn *websocket.Conn, ticker *time.Ticker) bool {
-	select {
-	case <-ctx.Done():
-		return false
-	case <-ticker.C:
-		return h.writeSystemStats(ctx, conn, "failed to collect system stats", "failed to write system stats")
-	}
+	_ = loop.RunTickerLoop(ctx, systemStatsStreamInterval, func(ctx context.Context) error {
+		if !h.writeSystemStats(ctx, conn, "failed to collect system stats", "failed to write system stats") {
+			return errSystemStatsStreamStopped
+		}
+		return nil
+	})
 }
 
 func (h *StatsAPIHandler) writeInitialSystemStats(ctx context.Context, conn *websocket.Conn) bool {
