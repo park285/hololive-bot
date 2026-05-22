@@ -107,8 +107,8 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	if modules.Data.MembersData != memberData {
 		t.Fatal("Data.MembersData did not preserve the alarm member data provider")
 	}
-	if modules.Stream.AlarmSvc != alarmCRUD {
-		t.Fatal("Stream.AlarmSvc did not preserve the alarm CRUD provider")
+	if modules.Stream.Alarm != alarmCRUD {
+		t.Fatal("Stream.Alarm did not preserve the alarm CRUD provider")
 	}
 	if modules.Messaging.Client != irisClient {
 		t.Fatal("Messaging.Client did not preserve the Iris client")

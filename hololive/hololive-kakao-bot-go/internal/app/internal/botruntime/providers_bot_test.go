@@ -133,7 +133,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			HolodexSvc:   holodexSvc,
 			ChzzkClient:  chzzkClient,
 			TwitchClient: twitchClient,
-			AlarmSvc:     nil,
+			Alarm:        nil,
 			MemberMatch:  memberMatcher,
 			YTStack:      ytStack,
 		},

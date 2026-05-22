@@ -67,7 +67,7 @@ func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
 		Chzzk:            modules.Stream.ChzzkClient,
 		Twitch:           modules.Stream.TwitchClient,
 		Profiles:         modules.Data.Profiles,
-		Alarm:            modules.Stream.AlarmSvc,
+		Alarm:            modules.Stream.Alarm,
 		Matcher:          modules.Stream.MemberMatch,
 		MembersData:      modules.Data.MembersData,
 		Service:          youTubeService,

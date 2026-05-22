@@ -95,7 +95,7 @@ func buildBotStreamModule(
 		HolodexSvc:   holodexService,
 		ChzzkClient:  alarmMode.ChzzkClient,
 		TwitchClient: alarmMode.TwitchClient,
-		AlarmSvc:     alarmMode.AlarmCRUD,
+		Alarm:        alarmMode.AlarmCRUD,
 		MemberMatch:  memberMatcher,
 		YTStack:      youTubeStack,
 	}

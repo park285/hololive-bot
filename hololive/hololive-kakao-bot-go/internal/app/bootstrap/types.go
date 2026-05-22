@@ -103,7 +103,7 @@ type BotStreamModule struct {
 	HolodexSvc   *holodex.Service
 	ChzzkClient  *chzzk.Client
 	TwitchClient *twitch.Client
-	AlarmSvc     domain.AlarmCRUD
+	Alarm        domain.AlarmCRUD
 	MemberMatch  *matcher.MemberMatcher
 	YTStack      *providers.YouTubeStack
 }
