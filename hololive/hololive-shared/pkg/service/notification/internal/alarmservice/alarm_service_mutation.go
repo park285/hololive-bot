@@ -97,10 +97,7 @@ func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation addA
 		return added, nil
 	}
 	opErr := as.rebuildAlarmCacheFromRepository(ctx, "add", fmt.Errorf("add alarm: %w", err))
-	if as.logger != nil {
-		as.logger.Error("Failed to add alarm", slog.Any("error", opErr))
-	}
-	return 0, fmt.Errorf("rebuild add cache from repository: %w", opErr)
+	return 0, sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild add cache from repository", opErr)
 }
 
 func normalizeAddAlarmRequest(req domain.AddAlarmRequest) (domain.AddAlarmRequest, error) {
@@ -265,20 +262,14 @@ func (as *AlarmService) persistRemoveAlarmMutation(ctx context.Context, roomID s
 
 func (as *AlarmService) deleteAlarmBeforeCacheRemoval(ctx context.Context, roomID string, channelID string) error {
 	if err := as.deleteAlarm(ctx, roomID, channelID); err != nil {
-		if as.logger != nil {
-			as.logger.Error("Failed to persist alarm removal before cache write", slog.Any("error", err))
-		}
-		return fmt.Errorf("delete alarm before cache removal: %w", err)
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "delete alarm before cache removal", err)
 	}
 	return nil
 }
 
 func (as *AlarmService) updateAlarmTypesBeforeCacheRemoval(ctx context.Context, updated *domain.Alarm) error {
 	if err := as.updateAlarmTypes(ctx, updated); err != nil {
-		if as.logger != nil {
-			as.logger.Error("Failed to persist alarm type update before cache write", slog.Any("error", err))
-		}
-		return fmt.Errorf("persist alarm type update before cache removal: %w", err)
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm type update before cache removal", err)
 	}
 	return nil
 }
@@ -362,10 +353,7 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 
 func (as *AlarmService) deleteRoomAlarmsBeforeCacheClear(ctx context.Context, roomID string) error {
 	if err := as.deleteRoomAlarms(ctx, roomID); err != nil {
-		if as.logger != nil {
-			as.logger.Error("Failed to persist room alarm clear before cache write", slog.Any("error", err))
-		}
-		return fmt.Errorf("delete room alarms before cache clear: %w", err)
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "delete room alarms before cache clear", err)
 	}
 	return nil
 }

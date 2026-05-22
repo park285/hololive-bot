@@ -123,6 +123,15 @@ func assertRebuildLoadedMetric(t *testing.T, operation, resource string, want fl
 	}), 0.000001)
 }
 
+func decodeSingleJSONLog(t *testing.T, logBuffer *bytes.Buffer) map[string]any {
+	t.Helper()
+
+	var logRecord map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &logRecord))
+
+	return logRecord
+}
+
 func TestAddAlarm_PersistFailureDoesNotPolluteCache(t *testing.T) {
 	t.Parallel()
 
@@ -192,6 +201,127 @@ func TestAddAlarm_PersistFailureLogKeepsErrorKey(t *testing.T) {
 	assert.Equal(t, "persist alarm: stub add: db down", logRecord["error"])
 	assert.Equal(t, "wrapError", logRecord["error_type"])
 	assert.Equal(t, "persist alarm: stub add: db down", logRecord["error_message"])
+}
+
+func TestCacheAddAlarmMutationFailureLogsWrappedEvent(t *testing.T) {
+	ctx := t.Context()
+	var logBuffer bytes.Buffer
+	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheSvc *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
+		if key == AlarmRegistryKey {
+			return 0, errors.New("registry add failed")
+		}
+
+		return cacheSvc.SAdd(ctx, key, members)
+	})
+
+	as := &AlarmService{
+		cache:      cacheMock,
+		logger:     slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError})),
+		memberData: &mockMemberDataProvider{members: []*domain.Member{}},
+	}
+	cacheMock.GetClientFunc = func() valkey.Client { return nil }
+
+	_, err := as.cacheAddAlarmMutation(ctx, addAlarmMutation{
+		cacheRecord: domain.Alarm{
+			RoomID:     "room-1",
+			ChannelID:  "ch-1",
+			MemberName: "Miko",
+			AlarmTypes: domain.DefaultAlarmTypes,
+		},
+	})
+	require.Error(t, err)
+
+	logRecord := decodeSingleJSONLog(t, &logBuffer)
+	assert.Equal(t, "rebuild add cache from repository.failed", logRecord["event"])
+	assert.NotContains(t, logRecord, "error")
+	assert.Equal(t, "wrapError", logRecord["error_type"])
+	assert.Contains(t, logRecord["error_message"], "add alarm: add room registry: registry add failed")
+}
+
+func TestRemoveAlarmPersistFailureLogsWrappedEvents(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		run       func(context.Context, *AlarmService) error
+		wantEvent string
+		wantError string
+	}{
+		{
+			name: "delete_alarm_before_cache_removal",
+			run: func(ctx context.Context, as *AlarmService) error {
+				as.alarmWriter = &stubAlarmWriter{
+					removeFn: func(context.Context, string, string) error {
+						return errors.New("db down")
+					},
+				}
+
+				return as.deleteAlarmBeforeCacheRemoval(ctx, "room-1", "ch-1")
+			},
+			wantEvent: "delete alarm before cache removal.failed",
+			wantError: "delete alarm: stub remove: db down",
+		},
+		{
+			name: "update_alarm_types_before_cache_removal",
+			run: func(ctx context.Context, as *AlarmService) error {
+				as.alarmWriter = &stubAlarmWriter{
+					addFn: func(context.Context, *domain.Alarm) error {
+						return errors.New("db down")
+					},
+				}
+
+				return as.updateAlarmTypesBeforeCacheRemoval(ctx, &domain.Alarm{
+					RoomID:     "room-1",
+					ChannelID:  "ch-1",
+					AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
+				})
+			},
+			wantEvent: "persist alarm type update before cache removal.failed",
+			wantError: "persist alarm type update: stub add: db down",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var logBuffer bytes.Buffer
+			as := newTestAlarmService(t)
+			as.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
+
+			err := tt.run(t.Context(), as)
+			require.Error(t, err)
+
+			logRecord := decodeSingleJSONLog(t, &logBuffer)
+			assert.Equal(t, tt.wantEvent, logRecord["event"])
+			assert.NotContains(t, logRecord, "error")
+			assert.Equal(t, "wrapError", logRecord["error_type"])
+			assert.Equal(t, tt.wantError, logRecord["error_message"])
+		})
+	}
+}
+
+func TestClearRoomAlarmsPersistFailureLogsWrappedEvent(t *testing.T) {
+	t.Parallel()
+
+	var logBuffer bytes.Buffer
+	as := newTestAlarmService(t)
+	as.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
+	as.alarmWriter = &stubAlarmWriter{
+		clearByRoomFn: func(context.Context, string) (int64, error) {
+			return 0, errors.New("db down")
+		},
+	}
+
+	err := as.deleteRoomAlarmsBeforeCacheClear(t.Context(), "room-1")
+	require.Error(t, err)
+
+	logRecord := decodeSingleJSONLog(t, &logBuffer)
+	assert.Equal(t, "delete room alarms before cache clear.failed", logRecord["event"])
+	assert.NotContains(t, logRecord, "error")
+	assert.Equal(t, "wrapError", logRecord["error_type"])
+	assert.Equal(t, "delete room alarms: stub clear by room: db down", logRecord["error_message"])
 }
 
 func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {
