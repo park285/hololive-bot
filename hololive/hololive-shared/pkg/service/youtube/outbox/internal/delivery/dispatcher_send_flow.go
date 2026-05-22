@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/park285/iris-client-go/iris"
 )
 
 type deliverySendRequest struct {
@@ -37,6 +38,16 @@ const (
 
 var ErrDeliveryDedupeKeyRequired = errors.New("delivery dedupe key is required")
 var errDeliverySendTimeout = errors.New("delivery send timeout exceeded")
+
+var deliveryFailureReasonBySentinel = []struct {
+	err    error
+	reason string
+}{
+	{err: iris.ErrAuthFailed, reason: "auth"},
+	{err: iris.ErrRateLimited, reason: "rate-limited"},
+	{err: iris.ErrTransport, reason: "transport"},
+	{err: iris.ErrPermanent, reason: "http-permanent"},
+}
 
 func buildDeliverySendRequest(roomID, message string, outboxes []domain.YouTubeNotificationOutbox) (deliverySendRequest, error) {
 	if strings.TrimSpace(roomID) == "" {
@@ -99,6 +110,11 @@ func validateDeliverySendRequest(req deliverySendRequest) error {
 func deliveryFailureReason(err error) string {
 	if errors.Is(err, ErrDeliveryDedupeKeyRequired) {
 		return "dedupe key"
+	}
+	for _, item := range deliveryFailureReasonBySentinel {
+		if errors.Is(err, item.err) {
+			return item.reason
+		}
 	}
 	return "send message"
 }
