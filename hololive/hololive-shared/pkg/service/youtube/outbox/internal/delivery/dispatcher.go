@@ -92,6 +92,10 @@ type Dispatcher struct {
 	formatter *MessageFormatter
 	karingMu  sync.Mutex
 	started   atomic.Bool
+
+	onProcessOnce   func()
+	onAggregateSync func()
+	onCleanup       func()
 }
 
 func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
@@ -205,11 +209,18 @@ func (d *Dispatcher) Start(ctx context.Context) {
 }
 
 func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
-	d.reconcileTerminalOutboxStatuses(ctx)
+	d.aggregateSyncOnce(ctx)
 	_ = loop.RunTickerLoop(ctx, d.cfg.AggregateSyncInterval, func(context.Context) error {
-		d.reconcileTerminalOutboxStatuses(ctx)
+		d.aggregateSyncOnce(ctx)
 		return nil
 	})
+}
+
+func (d *Dispatcher) aggregateSyncOnce(ctx context.Context) {
+	d.reconcileTerminalOutboxStatuses(ctx)
+	if d.onAggregateSync != nil {
+		d.onAggregateSync()
+	}
 }
 
 // run: 메인 폴링 루프
@@ -232,6 +243,9 @@ func (d *Dispatcher) run(ctx context.Context) {
 // processOnce: 한 번의 폴링 사이클
 func (d *Dispatcher) processOnce(ctx context.Context) {
 	d.processAvailable(ctx, 4)
+	if d.onProcessOnce != nil {
+		d.onProcessOnce()
+	}
 }
 
 func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
@@ -273,6 +287,9 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
 	_ = loop.RunTickerLoop(ctx, outboxCleanupLoopInterval, func(context.Context) error {
 		d.cleanup(ctx)
+		if d.onCleanup != nil {
+			d.onCleanup()
+		}
 		return nil
 	})
 }
@@ -326,5 +343,5 @@ func (d *Dispatcher) CleanupForTest(ctx context.Context) {
 }
 
 func (d *Dispatcher) AggregateSyncForTest(ctx context.Context) {
-	d.reconcileTerminalOutboxStatuses(ctx)
+	d.aggregateSyncOnce(ctx)
 }

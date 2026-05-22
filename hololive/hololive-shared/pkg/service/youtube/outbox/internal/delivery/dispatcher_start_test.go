@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,54 +13,32 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-type gormSQLCounter struct {
-	gormlogger.Interface
-
-	pattern string
+type dispatcherTickProbe struct {
 	target  int32
-	active  atomic.Bool
 	count   atomic.Int32
 	once    sync.Once
 	reached chan struct{}
 }
 
-func newGormSQLCounter(pattern string, target int32) *gormSQLCounter {
-	return &gormSQLCounter{
-		Interface: gormlogger.Discard,
-		pattern:   pattern,
-		target:    target,
-		reached:   make(chan struct{}),
+func newDispatcherTickProbe(target int32) *dispatcherTickProbe {
+	return &dispatcherTickProbe{
+		target:  target,
+		reached: make(chan struct{}),
 	}
 }
 
-func (c *gormSQLCounter) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
-	return c
-}
-
-func (c *gormSQLCounter) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-	if !c.active.Load() {
-		return
-	}
-	sql, _ := fc()
-	if !strings.Contains(sql, c.pattern) {
-		return
-	}
-	if c.count.Add(1) >= c.target {
-		c.once.Do(func() {
-			close(c.reached)
+func (p *dispatcherTickProbe) tick() {
+	if p.count.Add(1) >= p.target {
+		p.once.Do(func() {
+			close(p.reached)
 		})
 	}
-}
-
-func (c *gormSQLCounter) start() {
-	c.active.Store(true)
 }
 
 func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
@@ -120,8 +97,8 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 	t.Parallel()
 
-	counter := newGormSQLCounter("youtube_notification_outbox", 2)
-	db := openDispatcherStartTestDB(t, "dispatcher_run_tick", counter)
+	probe := newDispatcherTickProbe(2)
+	db := openDispatcherStartTestDB(t, "dispatcher_run_tick")
 	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
 
 	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
@@ -134,17 +111,17 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 		CleanupEnabled:      false,
 	})
 	dispatcher.telemetry = nil
+	dispatcher.onProcessOnce = probe.tick
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	counter.start()
 	go func() {
 		dispatcher.run(ctx)
 		close(done)
 	}()
 
 	select {
-	case <-counter.reached:
+	case <-probe.reached:
 	case <-time.After(500 * time.Millisecond):
 		cancel()
 		t.Fatal("dispatcher run loop did not process a periodic tick")
@@ -161,8 +138,8 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 	t.Parallel()
 
-	counter := newGormSQLCounter("FROM youtube_notification_delivery d", 2)
-	db := openDispatcherStartTestDB(t, "dispatcher_aggregate_tick", counter)
+	probe := newDispatcherTickProbe(2)
+	db := openDispatcherStartTestDB(t, "dispatcher_aggregate_tick")
 	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
 
 	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
@@ -175,17 +152,17 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 		DeliveryParallelism:   1,
 		CleanupEnabled:        false,
 	})
+	dispatcher.onAggregateSync = probe.tick
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	counter.start()
 	go func() {
 		dispatcher.aggregateSyncLoop(ctx)
 		close(done)
 	}()
 
 	select {
-	case <-counter.reached:
+	case <-probe.reached:
 	case <-time.After(500 * time.Millisecond):
 		cancel()
 		t.Fatal("aggregate sync loop did not process a periodic tick")
@@ -206,8 +183,8 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 		outboxCleanupLoopInterval = oldInterval
 	})
 
-	counter := newGormSQLCounter("youtube_notification_outbox", 1)
-	db := openDispatcherStartTestDB(t, "dispatcher_cleanup_tick", counter)
+	probe := newDispatcherTickProbe(1)
+	db := openDispatcherStartTestDB(t, "dispatcher_cleanup_tick")
 	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
 
 	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
@@ -220,17 +197,17 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 		CleanupEnabled: true,
 	})
 	dispatcher.telemetry = nil
+	dispatcher.onCleanup = probe.tick
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	counter.start()
 	go func() {
 		dispatcher.cleanupLoop(ctx)
 		close(done)
 	}()
 
 	select {
-	case <-counter.reached:
+	case <-probe.reached:
 	case <-time.After(500 * time.Millisecond):
 		cancel()
 		t.Fatal("cleanup loop did not process a periodic tick")
@@ -244,15 +221,11 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	}
 }
 
-func openDispatcherStartTestDB(t *testing.T, name string, logger gormlogger.Interface) *gorm.DB {
+func openDispatcherStartTestDB(t *testing.T, name string) *gorm.DB {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s_%d?mode=memory&cache=shared", name, time.Now().UnixNano())
-	cfg := &gorm.Config{}
-	if logger != nil {
-		cfg.Logger = logger
-	}
-	db, err := gorm.Open(sqlite.Open(dsn), cfg)
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
