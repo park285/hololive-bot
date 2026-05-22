@@ -99,8 +99,8 @@ func (p refreshTestPoller) Name() string {
 func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NEW"}, nil
 		}
@@ -119,7 +119,7 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_STATS"},
@@ -132,7 +132,7 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 		providers.WithSchedulerChannelIDs([]string{"UC_STATS"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -157,20 +157,20 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
+	cache := cachemocks.NewStrictClient()
 	smembersCalls := 0
-	cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+	cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
 		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
 		return true, nil
 	}
-	cacheSvc.GetFunc = func(_ context.Context, key string, dest any) error {
+	cache.GetFunc = func(_ context.Context, key string, dest any) error {
 		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
 		version, ok := dest.(*int64)
 		require.True(t, ok)
 		*version = 123
 		return nil
 	}
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
 		smembersCalls++
 		return []string{"UC_VERSIONED"}, nil
@@ -183,7 +183,7 @@ func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged
 			Stats: 4 * time.Hour, Live: 3 * time.Minute,
 		}},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_VERSIONED"},
@@ -195,7 +195,7 @@ func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged
 		providers.WithSchedulerChannelIDs([]string{"UC_VERSIONED"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{{ChannelID: "UC_VERSIONED", Enabled: true}},
@@ -215,19 +215,19 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&domain.YouTubeVideo{}))
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
 		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
 		return true, nil
 	}
-	cacheSvc.GetFunc = func(_ context.Context, key string, dest any) error {
+	cache.GetFunc = func(_ context.Context, key string, dest any) error {
 		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
 		version, ok := dest.(*int64)
 		require.True(t, ok)
 		*version = 123
 		return nil
 	}
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
 		return []string{"UC_TIER"}, nil
 	}
@@ -243,7 +243,7 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
 	}
 	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
-	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), cacheSvc, nil, []string{"UC_TIER"}, []string{"UC_TIER"})
+	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), cache, nil, []string{"UC_TIER"}, []string{"UC_TIER"})
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -251,7 +251,7 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		providers.WithSchedulerChannelIDs([]string{"UC_TIER"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{{ChannelID: "UC_TIER", Enabled: true}},
@@ -274,20 +274,20 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
+	cache := cachemocks.NewStrictClient()
 	smembersCalls := 0
-	cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+	cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
 		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
 		return true, nil
 	}
-	cacheSvc.GetFunc = func(_ context.Context, key string, dest any) error {
+	cache.GetFunc = func(_ context.Context, key string, dest any) error {
 		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
 		version, ok := dest.(*int64)
 		require.True(t, ok)
 		*version = 0
 		return nil
 	}
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
 		smembersCalls++
 		return []string{"UC_VERSIONED"}, nil
@@ -300,7 +300,7 @@ func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T)
 			Stats: 4 * time.Hour, Live: 3 * time.Minute,
 		}},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_VERSIONED"},
@@ -312,7 +312,7 @@ func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T)
 		providers.WithSchedulerChannelIDs([]string{"UC_VERSIONED"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{{ChannelID: "UC_VERSIONED", Enabled: true}},
@@ -329,8 +329,8 @@ func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T)
 func TestYouTubePollTargetRefresher_SkipsImplicitGlobalRegistrationsDuringRefresh(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NOTIFY"}, nil
 		}
@@ -350,7 +350,7 @@ func TestYouTubePollTargetRefresher_SkipsImplicitGlobalRegistrationsDuringRefres
 		providers.WithChannelPollerRegistrations(registrations),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
@@ -368,8 +368,8 @@ func TestYouTubePollTargetRefresher_SkipsImplicitGlobalRegistrationsDuringRefres
 func TestYouTubePollTargetRefresher_PreservesExplicitGlobalRegistrationsDuringRefresh(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NOTIFY"}, nil
 		}
@@ -393,7 +393,7 @@ func TestYouTubePollTargetRefresher_PreservesExplicitGlobalRegistrationsDuringRe
 		providers.WithChannelPollerRegistrations(registrations),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
@@ -412,8 +412,8 @@ func TestYouTubePollTargetRefresher_PreservesExplicitGlobalRegistrationsDuringRe
 func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NOTIFY"}, nil
 		}
@@ -432,7 +432,7 @@ func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testi
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_NOTIFY", "UC_STATS_A"},
@@ -445,7 +445,7 @@ func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testi
 		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY", "UC_STATS_A"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -472,8 +472,8 @@ func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testi
 func TestYouTubePollTargetRefresherCreatesSeparatePrimaryAndBackfillJobs(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NOTIFY"}, nil
 		}
@@ -495,7 +495,7 @@ func TestYouTubePollTargetRefresherCreatesSeparatePrimaryAndBackfillJobs(t *test
 		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
@@ -515,8 +515,8 @@ func TestYouTubePollTargetRefresherCreatesSeparatePrimaryAndBackfillJobs(t *test
 func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderError(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NOTIFY"}, nil
 		}
@@ -535,7 +535,7 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
@@ -550,7 +550,7 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 
 	loadCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -582,8 +582,8 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NOTIFY"}, nil
 		}
@@ -602,7 +602,7 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
@@ -618,7 +618,7 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 	logger, logBuf := newBufferedYouTubePollTargetTestLogger()
 	loadCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -648,8 +648,8 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NOTIFY"}, nil
 		}
@@ -668,7 +668,7 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t 
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
@@ -683,7 +683,7 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t 
 
 	logger, logBuf := newBufferedYouTubePollTargetTestLogger()
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -704,8 +704,8 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t 
 func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderChanges(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NOTIFY"}, nil
 		}
@@ -724,7 +724,7 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
@@ -740,7 +740,7 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 	logger, logBuf := newBufferedYouTubePollTargetTestLogger()
 	loadCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -773,8 +773,8 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsAreUnchanged(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_SAME"}, nil
 		}
@@ -793,7 +793,7 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsAreUnchanged(t *t
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_SAME"},
 		[]string{"UC_SAME", "UC_STATS"},
@@ -806,7 +806,7 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsAreUnchanged(t *t
 		providers.WithSchedulerChannelIDs([]string{"UC_SAME", "UC_STATS"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -831,8 +831,8 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsAreUnchanged(t *t
 func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsMatchInDifferentOrder(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_NOTIFY_B", "UC_NOTIFY_A"}, nil
 		}
@@ -851,7 +851,7 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsMatchInDifferentO
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_NOTIFY_A", "UC_NOTIFY_B"},
 		[]string{"UC_NOTIFY_B", "UC_NOTIFY_A", "UC_STATS"},
@@ -864,7 +864,7 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsMatchInDifferentO
 		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY_A", "UC_NOTIFY_B", "UC_STATS"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -891,8 +891,8 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsMatchInDifferentO
 func TestYouTubePollTargetRefresherFallsBackToDBWhenCacheLookupFails(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return nil, assert.AnError
 		}
@@ -911,7 +911,7 @@ func TestYouTubePollTargetRefresherFallsBackToDBWhenCacheLookupFails(t *testing.
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_STATS"},
@@ -924,7 +924,7 @@ func TestYouTubePollTargetRefresherFallsBackToDBWhenCacheLookupFails(t *testing.
 		providers.WithSchedulerChannelIDs([]string{"UC_STATS"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -945,8 +945,8 @@ func TestYouTubePollTargetRefresherFallsBackToDBWhenCacheLookupFails(t *testing.
 func TestYouTubePollTargetRefresherRecentEmptyCacheKeepsPreviousResolvedTargetsDuringGrace(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{}, nil
 		}
@@ -965,7 +965,7 @@ func TestYouTubePollTargetRefresherRecentEmptyCacheKeepsPreviousResolvedTargetsD
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_STATS"},
@@ -979,7 +979,7 @@ func TestYouTubePollTargetRefresherRecentEmptyCacheKeepsPreviousResolvedTargetsD
 	)
 	dbCalled := false
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1010,8 +1010,8 @@ func TestYouTubePollTargetRefresherRecentEmptyCacheKeepsPreviousResolvedTargetsD
 func TestYouTubePollTargetRefresher_EmptyCacheGraceStillRefreshesStatsTargets(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{}, nil
 		}
@@ -1030,7 +1030,7 @@ func TestYouTubePollTargetRefresher_EmptyCacheGraceStillRefreshesStatsTargets(t 
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_NOTIFY", "UC_STATS_A"},
@@ -1044,7 +1044,7 @@ func TestYouTubePollTargetRefresher_EmptyCacheGraceStillRefreshesStatsTargets(t 
 	)
 	dbCalled := false
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1077,8 +1077,8 @@ func TestYouTubePollTargetRefresher_EmptyCacheGraceStillRefreshesStatsTargets(t 
 func TestYouTubePollTargetRefresherPreservesExplicitEmptyNotificationTargets(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{}, nil
 		}
@@ -1097,7 +1097,7 @@ func TestYouTubePollTargetRefresherPreservesExplicitEmptyNotificationTargets(t *
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		nil,
 		[]string{"UC_STATS"},
@@ -1111,7 +1111,7 @@ func TestYouTubePollTargetRefresherPreservesExplicitEmptyNotificationTargets(t *
 	)
 	dbCalled := false
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1140,8 +1140,8 @@ func TestYouTubePollTargetRefresherPreservesExplicitEmptyNotificationTargets(t *
 func TestYouTubePollTargetRefresher_PartialCacheShrinkUsesDBValidation(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A"}, nil
 		}
@@ -1160,7 +1160,7 @@ func TestYouTubePollTargetRefresher_PartialCacheShrinkUsesDBValidation(t *testin
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
@@ -1174,7 +1174,7 @@ func TestYouTubePollTargetRefresher_PartialCacheShrinkUsesDBValidation(t *testin
 	)
 	dbCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1206,8 +1206,8 @@ func TestYouTubePollTargetRefresher_PartialCacheShrinkUsesDBValidation(t *testin
 func TestYouTubePollTargetRefresher_ValidatesSameSizeSetMismatchAgainstDB(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A", "UC_C"}, nil
 		}
@@ -1226,7 +1226,7 @@ func TestYouTubePollTargetRefresher_ValidatesSameSizeSetMismatchAgainstDB(t *tes
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A", "UC_B"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
@@ -1240,7 +1240,7 @@ func TestYouTubePollTargetRefresher_ValidatesSameSizeSetMismatchAgainstDB(t *tes
 	)
 	dbCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1269,8 +1269,8 @@ func TestYouTubePollTargetRefresher_ValidatesSameSizeSetMismatchAgainstDB(t *tes
 func TestYouTubePollTargetRefresher_AllowsCacheOnlyAdditionWithinGrace(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A", "UC_B"}, nil
 		}
@@ -1289,7 +1289,7 @@ func TestYouTubePollTargetRefresher_AllowsCacheOnlyAdditionWithinGrace(t *testin
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
@@ -1303,7 +1303,7 @@ func TestYouTubePollTargetRefresher_AllowsCacheOnlyAdditionWithinGrace(t *testin
 	)
 	now := time.Date(2026, 4, 12, 4, 0, 0, 0, time.UTC)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1329,8 +1329,8 @@ func TestYouTubePollTargetRefresher_AllowsCacheOnlyAdditionWithinGrace(t *testin
 func TestYouTubePollTargetRefresher_DropsCacheOnlyAdditionAfterGraceIfStillMissingInDB(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A", "UC_B"}, nil
 		}
@@ -1349,7 +1349,7 @@ func TestYouTubePollTargetRefresher_DropsCacheOnlyAdditionAfterGraceIfStillMissi
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
@@ -1363,7 +1363,7 @@ func TestYouTubePollTargetRefresher_DropsCacheOnlyAdditionAfterGraceIfStillMissi
 	)
 	now := time.Date(2026, 4, 12, 4, 0, 0, 0, time.UTC)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1393,8 +1393,8 @@ func TestYouTubePollTargetRefresher_DropsCacheOnlyAdditionAfterGraceIfStillMissi
 func TestYouTubePollTargetRefresher_ExpiredCacheOnlyAdditionDoesNotForceDBValidationForever(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A", "UC_B"}, nil
 		}
@@ -1413,7 +1413,7 @@ func TestYouTubePollTargetRefresher_ExpiredCacheOnlyAdditionDoesNotForceDBValida
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
@@ -1429,7 +1429,7 @@ func TestYouTubePollTargetRefresher_ExpiredCacheOnlyAdditionDoesNotForceDBValida
 	now := time.Date(2026, 4, 12, 4, 0, 0, 0, time.UTC)
 	dbCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1463,8 +1463,8 @@ func TestYouTubePollTargetRefresher_ExpiredCacheOnlyAdditionDoesNotForceDBValida
 func TestYouTubePollTargetRefresher_UnexpiredCacheOnlyAdditionStillForcesValidation(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A", "UC_B"}, nil
 		}
@@ -1483,7 +1483,7 @@ func TestYouTubePollTargetRefresher_UnexpiredCacheOnlyAdditionStillForcesValidat
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
@@ -1499,7 +1499,7 @@ func TestYouTubePollTargetRefresher_UnexpiredCacheOnlyAdditionStillForcesValidat
 	now := time.Date(2026, 4, 12, 4, 0, 0, 0, time.UTC)
 	dbCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1536,8 +1536,8 @@ func TestYouTubePollTargetRefresher_ClearsCacheOnlyStateWhenCandidateDisappears(
 		{"UC_A"},
 	}
 	cacheCall := 0
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			if cacheCall >= len(cacheResponses) {
 				return cacheResponses[len(cacheResponses)-1], nil
@@ -1561,7 +1561,7 @@ func TestYouTubePollTargetRefresher_ClearsCacheOnlyStateWhenCandidateDisappears(
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
@@ -1576,7 +1576,7 @@ func TestYouTubePollTargetRefresher_ClearsCacheOnlyStateWhenCandidateDisappears(
 	now := time.Date(2026, 4, 12, 4, 0, 0, 0, time.UTC)
 	dbCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1608,8 +1608,8 @@ func TestYouTubePollTargetRefresher_ClearsCacheOnlyStateWhenCandidateDisappears(
 func TestYouTubePollTargetRefresher_ValidatesRemovalAgainstDB(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A"}, nil
 		}
@@ -1628,7 +1628,7 @@ func TestYouTubePollTargetRefresher_ValidatesRemovalAgainstDB(t *testing.T) {
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
@@ -1642,7 +1642,7 @@ func TestYouTubePollTargetRefresher_ValidatesRemovalAgainstDB(t *testing.T) {
 	)
 	dbCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1671,8 +1671,8 @@ func TestYouTubePollTargetRefresher_ValidatesRemovalAgainstDB(t *testing.T) {
 func TestYouTubePollTargetRefresher_DBValidationFailureKeepsPreviousTargets(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A"}, nil
 		}
@@ -1691,7 +1691,7 @@ func TestYouTubePollTargetRefresher_DBValidationFailureKeepsPreviousTargets(t *t
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
@@ -1705,7 +1705,7 @@ func TestYouTubePollTargetRefresher_DBValidationFailureKeepsPreviousTargets(t *t
 	)
 	dbCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1737,8 +1737,8 @@ func TestYouTubePollTargetRefresher_DBValidationFailureKeepsPreviousTargets(t *t
 func TestYouTubePollTargetRefresher_DBFallbackShrinkDoesNotRevalidate(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return nil, assert.AnError
 		}
@@ -1757,7 +1757,7 @@ func TestYouTubePollTargetRefresher_DBFallbackShrinkDoesNotRevalidate(t *testing
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
@@ -1771,7 +1771,7 @@ func TestYouTubePollTargetRefresher_DBFallbackShrinkDoesNotRevalidate(t *testing
 	)
 	dbCalls := 0
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1798,8 +1798,8 @@ func TestYouTubePollTargetRefresher_DBFallbackShrinkDoesNotRevalidate(t *testing
 }
 
 func TestYouTubePollTargetRefresher_DBValidationValidatedMetricAndLog(t *testing.T) {
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A"}, nil
 		}
@@ -1818,7 +1818,7 @@ func TestYouTubePollTargetRefresher_DBValidationValidatedMetricAndLog(t *testing
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
@@ -1832,7 +1832,7 @@ func TestYouTubePollTargetRefresher_DBValidationValidatedMetricAndLog(t *testing
 	)
 	logger, logBuf := newBufferedYouTubePollTargetTestLogger()
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1859,8 +1859,8 @@ func TestYouTubePollTargetRefresher_DBValidationValidatedMetricAndLog(t *testing
 }
 
 func TestYouTubePollTargetRefresher_DBValidationFailureMetric(t *testing.T) {
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A"}, nil
 		}
@@ -1879,7 +1879,7 @@ func TestYouTubePollTargetRefresher_DBValidationFailureMetric(t *testing.T) {
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A", "UC_B"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
@@ -1892,7 +1892,7 @@ func TestYouTubePollTargetRefresher_DBValidationFailureMetric(t *testing.T) {
 		providers.WithSchedulerChannelIDs([]string{"UC_A", "UC_B", "UC_STATS"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
@@ -1914,8 +1914,8 @@ func TestYouTubePollTargetRefresher_DBValidationFailureMetric(t *testing.T) {
 }
 
 func TestYouTubePollTargetRefresher_DBValidationSkippedMetric(t *testing.T) {
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == "alarm:channel_registry" {
 			return []string{"UC_A", "UC_B"}, nil
 		}
@@ -1934,7 +1934,7 @@ func TestYouTubePollTargetRefresher_DBValidationSkippedMetric(t *testing.T) {
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
-		cacheSvc,
+		cache,
 		nil,
 		[]string{"UC_A", "UC_B"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
@@ -1947,7 +1947,7 @@ func TestYouTubePollTargetRefresher_DBValidationSkippedMetric(t *testing.T) {
 		providers.WithSchedulerChannelIDs([]string{"UC_A", "UC_B", "UC_STATS"}),
 	)
 	refresher := newYouTubePollTargetRefresher(
-		cacheSvc,
+		cache,
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{

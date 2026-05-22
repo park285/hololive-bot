@@ -66,17 +66,17 @@ func BuildComponentsWithJobClaimer(
 
 func BuildSharedClient(
 	scraperCfg config.ScraperConfig,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	sharedRL *scraper.RateLimiter,
 ) *scraper.Client {
-	return buildSharedYouTubeProducerClient(scraperCfg, cacheSvc, sharedRL)
+	return buildSharedYouTubeProducerClient(scraperCfg, cacheClient, sharedRL)
 }
 
 func BuildRegistrations(
 	postgres database.Client,
 	scraperCfg config.ScraperConfig,
 	sharedRL *scraper.RateLimiter,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	routeDecider poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -85,7 +85,7 @@ func BuildRegistrations(
 		postgres,
 		scraperCfg,
 		sharedRL,
-		cacheSvc,
+		cacheClient,
 		routeDecider,
 		notificationChannelIDs,
 		statsChannelIDs,

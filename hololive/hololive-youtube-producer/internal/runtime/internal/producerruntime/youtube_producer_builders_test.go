@@ -425,7 +425,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations(t *testing.T) {
 func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewLenientClient()
+	cache := cachemocks.NewLenientClient()
 	sharedRL := scraper.NewRateLimiter(time.Second)
 	cfg := config.ScraperConfig{
 		ProxyEnabled:        true,
@@ -439,7 +439,7 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 			Live:      3 * time.Minute,
 		},
 	}
-	sharedClient := polling.BuildSharedClient(cfg, cacheSvc, sharedRL)
+	sharedClient := polling.BuildSharedClient(cfg, cache, sharedRL)
 	registrations := polling.BuildRegistrationsWithClient(
 		&databasemocks.Client{},
 		cfg,

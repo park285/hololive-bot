@@ -41,7 +41,7 @@ func buildYouTubeProducerChannelPollerRegistrations(
 	postgres database.Client,
 	scraperCfg config.ScraperConfig,
 	sharedRL *scraper.RateLimiter,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	routeDecider poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -49,7 +49,7 @@ func buildYouTubeProducerChannelPollerRegistrations(
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		postgres,
 		scraperCfg,
-		buildSharedYouTubeProducerClient(scraperCfg, cacheSvc, sharedRL),
+		buildSharedYouTubeProducerClient(scraperCfg, cacheClient, sharedRL),
 		nil,
 		routeDecider,
 		notificationChannelIDs,

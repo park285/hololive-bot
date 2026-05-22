@@ -25,7 +25,7 @@ func TestJobRunGuardRealValkeyIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	cacheSvc, err := cache.NewCacheService(ctx, cache.Config{
+	cacheClient, err := cache.NewCacheService(ctx, cache.Config{
 		Host:              host,
 		Port:              port,
 		DisableCache:      true,
@@ -33,12 +33,12 @@ func TestJobRunGuardRealValkeyIntegration(t *testing.T) {
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, cacheSvc.Close())
+		require.NoError(t, cacheClient.Close())
 	})
 
 	namespace := "real-valkey-test-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	winner := NewJobRunGuard(cacheSvc, JobRunGuardConfig{Namespace: namespace, InstanceID: "ap-a"})
-	peer := NewJobRunGuard(cacheSvc, JobRunGuardConfig{Namespace: namespace, InstanceID: "ap-b"})
+	winner := NewJobRunGuard(cacheClient, JobRunGuardConfig{Namespace: namespace, InstanceID: "ap-a"})
+	peer := NewJobRunGuard(cacheClient, JobRunGuardConfig{Namespace: namespace, InstanceID: "ap-b"})
 	identity := JobIdentity{PollerName: "videos", ChannelID: "UC_REAL", Interval: 250 * time.Millisecond}
 
 	status, claim, err := winner.TryClaim(ctx, identity, time.Second, identity.Interval)
