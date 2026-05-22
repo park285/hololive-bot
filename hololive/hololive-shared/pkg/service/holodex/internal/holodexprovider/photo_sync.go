@@ -29,6 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/internal/ctxutil"
 	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 )
 
 type PhotoSyncService struct {
@@ -79,24 +80,11 @@ func (ps *PhotoSyncService) waitBeforeInitialSync(ctx context.Context) bool {
 }
 
 func (ps *PhotoSyncService) runPeriodicSync(ctx context.Context) {
-	ticker := time.NewTicker(ps.syncInterval)
-	defer ticker.Stop()
-
-	for {
-		if !ps.waitForNextPeriodicSync(ctx, ticker) {
-			return
-		}
+	if err := loop.RunTickerLoop(ctx, ps.syncInterval, func(ctx context.Context) error {
 		ps.syncWithRetry(ctx, 3)
-	}
-}
-
-func (ps *PhotoSyncService) waitForNextPeriodicSync(ctx context.Context, ticker *time.Ticker) bool {
-	select {
-	case <-ctx.Done():
+		return nil
+	}); err != nil && ctx.Err() != nil {
 		ps.logger.Info("Photo sync service stopped")
-		return false
-	case <-ticker.C:
-		return true
 	}
 }
 
