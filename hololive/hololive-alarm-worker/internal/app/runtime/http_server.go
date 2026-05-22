@@ -26,31 +26,41 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/httpserver"
 )
+
+type listenErrorPrefixServer struct {
+	httpserver.Server
+	errorText string
+	logger    *slog.Logger
+	errCh     chan<- error
+}
+
+func (s listenErrorPrefixServer) ListenAndServe() error {
+	err := s.Server.ListenAndServe()
+	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+
+	if s.errCh == nil && s.logger != nil {
+		s.logger.Error(s.errorText, slog.Any("error", err))
+	}
+
+	return fmt.Errorf("%s: %w", s.errorText, err)
+}
 
 func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
 	if server == nil {
 		return
 	}
 
-	go runHTTPServer(server, logger, errCh)
-}
-
-func runHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		reportHTTPServerError(err, logger, errCh)
-	}
-}
-
-func reportHTTPServerError(err error, logger *slog.Logger, errCh chan<- error) {
-	if errCh != nil {
-		errCh <- fmt.Errorf("HTTP server error: %w", err)
-		return
-	}
-
-	if logger != nil {
-		logger.Error("HTTP server error", slog.Any("error", err))
-	}
+	httpserver.Start(listenErrorPrefixServer{
+		Server:    server,
+		errorText: "HTTP server error",
+		logger:    logger,
+		errCh:     errCh,
+	}, nil, errCh)
 }
 
 func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
@@ -58,9 +68,5 @@ func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
 		return nil
 	}
 
-	if err := server.Shutdown(ctx); err != nil {
-		return fmt.Errorf("HTTP server shutdown failed: %w", err)
-	}
-
-	return nil
+	return httpserver.Shutdown(ctx, server, "HTTP server shutdown failed")
 }
