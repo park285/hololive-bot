@@ -167,9 +167,7 @@ func TestMemoryDecisionCache_ResolveClaimConcurrentMissComputesOnce(t *testing.T
 	errs := make(chan error, workers)
 
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
 			result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
 				computeCalls.Add(1)
@@ -195,7 +193,7 @@ func TestMemoryDecisionCache_ResolveClaimConcurrentMissComputesOnce(t *testing.T
 			if result.Token == nil {
 				errs <- errors.New("miss returned nil token")
 			}
-		}()
+		})
 	}
 
 	close(start)

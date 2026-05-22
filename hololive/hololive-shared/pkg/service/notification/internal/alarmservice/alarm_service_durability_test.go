@@ -281,7 +281,6 @@ func TestRemoveAlarmPersistFailureLogsWrappedEvents(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -339,7 +338,6 @@ func TestRemoveAlarmCacheMutationFailureLogsWrappedEvents(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 			var logBuffer bytes.Buffer
@@ -416,7 +414,6 @@ func TestClearRoomAlarmsCacheMutationFailureLogsWrappedEvents(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 			var logBuffer bytes.Buffer
@@ -505,7 +502,6 @@ func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 			var logBuffer bytes.Buffer
