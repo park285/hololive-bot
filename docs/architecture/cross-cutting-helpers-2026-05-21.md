@@ -53,6 +53,12 @@ func RunTickerLoop(ctx context.Context, interval time.Duration, runImmediately b
 - step 3: `hololive/hololive-shared/pkg/service/delivery/dispatcher.go:121`, `hololive/hololive-admin-api/internal/server/internal/api/api_stats.go:126`, `hololive/hololive-shared/pkg/service/youtube/poller/internal/polling/scheduler_worker.go:221` 로 확장하고 기존 테스트를 보존.
 - step 4: `hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/scheduler_batch.go:19`, `hololive/hololive-llm-sched/internal/service/majorevent/scraper/maintenance_scheduler.go:119` 는 `stopCh` / timer 병합 때문에 별도 검토 후 적용하거나 local loop 유지.
 
+#### step 4 평가 결과
+
+- `hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/scheduler_batch.go:19` 는 `schedulerInterval` ticker 를 `schedulerImpl.ticker` field 로 보관하고 `handleNextSchedulerEvent` 에서 `ticker.C`, `stopCh`, `ctx.Done()` 을 함께 select 한다.
+- 같은 파일의 `startMilestoneWatcher` 는 `scheduler.go:64` 의 `milestoneWatchTicker` field 를 사용하며, 초기 1회 `runMilestoneWatcherCycle` 이후 `handleNextMilestoneWatcherEvent` 에서 `milestoneWatchTicker.C`, `stopCh`, `ctx.Done()` 을 함께 select 한다.
+- 위 두 루프는 pure ticker loop 가 아니므로 "ticker 외에 timer / `stopCh` 를 함께 select 하는 루프는 1차 마이그레이션 대상에서 제외한다. helper 적용으로 제어 흐름이 흐려지는 호출부는 local loop 를 보존한다."는 stop rule 에 따라 `RunTickerLoop` 적용을 skip 하고 local loop 를 유지한다.
+
 ## NextExponentialBackoff (Phase 2.B.1)
 
 ### 목적
