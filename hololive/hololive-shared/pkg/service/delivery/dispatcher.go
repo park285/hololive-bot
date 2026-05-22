@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -118,24 +119,13 @@ func (d *Dispatcher) Start(ctx context.Context) {
 }
 
 func (d *Dispatcher) run(ctx context.Context) {
-	ticker := time.NewTicker(d.cfg.PollInterval)
-	defer ticker.Stop()
-
 	d.processOnce(ctx)
 
-	for d.waitNextDispatchTick(ctx, ticker.C) {
+	_ = loop.RunTickerLoop(ctx, d.cfg.PollInterval, func(ctx context.Context) error {
 		d.processOnce(ctx)
-	}
-}
-
-func (d *Dispatcher) waitNextDispatchTick(ctx context.Context, ticks <-chan time.Time) bool {
-	select {
-	case <-ctx.Done():
-		d.logger.Info("Delivery dispatcher stopped")
-		return false
-	case <-ticks:
-		return true
-	}
+		return nil
+	})
+	d.logger.Info("Delivery dispatcher stopped")
 }
 
 func (d *Dispatcher) processOnce(ctx context.Context) {
