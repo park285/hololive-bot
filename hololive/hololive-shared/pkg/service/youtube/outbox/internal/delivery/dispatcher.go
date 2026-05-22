@@ -98,7 +98,7 @@ type Dispatcher struct {
 	onCleanup       func()
 }
 
-func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
+func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
 	initOutboxMetrics()
 	if logger == nil {
 		logger = slog.Default()
@@ -113,7 +113,7 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSe
 
 	return &Dispatcher{
 		db:        db,
-		cache:     cacheSvc,
+		cache:     cacheClient,
 		sender:    sender,
 		renderer:  renderer,
 		logger:    logger,
@@ -122,7 +122,7 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSe
 		telemetry: telemetryRepo,
 		formatter: &MessageFormatter{
 			renderer: renderer,
-			cache:    cacheSvc,
+			cache:    cacheClient,
 			logger:   logger,
 		},
 	}

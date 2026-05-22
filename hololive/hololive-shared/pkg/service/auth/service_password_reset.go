@@ -73,7 +73,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 }
 
 func (s *Service) checkPasswordResetRequestRateLimit(ctx context.Context, clientIP string) error {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return nil
 	}
 	limited, err := s.isPasswordResetRequestRateLimited(ctx, clientIP)

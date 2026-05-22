@@ -53,8 +53,8 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	sqlDB.SetMaxIdleConns(1)
 	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
 
-	cacheSvc := cachemocks.NewLenientClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewLenientClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == sharedalarmkeys.BuildChannelSubscriberKey("UCstart", domain.AlarmTypeLive) {
 			return []string{"room-start"}, nil
 		}
@@ -62,7 +62,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cacheSvc, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,

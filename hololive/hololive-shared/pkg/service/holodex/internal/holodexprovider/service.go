@@ -80,7 +80,7 @@ type Service struct {
 	retry        *retryScheduler
 }
 
-func NewHolodexService(baseURL string, apiKey string, cacheSvc cache.Client, scraperSvc *ScraperService, logger *slog.Logger) (*Service, error) {
+func NewHolodexService(baseURL string, apiKey string, cacheClient cache.Client, scraperSvc *ScraperService, logger *slog.Logger) (*Service, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, fmt.Errorf("holodex api key is required")
 	}
@@ -98,7 +98,7 @@ func NewHolodexService(baseURL string, apiKey string, cacheSvc cache.Client, scr
 	if constants.HolodexDistributedRateLimitConfig.Enabled {
 		var err error
 		distributedLimiter, err = ratelimit.NewSlidingWindowLimiter(
-			cacheSvc,
+			cacheClient,
 			constants.HolodexDistributedRateLimitConfig.KeyPrefix,
 			logger,
 		)
@@ -113,7 +113,7 @@ func NewHolodexService(baseURL string, apiKey string, cacheSvc cache.Client, scr
 		requester:    requester,
 		scraper:      scraperSvc,
 		logger:       logger,
-		cacheManager: NewCacheManager(cacheSvc, logger),
+		cacheManager: NewCacheManager(cacheClient, logger),
 		mapper:       NewStreamMapper(logger),
 		filter:       NewStreamFilter(logger),
 	}

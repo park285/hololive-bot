@@ -263,7 +263,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 		&domain.YouTubeCommunityShortsAlarmState{},
 	))
 
-	cacheSvc := cachemocks.NewLenientClient()
+	cacheClient := cachemocks.NewLenientClient()
 
 	now := time.Now()
 	item := domain.YouTubeNotificationOutbox{
@@ -293,7 +293,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	require.NoError(t, db.Create(&delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cacheSvc, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cacheClient, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

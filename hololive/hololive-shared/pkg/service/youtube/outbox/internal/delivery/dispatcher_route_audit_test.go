@@ -148,7 +148,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 		&domain.YouTubeCommunityShortsAlarmState{},
 	))
 
-	cacheSvc, cacheStore := newRouteAuditCacheClient()
+	cache, cacheStore := newRouteAuditCacheClient()
 	alarms := []*domain.Alarm{
 		{RoomID: "room-shorts-a", ChannelID: "UC_A", MemberName: "A", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
 		{RoomID: "room-community-a", ChannelID: "UC_A", MemberName: "A", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity}},
@@ -157,7 +157,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 		{RoomID: "room-live-only", ChannelID: "UC_LIVE_ONLY", MemberName: "Live", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 	}
 
-	summary, err := sharedalarm.WarmSubscriberCacheFromAlarms(ctx, cacheSvc, alarms)
+	summary, err := sharedalarm.WarmSubscriberCacheFromAlarms(ctx, cache, alarms)
 	require.NoError(t, err)
 	require.Equal(t, len(alarms), summary.AlarmCount)
 	require.Equal(t, 3, summary.ChannelCount)
@@ -180,7 +180,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	require.NoError(t, db.Create(&trackingRows).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cacheSvc, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

@@ -64,54 +64,54 @@ func newLenientAlarmCacheMock(
 ) (*cachemocks.Client, *cache.Service) {
 	t.Helper()
 
-	cacheSvc := newTestCacheService(ctx, t)
+	cacheClient := newTestCacheService(ctx, t)
 	cacheMock := cachemocks.NewLenientClient()
 
-	cacheMock.BuilderFunc = cacheSvc.Builder
-	cacheMock.BFunc = cacheSvc.B
-	cacheMock.GetClientFunc = cacheSvc.GetClient
-	cacheMock.DoMultiFunc = cacheSvc.DoMulti
-	cacheMock.SMembersFunc = cacheSvc.SMembers
-	cacheMock.SIsMemberFunc = cacheSvc.SIsMember
-	cacheMock.HGetFunc = cacheSvc.HGet
-	cacheMock.HGetAllFunc = cacheSvc.HGetAll
-	cacheMock.SetFunc = cacheSvc.Set
-	cacheMock.GetFunc = cacheSvc.Get
-	cacheMock.DelFunc = cacheSvc.Del
-	cacheMock.DelManyFunc = cacheSvc.DelMany
-	cacheMock.ScanKeysFunc = cacheSvc.ScanKeys
-	cacheMock.HDelFunc = cacheSvc.HDel
-	cacheMock.HMSetFunc = cacheSvc.HMSet
-	cacheMock.ExistsFunc = cacheSvc.Exists
-	cacheMock.ExpireFunc = cacheSvc.Expire
-	cacheMock.MGetFunc = cacheSvc.MGet
-	cacheMock.MSetFunc = cacheSvc.MSet
-	cacheMock.SetNXFunc = cacheSvc.SetNX
-	cacheMock.CompareAndDeleteFunc = cacheSvc.CompareAndDelete
-	cacheMock.CompareAndExpireFunc = cacheSvc.CompareAndExpire
-	cacheMock.GetStreamsFunc = cacheSvc.GetStreams
-	cacheMock.SetStreamsFunc = cacheSvc.SetStreams
-	cacheMock.InitializeMemberDatabaseFunc = cacheSvc.InitializeMemberDatabase
-	cacheMock.GetMemberChannelIDFunc = cacheSvc.GetMemberChannelID
-	cacheMock.GetAllMembersFunc = cacheSvc.GetAllMembers
-	cacheMock.GetMemberChannelIDWithOrgFunc = cacheSvc.GetMemberChannelIDWithOrg
-	cacheMock.GetMemberChannelIDsFunc = cacheSvc.GetMemberChannelIDs
-	cacheMock.AddMemberFunc = cacheSvc.AddMember
-	cacheMock.CloseFunc = cacheSvc.Close
-	cacheMock.IsConnectedFunc = cacheSvc.IsConnected
-	cacheMock.WaitUntilReadyFunc = cacheSvc.WaitUntilReady
-	cacheMock.SRemFunc = cacheSvc.SRem
-	cacheMock.HSetFunc = cacheSvc.HSet
+	cacheMock.BuilderFunc = cacheClient.Builder
+	cacheMock.BFunc = cacheClient.B
+	cacheMock.GetClientFunc = cacheClient.GetClient
+	cacheMock.DoMultiFunc = cacheClient.DoMulti
+	cacheMock.SMembersFunc = cacheClient.SMembers
+	cacheMock.SIsMemberFunc = cacheClient.SIsMember
+	cacheMock.HGetFunc = cacheClient.HGet
+	cacheMock.HGetAllFunc = cacheClient.HGetAll
+	cacheMock.SetFunc = cacheClient.Set
+	cacheMock.GetFunc = cacheClient.Get
+	cacheMock.DelFunc = cacheClient.Del
+	cacheMock.DelManyFunc = cacheClient.DelMany
+	cacheMock.ScanKeysFunc = cacheClient.ScanKeys
+	cacheMock.HDelFunc = cacheClient.HDel
+	cacheMock.HMSetFunc = cacheClient.HMSet
+	cacheMock.ExistsFunc = cacheClient.Exists
+	cacheMock.ExpireFunc = cacheClient.Expire
+	cacheMock.MGetFunc = cacheClient.MGet
+	cacheMock.MSetFunc = cacheClient.MSet
+	cacheMock.SetNXFunc = cacheClient.SetNX
+	cacheMock.CompareAndDeleteFunc = cacheClient.CompareAndDelete
+	cacheMock.CompareAndExpireFunc = cacheClient.CompareAndExpire
+	cacheMock.GetStreamsFunc = cacheClient.GetStreams
+	cacheMock.SetStreamsFunc = cacheClient.SetStreams
+	cacheMock.InitializeMemberDatabaseFunc = cacheClient.InitializeMemberDatabase
+	cacheMock.GetMemberChannelIDFunc = cacheClient.GetMemberChannelID
+	cacheMock.GetAllMembersFunc = cacheClient.GetAllMembers
+	cacheMock.GetMemberChannelIDWithOrgFunc = cacheClient.GetMemberChannelIDWithOrg
+	cacheMock.GetMemberChannelIDsFunc = cacheClient.GetMemberChannelIDs
+	cacheMock.AddMemberFunc = cacheClient.AddMember
+	cacheMock.CloseFunc = cacheClient.Close
+	cacheMock.IsConnectedFunc = cacheClient.IsConnected
+	cacheMock.WaitUntilReadyFunc = cacheClient.WaitUntilReady
+	cacheMock.SRemFunc = cacheClient.SRem
+	cacheMock.HSetFunc = cacheClient.HSet
 
 	if sadd != nil {
 		cacheMock.SAddFunc = func(innerCtx context.Context, key string, members []string) (int64, error) {
-			return sadd(cacheSvc, innerCtx, key, members)
+			return sadd(cacheClient, innerCtx, key, members)
 		}
 	} else {
-		cacheMock.SAddFunc = cacheSvc.SAdd
+		cacheMock.SAddFunc = cacheClient.SAdd
 	}
 
-	return cacheMock, cacheSvc
+	return cacheMock, cacheClient
 }
 
 func assertRebuildLoadedMetric(t *testing.T, operation, resource string, want float64) {
@@ -205,12 +205,12 @@ func TestAddAlarm_PersistFailureLogsWrappedEvent(t *testing.T) {
 func TestCacheAddAlarmMutationFailureLogsWrappedEvent(t *testing.T) {
 	ctx := t.Context()
 	var logBuffer bytes.Buffer
-	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheSvc *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
+	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheClient *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
 		if key == AlarmRegistryKey {
 			return 0, errors.New("registry add failed")
 		}
 
-		return cacheSvc.SAdd(ctx, key, members)
+		return cacheClient.SAdd(ctx, key, members)
 	})
 
 	as := &AlarmService{
@@ -341,8 +341,8 @@ func TestRemoveAlarmCacheMutationFailureLogsWrappedEvents(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 			var logBuffer bytes.Buffer
-			cacheMock, cacheSvc := newLenientAlarmCacheMock(ctx, t, nil)
-			tt.setup(cacheMock, cacheSvc)
+			cacheMock, cacheClient := newLenientAlarmCacheMock(ctx, t, nil)
+			tt.setup(cacheMock, cacheClient)
 
 			as := &AlarmService{
 				cache:  cacheMock,
@@ -417,8 +417,8 @@ func TestClearRoomAlarmsCacheMutationFailureLogsWrappedEvents(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 			var logBuffer bytes.Buffer
-			cacheMock, cacheSvc := newLenientAlarmCacheMock(ctx, t, nil)
-			tt.setup(cacheMock, cacheSvc)
+			cacheMock, cacheClient := newLenientAlarmCacheMock(ctx, t, nil)
+			tt.setup(cacheMock, cacheClient)
 
 			as := &AlarmService{
 				cache:  cacheMock,
@@ -598,12 +598,12 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 		"operation": "add",
 		"result":    "ok",
 	})
-	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheSvc *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
+	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheClient *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
 		if key == AlarmRegistryKey {
 			return 0, errors.New("registry add failed")
 		}
 
-		return cacheSvc.SAdd(ctx, key, members)
+		return cacheClient.SAdd(ctx, key, members)
 	})
 
 	as := &AlarmService{

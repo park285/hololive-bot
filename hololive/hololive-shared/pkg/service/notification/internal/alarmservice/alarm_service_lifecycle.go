@@ -50,7 +50,7 @@ var (
 )
 
 func NewAlarmService(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	holodexSvc *holodex.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
@@ -73,7 +73,7 @@ func NewAlarmService(
 	}
 
 	svc := &AlarmService{
-		cache:        cacheSvc,
+		cache:        cacheClient,
 		holodex:      holodexSvc,
 		chzzk:        chzzkClient,
 		twitch:       twitchClient,

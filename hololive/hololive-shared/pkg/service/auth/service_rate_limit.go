@@ -40,12 +40,12 @@ return current
 `
 
 func (s *Service) isLoginRateLimited(ctx context.Context, clientIP string) (bool, error) {
-	if clientIP == "" || s.cacheSvc == nil {
+	if clientIP == "" || s.cacheClient == nil {
 		return false, nil
 	}
 
 	key := loginRateLimitKeyPrefix + clientIP
-	count, err := incrWithTTL(ctx, s.cacheSvc, key, time.Minute)
+	count, err := incrWithTTL(ctx, s.cacheClient, key, time.Minute)
 	if err != nil {
 		return false, err
 	}
@@ -54,12 +54,12 @@ func (s *Service) isLoginRateLimited(ctx context.Context, clientIP string) (bool
 }
 
 func (s *Service) isPasswordResetRequestRateLimited(ctx context.Context, clientIP string) (bool, error) {
-	if clientIP == "" || s.cacheSvc == nil {
+	if clientIP == "" || s.cacheClient == nil {
 		return false, nil
 	}
 
 	key := resetReqRateLimitPrefix + clientIP
-	count, err := incrWithTTL(ctx, s.cacheSvc, key, time.Minute)
+	count, err := incrWithTTL(ctx, s.cacheClient, key, time.Minute)
 	if err != nil {
 		return false, err
 	}
@@ -68,11 +68,11 @@ func (s *Service) isPasswordResetRequestRateLimited(ctx context.Context, clientI
 }
 
 func (s *Service) isAccountLocked(ctx context.Context, email string) (bool, error) {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return false, nil
 	}
 	key := accountLockKeyPrefix + email
-	exists, err := s.cacheSvc.Exists(ctx, key)
+	exists, err := s.cacheClient.Exists(ctx, key)
 	if err != nil {
 		return false, fmt.Errorf("cache exists failed: %w", err)
 	}
@@ -80,12 +80,12 @@ func (s *Service) isAccountLocked(ctx context.Context, email string) (bool, erro
 }
 
 func (s *Service) onLoginFailed(ctx context.Context, email string) {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return
 	}
 
 	key := loginFailKeyPrefix + email
-	count, err := incrWithTTL(ctx, s.cacheSvc, key, s.cfg.LoginFailWindow)
+	count, err := incrWithTTL(ctx, s.cacheClient, key, s.cfg.LoginFailWindow)
 	if err != nil {
 		s.logger.Warn("login_fail_increment_failed", slog.Any("error", err))
 		return
@@ -93,20 +93,20 @@ func (s *Service) onLoginFailed(ctx context.Context, email string) {
 
 	if count >= s.cfg.LoginFailLimit {
 		lockKey := accountLockKeyPrefix + email
-		_ = s.cacheSvc.Set(ctx, lockKey, "1", s.cfg.LoginLockDuration)
-		_ = s.cacheSvc.Del(ctx, key)
+		_ = s.cacheClient.Set(ctx, lockKey, "1", s.cfg.LoginLockDuration)
+		_ = s.cacheClient.Del(ctx, key)
 	}
 }
 
 func (s *Service) onLoginSucceeded(ctx context.Context, email string) {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return
 	}
-	_ = s.cacheSvc.Del(ctx, loginFailKeyPrefix+email)
-	_ = s.cacheSvc.Del(ctx, accountLockKeyPrefix+email)
+	_ = s.cacheClient.Del(ctx, loginFailKeyPrefix+email)
+	_ = s.cacheClient.Del(ctx, accountLockKeyPrefix+email)
 }
 
-func incrWithTTL(ctx context.Context, cacheSvc cache.Client, key string, ttl time.Duration) (int64, error) {
+func incrWithTTL(ctx context.Context, cacheClient cache.Client, key string, ttl time.Duration) (int64, error) {
 	ttlSeconds := int64(0)
 	if ttl > 0 {
 		ttlSeconds = int64(math.Ceil(ttl.Seconds()))
@@ -115,14 +115,14 @@ func incrWithTTL(ctx context.Context, cacheSvc cache.Client, key string, ttl tim
 		}
 	}
 
-	cmd := cacheSvc.B().
+	cmd := cacheClient.B().
 		Eval().
 		Script(incrWithTTLScript).
 		Numkeys(1).
 		Key(key).
 		Arg(strconv.FormatInt(ttlSeconds, 10)).
 		Build()
-	results := cacheSvc.DoMulti(ctx, cmd)
+	results := cacheClient.DoMulti(ctx, cmd)
 	if len(results) != 1 {
 		return 0, fmt.Errorf("increment with ttl: unexpected result count: %d", len(results))
 	}

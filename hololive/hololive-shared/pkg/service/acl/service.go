@@ -160,7 +160,7 @@ func (s *Service) IsReady() bool {
 func NewACLService(
 	ctx context.Context,
 	postgres database.Client,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	logger *slog.Logger,
 	defaultEnabled bool,
 	defaultMode ACLMode,
@@ -174,7 +174,7 @@ func NewACLService(
 	if err != nil {
 		return nil, err
 	}
-	if cacheSvc == nil {
+	if cacheClient == nil {
 		return nil, fmt.Errorf("cache service is nil")
 	}
 
@@ -186,7 +186,7 @@ func NewACLService(
 
 	svc := &Service{
 		db:             db,
-		cache:          cacheSvc,
+		cache:          cacheClient,
 		logger:         logger,
 		enabled:        defaultEnabled,
 		mode:           normalizedMode,

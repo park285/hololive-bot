@@ -77,11 +77,11 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	t.Helper()
 
 	ctx := t.Context()
-	cacheSvc := newTestCacheService(ctx, t)
+	cacheClient := newTestCacheService(ctx, t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	return &AlarmService{
-		cache:        cacheSvc,
+		cache:        cacheClient,
 		logger:       logger,
 		targetPolicy: sharedchecker.NewTargetMinutePolicyFromConfigured([]int{30, 15, 5, 1}),
 	}

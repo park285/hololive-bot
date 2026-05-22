@@ -32,7 +32,7 @@ import (
 )
 
 func (s *Service) Logout(ctx context.Context, token string) error {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return newError(CodeInternal, "cache service not configured", nil)
 	}
 
@@ -40,23 +40,23 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	key := sessionKeyPrefix + sessionHash
 
 	var data sessionData
-	if err := s.cacheSvc.Get(ctx, key, &data); err != nil {
+	if err := s.cacheClient.Get(ctx, key, &data); err != nil {
 		return newError(CodeInternal, "failed to read session", err)
 	}
 	if data.UserID == "" {
 		return newError(CodeUnauthorized, "invalid session", nil)
 	}
 
-	if err := s.cacheSvc.Del(ctx, key); err != nil {
+	if err := s.cacheClient.Del(ctx, key); err != nil {
 		return newError(CodeInternal, "failed to delete session", err)
 	}
-	_, _ = s.cacheSvc.SRem(ctx, userSessionsKeyPrefix+data.UserID, []string{sessionHash})
+	_, _ = s.cacheClient.SRem(ctx, userSessionsKeyPrefix+data.UserID, []string{sessionHash})
 
 	return nil
 }
 
 func (s *Service) Refresh(ctx context.Context, token string) (*Session, error) {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return nil, newError(CodeInternal, "cache service not configured", nil)
 	}
 
@@ -82,7 +82,7 @@ func (s *Service) refreshSessionData(ctx context.Context, token string) (string,
 	key := sessionKeyPrefix + sessionHash
 
 	var data sessionData
-	if err := s.cacheSvc.Get(ctx, key, &data); err != nil {
+	if err := s.cacheClient.Get(ctx, key, &data); err != nil {
 		return "", data, newError(CodeInternal, "failed to read session", err)
 	}
 	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
@@ -94,9 +94,9 @@ func (s *Service) refreshSessionData(ctx context.Context, token string) (string,
 }
 
 func (s *Service) deleteExpiredSession(ctx context.Context, key, sessionHash, userID string) {
-	_ = s.cacheSvc.Del(ctx, key)
+	_ = s.cacheClient.Del(ctx, key)
 	if userID != "" {
-		_, _ = s.cacheSvc.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash})
+		_, _ = s.cacheClient.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash})
 	}
 }
 
@@ -150,7 +150,7 @@ type sessionData struct {
 }
 
 func (s *Service) validateSession(ctx context.Context, token string) (string, error) {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return "", newError(CodeInternal, "cache service not configured", nil)
 	}
 	if token == "" {
@@ -160,7 +160,7 @@ func (s *Service) validateSession(ctx context.Context, token string) (string, er
 	sessionHash := sha256Hex(token)
 	key := sessionKeyPrefix + sessionHash
 	var data sessionData
-	if err := s.cacheSvc.Get(ctx, key, &data); err != nil {
+	if err := s.cacheClient.Get(ctx, key, &data); err != nil {
 		return "", newError(CodeInternal, "failed to read session", err)
 	}
 	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
@@ -180,7 +180,7 @@ func (r sessionInvalidationResult) Err() error {
 }
 
 func (s *Service) deleteSessionByHash(ctx context.Context, userID, sessionHash string) sessionInvalidationResult {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return sessionInvalidationResult{
 			keyErr: newError(CodeInternal, "cache service not configured", nil),
 		}
@@ -188,10 +188,10 @@ func (s *Service) deleteSessionByHash(ctx context.Context, userID, sessionHash s
 
 	key := sessionKeyPrefix + sessionHash
 	result := sessionInvalidationResult{}
-	if err := s.cacheSvc.Del(ctx, key); err != nil {
+	if err := s.cacheClient.Del(ctx, key); err != nil {
 		result.keyErr = fmt.Errorf("delete session key: %w", err)
 	}
-	if _, err := s.cacheSvc.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash}); err != nil {
+	if _, err := s.cacheClient.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash}); err != nil {
 		result.indexErr = fmt.Errorf("remove session index: %w", err)
 	}
 
@@ -199,7 +199,7 @@ func (s *Service) deleteSessionByHash(ctx context.Context, userID, sessionHash s
 }
 
 func (s *Service) createSession(ctx context.Context, userID string) (*Session, error) {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return nil, newError(CodeInternal, "cache service not configured", nil)
 	}
 	if userID == "" {
@@ -241,7 +241,7 @@ func (s *Service) allocateSessionToken(ctx context.Context, payload string) (str
 		}
 
 		hash := sha256Hex(raw)
-		acquired, err := s.cacheSvc.SetNX(ctx, sessionKeyPrefix+hash, payload, s.cfg.SessionTTL)
+		acquired, err := s.cacheClient.SetNX(ctx, sessionKeyPrefix+hash, payload, s.cfg.SessionTTL)
 		if err != nil {
 			return "", "", newError(CodeInternal, "failed to store session", err)
 		}
@@ -255,25 +255,25 @@ func (s *Service) allocateSessionToken(ctx context.Context, payload string) (str
 
 func (s *Service) addSessionIndex(ctx context.Context, userID, sessionHash string) error {
 	userSessionsKey := userSessionsKeyPrefix + userID
-	if _, err := s.cacheSvc.SAdd(ctx, userSessionsKey, []string{sessionHash}); err != nil {
-		_ = s.cacheSvc.Del(ctx, sessionKeyPrefix+sessionHash)
+	if _, err := s.cacheClient.SAdd(ctx, userSessionsKey, []string{sessionHash}); err != nil {
+		_ = s.cacheClient.Del(ctx, sessionKeyPrefix+sessionHash)
 		return newError(CodeInternal, "failed to update session index", err)
 	}
-	if err := s.cacheSvc.Expire(ctx, userSessionsKey, s.cfg.UserSessionsTTL); err != nil {
-		_, _ = s.cacheSvc.SRem(ctx, userSessionsKey, []string{sessionHash})
-		_ = s.cacheSvc.Del(ctx, sessionKeyPrefix+sessionHash)
+	if err := s.cacheClient.Expire(ctx, userSessionsKey, s.cfg.UserSessionsTTL); err != nil {
+		_, _ = s.cacheClient.SRem(ctx, userSessionsKey, []string{sessionHash})
+		_ = s.cacheClient.Del(ctx, sessionKeyPrefix+sessionHash)
 		return newError(CodeInternal, "failed to expire session index", err)
 	}
 	return nil
 }
 
 func (s *Service) revokeAllSessions(ctx context.Context, userID string) error {
-	if s.cacheSvc == nil || userID == "" {
+	if s.cacheClient == nil || userID == "" {
 		return nil
 	}
 
 	userSessionsKey := userSessionsKeyPrefix + userID
-	hashes, err := s.cacheSvc.SMembers(ctx, userSessionsKey)
+	hashes, err := s.cacheClient.SMembers(ctx, userSessionsKey)
 	if err != nil {
 		return fmt.Errorf("cache smembers failed: %w", err)
 	}
@@ -297,7 +297,7 @@ func sessionKeysFromHashes(hashes []string) []string {
 
 func (s *Service) deleteUserSessionKeysAndIndex(ctx context.Context, userSessionsKey string, keys []string) error {
 	var errs []error
-	if _, err := s.cacheSvc.DelMany(ctx, keys); err != nil {
+	if _, err := s.cacheClient.DelMany(ctx, keys); err != nil {
 		errs = append(errs, fmt.Errorf("delete session keys: %w", err))
 	}
 	if err := s.deleteUserSessionsIndex(ctx, userSessionsKey); err != nil {
@@ -308,7 +308,7 @@ func (s *Service) deleteUserSessionKeysAndIndex(ctx context.Context, userSession
 }
 
 func (s *Service) deleteUserSessionsIndex(ctx context.Context, userSessionsKey string) error {
-	if err := s.cacheSvc.Del(ctx, userSessionsKey); err != nil {
+	if err := s.cacheClient.Del(ctx, userSessionsKey); err != nil {
 		return fmt.Errorf("delete user session index: %w", err)
 	}
 	return nil

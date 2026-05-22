@@ -34,10 +34,10 @@ import (
 
 func TestNewAlarmServiceAndCloseAllAlarmServices(t *testing.T) {
 	ctx := t.Context()
-	cacheSvc := newTestCacheService(ctx, t)
+	cacheClient := newTestCacheService(ctx, t)
 
 	svc, err := NewAlarmService(
-		cacheSvc,
+		cacheClient,
 		nil,
 		nil,
 		nil,
@@ -202,10 +202,10 @@ func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
 	original := rebuildSubscriberCacheFromRepository
 	rebuildCalled := false
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, cacheSvc cache.Client, repo *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, cacheClient cache.Client, repo *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
 		rebuildCalled = true
 
-		assert.Same(t, as.cache, cacheSvc)
+		assert.Same(t, as.cache, cacheClient)
 		assert.Same(t, as.alarmRepo, repo)
 
 		return sharedalarm.CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, nil

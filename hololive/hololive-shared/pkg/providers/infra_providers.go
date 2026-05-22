@@ -47,7 +47,7 @@ type DatabaseResources struct {
 
 // ProvideCacheResources - 캐시 리소스 생성 (정리 함수 포함)
 func ProvideCacheResources(ctx context.Context, cfg config.ValkeyConfig, logger *slog.Logger) (*CacheResources, func(), error) {
-	cacheSvc, err := cache.NewCacheService(ctx, cache.Config{
+	cacheClient, err := cache.NewCacheService(ctx, cache.Config{
 		Host:       cfg.Host,
 		Port:       cfg.Port,
 		Password:   cfg.Password,
@@ -59,9 +59,9 @@ func ProvideCacheResources(ctx context.Context, cfg config.ValkeyConfig, logger 
 	}
 
 	resources := &CacheResources{
-		Service: cacheSvc,
+		Service: cacheClient,
 		Close: func() {
-			_ = cacheSvc.Close()
+			_ = cacheClient.Close()
 		},
 	}
 	return resources, resources.Close, nil

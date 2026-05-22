@@ -46,7 +46,7 @@ type ProfileService struct {
 	channelToSlug map[string]string
 }
 
-func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger) (*ProfileService, error) {
+func NewProfileService(cacheClient cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger) (*ProfileService, error) {
 	if membersData == nil {
 		return nil, fmt.Errorf("members data is nil")
 	}
@@ -59,7 +59,7 @@ func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvi
 		return nil, err
 	}
 
-	service := newProfileService(cacheSvc, membersData, logger, profiles, preTranslated, members)
+	service := newProfileService(cacheClient, membersData, logger, profiles, preTranslated, members)
 	service.buildIndexes(members)
 
 	logger.Info("ProfileService initialized",
@@ -91,9 +91,9 @@ func loadProfileServiceData(membersData domain.MemberDataProvider) (map[string]*
 	return profiles, preTranslated, members, nil
 }
 
-func newProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger, profiles map[string]*domain.TalentProfile, preTranslated map[string]*domain.Translated, members []*domain.Member) *ProfileService {
+func newProfileService(cacheClient cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger, profiles map[string]*domain.TalentProfile, preTranslated map[string]*domain.Translated, members []*domain.Member) *ProfileService {
 	return &ProfileService{
-		cache:         cacheSvc,
+		cache:         cacheClient,
 		logger:        logger,
 		membersData:   membersData,
 		profiles:      profiles,

@@ -133,7 +133,7 @@ func newTestCacheWithMini(t *testing.T) (*cache.Service, *miniredis.Miniredis, f
 		t.Fatalf("failed to parse port: %v", err)
 	}
 
-	cacheSvc, err := cache.NewCacheService(context.Background(), cache.Config{
+	cacheClient, err := cache.NewCacheService(context.Background(), cache.Config{
 		Host:              host,
 		Port:              port,
 		DisableCache:      true,
@@ -145,18 +145,18 @@ func newTestCacheWithMini(t *testing.T) (*cache.Service, *miniredis.Miniredis, f
 	}
 
 	cleanup := func() {
-		_ = cacheSvc.Close()
+		_ = cacheClient.Close()
 		mr.Close()
 	}
 
-	return cacheSvc, mr, cleanup
+	return cacheClient, mr, cleanup
 }
 
 func newTestCache(t *testing.T) (*cache.Service, func()) {
 	t.Helper()
 
-	cacheSvc, _, cleanup := newTestCacheWithMini(t)
-	return cacheSvc, cleanup
+	cacheClient, _, cleanup := newTestCacheWithMini(t)
+	return cacheClient, cleanup
 }
 
 func assertAuthCode(t *testing.T, err error, want ErrorCode) {
@@ -192,14 +192,14 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 
 func TestLogin_SessionFlow(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
 	cfg := DefaultConfig()
 	cfg.SessionTTL = 30 * time.Minute
 	cfg.UserSessionsTTL = 2 * time.Hour
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	svc, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -257,14 +257,14 @@ func TestLogin_SessionFlow(t *testing.T) {
 
 func TestLogin_RateLimited(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
 	cfg := DefaultConfig()
 	cfg.LoginRateLimitPerMinute = 2
 	cfg.LoginFailLimit = 100 // 레이트리밋 테스트에서 락 영향 제거
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	svc, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -295,7 +295,7 @@ func TestLogin_RateLimited(t *testing.T) {
 
 func TestLogin_AccountLocked(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
 	cfg := DefaultConfig()
@@ -304,7 +304,7 @@ func TestLogin_AccountLocked(t *testing.T) {
 	cfg.LoginFailWindow = 10 * time.Minute
 	cfg.LoginLockDuration = 10 * time.Minute
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	svc, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -331,13 +331,13 @@ func TestLogin_AccountLocked(t *testing.T) {
 
 func TestPasswordReset_RevokesSessions(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
 	cfg := DefaultConfig()
 	cfg.LoginRateLimitPerMinute = 1000
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	svc, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -384,13 +384,13 @@ func TestPasswordReset_RevokesSessions(t *testing.T) {
 
 func TestPasswordResetRequest_RateLimited(t *testing.T) {
 	db := newTestDB(t)
-	cacheSvc, cleanup := newTestCache(t)
+	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
 	cfg := DefaultConfig()
 	cfg.PasswordResetRequestRateLimitPerMinute = 2
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), cfg)
+	svc, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -423,14 +423,14 @@ func TestCreateSession_RollsBackSessionWhenIndexAddFails(t *testing.T) {
 	defer cleanup()
 
 	userID := "user-1"
-	cacheSvc := &failingCacheClient{
+	cacheClient := &failingCacheClient{
 		Client:      baseCache,
 		failSAddKey: userSessionsKeyPrefix + userID,
 		failSAddErr: stdErrors.New("sadd failed"),
 		failDelKeys: map[string]error{},
 	}
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), DefaultConfig())
+	svc, err := NewService(context.Background(), db, cacheClient, newTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -456,14 +456,14 @@ func TestCreateSession_RollsBackSessionWhenIndexExpireFails(t *testing.T) {
 	defer cleanup()
 
 	userID := "user-1"
-	cacheSvc := &failingCacheClient{
+	cacheClient := &failingCacheClient{
 		Client:        baseCache,
 		failExpireKey: userSessionsKeyPrefix + userID,
 		failExpireErr: stdErrors.New("expire failed"),
 		failDelKeys:   map[string]error{},
 	}
 
-	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), DefaultConfig())
+	svc, err := NewService(context.Background(), db, cacheClient, newTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestRefresh_RollsBackNewSessionWhenOldInvalidationFails(t *testing.T) {
 	}
 
 	oldKey := sessionKeyPrefix + sha256Hex(session.Token)
-	svc.cacheSvc = &failingCacheClient{
+	svc.cacheClient = &failingCacheClient{
 		Client:      baseCache,
 		failDelKeys: map[string]error{oldKey: stdErrors.New("delete old session failed")},
 	}
@@ -554,7 +554,7 @@ func TestRefresh_KeepsNewSessionWhenOldIndexRemovalFails(t *testing.T) {
 
 	oldHash := sha256Hex(session.Token)
 	oldKey := sessionKeyPrefix + oldHash
-	svc.cacheSvc = &failingCacheClient{
+	svc.cacheClient = &failingCacheClient{
 		Client:      baseCache,
 		failSRemKey: userSessionsKeyPrefix + user.ID,
 		failSRemErr: stdErrors.New("remove old session index failed"),
@@ -616,7 +616,7 @@ func TestResetPassword_IgnoresSessionRevocationFailureAfterCommit(t *testing.T) 
 		t.Fatalf("request password reset failed: %v", err)
 	}
 
-	svc.cacheSvc = &failingCacheClient{
+	svc.cacheClient = &failingCacheClient{
 		Client:      baseCache,
 		failDelMany: stdErrors.New("delete sessions failed"),
 	}
@@ -636,12 +636,12 @@ func TestResetPassword_IgnoresSessionRevocationFailureAfterCommit(t *testing.T) 
 }
 
 func TestIncrWithTTL_SetsTTLOnFirstIncrementAndKeepsIt(t *testing.T) {
-	cacheSvc, mini, cleanup := newTestCacheWithMini(t)
+	cacheClient, mini, cleanup := newTestCacheWithMini(t)
 	defer cleanup()
 
 	key := "auth:test:counter"
 
-	count, err := incrWithTTL(context.Background(), cacheSvc, key, 500*time.Millisecond)
+	count, err := incrWithTTL(context.Background(), cacheClient, key, 500*time.Millisecond)
 	if err != nil {
 		t.Fatalf("first incr failed: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestIncrWithTTL_SetsTTLOnFirstIncrementAndKeepsIt(t *testing.T) {
 		t.Fatalf("expected first ttl to ceil to 1s, got=%v", firstTTL)
 	}
 
-	count, err = incrWithTTL(context.Background(), cacheSvc, key, 2*time.Second)
+	count, err = incrWithTTL(context.Background(), cacheClient, key, 2*time.Second)
 	if err != nil {
 		t.Fatalf("second incr failed: %v", err)
 	}

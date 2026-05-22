@@ -46,33 +46,33 @@ func schedulerLogger(logger *slog.Logger) *slog.Logger {
 
 // ProvideScraperService - 스크래퍼 서비스 생성
 func ProvideScraperService(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	members member.DataProvider,
 	proxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
 ) *holodex.ScraperService {
-	return holodex.NewScraperService(cacheSvc, members, proxyConfig, sharedRL, logger)
+	return holodex.NewScraperService(cacheClient, members, proxyConfig, sharedRL, logger)
 }
 
 func ProvideScraperServiceWithYouTubeProducer(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	members member.DataProvider,
 	youtubeProducer *scraper.Client,
 	logger *slog.Logger,
 ) *holodex.ScraperService {
-	return holodex.NewScraperServiceWithYouTubeProducer(cacheSvc, members, youtubeProducer, logger)
+	return holodex.NewScraperServiceWithYouTubeProducer(cacheClient, members, youtubeProducer, logger)
 }
 
 // ProvideHolodexService - Holodex API 서비스 생성
 func ProvideHolodexService(
 	baseURL string,
 	apiKey string,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	scraperSvc *holodex.ScraperService,
 	logger *slog.Logger,
 ) (*holodex.Service, error) {
-	svc, err := holodex.NewHolodexService(baseURL, apiKey, cacheSvc, scraperSvc, logger)
+	svc, err := holodex.NewHolodexService(baseURL, apiKey, cacheClient, scraperSvc, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create holodex service: %w", err)
 	}

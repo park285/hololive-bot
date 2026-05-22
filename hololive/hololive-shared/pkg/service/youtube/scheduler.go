@@ -24,7 +24,7 @@ var SubscriberMilestones = milestonescheduler.SubscriberMilestones
 func NewScheduler(
 	youtubeSvc Service,
 	holodexSvc *holodex.Service,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	statsRepo ytstats.StatsSchedulerRepository,
 	membersData domain.MemberDataProvider,
 	alarmSvc domain.AlarmDispatchState,
@@ -35,7 +35,7 @@ func NewScheduler(
 	return milestonescheduler.NewScheduler(
 		youtubeSvc,
 		holodexSvc,
-		cacheSvc,
+		cacheClient,
 		statsRepo,
 		membersData,
 		alarmSvc,

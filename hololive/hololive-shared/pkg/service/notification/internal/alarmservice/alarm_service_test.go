@@ -431,9 +431,9 @@ func TestAlarmServiceClose(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	cacheSvc := newTestCacheService(ctx, t)
+	cache := newTestCacheService(ctx, t)
 
-	svc, err := NewAlarmService(cacheSvc, nil, nil, nil, nil, nil, nil, []int{5, 3, 1})
+	svc, err := NewAlarmService(cache, nil, nil, nil, nil, nil, nil, []int{5, 3, 1})
 	require.NoError(t, err)
 
 	err = svc.Close(ctx)

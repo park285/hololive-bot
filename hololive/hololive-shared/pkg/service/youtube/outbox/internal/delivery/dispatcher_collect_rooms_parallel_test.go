@@ -26,8 +26,8 @@ func TestCollectRoomsByChannel_PerformsTypedLookupsConcurrently(t *testing.T) {
 	communityStarted := make(chan struct{})
 	release := make(chan struct{})
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		switch key {
 		case shortsKey:
 			close(shortsStarted)
@@ -42,7 +42,7 @@ func TestCollectRoomsByChannel_PerformsTypedLookupsConcurrently(t *testing.T) {
 		}
 	}
 
-	dispatcher := NewDispatcher(nil, cacheSvc, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
 	done := make(chan map[string]channelAlarmRoomTargets, 1)
 	go func() {
 		done <- dispatcher.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
@@ -81,13 +81,13 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheEmpty(t *testing.T) {
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
 	}).Error)
 
-	cacheSvc := cachemocks.NewLenientClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewLenientClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		require.Equal(t, sharedalarmkeys.BuildChannelSubscriberKey("UCfallback", domain.AlarmTypeShorts), key)
 		return nil, nil
 	}
 
-	dispatcher := NewDispatcher(db, cacheSvc, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
 	roomsByChannel := dispatcher.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback", Kind: domain.OutboxKindNewShort},
 	})
@@ -106,13 +106,13 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheErrors(t *testing.T) {
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
 	}).Error)
 
-	cacheSvc := cachemocks.NewLenientClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewLenientClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		require.Equal(t, sharedalarmkeys.BuildChannelSubscriberKey("UCfallback-error", domain.AlarmTypeCommunity), key)
 		return nil, errors.New("cache unavailable")
 	}
 
-	dispatcher := NewDispatcher(db, cacheSvc, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
 	roomsByChannel := dispatcher.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback-error", Kind: domain.OutboxKindCommunityPost},
 	})

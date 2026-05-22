@@ -413,8 +413,8 @@ func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *gorm.DB, send
 
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	cacheSvc := cachemocks.NewLenientClient()
-	return NewDispatcher(db, cacheSvc, sender, nil, logger, cfg), logBuffer
+	cache := cachemocks.NewLenientClient()
+	return NewDispatcher(db, cache, sender, nil, logger, cfg), logBuffer
 }
 
 func findAuditLogEntryByTelemetrySource(t *testing.T, logBuffer *bytes.Buffer, source string) map[string]any {

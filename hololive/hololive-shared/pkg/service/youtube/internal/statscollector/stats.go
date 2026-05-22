@@ -55,10 +55,10 @@ type ChannelStatistics struct {
 	ViewCount        uint64
 }
 
-func NewStatsService(oauth *oauthservice.OAuthService, cacheSvc cache.Client, statsRepo ytstats.StatsServiceRepository, logger *slog.Logger) *StatsService {
+func NewStatsService(oauth *oauthservice.OAuthService, cacheClient cache.Client, statsRepo ytstats.StatsServiceRepository, logger *slog.Logger) *StatsService {
 	return &StatsService{
 		oauth:     oauth,
-		cache:     cacheSvc,
+		cache:     cacheClient,
 		statsRepo: statsRepo,
 		logger:    logger,
 	}

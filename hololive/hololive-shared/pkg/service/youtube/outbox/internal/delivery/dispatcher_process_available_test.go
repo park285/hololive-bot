@@ -24,8 +24,8 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
 
-	cacheSvc := cachemocks.NewLenientClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewLenientClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == sharedalarmkeys.BuildChannelSubscriberKey("UCdrain", domain.AlarmTypeLive) {
 			return []string{"room-drain"}, nil
 		}
@@ -33,7 +33,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cacheSvc, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,

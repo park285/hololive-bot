@@ -84,7 +84,7 @@ func newACLServiceWithSQLite(t *testing.T) (*gorm.DB, *cachemocks.Client, *aclCa
 		t.Fatalf("parse miniredis port: %v", err)
 	}
 
-	cacheSvc, err := sharedcache.NewCacheService(t.Context(), sharedcache.Config{
+	cacheClient, err := sharedcache.NewCacheService(t.Context(), sharedcache.Config{
 		Host:              mini.Host(),
 		Port:              port,
 		DisableCache:      true,
@@ -95,7 +95,7 @@ func newACLServiceWithSQLite(t *testing.T) (*gorm.DB, *cachemocks.Client, *aclCa
 	}
 
 	t.Cleanup(func() {
-		if err := cacheSvc.Close(); err != nil {
+		if err := cacheClient.Close(); err != nil {
 			t.Errorf("close cache service: %v", err)
 		}
 	})
@@ -104,26 +104,26 @@ func newACLServiceWithSQLite(t *testing.T) (*gorm.DB, *cachemocks.Client, *aclCa
 	cacheMock := &cachemocks.Client{
 		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
 			counter.setCalls++
-			return cacheSvc.Set(ctx, key, value, ttl)
+			return cacheClient.Set(ctx, key, value, ttl)
 		},
 		DelFunc: func(ctx context.Context, key string) error {
 			counter.delCalls++
-			return cacheSvc.Del(ctx, key)
+			return cacheClient.Del(ctx, key)
 		},
 		SAddFunc: func(ctx context.Context, key string, members []string) (int64, error) {
 			counter.saddCalls++
-			return cacheSvc.SAdd(ctx, key, members)
+			return cacheClient.SAdd(ctx, key, members)
 		},
 		SRemFunc: func(ctx context.Context, key string, members []string) (int64, error) {
 			counter.sremCalls++
-			return cacheSvc.SRem(ctx, key, members)
+			return cacheClient.SRem(ctx, key, members)
 		},
-		SMembersFunc:  cacheSvc.SMembers,
-		ExistsFunc:    cacheSvc.Exists,
-		GetClientFunc: cacheSvc.GetClient,
-		DoMultiFunc:   cacheSvc.DoMulti,
-		BuilderFunc:   cacheSvc.Builder,
-		BFunc:         cacheSvc.B,
+		SMembersFunc:  cacheClient.SMembers,
+		ExistsFunc:    cacheClient.Exists,
+		GetClientFunc: cacheClient.GetClient,
+		DoMultiFunc:   cacheClient.DoMulti,
+		BuilderFunc:   cacheClient.Builder,
+		BFunc:         cacheClient.B,
 	}
 
 	return db, cacheMock, counter

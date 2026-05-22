@@ -54,12 +54,12 @@ type Session struct {
 
 type Service struct {
 	db       *gorm.DB
-	cacheSvc cache.Client
+	cacheClient cache.Client
 	logger   *slog.Logger
 	cfg      Config
 }
 
-func NewService(ctx context.Context, db *gorm.DB, cacheSvc cache.Client, logger *slog.Logger, cfg Config) (*Service, error) {
+func NewService(ctx context.Context, db *gorm.DB, cacheClient cache.Client, logger *slog.Logger, cfg Config) (*Service, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("ctx must not be nil")
 	}
@@ -75,7 +75,7 @@ func NewService(ctx context.Context, db *gorm.DB, cacheSvc cache.Client, logger 
 
 	svc := &Service{
 		db:       db,
-		cacheSvc: cacheSvc,
+		cacheClient: cacheClient,
 		logger:   logger,
 		cfg:      cfg,
 	}
@@ -153,7 +153,7 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP string) (
 }
 
 func (s *Service) validateLoginGuards(ctx context.Context, email, clientIP string) error {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return nil
 	}
 

@@ -1377,7 +1377,7 @@ func (m *mockRecentVideosService) GetRecentVideos(ctx context.Context, channelID
 func TestFetchRecentVideosRotation_UsesBoundedParallelism(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	youtubeSvc := &mockRecentVideosService{}
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
 			return nil
 		},
@@ -1393,7 +1393,7 @@ func TestFetchRecentVideosRotation_UsesBoundedParallelism(t *testing.T) {
 
 	scheduler := &schedulerImpl{
 		youtube:     youtubeSvc,
-		cache:       cacheSvc,
+		cache:       cache,
 		membersData: members,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
@@ -1420,7 +1420,7 @@ func TestFetchRecentVideosRotation_CacheWritesUseBoundedParallelism(t *testing.T
 		cacheCurrent       int
 		cacheMaxConcurrent int
 	)
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
 			mu.Lock()
 			cacheCurrent++
@@ -1448,7 +1448,7 @@ func TestFetchRecentVideosRotation_CacheWritesUseBoundedParallelism(t *testing.T
 
 	scheduler := &schedulerImpl{
 		youtube:     youtubeSvc,
-		cache:       cacheSvc,
+		cache:       cache,
 		membersData: members,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
@@ -1508,7 +1508,7 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 		startedCh: make(chan struct{}, recentVideosFetchParallelism),
 		releaseCh: make(chan struct{}),
 	}
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
 			return nil
 		},
@@ -1526,7 +1526,7 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 	scheduler := &schedulerImpl{
 		youtube:     youtubeSvc,
 		statsRepo:   &mockTrackAllSubscribersRepo{latestByChannel: map[string]*domain.TimestampedStats{}},
-		cache:       cacheSvc,
+		cache:       cache,
 		membersData: members,
 		logger:      logger,
 		stopCh:      make(chan struct{}),

@@ -108,14 +108,14 @@ func TestSha256Hex_EmptyString(t *testing.T) {
 }
 
 func TestCreateSession_Success(t *testing.T) {
-	cacheSvc, cleanup := newTestCache(t)
+	cache, cleanup := newTestCache(t)
 	defer cleanup()
 
 	cfg := DefaultConfig()
 	cfg.SessionTTL = 30 * time.Minute
 	cfg.UserSessionsTTL = 2 * time.Hour
 
-	svc, err := NewService(context.Background(), newTestDB(t), cacheSvc, newTestLogger(), cfg)
+	svc, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), cfg)
 	require.NoError(t, err)
 
 	session, err := svc.createSession(context.Background(), "user-123")
@@ -128,14 +128,14 @@ func TestCreateSession_Success(t *testing.T) {
 }
 
 func TestCreateSession_StoresJSONSessionDataAndUserIndex(t *testing.T) {
-	cacheSvc, cleanup := newTestCache(t)
+	cache, cleanup := newTestCache(t)
 	defer cleanup()
 
 	cfg := DefaultConfig()
 	cfg.SessionTTL = 30 * time.Minute
 	cfg.UserSessionsTTL = 2 * time.Hour
 
-	svc, err := NewService(context.Background(), newTestDB(t), cacheSvc, newTestLogger(), cfg)
+	svc, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), cfg)
 	require.NoError(t, err)
 
 	session, err := svc.createSession(context.Background(), "user-123")
@@ -144,12 +144,12 @@ func TestCreateSession_StoresJSONSessionDataAndUserIndex(t *testing.T) {
 	sessionHash := sha256Hex(session.Token)
 
 	var stored sessionData
-	require.NoError(t, cacheSvc.Get(context.Background(), sessionKeyPrefix+sessionHash, &stored))
+	require.NoError(t, cache.Get(context.Background(), sessionKeyPrefix+sessionHash, &stored))
 	assert.Equal(t, "user-123", stored.UserID)
 	assert.WithinDuration(t, session.ExpiresAt, stored.ExpiresAt, time.Second)
 	assert.False(t, stored.CreatedAt.IsZero())
 
-	userSessions, err := cacheSvc.SMembers(context.Background(), userSessionsKeyPrefix+"user-123")
+	userSessions, err := cache.SMembers(context.Background(), userSessionsKeyPrefix+"user-123")
 	require.NoError(t, err)
 	assert.Contains(t, userSessions, sessionHash)
 }
@@ -165,10 +165,10 @@ func TestCreateSession_NoCacheService(t *testing.T) {
 }
 
 func TestCreateSession_EmptyUserID(t *testing.T) {
-	cacheSvc, cleanup := newTestCache(t)
+	cache, cleanup := newTestCache(t)
 	defer cleanup()
 
-	svc, err := NewService(context.Background(), newTestDB(t), cacheSvc, newTestLogger(), DefaultConfig())
+	svc, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
 	_, err = svc.createSession(context.Background(), "")
@@ -177,10 +177,10 @@ func TestCreateSession_EmptyUserID(t *testing.T) {
 }
 
 func TestCreateSession_UniqueSessions(t *testing.T) {
-	cacheSvc, cleanup := newTestCache(t)
+	cache, cleanup := newTestCache(t)
 	defer cleanup()
 
-	svc, err := NewService(context.Background(), newTestDB(t), cacheSvc, newTestLogger(), DefaultConfig())
+	svc, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
 	s1, err := svc.createSession(context.Background(), "user-123")
