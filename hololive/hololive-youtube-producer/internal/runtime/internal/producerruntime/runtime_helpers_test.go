@@ -24,8 +24,10 @@ import (
 	"context"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unsafe"
 
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
@@ -152,6 +154,30 @@ func TestYouTubeProducerRuntimeShutdown(t *testing.T) {
 	runtime.shutdown(context.Background())
 	if scheduler.stopCalls != 1 {
 		t.Fatalf("scheduler Stop calls = %d, want 1", scheduler.stopCalls)
+	}
+}
+
+func TestYouTubeProducerRuntimeStartHTTPServerSendsListenError(t *testing.T) {
+	t.Parallel()
+
+	runtime := &YouTubeProducerRuntime{
+		Logger:     testLogger(),
+		ServerAddr: "invalid::addr",
+		HttpServer: &http.Server{
+			Addr: "invalid::addr",
+		},
+	}
+	errCh := make(chan error, 1)
+
+	runtime.startHTTPServer(errCh)
+
+	select {
+	case err := <-errCh:
+		if err == nil || !strings.Contains(err.Error(), "http server error") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for HTTP server error")
 	}
 }
 
