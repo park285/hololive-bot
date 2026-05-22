@@ -70,6 +70,7 @@ github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/ka
 github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/kapu/hololive-shared/pkg/service/youtube/poller
 github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
 github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
+github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop
 github.com/kapu/hololive-admin-api/internal/service/system -> github.com/park285/llm-kakao-bots/shared-go/pkg/httputil
 github.com/kapu/hololive-admin-api/internal/service/system -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
 github.com/kapu/hololive-admin-api/internal/service/trigger -> github.com/kapu/hololive-shared/pkg/contracts/common
@@ -572,6 +573,7 @@ github.com/kapu/hololive-shared/pkg/service/database/mocks -> github.com/kapu/ho
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/park285/llm-kakao-bots/shared-go/pkg/logging
+github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop
 github.com/kapu/hololive-shared/pkg/service/holodex -> github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/internal/ctxutil
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/internal/retry
@@ -683,6 +685,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling -> g
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling -> github.com/kapu/hololive-shared/pkg/service/youtube/timestamp
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling -> github.com/kapu/hololive-shared/pkg/service/youtube/tracking
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
+github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling -> github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/browserfetcher -> github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
