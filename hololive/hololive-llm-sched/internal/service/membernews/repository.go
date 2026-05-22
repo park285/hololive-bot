@@ -64,7 +64,7 @@ type Repository struct {
 	log   *slog.Logger
 }
 
-func NewRepository(postgres database.Client, cacheSvc cache.Client, logger *slog.Logger) *Repository {
+func NewRepository(postgres database.Client, cacheClient cache.Client, logger *slog.Logger) *Repository {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -74,7 +74,7 @@ func NewRepository(postgres database.Client, cacheSvc cache.Client, logger *slog
 	}
 	return &Repository{
 		pool:  pool,
-		cache: cacheSvc,
+		cache: cacheClient,
 		log:   logger,
 	}
 }

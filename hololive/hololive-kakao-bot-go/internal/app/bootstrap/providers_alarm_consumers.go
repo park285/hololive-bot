@@ -20,21 +20,21 @@ import (
 
 func ProvideAlarmService(
 	advanceMinutes []int,
-	cacheSvc cache.Client,
-	holodexSvc *holodex.Service,
+	cacheClient cache.Client,
+	holodexService *holodex.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	memberData domain.MemberDataProvider,
-	alarmRepo *alarm.Repository,
+	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*notification.AlarmService, error) {
-	svc, err := notification.NewAlarmService(
-		cacheSvc,
-		holodexSvc,
+	service, err := notification.NewAlarmService(
+		cacheClient,
+		holodexService,
 		chzzkClient,
 		twitchClient,
 		memberData,
-		alarmRepo,
+		alarmRepository,
 		logger,
 		advanceMinutes,
 	)
@@ -42,7 +42,7 @@ func ProvideAlarmService(
 		return nil, fmt.Errorf("failed to create alarm service: %w", err)
 	}
 
-	return svc, nil
+	return service, nil
 }
 
 func ProvideAlarmRepository(postgres database.Client, logger *slog.Logger) *alarm.Repository {
@@ -50,12 +50,12 @@ func ProvideAlarmRepository(postgres database.Client, logger *slog.Logger) *alar
 }
 
 func ProvideAlarmWorkerPool() (*workerpool.Pool, error) {
-	cfg := workerpool.DefaultConfig()
+	config := workerpool.DefaultConfig()
 
 	const alarmWorkerPoolSize = 10
-	cfg.Size = alarmWorkerPoolSize
+	config.Size = alarmWorkerPoolSize
 
-	pool, err := workerpool.New(cfg)
+	pool, err := workerpool.New(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create alarm worker pool: %w", err)
 	}
@@ -63,12 +63,12 @@ func ProvideAlarmWorkerPool() (*workerpool.Pool, error) {
 	return pool, nil
 }
 
-func ProvideMemberMatcher(
+func ProvideMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
-	cacheSvc cache.Client,
-	holodexSvc *holodex.Service,
+	cacheClient cache.Client,
+	holodexService *holodex.Service,
 	logger *slog.Logger,
-) *matcher.MemberMatcher {
-	return matcher.NewMemberMatcher(ctx, membersData, cacheSvc, holodexSvc, nil, logger)
+) *matcher.Matcher {
+	return matcher.NewMatcher(ctx, membersData, cacheClient, holodexService, nil, logger)
 }

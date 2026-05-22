@@ -25,8 +25,8 @@ func TestFilterLiveCatchupSuppressedRoomsSkipsRecentUpcomingRooms(t *testing.T) 
 		Payload:   payload,
 	}
 	suppressedKey := keys.BuildUpcomingEventKey("room-suppressed", item.ChannelID, "live-1", "Live One", scheduledAt)
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.GetFunc = func(_ context.Context, key string, dest any) error {
+	cache := cachemocks.NewStrictClient()
+	cache.GetFunc = func(_ context.Context, key string, dest any) error {
 		data, ok := dest.(*liveUpcomingSuppressionData)
 		require.True(t, ok)
 		if key == suppressedKey {
@@ -35,7 +35,7 @@ func TestFilterLiveCatchupSuppressedRoomsSkipsRecentUpcomingRooms(t *testing.T) 
 		return nil
 	}
 	dispatcher := &Dispatcher{
-		cache:  cacheSvc,
+		cache:  cache,
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 

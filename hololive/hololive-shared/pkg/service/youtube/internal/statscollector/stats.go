@@ -38,7 +38,7 @@ import (
 type StatsService struct {
 	oauth     *oauthservice.OAuthService
 	cache     cache.Client
-	statsRepo ytstats.StatsServiceRepository
+	statsRepository ytstats.StatsServiceRepository
 	logger    *slog.Logger
 }
 
@@ -55,11 +55,11 @@ type ChannelStatistics struct {
 	ViewCount        uint64
 }
 
-func NewStatsService(oauth *oauthservice.OAuthService, cacheSvc cache.Client, statsRepo ytstats.StatsServiceRepository, logger *slog.Logger) *StatsService {
+func NewStatsService(oauth *oauthservice.OAuthService, cacheClient cache.Client, statsRepository ytstats.StatsServiceRepository, logger *slog.Logger) *StatsService {
 	return &StatsService{
 		oauth:     oauth,
-		cache:     cacheSvc,
-		statsRepo: statsRepo,
+		cache:     cacheClient,
+		statsRepository: statsRepository,
 		logger:    logger,
 	}
 }
@@ -102,8 +102,8 @@ func (ys *StatsService) loadPreviousStats(ctx context.Context, channelID string)
 		}
 	}
 
-	if ys.statsRepo != nil {
-		dbPrev, err := ys.statsRepo.GetLatestStats(ctx, channelID)
+	if ys.statsRepository != nil {
+		dbPrev, err := ys.statsRepository.GetLatestStats(ctx, channelID)
 		if err == nil {
 			return dbPrev
 		}
@@ -147,8 +147,8 @@ func (ys *StatsService) saveCurrentStats(ctx context.Context, item *youtube.Chan
 		subscriberChange = int64(item.Statistics.SubscriberCount) - int64(prevStats.SubscriberCount)
 	}
 
-	if ys.statsRepo != nil {
-		if err := ys.statsRepo.SaveStats(ctx, currentStats); err != nil {
+	if ys.statsRepository != nil {
+		if err := ys.statsRepository.SaveStats(ctx, currentStats); err != nil {
 			ys.logger.Warn("Failed to persist current stats snapshot",
 				slog.String("channel", item.Id),
 				slog.Any("error", err))

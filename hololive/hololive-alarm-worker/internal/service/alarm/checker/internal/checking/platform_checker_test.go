@@ -32,10 +32,10 @@ import (
 func TestChzzkCheckerCheck_EmptyMappings(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
+	cache := newCheckerTestCacheClient(t)
 
 	chzzkChecker, err := NewChzzkChecker(
-		cacheSvc,
+		cache,
 		chzzk.NewClient(&http.Client{Timeout: time.Second}, chzzk.DefaultBaseURL, newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -56,10 +56,10 @@ func TestChzzkCheckerCheck_EmptyMappings(t *testing.T) {
 func TestTwitchCheckerCheck_EmptyMappings(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
+	cache := newCheckerTestCacheClient(t)
 
 	twitchChecker, err := NewTwitchChecker(
-		cacheSvc,
+		cache,
 		twitch.NewClient(twitch.ClientConfig{}, newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)

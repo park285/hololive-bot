@@ -22,8 +22,8 @@ type Policy struct {
 	targetChannelIDs map[string]struct{}
 }
 
-func BuildPolicy(ingestionCfg config.IngestionConfig, channels []OperationalChannel) (Policy, error) {
-	if !ingestionCfg.CommunityShortsBigBangEnabled {
+func BuildPolicy(ingestionConfig config.IngestionConfig, channels []OperationalChannel) (Policy, error) {
+	if !ingestionConfig.CommunityShortsBigBangEnabled {
 		return Policy{}, nil
 	}
 
@@ -40,7 +40,7 @@ func BuildPolicy(ingestionCfg config.IngestionConfig, channels []OperationalChan
 	}
 
 	return Policy{
-		cutoverAt:        ingestionCfg.CommunityShortsBigBangCutoverAt.UTC(),
+		cutoverAt:        ingestionConfig.CommunityShortsBigBangCutoverAt.UTC(),
 		targetChannelIDs: targetChannelIDs,
 	}, nil
 }

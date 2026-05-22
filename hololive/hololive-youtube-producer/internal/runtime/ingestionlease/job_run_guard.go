@@ -42,9 +42,9 @@ type JobRunGuardConfig struct {
 }
 
 type JobRunGuard struct {
-	cacheSvc   cache.Client
-	namespace  string
-	instanceID string
+	cacheClient cache.Client
+	namespace   string
+	instanceID  string
 }
 
 type JobLeaseKeys struct {
@@ -53,9 +53,9 @@ type JobLeaseKeys struct {
 }
 
 type JobRunClaim struct {
-	cacheSvc   cache.Client
-	keys       JobLeaseKeys
-	ownerToken string
+	cacheClient cache.Client
+	keys        JobLeaseKeys
+	ownerToken  string
 }
 
 const (
@@ -107,11 +107,11 @@ end
 return 0
 `
 
-func NewJobRunGuard(cacheSvc cache.Client, cfg JobRunGuardConfig) *JobRunGuard {
+func NewJobRunGuard(cacheClient cache.Client, config JobRunGuardConfig) *JobRunGuard {
 	return &JobRunGuard{
-		cacheSvc:   cacheSvc,
-		namespace:  normalizeJobRunGuardNamespace(cfg.Namespace),
-		instanceID: normalizeJobRunGuardInstanceID(cfg.InstanceID),
+		cacheClient: cacheClient,
+		namespace:   normalizeJobRunGuardNamespace(config.Namespace),
+		instanceID:  normalizeJobRunGuardInstanceID(config.InstanceID),
 	}
 }
 
@@ -140,7 +140,7 @@ func (g *JobRunGuard) TryClaim(
 	leaseTTL time.Duration,
 	cooldownTTL time.Duration,
 ) (JobClaimStatus, *JobRunClaim, error) {
-	if g == nil || g.cacheSvc == nil {
+	if g == nil || g.cacheClient == nil {
 		return JobClaimStatus{Result: JobClaimUnavailable}, nil, fmt.Errorf("try claim job run: cache service must not be nil")
 	}
 	keys, err := BuildJobLeaseKeys(g.namespace, identity)
@@ -167,9 +167,9 @@ func (g *JobRunGuard) TryClaim(
 	}
 	status.OwnerToken = ownerToken
 	return status, &JobRunClaim{
-		cacheSvc:   g.cacheSvc,
-		keys:       keys,
-		ownerToken: ownerToken,
+		cacheClient: g.cacheClient,
+		keys:        keys,
+		ownerToken:  ownerToken,
 	}, nil
 }
 
@@ -179,14 +179,14 @@ func (g *JobRunGuard) acquire(
 	ownerToken string,
 	leaseTTL time.Duration,
 ) (JobClaimResult, time.Duration, error) {
-	cmd := g.cacheSvc.B().
+	cmd := g.cacheClient.B().
 		Eval().
 		Script(acquireJobRunScript).
 		Numkeys(2).
 		Key(keys.CooldownKey, keys.LeaseKey).
 		Arg(ownerToken, strconv.FormatInt(durationMillis(leaseTTL), 10)).
 		Build()
-	values, err := evalArray(ctx, g.cacheSvc, cmd)
+	values, err := evalArray(ctx, g.cacheClient, cmd)
 	if err != nil {
 		return JobClaimUnavailable, 0, fmt.Errorf("acquire job run: %w", err)
 	}
@@ -226,51 +226,51 @@ func parseAcquireJobRunValues(values []valkey.ValkeyMessage) (int64, int64, erro
 }
 
 func (c *JobRunClaim) Renew(ctx context.Context, ttl time.Duration) (bool, error) {
-	if c == nil || c.cacheSvc == nil {
+	if c == nil || c.cacheClient == nil {
 		return false, fmt.Errorf("renew job run: claim must not be nil")
 	}
 	if ttl <= 0 {
 		return false, fmt.Errorf("renew job run: ttl must be positive")
 	}
-	cmd := c.cacheSvc.B().
+	cmd := c.cacheClient.B().
 		Eval().
 		Script(renewJobRunScript).
 		Numkeys(1).
 		Key(c.keys.LeaseKey).
 		Arg(c.ownerToken, strconv.FormatInt(durationMillis(ttl), 10)).
 		Build()
-	return evalBool(ctx, c.cacheSvc, cmd, "renew job run")
+	return evalBool(ctx, c.cacheClient, cmd, "renew job run")
 }
 
 func (c *JobRunClaim) MarkCompleted(ctx context.Context, cooldownTTL time.Duration) (bool, error) {
-	if c == nil || c.cacheSvc == nil {
+	if c == nil || c.cacheClient == nil {
 		return false, fmt.Errorf("complete job run: claim must not be nil")
 	}
 	if cooldownTTL <= 0 {
 		return false, fmt.Errorf("complete job run: cooldown ttl must be positive")
 	}
-	cmd := c.cacheSvc.B().
+	cmd := c.cacheClient.B().
 		Eval().
 		Script(completeJobRunScript).
 		Numkeys(2).
 		Key(c.keys.LeaseKey, c.keys.CooldownKey).
 		Arg(c.ownerToken, strconv.FormatInt(durationMillis(cooldownTTL), 10)).
 		Build()
-	return evalBool(ctx, c.cacheSvc, cmd, "complete job run")
+	return evalBool(ctx, c.cacheClient, cmd, "complete job run")
 }
 
 func (c *JobRunClaim) Release(ctx context.Context) (bool, error) {
-	if c == nil || c.cacheSvc == nil {
+	if c == nil || c.cacheClient == nil {
 		return false, fmt.Errorf("release job run: claim must not be nil")
 	}
-	cmd := c.cacheSvc.B().
+	cmd := c.cacheClient.B().
 		Eval().
 		Script(releaseJobRunScript).
 		Numkeys(1).
 		Key(c.keys.LeaseKey).
 		Arg(c.ownerToken).
 		Build()
-	return evalBool(ctx, c.cacheSvc, cmd, "release job run")
+	return evalBool(ctx, c.cacheClient, cmd, "release job run")
 }
 
 func (c *JobRunClaim) LeaseKey() string {
@@ -294,8 +294,8 @@ func (c *JobRunClaim) OwnerToken() string {
 	return c.ownerToken
 }
 
-func evalArray(ctx context.Context, cacheSvc cache.Client, cmd valkey.Completed) ([]valkey.ValkeyMessage, error) {
-	results := cacheSvc.DoMulti(ctx, cmd)
+func evalArray(ctx context.Context, cacheClient cache.Client, cmd valkey.Completed) ([]valkey.ValkeyMessage, error) {
+	results := cacheClient.DoMulti(ctx, cmd)
 	if len(results) != 1 {
 		return nil, fmt.Errorf("unexpected result count: %d", len(results))
 	}
@@ -305,8 +305,8 @@ func evalArray(ctx context.Context, cacheSvc cache.Client, cmd valkey.Completed)
 	return results[0].ToArray()
 }
 
-func evalBool(ctx context.Context, cacheSvc cache.Client, cmd valkey.Completed, action string) (bool, error) {
-	results := cacheSvc.DoMulti(ctx, cmd)
+func evalBool(ctx context.Context, cacheClient cache.Client, cmd valkey.Completed, action string) (bool, error) {
+	results := cacheClient.DoMulti(ctx, cmd)
 	if len(results) != 1 {
 		return false, fmt.Errorf("%s: unexpected result count: %d", action, len(results))
 	}

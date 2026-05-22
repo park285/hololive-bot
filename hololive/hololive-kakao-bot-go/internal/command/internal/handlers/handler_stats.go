@@ -72,7 +72,7 @@ func (c *StatsCommand) showTopGainers(ctx context.Context, cmdCtx *domain.Comman
 	now := time.Now()
 	since, periodLabel := domain.ResolveStatsPeriod(now, periodStr)
 
-	gainers, err := c.deps.StatsRepo.GetTopGainers(ctx, since, 10)
+	gainers, err := c.deps.StatsRepository.GetTopGainers(ctx, since, 10)
 	if err != nil {
 		c.deps.Logger.Error("Failed to get top gainers", slog.Any("error", err))
 		return c.deps.SendError(ctx, cmdCtx.Room, adapter.ErrStatsQueryFailed)
@@ -96,7 +96,7 @@ func (c *StatsCommand) ensureDeps(cmdCtx *domain.CommandContext) error {
 		return errors.New("message callbacks not configured")
 	}
 
-	if c.deps.StatsRepo == nil {
+	if c.deps.StatsRepository == nil {
 		return errors.New("stats repository not configured")
 	}
 

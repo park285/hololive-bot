@@ -102,9 +102,9 @@ func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repo := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	require.NoError(t, repo.MarkSentBatch(ctx, []int64{delivery.ID}))
-	require.NoError(t, repo.UpdateOutboxAggregateStatuses(ctx, []int64{item.ID}))
+	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}))
+	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{item.ID}))
 
 	var updatedDelivery sqliteDeliveryModel
 	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)
@@ -169,8 +169,8 @@ func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonical
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repo := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	require.NoError(t, repo.MarkSentBatch(ctx, []int64{delivery.ID}))
+	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}))
 
 	var updatedTracking sqliteTrackingModel
 	require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&updatedTracking).Error)
@@ -239,8 +239,8 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repo := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	require.NoError(t, repo.MarkSentBatch(ctx, []int64{delivery.ID}, deliveryClaimToken{kind: item.Kind, postID: "community:post-claimed", authorizedAt: authorizedAt}))
+	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}, deliveryClaimToken{kind: item.Kind, postID: "community:post-claimed", authorizedAt: authorizedAt}))
 
 	var updatedState domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&updatedState, "kind = ? AND post_id = ?", item.Kind, "community:post-claimed").Error)
@@ -303,8 +303,8 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repo := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	err = repo.MarkSentBatch(ctx, []int64{delivery.ID}, deliveryClaimToken{kind: item.Kind, postID: "short:short-claimed", authorizedAt: otherAuthorizedAt})
+	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	err = repository.MarkSentBatch(ctx, []int64{delivery.ID}, deliveryClaimToken{kind: item.Kind, postID: "short:short-claimed", authorizedAt: otherAuthorizedAt})
 	require.ErrorContains(t, err, "claim authorization mismatch")
 
 	var updatedDelivery sqliteDeliveryModel
@@ -378,15 +378,15 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 	require.NoError(t, db.Create(&firstDelivery).Error)
 	require.NoError(t, db.Create(&secondDelivery).Error)
 
-	repo := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	require.NoError(t, repo.MarkSentBatch(ctx, []int64{firstDelivery.ID}))
+	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, repository.MarkSentBatch(ctx, []int64{firstDelivery.ID}))
 
 	firstExpected := yttimestamp.Normalize(currentNow)
 	currentNow = currentNow.Add(40 * time.Second)
-	require.NoError(t, repo.MarkSentBatch(ctx, []int64{firstDelivery.ID}))
+	require.NoError(t, repository.MarkSentBatch(ctx, []int64{firstDelivery.ID}))
 
 	currentNow = currentNow.Add(40 * time.Second)
-	require.NoError(t, repo.MarkSentBatch(ctx, []int64{secondDelivery.ID}))
+	require.NoError(t, repository.MarkSentBatch(ctx, []int64{secondDelivery.ID}))
 
 	var updatedTracking sqliteTrackingModel
 	require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&updatedTracking).Error)

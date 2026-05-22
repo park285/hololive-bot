@@ -37,11 +37,11 @@ type routeSpec struct {
 func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.APIHandler{}
+	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
@@ -50,7 +50,7 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}

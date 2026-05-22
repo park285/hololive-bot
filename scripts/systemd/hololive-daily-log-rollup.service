@@ -1,0 +1,12 @@
+[Unit]
+Description=Hololive daily log rollup into archive tar.gz
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/work/hololive-bot
+Environment=LOG_ROOT=/root/work/hololive-bot/logs
+ExecStart=/root/work/hololive-bot/scripts/logs/daily-rollup-logs.sh once
+UMask=0027
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6

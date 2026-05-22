@@ -10,7 +10,7 @@ import (
 )
 
 func TestAcquireNotificationEgressLeaseSuccess(t *testing.T) {
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetNXFunc: func(_ context.Context, key, value string, ttl time.Duration) (bool, error) {
 			if key != NotificationEgressLeaseKey {
 				t.Fatalf("key = %q, want %q", key, NotificationEgressLeaseKey)
@@ -25,7 +25,7 @@ func TestAcquireNotificationEgressLeaseSuccess(t *testing.T) {
 		},
 	}
 
-	lease, err := AcquireNotificationEgressLease(context.Background(), cacheSvc, nil)
+	lease, err := AcquireNotificationEgressLease(context.Background(), cache, nil)
 	if err != nil {
 		t.Fatalf("AcquireNotificationEgressLease() error = %v", err)
 	}
@@ -35,13 +35,13 @@ func TestAcquireNotificationEgressLeaseSuccess(t *testing.T) {
 }
 
 func TestAcquireNotificationEgressLeaseHeld(t *testing.T) {
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
 			return false, nil
 		},
 	}
 
-	_, err := AcquireNotificationEgressLease(context.Background(), cacheSvc, nil)
+	_, err := AcquireNotificationEgressLease(context.Background(), cache, nil)
 	if !errors.Is(err, ErrNotificationEgressLeaseHeld) {
 		t.Fatalf("error = %v, want ErrNotificationEgressLeaseHeld", err)
 	}
@@ -50,7 +50,7 @@ func TestAcquireNotificationEgressLeaseHeld(t *testing.T) {
 func TestNotificationEgressLeaseRenewAndReleaseUseOwner(t *testing.T) {
 	var renewOwner string
 	var releaseOwner string
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		CompareAndExpireFunc: func(_ context.Context, key, expected string, ttl time.Duration) (bool, error) {
 			if key != NotificationEgressLeaseKey {
 				t.Fatalf("renew key = %q, want %q", key, NotificationEgressLeaseKey)
@@ -70,11 +70,11 @@ func TestNotificationEgressLeaseRenewAndReleaseUseOwner(t *testing.T) {
 		},
 	}
 	lease := &NotificationEgressLease{
-		cacheSvc: cacheSvc,
-		key:      NotificationEgressLeaseKey,
-		owner:    "alarm-worker:test:1",
-		ttl:      notificationEgressLeaseTTL,
-		renewGap: notificationEgressRenewGap,
+		cacheClient: cache,
+		key:         NotificationEgressLeaseKey,
+		owner:       "alarm-worker:test:1",
+		ttl:         notificationEgressLeaseTTL,
+		renewGap:    notificationEgressRenewGap,
 	}
 
 	if err := lease.Renew(context.Background()); err != nil {

@@ -83,7 +83,7 @@ func TestSettingsHandler_UpdateSettings_PublishesConfigUpdates(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	settingsSvc := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
+	settingsService := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
 		AlarmAdvanceMinutes: 5,
 		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
@@ -92,7 +92,7 @@ func TestSettingsHandler_UpdateSettings_PublishesConfigUpdates(t *testing.T) {
 	handler := &SettingsHandler{
 		Logger:          newDiscardLogger(),
 		Activity:        testActivityLogger{},
-		Settings:        settingsSvc,
+		Settings:        settingsService,
 		ConfigPublisher: publisher,
 		SettingsApplier: testSettingsApplier{},
 	}
@@ -109,7 +109,7 @@ func TestSettingsHandler_UpdateSettings_PublishesConfigUpdates(t *testing.T) {
 	if len(publisher.alarmCalls) != 1 || publisher.alarmCalls[0] != 7 {
 		t.Fatalf("alarm publish calls=%v", publisher.alarmCalls)
 	}
-	if got := settingsSvc.Get().TargetMinutes; len(got) != 3 || got[0] != 7 || got[1] != 3 || got[2] != 1 {
+	if got := settingsService.Get().TargetMinutes; len(got) != 3 || got[0] != 7 || got[1] != 3 || got[2] != 1 {
 		t.Fatalf("persisted target minutes=%v want=[7 3 1]", got)
 	}
 
@@ -130,7 +130,7 @@ func TestSettingsHandler_UpdateSettings_ReportsPublishFailure(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	settingsSvc := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
+	settingsService := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
 		AlarmAdvanceMinutes: 5,
 		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
@@ -142,7 +142,7 @@ func TestSettingsHandler_UpdateSettings_ReportsPublishFailure(t *testing.T) {
 	handler := &SettingsHandler{
 		Logger:          newDiscardLogger(),
 		Activity:        testActivityLogger{},
-		Settings:        settingsSvc,
+		Settings:        settingsService,
 		ConfigPublisher: publisher,
 		SettingsApplier: testSettingsApplier{},
 	}
@@ -171,7 +171,7 @@ func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *tes
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	settingsSvc := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
+	settingsService := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
 		AlarmAdvanceMinutes: 5,
 		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
@@ -180,7 +180,7 @@ func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *tes
 	handler := &SettingsHandler{
 		Logger:          newDiscardLogger(),
 		Activity:        testActivityLogger{},
-		Settings:        settingsSvc,
+		Settings:        settingsService,
 		ConfigPublisher: publisher,
 		SettingsApplier: testSettingsApplier{},
 	}
@@ -194,7 +194,7 @@ func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *tes
 	if len(publisher.alarmCalls) != 0 || len(publisher.scraperCalls) != 0 {
 		t.Fatalf("invalid settings must not publish config updates: alarm=%v scraper=%v", publisher.alarmCalls, publisher.scraperCalls)
 	}
-	if got := settingsSvc.Get().AlarmAdvanceMinutes; got != 5 {
+	if got := settingsService.Get().AlarmAdvanceMinutes; got != 5 {
 		t.Fatalf("AlarmAdvanceMinutes=%d want unchanged 5", got)
 	}
 }

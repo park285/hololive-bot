@@ -66,7 +66,7 @@ func (c *SubscriberGraphCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 
 	days := subscriberGraphDays(params)
 
-	graphData, err := c.Deps().StatsRepo.GetSubscriberGraph(ctx, channel.ID, days)
+	graphData, err := c.Deps().StatsRepository.GetSubscriberGraph(ctx, channel.ID, days)
 	if err != nil {
 		c.Deps().Logger.Error("Failed to get subscriber graph", slog.Any("error", err))
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrGraphQueryFailed)
@@ -128,7 +128,7 @@ func (c *SubscriberGraphCommand) ensureDeps() error {
 		return fmt.Errorf("failed to ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Matcher == nil || c.Deps().StatsRepo == nil {
+	if c.Deps().Matcher == nil || c.Deps().StatsRepository == nil {
 		return errors.New("subscriber graph command services not configured")
 	}
 

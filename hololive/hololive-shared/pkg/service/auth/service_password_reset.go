@@ -60,7 +60,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 	model := &passwordResetTokenModel{
 		TokenHash: sha256Hex(rawToken),
 		UserID:    user.ID,
-		ExpiresAt: now.Add(s.cfg.ResetTokenTTL),
+		ExpiresAt: now.Add(s.config.ResetTokenTTL),
 		UsedAt:    nil,
 		CreatedAt: now,
 	}
@@ -73,7 +73,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 }
 
 func (s *Service) checkPasswordResetRequestRateLimit(ctx context.Context, clientIP string) error {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return nil
 	}
 	limited, err := s.isPasswordResetRequestRateLimited(ctx, clientIP)

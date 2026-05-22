@@ -41,7 +41,7 @@ type State struct {
 	runtimeName       string
 	youtubeEnabled    bool
 	photoSyncEnabled  bool
-	activeActive      bool
+	activeActiveEnabled      bool
 	instanceID        string
 	leaseAvailable    atomic.Bool
 	httpServerStarted atomic.Bool
@@ -55,7 +55,7 @@ func New(runtimeName string, features Features) *State {
 		runtimeName:      strings.TrimSpace(runtimeName),
 		youtubeEnabled:   features.YouTubeEnabled,
 		photoSyncEnabled: features.PhotoSyncEnabled,
-		activeActive:     features.ActiveActiveEnabled,
+		activeActiveEnabled:     features.ActiveActiveEnabled,
 		instanceID:       strings.TrimSpace(features.ActiveActiveInstance),
 	}
 	state.leaseReason.Store("")
@@ -102,6 +102,13 @@ func (s *State) MarkLeaseAvailable() {
 	s.leaseReason.Store("")
 }
 
+func (s *State) LeaseAvailable() bool {
+	if s == nil {
+		return false
+	}
+	return s.leaseAvailable.Load()
+}
+
 func (s *State) MarkLeaseUnavailable(reason string) {
 	if s == nil {
 		return
@@ -121,7 +128,7 @@ func (s *State) Response() (int, map[string]any) {
 	}
 
 	leaseAvailable := s.leaseAvailable.Load()
-	leaseEnabled := s.activeActive
+	leaseEnabled := s.activeActiveEnabled
 	statusCode, status := readinessHTTPStatus(s.ready(leaseEnabled, leaseAvailable))
 	response := s.responsePayload(base, status, leaseEnabled, leaseAvailable)
 	s.addLeaseReason(response, leaseEnabled, leaseAvailable)
@@ -164,8 +171,8 @@ func (s *State) responsePayload(
 		"shutting_down":       s.shuttingDown.Load(),
 		"youtube_enabled":     s.youtubeEnabled,
 		"photo_sync_enabled":  s.photoSyncEnabled,
-		"mode":                readinessMode(s.activeActive),
-		"active_active":       s.activeActive,
+		"mode":                readinessMode(s.activeActiveEnabled),
+		"active_active":       s.activeActiveEnabled,
 		"instance_id":         s.instanceID,
 		"job_lease_enabled":   leaseEnabled,
 		"valkey_available":    !leaseEnabled || leaseAvailable,
@@ -181,8 +188,8 @@ func (s *State) addLeaseReason(response map[string]any, leaseEnabled bool, lease
 	}
 }
 
-func readinessMode(activeActive bool) string {
-	if activeActive {
+func readinessMode(activeActiveEnabled bool) string {
+	if activeActiveEnabled {
 		return "active-active"
 	}
 	return "single-owner"

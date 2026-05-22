@@ -34,19 +34,19 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
-func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *majorevent.Repository) {
-	if router == nil || repo == nil {
+func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repository *majorevent.Repository) {
+	if router == nil || repository == nil {
 		return
 	}
 
 	rg := router.Group(majoreventcontracts.BasePath)
 	rg.Use(middleware.APIKeyAuthMiddleware(apiKey))
-	rg.GET(majoreventcontracts.SubscriptionsRoute+"/:roomID", getMajorEventSubscriptionHandler(repo))
-	rg.POST(majoreventcontracts.SubscriptionsRoute, subscribeMajorEventHandler(repo))
-	rg.DELETE(majoreventcontracts.SubscriptionsRoute+"/:roomID", unsubscribeMajorEventHandler(repo))
+	rg.GET(majoreventcontracts.SubscriptionsRoute+"/:roomID", getMajorEventSubscriptionHandler(repository))
+	rg.POST(majoreventcontracts.SubscriptionsRoute, subscribeMajorEventHandler(repository))
+	rg.DELETE(majoreventcontracts.SubscriptionsRoute+"/:roomID", unsubscribeMajorEventHandler(repository))
 }
 
-func getMajorEventSubscriptionHandler(repo *majorevent.Repository) gin.HandlerFunc {
+func getMajorEventSubscriptionHandler(repository *majorevent.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
 		if roomID == "" {
@@ -54,7 +54,7 @@ func getMajorEventSubscriptionHandler(repo *majorevent.Repository) gin.HandlerFu
 			return
 		}
 
-		subscribed, err := repo.IsSubscribed(c.Request.Context(), roomID)
+		subscribed, err := repository.IsSubscribed(c.Request.Context(), roomID)
 		if err != nil {
 			sharedserver.RespondError(c, http.StatusInternalServerError, "subscription_check_failed", nil)
 			return
@@ -64,7 +64,7 @@ func getMajorEventSubscriptionHandler(repo *majorevent.Repository) gin.HandlerFu
 	}
 }
 
-func subscribeMajorEventHandler(repo *majorevent.Repository) gin.HandlerFunc {
+func subscribeMajorEventHandler(repository *majorevent.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req subscription.SubscribeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -78,7 +78,7 @@ func subscribeMajorEventHandler(repo *majorevent.Repository) gin.HandlerFunc {
 			return
 		}
 
-		if err := repo.Subscribe(c.Request.Context(), req.RoomID, req.RoomName); err != nil {
+		if err := repository.Subscribe(c.Request.Context(), req.RoomID, req.RoomName); err != nil {
 			sharedserver.RespondError(c, http.StatusInternalServerError, "subscribe_failed", nil)
 			return
 		}
@@ -87,7 +87,7 @@ func subscribeMajorEventHandler(repo *majorevent.Repository) gin.HandlerFunc {
 	}
 }
 
-func unsubscribeMajorEventHandler(repo *majorevent.Repository) gin.HandlerFunc {
+func unsubscribeMajorEventHandler(repository *majorevent.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
 		if roomID == "" {
@@ -95,7 +95,7 @@ func unsubscribeMajorEventHandler(repo *majorevent.Repository) gin.HandlerFunc {
 			return
 		}
 
-		if err := repo.Unsubscribe(c.Request.Context(), roomID); err != nil {
+		if err := repository.Unsubscribe(c.Request.Context(), roomID); err != nil {
 			sharedserver.RespondError(c, http.StatusInternalServerError, "unsubscribe_failed", nil)
 			return
 		}

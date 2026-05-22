@@ -55,7 +55,7 @@ func TestIsRoomAllowed_ACLDisabled(t *testing.T) {
 	t.Parallel()
 
 	// ACL 비활성화 시 모든 방이 허용되어야 한다
-	svc := newTestService(false, ACLModeWhitelist, []string{"room-A"}, nil)
+	service := newTestService(false, ACLModeWhitelist, []string{"room-A"}, nil)
 
 	tests := []struct {
 		name     string
@@ -87,7 +87,7 @@ func TestIsRoomAllowed_ACLDisabled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := svc.IsRoomAllowed(tc.roomName, tc.chatID)
+			got := service.IsRoomAllowed(tc.roomName, tc.chatID)
 			if got != tc.want {
 				t.Errorf("IsRoomAllowed(%q, %q) = %v, want %v", tc.roomName, tc.chatID, got, tc.want)
 			}
@@ -98,7 +98,7 @@ func TestIsRoomAllowed_ACLDisabled(t *testing.T) {
 func TestIsRoomAllowed_WhitelistMode(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(true, ACLModeWhitelist, []string{"room-alpha", "chat-beta"}, nil)
+	service := newTestService(true, ACLModeWhitelist, []string{"room-alpha", "chat-beta"}, nil)
 
 	tests := []struct {
 		name     string
@@ -154,7 +154,7 @@ func TestIsRoomAllowed_WhitelistMode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := svc.IsRoomAllowed(tc.roomName, tc.chatID)
+			got := service.IsRoomAllowed(tc.roomName, tc.chatID)
 			if got != tc.want {
 				t.Errorf("IsRoomAllowed(%q, %q) = %v, want %v", tc.roomName, tc.chatID, got, tc.want)
 			}
@@ -165,7 +165,7 @@ func TestIsRoomAllowed_WhitelistMode(t *testing.T) {
 func TestIsRoomAllowed_BlacklistMode(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(true, ACLModeBlacklist, nil, []string{"blocked-room", "blocked-chat"})
+	service := newTestService(true, ACLModeBlacklist, nil, []string{"blocked-room", "blocked-chat"})
 
 	tests := []struct {
 		name     string
@@ -209,7 +209,7 @@ func TestIsRoomAllowed_BlacklistMode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := svc.IsRoomAllowed(tc.roomName, tc.chatID)
+			got := service.IsRoomAllowed(tc.roomName, tc.chatID)
 			if got != tc.want {
 				t.Errorf("IsRoomAllowed(%q, %q) = %v, want %v", tc.roomName, tc.chatID, got, tc.want)
 			}
@@ -221,9 +221,9 @@ func TestIsRoomAllowed_EmptyWhitelist(t *testing.T) {
 	t.Parallel()
 
 	// ACL 활성화 + 화이트리스트 비어있음 → 모든 방 거부
-	svc := newTestService(true, ACLModeWhitelist, []string{}, nil)
+	service := newTestService(true, ACLModeWhitelist, []string{}, nil)
 
-	got := svc.IsRoomAllowed("any-room", "any-chat")
+	got := service.IsRoomAllowed("any-room", "any-chat")
 	if got {
 		t.Error("화이트리스트가 비어있을 때 IsRoomAllowed는 false여야 함")
 	}
@@ -233,9 +233,9 @@ func TestIsRoomAllowed_EmptyBlacklist(t *testing.T) {
 	t.Parallel()
 
 	// ACL 활성화 + 블랙리스트 비어있음 → 모든 방 허용
-	svc := newTestService(true, ACLModeBlacklist, nil, []string{})
+	service := newTestService(true, ACLModeBlacklist, nil, []string{})
 
-	got := svc.IsRoomAllowed("any-room", "any-chat")
+	got := service.IsRoomAllowed("any-room", "any-chat")
 	if !got {
 		t.Error("블랙리스트가 비어있을 때 IsRoomAllowed는 true여야 함")
 	}
@@ -245,28 +245,28 @@ func TestIsRoomAllowed_DualLists_Independent(t *testing.T) {
 	t.Parallel()
 
 	// 화이트리스트와 블랙리스트에 각각 다른 방이 있을 때 현재 모드만 참조하는지 검증
-	svc := newTestService(true, ACLModeWhitelist, []string{"allowed-only"}, []string{"blocked-only"})
+	service := newTestService(true, ACLModeWhitelist, []string{"allowed-only"}, []string{"blocked-only"})
 
 	// 화이트리스트 모드: allowed-only만 허용, blocked-only는 화이트리스트에 없으므로 거부
-	if !svc.IsRoomAllowed("allowed-only", "") {
+	if !service.IsRoomAllowed("allowed-only", "") {
 		t.Error("화이트리스트 모드에서 화이트리스트에 있는 방은 허용되어야 함")
 	}
 
-	if svc.IsRoomAllowed("blocked-only", "") {
+	if service.IsRoomAllowed("blocked-only", "") {
 		t.Error("화이트리스트 모드에서 화이트리스트에 없는 방은 거부되어야 함")
 	}
 
 	// 블랙리스트 모드로 전환 (메모리만 변경, DB/캐시 없음)
-	svc.mu.Lock()
-	svc.mode = ACLModeBlacklist
-	svc.mu.Unlock()
+	service.mu.Lock()
+	service.mode = ACLModeBlacklist
+	service.mu.Unlock()
 
 	// 블랙리스트 모드: blocked-only는 차단, allowed-only는 블랙리스트에 없으므로 허용
-	if svc.IsRoomAllowed("blocked-only", "") {
+	if service.IsRoomAllowed("blocked-only", "") {
 		t.Error("블랙리스트 모드에서 블랙리스트에 있는 방은 차단되어야 함")
 	}
 
-	if !svc.IsRoomAllowed("allowed-only", "") {
+	if !service.IsRoomAllowed("allowed-only", "") {
 		t.Error("블랙리스트 모드에서 블랙리스트에 없는 방은 허용되어야 함")
 	}
 }
@@ -325,16 +325,16 @@ func TestGetACLStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := newTestService(tc.enabled, tc.mode, tc.wlRooms, tc.blRooms)
-			assertACLStatus(t, svc, tc.wantEnabled, tc.wantMode, tc.wantRoomsCnt, expectedACLRooms(tc.mode, tc.wlRooms, tc.blRooms))
+			service := newTestService(tc.enabled, tc.mode, tc.wlRooms, tc.blRooms)
+			assertACLStatus(t, service, tc.wantEnabled, tc.wantMode, tc.wantRoomsCnt, expectedACLRooms(tc.mode, tc.wlRooms, tc.blRooms))
 		})
 	}
 }
 
-func assertACLStatus(t *testing.T, svc *Service, wantEnabled bool, wantMode ACLMode, wantRoomsCnt int, expectedRooms []string) {
+func assertACLStatus(t *testing.T, service *Service, wantEnabled bool, wantMode ACLMode, wantRoomsCnt int, expectedRooms []string) {
 	t.Helper()
 
-	gotEnabled, gotMode, gotRooms := svc.GetACLStatus()
+	gotEnabled, gotMode, gotRooms := service.GetACLStatus()
 	if gotEnabled != wantEnabled {
 		t.Errorf("GetACLStatus().enabled = %v, want %v", gotEnabled, wantEnabled)
 	}
@@ -371,15 +371,15 @@ func TestGetACLStatus_ReturnsCopy(t *testing.T) {
 	t.Parallel()
 
 	// GetACLStatus가 내부 맵의 복사본을 반환해야 한다 (외부 수정이 내부 상태에 영향 없어야 함)
-	svc := newTestService(true, ACLModeWhitelist, []string{"room-safe"}, nil)
+	service := newTestService(true, ACLModeWhitelist, []string{"room-safe"}, nil)
 
-	_, _, rooms := svc.GetACLStatus()
+	_, _, rooms := service.GetACLStatus()
 	origLen := len(rooms)
 
 	// 반환된 슬라이스를 수정해도 서비스 내부 상태에 영향 없어야 한다
 	_ = append(rooms, "injected-room")
 
-	_, _, roomsAfter := svc.GetACLStatus()
+	_, _, roomsAfter := service.GetACLStatus()
 	if len(roomsAfter) != origLen {
 		t.Errorf("GetACLStatus 반환 슬라이스 수정이 내부 상태에 영향을 줌: got %d rooms, want %d", len(roomsAfter), origLen)
 	}
@@ -388,9 +388,9 @@ func TestGetACLStatus_ReturnsCopy(t *testing.T) {
 func TestGetACLStatus_ReturnsSortedRooms(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(true, ACLModeWhitelist, []string{"room-b", "room-a", "room-c"}, nil)
+	service := newTestService(true, ACLModeWhitelist, []string{"room-b", "room-a", "room-c"}, nil)
 
-	_, _, rooms := svc.GetACLStatus()
+	_, _, rooms := service.GetACLStatus()
 	if len(rooms) != 3 {
 		t.Fatalf("expected 3 rooms, got %d", len(rooms))
 	}
@@ -407,7 +407,7 @@ func TestIsRoomAllowed_ConcurrentRead(t *testing.T) {
 	t.Parallel()
 
 	// 동시 읽기 시 race condition 없어야 한다
-	svc := newTestService(true, ACLModeWhitelist, []string{"room-concurrent"}, nil)
+	service := newTestService(true, ACLModeWhitelist, []string{"room-concurrent"}, nil)
 
 	const goroutines = 50
 
@@ -418,7 +418,7 @@ func TestIsRoomAllowed_ConcurrentRead(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			_ = svc.IsRoomAllowed("room-concurrent", "")
+			_ = service.IsRoomAllowed("room-concurrent", "")
 		}()
 	}
 
@@ -429,7 +429,7 @@ func TestGetACLStatus_ConcurrentRead(t *testing.T) {
 	t.Parallel()
 
 	// 동시 읽기 시 race condition 없어야 한다
-	svc := newTestService(true, ACLModeBlacklist, nil, []string{"room-a", "room-b"})
+	service := newTestService(true, ACLModeBlacklist, nil, []string{"room-a", "room-b"})
 
 	const goroutines = 50
 
@@ -440,7 +440,7 @@ func TestGetACLStatus_ConcurrentRead(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			_, _, _ = svc.GetACLStatus()
+			_, _, _ = service.GetACLStatus()
 		}()
 	}
 

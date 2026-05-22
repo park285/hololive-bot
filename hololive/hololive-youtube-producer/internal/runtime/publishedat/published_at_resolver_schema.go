@@ -33,11 +33,11 @@ func validatePublishedAtResolverSchema(ctx context.Context, postgresService data
 
 func validatePublishedAtResolverSchemaIfEnabled(
 	ctx context.Context,
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	postgresService database.Client,
 	logger *slog.Logger,
 ) error {
-	if !effectivePublishedAtResolverConfig(scraperCfg).Enabled {
+	if !effectivePublishedAtResolverConfig(scraperConfig).Enabled {
 		return nil
 	}
 	if err := validatePublishedAtResolverSchema(ctx, postgresService); err != nil {

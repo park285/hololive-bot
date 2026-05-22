@@ -82,6 +82,31 @@ func TestLLMSchedulerRuntimeStartHTTPServer_ReportsError(t *testing.T) {
 	}
 }
 
+func TestLLMSchedulerRuntimeShutdown_StopsHTTPServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	response, err := server.Client().Get(server.URL)
+	require.NoError(t, err)
+	require.NoError(t, response.Body.Close())
+	assert.Equal(t, http.StatusNoContent, response.StatusCode)
+
+	runtime := &LLMSchedulerRuntime{
+		Logger:     testRuntimeLogger(),
+		httpServer: server.Config,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	require.NoError(t, runtime.Shutdown(ctx))
+
+	_, err = server.Client().Get(server.URL)
+	require.Error(t, err)
+}
+
 func TestLLMSchedulerRuntimeRun_ReturnsOnServerError(t *testing.T) {
 	runtime := &LLMSchedulerRuntime{
 		Logger: testRuntimeLogger(),

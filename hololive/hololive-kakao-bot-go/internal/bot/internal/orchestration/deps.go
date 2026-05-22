@@ -52,21 +52,21 @@ type Dependencies struct {
 	Formatter        *adapter.ResponseFormatter
 	Cache            cache.Client
 	Postgres         database.Client
-	MemberRepo       *member.Repository
+	MemberRepository       *member.Repository
 	MemberCache      *member.Cache
 	Holodex          domain.StreamProvider
 	Chzzk            *chzzk.Client
 	Twitch           *twitch.Client
 	Profiles         *member.ProfileService
 	Alarm            domain.AlarmCRUD
-	Matcher          *matcher.MemberMatcher
+	Matcher          *matcher.Matcher
 	MembersData      member.DataProvider
 	Service          youtube.Service
-	YouTubeStatsRepo stats.StatsCommandRepository
+	YouTubeStatsRepository stats.StatsCommandRepository
 	Activity         *activity.Logger
 	Settings         settings.ReadWriter
 	ACL              *acl.Service
-	MajorEventRepo   command.MajorEventRepository
+	MajorEventRepository   command.MajorEventRepository
 	MemberNews       command.MemberNewsService
 	CommandBuilders  []CommandBuilder
 	WorkerPool       *workerpool.Pool
@@ -88,7 +88,7 @@ type messagingDependencies struct {
 type dataDependencies struct {
 	cache       cache.Client
 	postgres    database.Client
-	memberRepo  *member.Repository
+	memberRepository  *member.Repository
 	memberCache *member.Cache
 }
 
@@ -98,10 +98,10 @@ type streamDependencies struct {
 	twitch           *twitch.Client
 	profiles         *member.ProfileService
 	alarm            domain.AlarmCRUD
-	matcher          *matcher.MemberMatcher
+	matcher          *matcher.Matcher
 	membersData      member.DataProvider
 	service          youtube.Service
-	youTubeStatsRepo stats.StatsCommandRepository
+	youTubeStatsRepository stats.StatsCommandRepository
 }
 
 type supportDependencies struct {
@@ -112,7 +112,7 @@ type supportDependencies struct {
 }
 
 type featureDependencies struct {
-	majorEventRepo  command.MajorEventRepository
+	majorEventRepository  command.MajorEventRepository
 	memberNews      command.MemberNewsService
 	commandBuilders []CommandBuilder
 }
@@ -150,7 +150,7 @@ func (d *Dependencies) dataDeps() dataDependencies {
 	return dataDependencies{
 		cache:       d.Cache,
 		postgres:    d.Postgres,
-		memberRepo:  d.MemberRepo,
+		memberRepository:  d.MemberRepository,
 		memberCache: d.MemberCache,
 	}
 }
@@ -169,7 +169,7 @@ func (d *Dependencies) streamDeps() streamDependencies {
 		matcher:          d.Matcher,
 		membersData:      d.MembersData,
 		service:          d.Service,
-		youTubeStatsRepo: d.YouTubeStatsRepo,
+		youTubeStatsRepository: d.YouTubeStatsRepository,
 	}
 }
 
@@ -192,7 +192,7 @@ func (d *Dependencies) featureDeps() featureDependencies {
 	}
 
 	return featureDependencies{
-		majorEventRepo:  d.MajorEventRepo,
+		majorEventRepository:  d.MajorEventRepository,
 		memberNews:      d.MemberNews,
 		commandBuilders: cloneCommandBuilders(d.CommandBuilders),
 	}

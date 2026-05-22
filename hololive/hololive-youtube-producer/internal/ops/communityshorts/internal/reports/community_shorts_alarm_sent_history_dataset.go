@@ -16,7 +16,7 @@ import (
 
 func CollectCommunityShortsAlarmSentHistoryDatasetReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityShortsAlarmSentHistoryDatasetCollectOptions,
@@ -24,7 +24,7 @@ func CollectCommunityShortsAlarmSentHistoryDatasetReport(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: config is nil")
 	}
 	if logger == nil {
@@ -41,7 +41,7 @@ func CollectCommunityShortsAlarmSentHistoryDatasetReport(
 		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: %w", err)
 	}
 
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, appConfig, logger)
 	if err != nil {
 		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: %w", err)
 	}
@@ -143,7 +143,7 @@ func collectCommunityShortsAlarmSentHistoryDatasetRows(
 		return communityShortsAlarmSentHistoryDatasetRows{}, fmt.Errorf("collect community shorts alarm sent history dataset: list shorts sent histories: %w", err)
 	}
 
-	sendStateRows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(
+	sendStateRows, err := session.telemetryRepository.ListPostSendCountsByFinalizedObservationWindow(
 		ctx,
 		query.ObservationRuntimeName,
 		window.BigBangCutoverAt,

@@ -27,19 +27,41 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/httpserver"
 	"github.com/quic-go/quic-go/http3"
 )
+
+type listenErrorPrefixServer struct {
+	httpserver.Server
+	errorText string
+	logger    *slog.Logger
+	errCh     chan<- error
+}
+
+func (s listenErrorPrefixServer) ListenAndServe() error {
+	err := s.Server.ListenAndServe()
+	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+
+	if s.errCh == nil && s.logger != nil {
+		s.logger.Error(s.errorText, slog.Any("error", err))
+	}
+
+	return fmt.Errorf("%s: %w", s.errorText, err)
+}
 
 func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
 	if server == nil {
 		return
 	}
 
-	go runHTTPServer(server, logger, errCh)
-}
-
-func runHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
-	handleHTTPServerError(server.ListenAndServe(), logger, errCh, "HTTP server error")
+	httpserver.Start(listenErrorPrefixServer{
+		Server:    server,
+		errorText: "HTTP server error",
+		logger:    logger,
+		errCh:     errCh,
+	}, nil, errCh)
 }
 
 func StartHTTP3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
@@ -47,34 +69,12 @@ func StartHTTP3Server(server *http3.Server, logger *slog.Logger, errCh chan<- er
 		return
 	}
 
-	go runHTTP3Server(server, logger, errCh)
-}
-
-func runHTTP3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
-	handleHTTPServerError(server.ListenAndServe(), logger, errCh, "HTTP/3 server error")
-}
-
-func handleHTTPServerError(err error, logger *slog.Logger, errCh chan<- error, message string) {
-	if err == nil || errors.Is(err, http.ErrServerClosed) {
-		return
-	}
-
-	if sendHTTPServerError(errCh, err, message) {
-		return
-	}
-
-	if logger != nil {
-		logger.Error(message, slog.Any("error", err))
-	}
-}
-
-func sendHTTPServerError(errCh chan<- error, err error, message string) bool {
-	if errCh == nil {
-		return false
-	}
-
-	errCh <- fmt.Errorf("%s: %w", message, err)
-	return true
+	httpserver.Start(listenErrorPrefixServer{
+		Server:    server,
+		errorText: "HTTP/3 server error",
+		logger:    logger,
+		errCh:     errCh,
+	}, nil, errCh)
 }
 
 func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
@@ -82,11 +82,7 @@ func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
 		return nil
 	}
 
-	if err := server.Shutdown(ctx); err != nil {
-		return fmt.Errorf("HTTP server shutdown failed: %w", err)
-	}
-
-	return nil
+	return httpserver.Shutdown(ctx, server, "HTTP server shutdown failed")
 }
 
 func ShutdownHTTP3Server(server *http3.Server, ctx context.Context) error {
@@ -94,9 +90,5 @@ func ShutdownHTTP3Server(server *http3.Server, ctx context.Context) error {
 		return nil
 	}
 
-	if err := server.Shutdown(ctx); err != nil {
-		return fmt.Errorf("HTTP/3 server shutdown failed: %w", err)
-	}
-
-	return nil
+	return httpserver.Shutdown(ctx, server, "HTTP/3 server shutdown failed")
 }

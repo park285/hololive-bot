@@ -64,9 +64,9 @@ type Publisher struct {
 
 type PublisherOption func(*Publisher)
 
-func WithOutbox(repo dispatchoutbox.Writer) PublisherOption {
+func WithOutbox(repository dispatchoutbox.Writer) PublisherOption {
 	return func(p *Publisher) {
-		p.outbox = repo
+		p.outbox = repository
 	}
 }
 

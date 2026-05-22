@@ -33,10 +33,10 @@ import (
 )
 
 // GET /api/milestones?limit=50&offset=0&channelId=xxx&memberName=xxx.
-func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
+func (h *MilestoneHandler) GetMilestones(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if !h.requireStatsRepo(c) {
+	if !h.requireStatsRepository(c) {
 		return
 	}
 
@@ -52,7 +52,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 		MemberName: c.Query("memberName"),
 	}
 
-	result, err := h.statsRepo.GetAllMilestones(ctx, filter)
+	result, err := h.statsRepository.GetAllMilestones(ctx, filter)
 	if err != nil {
 		h.safeLogger().Error("Failed to get milestones", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get milestones", nil)
@@ -115,10 +115,10 @@ func parseMilestoneOffset(c *gin.Context) (int, bool) {
 
 // GET /api/milestones/near?threshold=0.9
 // 기본 threshold: 백그라운드 워커와 동일한 95% (MilestoneThresholdRatio).
-func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
+func (h *MilestoneHandler) GetNearMilestoneMembers(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if !h.requireStatsRepo(c) {
+	if !h.requireStatsRepository(c) {
 		return
 	}
 
@@ -135,10 +135,10 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 		threshold = parsed
 	}
 
-	// 항상 6명만 조회 (졸업 멤버 제외는 Repo 내부 JOIN으로 자동 처리됨)
+	// 항상 6명만 조회 (졸업 멤버 제외는 Repository 내부 JOIN으로 자동 처리됨)
 	limit := 6
 
-	members, err := h.statsRepo.GetNearMilestoneMembers(ctx, threshold, youtube.SubscriberMilestones, limit)
+	members, err := h.statsRepository.GetNearMilestoneMembers(ctx, threshold, youtube.SubscriberMilestones, limit)
 	if err != nil {
 		h.safeLogger().Error("Failed to get near milestone members", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get near milestone members", nil)
@@ -160,14 +160,14 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 }
 
 // GET /api/milestones/stats.
-func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
+func (h *MilestoneHandler) GetMilestoneStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if !h.requireStatsRepo(c) {
+	if !h.requireStatsRepository(c) {
 		return
 	}
 
-	summary, err := h.statsRepo.GetMilestoneStats(ctx)
+	summary, err := h.statsRepository.GetMilestoneStats(ctx)
 	if err != nil {
 		h.safeLogger().Error("Failed to get milestone stats", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get milestone stats", nil)
@@ -176,7 +176,7 @@ func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	}
 
 	// 직전 멤버 수 조회 (95% 이상)
-	nearCount, err := h.statsRepo.CountNearMilestoneMembers(ctx, youtube.MilestoneThresholdRatio, youtube.SubscriberMilestones)
+	nearCount, err := h.statsRepository.CountNearMilestoneMembers(ctx, youtube.MilestoneThresholdRatio, youtube.SubscriberMilestones)
 	if err != nil {
 		h.safeLogger().Error("Failed to get near milestone summary", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get near milestone summary", nil)

@@ -54,12 +54,12 @@ type Session struct {
 
 type Service struct {
 	db       *gorm.DB
-	cacheSvc cache.Client
+	cacheClient cache.Client
 	logger   *slog.Logger
-	cfg      Config
+	config      Config
 }
 
-func NewService(ctx context.Context, db *gorm.DB, cacheSvc cache.Client, logger *slog.Logger, cfg Config) (*Service, error) {
+func NewService(ctx context.Context, db *gorm.DB, cacheClient cache.Client, logger *slog.Logger, config Config) (*Service, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("ctx must not be nil")
 	}
@@ -69,24 +69,24 @@ func NewService(ctx context.Context, db *gorm.DB, cacheSvc cache.Client, logger 
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if cfg.SessionTTL <= 0 {
-		cfg = DefaultConfig()
+	if config.SessionTTL <= 0 {
+		config = DefaultConfig()
 	}
 
-	svc := &Service{
+	service := &Service{
 		db:       db,
-		cacheSvc: cacheSvc,
+		cacheClient: cacheClient,
 		logger:   logger,
-		cfg:      cfg,
+		config:      config,
 	}
 
-	if cfg.AutoPrepareSchema {
-		if err := svc.createTablesIfNotExist(ctx); err != nil {
+	if config.AutoPrepareSchema {
+		if err := service.createTablesIfNotExist(ctx); err != nil {
 			return nil, err
 		}
 	}
 
-	return svc, nil
+	return service, nil
 }
 
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (*User, error) {
@@ -153,7 +153,7 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP string) (
 }
 
 func (s *Service) validateLoginGuards(ctx context.Context, email, clientIP string) error {
-	if s.cacheSvc == nil {
+	if s.cacheClient == nil {
 		return nil
 	}
 

@@ -196,13 +196,13 @@ func TestDeliveryTelemetryRepository_BackfillAndFlush(t *testing.T) {
 		AlarmLatencyExceeded: &alarmLatencyExceeded,
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db)
 
-	inserted, err := repo.BackfillFromDelivery(ctx, 10, time.Time{})
+	inserted, err := repository.BackfillFromDelivery(ctx, 10, time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, 1, inserted)
 
-	pending, err := repo.FetchAndLockPending(ctx, 10, time.Minute)
+	pending, err := repository.FetchAndLockPending(ctx, 10, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, pending, 1)
 	require.Equal(t, delivery.ID, pending[0].DeliveryID)
@@ -219,7 +219,7 @@ func TestDeliveryTelemetryRepository_BackfillAndFlush(t *testing.T) {
 	require.NotNil(t, pending[0].AlarmLatencyMillis)
 	require.Equal(t, alarmLatencyMillis, *pending[0].AlarmLatencyMillis)
 
-	require.NoError(t, repo.MarkLoggedBatch(ctx, []int64{pending[0].ID}))
+	require.NoError(t, repository.MarkLoggedBatch(ctx, []int64{pending[0].ID}))
 
 	var saved sqliteTelemetryBufferModel
 	require.NoError(t, db.First(&saved, pending[0].ID).Error)
@@ -237,7 +237,7 @@ func TestDeliveryTelemetryRepository_EnqueueDedupesByDeliveryAttempt(t *testing.
 		&domain.YouTubeCommunityShortsAlarmState{},
 	))
 
-	repo := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db)
 	event := domain.YouTubeNotificationDeliveryTelemetry{
 		DeliveryID:     101,
 		AttemptOrdinal: 1,
@@ -253,8 +253,8 @@ func TestDeliveryTelemetryRepository_EnqueueDedupesByDeliveryAttempt(t *testing.
 		EventAt:        time.Now().UTC(),
 	}
 
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{event}))
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{event}))
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{event}))
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{event}))
 
 	var count int64
 	require.NoError(t, db.Model(&sqliteTelemetryBufferModel{}).Count(&count).Error)
@@ -321,8 +321,8 @@ func TestDeliveryTelemetryRepository_BackfillFromDelivery_AppliesRetentionCutoff
 		SentAt:        &recentSentAt,
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	inserted, err := repo.BackfillFromDelivery(ctx, 10, now.Add(-24*time.Hour))
+	repository := NewDeliveryTelemetryRepository(db)
+	inserted, err := repository.BackfillFromDelivery(ctx, 10, now.Add(-24*time.Hour))
 	require.NoError(t, err)
 	require.Equal(t, 1, inserted)
 
@@ -516,9 +516,9 @@ func TestDeliveryTelemetryRepository_MarkRetryReleasesLock(t *testing.T) {
 		&domain.YouTubeCommunityShortsAlarmState{},
 	))
 
-	repo := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db)
 	now := time.Now().UTC()
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     501,
 		AttemptOrdinal: 1,
 		OutboxID:       601,
@@ -535,18 +535,18 @@ func TestDeliveryTelemetryRepository_MarkRetryReleasesLock(t *testing.T) {
 		NextAttemptAt:  now,
 	}}))
 
-	locked, err := repo.FetchAndLockPending(ctx, 10, time.Minute)
+	locked, err := repository.FetchAndLockPending(ctx, 10, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, locked, 1)
-	require.NoError(t, repo.MarkRetryBatch(ctx, []int64{locked[0].ID}, time.Millisecond, "emit failed"))
+	require.NoError(t, repository.MarkRetryBatch(ctx, []int64{locked[0].ID}, time.Millisecond, "emit failed"))
 
 	time.Sleep(2 * time.Millisecond)
-	again, err := repo.FetchAndLockPending(ctx, 10, time.Minute)
+	again, err := repository.FetchAndLockPending(ctx, 10, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, again, 1)
 	require.Equal(t, locked[0].ID, again[0].ID)
 	require.Equal(t, "post-retry", again[0].PostID)
-	require.NoError(t, repo.MarkLoggedBatch(ctx, []int64{again[0].ID}))
+	require.NoError(t, repository.MarkLoggedBatch(ctx, []int64{again[0].ID}))
 }
 
 var _ = io.Discard

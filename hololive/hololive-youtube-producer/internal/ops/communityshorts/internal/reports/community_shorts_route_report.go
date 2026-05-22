@@ -93,17 +93,17 @@ type communityShortsRouteReportContentKey struct {
 
 func CollectCommunityShortsRouteVerificationReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	since time.Time,
 ) (CommunityShortsRouteVerificationReport, error) {
-	ctx, logger, now, since, err := normalizeCommunityShortsRouteReportInputs(ctx, cfg, logger, now, since)
+	ctx, logger, now, since, err := normalizeCommunityShortsRouteReportInputs(ctx, appConfig, logger, now, since)
 	if err != nil {
 		return CommunityShortsRouteVerificationReport{}, err
 	}
 
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, appConfig, logger)
 	if err != nil {
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: %w", err)
 	}
@@ -115,7 +115,7 @@ func CollectCommunityShortsRouteVerificationReport(
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: session is nil")
 	}
 
-	baseline, err := buildCommunityShortsRouteReportBaseline(ctx, cfg, logger, session, now)
+	baseline, err := buildCommunityShortsRouteReportBaseline(ctx, appConfig, logger, session, now)
 	if err != nil {
 		return CommunityShortsRouteVerificationReport{}, err
 	}
@@ -130,7 +130,7 @@ func CollectCommunityShortsRouteVerificationReport(
 
 func normalizeCommunityShortsRouteReportInputs(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	since time.Time,
@@ -138,7 +138,7 @@ func normalizeCommunityShortsRouteReportInputs(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return ctx, logger, now, since, fmt.Errorf("collect community shorts route verification report: config is nil")
 	}
 	if logger == nil {
@@ -162,7 +162,7 @@ func normalizeCommunityShortsRouteReportInputs(
 
 func buildCommunityShortsRouteReportBaseline(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	session *communityShortsOpsSession,
 	now time.Time,
@@ -180,7 +180,7 @@ func buildCommunityShortsRouteReportBaseline(
 	}
 
 	channels := communityshorts.BuildOperationalChannelsFromMembers(members)
-	baseline, err := communityshorts.BuildTargetBaseline(channels, alarms, cfg.Ingestion, now)
+	baseline, err := communityshorts.BuildTargetBaseline(channels, alarms, appConfig.Ingestion, now)
 	if err != nil {
 		return communityshorts.TargetBaseline{}, fmt.Errorf("collect community shorts route verification report: build baseline: %w", err)
 	}
@@ -193,12 +193,12 @@ func loadCommunityShortsRouteReportRows(
 	session *communityShortsOpsSession,
 	since time.Time,
 ) ([]outbox.PostDeliveryPathUsage, []outbox.PostSendCount, error) {
-	pathUsageRows, err := session.telemetryRepo.ListPostDeliveryPathUsageSince(ctx, since)
+	pathUsageRows, err := session.telemetryRepository.ListPostDeliveryPathUsageSince(ctx, since)
 	if err != nil {
 		return nil, nil, fmt.Errorf("collect community shorts route verification report: list delivery path usage: %w", err)
 	}
 
-	sendCountRows, err := session.telemetryRepo.ListPostSendCountsSince(ctx, since)
+	sendCountRows, err := session.telemetryRepository.ListPostSendCountsSince(ctx, since)
 	if err != nil {
 		return nil, nil, fmt.Errorf("collect community shorts route verification report: list send counts: %w", err)
 	}

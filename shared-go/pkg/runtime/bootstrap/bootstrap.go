@@ -22,14 +22,14 @@ type Options[Config any, Runtime runtime] struct {
 	Initialize             func(version string)
 	LoadConfig             func() (Config, error)
 	LoadConfigErrorMessage string
-	NewLogger              func(cfg Config) (*slog.Logger, error)
-	LoggerConfig           func(cfg Config) sharedlogging.Config
+	NewLogger              func(config Config) (*slog.Logger, error)
+	LoggerConfig           func(config Config) sharedlogging.Config
 	LoggerFileName         string
-	LoggerLevel            func(cfg Config) string
+	LoggerLevel            func(config Config) string
 	StartupMessage         string
-	StartupFields          func(cfg Config) []any
+	StartupFields          func(config Config) []any
 	BuildTimeout           time.Duration
-	BuildRuntime           func(ctx context.Context, cfg Config, logger *slog.Logger) (Runtime, error)
+	BuildRuntime           func(ctx context.Context, config Config, logger *slog.Logger) (Runtime, error)
 	BuildErrorMessage      string
 	Stderr                 io.Writer
 }
@@ -38,24 +38,24 @@ func Run[Config any, Runtime runtime](opts Options[Config, Runtime]) int {
 	initializeRuntime(opts.Initialize, opts.Version)
 	stderr := runtimeStderr(opts.Stderr)
 
-	cfg, err := opts.LoadConfig()
+	config, err := opts.LoadConfig()
 	if err != nil {
 		return printBootstrapError(stderr, fallback(opts.LoadConfigErrorMessage, "Failed to load config"), err)
 	}
 
-	logger, err := newLogger(opts, cfg)
+	logger, err := newLogger(opts, config)
 	if err != nil {
 		return printBootstrapError(stderr, "Failed to initialize logger", err)
 	}
 
 	if message := opts.StartupMessage; message != "" {
-		logger.Info(message, startupFields(opts, cfg)...)
+		logger.Info(message, startupFields(opts, config)...)
 	}
 
 	buildCtx, buildCancel := context.WithTimeout(context.Background(), opts.BuildTimeout)
 	defer buildCancel()
 
-	rt, err := opts.BuildRuntime(buildCtx, cfg, logger)
+	rt, err := opts.BuildRuntime(buildCtx, config, logger)
 	if err != nil {
 		logger.Error(fallback(opts.BuildErrorMessage, "Failed to build runtime"), slog.Any("error", err))
 		return 1
@@ -89,38 +89,38 @@ func printBootstrapError(stderr io.Writer, message string, err error) int {
 	return 1
 }
 
-func newLogger[Config any, Runtime runtime](opts Options[Config, Runtime], cfg Config) (*slog.Logger, error) {
+func newLogger[Config any, Runtime runtime](opts Options[Config, Runtime], config Config) (*slog.Logger, error) {
 	if opts.NewLogger != nil {
-		return opts.NewLogger(cfg)
+		return opts.NewLogger(config)
 	}
 
-	logCfg := sharedlogging.Config{}
+	logConfig := sharedlogging.Config{}
 	if opts.LoggerConfig != nil {
-		logCfg = opts.LoggerConfig(cfg)
+		logConfig = opts.LoggerConfig(config)
 	}
 
 	level := ""
 	if opts.LoggerLevel != nil {
-		level = opts.LoggerLevel(cfg)
+		level = opts.LoggerLevel(config)
 	}
 
-	return sharedlogging.EnableFileLoggingWithLevel(logCfg, opts.LoggerFileName, level)
+	return sharedlogging.EnableFileLoggingWithLevel(logConfig, opts.LoggerFileName, level)
 }
 
-func startupFields[Config any, Runtime runtime](opts Options[Config, Runtime], cfg Config) []any {
+func startupFields[Config any, Runtime runtime](opts Options[Config, Runtime], config Config) []any {
 	fields := []any{
 		slog.String("version", opts.Version),
 	}
 
 	if opts.LoggerLevel != nil {
-		fields = append(fields, slog.String("log_level", opts.LoggerLevel(cfg)))
+		fields = append(fields, slog.String("log_level", opts.LoggerLevel(config)))
 	}
 
 	if opts.StartupFields == nil {
 		return fields
 	}
 
-	return append(fields, opts.StartupFields(cfg)...)
+	return append(fields, opts.StartupFields(config)...)
 }
 
 func fallback(value, def string) string {

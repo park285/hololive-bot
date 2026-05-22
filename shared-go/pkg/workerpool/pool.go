@@ -31,19 +31,19 @@ func DefaultConfig() Config {
 	}
 }
 
-func New(cfg Config) (*Pool, error) {
+func New(config Config) (*Pool, error) {
 	opts := []ants.Option{
-		ants.WithExpiryDuration(cfg.ExpiryDuration),
-		ants.WithNonblocking(cfg.Nonblocking),
+		ants.WithExpiryDuration(config.ExpiryDuration),
+		ants.WithNonblocking(config.Nonblocking),
 	}
-	if cfg.PreAlloc {
+	if config.PreAlloc {
 		opts = append(opts, ants.WithPreAlloc(true))
 	}
-	if cfg.MaxBlockingTask > 0 {
-		opts = append(opts, ants.WithMaxBlockingTasks(cfg.MaxBlockingTask))
+	if config.MaxBlockingTask > 0 {
+		opts = append(opts, ants.WithMaxBlockingTasks(config.MaxBlockingTask))
 	}
 
-	pool, err := ants.NewPool(cfg.Size, opts...)
+	pool, err := ants.NewPool(config.Size, opts...)
 	if err != nil {
 		return nil, err
 	}

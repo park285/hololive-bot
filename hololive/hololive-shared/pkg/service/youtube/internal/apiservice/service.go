@@ -51,7 +51,7 @@ type serviceImpl struct {
 func New(
 	ctx context.Context,
 	apiKey string,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	scraperProxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
@@ -72,7 +72,7 @@ func New(
 	ys := &serviceImpl{
 		service:       service,
 		scraper:       scraper.NewClient(scraper.WithProxy(scraperProxyConfig), scraper.WithRateLimiter(sharedRL)),
-		cache:         cacheSvc,
+		cache:         cacheClient,
 		logger:        logger,
 		quotaUsed:     0,
 		quotaReset:    getNextQuotaReset(),
@@ -80,7 +80,7 @@ func New(
 	}
 
 	// 캐시에서 채널 ID -> 멤버 이름 맵 초기화
-	if cacheSvc != nil {
+	if cacheClient != nil {
 		ys.loadChannelNameMap(ctx)
 	}
 

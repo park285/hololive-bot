@@ -75,7 +75,7 @@ func (h *StreamHandler) respondChannelStatsFromCache(c *gin.Context, ctx context
 }
 
 func (h *StreamHandler) respondChannelStatsFromDB(c *gin.Context, ctx context.Context) (bool, error) {
-	if h.StatsRepo == nil {
+	if h.StatsRepository == nil {
 		return false, nil
 	}
 
@@ -111,7 +111,7 @@ func (h *StreamHandler) getChannelStatsFromDB(ctx context.Context) (map[string]*
 		return make(map[string]*youtube.ChannelStats), nil
 	}
 
-	dbStats, err := h.StatsRepo.GetLatestStatsForChannels(ctx, channelIDs)
+	dbStats, err := h.StatsRepository.GetLatestStatsForChannels(ctx, channelIDs)
 	if err != nil {
 		return nil, fmt.Errorf("get latest stats: %w", err)
 	}

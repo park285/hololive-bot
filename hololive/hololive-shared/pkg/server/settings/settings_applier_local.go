@@ -40,14 +40,14 @@ type localSettingsApplier struct {
 var _ SettingsApplier = (*localSettingsApplier)(nil)
 
 func NewLocalSettingsApplier(
-	youtubeSvc youtube.Service,
-	holodexSvc *holodex.Service,
+	youtubeService youtube.Service,
+	holodexService *holodex.Service,
 	scraperProxyToggler *poller.Scheduler,
 	alarm domain.AlarmCRUD,
 ) SettingsApplier {
 	return &localSettingsApplier{
-		youtube:             youtubeSvc,
-		holodex:             holodexSvc,
+		youtube:             youtubeService,
+		holodex:             holodexService,
 		scraperProxyToggler: scraperProxyToggler,
 		alarm:               alarm,
 	}

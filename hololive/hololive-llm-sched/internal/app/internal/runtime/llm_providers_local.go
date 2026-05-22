@@ -51,13 +51,13 @@ func ProvideMajorEventLLMClient(cliproxy config.CliproxyConfig, logger *slog.Log
 	return client
 }
 
-func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
+func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
 	if !cliproxy.Enabled || cliproxy.APIKey == "" {
 		logger.Info("Member news LLM disabled")
 		return nil
 	}
 
-	model := llmCfg.MemberNewsModel
+	model := llmConfig.MemberNewsModel
 	if model == "" {
 		model = cliproxy.Model
 	}
@@ -76,29 +76,29 @@ func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmCfg config.LL
 		llm.WithChatCompletions(),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
 	}
-	if llmCfg.MemberNewsTemperature > 0 {
-		opts = append(opts, llm.WithTemperature(llmCfg.MemberNewsTemperature))
+	if llmConfig.MemberNewsTemperature > 0 {
+		opts = append(opts, llm.WithTemperature(llmConfig.MemberNewsTemperature))
 	}
 
 	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger, opts...)
-	tempApplied := llmCfg.MemberNewsTemperature > 0
+	tempApplied := llmConfig.MemberNewsTemperature > 0
 	logger.Info("Member news LLM enabled",
 		slog.String("model", model),
 		slog.Bool("temperature_applied", tempApplied),
-		slog.Float64("temperature", llmCfg.MemberNewsTemperature),
+		slog.Float64("temperature", llmConfig.MemberNewsTemperature),
 	)
 	return client
 }
 
 // consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
-func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
-	if !llmCfg.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
+func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
+	if !llmConfig.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
 	}
 
-	model := llmCfg.MemberNews.ReviewerModel
+	model := llmConfig.MemberNews.ReviewerModel
 	if model == "" {
-		model = llmCfg.MemberNewsModel
+		model = llmConfig.MemberNewsModel
 	}
 	if model == "" {
 		model = cliproxy.Model
@@ -119,12 +119,12 @@ func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmCfg conf
 	return client
 }
 
-func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
-	if !llmCfg.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
+func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
+	if !llmConfig.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
 	}
 
-	model := llmCfg.MajorEvent.ReviewerModel
+	model := llmConfig.MajorEvent.ReviewerModel
 	if model == "" {
 		model = cliproxy.Model
 	}
@@ -140,12 +140,12 @@ func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmCfg conf
 	)
 }
 
-func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
-	if !llmCfg.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
+func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
+	if !llmConfig.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
 	}
 
-	model := llmCfg.MajorEvent.AdjudicatorModel
+	model := llmConfig.MajorEvent.AdjudicatorModel
 	if model == "" {
 		model = cliproxy.Model
 	}
@@ -162,14 +162,14 @@ func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmCfg c
 }
 
 // consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
-func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
-	if !llmCfg.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
+func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
+	if !llmConfig.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
 	}
 
-	model := llmCfg.MemberNews.AdjudicatorModel
+	model := llmConfig.MemberNews.AdjudicatorModel
 	if model == "" {
-		model = llmCfg.MemberNewsModel
+		model = llmConfig.MemberNewsModel
 	}
 	if model == "" {
 		model = cliproxy.Model
@@ -185,8 +185,8 @@ func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmCfg c
 		llm.WithChatCompletions(),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
 	}
-	if llmCfg.MemberNewsTemperature > 0 {
-		opts = append(opts, llm.WithTemperature(llmCfg.MemberNewsTemperature))
+	if llmConfig.MemberNewsTemperature > 0 {
+		opts = append(opts, llm.WithTemperature(llmConfig.MemberNewsTemperature))
 	}
 
 	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger, opts...)

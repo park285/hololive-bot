@@ -21,16 +21,16 @@ const (
 var ErrNotificationEgressLeaseHeld = errors.New("notification egress lease held")
 
 type NotificationEgressLease struct {
-	cacheSvc cache.Client
-	key      string
-	owner    string
-	ttl      time.Duration
-	renewGap time.Duration
-	logger   *slog.Logger
+	cacheClient cache.Client
+	key         string
+	owner       string
+	ttl         time.Duration
+	renewGap    time.Duration
+	logger      *slog.Logger
 }
 
-func AcquireNotificationEgressLease(ctx context.Context, cacheSvc cache.Client, logger *slog.Logger) (*NotificationEgressLease, error) {
-	if cacheSvc == nil {
+func AcquireNotificationEgressLease(ctx context.Context, cacheClient cache.Client, logger *slog.Logger) (*NotificationEgressLease, error) {
+	if cacheClient == nil {
 		return nil, fmt.Errorf("acquire notification egress lease: cache service must not be nil")
 	}
 	if logger == nil {
@@ -38,7 +38,7 @@ func AcquireNotificationEgressLease(ctx context.Context, cacheSvc cache.Client, 
 	}
 
 	owner := notificationEgressLeaseOwner()
-	acquired, err := cacheSvc.SetNX(ctx, NotificationEgressLeaseKey, owner, notificationEgressLeaseTTL)
+	acquired, err := cacheClient.SetNX(ctx, NotificationEgressLeaseKey, owner, notificationEgressLeaseTTL)
 	if err != nil {
 		return nil, fmt.Errorf("acquire notification egress lease: setnx failed: %w", err)
 	}
@@ -53,12 +53,12 @@ func AcquireNotificationEgressLease(ctx context.Context, cacheSvc cache.Client, 
 	)
 
 	return &NotificationEgressLease{
-		cacheSvc: cacheSvc,
-		key:      NotificationEgressLeaseKey,
-		owner:    owner,
-		ttl:      notificationEgressLeaseTTL,
-		renewGap: notificationEgressRenewGap,
-		logger:   logger,
+		cacheClient: cacheClient,
+		key:         NotificationEgressLeaseKey,
+		owner:       owner,
+		ttl:         notificationEgressLeaseTTL,
+		renewGap:    notificationEgressRenewGap,
+		logger:      logger,
 	}, nil
 }
 
@@ -103,7 +103,7 @@ func (l *NotificationEgressLease) Renew(ctx context.Context) error {
 		return nil
 	}
 
-	renewed, err := l.cacheSvc.CompareAndExpire(ctx, l.key, l.owner, l.ttl)
+	renewed, err := l.cacheClient.CompareAndExpire(ctx, l.key, l.owner, l.ttl)
 	if err != nil {
 		return fmt.Errorf("renew notification egress lease: %w", err)
 	}
@@ -118,7 +118,7 @@ func (l *NotificationEgressLease) Release(ctx context.Context) error {
 		return nil
 	}
 
-	released, err := l.cacheSvc.CompareAndDelete(ctx, l.key, l.owner)
+	released, err := l.cacheClient.CompareAndDelete(ctx, l.key, l.owner)
 	if err != nil {
 		return fmt.Errorf("release notification egress lease: %w", err)
 	}

@@ -43,7 +43,7 @@ import (
 type youtubeProducerInfrastructure struct {
 	cacheService     cache.Client
 	postgresService  database.Client
-	memberRepo       *member.Repository
+	memberRepository       *member.Repository
 	settingsService  settings.ReadWriter
 	holodexService   *holodex.Service
 	ytStack          *sharedproviders.YouTubeStack
@@ -64,8 +64,8 @@ type youtubeProducerYouTubeResources struct {
 
 // initYouTubeProducerInfrastructure: youtube-producer에 필요한 최소 인프라만 초기화한다.
 // alarm/ACL/activity/workerPool 등 bot 전용 구성요소를 제외한다.
-func initYouTubeProducerInfrastructure(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *youtubeProducerInfrastructure, retErr error) {
-	infra, err := initProducerInfra(ctx, cfg, logger)
+func initYouTubeProducerInfrastructure(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (_ *youtubeProducerInfrastructure, retErr error) {
+	infra, err := initProducerInfra(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func initYouTubeProducerInfrastructure(ctx context.Context, cfg *config.Config, 
 
 	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
 
-	youTube, err := buildYouTubeProducerResources(ctx, cfg, logger, infra)
+	youTube, err := buildYouTubeProducerResources(ctx, appConfig, logger, infra)
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +85,8 @@ func initYouTubeProducerInfrastructure(ctx context.Context, cfg *config.Config, 
 	return &youtubeProducerInfrastructure{
 		cacheService:     infra.Cache,
 		postgresService:  infra.Postgres,
-		memberRepo:       infra.MemberRepo,
-		settingsService:  sharedmodules.BuildSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger),
+		memberRepository:       infra.MemberRepository,
+		settingsService:  sharedmodules.BuildSettingsService(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger),
 		holodexService:   youTube.holodexService,
 		ytStack:          youTube.ytStack,
 		photoSync:        youTube.photoSync,
@@ -97,27 +97,27 @@ func initYouTubeProducerInfrastructure(ctx context.Context, cfg *config.Config, 
 	}, nil
 }
 
-func buildYouTubeProducerResources(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *sharedmodules.InfraModule) (*youtubeProducerYouTubeResources, error) {
+func buildYouTubeProducerResources(ctx context.Context, appConfig *config.Config, logger *slog.Logger, infra *sharedmodules.InfraModule) (*youtubeProducerYouTubeResources, error) {
 	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 	sharedRL, err := sharedproviders.ProvideYouTubeProducerRateLimiter(infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}
 
-	scraperClient := polling.BuildSharedClient(cfg.Scraper, infra.Cache, sharedRL)
+	scraperClient := polling.BuildSharedClient(appConfig.Scraper, infra.Cache, sharedRL)
 	scraperService := sharedproviders.ProvideScraperServiceWithYouTubeProducer(infra.Cache, memberServiceAdapter, scraperClient, logger)
-	holodexService, err := sharedproviders.ProvideHolodexService(cfg.Holodex.BaseURL, cfg.Holodex.APIKey, infra.Cache, scraperService, logger)
+	holodexService, err := sharedproviders.ProvideHolodexService(appConfig.Holodex.BaseURL, appConfig.Holodex.APIKey, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
 	youTubeStack := sharedmodules.BuildYouTubeStack(ctx, sharedmodules.YouTubeStackParams{
-		YouTubeConfig:   cfg.YouTube,
-		ScraperConfig:   cfg.Scraper,
+		YouTubeConfig:   appConfig.YouTube,
+		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,
 		HolodexService:  holodexService,
 		Members:         memberServiceAdapter,
-		StatsRepo:       ytstats.NewYouTubeStatsRepository(infra.Postgres, logger),
+		StatsRepository:       ytstats.NewYouTubeStatsRepository(infra.Postgres, logger),
 		AlarmState:      nil,
 		Formatter:       nil,
 		SharedRateLimit: sharedRL,
@@ -127,7 +127,7 @@ func buildYouTubeProducerResources(ctx context.Context, cfg *config.Config, logg
 	return &youtubeProducerYouTubeResources{
 		holodexService: holodexService,
 		ytStack:        youTubeStack,
-		photoSync:      holodex.NewPhotoSyncService(holodexService, infra.MemberRepo, logger),
+		photoSync:      holodex.NewPhotoSyncService(holodexService, infra.MemberRepository, logger),
 		sharedRL:       sharedRL,
 		scraperClient:  scraperClient,
 	}, nil

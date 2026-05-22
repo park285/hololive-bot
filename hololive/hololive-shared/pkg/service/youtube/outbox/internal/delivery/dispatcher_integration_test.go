@@ -109,7 +109,7 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 
 	setupTestSubscribers(t, cacheService)
 
-	cfg := outbox.Config{
+	config := outbox.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -117,7 +117,7 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "test123",
@@ -183,7 +183,7 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 
 	setupTestSubscribers(t, cacheService)
 
-	cfg := outbox.Config{
+	config := outbox.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -191,7 +191,7 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "retry123",
@@ -252,7 +252,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 	cacheService := setupCacheService(t)
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	cfg := outbox.Config{
+	config := outbox.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -260,7 +260,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "nosub123",
@@ -317,7 +317,7 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:SHORTS:UCperroom_success", []string{"roomA", "roomB"})
 	setupMemberName(t, cacheService, "UCperroom_success", "PerRoomMember")
 
-	cfg := outbox.Config{
+	config := outbox.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -325,7 +325,7 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 		RetryBackoff: 50 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_success_video",
@@ -389,7 +389,7 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:UCperroom_retry", []string{"roomA", "roomB"})
 	setupMemberName(t, cacheService, "UCperroom_retry", "PerRoomRetryMember")
 
-	cfg := outbox.Config{
+	config := outbox.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -397,7 +397,7 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		RetryBackoff: 30 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_retry_video",
@@ -465,7 +465,7 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 	cacheService := setupCacheService(t)
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	cfg := outbox.Config{
+	config := outbox.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -473,7 +473,7 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 		RetryBackoff: 50 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_no_sub_video",
@@ -532,7 +532,7 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:UCperroom_terminal_fail", []string{"roomA", "roomB"})
 	setupMemberName(t, cacheService, "UCperroom_terminal_fail", "PerRoomTerminalFailMember")
 
-	cfg := outbox.Config{
+	config := outbox.Config{
 		BatchSize:    10,
 		LockTimeout:  1 * time.Minute,
 		PollInterval: 100 * time.Millisecond,
@@ -540,7 +540,7 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 		RetryBackoff: 30 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_terminal_fail_video",
@@ -662,7 +662,7 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			setupMemberName(t, cacheService, tc.channelID, tc.memberName)
 			testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-			cfg := outbox.Config{
+			config := outbox.Config{
 				BatchSize:    10,
 				LockTimeout:  1 * time.Minute,
 				PollInterval: 100 * time.Millisecond,
@@ -671,8 +671,8 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			}
 
 			dispatchers := []*outbox.Dispatcher{
-				outbox.NewDispatcher(dbPrimary, cacheService, sender, nil, testLogger, cfg),
-				outbox.NewDispatcher(dbSecondary, cacheService, sender, nil, testLogger, cfg),
+				outbox.NewDispatcher(dbPrimary, cacheService, sender, nil, testLogger, config),
+				outbox.NewDispatcher(dbSecondary, cacheService, sender, nil, testLogger, config),
 			}
 
 			contentID := "test_" + tc.contentPrefix + "_" + time.Now().UTC().Format("150405000000000")
@@ -757,7 +757,7 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 	cacheService := setupCacheService(t)
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	cfg := outbox.Config{
+	config := outbox.Config{
 		BatchSize:      10,
 		LockTimeout:    1 * time.Minute,
 		PollInterval:   100 * time.Millisecond,
@@ -767,7 +767,7 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 		CleanupEnabled: false,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	oldFailed := &domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
@@ -867,7 +867,7 @@ func setupCacheService(t *testing.T) *cache.Service {
 		valkeyHost = "localhost"
 	}
 
-	cfg := cache.Config{
+	config := cache.Config{
 		Host:              valkeyHost,
 		Port:              6379,
 		DisableCache:      true,
@@ -875,7 +875,7 @@ func setupCacheService(t *testing.T) *cache.Service {
 	}
 
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	cacheService, err := cache.NewCacheService(context.Background(), cfg, testLogger)
+	cacheService, err := cache.NewCacheService(context.Background(), config, testLogger)
 	if err != nil {
 		t.Fatalf("Failed to create cache service: %v", err)
 	}

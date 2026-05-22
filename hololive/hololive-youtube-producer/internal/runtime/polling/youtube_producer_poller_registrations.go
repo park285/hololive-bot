@@ -39,17 +39,17 @@ const defaultChannelPollerMaxResults = 10
 
 func buildYouTubeProducerChannelPollerRegistrations(
 	postgres database.Client,
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	sharedRL *scraper.RateLimiter,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	routeDecider poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		postgres,
-		scraperCfg,
-		buildSharedYouTubeProducerClient(scraperCfg, cacheSvc, sharedRL),
+		scraperConfig,
+		buildSharedYouTubeProducerClient(scraperConfig, cacheClient, sharedRL),
 		nil,
 		routeDecider,
 		notificationChannelIDs,
@@ -59,30 +59,30 @@ func buildYouTubeProducerChannelPollerRegistrations(
 
 func buildYouTubeProducerChannelPollerRegistrationsWithClient(
 	postgres database.Client,
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
 	routeDecider poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
-	poll := scraperCfg.PollOrDefault()
-	resolverCfg := publishedat.EffectiveConfig(scraperCfg)
-	inlineResolveMissingPublishedAt := routeDecider != nil && !resolverCfg.Enabled
+	poll := scraperConfig.PollOrDefault()
+	resolverConfig := publishedat.EffectiveConfig(scraperConfig)
+	inlineResolveMissingPublishedAt := routeDecider != nil && !resolverConfig.Enabled
 	communityKeywords := []string{}
 	db := postgres.GetGormDB()
 	maxResults := defaultChannelPollerMaxResults
-	tieringEnabled := scraperCfg.PollTiering.Enabled
+	tieringEnabled := scraperConfig.PollTiering.Enabled
 	pollers := newYouTubeProducerPollerSet(scraperClient, liveStatusProvider, db, maxResults, communityKeywords, routeDecider, inlineResolveMissingPublishedAt)
 
 	if registrations, ok := tryBuildTieredChannelPollerRegistrations(tieringEnabled, db, pollers, poll, polltarget.Targets{
 		NotificationChannelIDs: notificationChannelIDs,
 		StatsChannelIDs:        statsChannelIDs,
 	}, inlineResolveMissingPublishedAt, maxResults); ok {
-		return appendBackfillChannelPollerRegistrations(registrations, pollers, scraperCfg.Backfill, notificationChannelIDs, inlineResolveMissingPublishedAt, maxResults)
+		return appendBackfillChannelPollerRegistrations(registrations, pollers, scraperConfig.Backfill, notificationChannelIDs, inlineResolveMissingPublishedAt, maxResults)
 	}
 	registrations := buildFlatYouTubeProducerChannelPollerRegistrations(pollers, poll, notificationChannelIDs, statsChannelIDs, inlineResolveMissingPublishedAt, maxResults)
-	return appendBackfillChannelPollerRegistrations(registrations, pollers, scraperCfg.Backfill, notificationChannelIDs, inlineResolveMissingPublishedAt, maxResults)
+	return appendBackfillChannelPollerRegistrations(registrations, pollers, scraperConfig.Backfill, notificationChannelIDs, inlineResolveMissingPublishedAt, maxResults)
 }
 
 type youTubeProducerPollerSet struct {

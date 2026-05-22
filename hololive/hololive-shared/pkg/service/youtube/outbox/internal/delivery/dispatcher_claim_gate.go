@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 	"gorm.io/gorm"
 )
@@ -31,6 +32,13 @@ type deliveryClaimToken struct {
 	authorizedAt time.Time
 }
 
+func (t *deliveryClaimToken) authorizedAtOrZero() time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return t.authorizedAt
+}
+
 type deliveryClaimSelection struct {
 	sendRows               []domain.YouTubeNotificationDelivery
 	sendOutboxes           []domain.YouTubeNotificationOutbox
@@ -42,20 +50,12 @@ type deliveryClaimSelection struct {
 	retryOutboxIDs         []int64
 }
 
-type deliveryClaimReuse struct {
-	decision deliveryClaimDecision
-}
-
-type deliveryClaimReuseCache struct {
-	mu      sync.Mutex
-	entries map[string]deliveryClaimReuse
-}
 
 func (d *Dispatcher) selectClaimedDeliveries(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	reuseCache *deliveryClaimReuseCache,
+	reuseCache claim.DecisionCache,
 ) deliveryClaimSelection {
 	selection := deliveryClaimSelection{
 		sendRows:       make([]domain.YouTubeNotificationDelivery, 0, len(rows)),
@@ -77,7 +77,7 @@ func (d *Dispatcher) applyDeliveryClaimSelection(
 	selection *deliveryClaimSelection,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
-	reuseCache *deliveryClaimReuseCache,
+	reuseCache claim.DecisionCache,
 ) {
 	claimIdentity, err := deliveryClaimIdentityForOutbox(outbox)
 	if err != nil {
@@ -85,15 +85,29 @@ func (d *Dispatcher) applyDeliveryClaimSelection(
 		return
 	}
 
-	decision, claimToken, reused, err := reuseCache.resolve(claimIdentity, func() (deliveryClaimDecision, *deliveryClaimToken, error) {
-		return d.tryClaimDelivery(ctx, row, outbox)
+	type claimResult struct {
+		decision   deliveryClaimDecision
+		claimToken *deliveryClaimToken
+	}
+
+	result, err := reuseCache.ResolveClaim(ctx, claimIdentity, func(ctx context.Context) (claim.Decision, *claim.Token, error) {
+		decision, claimToken, err := d.tryClaimDelivery(ctx, row, outbox)
+		if err != nil {
+			return claim.Decision{}, nil, err
+		}
+		var token *claim.Token
+		if claimToken != nil {
+			token = &claim.Token{AuthorizedAt: claimToken.authorizedAt}
+		}
+		return claim.Decision{Value: claimResult{decision: decision, claimToken: claimToken}}, token, nil
 	})
 	if err != nil {
 		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to claim community/shorts alarm state before send", err)
 		return
 	}
 
-	d.applyDeliveryClaimDecision(selection, row, outbox, decision, claimToken, reused)
+	cr := result.Decision.Value.(claimResult)
+	d.applyDeliveryClaimDecision(selection, row, outbox, cr.decision, cr.claimToken, result.Hit)
 }
 
 func (d *Dispatcher) retryDeliveryClaimSelection(
@@ -148,43 +162,6 @@ func appendProceedingDeliveryClaim(
 	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
 }
 
-func newDeliveryClaimReuseCache(capacity int) *deliveryClaimReuseCache {
-	if capacity < 1 {
-		capacity = 1
-	}
-	return &deliveryClaimReuseCache{
-		entries: make(map[string]deliveryClaimReuse, capacity),
-	}
-}
-
-func (c *deliveryClaimReuseCache) resolve(
-	identity string,
-	compute func() (deliveryClaimDecision, *deliveryClaimToken, error),
-) (deliveryClaimDecision, *deliveryClaimToken, bool, error) {
-	if identity == "" {
-		decision, token, err := compute()
-		return decision, token, false, err
-	}
-	if c == nil {
-		decision, token, err := compute()
-		return decision, token, false, err
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if reuse, ok := c.entries[identity]; ok {
-		return reuse.decision, nil, true, nil
-	}
-
-	decision, token, err := compute()
-	if err != nil {
-		return deliveryClaimDecisionRetryLater, nil, false, err
-	}
-
-	c.entries[identity] = deliveryClaimReuse{decision: decision}
-	return decision, token, false, nil
-}
 
 func (d *Dispatcher) applyClaimSelection(result *deliveryDispatchResult, mu *sync.Mutex, selection deliveryClaimSelection) {
 	if len(selection.alreadySentDeliveryIDs) > 0 {

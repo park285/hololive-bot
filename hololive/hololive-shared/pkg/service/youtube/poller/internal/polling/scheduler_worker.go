@@ -27,7 +27,11 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 )
+
+var errJobClaimRenewLoopStopped = errors.New("job claim renew loop stopped")
 
 // worker: 작업 실행 워커
 func (s *Scheduler) worker(ctx context.Context, jobCh <-chan *Job, id int, stopCh <-chan struct{}) {
@@ -218,33 +222,19 @@ func runJobClaimRenewLoop(
 	interval time.Duration,
 	errCh chan<- error,
 ) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		if !jobClaimRenewLoopStep(renewCtx, pollCtx, pollCancel, claim, pollerName, ttl, ticker.C, errCh) {
-			return
-		}
-	}
-}
+	loopCtx, cancelLoop := context.WithCancel(renewCtx)
+	stopPollCancel := context.AfterFunc(pollCtx, cancelLoop)
+	defer func() {
+		stopPollCancel()
+		cancelLoop()
+	}()
 
-func jobClaimRenewLoopStep(
-	renewCtx context.Context,
-	pollCtx context.Context,
-	pollCancel context.CancelFunc,
-	claim JobClaim,
-	pollerName string,
-	ttl time.Duration,
-	ticks <-chan time.Time,
-	errCh chan<- error,
-) bool {
-	select {
-	case <-renewCtx.Done():
-		return false
-	case <-pollCtx.Done():
-		return false
-	case <-ticks:
-		return renewJobClaim(pollCtx, pollCancel, claim, pollerName, ttl, errCh)
-	}
+	_ = loop.RunTickerLoop(loopCtx, interval, func(context.Context) error {
+		if !renewJobClaim(pollCtx, pollCancel, claim, pollerName, ttl, errCh) {
+			return errJobClaimRenewLoopStopped
+		}
+		return nil
+	})
 }
 
 func renewJobClaim(

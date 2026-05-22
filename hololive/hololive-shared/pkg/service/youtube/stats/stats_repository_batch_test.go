@@ -95,10 +95,10 @@ func TestSaveStatsBatch(t *testing.T) {
 					return pgconn.NewCommandTag("INSERT 0 1"), nil
 				},
 			}
-			repo := newTestStatsRepository(db)
+			repository := newTestStatsRepository(db)
 
 			stats := makeBatchStats(tc.count)
-			if err := repo.SaveStatsBatch(context.Background(), stats); err != nil {
+			if err := repository.SaveStatsBatch(context.Background(), stats); err != nil {
 				t.Fatalf("SaveStatsBatch error: %v", err)
 			}
 
@@ -118,10 +118,10 @@ func TestSaveStatsBatch_Error(t *testing.T) {
 			return pgconn.NewCommandTag(""), &pgconn.PgError{Code: "23505", Message: "duplicate key"}
 		},
 	}
-	repo := newTestStatsRepository(db)
+	repository := newTestStatsRepository(db)
 
 	stats := makeBatchStats(3)
-	err := repo.SaveStatsBatch(context.Background(), stats)
+	err := repository.SaveStatsBatch(context.Background(), stats)
 	if err == nil {
 		t.Fatal("SaveStatsBatch error = nil, want non-nil")
 	}
@@ -144,9 +144,9 @@ func TestSaveStatsBatch_UpsertsLatestSnapshot(t *testing.T) {
 			return pgconn.NewCommandTag("INSERT 0 1"), nil
 		},
 	}
-	repo := newTestStatsRepository(db)
+	repository := newTestStatsRepository(db)
 
-	if err := repo.SaveStatsBatch(context.Background(), makeBatchStats(3)); err != nil {
+	if err := repository.SaveStatsBatch(context.Background(), makeBatchStats(3)); err != nil {
 		t.Fatalf("SaveStatsBatch error: %v", err)
 	}
 
@@ -172,12 +172,12 @@ func TestSaveStatsBatch_DisablesLatestSnapshotOnUndefinedTable(t *testing.T) {
 			return pgconn.NewCommandTag("INSERT 0 1"), nil
 		},
 	}
-	repo := newTestStatsRepository(db)
+	repository := newTestStatsRepository(db)
 
-	if err := repo.SaveStatsBatch(context.Background(), makeBatchStats(3)); err != nil {
+	if err := repository.SaveStatsBatch(context.Background(), makeBatchStats(3)); err != nil {
 		t.Fatalf("first SaveStatsBatch error: %v", err)
 	}
-	if err := repo.SaveStatsBatch(context.Background(), makeBatchStats(3)); err != nil {
+	if err := repository.SaveStatsBatch(context.Background(), makeBatchStats(3)); err != nil {
 		t.Fatalf("second SaveStatsBatch error: %v", err)
 	}
 
@@ -187,7 +187,7 @@ func TestSaveStatsBatch_DisablesLatestSnapshotOnUndefinedTable(t *testing.T) {
 	if latestExecCount != 1 {
 		t.Fatalf("latestExecCount = %d, want 1", latestExecCount)
 	}
-	if repo.isLatestTableAvailable() {
+	if repository.isLatestTableAvailable() {
 		t.Fatal("latestTableAvailable should be false after undefined table error")
 	}
 }
@@ -201,16 +201,16 @@ func TestSaveStatsBatch_ReturnsErrorOnLatestSnapshotFailure(t *testing.T) {
 			return pgconn.NewCommandTag("INSERT 0 1"), nil
 		},
 	}
-	repo := newTestStatsRepository(db)
+	repository := newTestStatsRepository(db)
 
-	err := repo.SaveStatsBatch(context.Background(), makeBatchStats(2))
+	err := repository.SaveStatsBatch(context.Background(), makeBatchStats(2))
 	if err == nil {
 		t.Fatal("SaveStatsBatch error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "failed to save latest stats snapshot batch") {
 		t.Fatalf("error = %q, want contains %q", err.Error(), "failed to save latest stats snapshot batch")
 	}
-	if !repo.isLatestTableAvailable() {
+	if !repository.isLatestTableAvailable() {
 		t.Fatal("latestTableAvailable should remain true on non-undefined-table error")
 	}
 }

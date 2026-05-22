@@ -45,22 +45,22 @@ func main() {
 		},
 		LoadConfig:             config.Load,
 		LoadConfigErrorMessage: "Failed to load youtube producer config",
-		LoggerConfig: func(cfg *config.Config) sharedlogging.Config {
+		LoggerConfig: func(appConfig *config.Config) sharedlogging.Config {
 			return sharedlogging.Config{
-				Dir:        cfg.Logging.Dir,
-				MaxSizeMB:  cfg.Logging.MaxSizeMB,
-				MaxBackups: cfg.Logging.MaxBackups,
-				MaxAgeDays: cfg.Logging.MaxAgeDays,
-				Compress:   cfg.Logging.Compress,
+				Dir:        appConfig.Logging.Dir,
+				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
+				MaxBackups: appConfig.Logging.MaxBackups,
+				MaxAgeDays: appConfig.Logging.MaxAgeDays,
+				Compress:   appConfig.Logging.Compress,
 			}
 		},
 		LoggerFileName: "youtube-producer.log",
-		LoggerLevel: func(cfg *config.Config) string {
-			return cfg.Logging.Level
+		LoggerLevel: func(appConfig *config.Config) string {
+			return appConfig.Logging.Level
 		},
 		StartupMessage: "YouTube Producer starting...",
-		StartupFields: func(cfg *config.Config) []any {
-			return []any{slog.Int("port", cfg.Server.Port)}
+		StartupFields: func(appConfig *config.Config) []any {
+			return []any{slog.Int("port", appConfig.Server.Port)}
 		},
 		BuildTimeout:      time.Minute,
 		BuildRuntime:      runtimeapp.BuildYouTubeProducerRuntime,

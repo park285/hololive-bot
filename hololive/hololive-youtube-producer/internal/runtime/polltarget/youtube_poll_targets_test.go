@@ -22,8 +22,8 @@ func TestResolveYouTubePollTargets_UsesDBAsAuthoritativeSourceEvenWhenCacheSuper
 		loadAlarmChannelIDsFromRepository = original
 	})
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
 		assert.Equal(t, t.Context(), ctx)
 		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
 		return []string{"UCmiko", "UCpekora"}, nil
@@ -38,7 +38,7 @@ func TestResolveYouTubePollTargets_UsesDBAsAuthoritativeSourceEvenWhenCacheSuper
 
 	targets, err := resolveYouTubePollTargets(
 		t.Context(),
-		cacheSvc,
+		cache,
 		&databasemocks.Client{},
 		testYouTubePollTargetsOperationalChannels(),
 		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
@@ -57,8 +57,8 @@ func TestResolveYouTubePollTargets_UsesDBAsAuthoritativeSourceOnSameSizeMismatch
 		loadAlarmChannelIDsFromRepository = original
 	})
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
 		assert.Equal(t, t.Context(), ctx)
 		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
 		return []string{"UCpekora"}, nil
@@ -73,7 +73,7 @@ func TestResolveYouTubePollTargets_UsesDBAsAuthoritativeSourceOnSameSizeMismatch
 
 	targets, err := resolveYouTubePollTargets(
 		t.Context(),
-		cacheSvc,
+		cache,
 		&databasemocks.Client{},
 		testYouTubePollTargetsOperationalChannels(),
 		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
@@ -92,8 +92,8 @@ func TestResolveYouTubePollTargets_LogsStartupSourceDivergence(t *testing.T) {
 		loadAlarmChannelIDsFromRepository = original
 	})
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
 		assert.Equal(t, t.Context(), ctx)
 		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
 		return []string{"UCmiko", "UCpekora"}, nil
@@ -109,7 +109,7 @@ func TestResolveYouTubePollTargets_LogsStartupSourceDivergence(t *testing.T) {
 
 	targets, err := resolveYouTubePollTargets(
 		t.Context(),
-		cacheSvc,
+		cache,
 		&databasemocks.Client{},
 		testYouTubePollTargetsOperationalChannels(),
 		logger,
@@ -132,8 +132,8 @@ func TestResolveYouTubePollTargets_LogsStartupSourceAlignment(t *testing.T) {
 		loadAlarmChannelIDsFromRepository = original
 	})
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
 		assert.Equal(t, t.Context(), ctx)
 		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
 		return []string{"UCmiko"}, nil
@@ -149,7 +149,7 @@ func TestResolveYouTubePollTargets_LogsStartupSourceAlignment(t *testing.T) {
 
 	targets, err := resolveYouTubePollTargets(
 		t.Context(),
-		cacheSvc,
+		cache,
 		&databasemocks.Client{},
 		testYouTubePollTargetsOperationalChannels(),
 		logger,
@@ -170,8 +170,8 @@ func TestResolveYouTubePollTargets_WarnsWhenCacheInspectionFails(t *testing.T) {
 		loadAlarmChannelIDsFromRepository = original
 	})
 
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
 		assert.Equal(t, t.Context(), ctx)
 		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
 		return nil, errors.New("cache read failed")
@@ -187,7 +187,7 @@ func TestResolveYouTubePollTargets_WarnsWhenCacheInspectionFails(t *testing.T) {
 
 	targets, err := resolveYouTubePollTargets(
 		t.Context(),
-		cacheSvc,
+		cache,
 		&databasemocks.Client{},
 		testYouTubePollTargetsOperationalChannels(),
 		logger,

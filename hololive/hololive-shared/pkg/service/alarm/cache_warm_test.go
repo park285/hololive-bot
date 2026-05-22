@@ -24,9 +24,9 @@ func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testin
 	t.Parallel()
 
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient(t)
+	cacheClient := newMemoryCacheClient(t)
 
-	summary, err := WarmSubscriberCacheFromAlarms(ctx, cacheSvc, []*domain.Alarm{
+	summary, err := WarmSubscriberCacheFromAlarms(ctx, cacheClient, []*domain.Alarm{
 		{
 			RoomID:     "room-community",
 			UserID:     "user-community",
@@ -57,51 +57,51 @@ func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{AlarmCount: 3, RoomCount: 3, ChannelCount: 2}, summary)
 
-	roomChannels, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-community"))
+	roomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-community"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"UC_A"}, roomChannels)
 
-	registryRooms, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"room-community", "room-shorts", "room-default"}, registryRooms)
 
-	channelRegistry, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	channelRegistry, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"UC_A", "UC_B"}, channelRegistry)
 
-	communitySubs, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_A", domain.AlarmTypeCommunity))
+	communitySubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_A", domain.AlarmTypeCommunity))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-community"}, communitySubs)
 
-	shortsSubs, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_A", domain.AlarmTypeShorts))
+	shortsSubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_A", domain.AlarmTypeShorts))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-shorts"}, shortsSubs)
 
-	liveSubs, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_A", domain.AlarmTypeLive))
+	liveSubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_A", domain.AlarmTypeLive))
 	require.NoError(t, err)
 	assert.Empty(t, liveSubs)
 
-	defaultLiveSubs, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_B", domain.AlarmTypeLive))
+	defaultLiveSubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_B", domain.AlarmTypeLive))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-default"}, defaultLiveSubs)
 
-	defaultCommunitySubs, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_B", domain.AlarmTypeCommunity))
+	defaultCommunitySubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_B", domain.AlarmTypeCommunity))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-default"}, defaultCommunitySubs)
 
-	defaultShortsSubs, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_B", domain.AlarmTypeShorts))
+	defaultShortsSubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_B", domain.AlarmTypeShorts))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-default"}, defaultShortsSubs)
 
-	memberName, err := cacheSvc.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_A")
+	memberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_A")
 	require.NoError(t, err)
 	assert.Equal(t, "Member A", memberName)
 
-	roomName, err := cacheSvc.HGet(ctx, sharedalarmkeys.RoomNamesCacheKey, "room-shorts")
+	roomName, err := cacheClient.HGet(ctx, sharedalarmkeys.RoomNamesCacheKey, "room-shorts")
 	require.NoError(t, err)
 	assert.Equal(t, "Shorts Room", roomName)
 
-	userName, err := cacheSvc.HGet(ctx, sharedalarmkeys.UserNamesCacheKey, "user-default")
+	userName, err := cacheClient.HGet(ctx, sharedalarmkeys.UserNamesCacheKey, "user-default")
 	require.NoError(t, err)
 	assert.Equal(t, "Default User", userName)
 }
@@ -110,21 +110,21 @@ func TestWarmSubscriberCacheFromAlarms_MarksEmptyCacheState(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient(t)
+	cacheClient := newMemoryCacheClient(t)
 
-	summary, err := WarmSubscriberCacheFromAlarms(ctx, cacheSvc, nil)
+	summary, err := WarmSubscriberCacheFromAlarms(ctx, cacheClient, nil)
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{}, summary)
 
-	emptyMarkerExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
+	emptyMarkerExists, err := cacheClient.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
 	require.NoError(t, err)
 	assert.True(t, emptyMarkerExists)
 
-	channelRegistryExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	channelRegistryExists, err := cacheClient.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.False(t, channelRegistryExists)
 
-	versionExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey)
+	versionExists, err := cacheClient.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey)
 	require.NoError(t, err)
 	assert.True(t, versionExists)
 }
@@ -133,10 +133,10 @@ func TestWarmSubscriberCacheFromAlarms_ClearsEmptyCacheMarkerWhenAlarmsExist(t *
 	t.Parallel()
 
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient(t)
-	require.NoError(t, cacheSvc.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
+	cacheClient := newMemoryCacheClient(t)
+	require.NoError(t, cacheClient.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
 
-	_, err := WarmSubscriberCacheFromAlarms(ctx, cacheSvc, []*domain.Alarm{
+	_, err := WarmSubscriberCacheFromAlarms(ctx, cacheClient, []*domain.Alarm{
 		{
 			RoomID:    "room-1",
 			UserID:    "user-1",
@@ -145,11 +145,11 @@ func TestWarmSubscriberCacheFromAlarms_ClearsEmptyCacheMarkerWhenAlarmsExist(t *
 	})
 	require.NoError(t, err)
 
-	emptyMarkerExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
+	emptyMarkerExists, err := cacheClient.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
 	require.NoError(t, err)
 	assert.False(t, emptyMarkerExists)
 
-	versionExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey)
+	versionExists, err := cacheClient.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey)
 	require.NoError(t, err)
 	assert.True(t, versionExists)
 }
@@ -190,7 +190,7 @@ func TestWarmSubscriberCacheFromAlarms_UsesBatchedWrites(t *testing.T) {
 
 func TestWarmSubscriberCacheFromRepository_RemainsAdditiveByContract(t *testing.T) {
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient(t)
+	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
@@ -214,43 +214,43 @@ func TestWarmSubscriberCacheFromRepository_RemainsAdditiveByContract(t *testing.
 		loadMemberNamesFromRepository = originalMemberNameLoader
 	})
 
-	_, err := cacheSvc.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-existing"})
+	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-existing"})
 	require.NoError(t, err)
-	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"), []string{"UC_EXISTING"})
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"), []string{"UC_EXISTING"})
 	require.NoError(t, err)
-	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_EXISTING"})
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_EXISTING"})
 	require.NoError(t, err)
-	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_EXISTING", domain.AlarmTypeLive), []string{"room-existing"})
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_EXISTING", domain.AlarmTypeLive), []string{"room-existing"})
 	require.NoError(t, err)
 
-	summary, err := WarmSubscriberCacheFromRepository(ctx, cacheSvc, &Repository{})
+	summary, err := WarmSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, summary)
 
-	registryRooms, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"room-existing", "room-fresh"}, registryRooms)
 
-	channelRegistry, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	channelRegistry, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"UC_EXISTING", "UC_FRESH"}, channelRegistry)
 
-	existingLiveSubscribers, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_EXISTING", domain.AlarmTypeLive))
+	existingLiveSubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_EXISTING", domain.AlarmTypeLive))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-existing"}, existingLiveSubscribers)
 
-	freshCommunitySubscribers, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_FRESH", domain.AlarmTypeCommunity))
+	freshCommunitySubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_FRESH", domain.AlarmTypeCommunity))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-fresh"}, freshCommunitySubscribers)
 
-	memberName, err := cacheSvc.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_FRESH")
+	memberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_FRESH")
 	require.NoError(t, err)
 	assert.Equal(t, "라덴", memberName)
 }
 
 func TestWarmSubscriberCacheFromRepository_UsesAuthoritativeMemberNames(t *testing.T) {
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient(t)
+	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
@@ -274,10 +274,10 @@ func TestWarmSubscriberCacheFromRepository_UsesAuthoritativeMemberNames(t *testi
 		loadMemberNamesFromRepository = originalMemberNameLoader
 	})
 
-	_, err := WarmSubscriberCacheFromRepository(ctx, cacheSvc, &Repository{})
+	_, err := WarmSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
 	require.NoError(t, err)
 
-	memberName, err := cacheSvc.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_RADEN")
+	memberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_RADEN")
 	require.NoError(t, err)
 	assert.Equal(t, "라덴", memberName)
 }
@@ -305,7 +305,7 @@ func TestWarmSubscriberCacheFromRepository_LoadError(t *testing.T) {
 
 func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorPreservesExistingCache(t *testing.T) {
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient(t)
+	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
@@ -329,29 +329,29 @@ func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorPreservesExisti
 		loadMemberNamesFromRepository = originalMemberNameLoader
 	})
 
-	_, err := cacheSvc.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-existing"})
+	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-existing"})
 	require.NoError(t, err)
-	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"), []string{"UC_EXISTING"})
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"), []string{"UC_EXISTING"})
 	require.NoError(t, err)
-	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_EXISTING"})
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_EXISTING"})
 	require.NoError(t, err)
-	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_EXISTING", domain.AlarmTypeLive), []string{"room-existing"})
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_EXISTING", domain.AlarmTypeLive), []string{"room-existing"})
 	require.NoError(t, err)
-	require.NoError(t, cacheSvc.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_EXISTING", "Existing Member"))
+	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_EXISTING", "Existing Member"))
 
-	_, err = RebuildSubscriberCacheFromRepository(ctx, cacheSvc, &Repository{})
+	_, err = RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "rebuild subscriber cache from repository: load member names")
 
-	registryRooms, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-existing"}, registryRooms)
 
-	existingRoomChannels, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"))
+	existingRoomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"UC_EXISTING"}, existingRoomChannels)
 
-	existingMemberName, err := cacheSvc.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_EXISTING")
+	existingMemberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_EXISTING")
 	require.NoError(t, err)
 	assert.Equal(t, "Existing Member", existingMemberName)
 }
@@ -366,7 +366,7 @@ func TestCompactUniqueStrings_TrimsDedupesAndPreservesOrder(t *testing.T) {
 
 func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing.T) {
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient(t)
+	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
@@ -390,55 +390,55 @@ func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing
 		loadMemberNamesFromRepository = originalMemberNameLoader
 	})
 
-	_, err := cacheSvc.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-stale"})
+	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-stale"})
 	require.NoError(t, err)
-	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-stale"), []string{"UC_STALE"})
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-stale"), []string{"UC_STALE"})
 	require.NoError(t, err)
-	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_STALE"})
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_STALE"})
 	require.NoError(t, err)
-	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_STALE", domain.AlarmTypeLive), []string{"room-stale"})
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_STALE", domain.AlarmTypeLive), []string{"room-stale"})
 	require.NoError(t, err)
-	require.NoError(t, cacheSvc.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_STALE", "Stale Member"))
-	require.NoError(t, cacheSvc.HSet(ctx, sharedalarmkeys.RoomNamesCacheKey, "room-stale", "Stale Room"))
-	require.NoError(t, cacheSvc.HSet(ctx, sharedalarmkeys.UserNamesCacheKey, "user-stale", "Stale User"))
-	require.NoError(t, cacheSvc.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_STALE", domain.AlarmTypeLive), "1", time.Minute))
+	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_STALE", "Stale Member"))
+	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.RoomNamesCacheKey, "room-stale", "Stale Room"))
+	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.UserNamesCacheKey, "user-stale", "Stale User"))
+	require.NoError(t, cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_STALE", domain.AlarmTypeLive), "1", time.Minute))
 
-	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheSvc, &Repository{})
+	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, summary)
 
-	registryRooms, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-fresh"}, registryRooms)
 
-	channelRegistry, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	channelRegistry, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"UC_FRESH"}, channelRegistry)
 
-	staleRoomChannels, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-stale"))
+	staleRoomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-stale"))
 	require.NoError(t, err)
 	assert.Empty(t, staleRoomChannels)
 
-	staleLiveSubscribers, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_STALE", domain.AlarmTypeLive))
+	staleLiveSubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_STALE", domain.AlarmTypeLive))
 	require.NoError(t, err)
 	assert.Empty(t, staleLiveSubscribers)
 
-	staleEmptyKnown, err := cacheSvc.Exists(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_STALE", domain.AlarmTypeLive))
+	staleEmptyKnown, err := cacheClient.Exists(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_STALE", domain.AlarmTypeLive))
 	require.NoError(t, err)
 	assert.False(t, staleEmptyKnown)
 
-	staleMemberName, err := cacheSvc.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_STALE")
+	staleMemberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_STALE")
 	require.NoError(t, err)
 	assert.Empty(t, staleMemberName)
 
-	freshCommunitySubscribers, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_FRESH", domain.AlarmTypeCommunity))
+	freshCommunitySubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_FRESH", domain.AlarmTypeCommunity))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-fresh"}, freshCommunitySubscribers)
 }
 
 func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesDispatchQueue(t *testing.T) {
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient(t)
+	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
@@ -462,29 +462,29 @@ func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesD
 		loadMemberNamesFromRepository = originalMemberNameLoader
 	})
 
-	_, err := cacheSvc.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-orphan"), []string{"UC_ORPHAN"})
+	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-orphan"), []string{"UC_ORPHAN"})
 	require.NoError(t, err)
-	require.NoError(t, cacheSvc.Set(ctx, contractsalarm.DispatchQueueKey, "queue-marker", 0))
-	require.NoError(t, cacheSvc.Set(ctx, "alarm:chzzk_channels", "mapping-marker", 0))
-	require.NoError(t, cacheSvc.Set(ctx, "alarm:next_stream:UC_KEEP", "stream-marker", 0))
+	require.NoError(t, cacheClient.Set(ctx, contractsalarm.DispatchQueueKey, "queue-marker", 0))
+	require.NoError(t, cacheClient.Set(ctx, "alarm:chzzk_channels", "mapping-marker", 0))
+	require.NoError(t, cacheClient.Set(ctx, "alarm:next_stream:UC_KEEP", "stream-marker", 0))
 
-	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheSvc, &Repository{})
+	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, summary)
 
-	orphanRoomChannels, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-orphan"))
+	orphanRoomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-orphan"))
 	require.NoError(t, err)
 	assert.Empty(t, orphanRoomChannels)
 
-	dispatchQueueExists, err := cacheSvc.Exists(ctx, contractsalarm.DispatchQueueKey)
+	dispatchQueueExists, err := cacheClient.Exists(ctx, contractsalarm.DispatchQueueKey)
 	require.NoError(t, err)
 	assert.True(t, dispatchQueueExists)
 
-	chzzkMapExists, err := cacheSvc.Exists(ctx, "alarm:chzzk_channels")
+	chzzkMapExists, err := cacheClient.Exists(ctx, "alarm:chzzk_channels")
 	require.NoError(t, err)
 	assert.True(t, chzzkMapExists)
 
-	nextStreamExists, err := cacheSvc.Exists(ctx, "alarm:next_stream:UC_KEEP")
+	nextStreamExists, err := cacheClient.Exists(ctx, "alarm:next_stream:UC_KEEP")
 	require.NoError(t, err)
 	assert.True(t, nextStreamExists)
 }

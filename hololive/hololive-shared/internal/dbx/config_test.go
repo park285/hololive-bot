@@ -29,12 +29,12 @@ import (
 func TestSafeDSN(t *testing.T) {
 	tests := []struct {
 		name     string
-		cfg      Config
+		config      Config
 		wantSafe string
 	}{
 		{
 			name: "TCP with password masked",
-			cfg: Config{
+			config: Config{
 				Host:     "localhost",
 				Port:     5432,
 				User:     "admin",
@@ -46,7 +46,7 @@ func TestSafeDSN(t *testing.T) {
 		},
 		{
 			name: "UDS with password masked",
-			cfg: Config{
+			config: Config{
 				SocketPath: "/var/run/postgresql",
 				User:       "admin",
 				Password:   "x",
@@ -57,7 +57,7 @@ func TestSafeDSN(t *testing.T) {
 		},
 		{
 			name: "empty password stays empty",
-			cfg: Config{
+			config: Config{
 				Host:     "localhost",
 				Port:     5432,
 				User:     "admin",
@@ -69,7 +69,7 @@ func TestSafeDSN(t *testing.T) {
 		},
 		{
 			name: "password not in SafeDSN output",
-			cfg: Config{
+			config: Config{
 				Host:     "db.prod",
 				Port:     5432,
 				User:     "app",
@@ -82,21 +82,21 @@ func TestSafeDSN(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			safe := tt.cfg.SafeDSN()
+			safe := tt.config.SafeDSN()
 			if safe != tt.wantSafe {
 				t.Errorf("SafeDSN() = %q, want %q", safe, tt.wantSafe)
 			}
 			// DSN은 원본 비밀번호 유지 확인
-			if tt.cfg.Password != "" {
-				dsn := tt.cfg.DSN()
+			if tt.config.Password != "" {
+				dsn := tt.config.DSN()
 				if dsn == safe {
 					t.Error("DSN() should differ from SafeDSN() when password is set")
 				}
-				if !strings.Contains(dsn, tt.cfg.Password) {
+				if !strings.Contains(dsn, tt.config.Password) {
 					t.Error("DSN() should contain the original password")
 				}
-				if strings.Contains(safe, tt.cfg.Password) {
-					t.Errorf("SafeDSN() must not contain the original password %q", tt.cfg.Password)
+				if strings.Contains(safe, tt.config.Password) {
+					t.Errorf("SafeDSN() must not contain the original password %q", tt.config.Password)
 				}
 			}
 		})
@@ -187,22 +187,22 @@ func TestDefaultPoolConfig(t *testing.T) {
 				t.Setenv(k, v)
 			}
 
-			cfg := DefaultPoolConfig()
+			config := DefaultPoolConfig()
 
-			if cfg.MinConns != tt.wantMin {
-				t.Errorf("MinConns = %d, want %d", cfg.MinConns, tt.wantMin)
+			if config.MinConns != tt.wantMin {
+				t.Errorf("MinConns = %d, want %d", config.MinConns, tt.wantMin)
 			}
-			if cfg.MaxConns != tt.wantMax {
-				t.Errorf("MaxConns = %d, want %d", cfg.MaxConns, tt.wantMax)
+			if config.MaxConns != tt.wantMax {
+				t.Errorf("MaxConns = %d, want %d", config.MaxConns, tt.wantMax)
 			}
-			if cfg.MaxIdleConns != tt.wantMaxIdle {
-				t.Errorf("MaxIdleConns = %d, want %d", cfg.MaxIdleConns, tt.wantMaxIdle)
+			if config.MaxIdleConns != tt.wantMaxIdle {
+				t.Errorf("MaxIdleConns = %d, want %d", config.MaxIdleConns, tt.wantMaxIdle)
 			}
-			if cfg.ConnMaxLifetime != time.Hour {
-				t.Errorf("ConnMaxLifetime = %v, want %v", cfg.ConnMaxLifetime, time.Hour)
+			if config.ConnMaxLifetime != time.Hour {
+				t.Errorf("ConnMaxLifetime = %v, want %v", config.ConnMaxLifetime, time.Hour)
 			}
-			if cfg.ConnMaxIdleTime != 30*time.Minute {
-				t.Errorf("ConnMaxIdleTime = %v, want %v", cfg.ConnMaxIdleTime, 30*time.Minute)
+			if config.ConnMaxIdleTime != 30*time.Minute {
+				t.Errorf("ConnMaxIdleTime = %v, want %v", config.ConnMaxIdleTime, 30*time.Minute)
 			}
 		})
 	}

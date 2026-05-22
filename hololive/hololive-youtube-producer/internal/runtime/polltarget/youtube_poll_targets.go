@@ -52,8 +52,8 @@ func resolveYouTubePollTargets(
 }
 
 func loadAlarmChannelIDs(ctx context.Context, postgresService database.Client) ([]string, error) {
-	repo := sharedalarm.NewRepository(postgresService, nil)
-	alarmChannelIDs, err := repo.GetAllChannelIDs(ctx)
+	repository := sharedalarm.NewRepository(postgresService, nil)
+	alarmChannelIDs, err := repository.GetAllChannelIDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve youtube poll targets: get alarm channel ids: %w", err)
 	}

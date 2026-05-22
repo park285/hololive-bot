@@ -487,7 +487,7 @@ func TestIsTimeoutError(t *testing.T) {
 }
 
 func TestShouldUseFallbackTimeout(t *testing.T) {
-	svc := &Service{
+	service := &Service{
 		requester: &APIClient{
 			httpClient:  &http.Client{},
 			baseURL:     "https://holodex.net/api/v2",
@@ -541,7 +541,7 @@ func TestShouldUseFallbackTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := svc.shouldUseFallback(tt.ctx, tt.err)
+			got := service.shouldUseFallback(tt.ctx, tt.err)
 			if got != tt.expected {
 				t.Errorf("shouldUseFallback(%v) = %v, want %v", tt.err, got, tt.expected)
 			}
@@ -550,7 +550,7 @@ func TestShouldUseFallbackTimeout(t *testing.T) {
 }
 
 func TestShouldUseFallbackCallerContextExpired(t *testing.T) {
-	svc := &Service{
+	service := &Service{
 		requester: &APIClient{
 			httpClient:  &http.Client{},
 			baseURL:     "https://holodex.net/api/v2",
@@ -567,11 +567,11 @@ func TestShouldUseFallbackCallerContextExpired(t *testing.T) {
 	cancel()
 
 	// timeout 에러지만, 호출자 ctx가 만료되었으므로 폴백하면 안 됨
-	if svc.shouldUseFallback(canceledCtx, context.DeadlineExceeded) {
+	if service.shouldUseFallback(canceledCtx, context.DeadlineExceeded) {
 		t.Error("호출자 context 만료 시 폴백하면 안 됨")
 	}
 
-	if svc.shouldUseFallback(canceledCtx, &mockTimeoutError{msg: "timeout", timeout: true}) {
+	if service.shouldUseFallback(canceledCtx, &mockTimeoutError{msg: "timeout", timeout: true}) {
 		t.Error("호출자 context 만료 시 net timeout도 폴백하면 안 됨")
 	}
 }

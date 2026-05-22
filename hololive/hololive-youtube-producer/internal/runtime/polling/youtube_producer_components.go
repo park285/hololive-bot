@@ -13,7 +13,7 @@ import (
 )
 
 func buildYouTubeProducerComponents(
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	jobClaimer poller.JobClaimer,
 	postgresService database.Client,
 	notificationChannelIDs []string,
@@ -26,14 +26,14 @@ func buildYouTubeProducerComponents(
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
 	pollerRegistrations := buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		postgresService,
-		scraperCfg,
+		scraperConfig,
 		scraperClient,
 		liveStatusProvider,
 		routeDecider,
 		notificationChannelIDs,
 		statsChannelIDs,
 	)
-	if resolverRegistration := publishedat.BuildRegistration(publishedAtResolver, scraperCfg, logger); resolverRegistration != nil {
+	if resolverRegistration := publishedat.BuildRegistration(publishedAtResolver, scraperConfig, logger); resolverRegistration != nil {
 		pollerRegistrations = append(pollerRegistrations, *resolverRegistration)
 	}
 	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
@@ -45,14 +45,14 @@ func buildYouTubeProducerComponents(
 		return nil, nil, err
 	}
 
-	schedulerCfg := scraperCfg.SchedulerOrDefault()
+	schedulerConfig := scraperConfig.SchedulerOrDefault()
 	scraperScheduler := providers.ProvideScraperScheduler(
 		nil,
 		logger,
 		providers.WithChannelPollerRegistrations(pollerRegistrations),
-		providers.WithSchedulerWorkerCount(scraperCfg.WorkerCountOrDefault()),
-		providers.WithSchedulerPollTimeout(schedulerCfg.PollTimeout),
-		providers.WithSchedulerErrorBackoff(schedulerCfg.ErrorBackoffMin, schedulerCfg.ErrorBackoffMax),
+		providers.WithSchedulerWorkerCount(scraperConfig.WorkerCountOrDefault()),
+		providers.WithSchedulerPollTimeout(schedulerConfig.PollTimeout),
+		providers.WithSchedulerErrorBackoff(schedulerConfig.ErrorBackoffMin, schedulerConfig.ErrorBackoffMax),
 		providers.WithSchedulerJobClaimer(jobClaimer),
 	)
 
@@ -60,55 +60,55 @@ func buildYouTubeProducerComponents(
 }
 
 func buildSharedYouTubeProducerClient(
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	cacheService cache.Client,
 	sharedRL *scraper.RateLimiter,
 ) *scraper.Client {
 	proxyConfig := scraper.ProxyConfig{
-		Enabled: scraperCfg.ProxyEnabled,
-		URL:     scraperCfg.ProxyURL,
+		Enabled: scraperConfig.ProxyEnabled,
+		URL:     scraperConfig.ProxyURL,
 	}
-	snapshotCfg := scraperCfg.SnapshotOrDefault()
-	channelHealthCfg := scraperCfg.ChannelHealthOrDefault()
-	browserCfg := scraperCfg.BrowserDiagnosticOrDefault()
+	snapshotConfig := scraperConfig.SnapshotOrDefault()
+	channelHealthConfig := scraperConfig.ChannelHealthOrDefault()
+	browserConfig := scraperConfig.BrowserDiagnosticOrDefault()
 
 	opts := []scraper.ClientOption{
 		scraper.WithProxy(proxyConfig),
 		scraper.WithRateLimiter(sharedRL),
 		scraper.WithStateStore(cacheService),
-		scraper.WithFetcherEngine(scraper.FetcherEngine(scraperCfg.FetcherEngine)),
+		scraper.WithFetcherEngine(scraper.FetcherEngine(scraperConfig.FetcherEngine)),
 		scraper.WithSnapshotPolicy(scraper.SnapshotPolicy{
-			Enabled:      snapshotCfg.Enabled,
-			MaxBodyBytes: snapshotCfg.MaxBodyBytes,
-			MinInterval:  snapshotCfg.MinInterval,
+			Enabled:      snapshotConfig.Enabled,
+			MaxBodyBytes: snapshotConfig.MaxBodyBytes,
+			MinInterval:  snapshotConfig.MinInterval,
 			AllowedReasons: map[scraper.FailureReason]bool{
 				scraper.FailureReasonParserDrift:   true,
 				scraper.FailureReasonEmptyResponse: true,
 			},
 		}),
 	}
-	if channelHealthCfg.Enabled {
+	if channelHealthConfig.Enabled {
 		opts = append(opts, scraper.WithChannelHealthPolicy(scraper.ChannelHealthPolicy{
-			Enforce:           channelHealthCfg.Enforce,
-			TTL:               channelHealthCfg.TTL,
-			ParserDriftBase:   channelHealthCfg.ParserDriftBase,
-			ParserDriftMax:    channelHealthCfg.ParserDriftMax,
-			TransportBase:     channelHealthCfg.TransportBase,
-			TransportMax:      channelHealthCfg.TransportMax,
-			TimeoutBase:       channelHealthCfg.TimeoutBase,
-			TimeoutMax:        channelHealthCfg.TimeoutMax,
-			HTTPStatusBase:    channelHealthCfg.HTTPStatusBase,
-			HTTPStatusMax:     channelHealthCfg.HTTPStatusMax,
-			SuccessDecaySteps: channelHealthCfg.SuccessDecaySteps,
+			Enforce:           channelHealthConfig.Enforce,
+			TTL:               channelHealthConfig.TTL,
+			ParserDriftBase:   channelHealthConfig.ParserDriftBase,
+			ParserDriftMax:    channelHealthConfig.ParserDriftMax,
+			TransportBase:     channelHealthConfig.TransportBase,
+			TransportMax:      channelHealthConfig.TransportMax,
+			TimeoutBase:       channelHealthConfig.TimeoutBase,
+			TimeoutMax:        channelHealthConfig.TimeoutMax,
+			HTTPStatusBase:    channelHealthConfig.HTTPStatusBase,
+			HTTPStatusMax:     channelHealthConfig.HTTPStatusMax,
+			SuccessDecaySteps: channelHealthConfig.SuccessDecaySteps,
 		}))
 	} else {
 		opts = append(opts, scraper.WithChannelHealthDisabled())
 	}
-	if snapshotCfg.Enabled {
-		opts = append(opts, scraper.WithSnapshotSink(scraper.NewFileSnapshotSink(snapshotCfg.Dir)))
+	if snapshotConfig.Enabled {
+		opts = append(opts, scraper.WithSnapshotSink(scraper.NewFileSnapshotSink(snapshotConfig.Dir)))
 	}
-	if browserCfg.Enabled && browserCfg.Endpoint != "" {
-		opts = append(opts, scraper.WithBrowserSnapshotFetcher(scraper.NewBrowserSnapshotFetcher(browserCfg.Endpoint, browserCfg.Timeout)))
+	if browserConfig.Enabled && browserConfig.Endpoint != "" {
+		opts = append(opts, scraper.WithBrowserSnapshotFetcher(scraper.NewBrowserSnapshotFetcher(browserConfig.Endpoint, browserConfig.Timeout)))
 	}
 
 	return scraper.NewClient(opts...)

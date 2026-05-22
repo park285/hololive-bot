@@ -22,23 +22,23 @@ const (
 var SubscriberMilestones = milestonescheduler.SubscriberMilestones
 
 func NewScheduler(
-	youtubeSvc Service,
-	holodexSvc *holodex.Service,
-	cacheSvc cache.Client,
-	statsRepo ytstats.StatsSchedulerRepository,
+	youtubeService Service,
+	holodexService *holodex.Service,
+	cacheClient cache.Client,
+	statsRepository ytstats.StatsSchedulerRepository,
 	membersData domain.MemberDataProvider,
-	alarmSvc domain.AlarmDispatchState,
+	alarmService domain.AlarmDispatchState,
 	irisClient iris.Sender,
 	formatter MilestoneMessageFormatter,
 	logger *slog.Logger,
 ) Scheduler {
 	return milestonescheduler.NewScheduler(
-		youtubeSvc,
-		holodexSvc,
-		cacheSvc,
-		statsRepo,
+		youtubeService,
+		holodexService,
+		cacheClient,
+		statsRepository,
 		membersData,
-		alarmSvc,
+		alarmService,
 		irisClient,
 		formatter,
 		logger,

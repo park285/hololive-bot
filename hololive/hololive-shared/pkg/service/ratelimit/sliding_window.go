@@ -77,15 +77,15 @@ type Decision struct {
 }
 
 type SlidingWindowLimiter struct {
-	cacheSvc   cache.Client
+	cacheClient   cache.Client
 	keyPrefix  string
 	logger     *slog.Logger
 	instanceID string
 	sequence   atomic.Uint64
 }
 
-func NewSlidingWindowLimiter(cacheSvc cache.Client, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
-	if cacheSvc == nil {
+func NewSlidingWindowLimiter(cacheClient cache.Client, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
+	if cacheClient == nil {
 		return nil, fmt.Errorf("new sliding window limiter: cache service must not be nil")
 	}
 	if keyPrefix == "" {
@@ -95,7 +95,7 @@ func NewSlidingWindowLimiter(cacheSvc cache.Client, keyPrefix string, logger *sl
 		logger = slog.Default()
 	}
 	return &SlidingWindowLimiter{
-		cacheSvc:   cacheSvc,
+		cacheClient:   cacheClient,
 		keyPrefix:  keyPrefix,
 		logger:     logger,
 		instanceID: resolveInstanceID(),
@@ -162,7 +162,7 @@ func (l *SlidingWindowLimiter) allowByScript(
 	member string,
 	ttlSeconds int64,
 ) (bool, int, time.Duration, error) {
-	cmd := l.cacheSvc.B().
+	cmd := l.cacheClient.B().
 		Eval().
 		Script(allowScript).
 		Numkeys(1).
@@ -175,7 +175,7 @@ func (l *SlidingWindowLimiter) allowByScript(
 			strconv.FormatInt(ttlSeconds, 10),
 		).
 		Build()
-	results := l.cacheSvc.DoMulti(ctx, cmd)
+	results := l.cacheClient.DoMulti(ctx, cmd)
 	if len(results) != 1 {
 		return false, 0, 0, fmt.Errorf("eval allow script: unexpected result count: %d", len(results))
 	}

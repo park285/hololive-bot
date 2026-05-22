@@ -107,12 +107,12 @@ func (m *mockAlarmCRUD) WarmCacheFromDB(ctx context.Context) error {
 }
 
 // newTestHandler: 테스트용 핸들러와 gin.Engine을 생성합니다.
-func newTestHandler(t *testing.T, mock *mockAlarmCRUD) (*APIHandler, *gin.Engine) {
+func newTestHandler(t *testing.T, mock *mockAlarmCRUD) (*Handler, *gin.Engine) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := NewAPIHandler(mock, logger)
+	h := NewHandler(mock, logger)
 
 	r := gin.New()
 	h.RegisterRoutes(&r.RouterGroup)

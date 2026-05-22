@@ -35,8 +35,8 @@ import (
 )
 
 func initAlarmDependencies(
-	chzzkCfg config.ChzzkConfig,
-	twitchCfg config.TwitchConfig,
+	chzzkConfig config.ChzzkConfig,
+	twitchConfig config.TwitchConfig,
 	advanceMinutes []int,
 	scraperProxyEnabled bool,
 	cacheService cache.Client,
@@ -45,7 +45,7 @@ func initAlarmDependencies(
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*appbootstrap.AlarmDependencies, error) {
-	deps, err := appbootstrap.InitAlarmDependencies(chzzkCfg, twitchCfg, advanceMinutes, scraperProxyEnabled, cacheService, holodexService, memberServiceAdapter, alarmRepository, logger)
+	deps, err := appbootstrap.InitAlarmDependencies(chzzkConfig, twitchConfig, advanceMinutes, scraperProxyEnabled, cacheService, holodexService, memberServiceAdapter, alarmRepository, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -54,14 +54,14 @@ func initAlarmDependencies(
 
 func initAlarmModeComponents(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	holodexService *holodex.Service,
 	memberServiceAdapter member.DataProvider,
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*appbootstrap.AlarmModeComponents, error) {
-	components, err := appbootstrap.InitAlarmModeComponents(ctx, cfg, infra, holodexService, memberServiceAdapter, alarmRepository, logger)
+	components, err := appbootstrap.InitAlarmModeComponents(ctx, appConfig, infra, holodexService, memberServiceAdapter, alarmRepository, logger)
 	if err != nil {
 		return nil, err
 	}

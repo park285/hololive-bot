@@ -17,7 +17,7 @@ func runTargetBaselineCommand(ctx commandContext, args []string) error {
 		return err
 	}
 
-	cfg, err := config.Load()
+	appConfig, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load community/shorts baseline config: %w", err)
 	}
@@ -26,7 +26,7 @@ func runTargetBaselineCommand(ctx commandContext, args []string) error {
 	reqCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	baseline, err := communityshorts.CollectTargetBaseline(reqCtx, cfg, logger)
+	baseline, err := communityshorts.CollectTargetBaseline(reqCtx, appConfig, logger)
 	if err != nil {
 		return fmt.Errorf("failed to collect community/shorts target baseline: %w", err)
 	}

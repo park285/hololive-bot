@@ -91,10 +91,10 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUp
 	t.Setenv("SETTINGS_DIR", t.TempDir())
 
 	logger := slog.New(slog.DiscardHandler)
-	svc := BuildSettingsService([]int{30, 15, 5, 1}, false, logger)
-	current := svc.Get()
+	service := BuildSettingsService([]int{30, 15, 5, 1}, false, logger)
+	current := service.Get()
 	current.ScraperProxyEnabled = true
-	if err := svc.Update(current); err != nil {
+	if err := service.Update(current); err != nil {
 		t.Fatalf("update settings: %v", err)
 	}
 

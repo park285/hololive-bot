@@ -18,14 +18,14 @@ import (
 
 func buildYouTubeProducerChannelPollerRegistrations(
 	postgres database.Client,
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	_ *scraper.RateLimiter,
 	_ cache.Client,
 	_ poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
-	poll := scraperCfg.PollOrDefault()
+	poll := scraperConfig.PollOrDefault()
 	pollers := testPollerSet{
 		videos:    refreshTestPoller{name: "videos"},
 		shorts:    refreshTestPoller{name: "shorts"},
@@ -33,7 +33,7 @@ func buildYouTubeProducerChannelPollerRegistrations(
 		stats:     refreshTestPoller{name: "channel_stats"},
 		live:      refreshTestPoller{name: "live"},
 	}
-	if scraperCfg.PollTiering.Enabled {
+	if scraperConfig.PollTiering.Enabled {
 		targets := Targets{NotificationChannelIDs: notificationChannelIDs, StatsChannelIDs: statsChannelIDs}
 		if postgres != nil {
 			if tiered, err := ClassifyByActivity(context.Background(), postgres.GetGormDB(), targets, time.Now()); err == nil {

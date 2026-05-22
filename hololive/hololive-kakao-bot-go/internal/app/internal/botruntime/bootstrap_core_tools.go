@@ -35,8 +35,8 @@ import (
 )
 
 // InitializeWarmMemberCache - cmd/tools/warm_member_cache 전용.
-func InitializeWarmMemberCache(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*member.Cache, func(), error) {
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+func InitializeWarmMemberCache(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*member.Cache, func(), error) {
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, appConfig.Postgres, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}
@@ -44,7 +44,7 @@ func InitializeWarmMemberCache(ctx context.Context, cfg *config.Config, logger *
 	postgresService := databaseResources.Service
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
 
-	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, cfg.Valkey, logger)
+	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, appConfig.Valkey, logger)
 	if err != nil {
 		cleanupDB()
 		return nil, nil, fmt.Errorf("provide cache resources: %w", err)
@@ -69,8 +69,8 @@ func InitializeWarmMemberCache(ctx context.Context, cfg *config.Config, logger *
 }
 
 // InitializeDBIntegrationRuntime - cmd/test_db_integration 전용.
-func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresConfig, logger *slog.Logger) (*DBIntegrationRuntime, func(), error) {
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, pgCfg, logger)
+func InitializeDBIntegrationRuntime(ctx context.Context, postgresConfig config.PostgresConfig, logger *slog.Logger) (*DBIntegrationRuntime, func(), error) {
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, postgresConfig, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}

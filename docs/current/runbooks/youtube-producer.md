@@ -183,7 +183,31 @@ Mitigation:
 Rollback:
 - Roll back the previous `youtube-producer` image/config if the startup-owned photo sync path regresses.
 
-### 4. Outbox backlog grows
+### 4. Valkey 일시 단절 후 active-active fail-closed가 풀리지 않음
+
+Symptoms:
+- 컨테이너 부팅 직후 일회성 `dial tcp <main-valkey>:6379: connect: connection refused` 이후 producer 로그에 `active_active_paused reason=valkey_unavailable_active_active_fail_closed`가 지속.
+- `/ready` JSON의 `valkey_available=false`, `scraping_paused=true`가 유지.
+- `youtube_notification_outbox.max(created_at)`이 분 단위가 아닌 시간 단위로 정체. alarm-worker `alarm_type` 분포가 SHORTS만 잔존하고 LIVE/COMMUNITY_POST/NEW_VIDEO 등은 사라짐.
+
+Diagnosis:
+```bash
+ss -tlnp 2>/dev/null | grep ':6379'
+docker exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock PING
+ssh -F /dev/null -i ./KR.key -o IdentitiesOnly=yes -o HostKeyAlias=100.100.1.7 ubuntu@kapu-iris-osaka-1 \
+  'docker ps --format "{{.Names}}\t{{.Status}}" | grep -iE "youtube|producer"'
+SINCE=15m TAIL=600 PATTERN='active_active_paused|active_active_resumed|valkey' \
+  ./scripts/logs/osaka-logs.sh youtube-producer | tail -80
+```
+
+Mitigation:
+- 백그라운드 recovery loop가 `__readiness_probe__`를 사용해 5초 base interval로 재시도하므로, 메인 valkey가 살아나면 자동으로 `active_active_resumed` 로그가 등장하고 `MarkLeaseAvailable()`이 호출됩니다. 일반적으로 사람 개입 없이 회복됩니다.
+- 회복이 5분 이상 걸리면 메인 valkey-cache의 listen/auth와 Tailscale ACL, 호스트 방화벽을 먼저 확인. 그래도 막히면 producer-a → 30초 대기 → producer-b 순서로 재시작.
+
+Rollback:
+- 기존 active-active rollback 절차(`./scripts/deploy/osaka-active-active-rollback.sh`)를 그대로 사용. recovery loop는 readiness 보조 경로이므로 별도 롤백 대상이 아닙니다.
+
+### 5. Outbox backlog grows
 
 Symptoms:
 - Producer persists events but downstream delivery is delayed.

@@ -32,9 +32,9 @@ type cachePayload struct {
 
 func TestNewTestCacheServiceWithMini(t *testing.T) {
 	ctx := context.Background()
-	svc, mini := NewTestCacheServiceWithMini(t, ctx)
+	service, mini := NewTestCacheServiceWithMini(t, ctx)
 
-	if svc == nil {
+	if service == nil {
 		t.Fatal("service is nil")
 	}
 	if mini == nil {
@@ -42,12 +42,12 @@ func TestNewTestCacheServiceWithMini(t *testing.T) {
 	}
 
 	in := cachePayload{Value: "ok"}
-	if err := svc.Set(ctx, "test:key", in, time.Minute); err != nil {
+	if err := service.Set(ctx, "test:key", in, time.Minute); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 
 	var out cachePayload
-	if err := svc.Get(ctx, "test:key", &out); err != nil {
+	if err := service.Get(ctx, "test:key", &out); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if out.Value != in.Value {
@@ -57,8 +57,8 @@ func TestNewTestCacheServiceWithMini(t *testing.T) {
 
 func TestNewTestCacheService(t *testing.T) {
 	ctx := context.Background()
-	svc := NewTestCacheService(t, ctx)
-	if svc == nil {
+	service := NewTestCacheService(t, ctx)
+	if service == nil {
 		t.Fatal("service is nil")
 	}
 }

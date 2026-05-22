@@ -56,7 +56,7 @@ type eventLinkCheck struct {
 }
 
 // NewLinkChecker는 LinkChecker를 생성한다.
-func NewLinkChecker(client *http.Client, cfg LinkCheckerConfig, logger *slog.Logger) *LinkChecker {
+func NewLinkChecker(client *http.Client, config LinkCheckerConfig, logger *slog.Logger) *LinkChecker {
 	if client == nil {
 		client = httputil.NewExternalAPIClient(defaultLinkCheckerHTTPClient)
 	}
@@ -64,7 +64,7 @@ func NewLinkChecker(client *http.Client, cfg LinkCheckerConfig, logger *slog.Log
 		logger = slog.Default()
 	}
 
-	normalized := cfg
+	normalized := config
 	defaults := DefaultLinkCheckerConfig()
 	if normalized.Timeout <= 0 {
 		normalized.Timeout = defaults.Timeout

@@ -37,8 +37,8 @@ func TestSettingsService_LoadDefaultAndPersist(t *testing.T) {
 		AlarmAdvanceMinutes: 5,
 		ScraperProxyEnabled: true,
 	}
-	svc := NewSettingsService(filePath, defaults, logger)
-	got := svc.Get()
+	service := NewSettingsService(filePath, defaults, logger)
+	got := service.Get()
 	if got.AlarmAdvanceMinutes != 5 {
 		t.Fatalf("expected default 5, got %d", got.AlarmAdvanceMinutes)
 	}
@@ -47,7 +47,7 @@ func TestSettingsService_LoadDefaultAndPersist(t *testing.T) {
 	}
 
 	updated := Settings{AlarmAdvanceMinutes: 12, ScraperProxyEnabled: false}
-	if err := svc.Update(updated); err != nil {
+	if err := service.Update(updated); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
 
@@ -71,10 +71,10 @@ func TestSettingsService_PreservesTargetMinutesOnReload(t *testing.T) {
 		ScraperProxyEnabled: false,
 		TargetMinutes:       []int{30, 15, 5, 1},
 	}
-	svc := NewSettingsService(filePath, defaults, logger)
-	current := svc.Get()
+	service := NewSettingsService(filePath, defaults, logger)
+	current := service.Get()
 	current.ScraperProxyEnabled = true
-	if err := svc.Update(current); err != nil {
+	if err := service.Update(current); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
 

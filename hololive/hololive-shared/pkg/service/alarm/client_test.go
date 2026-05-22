@@ -292,7 +292,7 @@ func TestClient_ListRoomAlarmsView_RequiresViewEndpoint(t *testing.T) {
 	}
 }
 
-func TestClient_ListRoomAlarmsView_WithAPIHandler(t *testing.T) {
+func TestClient_ListRoomAlarmsView_WithHandler(t *testing.T) {
 	now := time.Now()
 	mock := &mockAlarmCRUD{
 		listRoomAlarmsViewFn: func(_ context.Context, roomID string) ([]domain.AlarmListView, error) {

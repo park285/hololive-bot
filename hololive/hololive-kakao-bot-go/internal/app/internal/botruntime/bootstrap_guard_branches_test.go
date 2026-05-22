@@ -135,7 +135,7 @@ func TestProvideTriggerHandler_ReturnsHandler(t *testing.T) {
 func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "token")
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Iris: config.IrisConfig{WebhookToken: "token"},
 		Webhook: config.WebhookConfig{
 			WorkerCount:    1,
@@ -146,7 +146,7 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 	}
 
 	handler, err := appbootstrap.BuildBotWebhookHandler(
-		cfg,
+		appConfig,
 		stubWebhookMessageHandler{},
 		botWebhookRuntimeDependencies{Cache: &cache.Service{}},
 		testBootstrapGuardLogger(),
@@ -156,11 +156,11 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 
 	options := reflect.ValueOf(handler).Elem().FieldByName("options")
 	require.True(t, options.IsValid(), "reflect: field 'options' not found on Handler")
-	assert.Equal(t, int64(cfg.Webhook.WorkerCount), options.FieldByName("WorkerCount").Int())
-	assert.Equal(t, int64(cfg.Webhook.QueueSize), options.FieldByName("QueueSize").Int())
-	assert.Equal(t, int64(cfg.Webhook.EnqueueTimeout), options.FieldByName("EnqueueTimeout").Int())
-	assert.Equal(t, int64(cfg.Webhook.HandlerTimeout), options.FieldByName("HandlerTimeout").Int())
-	assert.Equal(t, cfg.Webhook.RequireHTTP2, options.FieldByName("RequireHTTP2").Bool())
+	assert.Equal(t, int64(appConfig.Webhook.WorkerCount), options.FieldByName("WorkerCount").Int())
+	assert.Equal(t, int64(appConfig.Webhook.QueueSize), options.FieldByName("QueueSize").Int())
+	assert.Equal(t, int64(appConfig.Webhook.EnqueueTimeout), options.FieldByName("EnqueueTimeout").Int())
+	assert.Equal(t, int64(appConfig.Webhook.HandlerTimeout), options.FieldByName("HandlerTimeout").Int())
+	assert.Equal(t, appConfig.Webhook.RequireHTTP2, options.FieldByName("RequireHTTP2").Bool())
 
 	dedupField := reflect.ValueOf(handler).Elem().FieldByName("dedup")
 	require.True(t, dedupField.IsValid(), "reflect: field 'dedup' not found on Handler")
@@ -198,18 +198,18 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	t.Parallel()
 
 	logger := testBootstrapGuardLogger()
-	cacheSvc := &cache.Service{}
-	postgresSvc := &database.PostgresService{}
-	memberRepo := &member.Repository{}
+	cache := &cache.Service{}
+	postgresService := &database.PostgresService{}
+	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	memberData := &stubMemberDataProvider{}
 	chzzkClient := &chzzk.Client{}
 	twitchClient := &twitch.Client{}
-	matcherSvc := &matcher.MemberMatcher{}
+	matcherService := &matcher.Matcher{}
 	ytStack := &providers.YouTubeStack{}
 	activityLogger := &activity.Logger{}
-	settingsSvc := &settings.Service{}
-	aclSvc := &acl.Service{}
+	settingsService := &settings.Service{}
+	aclService := &acl.Service{}
 	workerPool := &workerpool.Pool{}
 	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command { return nil })
 
@@ -219,19 +219,19 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Iris:         config.IrisConfig{BaseURL: "https://iris.example"},
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
-		&sharedmodules.InfraModule{Cache: cacheSvc, Postgres: postgresSvc, MemberRepo: memberRepo, MemberCache: memberCache},
+		&sharedmodules.InfraModule{Cache: cache, Postgres: postgresService, MemberRepository: memberRepository, MemberCache: memberCache},
 		&appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},
 		&holodex.Service{},
 		&adapter.MessageAdapter{},
 		&adapter.ResponseFormatter{},
 		&stubIrisClient{},
 		&member.ProfileService{},
-		matcherSvc,
+		matcherService,
 		ytStack,
 		activityLogger,
-		settingsSvc,
-		aclSvc,
-		&stubMajorEventRepo{},
+		settingsService,
+		aclService,
+		&stubMajorEventRepository{},
 		&stubMemberNewsService{},
 		[]bot.CommandBuilder{commandBuilder},
 		workerPool,
@@ -240,18 +240,18 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 
 	assert.Equal(t, "self-user", modules.Core.BotSelfUser)
 	assert.Equal(t, "https://iris.example", modules.Core.IrisBaseURL)
-	assert.Same(t, cacheSvc, modules.Data.CacheSvc)
-	assert.Same(t, postgresSvc, modules.Data.Postgres)
-	assert.Same(t, memberRepo, modules.Data.MemberRepo)
+	assert.Same(t, cache, modules.Data.Cache)
+	assert.Same(t, postgresService, modules.Data.Postgres)
+	assert.Same(t, memberRepository, modules.Data.MemberRepository)
 	assert.Same(t, memberCache, modules.Data.MemberCache)
 	assert.Same(t, memberData, modules.Data.MembersData)
 	assert.Same(t, chzzkClient, modules.Stream.ChzzkClient)
 	assert.Same(t, twitchClient, modules.Stream.TwitchClient)
-	assert.Same(t, matcherSvc, modules.Stream.MemberMatch)
+	assert.Same(t, matcherService, modules.Stream.MemberMatch)
 	assert.Same(t, ytStack, modules.Stream.YTStack)
 	assert.Same(t, activityLogger, modules.Support.ActivityLogger)
-	assert.Same(t, settingsSvc, modules.Support.SettingsSvc)
-	assert.Same(t, aclSvc, modules.Support.ACLSvc)
+	assert.Same(t, settingsService, modules.Support.Settings)
+	assert.Same(t, aclService, modules.Support.ACL)
 	require.Len(t, modules.Feature.CommandBuilders, 1)
 	assert.NotNil(t, modules.Feature.CommandBuilders[0])
 	assert.Same(t, workerPool, modules.Support.WorkerPool)

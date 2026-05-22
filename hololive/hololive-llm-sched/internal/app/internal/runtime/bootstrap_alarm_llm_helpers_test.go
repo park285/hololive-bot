@@ -63,7 +63,7 @@ func TestResolveMemberNewsXAllowlistPath(t *testing.T) {
 
 func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 	t.Run("basic config without consensus", func(t *testing.T) {
-		svc := initMemberNewsService(
+		service := initMemberNewsService(
 			context.Background(),
 			config.CliproxyConfig{},
 			config.LLMConfig{},
@@ -73,18 +73,18 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			nil,
 			testRuntimeLogger(),
 		)
-		require.NotNil(t, svc)
+		require.NotNil(t, service)
 	})
 
 	t.Run("consensus config enabled", func(t *testing.T) {
-		cliproxyCfg := config.CliproxyConfig{
+		cliproxyConfig := config.CliproxyConfig{
 			Enabled:         true,
 			BaseURL:         "https://example.com",
 			APIKey:          "dummy-api-key",
 			Model:           "gpt-4.1",
 			ReasoningEffort: "medium",
 		}
-		llmCfg := config.LLMConfig{
+		llmConfig := config.LLMConfig{
 			MemberNewsModel: "gpt-4.1",
 			MemberNews: config.ConsensusLLMConfig{
 				Enabled:           true,
@@ -96,17 +96,17 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			},
 		}
 
-		svc := initMemberNewsService(
+		service := initMemberNewsService(
 			context.Background(),
-			cliproxyCfg,
-			llmCfg,
+			cliproxyConfig,
+			llmConfig,
 			config.ExaConfig{},
 			nil,
 			nil,
 			nil,
 			testRuntimeLogger(),
 		)
-		require.NotNil(t, svc)
+		require.NotNil(t, service)
 	})
 }
 
@@ -120,8 +120,8 @@ func TestBuildMemberNewsComponents(t *testing.T) {
 	})
 
 	t.Run("non-nil service builds schedulers", func(t *testing.T) {
-		svc := membernews.NewService(nil, nil, nil, nil, logger)
-		weekly, monthly := buildMemberNewsComponents(svc, nil, nil, nil, logger)
+		service := membernews.NewService(nil, nil, nil, nil, logger)
+		weekly, monthly := buildMemberNewsComponents(service, nil, nil, nil, logger)
 		require.NotNil(t, weekly)
 		require.NotNil(t, monthly)
 	})

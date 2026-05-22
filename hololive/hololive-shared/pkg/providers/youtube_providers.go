@@ -46,37 +46,37 @@ func schedulerLogger(logger *slog.Logger) *slog.Logger {
 
 // ProvideScraperService - 스크래퍼 서비스 생성
 func ProvideScraperService(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	members member.DataProvider,
 	proxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
 ) *holodex.ScraperService {
-	return holodex.NewScraperService(cacheSvc, members, proxyConfig, sharedRL, logger)
+	return holodex.NewScraperService(cacheClient, members, proxyConfig, sharedRL, logger)
 }
 
 func ProvideScraperServiceWithYouTubeProducer(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	members member.DataProvider,
 	youtubeProducer *scraper.Client,
 	logger *slog.Logger,
 ) *holodex.ScraperService {
-	return holodex.NewScraperServiceWithYouTubeProducer(cacheSvc, members, youtubeProducer, logger)
+	return holodex.NewScraperServiceWithYouTubeProducer(cacheClient, members, youtubeProducer, logger)
 }
 
 // ProvideHolodexService - Holodex API 서비스 생성
 func ProvideHolodexService(
 	baseURL string,
 	apiKey string,
-	cacheSvc cache.Client,
-	scraperSvc *holodex.ScraperService,
+	cacheClient cache.Client,
+	scraperService *holodex.ScraperService,
 	logger *slog.Logger,
 ) (*holodex.Service, error) {
-	svc, err := holodex.NewHolodexService(baseURL, apiKey, cacheSvc, scraperSvc, logger)
+	service, err := holodex.NewHolodexService(baseURL, apiKey, cacheClient, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create holodex service: %w", err)
 	}
-	return svc, nil
+	return service, nil
 }
 
 // ProvideYouTubeStatsRepository - YouTube 통계 저장소 생성
@@ -143,22 +143,22 @@ func ProvideScraperScheduler(
 }
 
 func newScraperScheduler(opts scraperSchedulerOptions) *poller.Scheduler {
-	schedulerCfg := poller.DefaultSchedulerConfig()
-	schedulerCfg.RequestInterval = 0
+	schedulerConfig := poller.DefaultSchedulerConfig()
+	schedulerConfig.RequestInterval = 0
 	if opts.workerCount > 0 {
-		schedulerCfg.WorkerCount = opts.workerCount
+		schedulerConfig.WorkerCount = opts.workerCount
 	}
 	if opts.pollTimeout > 0 {
-		schedulerCfg.PollTimeout = opts.pollTimeout
+		schedulerConfig.PollTimeout = opts.pollTimeout
 	}
 	if opts.errorBackoffMin > 0 {
-		schedulerCfg.ErrorBackoffMin = opts.errorBackoffMin
+		schedulerConfig.ErrorBackoffMin = opts.errorBackoffMin
 	}
 	if opts.errorBackoffMax > 0 {
-		schedulerCfg.ErrorBackoffMax = opts.errorBackoffMax
+		schedulerConfig.ErrorBackoffMax = opts.errorBackoffMax
 	}
-	schedulerCfg.JobClaimer = opts.jobClaimer
-	return poller.NewScheduler(schedulerCfg)
+	schedulerConfig.JobClaimer = opts.jobClaimer
+	return poller.NewScheduler(schedulerConfig)
 }
 
 func resolveDefaultScraperSchedulerChannels(

@@ -25,8 +25,8 @@ func TestBuildJobRunGuardClaimerDisabledAllowsNilCache(t *testing.T) {
 
 func TestBuildJobRunGuardClaimerMapsClaims(t *testing.T) {
 	ctx := context.Background()
-	cacheSvc := sharedtestutil.NewTestCacheService(t, ctx)
-	claimer, err := BuildJobRunGuardClaimer(cacheSvc, config.ScraperActiveActiveConfig{
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	claimer, err := BuildJobRunGuardClaimer(cache, config.ScraperActiveActiveConfig{
 		Enabled:    true,
 		Namespace:  "test",
 		InstanceID: "ap-a",

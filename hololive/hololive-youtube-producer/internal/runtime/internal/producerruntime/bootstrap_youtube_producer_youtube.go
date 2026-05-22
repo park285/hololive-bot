@@ -41,7 +41,7 @@ type ingestionRuntimeYouTubeDependencies struct {
 
 func resolveIngestionRuntimeYouTubeState(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	spec ingestionRuntimeSpec,
 	features ingestionRuntimeFeatures,
@@ -52,7 +52,7 @@ func resolveIngestionRuntimeYouTubeState(
 		return state, nil
 	}
 
-	operationalChannels, err := communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepo)
+	operationalChannels, err := communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepository)
 	if err != nil {
 		return state, fmt.Errorf("resolve community shorts operational channels: %w", err)
 	}
@@ -69,7 +69,7 @@ func resolveIngestionRuntimeYouTubeState(
 
 	state.operationalChannels = operationalChannels
 	state.pollTargets = pollTargets
-	communityShortsPolicy, err := resolveCommunityShortsBigBangPolicy(cfg, logger, operationalChannels, features)
+	communityShortsPolicy, err := resolveCommunityShortsBigBangPolicy(appConfig, logger, operationalChannels, features)
 	if err != nil {
 		return state, err
 	}
@@ -79,7 +79,7 @@ func resolveIngestionRuntimeYouTubeState(
 }
 
 func resolveCommunityShortsBigBangPolicy(
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	operationalChannels []communityShortsOperationalChannel,
 	features ingestionRuntimeFeatures,
@@ -88,7 +88,7 @@ func resolveCommunityShortsBigBangPolicy(
 		return communityShortsBigBangPolicy{}, nil
 	}
 
-	policy, err := communityshorts.BuildPolicy(cfg.Ingestion, operationalChannels)
+	policy, err := communityshorts.BuildPolicy(appConfig.Ingestion, operationalChannels)
 	if err != nil {
 		return policy, err
 	}
@@ -107,7 +107,7 @@ func resolveCommunityShortsBigBangPolicy(
 
 func buildIngestionRuntimeYouTubeDependencies(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	infra *youtubeProducerInfrastructure,
 	enabled bool,
@@ -120,20 +120,20 @@ func buildIngestionRuntimeYouTubeDependencies(
 	}
 
 	routeDecider := communityshorts.BuildRouteDecider(state.communityShortsPolicy)
-	sharedScraperClient := resolveIngestionSharedScraperClient(cfg.Scraper, infra)
-	if err := publishedat.ValidateSchemaIfEnabled(ctx, cfg.Scraper, infra.postgresService, logger); err != nil {
+	sharedScraperClient := resolveIngestionSharedScraperClient(appConfig.Scraper, infra)
+	if err := publishedat.ValidateSchemaIfEnabled(ctx, appConfig.Scraper, infra.postgresService, logger); err != nil {
 		return deps, fmt.Errorf("validate published_at resolver schema: %w", err)
 	}
-	jobClaimer, err := buildIngestionRuntimeJobClaimer(cfg, infra)
+	jobClaimer, err := buildIngestionRuntimeJobClaimer(appConfig, infra)
 	if err != nil {
 		return deps, err
 	}
 	jobClaimer = newReadinessReportingJobClaimer(jobClaimer, readinessState)
-	if cfg.Scraper.ActiveActive.Enabled {
+	if appConfig.Scraper.ActiveActive.Enabled {
 		probeReadinessJobClaimer(ctx, jobClaimer, logger)
 	}
 	deps.publishedAtResolver = publishedat.BuildPendingResolver(
-		cfg.Scraper,
+		appConfig.Scraper,
 		infra.postgresService,
 		sharedScraperClient,
 		routeDecider,
@@ -143,7 +143,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 		deps.publishedAtResolver.SetCandidateClaimer(jobClaimer)
 	}
 	deps.scraperScheduler, deps.pollerRegistrations, err = polling.BuildComponentsWithJobClaimer(
-		cfg.Scraper,
+		appConfig.Scraper,
 		jobClaimer,
 		infra.postgresService,
 		state.pollTargets.NotificationChannelIDs,
@@ -157,27 +157,45 @@ func buildIngestionRuntimeYouTubeDependencies(
 	if err != nil {
 		return deps, err
 	}
-	deps.pollTargetRefresher = buildPollTargetRefresher(cfg, infra, deps, state, logger)
+	startActiveActiveRecoveryLoopIfEnabled(ctx, appConfig, jobClaimer, readinessState, deps.scraperScheduler, logger)
+	deps.pollTargetRefresher = buildPollTargetRefresher(appConfig, infra, deps, state, logger)
 	deps.youtubeScheduler = infra.ytStack.Scheduler
 	return deps, nil
 }
 
+func startActiveActiveRecoveryLoopIfEnabled(
+	ctx context.Context,
+	appConfig *config.Config,
+	jobClaimer poller.JobClaimer,
+	readinessState *readiness.State,
+	scraperScheduler *poller.Scheduler,
+	logger *slog.Logger,
+) {
+	if !appConfig.Scraper.ActiveActive.Enabled {
+		return
+	}
+	_ = startRecoveryLoop(ctx, jobClaimer, readinessState, 5*time.Second, 60*time.Second, logger, func() {
+		scraperScheduler.NudgeAllJobs()
+		logger.Info("active_active_resumed_nudge")
+	})
+}
+
 func buildIngestionRuntimeJobClaimer(
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *youtubeProducerInfrastructure,
 ) (poller.JobClaimer, error) {
-	jobClaimer, err := polling.BuildJobRunGuardClaimer(infra.cacheService, cfg.Scraper.ActiveActive)
+	jobClaimer, err := polling.BuildJobRunGuardClaimer(infra.cacheService, appConfig.Scraper.ActiveActive)
 	if err != nil {
 		return nil, fmt.Errorf("build job run guard claimer: %w", err)
 	}
-	if cfg.Scraper.ActiveActive.Enabled && jobClaimer == nil {
+	if appConfig.Scraper.ActiveActive.Enabled && jobClaimer == nil {
 		return nil, fmt.Errorf("active-active scraper requires job run guard claimer")
 	}
 	return jobClaimer, nil
 }
 
 func buildPollTargetRefresher(
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *youtubeProducerInfrastructure,
 	deps ingestionRuntimeYouTubeDependencies,
 	state ingestionRuntimeYouTubeState,
@@ -193,10 +211,10 @@ func buildPollTargetRefresher(
 		},
 		logger,
 	).WithTieringDB(infra.postgresService.GetGormDB()).WithOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
-		return communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepo)
+		return communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepository)
 	})
-	if cfg != nil && cfg.Scraper.ActiveActive.Enabled {
-		refresher = refresher.WithInitialJitter(activeActiveInitialJitter(cfg.Scraper.ActiveActive.InstanceID))
+	if appConfig != nil && appConfig.Scraper.ActiveActive.Enabled {
+		refresher = refresher.WithInitialJitter(activeActiveInitialJitter(appConfig.Scraper.ActiveActive.InstanceID))
 	}
 	return refresher
 }
@@ -213,11 +231,11 @@ func activeActiveInitialJitter(instanceID string) time.Duration {
 	return time.Duration(crc32.ChecksumIEEE([]byte(trimmed))%uint32(maxMillis)) * time.Millisecond
 }
 
-func resolveIngestionSharedScraperClient(scraperCfg config.ScraperConfig, infra *youtubeProducerInfrastructure) *scraper.Client {
+func resolveIngestionSharedScraperClient(scraperConfig config.ScraperConfig, infra *youtubeProducerInfrastructure) *scraper.Client {
 	if infra.scraperClient != nil {
 		return infra.scraperClient
 	}
-	return polling.BuildSharedClient(scraperCfg, infra.cacheService, infra.sharedRL)
+	return polling.BuildSharedClient(scraperConfig, infra.cacheService, infra.sharedRL)
 }
 
 func buildIngestionRuntimeObservationWindowWriter(

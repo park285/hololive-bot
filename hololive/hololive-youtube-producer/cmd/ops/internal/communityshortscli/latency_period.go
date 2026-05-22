@@ -26,7 +26,7 @@ func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
 		return fmt.Errorf("invalid period flag: %v", err)
 	}
 
-	cfg, err := config.Load()
+	appConfig, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load community/shorts latency-period config: %w", err)
 	}
@@ -36,7 +36,7 @@ func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
 	reqCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	report, err := opsapp.CollectCommunityShortsLatencyPeriodReport(reqCtx, cfg, logger, now, specs)
+	report, err := opsapp.CollectCommunityShortsLatencyPeriodReport(reqCtx, appConfig, logger, now, specs)
 	if err != nil {
 		return fmt.Errorf("failed to collect community/shorts latency period report: %w", err)
 	}

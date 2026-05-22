@@ -83,9 +83,9 @@ func (r *fakeOutboxRepository) InsertBatch(ctx context.Context, input dispatchou
 
 func TestPublisherShadowModeWritesOutboxAfterValkeySuccess(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	repo := &fakeOutboxRepository{}
+	repository := &fakeOutboxRepository{}
 	publisher := NewPublisher(cacheClient, newTestLogger(),
-		WithOutbox(repo),
+		WithOutbox(repository),
 		WithPublishMode(PublishModeShadow),
 	)
 
@@ -96,18 +96,18 @@ func TestPublisherShadowModeWritesOutboxAfterValkeySuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, queueItemsOrEmpty(t, mini), 1)
-	assert.Equal(t, 1, repo.insertBatchCalls)
-	assert.Equal(t, dispatchoutbox.StatusShadowed, repo.lastBatchInput.Status)
-	assert.Len(t, repo.lastBatchInput.Envelopes, 1)
-	assert.Equal(t, 0, repo.insertShadowedCalls)
-	assert.Equal(t, 0, repo.insertPendingCalls)
+	assert.Equal(t, 1, repository.insertBatchCalls)
+	assert.Equal(t, dispatchoutbox.StatusShadowed, repository.lastBatchInput.Status)
+	assert.Len(t, repository.lastBatchInput.Envelopes, 1)
+	assert.Equal(t, 0, repository.insertShadowedCalls)
+	assert.Equal(t, 0, repository.insertPendingCalls)
 }
 
 func TestPublisherShadowModeHonorsFatalFlag(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	repo := &fakeOutboxRepository{batchErr: errors.New("pg unavailable")}
+	repository := &fakeOutboxRepository{batchErr: errors.New("pg unavailable")}
 	publisher := NewPublisher(cacheClient, slog.Default(),
-		WithOutbox(repo),
+		WithOutbox(repository),
 		WithPublishMode(PublishModeShadow),
 		WithShadowFatal(true),
 	)
@@ -122,9 +122,9 @@ func TestPublisherShadowModeHonorsFatalFlag(t *testing.T) {
 
 func TestPublisherPGFirstDoesNotPushLegacyQueue(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	repo := &fakeOutboxRepository{}
+	repository := &fakeOutboxRepository{}
 	publisher := NewPublisher(cacheClient, newTestLogger(),
-		WithOutbox(repo),
+		WithOutbox(repository),
 		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
 	)
@@ -136,14 +136,14 @@ func TestPublisherPGFirstDoesNotPushLegacyQueue(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
-	assert.Equal(t, 0, repo.insertShadowedCalls)
-	assert.Equal(t, 1, repo.insertBatchCalls)
-	assert.Equal(t, 0, repo.insertPendingCalls)
+	assert.Equal(t, 0, repository.insertShadowedCalls)
+	assert.Equal(t, 1, repository.insertBatchCalls)
+	assert.Equal(t, 0, repository.insertPendingCalls)
 }
 
 func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	repo := &fakeOutboxRepository{batchResult: dispatchoutbox.PublishBatchResult{
+	repository := &fakeOutboxRepository{batchResult: dispatchoutbox.PublishBatchResult{
 		RequestedEvents:       1,
 		ProcessedDeliveries:   1,
 		RequestedDeliveries:   1,
@@ -155,7 +155,7 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 		PromotedShadowedCount: 0,
 	}}
 	publisher := NewPublisher(cacheClient, newTestLogger(),
-		WithOutbox(repo),
+		WithOutbox(repository),
 		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
 	)
@@ -167,8 +167,8 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
-	assert.Equal(t, 1, repo.insertBatchCalls)
-	assert.Equal(t, 0, repo.insertPendingCalls)
+	assert.Equal(t, 1, repository.insertBatchCalls)
+	assert.Equal(t, 0, repository.insertPendingCalls)
 	assert.Equal(t, 1, result.ProcessedDeliveries)
 	assert.Equal(t, 1, result.DuplicateDeliveries)
 	assert.Equal(t, 0, result.InsertedDeliveries)
@@ -176,11 +176,11 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 
 func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	repo := &fakeOutboxRepository{
+	repository := &fakeOutboxRepository{
 		batchErrors: []error{nil, errors.New("pg unavailable")},
 	}
 	publisher := NewPublisher(cacheClient, newTestLogger(),
-		WithOutbox(repo),
+		WithOutbox(repository),
 		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
 		WithMaxDeliveriesPerBatch(1),
@@ -192,7 +192,7 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 	}, nil)
 	require.Error(t, err)
 
-	assert.Equal(t, 2, repo.insertBatchCalls)
+	assert.Equal(t, 2, repository.insertBatchCalls)
 	assert.Equal(t, 2, result.RequestedDeliveries)
 	assert.Equal(t, 1, result.ProcessedDeliveries)
 	assert.Equal(t, 1, result.InsertedDeliveries)
@@ -200,9 +200,9 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 
 func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	repo := &fakeOutboxRepository{}
+	repository := &fakeOutboxRepository{}
 	publisher := NewPublisher(cacheClient, newTestLogger(),
-		WithOutbox(repo),
+		WithOutbox(repository),
 		WithPublishMode(PublishModePGFirst),
 	)
 	channel := &domain.Channel{ID: "channel-1"}
@@ -216,9 +216,9 @@ func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(
 	require.NoError(t, err)
 
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
-	assert.Equal(t, 1, repo.insertBatchCalls)
-	assert.Equal(t, 0, repo.insertPendingCalls)
-	assert.Equal(t, dispatchoutbox.StatusPending, repo.lastBatchInput.Status)
-	assert.Len(t, repo.lastBatchInput.Envelopes, 3)
+	assert.Equal(t, 1, repository.insertBatchCalls)
+	assert.Equal(t, 0, repository.insertPendingCalls)
+	assert.Equal(t, dispatchoutbox.StatusPending, repository.lastBatchInput.Status)
+	assert.Len(t, repository.lastBatchInput.Envelopes, 3)
 	assert.Equal(t, []string{"1"}, queueItemsByKeyOrEmpty(t, mini, AlarmDispatchWakeupQueue))
 }

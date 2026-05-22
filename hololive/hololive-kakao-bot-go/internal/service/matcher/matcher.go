@@ -50,7 +50,7 @@ type snapshotEntry struct {
 	aliasNorms []string
 }
 
-type memberMatcherSnapshot struct {
+type matcherSnapshot struct {
 	builtAt        time.Time
 	exactNames     map[string][]*snapshotEntry
 	exactAliases   map[string][]*snapshotEntry
@@ -61,7 +61,7 @@ type memberMatcherSnapshot struct {
 
 type snapshotMatchStrategy struct {
 	name string
-	find func(*memberMatcherSnapshot, string) *matchCandidate
+	find func(*matcherSnapshot, string) *matchCandidate
 }
 
 type ChannelSelector interface {
@@ -69,7 +69,7 @@ type ChannelSelector interface {
 }
 
 // 다양한 매칭 전략(정확 일치, 부분 일치, 별명 검색 등)을 순차적으로 시도한다.
-type MemberMatcher struct {
+type Matcher struct {
 	ctx                   context.Context
 	membersData           domain.MemberDataProvider
 	cache                 cache.Client
@@ -81,24 +81,24 @@ type MemberMatcher struct {
 	matchCacheTTL         time.Duration
 	matchCacheLastCleanup time.Time
 	snapshotMu            sync.RWMutex
-	snapshot              *memberMatcherSnapshot
+	snapshot              *matcherSnapshot
 	snapshotTTL           time.Duration
 	snapshotGroup         singleflight.Group
 }
 
-func NewMemberMatcher(
+func NewMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
-	cacheSvc cache.Client,
-	holodexSvc *holodex.Service,
+	cacheClient cache.Client,
+	holodexService *holodex.Service,
 	selector ChannelSelector,
 	logger *slog.Logger,
-) *MemberMatcher {
-	mm := &MemberMatcher{
+) *Matcher {
+	mm := &Matcher{
 		ctx:                   ctx,
 		membersData:           membersData,
-		cache:                 cacheSvc,
-		holodex:               holodexSvc,
+		cache:                 cacheClient,
+		holodex:               holodexService,
 		selector:              selector,
 		logger:                logger,
 		matchCache:            make(map[string]*MatchCacheEntry),
@@ -114,14 +114,14 @@ func NewMemberMatcher(
 		memberCount = len(provider.GetAllMembers())
 	}
 
-	logger.Info("MemberMatcher initialized",
+	logger.Info("Matcher initialized",
 		slog.Int("members", memberCount),
 	)
 
 	return mm
 }
 
-func (mm *MemberMatcher) providerWithContext(ctx context.Context) domain.MemberDataProvider {
+func (mm *Matcher) providerWithContext(ctx context.Context) domain.MemberDataProvider {
 	if mm == nil || mm.membersData == nil {
 		return nil
 	}

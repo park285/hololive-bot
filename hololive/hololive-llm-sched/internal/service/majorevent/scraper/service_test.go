@@ -55,14 +55,14 @@ func TestServiceScrape_StoresOnlyNewEvents(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	repo := &fakeEventRepository{
+	repository := &fakeEventRepository{
 		recentExternalIDs: []string{"https://hololive.hololivepro.com/events/superexpo2026/"},
 	}
 	parser := NewRSSParser()
 	fetcher := NewFeedFetcher(server.Client(), DefaultFeedFetcherConfig())
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	service, err := NewService(repo, fetcher, parser, ServiceConfig{
+	service, err := NewService(repository, fetcher, parser, ServiceConfig{
 		Sources: []FeedSource{
 			{
 				Name:      "event",

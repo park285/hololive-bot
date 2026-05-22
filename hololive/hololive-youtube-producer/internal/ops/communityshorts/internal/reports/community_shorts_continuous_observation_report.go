@@ -116,7 +116,7 @@ func DefaultCommunityShortsContinuousObservationPeriodSpecs() []CommunityShortsL
 
 func CollectCommunityShortsContinuousObservationReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityShortsContinuousObservationCollectOptions,
@@ -124,7 +124,7 @@ func CollectCommunityShortsContinuousObservationReport(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: config is nil")
 	}
 	if logger == nil {
@@ -140,7 +140,7 @@ func CollectCommunityShortsContinuousObservationReport(
 		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: %w", err)
 	}
 
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, appConfig, logger)
 	if err != nil {
 		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: %w", err)
 	}
@@ -151,7 +151,7 @@ func CollectCommunityShortsContinuousObservationReport(
 	return collectCommunityShortsContinuousObservationReportWithSession(
 		ctx,
 		session,
-		cfg,
+		appConfig,
 		logger,
 		now,
 		options,
@@ -162,7 +162,7 @@ func CollectCommunityShortsContinuousObservationReport(
 func collectCommunityShortsContinuousObservationReportWithSession(
 	ctx context.Context,
 	session *communityShortsOpsSession,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityShortsContinuousObservationCollectOptions,
@@ -171,7 +171,7 @@ func collectCommunityShortsContinuousObservationReportWithSession(
 	artifacts, err := collectCommunityShortsContinuousObservationArtifacts(
 		ctx,
 		session,
-		cfg,
+		appConfig,
 		logger,
 		now,
 		options,

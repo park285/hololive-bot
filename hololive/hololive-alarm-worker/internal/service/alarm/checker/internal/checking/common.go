@@ -116,13 +116,13 @@ func ensureScheduledTime(stream *domain.Stream, fallback time.Time) *domain.Stre
 	return updated
 }
 
-func loadMemberNamesByChannel(ctx context.Context, cacheSvc cache.Client, channelIDs []string) (map[string]string, error) {
+func loadMemberNamesByChannel(ctx context.Context, cacheClient cache.Client, channelIDs []string) (map[string]string, error) {
 	channelIDs = uniqueStrings(channelIDs)
 	if len(channelIDs) == 0 {
 		return map[string]string{}, nil
 	}
 
-	memberNames, err := cacheSvc.BatchHGet(ctx, sharedalarmkeys.MemberNameKey, channelIDs)
+	memberNames, err := cacheClient.BatchHGet(ctx, sharedalarmkeys.MemberNameKey, channelIDs)
 	if err != nil {
 		return nil, fmt.Errorf("load member names by channel: %w", err)
 	}
@@ -241,7 +241,7 @@ func scheduleChangeNotificationDetails(change *dedup.ScheduleChange) (string, st
 
 func loadSubscriberRoomsByChannel(
 	ctx context.Context,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	channelIDs []string,
 ) (map[string][]string, error) {
 	uniqueChannelIDs := uniqueStrings(channelIDs)
@@ -249,16 +249,16 @@ func loadSubscriberRoomsByChannel(
 		return map[string][]string{}, nil
 	}
 
-	if result, ok, err := tryLoadSubscriberRoomsByChannelBatched(ctx, cacheSvc, uniqueChannelIDs); ok {
+	if result, ok, err := tryLoadSubscriberRoomsByChannelBatched(ctx, cacheClient, uniqueChannelIDs); ok {
 		return result, err
 	}
 
-	return loadSubscriberRoomsByChannelSequential(ctx, cacheSvc, uniqueChannelIDs)
+	return loadSubscriberRoomsByChannelSequential(ctx, cacheClient, uniqueChannelIDs)
 }
 
 func tryLoadSubscriberRoomsByChannelBatched(
 	ctx context.Context,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	uniqueChannelIDs []string,
 ) (_ map[string][]string, ok bool, _ error) {
 	defer func() {
@@ -266,7 +266,7 @@ func tryLoadSubscriberRoomsByChannelBatched(
 		ok = recovered == nil && ok
 	}()
 
-	client := cacheSvc.GetClient()
+	client := cacheClient.GetClient()
 	if client == nil {
 		return nil, false, nil
 	}
@@ -276,7 +276,7 @@ func tryLoadSubscriberRoomsByChannelBatched(
 		cmds = append(cmds, client.B().Smembers().Key(sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID).Build())
 	}
 
-	results := cacheSvc.DoMulti(ctx, cmds...)
+	results := cacheClient.DoMulti(ctx, cmds...)
 	if len(results) != len(uniqueChannelIDs) {
 		return nil, false, nil
 	}
@@ -305,7 +305,7 @@ func collectBatchedSubscriberRooms(
 
 func loadSubscriberRoomsByChannelSequential(
 	ctx context.Context,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	uniqueChannelIDs []string,
 ) (map[string][]string, error) {
 	result := make(map[string][]string, len(uniqueChannelIDs))
@@ -317,7 +317,7 @@ func loadSubscriberRoomsByChannelSequential(
 
 	for _, channelID := range uniqueChannelIDs {
 		eg.Go(func() error {
-			rooms, err := cacheSvc.SMembers(egCtx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID)
+			rooms, err := cacheClient.SMembers(egCtx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID)
 			if err != nil {
 				return fmt.Errorf("load subscriber rooms by channel: smembers channel %s: %w", channelID, err)
 			}

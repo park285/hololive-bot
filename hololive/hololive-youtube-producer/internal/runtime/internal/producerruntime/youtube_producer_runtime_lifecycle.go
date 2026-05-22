@@ -28,7 +28,28 @@ import (
 	"net/http"
 
 	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/httpserver"
 )
+
+type listenErrorPrefixServer struct {
+	httpserver.Server
+	errorText string
+	logger    *slog.Logger
+	errCh     chan<- error
+}
+
+func (s listenErrorPrefixServer) ListenAndServe() error {
+	err := s.Server.ListenAndServe()
+	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+
+	if s.errCh == nil && s.logger != nil {
+		s.logger.Error(s.errorText, slog.Any("error", err))
+	}
+
+	return fmt.Errorf("%s: %w", s.errorText, err)
+}
 
 func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, errCh chan<- error) {
 	if r.ConfigSubscriber != nil {
@@ -57,11 +78,12 @@ func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, er
 }
 
 func (r *YouTubeProducerRuntime) startHTTPServer(errCh chan<- error) {
-	go func() {
-		if err := r.HttpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- fmt.Errorf("http server error: %w", err)
-		}
-	}()
+	httpserver.Start(listenErrorPrefixServer{
+		Server:    r.HttpServer,
+		errorText: "http server error",
+		logger:    r.Logger,
+		errCh:     errCh,
+	}, nil, errCh)
 	r.Logger.Info("Ingestion runtime HTTP server started",
 		slog.String("runtime", r.runtimeName()),
 		slog.String("addr", r.ServerAddr),
@@ -92,7 +114,7 @@ func (r *YouTubeProducerRuntime) stopSchedulers() {
 
 func (r *YouTubeProducerRuntime) shutdownHTTPServer(ctx context.Context) {
 	if r.HttpServer != nil {
-		if err := r.HttpServer.Shutdown(ctx); err != nil {
+		if err := httpserver.Shutdown(ctx, r.HttpServer, "Ingestion runtime HTTP shutdown failed"); err != nil {
 			r.Logger.Error("Ingestion runtime HTTP shutdown failed",
 				slog.String("runtime", r.runtimeName()),
 				slog.Any("error", err),

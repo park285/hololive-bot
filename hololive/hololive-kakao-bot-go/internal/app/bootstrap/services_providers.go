@@ -20,13 +20,13 @@ func ProvideACLService(
 	kakaoACLMode acl.ACLMode,
 	kakaoRooms []string,
 	postgres database.Client,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*acl.Service, error) {
-	svc, err := acl.NewACLService(
+	service, err := acl.NewACLService(
 		ctx,
 		postgres,
-		cacheSvc,
+		cacheClient,
 		logger,
 		kakaoACLEnabled,
 		kakaoACLMode,
@@ -36,7 +36,7 @@ func ProvideACLService(
 		return nil, fmt.Errorf("failed to create ACL service: %w", err)
 	}
 
-	return svc, nil
+	return service, nil
 }
 
 func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
@@ -44,9 +44,9 @@ func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
 }
 
 func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
-	var youTubeStatsRepo stats.StatsCommandRepository
-	if statsRepo := modules.Stream.YTStack.GetStatsRepo(); statsRepo != nil {
-		youTubeStatsRepo = statsRepo
+	var youTubeStatsRepository stats.StatsCommandRepository
+	if statsRepository := modules.Stream.YTStack.GetStatsRepository(); statsRepository != nil {
+		youTubeStatsRepository = statsRepository
 	}
 
 	var youTubeService = modules.Stream.YTStack.GetService()
@@ -59,24 +59,24 @@ func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
 		Client:           modules.Messaging.Client,
 		MessageAdapter:   modules.Messaging.MessageAdapter,
 		Formatter:        modules.Messaging.Formatter,
-		Cache:            modules.Data.CacheSvc,
+		Cache:            modules.Data.Cache,
 		Postgres:         modules.Data.Postgres,
-		MemberRepo:       modules.Data.MemberRepo,
+		MemberRepository:       modules.Data.MemberRepository,
 		MemberCache:      modules.Data.MemberCache,
-		Holodex:          modules.Stream.HolodexSvc,
+		Holodex:          modules.Stream.Holodex,
 		Chzzk:            modules.Stream.ChzzkClient,
 		Twitch:           modules.Stream.TwitchClient,
 		Profiles:         modules.Data.Profiles,
-		Alarm:            modules.Stream.AlarmSvc,
+		Alarm:            modules.Stream.Alarm,
 		Matcher:          modules.Stream.MemberMatch,
 		MembersData:      modules.Data.MembersData,
 		Service:          youTubeService,
-		YouTubeStatsRepo: youTubeStatsRepo,
+		YouTubeStatsRepository: youTubeStatsRepository,
 		Activity:         modules.Support.ActivityLogger,
-		Settings:         modules.Support.SettingsSvc,
-		ACL:              modules.Support.ACLSvc,
-		MajorEventRepo:   modules.Feature.MajorEventRepo,
-		MemberNews:       modules.Feature.MemberNewsSvc,
+		Settings:         modules.Support.Settings,
+		ACL:              modules.Support.ACL,
+		MajorEventRepository:   modules.Feature.MajorEventRepository,
+		MemberNews:       modules.Feature.MemberNews,
 		CommandBuilders:  modules.Feature.CommandBuilders,
 		WorkerPool:       modules.Support.WorkerPool,
 	}

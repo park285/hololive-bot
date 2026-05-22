@@ -60,15 +60,15 @@ func (s *mockYouTubeService) GetRecentVideos(ctx context.Context, channelID stri
 	return nil, nil
 }
 
-type stubMajorEventRepo struct{}
+type stubMajorEventRepository struct{}
 
-func (s *stubMajorEventRepo) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
+func (s *stubMajorEventRepository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	return false, nil
 }
-func (s *stubMajorEventRepo) Subscribe(ctx context.Context, roomID, roomName string) error {
+func (s *stubMajorEventRepository) Subscribe(ctx context.Context, roomID, roomName string) error {
 	return nil
 }
-func (s *stubMajorEventRepo) Unsubscribe(ctx context.Context, roomID string) error { return nil }
+func (s *stubMajorEventRepository) Unsubscribe(ctx context.Context, roomID string) error { return nil }
 
 type stubMemberNewsService struct{}
 
@@ -88,24 +88,24 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	messageAdapter := &adapter.MessageAdapter{}
 	formatter := &adapter.ResponseFormatter{}
 
-	cacheSvc := &cache.Service{}
+	cache := &cache.Service{}
 	postgres := &database.PostgresService{}
-	memberRepo := &member.Repository{}
+	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
-	holodexSvc := &holodex.Service{}
+	holodexService := &holodex.Service{}
 	chzzkClient := &chzzk.Client{}
 	twitchClient := &twitch.Client{}
 	profiles := &member.ProfileService{}
-	memberMatcher := &matcher.MemberMatcher{}
+	memberMatcher := &matcher.Matcher{}
 
 	var ytService youtube.Service = &mockYouTubeService{}
-	ytStatsRepo := &stats.StatsRepository{}
-	ytStack := &providers.YouTubeStack{Service: ytService, StatsRepo: ytStatsRepo}
+	ytStatsRepository := &stats.StatsRepository{}
+	ytStack := &providers.YouTubeStack{Service: ytService, StatsRepository: ytStatsRepository}
 	activityLogger := &activity.Logger{}
-	settingsSvc := &settings.Service{}
-	aclSvc := &acl.Service{}
-	majorEventRepo := &stubMajorEventRepo{}
-	memberNewsSvc := &stubMemberNewsService{}
+	settingsService := &settings.Service{}
+	aclService := &acl.Service{}
+	majorEventRepository := &stubMajorEventRepository{}
+	memberNewsService := &stubMemberNewsService{}
 	workerPool := &workerpool.Pool{}
 	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command { return nil })
 
@@ -122,31 +122,31 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			Formatter:      formatter,
 		},
 		Data: appbootstrap.BotDataModule{
-			CacheSvc:    cacheSvc,
-			Postgres:    postgres,
-			MemberRepo:  memberRepo,
-			MemberCache: memberCache,
-			Profiles:    profiles,
-			MembersData: nil,
+			Cache:            cache,
+			Postgres:         postgres,
+			MemberRepository: memberRepository,
+			MemberCache:      memberCache,
+			Profiles:         profiles,
+			MembersData:      nil,
 		},
 		Stream: appbootstrap.BotStreamModule{
-			HolodexSvc:   holodexSvc,
+			Holodex:      holodexService,
 			ChzzkClient:  chzzkClient,
 			TwitchClient: twitchClient,
-			AlarmSvc:     nil,
+			Alarm:        nil,
 			MemberMatch:  memberMatcher,
 			YTStack:      ytStack,
 		},
 		Support: appbootstrap.BotSupportModule{
 			ActivityLogger: activityLogger,
-			SettingsSvc:    settingsSvc,
-			ACLSvc:         aclSvc,
+			Settings:       settingsService,
+			ACL:            aclService,
 			WorkerPool:     workerPool,
 		},
 		Feature: appbootstrap.BotFeatureModule{
-			MajorEventRepo:  majorEventRepo,
-			MemberNewsSvc:   memberNewsSvc,
-			CommandBuilders: []bot.CommandBuilder{commandBuilder},
+			MajorEventRepository: majorEventRepository,
+			MemberNews:           memberNewsService,
+			CommandBuilders:      []bot.CommandBuilder{commandBuilder},
 		},
 	})
 
@@ -162,22 +162,22 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	if deps.Formatter != formatter {
 		t.Fatal("Formatter wiring mismatch")
 	}
-	if deps.Cache != cacheSvc || deps.Postgres != postgres {
+	if deps.Cache != cache || deps.Postgres != postgres {
 		t.Fatal("infra wiring mismatch")
 	}
-	if deps.MemberRepo != memberRepo || deps.MemberCache != memberCache {
+	if deps.MemberRepository != memberRepository || deps.MemberCache != memberCache {
 		t.Fatal("member wiring mismatch")
 	}
-	if deps.Holodex != holodexSvc || deps.Chzzk != chzzkClient || deps.Twitch != twitchClient {
+	if deps.Holodex != holodexService || deps.Chzzk != chzzkClient || deps.Twitch != twitchClient {
 		t.Fatal("stream client wiring mismatch")
 	}
-	if deps.Service != ytService || deps.YouTubeStatsRepo != ytStatsRepo {
+	if deps.Service != ytService || deps.YouTubeStatsRepository != ytStatsRepository {
 		t.Fatal("youtube stack wiring mismatch")
 	}
-	if deps.Activity != activityLogger || deps.Settings != settingsSvc || deps.ACL != aclSvc {
+	if deps.Activity != activityLogger || deps.Settings != settingsService || deps.ACL != aclService {
 		t.Fatal("runtime support wiring mismatch")
 	}
-	if deps.MajorEventRepo != majorEventRepo || deps.MemberNews != memberNewsSvc {
+	if deps.MajorEventRepository != majorEventRepository || deps.MemberNews != memberNewsService {
 		t.Fatal("event/news wiring mismatch")
 	}
 	if deps.WorkerPool != workerPool {
@@ -200,7 +200,7 @@ func TestProvideBotDependencies_NilYouTubeStackIsSafe(t *testing.T) {
 	if deps.Service != nil {
 		t.Fatal("Service must be nil when ytStack is nil")
 	}
-	if deps.YouTubeStatsRepo != nil {
-		t.Fatal("YouTubeStatsRepo must be nil when ytStack is nil")
+	if deps.YouTubeStatsRepository != nil {
+		t.Fatal("YouTubeStatsRepository must be nil when ytStack is nil")
 	}
 }

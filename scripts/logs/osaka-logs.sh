@@ -5,6 +5,7 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 . "$REPO_ROOT/scripts/deploy/lib/compose-services.sh"
 SSH_KEY="${SSH_KEY:-$REPO_ROOT/KR.key}"
 OSAKA_HOST="${OSAKA_HOST:-kapu-iris-osaka-1}"
+OSAKA_HOST_KEY_ALIAS="${OSAKA_HOST_KEY_ALIAS:-100.100.1.7}"
 SERVICE="${1:-all}"
 SINCE="${SINCE:-30m}"
 TAIL="${TAIL:-300}"
@@ -12,7 +13,7 @@ PATTERN="${PATTERN:-}"
 FOLLOW="${FOLLOW:-0}"
 FULL="${FULL:-0}"
 SOURCE="${SOURCE:-docker}"
-SSH_OSAKA=(ssh -F /dev/null -i "$SSH_KEY" -o IdentitiesOnly=yes -o SetEnv=LC_ALL=C -o SetEnv=LANG=C "ubuntu@$OSAKA_HOST")
+SSH_OSAKA=(ssh -F /dev/null -i "$SSH_KEY" -o IdentitiesOnly=yes -o HostKeyAlias="$OSAKA_HOST_KEY_ALIAS" -o SetEnv=LC_ALL=C -o SetEnv=LANG=C "ubuntu@$OSAKA_HOST")
 
 usage() {
   cat <<'USAGE'
@@ -26,6 +27,7 @@ Environment:
   FOLLOW=1               follow docker logs
   FULL=1                 print all available logs; ignores SINCE and TAIL
   SOURCE=docker|file     read docker logs or /home/ubuntu/hololive-bot/logs/*.log
+  OSAKA_HOST_KEY_ALIAS=100.100.1.7
 
 Examples:
   osaka-logs.sh youtube-producer
@@ -59,17 +61,17 @@ for service in "${services[@]}"; do
     logfile=$(compose_service_resolve_osaka_log_file "$service")
     if [[ "$FULL" == "1" ]]; then
       if [[ -n "$PATTERN" ]]; then
-        remote "cd ~/hololive-bot && cat '$logfile' | grep -E '$PATTERN' || true"
+        remote "cd ~/hololive-bot && sudo -n cat '$logfile' | grep -E '$PATTERN' || true"
       else
-        remote "cd ~/hololive-bot && cat '$logfile'"
+        remote "cd ~/hololive-bot && sudo -n cat '$logfile'"
       fi
       echo
       continue
     fi
     if [[ -n "$PATTERN" ]]; then
-      remote "cd ~/hololive-bot && tail -n '$TAIL' '$logfile' | grep -E '$PATTERN' || true"
+      remote "cd ~/hololive-bot && sudo -n tail -n '$TAIL' '$logfile' | grep -E '$PATTERN' || true"
     else
-      remote "cd ~/hololive-bot && tail -n '$TAIL' '$logfile'"
+      remote "cd ~/hololive-bot && sudo -n tail -n '$TAIL' '$logfile'"
     fi
   else
     container=$(compose_service_resolve_osaka_container "$service")

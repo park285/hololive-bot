@@ -108,8 +108,8 @@ func TestDeliveryTelemetryRepository_EnqueueEnrichesObservationWindowContext(t *
 	seedObservationWindow(t, db, cutoverAt, observationStartedAt)
 	seedTrackingRow(t, db, domain.OutboxKindNewShort, "short-inside", "UC_inside", &actualPublishedAt, detectedAt)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
+	repository := NewDeliveryTelemetryRepository(db)
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     101,
 		AttemptOrdinal: 1,
 		OutboxID:       201,
@@ -161,8 +161,8 @@ func TestDeliveryTelemetryRepository_EnqueueMarksLateDetectionsOutsideObservatio
 	seedObservationWindow(t, db, cutoverAt, observationStartedAt)
 	seedTrackingRow(t, db, domain.OutboxKindNewShort, "short-late-detect", "UC_late", &actualPublishedAt, detectedAt)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
+	repository := NewDeliveryTelemetryRepository(db)
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     111,
 		AttemptOrdinal: 1,
 		OutboxID:       211,
@@ -208,8 +208,8 @@ func TestDeliveryTelemetryRepository_ListByObservationWindowReturnsMatchedOnly(t
 	outsideDetectedAt := outsidePublishedAt.Add(20 * time.Second)
 	seedTrackingRow(t, db, domain.OutboxKindNewShort, "short-outside", "UC_outside", &outsidePublishedAt, outsideDetectedAt)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
+	repository := NewDeliveryTelemetryRepository(db)
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
 		{
 			DeliveryID:     201,
 			AttemptOrdinal: 1,
@@ -240,7 +240,7 @@ func TestDeliveryTelemetryRepository_ListByObservationWindowReturnsMatchedOnly(t
 		},
 	}))
 
-	rows, err := repo.ListByObservationWindow(ctx, "youtube-producer", cutoverAt)
+	rows, err := repository.ListByObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, int64(201), rows[0].DeliveryID)
@@ -370,8 +370,8 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
+	repository := NewDeliveryTelemetryRepository(db)
+	rows, err := repository.ListByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, int64(301), rows[0].DeliveryID)

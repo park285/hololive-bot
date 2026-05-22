@@ -42,7 +42,7 @@ type DBIntegrationRuntime struct {
 
 func BuildDBIntegrationRuntime(
 	ctx context.Context,
-	pgCfg config.PostgresConfig,
+	postgresConfig config.PostgresConfig,
 	logger *slog.Logger,
 ) (*DBIntegrationRuntime, error) {
 	if logger == nil {
@@ -53,7 +53,7 @@ func BuildDBIntegrationRuntime(
 		ctx = context.Background()
 	}
 
-	runtime, cleanup, err := InitializeDBIntegrationRuntime(ctx, pgCfg, logger)
+	runtime, cleanup, err := InitializeDBIntegrationRuntime(ctx, postgresConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize DB integration runtime: %w", err)
 	}

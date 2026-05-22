@@ -40,22 +40,22 @@ import (
 // Admin Dashboard와 Tauri 앱에서 사용됩니다.
 func ProvideAPIRouter(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
-	domainHandlers *server.DomainAPIHandlers,
+	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 ) (*gin.Engine, error) {
-	if err := validateAPIRouterInputs(cfg, domainHandlers, authHandler); err != nil {
+	if err := validateAPIRouterInputs(appConfig, domainHandlers, authHandler); err != nil {
 		return nil, err
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	router, err := newAPIRouter(ctx, cfg, logger)
+	router, err := newAPIRouter(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -65,10 +65,10 @@ func ProvideAPIRouter(
 	}
 
 	if triggerHandler != nil {
-		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
+		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), appConfig.Server.APIKey)
 	}
 
-	registerAPIRoutes(router, cfg.Server.APIKey, cacheSvc, logger, domainHandlers, authHandler)
+	registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers, authHandler)
 
 	logger.Info("api_key_auth_enabled")
 
@@ -76,14 +76,14 @@ func ProvideAPIRouter(
 }
 
 func validateAPIRouterInputs(
-	cfg *config.Config,
-	domainHandlers *server.DomainAPIHandlers,
+	appConfig *config.Config,
+	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
 ) error {
-	if cfg == nil {
+	if appConfig == nil {
 		return errors.New("config must not be nil")
 	}
-	if strings.TrimSpace(cfg.Server.APIKey) == "" {
+	if strings.TrimSpace(appConfig.Server.APIKey) == "" {
 		return errors.New("API_SECRET_KEY required")
 	}
 	if domainHandlers == nil {
@@ -98,7 +98,7 @@ func validateAPIRouterInputs(
 	return nil
 }
 
-func validateDomainHandlers(h *server.DomainAPIHandlers) error {
+func validateDomainHandlers(h *server.DomainHandlers) error {
 	requiredHandlers := []struct {
 		missing bool
 		err     string
@@ -123,26 +123,26 @@ func validateDomainHandlers(h *server.DomainAPIHandlers) error {
 	return nil
 }
 
-func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*gin.Engine, error) {
-	if cfg == nil {
+func newAPIRouter(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*gin.Engine, error) {
+	if appConfig == nil {
 		return nil, errors.New("config must not be nil")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	isProduction := strings.EqualFold(strings.TrimSpace(cfg.Environment), "production")
-	if err := validateAPICORSConfig(cfg, isProduction); err != nil {
+	isProduction := strings.EqualFold(strings.TrimSpace(appConfig.Environment), "production")
+	if err := validateAPICORSConfig(appConfig, isProduction); err != nil {
 		return nil, err
 	}
 
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
-		APIKey:       cfg.Server.APIKey,
+		APIKey:       appConfig.Server.APIKey,
 		EnableGzip:   true,
 		SkipLogPaths: []string{"/metrics"},
 		PreRouteUse: []gin.HandlerFunc{
-			corsOriginGuard(cfg.CORS.AllowedOrigins, cfg.CORS.Enforce, logger),
-			cors.New(newAPICORSConfig(cfg, cfg.CORS.Enforce)),
+			corsOriginGuard(appConfig.CORS.AllowedOrigins, appConfig.CORS.Enforce, logger),
+			cors.New(newAPICORSConfig(appConfig, appConfig.CORS.Enforce)),
 			middleware.ClientHintsMiddleware(),
 		},
 	})
@@ -150,28 +150,28 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 		return nil, err
 	}
 
-	warnMissingProductionCORS(logger, cfg, isProduction)
+	warnMissingProductionCORS(logger, appConfig, isProduction)
 
-	router.NoRoute(middleware.NoRouteAuthHandler(cfg.Server.APIKey))
+	router.NoRoute(middleware.NoRouteAuthHandler(appConfig.Server.APIKey))
 
 	return router, nil
 }
 
-func validateAPICORSConfig(cfg *config.Config, isProduction bool) error {
-	origins := normalizedOrigins(cfg.CORS.AllowedOrigins)
-	if isProduction && cfg.CORS.Enforce && (len(origins) == 0 || containsWildcard(origins)) {
+func validateAPICORSConfig(appConfig *config.Config, isProduction bool) error {
+	origins := normalizedOrigins(appConfig.CORS.AllowedOrigins)
+	if isProduction && appConfig.CORS.Enforce && (len(origins) == 0 || containsWildcard(origins)) {
 		return errors.New("explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true")
 	}
 	return nil
 }
 
-func warnMissingProductionCORS(logger *slog.Logger, cfg *config.Config, isProduction bool) {
-	if !isProduction || !cfg.CORS.MissingInProduction {
+func warnMissingProductionCORS(logger *slog.Logger, appConfig *config.Config, isProduction bool) {
+	if !isProduction || !appConfig.CORS.MissingInProduction {
 		return
 	}
 	logger.Warn(
 		"cors_allowed_origins_missing_in_production_monitor_mode",
-		slog.Bool("cors_enforce", cfg.CORS.Enforce),
+		slog.Bool("cors_enforce", appConfig.CORS.Enforce),
 		slog.String("next_step", "set CORS_ALLOWED_ORIGINS and enable CORS_ENFORCE"),
 	)
 }

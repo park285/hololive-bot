@@ -20,19 +20,19 @@ func (d *Dispatcher) tryClaimDelivery(
 		return deliveryClaimDecisionProceed, nil, nil
 	}
 
-	repo := trackingrepo.NewRepository(d.db)
+	repository := trackingrepo.NewRepository(d.db)
 	claimAt := resolveDeliveryClaimTime(row, outbox)
 	postID := strings.TrimSpace(resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
 	if postID == "" {
 		return deliveryClaimDecisionRetryLater, nil, fmt.Errorf("resolve post id: empty")
 	}
 
-	state, err := repo.FindAlarmStateByPostID(ctx, outbox.Kind, postID)
+	state, err := repository.FindAlarmStateByPostID(ctx, outbox.Kind, postID)
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, fmt.Errorf("find alarm state by post id: %w", err)
 	}
 
-	alreadyCompleted, err := d.isCommunityShortsDeliveryAlreadyCompleted(ctx, repo, outbox, state)
+	alreadyCompleted, err := d.isCommunityShortsDeliveryAlreadyCompleted(ctx, repository, outbox, state)
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, err
 	}
@@ -41,7 +41,7 @@ func (d *Dispatcher) tryClaimDelivery(
 		return deliveryClaimDecisionAlreadySent, nil, nil
 	}
 
-	state, decision, done, err := d.refreshStaleAlarmStateClaim(ctx, repo, outbox, postID, state, claimAt)
+	state, decision, done, err := d.refreshStaleAlarmStateClaim(ctx, repository, outbox, postID, state, claimAt)
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, err
 	}
@@ -49,7 +49,7 @@ func (d *Dispatcher) tryClaimDelivery(
 		return decision, nil, nil
 	}
 
-	return d.acquireAlarmStateClaim(ctx, repo, row, outbox, postID, state, claimAt)
+	return d.acquireAlarmStateClaim(ctx, repository, row, outbox, postID, state, claimAt)
 }
 
 func shouldSkipDeliveryClaim(d *Dispatcher, outbox domain.YouTubeNotificationOutbox) bool {
@@ -88,7 +88,7 @@ func deliveryClaimIdentityForOutbox(outbox domain.YouTubeNotificationOutbox) (st
 
 func (d *Dispatcher) isCommunityShortsDeliveryAlreadyCompleted(
 	ctx context.Context,
-	repo *trackingrepo.GormRepository,
+	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 ) (bool, error) {
@@ -96,7 +96,7 @@ func (d *Dispatcher) isCommunityShortsDeliveryAlreadyCompleted(
 		return true, nil
 	}
 
-	trackingRow, err := repo.FindByIdentity(ctx, outbox.Kind, outbox.ContentID)
+	trackingRow, err := repository.FindByIdentity(ctx, outbox.Kind, outbox.ContentID)
 	if err != nil {
 		return false, fmt.Errorf("load tracking row: %w", err)
 	}
@@ -113,14 +113,14 @@ func communityShortsTrackingRowMarkedSent(row *domain.YouTubeContentAlarmTrackin
 
 func (d *Dispatcher) buildAlarmStateClaimRecord(
 	ctx context.Context,
-	repo *trackingrepo.GormRepository,
+	repository *trackingrepo.GormRepository,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	claimAt time.Time,
 ) (*domain.YouTubeCommunityShortsAlarmState, error) {
-	trackingRow, err := d.loadClaimTrackingRow(ctx, repo, outbox, state)
+	trackingRow, err := d.loadClaimTrackingRow(ctx, repository, outbox, state)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (d *Dispatcher) buildAlarmStateClaimRecord(
 
 func (d *Dispatcher) refreshStaleAlarmStateClaim(
 	ctx context.Context,
-	repo *trackingrepo.GormRepository,
+	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 	state *domain.YouTubeCommunityShortsAlarmState,
@@ -158,11 +158,11 @@ func (d *Dispatcher) refreshStaleAlarmStateClaim(
 		return state, deliveryClaimDecisionProceed, false, nil
 	}
 
-	if _, err := repo.ReleaseAlarmStateClaim(ctx, outbox.Kind, postID, *state.AuthorizedAt); err != nil {
+	if _, err := repository.ReleaseAlarmStateClaim(ctx, outbox.Kind, postID, *state.AuthorizedAt); err != nil {
 		return nil, deliveryClaimDecisionRetryLater, false, fmt.Errorf("release stale alarm state claim: %w", err)
 	}
 
-	reloadedState, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repo, outbox, postID, "reload alarm state by post id")
+	reloadedState, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repository, outbox, postID, "reload alarm state by post id")
 	if err != nil {
 		return nil, deliveryClaimDecisionRetryLater, false, err
 	}
@@ -186,25 +186,25 @@ func isStaleAlarmStateClaim(
 
 func (d *Dispatcher) acquireAlarmStateClaim(
 	ctx context.Context,
-	repo *trackingrepo.GormRepository,
+	repository *trackingrepo.GormRepository,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	claimAt time.Time,
 ) (deliveryClaimDecision, *deliveryClaimToken, error) {
-	claimRecord, err := d.buildAlarmStateClaimRecord(ctx, repo, row, outbox, postID, state, claimAt)
+	claimRecord, err := d.buildAlarmStateClaimRecord(ctx, repository, row, outbox, postID, state, claimAt)
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, err
 	}
 
-	claimed, err := repo.TryClaimAlarmState(ctx, claimRecord)
+	claimed, err := repository.TryClaimAlarmState(ctx, claimRecord)
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, fmt.Errorf("try claim alarm state: %w", err)
 	}
 	if claimed {
-		return d.finalizeClaimSuccess(ctx, repo, outbox, postID, claimAt)
+		return d.finalizeClaimSuccess(ctx, repository, outbox, postID, claimAt)
 	}
 
-	return d.finalizeClaimMiss(ctx, repo, outbox, postID)
+	return d.finalizeClaimMiss(ctx, repository, outbox, postID)
 }

@@ -143,19 +143,19 @@ func effectiveDeliveryMode(roomCount int, cutoverPending bool) string {
 	return DeliveryModeNew
 }
 
-func isCutoverPending(ingestionCfg config.IngestionConfig, generatedAt time.Time) bool {
-	if !ingestionCfg.CommunityShortsBigBangEnabled {
+func isCutoverPending(ingestionConfig config.IngestionConfig, generatedAt time.Time) bool {
+	if !ingestionConfig.CommunityShortsBigBangEnabled {
 		return false
 	}
-	cutoverAt := normalizedCutoverAt(ingestionCfg.CommunityShortsBigBangCutoverAt)
+	cutoverAt := normalizedCutoverAt(ingestionConfig.CommunityShortsBigBangCutoverAt)
 	if cutoverAt == nil {
 		return false
 	}
 	return generatedAt.UTC().Before(*cutoverAt)
 }
 
-func resolveFinalDeliveryOwner(ingestionCfg config.IngestionConfig) string {
-	if ingestionCfg.CommunityShortsBigBangEnabled {
+func resolveFinalDeliveryOwner(ingestionConfig config.IngestionConfig) string {
+	if ingestionConfig.CommunityShortsBigBangEnabled {
 		return RuntimeOwnerAlarmWorker
 	}
 	return RuntimeOwnerYouTubeProducer

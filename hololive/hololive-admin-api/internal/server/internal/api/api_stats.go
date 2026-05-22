@@ -22,6 +22,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -32,11 +33,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 )
 
-const systemStatsStreamInterval = 5 * time.Second
+var systemStatsStreamInterval = 5 * time.Second
 
-func (h *StatsAPIHandler) GetStats(c *gin.Context) {
+var errSystemStatsStreamStopped = errors.New("system stats stream stopped")
+
+func (h *StatsHandler) GetStats(c *gin.Context) {
 	if !h.requireStatsDeps(c) {
 		return
 	}
@@ -58,7 +62,7 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 	go func() {
 		defer wg.Done()
 
-		members, memberErr = h.repo.GetAllMembers(ctx)
+		members, memberErr = h.repository.GetAllMembers(ctx)
 	}()
 	go func() {
 		defer wg.Done()
@@ -97,8 +101,8 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 }
 
 // 5초마다 CPU/메모리 통계를 전송합니다.
-func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
-	if h == nil || h.APIHandler == nil || h.systemStats == nil {
+func (h *StatsHandler) StreamSystemStats(c *gin.Context) {
+	if h == nil || h.Handler == nil || h.systemStats == nil {
 		sharedserver.RespondError(c, 400, "System stats collector not available", nil)
 
 		return
@@ -122,36 +126,24 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	h.streamSystemStats(ctx, conn)
 }
 
-func (h *StatsAPIHandler) streamSystemStats(ctx context.Context, conn *websocket.Conn) {
-	ticker := time.NewTicker(systemStatsStreamInterval)
-	defer ticker.Stop()
-
+func (h *StatsHandler) streamSystemStats(ctx context.Context, conn *websocket.Conn) {
 	if !h.writeInitialSystemStats(ctx, conn) {
 		return
 	}
 
-	h.writeSystemStatsTicks(ctx, conn, ticker)
+	_ = loop.RunTickerLoop(ctx, systemStatsStreamInterval, func(ctx context.Context) error {
+		if !h.writeSystemStats(ctx, conn, "failed to collect system stats", "failed to write system stats") {
+			return errSystemStatsStreamStopped
+		}
+		return nil
+	})
 }
 
-func (h *StatsAPIHandler) writeSystemStatsTicks(ctx context.Context, conn *websocket.Conn, ticker *time.Ticker) {
-	for h.writeNextSystemStatsTick(ctx, conn, ticker) {
-	}
-}
-
-func (h *StatsAPIHandler) writeNextSystemStatsTick(ctx context.Context, conn *websocket.Conn, ticker *time.Ticker) bool {
-	select {
-	case <-ctx.Done():
-		return false
-	case <-ticker.C:
-		return h.writeSystemStats(ctx, conn, "failed to collect system stats", "failed to write system stats")
-	}
-}
-
-func (h *StatsAPIHandler) writeInitialSystemStats(ctx context.Context, conn *websocket.Conn) bool {
+func (h *StatsHandler) writeInitialSystemStats(ctx context.Context, conn *websocket.Conn) bool {
 	return h.writeSystemStats(ctx, conn, "failed to collect initial system stats", "failed to write initial system stats")
 }
 
-func (h *StatsAPIHandler) writeSystemStats(
+func (h *StatsHandler) writeSystemStats(
 	ctx context.Context,
 	conn *websocket.Conn,
 	collectMessage string,

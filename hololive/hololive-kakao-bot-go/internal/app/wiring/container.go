@@ -39,7 +39,7 @@ import (
 )
 
 type BuildHooks struct {
-	InitializeBotDependencies func(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*bot.Dependencies, func(), error)
+	InitializeBotDependencies func(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*bot.Dependencies, func(), error)
 }
 
 type BuiltContainer struct {
@@ -47,8 +47,8 @@ type BuiltContainer struct {
 	Cleanup         func()
 }
 
-func BuildContainer(ctx context.Context, cfg *config.Config, logger *slog.Logger, hooks BuildHooks) (*BuiltContainer, error) {
-	if cfg == nil {
+func BuildContainer(ctx context.Context, appConfig *config.Config, logger *slog.Logger, hooks BuildHooks) (*BuiltContainer, error) {
+	if appConfig == nil {
 		return nil, errors.New("config must not be nil")
 	}
 	if logger == nil {
@@ -61,7 +61,7 @@ func BuildContainer(ctx context.Context, cfg *config.Config, logger *slog.Logger
 		ctx = context.Background()
 	}
 
-	deps, cleanup, err := hooks.InitializeBotDependencies(ctx, cfg, logger)
+	deps, cleanup, err := hooks.InitializeBotDependencies(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize dependencies: %w", err)
 	}
@@ -85,11 +85,11 @@ func NewBot(deps *bot.Dependencies) (*bot.Bot, error) {
 	return instance, nil
 }
 
-func MemberRepo(deps *bot.Dependencies) *member.Repository {
+func MemberRepository(deps *bot.Dependencies) *member.Repository {
 	if deps == nil {
 		return nil
 	}
-	return deps.MemberRepo
+	return deps.MemberRepository
 }
 
 func MemberCache(deps *bot.Dependencies) *member.Cache {

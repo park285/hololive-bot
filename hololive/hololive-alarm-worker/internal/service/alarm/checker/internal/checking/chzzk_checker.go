@@ -46,14 +46,14 @@ const (
 
 // ChzzkChecker는 치지직 라이브 상태를 조회해 알림 후보를 만든다.
 type ChzzkChecker struct {
-	cacheSvc    cache.Client
+	cacheClient cache.Client
 	chzzkClient *chzzk.Client
 	logger      *slog.Logger
 }
 
 // NewChzzkChecker는 치지직 체커를 생성한다.
-func NewChzzkChecker(cacheSvc cache.Client, chzzkClient *chzzk.Client, logger *slog.Logger) (*ChzzkChecker, error) {
-	if cacheSvc == nil {
+func NewChzzkChecker(cacheClient cache.Client, chzzkClient *chzzk.Client, logger *slog.Logger) (*ChzzkChecker, error) {
+	if cacheClient == nil {
 		return nil, errors.New("new chzzk checker: cache service is nil")
 	}
 
@@ -62,7 +62,7 @@ func NewChzzkChecker(cacheSvc cache.Client, chzzkClient *chzzk.Client, logger *s
 	}
 
 	return &ChzzkChecker{
-		cacheSvc:    cacheSvc,
+		cacheClient: cacheClient,
 		chzzkClient: chzzkClient,
 		logger:      safeLogger(logger),
 	}, nil
@@ -70,7 +70,7 @@ func NewChzzkChecker(cacheSvc cache.Client, chzzkClient *chzzk.Client, logger *s
 
 // Check는 alarm:chzzk_channels 매핑 기반으로 라이브 알림 후보를 생성한다.
 func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
-	channelMappings, err := c.cacheSvc.HGetAll(ctx, sharedalarmkeys.ChzzkChannelMapKey)
+	channelMappings, err := c.cacheClient.HGetAll(ctx, sharedalarmkeys.ChzzkChannelMapKey)
 	if err != nil {
 		return nil, fmt.Errorf("check chzzk streams: read channel mappings: %w", err)
 	}
@@ -84,12 +84,12 @@ func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, 
 		youtubeChannelIDs = append(youtubeChannelIDs, youtubeChannelID)
 	}
 
-	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
+	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheClient, youtubeChannelIDs)
 	if err != nil {
 		return nil, fmt.Errorf("check chzzk streams: load subscriber rooms: %w", err)
 	}
 
-	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
+	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheClient, youtubeChannelIDs)
 	if err != nil {
 		return nil, fmt.Errorf("check chzzk streams: load member names: %w", err)
 	}

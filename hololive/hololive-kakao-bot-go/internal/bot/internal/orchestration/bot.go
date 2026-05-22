@@ -67,11 +67,11 @@ type Bot struct {
 	twitch           *twitch.Client
 	officialProfiles *member.ProfileService
 	alarm            domain.AlarmCRUD
-	matcher          *matcher.MemberMatcher
+	matcher          *matcher.Matcher
 	commandRegistry  *command.Registry
-	statsRepo        stats.StatsCommandRepository
+	statsRepository        stats.StatsCommandRepository
 	acl              *acl.Service
-	majorEventRepo   command.MajorEventRepository
+	majorEventRepository   command.MajorEventRepository
 	memberNews       command.MemberNewsService
 	commandBuilders  []CommandBuilder
 	membersData      member.DataProvider
@@ -114,9 +114,9 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		officialProfiles: stream.profiles,
 		alarm:            stream.alarm,
 		matcher:          stream.matcher,
-		statsRepo:        stream.youTubeStatsRepo,
+		statsRepository:        stream.youTubeStatsRepository,
 		acl:              support.acl,
-		majorEventRepo:   feature.majorEventRepo,
+		majorEventRepository:   feature.majorEventRepository,
 		memberNews:       feature.memberNews,
 		commandBuilders:  feature.commandBuilders,
 		membersData:      stream.membersData,
@@ -153,7 +153,7 @@ func (b *Bot) initializeCommands() {
 	view := b.commandInitView()
 	deps := view.toCommandDependencies(registry)
 
-	b.logger.Info("Stats repository detected", slog.Bool("available", deps.StatsRepo != nil))
+	b.logger.Info("Stats repository detected", slog.Bool("available", deps.StatsRepository != nil))
 
 	commandsList := view.buildCommands(deps)
 	for _, cmd := range commandsList {

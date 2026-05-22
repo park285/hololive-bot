@@ -36,39 +36,39 @@ import (
 
 func buildMajorEventComponents(
 	ctx context.Context,
-	majorEventRepo *majorevent.Repository,
+	majorEventRepository *majorevent.Repository,
 	formatter mescheduler.Formatter,
 	summarizer *mesummarizer.EventSummarizer,
 	locker delivery.NotificationLocker,
-	outboxRepo *delivery.OutboxRepository,
+	outboxRepository *delivery.OutboxRepository,
 	logger *slog.Logger,
 	autoPrepareSchema bool,
 ) (*mescheduler.Scheduler, *mescheduler.MonthlyScheduler, *mescraper.RuntimeScheduler) {
 	majorEventScheduler := mescheduler.NewScheduler(
-		majorEventRepo,
+		majorEventRepository,
 		formatter,
 		summarizer,
 		locker,
-		outboxRepo,
+		outboxRepository,
 		logger,
 	)
 
 	majorEventMonthlyScheduler := mescheduler.NewMonthlyScheduler(
-		majorEventRepo,
+		majorEventRepository,
 		formatter,
 		summarizer,
 		locker,
-		outboxRepo,
+		outboxRepository,
 		logger,
 	)
 
 	if autoPrepareSchema {
-		if err := majorEventRepo.CreateEventsTable(ctx); err != nil {
+		if err := majorEventRepository.CreateEventsTable(ctx); err != nil {
 			logger.Error("Failed to create major_events table", slog.String("error", err.Error()))
 		}
 	}
 
-	majorEventScraperScheduler, err := mescraper.NewRuntimeScheduler(majorEventRepo, logger)
+	majorEventScraperScheduler, err := mescraper.NewRuntimeScheduler(majorEventRepository, logger)
 	if err != nil {
 		logger.Error("Failed to initialize major event scraper runtime scheduler", slog.String("error", err.Error()))
 		majorEventScraperScheduler = nil
@@ -81,7 +81,7 @@ func buildMemberNewsComponents(
 	memberNews *membernews.Service,
 	formatter membernews.DigestFormatter,
 	locker delivery.NotificationLocker,
-	outboxRepo *delivery.OutboxRepository,
+	outboxRepository *delivery.OutboxRepository,
 	logger *slog.Logger,
 ) (*mnscheduler.Scheduler, *mnscheduler.MonthlyScheduler) {
 	if memberNews == nil {
@@ -93,14 +93,14 @@ func buildMemberNewsComponents(
 		memberNews,
 		formatter,
 		locker,
-		outboxRepo,
+		outboxRepository,
 		logger,
 	)
 	monthlyScheduler := mnscheduler.NewMonthlyScheduler(
 		memberNews,
 		formatter,
 		locker,
-		outboxRepo,
+		outboxRepository,
 		logger,
 	)
 	return scheduler, monthlyScheduler

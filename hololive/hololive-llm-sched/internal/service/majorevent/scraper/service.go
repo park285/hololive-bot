@@ -49,7 +49,7 @@ type sourceScrapeResult struct {
 
 // Service는 RSS 수집/파싱/저장을 담당한다.
 type Service struct {
-	repo    eventRepository
+	repository    eventRepository
 	fetcher *FeedFetcher
 	parser  *RSSParser
 	config  ServiceConfig
@@ -58,13 +58,13 @@ type Service struct {
 
 // NewService는 Service를 생성한다.
 func NewService(
-	repo eventRepository,
+	repository eventRepository,
 	fetcher *FeedFetcher,
 	parser *RSSParser,
-	cfg ServiceConfig,
+	config ServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
-	if repo == nil {
+	if repository == nil {
 		return nil, fmt.Errorf("new scraper service: repository is nil")
 	}
 	if fetcher == nil {
@@ -74,13 +74,13 @@ func NewService(
 		return nil, fmt.Errorf("new scraper service: parser is nil")
 	}
 
-	normalized := normalizeServiceConfig(cfg)
+	normalized := normalizeServiceConfig(config)
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	return &Service{
-		repo:    repo,
+		repository:    repository,
 		fetcher: fetcher,
 		parser:  parser,
 		config:  normalized,
@@ -88,8 +88,8 @@ func NewService(
 	}, nil
 }
 
-func normalizeServiceConfig(cfg ServiceConfig) ServiceConfig {
-	normalized := cfg
+func normalizeServiceConfig(config ServiceConfig) ServiceConfig {
+	normalized := config
 	if len(normalized.Sources) == 0 {
 		normalized.Sources = DefaultServiceConfig().Sources
 	}
@@ -131,7 +131,7 @@ func (s *Service) Scrape(ctx context.Context) (ScrapeResult, error) {
 
 	deduped := dedupeEvents(allEvents)
 	for _, event := range deduped {
-		if err := s.repo.UpsertEvent(ctx, event); err != nil {
+		if err := s.repository.UpsertEvent(ctx, event); err != nil {
 			s.logger.Warn(
 				"Major event upsert failed",
 				slog.String("external_id", event.ExternalID),
@@ -209,7 +209,7 @@ func (s *Service) filterIncrementalEvents(
 	eventType domain.MajorEventType,
 	events []*domain.MajorEvent,
 ) ([]*domain.MajorEvent, int, error) {
-	recentExternalIDs, latestPubDate, err := s.repo.GetRecentExternalIDs(ctx, eventType, s.config.IncrementalLimit)
+	recentExternalIDs, latestPubDate, err := s.repository.GetRecentExternalIDs(ctx, eventType, s.config.IncrementalLimit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("filter incremental events: get recent external ids: %w", err)
 	}

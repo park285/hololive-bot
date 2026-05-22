@@ -40,7 +40,7 @@ const (
 var errIngestionLeaseOwnershipLost = errors.New("ingestion lease ownership lost")
 
 type Lease struct {
-	cacheSvc      cache.Client
+	cacheClient   cache.Client
 	key           string
 	owner         string
 	role          string
@@ -52,11 +52,11 @@ type Lease struct {
 
 func Acquire(
 	ctx context.Context,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	role string,
 	logger *slog.Logger,
 ) (*Lease, error) {
-	if cacheSvc == nil {
+	if cacheClient == nil {
 		return nil, fmt.Errorf("acquire ingestion lease: cache service must not be nil")
 	}
 	if role == "" {
@@ -67,7 +67,7 @@ func Acquire(
 	}
 
 	owner := fmt.Sprintf("%s:%d:%d", role, os.Getpid(), time.Now().UnixNano())
-	acquired, err := cacheSvc.SetNX(ctx, Key, owner, ingestionLeaseTTL)
+	acquired, err := cacheClient.SetNX(ctx, Key, owner, ingestionLeaseTTL)
 	if err != nil {
 		return nil, fmt.Errorf("acquire ingestion lease: setnx failed: %w", err)
 	}
@@ -83,7 +83,7 @@ func Acquire(
 	)
 
 	return &Lease{
-		cacheSvc:      cacheSvc,
+		cacheClient:   cacheClient,
 		key:           Key,
 		owner:         owner,
 		role:          role,
@@ -182,7 +182,7 @@ func (l *Lease) renew(ctx context.Context) error {
 			)
 		},
 	}, func(ctx context.Context) error {
-		renewed, err := l.cacheSvc.CompareAndExpire(ctx, l.key, l.owner, l.ttl)
+		renewed, err := l.cacheClient.CompareAndExpire(ctx, l.key, l.owner, l.ttl)
 		if err != nil {
 			return fmt.Errorf("renew ingestion lease: %w", err)
 		}
@@ -307,7 +307,7 @@ func (l *Lease) Release(ctx context.Context) error {
 		return nil
 	}
 
-	released, err := l.cacheSvc.CompareAndDelete(ctx, l.key, l.owner)
+	released, err := l.cacheClient.CompareAndDelete(ctx, l.key, l.owner)
 	if err != nil {
 		return fmt.Errorf("release ingestion lease: compare-and-delete failed: %w", err)
 	}

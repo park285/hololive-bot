@@ -158,12 +158,12 @@ func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
 		{Name: target.EnglishName, ChannelID: "channel-1"},
 	})
 
-	svc, err := NewProfileService(nil, provider, logger)
+	service, err := NewProfileService(nil, provider, logger)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	profile, err := svc.GetByEnglish(target.EnglishName)
+	profile, err := service.GetByEnglish(target.EnglishName)
 	if err != nil {
 		t.Fatalf("GetByEnglish failed: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
 		t.Fatalf("unexpected slug: %s", profile.Slug)
 	}
 
-	byChannel, err := svc.GetByChannel("channel-1")
+	byChannel, err := service.GetByChannel("channel-1")
 	if err != nil {
 		t.Fatalf("GetByChannel failed: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
 		t.Fatalf("unexpected channel slug: %s", byChannel.Slug)
 	}
 
-	withTranslation, translated, err := svc.GetWithTranslation(context.Background(), target.EnglishName)
+	withTranslation, translated, err := service.GetWithTranslation(context.Background(), target.EnglishName)
 	if err != nil {
 		t.Fatalf("GetWithTranslation failed: %v", err)
 	}

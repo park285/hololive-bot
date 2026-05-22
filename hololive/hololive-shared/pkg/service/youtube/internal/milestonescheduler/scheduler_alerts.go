@@ -66,7 +66,7 @@ func (ys *schedulerImpl) dispatchMilestoneAlerts(ctx context.Context) {
 func (ys *schedulerImpl) SendMilestoneAlerts(ctx context.Context, sendMessage func(room, message string) error, rooms []string) error {
 	approachingSent := ys.sendApproachingAlerts(ctx, sendMessage, rooms)
 
-	milestones, err := ys.statsRepo.GetUnnotifiedMilestones(ctx, 50)
+	milestones, err := ys.statsRepository.GetUnnotifiedMilestones(ctx, 50)
 	if err != nil {
 		ys.logger.Warn("Failed to get unnotified milestones", slog.Any("error", err))
 	}
@@ -86,7 +86,7 @@ func (ys *schedulerImpl) SendMilestoneAlerts(ctx context.Context, sendMessage fu
 }
 
 func (ys *schedulerImpl) sendApproachingAlerts(ctx context.Context, sendMessage func(room, message string) error, rooms []string) int {
-	notifications, err := ys.statsRepo.GetUnnotifiedApproaching(ctx, 50)
+	notifications, err := ys.statsRepository.GetUnnotifiedApproaching(ctx, 50)
 	if err != nil {
 		ys.logger.Warn("Failed to get unnotified approaching alerts", slog.Any("error", err))
 		return 0
@@ -160,7 +160,7 @@ func (ys *schedulerImpl) markMilestoneNotificationsSent(ctx context.Context, not
 		return
 	}
 
-	if err := ys.statsRepo.MarkMilestonesNotifiedBatch(ctx, notifications); err != nil {
+	if err := ys.statsRepository.MarkMilestonesNotifiedBatch(ctx, notifications); err != nil {
 		ys.logger.Warn("Failed to batch mark milestones notified",
 			slog.Int("count", len(notifications)),
 			slog.Any("error", err))
@@ -206,7 +206,7 @@ func (ys *schedulerImpl) markApproachingNotificationsSent(ctx context.Context, n
 		return
 	}
 
-	if err := ys.statsRepo.MarkApproachingChatNotifiedBatch(ctx, notifications); err != nil {
+	if err := ys.statsRepository.MarkApproachingChatNotifiedBatch(ctx, notifications); err != nil {
 		ys.logger.Warn("Failed to batch mark approaching notified",
 			slog.Int("count", len(notifications)),
 			slog.Any("error", err))

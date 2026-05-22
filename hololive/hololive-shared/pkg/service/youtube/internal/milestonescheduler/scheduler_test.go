@@ -872,7 +872,7 @@ func (m *mockTrackAllSubscribersService) GetRecentVideos(ctx context.Context, ch
 	return nil, nil
 }
 
-type mockTrackAllSubscribersRepo struct {
+type mockTrackAllSubscribersRepository struct {
 	latestByChannel       map[string]*domain.TimestampedStats
 	latestBatchErr        error
 	latestBatchCalls      int
@@ -894,11 +894,11 @@ type mockTrackAllSubscribersRepo struct {
 	markedApproaching     []ytstats.ApproachingNotification
 }
 
-func (m *mockTrackAllSubscribersRepo) GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error) {
+func (m *mockTrackAllSubscribersRepository) GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error) {
 	return m.latestByChannel[channelID], nil
 }
 
-func (m *mockTrackAllSubscribersRepo) GetLatestStatsForChannels(ctx context.Context, channelIDs []string) (map[string]*domain.TimestampedStats, error) {
+func (m *mockTrackAllSubscribersRepository) GetLatestStatsForChannels(ctx context.Context, channelIDs []string) (map[string]*domain.TimestampedStats, error) {
 	m.latestBatchCalls++
 	m.latestBatchKeys = append([]string(nil), channelIDs...)
 	if m.latestBatchErr != nil {
@@ -907,28 +907,28 @@ func (m *mockTrackAllSubscribersRepo) GetLatestStatsForChannels(ctx context.Cont
 	return m.latestByChannel, nil
 }
 
-func (m *mockTrackAllSubscribersRepo) SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
+func (m *mockTrackAllSubscribersRepository) SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
 	m.saveBatchCalls++
 	m.saveBatchRows += len(stats)
 	return m.saveBatchErr
 }
 
-func (m *mockTrackAllSubscribersRepo) SaveStats(ctx context.Context, stats *domain.TimestampedStats) error {
+func (m *mockTrackAllSubscribersRepository) SaveStats(ctx context.Context, stats *domain.TimestampedStats) error {
 	m.saveSingleCalls++
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) RecordChange(ctx context.Context, change *domain.StatsChange) error {
+func (m *mockTrackAllSubscribersRepository) RecordChange(ctx context.Context, change *domain.StatsChange) error {
 	m.recordChangeCalls++
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) RecordChangeBatch(ctx context.Context, changes []*domain.StatsChange) error {
+func (m *mockTrackAllSubscribersRepository) RecordChangeBatch(ctx context.Context, changes []*domain.StatsChange) error {
 	m.recordChangeCalls += len(changes)
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) GetAchievedMilestones(ctx context.Context, channelIDs []string, milestoneType domain.MilestoneType) (map[string][]uint64, error) {
+func (m *mockTrackAllSubscribersRepository) GetAchievedMilestones(ctx context.Context, channelIDs []string, milestoneType domain.MilestoneType) (map[string][]uint64, error) {
 	m.achievedCalls++
 	if m.achievedErr != nil {
 		return nil, m.achievedErr
@@ -939,50 +939,50 @@ func (m *mockTrackAllSubscribersRepo) GetAchievedMilestones(ctx context.Context,
 	return m.achievedByChannel, nil
 }
 
-func (m *mockTrackAllSubscribersRepo) HasAchievedMilestone(ctx context.Context, channelID string, milestoneType domain.MilestoneType, value uint64) (bool, error) {
+func (m *mockTrackAllSubscribersRepository) HasAchievedMilestone(ctx context.Context, channelID string, milestoneType domain.MilestoneType, value uint64) (bool, error) {
 	m.hasAchievedCalls++
 	return m.hasAchievedResult, nil
 }
 
-func (m *mockTrackAllSubscribersRepo) SaveMilestone(ctx context.Context, milestone *domain.Milestone) error {
+func (m *mockTrackAllSubscribersRepository) SaveMilestone(ctx context.Context, milestone *domain.Milestone) error {
 	m.saveMilestoneCalls++
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) GetNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64, limit int) ([]ytstats.NearMilestoneEntry, error) {
+func (m *mockTrackAllSubscribersRepository) GetNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64, limit int) ([]ytstats.NearMilestoneEntry, error) {
 	return nil, nil
 }
 
-func (m *mockTrackAllSubscribersRepo) HasApproachingNotified(ctx context.Context, channelID string, milestoneValue uint64) (bool, error) {
+func (m *mockTrackAllSubscribersRepository) HasApproachingNotified(ctx context.Context, channelID string, milestoneValue uint64) (bool, error) {
 	return false, nil
 }
 
-func (m *mockTrackAllSubscribersRepo) SaveApproachingNotification(ctx context.Context, channelID string, milestoneValue, currentSubs uint64, notifiedAt time.Time) error {
+func (m *mockTrackAllSubscribersRepository) SaveApproachingNotification(ctx context.Context, channelID string, milestoneValue, currentSubs uint64, notifiedAt time.Time) error {
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) GetUnnotifiedMilestones(ctx context.Context, limit int) ([]ytstats.MilestoneNotification, error) {
+func (m *mockTrackAllSubscribersRepository) GetUnnotifiedMilestones(ctx context.Context, limit int) ([]ytstats.MilestoneNotification, error) {
 	return append([]ytstats.MilestoneNotification(nil), m.unnotifiedMilestones...), nil
 }
 
-func (m *mockTrackAllSubscribersRepo) MarkMilestoneNotified(ctx context.Context, channelID string, milestoneType string, value uint64) error {
+func (m *mockTrackAllSubscribersRepository) MarkMilestoneNotified(ctx context.Context, channelID string, milestoneType string, value uint64) error {
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) MarkMilestonesNotifiedBatch(ctx context.Context, milestones []ytstats.MilestoneNotification) error {
+func (m *mockTrackAllSubscribersRepository) MarkMilestonesNotifiedBatch(ctx context.Context, milestones []ytstats.MilestoneNotification) error {
 	m.markedMilestones = append([]ytstats.MilestoneNotification(nil), milestones...)
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ytstats.ApproachingNotification, error) {
+func (m *mockTrackAllSubscribersRepository) GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ytstats.ApproachingNotification, error) {
 	return append([]ytstats.ApproachingNotification(nil), m.unnotifiedApproaching...), nil
 }
 
-func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotified(ctx context.Context, channelID string, milestoneValue uint64) error {
+func (m *mockTrackAllSubscribersRepository) MarkApproachingChatNotified(ctx context.Context, channelID string, milestoneValue uint64) error {
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ytstats.ApproachingNotification) error {
+func (m *mockTrackAllSubscribersRepository) MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ytstats.ApproachingNotification) error {
 	m.markedApproaching = append([]ytstats.ApproachingNotification(nil), notifications...)
 	return nil
 }
@@ -999,7 +999,7 @@ func (mockMilestoneFormatter) FormatMilestoneApproaching(ctx context.Context, me
 
 func TestSendMilestoneAlerts_SendsAndMarksBothKinds(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	repo := &mockTrackAllSubscribersRepo{
+	repository := &mockTrackAllSubscribersRepository{
 		unnotifiedMilestones: []ytstats.MilestoneNotification{
 			{ChannelID: "UC1", MemberName: "A", Value: 100000},
 		},
@@ -1009,7 +1009,7 @@ func TestSendMilestoneAlerts_SendsAndMarksBothKinds(t *testing.T) {
 	}
 
 	scheduler := &schedulerImpl{
-		statsRepo: repo,
+		statsRepository: repository,
 		formatter: mockMilestoneFormatter{},
 		logger:    logger,
 		stopCh:    make(chan struct{}),
@@ -1032,17 +1032,17 @@ func TestSendMilestoneAlerts_SendsAndMarksBothKinds(t *testing.T) {
 	if len(sent) != 4 {
 		t.Fatalf("sent messages = %d, want 4", len(sent))
 	}
-	if len(repo.markedMilestones) != 1 {
-		t.Fatalf("marked milestones = %d, want 1", len(repo.markedMilestones))
+	if len(repository.markedMilestones) != 1 {
+		t.Fatalf("marked milestones = %d, want 1", len(repository.markedMilestones))
 	}
-	if len(repo.markedApproaching) != 1 {
-		t.Fatalf("marked approaching = %d, want 1", len(repo.markedApproaching))
+	if len(repository.markedApproaching) != 1 {
+		t.Fatalf("marked approaching = %d, want 1", len(repository.markedApproaching))
 	}
 }
 
 func TestSendMilestoneAlerts_DoesNotMarkWhenAllRoomSendsFail(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	repo := &mockTrackAllSubscribersRepo{
+	repository := &mockTrackAllSubscribersRepository{
 		unnotifiedMilestones: []ytstats.MilestoneNotification{
 			{ChannelID: "UC1", MemberName: "A", Value: 100000},
 		},
@@ -1052,7 +1052,7 @@ func TestSendMilestoneAlerts_DoesNotMarkWhenAllRoomSendsFail(t *testing.T) {
 	}
 
 	scheduler := &schedulerImpl{
-		statsRepo: repo,
+		statsRepository: repository,
 		formatter: mockMilestoneFormatter{},
 		logger:    logger,
 		stopCh:    make(chan struct{}),
@@ -1066,17 +1066,17 @@ func TestSendMilestoneAlerts_DoesNotMarkWhenAllRoomSendsFail(t *testing.T) {
 		t.Fatalf("SendMilestoneAlerts() error = %v", err)
 	}
 
-	if len(repo.markedMilestones) != 0 {
-		t.Fatalf("marked milestones = %d, want 0", len(repo.markedMilestones))
+	if len(repository.markedMilestones) != 0 {
+		t.Fatalf("marked milestones = %d, want 0", len(repository.markedMilestones))
 	}
-	if len(repo.markedApproaching) != 0 {
-		t.Fatalf("marked approaching = %d, want 0", len(repo.markedApproaching))
+	if len(repository.markedApproaching) != 0 {
+		t.Fatalf("marked approaching = %d, want 0", len(repository.markedApproaching))
 	}
 }
 
 func TestSendMilestoneAlerts_DoesNotMarkMilestoneWhenAnyRoomFails(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	repo := &mockTrackAllSubscribersRepo{
+	repository := &mockTrackAllSubscribersRepository{
 		unnotifiedMilestones: []ytstats.MilestoneNotification{
 			{ChannelID: "UC1", MemberName: "A", Value: 100000},
 		},
@@ -1086,7 +1086,7 @@ func TestSendMilestoneAlerts_DoesNotMarkMilestoneWhenAnyRoomFails(t *testing.T) 
 	}
 
 	scheduler := &schedulerImpl{
-		statsRepo: repo,
+		statsRepository: repository,
 		formatter: mockMilestoneFormatter{},
 		logger:    logger,
 		stopCh:    make(chan struct{}),
@@ -1105,24 +1105,24 @@ func TestSendMilestoneAlerts_DoesNotMarkMilestoneWhenAnyRoomFails(t *testing.T) 
 		t.Fatalf("SendMilestoneAlerts() error = %v", err)
 	}
 
-	if len(repo.markedMilestones) != 0 {
-		t.Fatalf("marked milestones = %d, want 0", len(repo.markedMilestones))
+	if len(repository.markedMilestones) != 0 {
+		t.Fatalf("marked milestones = %d, want 0", len(repository.markedMilestones))
 	}
-	if len(repo.markedApproaching) != 0 {
-		t.Fatalf("marked approaching = %d, want 0", len(repo.markedApproaching))
+	if len(repository.markedApproaching) != 0 {
+		t.Fatalf("marked approaching = %d, want 0", len(repository.markedApproaching))
 	}
 }
 
 func TestSendMilestoneAlerts_DoesNotMarkApproachingWhenAnyRoomFails(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	repo := &mockTrackAllSubscribersRepo{
+	repository := &mockTrackAllSubscribersRepository{
 		unnotifiedApproaching: []ytstats.ApproachingNotification{
 			{ChannelID: "UC2", MemberName: "B", MilestoneValue: 1000000, CurrentSubs: 990000},
 		},
 	}
 
 	scheduler := &schedulerImpl{
-		statsRepo: repo,
+		statsRepository: repository,
 		formatter: mockMilestoneFormatter{},
 		logger:    logger,
 		stopCh:    make(chan struct{}),
@@ -1141,11 +1141,11 @@ func TestSendMilestoneAlerts_DoesNotMarkApproachingWhenAnyRoomFails(t *testing.T
 		t.Fatalf("SendMilestoneAlerts() error = %v", err)
 	}
 
-	if len(repo.markedMilestones) != 0 {
-		t.Fatalf("marked milestones = %d, want 0", len(repo.markedMilestones))
+	if len(repository.markedMilestones) != 0 {
+		t.Fatalf("marked milestones = %d, want 0", len(repository.markedMilestones))
 	}
-	if len(repo.markedApproaching) != 0 {
-		t.Fatalf("marked approaching = %d, want 0", len(repo.markedApproaching))
+	if len(repository.markedApproaching) != 0 {
+		t.Fatalf("marked approaching = %d, want 0", len(repository.markedApproaching))
 	}
 }
 
@@ -1159,14 +1159,14 @@ func TestTrackAllSubscribers_UsesSaveStatsBatch(t *testing.T) {
 		},
 	}
 
-	youtubeSvc := &mockTrackAllSubscribersService{
+	youtubeService := &mockTrackAllSubscribersService{
 		stats: map[string]*ChannelStats{
 			"UC1": {SubscriberCount: 1100, VideoCount: 11, ViewCount: 10001},
 			"UC2": {SubscriberCount: 2200, VideoCount: 22, ViewCount: 20002},
 		},
 	}
 
-	repo := &mockTrackAllSubscribersRepo{
+	repository := &mockTrackAllSubscribersRepository{
 		latestByChannel: map[string]*domain.TimestampedStats{
 			"UC1": {SubscriberCount: 1000, VideoCount: 10, ViewCount: 10000},
 			"UC2": {SubscriberCount: 2000, VideoCount: 20, ViewCount: 20000},
@@ -1174,8 +1174,8 @@ func TestTrackAllSubscribers_UsesSaveStatsBatch(t *testing.T) {
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeSvc,
-		statsRepo:   repo,
+		youtube:     youtubeService,
+		statsRepository:   repository,
 		membersData: members,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
@@ -1183,26 +1183,26 @@ func TestTrackAllSubscribers_UsesSaveStatsBatch(t *testing.T) {
 
 	scheduler.trackAllSubscribers(context.Background())
 
-	if repo.saveBatchCalls != 1 {
-		t.Fatalf("saveBatchCalls = %d, want 1", repo.saveBatchCalls)
+	if repository.saveBatchCalls != 1 {
+		t.Fatalf("saveBatchCalls = %d, want 1", repository.saveBatchCalls)
 	}
-	if repo.latestBatchCalls != 1 {
-		t.Fatalf("latestBatchCalls = %d, want 1", repo.latestBatchCalls)
+	if repository.latestBatchCalls != 1 {
+		t.Fatalf("latestBatchCalls = %d, want 1", repository.latestBatchCalls)
 	}
-	if repo.achievedCalls != 1 {
-		t.Fatalf("achievedCalls = %d, want 1", repo.achievedCalls)
+	if repository.achievedCalls != 1 {
+		t.Fatalf("achievedCalls = %d, want 1", repository.achievedCalls)
 	}
-	if repo.saveBatchRows != 2 {
-		t.Fatalf("saveBatchRows = %d, want 2", repo.saveBatchRows)
+	if repository.saveBatchRows != 2 {
+		t.Fatalf("saveBatchRows = %d, want 2", repository.saveBatchRows)
 	}
-	if repo.saveSingleCalls != 0 {
-		t.Fatalf("saveSingleCalls = %d, want 0", repo.saveSingleCalls)
+	if repository.saveSingleCalls != 0 {
+		t.Fatalf("saveSingleCalls = %d, want 0", repository.saveSingleCalls)
 	}
-	if repo.recordChangeCalls != 2 {
-		t.Fatalf("recordChangeCalls = %d, want 2", repo.recordChangeCalls)
+	if repository.recordChangeCalls != 2 {
+		t.Fatalf("recordChangeCalls = %d, want 2", repository.recordChangeCalls)
 	}
-	if repo.hasAchievedCalls != 0 {
-		t.Fatalf("hasAchievedCalls = %d, want 0", repo.hasAchievedCalls)
+	if repository.hasAchievedCalls != 0 {
+		t.Fatalf("hasAchievedCalls = %d, want 0", repository.hasAchievedCalls)
 	}
 }
 
@@ -1215,13 +1215,13 @@ func TestTrackAllSubscribers_SkipsChangeProcessingWhenBatchSaveFails(t *testing.
 		},
 	}
 
-	youtubeSvc := &mockTrackAllSubscribersService{
+	youtubeService := &mockTrackAllSubscribersService{
 		stats: map[string]*ChannelStats{
 			"UC1": {SubscriberCount: 1100, VideoCount: 11, ViewCount: 10001},
 		},
 	}
 
-	repo := &mockTrackAllSubscribersRepo{
+	repository := &mockTrackAllSubscribersRepository{
 		latestByChannel: map[string]*domain.TimestampedStats{
 			"UC1": {SubscriberCount: 1000, VideoCount: 10, ViewCount: 10000},
 		},
@@ -1229,8 +1229,8 @@ func TestTrackAllSubscribers_SkipsChangeProcessingWhenBatchSaveFails(t *testing.
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeSvc,
-		statsRepo:   repo,
+		youtube:     youtubeService,
+		statsRepository:   repository,
 		membersData: members,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
@@ -1238,17 +1238,17 @@ func TestTrackAllSubscribers_SkipsChangeProcessingWhenBatchSaveFails(t *testing.
 
 	scheduler.trackAllSubscribers(context.Background())
 
-	if repo.saveBatchCalls != 1 {
-		t.Fatalf("saveBatchCalls = %d, want 1", repo.saveBatchCalls)
+	if repository.saveBatchCalls != 1 {
+		t.Fatalf("saveBatchCalls = %d, want 1", repository.saveBatchCalls)
 	}
-	if repo.latestBatchCalls != 1 {
-		t.Fatalf("latestBatchCalls = %d, want 1", repo.latestBatchCalls)
+	if repository.latestBatchCalls != 1 {
+		t.Fatalf("latestBatchCalls = %d, want 1", repository.latestBatchCalls)
 	}
-	if repo.saveSingleCalls != 0 {
-		t.Fatalf("saveSingleCalls = %d, want 0", repo.saveSingleCalls)
+	if repository.saveSingleCalls != 0 {
+		t.Fatalf("saveSingleCalls = %d, want 0", repository.saveSingleCalls)
 	}
-	if repo.recordChangeCalls != 0 {
-		t.Fatalf("recordChangeCalls = %d, want 0", repo.recordChangeCalls)
+	if repository.recordChangeCalls != 0 {
+		t.Fatalf("recordChangeCalls = %d, want 0", repository.recordChangeCalls)
 	}
 }
 
@@ -1261,13 +1261,13 @@ func TestTrackAllSubscribers_UsesHasAchievedFallbackWhenMilestonePreloadFails(t 
 		},
 	}
 
-	youtubeSvc := &mockTrackAllSubscribersService{
+	youtubeService := &mockTrackAllSubscribersService{
 		stats: map[string]*ChannelStats{
 			"UC1": {SubscriberCount: 101000, VideoCount: 11, ViewCount: 10001},
 		},
 	}
 
-	repo := &mockTrackAllSubscribersRepo{
+	repository := &mockTrackAllSubscribersRepository{
 		latestByChannel: map[string]*domain.TimestampedStats{
 			"UC1": {SubscriberCount: 99000, VideoCount: 10, ViewCount: 10000},
 		},
@@ -1275,8 +1275,8 @@ func TestTrackAllSubscribers_UsesHasAchievedFallbackWhenMilestonePreloadFails(t 
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeSvc,
-		statsRepo:   repo,
+		youtube:     youtubeService,
+		statsRepository:   repository,
 		membersData: members,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
@@ -1284,25 +1284,25 @@ func TestTrackAllSubscribers_UsesHasAchievedFallbackWhenMilestonePreloadFails(t 
 
 	scheduler.trackAllSubscribers(context.Background())
 
-	if repo.achievedCalls != 1 {
-		t.Fatalf("achievedCalls = %d, want 1", repo.achievedCalls)
+	if repository.achievedCalls != 1 {
+		t.Fatalf("achievedCalls = %d, want 1", repository.achievedCalls)
 	}
-	if repo.hasAchievedCalls != 1 {
-		t.Fatalf("hasAchievedCalls = %d, want 1", repo.hasAchievedCalls)
+	if repository.hasAchievedCalls != 1 {
+		t.Fatalf("hasAchievedCalls = %d, want 1", repository.hasAchievedCalls)
 	}
-	if repo.saveMilestoneCalls != 1 {
-		t.Fatalf("saveMilestoneCalls = %d, want 1", repo.saveMilestoneCalls)
+	if repository.saveMilestoneCalls != 1 {
+		t.Fatalf("saveMilestoneCalls = %d, want 1", repository.saveMilestoneCalls)
 	}
 }
 
 func TestProcessMilestones_FallsBackToHasAchievedWhenPreloadUnavailable(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	repo := &mockTrackAllSubscribersRepo{
+	repository := &mockTrackAllSubscribersRepository{
 		hasAchievedResult: true,
 	}
 
 	scheduler := &schedulerImpl{
-		statsRepo: repo,
+		statsRepository: repository,
 		logger:    logger,
 		stopCh:    make(chan struct{}),
 	}
@@ -1331,11 +1331,11 @@ func TestProcessMilestones_FallsBackToHasAchievedWhenPreloadUnavailable(t *testi
 	if saveErrors != 0 {
 		t.Fatalf("saveErrors = %d, want 0", saveErrors)
 	}
-	if repo.hasAchievedCalls != 1 {
-		t.Fatalf("hasAchievedCalls = %d, want 1", repo.hasAchievedCalls)
+	if repository.hasAchievedCalls != 1 {
+		t.Fatalf("hasAchievedCalls = %d, want 1", repository.hasAchievedCalls)
 	}
-	if repo.saveMilestoneCalls != 0 {
-		t.Fatalf("saveMilestoneCalls = %d, want 0", repo.saveMilestoneCalls)
+	if repository.saveMilestoneCalls != 0 {
+		t.Fatalf("saveMilestoneCalls = %d, want 0", repository.saveMilestoneCalls)
 	}
 }
 
@@ -1376,8 +1376,8 @@ func (m *mockRecentVideosService) GetRecentVideos(ctx context.Context, channelID
 
 func TestFetchRecentVideosRotation_UsesBoundedParallelism(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	youtubeSvc := &mockRecentVideosService{}
-	cacheSvc := &cachemocks.Client{
+	youtubeService := &mockRecentVideosService{}
+	cache := &cachemocks.Client{
 		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
 			return nil
 		},
@@ -1392,8 +1392,8 @@ func TestFetchRecentVideosRotation_UsesBoundedParallelism(t *testing.T) {
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeSvc,
-		cache:       cacheSvc,
+		youtube:     youtubeService,
+		cache:       cache,
 		membersData: members,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
@@ -1401,17 +1401,17 @@ func TestFetchRecentVideosRotation_UsesBoundedParallelism(t *testing.T) {
 
 	scheduler.fetchRecentVideosRotation(context.Background(), 0)
 
-	if youtubeSvc.maxConcurrent <= 1 {
-		t.Fatalf("maxConcurrent = %d, want > 1", youtubeSvc.maxConcurrent)
+	if youtubeService.maxConcurrent <= 1 {
+		t.Fatalf("maxConcurrent = %d, want > 1", youtubeService.maxConcurrent)
 	}
-	if youtubeSvc.maxConcurrent > recentVideosFetchParallelism {
-		t.Fatalf("maxConcurrent = %d, want <= %d", youtubeSvc.maxConcurrent, recentVideosFetchParallelism)
+	if youtubeService.maxConcurrent > recentVideosFetchParallelism {
+		t.Fatalf("maxConcurrent = %d, want <= %d", youtubeService.maxConcurrent, recentVideosFetchParallelism)
 	}
 }
 
 func TestFetchRecentVideosRotation_CacheWritesUseBoundedParallelism(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	youtubeSvc := &mockRecentVideosService{
+	youtubeService := &mockRecentVideosService{
 		sleep: time.Millisecond,
 	}
 
@@ -1420,7 +1420,7 @@ func TestFetchRecentVideosRotation_CacheWritesUseBoundedParallelism(t *testing.T
 		cacheCurrent       int
 		cacheMaxConcurrent int
 	)
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
 			mu.Lock()
 			cacheCurrent++
@@ -1447,8 +1447,8 @@ func TestFetchRecentVideosRotation_CacheWritesUseBoundedParallelism(t *testing.T
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeSvc,
-		cache:       cacheSvc,
+		youtube:     youtubeService,
+		cache:       cache,
 		membersData: members,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
@@ -1504,11 +1504,11 @@ func (m *mockBatchOverlapGuardService) RecentCalls() int {
 
 func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	youtubeSvc := &mockBatchOverlapGuardService{
+	youtubeService := &mockBatchOverlapGuardService{
 		startedCh: make(chan struct{}, recentVideosFetchParallelism),
 		releaseCh: make(chan struct{}),
 	}
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
 			return nil
 		},
@@ -1524,9 +1524,9 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeSvc,
-		statsRepo:   &mockTrackAllSubscribersRepo{latestByChannel: map[string]*domain.TimestampedStats{}},
-		cache:       cacheSvc,
+		youtube:     youtubeService,
+		statsRepository:   &mockTrackAllSubscribersRepository{latestByChannel: map[string]*domain.TimestampedStats{}},
+		cache:       cache,
 		membersData: members,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
@@ -1541,7 +1541,7 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 
 	for range recentVideosFetchParallelism {
 		select {
-		case <-youtubeSvc.startedCh:
+		case <-youtubeService.startedCh:
 		case <-time.After(time.Second):
 			t.Fatal("timed out waiting for first batch to fill parallelism slots")
 		}
@@ -1549,7 +1549,7 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 
 	scheduler.runBatch(ctx)
 
-	if got := youtubeSvc.RecentCalls(); got != recentVideosFetchParallelism {
+	if got := youtubeService.RecentCalls(); got != recentVideosFetchParallelism {
 		t.Fatalf("recentCalls = %d, want %d while overlap guard is active", got, recentVideosFetchParallelism)
 	}
 
@@ -1560,7 +1560,7 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 		t.Fatalf("currentBatch = %d, want 1 after skipped overlapping batch", currentBatch)
 	}
 
-	close(youtubeSvc.releaseCh)
+	close(youtubeService.releaseCh)
 
 	select {
 	case <-firstDone:
@@ -1570,7 +1570,7 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 
 	scheduler.runBatch(ctx)
 
-	if got := youtubeSvc.RecentCalls(); got != channelsPerBatch*2 {
+	if got := youtubeService.RecentCalls(); got != channelsPerBatch*2 {
 		t.Fatalf("recentCalls = %d, want %d after guard is released", got, channelsPerBatch*2)
 	}
 

@@ -14,10 +14,10 @@ import (
 
 func ProvideBotRouter(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
-	return apphttp.ProvideBotRouter(ctx, cfg, logger, webhookHandler, triggerHandler)
+	return apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler)
 }

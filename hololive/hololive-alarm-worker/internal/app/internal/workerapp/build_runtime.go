@@ -46,44 +46,44 @@ type alarmFoundation struct {
 	Postgres       database.Client
 }
 
-func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*AlarmWorkerRuntime, error) {
-	ctx, err := normalizeRuntimeBuildInputs(ctx, cfg, logger)
+func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*AlarmWorkerRuntime, error) {
+	ctx, err := normalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	infra, err := sharedmodules.BuildInfraModule(ctx, cfg, logger)
+	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build alarm worker runtime: build infra module: %w", err)
 	}
 
-	foundation, err := buildAlarmFoundation(ctx, cfg, infra, logger)
+	foundation, err := buildAlarmFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
 		infra.Cleanup()
 		return nil, fmt.Errorf("build alarm worker runtime: alarm foundation: %w", err)
 	}
 
-	scheduler, err := buildRuntimeScheduler(cfg, infra.Cache, foundation, logger, os.Getenv(notificationSchedulerRoleEnv))
+	scheduler, err := buildRuntimeScheduler(appConfig, infra.Cache, foundation, logger, os.Getenv(notificationSchedulerRoleEnv))
 	if err != nil {
 		infra.Cleanup()
 		return nil, fmt.Errorf("build alarm worker runtime: scheduler: %w", err)
 	}
 
-	notificationEgress, err := buildNotificationEgress(cfg, infra, logger)
+	notificationEgress, err := buildNotificationEgress(appConfig, infra, logger)
 	if err != nil {
 		infra.Cleanup()
 		return nil, fmt.Errorf("build alarm worker runtime: notification egress: %w", err)
 	}
 
-	router, err := sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{APIKey: cfg.Server.APIKey})
+	router, err := sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{APIKey: appConfig.Server.APIKey})
 	if err != nil {
 		infra.Cleanup()
 		return nil, fmt.Errorf("build alarm worker runtime: router: %w", err)
 	}
 
-	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	addr := fmt.Sprintf(":%d", appConfig.Server.Port)
 	return &AlarmWorkerRuntime{
-		Config:             cfg,
+		Config:             appConfig,
 		Logger:             logger,
 		Scheduler:          scheduler,
 		NotificationEgress: notificationEgress,
@@ -95,11 +95,11 @@ func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *sl
 }
 
 func BuildAlarmWorkerConfigSubscriber(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	alarmCRUD domain.AlarmCRUD,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
-	if cacheSvc == nil || alarmCRUD == nil {
+	if cacheClient == nil || alarmCRUD == nil {
 		return nil
 	}
 
@@ -119,7 +119,7 @@ func BuildAlarmWorkerConfigSubscriber(
 		},
 	})
 
-	return configsub.New(cacheSvc.GetClient(), applyFn, logger)
+	return configsub.New(cacheClient.GetClient(), applyFn, logger)
 }
 
 func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
@@ -139,8 +139,8 @@ func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
 }
 
 func buildRuntimeScheduler(
-	cfg *config.Config,
-	cacheSvc cache.Client,
+	appConfig *config.Config,
+	cacheClient cache.Client,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
 	configuredRole string,
@@ -162,13 +162,13 @@ func buildRuntimeScheduler(
 	}
 
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(
-		cacheSvc,
+		cacheClient,
 		foundation.HolodexService,
 		foundation.ChzzkClient,
 		foundation.TwitchClient,
 		foundation.AlarmCRUD,
 		foundation.Postgres,
-		cfg.Notification,
+		appConfig.Notification,
 		foundation.Outbox,
 		publishConfig,
 		parseBoolEnv("ALARM_TWITCH_ENABLED", true),
@@ -183,7 +183,7 @@ func buildRuntimeScheduler(
 
 func buildAlarmFoundation(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*alarmFoundation, error) {
@@ -196,29 +196,29 @@ func buildAlarmFoundation(
 	scraperService := providers.ProvideScraperService(
 		infra.Cache,
 		memberData,
-		scraper.ProxyConfig{Enabled: cfg.Scraper.ProxyEnabled, URL: cfg.Scraper.ProxyURL},
+		scraper.ProxyConfig{Enabled: appConfig.Scraper.ProxyEnabled, URL: appConfig.Scraper.ProxyURL},
 		sharedRL,
 		logger,
 	)
-	holodexService, err := providers.ProvideHolodexService(cfg.Holodex.BaseURL, cfg.Holodex.APIKey, infra.Cache, scraperService, logger)
+	holodexService, err := providers.ProvideHolodexService(appConfig.Holodex.BaseURL, appConfig.Holodex.APIKey, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
 	chzzkClient := chzzk.NewClientWithConfig(chzzk.ClientConfig{
-		ClientID:     cfg.Chzzk.ClientID,
-		ClientSecret: cfg.Chzzk.ClientSecret,
+		ClientID:     appConfig.Chzzk.ClientID,
+		ClientSecret: appConfig.Chzzk.ClientSecret,
 		Logger:       logger,
 	})
 	twitchClient := twitch.NewClient(twitch.ClientConfig{
-		ClientID:     cfg.Twitch.ClientID,
-		ClientSecret: cfg.Twitch.ClientSecret,
+		ClientID:     appConfig.Twitch.ClientID,
+		ClientSecret: appConfig.Twitch.ClientSecret,
 	}, logger)
 
-	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
-	outboxRepo := dispatchoutbox.NewPgxRepository(infra.Postgres)
-	resolved := sharedmodules.ResolvePersistedTargetMinutes(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
-	alarmService, err := notification.NewAlarmService(infra.Cache, holodexService, chzzkClient, twitchClient, memberData, alarmRepo, logger, resolved)
+	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
+	outboxRepository := dispatchoutbox.NewPgxRepository(infra.Postgres)
+	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
+	alarmService, err := notification.NewAlarmService(infra.Cache, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}
@@ -233,7 +233,7 @@ func buildAlarmFoundation(
 		ChzzkClient:    chzzkClient,
 		TwitchClient:   twitchClient,
 		AlarmCRUD:      alarmService,
-		Outbox:         outboxRepo,
+		Outbox:         outboxRepository,
 		Postgres:       infra.Postgres,
 	}, nil
 }

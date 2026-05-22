@@ -92,8 +92,8 @@ func (m *mockNotificationLocker) ReleaseRoomClaims(_ context.Context, _ []string
 	return nil
 }
 
-// mockOutboxRepo: outboxEnqueuer 구현
-type mockOutboxRepo struct {
+// mockOutboxRepository: outboxEnqueuer 구현
+type mockOutboxRepository struct {
 	mu            sync.Mutex
 	enqueuedItems []enqueueRecord
 	enqueueErr    map[string]error // roomID → error
@@ -106,13 +106,13 @@ type enqueueRecord struct {
 	Message   string
 }
 
-func newMockOutboxRepo() *mockOutboxRepo {
-	return &mockOutboxRepo{
+func newMockOutboxRepository() *mockOutboxRepository {
+	return &mockOutboxRepository{
 		enqueueErr: make(map[string]error),
 	}
 }
 
-func (m *mockOutboxRepo) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
+func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err, ok := m.enqueueErr[roomID]; ok {
@@ -130,7 +130,7 @@ func (m *mockOutboxRepo) Enqueue(_ context.Context, kind domain.DeliveryOutboxKi
 func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
-	outbox := newMockOutboxRepo()
+	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
@@ -147,7 +147,7 @@ func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
 func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}, {RoomID: "room-2"}}}
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
-	outbox := newMockOutboxRepo()
+	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
@@ -164,7 +164,7 @@ func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
 func TestScheduler_AllEnqueueFailureReturnsError(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
-	outbox := newMockOutboxRepo()
+	outbox := newMockOutboxRepository()
 	outbox.enqueueErr["room-1"] = errors.New("db error")
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
@@ -227,7 +227,7 @@ func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 		},
 	}
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
-	outbox := newMockOutboxRepo()
+	outbox := newMockOutboxRepository()
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
@@ -250,7 +250,7 @@ func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 		},
 	}
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
-	outbox := newMockOutboxRepo()
+	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
@@ -267,7 +267,7 @@ func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireToken: "tok-1", acquireAcquired: true}
-	outbox := newMockOutboxRepo()
+	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
@@ -285,7 +285,7 @@ func TestScheduler_LockAcquireGracefulDegradation(t *testing.T) {
 	// 스케줄러는 정상 진행.
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireToken: "degraded", acquireAcquired: true}
-	outbox := newMockOutboxRepo()
+	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)

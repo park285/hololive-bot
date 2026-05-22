@@ -14,8 +14,8 @@ import (
 )
 
 func TestObserveSubscriberCacheOnProducerStartup_LogsRegistryCount(t *testing.T) {
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
 		assert.Equal(t, t.Context(), ctx)
 		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
 		return []string{"UC_test_1", "UC_test_2"}, nil
@@ -24,7 +24,7 @@ func TestObserveSubscriberCacheOnProducerStartup_LogsRegistryCount(t *testing.T)
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 
-	err := observeSubscriberCacheOnProducerStartup(t.Context(), "youtube-producer", true, cacheSvc, logger)
+	err := observeSubscriberCacheOnProducerStartup(t.Context(), "youtube-producer", true, cache, logger)
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), `"msg":"subscriber_cache_observed_on_producer_startup"`)
 	assert.Contains(t, buf.String(), `"runtime":"youtube-producer"`)
@@ -32,16 +32,16 @@ func TestObserveSubscriberCacheOnProducerStartup_LogsRegistryCount(t *testing.T)
 }
 
 func TestObserveSubscriberCacheOnProducerStartup_NoOpWhenYouTubeDisabled(t *testing.T) {
-	cacheSvc := cachemocks.NewStrictClient()
+	cache := cachemocks.NewStrictClient()
 	called := false
-	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+	cache.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
 		called = true
 		return nil, nil
 	}
 
 	logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
 
-	err := observeSubscriberCacheOnProducerStartup(t.Context(), "youtube-producer", false, cacheSvc, logger)
+	err := observeSubscriberCacheOnProducerStartup(t.Context(), "youtube-producer", false, cache, logger)
 	require.NoError(t, err)
 	assert.False(t, called)
 }

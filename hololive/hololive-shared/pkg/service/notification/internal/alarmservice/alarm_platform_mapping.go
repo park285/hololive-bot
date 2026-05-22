@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
@@ -199,11 +200,9 @@ func (as *AlarmService) syncRegisteredPlatformMappingForChannel(ctx context.Cont
 }
 
 func (as *AlarmService) removeUnknownPlatformMappingsForChannel(ctx context.Context, channelID string) error {
-	if as.logger != nil {
-		as.logger.Warn("Skip platform mapping update for unknown channel",
-			slog.String("channel_id", channelID),
-		)
-	}
+	logging.Warn(ctx, as.logger, "platform_mapping.unknown_channel", "Skip platform mapping update for unknown channel",
+		slog.String("channel_id", channelID),
+	)
 
 	if err := as.removePlatformMappingsForChannel(ctx, channelID); err != nil {
 		return fmt.Errorf("remove unknown channel platform mappings: %w", err)
@@ -338,13 +337,11 @@ func (as *AlarmService) clearConflictingTwitchChannelLoginMapping(
 		return fmt.Errorf("clear conflicting twitch channel login mapping: %w", err)
 	}
 
-	if as.logger != nil {
-		as.logger.Warn("Duplicate Twitch login detected while incrementally syncing platform mappings",
-			slog.String("twitch_login", desiredLogin),
-			slog.String("kept_channel_id", existingChannelID),
-			slog.String("ignored_channel_id", channelID),
-		)
-	}
+	logging.Warn(ctx, as.logger, "platform_mapping.duplicate_twitch_login", "Duplicate Twitch login detected while incrementally syncing platform mappings",
+		slog.String("twitch_login", desiredLogin),
+		slog.String("kept_channel_id", existingChannelID),
+		slog.String("ignored_channel_id", channelID),
+	)
 	return nil
 }
 

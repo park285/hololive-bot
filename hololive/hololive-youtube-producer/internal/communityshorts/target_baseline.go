@@ -79,18 +79,18 @@ type alarmActivationKey struct {
 	alarmType domain.AlarmType
 }
 
-func CollectTargetBaseline(ctx context.Context, cfg *config.Config, logger *slog.Logger) (TargetBaseline, error) {
+func CollectTargetBaseline(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (TargetBaseline, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return TargetBaseline{}, fmt.Errorf("collect community shorts target baseline: config is nil")
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, appConfig.Postgres, logger)
 	if err != nil {
 		return TargetBaseline{}, fmt.Errorf("collect community shorts target baseline: provide database resources: %w", err)
 	}
@@ -111,13 +111,13 @@ func CollectTargetBaseline(ctx context.Context, cfg *config.Config, logger *slog
 	}
 
 	channels := BuildOperationalChannelsFromMembers(members)
-	return BuildTargetBaseline(channels, alarms, cfg.Ingestion, time.Now().UTC())
+	return BuildTargetBaseline(channels, alarms, appConfig.Ingestion, time.Now().UTC())
 }
 
 func BuildTargetBaseline(
 	channels []OperationalChannel,
 	alarms []*domain.Alarm,
-	ingestionCfg config.IngestionConfig,
+	ingestionConfig config.IngestionConfig,
 	generatedAt time.Time,
 ) (TargetBaseline, error) {
 	if err := ValidateOperationalTargets(channels); err != nil {
@@ -125,8 +125,8 @@ func BuildTargetBaseline(
 	}
 
 	activationIndex := buildAlarmActivationIndex(alarms)
-	finalOwner := resolveFinalDeliveryOwner(ingestionCfg)
-	cutoverPending := isCutoverPending(ingestionCfg, generatedAt)
+	finalOwner := resolveFinalDeliveryOwner(ingestionConfig)
+	cutoverPending := isCutoverPending(ingestionConfig, generatedAt)
 
 	enabledChannels := make([]TargetBaselineChannel, 0, len(channels))
 	for i := range channels {
@@ -154,13 +154,13 @@ func BuildTargetBaseline(
 		return strings.Compare(left.OwnerLabel, right.OwnerLabel)
 	})
 
-	cutoverAt := normalizedCutoverAt(ingestionCfg.CommunityShortsBigBangCutoverAt)
+	cutoverAt := normalizedCutoverAt(ingestionConfig.CommunityShortsBigBangCutoverAt)
 
 	return TargetBaseline{
 		GeneratedAt: generatedAt.UTC(),
 		Runtime: TargetBaselineRuntime{
 			FinalDeliveryOwner:              finalOwner,
-			CommunityShortsBigBangEnabled:   ingestionCfg.CommunityShortsBigBangEnabled,
+			CommunityShortsBigBangEnabled:   ingestionConfig.CommunityShortsBigBangEnabled,
 			CommunityShortsBigBangCutoverAt: cutoverAt,
 			TargetChannelCount:              len(enabledChannels),
 		},

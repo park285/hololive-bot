@@ -60,16 +60,16 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
-	cfg, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction)
+	config, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := cfg.Validate(); err != nil {
+	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
-	return cfg, nil
+	return config, nil
 }
 
 //nolint:funlen // central environment-to-config assembly is intentionally kept in one place

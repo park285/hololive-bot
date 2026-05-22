@@ -14,16 +14,16 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
 
-func InitBotInfrastructure(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
-	infra, err := InitInfraResources(ctx, cfg, logger)
+func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
+	infra, err := InitInfraResources(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
 
 	irisClient, err := providers.ProvideIrisClient(
 		logger,
-		iris.WithBaseURL(cfg.Iris.BaseURL),
-		iris.WithBotToken(cfg.Iris.BotToken),
+		iris.WithBaseURL(appConfig.Iris.BaseURL),
+		iris.WithBotToken(appConfig.Iris.BotToken),
 	)
 	if err != nil {
 		infra.Cleanup()
@@ -37,26 +37,26 @@ func InitBotInfrastructure(ctx context.Context, cfg *config.Config, logger *slog
 	}()
 
 	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
-	messageAdapter := adapter.NewMessageAdapter(cfg.Bot.Prefix, cfg.Bot.MentionPrefix)
-	formatter := adapter.NewResponseFormatter(cfg.Bot.Prefix, templateRenderer)
+	messageAdapter := adapter.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
+	formatter := adapter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer)
 
-	foundation, err := InitScraperHolodexProfileFoundation(ctx, cfg, infra, logger)
+	foundation, err := InitScraperHolodexProfileFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	alarmYouTubeStack, err := InitAlarmYouTubeStack(ctx, cfg, infra, foundation, irisClient, formatter, logger)
+	alarmYouTubeStack, err := InitAlarmYouTubeStack(ctx, appConfig, infra, foundation, irisClient, formatter, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	integrationServices, err := InitCoreIntegrationServices(ctx, cfg, infra, logger)
+	integrationServices, err := InitCoreIntegrationServices(ctx, appConfig, infra, logger)
 	if err != nil {
 		return nil, err
 	}
 
 	deps := provideBotDependenciesFromStacks(
-		cfg, infra, foundation, alarmYouTubeStack, integrationServices, messageAdapter, formatter, irisClient, logger,
+		appConfig, infra, foundation, alarmYouTubeStack, integrationServices, messageAdapter, formatter, irisClient, logger,
 	)
 
 	return &BotInfrastructure{
@@ -68,7 +68,7 @@ func InitBotInfrastructure(ctx context.Context, cfg *config.Config, logger *slog
 }
 
 func provideBotDependenciesFromStacks(
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *ScraperHolodexProfileFoundation,
 	alarmYouTubeStack *AlarmYouTubeStackComponents,
@@ -79,7 +79,7 @@ func provideBotDependenciesFromStacks(
 	logger *slog.Logger,
 ) *bot.Dependencies {
 	modules := BuildBotDependencyModules(
-		cfg,
+		appConfig,
 		infra,
 		alarmYouTubeStack.AlarmMode,
 		foundation.HolodexService,
@@ -87,12 +87,12 @@ func provideBotDependenciesFromStacks(
 		formatter,
 		irisClient,
 		foundation.ProfileService,
-		alarmYouTubeStack.MemberMatcher,
+		alarmYouTubeStack.Matcher,
 		alarmYouTubeStack.YouTubeStack,
 		alarmYouTubeStack.ActivityLogger,
 		alarmYouTubeStack.SettingsService,
 		integrationServices.ACLService,
-		integrationServices.MajorEventRepo,
+		integrationServices.MajorEventRepository,
 		integrationServices.MemberNewsService,
 		integrationServices.CommandBuilders,
 		integrationServices.WorkerPool,

@@ -55,14 +55,14 @@ func NewConsensusSummarizer(
 	reviewer LLMClient,
 	adjudicator LLMClient,
 	validator *SourceValidator,
-	cfg consensus.Config,
+	config consensus.Config,
 	logger *slog.Logger,
 ) *ConsensusSummarizer {
 	var v model.SourceURLValidator
 	if validator != nil {
 		v = validator
 	}
-	return summarizer.NewConsensusSummarizer(primary, reviewer, adjudicator, v, cfg, logger)
+	return summarizer.NewConsensusSummarizer(primary, reviewer, adjudicator, v, config, logger)
 }
 
 func BuildDeterministicFallback(period Period, candidates []FilteredCandidate) *Digest {

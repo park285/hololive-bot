@@ -29,13 +29,13 @@ func TestLookupChannelSubscribersByTypeUsesTypedKey(t *testing.T) {
 	t.Parallel()
 
 	var lookedUpKey string
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewStrictClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		lookedUpKey = key
 		return []string{"room-a", "room-b"}, nil
 	}
 
-	got, err := LookupChannelSubscribersByType(t.Context(), cacheSvc, "UC_shorts", domain.AlarmTypeShorts)
+	got, err := LookupChannelSubscribersByType(t.Context(), cache, "UC_shorts", domain.AlarmTypeShorts)
 	if err != nil {
 		t.Fatalf("LookupChannelSubscribersByType() error = %v", err)
 	}
@@ -60,19 +60,19 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheEmpty(t *testing.T
 	})
 
 	warmed := make(map[string][]string)
-	cacheSvc := cachemocks.NewLenientClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewLenientClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key != sharedalarmkeys.BuildChannelSubscriberKey("UC_shorts", domain.AlarmTypeShorts) {
 			t.Fatalf("unexpected cache lookup key %q", key)
 		}
 		return nil, nil
 	}
-	cacheSvc.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
+	cache.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
 		warmed[key] = append(warmed[key], members...)
 		return int64(len(members)), nil
 	}
 
-	got, err := ResolveChannelSubscribersByType(t.Context(), cacheSvc, db, "UC_shorts", domain.AlarmTypeShorts)
+	got, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_shorts", domain.AlarmTypeShorts)
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
@@ -96,15 +96,15 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheErrors(t *testing.
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
 	})
 
-	cacheSvc := cachemocks.NewLenientClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewLenientClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key != sharedalarmkeys.BuildChannelSubscriberKey("UC_community", domain.AlarmTypeCommunity) {
 			t.Fatalf("unexpected cache lookup key %q", key)
 		}
 		return nil, errors.New("cache unavailable")
 	}
 
-	got, err := ResolveChannelSubscribersByType(t.Context(), cacheSvc, db, "UC_community", domain.AlarmTypeCommunity)
+	got, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_community", domain.AlarmTypeCommunity)
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
@@ -117,15 +117,15 @@ func TestResolveChannelSubscribersByTypeReturnsAuthoritativeEmptyOnlyAfterDBFall
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
-	cacheSvc := cachemocks.NewLenientClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewLenientClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key != sharedalarmkeys.BuildChannelSubscriberKey("UC_empty", domain.AlarmTypeLive) {
 			t.Fatalf("unexpected cache lookup key %q", key)
 		}
 		return nil, nil
 	}
 
-	got, err := ResolveChannelSubscribersByType(t.Context(), cacheSvc, db, "UC_empty", domain.AlarmTypeLive)
+	got, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_empty", domain.AlarmTypeLive)
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
@@ -140,20 +140,20 @@ func TestResolveChannelSubscribersByTypeUsesNegativeCacheForAuthoritativeEmpty(t
 	emptyKey := sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_empty", domain.AlarmTypeLive)
 	emptyKnown := false
 
-	cacheSvc := cachemocks.NewLenientClient()
-	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+	cache := cachemocks.NewLenientClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key != sharedalarmkeys.BuildChannelSubscriberKey("UC_empty", domain.AlarmTypeLive) {
 			t.Fatalf("unexpected cache lookup key %q", key)
 		}
 		return nil, nil
 	}
-	cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+	cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
 		if key != emptyKey {
 			t.Fatalf("unexpected exists key %q", key)
 		}
 		return emptyKnown, nil
 	}
-	cacheSvc.SetFunc = func(_ context.Context, key string, value any, _ time.Duration) error {
+	cache.SetFunc = func(_ context.Context, key string, value any, _ time.Duration) error {
 		if key != emptyKey {
 			t.Fatalf("unexpected set key %q", key)
 		}
@@ -165,7 +165,7 @@ func TestResolveChannelSubscribersByTypeUsesNegativeCacheForAuthoritativeEmpty(t
 	}
 
 	db := newAlarmTargetLookupTestDB(t)
-	got, err := ResolveChannelSubscribersByType(t.Context(), cacheSvc, db, "UC_empty", domain.AlarmTypeLive)
+	got, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_empty", domain.AlarmTypeLive)
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() first error = %v", err)
 	}
@@ -173,7 +173,7 @@ func TestResolveChannelSubscribersByTypeUsesNegativeCacheForAuthoritativeEmpty(t
 		t.Fatalf("ResolveChannelSubscribersByType() first = %#v", got)
 	}
 
-	got, err = ResolveChannelSubscribersByType(t.Context(), cacheSvc, nil, "UC_empty", domain.AlarmTypeLive)
+	got, err = ResolveChannelSubscribersByType(t.Context(), cache, nil, "UC_empty", domain.AlarmTypeLive)
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() second error = %v", err)
 	}

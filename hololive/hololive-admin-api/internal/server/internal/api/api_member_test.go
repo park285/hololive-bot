@@ -124,7 +124,7 @@ func TestHandleAliasOperation_RejectsTooLongAlias(t *testing.T) {
 	}
 }
 
-func newAliasOperationTestHandler(t *testing.T) *MemberAPIHandler {
+func newAliasOperationTestHandler(t *testing.T) *MemberHandler {
 	t.Helper()
 
 	logger := slog.New(slog.DiscardHandler)
@@ -136,8 +136,8 @@ func newAliasOperationTestHandler(t *testing.T) *MemberAPIHandler {
 
 	activityLogger := activity.NewActivityLogger(filepath.Join(t.TempDir(), "activity.log"), logger)
 
-	return &MemberAPIHandler{
-		APIHandler: &APIHandler{
+	return &MemberHandler{
+		Handler: &Handler{
 			memberCache: memberCache,
 			activity:    activityLogger,
 			logger:      logger,

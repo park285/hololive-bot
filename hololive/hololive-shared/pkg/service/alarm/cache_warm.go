@@ -18,46 +18,46 @@ type CacheWarmSummary struct {
 	ChannelCount int
 }
 
-var loadAllAlarmsFromRepository = func(ctx context.Context, repo *Repository) ([]*domain.Alarm, error) {
-	return repo.LoadAll(ctx)
+var loadAllAlarmsFromRepository = func(ctx context.Context, repository *Repository) ([]*domain.Alarm, error) {
+	return repository.LoadAll(ctx)
 }
 
-var loadMemberNamesFromRepository = func(ctx context.Context, repo *Repository) (map[string]string, error) {
-	return repo.GetAllMemberNames(ctx)
+var loadMemberNamesFromRepository = func(ctx context.Context, repository *Repository) (map[string]string, error) {
+	return repository.GetAllMemberNames(ctx)
 }
 
 const cacheScanBatchSize int64 = 100
 
-func WarmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository) (CacheWarmSummary, error) {
-	if repo == nil {
+func WarmSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Client, repository *Repository) (CacheWarmSummary, error) {
+	if repository == nil {
 		return CacheWarmSummary{}, errors.New("warm subscriber cache from repository: repository is nil")
 	}
 
-	return warmSubscriberCacheFromRepository(ctx, cacheSvc, repo, false)
+	return warmSubscriberCacheFromRepository(ctx, cacheClient, repository, false)
 }
 
-func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository) (CacheWarmSummary, error) {
-	if repo == nil {
+func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Client, repository *Repository) (CacheWarmSummary, error) {
+	if repository == nil {
 		return CacheWarmSummary{}, errors.New("rebuild subscriber cache from repository: repository is nil")
 	}
 
-	return warmSubscriberCacheFromRepository(ctx, cacheSvc, repo, true)
+	return warmSubscriberCacheFromRepository(ctx, cacheClient, repository, true)
 }
 
-func warmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository, rebuild bool) (CacheWarmSummary, error) {
+func warmSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Client, repository *Repository, rebuild bool) (CacheWarmSummary, error) {
 	operation := subscriberCacheWarmOperation(rebuild)
-	warmData, err := loadSubscriberCacheWarmData(ctx, repo, operation)
+	warmData, err := loadSubscriberCacheWarmData(ctx, repository, operation)
 	if err != nil {
 		return CacheWarmSummary{}, err
 	}
 
 	if rebuild {
-		if err := clearSubscriberCacheNamespace(ctx, cacheSvc); err != nil {
+		if err := clearSubscriberCacheNamespace(ctx, cacheClient); err != nil {
 			return CacheWarmSummary{}, err
 		}
 	}
 
-	if err := writeSubscriberCacheWarmData(ctx, cacheSvc, warmData); err != nil {
+	if err := writeSubscriberCacheWarmData(ctx, cacheClient, warmData); err != nil {
 		return CacheWarmSummary{}, err
 	}
 
@@ -71,8 +71,8 @@ func subscriberCacheWarmOperation(rebuild bool) string {
 	return "warm"
 }
 
-func loadSubscriberCacheWarmData(ctx context.Context, repo *Repository, operation string) (*subscriberCacheWarmData, error) {
-	alarms, err := loadAllAlarmsFromRepository(ctx, repo)
+func loadSubscriberCacheWarmData(ctx context.Context, repository *Repository, operation string) (*subscriberCacheWarmData, error) {
+	alarms, err := loadAllAlarmsFromRepository(ctx, repository)
 	if err != nil {
 		return nil, fmt.Errorf("%s subscriber cache from repository: load alarms: %w", operation, err)
 	}
@@ -83,7 +83,7 @@ func loadSubscriberCacheWarmData(ctx context.Context, repo *Repository, operatio
 	}
 	warmData.summary = warmData.finish()
 
-	memberNames, err := loadMemberNamesFromRepository(ctx, repo)
+	memberNames, err := loadMemberNamesFromRepository(ctx, repository)
 	if err != nil {
 		return nil, fmt.Errorf("%s subscriber cache from repository: load member names: %w", operation, err)
 	}
@@ -94,32 +94,32 @@ func loadSubscriberCacheWarmData(ctx context.Context, repo *Repository, operatio
 	return warmData, nil
 }
 
-func clearSubscriberCacheNamespace(ctx context.Context, cacheSvc cache.Client) error {
-	if cacheSvc == nil {
+func clearSubscriberCacheNamespace(ctx context.Context, cacheClient cache.Client) error {
+	if cacheClient == nil {
 		return errors.New("rebuild subscriber cache from alarms: cache service is nil")
 	}
 
-	keysToDelete, err := subscriberCacheStaticKeysToDelete(ctx, cacheSvc)
+	keysToDelete, err := subscriberCacheStaticKeysToDelete(ctx, cacheClient)
 	if err != nil {
 		return err
 	}
 
-	roomAlarmKeys, err := scanRoomAlarmKeys(ctx, cacheSvc)
+	roomAlarmKeys, err := scanRoomAlarmKeys(ctx, cacheClient)
 	if err != nil {
 		return err
 	}
 	keysToDelete = append(keysToDelete, roomAlarmKeys...)
 
-	patternKeys, err := scanSubscriberCachePatternKeys(ctx, cacheSvc)
+	patternKeys, err := scanSubscriberCachePatternKeys(ctx, cacheClient)
 	if err != nil {
 		return err
 	}
 	keysToDelete = append(keysToDelete, patternKeys...)
 
-	return deleteSubscriberCacheKeys(ctx, cacheSvc, keysToDelete)
+	return deleteSubscriberCacheKeys(ctx, cacheClient, keysToDelete)
 }
 
-func subscriberCacheStaticKeysToDelete(ctx context.Context, cacheSvc cache.Client) ([]string, error) {
+func subscriberCacheStaticKeysToDelete(ctx context.Context, cacheClient cache.Client) ([]string, error) {
 	keysToDelete := []string{
 		sharedalarmkeys.AlarmRegistryKey,
 		sharedalarmkeys.AlarmChannelRegistryKey,
@@ -130,7 +130,7 @@ func subscriberCacheStaticKeysToDelete(ctx context.Context, cacheSvc cache.Clien
 		sharedalarmkeys.UserNamesCacheKey,
 	}
 
-	registryRooms, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	if err != nil {
 		return nil, fmt.Errorf("rebuild subscriber cache from alarms: read room registry: %w", err)
 	}
@@ -148,13 +148,13 @@ func appendRoomAlarmKey(keys []string, roomID string) []string {
 	return append(keys, sharedalarmkeys.BuildRoomAlarmKey(roomID))
 }
 
-func scanSubscriberCachePatternKeys(ctx context.Context, cacheSvc cache.Client) ([]string, error) {
+func scanSubscriberCachePatternKeys(ctx context.Context, cacheClient cache.Client) ([]string, error) {
 	var keysToDelete []string
 	for _, pattern := range []string{
 		sharedalarmkeys.ChannelSubscribersKeyPrefix + "*",
 		sharedalarmkeys.ChannelSubscribersEmptyKeyPrefix + "*",
 	} {
-		keys, scanErr := cacheSvc.ScanKeys(ctx, pattern, cacheScanBatchSize)
+		keys, scanErr := cacheClient.ScanKeys(ctx, pattern, cacheScanBatchSize)
 		if scanErr != nil {
 			return nil, fmt.Errorf("rebuild subscriber cache from alarms: scan keys %q: %w", pattern, scanErr)
 		}
@@ -163,21 +163,21 @@ func scanSubscriberCachePatternKeys(ctx context.Context, cacheSvc cache.Client) 
 	return keysToDelete, nil
 }
 
-func deleteSubscriberCacheKeys(ctx context.Context, cacheSvc cache.Client, keysToDelete []string) error {
+func deleteSubscriberCacheKeys(ctx context.Context, cacheClient cache.Client, keysToDelete []string) error {
 	keysToDelete = compactUniqueStrings(keysToDelete)
 	if len(keysToDelete) == 0 {
 		return nil
 	}
 
-	if _, err := cacheSvc.DelMany(ctx, keysToDelete); err != nil {
+	if _, err := cacheClient.DelMany(ctx, keysToDelete); err != nil {
 		return fmt.Errorf("rebuild subscriber cache from alarms: delete existing keys: %w", err)
 	}
 
 	return nil
 }
 
-func scanRoomAlarmKeys(ctx context.Context, cacheSvc cache.Client) ([]string, error) {
-	keys, err := cacheSvc.ScanKeys(ctx, sharedalarmkeys.AlarmKeyPrefix+"*", cacheScanBatchSize)
+func scanRoomAlarmKeys(ctx context.Context, cacheClient cache.Client) ([]string, error) {
+	keys, err := cacheClient.ScanKeys(ctx, sharedalarmkeys.AlarmKeyPrefix+"*", cacheScanBatchSize)
 	if err != nil {
 		return nil, fmt.Errorf("rebuild subscriber cache from alarms: scan room alarm keys: %w", err)
 	}
@@ -214,8 +214,8 @@ func compactUniqueStrings(values []string) []string {
 	return result
 }
 
-func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheSvc cache.Client, alarms []*domain.Alarm) (CacheWarmSummary, error) {
-	if cacheSvc == nil {
+func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheClient cache.Client, alarms []*domain.Alarm) (CacheWarmSummary, error) {
+	if cacheClient == nil {
 		return CacheWarmSummary{}, errors.New("warm subscriber cache from alarms: cache service is nil")
 	}
 
@@ -224,7 +224,7 @@ func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheSvc cache.Client, a
 		warmData.addAlarm(alarmRecord)
 	}
 
-	if err := writeSubscriberCacheWarmData(ctx, cacheSvc, warmData); err != nil {
+	if err := writeSubscriberCacheWarmData(ctx, cacheClient, warmData); err != nil {
 		return CacheWarmSummary{}, err
 	}
 
@@ -240,63 +240,63 @@ func normalizedWarmAlarmIdentity(alarmRecord *domain.Alarm) (string, string, boo
 	return roomID, channelID, roomID != "" && channelID != ""
 }
 
-func writeSubscriberCacheWarmData(ctx context.Context, cacheSvc cache.Client, data *subscriberCacheWarmData) error {
-	if err := writeSubscriberCacheSets(ctx, cacheSvc, data); err != nil {
+func writeSubscriberCacheWarmData(ctx context.Context, cacheClient cache.Client, data *subscriberCacheWarmData) error {
+	if err := writeSubscriberCacheSets(ctx, cacheClient, data); err != nil {
 		return err
 	}
-	if err := writeSubscriberCacheHashes(ctx, cacheSvc, data); err != nil {
+	if err := writeSubscriberCacheHashes(ctx, cacheClient, data); err != nil {
 		return err
 	}
-	return writeSubscriberCacheWarmMarkers(ctx, cacheSvc, data.summary.AlarmCount == 0)
+	return writeSubscriberCacheWarmMarkers(ctx, cacheClient, data.summary.AlarmCount == 0)
 }
 
-func writeSubscriberCacheSets(ctx context.Context, cacheSvc cache.Client, data *subscriberCacheWarmData) error {
-	if err := writeWarmSetMap(ctx, cacheSvc, data.roomAlarmMembers, "room alarms"); err != nil {
+func writeSubscriberCacheSets(ctx context.Context, cacheClient cache.Client, data *subscriberCacheWarmData) error {
+	if err := writeWarmSetMap(ctx, cacheClient, data.roomAlarmMembers, "room alarms"); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
 	}
-	if err := writeWarmSet(ctx, cacheSvc, sharedalarmkeys.AlarmRegistryKey, compactUniqueStrings(data.registryRooms), "room registry"); err != nil {
+	if err := writeWarmSet(ctx, cacheClient, sharedalarmkeys.AlarmRegistryKey, compactUniqueStrings(data.registryRooms), "room registry"); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
 	}
-	if err := writeWarmSet(ctx, cacheSvc, sharedalarmkeys.AlarmChannelRegistryKey, compactUniqueStrings(data.channelRegistry), "channel registry"); err != nil {
+	if err := writeWarmSet(ctx, cacheClient, sharedalarmkeys.AlarmChannelRegistryKey, compactUniqueStrings(data.channelRegistry), "channel registry"); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
 	}
-	if err := writeWarmSetMap(ctx, cacheSvc, data.channelSubscribers, "channel subscribers"); err != nil {
+	if err := writeWarmSetMap(ctx, cacheClient, data.channelSubscribers, "channel subscribers"); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
 	}
 	return nil
 }
 
-func writeSubscriberCacheHashes(ctx context.Context, cacheSvc cache.Client, data *subscriberCacheWarmData) error {
-	if err := writeWarmHash(ctx, cacheSvc, sharedalarmkeys.MemberNameKey, data.memberNames); err != nil {
+func writeSubscriberCacheHashes(ctx context.Context, cacheClient cache.Client, data *subscriberCacheWarmData) error {
+	if err := writeWarmHash(ctx, cacheClient, sharedalarmkeys.MemberNameKey, data.memberNames); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: cache member names: %w", err)
 	}
-	if err := writeWarmHash(ctx, cacheSvc, sharedalarmkeys.RoomNamesCacheKey, data.roomNames); err != nil {
+	if err := writeWarmHash(ctx, cacheClient, sharedalarmkeys.RoomNamesCacheKey, data.roomNames); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: cache room names: %w", err)
 	}
-	if err := writeWarmHash(ctx, cacheSvc, sharedalarmkeys.UserNamesCacheKey, data.userNames); err != nil {
+	if err := writeWarmHash(ctx, cacheClient, sharedalarmkeys.UserNamesCacheKey, data.userNames); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: cache user names: %w", err)
 	}
 	return nil
 }
 
-func writeSubscriberCacheWarmMarkers(ctx context.Context, cacheSvc cache.Client, empty bool) error {
-	if err := markSubscriberCacheEmptyState(ctx, cacheSvc, empty); err != nil {
+func writeSubscriberCacheWarmMarkers(ctx context.Context, cacheClient cache.Client, empty bool) error {
+	if err := markSubscriberCacheEmptyState(ctx, cacheClient, empty); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: mark empty state: %w", err)
 	}
-	if err := bumpAlarmChannelRegistryVersion(ctx, cacheSvc); err != nil {
+	if err := bumpAlarmChannelRegistryVersion(ctx, cacheClient); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: bump channel registry version: %w", err)
 	}
 	return nil
 }
 
-func bumpAlarmChannelRegistryVersion(ctx context.Context, cacheSvc cache.Client) error {
-	return cacheSvc.Set(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, time.Now().UTC().UnixNano(), 0)
+func bumpAlarmChannelRegistryVersion(ctx context.Context, cacheClient cache.Client) error {
+	return cacheClient.Set(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, time.Now().UTC().UnixNano(), 0)
 }
 
-func markSubscriberCacheEmptyState(ctx context.Context, cacheSvc cache.Client, empty bool) error {
+func markSubscriberCacheEmptyState(ctx context.Context, cacheClient cache.Client, empty bool) error {
 	if empty {
-		return cacheSvc.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0)
+		return cacheClient.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0)
 	}
 
-	return cacheSvc.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
+	return cacheClient.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
 }

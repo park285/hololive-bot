@@ -129,8 +129,8 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 0)
+	repository := NewDeliveryTelemetryRepository(db)
+	rows, err := repository.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 0)
 	require.NoError(t, err)
 	require.Len(t, rows, 3)
 
@@ -189,8 +189,8 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Respec
 	}
 	require.NoError(t, db.Create(&rows).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	limited, err := repo.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 2)
+	repository := NewDeliveryTelemetryRepository(db)
+	limited, err := repository.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 2)
 	require.NoError(t, err)
 	require.Len(t, limited, 2)
 	require.Equal(t, rows[0].ContentID, limited[0].ContentID)

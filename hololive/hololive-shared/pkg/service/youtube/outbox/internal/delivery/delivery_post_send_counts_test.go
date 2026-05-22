@@ -290,8 +290,8 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 	}
 	require.NoError(t, db.Create(&rows).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	summaries, err := repo.ListPostSendCountsSince(ctx, windowStart)
+	repository := NewDeliveryTelemetryRepository(db)
+	summaries, err := repository.ListPostSendCountsSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, summaries, 3)
 
@@ -489,8 +489,8 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListPostSendCountsWithinPublishedWindow(ctx, windowStart, windowEnd)
+	repository := NewDeliveryTelemetryRepository(db)
+	rows, err := repository.ListPostSendCountsWithinPublishedWindow(ctx, windowStart, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, insideOutbox.ContentID, rows[0].ContentID)
@@ -597,8 +597,8 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListPostSendCountsWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
+	repository := NewDeliveryTelemetryRepository(db)
+	rows, err := repository.ListPostSendCountsWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, timelyOutbox.ContentID, rows[0].ContentID)
@@ -730,8 +730,8 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 		},
 	}).Error)
 
-	repo := NewDeliveryTelemetryRepository(db)
-	rows, err := repo.ListPostSendCountsByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
+	repository := NewDeliveryTelemetryRepository(db)
+	rows, err := repository.ListPostSendCountsByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 

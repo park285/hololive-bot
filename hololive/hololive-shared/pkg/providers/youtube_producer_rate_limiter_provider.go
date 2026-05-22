@@ -31,7 +31,7 @@ import (
 )
 
 // 분산 제한이 활성화된 경우 Valkey 기반 SlidingWindowLimiter를 함께 구성합니다.
-func ProvideYouTubeProducerRateLimiter(cacheSvc cache.Client, logger *slog.Logger) (*scraper.RateLimiter, error) {
+func ProvideYouTubeProducerRateLimiter(cacheClient cache.Client, logger *slog.Logger) (*scraper.RateLimiter, error) {
 	limiter := scraper.NewRateLimiter(constants.YouTubeProducerRateLimitConfig.RequestInterval)
 
 	if !constants.YouTubeProducerDistributedRateLimitConfig.Enabled {
@@ -39,7 +39,7 @@ func ProvideYouTubeProducerRateLimiter(cacheSvc cache.Client, logger *slog.Logge
 	}
 
 	distributedLimiter, err := ratelimit.NewSlidingWindowLimiter(
-		cacheSvc,
+		cacheClient,
 		constants.YouTubeProducerDistributedRateLimitConfig.KeyPrefix,
 		logger,
 	)

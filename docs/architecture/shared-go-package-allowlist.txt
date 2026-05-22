@@ -1,3 +1,4 @@
+backoff
 envutil
 ginjson
 httputil
@@ -6,7 +7,9 @@ jsonutil
 logging
 runtime/automaxprocs
 runtime/bootstrap
+runtime/httpserver
 runtime/lifecycle
+runtime/loop
 stringutil
 telemetry
 workerpool

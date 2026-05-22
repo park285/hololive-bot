@@ -51,7 +51,7 @@ type FeedScheduler struct {
 }
 
 // NewFeedScheduler는 FeedScheduler를 생성한다.
-func NewFeedScheduler(service *Service, cfg FeedScheduleConfig, logger *slog.Logger) (*FeedScheduler, error) {
+func NewFeedScheduler(service *Service, config FeedScheduleConfig, logger *slog.Logger) (*FeedScheduler, error) {
 	if service == nil {
 		return nil, fmt.Errorf("new feed scheduler: service is nil")
 	}
@@ -59,7 +59,7 @@ func NewFeedScheduler(service *Service, cfg FeedScheduleConfig, logger *slog.Log
 		logger = slog.Default()
 	}
 
-	normalized := cfg
+	normalized := config
 	defaults := DefaultFeedScheduleConfig()
 	if normalized.RunTimeout <= 0 {
 		normalized.RunTimeout = defaults.RunTimeout

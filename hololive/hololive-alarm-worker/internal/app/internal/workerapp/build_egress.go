@@ -21,7 +21,7 @@ import (
 )
 
 func buildNotificationEgress(
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (runtimeAlarmScheduler, error) {
@@ -30,8 +30,8 @@ func buildNotificationEgress(
 	}
 	irisClient, err := providers.ProvideIrisKaringClient(
 		logger,
-		iris.WithBaseURL(cfg.Iris.BaseURL),
-		iris.WithBotToken(cfg.Iris.BotToken),
+		iris.WithBaseURL(appConfig.Iris.BaseURL),
+		iris.WithBotToken(appConfig.Iris.BotToken),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("init alarm-worker notification egress iris client: %w", err)

@@ -37,7 +37,7 @@
 //
 // 기본 사용:
 //
-//	cfg := dbx.Config{
+//	config := dbx.Config{
 //		Host:     "localhost",
 //		Port:     5432,
 //		User:     "myuser",
@@ -45,7 +45,7 @@
 //		Name:     "mydb",
 //	}
 //
-//	client, err := dbx.Open(ctx, cfg, dbx.DefaultOpenOptions())
+//	client, err := dbx.Open(ctx, config, dbx.DefaultOpenOptions())
 //	if err != nil {
 //		log.Fatal(err)
 //	}
@@ -61,7 +61,7 @@
 //
 // Retry 사용:
 //
-//	client, err := dbx.OpenWithRetry(ctx, cfg, dbx.DefaultOpenOptions())
+//	client, err := dbx.OpenWithRetry(ctx, config, dbx.DefaultOpenOptions())
 //
 // 트랜잭션 헬퍼:
 //

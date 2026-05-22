@@ -57,7 +57,7 @@ func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	port, err := strconv.Atoi(rawPort)
 	require.NoError(t, err)
 
-	svc, err := cache.NewCacheService(
+	service, err := cache.NewCacheService(
 		context.Background(),
 		cache.Config{
 			Host:              host,
@@ -70,11 +70,11 @@ func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		require.NoError(t, svc.Close())
+		require.NoError(t, service.Close())
 		mini.Close()
 	})
 
-	return svc, mini
+	return service, mini
 }
 
 func queueItemsOrEmpty(t *testing.T, mini *miniredis.Miniredis) []string {

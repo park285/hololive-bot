@@ -46,7 +46,7 @@ func NewConsensusSummarizer(
 	reviewer LLMClient,
 	adjudicator LLMClient,
 	validator model.SourceURLValidator,
-	cfg consensus.Config,
+	config consensus.Config,
 	logger *slog.Logger,
 ) *ConsensusSummarizer {
 	if logger == nil {
@@ -57,7 +57,7 @@ func NewConsensusSummarizer(
 		reviewer:    reviewer,
 		adjudicator: adjudicator,
 		validator:   validator,
-		config:      cfg,
+		config:      config,
 		logger:      logger,
 	}
 }

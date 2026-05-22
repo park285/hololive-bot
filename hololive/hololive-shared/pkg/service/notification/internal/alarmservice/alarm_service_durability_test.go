@@ -1,9 +1,12 @@
 package alarmservice
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -61,54 +64,54 @@ func newLenientAlarmCacheMock(
 ) (*cachemocks.Client, *cache.Service) {
 	t.Helper()
 
-	cacheSvc := newTestCacheService(ctx, t)
+	cacheClient := newTestCacheService(ctx, t)
 	cacheMock := cachemocks.NewLenientClient()
 
-	cacheMock.BuilderFunc = cacheSvc.Builder
-	cacheMock.BFunc = cacheSvc.B
-	cacheMock.GetClientFunc = cacheSvc.GetClient
-	cacheMock.DoMultiFunc = cacheSvc.DoMulti
-	cacheMock.SMembersFunc = cacheSvc.SMembers
-	cacheMock.SIsMemberFunc = cacheSvc.SIsMember
-	cacheMock.HGetFunc = cacheSvc.HGet
-	cacheMock.HGetAllFunc = cacheSvc.HGetAll
-	cacheMock.SetFunc = cacheSvc.Set
-	cacheMock.GetFunc = cacheSvc.Get
-	cacheMock.DelFunc = cacheSvc.Del
-	cacheMock.DelManyFunc = cacheSvc.DelMany
-	cacheMock.ScanKeysFunc = cacheSvc.ScanKeys
-	cacheMock.HDelFunc = cacheSvc.HDel
-	cacheMock.HMSetFunc = cacheSvc.HMSet
-	cacheMock.ExistsFunc = cacheSvc.Exists
-	cacheMock.ExpireFunc = cacheSvc.Expire
-	cacheMock.MGetFunc = cacheSvc.MGet
-	cacheMock.MSetFunc = cacheSvc.MSet
-	cacheMock.SetNXFunc = cacheSvc.SetNX
-	cacheMock.CompareAndDeleteFunc = cacheSvc.CompareAndDelete
-	cacheMock.CompareAndExpireFunc = cacheSvc.CompareAndExpire
-	cacheMock.GetStreamsFunc = cacheSvc.GetStreams
-	cacheMock.SetStreamsFunc = cacheSvc.SetStreams
-	cacheMock.InitializeMemberDatabaseFunc = cacheSvc.InitializeMemberDatabase
-	cacheMock.GetMemberChannelIDFunc = cacheSvc.GetMemberChannelID
-	cacheMock.GetAllMembersFunc = cacheSvc.GetAllMembers
-	cacheMock.GetMemberChannelIDWithOrgFunc = cacheSvc.GetMemberChannelIDWithOrg
-	cacheMock.GetMemberChannelIDsFunc = cacheSvc.GetMemberChannelIDs
-	cacheMock.AddMemberFunc = cacheSvc.AddMember
-	cacheMock.CloseFunc = cacheSvc.Close
-	cacheMock.IsConnectedFunc = cacheSvc.IsConnected
-	cacheMock.WaitUntilReadyFunc = cacheSvc.WaitUntilReady
-	cacheMock.SRemFunc = cacheSvc.SRem
-	cacheMock.HSetFunc = cacheSvc.HSet
+	cacheMock.BuilderFunc = cacheClient.Builder
+	cacheMock.BFunc = cacheClient.B
+	cacheMock.GetClientFunc = cacheClient.GetClient
+	cacheMock.DoMultiFunc = cacheClient.DoMulti
+	cacheMock.SMembersFunc = cacheClient.SMembers
+	cacheMock.SIsMemberFunc = cacheClient.SIsMember
+	cacheMock.HGetFunc = cacheClient.HGet
+	cacheMock.HGetAllFunc = cacheClient.HGetAll
+	cacheMock.SetFunc = cacheClient.Set
+	cacheMock.GetFunc = cacheClient.Get
+	cacheMock.DelFunc = cacheClient.Del
+	cacheMock.DelManyFunc = cacheClient.DelMany
+	cacheMock.ScanKeysFunc = cacheClient.ScanKeys
+	cacheMock.HDelFunc = cacheClient.HDel
+	cacheMock.HMSetFunc = cacheClient.HMSet
+	cacheMock.ExistsFunc = cacheClient.Exists
+	cacheMock.ExpireFunc = cacheClient.Expire
+	cacheMock.MGetFunc = cacheClient.MGet
+	cacheMock.MSetFunc = cacheClient.MSet
+	cacheMock.SetNXFunc = cacheClient.SetNX
+	cacheMock.CompareAndDeleteFunc = cacheClient.CompareAndDelete
+	cacheMock.CompareAndExpireFunc = cacheClient.CompareAndExpire
+	cacheMock.GetStreamsFunc = cacheClient.GetStreams
+	cacheMock.SetStreamsFunc = cacheClient.SetStreams
+	cacheMock.InitializeMemberDatabaseFunc = cacheClient.InitializeMemberDatabase
+	cacheMock.GetMemberChannelIDFunc = cacheClient.GetMemberChannelID
+	cacheMock.GetAllMembersFunc = cacheClient.GetAllMembers
+	cacheMock.GetMemberChannelIDWithOrgFunc = cacheClient.GetMemberChannelIDWithOrg
+	cacheMock.GetMemberChannelIDsFunc = cacheClient.GetMemberChannelIDs
+	cacheMock.AddMemberFunc = cacheClient.AddMember
+	cacheMock.CloseFunc = cacheClient.Close
+	cacheMock.IsConnectedFunc = cacheClient.IsConnected
+	cacheMock.WaitUntilReadyFunc = cacheClient.WaitUntilReady
+	cacheMock.SRemFunc = cacheClient.SRem
+	cacheMock.HSetFunc = cacheClient.HSet
 
 	if sadd != nil {
 		cacheMock.SAddFunc = func(innerCtx context.Context, key string, members []string) (int64, error) {
-			return sadd(cacheSvc, innerCtx, key, members)
+			return sadd(cacheClient, innerCtx, key, members)
 		}
 	} else {
-		cacheMock.SAddFunc = cacheSvc.SAdd
+		cacheMock.SAddFunc = cacheClient.SAdd
 	}
 
-	return cacheMock, cacheSvc
+	return cacheMock, cacheClient
 }
 
 func assertRebuildLoadedMetric(t *testing.T, operation, resource string, want float64) {
@@ -118,6 +121,15 @@ func assertRebuildLoadedMetric(t *testing.T, operation, resource string, want fl
 		"operation": operation,
 		"resource":  resource,
 	}), 0.000001)
+}
+
+func decodeSingleJSONLog(t *testing.T, logBuffer *bytes.Buffer) map[string]any {
+	t.Helper()
+
+	var logRecord map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &logRecord))
+
+	return logRecord
 }
 
 func TestAddAlarm_PersistFailureDoesNotPolluteCache(t *testing.T) {
@@ -157,6 +169,366 @@ func TestAddAlarm_PersistFailureDoesNotPolluteCache(t *testing.T) {
 	assert.Empty(t, memberName)
 }
 
+func TestAddAlarm_PersistFailureLogsWrappedEvent(t *testing.T) {
+	t.Parallel()
+
+	var logBuffer bytes.Buffer
+	as := newTestAlarmService(t)
+	as.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
+	as.alarmWriter = &stubAlarmWriter{
+		addFn: func(context.Context, *domain.Alarm) error {
+			return errors.New("db down")
+		},
+	}
+
+	added, err := as.AddAlarm(t.Context(), domain.AddAlarmRequest{
+		RoomID:     "room-1",
+		UserID:     "user-1",
+		ChannelID:  "ch-1",
+		MemberName: "Miko",
+		RoomName:   "메인방",
+		UserName:   "관리자",
+	})
+	require.Error(t, err)
+	assert.False(t, added)
+
+	var logRecord map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &logRecord))
+	assert.Equal(t, "persist alarm before cache write.failed", logRecord["event"])
+	assert.NotContains(t, logRecord, "error")
+	assert.Equal(t, "wrapError", logRecord["error_type"])
+	assert.Equal(t, "persist alarm: stub add: db down", logRecord["error_message"])
+}
+
+func TestCacheAddAlarmMutationFailureLogsWrappedEvent(t *testing.T) {
+	ctx := t.Context()
+	var logBuffer bytes.Buffer
+	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheClient *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
+		if key == AlarmRegistryKey {
+			return 0, errors.New("registry add failed")
+		}
+
+		return cacheClient.SAdd(ctx, key, members)
+	})
+
+	as := &AlarmService{
+		cache:      cacheMock,
+		logger:     slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError})),
+		memberData: &mockMemberDataProvider{members: []*domain.Member{}},
+	}
+	cacheMock.GetClientFunc = func() valkey.Client { return nil }
+
+	_, err := as.cacheAddAlarmMutation(ctx, addAlarmMutation{
+		cacheRecord: domain.Alarm{
+			RoomID:     "room-1",
+			ChannelID:  "ch-1",
+			MemberName: "Miko",
+			AlarmTypes: domain.DefaultAlarmTypes,
+		},
+	})
+	require.Error(t, err)
+
+	logRecord := decodeSingleJSONLog(t, &logBuffer)
+	assert.Equal(t, "rebuild add cache from repository.failed", logRecord["event"])
+	assert.NotContains(t, logRecord, "error")
+	assert.Equal(t, "wrapError", logRecord["error_type"])
+	assert.Contains(t, logRecord["error_message"], "add alarm: add room registry: registry add failed")
+}
+
+func TestRemoveAlarmPersistFailureLogsWrappedEvents(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		run       func(context.Context, *AlarmService) error
+		wantEvent string
+		wantError string
+	}{
+		{
+			name: "delete_alarm_before_cache_removal",
+			run: func(ctx context.Context, as *AlarmService) error {
+				as.alarmWriter = &stubAlarmWriter{
+					removeFn: func(context.Context, string, string) error {
+						return errors.New("db down")
+					},
+				}
+
+				return as.deleteAlarmBeforeCacheRemoval(ctx, "room-1", "ch-1")
+			},
+			wantEvent: "delete alarm before cache removal.failed",
+			wantError: "delete alarm: stub remove: db down",
+		},
+		{
+			name: "update_alarm_types_before_cache_removal",
+			run: func(ctx context.Context, as *AlarmService) error {
+				as.alarmWriter = &stubAlarmWriter{
+					addFn: func(context.Context, *domain.Alarm) error {
+						return errors.New("db down")
+					},
+				}
+
+				return as.updateAlarmTypesBeforeCacheRemoval(ctx, &domain.Alarm{
+					RoomID:     "room-1",
+					ChannelID:  "ch-1",
+					AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
+				})
+			},
+			wantEvent: "persist alarm type update before cache removal.failed",
+			wantError: "persist alarm type update: stub add: db down",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var logBuffer bytes.Buffer
+			as := newTestAlarmService(t)
+			as.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
+
+			err := tt.run(t.Context(), as)
+			require.Error(t, err)
+
+			logRecord := decodeSingleJSONLog(t, &logBuffer)
+			assert.Equal(t, tt.wantEvent, logRecord["event"])
+			assert.NotContains(t, logRecord, "error")
+			assert.Equal(t, "wrapError", logRecord["error_type"])
+			assert.Equal(t, tt.wantError, logRecord["error_message"])
+		})
+	}
+}
+
+func TestRemoveAlarmCacheMutationFailureLogsWrappedEvents(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(*cachemocks.Client, *cache.Service)
+		mutation  removeAlarmMutation
+		wantEvent string
+		wantError string
+	}{
+		{
+			name: "rebuild_remove_cache_from_repository",
+			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
+				cacheMock.SRemFunc = func(context.Context, string, []string) (int64, error) {
+					return 0, errors.New("srem failed")
+				}
+			},
+			mutation: removeAlarmMutation{
+				effectiveRemovalTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+				removeRoomChannel:     true,
+			},
+			wantEvent: "rebuild remove cache from repository.failed",
+			wantError: "remove alarm: remove room alarm: srem failed",
+		},
+		{
+			name: "mark_room_alarms_changed_in_cache",
+			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
+				cacheMock.DelFunc = func(context.Context, string) error {
+					return errors.New("del failed")
+				}
+			},
+			mutation: removeAlarmMutation{
+				removeRoomChannel: true,
+			},
+			wantEvent: "mark room alarms changed in cache.failed",
+			wantError: "mark alarm cache changed: clear empty subscriber cache marker: del failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			var logBuffer bytes.Buffer
+			cacheMock, cacheClient := newLenientAlarmCacheMock(ctx, t, nil)
+			tt.setup(cacheMock, cacheClient)
+
+			as := &AlarmService{
+				cache:  cacheMock,
+				logger: slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError})),
+			}
+
+			removed, err := as.removeAlarmCacheMutation(ctx, "room-1", "ch-1", tt.mutation)
+			require.Error(t, err)
+			assert.False(t, removed)
+
+			logRecord := decodeSingleJSONLog(t, &logBuffer)
+			assert.Equal(t, tt.wantEvent, logRecord["event"])
+			assert.NotContains(t, logRecord, "error")
+			assert.Equal(t, "wrapError", logRecord["error_type"])
+			assert.Equal(t, tt.wantError, logRecord["error_message"])
+		})
+	}
+}
+
+func TestClearRoomAlarmsPersistFailureLogsWrappedEvent(t *testing.T) {
+	t.Parallel()
+
+	var logBuffer bytes.Buffer
+	as := newTestAlarmService(t)
+	as.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
+	as.alarmWriter = &stubAlarmWriter{
+		clearByRoomFn: func(context.Context, string) (int64, error) {
+			return 0, errors.New("db down")
+		},
+	}
+
+	err := as.deleteRoomAlarmsBeforeCacheClear(t.Context(), "room-1")
+	require.Error(t, err)
+
+	logRecord := decodeSingleJSONLog(t, &logBuffer)
+	assert.Equal(t, "delete room alarms before cache clear.failed", logRecord["event"])
+	assert.NotContains(t, logRecord, "error")
+	assert.Equal(t, "wrapError", logRecord["error_type"])
+	assert.Equal(t, "delete room alarms: stub clear by room: db down", logRecord["error_message"])
+}
+
+func TestClearRoomAlarmsCacheMutationFailureLogsWrappedEvents(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(*cachemocks.Client, *cache.Service)
+		wantEvent string
+		wantError string
+	}{
+		{
+			name: "rebuild_clear_cache_from_repository",
+			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
+				cacheMock.SRemFunc = func(context.Context, string, []string) (int64, error) {
+					return 0, errors.New("srem failed")
+				}
+			},
+			wantEvent: "rebuild clear cache from repository.failed",
+			wantError: "clear room alarms: remove room alarms: srem failed",
+		},
+		{
+			name: "mark_room_alarms_changed_in_cache",
+			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
+				cacheMock.DelFunc = func(context.Context, string) error {
+					return errors.New("del failed")
+				}
+			},
+			wantEvent: "mark room alarms changed in cache.failed",
+			wantError: "mark alarm cache changed: clear empty subscriber cache marker: del failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			var logBuffer bytes.Buffer
+			cacheMock, cacheClient := newLenientAlarmCacheMock(ctx, t, nil)
+			tt.setup(cacheMock, cacheClient)
+
+			as := &AlarmService{
+				cache:  cacheMock,
+				logger: slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError})),
+			}
+
+			removed, err := as.clearRoomAlarmsCacheMutation(ctx, "room-1", []string{"ch-1"})
+			require.Error(t, err)
+			assert.Zero(t, removed)
+
+			logRecord := decodeSingleJSONLog(t, &logBuffer)
+			assert.Equal(t, tt.wantEvent, logRecord["event"])
+			assert.NotContains(t, logRecord, "error")
+			assert.Equal(t, "wrapError", logRecord["error_type"])
+			assert.Equal(t, tt.wantError, logRecord["error_message"])
+		})
+	}
+}
+
+func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
+	tests := []struct {
+		name         string
+		setup        func(*cachemocks.Client)
+		run          func(context.Context, *AlarmService)
+		wantEvent    string
+		wantMessage  string
+		wantErrorTyp string
+		wantErrorMsg string
+	}{
+		{
+			name: "after_add_sync_platform_mapping",
+			run: func(ctx context.Context, as *AlarmService) {
+				as.afterAddAlarm(ctx, domain.AddAlarmRequest{
+					RoomID:    "room-1",
+					ChannelID: "ch-1",
+				}, domain.AlarmTypes{domain.AlarmTypeLive})
+			},
+			wantEvent:    "sync platform alarm mapping after add.failed",
+			wantMessage:  "Failed to sync platform alarm mapping after add",
+			wantErrorTyp: "errorString",
+			wantErrorMsg: "member data provider not configured",
+		},
+		{
+			name: "after_remove_sync_platform_mapping",
+			run: func(ctx context.Context, as *AlarmService) {
+				as.afterRemoveAlarm(ctx, "room-1", "ch-1", removeAlarmMutation{
+					effectiveRemovalTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+				})
+			},
+			wantEvent:    "sync platform alarm mapping after remove.failed",
+			wantMessage:  "Failed to sync platform alarm mapping after remove",
+			wantErrorTyp: "errorString",
+			wantErrorMsg: "member data provider not configured",
+		},
+		{
+			name: "clear_room_cleanup_channel_registry",
+			setup: func(cacheMock *cachemocks.Client) {
+				cacheMock.SRemFunc = func(context.Context, string, []string) (int64, error) {
+					return 0, errors.New("srem failed")
+				}
+			},
+			run: func(ctx context.Context, as *AlarmService) {
+				as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
+				as.cleanupClearedRoomAlarmChannel(ctx, "room-1", "ch-1")
+			},
+			wantEvent:    "cleanup channel registry during room alarm clear.failed",
+			wantMessage:  "Failed to cleanup channel registry during room alarm clear",
+			wantErrorTyp: "wrapError",
+			wantErrorMsg: "cleanup channel registry: remove channel registry entry: srem failed",
+		},
+		{
+			name: "clear_room_sync_platform_mapping",
+			run: func(ctx context.Context, as *AlarmService) {
+				as.cleanupClearedRoomAlarmChannel(ctx, "room-1", "ch-1")
+			},
+			wantEvent:    "sync platform alarm mapping after clear.failed",
+			wantMessage:  "Failed to sync platform alarm mapping after clear",
+			wantErrorTyp: "errorString",
+			wantErrorMsg: "member data provider not configured",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			var logBuffer bytes.Buffer
+			cacheMock, _ := newLenientAlarmCacheMock(ctx, t, nil)
+			if tt.setup != nil {
+				tt.setup(cacheMock)
+			}
+
+			as := &AlarmService{
+				cache:  cacheMock,
+				logger: slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn})),
+			}
+
+			tt.run(ctx, as)
+
+			logRecord := decodeSingleJSONLog(t, &logBuffer)
+			assert.Equal(t, tt.wantEvent, logRecord["event"])
+			assert.Equal(t, tt.wantMessage, logRecord["msg"])
+			assert.NotContains(t, logRecord, "error")
+			assert.Equal(t, tt.wantErrorTyp, logRecord["error_type"])
+			assert.Equal(t, tt.wantErrorMsg, logRecord["error_message"])
+			assert.Equal(t, "room-1", logRecord["room_id"])
+			assert.Equal(t, "ch-1", logRecord["channel_id"])
+		})
+	}
+}
+
 func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {
 	t.Parallel()
 
@@ -191,7 +563,7 @@ func TestClearRoomAlarms_UsesRepositoryAsAuthorityWhenConfigured(t *testing.T) {
 	as := newTestAlarmService(t)
 
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	as.alarmRepo = &sharedalarm.Repository{}
+	as.alarmRepository = &sharedalarm.Repository{}
 	as.alarmWriter = &stubAlarmWriter{
 		clearByRoomFn: func(context.Context, string) (int64, error) {
 			return 2, nil
@@ -226,19 +598,19 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 		"operation": "add",
 		"result":    "ok",
 	})
-	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheSvc *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
+	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheClient *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
 		if key == AlarmRegistryKey {
 			return 0, errors.New("registry add failed")
 		}
 
-		return cacheSvc.SAdd(ctx, key, members)
+		return cacheClient.SAdd(ctx, key, members)
 	})
 
 	as := &AlarmService{
 		cache:       cacheMock,
 		logger:      newDiscardAlarmLogger(),
 		memberData:  &mockMemberDataProvider{members: []*domain.Member{}},
-		alarmRepo:   &sharedalarm.Repository{},
+		alarmRepository:   &sharedalarm.Repository{},
 		alarmWriter: &stubAlarmWriter{},
 	}
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }
