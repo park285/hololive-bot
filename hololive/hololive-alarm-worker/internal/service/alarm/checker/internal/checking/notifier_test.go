@@ -85,12 +85,12 @@ func (o *notifierBatchOutbox) InsertBatch(_ context.Context, input dispatchoutbo
 func TestNotifierSend_DedupSkip(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
-	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+	cache := newCheckerTestCacheClient(t)
+	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
 
 	notifier, err := NewNotifier(
 		dedupSvc,
-		queue.NewPublisher(cacheSvc, newCheckerTestLogger()),
+		queue.NewPublisher(cache, newCheckerTestLogger()),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -124,7 +124,7 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 
-	if queueSize := readDispatchQueueSize(t, cacheSvc); queueSize != 0 {
+	if queueSize := readDispatchQueueSize(t, cache); queueSize != 0 {
 		t.Fatalf("expected empty dispatch queue, got %d", queueSize)
 	}
 }
@@ -132,12 +132,12 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
-	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+	cache := newCheckerTestCacheClient(t)
+	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
 
 	notifier, err := NewNotifier(
 		dedupSvc,
-		queue.NewPublisher(cacheSvc, newCheckerTestLogger()),
+		queue.NewPublisher(cache, newCheckerTestLogger()),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -165,13 +165,13 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 
-	if queueSize := readDispatchQueueSize(t, cacheSvc); queueSize != 1 {
+	if queueSize := readDispatchQueueSize(t, cache); queueSize != 1 {
 		t.Fatalf("expected dispatch queue size=1, got %d", queueSize)
 	}
 
 	notifiedKey := "notified:" + stream.ID
 
-	startScheduled, err := cacheSvc.HGet(t.Context(), notifiedKey, "start_scheduled")
+	startScheduled, err := cache.HGet(t.Context(), notifiedKey, "start_scheduled")
 	if err != nil {
 		t.Fatalf("expected hash-based notified cache, got error: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 		t.Fatal("expected start_scheduled field to be written")
 	}
 
-	minuteSent, err := cacheSvc.HGet(t.Context(), notifiedKey, "5")
+	minuteSent, err := cache.HGet(t.Context(), notifiedKey, "5")
 	if err != nil {
 		t.Fatalf("expected minute field to be readable from hash: %v", err)
 	}
@@ -193,12 +193,12 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
-	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+	cache := newCheckerTestCacheClient(t)
+	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
 
 	notifier, err := NewNotifier(
 		dedupSvc,
-		queue.NewPublisher(cacheSvc, newCheckerTestLogger()),
+		queue.NewPublisher(cache, newCheckerTestLogger()),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -238,7 +238,7 @@ func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
 	require.NoError(t, sendErr)
 	assert.Equal(t, SendResult{Sent: 2}, result)
 
-	if queueSize := readDispatchQueueSize(t, cacheSvc); queueSize != 2 {
+	if queueSize := readDispatchQueueSize(t, cache); queueSize != 2 {
 		t.Fatalf("expected non-youtube live streams to publish, got queue size %d", queueSize)
 	}
 }
@@ -246,8 +246,8 @@ func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
 func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
-	failingCache := &failingPublishCacheClient{Client: cacheSvc}
+	cache := newCheckerTestCacheClient(t)
+	failingCache := &failingPublishCacheClient{Client: cache}
 	logger := newCheckerTestLogger()
 	dedupSvc := dedup.NewService(failingCache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
@@ -298,14 +298,14 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := cachemocks.NewStrictClient()
+	cache := cachemocks.NewStrictClient()
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, logger)
 
 	notifier, err := NewNotifier(
 		dedupSvc,
-		queue.NewPublisher(cacheSvc, logger),
+		queue.NewPublisher(cache, logger),
 		nil,
 		logger,
 	)
@@ -342,13 +342,13 @@ func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
 func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
+	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, logger)
 
 	notifier, err := NewNotifier(
 		dedupSvc,
-		queue.NewPublisher(cacheSvc, logger),
+		queue.NewPublisher(cache, logger),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -383,7 +383,7 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 		t.Fatalf("expected Sent=2, got %d (Skipped=%d, Failed=%d)", result.Sent, result.Skipped, result.Failed)
 	}
 
-	if queueSize := readDispatchQueueSize(t, cacheSvc); queueSize != 2 {
+	if queueSize := readDispatchQueueSize(t, cache); queueSize != 2 {
 		t.Fatalf("expected dispatch queue size=2, got %d", queueSize)
 	}
 }
@@ -391,14 +391,14 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 func TestNotifierSend_UsesSinglePublishBatchForClaimedNotifications(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
+	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupSvc := dedup.NewService(cacheSvc, []int{10}, logger)
+	dedupSvc := dedup.NewService(cache, []int{10}, logger)
 	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
 		dedupSvc,
-		queue.NewPublisher(cacheSvc, logger,
+		queue.NewPublisher(cache, logger,
 			queue.WithOutbox(outbox),
 			queue.WithPublishMode(queue.PublishModePGFirst),
 			queue.WithWakeupEnabled(false),
@@ -444,14 +444,14 @@ func TestNotifierSend_UsesSinglePublishBatchForClaimedNotifications(t *testing.T
 func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
+	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupSvc := dedup.NewService(cacheSvc, []int{10}, logger)
+	dedupSvc := dedup.NewService(cache, []int{10}, logger)
 	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
 		dedupSvc,
-		queue.NewPublisher(cacheSvc, logger,
+		queue.NewPublisher(cache, logger,
 			queue.WithOutbox(outbox),
 			queue.WithPublishMode(queue.PublishModePGFirst),
 			queue.WithWakeupEnabled(false),
@@ -514,14 +514,14 @@ func TestClampProcessedDeliveriesBoundsPublishResult(t *testing.T) {
 func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newCheckerTestCacheClient(t)
+	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupSvc := dedup.NewService(cacheSvc, []int{10}, logger)
+	dedupSvc := dedup.NewService(cache, []int{10}, logger)
 	outbox := &notifierBatchOutbox{batchErrors: []error{nil, errors.New("pg unavailable")}}
 
 	notifier, err := NewNotifier(
 		dedupSvc,
-		queue.NewPublisher(cacheSvc, logger,
+		queue.NewPublisher(cache, logger,
 			queue.WithOutbox(outbox),
 			queue.WithPublishMode(queue.PublishModePGFirst),
 			queue.WithWakeupEnabled(false),
@@ -563,10 +563,10 @@ func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testin
 	assert.True(t, secondClaimed)
 }
 
-func readDispatchQueueSize(t *testing.T, cacheSvc cache.Client) int64 {
+func readDispatchQueueSize(t *testing.T, cacheClient cache.Client) int64 {
 	t.Helper()
 
-	resp := cacheSvc.GetClient().Do(t.Context(), cacheSvc.B().Llen().Key(queue.AlarmDispatchQueue).Build())
+	resp := cacheClient.GetClient().Do(t.Context(), cacheClient.B().Llen().Key(queue.AlarmDispatchQueue).Build())
 
 	size, err := resp.AsInt64()
 	if err != nil {

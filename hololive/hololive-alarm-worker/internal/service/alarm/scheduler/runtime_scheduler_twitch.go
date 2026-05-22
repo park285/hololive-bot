@@ -32,7 +32,7 @@ import (
 )
 
 func newOptionalTwitchChecker(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	twitchClient *twitch.Client,
 	twitchEnabled bool,
 	logger *slog.Logger,
@@ -41,7 +41,7 @@ func newOptionalTwitchChecker(
 		logger.Info("Twitch alarm loop disabled")
 		return nil, nil
 	}
-	twitchChecker, err := checker.NewTwitchChecker(cacheSvc, twitchClient, logger)
+	twitchChecker, err := checker.NewTwitchChecker(cacheClient, twitchClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create twitch checker: %w", err)
 	}

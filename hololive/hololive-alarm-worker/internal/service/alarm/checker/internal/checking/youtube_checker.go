@@ -43,7 +43,7 @@ const (
 
 // YouTubeChecker는 Holodex live status 기반 알림 후보를 생성한다.
 type YouTubeChecker struct {
-	cacheSvc            cache.Client
+	cacheClient         cache.Client
 	holodexSvc          *holodex.Service
 	tierScheduler       *tier.TieredScheduler
 	dedupSvc            *dedup.Service
@@ -56,7 +56,7 @@ type YouTubeChecker struct {
 
 // NewYouTubeChecker는 YouTube 체커를 생성한다.
 func NewYouTubeChecker(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	holodexSvc *holodex.Service,
 	tierScheduler *tier.TieredScheduler,
 	dedupSvc *dedup.Service,
@@ -65,7 +65,7 @@ func NewYouTubeChecker(
 	logger *slog.Logger,
 ) (*YouTubeChecker, error) {
 	return NewYouTubeCheckerWithPersistedLiveSource(
-		cacheSvc,
+		cacheClient,
 		holodexSvc,
 		tierScheduler,
 		dedupSvc,
@@ -77,7 +77,7 @@ func NewYouTubeChecker(
 }
 
 func NewYouTubeCheckerWithPersistedLiveSource(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	holodexSvc *holodex.Service,
 	tierScheduler *tier.TieredScheduler,
 	dedupSvc *dedup.Service,
@@ -86,7 +86,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 	persistedLiveSource YouTubeLiveSessionSource,
 	logger *slog.Logger,
 ) (*YouTubeChecker, error) {
-	if cacheSvc == nil {
+	if cacheClient == nil {
 		return nil, errors.New("new youtube checker: cache service is nil")
 	}
 
@@ -109,7 +109,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 	initCheckerMetrics()
 
 	return &YouTubeChecker{
-		cacheSvc:            cacheSvc,
+		cacheClient:         cacheClient,
 		holodexSvc:          holodexSvc,
 		tierScheduler:       tierScheduler,
 		dedupSvc:            dedupSvc,

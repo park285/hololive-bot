@@ -84,12 +84,12 @@ func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cacheSvc := newCheckerTestCacheClient(t)
+			cache := newCheckerTestCacheClient(t)
 			ctx := t.Context()
 
-			require.NoError(t, cacheSvc.HSet(ctx, notification.ChzzkChannelMapKey, "yt-1", "chzzk-1"))
+			require.NoError(t, cache.HSet(ctx, notification.ChzzkChannelMapKey, "yt-1", "chzzk-1"))
 
-			_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1", "room-2"})
+			_, err := cache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1", "room-2"})
 			require.NoError(t, err)
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +110,7 @@ func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
 			}
 
 			checker, err := NewChzzkChecker(
-				cacheSvc,
+				cache,
 				chzzk.NewClient(httpClient, server.URL, newCheckerTestLogger()),
 				newCheckerTestLogger(),
 			)
@@ -139,7 +139,7 @@ func TestChzzkCheckerCheck_DoesNotPreclaimDedup(t *testing.T) {
 	t.Parallel()
 
 	setNXCalls := 0
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		HGetAllFunc: func(context.Context, string) (map[string]string, error) {
 			return map[string]string{"yt-1": "chzzk-1"}, nil
 		},
@@ -163,7 +163,7 @@ func TestChzzkCheckerCheck_DoesNotPreclaimDedup(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	checker, err := NewChzzkChecker(
-		cacheSvc,
+		cache,
 		chzzk.NewClient(server.Client(), server.URL, newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)

@@ -95,11 +95,11 @@ func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *sl
 }
 
 func BuildAlarmWorkerConfigSubscriber(
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	alarmCRUD domain.AlarmCRUD,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
-	if cacheSvc == nil || alarmCRUD == nil {
+	if cacheClient == nil || alarmCRUD == nil {
 		return nil
 	}
 
@@ -119,7 +119,7 @@ func BuildAlarmWorkerConfigSubscriber(
 		},
 	})
 
-	return configsub.New(cacheSvc.GetClient(), applyFn, logger)
+	return configsub.New(cacheClient.GetClient(), applyFn, logger)
 }
 
 func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
@@ -140,7 +140,7 @@ func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
 
 func buildRuntimeScheduler(
 	cfg *config.Config,
-	cacheSvc cache.Client,
+	cacheClient cache.Client,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
 	configuredRole string,
@@ -162,7 +162,7 @@ func buildRuntimeScheduler(
 	}
 
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(
-		cacheSvc,
+		cacheClient,
 		foundation.HolodexService,
 		foundation.ChzzkClient,
 		foundation.TwitchClient,

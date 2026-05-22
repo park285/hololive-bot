@@ -97,7 +97,7 @@ func TestLoadAlarmDispatchPublishConfigAllowsMatchingPGPair(t *testing.T) {
 func TestNotificationEgressRunnerRetriesHeldLeaseUntilAcquired(t *testing.T) {
 	var setNXCalls atomic.Int32
 	var schedulerStarts atomic.Int32
-	cacheSvc := &cachemocks.Client{
+	cache := &cachemocks.Client{
 		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
 			return setNXCalls.Add(1) > 1, nil
 		},
@@ -106,7 +106,7 @@ func TestNotificationEgressRunnerRetriesHeldLeaseUntilAcquired(t *testing.T) {
 		},
 	}
 	runner := notificationEgressRunner{
-		leaseCache:         cacheSvc,
+		leaseCache:         cache,
 		leaseEnabled:       true,
 		leaseRetryInterval: time.Millisecond,
 	}

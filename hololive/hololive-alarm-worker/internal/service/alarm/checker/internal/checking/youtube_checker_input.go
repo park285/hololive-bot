@@ -16,7 +16,7 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 	ctx context.Context,
 	now time.Time,
 ) ([]string, map[string][]*domain.Stream, map[string]time.Time, map[string][]string, error) {
-	channelIDs, err := c.cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	channelIDs, err := c.cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: read channel registry: %w", err)
 	}
@@ -46,13 +46,13 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: fetch channels live status: %w", holodexErr)
 	}
 	liveObservedAtByStreamID := mergePersistedLiveSessionStreams(streamsByChannel, persistedSessions)
-	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheSvc, dueChannels)
+	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheClient, dueChannels)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: load member names: %w", err)
 	}
 	applyMemberNamesToStreams(streamsByChannel, memberNames)
 
-	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, dueChannels)
+	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheClient, dueChannels)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
 	}
