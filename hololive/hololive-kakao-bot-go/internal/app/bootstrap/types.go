@@ -100,7 +100,7 @@ type BotDataModule struct {
 }
 
 type BotStreamModule struct {
-	HolodexSvc   *holodex.Service
+	Holodex      *holodex.Service
 	ChzzkClient  *chzzk.Client
 	TwitchClient *twitch.Client
 	Alarm        domain.AlarmCRUD
@@ -110,14 +110,14 @@ type BotStreamModule struct {
 
 type BotSupportModule struct {
 	ActivityLogger *activity.Logger
-	SettingsSvc    settings.ReadWriter
-	ACLSvc         *acl.Service
+	Settings       settings.ReadWriter
+	ACL            *acl.Service
 	WorkerPool     *workerpool.Pool
 }
 
 type BotFeatureModule struct {
 	MajorEventRepo  command.MajorEventRepository
-	MemberNewsSvc   command.MemberNewsService
+	MemberNews      command.MemberNewsService
 	CommandBuilders []bot.CommandBuilder
 }
 

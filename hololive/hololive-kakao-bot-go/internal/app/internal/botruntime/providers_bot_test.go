@@ -130,7 +130,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			MembersData: nil,
 		},
 		Stream: appbootstrap.BotStreamModule{
-			HolodexSvc:   holodexSvc,
+			Holodex:      holodexSvc,
 			ChzzkClient:  chzzkClient,
 			TwitchClient: twitchClient,
 			Alarm:        nil,
@@ -139,13 +139,13 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 		},
 		Support: appbootstrap.BotSupportModule{
 			ActivityLogger: activityLogger,
-			SettingsSvc:    settingsSvc,
-			ACLSvc:         aclSvc,
+			Settings:       settingsSvc,
+			ACL:            aclSvc,
 			WorkerPool:     workerPool,
 		},
 		Feature: appbootstrap.BotFeatureModule{
 			MajorEventRepo:  majorEventRepo,
-			MemberNewsSvc:   memberNewsSvc,
+			MemberNews:      memberNewsSvc,
 			CommandBuilders: []bot.CommandBuilder{commandBuilder},
 		},
 	})

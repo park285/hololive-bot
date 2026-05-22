@@ -92,7 +92,7 @@ func buildBotStreamModule(
 	youTubeStack *providers.YouTubeStack,
 ) BotStreamModule {
 	return BotStreamModule{
-		HolodexSvc:   holodexService,
+		Holodex:      holodexService,
 		ChzzkClient:  alarmMode.ChzzkClient,
 		TwitchClient: alarmMode.TwitchClient,
 		Alarm:        alarmMode.AlarmCRUD,
@@ -109,8 +109,8 @@ func buildBotSupportModule(
 ) BotSupportModule {
 	return BotSupportModule{
 		ActivityLogger: activityLogger,
-		SettingsSvc:    settingsService,
-		ACLSvc:         aclService,
+		Settings:       settingsService,
+		ACL:            aclService,
 		WorkerPool:     workerPool,
 	}
 }
@@ -122,7 +122,7 @@ func buildBotFeatureModule(
 ) BotFeatureModule {
 	return BotFeatureModule{
 		MajorEventRepo:  majorEventRepo,
-		MemberNewsSvc:   memberNewsService,
+		MemberNews:      memberNewsService,
 		CommandBuilders: bot.CloneCommandBuilders(commandBuilders),
 	}
 }
