@@ -48,7 +48,7 @@ type digestDispatchConfig struct {
 // processDigestForRoom: 단일 room의 다이제스트 생성 + outbox enqueue (weekly/monthly 공용).
 func processDigestForRoom(
 	ctx context.Context,
-	svc model.DigestService,
+	service model.DigestService,
 	fmtr model.DigestFormatter,
 	outbox outboxEnqueuer,
 	logger *slog.Logger,
@@ -58,7 +58,7 @@ func processDigestForRoom(
 ) delivery.SendResult {
 	var result delivery.SendResult
 
-	digest, err := svc.GenerateRoomDigest(ctx, roomID, period)
+	digest, err := service.GenerateRoomDigest(ctx, roomID, period)
 	if err != nil {
 		if errors.Is(err, model.ErrNoSubscribedMembers) {
 			logger.Info("Member news skip: room has no alarm members",

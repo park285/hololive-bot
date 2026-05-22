@@ -63,7 +63,7 @@ func TestResolveMemberNewsXAllowlistPath(t *testing.T) {
 
 func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 	t.Run("basic config without consensus", func(t *testing.T) {
-		svc := initMemberNewsService(
+		service := initMemberNewsService(
 			context.Background(),
 			config.CliproxyConfig{},
 			config.LLMConfig{},
@@ -73,7 +73,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			nil,
 			testRuntimeLogger(),
 		)
-		require.NotNil(t, svc)
+		require.NotNil(t, service)
 	})
 
 	t.Run("consensus config enabled", func(t *testing.T) {
@@ -96,7 +96,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			},
 		}
 
-		svc := initMemberNewsService(
+		service := initMemberNewsService(
 			context.Background(),
 			cliproxyCfg,
 			llmCfg,
@@ -106,7 +106,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			nil,
 			testRuntimeLogger(),
 		)
-		require.NotNil(t, svc)
+		require.NotNil(t, service)
 	})
 }
 
@@ -120,8 +120,8 @@ func TestBuildMemberNewsComponents(t *testing.T) {
 	})
 
 	t.Run("non-nil service builds schedulers", func(t *testing.T) {
-		svc := membernews.NewService(nil, nil, nil, nil, logger)
-		weekly, monthly := buildMemberNewsComponents(svc, nil, nil, nil, logger)
+		service := membernews.NewService(nil, nil, nil, nil, logger)
+		weekly, monthly := buildMemberNewsComponents(service, nil, nil, nil, logger)
 		require.NotNil(t, weekly)
 		require.NotNil(t, monthly)
 	})

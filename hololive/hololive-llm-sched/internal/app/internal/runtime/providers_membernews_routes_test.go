@@ -127,10 +127,10 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 
 	registerMemberNewsInternalRoutes(nil, "", nil)
 
-	svc := membernewssvc.NewService(nil, nil, nil, nil, newTestLogger())
+	service := membernewssvc.NewService(nil, nil, nil, nil, newTestLogger())
 
 	t.Run("auth middleware", func(t *testing.T) {
-		router := newMemberNewsRouter(t, "secret", svc)
+		router := newMemberNewsRouter(t, "secret", service)
 
 		req := httptest.NewRequest(http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":"r1"}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -147,7 +147,7 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 	})
 
 	t.Run("subscription and digest handlers", func(t *testing.T) {
-		router := newMemberNewsRouter(t, "", svc)
+		router := newMemberNewsRouter(t, "", service)
 
 		// GET subscription - room_id required
 		req := httptest.NewRequest(http.MethodGet, membernewscontracts.SubscriptionsPath+"/%20", nil)
@@ -227,13 +227,13 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 	})
 }
 
-func newMemberNewsRouter(t *testing.T, apiKey string, svc *membernewssvc.Service) *http.ServeMux {
+func newMemberNewsRouter(t *testing.T, apiKey string, service *membernewssvc.Service) *http.ServeMux {
 	t.Helper()
 
 	// gin.Engine는 http.Handler를 구현하므로 테스트 편의를 위해 mux에 연결합니다.
 	engine, err := buildHealthOnlyRouter(context.Background(), newTestLogger(), "")
 	require.NoError(t, err)
-	registerMemberNewsInternalRoutes(engine, apiKey, svc)
+	registerMemberNewsInternalRoutes(engine, apiKey, service)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", engine)

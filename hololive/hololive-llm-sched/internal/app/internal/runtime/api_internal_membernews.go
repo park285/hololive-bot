@@ -40,21 +40,21 @@ type memberNewsDigestRequest struct {
 	Period string `json:"period"`
 }
 
-func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *membernewssvc.Service) {
-	if router == nil || svc == nil {
+func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, service *membernewssvc.Service) {
+	if router == nil || service == nil {
 		return
 	}
 
 	rg := router.Group(membernewscontracts.BasePath)
 	rg.Use(middleware.APIKeyAuthMiddleware(apiKey))
 
-	rg.GET(membernewscontracts.SubscriptionsRoute+"/:roomID", memberNewsSubscriptionStatusHandler(svc))
-	rg.POST(membernewscontracts.SubscriptionsRoute, memberNewsSubscribeHandler(svc))
-	rg.DELETE(membernewscontracts.SubscriptionsRoute+"/:roomID", memberNewsUnsubscribeHandler(svc))
-	rg.POST(membernewscontracts.DigestRoute, memberNewsDigestHandler(svc))
+	rg.GET(membernewscontracts.SubscriptionsRoute+"/:roomID", memberNewsSubscriptionStatusHandler(service))
+	rg.POST(membernewscontracts.SubscriptionsRoute, memberNewsSubscribeHandler(service))
+	rg.DELETE(membernewscontracts.SubscriptionsRoute+"/:roomID", memberNewsUnsubscribeHandler(service))
+	rg.POST(membernewscontracts.DigestRoute, memberNewsDigestHandler(service))
 }
 
-func memberNewsSubscriptionStatusHandler(svc *membernewssvc.Service) gin.HandlerFunc {
+func memberNewsSubscriptionStatusHandler(service *membernewssvc.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		roomID := trimmedRoomIDParam(c)
 		if roomID == "" {
@@ -62,7 +62,7 @@ func memberNewsSubscriptionStatusHandler(svc *membernewssvc.Service) gin.Handler
 			return
 		}
 
-		subscribed, err := svc.IsRoomSubscribed(c.Request.Context(), roomID)
+		subscribed, err := service.IsRoomSubscribed(c.Request.Context(), roomID)
 		if err != nil {
 			sharedserver.RespondError(c, http.StatusInternalServerError, "subscription_check_failed", nil)
 			return
@@ -72,14 +72,14 @@ func memberNewsSubscriptionStatusHandler(svc *membernewssvc.Service) gin.Handler
 	}
 }
 
-func memberNewsSubscribeHandler(svc *membernewssvc.Service) gin.HandlerFunc {
+func memberNewsSubscribeHandler(service *membernewssvc.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		req, ok := bindMemberNewsSubscribeRequest(c)
 		if !ok {
 			return
 		}
 
-		if err := svc.SubscribeRoom(c.Request.Context(), req.RoomID, req.RoomName); err != nil {
+		if err := service.SubscribeRoom(c.Request.Context(), req.RoomID, req.RoomName); err != nil {
 			sharedserver.RespondError(c, http.StatusInternalServerError, "subscribe_failed", nil)
 			return
 		}
@@ -88,7 +88,7 @@ func memberNewsSubscribeHandler(svc *membernewssvc.Service) gin.HandlerFunc {
 	}
 }
 
-func memberNewsUnsubscribeHandler(svc *membernewssvc.Service) gin.HandlerFunc {
+func memberNewsUnsubscribeHandler(service *membernewssvc.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		roomID := trimmedRoomIDParam(c)
 		if roomID == "" {
@@ -96,7 +96,7 @@ func memberNewsUnsubscribeHandler(svc *membernewssvc.Service) gin.HandlerFunc {
 			return
 		}
 
-		if err := svc.UnsubscribeRoom(c.Request.Context(), roomID); err != nil {
+		if err := service.UnsubscribeRoom(c.Request.Context(), roomID); err != nil {
 			sharedserver.RespondError(c, http.StatusInternalServerError, "unsubscribe_failed", nil)
 			return
 		}
@@ -105,7 +105,7 @@ func memberNewsUnsubscribeHandler(svc *membernewssvc.Service) gin.HandlerFunc {
 	}
 }
 
-func memberNewsDigestHandler(svc *membernewssvc.Service) gin.HandlerFunc {
+func memberNewsDigestHandler(service *membernewssvc.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		req, ok := bindMemberNewsDigestRequest(c)
 		if !ok {
@@ -113,7 +113,7 @@ func memberNewsDigestHandler(svc *membernewssvc.Service) gin.HandlerFunc {
 		}
 
 		period := membernewscontracts.NormalizePeriod(membernewscontracts.Period(req.Period))
-		digest, err := svc.GenerateRoomDigest(c.Request.Context(), req.RoomID, membernewssvc.Period(period))
+		digest, err := service.GenerateRoomDigest(c.Request.Context(), req.RoomID, membernewssvc.Period(period))
 		if err != nil {
 			respondMemberNewsDigestError(c, err)
 			return
