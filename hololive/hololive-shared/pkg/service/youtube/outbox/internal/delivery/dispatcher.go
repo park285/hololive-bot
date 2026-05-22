@@ -205,14 +205,11 @@ func (d *Dispatcher) Start(ctx context.Context) {
 }
 
 func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
-	reconcileTerminalOutboxStatuses := func(context.Context) error {
+	d.reconcileTerminalOutboxStatuses(ctx)
+	_ = loop.RunTickerLoop(ctx, d.cfg.AggregateSyncInterval, func(context.Context) error {
 		d.reconcileTerminalOutboxStatuses(ctx)
 		return nil
-	}
-	if err := reconcileTerminalOutboxStatuses(ctx); err != nil {
-		return
-	}
-	_ = loop.RunTickerLoop(ctx, d.cfg.AggregateSyncInterval, reconcileTerminalOutboxStatuses)
+	})
 }
 
 // run: 메인 폴링 루프
@@ -224,14 +221,11 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("delivery_parallelism", d.cfg.DeliveryParallelism),
 		slog.Int("subscriber_lookup_parallelism", d.subscriberLookupParallelism()))
 
-	processOnce := func(context.Context) error {
+	d.processOnce(ctx)
+	_ = loop.RunTickerLoop(ctx, d.cfg.PollInterval, func(context.Context) error {
 		d.processOnce(ctx)
 		return nil
-	}
-	if err := processOnce(ctx); err != nil {
-		return
-	}
-	_ = loop.RunTickerLoop(ctx, d.cfg.PollInterval, processOnce)
+	})
 	d.logger.Info("Outbox dispatcher stopped")
 }
 
