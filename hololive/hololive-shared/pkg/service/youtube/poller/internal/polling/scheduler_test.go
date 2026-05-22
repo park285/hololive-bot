@@ -313,9 +313,15 @@ func (c *schedulerClaimStub) TryClaim(
 type schedulerClaimHandleStub struct {
 	markCompletedCalls int
 	releaseCalls       int
+	renewCalls         int
+	renewFn            func(context.Context, time.Duration) (bool, error)
 }
 
-func (c *schedulerClaimHandleStub) Renew(context.Context, time.Duration) (bool, error) {
+func (c *schedulerClaimHandleStub) Renew(ctx context.Context, ttl time.Duration) (bool, error) {
+	c.renewCalls++
+	if c.renewFn != nil {
+		return c.renewFn(ctx, ttl)
+	}
 	return true, nil
 }
 func (c *schedulerClaimHandleStub) MarkCompleted(context.Context, time.Duration) (bool, error) {
@@ -427,6 +433,75 @@ func (p *blockingCountingPollerStub) callCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.calls
+}
+
+func TestRunJobClaimRenewLoop_StopsWhenPollContextCanceledBeforeTick(t *testing.T) {
+	renewCtx, renewCancel := context.WithCancel(context.Background())
+	defer renewCancel()
+	pollCtx, pollCancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	claim := &schedulerClaimHandleStub{}
+	done := make(chan struct{})
+
+	pollCancel()
+
+	go func() {
+		defer close(done)
+		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, "videos", time.Minute, time.Hour, errCh)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("runJobClaimRenewLoop did not stop after poll context cancellation")
+	}
+
+	require.Equal(t, 0, claim.renewCalls)
+	select {
+	case err := <-errCh:
+		t.Fatalf("unexpected renew error: %v", err)
+	default:
+	}
+}
+
+func TestRunJobClaimRenewLoop_RenewFailureCancelsPollAndReportsError(t *testing.T) {
+	renewCtx, renewCancel := context.WithCancel(context.Background())
+	defer renewCancel()
+	pollCtx, pollCancel := context.WithCancel(context.Background())
+	defer pollCancel()
+	errCh := make(chan error, 1)
+	claim := &schedulerClaimHandleStub{
+		renewFn: func(context.Context, time.Duration) (bool, error) {
+			return false, nil
+		},
+	}
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, "videos", time.Minute, 5*time.Millisecond, errCh)
+	}()
+
+	select {
+	case err := <-errCh:
+		require.ErrorContains(t, err, "ownership lost")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("runJobClaimRenewLoop did not report renew failure")
+	}
+
+	select {
+	case <-pollCtx.Done():
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("runJobClaimRenewLoop did not cancel poll context after renew failure")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("runJobClaimRenewLoop did not stop after renew failure")
+	}
+
+	require.Equal(t, 1, claim.renewCalls)
 }
 
 func TestSchedulerExecuteJobSkipsPeerOwnedWithoutPolling(t *testing.T) {
