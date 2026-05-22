@@ -34,10 +34,10 @@ type MajorEventCommand struct {
 	repository MajorEventRepository
 }
 
-func NewMajorEventCommand(deps *Dependencies, repo MajorEventRepository) *MajorEventCommand {
+func NewMajorEventCommand(deps *Dependencies, repository MajorEventRepository) *MajorEventCommand {
 	return &MajorEventCommand{
 		BaseCommand: NewBaseCommand(deps),
-		repository:  repo,
+		repository:  repository,
 	}
 }
 

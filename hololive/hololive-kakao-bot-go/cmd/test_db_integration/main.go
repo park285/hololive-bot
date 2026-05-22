@@ -82,18 +82,18 @@ func runIntegrationChecks(ctx context.Context, runtime *app.DBIntegrationRuntime
 }
 
 func runRepositoryChecks(ctx context.Context, runtime *app.DBIntegrationRuntime, testChannelID string) int {
-	repo := runtime.Repository
+	repository := runtime.Repository
 
 	log.Println("Repository created")
 
-	members, err := repo.GetAllMembers(ctx)
+	members, err := repository.GetAllMembers(ctx)
 	if err != nil {
 		log.Fatalf("Failed to get all members: %v", err)
 	}
 
 	log.Printf("Loaded %d members from PostgreSQL", len(members))
 
-	foundMember, err := repo.FindByChannelID(ctx, testChannelID)
+	foundMember, err := repository.FindByChannelID(ctx, testChannelID)
 	if err != nil {
 		log.Fatalf("Failed to find by channel ID: %v", err)
 	}
@@ -106,7 +106,7 @@ func runRepositoryChecks(ctx context.Context, runtime *app.DBIntegrationRuntime,
 	log.Printf("Find by channel ID: %s (aliases: ko=%d, ja=%d)",
 		foundMember.Name, len(foundMember.Aliases.Ko), len(foundMember.Aliases.Ja))
 
-	foundMember, err = repo.FindByAlias(ctx, "코로네")
+	foundMember, err = repository.FindByAlias(ctx, "코로네")
 	if err != nil {
 		log.Fatalf("Failed to find by alias: %v", err)
 	}

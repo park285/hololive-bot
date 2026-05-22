@@ -33,10 +33,10 @@ func ProvideTwitchClient(cfg config.TwitchConfig, logger *slog.Logger) *twitch.C
 
 func ProvideMemberCacheWithoutValkey(
 	ctx context.Context,
-	repo *member.Repository,
+	repository *member.Repository,
 	logger *slog.Logger,
 ) (*member.Cache, error) {
-	memberCache, err := member.NewMemberCache(ctx, repo, nil, logger, member.CacheConfig{
+	memberCache, err := member.NewMemberCache(ctx, repository, nil, logger, member.CacheConfig{
 		WarmUp:    true,
 		ValkeyTTL: constants.MemberCacheDefaults.ValkeyTTL,
 	})
