@@ -1,24 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
-import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Server from "lucide-react/dist/esm/icons/server";
-import { useState } from "react";
-import {
-	type DockerContainer,
-	dockerApi,
-	type StatusOnlyResponse,
-} from "@/api/core";
-import { queryKeys } from "@/api/queryKeys";
-import { ConfirmModal } from "@/components/ConfirmModal";
+import type { DockerContainer } from "@/api/core";
+import { useDockerContainerActions } from "@/components/settings/DockerContainerActions";
+import { DockerContainerConfirmModal } from "@/components/settings/DockerContainerConfirmModal";
 import { DockerContainerItem } from "@/components/docker/DockerContainerItem";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { VirtualList } from "@/components/ui/VirtualList";
-import toast from "@/lib/toast-api";
-import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
 
 interface DockerContainerListProps {
 	initialHealth?: { status: string; available: boolean };
@@ -29,172 +20,19 @@ export const DockerContainerList = ({
 	initialHealth,
 	initialContainers,
 }: DockerContainerListProps) => {
-	const queryClient = useQueryClient();
-	const [isManualRefetching, setIsManualRefetching] = useState(false);
-	const [actionInProgress, setActionInProgress] = useState<string | null>(null);
-
-	const [confirmModal, setConfirmModal] = useState<{
-		isOpen: boolean;
-		containerName: string | null;
-		action: "restart" | "stop" | "start" | null;
-	}>({
-		isOpen: false,
-		containerName: null,
-		action: null,
-	});
-
-	const { data: dockerHealth } = useQuery({
-		queryKey: queryKeys.docker.health,
-		queryFn: dockerApi.checkHealth,
-		refetchInterval: 30000,
-		retry: 1,
-		initialData: initialHealth,
-	});
-
-	const safeInitialContainers =
-		initialContainers && initialContainers.status
-			? initialContainers
-			: undefined;
-
 	const {
-		data: containersData,
-		isLoading: containersLoading,
-		isRefetching: containersRefetching,
-		refetch: refetchContainers,
-	} = useQuery({
-		queryKey: queryKeys.docker.containers,
-		queryFn: dockerApi.getContainers,
-		enabled: dockerHealth?.available === true,
-		refetchInterval: 15000,
-		initialData: safeInitialContainers,
-	});
-
-	const restartMutation = useMutation({
-		mutationFn: (containerName: string) =>
-			dockerApi.restartContainer(containerName),
-		onSuccess: (_data: StatusOnlyResponse, containerName: string) => {
-			setActionInProgress(null);
-			toast.success(
-				<span>
-					<span className="font-bold text-slate-800">{containerName}</span>
-					<span className="text-slate-600"> 재시작을 요청했습니다.</span>
-				</span>,
-			);
-			void queryClient.invalidateQueries({
-				queryKey: queryKeys.docker.containers,
-			});
-		},
-		onError: (error: unknown) => {
-			setActionInProgress(null);
-			toast.error(`컨테이너 작업 실패: ${getErrorMessageFromUnknown(error)}`);
-		},
-	});
-
-	const stopMutation = useMutation({
-		mutationFn: (containerName: string) =>
-			dockerApi.stopContainer(containerName),
-		onSuccess: (_data: StatusOnlyResponse, containerName: string) => {
-			setActionInProgress(null);
-			toast.success(
-				<span>
-					<span className="font-bold text-slate-800">{containerName}</span>
-					<span className="text-slate-600"> 중지되었습니다.</span>
-				</span>,
-			);
-			void queryClient.invalidateQueries({
-				queryKey: queryKeys.docker.containers,
-			});
-		},
-		onError: (error: unknown) => {
-			setActionInProgress(null);
-			toast.error(`컨테이너 작업 실패: ${getErrorMessageFromUnknown(error)}`);
-		},
-	});
-
-	const startMutation = useMutation({
-		mutationFn: (containerName: string) =>
-			dockerApi.startContainer(containerName),
-		onSuccess: (_data: StatusOnlyResponse, containerName: string) => {
-			setActionInProgress(null);
-			toast.success(
-				<span>
-					<span className="font-bold text-slate-800">{containerName}</span>
-					<span className="text-slate-600"> 시작되었습니다.</span>
-				</span>,
-			);
-			void queryClient.invalidateQueries({
-				queryKey: queryKeys.docker.containers,
-			});
-		},
-		onError: (error: unknown) => {
-			setActionInProgress(null);
-			toast.error(`컨테이너 작업 실패: ${getErrorMessageFromUnknown(error)}`);
-		},
-	});
-
-	const openConfirmModal = (
-		containerName: string,
-		action: "restart" | "stop" | "start",
-	) => {
-		setConfirmModal({ isOpen: true, containerName, action });
-	};
-
-	const closeConfirmModal = () => {
-		setConfirmModal({ isOpen: false, containerName: null, action: null });
-	};
-
-	const handleConfirmAction = () => {
-		if (confirmModal.containerName && confirmModal.action) {
-			const name = confirmModal.containerName;
-			setActionInProgress(name);
-
-			switch (confirmModal.action) {
-				case "restart":
-					restartMutation.mutate(name);
-					break;
-				case "stop":
-					stopMutation.mutate(name);
-					break;
-				case "start":
-					startMutation.mutate(name);
-					break;
-			}
-			closeConfirmModal();
-		}
-	};
-
-	const handleRefresh = async () => {
-		setIsManualRefetching(true);
-		const minDelay = new Promise((resolve) => setTimeout(resolve, 500));
-		try {
-			const [result] = await Promise.all([refetchContainers(), minDelay]);
-			if (result.error) {
-				throw result.error;
-			}
-			toast.success("컨테이너 상태를 갱신했습니다", {
-				id: "refresh-containers",
-			});
-		} catch (error) {
-			toast.error(`갱신 실패: ${getErrorMessageFromUnknown(error)}`);
-		} finally {
-			setIsManualRefetching(false);
-		}
-	};
-
-	const getActionLabel = (action: "restart" | "stop" | "start" | null) => {
-		switch (action) {
-			case "restart":
-				return "재시작";
-			case "stop":
-				return "중지";
-			case "start":
-				return "시작";
-			default:
-				return "";
-		}
-	};
-
-	const containers = containersData?.containers ?? [];
+		dockerHealth,
+		containers,
+		containersLoading,
+		containersRefetching,
+		isManualRefetching,
+		actionInProgress,
+		confirmModal,
+		openConfirmModal,
+		closeConfirmModal,
+		handleConfirmAction,
+		handleRefresh,
+	} = useDockerContainerActions({ initialHealth, initialContainers });
 
 	return (
 		<>
@@ -288,42 +126,11 @@ export const DockerContainerList = ({
 				</Card.Body>
 			</Card>
 
-			<ConfirmModal
-				isOpen={confirmModal.isOpen}
+			<DockerContainerConfirmModal
+				confirmModal={confirmModal}
 				onClose={closeConfirmModal}
 				onConfirm={handleConfirmAction}
-				title={`컨테이너 ${getActionLabel(confirmModal.action)}`}
-				message={""}
-				confirmText={`${getActionLabel(confirmModal.action)} 실행`}
-				confirmColor={
-					confirmModal.action === "stop"
-						? "danger"
-						: confirmModal.action === "start"
-							? "primary"
-							: "primary"
-				}
-			>
-				<div className="space-y-3">
-					<div className="flex items-center gap-3 mb-2">
-						<div className="bg-amber-100 p-2.5 rounded-full shrink-0">
-							<AlertTriangle className="text-amber-600" size={24} />
-						</div>
-						<p className="text-slate-600">
-							'
-							<span className="font-bold text-slate-800">
-								{confirmModal.containerName}
-							</span>
-							'을(를) {getActionLabel(confirmModal.action)}하시겠습니까?
-						</p>
-					</div>
-
-					{confirmModal.action !== "start" && (
-						<p className="text-xs text-amber-600 font-medium bg-amber-50 px-3 py-2 rounded-lg">
-							주의: 서비스가 잠시 중단될 수 있습니다.
-						</p>
-					)}
-				</div>
-			</ConfirmModal>
+			/>
 		</>
 	);
 };
