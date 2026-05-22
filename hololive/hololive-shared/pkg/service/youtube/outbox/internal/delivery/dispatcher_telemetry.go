@@ -9,32 +9,15 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 )
 
 func (d *Dispatcher) telemetryLoop(ctx context.Context) {
-	ticker := time.NewTicker(d.cfg.TelemetryPollInterval)
-	defer ticker.Stop()
-
 	d.processDeliveryTelemetry(ctx)
-	d.runDeliveryTelemetryLoop(ctx, ticker.C)
-}
-
-func (d *Dispatcher) runDeliveryTelemetryLoop(ctx context.Context, ticks <-chan time.Time) {
-	for {
-		if !waitForDeliveryTelemetryTick(ctx, ticks) {
-			return
-		}
+	_ = loop.RunTickerLoop(ctx, d.cfg.TelemetryPollInterval, func(ctx context.Context) error {
 		d.processDeliveryTelemetry(ctx)
-	}
-}
-
-func waitForDeliveryTelemetryTick(ctx context.Context, ticks <-chan time.Time) bool {
-	select {
-	case <-ctx.Done():
-		return false
-	case <-ticks:
-		return true
-	}
+		return nil
+	})
 }
 
 func (d *Dispatcher) processDeliveryTelemetry(ctx context.Context) {
