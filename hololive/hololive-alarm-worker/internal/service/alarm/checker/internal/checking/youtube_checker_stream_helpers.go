@@ -21,10 +21,61 @@
 package checking
 
 import (
+	"context"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 )
+
+func (c *YouTubeChecker) buildChannelNotifications(
+	ctx context.Context,
+	channelID string,
+	subscriberRooms []string,
+	streams []*domain.Stream,
+	window sharedchecker.EvaluationWindow,
+	now time.Time,
+	liveObservedAtByStreamID ...map[string]time.Time,
+) ([]*domain.AlarmNotification, error) {
+	notifications := make([]*domain.AlarmNotification, 0, len(streams)*len(subscriberRooms))
+	for _, stream := range streams {
+		if stream == nil {
+			continue
+		}
+
+		upcomingNotifications, err := c.buildUpcomingNotifications(ctx, stream, subscriberRooms, window)
+		if err != nil {
+			return nil, fmt.Errorf("build channel notifications: build upcoming notifications: %w", err)
+		}
+
+		notifications = append(notifications, upcomingNotifications...)
+
+		liveCatchupNotifications, err := c.buildLiveCatchupNotifications(ctx, channelID, stream, subscriberRooms, now, liveObservedAt(stream, liveObservedAtByStreamID...))
+		if err != nil {
+			return nil, fmt.Errorf("build channel notifications: build live catchup notifications: %w", err)
+		}
+
+		notifications = append(notifications, liveCatchupNotifications...)
+	}
+
+	return notifications, nil
+}
+
+func appendYouTubeChannelNotifications(
+	mu *sync.Mutex,
+	notifications *[]*domain.AlarmNotification,
+	channelNotifications []*domain.AlarmNotification,
+) {
+	if len(channelNotifications) == 0 {
+		return
+	}
+
+	mu.Lock()
+	*notifications = append(*notifications, channelNotifications...)
+	mu.Unlock()
+}
 
 func resolveLiveStart(stream *domain.Stream) *time.Time {
 	if stream == nil {
