@@ -692,6 +692,7 @@ shared-go/pkg/logging/doc.go
 shared-go/pkg/logging/id.go
 shared-go/pkg/logging/log.go
 shared-go/pkg/logging/log_and_wrap.go
+shared-go/pkg/logging/log_warn.go
 shared-go/pkg/logging/logging.go
 shared-go/pkg/logging/logging_archive.go
 shared-go/pkg/logging/logging_archive_backups.go
