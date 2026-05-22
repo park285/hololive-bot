@@ -101,6 +101,35 @@ func collectTopLevelKeys(contents gjson.Result) []string {
 	return topKeys
 }
 
+// videosTabTitles: YouTube 채널 'Videos' 탭이 각 언어 로케일에서 사용하는 명칭 set.
+// URL fallback(`/videos`)이 1차 신호이고, 이 set은 URL이 누락된 응답을 위한 보조 매칭이다.
+var videosTabTitles = map[string]struct{}{
+	"Videos":  {},
+	"동영상":     {},
+	"動画":      {},
+	"视频":      {},
+	"影片":      {},
+	"Vídeos":  {},
+	"Видео":   {},
+	"Vidéos":  {},
+	"Vidéo":   {},
+	"Video":   {},
+	"วิดีโอ":  {},
+	"वीडियो":  {},
+	"Filmer":  {},
+	"Filmy":   {},
+	"Фільми":  {},
+	"फ़िल्में": {},
+}
+
+func isVideosTabTitle(title string) bool {
+	if title == "" {
+		return false
+	}
+	_, ok := videosTabTitles[title]
+	return ok
+}
+
 func findVideosTabContent(tabs gjson.Result) (gjson.Result, []string) {
 	var videosContent gjson.Result
 	var foundTabTitles []string
@@ -113,9 +142,7 @@ func findVideosTabContent(tabs gjson.Result) (gjson.Result, []string) {
 			foundTabTitles = append(foundTabTitles, tabTitle)
 		}
 
-		isVideosTab := tabTitle == "Videos" || tabTitle == "동영상" || tabTitle == "動画" ||
-			strings.Contains(tabURL, "/videos")
-		if !isVideosTab {
+		if !isVideosTabMatch(tabTitle, tabURL) {
 			return true
 		}
 
@@ -124,6 +151,13 @@ func findVideosTabContent(tabs gjson.Result) (gjson.Result, []string) {
 	})
 
 	return videosContent, foundTabTitles
+}
+
+func isVideosTabMatch(tabTitle, tabURL string) bool {
+	if isVideosTabTitle(tabTitle) {
+		return true
+	}
+	return strings.Contains(tabURL, "/videos")
 }
 
 func parseVideosFromRichGrid(

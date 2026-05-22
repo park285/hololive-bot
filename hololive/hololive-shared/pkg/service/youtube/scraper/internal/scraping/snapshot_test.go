@@ -56,4 +56,46 @@ func TestRecordParserDriftCapturesSnapshotWhenEnabled(t *testing.T) {
 	require.Len(t, sink.snapshots, 1)
 	require.Equal(t, []byte("abcd"), sink.snapshots[0].Body)
 	require.Equal(t, FailureReasonParserDrift, sink.snapshots[0].Reason)
+	require.Equal(t, SnapshotSchemaVersion, sink.snapshots[0].SchemaVersion)
+}
+
+func TestSanitizeSnapshotBodyRemovesSensitiveTokens(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "set-cookie header pattern",
+			in:   "<html>Set-Cookie: SID=abc123; Path=/</html>",
+			want: "<html>Set-Cookie: [REDACTED]</html>",
+		},
+		{
+			name: "authorization bearer pattern",
+			in:   "Authorization: Bearer eyJhbGciOi.payload.sig",
+			want: "Authorization: [REDACTED]",
+		},
+		{
+			name: "x-goog-visitor-id pattern",
+			in:   `"x-goog-visitor-id":"CgtfdHo"`,
+			want: `"x-goog-visitor-id":"[REDACTED]"`,
+		},
+		{
+			name: "passthrough when no sensitive tokens",
+			in:   "<html>normal page body</html>",
+			want: "<html>normal page body</html>",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := sanitizeSnapshotBody([]byte(tc.in))
+			require.Equal(t, tc.want, string(got))
+		})
+	}
+}
+
+func TestTrimSnapshotBodyAppliesRedactionAfterTruncation(t *testing.T) {
+	body := "Set-Cookie: foo=bar"
+	got := trimSnapshotBody(body, 256)
+	require.Equal(t, "Set-Cookie: [REDACTED]", string(got))
 }

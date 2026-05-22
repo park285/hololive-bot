@@ -319,16 +319,59 @@ func parseLockupVideoViewModel(lockup gjson.Result, channelID string) *Video {
 	})
 
 	metadataParts := lockup.Get("metadata.lockupMetadataViewModel.metadata.contentMetadataViewModel.metadataRows.0.metadataParts")
-	viewCountText := metadataParts.Get("0.text.content").String()
-	publishedText := metadataParts.Get("1.text.content").String()
+	viewCount, publishedText := pickLockupMetadataTexts(metadataParts)
 
 	return &Video{
 		VideoID:       videoID,
 		Title:         lockup.Get("metadata.lockupMetadataViewModel.title.content").String(),
 		Thumbnail:     thumbnails,
-		ViewCount:     parseViewCount(viewCountText),
+		ViewCount:     viewCount,
 		PublishedText: publishedText,
 		Duration:      lockup.Get("contentImage.thumbnailViewModel.overlays.0.thumbnailBottomOverlayViewModel.badges.0.thumbnailBadgeViewModel.text").String(),
 		ChannelID:     channelID,
 	}
+}
+
+// pickLockupMetadataTexts: lockup metadataParts 항목의 순서 의존성을 없앤다.
+// parseViewCount > 0인 항목을 viewCount로 식별하고, 나머지 첫 번째 항목을 published 텍스트로 사용.
+// 모든 항목에서 viewCount를 식별하지 못하면 기존 동작(0=viewCount, 1=published)으로 폴백.
+func pickLockupMetadataTexts(parts gjson.Result) (int64, string) {
+	var texts []string
+	parts.ForEach(func(_, part gjson.Result) bool {
+		text := part.Get("text.content").String()
+		if text != "" {
+			texts = append(texts, text)
+		}
+		return true
+	})
+
+	viewCountIdx := -1
+	var viewCount int64
+	for i, t := range texts {
+		if parsed := parseViewCount(t); parsed > 0 {
+			viewCount = parsed
+			viewCountIdx = i
+			break
+		}
+	}
+
+	if viewCountIdx >= 0 {
+		for i, t := range texts {
+			if i == viewCountIdx {
+				continue
+			}
+			return viewCount, t
+		}
+		return viewCount, ""
+	}
+
+	// 폴백: 기존 위치 기반 추출.
+	var fallbackViewText, fallbackPublishedText string
+	if len(texts) > 0 {
+		fallbackViewText = texts[0]
+	}
+	if len(texts) > 1 {
+		fallbackPublishedText = texts[1]
+	}
+	return parseViewCount(fallbackViewText), fallbackPublishedText
 }

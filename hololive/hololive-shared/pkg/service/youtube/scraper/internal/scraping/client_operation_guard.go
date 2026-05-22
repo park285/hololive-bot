@@ -53,15 +53,16 @@ func (c *Client) recordParserDrift(ctx context.Context, operation, stage, channe
 	err := NewParserDriftError(operation, stage, cause)
 	detail := ClassifyFailure(err, source)
 	c.captureSnapshot(ctx, Snapshot{
-		Operation:  operation,
-		ChannelID:  channelID,
-		URL:        pageURL,
-		Source:     source,
-		Reason:     detail.Reason,
-		Stage:      stage,
-		StatusCode: detail.StatusCode,
-		Body:       trimSnapshotBody(html, c.snapshotPolicy.MaxBodyBytes),
-		CapturedAt: time.Now().UTC(),
+		Operation:     operation,
+		ChannelID:     channelID,
+		URL:           pageURL,
+		Source:        source,
+		Reason:        detail.Reason,
+		Stage:         stage,
+		StatusCode:    detail.StatusCode,
+		Body:          trimSnapshotBody(html, c.snapshotPolicy.MaxBodyBytes),
+		CapturedAt:    time.Now().UTC(),
+		SchemaVersion: SnapshotSchemaVersion,
 	})
 	delay := c.recordChannelSourceFailure(ctx, channelID, detail)
 	return channelSourceCooldownError(source, delay, err)

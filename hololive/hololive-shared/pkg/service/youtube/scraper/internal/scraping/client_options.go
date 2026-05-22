@@ -48,6 +48,8 @@ type Client struct {
 	snapshotSink           SnapshotSink
 	snapshotPolicy         SnapshotPolicy
 	browserSnapshotFetcher *BrowserSnapshotFetcher
+	proxyFallbackPolicy    ProxyFallbackPolicy
+	proxyHealth            *proxyHealthTracker
 
 	communityMissing *cacheState
 	videoRSSBackoff  *cacheState
@@ -115,6 +117,12 @@ func WithBrowserSnapshotFetcher(fetcher *BrowserSnapshotFetcher) ClientOption {
 	}
 }
 
+func WithProxyFallbackPolicy(policy ProxyFallbackPolicy) ClientOption {
+	return func(c *Client) {
+		c.proxyFallbackPolicy = policy
+	}
+}
+
 func NewClient(opts ...ClientOption) *Client {
 	c := &Client{
 		uaProvider:     ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
@@ -128,6 +136,8 @@ func NewClient(opts ...ClientOption) *Client {
 	for _, opt := range opts {
 		opt(c)
 	}
+
+	c.proxyHealth = newProxyHealthTracker(c.proxyFallbackPolicy)
 
 	// stateStore 주입 후 cacheState 초기화
 	c.initStateManagers()

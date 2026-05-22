@@ -20,6 +20,9 @@ func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot Snaps
 	if snapshot.CapturedAt.IsZero() {
 		snapshot.CapturedAt = time.Now().UTC()
 	}
+	if snapshot.SchemaVersion == "" {
+		snapshot.SchemaVersion = SnapshotSchemaVersion
+	}
 	if policy.MaxBodyBytes > 0 && len(snapshot.Body) > policy.MaxBodyBytes {
 		snapshot.Body = snapshot.Body[:policy.MaxBodyBytes]
 	}

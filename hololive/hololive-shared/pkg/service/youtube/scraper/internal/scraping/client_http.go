@@ -70,6 +70,7 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 
 	resp, err := c.currentPageFetcher().FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header})
 	if err != nil {
+		c.observeProxyTransportFailure(err)
 		return "", err
 	}
 
@@ -78,7 +79,25 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 	}
 
 	c.backoffState.RecordSuccess()
+	if c.ProxyEnabled() {
+		c.proxyHealth.RecordSuccess()
+	}
 	return string(resp.Body), nil
+}
+
+func (c *Client) observeProxyTransportFailure(err error) {
+	if c == nil || c.proxyHealth == nil {
+		return
+	}
+	if !c.ProxyEnabled() || !isRetryableTransportError(err) {
+		return
+	}
+	if c.proxyHealth.RecordTransportFailure() {
+		slog.Warn("scraper proxy disabled after consecutive transport failures, falling back to direct",
+			"threshold", c.proxyFallbackPolicy.MaxConsecutiveFailures,
+			"error", err)
+		c.SetProxyEnabled(false)
+	}
 }
 
 func (c *Client) handleFetchStatus(pageURL string, resp pageFetchResponse) error {
@@ -114,6 +133,10 @@ func (c *Client) handleForbiddenFetch(pageURL string, statusCode int, retryAfter
 	return &httpStatusError{code: statusCode, retryAfter: retryAfter, cause: ErrForbidden}
 }
 
+// MaxRetryAfterDuration: Retry-After 헤더가 비정상적으로 큰 값을 보낼 때 적용되는 상한.
+// channel-health/cooldown 계층에서 11일짜리 차단이 propagate되는 사고를 방지한다.
+const MaxRetryAfterDuration = 6 * time.Hour
+
 func parseRetryAfter(value string, now time.Time) time.Duration {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -124,7 +147,7 @@ func parseRetryAfter(value string, now time.Time) time.Duration {
 		if seconds <= 0 {
 			return 0
 		}
-		return time.Duration(seconds) * time.Second
+		return clampRetryAfter(time.Duration(seconds) * time.Second)
 	}
 
 	retryAt, err := http.ParseTime(value)
@@ -135,6 +158,13 @@ func parseRetryAfter(value string, now time.Time) time.Duration {
 	delay := retryAt.Sub(now)
 	if delay <= 0 {
 		return 0
+	}
+	return clampRetryAfter(delay)
+}
+
+func clampRetryAfter(delay time.Duration) time.Duration {
+	if delay > MaxRetryAfterDuration {
+		return MaxRetryAfterDuration
 	}
 	return delay
 }

@@ -123,6 +123,7 @@ func (c *Client) SetProxyEnabled(enabled bool) bool {
 		}
 		c.activeHTTPClient.Store(c.proxyHTTPClient)
 		c.proxyEnabled.Store(true)
+		c.proxyHealth.Arm()
 		return true
 	}
 
