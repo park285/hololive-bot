@@ -38,7 +38,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	messageAdapter := adapter.NewMessageAdapter("!", "@bot")
 	formatter := adapter.NewResponseFormatter("!", nil)
 	activityLogger := ProvideActivityLogger(logger)
-	settingsSvc := &settingsmocks.ReadWriter{
+	settingsService := &settingsmocks.ReadWriter{
 		GetFunc: func() settings.Settings {
 			return settings.Settings{AlarmAdvanceMinutes: 15, TargetMinutes: []int{15, 3, 1}}
 		},
@@ -79,7 +79,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 		nil,
 		&sharedproviders.YouTubeStack{Service: youTubeService, StatsRepository: statsRepository},
 		activityLogger,
-		settingsSvc,
+		settingsService,
 		nil,
 		nil,
 		nil,
@@ -143,7 +143,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	if deps.Activity != activityLogger {
 		t.Fatal("Dependencies.Activity did not preserve the activity logger")
 	}
-	if deps.Settings != settingsSvc {
+	if deps.Settings != settingsService {
 		t.Fatal("Dependencies.Settings did not preserve the settings service")
 	}
 	assertCommandBuilderPointers(t, deps.CommandBuilders, []bot.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})

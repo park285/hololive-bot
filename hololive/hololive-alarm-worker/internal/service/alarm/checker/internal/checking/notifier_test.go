@@ -86,10 +86,10 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 	t.Parallel()
 
 	cache := newCheckerTestCacheClient(t)
-	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
 
 	notifier, err := NewNotifier(
-		dedupSvc,
+		dedupService,
 		queue.NewPublisher(cache, newCheckerTestLogger()),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
@@ -109,7 +109,7 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 	}
 	notification := domain.NewAlarmNotification("room1", stream.Channel, stream, 5, []string{}, "")
 
-	if _, claimed, claimErr := dedupSvc.TryClaimNotification(t.Context(), "room1", stream.ID, start, 5); claimErr != nil {
+	if _, claimed, claimErr := dedupService.TryClaimNotification(t.Context(), "room1", stream.ID, start, 5); claimErr != nil {
 		t.Fatalf("TryClaimNotification() error = %v", claimErr)
 	} else if !claimed {
 		t.Fatal("expected pre-claim to succeed")
@@ -133,10 +133,10 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	t.Parallel()
 
 	cache := newCheckerTestCacheClient(t)
-	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
 
 	notifier, err := NewNotifier(
-		dedupSvc,
+		dedupService,
 		queue.NewPublisher(cache, newCheckerTestLogger()),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
@@ -194,10 +194,10 @@ func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
 	t.Parallel()
 
 	cache := newCheckerTestCacheClient(t)
-	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
 
 	notifier, err := NewNotifier(
-		dedupSvc,
+		dedupService,
 		queue.NewPublisher(cache, newCheckerTestLogger()),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
@@ -249,15 +249,15 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 	cache := newCheckerTestCacheClient(t)
 	failingCache := &failingPublishCacheClient{Client: cache}
 	logger := newCheckerTestLogger()
-	dedupSvc := dedup.NewService(failingCache, []int{5, 3, 1}, logger)
+	dedupService := dedup.NewService(failingCache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexSvc, err := holodex.NewHolodexService("http://unused", "k", failingCache, nil, logger)
+	holodexService, err := holodex.NewHolodexService("http://unused", "k", failingCache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(failingCache, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeChecker(failingCache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
 	require.NoError(t, err)
 	notifier, err := NewNotifier(
-		dedupSvc,
+		dedupService,
 		queue.NewPublisher(failingCache, logger),
 		tierSched,
 		logger,
@@ -266,7 +266,7 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 
 	previousScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
 	currentScheduled := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
-	require.NoError(t, dedupSvc.MarkAsNotified(t.Context(), "delayed-publish-fail", previousScheduled, 5))
+	require.NoError(t, dedupService.MarkAsNotified(t.Context(), "delayed-publish-fail", previousScheduled, 5))
 
 	window := sharedchecker.EvaluationWindow{
 		Start: time.Date(2026, 4, 9, 11, 52, 50, 0, time.UTC),
@@ -301,10 +301,10 @@ func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
 	cache := cachemocks.NewStrictClient()
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, logger)
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 
 	notifier, err := NewNotifier(
-		dedupSvc,
+		dedupService,
 		queue.NewPublisher(cache, logger),
 		nil,
 		logger,
@@ -344,10 +344,10 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupSvc := dedup.NewService(cache, []int{5, 3, 1}, logger)
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 
 	notifier, err := NewNotifier(
-		dedupSvc,
+		dedupService,
 		queue.NewPublisher(cache, logger),
 		tier.NewTieredScheduler(logger),
 		logger,
@@ -393,11 +393,11 @@ func TestNotifierSend_UsesSinglePublishBatchForClaimedNotifications(t *testing.T
 
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupSvc := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, []int{10}, logger)
 	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
-		dedupSvc,
+		dedupService,
 		queue.NewPublisher(cache, logger,
 			queue.WithOutbox(outbox),
 			queue.WithPublishMode(queue.PublishModePGFirst),
@@ -446,11 +446,11 @@ func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *te
 
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupSvc := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, []int{10}, logger)
 	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
-		dedupSvc,
+		dedupService,
 		queue.NewPublisher(cache, logger,
 			queue.WithOutbox(outbox),
 			queue.WithPublishMode(queue.PublishModePGFirst),
@@ -516,11 +516,11 @@ func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testin
 
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
-	dedupSvc := dedup.NewService(cache, []int{10}, logger)
+	dedupService := dedup.NewService(cache, []int{10}, logger)
 	outbox := &notifierBatchOutbox{batchErrors: []error{nil, errors.New("pg unavailable")}}
 
 	notifier, err := NewNotifier(
-		dedupSvc,
+		dedupService,
 		queue.NewPublisher(cache, logger,
 			queue.WithOutbox(outbox),
 			queue.WithPublishMode(queue.PublishModePGFirst),
@@ -554,11 +554,11 @@ func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testin
 	assert.Equal(t, SendResult{Sent: 1, Failed: 1}, result)
 	assert.Equal(t, 2, outbox.insertBatchCalls)
 
-	_, firstClaimed, err := dedupSvc.TryClaimNotification(t.Context(), "room-pg-partial-1", stream.ID, start, 10)
+	_, firstClaimed, err := dedupService.TryClaimNotification(t.Context(), "room-pg-partial-1", stream.ID, start, 10)
 	require.NoError(t, err)
 	assert.False(t, firstClaimed)
 
-	_, secondClaimed, err := dedupSvc.TryClaimNotification(t.Context(), "room-pg-partial-2", stream.ID, start, 10)
+	_, secondClaimed, err := dedupService.TryClaimNotification(t.Context(), "room-pg-partial-2", stream.ID, start, 10)
 	require.NoError(t, err)
 	assert.True(t, secondClaimed)
 }

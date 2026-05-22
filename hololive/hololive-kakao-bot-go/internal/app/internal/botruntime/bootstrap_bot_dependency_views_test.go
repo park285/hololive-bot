@@ -80,13 +80,13 @@ func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 
 	t.Run("maps settings and cache", func(t *testing.T) {
 		cache := &cache.Service{}
-		settingsSvc := &stubSettingsReadWriter{}
-		deps := &bot.Dependencies{Cache: cache, Settings: settingsSvc}
+		settingsService := &stubSettingsReadWriter{}
+		deps := &bot.Dependencies{Cache: cache, Settings: settingsService}
 		view := buildBotConfigSubscriberDependencies(deps)
 		if view.Cache != cache {
 			t.Fatal("cache mapping mismatch")
 		}
-		if view.Settings != settingsSvc {
+		if view.Settings != settingsService {
 			t.Fatal("settings mapping mismatch")
 		}
 	})
@@ -101,20 +101,20 @@ func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 	})
 
 	t.Run("maps runtime fields", func(t *testing.T) {
-		youtubeSvc := &stubYouTubeService{}
-		holodexSvc := &holodex.Service{}
+		youtubeService := &stubYouTubeService{}
+		holodexService := &holodex.Service{}
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 		infra := &appbootstrap.BotInfrastructure{
-			Deps:           &bot.Dependencies{Service: youtubeSvc},
-			HolodexService: holodexSvc,
+			Deps:           &bot.Dependencies{Service: youtubeService},
+			HolodexService: holodexService,
 			AlarmCRUD:      alarmCRUD,
 		}
 
 		view := buildBotConfigSubscriberRuntimeDependencies(infra)
-		if view.YouTubeService != youtubeSvc {
+		if view.YouTubeService != youtubeService {
 			t.Fatal("youtube service mapping mismatch")
 		}
-		if view.HolodexService != holodexSvc {
+		if view.HolodexService != holodexService {
 			t.Fatal("holodex service mapping mismatch")
 		}
 		if view.AlarmCRUD != alarmCRUD {
@@ -136,12 +136,12 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 
 	t.Run("maps composed runtime views", func(t *testing.T) {
 		cache := &cache.Service{}
-		settingsSvc := &stubSettingsReadWriter{}
-		youtubeSvc := &stubYouTubeService{}
-		holodexSvc := &holodex.Service{}
+		settingsService := &stubSettingsReadWriter{}
+		youtubeService := &stubYouTubeService{}
+		holodexService := &holodex.Service{}
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
-		deps := &bot.Dependencies{Cache: cache, Settings: settingsSvc, Service: youtubeSvc}
-		infra := &appbootstrap.BotInfrastructure{Deps: deps, AlarmCRUD: alarmCRUD, HolodexService: holodexSvc}
+		deps := &bot.Dependencies{Cache: cache, Settings: settingsService, Service: youtubeService}
+		infra := &appbootstrap.BotInfrastructure{Deps: deps, AlarmCRUD: alarmCRUD, HolodexService: holodexService}
 
 		views := buildBotRuntimeDependencyViews(infra)
 		if views.botDeps != deps {
@@ -150,10 +150,10 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 		if views.webhook.Cache != cache {
 			t.Fatal("webhook view mapping mismatch")
 		}
-		if views.configSubscriber.Cache != cache || views.configSubscriber.Settings != settingsSvc {
+		if views.configSubscriber.Cache != cache || views.configSubscriber.Settings != settingsService {
 			t.Fatal("config subscriber view mapping mismatch")
 		}
-		if views.configSubscriberRuntime.AlarmCRUD != alarmCRUD || views.configSubscriberRuntime.HolodexService != holodexSvc {
+		if views.configSubscriberRuntime.AlarmCRUD != alarmCRUD || views.configSubscriberRuntime.HolodexService != holodexService {
 			t.Fatal("config subscriber runtime view mapping mismatch")
 		}
 	})

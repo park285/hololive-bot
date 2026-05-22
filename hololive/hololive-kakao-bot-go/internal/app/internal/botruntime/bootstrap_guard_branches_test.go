@@ -199,17 +199,17 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 
 	logger := testBootstrapGuardLogger()
 	cache := &cache.Service{}
-	postgresSvc := &database.PostgresService{}
+	postgresService := &database.PostgresService{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	memberData := &stubMemberDataProvider{}
 	chzzkClient := &chzzk.Client{}
 	twitchClient := &twitch.Client{}
-	matcherSvc := &matcher.MemberMatcher{}
+	matcherService := &matcher.MemberMatcher{}
 	ytStack := &providers.YouTubeStack{}
 	activityLogger := &activity.Logger{}
-	settingsSvc := &settings.Service{}
-	aclSvc := &acl.Service{}
+	settingsService := &settings.Service{}
+	aclService := &acl.Service{}
 	workerPool := &workerpool.Pool{}
 	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command { return nil })
 
@@ -219,18 +219,18 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Iris:         config.IrisConfig{BaseURL: "https://iris.example"},
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
-		&sharedmodules.InfraModule{Cache: cache, Postgres: postgresSvc, MemberRepository: memberRepository, MemberCache: memberCache},
+		&sharedmodules.InfraModule{Cache: cache, Postgres: postgresService, MemberRepository: memberRepository, MemberCache: memberCache},
 		&appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},
 		&holodex.Service{},
 		&adapter.MessageAdapter{},
 		&adapter.ResponseFormatter{},
 		&stubIrisClient{},
 		&member.ProfileService{},
-		matcherSvc,
+		matcherService,
 		ytStack,
 		activityLogger,
-		settingsSvc,
-		aclSvc,
+		settingsService,
+		aclService,
 		&stubMajorEventRepository{},
 		&stubMemberNewsService{},
 		[]bot.CommandBuilder{commandBuilder},
@@ -241,17 +241,17 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	assert.Equal(t, "self-user", modules.Core.BotSelfUser)
 	assert.Equal(t, "https://iris.example", modules.Core.IrisBaseURL)
 	assert.Same(t, cache, modules.Data.Cache)
-	assert.Same(t, postgresSvc, modules.Data.Postgres)
+	assert.Same(t, postgresService, modules.Data.Postgres)
 	assert.Same(t, memberRepository, modules.Data.MemberRepository)
 	assert.Same(t, memberCache, modules.Data.MemberCache)
 	assert.Same(t, memberData, modules.Data.MembersData)
 	assert.Same(t, chzzkClient, modules.Stream.ChzzkClient)
 	assert.Same(t, twitchClient, modules.Stream.TwitchClient)
-	assert.Same(t, matcherSvc, modules.Stream.MemberMatch)
+	assert.Same(t, matcherService, modules.Stream.MemberMatch)
 	assert.Same(t, ytStack, modules.Stream.YTStack)
 	assert.Same(t, activityLogger, modules.Support.ActivityLogger)
-	assert.Same(t, settingsSvc, modules.Support.Settings)
-	assert.Same(t, aclSvc, modules.Support.ACL)
+	assert.Same(t, settingsService, modules.Support.Settings)
+	assert.Same(t, aclService, modules.Support.ACL)
 	require.Len(t, modules.Feature.CommandBuilders, 1)
 	assert.NotNil(t, modules.Feature.CommandBuilders[0])
 	assert.Same(t, workerPool, modules.Support.WorkerPool)

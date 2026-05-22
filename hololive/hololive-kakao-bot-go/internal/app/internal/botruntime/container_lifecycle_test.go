@@ -83,36 +83,36 @@ func TestContainerGetterMappings(t *testing.T) {
 	cache := &cache.Service{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
-	alarmSvc := testAlarmCRUD{}
-	streamSvc := &stubStreamProvider{}
-	youtubeSvc := &trackingYouTubeSvc{}
+	alarmService := testAlarmCRUD{}
+	streamService := &stubStreamProvider{}
+	youtubeService := &trackingYouTubeService{}
 	activityLogger := &activity.Logger{}
-	settingsSvc := &stubSettingsReadWriter{}
-	aclSvc := &acl.Service{}
+	settingsService := &stubSettingsReadWriter{}
+	aclService := &acl.Service{}
 
 	container := &Container{
 		botDeps: &bot.Dependencies{
-			Cache:       cache,
-			MemberRepository:  memberRepository,
-			MemberCache: memberCache,
-			Alarm:       alarmSvc,
-			Holodex:     streamSvc,
-			Service:     youtubeSvc,
-			Activity:    activityLogger,
-			Settings:    settingsSvc,
-			ACL:         aclSvc,
+			Cache:            cache,
+			MemberRepository: memberRepository,
+			MemberCache:      memberCache,
+			Alarm:            alarmService,
+			Holodex:          streamService,
+			Service:          youtubeService,
+			Activity:         activityLogger,
+			Settings:         settingsService,
+			ACL:              aclService,
 		},
 	}
 
 	assert.Same(t, memberRepository, container.GetMemberRepository())
 	assert.Same(t, memberCache, container.GetMemberCache())
 	assert.Same(t, cache, container.GetCache())
-	assert.Equal(t, alarmSvc, container.GetAlarmService())
-	assert.Same(t, streamSvc, container.GetHolodexService())
-	assert.Same(t, youtubeSvc, container.GetYouTubeService())
+	assert.Equal(t, alarmService, container.GetAlarmService())
+	assert.Same(t, streamService, container.GetHolodexService())
+	assert.Same(t, youtubeService, container.GetYouTubeService())
 	assert.Same(t, activityLogger, container.GetActivityLogger())
-	assert.Same(t, settingsSvc, container.GetSettingsService())
-	assert.Same(t, aclSvc, container.GetACLService())
+	assert.Same(t, settingsService, container.GetSettingsService())
+	assert.Same(t, aclService, container.GetACLService())
 }
 
 func TestBuild_FailFastOnNilInputs(t *testing.T) {

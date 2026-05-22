@@ -49,7 +49,7 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 		return nil, nil
 	}
 
-	alreadyNotified, err := c.dedupSvc.IsAlreadyNotifiedForSchedule(ctx, stream.ID, *stream.StartScheduled, selection.minutesUntil)
+	alreadyNotified, err := c.dedupService.IsAlreadyNotifiedForSchedule(ctx, stream.ID, *stream.StartScheduled, selection.minutesUntil)
 	if err != nil {
 		return nil, fmt.Errorf("build upcoming notifications: check already notified for schedule: %w", err)
 	}
@@ -172,7 +172,7 @@ func (c *YouTubeChecker) detectRoomScheduleChanges(
 
 	changes := make(map[string]*dedup.ScheduleChange)
 	for _, roomID := range uniqueStrings(subscriberRooms) {
-		change, err := c.dedupSvc.DetectNotificationScheduleChange(ctx, roomID, channelID, stream)
+		change, err := c.dedupService.DetectNotificationScheduleChange(ctx, roomID, channelID, stream)
 		if err != nil {
 			return nil, fmt.Errorf("detect room schedule changes: room %s: %w", roomID, err)
 		}

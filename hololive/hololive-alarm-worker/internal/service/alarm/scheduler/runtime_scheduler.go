@@ -87,7 +87,7 @@ type RuntimeScheduler struct {
 // NewRuntimeScheduler는 런타임 알람 스케줄러를 생성한다.
 func NewRuntimeScheduler(
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	alarmCRUD domain.AlarmCRUD,
@@ -98,7 +98,7 @@ func NewRuntimeScheduler(
 	twitchEnabled bool,
 	logger *slog.Logger,
 ) (*RuntimeScheduler, error) {
-	if err := validateRuntimeSchedulerDeps(cacheClient, holodexSvc, chzzkClient, twitchClient, alarmCRUD); err != nil {
+	if err := validateRuntimeSchedulerDeps(cacheClient, holodexService, chzzkClient, twitchClient, alarmCRUD); err != nil {
 		return nil, err
 	}
 
@@ -107,14 +107,14 @@ func NewRuntimeScheduler(
 	targetMinutes := sharedchecker.NormalizeTargetMinutes(alarmCRUD.GetTargetMinutes())
 	youtubeInterval, youtubeEvaluationWindowCap := runtimeSchedulerYouTubeTiming(notifConfig.CheckInterval)
 	tierScheduler := tier.NewTieredScheduler(logger)
-	dedupSvc := dedup.NewService(cacheClient, targetMinutes, logger)
+	dedupService := dedup.NewService(cacheClient, targetMinutes, logger)
 	queuePublisher := newRuntimeSchedulerQueuePublisher(cacheClient, logger, outbox, publishConfig)
 
 	youtubeChecker, err := newRuntimeSchedulerYouTubeChecker(
 		cacheClient,
-		holodexSvc,
+		holodexService,
 		tierScheduler,
-		dedupSvc,
+		dedupService,
 		targetMinutes,
 		youtubeEvaluationWindowCap,
 		checker.NewPgYouTubeLiveSessionSource(postgres),
@@ -133,19 +133,19 @@ func NewRuntimeScheduler(
 	if err != nil {
 		return nil, err
 	}
-	notifierSvc, err := checker.NewNotifier(dedupSvc, queuePublisher, tierScheduler, logger)
+	notifierService, err := checker.NewNotifier(dedupService, queuePublisher, tierScheduler, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
 	}
 
-	return newRuntimeSchedulerInstance(cacheClient, alarmCRUD, youtubeChecker, chzzkChecker, twitchChecker, notifierSvc, dedupSvc, youtubeInterval, logger), nil
+	return newRuntimeSchedulerInstance(cacheClient, alarmCRUD, youtubeChecker, chzzkChecker, twitchChecker, notifierService, dedupService, youtubeInterval, logger), nil
 }
 
 func newRuntimeSchedulerYouTubeChecker(
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	tierScheduler *tier.TieredScheduler,
-	dedupSvc *dedup.Service,
+	dedupService *dedup.Service,
 	targetMinutes []int,
 	evaluationWindowCap time.Duration,
 	persistedLiveSource checker.YouTubeLiveSessionSource,
@@ -153,9 +153,9 @@ func newRuntimeSchedulerYouTubeChecker(
 ) (*checker.YouTubeChecker, error) {
 	youtubeChecker, err := checker.NewYouTubeCheckerWithPersistedLiveSource(
 		cacheClient,
-		holodexSvc,
+		holodexService,
 		tierScheduler,
-		dedupSvc,
+		dedupService,
 		targetMinutes,
 		evaluationWindowCap,
 		persistedLiveSource,
@@ -178,7 +178,7 @@ func runtimeSchedulerLogger(logger *slog.Logger) *slog.Logger {
 
 func validateRuntimeSchedulerDeps(
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	alarmCRUD domain.AlarmCRUD,
@@ -187,7 +187,7 @@ func validateRuntimeSchedulerDeps(
 		return errors.New("new runtime scheduler: cache service is nil")
 	}
 
-	if holodexSvc == nil {
+	if holodexService == nil {
 		return errors.New("new runtime scheduler: holodex service is nil")
 	}
 
@@ -238,8 +238,8 @@ func newRuntimeSchedulerInstance(
 	youtubeChecker *checker.YouTubeChecker,
 	chzzkChecker checker.Runner,
 	twitchChecker checker.Runner,
-	notifierSvc checker.Sender,
-	dedupSvc targetMinutesUpdater,
+	notifierService checker.Sender,
+	dedupService targetMinutesUpdater,
 	youtubeInterval time.Duration,
 	logger *slog.Logger,
 ) *RuntimeScheduler {
@@ -247,11 +247,11 @@ func newRuntimeSchedulerInstance(
 		youtubeChecker: youtubeChecker,
 		chzzkChecker:   chzzkChecker,
 		twitchChecker:  twitchChecker,
-		notifier:       notifierSvc,
+		notifier:       notifierService,
 		cacheClient:    cacheClient,
 
 		youtubeTargetUpdater:  youtubeChecker,
-		dedupTargetUpdater:    dedupSvc,
+		dedupTargetUpdater:    dedupService,
 		targetMinutesSource:   alarmCRUD,
 		alarmCacheWarmer:      alarmCRUD,
 		platformMappingSyncer: alarmPlatformMappingSyncerFrom(alarmCRUD),

@@ -174,7 +174,7 @@ func buildAdminAPIYouTubeStack(
 		YouTubeConfig:   appConfig.YouTube,
 		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,
-		StatsRepository:       statsRepository,
+		StatsRepository: statsRepository,
 		SharedRateLimit: foundation.SharedRL,
 		Logger:          logger,
 	})
@@ -349,7 +349,7 @@ func buildAlarmModeComponents(
 	ctx context.Context,
 	appConfig *config.Config,
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	memberData member.DataProvider,
 	alarmRepository *sharedalarm.Repository,
 	logger *slog.Logger,
@@ -369,7 +369,7 @@ func buildAlarmModeComponents(
 		ClientSecret: appConfig.Twitch.ClientSecret,
 	}, logger)
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
-	alarmService, err := notification.NewAlarmService(cacheClient, holodexSvc, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
+	alarmService, err := notification.NewAlarmService(cacheClient, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}

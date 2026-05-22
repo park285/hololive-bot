@@ -103,7 +103,7 @@ func (c *YouTubeChecker) loadHolodexStreamsByChannel(
 	ctx context.Context,
 	dueChannels []string,
 ) (map[string][]*domain.Stream, error) {
-	streams, err := c.holodexSvc.GetChannelsLiveStatus(ctx, dueChannels)
+	streams, err := c.holodexService.GetChannelsLiveStatus(ctx, dueChannels)
 	if err == nil {
 		return groupStreamsByChannel(streams), nil
 	}

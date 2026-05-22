@@ -179,7 +179,7 @@ func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 
 	t.Run("get logs/settings and update success", func(t *testing.T) {
 		applier := &stubSettingsApplier{}
-		settingsSvc := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
+		settingsService := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
 			AlarmAdvanceMinutes: 5,
 			ScraperProxyEnabled: false,
 		}, newDiscardLogger())
@@ -187,7 +187,7 @@ func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 		handler := &SettingsAPIHandler{APIHandler: &APIHandler{
 			logger:          newDiscardLogger(),
 			activity:        newActivityLoggerForTest(t),
-			settings:        settingsSvc,
+			settings:        settingsService,
 			settingsApplier: applier,
 		}}
 

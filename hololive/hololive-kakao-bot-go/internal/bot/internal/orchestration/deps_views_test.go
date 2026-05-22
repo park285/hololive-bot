@@ -62,7 +62,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	messageAdapter := &adapter.MessageAdapter{}
 	formatter := &adapter.ResponseFormatter{}
 	cache := &cache.Service{}
-	postgresSvc := &database.PostgresService{}
+	postgresService := &database.PostgresService{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	workerPool := &workerpool.Pool{}
@@ -71,19 +71,19 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	})
 
 	deps := &Dependencies{
-		BotSelfUser:     "bot-self",
-		IrisBaseURL:     "https://iris.internal",
-		Notification:    config.NotificationConfig{},
-		Logger:          logger,
-		Client:          &fakeIrisClient{},
-		MessageAdapter:  messageAdapter,
-		Formatter:       formatter,
-		Cache:           cache,
-		Postgres:        postgresSvc,
-		MemberRepository:      memberRepository,
-		MemberCache:     memberCache,
-		CommandBuilders: []CommandBuilder{externalBuilder},
-		WorkerPool:      workerPool,
+		BotSelfUser:      "bot-self",
+		IrisBaseURL:      "https://iris.internal",
+		Notification:     config.NotificationConfig{},
+		Logger:           logger,
+		Client:           &fakeIrisClient{},
+		MessageAdapter:   messageAdapter,
+		Formatter:        formatter,
+		Cache:            cache,
+		Postgres:         postgresService,
+		MemberRepository: memberRepository,
+		MemberCache:      memberCache,
+		CommandBuilders:  []CommandBuilder{externalBuilder},
+		WorkerPool:       workerPool,
 	}
 
 	core := deps.coreDeps()
@@ -97,7 +97,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	}
 
 	data := deps.dataDeps()
-	if data.cache != cache || data.postgres != postgresSvc || data.memberRepository != memberRepository || data.memberCache != memberCache {
+	if data.cache != cache || data.postgres != postgresService || data.memberRepository != memberRepository || data.memberCache != memberCache {
 		t.Fatal("dataDeps mapping mismatch")
 	}
 

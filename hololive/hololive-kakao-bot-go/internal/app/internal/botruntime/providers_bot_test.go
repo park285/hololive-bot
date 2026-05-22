@@ -92,7 +92,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	postgres := &database.PostgresService{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
-	holodexSvc := &holodex.Service{}
+	holodexService := &holodex.Service{}
 	chzzkClient := &chzzk.Client{}
 	twitchClient := &twitch.Client{}
 	profiles := &member.ProfileService{}
@@ -102,10 +102,10 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	ytStatsRepository := &stats.StatsRepository{}
 	ytStack := &providers.YouTubeStack{Service: ytService, StatsRepository: ytStatsRepository}
 	activityLogger := &activity.Logger{}
-	settingsSvc := &settings.Service{}
-	aclSvc := &acl.Service{}
+	settingsService := &settings.Service{}
+	aclService := &acl.Service{}
 	majorEventRepository := &stubMajorEventRepository{}
-	memberNewsSvc := &stubMemberNewsService{}
+	memberNewsService := &stubMemberNewsService{}
 	workerPool := &workerpool.Pool{}
 	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command { return nil })
 
@@ -122,15 +122,15 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			Formatter:      formatter,
 		},
 		Data: appbootstrap.BotDataModule{
-			Cache:       cache,
-			Postgres:    postgres,
-			MemberRepository:  memberRepository,
-			MemberCache: memberCache,
-			Profiles:    profiles,
-			MembersData: nil,
+			Cache:            cache,
+			Postgres:         postgres,
+			MemberRepository: memberRepository,
+			MemberCache:      memberCache,
+			Profiles:         profiles,
+			MembersData:      nil,
 		},
 		Stream: appbootstrap.BotStreamModule{
-			Holodex:      holodexSvc,
+			Holodex:      holodexService,
 			ChzzkClient:  chzzkClient,
 			TwitchClient: twitchClient,
 			Alarm:        nil,
@@ -139,14 +139,14 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 		},
 		Support: appbootstrap.BotSupportModule{
 			ActivityLogger: activityLogger,
-			Settings:       settingsSvc,
-			ACL:            aclSvc,
+			Settings:       settingsService,
+			ACL:            aclService,
 			WorkerPool:     workerPool,
 		},
 		Feature: appbootstrap.BotFeatureModule{
-			MajorEventRepository:  majorEventRepository,
-			MemberNews:      memberNewsSvc,
-			CommandBuilders: []bot.CommandBuilder{commandBuilder},
+			MajorEventRepository: majorEventRepository,
+			MemberNews:           memberNewsService,
+			CommandBuilders:      []bot.CommandBuilder{commandBuilder},
 		},
 	})
 
@@ -168,16 +168,16 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	if deps.MemberRepository != memberRepository || deps.MemberCache != memberCache {
 		t.Fatal("member wiring mismatch")
 	}
-	if deps.Holodex != holodexSvc || deps.Chzzk != chzzkClient || deps.Twitch != twitchClient {
+	if deps.Holodex != holodexService || deps.Chzzk != chzzkClient || deps.Twitch != twitchClient {
 		t.Fatal("stream client wiring mismatch")
 	}
 	if deps.Service != ytService || deps.YouTubeStatsRepository != ytStatsRepository {
 		t.Fatal("youtube stack wiring mismatch")
 	}
-	if deps.Activity != activityLogger || deps.Settings != settingsSvc || deps.ACL != aclSvc {
+	if deps.Activity != activityLogger || deps.Settings != settingsService || deps.ACL != aclService {
 		t.Fatal("runtime support wiring mismatch")
 	}
-	if deps.MajorEventRepository != majorEventRepository || deps.MemberNews != memberNewsSvc {
+	if deps.MajorEventRepository != majorEventRepository || deps.MemberNews != memberNewsService {
 		t.Fatal("event/news wiring mismatch")
 	}
 	if deps.WorkerPool != workerPool {

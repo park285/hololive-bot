@@ -21,7 +21,7 @@ import (
 func ProvideAlarmService(
 	advanceMinutes []int,
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	memberData domain.MemberDataProvider,
@@ -30,7 +30,7 @@ func ProvideAlarmService(
 ) (*notification.AlarmService, error) {
 	service, err := notification.NewAlarmService(
 		cacheClient,
-		holodexSvc,
+		holodexService,
 		chzzkClient,
 		twitchClient,
 		memberData,
@@ -67,8 +67,8 @@ func ProvideMemberMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	logger *slog.Logger,
 ) *matcher.MemberMatcher {
-	return matcher.NewMemberMatcher(ctx, membersData, cacheClient, holodexSvc, nil, logger)
+	return matcher.NewMemberMatcher(ctx, membersData, cacheClient, holodexService, nil, logger)
 }

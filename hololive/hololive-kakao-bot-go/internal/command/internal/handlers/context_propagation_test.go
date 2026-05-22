@@ -186,10 +186,10 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 	})
 	var baseCtx context.Context
 	//nolint:staticcheck // nil context path is the behavior under test
-	matcherSvc := matcher.NewMemberMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMemberMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 
 	deps := &Dependencies{
-		Matcher:   matcherSvc,
+		Matcher:   matcherService,
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendError: func(context.Context, string, string) error {
 			t.Fatal("unexpected SendError call")
@@ -214,7 +214,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		IsGraduated: true,
 		Org:         "Hololive",
 	})
-	matcherSvc := matcher.NewMemberMatcher(context.Background(), provider, nil, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMemberMatcher(context.Background(), provider, nil, nil, nil, newCommandTestLogger())
 
 	var (
 		sendErrorCtx context.Context
@@ -223,7 +223,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 
 	cmd := NewAlarmCommand(&Dependencies{
 		Alarm:     &alarmListViewerStub{},
-		Matcher:   matcherSvc,
+		Matcher:   matcherService,
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {
 			t.Fatal("unexpected SendMessage call")
@@ -258,7 +258,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 	})
 	var baseCtx context.Context
 	//nolint:staticcheck // nil context path is the behavior under test
-	matcherSvc := matcher.NewMemberMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMemberMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 	streamProvider := &trackedStreamProvider{}
 
 	var (
@@ -268,7 +268,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 
 	cmd := NewLiveCommand(&Dependencies{
 		Holodex:   streamProvider,
-		Matcher:   matcherSvc,
+		Matcher:   matcherService,
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(ctx context.Context, _, message string) error {
 			sendMessageCtx = ctx

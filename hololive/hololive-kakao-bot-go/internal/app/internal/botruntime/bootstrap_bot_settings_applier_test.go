@@ -77,12 +77,12 @@ func (t *trackingMemberNewsRunNowTrigger) SendMemberNewsWeekly(context.Context) 
 	return t.err
 }
 
-type trackingYouTubeSvc struct {
+type trackingYouTubeService struct {
 	mu           sync.Mutex
 	proxyEnabled bool
 }
 
-func (s *trackingYouTubeSvc) SetScraperProxyEnabled(enabled bool) bool {
+func (s *trackingYouTubeService) SetScraperProxyEnabled(enabled bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -91,25 +91,25 @@ func (s *trackingYouTubeSvc) SetScraperProxyEnabled(enabled bool) bool {
 	return true
 }
 
-func (s *trackingYouTubeSvc) ScraperProxyEnabled() bool {
+func (s *trackingYouTubeService) ScraperProxyEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	return s.proxyEnabled
 }
 
-func (s *trackingYouTubeSvc) isProxyEnabled() bool {
+func (s *trackingYouTubeService) isProxyEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	return s.proxyEnabled
 }
 
-func (s *trackingYouTubeSvc) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
+func (s *trackingYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
 	return nil, nil
 }
 
-func (s *trackingYouTubeSvc) GetRecentVideos(context.Context, string, int64) ([]string, error) {
+func (s *trackingYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
 	return nil, nil
 }
 
@@ -247,7 +247,7 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 	t.Parallel()
 
 	logger := testAppLogger()
-	youtubeSvc := &trackingYouTubeSvc{}
+	youtubeService := &trackingYouTubeService{}
 	scheduler := poller.NewScheduler(poller.SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: time.Millisecond,
@@ -255,16 +255,16 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 	trackingPoller := &trackingProxyTogglePoller{}
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
-	sharedserver.ApplyScraperProxyToggle(true, youtubeSvc, nil, scheduler, logger)
-	assert.True(t, youtubeSvc.isProxyEnabled())
+	sharedserver.ApplyScraperProxyToggle(true, youtubeService, nil, scheduler, logger)
+	assert.True(t, youtubeService.isProxyEnabled())
 	assert.True(t, trackingPoller.isEnabled())
 
 	enabled, known := scheduler.ProxyEnabled()
 	assert.True(t, known)
 	assert.True(t, enabled)
 
-	sharedserver.ApplyScraperProxyToggle(false, youtubeSvc, nil, scheduler, logger)
-	assert.False(t, youtubeSvc.isProxyEnabled())
+	sharedserver.ApplyScraperProxyToggle(false, youtubeService, nil, scheduler, logger)
+	assert.False(t, youtubeService.isProxyEnabled())
 	assert.False(t, trackingPoller.isEnabled())
 
 	enabled, known = scheduler.ProxyEnabled()
@@ -279,7 +279,7 @@ func TestYouTubeStackAndSchedulerAccessors_Defaults(t *testing.T) {
 
 	assert.Nil(t, stack.GetService())
 
-	service := &trackingYouTubeSvc{}
+	service := &trackingYouTubeService{}
 	ytStack := &providers.YouTubeStack{Service: service}
 	assert.Same(t, service, ytStack.GetService())
 	assert.Nil(t, (*bot.Dependencies)(nil))
@@ -288,5 +288,5 @@ func TestYouTubeStackAndSchedulerAccessors_Defaults(t *testing.T) {
 var (
 	_ sharedserver.SettingsApplier  = (*trackingSettingsApplier)(nil)
 	_ memberNewsWeeklyRunNowTrigger = (*trackingMemberNewsRunNowTrigger)(nil)
-	_ youtube.Service               = (*trackingYouTubeSvc)(nil)
+	_ youtube.Service               = (*trackingYouTubeService)(nil)
 )

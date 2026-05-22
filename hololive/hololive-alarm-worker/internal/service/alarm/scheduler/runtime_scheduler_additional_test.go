@@ -213,7 +213,7 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 	})
 
 	t.Run("youtube iteration picks up updated alarm service targets", func(t *testing.T) {
-		alarmSvc, err := notification.NewAlarmService(nil, nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
+		alarmService, err := notification.NewAlarmService(nil, nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
 		require.NoError(t, err)
 
 		youtubeUpdater := &targetMinutesUpdaterStub{}
@@ -226,12 +226,12 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 			},
 			youtubeTargetUpdater: youtubeUpdater,
 			dedupTargetUpdater:   dedupUpdater,
-			targetMinutesSource:  alarmSvc,
+			targetMinutesSource:  alarmService,
 			notifier:             &senderFunc{},
 			logger:               testSchedulerLogger(),
 		}
 
-		updated := alarmSvc.UpdateAlarmAdvanceMinutes(t.Context(), 12)
+		updated := alarmService.UpdateAlarmAdvanceMinutes(t.Context(), 12)
 		require.Equal(t, []int{12, 3, 1}, updated)
 
 		require.NoError(t, s.runYouTubeIteration(t.Context()))

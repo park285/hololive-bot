@@ -44,9 +44,9 @@ const (
 // YouTubeChecker는 Holodex live status 기반 알림 후보를 생성한다.
 type YouTubeChecker struct {
 	cacheClient         cache.Client
-	holodexSvc          *holodex.Service
+	holodexService      *holodex.Service
 	tierScheduler       *tier.TieredScheduler
-	dedupSvc            *dedup.Service
+	dedupService        *dedup.Service
 	persistedLiveSource YouTubeLiveSessionSource
 	targetPolicy        sharedchecker.TargetMinutePolicy
 	targetMinutesMu     sync.RWMutex
@@ -57,18 +57,18 @@ type YouTubeChecker struct {
 // NewYouTubeChecker는 YouTube 체커를 생성한다.
 func NewYouTubeChecker(
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	tierScheduler *tier.TieredScheduler,
-	dedupSvc *dedup.Service,
+	dedupService *dedup.Service,
 	targetMinutes []int,
 	evaluationWindowCap time.Duration,
 	logger *slog.Logger,
 ) (*YouTubeChecker, error) {
 	return NewYouTubeCheckerWithPersistedLiveSource(
 		cacheClient,
-		holodexSvc,
+		holodexService,
 		tierScheduler,
-		dedupSvc,
+		dedupService,
 		targetMinutes,
 		evaluationWindowCap,
 		nil,
@@ -78,9 +78,9 @@ func NewYouTubeChecker(
 
 func NewYouTubeCheckerWithPersistedLiveSource(
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	tierScheduler *tier.TieredScheduler,
-	dedupSvc *dedup.Service,
+	dedupService *dedup.Service,
 	targetMinutes []int,
 	evaluationWindowCap time.Duration,
 	persistedLiveSource YouTubeLiveSessionSource,
@@ -90,7 +90,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		return nil, errors.New("new youtube checker: cache service is nil")
 	}
 
-	if holodexSvc == nil {
+	if holodexService == nil {
 		return nil, errors.New("new youtube checker: holodex service is nil")
 	}
 
@@ -98,7 +98,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		return nil, errors.New("new youtube checker: tier scheduler is nil")
 	}
 
-	if dedupSvc == nil {
+	if dedupService == nil {
 		return nil, errors.New("new youtube checker: dedup service is nil")
 	}
 
@@ -110,9 +110,9 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 
 	return &YouTubeChecker{
 		cacheClient:         cacheClient,
-		holodexSvc:          holodexSvc,
+		holodexService:      holodexService,
 		tierScheduler:       tierScheduler,
-		dedupSvc:            dedupSvc,
+		dedupService:        dedupService,
 		persistedLiveSource: persistedLiveSource,
 		targetPolicy:        sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
 		evaluationWindowCap: evaluationWindowCap,

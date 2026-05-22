@@ -135,7 +135,7 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 		threshold = parsed
 	}
 
-	// 항상 6명만 조회 (졸업 멤버 제외는 Repo 내부 JOIN으로 자동 처리됨)
+	// 항상 6명만 조회 (졸업 멤버 제외는 Repository 내부 JOIN으로 자동 처리됨)
 	limit := 6
 
 	members, err := h.statsRepository.GetNearMilestoneMembers(ctx, threshold, youtube.SubscriberMilestones, limit)

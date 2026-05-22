@@ -90,7 +90,7 @@ func NewMemberMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	selector ChannelSelector,
 	logger *slog.Logger,
 ) *MemberMatcher {
@@ -98,7 +98,7 @@ func NewMemberMatcher(
 		ctx:                   ctx,
 		membersData:           membersData,
 		cache:                 cacheClient,
-		holodex:               holodexSvc,
+		holodex:               holodexService,
 		selector:              selector,
 		logger:                logger,
 		matchCache:            make(map[string]*MatchCacheEntry),

@@ -213,10 +213,10 @@ func (c *YouTubeChecker) collectValkeyLiveDispatchEvidence(
 	evidence *recentLiveDispatchEvidence,
 	errs *[]error,
 ) {
-	if c.dedupSvc == nil {
+	if c.dedupService == nil {
 		return
 	}
-	notified, err := c.dedupSvc.RecentlyNotifiedStreamIDs(ctx, streamIDs)
+	notified, err := c.dedupService.RecentlyNotifiedStreamIDs(ctx, streamIDs)
 	if err != nil {
 		*errs = append(*errs, fmt.Errorf("valkey notified evidence: %w", err))
 		return
