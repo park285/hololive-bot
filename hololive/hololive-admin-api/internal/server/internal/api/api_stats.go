@@ -36,7 +36,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
 )
 
-const systemStatsStreamInterval = 5 * time.Second
+var systemStatsStreamInterval = 5 * time.Second
 
 var errSystemStatsStreamStopped = errors.New("system stats stream stopped")
 
