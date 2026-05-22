@@ -436,8 +436,7 @@ func (p *blockingCountingPollerStub) callCount() int {
 }
 
 func TestRunJobClaimRenewLoop_StopsWhenPollContextCanceledBeforeTick(t *testing.T) {
-	renewCtx, renewCancel := context.WithCancel(context.Background())
-	defer renewCancel()
+	renewCtx := t.Context()
 	pollCtx, pollCancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	claim := &schedulerClaimHandleStub{}
@@ -465,8 +464,7 @@ func TestRunJobClaimRenewLoop_StopsWhenPollContextCanceledBeforeTick(t *testing.
 }
 
 func TestRunJobClaimRenewLoop_RenewFailureCancelsPollAndReportsError(t *testing.T) {
-	renewCtx, renewCancel := context.WithCancel(context.Background())
-	defer renewCancel()
+	renewCtx := t.Context()
 	pollCtx, pollCancel := context.WithCancel(context.Background())
 	defer pollCancel()
 	errCh := make(chan error, 1)
