@@ -20,51 +20,27 @@
 
 package filter
 
-import (
-	"sort"
-	"time"
+import "github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
-	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
-	"github.com/kapu/hololive-shared/pkg/domain"
-)
-
-var (
-	kst = model.KST
-)
-
-type datedCandidate struct {
-	candidate model.Candidate
-	date      time.Time
-}
-
-type memberProfile struct {
-	display string
-	tokens  []string
-}
-
-func FilterCandidates(
-	candidates []model.Candidate,
-	period model.Period,
-	now time.Time,
-	roomMembers []string,
-	membersData domain.MemberDataProvider,
-	sourceValidator model.SourceURLValidator,
-) []model.FilteredCandidate {
-	periodCandidates := applyPeriodFilter(candidates, period, now)
-	profiles := buildMemberProfiles(roomMembers, membersData)
-
-	result := make([]model.FilteredCandidate, 0, len(periodCandidates))
-	for i := range periodCandidates {
-		item := &periodCandidates[i]
-		filtered, ok := buildFilteredCandidate(*item, profiles, sourceValidator)
-		if ok {
-			result = append(result, filtered)
+func buildCandidateMemberTokenSet(members []string) map[string]struct{} {
+	memberTokenSet := make(map[string]struct{}, len(members))
+	for _, member := range members {
+		normalized := stringutil.NormalizeKey(member)
+		if normalized != "" {
+			memberTokenSet[normalized] = struct{}{}
 		}
 	}
+	return memberTokenSet
+}
 
-	sort.SliceStable(result, func(i, j int) bool {
-		return lessFilteredCandidate(result[i], result[j])
-	})
-
-	return result
+func appendUniqueMatchedMember(
+	matched []string,
+	matchedSet map[string]struct{},
+	display string,
+) []string {
+	if _, exists := matchedSet[display]; exists {
+		return matched
+	}
+	matchedSet[display] = struct{}{}
+	return append(matched, display)
 }
