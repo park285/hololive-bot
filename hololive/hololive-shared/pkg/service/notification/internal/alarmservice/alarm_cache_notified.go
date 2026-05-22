@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
@@ -50,26 +52,17 @@ func (as *AlarmService) MarkAsNotified(ctx context.Context, streamID string, sta
 
 	canonicalKey := notifiedMinuteKey(streamID, startScheduled, minutesUntil)
 	if err := as.cache.Set(ctx, canonicalKey, "1", constants.CacheTTL.NotificationSent); err != nil {
-		if as.logger != nil {
-			as.logger.Warn("Failed to mark as notified",
-				slog.String("stream_id", streamID),
-				slog.Int("minutes_until", minutesUntil),
-				slog.Any("error", err),
-			)
-		}
-
-		return fmt.Errorf("mark as notified: %w", err)
+		return logging.LogAndWrapError(ctx, as.logger, "mark as notified", err,
+			slog.String("stream_id", streamID),
+			slog.Int("minutes_until", minutesUntil),
+		)
 	}
 
 	if err := as.updateLegacyNotifiedData(ctx, streamID, startScheduled, minutesUntil); err != nil {
-		if as.logger != nil {
-			as.logger.Warn("Failed to update legacy notified data",
-				slog.String("stream_id", streamID),
-				slog.Int("minutes_until", minutesUntil),
-				slog.Any("error", err),
-			)
-		}
-		return fmt.Errorf("mark as notified legacy data: %w", err)
+		return logging.LogAndWrapError(ctx, as.logger, "mark as notified legacy data", err,
+			slog.String("stream_id", streamID),
+			slog.Int("minutes_until", minutesUntil),
+		)
 	}
 
 	return nil
