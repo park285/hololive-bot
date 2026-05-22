@@ -68,19 +68,19 @@ func ProvideCacheResources(ctx context.Context, valkeyConfig config.ValkeyConfig
 }
 
 // ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함)
-func ProvideDatabaseResources(ctx context.Context, valkeyConfig config.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
+func ProvideDatabaseResources(ctx context.Context, postgresConfig config.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
 	dbService, err := database.NewPostgresService(ctx, database.PostgresConfig{
-		Host:             valkeyConfig.Host,
-		Port:             valkeyConfig.Port,
-		SocketPath:       valkeyConfig.SocketPath,
-		User:             valkeyConfig.User,
-		Password:         valkeyConfig.Password,
-		Database:         valkeyConfig.Database,
-		SSLMode:          valkeyConfig.SSLMode,
-		QueryExecMode:    valkeyConfig.QueryExecMode,
-		PoolMinConns:     valkeyConfig.PoolMinConns,
-		PoolMaxConns:     valkeyConfig.PoolMaxConns,
-		PoolMaxIdleConns: valkeyConfig.PoolMaxIdleConns,
+		Host:             postgresConfig.Host,
+		Port:             postgresConfig.Port,
+		SocketPath:       postgresConfig.SocketPath,
+		User:             postgresConfig.User,
+		Password:         postgresConfig.Password,
+		Database:         postgresConfig.Database,
+		SSLMode:          postgresConfig.SSLMode,
+		QueryExecMode:    postgresConfig.QueryExecMode,
+		PoolMinConns:     postgresConfig.PoolMinConns,
+		PoolMaxConns:     postgresConfig.PoolMaxConns,
+		PoolMaxIdleConns: postgresConfig.PoolMaxIdleConns,
 	}, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create database resources: %w", err)
@@ -112,8 +112,8 @@ func ProvideIrisKaringClient(logger *slog.Logger, opts ...iris.ClientOption) (Ir
 }
 
 func provideRuntimeIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*delivery.RuntimeIrisClient, error) {
-	valkeyConfig := iris.ResolveClientSDKConfig(opts)
-	fallbackBaseURL := strings.TrimSpace(valkeyConfig.BaseURL)
+	irisConfig := iris.ResolveClientSDKConfig(opts)
+	fallbackBaseURL := strings.TrimSpace(irisConfig.BaseURL)
 	if fallbackBaseURL == "" {
 		fallbackBaseURL = strings.TrimSpace(os.Getenv(iris.EnvBaseURL))
 	}
@@ -122,7 +122,7 @@ func provideRuntimeIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*
 		return nil, fmt.Errorf("provide iris client: IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
-	botToken := strings.TrimSpace(valkeyConfig.BotToken)
+	botToken := strings.TrimSpace(irisConfig.BotToken)
 	if botToken == "" {
 		botToken = strings.TrimSpace(os.Getenv(iris.EnvBotToken))
 	}

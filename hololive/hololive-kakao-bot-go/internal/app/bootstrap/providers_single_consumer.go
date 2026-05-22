@@ -24,10 +24,10 @@ func ProvideChzzkClient(httpClient *http.Client, chzzkConfig config.ChzzkConfig,
 	})
 }
 
-func ProvideTwitchClient(chzzkConfig config.TwitchConfig, logger *slog.Logger) *twitch.Client {
+func ProvideTwitchClient(twitchConfig config.TwitchConfig, logger *slog.Logger) *twitch.Client {
 	return twitch.NewClient(twitch.ClientConfig{
-		ClientID:     chzzkConfig.ClientID,
-		ClientSecret: chzzkConfig.ClientSecret,
+		ClientID:     twitchConfig.ClientID,
+		ClientSecret: twitchConfig.ClientSecret,
 	}, logger)
 }
 
