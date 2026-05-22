@@ -78,11 +78,32 @@ func TestComputeExponentialBackoff_JitterRange(t *testing.T) {
 	base := 2 * time.Second
 	jitter := 150 * time.Millisecond
 
-	for range 50 {
+	for range 100 {
 		got := ComputeExponentialBackoff(0, base, time.Minute, jitter)
-		if got < base || got > base+jitter {
-			t.Fatalf("ComputeExponentialBackoff() = %v, want in [%v, %v]", got, base, base+jitter)
+		if got < base || got >= base+jitter {
+			t.Fatalf("ComputeExponentialBackoff() = %v, want in [%v, %v)", got, base, base+jitter)
 		}
+	}
+}
+
+func TestComputeExponentialBackoff_JitterUpperBoundExclusive(t *testing.T) {
+	base := 2 * time.Second
+	jitter := time.Nanosecond
+
+	for range 100 {
+		got := ComputeExponentialBackoff(0, base, time.Minute, jitter)
+		if got >= base+jitter {
+			t.Fatalf("ComputeExponentialBackoff() = %v, want < %v", got, base+jitter)
+		}
+	}
+}
+
+func TestComputeExponentialBackoff_ZeroJitter(t *testing.T) {
+	base := 2 * time.Second
+
+	got := ComputeExponentialBackoff(0, base, time.Minute, 0)
+	if got != base {
+		t.Fatalf("ComputeExponentialBackoff() = %v, want %v", got, base)
 	}
 }
 

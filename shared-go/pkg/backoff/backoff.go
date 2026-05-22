@@ -55,5 +55,5 @@ func addJitter(candidate, jitter time.Duration) time.Duration {
 	if jitter <= 0 {
 		return candidate
 	}
-	return candidate + time.Duration(rand.Int63n(int64(jitter)+1))
+	return candidate + time.Duration(rand.Int63n(int64(jitter)))
 }
