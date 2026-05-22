@@ -25,6 +25,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -172,4 +173,46 @@ func TestChzzkCheckerCheck_DoesNotPreclaimDedup(t *testing.T) {
 	require.NoError(t, checkErr)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 0, setNXCalls, "checker must not preclaim dedup before queue publish")
+}
+
+func TestChzzkCheckerCollectNotificationsSkipsInvalidLookupJobs(t *testing.T) {
+	t.Parallel()
+
+	var liveStatusCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		liveStatusCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+
+		_, _ = w.Write([]byte(`{"code":200,"content":{"status":"OPEN","liveTitle":"치지직 라이브","concurrentUserCount":77}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	checker := &ChzzkChecker{
+		chzzkClient: chzzk.NewClient(server.Client(), server.URL, newCheckerTestLogger()),
+		logger:      newCheckerTestLogger(),
+	}
+
+	notifications, err := checker.collectChzzkNotifications(
+		t.Context(),
+		map[string]string{
+			" yt-valid ":     " chzzk-valid ",
+			"yt-no-subs":     "chzzk-no-subs",
+			"yt-empty-room":  "chzzk-empty-room",
+			"yt-empty-chzzk": " ",
+			" ":              "chzzk-empty-youtube",
+		},
+		map[string][]string{
+			"yt-valid":      {"room-valid"},
+			"yt-empty-room": {},
+		},
+		map[string]string{"yt-valid": "라덴"},
+		time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
+	)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, int32(1), liveStatusCalls.Load())
+	assert.Equal(t, "room-valid", notifications[0].RoomID)
+	assert.Equal(t, "yt-valid", notifications[0].Stream.ChannelID)
+	assert.Equal(t, "chzzk-valid", notifications[0].Stream.ChzzkChannelID)
+	assert.Equal(t, "라덴", notifications[0].Stream.Channel.Name)
 }

@@ -805,6 +805,46 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DetectsReplacedWaitingRoomSch
 	assert.Equal(t, "일정이 늦춰졌습니다.", notifications[0].ScheduleChangeMessage)
 }
 
+func TestYouTubeChecker_DetectRoomScheduleChangesDeduplicatesRoomsAndUsesChannelFallback(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexSvc, err := holodex.NewHolodexService("http://unused", "k", cacheSvc, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, logger)
+	require.NoError(t, err)
+
+	previousScheduled := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, 5, 22, 12, 2, 0, 0, time.UTC)
+	previousStream := &domain.Stream{
+		ID:             "old-room-schedule",
+		Title:          "same room schedule",
+		ChannelID:      "ch-fallback",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &previousScheduled,
+		Channel:        &domain.Channel{ID: "ch-fallback", Name: "Channel fallback"},
+	}
+	require.NoError(t, dedupSvc.MarkUpcomingEventNotified(t.Context(), "room-1", "ch-fallback", previousStream))
+
+	currentStream := &domain.Stream{
+		ID:             "new-room-schedule",
+		Title:          "same room schedule",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &currentScheduled,
+		Channel:        &domain.Channel{ID: "ch-fallback", Name: "Channel fallback"},
+	}
+	changes, err := checker.detectRoomScheduleChanges(t.Context(), currentStream, []string{"room-1", "room-1", "room-2", ""})
+	require.NoError(t, err)
+	require.Len(t, changes, 1)
+	require.Contains(t, changes, "room-1")
+	assert.Equal(t, "일정이 늦춰졌습니다.", changes["room-1"].Message)
+	assert.Equal(t, previousScheduled, changes["room-1"].PreviousScheduled)
+}
+
 func TestUniqueStrings(t *testing.T) {
 	t.Parallel()
 

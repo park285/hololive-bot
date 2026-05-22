@@ -28,10 +28,12 @@ import (
 	"testing"
 	"time"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
+	alarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -437,6 +439,76 @@ func TestNotifierSend_UsesSinglePublishBatchForClaimedNotifications(t *testing.T
 	if len(outbox.lastBatchInput.Envelopes) != 3 {
 		t.Fatalf("InsertBatch envelopes = %d, want 3", len(outbox.lastBatchInput.Envelopes))
 	}
+}
+
+func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{10}, logger)
+	outbox := &notifierBatchOutbox{}
+
+	notifier, err := NewNotifier(
+		dedupSvc,
+		queue.NewPublisher(cacheSvc, logger,
+			queue.WithOutbox(outbox),
+			queue.WithPublishMode(queue.PublishModePGFirst),
+			queue.WithWakeupEnabled(false),
+		),
+		tier.NewTieredScheduler(logger),
+		logger,
+	)
+	require.NoError(t, err)
+
+	start := time.Date(2026, 5, 22, 12, 10, 0, 0, time.UTC)
+	stream := &domain.Stream{
+		ID:             "stream-payload-pg",
+		Title:          "Payload PG",
+		ChannelID:      "UC_PAYLOAD_PG",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &start,
+		Channel:        &domain.Channel{ID: "UC_PAYLOAD_PG", Name: "Payload PG Channel"},
+	}
+	notification := domain.NewAlarmNotification("room-payload-pg", stream.Channel, stream, 10, []string{"alice", "bob"}, "")
+
+	result, sendErr := notifier.Send(t.Context(), []*domain.AlarmNotification{notification})
+	require.NoError(t, sendErr)
+	assert.Equal(t, SendResult{Sent: 1}, result)
+	require.Equal(t, 1, outbox.insertBatchCalls)
+	require.Len(t, outbox.lastBatchInput.Envelopes, 1)
+	assert.Equal(t, dispatchoutbox.StatusPending, outbox.lastBatchInput.Status)
+
+	envelope := outbox.lastBatchInput.Envelopes[0]
+	assert.Equal(t, contractsalarm.QueueEnvelopeVersionV1, envelope.Version)
+	_, err = time.Parse(time.RFC3339, envelope.EnqueuedAt)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		alarmkeys.BuildNotifyClaimKey("room-payload-pg", "stream-payload-pg", start, "target"),
+		alarmkeys.BuildLogicalEventClaimKey("room-payload-pg", "UC_PAYLOAD_PG", "stream-payload-pg", "Payload PG", start, "target"),
+	}, envelope.ClaimKeys)
+
+	got := envelope.Notification
+	assert.Equal(t, domain.AlarmTypeLive, got.AlarmType)
+	assert.Equal(t, "room-payload-pg", got.RoomID)
+	assert.Equal(t, 10, got.MinutesUntil)
+	assert.Equal(t, []string{"alice", "bob"}, got.Users)
+	require.NotNil(t, got.Channel)
+	assert.Equal(t, "UC_PAYLOAD_PG", got.Channel.ID)
+	require.NotNil(t, got.Stream)
+	assert.Equal(t, "stream-payload-pg", got.Stream.ID)
+	assert.Equal(t, domain.StreamStatusUpcoming, got.Stream.Status)
+	require.NotNil(t, got.Stream.StartScheduled)
+	assert.Equal(t, start, *got.Stream.StartScheduled)
+}
+
+func TestClampProcessedDeliveriesBoundsPublishResult(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 0, clampProcessedDeliveries(-1, 2))
+	assert.Equal(t, 1, clampProcessedDeliveries(1, 2))
+	assert.Equal(t, 2, clampProcessedDeliveries(5, 2))
 }
 
 func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testing.T) {
