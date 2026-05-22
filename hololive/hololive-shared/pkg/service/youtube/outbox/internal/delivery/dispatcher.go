@@ -38,6 +38,8 @@ import (
 
 const defaultTelemetryRetention = 24 * time.Hour
 
+var outboxCleanupLoopInterval = 1 * time.Hour
+
 type Config struct {
 	BatchSize                   int           // 한 번에 처리할 알림 수
 	LockTimeout                 time.Duration // 락 타임아웃 (처리 중 상태 유지 시간)
@@ -275,7 +277,7 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 
 // cleanupLoop: 오래된 완료 알림 정리 루프
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
-	_ = loop.RunTickerLoop(ctx, 1*time.Hour, func(context.Context) error {
+	_ = loop.RunTickerLoop(ctx, outboxCleanupLoopInterval, func(context.Context) error {
 		d.cleanup(ctx)
 		return nil
 	})
