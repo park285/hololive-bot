@@ -27,7 +27,7 @@ pub async fn handle_aggregated_status(
 }
 
 pub async fn handle_system_stats_stream(
-    State(app_state): State<Arc<crate::state::AppState>>,
+    State(state): State<Arc<crate::state::AppState>>,
     ws: WebSocketUpgrade,
     req: Request,
 ) -> Result<impl IntoResponse, crate::error::AppError> {
@@ -36,7 +36,7 @@ pub async fn handle_system_stats_stream(
         .get(axum::http::header::ORIGIN)
         .and_then(|v| v.to_str().ok());
 
-    let allowed_origins: HashSet<String> = app_state
+    let allowed_origins: HashSet<String> = state
         .config
         .security
         .allowed_origins
@@ -46,7 +46,7 @@ pub async fn handle_system_stats_stream(
     verify_ws_origin(
         origin,
         &allowed_origins,
-        app_state.config.security.ws_origin_mode,
+        state.config.security.ws_origin_mode,
     )?;
 
     let permit = try_acquire_system_stats_stream_permit().ok_or(
@@ -55,7 +55,7 @@ pub async fn handle_system_stats_stream(
         },
     )?;
 
-    let mut rx = app_state.stats_tx.subscribe();
+    let mut rx = state.stats_tx.subscribe();
 
     Ok(ws.on_upgrade(move |mut socket: WebSocket| async move {
         let _permit = permit;
