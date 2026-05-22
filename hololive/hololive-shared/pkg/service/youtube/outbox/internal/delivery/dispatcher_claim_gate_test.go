@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	"context"
 	"errors"
 	"fmt"
@@ -487,7 +488,7 @@ func TestSelectClaimedDeliveriesTracksRowClaimOwnership(t *testing.T) {
 		context.Background(),
 		[]domain.YouTubeNotificationDelivery{firstRow, secondRow, duplicateRow},
 		[]domain.YouTubeNotificationOutbox{firstOutbox, secondOutbox, duplicateOutbox},
-		newDeliveryClaimReuseCache(3),
+		claim.NewMemoryDecisionCache(),
 	)
 
 	require.Len(t, selection.sendRows, 3)
@@ -520,7 +521,7 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 		context.Background(),
 		[]domain.YouTubeNotificationDelivery{firstRow, secondRow, duplicateRow},
 		[]domain.YouTubeNotificationOutbox{firstOutbox, secondOutbox, duplicateOutbox},
-		newDeliveryClaimReuseCache(3),
+		claim.NewMemoryDecisionCache(),
 	)
 
 	result := &deliveryDispatchResult{failureBuckets: make(map[string][]int64)}

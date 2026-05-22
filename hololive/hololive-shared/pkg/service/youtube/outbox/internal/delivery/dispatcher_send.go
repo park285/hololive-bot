@@ -31,6 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
@@ -54,7 +55,7 @@ func (d *Dispatcher) dispatchDeliveryRows(
 		failureBuckets:     make(map[string][]int64),
 	}
 	var mu sync.Mutex
-	reuseCache := newDeliveryClaimReuseCache(len(rows))
+	reuseCache := claim.NewMemoryDecisionCache()
 
 	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)
 
@@ -85,7 +86,7 @@ func (d *Dispatcher) dispatchGroup(
 	group deliveryGroup,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache *deliveryClaimReuseCache,
+	reuseCache claim.DecisionCache,
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -158,7 +159,7 @@ func (d *Dispatcher) dispatchDeliveryRow(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache *deliveryClaimReuseCache,
+	reuseCache claim.DecisionCache,
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -371,7 +372,7 @@ func (d *Dispatcher) dispatchRowsIndividually(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache *deliveryClaimReuseCache,
+	reuseCache claim.DecisionCache,
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
