@@ -50,7 +50,7 @@ func (s *Service) isLoginRateLimited(ctx context.Context, clientIP string) (bool
 		return false, err
 	}
 
-	return count > s.cfg.LoginRateLimitPerMinute, nil
+	return count > s.config.LoginRateLimitPerMinute, nil
 }
 
 func (s *Service) isPasswordResetRequestRateLimited(ctx context.Context, clientIP string) (bool, error) {
@@ -64,7 +64,7 @@ func (s *Service) isPasswordResetRequestRateLimited(ctx context.Context, clientI
 		return false, err
 	}
 
-	return count > s.cfg.PasswordResetRequestRateLimitPerMinute, nil
+	return count > s.config.PasswordResetRequestRateLimitPerMinute, nil
 }
 
 func (s *Service) isAccountLocked(ctx context.Context, email string) (bool, error) {
@@ -85,15 +85,15 @@ func (s *Service) onLoginFailed(ctx context.Context, email string) {
 	}
 
 	key := loginFailKeyPrefix + email
-	count, err := incrWithTTL(ctx, s.cacheClient, key, s.cfg.LoginFailWindow)
+	count, err := incrWithTTL(ctx, s.cacheClient, key, s.config.LoginFailWindow)
 	if err != nil {
 		s.logger.Warn("login_fail_increment_failed", slog.Any("error", err))
 		return
 	}
 
-	if count >= s.cfg.LoginFailLimit {
+	if count >= s.config.LoginFailLimit {
 		lockKey := accountLockKeyPrefix + email
-		_ = s.cacheClient.Set(ctx, lockKey, "1", s.cfg.LoginLockDuration)
+		_ = s.cacheClient.Set(ctx, lockKey, "1", s.config.LoginLockDuration)
 		_ = s.cacheClient.Del(ctx, key)
 	}
 }

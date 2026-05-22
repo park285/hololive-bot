@@ -1369,13 +1369,13 @@ func TestNewDispatcherAppliesDeliveryDefaults(t *testing.T) {
 	)
 
 	defaults := DefaultConfig()
-	if dispatcher.cfg.DeliveryParallelism != defaults.DeliveryParallelism {
-		t.Fatalf("DeliveryParallelism = %d, want %d", dispatcher.cfg.DeliveryParallelism, defaults.DeliveryParallelism)
+	if dispatcher.config.DeliveryParallelism != defaults.DeliveryParallelism {
+		t.Fatalf("DeliveryParallelism = %d, want %d", dispatcher.config.DeliveryParallelism, defaults.DeliveryParallelism)
 	}
-	if dispatcher.cfg.DeliverySendTimeout != defaults.DeliverySendTimeout {
-		t.Fatalf("DeliverySendTimeout = %s, want %s", dispatcher.cfg.DeliverySendTimeout, defaults.DeliverySendTimeout)
+	if dispatcher.config.DeliverySendTimeout != defaults.DeliverySendTimeout {
+		t.Fatalf("DeliverySendTimeout = %s, want %s", dispatcher.config.DeliverySendTimeout, defaults.DeliverySendTimeout)
 	}
-	if dispatcher.cfg.SubscriberLookupParallelism != defaults.SubscriberLookupParallelism {
-		t.Fatalf("SubscriberLookupParallelism = %d, want %d", dispatcher.cfg.SubscriberLookupParallelism, defaults.SubscriberLookupParallelism)
+	if dispatcher.config.SubscriberLookupParallelism != defaults.SubscriberLookupParallelism {
+		t.Fatalf("SubscriberLookupParallelism = %d, want %d", dispatcher.config.SubscriberLookupParallelism, defaults.SubscriberLookupParallelism)
 	}
 }

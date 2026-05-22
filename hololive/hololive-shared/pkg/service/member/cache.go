@@ -65,29 +65,29 @@ type CacheConfig struct {
 }
 
 // 설정에 따라 생성 시점에 자동으로 캐시 워밍업을 수행할 수 있다.
-func NewMemberCache(ctx context.Context, repository *Repository, cacheService cache.Client, logger *slog.Logger, cfg CacheConfig) (*Cache, error) {
-	if cfg.ValkeyTTL == 0 {
-		cfg.ValkeyTTL = constants.MemberCacheDefaults.ValkeyTTL
+func NewMemberCache(ctx context.Context, repository *Repository, cacheService cache.Client, logger *slog.Logger, config CacheConfig) (*Cache, error) {
+	if config.ValkeyTTL == 0 {
+		config.ValkeyTTL = constants.MemberCacheDefaults.ValkeyTTL
 	}
-	if cfg.WarmUpChunkSize == 0 {
-		cfg.WarmUpChunkSize = constants.MemberCacheDefaults.WarmUpChunkSize
+	if config.WarmUpChunkSize == 0 {
+		config.WarmUpChunkSize = constants.MemberCacheDefaults.WarmUpChunkSize
 	}
-	if cfg.WarmUpMaxGoroutines == 0 {
-		cfg.WarmUpMaxGoroutines = constants.MemberCacheDefaults.WarmUpMaxGoroutines
+	if config.WarmUpMaxGoroutines == 0 {
+		config.WarmUpMaxGoroutines = constants.MemberCacheDefaults.WarmUpMaxGoroutines
 	}
 
 	mc := &Cache{
 		repository:     repository,
 		cache:    cacheService,
 		logger:   logger,
-		cacheTTL: cfg.ValkeyTTL,
-		warmup:   cfg.WarmUp,
+		cacheTTL: config.ValkeyTTL,
+		warmup:   config.WarmUp,
 
-		warmUpChunkSize:     cfg.WarmUpChunkSize,
-		warmUpMaxGoroutines: cfg.WarmUpMaxGoroutines,
+		warmUpChunkSize:     config.WarmUpChunkSize,
+		warmUpMaxGoroutines: config.WarmUpMaxGoroutines,
 	}
 
-	if cfg.WarmUp {
+	if config.WarmUp {
 		if err := mc.WarmUpCache(ctx); err != nil {
 			logger.Warn("Failed to warm up member cache", slog.Any("error", err))
 		}

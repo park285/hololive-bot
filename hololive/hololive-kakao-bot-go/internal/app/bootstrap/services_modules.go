@@ -20,7 +20,7 @@ import (
 )
 
 func BuildBotDependencyModules(
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	alarmMode *AlarmModeComponents,
 	holodexService *holodex.Service,
@@ -40,7 +40,7 @@ func BuildBotDependencyModules(
 	logger *slog.Logger,
 ) BotDependencyModules {
 	return BotDependencyModules{
-		Core:      buildBotCoreModule(cfg, logger),
+		Core:      buildBotCoreModule(appConfig, logger),
 		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter),
 		Data:      buildBotDataModule(infra, alarmMode, profileService),
 		Stream:    buildBotStreamModule(alarmMode, holodexService, memberMatcher, youTubeStack),
@@ -49,11 +49,11 @@ func BuildBotDependencyModules(
 	}
 }
 
-func buildBotCoreModule(cfg *config.Config, logger *slog.Logger) BotCoreModule {
+func buildBotCoreModule(appConfig *config.Config, logger *slog.Logger) BotCoreModule {
 	return BotCoreModule{
-		BotSelfUser:  cfg.Bot.SelfUser,
-		IrisBaseURL:  cfg.Iris.BaseURL,
-		Notification: cfg.Notification,
+		BotSelfUser:  appConfig.Bot.SelfUser,
+		IrisBaseURL:  appConfig.Iris.BaseURL,
+		Notification: appConfig.Notification,
 		Logger:       logger,
 	}
 }

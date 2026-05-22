@@ -50,7 +50,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	statsRepository := &ytstats.StatsRepository{}
 	commandBuilders := []bot.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo}
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Bot: config.BotConfig{
 			SelfUser:      "bot-self",
 			Prefix:        "!",
@@ -65,7 +65,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	}
 
 	modules := BuildBotDependencyModules(
-		cfg,
+		appConfig,
 		(&sharedInfraForBootstrapTest{cacheClient: cacheClient, postgres: postgres}).module(),
 		&AlarmModeComponents{
 			AlarmCRUD:        alarmCRUD,

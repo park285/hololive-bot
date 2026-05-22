@@ -113,34 +113,34 @@ func TestOTelHandler_WithGroup(t *testing.T) {
 func TestConfig_Validation(t *testing.T) {
 	tests := []struct {
 		name    string
-		cfg     Config
+		config     Config
 		wantErr bool
 	}{
 		{
 			name:    "empty dir returns nil",
-			cfg:     Config{Dir: "", MaxSizeMB: 10, MaxBackups: 5, MaxAgeDays: 7},
+			config:     Config{Dir: "", MaxSizeMB: 10, MaxBackups: 5, MaxAgeDays: 7},
 			wantErr: false,
 		},
 		{
 			name:    "invalid size",
-			cfg:     Config{Dir: "/tmp", MaxSizeMB: 0, MaxBackups: 5, MaxAgeDays: 7},
+			config:     Config{Dir: "/tmp", MaxSizeMB: 0, MaxBackups: 5, MaxAgeDays: 7},
 			wantErr: true,
 		},
 		{
 			name:    "invalid backups",
-			cfg:     Config{Dir: "/tmp", MaxSizeMB: 10, MaxBackups: 0, MaxAgeDays: 7},
+			config:     Config{Dir: "/tmp", MaxSizeMB: 10, MaxBackups: 0, MaxAgeDays: 7},
 			wantErr: true,
 		},
 		{
 			name:    "invalid age",
-			cfg:     Config{Dir: "/tmp", MaxSizeMB: 10, MaxBackups: 5, MaxAgeDays: 0},
+			config:     Config{Dir: "/tmp", MaxSizeMB: 10, MaxBackups: 5, MaxAgeDays: 0},
 			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := EnableFileLogging(tt.cfg, "test.log")
+			_, err := EnableFileLogging(tt.config, "test.log")
 			if tt.wantErr && err == nil {
 				t.Error("expected error but got nil")
 			}
@@ -158,7 +158,7 @@ func TestEnableFileLogging_UsesRestrictedFileAndDirectoryPerms(t *testing.T) {
 		t.Fatalf("write preexisting log failed: %v", err)
 	}
 
-	cfg := Config{
+	config := Config{
 		Level:      "info",
 		Dir:        logDir,
 		MaxSizeMB:  10,
@@ -166,7 +166,7 @@ func TestEnableFileLogging_UsesRestrictedFileAndDirectoryPerms(t *testing.T) {
 		MaxAgeDays: 7,
 	}
 
-	if _, err := EnableFileLogging(cfg, "service.log"); err != nil {
+	if _, err := EnableFileLogging(config, "service.log"); err != nil {
 		t.Fatalf("EnableFileLogging failed: %v", err)
 	}
 
@@ -209,7 +209,7 @@ func TestNewLoggerWithLevel(t *testing.T) {
 
 func TestEnableFileLoggingWithLevel(t *testing.T) {
 	logDir := t.TempDir()
-	cfg := Config{
+	config := Config{
 		Dir:        logDir,
 		MaxSizeMB:  10,
 		MaxBackups: 5,
@@ -217,7 +217,7 @@ func TestEnableFileLoggingWithLevel(t *testing.T) {
 		Compress:   false,
 	}
 
-	logger, err := EnableFileLoggingWithLevel(cfg, "with-level.log", "warn")
+	logger, err := EnableFileLoggingWithLevel(config, "with-level.log", "warn")
 	if err != nil {
 		t.Fatalf("EnableFileLoggingWithLevel failed: %v", err)
 	}

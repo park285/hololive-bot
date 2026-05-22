@@ -73,14 +73,14 @@ func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Cl
 	}
 }
 
-func NewClientWithConfig(cfg ClientConfig) *Client {
+func NewClientWithConfig(config ClientConfig) *Client {
 	return &Client{
-		httpClient:     defaultHTTPClient(cfg.HTTPClient),
-		baseURL:        defaultBaseURL(cfg.BaseURL),
+		httpClient:     defaultHTTPClient(config.HTTPClient),
+		baseURL:        defaultBaseURL(config.BaseURL),
 		openAPIBaseURL: OpenAPIBaseURL,
-		clientID:       cfg.ClientID,
-		clientSecret:   cfg.ClientSecret,
-		logger:         defaultClientLogger(cfg.Logger),
+		clientID:       config.ClientID,
+		clientSecret:   config.ClientSecret,
+		logger:         defaultClientLogger(config.Logger),
 	}
 }
 

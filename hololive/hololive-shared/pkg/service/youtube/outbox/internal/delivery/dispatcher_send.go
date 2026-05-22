@@ -582,8 +582,8 @@ func (d *Dispatcher) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 
 	sendCtx := ctx
 	cancel := func() {}
-	if d.cfg.DeliverySendTimeout > 0 {
-		sendCtx, cancel = context.WithTimeoutCause(ctx, d.cfg.DeliverySendTimeout, errDeliverySendTimeout)
+	if d.config.DeliverySendTimeout > 0 {
+		sendCtx, cancel = context.WithTimeoutCause(ctx, d.config.DeliverySendTimeout, errDeliverySendTimeout)
 	}
 	defer cancel()
 
@@ -595,7 +595,7 @@ func (d *Dispatcher) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 	}
 	if err != nil {
 		if errors.Is(context.Cause(sendCtx), errDeliverySendTimeout) {
-			return fmt.Errorf("send delivery message timed out after %s: %w", d.cfg.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
+			return fmt.Errorf("send delivery message timed out after %s: %w", d.config.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
 		}
 		return fmt.Errorf("send delivery message: %w", err)
 	}
@@ -604,8 +604,8 @@ func (d *Dispatcher) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 }
 
 func (d *Dispatcher) deliveryParallelism() int {
-	if d.cfg.DeliveryParallelism > 0 {
-		return d.cfg.DeliveryParallelism
+	if d.config.DeliveryParallelism > 0 {
+		return d.config.DeliveryParallelism
 	}
 	return DefaultConfig().DeliveryParallelism
 }

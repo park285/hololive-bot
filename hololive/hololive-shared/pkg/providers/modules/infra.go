@@ -20,18 +20,18 @@ type InfraModule struct {
 	Cleanup     func()
 }
 
-func BuildInfraModule(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *InfraModule, retErr error) {
-	if cfg == nil {
+func BuildInfraModule(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (_ *InfraModule, retErr error) {
+	if appConfig == nil {
 		return nil, fmt.Errorf("build infra module: config is nil")
 	}
 
-	cacheResources, cleanupCache, err := buildInfraCacheResources(ctx, cfg, logger)
+	cacheResources, cleanupCache, err := buildInfraCacheResources(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanupInfraOnError(&retErr, cleanupCache)
 
-	databaseResources, cleanupDB, err := buildInfraDatabaseResources(ctx, cfg, logger)
+	databaseResources, cleanupDB, err := buildInfraDatabaseResources(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -50,10 +50,10 @@ func BuildInfraModule(ctx context.Context, cfg *config.Config, logger *slog.Logg
 
 func buildInfraCacheResources(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 ) (*providers.CacheResources, func(), error) {
-	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, cfg.Valkey, logger)
+	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, appConfig.Valkey, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide cache resources: %w", err)
 	}
@@ -62,10 +62,10 @@ func buildInfraCacheResources(
 
 func buildInfraDatabaseResources(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 ) (*providers.DatabaseResources, func(), error) {
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, appConfig.Postgres, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide database resources: %w", err)
 	}

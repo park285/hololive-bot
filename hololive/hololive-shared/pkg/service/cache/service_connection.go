@@ -14,30 +14,30 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Service, error) {
+func NewCacheService(ctx context.Context, config Config, logger *slog.Logger) (*Service, error) {
 	var addr string
 	var connMethod string
-	if cfg.SocketPath != "" {
-		addr = cfg.SocketPath
+	if config.SocketPath != "" {
+		addr = config.SocketPath
 		connMethod = "unix"
 	} else {
-		addr = net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
+		addr = net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
 		connMethod = "tcp"
 	}
 
 	opts := valkey.ClientOption{
 		InitAddress:       []string{addr},
-		Password:          cfg.Password,
-		SelectDB:          cfg.DB,
+		Password:          config.Password,
+		SelectDB:          config.DB,
 		ConnWriteTimeout:  constants.MQConfig.ConnWriteTimeout,
 		BlockingPoolSize:  constants.ValkeyConfig.BlockingPoolSize,
 		PipelineMultiplex: constants.ValkeyConfig.PipelineMultiplex,
-		DisableCache:      cfg.DisableCache,
-		ForceSingleClient: cfg.ForceSingleClient,
+		DisableCache:      config.DisableCache,
+		ForceSingleClient: config.ForceSingleClient,
 	}
 
-	if cfg.SocketPath != "" {
-		socketPath := cfg.SocketPath
+	if config.SocketPath != "" {
+		socketPath := config.SocketPath
 		opts.DialCtxFn = func(ctx context.Context, _ string, _ *net.Dialer, _ *tls.Config) (net.Conn, error) {
 			var d net.Dialer
 			d.Timeout = constants.MQConfig.DialTimeout
@@ -63,7 +63,7 @@ func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Ser
 	logger.Info("Cache store connected",
 		slog.String("addr", addr),
 		slog.String("method", connMethod),
-		slog.Int("db", cfg.DB),
+		slog.Int("db", config.DB),
 		slog.Int("pool_size", constants.ValkeyConfig.BlockingPoolSize),
 	)
 

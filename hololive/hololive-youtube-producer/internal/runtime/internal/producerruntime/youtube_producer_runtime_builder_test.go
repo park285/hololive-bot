@@ -50,7 +50,7 @@ import (
 )
 
 func TestBuildYouTubeProducerHTTPServer_Success(t *testing.T) {
-	cfg := &config.Config{
+	ingestionConfig := &config.Config{
 		Server: config.ServerConfig{
 			Port: 30123,
 		},
@@ -60,7 +60,7 @@ func TestBuildYouTubeProducerHTTPServer_Success(t *testing.T) {
 		youtubeEnabled:   false,
 		photoSyncEnabled: true,
 	})
-	server, err := buildYouTubeProducerHTTPServer(context.Background(), cfg, testLogger(), youtubeProducerRuntimeName, readiness)
+	server, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), youtubeProducerRuntimeName, readiness)
 	require.NoError(t, err)
 	require.NotNil(t, server)
 	assert.Equal(t, ":30123", server.Addr)
@@ -74,7 +74,7 @@ func TestBuildYouTubeProducerHTTPServer_ReturnsErrorWhenTrustedProxyConfigInvali
 		constants.ServerConfig.TrustedProxies = originalTrustedProxies
 	})
 
-	cfg := &config.Config{
+	ingestionConfig := &config.Config{
 		Server: config.ServerConfig{
 			Port: 30123,
 		},
@@ -84,14 +84,14 @@ func TestBuildYouTubeProducerHTTPServer_ReturnsErrorWhenTrustedProxyConfigInvali
 		youtubeEnabled:   false,
 		photoSyncEnabled: true,
 	})
-	server, err := buildYouTubeProducerHTTPServer(context.Background(), cfg, testLogger(), youtubeProducerRuntimeName, readiness)
+	server, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), youtubeProducerRuntimeName, readiness)
 	require.Error(t, err)
 	assert.Nil(t, server)
 	assert.Contains(t, err.Error(), "build youtube producer router: set trusted proxies")
 }
 
 func TestBuildRuntimePhotoSyncService_ReturnsNilWhenDisabled(t *testing.T) {
-	cfg := &config.Config{
+	ingestionConfig := &config.Config{
 		Scraper: config.ScraperConfig{
 			ActiveActive: config.ScraperActiveActiveConfig{
 				Enabled:    true,
@@ -104,7 +104,7 @@ func TestBuildRuntimePhotoSyncService_ReturnsNilWhenDisabled(t *testing.T) {
 		photoSync: &holodex.PhotoSyncService{},
 	}
 
-	service := buildRuntimePhotoSyncService(cfg, ingestionRuntimeFeatures{
+	service := buildRuntimePhotoSyncService(ingestionConfig, ingestionRuntimeFeatures{
 		photoSyncEnabled: false,
 	}, infra, testLogger())
 
@@ -113,7 +113,7 @@ func TestBuildRuntimePhotoSyncService_ReturnsNilWhenDisabled(t *testing.T) {
 
 func TestBuildIngestionRuntimeSpec(t *testing.T) {
 	t.Run("youtube producer spec preserves configured flags before big-bang cutover", func(t *testing.T) {
-		cfg := &config.Config{
+		ingestionConfig := &config.Config{
 			Ingestion: config.IngestionConfig{
 				YouTubeEnabled:                true,
 				PhotoSyncEnabled:              true,
@@ -121,7 +121,7 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 			},
 		}
 
-		spec := youtubeProducerSpec(cfg)
+		spec := youtubeProducerSpec(ingestionConfig)
 		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
 		assert.Equal(t, spec.requestedFeatures, spec.features)
 		assert.True(t, spec.features.youtubeEnabled)
@@ -130,7 +130,7 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 	})
 
 	t.Run("youtube producer spec preserves youtube routing during big-bang cutover", func(t *testing.T) {
-		cfg := &config.Config{
+		ingestionConfig := &config.Config{
 			Ingestion: config.IngestionConfig{
 				YouTubeEnabled:                true,
 				PhotoSyncEnabled:              true,
@@ -138,7 +138,7 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 			},
 		}
 
-		spec := youtubeProducerSpec(cfg)
+		spec := youtubeProducerSpec(ingestionConfig)
 		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
 		assert.True(t, spec.requestedFeatures.youtubeEnabled)
 		assert.True(t, spec.requestedFeatures.communityShortsBigBangEnabled)
@@ -148,7 +148,7 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 	})
 
 	t.Run("youtube producer spec preserves photo sync request before big-bang cutover", func(t *testing.T) {
-		cfg := &config.Config{
+		ingestionConfig := &config.Config{
 			Ingestion: config.IngestionConfig{
 				YouTubeEnabled:                true,
 				PhotoSyncEnabled:              true,
@@ -156,7 +156,7 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 			},
 		}
 
-		spec := youtubeProducerSpec(cfg)
+		spec := youtubeProducerSpec(ingestionConfig)
 		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
 		assert.True(t, spec.features.youtubeEnabled)
 		assert.True(t, spec.features.photoSyncEnabled)
@@ -164,7 +164,7 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 	})
 
 	t.Run("youtube producer spec does not force youtube on from big-bang flag alone", func(t *testing.T) {
-		cfg := &config.Config{
+		ingestionConfig := &config.Config{
 			Ingestion: config.IngestionConfig{
 				YouTubeEnabled:                false,
 				PhotoSyncEnabled:              true,
@@ -172,7 +172,7 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 			},
 		}
 
-		spec := youtubeProducerSpec(cfg)
+		spec := youtubeProducerSpec(ingestionConfig)
 		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
 		assert.False(t, spec.requestedFeatures.youtubeEnabled)
 		assert.True(t, spec.requestedFeatures.photoSyncEnabled)
@@ -187,12 +187,12 @@ func TestIngestionRuntimeSpecs_YouTubeProducerOwnsConfiguredYouTubeState(t *test
 	t.Parallel()
 
 	tests := map[string]struct {
-		cfg                  config.IngestionConfig
+		ingestionConfig                  config.IngestionConfig
 		wantYouTube          bool
 		wantCommunityBigBang bool
 	}{
 		"youtube enabled without big-bang still starts producer polling": {
-			cfg: config.IngestionConfig{
+			ingestionConfig: config.IngestionConfig{
 				YouTubeEnabled:                true,
 				PhotoSyncEnabled:              true,
 				CommunityShortsBigBangEnabled: false,
@@ -201,7 +201,7 @@ func TestIngestionRuntimeSpecs_YouTubeProducerOwnsConfiguredYouTubeState(t *test
 			wantCommunityBigBang: false,
 		},
 		"big-bang enabled keeps producer polling and observation enabled": {
-			cfg: config.IngestionConfig{
+			ingestionConfig: config.IngestionConfig{
 				YouTubeEnabled:                true,
 				PhotoSyncEnabled:              true,
 				CommunityShortsBigBangEnabled: true,
@@ -210,7 +210,7 @@ func TestIngestionRuntimeSpecs_YouTubeProducerOwnsConfiguredYouTubeState(t *test
 			wantCommunityBigBang: true,
 		},
 		"youtube disabled leaves producer polling idle even if photo sync is enabled": {
-			cfg: config.IngestionConfig{
+			ingestionConfig: config.IngestionConfig{
 				YouTubeEnabled:                false,
 				PhotoSyncEnabled:              true,
 				CommunityShortsBigBangEnabled: false,
@@ -224,8 +224,8 @@ func TestIngestionRuntimeSpecs_YouTubeProducerOwnsConfiguredYouTubeState(t *test
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := &config.Config{Ingestion: tc.cfg}
-			producerSpec := youtubeProducerSpec(cfg)
+			ingestionConfig := &config.Config{Ingestion: tc.ingestionConfig}
+			producerSpec := youtubeProducerSpec(ingestionConfig)
 
 			assert.Equal(t, tc.wantYouTube, producerSpec.features.youtubeEnabled)
 			assert.Equal(t, tc.wantCommunityBigBang, producerSpec.features.communityShortsBigBangEnabled)
@@ -236,14 +236,14 @@ func TestIngestionRuntimeSpecs_YouTubeProducerOwnsConfiguredYouTubeState(t *test
 func TestIngestionRuntimeSpecs_AllowYouTubeProducerPhotoSyncOwner(t *testing.T) {
 	t.Parallel()
 
-	cfg := &config.Config{
+	ingestionConfig := &config.Config{
 		Ingestion: config.IngestionConfig{
 			YouTubeEnabled:                true,
 			PhotoSyncEnabled:              true,
 			CommunityShortsBigBangEnabled: true,
 		},
 	}
-	producerSpec := youtubeProducerSpec(cfg)
+	producerSpec := youtubeProducerSpec(ingestionConfig)
 
 	activePhotoSyncOwners := 0
 	youtubeProducerActive := true
@@ -279,7 +279,7 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			cfg := &config.Config{
+			ingestionConfig := &config.Config{
 				Server: config.ServerConfig{Port: 30123},
 				Ingestion: config.IngestionConfig{
 					YouTubeEnabled:   true,
@@ -337,11 +337,11 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			operationalChannels := mustResolveCommunityShortsOperationalChannels(t, memberData)
 
 			scraperScheduler, registrations, err := polling.BuildComponents(
-				cfg.Scraper,
+				ingestionConfig.Scraper,
 				infra.postgresService,
 				communityshorts.EnabledChannelIDs(operationalChannels),
 				communityshorts.EnabledChannelIDs(operationalChannels),
-				polling.BuildSharedClient(cfg.Scraper, infra.cacheService, infra.sharedRL),
+				polling.BuildSharedClient(ingestionConfig.Scraper, infra.cacheService, infra.sharedRL),
 				nil,
 				nil,
 				nil,
@@ -390,18 +390,18 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 				youtubeEnabled:   true,
 				photoSyncEnabled: true,
 			})
-			httpServer, err := buildYouTubeProducerHTTPServer(context.Background(), cfg, testLogger(), youtubeProducerRuntimeName, readiness)
+			httpServer, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), youtubeProducerRuntimeName, readiness)
 			require.NoError(t, err)
 			require.NotNil(t, httpServer)
 
 			runtime := &YouTubeProducerRuntime{
-				Config:           cfg,
+				Config:           ingestionConfig,
 				Logger:           testLogger(),
 				Scheduler:        youtubeScheduler,
 				ScraperScheduler: scraperScheduler,
 				PhotoSync:        infra.photoSync,
 				ConfigSubscriber: configSubscriber,
-				ServerAddr:       fmt.Sprintf(":%d", cfg.Server.Port),
+				ServerAddr:       fmt.Sprintf(":%d", ingestionConfig.Server.Port),
 				HttpServer:       httpServer,
 				Readiness:        readiness,
 				Managed:          lifecycle.NewManaged(infra.cleanup),

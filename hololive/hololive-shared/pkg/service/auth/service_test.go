@@ -195,11 +195,11 @@ func TestLogin_SessionFlow(t *testing.T) {
 	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.SessionTTL = 30 * time.Minute
-	cfg.UserSessionsTTL = 2 * time.Hour
+	config := DefaultConfig()
+	config.SessionTTL = 30 * time.Minute
+	config.UserSessionsTTL = 2 * time.Hour
 
-	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -260,11 +260,11 @@ func TestLogin_RateLimited(t *testing.T) {
 	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.LoginRateLimitPerMinute = 2
-	cfg.LoginFailLimit = 100 // 레이트리밋 테스트에서 락 영향 제거
+	config := DefaultConfig()
+	config.LoginRateLimitPerMinute = 2
+	config.LoginFailLimit = 100 // 레이트리밋 테스트에서 락 영향 제거
 
-	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -298,13 +298,13 @@ func TestLogin_AccountLocked(t *testing.T) {
 	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.LoginRateLimitPerMinute = 1000
-	cfg.LoginFailLimit = 3
-	cfg.LoginFailWindow = 10 * time.Minute
-	cfg.LoginLockDuration = 10 * time.Minute
+	config := DefaultConfig()
+	config.LoginRateLimitPerMinute = 1000
+	config.LoginFailLimit = 3
+	config.LoginFailWindow = 10 * time.Minute
+	config.LoginLockDuration = 10 * time.Minute
 
-	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -334,10 +334,10 @@ func TestPasswordReset_RevokesSessions(t *testing.T) {
 	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.LoginRateLimitPerMinute = 1000
+	config := DefaultConfig()
+	config.LoginRateLimitPerMinute = 1000
 
-	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -387,10 +387,10 @@ func TestPasswordResetRequest_RateLimited(t *testing.T) {
 	cacheClient, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.PasswordResetRequestRateLimitPerMinute = 2
+	config := DefaultConfig()
+	config.PasswordResetRequestRateLimitPerMinute = 2
 
-	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), db, cacheClient, newTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

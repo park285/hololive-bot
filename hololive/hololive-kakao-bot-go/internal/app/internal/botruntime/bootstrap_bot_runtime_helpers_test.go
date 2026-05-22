@@ -58,7 +58,7 @@ func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
 func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-token")
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Iris: config.IrisConfig{
 			WebhookToken: "test-token",
 		},
@@ -75,7 +75,7 @@ func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 		},
 	}
 
-	handler, err := appbootstrap.BuildBotWebhookHandler(cfg, stubWebhookMessageHandler{}, deps, nil)
+	handler, err := appbootstrap.BuildBotWebhookHandler(appConfig, stubWebhookMessageHandler{}, deps, nil)
 	require.NoError(t, err)
 	require.NotNil(t, handler)
 	t.Cleanup(func() {

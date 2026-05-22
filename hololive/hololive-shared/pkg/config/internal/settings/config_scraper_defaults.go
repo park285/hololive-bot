@@ -124,55 +124,55 @@ func (c ScraperConfig) PollOrDefault() ScraperPoll {
 
 func (c ScraperConfig) SchedulerOrDefault() ScraperSchedulerConfig {
 	defaults := DefaultScraperSchedulerConfig()
-	cfg := c.Scheduler
+	config := c.Scheduler
 
-	if cfg.PollTimeout <= 0 {
-		cfg.PollTimeout = defaults.PollTimeout
+	if config.PollTimeout <= 0 {
+		config.PollTimeout = defaults.PollTimeout
 	}
-	if cfg.ErrorBackoffMin <= 0 {
-		cfg.ErrorBackoffMin = defaults.ErrorBackoffMin
+	if config.ErrorBackoffMin <= 0 {
+		config.ErrorBackoffMin = defaults.ErrorBackoffMin
 	}
-	if cfg.ErrorBackoffMax <= 0 {
-		cfg.ErrorBackoffMax = defaults.ErrorBackoffMax
+	if config.ErrorBackoffMax <= 0 {
+		config.ErrorBackoffMax = defaults.ErrorBackoffMax
 	}
-	if cfg.ErrorBackoffMax < cfg.ErrorBackoffMin {
-		cfg.ErrorBackoffMax = cfg.ErrorBackoffMin
+	if config.ErrorBackoffMax < config.ErrorBackoffMin {
+		config.ErrorBackoffMax = config.ErrorBackoffMin
 	}
 
-	return cfg
+	return config
 }
 
 func (c ScraperConfig) SnapshotOrDefault() ScraperSnapshotConfig {
 	defaults := DefaultScraperSnapshotConfig()
-	cfg := c.Snapshot
-	if strings.TrimSpace(cfg.Dir) == "" {
-		cfg.Dir = defaults.Dir
+	config := c.Snapshot
+	if strings.TrimSpace(config.Dir) == "" {
+		config.Dir = defaults.Dir
 	}
-	if cfg.MaxBodyBytes <= 0 {
-		cfg.MaxBodyBytes = defaults.MaxBodyBytes
+	if config.MaxBodyBytes <= 0 {
+		config.MaxBodyBytes = defaults.MaxBodyBytes
 	}
-	if cfg.MinInterval <= 0 {
-		cfg.MinInterval = defaults.MinInterval
+	if config.MinInterval <= 0 {
+		config.MinInterval = defaults.MinInterval
 	}
-	return cfg
+	return config
 }
 
 func (c ScraperConfig) ChannelHealthOrDefault() ScraperChannelHealthConfig {
 	defaults := DefaultScraperChannelHealthConfig()
-	cfg := c.ChannelHealth
-	fillDefaultDuration(&cfg.TTL, defaults.TTL)
-	fillDefaultDuration(&cfg.ParserDriftBase, defaults.ParserDriftBase)
-	fillDefaultDuration(&cfg.ParserDriftMax, defaults.ParserDriftMax)
-	fillDefaultDuration(&cfg.TransportBase, defaults.TransportBase)
-	fillDefaultDuration(&cfg.TransportMax, defaults.TransportMax)
-	fillDefaultDuration(&cfg.TimeoutBase, defaults.TimeoutBase)
-	fillDefaultDuration(&cfg.TimeoutMax, defaults.TimeoutMax)
-	fillDefaultDuration(&cfg.HTTPStatusBase, defaults.HTTPStatusBase)
-	fillDefaultDuration(&cfg.HTTPStatusMax, defaults.HTTPStatusMax)
-	if cfg.SuccessDecaySteps <= 0 {
-		cfg.SuccessDecaySteps = defaults.SuccessDecaySteps
+	config := c.ChannelHealth
+	fillDefaultDuration(&config.TTL, defaults.TTL)
+	fillDefaultDuration(&config.ParserDriftBase, defaults.ParserDriftBase)
+	fillDefaultDuration(&config.ParserDriftMax, defaults.ParserDriftMax)
+	fillDefaultDuration(&config.TransportBase, defaults.TransportBase)
+	fillDefaultDuration(&config.TransportMax, defaults.TransportMax)
+	fillDefaultDuration(&config.TimeoutBase, defaults.TimeoutBase)
+	fillDefaultDuration(&config.TimeoutMax, defaults.TimeoutMax)
+	fillDefaultDuration(&config.HTTPStatusBase, defaults.HTTPStatusBase)
+	fillDefaultDuration(&config.HTTPStatusMax, defaults.HTTPStatusMax)
+	if config.SuccessDecaySteps <= 0 {
+		config.SuccessDecaySteps = defaults.SuccessDecaySteps
 	}
-	return cfg
+	return config
 }
 
 func fillDefaultDuration(value *time.Duration, fallback time.Duration) {
@@ -183,11 +183,11 @@ func fillDefaultDuration(value *time.Duration, fallback time.Duration) {
 
 func (c ScraperConfig) BrowserDiagnosticOrDefault() ScraperBrowserDiagnosticConfig {
 	defaults := DefaultScraperBrowserDiagnosticConfig()
-	cfg := c.BrowserDiagnostic
-	if cfg.Timeout <= 0 {
-		cfg.Timeout = defaults.Timeout
+	config := c.BrowserDiagnostic
+	if config.Timeout <= 0 {
+		config.Timeout = defaults.Timeout
 	}
-	return cfg
+	return config
 }
 
 func (c ScraperConfig) WorkerCountOrDefault() int {

@@ -14,7 +14,7 @@ import (
 
 func (d *Dispatcher) telemetryLoop(ctx context.Context) {
 	d.processDeliveryTelemetry(ctx)
-	_ = loop.RunTickerLoop(ctx, d.cfg.TelemetryPollInterval, func(ctx context.Context) error {
+	_ = loop.RunTickerLoop(ctx, d.config.TelemetryPollInterval, func(ctx context.Context) error {
 		d.processDeliveryTelemetry(ctx)
 		return nil
 	})
@@ -37,20 +37,20 @@ func (d *Dispatcher) processDeliveryTelemetry(ctx context.Context) {
 }
 
 func (d *Dispatcher) backfillDeliveryTelemetry(ctx context.Context) {
-	if _, err := d.telemetry.BackfillFromDelivery(ctx, d.cfg.TelemetryBackfillBatch, d.deliveryTelemetryBackfillSince()); err != nil {
+	if _, err := d.telemetry.BackfillFromDelivery(ctx, d.config.TelemetryBackfillBatch, d.deliveryTelemetryBackfillSince()); err != nil {
 		d.logger.Warn("Failed to backfill delivery telemetry", slog.Any("error", err))
 	}
 }
 
 func (d *Dispatcher) deliveryTelemetryBackfillSince() time.Time {
-	if d.cfg.TelemetryRetention <= 0 {
+	if d.config.TelemetryRetention <= 0 {
 		return time.Time{}
 	}
-	return time.Now().UTC().Add(-d.cfg.TelemetryRetention)
+	return time.Now().UTC().Add(-d.config.TelemetryRetention)
 }
 
 func (d *Dispatcher) fetchDeliveryTelemetryRows(ctx context.Context) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {
-	rows, err := d.telemetry.FetchAndLockPending(ctx, d.cfg.TelemetryFlushBatch, d.cfg.LockTimeout)
+	rows, err := d.telemetry.FetchAndLockPending(ctx, d.config.TelemetryFlushBatch, d.config.LockTimeout)
 	if err != nil {
 		d.logger.Warn("Failed to fetch delivery telemetry buffer", slog.Any("error", err))
 		return nil, false
@@ -91,7 +91,7 @@ func (d *Dispatcher) markDeliveryTelemetryResults(ctx context.Context, loggedIDs
 	if err := d.telemetry.MarkLoggedBatch(ctx, loggedIDs); err != nil {
 		d.logger.Warn("Failed to mark delivery telemetry as logged", slog.Any("error", err))
 	}
-	if err := d.telemetry.MarkRetryBatch(ctx, failedIDs, d.cfg.TelemetryRetryBackoff, "emit delivery telemetry"); err != nil {
+	if err := d.telemetry.MarkRetryBatch(ctx, failedIDs, d.config.TelemetryRetryBackoff, "emit delivery telemetry"); err != nil {
 		d.logger.Warn("Failed to schedule delivery telemetry retry", slog.Any("error", err))
 	}
 }

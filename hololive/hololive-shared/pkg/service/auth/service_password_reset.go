@@ -60,7 +60,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 	model := &passwordResetTokenModel{
 		TokenHash: sha256Hex(rawToken),
 		UserID:    user.ID,
-		ExpiresAt: now.Add(s.cfg.ResetTokenTTL),
+		ExpiresAt: now.Add(s.config.ResetTokenTTL),
 		UsedAt:    nil,
 		CreatedAt: now,
 	}

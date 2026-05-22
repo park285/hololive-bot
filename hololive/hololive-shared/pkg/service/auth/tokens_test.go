@@ -111,11 +111,11 @@ func TestCreateSession_Success(t *testing.T) {
 	cache, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.SessionTTL = 30 * time.Minute
-	cfg.UserSessionsTTL = 2 * time.Hour
+	config := DefaultConfig()
+	config.SessionTTL = 30 * time.Minute
+	config.UserSessionsTTL = 2 * time.Hour
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), config)
 	require.NoError(t, err)
 
 	session, err := service.createSession(context.Background(), "user-123")
@@ -131,11 +131,11 @@ func TestCreateSession_StoresJSONSessionDataAndUserIndex(t *testing.T) {
 	cache, cleanup := newTestCache(t)
 	defer cleanup()
 
-	cfg := DefaultConfig()
-	cfg.SessionTTL = 30 * time.Minute
-	cfg.UserSessionsTTL = 2 * time.Hour
+	config := DefaultConfig()
+	config.SessionTTL = 30 * time.Minute
+	config.UserSessionsTTL = 2 * time.Hour
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), config)
 	require.NoError(t, err)
 
 	session, err := service.createSession(context.Background(), "user-123")

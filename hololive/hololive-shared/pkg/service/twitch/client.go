@@ -60,20 +60,20 @@ type Client struct {
 	failureCount    atomic.Int32
 }
 
-func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
+func NewClient(config ClientConfig, logger *slog.Logger) *Client {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	httpClient := cfg.HTTPClient
+	httpClient := config.HTTPClient
 	if httpClient == nil {
 		httpClient = httputil.NewExternalAPIClient(constants.TwitchConfig.Timeout)
 	}
 
 	c := &Client{
 		httpClient:   httpClient,
-		clientID:     cfg.ClientID,
-		clientSecret: cfg.ClientSecret,
+		clientID:     config.ClientID,
+		clientSecret: config.ClientSecret,
 		logger:       logger,
 	}
 	c.tokenExpiry.Store(time.Time{})

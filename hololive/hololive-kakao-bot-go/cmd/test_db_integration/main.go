@@ -40,9 +40,9 @@ func main() {
 	log.Println("=== PostgreSQL Member Data Integration Test ===")
 	log.Println()
 
-	postgresCfg := postgresConfigFromEnv()
+	postgresConfig := postgresConfigFromEnv()
 	buildCtx, buildCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Build)
-	runtime, err := app.BuildDBIntegrationRuntime(buildCtx, postgresCfg, logger)
+	runtime, err := app.BuildDBIntegrationRuntime(buildCtx, postgresConfig, logger)
 	buildCancel()
 
 	if err != nil {

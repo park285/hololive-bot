@@ -289,11 +289,11 @@ func (mf *MessageFormatter) formatGroupedMessage(ctx context.Context, memberName
 }
 
 func (mf *MessageFormatter) getGroupedTemplateKeyAndHeader(memberName string, kind domain.OutboxKind, count int) (domain.TemplateKey, string) {
-	cfg, ok := groupedTemplateConfigs[kind]
+	config, ok := groupedTemplateConfigs[kind]
 	if !ok {
-		cfg = defaultGroupedTemplateConfig
+		config = defaultGroupedTemplateConfig
 	}
-	return cfg.templateKey, fmt.Sprintf(cfg.headerFormat, memberName, count)
+	return config.templateKey, fmt.Sprintf(config.headerFormat, memberName, count)
 }
 
 type groupedTemplateConfig struct {

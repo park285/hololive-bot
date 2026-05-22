@@ -52,45 +52,45 @@ type alarmModeComponents struct {
 	MemberDataSource member.DataProvider
 }
 
-func BuildAdminAPIRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*AdminAPIRuntime, error) {
-	ctx, err := normalizeRuntimeBuildInputs(ctx, cfg, logger)
+func BuildAdminAPIRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*AdminAPIRuntime, error) {
+	ctx, err := normalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	infra, err := sharedmodules.BuildInfraModule(ctx, cfg, logger)
+	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build admin api runtime: build infra module: %w", err)
 	}
 
-	foundation, err := buildScraperHolodexProfileFoundation(ctx, cfg, infra, logger)
+	foundation, err := buildScraperHolodexProfileFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "foundation", err)
 	}
 
 	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
-	alarmMode, err := buildAlarmModeComponents(ctx, cfg, infra.Cache, foundation.HolodexService, foundation.MemberServiceAdapter, alarmRepository, logger)
+	alarmMode, err := buildAlarmModeComponents(ctx, appConfig, infra.Cache, foundation.HolodexService, foundation.MemberServiceAdapter, alarmRepository, logger)
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "alarm mode", err)
 	}
 
-	aclService, err := buildAdminAPIACLService(ctx, cfg, infra, logger)
+	aclService, err := buildAdminAPIACLService(ctx, appConfig, infra, logger)
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "acl service", err)
 	}
 
-	ytStack := buildAdminAPIYouTubeStack(ctx, cfg, infra, foundation, logger)
+	ytStack := buildAdminAPIYouTubeStack(ctx, appConfig, infra, foundation, logger)
 	templateAdmin := buildAdminAPITemplateAdmin(infra, logger)
-	authService, err := buildAdminAPIAuthService(ctx, cfg, infra, logger)
+	authService, err := buildAdminAPIAuthService(ctx, appConfig, infra, logger)
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "auth service", err)
 	}
 
-	settingsApplier, majorEventTriggerClient := buildAdminAPISettingsApplier(cfg, foundation, alarmMode, ytStack, logger)
-	systemCollector := buildAdminAPISystemCollector(cfg)
+	settingsApplier, majorEventTriggerClient := buildAdminAPISettingsApplier(appConfig, foundation, alarmMode, ytStack, logger)
+	systemCollector := buildAdminAPISystemCollector(appConfig)
 	communityShortsOpsRepository := buildAdminAPICommunityShortsOpsRepository(infra)
 	handler := buildAdminAPIHandler(
-		cfg,
+		appConfig,
 		infra,
 		foundation,
 		alarmMode,
@@ -103,14 +103,14 @@ func BuildAdminAPIRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 		majorEventTriggerClient,
 		logger,
 	)
-	router, err := buildAdminAPIRouter(ctx, cfg, infra, authService, handler, logger)
+	router, err := buildAdminAPIRouter(ctx, appConfig, infra, authService, handler, logger)
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "provide api router", err)
 	}
 
-	registerAdminAPIInternalAlarmRoutes(router, cfg, alarmMode, logger)
+	registerAdminAPIInternalAlarmRoutes(router, appConfig, alarmMode, logger)
 
-	return newAdminAPIRuntime(cfg, logger, fmt.Sprintf(":%d", cfg.Server.Port), router, infra.Cleanup), nil
+	return newAdminAPIRuntime(appConfig, logger, fmt.Sprintf(":%d", appConfig.Server.Port), router, infra.Cleanup), nil
 }
 
 func cleanupAdminAPIRuntimeBuild(infra *sharedmodules.InfraModule, stage string, err error) (*AdminAPIRuntime, error) {
@@ -119,14 +119,14 @@ func cleanupAdminAPIRuntimeBuild(infra *sharedmodules.InfraModule, stage string,
 }
 
 func newAdminAPIRuntime(
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	addr string,
 	router *gin.Engine,
 	cleanup func(),
 ) *AdminAPIRuntime {
 	return &AdminAPIRuntime{
-		Config:     cfg,
+		Config:     appConfig,
 		Logger:     logger,
 		ServerAddr: addr,
 		HttpServer: sharedserver.NewH2CServer(addr, router, "hololive-admin-api.http"),
@@ -136,7 +136,7 @@ func newAdminAPIRuntime(
 
 func buildAdminAPIACLService(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*acl.Service, error) {
@@ -145,34 +145,34 @@ func buildAdminAPIACLService(
 		infra.Postgres,
 		infra.Cache,
 		logger,
-		cfg.Kakao.ACLEnabled,
-		acl.ParseACLMode(cfg.Kakao.ACLMode),
-		cfg.Kakao.Rooms,
+		appConfig.Kakao.ACLEnabled,
+		acl.ParseACLMode(appConfig.Kakao.ACLMode),
+		appConfig.Kakao.Rooms,
 	)
 }
 
 func buildAdminAPIAuthService(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*authsvc.Service, error) {
-	authCfg := authsvc.DefaultConfig()
-	authCfg.AutoPrepareSchema = cfg.Postgres.AutoPrepareSchema
-	return authsvc.NewService(ctx, infra.Postgres.GetGormDB(), infra.Cache, logger, authCfg)
+	authConfig := authsvc.DefaultConfig()
+	authConfig.AutoPrepareSchema = appConfig.Postgres.AutoPrepareSchema
+	return authsvc.NewService(ctx, infra.Postgres.GetGormDB(), infra.Cache, logger, authConfig)
 }
 
 func buildAdminAPIYouTubeStack(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *scraperHolodexProfileFoundation,
 	logger *slog.Logger,
 ) *providers.YouTubeStack {
 	statsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
 	return sharedmodules.BuildYouTubeAPIStack(ctx, sharedmodules.YouTubeAPIStackParams{
-		YouTubeConfig:   cfg.YouTube,
-		ScraperConfig:   cfg.Scraper,
+		YouTubeConfig:   appConfig.YouTube,
+		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,
 		StatsRepository:       statsRepository,
 		SharedRateLimit: foundation.SharedRL,
@@ -181,7 +181,7 @@ func buildAdminAPIYouTubeStack(
 }
 
 func buildAdminAPISettingsApplier(
-	cfg *config.Config,
+	appConfig *config.Config,
 	foundation *scraperHolodexProfileFoundation,
 	alarmMode *alarmModeComponents,
 	ytStack *providers.YouTubeStack,
@@ -195,17 +195,17 @@ func buildAdminAPISettingsApplier(
 	)
 	settingsApplier := newBotSettingsApplier(localSettingsApplier, nil, logger)
 
-	if strings.TrimSpace(cfg.LLMSchedulerURL) == "" {
+	if strings.TrimSpace(appConfig.LLMSchedulerURL) == "" {
 		logger.Warn("LLM scheduler URL not configured; trigger routes and membernews run-now are disabled", slog.String("env", "LLM_SCHEDULER_INTERNAL_URL"))
 		return settingsApplier, nil
 	}
 
-	majorEventTriggerClient := triggerclient.NewClient(cfg.LLMSchedulerURL, cfg.Server.APIKey, logger)
+	majorEventTriggerClient := triggerclient.NewClient(appConfig.LLMSchedulerURL, appConfig.Server.APIKey, logger)
 	return newBotSettingsApplier(localSettingsApplier, majorEventTriggerClient, logger), majorEventTriggerClient
 }
 
 func buildAdminAPIHandler(
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *scraperHolodexProfileFoundation,
 	alarmMode *alarmModeComponents,
@@ -230,7 +230,7 @@ func buildAdminAPIHandler(
 		ytStack.GetStatsRepository(),
 		communityShortsOpsRepository,
 		activity.NewActivityLogger("", logger),
-		sharedmodules.BuildSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger),
+		sharedmodules.BuildSettingsService(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger),
 		settingsApplier,
 		aclService,
 		systemCollector,
@@ -241,11 +241,11 @@ func buildAdminAPIHandler(
 	)
 }
 
-func buildAdminAPISystemCollector(cfg *config.Config) *system.Collector {
+func buildAdminAPISystemCollector(appConfig *config.Config) *system.Collector {
 	return system.NewCollector([]system.ServiceEndpoint{
-		{Name: "llm-scheduler", URL: cfg.Services.LLMSchedulerHealthURL},
-		{Name: "twentyq", URL: cfg.Services.GameBotTwentyQHealthURL},
-		{Name: "turtlesoup", URL: cfg.Services.GameBotTurtleHealthURL},
+		{Name: "llm-scheduler", URL: appConfig.Services.LLMSchedulerHealthURL},
+		{Name: "twentyq", URL: appConfig.Services.GameBotTwentyQHealthURL},
+		{Name: "turtlesoup", URL: appConfig.Services.GameBotTurtleHealthURL},
 	}, system.WithServiceName("hololive-admin-api"))
 }
 
@@ -267,7 +267,7 @@ func buildAdminAPICommunityShortsOpsRepository(infra *sharedmodules.InfraModule)
 
 func buildAdminAPIRouter(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	authService *authsvc.Service,
 	handler *server.APIHandler,
@@ -275,7 +275,7 @@ func buildAdminAPIRouter(
 ) (*gin.Engine, error) {
 	return apphttp.ProvideAPIRouter(
 		ctx,
-		cfg,
+		appConfig,
 		logger,
 		handler.DomainHandlers(),
 		server.NewAuthHandler(authService, logger),
@@ -287,7 +287,7 @@ func buildAdminAPIRouter(
 
 func registerAdminAPIInternalAlarmRoutes(
 	router *gin.Engine,
-	cfg *config.Config,
+	appConfig *config.Config,
 	alarmMode *alarmModeComponents,
 	logger *slog.Logger,
 ) {
@@ -297,13 +297,13 @@ func registerAdminAPIInternalAlarmRoutes(
 
 	alarmAPI := sharedalarm.NewAPIHandler(alarmMode.AlarmCRUD, logger)
 	internalAlarm := router.Group("")
-	internalAlarm.Use(middleware.APIKeyAuthMiddleware(cfg.Server.APIKey))
+	internalAlarm.Use(middleware.APIKeyAuthMiddleware(appConfig.Server.APIKey))
 	alarmAPI.RegisterInternalRoutes(internalAlarm)
 }
 
 func buildScraperHolodexProfileFoundation(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*scraperHolodexProfileFoundation, error) {
@@ -316,14 +316,14 @@ func buildScraperHolodexProfileFoundation(
 	scraperService := providers.ProvideScraperService(
 		infra.Cache,
 		memberServiceAdapter,
-		scraper.ProxyConfig{Enabled: cfg.Scraper.ProxyEnabled, URL: cfg.Scraper.ProxyURL},
+		scraper.ProxyConfig{Enabled: appConfig.Scraper.ProxyEnabled, URL: appConfig.Scraper.ProxyURL},
 		sharedRL,
 		logger,
 	)
 
 	holodexService, err := providers.ProvideHolodexService(
-		cfg.Holodex.BaseURL,
-		cfg.Holodex.APIKey,
+		appConfig.Holodex.BaseURL,
+		appConfig.Holodex.APIKey,
 		infra.Cache,
 		scraperService,
 		logger,
@@ -347,7 +347,7 @@ func buildScraperHolodexProfileFoundation(
 
 func buildAlarmModeComponents(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	cacheClient cache.Client,
 	holodexSvc *holodex.Service,
 	memberData member.DataProvider,
@@ -355,20 +355,20 @@ func buildAlarmModeComponents(
 	logger *slog.Logger,
 ) (*alarmModeComponents, error) {
 	chzzkClient := chzzk.NewClient(nil, "", logger)
-	if strings.TrimSpace(cfg.Chzzk.ClientID) != "" || strings.TrimSpace(cfg.Chzzk.ClientSecret) != "" {
+	if strings.TrimSpace(appConfig.Chzzk.ClientID) != "" || strings.TrimSpace(appConfig.Chzzk.ClientSecret) != "" {
 		chzzkClient = chzzk.NewClientWithConfig(chzzk.ClientConfig{
 			HTTPClient:   nil,
-			ClientID:     cfg.Chzzk.ClientID,
-			ClientSecret: cfg.Chzzk.ClientSecret,
+			ClientID:     appConfig.Chzzk.ClientID,
+			ClientSecret: appConfig.Chzzk.ClientSecret,
 			Logger:       logger,
 		})
 	}
 	twitchClient := twitch.NewClient(twitch.ClientConfig{
 		HTTPClient:   nil,
-		ClientID:     cfg.Twitch.ClientID,
-		ClientSecret: cfg.Twitch.ClientSecret,
+		ClientID:     appConfig.Twitch.ClientID,
+		ClientSecret: appConfig.Twitch.ClientSecret,
 	}, logger)
-	resolved := sharedmodules.ResolvePersistedTargetMinutes(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
+	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
 	alarmService, err := notification.NewAlarmService(cacheClient, holodexSvc, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)

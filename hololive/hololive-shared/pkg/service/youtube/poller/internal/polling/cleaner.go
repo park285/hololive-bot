@@ -44,18 +44,18 @@ func DefaultViewerSampleCleanerConfig() ViewerSampleCleanerConfig {
 
 type ViewerSampleCleaner struct {
 	db  *gorm.DB
-	cfg ViewerSampleCleanerConfig
+	config ViewerSampleCleanerConfig
 }
 
-func NewViewerSampleCleaner(db *gorm.DB, cfg ViewerSampleCleanerConfig) *ViewerSampleCleaner {
+func NewViewerSampleCleaner(db *gorm.DB, config ViewerSampleCleanerConfig) *ViewerSampleCleaner {
 	return &ViewerSampleCleaner{
 		db:  db,
-		cfg: cfg,
+		config: config,
 	}
 }
 
 func (c *ViewerSampleCleaner) Cleanup(ctx context.Context) (int64, error) {
-	cutoff := time.Now().AddDate(0, 0, -c.cfg.RetentionDays)
+	cutoff := time.Now().AddDate(0, 0, -c.config.RetentionDays)
 
 	result := c.db.WithContext(ctx).
 		Where("video_id IN (SELECT video_id FROM youtube_live_sessions WHERE status = ? AND ended_at < ?)",
@@ -69,7 +69,7 @@ func (c *ViewerSampleCleaner) Cleanup(ctx context.Context) (int64, error) {
 	if result.RowsAffected > 0 {
 		slog.Info("Cleaned up old viewer samples",
 			"deleted", result.RowsAffected,
-			"retention_days", c.cfg.RetentionDays)
+			"retention_days", c.config.RetentionDays)
 	}
 
 	return result.RowsAffected, nil

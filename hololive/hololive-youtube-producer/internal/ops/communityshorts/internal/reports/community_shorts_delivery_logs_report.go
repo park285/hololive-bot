@@ -59,7 +59,7 @@ type CommunityShortsDeliveryLogRow struct {
 
 func CollectCommunityShortsDeliveryLogReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityShortsDeliveryLogCollectOptions,
@@ -67,7 +67,7 @@ func CollectCommunityShortsDeliveryLogReport(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: config is nil")
 	}
 	if logger == nil {
@@ -84,7 +84,7 @@ func CollectCommunityShortsDeliveryLogReport(
 		return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: %w", err)
 	}
 
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, appConfig, logger)
 	if err != nil {
 		return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: %w", err)
 	}

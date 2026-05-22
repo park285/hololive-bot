@@ -37,15 +37,15 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 	}
 	setupPool.Close()
 
-	cfg, err := pgxpool.ParseConfig(dsn)
+	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		t.Fatalf("parse test database config: %v", err)
 	}
-	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		_, err := conn.Exec(ctx, "SET search_path TO "+schema)
 		return err
 	}
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		t.Fatalf("connect schema-scoped test database: %v", err)
 	}

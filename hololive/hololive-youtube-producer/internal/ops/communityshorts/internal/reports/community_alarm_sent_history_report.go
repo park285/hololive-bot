@@ -11,14 +11,14 @@ import (
 
 func CollectCommunityAlarmSentHistoryReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityAlarmSentHistoryCollectOptions,
 ) (CommunityAlarmSentHistoryReport, error) {
 	return collectObservationAlarmSentHistoryWithDefinition(
 		ctx,
-		cfg,
+		appConfig,
 		logger,
 		now,
 		options,

@@ -207,7 +207,7 @@ func (s *Service) createSession(ctx context.Context, userID string) (*Session, e
 	}
 
 	now := time.Now().UTC()
-	expiresAt := now.Add(s.cfg.SessionTTL)
+	expiresAt := now.Add(s.config.SessionTTL)
 	data := sessionData{
 		UserID:    userID,
 		ExpiresAt: expiresAt,
@@ -241,7 +241,7 @@ func (s *Service) allocateSessionToken(ctx context.Context, payload string) (str
 		}
 
 		hash := sha256Hex(raw)
-		acquired, err := s.cacheClient.SetNX(ctx, sessionKeyPrefix+hash, payload, s.cfg.SessionTTL)
+		acquired, err := s.cacheClient.SetNX(ctx, sessionKeyPrefix+hash, payload, s.config.SessionTTL)
 		if err != nil {
 			return "", "", newError(CodeInternal, "failed to store session", err)
 		}
@@ -259,7 +259,7 @@ func (s *Service) addSessionIndex(ctx context.Context, userID, sessionHash strin
 		_ = s.cacheClient.Del(ctx, sessionKeyPrefix+sessionHash)
 		return newError(CodeInternal, "failed to update session index", err)
 	}
-	if err := s.cacheClient.Expire(ctx, userSessionsKey, s.cfg.UserSessionsTTL); err != nil {
+	if err := s.cacheClient.Expire(ctx, userSessionsKey, s.config.UserSessionsTTL); err != nil {
 		_, _ = s.cacheClient.SRem(ctx, userSessionsKey, []string{sessionHash})
 		_ = s.cacheClient.Del(ctx, sessionKeyPrefix+sessionHash)
 		return newError(CodeInternal, "failed to expire session index", err)

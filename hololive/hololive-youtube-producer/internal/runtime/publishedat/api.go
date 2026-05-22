@@ -12,32 +12,32 @@ import (
 )
 
 func BuildPendingResolver(
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	postgresService database.Client,
 	scraperClient *scraper.Client,
 	routeDecider poller.NotificationRouteDecider,
 	logger *slog.Logger,
 ) *poller.PendingPublishedAtResolver {
-	return buildPendingPublishedAtResolver(scraperCfg, postgresService, scraperClient, routeDecider, logger)
+	return buildPendingPublishedAtResolver(scraperConfig, postgresService, scraperClient, routeDecider, logger)
 }
 
 func BuildRegistration(
 	resolver *poller.PendingPublishedAtResolver,
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	logger *slog.Logger,
 ) *providers.ChannelPollerRegistration {
-	return buildPublishedAtResolverRegistration(resolver, scraperCfg, logger)
+	return buildPublishedAtResolverRegistration(resolver, scraperConfig, logger)
 }
 
-func EffectiveConfig(scraperCfg config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
-	return effectivePublishedAtResolverConfig(scraperCfg)
+func EffectiveConfig(scraperConfig config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
+	return effectivePublishedAtResolverConfig(scraperConfig)
 }
 
 func ValidateSchemaIfEnabled(
 	ctx context.Context,
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	postgresService database.Client,
 	logger *slog.Logger,
 ) error {
-	return validatePublishedAtResolverSchemaIfEnabled(ctx, scraperCfg, postgresService, logger)
+	return validatePublishedAtResolverSchemaIfEnabled(ctx, scraperConfig, postgresService, logger)
 }

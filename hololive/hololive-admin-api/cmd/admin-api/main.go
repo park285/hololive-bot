@@ -44,18 +44,18 @@ func main() {
 		},
 		LoadConfig:             config.Load,
 		LoadConfigErrorMessage: "Failed to load config",
-		LoggerConfig: func(cfg *config.Config) sharedlogging.Config {
+		LoggerConfig: func(appConfig *config.Config) sharedlogging.Config {
 			return sharedlogging.Config{
-				Dir:        cfg.Logging.Dir,
-				MaxSizeMB:  cfg.Logging.MaxSizeMB,
-				MaxBackups: cfg.Logging.MaxBackups,
-				MaxAgeDays: cfg.Logging.MaxAgeDays,
-				Compress:   cfg.Logging.Compress,
+				Dir:        appConfig.Logging.Dir,
+				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
+				MaxBackups: appConfig.Logging.MaxBackups,
+				MaxAgeDays: appConfig.Logging.MaxAgeDays,
+				Compress:   appConfig.Logging.Compress,
 			}
 		},
 		LoggerFileName: "admin-api.log",
-		LoggerLevel: func(cfg *config.Config) string {
-			return cfg.Logging.Level
+		LoggerLevel: func(appConfig *config.Config) string {
+			return appConfig.Logging.Level
 		},
 		StartupMessage:    "Hololive Admin API starting...",
 		BuildTimeout:      constants.AppTimeout.Build,

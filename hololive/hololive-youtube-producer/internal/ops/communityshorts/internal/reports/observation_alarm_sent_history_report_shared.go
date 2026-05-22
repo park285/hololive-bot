@@ -102,7 +102,7 @@ func buildObservationAlarmSentHistorySummary(finalized observationAlarmSentHisto
 
 func collectObservationAlarmSentHistoryWithDefinition[Report any](
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options observationAlarmSentHistoryCollectOptions,
@@ -111,7 +111,7 @@ func collectObservationAlarmSentHistoryWithDefinition[Report any](
 ) (Report, error) {
 	return collectObservationAlarmSentHistoryReport(
 		ctx,
-		cfg,
+		appConfig,
 		logger,
 		now,
 		options,
@@ -124,7 +124,7 @@ func collectObservationAlarmSentHistoryWithDefinition[Report any](
 
 func collectObservationAlarmSentHistoryReport[Report any](
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options observationAlarmSentHistoryCollectOptions,
@@ -141,11 +141,11 @@ func collectObservationAlarmSentHistoryReport[Report any](
 	if err != nil {
 		return zero, fmt.Errorf("collect %s: %w", reportName, err)
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return zero, fmt.Errorf("collect %s: config is nil", reportName)
 	}
 
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, appConfig, logger)
 	if err != nil {
 		return zero, fmt.Errorf("collect %s: %w", reportName, err)
 	}

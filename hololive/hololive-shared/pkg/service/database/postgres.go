@@ -53,44 +53,44 @@ type PostgresConfig struct {
 }
 
 // hololive-shared/internal/dbx.Client를 사용하여 pgxpool + GORM 듀얼 구조를 제공한다.
-func NewPostgresService(ctx context.Context, cfg PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
-	dbxCfg := dbx.Config{
-		Host:          cfg.Host,
-		Port:          cfg.Port,
-		SocketPath:    cfg.SocketPath,
-		User:          cfg.User,
-		Password:      cfg.Password,
-		Name:          cfg.Database,
-		SSLMode:       cfg.SSLMode,
-		QueryExecMode: cfg.QueryExecMode,
+func NewPostgresService(ctx context.Context, config PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
+	dbxConfig := dbx.Config{
+		Host:          config.Host,
+		Port:          config.Port,
+		SocketPath:    config.SocketPath,
+		User:          config.User,
+		Password:      config.Password,
+		Name:          config.Database,
+		SSLMode:       config.SSLMode,
+		QueryExecMode: config.QueryExecMode,
 	}
-	minConns := cfg.PoolMinConns
+	minConns := config.PoolMinConns
 	if minConns <= 0 {
 		minConns = constants.DatabaseConfig.MaxIdleConns
 	}
-	maxConns := cfg.PoolMaxConns
+	maxConns := config.PoolMaxConns
 	if maxConns <= 0 {
 		maxConns = constants.DatabaseConfig.MaxOpenConns
 	}
-	maxIdleConns := cfg.PoolMaxIdleConns
+	maxIdleConns := config.PoolMaxIdleConns
 	if maxIdleConns <= 0 {
 		maxIdleConns = constants.DatabaseConfig.MaxIdleConns
 	}
-	poolCfg := dbx.PoolConfig{
+	poolConfig := dbx.PoolConfig{
 		MaxConns:        maxConns,
 		MaxIdleConns:    maxIdleConns,
 		MinConns:        minConns,
 		ConnMaxLifetime: constants.DatabaseConfig.ConnMaxLifetime,
 	}
 
-	retryCfg := dbx.RetryConfig{
+	retryConfig := dbx.RetryConfig{
 		PingTimeout: constants.RequestTimeout.DatabasePing,
 	}
 
-	client, err := dbx.Open(ctx, dbxCfg, dbx.OpenOptions{
+	client, err := dbx.Open(ctx, dbxConfig, dbx.OpenOptions{
 		Logger: logger,
-		Pool:   poolCfg,
-		Retry:  retryCfg,
+		Pool:   poolConfig,
+		Retry:  retryConfig,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)

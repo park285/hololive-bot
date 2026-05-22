@@ -11,16 +11,16 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 )
 
-func BuildJobRunGuardClaimer(cacheClient cache.Client, cfg config.ScraperActiveActiveConfig) (poller.JobClaimer, error) {
-	if !cfg.Enabled {
+func BuildJobRunGuardClaimer(cacheClient cache.Client, activeActiveConfig config.ScraperActiveActiveConfig) (poller.JobClaimer, error) {
+	if !activeActiveConfig.Enabled {
 		return nil, nil
 	}
 	if cacheClient == nil {
 		return nil, fmt.Errorf("active-active job run guard requires cache service")
 	}
 	guard := ingestionlease.NewJobRunGuard(cacheClient, ingestionlease.JobRunGuardConfig{
-		Namespace:  cfg.Namespace,
-		InstanceID: cfg.InstanceID,
+		Namespace:  activeActiveConfig.Namespace,
+		InstanceID: activeActiveConfig.InstanceID,
 	})
 	return jobRunGuardClaimer{guard: guard}, nil
 }

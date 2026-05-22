@@ -26,7 +26,7 @@ type AlarmYouTubeStackComponents struct {
 
 func InitAlarmYouTubeStack(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *ScraperHolodexProfileFoundation,
 	irisClient iris.Sender,
@@ -37,7 +37,7 @@ func InitAlarmYouTubeStack(
 
 	alarmMode, err := InitAlarmModeComponents(
 		ctx,
-		cfg,
+		appConfig,
 		infra,
 		foundation.HolodexService,
 		foundation.MemberServiceAdapter,
@@ -57,8 +57,8 @@ func InitAlarmYouTubeStack(
 	)
 	statsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
 	apiStack := sharedmodules.BuildYouTubeAPIStack(ctx, sharedmodules.YouTubeAPIStackParams{
-		YouTubeConfig:   cfg.YouTube,
-		ScraperConfig:   cfg.Scraper,
+		YouTubeConfig:   appConfig.YouTube,
+		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,
 		StatsRepository:       statsRepository,
 		SharedRateLimit: foundation.SharedRL,
@@ -71,8 +71,8 @@ func InitAlarmYouTubeStack(
 		YouTubeStack:   apiStack,
 		ActivityLogger: ProvideActivityLogger(logger),
 		SettingsService: sharedmodules.BuildSettingsService(
-			cfg.Notification.AdvanceMinutes,
-			cfg.Scraper.ProxyEnabled,
+			appConfig.Notification.AdvanceMinutes,
+			appConfig.Scraper.ProxyEnabled,
 			logger,
 		),
 	}, nil

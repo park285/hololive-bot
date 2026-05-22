@@ -135,7 +135,7 @@ func TestProvideTriggerHandler_ReturnsHandler(t *testing.T) {
 func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "token")
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Iris: config.IrisConfig{WebhookToken: "token"},
 		Webhook: config.WebhookConfig{
 			WorkerCount:    1,
@@ -146,7 +146,7 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 	}
 
 	handler, err := appbootstrap.BuildBotWebhookHandler(
-		cfg,
+		appConfig,
 		stubWebhookMessageHandler{},
 		botWebhookRuntimeDependencies{Cache: &cache.Service{}},
 		testBootstrapGuardLogger(),
@@ -156,11 +156,11 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 
 	options := reflect.ValueOf(handler).Elem().FieldByName("options")
 	require.True(t, options.IsValid(), "reflect: field 'options' not found on Handler")
-	assert.Equal(t, int64(cfg.Webhook.WorkerCount), options.FieldByName("WorkerCount").Int())
-	assert.Equal(t, int64(cfg.Webhook.QueueSize), options.FieldByName("QueueSize").Int())
-	assert.Equal(t, int64(cfg.Webhook.EnqueueTimeout), options.FieldByName("EnqueueTimeout").Int())
-	assert.Equal(t, int64(cfg.Webhook.HandlerTimeout), options.FieldByName("HandlerTimeout").Int())
-	assert.Equal(t, cfg.Webhook.RequireHTTP2, options.FieldByName("RequireHTTP2").Bool())
+	assert.Equal(t, int64(appConfig.Webhook.WorkerCount), options.FieldByName("WorkerCount").Int())
+	assert.Equal(t, int64(appConfig.Webhook.QueueSize), options.FieldByName("QueueSize").Int())
+	assert.Equal(t, int64(appConfig.Webhook.EnqueueTimeout), options.FieldByName("EnqueueTimeout").Int())
+	assert.Equal(t, int64(appConfig.Webhook.HandlerTimeout), options.FieldByName("HandlerTimeout").Int())
+	assert.Equal(t, appConfig.Webhook.RequireHTTP2, options.FieldByName("RequireHTTP2").Bool())
 
 	dedupField := reflect.ValueOf(handler).Elem().FieldByName("dedup")
 	require.True(t, dedupField.IsValid(), "reflect: field 'dedup' not found on Handler")

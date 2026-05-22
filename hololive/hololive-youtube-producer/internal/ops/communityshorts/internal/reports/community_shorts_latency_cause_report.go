@@ -142,14 +142,14 @@ type communityShortsLatencyCauseRows struct {
 
 func CollectCommunityShortsLatencyCauseReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	specs []CommunityShortsLatencyPeriodSpec,
 ) (CommunityShortsLatencyCauseReport, error) {
 	return CollectCommunityShortsLatencyCauseReportWithOptions(
 		ctx,
-		cfg,
+		appConfig,
 		logger,
 		now,
 		CommunityShortsLatencyCauseCollectOptions{PeriodSpecs: specs},
@@ -158,7 +158,7 @@ func CollectCommunityShortsLatencyCauseReport(
 
 func CollectCommunityShortsLatencyCauseReportWithOptions(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityShortsLatencyCauseCollectOptions,
@@ -166,7 +166,7 @@ func CollectCommunityShortsLatencyCauseReportWithOptions(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: config is nil")
 	}
 	if logger == nil {
@@ -183,7 +183,7 @@ func CollectCommunityShortsLatencyCauseReportWithOptions(
 		return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: %w", err)
 	}
 
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, appConfig, logger)
 	if err != nil {
 		return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: %w", err)
 	}

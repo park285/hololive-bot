@@ -86,7 +86,7 @@ type Dispatcher struct {
 	sender    delivery.MessageSender
 	renderer  *template.Renderer
 	logger    *slog.Logger
-	cfg       Config
+	config       Config
 	delivery  *DeliveryRepository
 	telemetry *DeliveryTelemetryRepository
 	formatter *MessageFormatter
@@ -98,13 +98,13 @@ type Dispatcher struct {
 	onCleanup       func()
 }
 
-func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
+func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, config Config) *Dispatcher {
 	initOutboxMetrics()
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	cfg = normalizeDispatcherConfig(cfg)
+	config = normalizeDispatcherConfig(config)
 
 	var telemetryRepository *DeliveryTelemetryRepository
 	if db != nil {
@@ -117,7 +117,7 @@ func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.Messag
 		sender:    sender,
 		renderer:  renderer,
 		logger:    logger,
-		cfg:       cfg,
+		config:       config,
 		delivery:  NewDeliveryRepository(db, logger),
 		telemetry: telemetryRepository,
 		formatter: &MessageFormatter{
@@ -128,60 +128,60 @@ func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.Messag
 	}
 }
 
-func normalizeDispatcherConfig(cfg Config) Config {
+func normalizeDispatcherConfig(config Config) Config {
 	defaults := DefaultConfig()
-	cfg = normalizeDispatcherCoreConfig(cfg, defaults)
-	cfg = normalizeDispatcherDeliveryConfig(cfg, defaults)
-	cfg = normalizeDispatcherTelemetryConfig(cfg, defaults)
-	return cfg
+	config = normalizeDispatcherCoreConfig(config, defaults)
+	config = normalizeDispatcherDeliveryConfig(config, defaults)
+	config = normalizeDispatcherTelemetryConfig(config, defaults)
+	return config
 }
 
-func normalizeDispatcherCoreConfig(cfg Config, defaults Config) Config {
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = defaults.BatchSize
+func normalizeDispatcherCoreConfig(config Config, defaults Config) Config {
+	if config.BatchSize <= 0 {
+		config.BatchSize = defaults.BatchSize
 	}
-	if cfg.LockTimeout <= 0 {
-		cfg.LockTimeout = defaults.LockTimeout
+	if config.LockTimeout <= 0 {
+		config.LockTimeout = defaults.LockTimeout
 	}
-	if cfg.PollInterval <= 0 {
-		cfg.PollInterval = defaults.PollInterval
+	if config.PollInterval <= 0 {
+		config.PollInterval = defaults.PollInterval
 	}
-	if cfg.AggregateSyncInterval <= 0 {
-		cfg.AggregateSyncInterval = defaults.AggregateSyncInterval
+	if config.AggregateSyncInterval <= 0 {
+		config.AggregateSyncInterval = defaults.AggregateSyncInterval
 	}
-	return cfg
+	return config
 }
 
-func normalizeDispatcherDeliveryConfig(cfg Config, defaults Config) Config {
-	if cfg.DeliveryParallelism <= 0 {
-		cfg.DeliveryParallelism = defaults.DeliveryParallelism
+func normalizeDispatcherDeliveryConfig(config Config, defaults Config) Config {
+	if config.DeliveryParallelism <= 0 {
+		config.DeliveryParallelism = defaults.DeliveryParallelism
 	}
-	if cfg.DeliverySendTimeout <= 0 {
-		cfg.DeliverySendTimeout = defaults.DeliverySendTimeout
+	if config.DeliverySendTimeout <= 0 {
+		config.DeliverySendTimeout = defaults.DeliverySendTimeout
 	}
-	if cfg.SubscriberLookupParallelism <= 0 {
-		cfg.SubscriberLookupParallelism = defaults.SubscriberLookupParallelism
+	if config.SubscriberLookupParallelism <= 0 {
+		config.SubscriberLookupParallelism = defaults.SubscriberLookupParallelism
 	}
-	return cfg
+	return config
 }
 
-func normalizeDispatcherTelemetryConfig(cfg Config, defaults Config) Config {
-	if cfg.TelemetryBackfillBatch <= 0 {
-		cfg.TelemetryBackfillBatch = defaults.TelemetryBackfillBatch
+func normalizeDispatcherTelemetryConfig(config Config, defaults Config) Config {
+	if config.TelemetryBackfillBatch <= 0 {
+		config.TelemetryBackfillBatch = defaults.TelemetryBackfillBatch
 	}
-	if cfg.TelemetryPollInterval <= 0 {
-		cfg.TelemetryPollInterval = defaults.TelemetryPollInterval
+	if config.TelemetryPollInterval <= 0 {
+		config.TelemetryPollInterval = defaults.TelemetryPollInterval
 	}
-	if cfg.TelemetryFlushBatch <= 0 {
-		cfg.TelemetryFlushBatch = defaults.TelemetryFlushBatch
+	if config.TelemetryFlushBatch <= 0 {
+		config.TelemetryFlushBatch = defaults.TelemetryFlushBatch
 	}
-	if cfg.TelemetryRetryBackoff <= 0 {
-		cfg.TelemetryRetryBackoff = defaults.TelemetryRetryBackoff
+	if config.TelemetryRetryBackoff <= 0 {
+		config.TelemetryRetryBackoff = defaults.TelemetryRetryBackoff
 	}
-	if cfg.TelemetryRetention <= 0 {
-		cfg.TelemetryRetention = defaults.TelemetryRetention
+	if config.TelemetryRetention <= 0 {
+		config.TelemetryRetention = defaults.TelemetryRetention
 	}
-	return cfg
+	return config
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
@@ -203,14 +203,14 @@ func (d *Dispatcher) Start(ctx context.Context) {
 	if d.telemetry != nil {
 		go d.telemetryLoop(ctx)
 	}
-	if d.cfg.CleanupEnabled {
+	if d.config.CleanupEnabled {
 		go d.cleanupLoop(ctx)
 	}
 }
 
 func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
 	d.aggregateSyncOnce(ctx)
-	_ = loop.RunTickerLoop(ctx, d.cfg.AggregateSyncInterval, func(context.Context) error {
+	_ = loop.RunTickerLoop(ctx, d.config.AggregateSyncInterval, func(context.Context) error {
 		d.aggregateSyncOnce(ctx)
 		return nil
 	})
@@ -226,14 +226,14 @@ func (d *Dispatcher) aggregateSyncOnce(ctx context.Context) {
 // run: 메인 폴링 루프
 func (d *Dispatcher) run(ctx context.Context) {
 	d.logger.Info("Outbox dispatcher started",
-		slog.Duration("poll_interval", d.cfg.PollInterval),
-		slog.Int("batch_size", d.cfg.BatchSize),
-		slog.Duration("delivery_send_timeout", d.cfg.DeliverySendTimeout),
-		slog.Int("delivery_parallelism", d.cfg.DeliveryParallelism),
+		slog.Duration("poll_interval", d.config.PollInterval),
+		slog.Int("batch_size", d.config.BatchSize),
+		slog.Duration("delivery_send_timeout", d.config.DeliverySendTimeout),
+		slog.Int("delivery_parallelism", d.config.DeliveryParallelism),
 		slog.Int("subscriber_lookup_parallelism", d.subscriberLookupParallelism()))
 
 	d.processOnce(ctx)
-	_ = loop.RunTickerLoop(ctx, d.cfg.PollInterval, func(context.Context) error {
+	_ = loop.RunTickerLoop(ctx, d.config.PollInterval, func(context.Context) error {
 		d.processOnce(ctx)
 		return nil
 	})
@@ -301,7 +301,7 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 	}
 
 	now := time.Now().UTC()
-	outboxCutoff := now.Add(-d.cfg.CleanupAfter)
+	outboxCutoff := now.Add(-d.config.CleanupAfter)
 
 	result := d.db.WithContext(ctx).
 		Where("status IN (?, ?) AND COALESCE(sent_at, created_at) < ?", domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff).
@@ -316,11 +316,11 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 		d.logger.Info("Cleaned up old outbox items", slog.Int64("deleted", result.RowsAffected))
 	}
 
-	if d.telemetry == nil || d.cfg.TelemetryRetention <= 0 {
+	if d.telemetry == nil || d.config.TelemetryRetention <= 0 {
 		return
 	}
 
-	telemetryCutoff := now.Add(-d.cfg.TelemetryRetention)
+	telemetryCutoff := now.Add(-d.config.TelemetryRetention)
 	deletedTelemetry, err := d.telemetry.DeleteLoggedBefore(ctx, telemetryCutoff)
 	if err != nil {
 		d.logger.Warn("Failed to cleanup old delivery telemetry", slog.Any("error", err))
@@ -330,7 +330,7 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 	if deletedTelemetry > 0 {
 		d.logger.Info("Cleaned up old delivery telemetry",
 			slog.Int64("deleted", deletedTelemetry),
-			slog.Duration("retention", d.cfg.TelemetryRetention))
+			slog.Duration("retention", d.config.TelemetryRetention))
 	}
 }
 

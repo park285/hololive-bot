@@ -51,41 +51,41 @@ type Provider struct {
 	tracerProvider *sdktrace.TracerProvider
 }
 
-// cfg.Enabled가 false면 no-op Provider를 반환합니다.
-func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
-	if !cfg.Enabled {
+// config.Enabled가 false면 no-op Provider를 반환합니다.
+func NewProvider(ctx context.Context, config Config) (*Provider, error) {
+	if !config.Enabled {
 		return &Provider{}, nil
 	}
 
-	exporter, err := otlptracegrpc.New(ctx, buildOTLPExporterOptions(cfg)...)
+	exporter, err := otlptracegrpc.New(ctx, buildOTLPExporterOptions(config)...)
 	if err != nil {
 		return nil, fmt.Errorf("create exporter: %w", err)
 	}
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(buildResource(cfg)),
-		sdktrace.WithSampler(buildSampler(cfg)),
+		sdktrace.WithResource(buildResource(config)),
+		sdktrace.WithSampler(buildSampler(config)),
 	)
 	installGlobalProvider(tp)
 
 	return &Provider{tracerProvider: tp}, nil
 }
 
-func buildResource(cfg Config) *resource.Resource {
+func buildResource(config Config) *resource.Resource {
 	return resource.NewWithAttributes(
 		semconv.SchemaURL,
-		semconv.ServiceName(cfg.ServiceName),
-		semconv.ServiceVersion(cfg.ServiceVersion),
-		semconv.DeploymentEnvironment(cfg.Environment),
+		semconv.ServiceName(config.ServiceName),
+		semconv.ServiceVersion(config.ServiceVersion),
+		semconv.DeploymentEnvironment(config.Environment),
 	)
 }
 
-func buildOTLPExporterOptions(cfg Config) []otlptracegrpc.Option {
+func buildOTLPExporterOptions(config Config) []otlptracegrpc.Option {
 	opts := []otlptracegrpc.Option{
-		otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint),
+		otlptracegrpc.WithEndpoint(config.OTLPEndpoint),
 	}
-	if cfg.OTLPInsecure {
+	if config.OTLPInsecure {
 		opts = append(opts,
 			otlptracegrpc.WithDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
 		)
@@ -93,14 +93,14 @@ func buildOTLPExporterOptions(cfg Config) []otlptracegrpc.Option {
 	return opts
 }
 
-func buildSampler(cfg Config) sdktrace.Sampler {
+func buildSampler(config Config) sdktrace.Sampler {
 	var rootSampler sdktrace.Sampler
-	if cfg.SampleRate >= 1.0 {
+	if config.SampleRate >= 1.0 {
 		rootSampler = sdktrace.AlwaysSample()
-	} else if cfg.SampleRate <= 0 {
+	} else if config.SampleRate <= 0 {
 		rootSampler = sdktrace.NeverSample()
 	} else {
-		rootSampler = sdktrace.TraceIDRatioBased(cfg.SampleRate)
+		rootSampler = sdktrace.TraceIDRatioBased(config.SampleRate)
 	}
 	return sdktrace.ParentBased(rootSampler)
 }

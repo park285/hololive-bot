@@ -18,21 +18,21 @@ import (
 )
 
 func TestDefaultConfig(t *testing.T) {
-	cfg := DefaultConfig()
-	if cfg.Enabled {
+	config := DefaultConfig()
+	if config.Enabled {
 		t.Error("default config should be disabled")
 	}
-	if cfg.SampleRate != 1.0 {
-		t.Errorf("expected sample rate 1.0, got %f", cfg.SampleRate)
+	if config.SampleRate != 1.0 {
+		t.Errorf("expected sample rate 1.0, got %f", config.SampleRate)
 	}
-	if !cfg.OTLPInsecure {
+	if !config.OTLPInsecure {
 		t.Error("default should be insecure")
 	}
 }
 
 func TestNewProvider_Disabled(t *testing.T) {
-	cfg := Config{Enabled: false}
-	provider, err := NewProvider(context.Background(), cfg)
+	config := Config{Enabled: false}
+	provider, err := NewProvider(context.Background(), config)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,13 +62,13 @@ func TestProvider_IsEnabled(t *testing.T) {
 }
 
 func TestBuildResource_PopulatesServiceAttrs(t *testing.T) {
-	cfg := Config{
+	config := Config{
 		ServiceName:    "hololive-test",
 		ServiceVersion: "1.2.3",
 		Environment:    "test",
 	}
 
-	res := buildResource(cfg)
+	res := buildResource(config)
 	if res.SchemaURL() != semconv.SchemaURL {
 		t.Fatalf("expected schema URL %q, got %q", semconv.SchemaURL, res.SchemaURL())
 	}
@@ -81,9 +81,9 @@ func TestBuildResource_PopulatesServiceAttrs(t *testing.T) {
 		got[kv.Key] = kv.Value.AsString()
 	}
 
-	assertAttributeValue(t, got, semconv.ServiceNameKey, cfg.ServiceName)
-	assertAttributeValue(t, got, semconv.ServiceVersionKey, cfg.ServiceVersion)
-	assertAttributeValue(t, got, semconv.DeploymentEnvironmentKey, cfg.Environment)
+	assertAttributeValue(t, got, semconv.ServiceNameKey, config.ServiceName)
+	assertAttributeValue(t, got, semconv.ServiceVersionKey, config.ServiceVersion)
+	assertAttributeValue(t, got, semconv.DeploymentEnvironmentKey, config.Environment)
 }
 
 func TestBuildSampler_AlwaysSample(t *testing.T) {
@@ -163,34 +163,34 @@ func TestBuildOTLPExporterOptions_Endpoint(t *testing.T) {
 }
 
 func TestBuildOTLPExporterOptions_InsecureTrue(t *testing.T) {
-	cfg := Config{
+	config := Config{
 		OTLPEndpoint: "otel-collector:4317",
 		OTLPInsecure: true,
 	}
-	opts := buildOTLPExporterOptions(cfg)
+	opts := buildOTLPExporterOptions(config)
 
 	if len(opts) != 2 {
 		t.Fatalf("expected endpoint and insecure dial options, got %d options", len(opts))
 	}
-	if got := otlpClientEndpoint(t, opts); got != cfg.OTLPEndpoint {
-		t.Fatalf("expected client endpoint %q, got %q", cfg.OTLPEndpoint, got)
+	if got := otlpClientEndpoint(t, opts); got != config.OTLPEndpoint {
+		t.Fatalf("expected client endpoint %q, got %q", config.OTLPEndpoint, got)
 	}
 	assertOptionConfigType(t, opts[0], "*otlpconfig.genericOption")
 	assertOptionConfigType(t, opts[1], "*otlpconfig.grpcOption")
 }
 
 func TestBuildOTLPExporterOptions_InsecureFalse(t *testing.T) {
-	cfg := Config{
+	config := Config{
 		OTLPEndpoint: "otel-collector:4317",
 		OTLPInsecure: false,
 	}
-	opts := buildOTLPExporterOptions(cfg)
+	opts := buildOTLPExporterOptions(config)
 
 	if len(opts) != 1 {
 		t.Fatalf("expected insecure=false to keep only endpoint option, got %d options", len(opts))
 	}
-	if got := otlpClientEndpoint(t, opts); got != cfg.OTLPEndpoint {
-		t.Fatalf("expected client endpoint %q, got %q", cfg.OTLPEndpoint, got)
+	if got := otlpClientEndpoint(t, opts); got != config.OTLPEndpoint {
+		t.Fatalf("expected client endpoint %q, got %q", config.OTLPEndpoint, got)
 	}
 	assertOptionConfigType(t, opts[0], "*otlpconfig.genericOption")
 }

@@ -41,7 +41,7 @@ import (
 )
 
 func buildBotDependencyModules(
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	alarmMode *appbootstrap.AlarmModeComponents,
 	holodexService *holodex.Service,
@@ -61,7 +61,7 @@ func buildBotDependencyModules(
 	logger *slog.Logger,
 ) appbootstrap.BotDependencyModules {
 	return appbootstrap.BuildBotDependencyModules(
-		cfg,
+		appConfig,
 		infra,
 		alarmMode,
 		holodexService,

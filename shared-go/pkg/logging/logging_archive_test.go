@@ -16,7 +16,7 @@ func TestEnableFileLogging_DoesNotCreateCombinedLog(t *testing.T) {
 	t.Parallel()
 
 	logDir := t.TempDir()
-	cfg := Config{
+	config := Config{
 		Level:      "info",
 		Dir:        logDir,
 		MaxSizeMB:  10,
@@ -24,7 +24,7 @@ func TestEnableFileLogging_DoesNotCreateCombinedLog(t *testing.T) {
 		MaxAgeDays: 7,
 	}
 
-	if _, err := EnableFileLogging(cfg, "service.log"); err != nil {
+	if _, err := EnableFileLogging(config, "service.log"); err != nil {
 		t.Fatalf("EnableFileLogging() error = %v", err)
 	}
 

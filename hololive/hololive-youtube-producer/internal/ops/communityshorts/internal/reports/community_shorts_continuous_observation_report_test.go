@@ -552,7 +552,7 @@ func TestCollectCommunityShortsContinuousObservationArtifactsCollectsFinalizedDa
 				require.Equal(t, options.ObservationRuntimeName, expectedObservation.RuntimeName)
 				return expectedObservation, nil
 			},
-			collectTargetBaseline: func(ctx context.Context, session *communityShortsOpsSession, cfg *config.Config, logger *slog.Logger, now time.Time) (communityshorts.TargetBaseline, error) {
+			collectTargetBaseline: func(ctx context.Context, session *communityShortsOpsSession, appConfig *config.Config, logger *slog.Logger, now time.Time) (communityshorts.TargetBaseline, error) {
 				callLog = append(callLog, "baseline")
 				return expectedBaseline, nil
 			},
@@ -652,7 +652,7 @@ func TestCollectCommunityShortsContinuousObservationArtifactsSkipsDatasetUntilFi
 					DeploymentCompletedAt: cutoverAt,
 				}, nil
 			},
-			collectTargetBaseline: func(ctx context.Context, session *communityShortsOpsSession, cfg *config.Config, logger *slog.Logger, now time.Time) (communityshorts.TargetBaseline, error) {
+			collectTargetBaseline: func(ctx context.Context, session *communityShortsOpsSession, appConfig *config.Config, logger *slog.Logger, now time.Time) (communityshorts.TargetBaseline, error) {
 				return communityshorts.TargetBaseline{}, nil
 			},
 			collectSendCounts: func(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsSendCountQuery, now time.Time) (CommunityShortsSendCountReport, error) {

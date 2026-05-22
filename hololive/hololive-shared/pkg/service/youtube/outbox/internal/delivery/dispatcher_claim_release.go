@@ -28,8 +28,8 @@ func (d *Dispatcher) releaseDeliveryClaims(ctx context.Context, claims []deliver
 
 func (d *Dispatcher) deliveryClaimTimeout() time.Duration {
 	claimTimeout := maxCommunityShortsClaimHold
-	if d != nil && d.cfg.LockTimeout > 0 && d.cfg.LockTimeout < claimTimeout {
-		claimTimeout = d.cfg.LockTimeout
+	if d != nil && d.config.LockTimeout > 0 && d.config.LockTimeout < claimTimeout {
+		claimTimeout = d.config.LockTimeout
 	}
 	if claimTimeout <= 0 {
 		return maxCommunityShortsClaimHold

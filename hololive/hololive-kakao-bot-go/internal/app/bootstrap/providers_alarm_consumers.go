@@ -50,12 +50,12 @@ func ProvideAlarmRepository(postgres database.Client, logger *slog.Logger) *alar
 }
 
 func ProvideAlarmWorkerPool() (*workerpool.Pool, error) {
-	cfg := workerpool.DefaultConfig()
+	config := workerpool.DefaultConfig()
 
 	const alarmWorkerPoolSize = 10
-	cfg.Size = alarmWorkerPoolSize
+	config.Size = alarmWorkerPoolSize
 
-	pool, err := workerpool.New(cfg)
+	pool, err := workerpool.New(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create alarm worker pool: %w", err)
 	}

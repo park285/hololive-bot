@@ -14,7 +14,7 @@ import (
 type BudgetSummary = youtubeProducerBudgetSummary
 
 func BuildComponents(
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	postgresService database.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -25,7 +25,7 @@ func BuildComponents(
 	logger *slog.Logger,
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
 	return BuildComponentsWithJobClaimer(
-		scraperCfg,
+		scraperConfig,
 		nil,
 		postgresService,
 		notificationChannelIDs,
@@ -39,7 +39,7 @@ func BuildComponents(
 }
 
 func BuildComponentsWithJobClaimer(
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	jobClaimer poller.JobClaimer,
 	postgresService database.Client,
 	notificationChannelIDs []string,
@@ -51,7 +51,7 @@ func BuildComponentsWithJobClaimer(
 	logger *slog.Logger,
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
 	return buildYouTubeProducerComponents(
-		scraperCfg,
+		scraperConfig,
 		jobClaimer,
 		postgresService,
 		notificationChannelIDs,
@@ -65,16 +65,16 @@ func BuildComponentsWithJobClaimer(
 }
 
 func BuildSharedClient(
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	cacheClient cache.Client,
 	sharedRL *scraper.RateLimiter,
 ) *scraper.Client {
-	return buildSharedYouTubeProducerClient(scraperCfg, cacheClient, sharedRL)
+	return buildSharedYouTubeProducerClient(scraperConfig, cacheClient, sharedRL)
 }
 
 func BuildRegistrations(
 	postgres database.Client,
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	sharedRL *scraper.RateLimiter,
 	cacheClient cache.Client,
 	routeDecider poller.NotificationRouteDecider,
@@ -83,7 +83,7 @@ func BuildRegistrations(
 ) []providers.ChannelPollerRegistration {
 	return buildYouTubeProducerChannelPollerRegistrations(
 		postgres,
-		scraperCfg,
+		scraperConfig,
 		sharedRL,
 		cacheClient,
 		routeDecider,
@@ -94,7 +94,7 @@ func BuildRegistrations(
 
 func BuildRegistrationsWithClient(
 	postgres database.Client,
-	scraperCfg config.ScraperConfig,
+	scraperConfig config.ScraperConfig,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
 	routeDecider poller.NotificationRouteDecider,
@@ -103,7 +103,7 @@ func BuildRegistrationsWithClient(
 ) []providers.ChannelPollerRegistration {
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		postgres,
-		scraperCfg,
+		scraperConfig,
 		scraperClient,
 		liveStatusProvider,
 		routeDecider,

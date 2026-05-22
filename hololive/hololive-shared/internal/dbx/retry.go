@@ -30,7 +30,7 @@ import (
 // 스키마 마이그레이션이 완료되기 전 앱이 시작되는 Race Condition 방어용.
 func OpenWithRetry(
 	ctx context.Context,
-	cfg Config,
+	config Config,
 	opt OpenOptions,
 ) (*Client, error) {
 	retry := normalizeOpenRetryConfig(opt.Retry)
@@ -38,7 +38,7 @@ func OpenWithRetry(
 
 	var lastErr error
 	for attempt := range retry.MaxAttempts {
-		client, err := Open(ctx, cfg, opt)
+		client, err := Open(ctx, config, opt)
 		if err == nil {
 			logOpenRetrySuccess(logger, attempt)
 			return client, nil

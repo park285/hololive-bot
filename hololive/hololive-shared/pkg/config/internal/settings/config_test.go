@@ -73,82 +73,82 @@ func TestResolveHolodexAPIKey(t *testing.T) {
 
 func TestKakaoConfig_IsRoomAllowed(t *testing.T) {
 	t.Run("ACL disabled allows all", func(t *testing.T) {
-		cfg := KakaoConfig{
+		config := KakaoConfig{
 			Rooms:      []string{"room-a"},
 			ACLEnabled: false,
 		}
 
-		if !cfg.IsRoomAllowed("other-room", "999") {
+		if !config.IsRoomAllowed("other-room", "999") {
 			t.Fatalf("expected room to be allowed when ACL is disabled")
 		}
 	})
 
 	t.Run("Matches by chat ID only", func(t *testing.T) {
-		cfg := KakaoConfig{
+		config := KakaoConfig{
 			Rooms:      []string{"1234567890"},
 			ACLEnabled: true,
 		}
 
-		if !cfg.IsRoomAllowed("테스트방", "1234567890") {
+		if !config.IsRoomAllowed("테스트방", "1234567890") {
 			t.Fatalf("expected room to be allowed by chat ID")
 		}
 
-		if cfg.IsRoomAllowed("1234567890", "other-id") {
+		if config.IsRoomAllowed("1234567890", "other-id") {
 			t.Fatalf("expected room to be denied - only chatID should be checked")
 		}
 	})
 
 	t.Run("Empty chatID denies", func(t *testing.T) {
-		cfg := KakaoConfig{
+		config := KakaoConfig{
 			Rooms:      []string{"테스트방"},
 			ACLEnabled: true,
 		}
 
-		if cfg.IsRoomAllowed("테스트방", "") {
+		if config.IsRoomAllowed("테스트방", "") {
 			t.Fatalf("expected room to be denied when chatID is empty")
 		}
 	})
 
 	t.Run("No match denies", func(t *testing.T) {
-		cfg := KakaoConfig{
+		config := KakaoConfig{
 			Rooms:      []string{"allowed-room"},
 			ACLEnabled: true,
 		}
 
-		if cfg.IsRoomAllowed("other-room", "999") {
+		if config.IsRoomAllowed("other-room", "999") {
 			t.Fatalf("expected room to be denied when no match exists")
 		}
 	})
 }
 
 func TestKakaoConfig_AddRemoveRoom(t *testing.T) {
-	cfg := KakaoConfig{
+	config := KakaoConfig{
 		Rooms:      []string{"123"},
 		ACLEnabled: true,
 	}
 
-	if !cfg.AddRoom(" 456 ") {
+	if !config.AddRoom(" 456 ") {
 		t.Fatalf("expected AddRoom to succeed")
 	}
-	if cfg.AddRoom("456") {
+	if config.AddRoom("456") {
 		t.Fatalf("expected duplicate AddRoom to fail")
 	}
 
-	if !cfg.RemoveRoom(" 456 ") {
+	if !config.RemoveRoom(" 456 ") {
 		t.Fatalf("expected RemoveRoom to succeed")
 	}
-	if cfg.RemoveRoom("456") {
+	if config.RemoveRoom("456") {
 		t.Fatalf("expected RemoveRoom to fail for non-existing room")
 	}
 }
 
 func TestKakaoConfig_SnapshotACL_ReturnsCopy(t *testing.T) {
-	cfg := KakaoConfig{
+	config := KakaoConfig{
 		Rooms:      []string{"a"},
 		ACLEnabled: true,
 	}
 
-	enabled, _, rooms := cfg.SnapshotACL()
+	enabled, _, rooms := config.SnapshotACL()
 	if !enabled {
 		t.Fatalf("expected enabled to be true")
 	}
@@ -157,7 +157,7 @@ func TestKakaoConfig_SnapshotACL_ReturnsCopy(t *testing.T) {
 	}
 
 	rooms[0] = "mutated"
-	_, _, rooms2 := cfg.SnapshotACL()
+	_, _, rooms2 := config.SnapshotACL()
 	if rooms2[0] != "a" {
 		t.Fatalf("expected SnapshotACL to return a copy, got: %v", rooms2)
 	}
@@ -168,16 +168,16 @@ func TestLoad_UsesSeparateIrisTokens(t *testing.T) {
 	t.Setenv("IRIS_WEBHOOK_TOKEN", " webhook-token ")
 	t.Setenv("IRIS_BOT_TOKEN", " bot-token ")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Iris.WebhookToken != "webhook-token" {
-		t.Fatalf("WebhookToken = %q, want %q", cfg.Iris.WebhookToken, "webhook-token")
+	if config.Iris.WebhookToken != "webhook-token" {
+		t.Fatalf("WebhookToken = %q, want %q", config.Iris.WebhookToken, "webhook-token")
 	}
-	if cfg.Iris.BotToken != "bot-token" {
-		t.Fatalf("BotToken = %q, want %q", cfg.Iris.BotToken, "bot-token")
+	if config.Iris.BotToken != "bot-token" {
+		t.Fatalf("BotToken = %q, want %q", config.Iris.BotToken, "bot-token")
 	}
 }
 
@@ -190,27 +190,27 @@ func TestLoad_ServerHTTP3Config(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if got, want := cfg.Server.HTTPTransports, []string{"h2c", "h3"}; !reflect.DeepEqual(got, want) {
+	if got, want := config.Server.HTTPTransports, []string{"h2c", "h3"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Server.HTTPTransports = %#v, want %#v", got, want)
 	}
-	if cfg.Server.H2CAddr != ":30001" {
-		t.Fatalf("Server.H2CAddr = %q, want :30001", cfg.Server.H2CAddr)
+	if config.Server.H2CAddr != ":30001" {
+		t.Fatalf("Server.H2CAddr = %q, want :30001", config.Server.H2CAddr)
 	}
-	if cfg.Server.H3Addr != ":30001" {
-		t.Fatalf("Server.H3Addr = %q, want :30001", cfg.Server.H3Addr)
+	if config.Server.H3Addr != ":30001" {
+		t.Fatalf("Server.H3Addr = %q, want :30001", config.Server.H3Addr)
 	}
-	if cfg.Server.H3CertFile != "/run/hololive-bot/certs/hololive-h3.crt" {
-		t.Fatalf("Server.H3CertFile = %q", cfg.Server.H3CertFile)
+	if config.Server.H3CertFile != "/run/hololive-bot/certs/hololive-h3.crt" {
+		t.Fatalf("Server.H3CertFile = %q", config.Server.H3CertFile)
 	}
-	if cfg.Server.H3KeyFile != "/run/hololive-bot/certs/hololive-h3.key" {
-		t.Fatalf("Server.H3KeyFile = %q", cfg.Server.H3KeyFile)
+	if config.Server.H3KeyFile != "/run/hololive-bot/certs/hololive-h3.key" {
+		t.Fatalf("Server.H3KeyFile = %q", config.Server.H3KeyFile)
 	}
-	if !cfg.ServerTransportEnabled("h3") {
+	if !config.ServerTransportEnabled("h3") {
 		t.Fatal("ServerTransportEnabled(h3) = false, want true")
 	}
 }
@@ -262,11 +262,11 @@ func TestLoad_ServerHTTPTransportsRejectClientOnlyTransportValue(t *testing.T) {
 func TestLoad_CommunityShortsBigBangFlagDefaultsFalse(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Ingestion.CommunityShortsBigBangEnabled {
+	if config.Ingestion.CommunityShortsBigBangEnabled {
 		t.Fatal("Ingestion.CommunityShortsBigBangEnabled = true, want false")
 	}
 }
@@ -274,12 +274,12 @@ func TestLoad_CommunityShortsBigBangFlagDefaultsFalse(t *testing.T) {
 func TestLoad_CommunityShortsBigBangCutoverDefaultsZero(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !cfg.Ingestion.CommunityShortsBigBangCutoverAt.IsZero() {
-		t.Fatalf("Ingestion.CommunityShortsBigBangCutoverAt = %s, want zero", cfg.Ingestion.CommunityShortsBigBangCutoverAt)
+	if !config.Ingestion.CommunityShortsBigBangCutoverAt.IsZero() {
+		t.Fatalf("Ingestion.CommunityShortsBigBangCutoverAt = %s, want zero", config.Ingestion.CommunityShortsBigBangCutoverAt)
 	}
 }
 
@@ -287,11 +287,11 @@ func TestLoad_CommunityShortsBigBangFlagEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED", "true")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !cfg.Ingestion.CommunityShortsBigBangEnabled {
+	if !config.Ingestion.CommunityShortsBigBangEnabled {
 		t.Fatal("Ingestion.CommunityShortsBigBangEnabled = false, want true")
 	}
 }
@@ -300,14 +300,14 @@ func TestLoad_CommunityShortsBigBangCutoverEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "2026-04-10T01:11:12+09:00")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
 	want := time.Date(2026, 4, 9, 16, 11, 12, 0, time.UTC)
-	if !cfg.Ingestion.CommunityShortsBigBangCutoverAt.Equal(want) {
-		t.Fatalf("Ingestion.CommunityShortsBigBangCutoverAt = %s, want %s", cfg.Ingestion.CommunityShortsBigBangCutoverAt, want)
+	if !config.Ingestion.CommunityShortsBigBangCutoverAt.Equal(want) {
+		t.Fatalf("Ingestion.CommunityShortsBigBangCutoverAt = %s, want %s", config.Ingestion.CommunityShortsBigBangCutoverAt, want)
 	}
 }
 
@@ -327,12 +327,12 @@ func TestLoad_CommunityShortsBigBangCutoverRejectsInvalidRFC3339(t *testing.T) {
 func TestLoad_ScraperPollDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	assertScraperPoll(t, cfg.Scraper.Poll, ScraperPoll{
+	assertScraperPoll(t, config.Scraper.Poll, ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
 		Community: 15 * time.Minute,
@@ -349,12 +349,12 @@ func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_POLL_STATS_INTERVAL_SECONDS", "14400")
 	t.Setenv("SCRAPER_POLL_LIVE_INTERVAL_SECONDS", "180")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	assertScraperPoll(t, cfg.Scraper.Poll, ScraperPoll{
+	assertScraperPoll(t, config.Scraper.Poll, ScraperPoll{
 		Videos:    7 * time.Minute,
 		Shorts:    11 * time.Minute,
 		Community: 13 * time.Minute,
@@ -371,12 +371,12 @@ func TestLoad_ScraperPollLegacyEnvFallback(t *testing.T) {
 	t.Setenv("SCRAPER_STATS_SECONDS", "14400")
 	t.Setenv("SCRAPER_LIVE_SECONDS", "180")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	assertScraperPoll(t, cfg.Scraper.Poll, ScraperPoll{
+	assertScraperPoll(t, config.Scraper.Poll, ScraperPoll{
 		Videos:    7 * time.Minute,
 		Shorts:    11 * time.Minute,
 		Community: 13 * time.Minute,
@@ -388,12 +388,12 @@ func TestLoad_ScraperPollLegacyEnvFallback(t *testing.T) {
 func TestLoad_ScraperBackfillDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	backfill := cfg.Scraper.Backfill
+	backfill := config.Scraper.Backfill
 	if backfill.Enabled {
 		t.Fatal("Scraper.Backfill.Enabled = true, want false")
 	}
@@ -431,12 +431,12 @@ func TestLoad_ScraperBackfillEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", "180")
 	t.Setenv("SCRAPER_BACKFILL_TARGET_GROUP", " notification ")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	backfill := cfg.Scraper.Backfill
+	backfill := config.Scraper.Backfill
 	if !backfill.Enabled {
 		t.Fatal("Scraper.Backfill.Enabled = false, want true")
 	}
@@ -526,13 +526,13 @@ func TestLoad_ScraperWorkerCountEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_SCHEDULER_WORKER_COUNT", "6")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.WorkerCount != 6 {
-		t.Fatalf("Scraper.WorkerCount = %d, want %d", cfg.Scraper.WorkerCount, 6)
+	if config.Scraper.WorkerCount != 6 {
+		t.Fatalf("Scraper.WorkerCount = %d, want %d", config.Scraper.WorkerCount, 6)
 	}
 }
 
@@ -540,26 +540,26 @@ func TestLoad_ScraperWorkerCountLegacyEnvFallback(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_WORKER_COUNT", "6")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.WorkerCount != 6 {
-		t.Fatalf("Scraper.WorkerCount = %d, want %d", cfg.Scraper.WorkerCount, 6)
+	if config.Scraper.WorkerCount != 6 {
+		t.Fatalf("Scraper.WorkerCount = %d, want %d", config.Scraper.WorkerCount, 6)
 	}
 }
 
 func TestLoad_ScraperFetcherEngineDefault(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.FetcherEngine != ScraperFetcherEngineNetHTTP {
-		t.Fatalf("Scraper.FetcherEngine = %q, want %q", cfg.Scraper.FetcherEngine, ScraperFetcherEngineNetHTTP)
+	if config.Scraper.FetcherEngine != ScraperFetcherEngineNetHTTP {
+		t.Fatalf("Scraper.FetcherEngine = %q, want %q", config.Scraper.FetcherEngine, ScraperFetcherEngineNetHTTP)
 	}
 }
 
@@ -567,13 +567,13 @@ func TestLoad_ScraperFetcherEngineEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_FETCHER_ENGINE", "goscrapy")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.FetcherEngine != ScraperFetcherEngineGoScrapy {
-		t.Fatalf("Scraper.FetcherEngine = %q, want %q", cfg.Scraper.FetcherEngine, ScraperFetcherEngineGoScrapy)
+	if config.Scraper.FetcherEngine != ScraperFetcherEngineGoScrapy {
+		t.Fatalf("Scraper.FetcherEngine = %q, want %q", config.Scraper.FetcherEngine, ScraperFetcherEngineGoScrapy)
 	}
 }
 
@@ -606,24 +606,24 @@ func TestLoad_ScraperFetcherEngineRejectsBrowserSnapshot(t *testing.T) {
 func TestLoad_ScraperSnapshotAndChannelHealthDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.Snapshot.Enabled {
+	if config.Scraper.Snapshot.Enabled {
 		t.Fatal("Scraper.Snapshot.Enabled = true, want default false")
 	}
-	if !cfg.Scraper.ChannelHealth.Enabled {
+	if !config.Scraper.ChannelHealth.Enabled {
 		t.Fatal("Scraper.ChannelHealth.Enabled = false, want default true")
 	}
-	if cfg.Scraper.ChannelHealth.Enforce {
+	if config.Scraper.ChannelHealth.Enforce {
 		t.Fatal("Scraper.ChannelHealth.Enforce = true, want default false")
 	}
-	if cfg.Scraper.Snapshot.MaxBodyBytes != 512<<10 {
-		t.Fatalf("Scraper.Snapshot.MaxBodyBytes = %d, want %d", cfg.Scraper.Snapshot.MaxBodyBytes, 512<<10)
+	if config.Scraper.Snapshot.MaxBodyBytes != 512<<10 {
+		t.Fatalf("Scraper.Snapshot.MaxBodyBytes = %d, want %d", config.Scraper.Snapshot.MaxBodyBytes, 512<<10)
 	}
-	if cfg.Scraper.PollTiering.Enabled {
+	if config.Scraper.PollTiering.Enabled {
 		t.Fatal("Scraper.PollTiering.Enabled = true, want default false")
 	}
 }
@@ -641,36 +641,36 @@ func TestLoad_ScraperSnapshotAndChannelHealthEnvOverride(t *testing.T) {
 	t.Setenv("SCRAPER_BROWSER_DIAGNOSTIC_ENDPOINT", "http://browser:9222/snapshot")
 	t.Setenv("SCRAPER_POLL_TIERING_ENABLED", "true")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if !cfg.Scraper.Snapshot.Enabled {
+	if !config.Scraper.Snapshot.Enabled {
 		t.Fatal("Scraper.Snapshot.Enabled = false, want true")
 	}
-	if cfg.Scraper.Snapshot.Dir != "/tmp/snapshots" {
-		t.Fatalf("Scraper.Snapshot.Dir = %q", cfg.Scraper.Snapshot.Dir)
+	if config.Scraper.Snapshot.Dir != "/tmp/snapshots" {
+		t.Fatalf("Scraper.Snapshot.Dir = %q", config.Scraper.Snapshot.Dir)
 	}
-	if cfg.Scraper.Snapshot.MaxBodyBytes != 1024 {
-		t.Fatalf("Scraper.Snapshot.MaxBodyBytes = %d, want 1024", cfg.Scraper.Snapshot.MaxBodyBytes)
+	if config.Scraper.Snapshot.MaxBodyBytes != 1024 {
+		t.Fatalf("Scraper.Snapshot.MaxBodyBytes = %d, want 1024", config.Scraper.Snapshot.MaxBodyBytes)
 	}
-	if cfg.Scraper.Snapshot.MinInterval != time.Minute {
-		t.Fatalf("Scraper.Snapshot.MinInterval = %s, want 1m", cfg.Scraper.Snapshot.MinInterval)
+	if config.Scraper.Snapshot.MinInterval != time.Minute {
+		t.Fatalf("Scraper.Snapshot.MinInterval = %s, want 1m", config.Scraper.Snapshot.MinInterval)
 	}
-	if cfg.Scraper.ChannelHealth.Enabled {
+	if config.Scraper.ChannelHealth.Enabled {
 		t.Fatal("Scraper.ChannelHealth.Enabled = true, want false")
 	}
-	if !cfg.Scraper.ChannelHealth.Enforce {
+	if !config.Scraper.ChannelHealth.Enforce {
 		t.Fatal("Scraper.ChannelHealth.Enforce = false, want true")
 	}
-	if cfg.Scraper.ChannelHealth.ParserDriftBase != 2*time.Minute {
-		t.Fatalf("Scraper.ChannelHealth.ParserDriftBase = %s, want 2m", cfg.Scraper.ChannelHealth.ParserDriftBase)
+	if config.Scraper.ChannelHealth.ParserDriftBase != 2*time.Minute {
+		t.Fatalf("Scraper.ChannelHealth.ParserDriftBase = %s, want 2m", config.Scraper.ChannelHealth.ParserDriftBase)
 	}
-	if !cfg.Scraper.BrowserDiagnostic.Enabled {
+	if !config.Scraper.BrowserDiagnostic.Enabled {
 		t.Fatal("Scraper.BrowserDiagnostic.Enabled = false, want true")
 	}
-	if !cfg.Scraper.PollTiering.Enabled {
+	if !config.Scraper.PollTiering.Enabled {
 		t.Fatal("Scraper.PollTiering.Enabled = false, want true")
 	}
 }
@@ -678,34 +678,34 @@ func TestLoad_ScraperSnapshotAndChannelHealthEnvOverride(t *testing.T) {
 func TestLoad_ScraperPublishedAtResolverDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if !cfg.Scraper.PublishedAtResolver.Enabled {
+	if !config.Scraper.PublishedAtResolver.Enabled {
 		t.Fatal("Scraper.PublishedAtResolver.Enabled = false, want true")
 	}
-	if cfg.Scraper.PublishedAtResolver.Interval != 3*time.Minute {
-		t.Fatalf("Scraper.PublishedAtResolver.Interval = %s, want %s", cfg.Scraper.PublishedAtResolver.Interval, 3*time.Minute)
+	if config.Scraper.PublishedAtResolver.Interval != 3*time.Minute {
+		t.Fatalf("Scraper.PublishedAtResolver.Interval = %s, want %s", config.Scraper.PublishedAtResolver.Interval, 3*time.Minute)
 	}
-	if cfg.Scraper.PublishedAtResolver.BatchSize != 10 {
-		t.Fatalf("Scraper.PublishedAtResolver.BatchSize = %d, want %d", cfg.Scraper.PublishedAtResolver.BatchSize, 10)
+	if config.Scraper.PublishedAtResolver.BatchSize != 10 {
+		t.Fatalf("Scraper.PublishedAtResolver.BatchSize = %d, want %d", config.Scraper.PublishedAtResolver.BatchSize, 10)
 	}
-	if cfg.Scraper.PublishedAtResolver.MaxResolvePerRun != 1 {
-		t.Fatalf("Scraper.PublishedAtResolver.MaxResolvePerRun = %d, want %d", cfg.Scraper.PublishedAtResolver.MaxResolvePerRun, 1)
+	if config.Scraper.PublishedAtResolver.MaxResolvePerRun != 1 {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxResolvePerRun = %d, want %d", config.Scraper.PublishedAtResolver.MaxResolvePerRun, 1)
 	}
-	if cfg.Scraper.PublishedAtResolver.MaxRunDuration != 12*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", cfg.Scraper.PublishedAtResolver.MaxRunDuration, 12*time.Second)
+	if config.Scraper.PublishedAtResolver.MaxRunDuration != 12*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", config.Scraper.PublishedAtResolver.MaxRunDuration, 12*time.Second)
 	}
-	if cfg.Scraper.PublishedAtResolver.ResolveTimeout != 10*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.ResolveTimeout = %s, want %s", cfg.Scraper.PublishedAtResolver.ResolveTimeout, 10*time.Second)
+	if config.Scraper.PublishedAtResolver.ResolveTimeout != 10*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.ResolveTimeout = %s, want %s", config.Scraper.PublishedAtResolver.ResolveTimeout, 10*time.Second)
 	}
-	if cfg.Scraper.PublishedAtResolver.MinDetectedAge != 30*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.MinDetectedAge = %s, want %s", cfg.Scraper.PublishedAtResolver.MinDetectedAge, 30*time.Second)
+	if config.Scraper.PublishedAtResolver.MinDetectedAge != 30*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MinDetectedAge = %s, want %s", config.Scraper.PublishedAtResolver.MinDetectedAge, 30*time.Second)
 	}
-	if cfg.Scraper.PublishedAtResolver.FailureBackoffTTL != 5*time.Minute {
-		t.Fatalf("Scraper.PublishedAtResolver.FailureBackoffTTL = %s, want %s", cfg.Scraper.PublishedAtResolver.FailureBackoffTTL, 5*time.Minute)
+	if config.Scraper.PublishedAtResolver.FailureBackoffTTL != 5*time.Minute {
+		t.Fatalf("Scraper.PublishedAtResolver.FailureBackoffTTL = %s, want %s", config.Scraper.PublishedAtResolver.FailureBackoffTTL, 5*time.Minute)
 	}
 }
 
@@ -720,39 +720,39 @@ func TestLoad_ScraperPublishedAtResolverEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS", "35")
 	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS", "420")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.PublishedAtResolver.Enabled {
+	if config.Scraper.PublishedAtResolver.Enabled {
 		t.Fatal("Scraper.PublishedAtResolver.Enabled = true, want false")
 	}
-	if cfg.Scraper.PublishedAtResolver.Interval != 21*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.Interval = %s, want %s", cfg.Scraper.PublishedAtResolver.Interval, 21*time.Second)
+	if config.Scraper.PublishedAtResolver.Interval != 21*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.Interval = %s, want %s", config.Scraper.PublishedAtResolver.Interval, 21*time.Second)
 	}
-	if cfg.Scraper.PublishedAtResolver.BatchSize != 7 {
-		t.Fatalf("Scraper.PublishedAtResolver.BatchSize = %d, want %d", cfg.Scraper.PublishedAtResolver.BatchSize, 7)
+	if config.Scraper.PublishedAtResolver.BatchSize != 7 {
+		t.Fatalf("Scraper.PublishedAtResolver.BatchSize = %d, want %d", config.Scraper.PublishedAtResolver.BatchSize, 7)
 	}
-	if cfg.Scraper.PublishedAtResolver.MaxResolvePerRun != 3 {
-		t.Fatalf("Scraper.PublishedAtResolver.MaxResolvePerRun = %d, want %d", cfg.Scraper.PublishedAtResolver.MaxResolvePerRun, 3)
+	if config.Scraper.PublishedAtResolver.MaxResolvePerRun != 3 {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxResolvePerRun = %d, want %d", config.Scraper.PublishedAtResolver.MaxResolvePerRun, 3)
 	}
-	if cfg.Scraper.PublishedAtResolver.MaxRunDuration != 12*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", cfg.Scraper.PublishedAtResolver.MaxRunDuration, 12*time.Second)
+	if config.Scraper.PublishedAtResolver.MaxRunDuration != 12*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", config.Scraper.PublishedAtResolver.MaxRunDuration, 12*time.Second)
 	}
-	if cfg.Scraper.PublishedAtResolver.ResolveTimeout != 9*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.ResolveTimeout = %s, want %s", cfg.Scraper.PublishedAtResolver.ResolveTimeout, 9*time.Second)
+	if config.Scraper.PublishedAtResolver.ResolveTimeout != 9*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.ResolveTimeout = %s, want %s", config.Scraper.PublishedAtResolver.ResolveTimeout, 9*time.Second)
 	}
-	if cfg.Scraper.PublishedAtResolver.MinDetectedAge != 35*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.MinDetectedAge = %s, want %s", cfg.Scraper.PublishedAtResolver.MinDetectedAge, 35*time.Second)
+	if config.Scraper.PublishedAtResolver.MinDetectedAge != 35*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MinDetectedAge = %s, want %s", config.Scraper.PublishedAtResolver.MinDetectedAge, 35*time.Second)
 	}
-	if cfg.Scraper.PublishedAtResolver.FailureBackoffTTL != 7*time.Minute {
-		t.Fatalf("Scraper.PublishedAtResolver.FailureBackoffTTL = %s, want %s", cfg.Scraper.PublishedAtResolver.FailureBackoffTTL, 7*time.Minute)
+	if config.Scraper.PublishedAtResolver.FailureBackoffTTL != 7*time.Minute {
+		t.Fatalf("Scraper.PublishedAtResolver.FailureBackoffTTL = %s, want %s", config.Scraper.PublishedAtResolver.FailureBackoffTTL, 7*time.Minute)
 	}
 }
 
 func TestConfigValidate_ScraperPublishedAtResolverRejectsMaxRunDurationBelowResolveTimeout(t *testing.T) {
-	cfg := &Config{
+	config := &Config{
 		Server: ServerConfig{
 			Port:           30001,
 			HTTPTransports: []string{"h3"},
@@ -779,7 +779,7 @@ func TestConfigValidate_ScraperPublishedAtResolverRejectsMaxRunDurationBelowReso
 		},
 	}
 
-	err := cfg.Validate()
+	err := config.Validate()
 	if err == nil {
 		t.Fatal("Validate() error = nil, want resolver duration validation error")
 	}
@@ -809,15 +809,15 @@ func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "false")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if len(cfg.CORS.AllowedOrigins) != 0 {
-		t.Fatalf("AllowedOrigins = %v, want empty", cfg.CORS.AllowedOrigins)
+	if len(config.CORS.AllowedOrigins) != 0 {
+		t.Fatalf("AllowedOrigins = %v, want empty", config.CORS.AllowedOrigins)
 	}
-	if !cfg.CORS.MissingInProduction {
+	if !config.CORS.MissingInProduction {
 		t.Fatalf("MissingInProduction = false, want true")
 	}
 }
@@ -827,12 +827,12 @@ func TestLoad_UsesProductionWhenOnlyLegacyTelemetryEnvIsSet(t *testing.T) {
 	t.Setenv("APP_ENV", "")
 	t.Setenv("OTEL_ENVIRONMENT", "development")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Environment != "production" {
-		t.Fatalf("Environment = %q, want %q", cfg.Environment, "production")
+	if config.Environment != "production" {
+		t.Fatalf("Environment = %q, want %q", config.Environment, "production")
 	}
 }
 
@@ -870,14 +870,14 @@ func TestLoad_CORSProductionFiltersWildcardAndLocalhost(t *testing.T) {
 	t.Setenv("CORS_ENFORCE", "false")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "*,http://localhost:5173,https://admin.example.com")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
 	expected := []string{"https://admin.example.com"}
-	if !reflect.DeepEqual(cfg.CORS.AllowedOrigins, expected) {
-		t.Fatalf("AllowedOrigins = %v, want %v", cfg.CORS.AllowedOrigins, expected)
+	if !reflect.DeepEqual(config.CORS.AllowedOrigins, expected) {
+		t.Fatalf("AllowedOrigins = %v, want %v", config.CORS.AllowedOrigins, expected)
 	}
 }
 
@@ -917,12 +917,12 @@ func TestLoad_LLMConfig(t *testing.T) {
 		setup(t)
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNewsModel != "new-model" {
-			t.Errorf("MemberNewsModel = %q, want %q", cfg.LLM.MemberNewsModel, "new-model")
+		if config.LLM.MemberNewsModel != "new-model" {
+			t.Errorf("MemberNewsModel = %q, want %q", config.LLM.MemberNewsModel, "new-model")
 		}
 	})
 
@@ -956,24 +956,24 @@ func TestLoad_LLMConfig(t *testing.T) {
 	t.Run("both unset", func(t *testing.T) {
 		setup(t)
 
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNewsModel != "" {
-			t.Errorf("MemberNewsModel = %q, want empty", cfg.LLM.MemberNewsModel)
+		if config.LLM.MemberNewsModel != "" {
+			t.Errorf("MemberNewsModel = %q, want empty", config.LLM.MemberNewsModel)
 		}
 	})
 
 	t.Run("temperature default", func(t *testing.T) {
 		setup(t)
 
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNewsTemperature != 0.0 {
-			t.Errorf("MemberNewsTemperature = %v, want 0.0", cfg.LLM.MemberNewsTemperature)
+		if config.LLM.MemberNewsTemperature != 0.0 {
+			t.Errorf("MemberNewsTemperature = %v, want 0.0", config.LLM.MemberNewsTemperature)
 		}
 	})
 }
@@ -981,13 +981,13 @@ func TestLoad_LLMConfig(t *testing.T) {
 func TestLoad_DefaultPostgresSSLModeRequire(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Postgres.SSLMode != "require" {
-		t.Fatalf("Postgres.SSLMode = %q, want %q", cfg.Postgres.SSLMode, "require")
+	if config.Postgres.SSLMode != "require" {
+		t.Fatalf("Postgres.SSLMode = %q, want %q", config.Postgres.SSLMode, "require")
 	}
 }
 
@@ -1094,28 +1094,28 @@ func TestLoadLLMScheduler_ProductionRequiresAPISecretKey(t *testing.T) {
 func TestLoadLLMConfig_ConsensusDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.LLM.MemberNews.Enabled {
+	if config.LLM.MemberNews.Enabled {
 		t.Error("ConsensusEnabled should default to false")
 	}
-	if cfg.LLM.MemberNews.Confidence != 0.85 {
-		t.Errorf("ConsensusConfidence = %v, want 0.85", cfg.LLM.MemberNews.Confidence)
+	if config.LLM.MemberNews.Confidence != 0.85 {
+		t.Errorf("ConsensusConfidence = %v, want 0.85", config.LLM.MemberNews.Confidence)
 	}
-	if cfg.LLM.MemberNews.ReviewTimeout != 30 {
-		t.Errorf("ConsensusReviewTimeout = %d, want 30", cfg.LLM.MemberNews.ReviewTimeout)
+	if config.LLM.MemberNews.ReviewTimeout != 30 {
+		t.Errorf("ConsensusReviewTimeout = %d, want 30", config.LLM.MemberNews.ReviewTimeout)
 	}
-	if cfg.LLM.MemberNews.AdjudicateTimeout != 45 {
-		t.Errorf("ConsensusAdjudicateTimeout = %d, want 45", cfg.LLM.MemberNews.AdjudicateTimeout)
+	if config.LLM.MemberNews.AdjudicateTimeout != 45 {
+		t.Errorf("ConsensusAdjudicateTimeout = %d, want 45", config.LLM.MemberNews.AdjudicateTimeout)
 	}
-	if cfg.LLM.MemberNews.ReviewerModel != "" {
-		t.Errorf("ConsensusReviewerModel = %q, want empty", cfg.LLM.MemberNews.ReviewerModel)
+	if config.LLM.MemberNews.ReviewerModel != "" {
+		t.Errorf("ConsensusReviewerModel = %q, want empty", config.LLM.MemberNews.ReviewerModel)
 	}
-	if cfg.LLM.MemberNews.AdjudicatorModel != "" {
-		t.Errorf("ConsensusAdjudicatorModel = %q, want empty", cfg.LLM.MemberNews.AdjudicatorModel)
+	if config.LLM.MemberNews.AdjudicatorModel != "" {
+		t.Errorf("ConsensusAdjudicatorModel = %q, want empty", config.LLM.MemberNews.AdjudicatorModel)
 	}
 }
 
@@ -1124,45 +1124,45 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 
 	t.Run("negative clamped to 0", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "-0.5")
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNews.Confidence != 0.0 {
-			t.Errorf("ConsensusConfidence = %v, want 0.0", cfg.LLM.MemberNews.Confidence)
+		if config.LLM.MemberNews.Confidence != 0.0 {
+			t.Errorf("ConsensusConfidence = %v, want 0.0", config.LLM.MemberNews.Confidence)
 		}
 	})
 
 	t.Run("above 1 clamped to 1", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "1.5")
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNews.Confidence != 1.0 {
-			t.Errorf("ConsensusConfidence = %v, want 1.0", cfg.LLM.MemberNews.Confidence)
+		if config.LLM.MemberNews.Confidence != 1.0 {
+			t.Errorf("ConsensusConfidence = %v, want 1.0", config.LLM.MemberNews.Confidence)
 		}
 	})
 
 	t.Run("NaN falls back to default", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "NaN")
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNews.Confidence != 0.85 {
-			t.Errorf("ConsensusConfidence = %v, want 0.85 (default)", cfg.LLM.MemberNews.Confidence)
+		if config.LLM.MemberNews.Confidence != 0.85 {
+			t.Errorf("ConsensusConfidence = %v, want 0.85 (default)", config.LLM.MemberNews.Confidence)
 		}
 	})
 
 	t.Run("Inf falls back to default", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "Inf")
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNews.Confidence != 0.85 {
-			t.Errorf("ConsensusConfidence = %v, want 0.85 (default)", cfg.LLM.MemberNews.Confidence)
+		if config.LLM.MemberNews.Confidence != 0.85 {
+			t.Errorf("ConsensusConfidence = %v, want 0.85 (default)", config.LLM.MemberNews.Confidence)
 		}
 	})
 }
@@ -1172,23 +1172,23 @@ func TestLoadLLMConfig_ConsensusTimeoutMinimum(t *testing.T) {
 
 	t.Run("review timeout below minimum", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_REVIEW_TIMEOUT_SEC", "2")
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNews.ReviewTimeout != 30 {
-			t.Errorf("ConsensusReviewTimeout = %d, want 30 (default on <5)", cfg.LLM.MemberNews.ReviewTimeout)
+		if config.LLM.MemberNews.ReviewTimeout != 30 {
+			t.Errorf("ConsensusReviewTimeout = %d, want 30 (default on <5)", config.LLM.MemberNews.ReviewTimeout)
 		}
 	})
 
 	t.Run("adjudicate timeout below minimum", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_ADJUDICATE_TIMEOUT_SEC", "3")
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNews.AdjudicateTimeout != 45 {
-			t.Errorf("ConsensusAdjudicateTimeout = %d, want 45 (default on <5)", cfg.LLM.MemberNews.AdjudicateTimeout)
+		if config.LLM.MemberNews.AdjudicateTimeout != 45 {
+			t.Errorf("ConsensusAdjudicateTimeout = %d, want 45 (default on <5)", config.LLM.MemberNews.AdjudicateTimeout)
 		}
 	})
 }
@@ -1198,24 +1198,24 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 
 	t.Run("empty reviewer model falls back to MemberNewsModel", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "primary-model")
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
 		// config 레벨에서는 빈값 유지, provider 레벨에서 fallback
-		if cfg.LLM.MemberNews.ReviewerModel != "" {
-			t.Errorf("ConsensusReviewerModel = %q, want empty (fallback at provider level)", cfg.LLM.MemberNews.ReviewerModel)
+		if config.LLM.MemberNews.ReviewerModel != "" {
+			t.Errorf("ConsensusReviewerModel = %q, want empty (fallback at provider level)", config.LLM.MemberNews.ReviewerModel)
 		}
 	})
 
 	t.Run("explicit reviewer model preserved", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_REVIEWER_MODEL", "gpt-4.1-mini")
-		cfg, err := Load()
+		config, err := Load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if cfg.LLM.MemberNews.ReviewerModel != "gpt-4.1-mini" {
-			t.Errorf("ConsensusReviewerModel = %q, want gpt-4.1-mini", cfg.LLM.MemberNews.ReviewerModel)
+		if config.LLM.MemberNews.ReviewerModel != "gpt-4.1-mini" {
+			t.Errorf("ConsensusReviewerModel = %q, want gpt-4.1-mini", config.LLM.MemberNews.ReviewerModel)
 		}
 	})
 }
@@ -1226,15 +1226,15 @@ func TestLoadAdminAPI_EnvApplied(t *testing.T) {
 	t.Setenv("ADMIN_API_PORT", "39002")
 	t.Setenv("LOG_LEVEL", "")
 
-	cfg, err := LoadAdminAPI()
+	config, err := LoadAdminAPI()
 	if err != nil {
 		t.Fatalf("LoadAdminAPI() error = %v", err)
 	}
-	if cfg.Server.Port != 39002 {
-		t.Fatalf("Server.Port = %d, want %d", cfg.Server.Port, 39002)
+	if config.Server.Port != 39002 {
+		t.Fatalf("Server.Port = %d, want %d", config.Server.Port, 39002)
 	}
-	if cfg.Logging.Level != "info" {
-		t.Fatalf("Logging.Level = %q, want %q", cfg.Logging.Level, "info")
+	if config.Logging.Level != "info" {
+		t.Fatalf("Logging.Level = %q, want %q", config.Logging.Level, "info")
 	}
 }
 
@@ -1243,11 +1243,11 @@ func TestLoadAdminAPI_CORSLooseBoolParsing(t *testing.T) {
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("CORS_ENFORCE", "yes")
 
-	cfg, err := LoadAdminAPI()
+	config, err := LoadAdminAPI()
 	if err != nil {
 		t.Fatalf("LoadAdminAPI() error = %v", err)
 	}
-	if !cfg.CORS.Enforce {
+	if !config.CORS.Enforce {
 		t.Fatal("CORS.Enforce = false, want true")
 	}
 }
@@ -1260,15 +1260,15 @@ func TestLoadLLMScheduler_EnvApplied(t *testing.T) {
 	t.Setenv("LLM_SCHEDULER_PORT", "39003")
 	t.Setenv("BOT_PREFIX", "#")
 
-	cfg, err := LoadLLMScheduler()
+	config, err := LoadLLMScheduler()
 	if err != nil {
 		t.Fatalf("LoadLLMScheduler() error = %v", err)
 	}
-	if cfg.Server.Port != 39003 {
-		t.Fatalf("Server.Port = %d, want %d", cfg.Server.Port, 39003)
+	if config.Server.Port != 39003 {
+		t.Fatalf("Server.Port = %d, want %d", config.Server.Port, 39003)
 	}
-	if cfg.Bot.Prefix != "#" {
-		t.Fatalf("Bot.Prefix = %q, want %q", cfg.Bot.Prefix, "#")
+	if config.Bot.Prefix != "#" {
+		t.Fatalf("Bot.Prefix = %q, want %q", config.Bot.Prefix, "#")
 	}
 }
 
@@ -1292,15 +1292,15 @@ func TestLoad_InvalidNumericStillUsesDefault(t *testing.T) {
 	t.Setenv("POSTGRES_PORT", "not-a-number")
 	t.Setenv("CACHE_PORT", "invalid")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Postgres.Port != constants.DatabaseDefaults.Port {
-		t.Fatalf("Postgres.Port = %d, want %d", cfg.Postgres.Port, constants.DatabaseDefaults.Port)
+	if config.Postgres.Port != constants.DatabaseDefaults.Port {
+		t.Fatalf("Postgres.Port = %d, want %d", config.Postgres.Port, constants.DatabaseDefaults.Port)
 	}
-	if cfg.Valkey.Port != 6379 {
-		t.Fatalf("Valkey.Port = %d, want %d", cfg.Valkey.Port, 6379)
+	if config.Valkey.Port != 6379 {
+		t.Fatalf("Valkey.Port = %d, want %d", config.Valkey.Port, 6379)
 	}
 }
 
@@ -1309,15 +1309,15 @@ func TestLoad_InvalidCoreNumeric(t *testing.T) {
 	t.Setenv("SERVER_PORT", "invalid")
 	t.Setenv("WEBHOOK_WORKER_COUNT", "NaN")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Server.Port != 30001 {
-		t.Fatalf("Server.Port = %d, want %d", cfg.Server.Port, 30001)
+	if config.Server.Port != 30001 {
+		t.Fatalf("Server.Port = %d, want %d", config.Server.Port, 30001)
 	}
-	if cfg.Webhook.WorkerCount != 16 {
-		t.Fatalf("Webhook.WorkerCount = %d, want %d", cfg.Webhook.WorkerCount, 16)
+	if config.Webhook.WorkerCount != 16 {
+		t.Fatalf("Webhook.WorkerCount = %d, want %d", config.Webhook.WorkerCount, 16)
 	}
 }
 
@@ -1325,12 +1325,12 @@ func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SERVICES_LLM_SERVER_HEALTH_URL", "http://legacy-llm-server/health")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
-		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", cfg.Services.LLMSchedulerHealthURL)
+	if config.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
+		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", config.Services.LLMSchedulerHealthURL)
 	}
 }
 
@@ -1339,12 +1339,12 @@ func TestLoadAdminAPI_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("SERVICES_LLM_SERVER_HEALTH_URL", "http://legacy-llm-server/health")
 
-	cfg, err := LoadAdminAPI()
+	config, err := LoadAdminAPI()
 	if err != nil {
 		t.Fatalf("LoadAdminAPI() error = %v", err)
 	}
-	if cfg.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
-		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", cfg.Services.LLMSchedulerHealthURL)
+	if config.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
+		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", config.Services.LLMSchedulerHealthURL)
 	}
 }
 
@@ -1352,11 +1352,11 @@ func TestLoad_WebhookRequireHTTP2(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("WEBHOOK_REQUIRE_HTTP2", "true")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !cfg.Webhook.RequireHTTP2 {
+	if !config.Webhook.RequireHTTP2 {
 		t.Fatal("Webhook.RequireHTTP2 = false, want true")
 	}
 }
@@ -1364,19 +1364,19 @@ func TestLoad_WebhookRequireHTTP2(t *testing.T) {
 func TestLoad_ScraperSchedulerDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.Scheduler.PollTimeout != 45*time.Second {
-		t.Fatalf("Scraper.Scheduler.PollTimeout = %s, want %s", cfg.Scraper.Scheduler.PollTimeout, 45*time.Second)
+	if config.Scraper.Scheduler.PollTimeout != 45*time.Second {
+		t.Fatalf("Scraper.Scheduler.PollTimeout = %s, want %s", config.Scraper.Scheduler.PollTimeout, 45*time.Second)
 	}
-	if cfg.Scraper.Scheduler.ErrorBackoffMin != 30*time.Second {
-		t.Fatalf("Scraper.Scheduler.ErrorBackoffMin = %s, want %s", cfg.Scraper.Scheduler.ErrorBackoffMin, 30*time.Second)
+	if config.Scraper.Scheduler.ErrorBackoffMin != 30*time.Second {
+		t.Fatalf("Scraper.Scheduler.ErrorBackoffMin = %s, want %s", config.Scraper.Scheduler.ErrorBackoffMin, 30*time.Second)
 	}
-	if cfg.Scraper.Scheduler.ErrorBackoffMax != 5*time.Minute {
-		t.Fatalf("Scraper.Scheduler.ErrorBackoffMax = %s, want %s", cfg.Scraper.Scheduler.ErrorBackoffMax, 5*time.Minute)
+	if config.Scraper.Scheduler.ErrorBackoffMax != 5*time.Minute {
+		t.Fatalf("Scraper.Scheduler.ErrorBackoffMax = %s, want %s", config.Scraper.Scheduler.ErrorBackoffMax, 5*time.Minute)
 	}
 }
 
@@ -1386,19 +1386,19 @@ func TestLoad_ScraperSchedulerEnvOverride(t *testing.T) {
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", "7")
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", "99")
 
-	cfg, err := Load()
+	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.Scheduler.PollTimeout != 22*time.Second {
-		t.Fatalf("Scraper.Scheduler.PollTimeout = %s, want %s", cfg.Scraper.Scheduler.PollTimeout, 22*time.Second)
+	if config.Scraper.Scheduler.PollTimeout != 22*time.Second {
+		t.Fatalf("Scraper.Scheduler.PollTimeout = %s, want %s", config.Scraper.Scheduler.PollTimeout, 22*time.Second)
 	}
-	if cfg.Scraper.Scheduler.ErrorBackoffMin != 7*time.Second {
-		t.Fatalf("Scraper.Scheduler.ErrorBackoffMin = %s, want %s", cfg.Scraper.Scheduler.ErrorBackoffMin, 7*time.Second)
+	if config.Scraper.Scheduler.ErrorBackoffMin != 7*time.Second {
+		t.Fatalf("Scraper.Scheduler.ErrorBackoffMin = %s, want %s", config.Scraper.Scheduler.ErrorBackoffMin, 7*time.Second)
 	}
-	if cfg.Scraper.Scheduler.ErrorBackoffMax != 99*time.Second {
-		t.Fatalf("Scraper.Scheduler.ErrorBackoffMax = %s, want %s", cfg.Scraper.Scheduler.ErrorBackoffMax, 99*time.Second)
+	if config.Scraper.Scheduler.ErrorBackoffMax != 99*time.Second {
+		t.Fatalf("Scraper.Scheduler.ErrorBackoffMax = %s, want %s", config.Scraper.Scheduler.ErrorBackoffMax, 99*time.Second)
 	}
 }
 

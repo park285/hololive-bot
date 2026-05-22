@@ -46,7 +46,7 @@ var queryExecModes = map[string]pgx.QueryExecMode{
 }
 
 type Client struct {
-	cfg Config
+	config Config
 	opt OpenOptions
 
 	mu     sync.RWMutex
@@ -61,7 +61,7 @@ type OpenOptions struct {
 	Retry      RetryConfig          // 재시도 설정
 	GormLogger gormlogger.Interface // GORM 로거 (nil이면 Silent)
 
-	// DNSFallback: cfg.Host DNS 조회 실패 시 127.0.0.1로 1회 재시도
+	// DNSFallback: config.Host DNS 조회 실패 시 127.0.0.1로 1회 재시도
 	// host가 "postgres"인 경우에만 동작 (Docker 환경에서 로컬 실행 시 fallback)
 	DNSFallback bool
 }
@@ -75,8 +75,8 @@ func DefaultOpenOptions() OpenOptions {
 	}
 }
 
-func Open(ctx context.Context, cfg Config, opt OpenOptions) (*Client, error) {
-	client := NewLazy(cfg, opt)
+func Open(ctx context.Context, config Config, opt OpenOptions) (*Client, error) {
+	client := NewLazy(config, opt)
 	if err := client.Connect(ctx); err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (c *Client) Close() error {
 }
 
 // 실제 연결은 Connect() 호출 시 수행
-func NewLazy(cfg Config, opt OpenOptions) *Client {
+func NewLazy(config Config, opt OpenOptions) *Client {
 	if opt.Logger == nil {
 		opt.Logger = slog.Default()
 	}
@@ -149,7 +149,7 @@ func NewLazy(cfg Config, opt OpenOptions) *Client {
 		opt.GormLogger = gormlogger.Default.LogMode(gormlogger.Silent)
 	}
 	return &Client{
-		cfg: cfg,
+		config: config,
 		opt: opt,
 	}
 }
@@ -163,7 +163,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	cfg := c.cfg
+	config := c.config
 	opt := c.opt
 
 	pool := normalizePoolConfig(opt.Pool)
@@ -172,21 +172,21 @@ func (c *Client) Connect(ctx context.Context) error {
 		retry.PingTimeout = 5 * time.Second
 	}
 
-	client, connectErr := c.connectWithOptionalDNSFallback(ctx, cfg, opt, pool, retry)
+	client, connectErr := c.connectWithOptionalDNSFallback(ctx, config, opt, pool, retry)
 	if connectErr != nil {
 		return connectErr
 	}
 
 	connMode := "TCP"
-	if c.cfg.SocketPath != "" {
+	if c.config.SocketPath != "" {
 		connMode = "UDS"
 	}
 	opt.Logger.Info("postgres_pool_connected",
 		slog.String("mode", connMode),
-		slog.String("host", c.cfg.Host),
-		slog.Int("port", c.cfg.Port),
-		slog.String("socket_path", c.cfg.SocketPath),
-		slog.String("database", c.cfg.Name),
+		slog.String("host", c.config.Host),
+		slog.Int("port", c.config.Port),
+		slog.String("socket_path", c.config.SocketPath),
+		slog.String("database", c.config.Name),
 		slog.Int("min_conns", pool.MinConns),
 		slog.Int("max_conns", pool.MaxConns),
 	)
@@ -201,25 +201,25 @@ func (c *Client) Connect(ctx context.Context) error {
 
 func (c *Client) connectWithOptionalDNSFallback(
 	ctx context.Context,
-	cfg Config,
+	config Config,
 	opt OpenOptions,
 	pool PoolConfig,
 	retry RetryConfig,
 ) (*Client, error) {
-	client, connectErr := c.tryConnect(ctx, cfg, pool, retry)
-	if connectErr == nil || !opt.DNSFallback || !ShouldFallbackToLocalhost(connectErr, cfg.Host) {
+	client, connectErr := c.tryConnect(ctx, config, pool, retry)
+	if connectErr == nil || !opt.DNSFallback || !ShouldFallbackToLocalhost(connectErr, config.Host) {
 		return client, connectErr
 	}
 
-	fallbackCfg := cfg
-	fallbackCfg.Host = "127.0.0.1"
-	client, connectErr = c.tryConnect(ctx, fallbackCfg, pool, retry)
+	fallbackConfig := config
+	fallbackConfig.Host = "127.0.0.1"
+	client, connectErr = c.tryConnect(ctx, fallbackConfig, pool, retry)
 	if connectErr == nil {
 		opt.Logger.Warn("postgres_host_fallback",
-			slog.String("configured_host", cfg.Host),
+			slog.String("configured_host", config.Host),
 			slog.String("effective_host", "127.0.0.1"),
 		)
-		c.cfg = fallbackCfg
+		c.config = fallbackConfig
 	}
 	return client, connectErr
 }
@@ -230,16 +230,16 @@ func (c *Client) Connected() bool {
 	return c.pool != nil
 }
 
-func (c *Client) tryConnect(ctx context.Context, cfg Config, pool PoolConfig, retry RetryConfig) (*Client, error) {
+func (c *Client) tryConnect(ctx context.Context, config Config, pool PoolConfig, retry RetryConfig) (*Client, error) {
 	// ParseConfig 에러 문자열에 DSN이 포함될 수 있으므로,
 	// 파싱 단계에서는 마스킹된 DSN을 사용하고 실제 비밀번호는 이후에 주입한다.
-	poolConfig, err := pgxpool.ParseConfig(cfg.SafeDSN())
+	poolConfig, err := pgxpool.ParseConfig(config.SafeDSN())
 	if err != nil {
 		return nil, fmt.Errorf("parse postgres config: %w", err)
 	}
-	poolConfig.ConnConfig.Password = cfg.Password
-	if cfg.QueryExecMode != "" {
-		mode, modeErr := parseQueryExecMode(cfg.QueryExecMode)
+	poolConfig.ConnConfig.Password = config.Password
+	if config.QueryExecMode != "" {
+		mode, modeErr := parseQueryExecMode(config.QueryExecMode)
 		if modeErr != nil {
 			return nil, fmt.Errorf("invalid query exec mode: %w", modeErr)
 		}

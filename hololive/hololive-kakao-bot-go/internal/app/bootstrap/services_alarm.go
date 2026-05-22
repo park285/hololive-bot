@@ -16,8 +16,8 @@ import (
 )
 
 func InitAlarmDependencies(
-	chzzkCfg config.ChzzkConfig,
-	twitchCfg config.TwitchConfig,
+	chzzkConfig config.ChzzkConfig,
+	twitchConfig config.TwitchConfig,
 	advanceMinutes []int,
 	scraperProxyEnabled bool,
 	cacheService cache.Client,
@@ -27,8 +27,8 @@ func InitAlarmDependencies(
 	logger *slog.Logger,
 ) (*AlarmDependencies, error) {
 	httpClient := httputil.NewExternalAPIClient(10 * time.Second)
-	chzzkClient := ProvideChzzkClient(httpClient, chzzkCfg, logger)
-	twitchClient := ProvideTwitchClient(twitchCfg, logger)
+	chzzkClient := ProvideChzzkClient(httpClient, chzzkConfig, logger)
+	twitchClient := ProvideTwitchClient(twitchConfig, logger)
 	memberDataProvider := memberServiceAdapter
 
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(advanceMinutes, scraperProxyEnabled, logger)
@@ -48,7 +48,7 @@ func InitAlarmDependencies(
 
 func InitAlarmModeComponents(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	holodexService *holodex.Service,
 	memberServiceAdapter member.DataProvider,
@@ -56,10 +56,10 @@ func InitAlarmModeComponents(
 	logger *slog.Logger,
 ) (*AlarmModeComponents, error) {
 	alarmDeps, alarmErr := InitAlarmDependencies(
-		cfg.Chzzk,
-		cfg.Twitch,
-		cfg.Notification.AdvanceMinutes,
-		cfg.Scraper.ProxyEnabled,
+		appConfig.Chzzk,
+		appConfig.Twitch,
+		appConfig.Notification.AdvanceMinutes,
+		appConfig.Scraper.ProxyEnabled,
 		infra.Cache,
 		holodexService,
 		memberServiceAdapter,

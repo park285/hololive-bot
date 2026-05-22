@@ -33,17 +33,17 @@ type CommunityShortsChannelSummaryTotals struct {
 
 func CollectCommunityShortsChannelSummaryReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	since time.Time,
 ) (CommunityShortsChannelSummaryReport, error) {
-	request, err := normalizeCommunityShortsChannelSummaryRequest(ctx, cfg, logger, now, since)
+	request, err := normalizeCommunityShortsChannelSummaryRequest(ctx, appConfig, logger, now, since)
 	if err != nil {
 		return CommunityShortsChannelSummaryReport{}, err
 	}
 
-	session, cleanupDB, err := openCommunityShortsOpsSession(request.ctx, cfg, request.logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(request.ctx, appConfig, request.logger)
 	if err != nil {
 		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: %w", err)
 	}
@@ -72,12 +72,12 @@ type communityShortsChannelSummaryRequest struct {
 
 func normalizeCommunityShortsChannelSummaryRequest(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	since time.Time,
 ) (communityShortsChannelSummaryRequest, error) {
-	if cfg == nil {
+	if appConfig == nil {
 		return communityShortsChannelSummaryRequest{}, fmt.Errorf("collect community shorts channel summary report: config is nil")
 	}
 	if ctx == nil {

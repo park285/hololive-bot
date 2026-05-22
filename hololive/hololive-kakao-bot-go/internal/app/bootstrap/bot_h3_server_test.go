@@ -21,7 +21,7 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			H3Addr:     "127.0.0.1:0",
 			H3CertFile: certFile,
@@ -29,7 +29,7 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 		},
 	}
 
-	server, err := BuildBotHTTP3Server(t.Context(), cfg, nil, nil, nil)
+	server, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}

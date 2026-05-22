@@ -41,19 +41,19 @@ import (
 func initMemberNewsService(
 	ctx context.Context,
 	cliproxy config.CliproxyConfig,
-	llmCfg config.LLMConfig,
-	exaCfg config.ExaConfig,
+	llmConfig config.LLMConfig,
+	exaConfig config.ExaConfig,
 	postgres database.Client,
 	cacheClient cache.Client,
 	membersData member.DataProvider,
 	logger *slog.Logger,
 ) *membernews.Service {
 	repository := membernews.NewRepository(postgres, cacheClient, logger)
-	llmClient := ProvideMemberNewsLLMClient(cliproxy, llmCfg, logger)
-	reviewer := ProvideMemberNewsReviewerClient(cliproxy, llmCfg, logger)
-	adjudicator := ProvideMemberNewsAdjudicatorClient(cliproxy, llmCfg, logger)
+	llmClient := ProvideMemberNewsLLMClient(cliproxy, llmConfig, logger)
+	reviewer := ProvideMemberNewsReviewerClient(cliproxy, llmConfig, logger)
+	adjudicator := ProvideMemberNewsAdjudicatorClient(cliproxy, llmConfig, logger)
 
-	searcher := provideExaSearcher(exaCfg, logger)
+	searcher := provideExaSearcher(exaConfig, logger)
 
 	allowlistPath := resolveMemberNewsXAllowlistPath()
 	validator, err := membernews.NewSourceValidator(allowlistPath, membersData, logger)
@@ -68,20 +68,20 @@ func initMemberNewsService(
 	baseSummarizer := mnsummarizer.NewSummarizer(llmClient, searcher, validator, logger)
 
 	var summarizer membernews.Summarizer = baseSummarizer
-	if llmCfg.MemberNews.Enabled && reviewer != nil {
+	if llmConfig.MemberNews.Enabled && reviewer != nil {
 		summarizer = mnsummarizer.NewConsensusSummarizer(
 			baseSummarizer, reviewer, adjudicator, validator,
 			consensus.Config{
-				ConfidenceThreshold: llmCfg.MemberNews.Confidence,
-				ReviewTimeout:       time.Duration(llmCfg.MemberNews.ReviewTimeout) * time.Second,
-				AdjudicateTimeout:   time.Duration(llmCfg.MemberNews.AdjudicateTimeout) * time.Second,
+				ConfidenceThreshold: llmConfig.MemberNews.Confidence,
+				ReviewTimeout:       time.Duration(llmConfig.MemberNews.ReviewTimeout) * time.Second,
+				AdjudicateTimeout:   time.Duration(llmConfig.MemberNews.AdjudicateTimeout) * time.Second,
 			},
 			logger,
 		)
 		logger.Info("Consensus summarizer enabled",
-			slog.Float64("confidence_threshold", llmCfg.MemberNews.Confidence),
-			slog.Int("review_timeout_sec", llmCfg.MemberNews.ReviewTimeout),
-			slog.Int("adjudicate_timeout_sec", llmCfg.MemberNews.AdjudicateTimeout),
+			slog.Float64("confidence_threshold", llmConfig.MemberNews.Confidence),
+			slog.Int("review_timeout_sec", llmConfig.MemberNews.ReviewTimeout),
+			slog.Int("adjudicate_timeout_sec", llmConfig.MemberNews.AdjudicateTimeout),
 		)
 	}
 

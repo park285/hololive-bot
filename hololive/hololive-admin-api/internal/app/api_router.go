@@ -36,7 +36,7 @@ import (
 
 func ProvideAPIRouter(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	domainHandlers *server.DomainAPIHandlers,
 	authHandler *server.AuthHandler,
@@ -44,5 +44,5 @@ func ProvideAPIRouter(
 	triggerHandler *sharedserver.TriggerHandler,
 	cacheClient cache.Client,
 ) (*gin.Engine, error) {
-	return apphttp.ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, webhookHandler, triggerHandler, cacheClient)
+	return apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, webhookHandler, triggerHandler, cacheClient)
 }

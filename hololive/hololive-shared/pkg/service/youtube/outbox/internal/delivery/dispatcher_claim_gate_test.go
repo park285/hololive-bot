@@ -48,26 +48,26 @@ func (s *claimGateTestSender) allMessages() []string {
 	return cloned
 }
 
-func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, cfg Config) (*Dispatcher, *gorm.DB) {
+func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, config Config) (*Dispatcher, *gorm.DB) {
 	t.Helper()
 
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = 10
+	if config.BatchSize <= 0 {
+		config.BatchSize = 10
 	}
-	if cfg.LockTimeout <= 0 {
-		cfg.LockTimeout = 5 * time.Minute
+	if config.LockTimeout <= 0 {
+		config.LockTimeout = 5 * time.Minute
 	}
-	if cfg.PollInterval <= 0 {
-		cfg.PollInterval = time.Second
+	if config.PollInterval <= 0 {
+		config.PollInterval = time.Second
 	}
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = 3
+	if config.MaxRetries <= 0 {
+		config.MaxRetries = 3
 	}
-	if cfg.RetryBackoff <= 0 {
-		cfg.RetryBackoff = time.Minute
+	if config.RetryBackoff <= 0 {
+		config.RetryBackoff = time.Minute
 	}
-	if cfg.DeliveryParallelism <= 0 {
-		cfg.DeliveryParallelism = 2
+	if config.DeliveryParallelism <= 0 {
+		config.DeliveryParallelism = 2
 	}
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -83,32 +83,32 @@ func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, cfg C
 		sender,
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		cfg,
+		config,
 	)
 	dispatcher.telemetry = nil
 	return dispatcher, db
 }
 
-func newClaimGateTestDispatcherWithDB(t *testing.T, db *gorm.DB, sender *claimGateTestSender, cfg Config) *Dispatcher {
+func newClaimGateTestDispatcherWithDB(t *testing.T, db *gorm.DB, sender *claimGateTestSender, config Config) *Dispatcher {
 	t.Helper()
 
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = 10
+	if config.BatchSize <= 0 {
+		config.BatchSize = 10
 	}
-	if cfg.LockTimeout <= 0 {
-		cfg.LockTimeout = 5 * time.Minute
+	if config.LockTimeout <= 0 {
+		config.LockTimeout = 5 * time.Minute
 	}
-	if cfg.PollInterval <= 0 {
-		cfg.PollInterval = time.Second
+	if config.PollInterval <= 0 {
+		config.PollInterval = time.Second
 	}
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = 3
+	if config.MaxRetries <= 0 {
+		config.MaxRetries = 3
 	}
-	if cfg.RetryBackoff <= 0 {
-		cfg.RetryBackoff = time.Minute
+	if config.RetryBackoff <= 0 {
+		config.RetryBackoff = time.Minute
 	}
-	if cfg.DeliveryParallelism <= 0 {
-		cfg.DeliveryParallelism = 2
+	if config.DeliveryParallelism <= 0 {
+		config.DeliveryParallelism = 2
 	}
 
 	dispatcher := NewDispatcher(
@@ -117,7 +117,7 @@ func newClaimGateTestDispatcherWithDB(t *testing.T, db *gorm.DB, sender *claimGa
 		sender,
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		cfg,
+		config,
 	)
 	dispatcher.telemetry = nil
 	return dispatcher

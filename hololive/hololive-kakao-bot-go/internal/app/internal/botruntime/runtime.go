@@ -50,13 +50,13 @@ type BotRuntime struct {
 	lifecycle.Managed
 }
 
-func BuildRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*BotRuntime, error) {
-	ctx, err := normalizeRuntimeBuildInputs(ctx, cfg, logger)
+func BuildRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*BotRuntime, error) {
+	ctx, err := normalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	runtime, cleanup, err := InitializeBotRuntime(ctx, cfg, logger)
+	runtime, cleanup, err := InitializeBotRuntime(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
 	}

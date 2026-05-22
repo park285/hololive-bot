@@ -61,7 +61,7 @@ func TestFailClosedAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &config.Config{
+			appConfig := &config.Config{
 				Server: config.ServerConfig{
 					APIKey: tt.apiKey,
 				},
@@ -70,7 +70,7 @@ func TestFailClosedAuth(t *testing.T) {
 				},
 			}
 
-			router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+			router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
 
 			if tt.wantErr {
 				if err == nil {
@@ -102,7 +102,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
@@ -113,7 +113,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -146,7 +146,7 @@ func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
@@ -158,7 +158,7 @@ func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err == nil {
 		t.Fatal("ProvideAPIRouter() expected error")
 	}
@@ -177,7 +177,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	authHandler := &server.AuthHandler{}
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
@@ -186,7 +186,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, nil, authHandler, nil, nil, nil)
+	router, err := ProvideAPIRouter(ctx, appConfig, logger, nil, authHandler, nil, nil, nil)
 	if err == nil {
 		t.Fatal("ProvideAPIRouter() expected error for nil domain handlers")
 	}
@@ -207,7 +207,7 @@ func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
@@ -216,7 +216,7 @@ func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -256,7 +256,7 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
@@ -265,7 +265,7 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -308,7 +308,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
@@ -317,7 +317,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -339,7 +339,7 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	cfg := &config.Config{
+	appConfig := &config.Config{
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
@@ -348,7 +348,7 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}

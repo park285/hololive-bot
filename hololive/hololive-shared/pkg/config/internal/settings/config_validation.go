@@ -81,46 +81,46 @@ func (c *Config) validateRequiredConfig() error {
 	return nil
 }
 
-func validateScraperConfig(cfg ScraperConfig) error {
-	if err := validateScraperSchedulerConfig(cfg.Scheduler); err != nil {
+func validateScraperConfig(config ScraperConfig) error {
+	if err := validateScraperSchedulerConfig(config.Scheduler); err != nil {
 		return err
 	}
-	if err := validateScraperFetcherEngine(cfg.FetcherEngine); err != nil {
+	if err := validateScraperFetcherEngine(config.FetcherEngine); err != nil {
 		return err
 	}
-	if err := validateScraperPublishedAtResolverConfig(cfg.PublishedAtResolver); err != nil {
+	if err := validateScraperPublishedAtResolverConfig(config.PublishedAtResolver); err != nil {
 		return err
 	}
-	if err := validateScraperBackfillConfig(cfg.Backfill); err != nil {
+	if err := validateScraperBackfillConfig(config.Backfill); err != nil {
 		return err
 	}
-	if err := validateScraperActiveActiveConfig(cfg.ActiveActive); err != nil {
+	if err := validateScraperActiveActiveConfig(config.ActiveActive); err != nil {
 		return err
 	}
 	return nil
 }
 
-func validateCORSConfig(environment string, cfg CORSConfig) error {
-	if isProductionEnvironment(environment) && cfg.Enforce && len(cfg.AllowedOrigins) == 0 {
+func validateCORSConfig(environment string, config CORSConfig) error {
+	if isProductionEnvironment(environment) && config.Enforce && len(config.AllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
 	return nil
 }
 
-func validateScraperSchedulerConfig(cfg ScraperSchedulerConfig) error {
-	if cfg.PollTimeout == 0 && cfg.ErrorBackoffMin == 0 && cfg.ErrorBackoffMax == 0 {
+func validateScraperSchedulerConfig(config ScraperSchedulerConfig) error {
+	if config.PollTimeout == 0 && config.ErrorBackoffMin == 0 && config.ErrorBackoffMax == 0 {
 		return nil
 	}
-	if cfg.PollTimeout <= 0 {
+	if config.PollTimeout <= 0 {
 		return fmt.Errorf("SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS must be positive")
 	}
-	if cfg.ErrorBackoffMin <= 0 {
+	if config.ErrorBackoffMin <= 0 {
 		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS must be positive")
 	}
-	if cfg.ErrorBackoffMax <= 0 {
+	if config.ErrorBackoffMax <= 0 {
 		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS must be positive")
 	}
-	if cfg.ErrorBackoffMax < cfg.ErrorBackoffMin {
+	if config.ErrorBackoffMax < config.ErrorBackoffMin {
 		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS must be >= SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS")
 	}
 	return nil
@@ -135,8 +135,8 @@ func validateScraperFetcherEngine(engine string) error {
 	}
 }
 
-func validateScraperPublishedAtResolverConfig(cfg ScraperPublishedAtResolverConfig) error {
-	if !cfg.Enabled {
+func validateScraperPublishedAtResolverConfig(config ScraperPublishedAtResolverConfig) error {
+	if !config.Enabled {
 		return nil
 	}
 
@@ -144,26 +144,26 @@ func validateScraperPublishedAtResolverConfig(cfg ScraperPublishedAtResolverConf
 		valid   bool
 		message string
 	}{
-		{cfg.Interval > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS must be positive when resolver is enabled"},
-		{cfg.BatchSize > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE must be positive when resolver is enabled"},
-		{cfg.MaxResolvePerRun > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN must be positive when resolver is enabled"},
-		{cfg.MaxRunDuration > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be positive when resolver is enabled"},
-		{cfg.ResolveTimeout > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS must be positive when resolver is enabled"},
+		{config.Interval > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS must be positive when resolver is enabled"},
+		{config.BatchSize > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE must be positive when resolver is enabled"},
+		{config.MaxResolvePerRun > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN must be positive when resolver is enabled"},
+		{config.MaxRunDuration > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be positive when resolver is enabled"},
+		{config.ResolveTimeout > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS must be positive when resolver is enabled"},
 	}
 	for _, check := range checks {
 		if !check.valid {
 			return errors.New(check.message)
 		}
 	}
-	if cfg.MaxRunDuration < cfg.ResolveTimeout {
+	if config.MaxRunDuration < config.ResolveTimeout {
 		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be >= SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS")
 	}
 	tailChecks := []struct {
 		valid   bool
 		message string
 	}{
-		{cfg.MinDetectedAge > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS must be positive when resolver is enabled"},
-		{cfg.FailureBackoffTTL > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS must be positive when resolver is enabled"},
+		{config.MinDetectedAge > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS must be positive when resolver is enabled"},
+		{config.FailureBackoffTTL > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS must be positive when resolver is enabled"},
 	}
 	for _, check := range tailChecks {
 		if !check.valid {
@@ -173,30 +173,30 @@ func validateScraperPublishedAtResolverConfig(cfg ScraperPublishedAtResolverConf
 	return nil
 }
 
-func validateScraperActiveActiveConfig(cfg ScraperActiveActiveConfig) error {
-	if !cfg.Enabled {
+func validateScraperActiveActiveConfig(config ScraperActiveActiveConfig) error {
+	if !config.Enabled {
 		return nil
 	}
-	if strings.TrimSpace(cfg.Namespace) == "" {
+	if strings.TrimSpace(config.Namespace) == "" {
 		return fmt.Errorf("YOUTUBE_PRODUCER_LEASE_NAMESPACE must not be empty when active-active is enabled")
 	}
 	return nil
 }
 
-func validateScraperBackfillConfig(cfg ScraperBackfillConfig) error {
-	if strings.TrimSpace(cfg.TargetGroup) != "notification" {
+func validateScraperBackfillConfig(config ScraperBackfillConfig) error {
+	if strings.TrimSpace(config.TargetGroup) != "notification" {
 		return fmt.Errorf("SCRAPER_BACKFILL_TARGET_GROUP must be notification")
 	}
-	if !cfg.Enabled {
+	if !config.Enabled {
 		return nil
 	}
-	if cfg.ShortsEnabled && cfg.ShortsInterval <= 0 {
+	if config.ShortsEnabled && config.ShortsInterval <= 0 {
 		return fmt.Errorf("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS must be positive when backfill shorts is enabled")
 	}
-	if cfg.CommunityEnabled && cfg.CommunityInterval <= 0 {
+	if config.CommunityEnabled && config.CommunityInterval <= 0 {
 		return fmt.Errorf("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS must be positive when backfill community is enabled")
 	}
-	if cfg.LiveEnabled && cfg.LiveInterval <= 0 {
+	if config.LiveEnabled && config.LiveInterval <= 0 {
 		return fmt.Errorf("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS must be positive when backfill live is enabled")
 	}
 	return nil

@@ -408,13 +408,13 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogObjectStringField(t, classification, "reason_code", string(PostLatencyReasonCodeJobFailure))
 }
 
-func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *gorm.DB, sender *finalResultTestSender, cfg Config) (*Dispatcher, *bytes.Buffer) {
+func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *gorm.DB, sender *finalResultTestSender, config Config) (*Dispatcher, *bytes.Buffer) {
 	t.Helper()
 
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	cache := cachemocks.NewLenientClient()
-	return NewDispatcher(db, cache, sender, nil, logger, cfg), logBuffer
+	return NewDispatcher(db, cache, sender, nil, logger, config), logBuffer
 }
 
 func findAuditLogEntryByTelemetrySource(t *testing.T, logBuffer *bytes.Buffer, source string) map[string]any {

@@ -173,21 +173,21 @@ func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func BuildLLMSchedulerRuntime(ctx context.Context, cfg *config.LLMSchedulerConfig, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
-	if cfg == nil {
+func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *config.LLMSchedulerConfig, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
+	if schedulerConfig == nil {
 		return nil, fmt.Errorf("llm scheduler config must not be nil")
 	}
 	if logger == nil {
 		return nil, fmt.Errorf("logger must not be nil")
 	}
 
-	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, cfg.Valkey, logger)
+	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, schedulerConfig.Valkey, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init cache: %w", err)
 	}
 	cacheService := cacheResources.Service
 
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, schedulerConfig.Postgres, logger)
 	if err != nil {
 		cleanupCache()
 		return nil, fmt.Errorf("init database: %w", err)
@@ -199,7 +199,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, cfg *config.LLMSchedulerConfi
 		cleanupCache()
 	}
 
-	runtime, err := buildLLMSchedulerComponents(ctx, cfg, logger, cacheService, postgresService)
+	runtime, err := buildLLMSchedulerComponents(ctx, schedulerConfig, logger, cacheService, postgresService)
 	if err != nil {
 		cleanup()
 		return nil, err
@@ -210,7 +210,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, cfg *config.LLMSchedulerConfi
 
 func buildLLMSchedulerComponents(
 	ctx context.Context,
-	cfg *config.LLMSchedulerConfig,
+	schedulerConfig *config.LLMSchedulerConfig,
 	logger *slog.Logger,
 	cacheService cache.Client,
 	postgresService database.Client,
@@ -224,13 +224,13 @@ func buildLLMSchedulerComponents(
 	memberDataProvider := memberServiceAdapter
 
 	templateRenderer := template.NewRenderer(postgresService.GetGormDB(), logger)
-	formatter := newLLMSchedulerFormatter(cfg.Bot.Prefix, templateRenderer, logger)
-	majorEventRepository := buildMajorEventRepository(ctx, postgresService, logger, cfg.Postgres.AutoPrepareSchema)
-	memberNewsService := initMemberNewsService(ctx, cfg.Cliproxy, cfg.LLM, cfg.Exa, postgresService, cacheService, memberDataProvider, logger)
+	formatter := newLLMSchedulerFormatter(schedulerConfig.Bot.Prefix, templateRenderer, logger)
+	majorEventRepository := buildMajorEventRepository(ctx, postgresService, logger, schedulerConfig.Postgres.AutoPrepareSchema)
+	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, logger)
 
 	deliveryModule := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
 
-	summarizer := buildMajorEventSummarizer(cfg, cacheService, logger)
+	summarizer := buildMajorEventSummarizer(schedulerConfig, cacheService, logger)
 
 	majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler := buildMajorEventComponents(
 		ctx,
@@ -240,19 +240,19 @@ func buildLLMSchedulerComponents(
 		deliveryModule.Locker,
 		deliveryModule.Repository,
 		logger,
-		cfg.Postgres.AutoPrepareSchema,
+		schedulerConfig.Postgres.AutoPrepareSchema,
 	)
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, logger)
 
 	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
-	httpServer, err := buildLLMSchedulerHTTPServer(ctx, cfg.Server.Port, logger, triggerHandler, cfg.Server.APIKey, majorEventRepository, memberNewsService)
+	httpServer, err := buildLLMSchedulerHTTPServer(ctx, schedulerConfig.Server.Port, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService)
 	if err != nil {
 		return nil, err
 	}
 	configSubscriber := buildLLMSchedulerConfigSubscriber(ctx, cacheService, memberNewsScheduler, logger)
 
 	return newLLMSchedulerRuntime(
-		cfg,
+		schedulerConfig,
 		logger,
 		deliveryModule,
 		majorEventScheduler,
@@ -266,7 +266,7 @@ func buildLLMSchedulerComponents(
 }
 
 func newLLMSchedulerRuntime(
-	cfg *config.LLMSchedulerConfig,
+	schedulerConfig *config.LLMSchedulerConfig,
 	logger *slog.Logger,
 	deliveryModule *DeliveryModule,
 	majorEventScheduler *mescheduler.Scheduler,
@@ -278,7 +278,7 @@ func newLLMSchedulerRuntime(
 	httpServer *http.Server,
 ) *LLMSchedulerRuntime {
 	return &LLMSchedulerRuntime{
-		Config:                     cfg,
+		Config:                     schedulerConfig,
 		Logger:                     logger,
 		MajorEventScheduler:        majorEventScheduler,
 		MajorEventMonthlyScheduler: majorEventMonthlyScheduler,

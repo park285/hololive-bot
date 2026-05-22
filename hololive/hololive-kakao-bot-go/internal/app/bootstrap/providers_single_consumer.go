@@ -14,20 +14,20 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
-func ProvideChzzkClient(httpClient *http.Client, cfg config.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
+func ProvideChzzkClient(httpClient *http.Client, chzzkConfig config.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
 	return chzzk.NewClientWithConfig(chzzk.ClientConfig{
 		HTTPClient:   httpClient,
 		BaseURL:      chzzk.DefaultBaseURL,
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
+		ClientID:     chzzkConfig.ClientID,
+		ClientSecret: chzzkConfig.ClientSecret,
 		Logger:       logger,
 	})
 }
 
-func ProvideTwitchClient(cfg config.TwitchConfig, logger *slog.Logger) *twitch.Client {
+func ProvideTwitchClient(chzzkConfig config.TwitchConfig, logger *slog.Logger) *twitch.Client {
 	return twitch.NewClient(twitch.ClientConfig{
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
+		ClientID:     chzzkConfig.ClientID,
+		ClientSecret: chzzkConfig.ClientSecret,
 	}, logger)
 }
 

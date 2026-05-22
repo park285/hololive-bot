@@ -16,15 +16,15 @@ import (
 
 func InitCoreIntegrationServices(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*CoreIntegrationServices, error) {
 	aclService, err := ProvideACLService(
 		ctx,
-		cfg.Kakao.ACLEnabled,
-		acl.ParseACLMode(cfg.Kakao.ACLMode),
-		cfg.Kakao.Rooms,
+		appConfig.Kakao.ACLEnabled,
+		acl.ParseACLMode(appConfig.Kakao.ACLMode),
+		appConfig.Kakao.Rooms,
 		infra.Postgres,
 		infra.Cache,
 		logger,
@@ -33,7 +33,7 @@ func InitCoreIntegrationServices(
 		return nil, err
 	}
 
-	majorEventRepository, memberNewsService := ResolveLLMSchedulerClients(cfg, logger)
+	majorEventRepository, memberNewsService := ResolveLLMSchedulerClients(appConfig, logger)
 
 	workerPool, err := ProvideAlarmWorkerPool()
 	if err != nil {

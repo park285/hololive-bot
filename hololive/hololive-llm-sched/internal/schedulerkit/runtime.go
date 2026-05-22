@@ -63,8 +63,8 @@ func (r *Runtime) Now() time.Time {
 	return now()
 }
 
-func (r *Runtime) Start(ctx context.Context, cfg Config) {
-	if r == nil || cfg.CalculateNextRun == nil || cfg.OnTick == nil {
+func (r *Runtime) Start(ctx context.Context, config Config) {
+	if r == nil || config.CalculateNextRun == nil || config.OnTick == nil {
 		return
 	}
 	r.init()
@@ -79,7 +79,7 @@ func (r *Runtime) Start(ctx context.Context, cfg Config) {
 	r.wg.Add(1)
 	r.mu.Unlock()
 
-	logger := cfg.Logger
+	logger := config.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -87,10 +87,10 @@ func (r *Runtime) Start(ctx context.Context, cfg Config) {
 	go func(stopCh chan struct{}) {
 		defer r.wg.Done()
 
-		reason := r.run(ctx, cfg, logger, stopCh)
+		reason := r.run(ctx, config, logger, stopCh)
 		r.finishRun(stopCh)
-		if cfg.OnStop != nil {
-			cfg.OnStop(reason)
+		if config.OnStop != nil {
+			config.OnStop(reason)
 		}
 	}(stopCh)
 }
@@ -115,25 +115,25 @@ func (r *Runtime) Stop() {
 	r.wg.Wait()
 }
 
-func (r *Runtime) run(ctx context.Context, cfg Config, logger *slog.Logger, stopCh <-chan struct{}) StopReason {
+func (r *Runtime) run(ctx context.Context, config Config, logger *slog.Logger, stopCh <-chan struct{}) StopReason {
 	for {
-		nextRun := cfg.CalculateNextRun(r.Now())
-		logger.Info(cfg.WaitingLog,
+		nextRun := config.CalculateNextRun(r.Now())
+		logger.Info(config.WaitingLog,
 			slog.Time("next_run", nextRun),
 			slog.Duration("wait_duration", time.Until(nextRun)),
 		)
 
 		timer := time.NewTimer(time.Until(nextRun))
-		if reason, stopped := waitRuntimeTick(ctx, cfg, logger, stopCh, timer); stopped {
+		if reason, stopped := waitRuntimeTick(ctx, config, logger, stopCh, timer); stopped {
 			return reason
 		}
-		cfg.OnTick(ctx)
+		config.OnTick(ctx)
 	}
 }
 
 func waitRuntimeTick(
 	ctx context.Context,
-	cfg Config,
+	config Config,
 	logger *slog.Logger,
 	stopCh <-chan struct{},
 	timer *time.Timer,
@@ -141,11 +141,11 @@ func waitRuntimeTick(
 	select {
 	case <-ctx.Done():
 		stopTimer(timer)
-		logger.Info(cfg.ContextStopLog)
+		logger.Info(config.ContextStopLog)
 		return StopReasonContextCancelled, true
 	case <-stopCh:
 		stopTimer(timer)
-		logger.Info(cfg.StopLog)
+		logger.Info(config.StopLog)
 		return StopReasonManual, true
 	case <-timer.C:
 		return 0, false

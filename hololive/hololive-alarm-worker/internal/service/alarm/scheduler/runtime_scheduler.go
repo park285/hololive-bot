@@ -92,9 +92,9 @@ func NewRuntimeScheduler(
 	twitchClient *twitch.Client,
 	alarmCRUD domain.AlarmCRUD,
 	postgres database.Client,
-	notifCfg config.NotificationConfig,
+	notifConfig config.NotificationConfig,
 	outbox dispatchoutbox.Writer,
-	publishCfg queue.PublishConfig,
+	publishConfig queue.PublishConfig,
 	twitchEnabled bool,
 	logger *slog.Logger,
 ) (*RuntimeScheduler, error) {
@@ -105,10 +105,10 @@ func NewRuntimeScheduler(
 	logger = runtimeSchedulerLogger(logger)
 
 	targetMinutes := sharedchecker.NormalizeTargetMinutes(alarmCRUD.GetTargetMinutes())
-	youtubeInterval, youtubeEvaluationWindowCap := runtimeSchedulerYouTubeTiming(notifCfg.CheckInterval)
+	youtubeInterval, youtubeEvaluationWindowCap := runtimeSchedulerYouTubeTiming(notifConfig.CheckInterval)
 	tierScheduler := tier.NewTieredScheduler(logger)
 	dedupSvc := dedup.NewService(cacheClient, targetMinutes, logger)
-	queuePublisher := newRuntimeSchedulerQueuePublisher(cacheClient, logger, outbox, publishCfg)
+	queuePublisher := newRuntimeSchedulerQueuePublisher(cacheClient, logger, outbox, publishConfig)
 
 	youtubeChecker, err := newRuntimeSchedulerYouTubeChecker(
 		cacheClient,
@@ -219,16 +219,16 @@ func newRuntimeSchedulerQueuePublisher(
 	cacheClient cache.Client,
 	logger *slog.Logger,
 	outbox dispatchoutbox.Writer,
-	publishCfg queue.PublishConfig,
+	publishConfig queue.PublishConfig,
 ) *queue.Publisher {
 	return queue.NewPublisher(
 		cacheClient,
 		logger,
 		queue.WithOutbox(outbox),
-		queue.WithPublishMode(publishCfg.Mode),
-		queue.WithShadowFatal(publishCfg.ShadowFatal),
-		queue.WithWakeupEnabled(publishCfg.WakeupEnabled),
-		queue.WithMaxDeliveriesPerBatch(publishCfg.MaxDeliveriesPerBatch),
+		queue.WithPublishMode(publishConfig.Mode),
+		queue.WithShadowFatal(publishConfig.ShadowFatal),
+		queue.WithWakeupEnabled(publishConfig.WakeupEnabled),
+		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
 	)
 }
 

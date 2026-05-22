@@ -45,8 +45,8 @@ func TestBuildYouTubeProducerRuntime_Preconditions(t *testing.T) {
 	})
 
 	t.Run("nil logger", func(t *testing.T) {
-		cfg := &config.Config{}
-		runtime, err := BuildYouTubeProducerRuntime(context.Background(), cfg, nil)
+		appConfig := &config.Config{}
+		runtime, err := BuildYouTubeProducerRuntime(context.Background(), appConfig, nil)
 		require.Error(t, err)
 		assert.Nil(t, runtime)
 		assert.Equal(t, "logger must not be nil", err.Error())
@@ -56,10 +56,10 @@ func TestBuildYouTubeProducerRuntime_Preconditions(t *testing.T) {
 func TestBuildYouTubeProducerRuntimeRequiresRuntimeAllowEnv(t *testing.T) {
 	t.Setenv("YOUTUBE_PRODUCER_RUNTIME_ALLOWED", "")
 
-	cfg := buildInfraFailureConfig()
-	cfg.Ingestion.CommunityShortsBigBangEnabled = true
+	appConfig := buildInfraFailureConfig()
+	appConfig.Ingestion.CommunityShortsBigBangEnabled = true
 
-	runtime, err := BuildYouTubeProducerRuntime(context.Background(), cfg, newYouTubeProducerTestLogger())
+	runtime, err := BuildYouTubeProducerRuntime(context.Background(), appConfig, newYouTubeProducerTestLogger())
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Equal(t, "youtube producer runtime disabled: set YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true on the owning host", err.Error())

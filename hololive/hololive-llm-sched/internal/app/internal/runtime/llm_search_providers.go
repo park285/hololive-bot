@@ -34,32 +34,32 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-func provideExaSearcher(cfg config.ExaConfig, logger *slog.Logger) sharedmodel.WebSearcher {
+func provideExaSearcher(exaConfig config.ExaConfig, logger *slog.Logger) sharedmodel.WebSearcher {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	if !cfg.Enabled || strings.TrimSpace(cfg.APIKey) == "" {
+	if !exaConfig.Enabled || strings.TrimSpace(exaConfig.APIKey) == "" {
 		logger.Info("Exa search disabled")
 		return nil
 	}
 
 	httpClient := httputil.NewExternalAPIClient(15 * time.Second)
-	client := mesummarizer.NewExaMCPClient(cfg.Endpoint, cfg.APIKey, httpClient, logger)
-	logger.Info("Exa search enabled", slog.String("endpoint", cfg.Endpoint))
+	client := mesummarizer.NewExaMCPClient(exaConfig.Endpoint, exaConfig.APIKey, httpClient, logger)
+	logger.Info("Exa search enabled", slog.String("endpoint", exaConfig.Endpoint))
 	return client
 }
 
-func buildMajorEventSummarizer(cfg *config.LLMSchedulerConfig, cacheClient cache.Client, logger *slog.Logger) *mesummarizer.EventSummarizer {
-	majorEventLLMClient := ProvideMajorEventLLMClient(cfg.Cliproxy, logger)
-	majorEventReviewer := ProvideMajorEventReviewerClient(cfg.Cliproxy, cfg.LLM, logger)
-	majorEventAdjudicator := ProvideMajorEventAdjudicatorClient(cfg.Cliproxy, cfg.LLM, logger)
-	exaSearcher := provideExaSearcher(cfg.Exa, logger)
-	return provideEventSummarizer(cfg.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheClient, exaSearcher, logger)
+func buildMajorEventSummarizer(exaConfig *config.LLMSchedulerConfig, cacheClient cache.Client, logger *slog.Logger) *mesummarizer.EventSummarizer {
+	majorEventLLMClient := ProvideMajorEventLLMClient(exaConfig.Cliproxy, logger)
+	majorEventReviewer := ProvideMajorEventReviewerClient(exaConfig.Cliproxy, exaConfig.LLM, logger)
+	majorEventAdjudicator := ProvideMajorEventAdjudicatorClient(exaConfig.Cliproxy, exaConfig.LLM, logger)
+	exaSearcher := provideExaSearcher(exaConfig.Exa, logger)
+	return provideEventSummarizer(exaConfig.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheClient, exaSearcher, logger)
 }
 
 func provideEventSummarizer(
-	majorEventCfg config.ConsensusLLMConfig,
+	majorEventConfig config.ConsensusLLMConfig,
 	llmClient mesummarizer.LLMClient,
 	reviewerClient mesummarizer.LLMClient,
 	adjudicatorClient mesummarizer.LLMClient,
@@ -72,21 +72,21 @@ func provideEventSummarizer(
 	}
 
 	opts := make([]mesummarizer.SummarizerOption, 0, 1)
-	if majorEventCfg.Enabled && reviewerClient != nil {
+	if majorEventConfig.Enabled && reviewerClient != nil {
 		opts = append(opts, mesummarizer.WithSummarizerConsensus(
 			reviewerClient,
 			adjudicatorClient,
 			mesummarizer.SummarizerConsensusConfig{
 				Enabled:             true,
-				ConfidenceThreshold: majorEventCfg.Confidence,
-				ReviewTimeout:       time.Duration(majorEventCfg.ReviewTimeout) * time.Second,
-				AdjudicateTimeout:   time.Duration(majorEventCfg.AdjudicateTimeout) * time.Second,
+				ConfidenceThreshold: majorEventConfig.Confidence,
+				ReviewTimeout:       time.Duration(majorEventConfig.ReviewTimeout) * time.Second,
+				AdjudicateTimeout:   time.Duration(majorEventConfig.AdjudicateTimeout) * time.Second,
 			},
 		))
 		logger.Info("Major event consensus summarizer enabled",
-			slog.Float64("confidence_threshold", majorEventCfg.Confidence),
-			slog.Int("review_timeout_sec", majorEventCfg.ReviewTimeout),
-			slog.Int("adjudicate_timeout_sec", majorEventCfg.AdjudicateTimeout),
+			slog.Float64("confidence_threshold", majorEventConfig.Confidence),
+			slog.Int("review_timeout_sec", majorEventConfig.ReviewTimeout),
+			slog.Int("adjudicate_timeout_sec", majorEventConfig.AdjudicateTimeout),
 		)
 	}
 

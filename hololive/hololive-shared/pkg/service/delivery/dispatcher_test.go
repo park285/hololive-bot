@@ -276,11 +276,11 @@ func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
 
 	sender := &mockSender{}
 
-	cfg := DefaultDispatcherConfig()
-	cfg.PollInterval = 10 * time.Millisecond
+	config := DefaultDispatcherConfig()
+	config.PollInterval = 10 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
-	d := NewDispatcher(repository, sender, dispatcherLogger(), cfg)
+	d := NewDispatcher(repository, sender, dispatcherLogger(), config)
 	d.Start(ctx)
 
 	// 초기 실행 + ticker 몇 회 대기
@@ -324,11 +324,11 @@ func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {
 		},
 	}
 
-	cfg := DefaultDispatcherConfig()
-	cfg.PollInterval = 10 * time.Millisecond
+	config := DefaultDispatcherConfig()
+	config.PollInterval = 10 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
-	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), cfg)
+	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), config)
 	done := make(chan struct{})
 	go func() {
 		d.run(ctx)
@@ -372,13 +372,13 @@ func TestDispatcher_StartProcessesOnceBeforeFirstTick(t *testing.T) {
 		},
 	}
 
-	cfg := DefaultDispatcherConfig()
-	cfg.PollInterval = time.Hour
+	config := DefaultDispatcherConfig()
+	config.PollInterval = time.Hour
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), cfg)
+	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), config)
 	d.Start(ctx)
 
 	select {
@@ -436,10 +436,10 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 		},
 	}
 
-	cfg := DefaultDispatcherConfig()
-	cfg.MaxConcurrent = 2
+	config := DefaultDispatcherConfig()
+	config.MaxConcurrent = 2
 
-	d := NewDispatcher(repository, sender, dispatcherLogger(), cfg)
+	d := NewDispatcher(repository, sender, dispatcherLogger(), config)
 	d.processOnce(context.Background())
 
 	if sentCount.Load() != 4 {

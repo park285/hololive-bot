@@ -5,7 +5,7 @@
 //
 // 이 패키지는 OpenTelemetry 기반 분산 추적을 서비스 공통 방식으로 구성합니다.
 // Config로 service metadata, OTLP gRPC endpoint, TLS 사용 여부, sampler 비율을
-// 지정하고 cfg.Enabled=true일 때 NewProvider가 exporter, resource, sampler,
+// 지정하고 config.Enabled=true일 때 NewProvider가 exporter, resource, sampler,
 // global provider를 설치합니다. Enabled=false이면 no-op Provider를 반환합니다.
 //
 // trace context 전파는 OpenTelemetry TextMapPropagator를 통해 처리합니다.
@@ -23,12 +23,12 @@
 //
 // # 주요 사용 패턴
 //
-//	cfg := telemetry.DefaultConfig()
-//	cfg.Enabled = true
-//	cfg.ServiceName = "llm-sched"
-//	cfg.OTLPEndpoint = "otel-collector:4317"
-//	cfg.OTLPInsecure = true
-//	provider, err := telemetry.NewProvider(ctx, cfg)
+//	config := telemetry.DefaultConfig()
+//	config.Enabled = true
+//	config.ServiceName = "llm-sched"
+//	config.OTLPEndpoint = "otel-collector:4317"
+//	config.OTLPInsecure = true
+//	provider, err := telemetry.NewProvider(ctx, config)
 //	if err != nil {
 //	    return err
 //	}

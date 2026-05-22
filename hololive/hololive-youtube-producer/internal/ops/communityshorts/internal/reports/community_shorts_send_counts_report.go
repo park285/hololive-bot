@@ -100,14 +100,14 @@ type communityShortsSendCountRows struct {
 
 func CollectCommunityShortsSendCountReport(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	since time.Time,
 ) (CommunityShortsSendCountReport, error) {
 	return CollectCommunityShortsSendCountReportWithOptions(
 		ctx,
-		cfg,
+		appConfig,
 		logger,
 		now,
 		CommunityShortsSendCountCollectOptions{Since: cloneCommunityShortsSendCountTime(&since)},
@@ -116,7 +116,7 @@ func CollectCommunityShortsSendCountReport(
 
 func CollectCommunityShortsSendCountReportWithOptions(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityShortsSendCountCollectOptions,
@@ -124,7 +124,7 @@ func CollectCommunityShortsSendCountReportWithOptions(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg == nil {
+	if appConfig == nil {
 		return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: config is nil")
 	}
 	if logger == nil {
@@ -141,7 +141,7 @@ func CollectCommunityShortsSendCountReportWithOptions(
 		return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: %w", err)
 	}
 
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, appConfig, logger)
 	if err != nil {
 		return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: %w", err)
 	}

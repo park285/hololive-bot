@@ -8,7 +8,7 @@ import (
 )
 
 func BuildBotWebhookHandler(
-	cfg *config.Config,
+	appConfig *config.Config,
 	messageHandler iris.MessageHandler,
 	deps BotWebhookRuntimeDependencies,
 	logger *slog.Logger,
@@ -16,10 +16,10 @@ func BuildBotWebhookHandler(
 	return iris.NewWebhookHandler(messageHandler,
 		iris.WithWebhookLogger(logger),
 		iris.WithValkeyDedup(deps.Cache.GetClient()),
-		iris.WithWorkerCount(cfg.Webhook.WorkerCount),
-		iris.WithQueueSize(cfg.Webhook.QueueSize),
-		iris.WithEnqueueTimeout(cfg.Webhook.EnqueueTimeout),
-		iris.WithHandlerTimeout(cfg.Webhook.HandlerTimeout),
-		iris.WithRequireHTTP2(cfg.Webhook.RequireHTTP2),
+		iris.WithWorkerCount(appConfig.Webhook.WorkerCount),
+		iris.WithQueueSize(appConfig.Webhook.QueueSize),
+		iris.WithEnqueueTimeout(appConfig.Webhook.EnqueueTimeout),
+		iris.WithHandlerTimeout(appConfig.Webhook.HandlerTimeout),
+		iris.WithRequireHTTP2(appConfig.Webhook.RequireHTTP2),
 	)
 }

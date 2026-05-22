@@ -46,13 +46,13 @@ type DatabaseResources struct {
 }
 
 // ProvideCacheResources - 캐시 리소스 생성 (정리 함수 포함)
-func ProvideCacheResources(ctx context.Context, cfg config.ValkeyConfig, logger *slog.Logger) (*CacheResources, func(), error) {
+func ProvideCacheResources(ctx context.Context, valkeyConfig config.ValkeyConfig, logger *slog.Logger) (*CacheResources, func(), error) {
 	cacheClient, err := cache.NewCacheService(ctx, cache.Config{
-		Host:       cfg.Host,
-		Port:       cfg.Port,
-		Password:   cfg.Password,
-		DB:         cfg.DB,
-		SocketPath: cfg.SocketPath,
+		Host:       valkeyConfig.Host,
+		Port:       valkeyConfig.Port,
+		Password:   valkeyConfig.Password,
+		DB:         valkeyConfig.DB,
+		SocketPath: valkeyConfig.SocketPath,
 	}, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create cache resources: %w", err)
@@ -68,19 +68,19 @@ func ProvideCacheResources(ctx context.Context, cfg config.ValkeyConfig, logger 
 }
 
 // ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함)
-func ProvideDatabaseResources(ctx context.Context, cfg config.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
+func ProvideDatabaseResources(ctx context.Context, valkeyConfig config.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
 	dbService, err := database.NewPostgresService(ctx, database.PostgresConfig{
-		Host:             cfg.Host,
-		Port:             cfg.Port,
-		SocketPath:       cfg.SocketPath,
-		User:             cfg.User,
-		Password:         cfg.Password,
-		Database:         cfg.Database,
-		SSLMode:          cfg.SSLMode,
-		QueryExecMode:    cfg.QueryExecMode,
-		PoolMinConns:     cfg.PoolMinConns,
-		PoolMaxConns:     cfg.PoolMaxConns,
-		PoolMaxIdleConns: cfg.PoolMaxIdleConns,
+		Host:             valkeyConfig.Host,
+		Port:             valkeyConfig.Port,
+		SocketPath:       valkeyConfig.SocketPath,
+		User:             valkeyConfig.User,
+		Password:         valkeyConfig.Password,
+		Database:         valkeyConfig.Database,
+		SSLMode:          valkeyConfig.SSLMode,
+		QueryExecMode:    valkeyConfig.QueryExecMode,
+		PoolMinConns:     valkeyConfig.PoolMinConns,
+		PoolMaxConns:     valkeyConfig.PoolMaxConns,
+		PoolMaxIdleConns: valkeyConfig.PoolMaxIdleConns,
 	}, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create database resources: %w", err)
@@ -112,8 +112,8 @@ func ProvideIrisKaringClient(logger *slog.Logger, opts ...iris.ClientOption) (Ir
 }
 
 func provideRuntimeIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*delivery.RuntimeIrisClient, error) {
-	cfg := iris.ResolveClientSDKConfig(opts)
-	fallbackBaseURL := strings.TrimSpace(cfg.BaseURL)
+	valkeyConfig := iris.ResolveClientSDKConfig(opts)
+	fallbackBaseURL := strings.TrimSpace(valkeyConfig.BaseURL)
 	if fallbackBaseURL == "" {
 		fallbackBaseURL = strings.TrimSpace(os.Getenv(iris.EnvBaseURL))
 	}
@@ -122,7 +122,7 @@ func provideRuntimeIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*
 		return nil, fmt.Errorf("provide iris client: IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
-	botToken := strings.TrimSpace(cfg.BotToken)
+	botToken := strings.TrimSpace(valkeyConfig.BotToken)
 	if botToken == "" {
 		botToken = strings.TrimSpace(os.Getenv(iris.EnvBotToken))
 	}

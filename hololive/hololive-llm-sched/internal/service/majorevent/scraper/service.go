@@ -61,7 +61,7 @@ func NewService(
 	repository eventRepository,
 	fetcher *FeedFetcher,
 	parser *RSSParser,
-	cfg ServiceConfig,
+	config ServiceConfig,
 	logger *slog.Logger,
 ) (*Service, error) {
 	if repository == nil {
@@ -74,7 +74,7 @@ func NewService(
 		return nil, fmt.Errorf("new scraper service: parser is nil")
 	}
 
-	normalized := normalizeServiceConfig(cfg)
+	normalized := normalizeServiceConfig(config)
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -88,8 +88,8 @@ func NewService(
 	}, nil
 }
 
-func normalizeServiceConfig(cfg ServiceConfig) ServiceConfig {
-	normalized := cfg
+func normalizeServiceConfig(config ServiceConfig) ServiceConfig {
+	normalized := config
 	if len(normalized.Sources) == 0 {
 		normalized.Sources = DefaultServiceConfig().Sources
 	}

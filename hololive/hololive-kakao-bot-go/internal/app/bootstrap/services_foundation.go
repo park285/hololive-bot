@@ -13,14 +13,14 @@ import (
 
 func InitScraperHolodexFoundation(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*ScraperHolodexFoundation, error) {
-	holodexAPIKey := cfg.Holodex.APIKey
+	holodexAPIKey := appConfig.Holodex.APIKey
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 
-	scraperProxyConfig := providersScraperProxyConfig(cfg)
+	scraperProxyConfig := providersScraperProxyConfig(appConfig)
 
 	sharedRL, err := providers.ProvideYouTubeProducerRateLimiter(infra.Cache, logger)
 	if err != nil {
@@ -36,7 +36,7 @@ func InitScraperHolodexFoundation(
 	)
 
 	holodexService, err := providers.ProvideHolodexService(
-		cfg.Holodex.BaseURL,
+		appConfig.Holodex.BaseURL,
 		holodexAPIKey,
 		infra.Cache,
 		scraperService,
@@ -55,11 +55,11 @@ func InitScraperHolodexFoundation(
 
 func InitScraperHolodexProfileFoundation(
 	ctx context.Context,
-	cfg *config.Config,
+	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*ScraperHolodexProfileFoundation, error) {
-	foundation, err := InitScraperHolodexFoundation(ctx, cfg, infra, logger)
+	foundation, err := InitScraperHolodexFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +77,6 @@ func InitScraperHolodexProfileFoundation(
 	}, nil
 }
 
-func providersScraperProxyConfig(cfg *config.Config) scraper.ProxyConfig {
-	return scraper.ProxyConfig{Enabled: cfg.Scraper.ProxyEnabled, URL: cfg.Scraper.ProxyURL}
+func providersScraperProxyConfig(appConfig *config.Config) scraper.ProxyConfig {
+	return scraper.ProxyConfig{Enabled: appConfig.Scraper.ProxyEnabled, URL: appConfig.Scraper.ProxyURL}
 }

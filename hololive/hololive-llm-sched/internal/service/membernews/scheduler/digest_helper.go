@@ -101,31 +101,31 @@ func runDigestDispatch(
 	service model.DigestService,
 	locker delivery.NotificationLocker,
 	logger *slog.Logger,
-	cfg digestDispatchConfig,
+	config digestDispatchConfig,
 ) error {
-	token, acquired, err := locker.TryAcquire(ctx, cfg.lockKey, delivery.DefaultExecutionLockTTL)
+	token, acquired, err := locker.TryAcquire(ctx, config.lockKey, delivery.DefaultExecutionLockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire digest execution lock: %w", err)
 	}
 	if !acquired {
-		logger.Info(cfg.lockHeldMessage, slog.String(cfg.periodFieldName, cfg.periodKey))
+		logger.Info(config.lockHeldMessage, slog.String(config.periodFieldName, config.periodKey))
 		return nil
 	}
-	defer func() { _ = locker.Release(ctx, cfg.lockKey, token) }()
+	defer func() { _ = locker.Release(ctx, config.lockKey, token) }()
 
 	rooms, err := service.ListSubscribedRooms(ctx)
 	if err != nil {
 		return fmt.Errorf("list subscribed rooms: %w", err)
 	}
 	if len(rooms) == 0 {
-		logger.Info(cfg.emptyRoomsMessage)
+		logger.Info(config.emptyRoomsMessage)
 		return nil
 	}
 
-	result := dispatchDigestRooms(ctx, rooms, cfg)
+	result := dispatchDigestRooms(ctx, rooms, config)
 
-	logger.Info(cfg.resultMessage,
-		slog.String(cfg.periodFieldName, cfg.periodKey),
+	logger.Info(config.resultMessage,
+		slog.String(config.periodFieldName, config.periodKey),
 		slog.Int("attempted", result.Attempted),
 		slog.Int("sent", result.Sent),
 		slog.Int("skipped", result.Skipped),
@@ -134,13 +134,13 @@ func runDigestDispatch(
 	)
 
 	if result.Sent == 0 && result.Failed > 0 {
-		return fmt.Errorf(cfg.allFailedMessage, result.Failed)
+		return fmt.Errorf(config.allFailedMessage, result.Failed)
 	}
 
 	return nil
 }
 
-func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, cfg digestDispatchConfig) delivery.SendResult {
+func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, config digestDispatchConfig) delivery.SendResult {
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
@@ -155,7 +155,7 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, cfg 
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			roomResult := cfg.processRoom(ctx, cfg.periodKey, roomID)
+			roomResult := config.processRoom(ctx, config.periodKey, roomID)
 			mu.Lock()
 			result.Merge(roomResult)
 			mu.Unlock()

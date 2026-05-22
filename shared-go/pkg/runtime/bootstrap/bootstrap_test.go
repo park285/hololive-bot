@@ -123,15 +123,15 @@ func TestRun_BuildsRunsAndClosesRuntime(t *testing.T) {
 			return slog.New(slog.DiscardHandler), nil
 		},
 		StartupMessage: "Test runtime starting...",
-		StartupFields: func(cfg *testConfig) []any {
-			return []any{slog.Int("port", cfg.Port)}
+		StartupFields: func(config *testConfig) []any {
+			return []any{slog.Int("port", config.Port)}
 		},
 		BuildTimeout: 25 * time.Millisecond,
-		BuildRuntime: func(ctx context.Context, cfg *testConfig, logger *slog.Logger) (*testRuntime, error) {
+		BuildRuntime: func(ctx context.Context, config *testConfig, logger *slog.Logger) (*testRuntime, error) {
 			if logger == nil {
 				t.Fatal("BuildRuntime() logger = nil")
 			}
-			builtConfig = cfg
+			builtConfig = config
 			var ok bool
 			buildCtxDeadline, ok = ctx.Deadline()
 			if !ok {

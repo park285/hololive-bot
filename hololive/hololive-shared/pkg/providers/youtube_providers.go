@@ -143,22 +143,22 @@ func ProvideScraperScheduler(
 }
 
 func newScraperScheduler(opts scraperSchedulerOptions) *poller.Scheduler {
-	schedulerCfg := poller.DefaultSchedulerConfig()
-	schedulerCfg.RequestInterval = 0
+	schedulerConfig := poller.DefaultSchedulerConfig()
+	schedulerConfig.RequestInterval = 0
 	if opts.workerCount > 0 {
-		schedulerCfg.WorkerCount = opts.workerCount
+		schedulerConfig.WorkerCount = opts.workerCount
 	}
 	if opts.pollTimeout > 0 {
-		schedulerCfg.PollTimeout = opts.pollTimeout
+		schedulerConfig.PollTimeout = opts.pollTimeout
 	}
 	if opts.errorBackoffMin > 0 {
-		schedulerCfg.ErrorBackoffMin = opts.errorBackoffMin
+		schedulerConfig.ErrorBackoffMin = opts.errorBackoffMin
 	}
 	if opts.errorBackoffMax > 0 {
-		schedulerCfg.ErrorBackoffMax = opts.errorBackoffMax
+		schedulerConfig.ErrorBackoffMax = opts.errorBackoffMax
 	}
-	schedulerCfg.JobClaimer = opts.jobClaimer
-	return poller.NewScheduler(schedulerCfg)
+	schedulerConfig.JobClaimer = opts.jobClaimer
+	return poller.NewScheduler(schedulerConfig)
 }
 
 func resolveDefaultScraperSchedulerChannels(

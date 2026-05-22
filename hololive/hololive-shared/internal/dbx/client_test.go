@@ -27,7 +27,7 @@ import (
 )
 
 func TestNewLazy(t *testing.T) {
-	cfg := Config{
+	config := Config{
 		Host:     "postgres",
 		Port:     5432,
 		User:     "test",
@@ -36,7 +36,7 @@ func TestNewLazy(t *testing.T) {
 	}
 	opt := DefaultOpenOptions()
 
-	client := NewLazy(cfg, opt)
+	client := NewLazy(config, opt)
 
 	if client == nil {
 		t.Fatal("NewLazy returned nil")
@@ -56,10 +56,10 @@ func TestNewLazy(t *testing.T) {
 }
 
 func TestNewLazy_NilLogger(t *testing.T) {
-	cfg := Config{Host: "postgres", Port: 5432}
+	config := Config{Host: "postgres", Port: 5432}
 	opt := OpenOptions{}
 
-	client := NewLazy(cfg, opt)
+	client := NewLazy(config, opt)
 
 	if client == nil {
 		t.Fatal("NewLazy returned nil")
@@ -86,12 +86,12 @@ func TestNormalizePoolConfig(t *testing.T) {
 func TestConfigDSN(t *testing.T) {
 	tests := []struct {
 		name string
-		cfg  Config
+		config  Config
 		want string
 	}{
 		{
 			name: "TCP connection",
-			cfg: Config{
+			config: Config{
 				Host:     "localhost",
 				Port:     5432,
 				User:     "user",
@@ -102,7 +102,7 @@ func TestConfigDSN(t *testing.T) {
 		},
 		{
 			name: "UDS connection",
-			cfg: Config{
+			config: Config{
 				SocketPath: "/var/run/postgresql",
 				User:       "user",
 				Password:   "pass",
@@ -112,7 +112,7 @@ func TestConfigDSN(t *testing.T) {
 		},
 		{
 			name: "custom SSL mode",
-			cfg: Config{
+			config: Config{
 				Host:     "localhost",
 				Port:     5432,
 				User:     "user",
@@ -124,7 +124,7 @@ func TestConfigDSN(t *testing.T) {
 		},
 		{
 			name: "query exec mode",
-			cfg: Config{
+			config: Config{
 				Host:          "localhost",
 				Port:          5432,
 				User:          "user",
@@ -138,7 +138,7 @@ func TestConfigDSN(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.cfg.DSN(); got != tt.want {
+			if got := tt.config.DSN(); got != tt.want {
 				t.Errorf("DSN() = %q, want %q", got, tt.want)
 			}
 		})
@@ -147,7 +147,7 @@ func TestConfigDSN(t *testing.T) {
 
 func TestTryConnect_ParseConfigError_MasksPassword(t *testing.T) {
 	client := &Client{opt: DefaultOpenOptions()}
-	cfg := Config{
+	config := Config{
 		Host:     "localhost",
 		Port:     5432,
 		User:     "user",
@@ -156,13 +156,13 @@ func TestTryConnect_ParseConfigError_MasksPassword(t *testing.T) {
 		SSLMode:  "invalid",
 	}
 
-	_, err := client.tryConnect(context.Background(), cfg, DefaultPoolConfig(), DefaultRetryConfig())
+	_, err := client.tryConnect(context.Background(), config, DefaultPoolConfig(), DefaultRetryConfig())
 	if err == nil {
 		t.Fatal("expected parse config error, got nil")
 	}
 
 	errMsg := err.Error()
-	if strings.Contains(errMsg, cfg.Password) {
+	if strings.Contains(errMsg, config.Password) {
 		t.Fatalf("error message must not leak raw password: %q", errMsg)
 	}
 	if !strings.Contains(errMsg, "sslmode is invalid") {

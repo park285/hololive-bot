@@ -232,7 +232,7 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		return []string{"UC_TIER"}, nil
 	}
 
-	cfg := config.ScraperConfig{
+	appConfig := config.ScraperConfig{
 		Poll: config.ScraperPoll{
 			Videos:    10 * time.Minute,
 			Shorts:    10 * time.Minute,
@@ -243,7 +243,7 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
 	}
 	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
-	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), cache, nil, []string{"UC_TIER"}, []string{"UC_TIER"})
+	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, appConfig, scraper.NewRateLimiter(time.Second), cache, nil, []string{"UC_TIER"}, []string{"UC_TIER"})
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),

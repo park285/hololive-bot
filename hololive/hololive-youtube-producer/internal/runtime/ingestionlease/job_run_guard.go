@@ -107,11 +107,11 @@ end
 return 0
 `
 
-func NewJobRunGuard(cacheClient cache.Client, cfg JobRunGuardConfig) *JobRunGuard {
+func NewJobRunGuard(cacheClient cache.Client, config JobRunGuardConfig) *JobRunGuard {
 	return &JobRunGuard{
 		cacheClient: cacheClient,
-		namespace:   normalizeJobRunGuardNamespace(cfg.Namespace),
-		instanceID:  normalizeJobRunGuardInstanceID(cfg.InstanceID),
+		namespace:   normalizeJobRunGuardNamespace(config.Namespace),
+		instanceID:  normalizeJobRunGuardInstanceID(config.InstanceID),
 	}
 }
 

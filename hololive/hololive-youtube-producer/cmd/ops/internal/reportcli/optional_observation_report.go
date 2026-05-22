@@ -49,7 +49,7 @@ func RunOptionalObservationReport[Options any, Report any](
 		return err
 	}
 
-	cfg, err := loadReportConfig(command.LoadConfig)
+	appConfig, err := loadReportConfig(command.LoadConfig)
 	if err != nil {
 		return fmt.Errorf("%s: %w", strings.TrimSpace(command.LoadConfigError), err)
 	}
@@ -58,7 +58,7 @@ func RunOptionalObservationReport[Options any, Report any](
 	ctx, cancel := context.WithTimeout(context.Background(), normalizeReportTimeout(command.Timeout))
 	defer cancel()
 
-	report, err := command.Collect(ctx, cfg, logger, now, options)
+	report, err := command.Collect(ctx, appConfig, logger, now, options)
 	if err != nil {
 		return fmt.Errorf("%s: %w", strings.TrimSpace(command.CollectError), err)
 	}
