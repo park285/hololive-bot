@@ -23,8 +23,9 @@ type ResolveResult struct {
 	Hit      bool
 }
 
-// ComputeFn 은 cache miss 때 호출되는 decision 계산 함수.
-type ComputeFn func(ctx context.Context) (Decision, error)
+// ComputeFn 은 cache miss 때 호출되는 decision 과 선택적 release token 계산 함수.
+// nil token 은 AlreadySent, RetryLater 처럼 release 없이 확정되는 decision 을 뜻한다.
+type ComputeFn func(ctx context.Context) (Decision, *Token, error)
 
 // DecisionCache 는 batch-local get-or-compute claim decision cache.
 type DecisionCache interface {

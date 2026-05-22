@@ -16,9 +16,9 @@ func TestMemoryDecisionCache_ResolveClaimMissComputesStoresAndReturnsToken(t *te
 	authorizedAt := time.Date(2026, 5, 22, 10, 30, 0, 0, time.UTC)
 	computeCalls := 0
 
-	result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, error) {
+	result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
 		computeCalls++
-		return Decision{AuthorizedAt: authorizedAt, Value: "proceed"}, nil
+		return Decision{AuthorizedAt: authorizedAt, Value: "proceed"}, &Token{AuthorizedAt: authorizedAt}, nil
 	})
 	if err != nil {
 		t.Fatalf("ResolveClaim() error = %v", err)
@@ -44,21 +44,48 @@ func TestMemoryDecisionCache_ResolveClaimMissComputesStoresAndReturnsToken(t *te
 	}
 }
 
+func TestMemoryDecisionCache_ResolveClaimMissCanReturnNilToken(t *testing.T) {
+	t.Parallel()
+
+	cache := NewMemoryDecisionCache()
+	authorizedAt := time.Date(2026, 5, 22, 10, 30, 30, 0, time.UTC)
+
+	result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
+		return Decision{AuthorizedAt: authorizedAt, Value: "already-sent"}, nil, nil
+	})
+	if err != nil {
+		t.Fatalf("ResolveClaim() error = %v", err)
+	}
+
+	if result.Hit {
+		t.Fatalf("ResolveClaim() Hit = true, want false")
+	}
+	if result.Token != nil {
+		t.Fatalf("ResolveClaim() token = %v, want nil", result.Token)
+	}
+	if result.Decision.Value != "already-sent" {
+		t.Fatalf("ResolveClaim() decision value = %v, want %q", result.Decision.Value, "already-sent")
+	}
+	if !result.Decision.AuthorizedAt.Equal(authorizedAt) {
+		t.Fatalf("ResolveClaim() decision authorized_at = %s, want %s", result.Decision.AuthorizedAt, authorizedAt)
+	}
+}
+
 func TestMemoryDecisionCache_ResolveClaimHitSkipsComputeAndReturnsNilToken(t *testing.T) {
 	t.Parallel()
 
 	cache := NewMemoryDecisionCache()
 	authorizedAt := time.Date(2026, 5, 22, 10, 30, 0, 0, time.UTC)
-	if _, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, error) {
-		return Decision{AuthorizedAt: authorizedAt, Value: "already-sent"}, nil
+	if _, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
+		return Decision{AuthorizedAt: authorizedAt, Value: "already-sent"}, nil, nil
 	}); err != nil {
 		t.Fatalf("initial ResolveClaim() error = %v", err)
 	}
 
 	computeCalls := 0
-	result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, error) {
+	result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
 		computeCalls++
-		return Decision{AuthorizedAt: authorizedAt.Add(time.Second), Value: "retry-later"}, nil
+		return Decision{AuthorizedAt: authorizedAt.Add(time.Second), Value: "retry-later"}, nil, nil
 	})
 	if err != nil {
 		t.Fatalf("ResolveClaim() error = %v", err)
@@ -88,9 +115,9 @@ func TestMemoryDecisionCache_ResolveClaimComputeErrorDoesNotStore(t *testing.T) 
 	computeErr := errors.New("claim failed")
 	firstCalls := 0
 
-	result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, error) {
+	result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
 		firstCalls++
-		return Decision{Value: "retry-later"}, computeErr
+		return Decision{Value: "retry-later"}, nil, computeErr
 	})
 	if !errors.Is(err, computeErr) {
 		t.Fatalf("ResolveClaim() error = %v, want %v", err, computeErr)
@@ -107,9 +134,9 @@ func TestMemoryDecisionCache_ResolveClaimComputeErrorDoesNotStore(t *testing.T) 
 
 	authorizedAt := time.Date(2026, 5, 22, 10, 31, 0, 0, time.UTC)
 	secondCalls := 0
-	result, err = cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, error) {
+	result, err = cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
 		secondCalls++
-		return Decision{AuthorizedAt: authorizedAt, Value: "proceed"}, nil
+		return Decision{AuthorizedAt: authorizedAt, Value: "proceed"}, &Token{AuthorizedAt: authorizedAt}, nil
 	})
 	if err != nil {
 		t.Fatalf("second ResolveClaim() error = %v", err)
@@ -144,10 +171,10 @@ func TestMemoryDecisionCache_ResolveClaimConcurrentMissComputesOnce(t *testing.T
 		go func() {
 			defer wg.Done()
 			<-start
-			result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, error) {
+			result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
 				computeCalls.Add(1)
 				time.Sleep(10 * time.Millisecond)
-				return Decision{AuthorizedAt: authorizedAt, Value: "proceed"}, nil
+				return Decision{AuthorizedAt: authorizedAt, Value: "proceed"}, &Token{AuthorizedAt: authorizedAt}, nil
 			})
 			if err != nil {
 				errs <- err

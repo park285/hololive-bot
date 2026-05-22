@@ -48,14 +48,12 @@ func (c *MemoryDecisionCache) ResolveClaim(ctx context.Context, key string, comp
 }
 
 func computeDecision(ctx context.Context, compute ComputeFn) (ResolveResult, error) {
-	decision, err := compute(ctx)
+	decision, token, err := compute(ctx)
 	if err != nil {
 		return ResolveResult{}, err
 	}
 	return ResolveResult{
 		Decision: decision,
-		Token: &Token{
-			AuthorizedAt: decision.AuthorizedAt,
-		},
+		Token:    token,
 	}, nil
 }
