@@ -373,6 +373,9 @@ hololive/hololive-shared/pkg/service/auth/service_schema.go
 hololive/hololive-shared/pkg/service/auth/service_session.go
 hololive/hololive-shared/pkg/service/auth/tokens.go
 hololive/hololive-shared/pkg/service/auth/validation.go
+hololive/hololive-shared/pkg/service/cache/claim/claim.go
+hololive/hololive-shared/pkg/service/cache/claim/claim_memory.go
+hololive/hololive-shared/pkg/service/cache/claim/doc.go
 hololive/hololive-shared/pkg/service/cache/errors.go
 hololive/hololive-shared/pkg/service/cache/interface.go
 hololive/hololive-shared/pkg/service/cache/member_cache.go
