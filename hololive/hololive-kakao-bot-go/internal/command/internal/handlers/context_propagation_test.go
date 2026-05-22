@@ -186,7 +186,7 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 	})
 	var baseCtx context.Context
 	//nolint:staticcheck // nil context path is the behavior under test
-	matcherService := matcher.NewMemberMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 
 	deps := &Dependencies{
 		Matcher:   matcherService,
@@ -214,7 +214,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		IsGraduated: true,
 		Org:         "Hololive",
 	})
-	matcherService := matcher.NewMemberMatcher(context.Background(), provider, nil, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMatcher(context.Background(), provider, nil, nil, nil, newCommandTestLogger())
 
 	var (
 		sendErrorCtx context.Context
@@ -258,7 +258,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 	})
 	var baseCtx context.Context
 	//nolint:staticcheck // nil context path is the behavior under test
-	matcherService := matcher.NewMemberMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 	streamProvider := &trackedStreamProvider{}
 
 	var (
@@ -312,7 +312,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 		}),
 		MembersData: provider,
 		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply reqCtx.
-		Matcher:   matcher.NewMemberMatcher(nil, provider, nil, nil, nil, newCommandTestLogger()),
+		Matcher:   matcher.NewMatcher(nil, provider, nil, nil, nil, newCommandTestLogger()),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil

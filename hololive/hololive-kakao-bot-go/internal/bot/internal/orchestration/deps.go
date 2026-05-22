@@ -59,7 +59,7 @@ type Dependencies struct {
 	Twitch           *twitch.Client
 	Profiles         *member.ProfileService
 	Alarm            domain.AlarmCRUD
-	Matcher          *matcher.MemberMatcher
+	Matcher          *matcher.Matcher
 	MembersData      member.DataProvider
 	Service          youtube.Service
 	YouTubeStatsRepository stats.StatsCommandRepository
@@ -98,7 +98,7 @@ type streamDependencies struct {
 	twitch           *twitch.Client
 	profiles         *member.ProfileService
 	alarm            domain.AlarmCRUD
-	matcher          *matcher.MemberMatcher
+	matcher          *matcher.Matcher
 	membersData      member.DataProvider
 	service          youtube.Service
 	youTubeStatsRepository stats.StatsCommandRepository

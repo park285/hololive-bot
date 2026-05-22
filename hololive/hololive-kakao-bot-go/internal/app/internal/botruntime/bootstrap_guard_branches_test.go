@@ -205,7 +205,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	memberData := &stubMemberDataProvider{}
 	chzzkClient := &chzzk.Client{}
 	twitchClient := &twitch.Client{}
-	matcherService := &matcher.MemberMatcher{}
+	matcherService := &matcher.Matcher{}
 	ytStack := &providers.YouTubeStack{}
 	activityLogger := &activity.Logger{}
 	settingsService := &settings.Service{}

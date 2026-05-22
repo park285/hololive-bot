@@ -131,11 +131,11 @@ func newActivityLoggerForTest(t *testing.T) *activity.Logger {
 	return activity.NewActivityLogger(filepath.Join(t.TempDir(), "activity.log"), newDiscardLogger())
 }
 
-func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
+func TestAlarmHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("get alarms success", func(t *testing.T) {
-		handler := &AlarmAPIHandler{APIHandler: &APIHandler{
+		handler := &AlarmHandler{Handler: &Handler{
 			alarm: &stubAlarmCRUDForServer{
 				getAllAlarmKeys: func(context.Context) ([]*domain.AlarmEntry, error) {
 					return []*domain.AlarmEntry{{RoomID: "r1", ChannelID: "c1"}}, nil
@@ -158,7 +158,7 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 	})
 
 	t.Run("get alarms error", func(t *testing.T) {
-		handler := &AlarmAPIHandler{APIHandler: &APIHandler{
+		handler := &AlarmHandler{Handler: &Handler{
 			alarm: &stubAlarmCRUDForServer{
 				getAllAlarmKeys: func(context.Context) ([]*domain.AlarmEntry, error) {
 					return nil, errors.New("boom")
@@ -174,7 +174,7 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 	})
 
 	t.Run("delete alarm bad json", func(t *testing.T) {
-		handler := &AlarmAPIHandler{APIHandler: &APIHandler{
+		handler := &AlarmHandler{Handler: &Handler{
 			alarm:    &stubAlarmCRUDForServer{},
 			logger:   newDiscardLogger(),
 			activity: newActivityLoggerForTest(t),
@@ -189,7 +189,7 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 	})
 
 	t.Run("delete alarm internal error", func(t *testing.T) {
-		handler := &AlarmAPIHandler{APIHandler: &APIHandler{
+		handler := &AlarmHandler{Handler: &Handler{
 			alarm: &stubAlarmCRUDForServer{
 				removeAlarm: func(context.Context, string, string, domain.AlarmTypes) (bool, error) {
 					return false, errors.New("remove failed")
@@ -210,7 +210,7 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 	t.Run("delete alarm success", func(t *testing.T) {
 		var gotRoomID, gotChannelID string
 
-		handler := &AlarmAPIHandler{APIHandler: &APIHandler{
+		handler := &AlarmHandler{Handler: &Handler{
 			alarm: &stubAlarmCRUDForServer{
 				removeAlarm: func(_ context.Context, roomID, channelID string, _ domain.AlarmTypes) (bool, error) {
 					gotRoomID, gotChannelID = roomID, channelID
@@ -238,11 +238,11 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 	})
 }
 
-func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
+func TestMajorEventHandler_TriggerEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("weekly scheduler not initialized", func(t *testing.T) {
-		handler := &MajorEventAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
+		handler := &MajorEventHandler{Handler: &Handler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
 		handler.TriggerMajorEventNotification(ctx)
 
@@ -250,7 +250,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 	})
 
 	t.Run("weekly conflict in progress", func(t *testing.T) {
-		handler := &MajorEventAPIHandler{APIHandler: &APIHandler{
+		handler := &MajorEventHandler{Handler: &Handler{
 			logger:              newDiscardLogger(),
 			majorEventScheduler: &stubMajorEventScheduler{err: triggercontracts.ErrNotificationInProgress},
 		}}
@@ -261,7 +261,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 	})
 
 	t.Run("weekly internal error", func(t *testing.T) {
-		handler := &MajorEventAPIHandler{APIHandler: &APIHandler{
+		handler := &MajorEventHandler{Handler: &Handler{
 			logger:              newDiscardLogger(),
 			majorEventScheduler: &stubMajorEventScheduler{err: errors.New("boom")},
 		}}
@@ -274,7 +274,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 	})
 
 	t.Run("weekly success", func(t *testing.T) {
-		handler := &MajorEventAPIHandler{APIHandler: &APIHandler{
+		handler := &MajorEventHandler{Handler: &Handler{
 			logger:              newDiscardLogger(),
 			majorEventScheduler: &stubMajorEventScheduler{},
 		}}
@@ -287,7 +287,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 	})
 
 	t.Run("monthly scheduler not initialized", func(t *testing.T) {
-		handler := &MajorEventAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
+		handler := &MajorEventHandler{Handler: &Handler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
 		handler.TriggerMajorEventMonthlyNotification(ctx)
 
@@ -297,7 +297,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 	})
 
 	t.Run("monthly conflict in progress", func(t *testing.T) {
-		handler := &MajorEventAPIHandler{APIHandler: &APIHandler{
+		handler := &MajorEventHandler{Handler: &Handler{
 			logger:                     newDiscardLogger(),
 			majorEventMonthlyScheduler: &stubMajorEventMonthlyScheduler{err: triggercontracts.ErrNotificationInProgress},
 		}}
@@ -310,7 +310,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 	})
 
 	t.Run("monthly success", func(t *testing.T) {
-		handler := &MajorEventAPIHandler{APIHandler: &APIHandler{
+		handler := &MajorEventHandler{Handler: &Handler{
 			logger:                     newDiscardLogger(),
 			majorEventMonthlyScheduler: &stubMajorEventMonthlyScheduler{},
 		}}
@@ -323,11 +323,11 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 	})
 }
 
-func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
+func TestProfileHandler_ValidationAndConverters(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("get profile requires channelId", func(t *testing.T) {
-		handler := &ProfileAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
+		handler := &ProfileHandler{Handler: &Handler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile", nil)
 		handler.GetProfile(ctx)
 
@@ -335,7 +335,7 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 	})
 
 	t.Run("get profile service unavailable", func(t *testing.T) {
-		handler := &ProfileAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
+		handler := &ProfileHandler{Handler: &Handler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile?channelId=UC123", nil)
 		handler.GetProfile(ctx)
 
@@ -345,7 +345,7 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 	})
 
 	t.Run("get profile by name requires name", func(t *testing.T) {
-		handler := &ProfileAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
+		handler := &ProfileHandler{Handler: &Handler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile/by-name", nil)
 		handler.GetProfileByName(ctx)
 
@@ -355,7 +355,7 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 	})
 
 	t.Run("get profile by name service unavailable", func(t *testing.T) {
-		handler := &ProfileAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
+		handler := &ProfileHandler{Handler: &Handler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile/by-name?name=Sora", nil)
 		handler.GetProfileByName(ctx)
 
@@ -419,11 +419,11 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 	})
 }
 
-func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
+func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("add room bad json", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}, logger: newDiscardLogger()}}
+		handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte("{"))
 		handler.AddRoom(ctx)
 
@@ -431,7 +431,7 @@ func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 	})
 
 	t.Run("remove room bad json", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}, logger: newDiscardLogger()}}
+		handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/rooms", []byte("{"))
 		handler.RemoveRoom(ctx)
 
@@ -441,7 +441,7 @@ func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 	})
 
 	t.Run("set acl bad json", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}, logger: newDiscardLogger()}}
+		handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/acl", []byte("{"))
 		handler.SetACL(ctx)
 

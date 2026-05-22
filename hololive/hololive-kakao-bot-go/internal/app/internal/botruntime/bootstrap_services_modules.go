@@ -49,7 +49,7 @@ func buildBotDependencyModules(
 	formatter *adapter.ResponseFormatter,
 	irisClient appbootstrap.BotIrisClient,
 	profileService *member.ProfileService,
-	memberMatcher *matcher.MemberMatcher,
+	memberMatcher *matcher.Matcher,
 	youTubeStack *providers.YouTubeStack,
 	activityLogger *activity.Logger,
 	settingsService settings.ReadWriter,

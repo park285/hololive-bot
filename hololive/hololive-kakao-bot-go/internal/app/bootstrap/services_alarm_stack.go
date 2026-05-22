@@ -18,7 +18,7 @@ import (
 
 type AlarmYouTubeStackComponents struct {
 	AlarmMode       *AlarmModeComponents
-	MemberMatcher   *matcher.MemberMatcher
+	Matcher   *matcher.Matcher
 	YouTubeStack    *sharedproviders.YouTubeStack
 	ActivityLogger  *activity.Logger
 	SettingsService settings.ReadWriter
@@ -48,7 +48,7 @@ func InitAlarmYouTubeStack(
 		return nil, err
 	}
 
-	memberMatcher := ProvideMemberMatcher(
+	memberMatcher := ProvideMatcher(
 		ctx,
 		alarmMode.MemberDataSource,
 		infra.Cache,
@@ -67,7 +67,7 @@ func InitAlarmYouTubeStack(
 
 	return &AlarmYouTubeStackComponents{
 		AlarmMode:      alarmMode,
-		MemberMatcher:  memberMatcher,
+		Matcher:  memberMatcher,
 		YouTubeStack:   apiStack,
 		ActivityLogger: ProvideActivityLogger(logger),
 		SettingsService: sharedmodules.BuildSettingsService(

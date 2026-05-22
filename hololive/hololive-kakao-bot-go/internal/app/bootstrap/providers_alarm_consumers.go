@@ -63,12 +63,12 @@ func ProvideAlarmWorkerPool() (*workerpool.Pool, error) {
 	return pool, nil
 }
 
-func ProvideMemberMatcher(
+func ProvideMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
 	cacheClient cache.Client,
 	holodexService *holodex.Service,
 	logger *slog.Logger,
-) *matcher.MemberMatcher {
-	return matcher.NewMemberMatcher(ctx, membersData, cacheClient, holodexService, nil, logger)
+) *matcher.Matcher {
+	return matcher.NewMatcher(ctx, membersData, cacheClient, holodexService, nil, logger)
 }

@@ -67,7 +67,7 @@ type Bot struct {
 	twitch           *twitch.Client
 	officialProfiles *member.ProfileService
 	alarm            domain.AlarmCRUD
-	matcher          *matcher.MemberMatcher
+	matcher          *matcher.Matcher
 	commandRegistry  *command.Registry
 	statsRepository        stats.StatsCommandRepository
 	acl              *acl.Service

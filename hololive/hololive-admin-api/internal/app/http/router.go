@@ -42,7 +42,7 @@ func ProvideAPIRouter(
 	ctx context.Context,
 	appConfig *config.Config,
 	logger *slog.Logger,
-	domainHandlers *server.DomainAPIHandlers,
+	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
@@ -77,7 +77,7 @@ func ProvideAPIRouter(
 
 func validateAPIRouterInputs(
 	appConfig *config.Config,
-	domainHandlers *server.DomainAPIHandlers,
+	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
 ) error {
 	if appConfig == nil {
@@ -98,7 +98,7 @@ func validateAPIRouterInputs(
 	return nil
 }
 
-func validateDomainHandlers(h *server.DomainAPIHandlers) error {
+func validateDomainHandlers(h *server.DomainHandlers) error {
 	requiredHandlers := []struct {
 		missing bool
 		err     string

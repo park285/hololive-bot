@@ -211,7 +211,7 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 
 	deps := &Dependencies{
 		Alarm:     &notification.AlarmService{},
-		Matcher:   &matcher.MemberMatcher{},
+		Matcher:   &matcher.Matcher{},
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(ctx context.Context, room, message string) error {
 			return nil
@@ -266,7 +266,7 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 
 	deps := &Dependencies{
 		Alarm:     alarm,
-		Matcher:   &matcher.MemberMatcher{},
+		Matcher:   &matcher.Matcher{},
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(ctx context.Context, room, message string) error {
 			sentMessage = message
@@ -301,7 +301,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	deps := &Dependencies{
 		Alarm: alarm,
 		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
-		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
@@ -344,7 +344,7 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	deps := &Dependencies{
 		Alarm: alarm,
 		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
-		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil

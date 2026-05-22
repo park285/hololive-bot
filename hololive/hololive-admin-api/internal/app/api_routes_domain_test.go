@@ -37,7 +37,7 @@ type routeSpec struct {
 func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.APIHandler{}
+	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 

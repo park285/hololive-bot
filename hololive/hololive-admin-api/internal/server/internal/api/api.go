@@ -52,7 +52,7 @@ import (
 //   - api_settings.go: 설정/활동 로그/이름매핑
 //   - api_milestone.go: 마일스톤 조회
 //   - api_template.go: 템플릿 관리
-type APIHandler struct {
+type Handler struct {
 	repository                 *member.Repository
 	memberCache                *member.Cache
 	valkeyCache                cache.Client
@@ -81,9 +81,9 @@ func newStreamState() *sharedserver.StreamState {
 	return sharedserver.NewStreamState(channelStatsCacheWorkers, channelStatsRefreshWorkers)
 }
 
-func (h *APIHandler) ensureDefaults() *APIHandler {
+func (h *Handler) ensureDefaults() *Handler {
 	if h == nil {
-		h = &APIHandler{}
+		h = &Handler{}
 	}
 
 	if h.streamState == nil {
@@ -102,7 +102,7 @@ func (h *APIHandler) ensureDefaults() *APIHandler {
 }
 
 // streamState 접근자. 생성자에서 반드시 초기화되므로 nil이 될 수 없다.
-func (h *APIHandler) ensureStreamState() *sharedserver.StreamState {
+func (h *Handler) ensureStreamState() *sharedserver.StreamState {
 	if h == nil {
 		return newStreamState()
 	}
@@ -114,11 +114,11 @@ func (h *APIHandler) ensureStreamState() *sharedserver.StreamState {
 	return h.streamState
 }
 
-func (h *APIHandler) HasCommunityShortsOpsRepository() bool {
+func (h *Handler) HasCommunityShortsOpsRepository() bool {
 	return h != nil && h.communityShortsOps != nil
 }
 
-func NewAPIHandler(
+func NewHandler(
 	repository *member.Repository,
 	memberCache *member.Cache,
 	valkeyCache cache.Client,
@@ -138,14 +138,14 @@ func NewAPIHandler(
 	majorEventScheduler MajorEventScheduler,
 	majorEventMonthlyScheduler MajorEventMonthlyScheduler,
 	logger *slog.Logger,
-) *APIHandler {
+) *Handler {
 	var memberIndexLoader func(context.Context) ([]*domain.Member, error)
 
 	if repository != nil {
 		memberIndexLoader = repository.GetAllMembers
 	}
 
-	return (&APIHandler{
+	return (&Handler{
 		repository:                 repository,
 		memberCache:                memberCache,
 		valkeyCache:                valkeyCache,

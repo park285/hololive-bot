@@ -28,7 +28,7 @@ func BuildBotDependencyModules(
 	formatter *adapter.ResponseFormatter,
 	irisClient BotIrisClient,
 	profileService *member.ProfileService,
-	memberMatcher *matcher.MemberMatcher,
+	memberMatcher *matcher.Matcher,
 	youTubeStack *providers.YouTubeStack,
 	activityLogger *activity.Logger,
 	settingsService settings.ReadWriter,
@@ -88,7 +88,7 @@ func buildBotDataModule(
 func buildBotStreamModule(
 	alarmMode *AlarmModeComponents,
 	holodexService *holodex.Service,
-	memberMatcher *matcher.MemberMatcher,
+	memberMatcher *matcher.Matcher,
 	youTubeStack *providers.YouTubeStack,
 ) BotStreamModule {
 	return BotStreamModule{

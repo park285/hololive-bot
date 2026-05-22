@@ -69,7 +69,7 @@ type Dependencies struct {
 	Chzzk            *chzzk.Client
 	Cache            cache.Client
 	Alarm            domain.AlarmCRUD
-	Matcher          *matcher.MemberMatcher
+	Matcher          *matcher.Matcher
 	OfficialProfiles *member.ProfileService
 	StatsRepository        stats.StatsCommandRepository
 	MemberNews       MemberNewsService

@@ -36,7 +36,7 @@ import (
 func TestFailClosedAuth(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.APIHandler{}
+	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
@@ -98,7 +98,7 @@ func TestFailClosedAuth(t *testing.T) {
 func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.APIHandler{}
+	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
@@ -142,7 +142,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.APIHandler{}
+	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
@@ -203,7 +203,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.APIHandler{}
+	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
@@ -252,7 +252,7 @@ func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
 func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.APIHandler{}
+	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
@@ -304,7 +304,7 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.APIHandler{}
+	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
@@ -335,7 +335,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
-	apiHandler := &server.APIHandler{}
+	apiHandler := &server.Handler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 

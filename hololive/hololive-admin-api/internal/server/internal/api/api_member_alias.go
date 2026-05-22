@@ -43,7 +43,7 @@ func normalizeAliasInput(alias string) string {
 	return strings.Join(strings.Fields(alias), " ")
 }
 
-func (h *MemberAPIHandler) handleAliasOperation(
+func (h *MemberHandler) handleAliasOperation(
 	c *gin.Context,
 	repoFunc func(context.Context, int, string, string) error,
 	operationName string,
@@ -58,7 +58,7 @@ func (h *MemberAPIHandler) handleAliasOperation(
 		return
 	}
 
-	if h == nil || h.APIHandler == nil || h.memberCache == nil || repoFunc == nil {
+	if h == nil || h.Handler == nil || h.memberCache == nil || repoFunc == nil {
 		respondServiceUnavailable(c, "member service not available")
 		return
 	}
@@ -88,7 +88,7 @@ func (h *MemberAPIHandler) handleAliasOperation(
 	h.respondAliasOperationSuccess(c, memberID, req.Type, req.Alias, operationName)
 }
 
-func (h *MemberAPIHandler) bindAliasRequest(c *gin.Context) (aliasRequest, bool) {
+func (h *MemberHandler) bindAliasRequest(c *gin.Context) (aliasRequest, bool) {
 	var req aliasRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
@@ -115,7 +115,7 @@ func (h *MemberAPIHandler) bindAliasRequest(c *gin.Context) (aliasRequest, bool)
 	return req, true
 }
 
-func (h *MemberAPIHandler) respondAliasOperationSuccess(c *gin.Context, memberID int, aliasType, alias, operationName string) {
+func (h *MemberHandler) respondAliasOperationSuccess(c *gin.Context, memberID int, aliasType, alias, operationName string) {
 	h.safeLogger().Info("Alias "+operationName,
 		slog.Int("member_id", memberID),
 		slog.String("type", aliasType),
@@ -134,8 +134,8 @@ func (h *MemberAPIHandler) respondAliasOperationSuccess(c *gin.Context, memberID
 	})
 }
 
-func (h *MemberAPIHandler) AddAlias(c *gin.Context) {
-	if h == nil || h.APIHandler == nil || h.repository == nil {
+func (h *MemberHandler) AddAlias(c *gin.Context) {
+	if h == nil || h.Handler == nil || h.repository == nil {
 		respondServiceUnavailable(c, "member service not available")
 		return
 	}
@@ -143,8 +143,8 @@ func (h *MemberAPIHandler) AddAlias(c *gin.Context) {
 	h.handleAliasOperation(c, h.repository.AddAlias, "add")
 }
 
-func (h *MemberAPIHandler) RemoveAlias(c *gin.Context) {
-	if h == nil || h.APIHandler == nil || h.repository == nil {
+func (h *MemberHandler) RemoveAlias(c *gin.Context) {
+	if h == nil || h.Handler == nil || h.repository == nil {
 		respondServiceUnavailable(c, "member service not available")
 		return
 	}

@@ -85,11 +85,11 @@ func pickPreferredSnapshotCandidate(entries []*snapshotEntry) *matchCandidate {
 	return entries[0].candidate
 }
 
-func (mm *MemberMatcher) snapshotMatchStrategies() []snapshotMatchStrategy {
+func (mm *Matcher) snapshotMatchStrategies() []snapshotMatchStrategy {
 	return []snapshotMatchStrategy{
 		{
 			name: "exact-alias",
-			find: func(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+			find: func(snapshot *matcherSnapshot, queryNorm string) *matchCandidate {
 				if snapshot == nil {
 					return nil
 				}
@@ -99,7 +99,7 @@ func (mm *MemberMatcher) snapshotMatchStrategies() []snapshotMatchStrategy {
 		},
 		{
 			name: "exact-name",
-			find: func(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+			find: func(snapshot *matcherSnapshot, queryNorm string) *matchCandidate {
 				if snapshot == nil {
 					return nil
 				}
@@ -109,13 +109,13 @@ func (mm *MemberMatcher) snapshotMatchStrategies() []snapshotMatchStrategy {
 		},
 		{
 			name: "partial-name",
-			find: func(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+			find: func(snapshot *matcherSnapshot, queryNorm string) *matchCandidate {
 				return mm.trySnapshotPartialNameMatch(snapshot, queryNorm)
 			},
 		},
 		{
 			name: "partial-alias",
-			find: func(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+			find: func(snapshot *matcherSnapshot, queryNorm string) *matchCandidate {
 				return mm.trySnapshotPartialAliasMatch(snapshot, queryNorm)
 			},
 		},
@@ -143,7 +143,7 @@ func cloneCandidateWithStrategy(candidate *matchCandidate, strategy string) *mat
 	return &cloned
 }
 
-func (mm *MemberMatcher) resolveSnapshotCandidate(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+func (mm *Matcher) resolveSnapshotCandidate(snapshot *matcherSnapshot, queryNorm string) *matchCandidate {
 	for _, strategy := range mm.snapshotMatchStrategies() {
 		if strategy.find == nil {
 			continue
@@ -157,7 +157,7 @@ func (mm *MemberMatcher) resolveSnapshotCandidate(snapshot *memberMatcherSnapsho
 	return nil
 }
 
-func (mm *MemberMatcher) exactNameMembers(snapshot *memberMatcherSnapshot, nameNorm, org string) []*domain.Member {
+func (mm *Matcher) exactNameMembers(snapshot *matcherSnapshot, nameNorm, org string) []*domain.Member {
 	if snapshot == nil || nameNorm == "" {
 		return nil
 	}
@@ -189,7 +189,7 @@ func snapshotMemberForEntry(entry *snapshotEntry, org string) *domain.Member {
 	}
 }
 
-func (mm *MemberMatcher) findSnapshotCandidates(snapshot *memberMatcherSnapshot, queryNorm string) []*snapshotEntry {
+func (mm *Matcher) findSnapshotCandidates(snapshot *matcherSnapshot, queryNorm string) []*snapshotEntry {
 	if snapshot == nil || queryNorm == "" {
 		return nil
 	}
@@ -202,7 +202,7 @@ func (mm *MemberMatcher) findSnapshotCandidates(snapshot *memberMatcherSnapshot,
 	return snapshot.entries
 }
 
-func (mm *MemberMatcher) trySnapshotPartialNameMatch(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+func (mm *Matcher) trySnapshotPartialNameMatch(snapshot *matcherSnapshot, queryNorm string) *matchCandidate {
 	for _, entry := range mm.findSnapshotCandidates(snapshot, queryNorm) {
 		if entry == nil || entry.candidate == nil || entry.nameNorm == "" {
 			continue
@@ -216,7 +216,7 @@ func (mm *MemberMatcher) trySnapshotPartialNameMatch(snapshot *memberMatcherSnap
 	return nil
 }
 
-func (mm *MemberMatcher) trySnapshotPartialAliasMatch(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+func (mm *Matcher) trySnapshotPartialAliasMatch(snapshot *matcherSnapshot, queryNorm string) *matchCandidate {
 	for _, entry := range mm.findSnapshotCandidates(snapshot, queryNorm) {
 		if entry == nil || entry.candidate == nil {
 			continue

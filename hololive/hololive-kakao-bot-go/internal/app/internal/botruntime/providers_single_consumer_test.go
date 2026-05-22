@@ -90,7 +90,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	})
 
 	t.Run("member matcher", func(t *testing.T) {
-		matcher := appbootstrap.ProvideMemberMatcher(t.Context(), &stubMemberDataProvider{}, cachemocks.NewStrictClient(), nil, logger)
+		matcher := appbootstrap.ProvideMatcher(t.Context(), &stubMemberDataProvider{}, cachemocks.NewStrictClient(), nil, logger)
 		require.NotNil(t, matcher)
 	})
 

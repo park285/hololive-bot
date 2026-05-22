@@ -41,7 +41,7 @@ type commandInitView struct {
 	chzzk            *chzzk.Client
 	cache            cache.Client
 	alarm            domain.AlarmCRUD
-	matcher          *matcher.MemberMatcher
+	matcher          *matcher.Matcher
 	officialProfiles *member.ProfileService
 	statsRepository        stats.StatsCommandRepository
 	memberNews       command.MemberNewsService

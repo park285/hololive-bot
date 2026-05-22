@@ -314,14 +314,14 @@ func TestValidateMemberLookupDependencies(t *testing.T) {
 		{
 			name: "nil formatter",
 			deps: &Dependencies{
-				Matcher: &matcher.MemberMatcher{},
+				Matcher: &matcher.Matcher{},
 			},
 			wantErr: "formatter is nil",
 		},
 		{
 			name: "nil send error callback",
 			deps: &Dependencies{
-				Matcher:   &matcher.MemberMatcher{},
+				Matcher:   &matcher.Matcher{},
 				Formatter: adapter.NewResponseFormatter("!", nil),
 			},
 			wantErr: "send error callback is nil",
@@ -329,7 +329,7 @@ func TestValidateMemberLookupDependencies(t *testing.T) {
 		{
 			name: "all dependencies configured",
 			deps: &Dependencies{
-				Matcher:   &matcher.MemberMatcher{},
+				Matcher:   &matcher.Matcher{},
 				Formatter: adapter.NewResponseFormatter("!", nil),
 				SendError: func(_ context.Context, _, _ string) error {
 					return nil
@@ -447,7 +447,7 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		deps := &Dependencies{
-			Matcher:   &matcher.MemberMatcher{},
+			Matcher:   &matcher.Matcher{},
 			Holodex:   &stubCoverageStreamProvider{},
 			Formatter: adapter.NewResponseFormatter("!", nil),
 			SendMessage: func(_ context.Context, _, _ string) error {
@@ -502,7 +502,7 @@ func TestSubscriberGraphCommandEnsureDeps(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		deps := &Dependencies{
-			Matcher:   &matcher.MemberMatcher{},
+			Matcher:   &matcher.Matcher{},
 			StatsRepository: &stubCoverageStatsRepository{},
 			SendMessage: func(_ context.Context, _, _ string) error {
 				return nil

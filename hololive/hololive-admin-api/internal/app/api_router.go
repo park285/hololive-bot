@@ -38,7 +38,7 @@ func ProvideAPIRouter(
 	ctx context.Context,
 	appConfig *config.Config,
 	logger *slog.Logger,
-	domainHandlers *server.DomainAPIHandlers,
+	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,

@@ -35,7 +35,7 @@ type setACLRequest struct {
 	Mode    *string `json:"mode"`
 }
 
-func (h *RoomAPIHandler) GetRooms(c *gin.Context) {
+func (h *RoomHandler) GetRooms(c *gin.Context) {
 	if !h.requireACL(c) {
 		return
 	}
@@ -51,7 +51,7 @@ func (h *RoomAPIHandler) GetRooms(c *gin.Context) {
 
 //
 //nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
-func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
+func (h *RoomHandler) AddRoom(c *gin.Context) {
 	if !h.requireACL(c) {
 		return
 	}
@@ -92,7 +92,7 @@ func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
 
 //
 //nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
-func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
+func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 	if !h.requireACL(c) {
 		return
 	}
@@ -131,7 +131,7 @@ func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
 	h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
 
-func (h *RoomAPIHandler) SetACL(c *gin.Context) {
+func (h *RoomHandler) SetACL(c *gin.Context) {
 	if !h.requireACL(c) {
 		return
 	}
@@ -148,7 +148,7 @@ func (h *RoomAPIHandler) SetACL(c *gin.Context) {
 	h.respondSetACL(c)
 }
 
-func (h *RoomAPIHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
+func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
 	var req setACLRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
@@ -165,7 +165,7 @@ func (h *RoomAPIHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool)
 	return req, true
 }
 
-func (h *RoomAPIHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
+func (h *RoomHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
 	ctx := c.Request.Context()
 	if req.Enabled != nil {
 		if err := h.acl.SetEnabled(ctx, *req.Enabled); err != nil {
@@ -189,7 +189,7 @@ func (h *RoomAPIHandler) applyACLSettings(c *gin.Context, req setACLRequest) boo
 	return true
 }
 
-func (h *RoomAPIHandler) respondSetACL(c *gin.Context) {
+func (h *RoomHandler) respondSetACL(c *gin.Context) {
 	enabled, mode, _ := h.acl.GetACLStatus()
 	h.safeLogger().Info("Room ACL updated", slog.Bool("enabled", enabled), slog.String("mode", string(mode)))
 

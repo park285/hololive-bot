@@ -31,7 +31,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-func (mm *MemberMatcher) maybeCleanupMatchCache() {
+func (mm *Matcher) maybeCleanupMatchCache() {
 	mm.matchCacheMu.Lock()
 	defer mm.matchCacheMu.Unlock()
 
@@ -50,7 +50,7 @@ func (mm *MemberMatcher) maybeCleanupMatchCache() {
 }
 
 // 캐시된 결과가 있으면 반환하고, 없으면 여러 매칭 전략을 시도한다.
-func (mm *MemberMatcher) FindBestMatch(ctx context.Context, query string) (*domain.Channel, error) {
+func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Channel, error) {
 	normalizedQuery := stringutil.Normalize(query)
 	cacheKey := fmt.Sprintf("match:%s", normalizedQuery)
 
@@ -86,7 +86,7 @@ func (mm *MemberMatcher) FindBestMatch(ctx context.Context, query string) (*doma
 	return channel, err
 }
 
-func (mm *MemberMatcher) findBestMatchImpl(ctx context.Context, query string) (*domain.Channel, error) {
+func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain.Channel, error) {
 	queryNorm := normalizeMatcherTerm(query)
 
 	snapshot, err := mm.getSnapshot(ctx)
@@ -103,7 +103,7 @@ func (mm *MemberMatcher) findBestMatchImpl(ctx context.Context, query string) (*
 	return nil, nil
 }
 
-func (mm *MemberMatcher) GetAllMembers() []*domain.Member {
+func (mm *Matcher) GetAllMembers() []*domain.Member {
 	provider := mm.providerWithContext(mm.ctx)
 	if provider == nil {
 		return nil
@@ -112,7 +112,7 @@ func (mm *MemberMatcher) GetAllMembers() []*domain.Member {
 	return provider.GetAllMembers()
 }
 
-func (mm *MemberMatcher) GetMemberByChannelID(ctx context.Context, channelID string) *domain.Member {
+func (mm *Matcher) GetMemberByChannelID(ctx context.Context, channelID string) *domain.Member {
 	provider := mm.providerWithContext(ctx)
 	if provider == nil {
 		return nil
@@ -122,7 +122,7 @@ func (mm *MemberMatcher) GetMemberByChannelID(ctx context.Context, channelID str
 }
 
 // "이름 (그룹)" 형식을 파싱하고, 동명이인 발생 시 AmbiguousMatchError를 반환합니다.
-func (mm *MemberMatcher) FindBestMatchWithCandidates(ctx context.Context, query string) (*domain.Channel, error) {
+func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string) (*domain.Channel, error) {
 	name, org := ParseNameWithOrg(query)
 
 	name = mm.normalizeQuery(name)
@@ -155,7 +155,7 @@ func (mm *MemberMatcher) FindBestMatchWithCandidates(ctx context.Context, query 
 	return mm.memberToChannel(candidates[0]), nil
 }
 
-func (mm *MemberMatcher) memberToChannel(m *domain.Member) *domain.Channel {
+func (mm *Matcher) memberToChannel(m *domain.Member) *domain.Channel {
 	return &domain.Channel{
 		ID:   m.ChannelID,
 		Name: m.Name,
@@ -163,6 +163,6 @@ func (mm *MemberMatcher) memberToChannel(m *domain.Member) *domain.Channel {
 	}
 }
 
-func (mm *MemberMatcher) normalizeQuery(q string) string {
+func (mm *Matcher) normalizeQuery(q string) string {
 	return strings.TrimSpace(q)
 }

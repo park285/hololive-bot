@@ -104,7 +104,7 @@ type BotStreamModule struct {
 	ChzzkClient  *chzzk.Client
 	TwitchClient *twitch.Client
 	Alarm        domain.AlarmCRUD
-	MemberMatch  *matcher.MemberMatcher
+	MemberMatch  *matcher.Matcher
 	YTStack      *providers.YouTubeStack
 }
 

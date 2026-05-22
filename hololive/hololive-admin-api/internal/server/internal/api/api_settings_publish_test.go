@@ -54,7 +54,7 @@ func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T
 		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
 
-	handler := &SettingsAPIHandler{APIHandler: &APIHandler{
+	handler := &SettingsAPIHandler{Handler: &Handler{
 		logger:          newDiscardLogger(),
 		activity:        newActivityLoggerForTest(t),
 		settings:        settingsService,

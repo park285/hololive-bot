@@ -53,7 +53,7 @@ func registerAPIRoutes(
 	apiKey string,
 	cacheClient cache.Client,
 	logger *slog.Logger,
-	domainHandlers *server.DomainAPIHandlers,
+	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
 ) {
 	domains := domainHandlers

@@ -40,7 +40,7 @@ type updateMemberNameRequest struct {
 
 type memberFieldUpdateSpec[T any] struct {
 	value             func(T) string
-	update            func(context.Context, *MemberAPIHandler, int, T) error
+	update            func(context.Context, *MemberHandler, int, T) error
 	logFieldKey       string
 	repoErrorLog      string
 	repoErrorResponse string
@@ -52,7 +52,7 @@ type memberFieldUpdateSpec[T any] struct {
 	successMessage    string
 }
 
-func updateMemberField[T any](h *MemberAPIHandler, c *gin.Context, spec memberFieldUpdateSpec[T]) {
+func updateMemberField[T any](h *MemberHandler, c *gin.Context, spec memberFieldUpdateSpec[T]) {
 	if !h.requireMemberDeps(c) {
 		return
 	}
@@ -111,12 +111,12 @@ func updateMemberField[T any](h *MemberAPIHandler, c *gin.Context, spec memberFi
 	})
 }
 
-func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
+func (h *MemberHandler) UpdateChannelID(c *gin.Context) {
 	updateMemberField(h, c, memberFieldUpdateSpec[updateChannelIDRequest]{
 		value: func(req updateChannelIDRequest) string {
 			return req.ChannelID
 		},
-		update: func(ctx context.Context, h *MemberAPIHandler, memberID int, req updateChannelIDRequest) error {
+		update: func(ctx context.Context, h *MemberHandler, memberID int, req updateChannelIDRequest) error {
 			return h.repository.UpdateChannelID(ctx, memberID, req.ChannelID)
 		},
 		logFieldKey:       "channel_id",
@@ -133,12 +133,12 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 	})
 }
 
-func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
+func (h *MemberHandler) UpdateMemberName(c *gin.Context) {
 	updateMemberField(h, c, memberFieldUpdateSpec[updateMemberNameRequest]{
 		value: func(req updateMemberNameRequest) string {
 			return req.Name
 		},
-		update: func(ctx context.Context, h *MemberAPIHandler, memberID int, req updateMemberNameRequest) error {
+		update: func(ctx context.Context, h *MemberHandler, memberID int, req updateMemberNameRequest) error {
 			return h.repository.UpdateMemberName(ctx, memberID, req.Name)
 		},
 		logFieldKey:       "name",

@@ -38,8 +38,8 @@ type MajorEventMonthlyScheduler interface {
 	SendMonthlyNotification(ctx context.Context) error
 }
 
-func (h *MajorEventAPIHandler) TriggerMajorEventNotification(c *gin.Context) {
-	if h == nil || h.APIHandler == nil || h.majorEventScheduler == nil {
+func (h *MajorEventHandler) TriggerMajorEventNotification(c *gin.Context) {
+	if h == nil || h.Handler == nil || h.majorEventScheduler == nil {
 		sharedserver.RespondError(c, http.StatusServiceUnavailable, "major event scheduler not initialized", nil)
 		return
 	}
@@ -58,8 +58,8 @@ func (h *MajorEventAPIHandler) TriggerMajorEventNotification(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "weekly notification sent"})
 }
 
-func (h *MajorEventAPIHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
-	if h == nil || h.APIHandler == nil || h.majorEventMonthlyScheduler == nil {
+func (h *MajorEventHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
+	if h == nil || h.Handler == nil || h.majorEventMonthlyScheduler == nil {
 		sharedserver.RespondError(c, http.StatusServiceUnavailable, "major event monthly scheduler not initialized", nil)
 		return
 	}

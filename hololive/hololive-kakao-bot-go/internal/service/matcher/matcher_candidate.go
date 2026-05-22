@@ -32,7 +32,7 @@ import (
 )
 
 // tryExactValkeyMatch: 동적 Valkey 데이터에서 정확한 매칭을 시도함 (Holodex 호출 없이).
-func (mm *MemberMatcher) tryExactValkeyMatch(provider domain.MemberDataProvider, query string, dynamicMembers map[string]string) *matchCandidate {
+func (mm *Matcher) tryExactValkeyMatch(provider domain.MemberDataProvider, query string, dynamicMembers map[string]string) *matchCandidate {
 	var candidates []*matchCandidate
 
 	for name, channelID := range dynamicMembers {
@@ -69,7 +69,7 @@ func preferHololiveCandidate(provider domain.MemberDataProvider, candidates []*m
 }
 
 // tryPartialStaticMatch: 정적 멤버 데이터에서 부분 매칭을 시도함.
-func (mm *MemberMatcher) tryPartialStaticMatch(provider domain.MemberDataProvider, queryNorm string) *matchCandidate {
+func (mm *Matcher) tryPartialStaticMatch(provider domain.MemberDataProvider, queryNorm string) *matchCandidate {
 	if provider != nil {
 		for _, member := range provider.GetAllMembers() {
 			nameNorm := stringutil.Normalize(member.Name)
@@ -83,7 +83,7 @@ func (mm *MemberMatcher) tryPartialStaticMatch(provider domain.MemberDataProvide
 }
 
 // tryPartialValkeyMatch: 동적 Valkey 데이터에서 부분 매칭을 시도함.
-func (mm *MemberMatcher) tryPartialValkeyMatch(provider domain.MemberDataProvider, queryNorm string, dynamicMembers map[string]string) *matchCandidate {
+func (mm *Matcher) tryPartialValkeyMatch(provider domain.MemberDataProvider, queryNorm string, dynamicMembers map[string]string) *matchCandidate {
 	for name, channelID := range dynamicMembers {
 		nameNorm := stringutil.Normalize(name)
 		if strings.Contains(nameNorm, queryNorm) || strings.Contains(queryNorm, nameNorm) {
@@ -95,7 +95,7 @@ func (mm *MemberMatcher) tryPartialValkeyMatch(provider domain.MemberDataProvide
 }
 
 // tryPartialAliasMatch: 모든 별칭에서 부분 매칭을 시도함.
-func (mm *MemberMatcher) tryPartialAliasMatch(provider domain.MemberDataProvider, queryNorm string) *matchCandidate {
+func (mm *Matcher) tryPartialAliasMatch(provider domain.MemberDataProvider, queryNorm string) *matchCandidate {
 	if provider != nil {
 		for _, member := range provider.GetAllMembers() {
 			if memberHasPartialAliasMatch(member, queryNorm) {
@@ -117,7 +117,7 @@ func memberHasPartialAliasMatch(member *domain.Member, queryNorm string) bool {
 	return false
 }
 
-func (mm *MemberMatcher) candidateFromMember(member *domain.Member, source string) *matchCandidate {
+func (mm *Matcher) candidateFromMember(member *domain.Member, source string) *matchCandidate {
 	if member == nil || member.ChannelID == "" {
 		return nil
 	}
@@ -139,7 +139,7 @@ func (mm *MemberMatcher) candidateFromMember(member *domain.Member, source strin
 	}
 }
 
-func (mm *MemberMatcher) candidateFromDynamic(provider domain.MemberDataProvider, name, channelID, source string) *matchCandidate {
+func (mm *Matcher) candidateFromDynamic(provider domain.MemberDataProvider, name, channelID, source string) *matchCandidate {
 	if channelID == "" {
 		return nil
 	}
@@ -165,7 +165,7 @@ func (mm *MemberMatcher) candidateFromDynamic(provider domain.MemberDataProvider
 	}
 }
 
-func (mm *MemberMatcher) hydrateChannel(ctx context.Context, candidate *matchCandidate) (*domain.Channel, error) {
+func (mm *Matcher) hydrateChannel(ctx context.Context, candidate *matchCandidate) (*domain.Channel, error) {
 	if candidate == nil {
 		return nil, nil
 	}
@@ -214,7 +214,7 @@ func fallbackChannelFromCandidate(candidate *matchCandidate) *domain.Channel {
 	return fallback
 }
 
-func (mm *MemberMatcher) applyCachedChannelNameFallback(ctx context.Context, fallback *domain.Channel, candidate *matchCandidate) {
+func (mm *Matcher) applyCachedChannelNameFallback(ctx context.Context, fallback *domain.Channel, candidate *matchCandidate) {
 	if mm.cache == nil {
 		return
 	}
@@ -241,7 +241,7 @@ func applyCandidateNameFallback(channel *domain.Channel, candidate *matchCandida
 	}
 }
 
-func (mm *MemberMatcher) finalizeCandidate(ctx context.Context, candidate *matchCandidate) (*domain.Channel, error) {
+func (mm *Matcher) finalizeCandidate(ctx context.Context, candidate *matchCandidate) (*domain.Channel, error) {
 	if candidate == nil {
 		return nil, nil
 	}
@@ -282,7 +282,7 @@ func toStringPtr(value string) *string {
 }
 
 // loadDynamicMembers: Valkey 캐시에서 멤버 데이터를 로드함.
-func (mm *MemberMatcher) loadDynamicMembers(ctx context.Context) map[string]string {
+func (mm *Matcher) loadDynamicMembers(ctx context.Context) map[string]string {
 	members, err := mm.cache.GetAllMembers(ctx)
 	if err != nil {
 		mm.logger.Warn("Failed to load dynamic members", slog.Any("error", err))

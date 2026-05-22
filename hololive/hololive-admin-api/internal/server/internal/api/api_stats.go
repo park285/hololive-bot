@@ -40,7 +40,7 @@ var systemStatsStreamInterval = 5 * time.Second
 
 var errSystemStatsStreamStopped = errors.New("system stats stream stopped")
 
-func (h *StatsAPIHandler) GetStats(c *gin.Context) {
+func (h *StatsHandler) GetStats(c *gin.Context) {
 	if !h.requireStatsDeps(c) {
 		return
 	}
@@ -101,8 +101,8 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 }
 
 // 5초마다 CPU/메모리 통계를 전송합니다.
-func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
-	if h == nil || h.APIHandler == nil || h.systemStats == nil {
+func (h *StatsHandler) StreamSystemStats(c *gin.Context) {
+	if h == nil || h.Handler == nil || h.systemStats == nil {
 		sharedserver.RespondError(c, 400, "System stats collector not available", nil)
 
 		return
@@ -126,7 +126,7 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	h.streamSystemStats(ctx, conn)
 }
 
-func (h *StatsAPIHandler) streamSystemStats(ctx context.Context, conn *websocket.Conn) {
+func (h *StatsHandler) streamSystemStats(ctx context.Context, conn *websocket.Conn) {
 	if !h.writeInitialSystemStats(ctx, conn) {
 		return
 	}
@@ -139,11 +139,11 @@ func (h *StatsAPIHandler) streamSystemStats(ctx context.Context, conn *websocket
 	})
 }
 
-func (h *StatsAPIHandler) writeInitialSystemStats(ctx context.Context, conn *websocket.Conn) bool {
+func (h *StatsHandler) writeInitialSystemStats(ctx context.Context, conn *websocket.Conn) bool {
 	return h.writeSystemStats(ctx, conn, "failed to collect initial system stats", "failed to write initial system stats")
 }
 
-func (h *StatsAPIHandler) writeSystemStats(
+func (h *StatsHandler) writeSystemStats(
 	ctx context.Context,
 	conn *websocket.Conn,
 	collectMessage string,

@@ -33,7 +33,7 @@ import (
 )
 
 // GET /api/milestones?limit=50&offset=0&channelId=xxx&memberName=xxx.
-func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
+func (h *MilestoneHandler) GetMilestones(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if !h.requireStatsRepository(c) {
@@ -115,7 +115,7 @@ func parseMilestoneOffset(c *gin.Context) (int, bool) {
 
 // GET /api/milestones/near?threshold=0.9
 // 기본 threshold: 백그라운드 워커와 동일한 95% (MilestoneThresholdRatio).
-func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
+func (h *MilestoneHandler) GetNearMilestoneMembers(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if !h.requireStatsRepository(c) {
@@ -160,7 +160,7 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 }
 
 // GET /api/milestones/stats.
-func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
+func (h *MilestoneHandler) GetMilestoneStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if !h.requireStatsRepository(c) {

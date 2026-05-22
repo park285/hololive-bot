@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (mm *MemberMatcher) getSnapshot(ctx context.Context) (*memberMatcherSnapshot, error) {
+func (mm *Matcher) getSnapshot(ctx context.Context) (*matcherSnapshot, error) {
 	mm.snapshotMu.RLock()
 
 	snapshot := mm.snapshot
@@ -57,7 +57,7 @@ func (mm *MemberMatcher) getSnapshot(ctx context.Context) (*memberMatcherSnapsho
 		return nil, fmt.Errorf("build member matcher snapshot: %w", err)
 	}
 
-	rebuilt, _ := value.(*memberMatcherSnapshot)
+	rebuilt, _ := value.(*matcherSnapshot)
 	if rebuilt == nil {
 		return nil, errors.New("build member matcher snapshot: empty snapshot")
 	}
@@ -65,9 +65,9 @@ func (mm *MemberMatcher) getSnapshot(ctx context.Context) (*memberMatcherSnapsho
 	return rebuilt, nil
 }
 
-func (mm *MemberMatcher) buildSnapshot(ctx context.Context) (*memberMatcherSnapshot, error) {
+func (mm *Matcher) buildSnapshot(ctx context.Context) (*matcherSnapshot, error) {
 	provider := mm.providerWithContext(ctx)
-	snapshot := &memberMatcherSnapshot{
+	snapshot := &matcherSnapshot{
 		builtAt:      time.Now(),
 		exactNames:   make(map[string][]*snapshotEntry),
 		exactAliases: make(map[string][]*snapshotEntry),
@@ -90,8 +90,8 @@ func (mm *MemberMatcher) buildSnapshot(ctx context.Context) (*memberMatcherSnaps
 	return snapshot, nil
 }
 
-func (mm *MemberMatcher) storeSnapshotMembers(
-	snapshot *memberMatcherSnapshot,
+func (mm *Matcher) storeSnapshotMembers(
+	snapshot *matcherSnapshot,
 	entriesByChannel map[string]*snapshotEntry,
 	members []*domain.Member,
 ) {
@@ -105,10 +105,10 @@ func (mm *MemberMatcher) storeSnapshotMembers(
 	}
 }
 
-func (mm *MemberMatcher) storeDynamicSnapshotMembers(
+func (mm *Matcher) storeDynamicSnapshotMembers(
 	ctx context.Context,
 	provider domain.MemberDataProvider,
-	snapshot *memberMatcherSnapshot,
+	snapshot *matcherSnapshot,
 	entriesByChannel map[string]*snapshotEntry,
 ) {
 	if mm.cache == nil {
@@ -131,7 +131,7 @@ func (mm *MemberMatcher) storeDynamicSnapshotMembers(
 	}
 }
 
-func (mm *MemberMatcher) snapshotEntryFromMember(member *domain.Member) *snapshotEntry {
+func (mm *Matcher) snapshotEntryFromMember(member *domain.Member) *snapshotEntry {
 	candidate := mm.candidateFromMember(member, "snapshot")
 	if candidate == nil {
 		return nil
@@ -163,7 +163,7 @@ func (mm *MemberMatcher) snapshotEntryFromMember(member *domain.Member) *snapsho
 	return entry
 }
 
-func (mm *MemberMatcher) snapshotEntryFromDynamic(provider domain.MemberDataProvider, key, channelID string) *snapshotEntry {
+func (mm *Matcher) snapshotEntryFromDynamic(provider domain.MemberDataProvider, key, channelID string) *snapshotEntry {
 	name, org := splitMemberKey(key)
 
 	candidate := mm.candidateFromDynamic(provider, name, channelID, "snapshot-dynamic")
@@ -181,8 +181,8 @@ func (mm *MemberMatcher) snapshotEntryFromDynamic(provider domain.MemberDataProv
 	}
 }
 
-func (mm *MemberMatcher) storeSnapshotEntry(
-	snapshot *memberMatcherSnapshot,
+func (mm *Matcher) storeSnapshotEntry(
+	snapshot *matcherSnapshot,
 	entriesByChannel map[string]*snapshotEntry,
 	entry *snapshotEntry,
 ) {

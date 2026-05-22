@@ -34,10 +34,10 @@ const (
 	channelStatsRefreshWorkers = sharedserver.DefaultChannelStatsRefreshWorkers
 )
 
-func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
-	var api *APIHandler
+func (h *StreamHandler) sharedStreamHandler() *sharedserver.StreamHandler {
+	var api *Handler
 	if h != nil {
-		api = h.APIHandler
+		api = h.Handler
 	}
 
 	handler := &sharedserver.StreamHandler{
@@ -61,19 +61,19 @@ func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 	return handler
 }
 
-func (h *StreamAPIHandler) GetLiveStreams(c *gin.Context) {
+func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 	h.sharedStreamHandler().GetLiveStreams(c)
 }
 
-func (h *StreamAPIHandler) GetUpcomingStreams(c *gin.Context) {
+func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 	h.sharedStreamHandler().GetUpcomingStreams(c)
 }
 
-func (h *StreamAPIHandler) GetChannelStats(c *gin.Context) {
+func (h *StreamHandler) GetChannelStats(c *gin.Context) {
 	h.sharedStreamHandler().GetChannelStats(c)
 }
 
-func (h *StreamAPIHandler) getActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
+func (h *StreamHandler) getActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
 	ids, names, err := h.sharedStreamHandler().GetActiveMemberIndex(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get active member index: %w", err)
@@ -82,14 +82,14 @@ func (h *StreamAPIHandler) getActiveMemberIndex(ctx context.Context) ([]string, 
 	return ids, names, nil
 }
 
-func (h *MemberAPIHandler) invalidateMemberIndex() {
+func (h *MemberHandler) invalidateMemberIndex() {
 	h.ensureStreamState().InvalidateMemberIndex()
 }
 
-func (h *StreamAPIHandler) GetChannel(c *gin.Context) {
+func (h *StreamHandler) GetChannel(c *gin.Context) {
 	h.sharedStreamHandler().GetChannel(c)
 }
 
-func (h *StreamAPIHandler) SearchChannels(c *gin.Context) {
+func (h *StreamHandler) SearchChannels(c *gin.Context) {
 	h.sharedStreamHandler().SearchChannels(c)
 }

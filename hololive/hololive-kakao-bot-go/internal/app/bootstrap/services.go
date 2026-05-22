@@ -87,7 +87,7 @@ func provideBotDependenciesFromStacks(
 		formatter,
 		irisClient,
 		foundation.ProfileService,
-		alarmYouTubeStack.MemberMatcher,
+		alarmYouTubeStack.Matcher,
 		alarmYouTubeStack.YouTubeStack,
 		alarmYouTubeStack.ActivityLogger,
 		alarmYouTubeStack.SettingsService,

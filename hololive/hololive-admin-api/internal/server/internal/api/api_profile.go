@@ -65,7 +65,7 @@ type TranslatedData struct {
 	Data        []DataEntry `json:"data"`
 }
 
-func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
+func (h *ProfileHandler) GetProfile(c *gin.Context) {
 	channelID := c.Query("channelId")
 	if channelID == "" {
 		sharedserver.RespondError(c, 400, "channelId is required", nil)
@@ -119,7 +119,7 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 	c.JSON(200, resp)
 }
 
-func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
+func (h *ProfileHandler) GetProfileByName(c *gin.Context) {
 	name := c.Query("name")
 	if name == "" {
 		sharedserver.RespondError(c, 400, "name is required", nil)

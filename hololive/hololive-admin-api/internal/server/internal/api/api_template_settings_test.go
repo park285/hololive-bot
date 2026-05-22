@@ -62,10 +62,10 @@ func (s *stubSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedset
 	}
 }
 
-func TestTemplateAPIHandler_ValidationBranches(t *testing.T) {
+func TestTemplateHandler_ValidationBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := &TemplateAPIHandler{APIHandler: &APIHandler{
+	handler := &TemplateHandler{Handler: &Handler{
 		templateAdmin: &template.AdminService{},
 		logger:        newDiscardLogger(),
 	}}
@@ -152,7 +152,7 @@ func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("invalid json branches", func(t *testing.T) {
-		handler := &SettingsAPIHandler{APIHandler: &APIHandler{
+		handler := &SettingsAPIHandler{Handler: &Handler{
 			logger: newDiscardLogger(),
 		}}
 
@@ -184,7 +184,7 @@ func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 			ScraperProxyEnabled: false,
 		}, newDiscardLogger())
 
-		handler := &SettingsAPIHandler{APIHandler: &APIHandler{
+		handler := &SettingsAPIHandler{Handler: &Handler{
 			logger:          newDiscardLogger(),
 			activity:        newActivityLoggerForTest(t),
 			settings:        settingsService,

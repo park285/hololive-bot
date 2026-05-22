@@ -89,7 +89,7 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *config.Config, logger 
 	settingsApplier, majorEventTriggerClient := buildAdminAPISettingsApplier(appConfig, foundation, alarmMode, ytStack, logger)
 	systemCollector := buildAdminAPISystemCollector(appConfig)
 	communityShortsOpsRepository := buildAdminAPICommunityShortsOpsRepository(infra)
-	handler := buildAdminAPIHandler(
+	handler := buildAdminHandler(
 		appConfig,
 		infra,
 		foundation,
@@ -204,7 +204,7 @@ func buildAdminAPISettingsApplier(
 	return newBotSettingsApplier(localSettingsApplier, majorEventTriggerClient, logger), majorEventTriggerClient
 }
 
-func buildAdminAPIHandler(
+func buildAdminHandler(
 	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *scraperHolodexProfileFoundation,
@@ -217,8 +217,8 @@ func buildAdminAPIHandler(
 	templateAdmin *template.AdminService,
 	majorEventTriggerClient *triggerclient.Client,
 	logger *slog.Logger,
-) *server.APIHandler {
-	return server.NewAPIHandler(
+) *server.Handler {
+	return server.NewHandler(
 		infra.MemberRepository,
 		infra.MemberCache,
 		infra.Cache,
@@ -270,7 +270,7 @@ func buildAdminAPIRouter(
 	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	authService *authsvc.Service,
-	handler *server.APIHandler,
+	handler *server.Handler,
 	logger *slog.Logger,
 ) (*gin.Engine, error) {
 	return apphttp.ProvideAPIRouter(
@@ -295,7 +295,7 @@ func registerAdminAPIInternalAlarmRoutes(
 		return
 	}
 
-	alarmAPI := sharedalarm.NewAPIHandler(alarmMode.AlarmCRUD, logger)
+	alarmAPI := sharedalarm.NewHandler(alarmMode.AlarmCRUD, logger)
 	internalAlarm := router.Group("")
 	internalAlarm.Use(middleware.APIKeyAuthMiddleware(appConfig.Server.APIKey))
 	alarmAPI.RegisterInternalRoutes(internalAlarm)

@@ -96,7 +96,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	chzzkClient := &chzzk.Client{}
 	twitchClient := &twitch.Client{}
 	profiles := &member.ProfileService{}
-	memberMatcher := &matcher.MemberMatcher{}
+	memberMatcher := &matcher.Matcher{}
 
 	var ytService youtube.Service = &mockYouTubeService{}
 	ytStatsRepository := &stats.StatsRepository{}

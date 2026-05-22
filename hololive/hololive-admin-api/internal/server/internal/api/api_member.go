@@ -32,7 +32,7 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
-func (h *MemberAPIHandler) parsePositiveMemberID(c *gin.Context) (int, bool) {
+func (h *MemberHandler) parsePositiveMemberID(c *gin.Context) (int, bool) {
 	memberID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		h.safeLogger().Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
@@ -51,7 +51,7 @@ func (h *MemberAPIHandler) parsePositiveMemberID(c *gin.Context) (int, bool) {
 	return memberID, true
 }
 
-func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
+func (h *MemberHandler) SetGraduation(c *gin.Context) {
 	if !h.requireMemberDeps(c) {
 		return
 	}
@@ -98,7 +98,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 	h.respondGraduationSuccess(c, memberID, req.IsGraduated)
 }
 
-func (h *MemberAPIHandler) respondGraduationSuccess(c *gin.Context, memberID int, isGraduated bool) {
+func (h *MemberHandler) respondGraduationSuccess(c *gin.Context, memberID int, isGraduated bool) {
 	h.safeLogger().Info("Graduation status updated",
 		slog.Int("member_id", memberID),
 		slog.Bool("is_graduated", isGraduated),
@@ -121,7 +121,7 @@ func (h *MemberAPIHandler) respondGraduationSuccess(c *gin.Context, memberID int
 	})
 }
 
-func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
+func (h *MemberHandler) GetMembers(c *gin.Context) {
 	if !h.requireMemberDeps(c) {
 		return
 	}
@@ -143,7 +143,7 @@ func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
 	})
 }
 
-func (h *MemberAPIHandler) AddMember(c *gin.Context) {
+func (h *MemberHandler) AddMember(c *gin.Context) {
 	var req domain.Member
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))

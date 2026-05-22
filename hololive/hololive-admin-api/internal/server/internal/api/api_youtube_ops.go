@@ -92,11 +92,11 @@ type youtubeCommunityShortsChannelLatencyAccumulator struct {
 	maxLatencyMillis     int64
 }
 
-func (h *StatsAPIHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
+func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	if h == nil || h.APIHandler == nil || h.communityShortsOps == nil {
+	if h == nil || h.Handler == nil || h.communityShortsOps == nil {
 		sharedserver.RespondError(c, 503, "YouTube community/shorts ops repository not available", nil)
 		return
 	}
@@ -151,9 +151,9 @@ func (h *StatsAPIHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	})
 }
 
-func (h *StatsAPIHandler) loadYouTubeCommunityShortsMemberNames(ctx context.Context) map[string]string {
+func (h *StatsHandler) loadYouTubeCommunityShortsMemberNames(ctx context.Context) map[string]string {
 	memberNames := map[string]string{}
-	if h == nil || h.APIHandler == nil || h.memberIndexLoader == nil {
+	if h == nil || h.Handler == nil || h.memberIndexLoader == nil {
 		return memberNames
 	}
 

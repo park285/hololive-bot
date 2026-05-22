@@ -26,7 +26,7 @@ import (
 )
 
 func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
-	if h == nil || h.APIHandler == nil {
+	if h == nil || h.Handler == nil {
 		return &SettingsHandler{}
 	}
 

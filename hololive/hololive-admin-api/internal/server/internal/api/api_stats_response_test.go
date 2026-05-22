@@ -16,10 +16,10 @@ import (
 	"github.com/kapu/hololive-admin-api/internal/service/system"
 )
 
-func TestStatsAPIHandler_StreamSystemStats_CollectorUnavailable(t *testing.T) {
+func TestStatsHandler_StreamSystemStats_CollectorUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := &StatsAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
+	handler := &StatsHandler{Handler: &Handler{logger: newDiscardLogger()}}
 	ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/stats/system", nil)
 
 	handler.StreamSystemStats(ctx)
@@ -27,7 +27,7 @@ func TestStatsAPIHandler_StreamSystemStats_CollectorUnavailable(t *testing.T) {
 	assertErrorResponse(t, rec, http.StatusBadRequest, "System stats collector not available")
 }
 
-func TestStatsAPIHandler_StreamSystemStats_WritesInitialFrameAndStopsAfterRequestContextCancel(t *testing.T) {
+func TestStatsHandler_StreamSystemStats_WritesInitialFrameAndStopsAfterRequestContextCancel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	oldUpgrader := sharedserver.WSUpgrader
@@ -42,7 +42,7 @@ func TestStatsAPIHandler_StreamSystemStats_WritesInitialFrameAndStopsAfterReques
 		sharedserver.WSUpgrader = oldUpgrader
 	})
 
-	handler := &StatsAPIHandler{APIHandler: &APIHandler{
+	handler := &StatsHandler{Handler: &Handler{
 		logger:      newDiscardLogger(),
 		systemStats: system.NewCollector(nil),
 	}}
@@ -95,7 +95,7 @@ func TestStatsAPIHandler_StreamSystemStats_WritesInitialFrameAndStopsAfterReques
 	}
 }
 
-func TestStatsAPIHandler_StreamSystemStats_WritesPeriodicFrame(t *testing.T) {
+func TestStatsHandler_StreamSystemStats_WritesPeriodicFrame(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	oldInterval := systemStatsStreamInterval
@@ -116,7 +116,7 @@ func TestStatsAPIHandler_StreamSystemStats_WritesPeriodicFrame(t *testing.T) {
 		sharedserver.WSUpgrader = oldUpgrader
 	})
 
-	handler := &StatsAPIHandler{APIHandler: &APIHandler{
+	handler := &StatsHandler{Handler: &Handler{
 		logger:      newDiscardLogger(),
 		systemStats: system.NewCollector(nil),
 	}}

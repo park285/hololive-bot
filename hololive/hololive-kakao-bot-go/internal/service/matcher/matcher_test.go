@@ -108,7 +108,7 @@ func (p *stubMemberProvider) FindMembersByAlias(alias string) []*domain.Member {
 
 func TestCandidateFromMember(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	mm := &MemberMatcher{logger: logger}
+	mm := &Matcher{logger: logger}
 
 	member := &domain.Member{ChannelID: "ch1", NameJa: "jp-name"}
 
@@ -135,7 +135,7 @@ func TestCandidateFromDynamic(t *testing.T) {
 		{ChannelID: "ch1", Name: "member"},
 	})
 
-	mm := &MemberMatcher{logger: logger}
+	mm := &Matcher{logger: logger}
 
 	candidate := mm.candidateFromDynamic(provider, "display", "ch1", "source")
 	if candidate == nil || candidate.memberName != "member" {
@@ -153,7 +153,7 @@ func TestTryPartialStaticMatch(t *testing.T) {
 	provider := newStubMemberProvider([]*domain.Member{
 		{ChannelID: "ch1", Name: "Test Name"},
 	})
-	mm := &MemberMatcher{logger: logger}
+	mm := &Matcher{logger: logger}
 
 	candidate := mm.tryPartialStaticMatch(provider, "test")
 	if candidate == nil || candidate.channelID != "ch1" {
@@ -163,7 +163,7 @@ func TestTryPartialStaticMatch(t *testing.T) {
 
 func TestMaybeCleanupMatchCache(t *testing.T) {
 	now := time.Now()
-	mm := &MemberMatcher{
+	mm := &Matcher{
 		matchCache: map[string]*MatchCacheEntry{
 			"old": {Channel: &domain.Channel{ID: "old"}, Timestamp: now.Add(-2 * time.Minute)},
 			"new": {Channel: &domain.Channel{ID: "new"}, Timestamp: now},
@@ -185,7 +185,7 @@ func TestMaybeCleanupMatchCache(t *testing.T) {
 
 func TestFinalizeCandidateFallback(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	mm := &MemberMatcher{logger: logger}
+	mm := &Matcher{logger: logger}
 
 	channel, err := mm.finalizeCandidate(t.Context(), &matchCandidate{
 		channelID:  "ch1",
