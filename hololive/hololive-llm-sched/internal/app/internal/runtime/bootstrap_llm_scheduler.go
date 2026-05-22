@@ -95,13 +95,7 @@ func (r *LLMSchedulerRuntime) Run() {
 }
 
 func (r *LLMSchedulerRuntime) startHTTPServer(errCh chan<- error) {
-	go func() {
-		if err := r.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			if errCh != nil {
-				errCh <- fmt.Errorf("HTTP server error: %w", err)
-			}
-		}
-	}()
+	StartHTTPServer(r.httpServer, r.Logger, errCh)
 	r.Logger.Info("LLM scheduler HTTP server started",
 		slog.String("addr", r.httpServer.Addr))
 }
@@ -170,7 +164,7 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	var errs []error
 	r.stopSchedulers()
-	if err := r.httpServer.Shutdown(ctx); err != nil {
+	if err := ShutdownHTTPServer(r.httpServer, ctx); err != nil {
 		r.Logger.Error("HTTP server shutdown error", slog.Any("error", err))
 		errs = append(errs, err)
 	} else {
