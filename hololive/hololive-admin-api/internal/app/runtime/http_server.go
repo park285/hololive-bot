@@ -22,10 +22,10 @@ package runtime
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
+
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/httpserver"
 )
 
 func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
@@ -33,34 +33,7 @@ func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- erro
 		return
 	}
 
-	go runHTTPServer(server, logger, errCh)
-}
-
-func runHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
-	handleHTTPServerError(server.ListenAndServe(), logger, errCh)
-}
-
-func handleHTTPServerError(err error, logger *slog.Logger, errCh chan<- error) {
-	if err == nil || errors.Is(err, http.ErrServerClosed) {
-		return
-	}
-
-	if sendHTTPServerError(errCh, err) {
-		return
-	}
-
-	if logger != nil {
-		logger.Error("HTTP server error", slog.Any("error", err))
-	}
-}
-
-func sendHTTPServerError(errCh chan<- error, err error) bool {
-	if errCh == nil {
-		return false
-	}
-
-	errCh <- fmt.Errorf("HTTP server error: %w", err)
-	return true
+	httpserver.Start(server, logger, errCh)
 }
 
 func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
@@ -68,9 +41,5 @@ func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
 		return nil
 	}
 
-	if err := server.Shutdown(ctx); err != nil {
-		return fmt.Errorf("HTTP server shutdown failed: %w", err)
-	}
-
-	return nil
+	return httpserver.Shutdown(ctx, server, "HTTP server shutdown failed")
 }
