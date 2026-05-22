@@ -54,7 +54,7 @@
 통합 가능한 부분:
 
 - HTTP/1.1/H2C server start: goroutine 에서 `ListenAndServe()` 실행, `http.ErrServerClosed` 무시, 나머지 error 는 buffered `errCh` 로 전달하거나 logger 로 기록.
-- HTTP server shutdown: nil-safe `Shutdown(ctx)`, context 전달, wrap message 표준화.
+- HTTP server shutdown: `Shutdown(ctx)`, context 전달, wrap message 표준화. (helper 가 nil server 가드를 강제하지 않음 — 호출부가 server 생성 보장 또는 nil check 책임을 가짐.)
 - `*http.Server` 와 `*http3.Server` 를 모두 수용하는 최소 interface:
 
 ```go
@@ -172,7 +172,7 @@ func RunServerLifecycle(opts ServerLifecycleOptions) error
 ## 6. 마이그레이션 step list
 
 1. `shared-go/pkg/runtime/httpserver` 에 `Server` interface, `Start`, `Shutdown` helper 와 unit test 를 추가한다.
-2. unit test 는 nil server, `http.ErrServerClosed` 무시, non-closed error 전달, nil `errCh` logger fallback, shutdown error wrap, `*http3.Server` shape compatibility 를 고정한다.
+2. unit test 는 `http.ErrServerClosed` 무시, non-closed error 전달, nil `errCh` logger fallback, shutdown error wrap 을 고정한다. nil server / `*http3.Server` shape compatibility 는 helper 의 interface 계약(`ListenAndServe() error` + `Shutdown(ctx) error`)을 만족하는 호출부가 책임지며 helper 단위 테스트의 직접 대상이 아니다.
 3. 가장 단순한 admin-api 의 `runtime/http_server.go` 부터 helper wrapper 로 교체한다.
 4. alarm-worker 의 `runtime/http_server.go` 를 같은 helper wrapper 로 교체한다.
 5. kakao-bot 은 `*http.Server` 와 `*http3.Server` 를 같은 interface helper 로 처리하고 기존 `errors.Join` shutdown semantics 를 보존한다.

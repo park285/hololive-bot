@@ -87,7 +87,7 @@ func LogAndWrapError(ctx context.Context, logger *slog.Logger, op string, err er
     }
     errorAttrs := ErrorAttrs(err)
     merged := append(errorAttrs, attrs...)
-    Error(ctx, logger, op+".error", op+": "+err.Error(), merged...)
+    Error(ctx, logger, op+".failed", op+": "+err.Error(), merged...)
     return fmt.Errorf("%s: %w", op, err)
 }
 ```
@@ -168,7 +168,7 @@ grep -rn "error_type\|error_message\|error_code\|retryable" --include="*.yaml" -
 ## 8. 마이그레이션 step list
 
 1. `shared-go/pkg/logging` 에 `LogAndWrapError` 를 신설하고 nil err, nil logger, attr 보존, `ErrorAttrs(err)` 포함, `%w` wrapping 을 단위 테스트로 고정한다.
-2. event suffix 를 `op+".error"` 또는 `op+".failed"` 중 하나로 결정하고 `docs/architecture/cross-cutting-helpers-2026-05-21.md` 와 helper godoc 을 맞춘다. message text 의존 경로는 첫 적용에서 제외한다.
+2. event suffix 는 `op+".failed"` 로 확정 (helper 구현 c167023c 에서 고정). `docs/architecture/cross-cutting-helpers-2026-05-21.md` 와 helper godoc 도 동일 suffix 로 정렬. message text 의존 경로는 첫 적용에서 제외한다.
 3. `hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service_mutation.go` 의 adjacent 4곳 중 1곳만 시범 마이그레이션하고 기존 `"error"` key 유지 여부를 테스트 또는 log snapshot 으로 확인한다.
 4. 같은 파일의 나머지 adjacent 후보로 확장한다. `:99/:101` 처럼 nil logger guard 때문에 2줄 초과로 잡히는 동일 패턴은 별도 검토한다.
 5. `slog.String("error", err.Error())` 를 쓰는 `pkg/service/delivery/dispatcher.go` 같은 호출부는 alert/grep 확인 후 package 단위 PR 로 분리한다.
@@ -180,4 +180,4 @@ grep -rn "error_type\|error_message\|error_code\|retryable" --include="*.yaml" -
 
 `LogAndWrapError` 의 시그니처와 본거지 결정은 유효하다. 다만 실제 인접 자동 마이그레이션 후보는 `COUNT=4` 로 작고, 기존 `hololive-shared` 호출부는 `"error"` key 와 message text 에 의존할 가능성이 있다. Phase 2.B.4 는 helper 신설 + 테스트 후 점진적 마이그레이션으로 진행하고, 첫 적용은 `alarm_service_mutation.go` 의 adjacent 후보 1곳으로 제한하는 것이 안전하다.
 
-log key 변경 위험은 repository 내부 기준 **medium** 이다. `*.yaml` alert rule 충돌은 확인되지 않았지만, 외부 grep rule 과 기존 `"error"` key 의존 가능성 때문에 전체 마이그레이션은 권장하지 않는다. event suffix 는 `op+".error"` 와 `op+".failed"` 중 하나로 구현 전 결정해야 한다.
+log key 변경 위험은 repository 내부 기준 **medium** 이다. `*.yaml` alert rule 충돌은 확인되지 않았지만, 외부 grep rule 과 기존 `"error"` key 의존 가능성 때문에 전체 마이그레이션은 권장하지 않는다. event suffix 는 helper 구현 c167023c 에서 `op+".failed"` 로 확정.
