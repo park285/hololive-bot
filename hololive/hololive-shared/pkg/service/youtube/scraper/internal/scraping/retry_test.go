@@ -627,6 +627,26 @@ func TestHttpStatusError(t *testing.T) {
 	assert.Equal(t, "unexpected status code: 504", err.Error())
 }
 
+func TestBackoffState_WithCooldownJitterStaysInRange(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		bs := NewBackoffState(WithCooldownJitter(0.1))
+		bs.RecordError()
+		cd := bs.HardCooldownRemaining()
+		base := 30 * time.Minute
+		// jitter range [0.9, 1.1] base, with small wall-clock drift margin.
+		assert.GreaterOrEqual(t, cd, time.Duration(float64(base)*0.85))
+		assert.LessOrEqual(t, cd, time.Duration(float64(base)*1.15))
+	}
+}
+
+func TestBackoffState_WithCooldownJitterDisabledMatchesBaseline(t *testing.T) {
+	bs := NewBackoffState(WithCooldownJitter(0))
+	bs.RecordError()
+	cd := bs.HardCooldownRemaining()
+	// jitter=0이면 정확히 30분 base (시계 drift 마진 2초).
+	assert.InDelta(t, 30*time.Minute, cd, float64(2*time.Second))
+}
+
 func TestBackoffState_DualState(t *testing.T) {
 	bs := NewBackoffState()
 
@@ -1047,6 +1067,17 @@ func TestParseRetryAfter(t *testing.T) {
 	assert.Equal(t, 90*time.Second, parseRetryAfter(httpDate, now))
 
 	assert.Equal(t, time.Duration(0), parseRetryAfter("not-a-date", now))
+}
+
+func TestParseRetryAfterClampsAbsurdValues(t *testing.T) {
+	now := time.Date(2026, time.April, 21, 12, 0, 0, 0, time.UTC)
+
+	// 정수 초가 상한(6시간)을 초과하면 상한으로 clamp.
+	assert.Equal(t, MaxRetryAfterDuration, parseRetryAfter("999999", now))
+
+	// HTTP-date 형식도 동일하게 clamp.
+	far := now.Add(48 * time.Hour).Format(http.TimeFormat)
+	assert.Equal(t, MaxRetryAfterDuration, parseRetryAfter(far, now))
 }
 
 func TestIsRetryableStatusCodeIncludesThrottleLikeTransientStatuses(t *testing.T) {

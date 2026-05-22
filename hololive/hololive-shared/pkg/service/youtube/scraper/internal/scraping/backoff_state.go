@@ -21,7 +21,10 @@
 package scraping
 
 import (
+	crand "crypto/rand"
+	"encoding/binary"
 	"log/slog"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -31,6 +34,8 @@ const (
 	maxSuggestedHardCooldown      = 6 * time.Hour
 	minSuggestedTransientCooldown = 5 * time.Second
 	maxSuggestedTransientCooldown = 10 * time.Minute
+
+	maxCooldownJitterPortion = 0.5
 )
 
 type BackoffState struct {
@@ -43,10 +48,61 @@ type BackoffState struct {
 	// transient: 5xx 전용 (경량 쿨다운)
 	transientErrors   int
 	transientCooldown time.Time
+
+	// jitterPortion: ±portion 비율의 jitter (0이면 비활성)
+	jitterPortion float64
+	jitterRNG     *rand.Rand
 }
 
-func NewBackoffState() *BackoffState {
-	return &BackoffState{}
+type BackoffOption func(*BackoffState)
+
+// WithCooldownJitter: hard/transient 쿨다운에 ±portion 비율의 jitter 적용.
+// 분산 환경에서 다수 인스턴스가 동일 시각에 쿨다운에서 깨어나 같은 retry를 발사하는 thundering herd를 완화한다.
+// portion이 0이면 jitter 비활성. portion은 [0, 0.5]로 clamp.
+func WithCooldownJitter(portion float64) BackoffOption {
+	return func(b *BackoffState) {
+		if portion < 0 {
+			portion = 0
+		}
+		if portion > maxCooldownJitterPortion {
+			portion = maxCooldownJitterPortion
+		}
+		b.jitterPortion = portion
+		if portion > 0 && b.jitterRNG == nil {
+			b.jitterRNG = newBackoffJitterRNG()
+		}
+	}
+}
+
+func NewBackoffState(opts ...BackoffOption) *BackoffState {
+	bs := &BackoffState{}
+	for _, opt := range opts {
+		opt(bs)
+	}
+	return bs
+}
+
+func newBackoffJitterRNG() *rand.Rand {
+	var seed [8]byte
+	if _, err := crand.Read(seed[:]); err != nil {
+		//nolint:gosec // jitter용 비보안 난수.
+		return rand.New(rand.NewSource(time.Now().UnixNano()))
+	}
+	//nolint:gosec // jitter용 비보안 난수.
+	return rand.New(rand.NewSource(int64(binary.LittleEndian.Uint64(seed[:]))))
+}
+
+func (b *BackoffState) applyJitter(cooldown time.Duration) time.Duration {
+	if cooldown <= 0 || b.jitterPortion <= 0 || b.jitterRNG == nil {
+		return cooldown
+	}
+	// caller가 b.mu lock 보유한 상태로 호출. jitterRNG 동시 접근 직렬화.
+	delta := (b.jitterRNG.Float64()*2 - 1) * b.jitterPortion
+	scaled := float64(cooldown) * (1 + delta)
+	if scaled <= 0 {
+		return cooldown
+	}
+	return time.Duration(scaled)
 }
 
 func (b *BackoffState) RecordError() {
@@ -66,6 +122,7 @@ func (b *BackoffState) RecordErrorWithSuggestedCooldown(suggested time.Duration)
 		minSuggestedHardCooldown,
 		maxSuggestedHardCooldown,
 	)
+	cooldown = b.applyJitter(cooldown)
 	b.hardCooldown = laterDeadline(b.hardCooldown, now.Add(cooldown))
 	slog.Warn("Hard backoff activated",
 		"consecutive_errors", b.hardErrors,
@@ -90,6 +147,7 @@ func (b *BackoffState) RecordTransientErrorWithSuggestedCooldown(suggested time.
 		minSuggestedTransientCooldown,
 		maxSuggestedTransientCooldown,
 	)
+	cooldown = b.applyJitter(cooldown)
 	b.transientCooldown = laterDeadline(b.transientCooldown, now.Add(cooldown))
 	slog.Warn("Transient backoff activated",
 		"consecutive_transient_errors", b.transientErrors,
