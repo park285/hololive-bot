@@ -22,17 +22,17 @@ type MemberRepository interface {
 
 func ResolveOperationalChannelsFromRepository(
 	ctx context.Context,
-	repo MemberRepository,
+	repository MemberRepository,
 ) ([]OperationalChannel, error) {
-	if repo == nil {
+	if repository == nil {
 		return nil, fmt.Errorf("member repository is nil")
 	}
-	value := reflect.ValueOf(repo)
+	value := reflect.ValueOf(repository)
 	if value.Kind() == reflect.Pointer && value.IsNil() {
 		return nil, fmt.Errorf("member repository is nil")
 	}
 
-	members, err := repo.GetAllMembers(ctx)
+	members, err := repository.GetAllMembers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load members from repository: %w", err)
 	}

@@ -43,25 +43,25 @@ func TestRepository_Interface(t *testing.T) {
 func TestRepository_NilPoolGuards(t *testing.T) {
 	t.Parallel()
 
-	repo := &Repository{}
+	repository := &Repository{}
 	ctx := context.Background()
 
 	t.Run("subscribe", func(t *testing.T) {
-		err := repo.Subscribe(ctx, "room-1", "room")
+		err := repository.Subscribe(ctx, "room-1", "room")
 		if err == nil || !strings.Contains(err.Error(), "postgres pool not configured") {
 			t.Fatalf("Subscribe() error = %v, want postgres pool not configured", err)
 		}
 	})
 
 	t.Run("unsubscribe", func(t *testing.T) {
-		err := repo.Unsubscribe(ctx, "room-1")
+		err := repository.Unsubscribe(ctx, "room-1")
 		if err == nil || !strings.Contains(err.Error(), "postgres pool not configured") {
 			t.Fatalf("Unsubscribe() error = %v, want postgres pool not configured", err)
 		}
 	})
 
 	t.Run("is subscribed", func(t *testing.T) {
-		_, err := repo.IsSubscribed(ctx, "room-1")
+		_, err := repository.IsSubscribed(ctx, "room-1")
 		if err == nil || !strings.Contains(err.Error(), "postgres pool not configured") {
 			t.Fatalf("IsSubscribed() error = %v, want postgres pool not configured", err)
 		}

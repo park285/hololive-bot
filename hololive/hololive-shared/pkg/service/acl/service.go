@@ -184,7 +184,7 @@ func NewACLService(
 	}
 	normalizedRooms := normalizeRoomList(defaultRooms)
 
-	svc := &Service{
+	service := &Service{
 		db:             db,
 		cache:          cacheClient,
 		logger:         logger,
@@ -195,22 +195,22 @@ func NewACLService(
 	}
 
 	// 시작 시 로드 (PostgreSQL → 메모리/Valkey)
-	if err := svc.loadFromDatabase(ctx, defaultEnabled, normalizedMode, normalizedRooms); err != nil {
+	if err := service.loadFromDatabase(ctx, defaultEnabled, normalizedMode, normalizedRooms); err != nil {
 		logger.Warn("Failed to load ACL from database, using defaults", slog.Any("error", err))
 
-		svc.enabled = defaultEnabled
-		svc.mode = normalizedMode
-		svc.addDefaultRooms(normalizedRooms)
+		service.enabled = defaultEnabled
+		service.mode = normalizedMode
+		service.addDefaultRooms(normalizedRooms)
 	}
 
 	logger.Info("ACL service initialized",
-		slog.Bool("enabled", svc.enabled),
-		slog.String("mode", string(svc.mode)),
-		slog.Int("whitelist_rooms", len(svc.whitelistRooms)),
-		slog.Int("blacklist_rooms", len(svc.blacklistRooms)),
+		slog.Bool("enabled", service.enabled),
+		slog.String("mode", string(service.mode)),
+		slog.Int("whitelist_rooms", len(service.whitelistRooms)),
+		slog.Int("blacklist_rooms", len(service.blacklistRooms)),
 	)
 
-	return svc, nil
+	return service, nil
 }
 
 func aclDatabase(postgres database.Client) (*gorm.DB, error) {

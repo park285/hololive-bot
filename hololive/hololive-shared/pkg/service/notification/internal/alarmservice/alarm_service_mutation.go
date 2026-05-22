@@ -209,7 +209,7 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 	}
 	as.afterRemoveAlarm(ctx, roomID, channelID, mutation)
 
-	if as.alarmRepo != nil {
+	if as.alarmRepository != nil {
 		return true, nil
 	}
 
@@ -342,7 +342,7 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 
 	as.afterClearRoomAlarms(ctx, roomID, channelIDs)
 
-	if as.alarmRepo != nil {
+	if as.alarmRepository != nil {
 		return len(channelIDs), nil
 	}
 

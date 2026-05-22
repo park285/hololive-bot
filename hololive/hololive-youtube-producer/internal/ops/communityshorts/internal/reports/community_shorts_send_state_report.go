@@ -189,14 +189,14 @@ func listCommunityShortsSendStateRows(
 	state communityShortsObservationQueryState,
 ) ([]outbox.PostSendCount, error) {
 	if state.Finalized {
-		rows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+		rows, err := session.telemetryRepository.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 		if err != nil {
 			return nil, fmt.Errorf("collect community shorts send state report: list finalized observation-window send states: %w", err)
 		}
 		return rows, nil
 	}
 
-	rows, err := session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	rows, err := session.telemetryRepository.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
 	if err != nil {
 		return nil, fmt.Errorf("collect community shorts send state report: list active observation-window send states: %w", err)
 	}

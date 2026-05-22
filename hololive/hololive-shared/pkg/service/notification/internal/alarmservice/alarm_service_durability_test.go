@@ -563,7 +563,7 @@ func TestClearRoomAlarms_UsesRepositoryAsAuthorityWhenConfigured(t *testing.T) {
 	as := newTestAlarmService(t)
 
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	as.alarmRepo = &sharedalarm.Repository{}
+	as.alarmRepository = &sharedalarm.Repository{}
 	as.alarmWriter = &stubAlarmWriter{
 		clearByRoomFn: func(context.Context, string) (int64, error) {
 			return 2, nil
@@ -610,7 +610,7 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 		cache:       cacheMock,
 		logger:      newDiscardAlarmLogger(),
 		memberData:  &mockMemberDataProvider{members: []*domain.Member{}},
-		alarmRepo:   &sharedalarm.Repository{},
+		alarmRepository:   &sharedalarm.Repository{},
 		alarmWriter: &stubAlarmWriter{},
 	}
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }

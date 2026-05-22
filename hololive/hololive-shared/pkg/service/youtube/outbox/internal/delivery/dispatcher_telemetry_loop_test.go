@@ -37,8 +37,8 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 	db := openTelemetryLoopTestDB(t)
 	require.NoError(t, db.AutoMigrate(&sqliteTelemetryOutboxModel{}, &sqliteTelemetryDeliveryModel{}, &sqliteTelemetryBufferModel{}, &sqliteTelemetryObservationTrackingModel{}))
 
-	repo := NewDeliveryTelemetryRepository(db)
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
+	repository := NewDeliveryTelemetryRepository(db)
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     701,
 		AttemptOrdinal: 1,
 		OutboxID:       801,
@@ -76,8 +76,8 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 	db := openTelemetryLoopTestDB(t)
 	require.NoError(t, db.AutoMigrate(&sqliteTelemetryOutboxModel{}, &sqliteTelemetryDeliveryModel{}, &sqliteTelemetryBufferModel{}, &sqliteTelemetryObservationTrackingModel{}))
 
-	repo := NewDeliveryTelemetryRepository(db)
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
+	repository := NewDeliveryTelemetryRepository(db)
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     702,
 		AttemptOrdinal: 1,
 		OutboxID:       802,
@@ -119,8 +119,8 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 	db := openTelemetryLoopTestDB(t)
 	require.NoError(t, db.AutoMigrate(&sqliteTelemetryOutboxModel{}, &sqliteTelemetryDeliveryModel{}, &sqliteTelemetryBufferModel{}, &sqliteTelemetryObservationTrackingModel{}))
 
-	repo := NewDeliveryTelemetryRepository(db)
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
+	repository := NewDeliveryTelemetryRepository(db)
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
 		telemetryLoopTestRow(703, 803, "short-loop-immediate", "room-loop-immediate"),
 	}))
 
@@ -140,7 +140,7 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 		return telemetryLoopRowLogged(t, db, 703)
 	}, 2*time.Second, 10*time.Millisecond)
 
-	require.NoError(t, repo.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
 		telemetryLoopTestRow(704, 804, "short-loop-tick", "room-loop-tick"),
 	}))
 

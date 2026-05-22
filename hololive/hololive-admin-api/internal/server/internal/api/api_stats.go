@@ -62,7 +62,7 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 	go func() {
 		defer wg.Done()
 
-		members, memberErr = h.repo.GetAllMembers(ctx)
+		members, memberErr = h.repository.GetAllMembers(ctx)
 	}()
 	go func() {
 		defer wg.Done()

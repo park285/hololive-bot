@@ -503,7 +503,7 @@ func TestSubscriberGraphCommandEnsureDeps(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		deps := &Dependencies{
 			Matcher:   &matcher.MemberMatcher{},
-			StatsRepo: &stubCoverageStatsRepository{},
+			StatsRepository: &stubCoverageStatsRepository{},
 			SendMessage: func(_ context.Context, _, _ string) error {
 				return nil
 			},

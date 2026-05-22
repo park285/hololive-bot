@@ -48,7 +48,7 @@ func initMemberNewsService(
 	membersData member.DataProvider,
 	logger *slog.Logger,
 ) *membernews.Service {
-	repo := membernews.NewRepository(postgres, cacheClient, logger)
+	repository := membernews.NewRepository(postgres, cacheClient, logger)
 	llmClient := ProvideMemberNewsLLMClient(cliproxy, llmCfg, logger)
 	reviewer := ProvideMemberNewsReviewerClient(cliproxy, llmCfg, logger)
 	adjudicator := ProvideMemberNewsAdjudicatorClient(cliproxy, llmCfg, logger)
@@ -85,7 +85,7 @@ func initMemberNewsService(
 		)
 	}
 
-	service := membernews.NewService(repo, summarizer, validator, membersData, logger)
+	service := membernews.NewService(repository, summarizer, validator, membersData, logger)
 	if warmErr := service.WarmupSubscriptionCache(ctx); warmErr != nil {
 		logger.Warn("Member news subscription warmup failed", slog.String("error", warmErr.Error()))
 	}

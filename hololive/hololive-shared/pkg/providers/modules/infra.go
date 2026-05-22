@@ -15,7 +15,7 @@ import (
 type InfraModule struct {
 	Cache       cache.Client
 	Postgres    database.Client
-	MemberRepo  *member.Repository
+	MemberRepository  *member.Repository
 	MemberCache *member.Cache
 	Cleanup     func()
 }
@@ -102,7 +102,7 @@ func newInfraModule(
 	return &InfraModule{
 		Cache:       cacheService,
 		Postgres:    postgresService,
-		MemberRepo:  memberRepository,
+		MemberRepository:  memberRepository,
 		MemberCache: memberCache,
 		Cleanup: func() {
 			if cleanupDB != nil {

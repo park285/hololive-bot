@@ -106,9 +106,9 @@ func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.Messag
 
 	cfg = normalizeDispatcherConfig(cfg)
 
-	var telemetryRepo *DeliveryTelemetryRepository
+	var telemetryRepository *DeliveryTelemetryRepository
 	if db != nil {
-		telemetryRepo = NewDeliveryTelemetryRepository(db)
+		telemetryRepository = NewDeliveryTelemetryRepository(db)
 	}
 
 	return &Dispatcher{
@@ -119,7 +119,7 @@ func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.Messag
 		logger:    logger,
 		cfg:       cfg,
 		delivery:  NewDeliveryRepository(db, logger),
-		telemetry: telemetryRepo,
+		telemetry: telemetryRepository,
 		formatter: &MessageFormatter{
 			renderer: renderer,
 			cache:    cacheClient,

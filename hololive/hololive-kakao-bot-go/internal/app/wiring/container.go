@@ -85,11 +85,11 @@ func NewBot(deps *bot.Dependencies) (*bot.Bot, error) {
 	return instance, nil
 }
 
-func MemberRepo(deps *bot.Dependencies) *member.Repository {
+func MemberRepository(deps *bot.Dependencies) *member.Repository {
 	if deps == nil {
 		return nil
 	}
-	return deps.MemberRepo
+	return deps.MemberRepository
 }
 
 func MemberCache(deps *bot.Dependencies) *member.Cache {

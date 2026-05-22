@@ -11,7 +11,7 @@ import (
 )
 
 func TestRepositoryListAlarmSentHistoriesWithinObservationWindowFiltersRows(t *testing.T) {
-	repo := NewRepository(newTrackingTestDB(t))
+	repository := NewRepository(newTrackingTestDB(t))
 	ctx := context.Background()
 
 	windowStart := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
@@ -27,7 +27,7 @@ func TestRepositoryListAlarmSentHistoriesWithinObservationWindowFiltersRows(t *t
 	shortAlarmSentAt := shortPublishedAt.Add(45 * time.Second)
 	pendingDetectedAt := windowStart.Add(50 * time.Minute)
 
-	require.NoError(t, repo.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{
+	require.NoError(t, repository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{
 		{
 			Kind:              domain.OutboxKindCommunityPost,
 			ContentID:         "community-window",
@@ -63,20 +63,20 @@ func TestRepositoryListAlarmSentHistoriesWithinObservationWindowFiltersRows(t *t
 			DetectedAt: pendingDetectedAt,
 		},
 	}))
-	require.NoError(t, repo.MarkAlarmSentBatch(ctx, []AlarmSentMark{
+	require.NoError(t, repository.MarkAlarmSentBatch(ctx, []AlarmSentMark{
 		{Kind: domain.OutboxKindCommunityPost, ContentID: "community-window", AlarmSentAt: communityAlarmSentAt},
 		{Kind: domain.OutboxKindCommunityPost, ContentID: "community-late-detected", AlarmSentAt: communityAlarmSentAt},
 		{Kind: domain.OutboxKindCommunityPost, ContentID: "community-out-of-window", AlarmSentAt: communityOutOfWindowPublishedAt.Add(time.Minute)},
 		{Kind: domain.OutboxKindNewShort, ContentID: "short-window", AlarmSentAt: shortAlarmSentAt},
 	}))
 
-	communityRows, err := repo.ListCommunityAlarmSentHistoriesWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
+	communityRows, err := repository.ListCommunityAlarmSentHistoriesWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, communityRows, 1)
 	require.Equal(t, "community:community-window", communityRows[0].PostID)
 	require.Equal(t, communityAlarmSentAt, communityRows[0].AlarmSentAt.UTC())
 
-	shortRows, err := repo.ListShortsAlarmSentHistoriesWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
+	shortRows, err := repository.ListShortsAlarmSentHistoriesWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, shortRows, 1)
 	require.Equal(t, "short:short-window", shortRows[0].PostID)

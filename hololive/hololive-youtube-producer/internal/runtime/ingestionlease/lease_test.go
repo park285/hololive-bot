@@ -39,8 +39,8 @@ import (
 
 func newTestCacheForLock(t *testing.T) *cache.Service {
 	t.Helper()
-	svc, _ := newTestCacheForLockWithMini(t)
-	return svc
+	service, _ := newTestCacheForLockWithMini(t)
+	return service
 }
 
 func newTestCacheForLockWithMini(t *testing.T) (*cache.Service, *miniredis.Miniredis) {
@@ -51,7 +51,7 @@ func newTestCacheForLockWithMini(t *testing.T) (*cache.Service, *miniredis.Minir
 	if err != nil {
 		t.Fatalf("parse miniredis port: %v", err)
 	}
-	svc, err := cache.NewCacheService(context.Background(), cache.Config{
+	service, err := cache.NewCacheService(context.Background(), cache.Config{
 		Host:              mini.Host(),
 		Port:              port,
 		DB:                0,
@@ -62,10 +62,10 @@ func newTestCacheForLockWithMini(t *testing.T) (*cache.Service, *miniredis.Minir
 		t.Fatalf("new cache service: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = svc.Close()
+		_ = service.Close()
 		mini.Close()
 	})
-	return svc, mini
+	return service, mini
 }
 
 func TestAcquireExclusive(t *testing.T) {

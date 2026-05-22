@@ -25,16 +25,16 @@ func ProvideAlarmService(
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	memberData domain.MemberDataProvider,
-	alarmRepo *alarm.Repository,
+	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*notification.AlarmService, error) {
-	svc, err := notification.NewAlarmService(
+	service, err := notification.NewAlarmService(
 		cacheClient,
 		holodexSvc,
 		chzzkClient,
 		twitchClient,
 		memberData,
-		alarmRepo,
+		alarmRepository,
 		logger,
 		advanceMinutes,
 	)
@@ -42,7 +42,7 @@ func ProvideAlarmService(
 		return nil, fmt.Errorf("failed to create alarm service: %w", err)
 	}
 
-	return svc, nil
+	return service, nil
 }
 
 func ProvideAlarmRepository(postgres database.Client, logger *slog.Logger) *alarm.Repository {

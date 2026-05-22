@@ -143,7 +143,7 @@ func collectCommunityShortsAlarmSentHistoryDatasetRows(
 		return communityShortsAlarmSentHistoryDatasetRows{}, fmt.Errorf("collect community shorts alarm sent history dataset: list shorts sent histories: %w", err)
 	}
 
-	sendStateRows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(
+	sendStateRows, err := session.telemetryRepository.ListPostSendCountsByFinalizedObservationWindow(
 		ctx,
 		query.ObservationRuntimeName,
 		window.BigBangCutoverAt,

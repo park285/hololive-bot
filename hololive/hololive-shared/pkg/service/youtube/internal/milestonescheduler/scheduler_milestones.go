@@ -72,7 +72,7 @@ func (ys *schedulerImpl) milestoneAlreadyAchieved(
 		}
 		return exists, false
 	}
-	alreadyAchieved, err := ys.statsRepo.HasAchievedMilestone(ctx, channelID, domain.MilestoneSubscribers, milestone)
+	alreadyAchieved, err := ys.statsRepository.HasAchievedMilestone(ctx, channelID, domain.MilestoneSubscribers, milestone)
 	if err != nil {
 		return false, true
 	}
@@ -103,7 +103,7 @@ func (ys *schedulerImpl) saveSubscriberMilestone(
 		AchievedAt: now,
 		Notified:   false,
 	}
-	if err := ys.statsRepo.SaveMilestone(ctx, milestoneRecord); err != nil {
+	if err := ys.statsRepository.SaveMilestone(ctx, milestoneRecord); err != nil {
 		return false
 	}
 	ys.logger.Info("Milestone achieved",

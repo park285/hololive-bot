@@ -193,12 +193,12 @@ func loadCommunityShortsRouteReportRows(
 	session *communityShortsOpsSession,
 	since time.Time,
 ) ([]outbox.PostDeliveryPathUsage, []outbox.PostSendCount, error) {
-	pathUsageRows, err := session.telemetryRepo.ListPostDeliveryPathUsageSince(ctx, since)
+	pathUsageRows, err := session.telemetryRepository.ListPostDeliveryPathUsageSince(ctx, since)
 	if err != nil {
 		return nil, nil, fmt.Errorf("collect community shorts route verification report: list delivery path usage: %w", err)
 	}
 
-	sendCountRows, err := session.telemetryRepo.ListPostSendCountsSince(ctx, since)
+	sendCountRows, err := session.telemetryRepository.ListPostSendCountsSince(ctx, since)
 	if err != nil {
 		return nil, nil, fmt.Errorf("collect community shorts route verification report: list send counts: %w", err)
 	}

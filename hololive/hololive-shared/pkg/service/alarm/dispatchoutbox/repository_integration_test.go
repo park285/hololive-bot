@@ -88,7 +88,7 @@ func readRepoMigration(t *testing.T, relative string) string {
 }
 
 func TestPgxRepositoryInsertBatch_SetBasedPath(t *testing.T) {
-	repo, pool := setupDispatchOutboxIntegration(t)
+	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 
@@ -107,7 +107,7 @@ func TestPgxRepositoryInsertBatch_SetBasedPath(t *testing.T) {
 		})
 	}
 
-	result, err := repo.InsertBatch(ctx, PublishBatchInput{Envelopes: envelopes, Status: StatusPending})
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: envelopes, Status: StatusPending})
 	if err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
@@ -136,7 +136,7 @@ func TestPgxRepositoryInsertBatch_SetBasedPath(t *testing.T) {
 }
 
 func TestPgxRepositoryInsertBatch_RollsBackSameBatchHashConflict(t *testing.T) {
-	repo, pool := setupDispatchOutboxIntegration(t)
+	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 	first := domain.AlarmQueueEnvelope{
@@ -152,7 +152,7 @@ func TestPgxRepositoryInsertBatch_RollsBackSameBatchHashConflict(t *testing.T) {
 	second.Notification.RoomID = "room-2"
 	second.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "second"}
 
-	_, err := repo.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}, Status: StatusPending})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}, Status: StatusPending})
 	if err == nil || !strings.Contains(err.Error(), "dispatch event hash conflict") {
 		t.Fatalf("InsertBatch() error = %v, want hash conflict", err)
 	}
@@ -170,7 +170,7 @@ func TestPgxRepositoryInsertBatch_RollsBackSameBatchHashConflict(t *testing.T) {
 }
 
 func TestPgxRepositoryInsertBatch_RejectsExistingEventHashConflict(t *testing.T) {
-	repo, pool := setupDispatchOutboxIntegration(t)
+	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 	first := domain.AlarmQueueEnvelope{
@@ -186,10 +186,10 @@ func TestPgxRepositoryInsertBatch_RejectsExistingEventHashConflict(t *testing.T)
 	second.Notification.RoomID = "room-2"
 	second.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "second"}
 
-	if _, err := repo.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first}, Status: StatusPending}); err != nil {
+	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first}, Status: StatusPending}); err != nil {
 		t.Fatalf("first InsertBatch() error = %v", err)
 	}
-	_, err := repo.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{second}, Status: StatusPending})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{second}, Status: StatusPending})
 	if err == nil || !strings.Contains(err.Error(), "dispatch event hash conflict") {
 		t.Fatalf("second InsertBatch() error = %v, want hash conflict", err)
 	}
@@ -204,7 +204,7 @@ func TestPgxRepositoryInsertBatch_RejectsExistingEventHashConflict(t *testing.T)
 }
 
 func TestPgxRepositoryInsertBatch_SkipsLegacyDedupeKey(t *testing.T) {
-	repo, pool := setupDispatchOutboxIntegration(t)
+	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 	envelope := domain.AlarmQueueEnvelope{
@@ -242,7 +242,7 @@ func TestPgxRepositoryInsertBatch_SkipsLegacyDedupeKey(t *testing.T) {
 		t.Fatalf("insert legacy delivery: %v", err)
 	}
 
-	result, err := repo.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
 	if err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
@@ -252,7 +252,7 @@ func TestPgxRepositoryInsertBatch_SkipsLegacyDedupeKey(t *testing.T) {
 }
 
 func TestPgxRepositoryInsertBatch_DedupesDuplicateDedupeKeyWithinBatch(t *testing.T) {
-	repo, pool := setupDispatchOutboxIntegration(t)
+	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 	envelope := domain.AlarmQueueEnvelope{
@@ -265,7 +265,7 @@ func TestPgxRepositoryInsertBatch_DedupesDuplicateDedupeKeyWithinBatch(t *testin
 		Version: 1,
 	}
 
-	result, err := repo.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope, envelope}, Status: StatusPending})
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope, envelope}, Status: StatusPending})
 	if err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
@@ -304,7 +304,7 @@ func TestPgxRepositoryInsertBatch_DBPayloadConstraintRejectsDeliveryFields(t *te
 }
 
 func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
-	repo, pool := setupDispatchOutboxIntegration(t)
+	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 	envelope := domain.AlarmQueueEnvelope{
@@ -317,17 +317,17 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 		Version: 1,
 	}
 
-	if _, err := repo.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending}); err != nil {
+	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending}); err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
-	claimed, err := repo.ClaimDue(ctx, "worker-1", 1, time.Minute)
+	claimed, err := repository.ClaimDue(ctx, "worker-1", 1, time.Minute)
 	if err != nil {
 		t.Fatalf("ClaimDue() error = %v", err)
 	}
 	if len(claimed) != 1 {
 		t.Fatalf("ClaimDue() rows = %d, want 1", len(claimed))
 	}
-	if err := repo.ReleaseLeased(ctx, []int64{claimed[0].ID}, "worker-1"); err != nil {
+	if err := repository.ReleaseLeased(ctx, []int64{claimed[0].ID}, "worker-1"); err != nil {
 		t.Fatalf("ReleaseLeased() error = %v", err)
 	}
 
@@ -342,7 +342,7 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 }
 
 func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.T) {
-	repo, pool := setupDispatchOutboxIntegration(t)
+	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	workerID := "worker-jsonb"
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
@@ -370,14 +370,14 @@ func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.
 		},
 	}
 
-	result, err := repo.InsertBatch(ctx, PublishBatchInput{
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{
 		Envelopes: envelopes,
 		Status:    StatusPending,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 2, result.InsertedDeliveries)
 
-	claimed, err := repo.ClaimDue(ctx, workerID, 2, time.Minute)
+	claimed, err := repository.ClaimDue(ctx, workerID, 2, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, claimed, 2)
 
@@ -394,7 +394,7 @@ func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.
 	require.NotZero(t, dlqID)
 
 	nextAttemptAt := time.Now().UTC().Add(3 * time.Minute)
-	require.NoError(t, repo.ScheduleRetry(ctx, []RetryUpdate{
+	require.NoError(t, repository.ScheduleRetry(ctx, []RetryUpdate{
 		{
 			ID:            retryID,
 			AttemptCount:  1,
@@ -403,7 +403,7 @@ func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.
 		},
 	}, workerID))
 
-	require.NoError(t, repo.MoveToDLQ(ctx, []TerminalUpdate{
+	require.NoError(t, repository.MoveToDLQ(ctx, []TerminalUpdate{
 		{
 			ID:    dlqID,
 			Error: "jsonb dlq test",
@@ -438,7 +438,7 @@ func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.
 }
 
 func TestPgxRepositoryJSONBRecordsetParam_QuarantineSendingPath(t *testing.T) {
-	repo, pool := setupDispatchOutboxIntegration(t)
+	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	workerID := "worker-jsonb-quarantine"
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
@@ -454,19 +454,19 @@ func TestPgxRepositoryJSONBRecordsetParam_QuarantineSendingPath(t *testing.T) {
 		Version:   1,
 	}
 
-	_, err := repo.InsertBatch(ctx, PublishBatchInput{
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{
 		Envelopes: []domain.AlarmQueueEnvelope{envelope},
 		Status:    StatusPending,
 	})
 	require.NoError(t, err)
 
-	claimed, err := repo.ClaimDue(ctx, workerID, 1, time.Minute)
+	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
 
 	id := claimed[0].ID
-	require.NoError(t, repo.MarkSending(ctx, []int64{id}, workerID, time.Minute))
-	require.NoError(t, repo.Quarantine(ctx, []TerminalUpdate{
+	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+	require.NoError(t, repository.Quarantine(ctx, []TerminalUpdate{
 		{
 			ID:    id,
 			Error: "jsonb quarantine test",
@@ -488,7 +488,7 @@ func TestPgxRepositoryJSONBRecordsetParam_QuarantineSendingPath(t *testing.T) {
 }
 
 func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {
-	repo, pool := setupDispatchOutboxIntegration(t)
+	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
 	envelope := domain.AlarmQueueEnvelope{
@@ -501,17 +501,17 @@ func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {
 		Version: 1,
 	}
 
-	if _, err := repo.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending}); err != nil {
+	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending}); err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
-	claimed, err := repo.ClaimDue(ctx, "worker-1", 1, time.Minute)
+	claimed, err := repository.ClaimDue(ctx, "worker-1", 1, time.Minute)
 	if err != nil {
 		t.Fatalf("ClaimDue() error = %v", err)
 	}
 	if len(claimed) != 1 {
 		t.Fatalf("ClaimDue() rows = %d, want 1", len(claimed))
 	}
-	if err := repo.ReleaseLeased(ctx, []int64{claimed[0].ID}, "worker-2"); err == nil {
+	if err := repository.ReleaseLeased(ctx, []int64{claimed[0].ID}, "worker-2"); err == nil {
 		t.Fatal("ReleaseLeased() error = nil, want owner mismatch error")
 	}
 

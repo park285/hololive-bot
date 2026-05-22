@@ -215,10 +215,10 @@ func buildAlarmFoundation(
 		ClientSecret: cfg.Twitch.ClientSecret,
 	}, logger)
 
-	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
-	outboxRepo := dispatchoutbox.NewPgxRepository(infra.Postgres)
+	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
+	outboxRepository := dispatchoutbox.NewPgxRepository(infra.Postgres)
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
-	alarmService, err := notification.NewAlarmService(infra.Cache, holodexService, chzzkClient, twitchClient, memberData, alarmRepo, logger, resolved)
+	alarmService, err := notification.NewAlarmService(infra.Cache, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}
@@ -233,7 +233,7 @@ func buildAlarmFoundation(
 		ChzzkClient:    chzzkClient,
 		TwitchClient:   twitchClient,
 		AlarmCRUD:      alarmService,
-		Outbox:         outboxRepo,
+		Outbox:         outboxRepository,
 		Postgres:       infra.Postgres,
 	}, nil
 }

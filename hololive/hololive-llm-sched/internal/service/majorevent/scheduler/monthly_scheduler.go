@@ -37,7 +37,7 @@ import (
 
 type MonthlyScheduler struct {
 	repository EventRepository
-	outboxRepo outboxEnqueuer
+	outboxRepository outboxEnqueuer
 	formatter  Formatter
 	summarizer *mesummarizer.EventSummarizer
 	locker     delivery.NotificationLocker
@@ -50,7 +50,7 @@ func NewMonthlyScheduler(
 	formatter Formatter,
 	summarizer *mesummarizer.EventSummarizer,
 	locker delivery.NotificationLocker,
-	outboxRepo outboxEnqueuer,
+	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 ) *MonthlyScheduler {
 	if locker == nil {
@@ -58,7 +58,7 @@ func NewMonthlyScheduler(
 	}
 	return &MonthlyScheduler{
 		repository: repository,
-		outboxRepo: outboxRepo,
+		outboxRepository: outboxRepository,
 		formatter:  formatter,
 		summarizer: summarizer,
 		locker:     locker,
@@ -195,7 +195,7 @@ func (s *MonthlyScheduler) enqueueMonthlyNotification(
 ) ([]int, bool, error) {
 	domainEvents, eventIDs := toDomainEventsAndIDs(events)
 	message := s.monthlyNotificationMessage(ctx, domainEvents, monthKey)
-	result := enqueueToRooms(ctx, s.outboxRepo, toRoomTargets(rooms), domain.DeliveryKindMajorEventMonthly, monthKey, message, s.logger)
+	result := enqueueToRooms(ctx, s.outboxRepository, toRoomTargets(rooms), domain.DeliveryKindMajorEventMonthly, monthKey, message, s.logger)
 	s.logMonthlyNotificationEnqueueResult(result, len(events))
 	shouldMark, err := s.shouldMarkMonthlyEvents(result)
 	return eventIDs, shouldMark, err

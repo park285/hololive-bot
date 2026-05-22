@@ -115,10 +115,10 @@ func TestCreateSession_Success(t *testing.T) {
 	cfg.SessionTTL = 30 * time.Minute
 	cfg.UserSessionsTTL = 2 * time.Hour
 
-	svc, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), cfg)
 	require.NoError(t, err)
 
-	session, err := svc.createSession(context.Background(), "user-123")
+	session, err := service.createSession(context.Background(), "user-123")
 	require.NoError(t, err)
 	require.NotNil(t, session)
 	assert.NotEmpty(t, session.Token)
@@ -135,10 +135,10 @@ func TestCreateSession_StoresJSONSessionDataAndUserIndex(t *testing.T) {
 	cfg.SessionTTL = 30 * time.Minute
 	cfg.UserSessionsTTL = 2 * time.Hour
 
-	svc, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), cfg)
+	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), cfg)
 	require.NoError(t, err)
 
-	session, err := svc.createSession(context.Background(), "user-123")
+	session, err := service.createSession(context.Background(), "user-123")
 	require.NoError(t, err)
 
 	sessionHash := sha256Hex(session.Token)
@@ -156,10 +156,10 @@ func TestCreateSession_StoresJSONSessionDataAndUserIndex(t *testing.T) {
 
 func TestCreateSession_NoCacheService(t *testing.T) {
 	db := newTestDB(t)
-	svc, err := NewService(context.Background(), db, nil, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), db, nil, newTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
-	_, err = svc.createSession(context.Background(), "user-123")
+	_, err = service.createSession(context.Background(), "user-123")
 	require.Error(t, err)
 	assertAuthCode(t, err, CodeInternal)
 }
@@ -168,10 +168,10 @@ func TestCreateSession_EmptyUserID(t *testing.T) {
 	cache, cleanup := newTestCache(t)
 	defer cleanup()
 
-	svc, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
-	_, err = svc.createSession(context.Background(), "")
+	_, err = service.createSession(context.Background(), "")
 	require.Error(t, err)
 	assertAuthCode(t, err, CodeInternal)
 }
@@ -180,13 +180,13 @@ func TestCreateSession_UniqueSessions(t *testing.T) {
 	cache, cleanup := newTestCache(t)
 	defer cleanup()
 
-	svc, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
-	s1, err := svc.createSession(context.Background(), "user-123")
+	s1, err := service.createSession(context.Background(), "user-123")
 	require.NoError(t, err)
 
-	s2, err := svc.createSession(context.Background(), "user-123")
+	s2, err := service.createSession(context.Background(), "user-123")
 	require.NoError(t, err)
 
 	assert.NotEqual(t, s1.Token, s2.Token, "동일 사용자여도 세션 토큰이 달라야 함")

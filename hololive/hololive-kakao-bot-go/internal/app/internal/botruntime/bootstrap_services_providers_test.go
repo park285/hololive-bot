@@ -58,12 +58,12 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 		},
 	}
 
-	svc, err := appbootstrap.ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"room-a", "room-b"}, dbClient, cache, logger)
+	service, err := appbootstrap.ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"room-a", "room-b"}, dbClient, cache, logger)
 	require.NoError(t, err)
-	require.NotNil(t, svc)
-	assert.True(t, svc.IsReady())
+	require.NotNil(t, service)
+	assert.True(t, service.IsReady())
 
-	enabled, _, rooms := svc.GetACLStatus()
+	enabled, _, rooms := service.GetACLStatus()
 	assert.True(t, enabled)
 	assert.Len(t, rooms, 2)
 }

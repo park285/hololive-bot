@@ -39,7 +39,7 @@ import (
 type ShortsPoller struct {
 	client                           *scraper.Client
 	db                               *gorm.DB
-	repo                             batchRepository
+	repository                             batchRepository
 	maxResults                       int
 	routeDecider                     NotificationRouteDecider
 	inlinePublishedAtFallbackEnabled bool
@@ -56,7 +56,7 @@ func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int,
 	return &ShortsPoller{
 		client:                           scraperClient,
 		db:                               db,
-		repo:                             newBatchRepository(db),
+		repository:                             newBatchRepository(db),
 		maxResults:                       maxResults,
 		routeDecider:                     routeDecider,
 		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,
@@ -105,7 +105,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt)
 	batch := p.buildShortBatch(ctx, channelID, newShorts, isInitialized, detectedAt)
 
-	if err := p.repo.PersistVideos(ctx, batch.dbVideos, batch.notifications, batch.trackingRows, &domain.YouTubeContentWatermark{
+	if err := p.repository.PersistVideos(ctx, batch.dbVideos, batch.notifications, batch.trackingRows, &domain.YouTubeContentWatermark{
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,

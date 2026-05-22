@@ -73,7 +73,7 @@ func NewService(ctx context.Context, db *gorm.DB, cacheClient cache.Client, logg
 		cfg = DefaultConfig()
 	}
 
-	svc := &Service{
+	service := &Service{
 		db:       db,
 		cacheClient: cacheClient,
 		logger:   logger,
@@ -81,12 +81,12 @@ func NewService(ctx context.Context, db *gorm.DB, cacheClient cache.Client, logg
 	}
 
 	if cfg.AutoPrepareSchema {
-		if err := svc.createTablesIfNotExist(ctx); err != nil {
+		if err := service.createTablesIfNotExist(ctx); err != nil {
 			return nil, err
 		}
 	}
 
-	return svc, nil
+	return service, nil
 }
 
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (*User, error) {

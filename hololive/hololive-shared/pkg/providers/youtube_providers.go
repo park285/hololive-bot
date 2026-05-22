@@ -69,14 +69,14 @@ func ProvideHolodexService(
 	baseURL string,
 	apiKey string,
 	cacheClient cache.Client,
-	scraperSvc *holodex.ScraperService,
+	scraperService *holodex.ScraperService,
 	logger *slog.Logger,
 ) (*holodex.Service, error) {
-	svc, err := holodex.NewHolodexService(baseURL, apiKey, cacheClient, scraperSvc, logger)
+	service, err := holodex.NewHolodexService(baseURL, apiKey, cacheClient, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create holodex service: %w", err)
 	}
-	return svc, nil
+	return service, nil
 }
 
 // ProvideYouTubeStatsRepository - YouTube 통계 저장소 생성

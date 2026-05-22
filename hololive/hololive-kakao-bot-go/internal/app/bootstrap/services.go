@@ -92,7 +92,7 @@ func provideBotDependenciesFromStacks(
 		alarmYouTubeStack.ActivityLogger,
 		alarmYouTubeStack.SettingsService,
 		integrationServices.ACLService,
-		integrationServices.MajorEventRepo,
+		integrationServices.MajorEventRepository,
 		integrationServices.MemberNewsService,
 		integrationServices.CommandBuilders,
 		integrationServices.WorkerPool,

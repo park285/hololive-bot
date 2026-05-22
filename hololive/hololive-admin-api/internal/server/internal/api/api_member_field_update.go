@@ -117,7 +117,7 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 			return req.ChannelID
 		},
 		update: func(ctx context.Context, h *MemberAPIHandler, memberID int, req updateChannelIDRequest) error {
-			return h.repo.UpdateChannelID(ctx, memberID, req.ChannelID)
+			return h.repository.UpdateChannelID(ctx, memberID, req.ChannelID)
 		},
 		logFieldKey:       "channel_id",
 		repoErrorLog:      "Failed to update channel ID",
@@ -139,7 +139,7 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 			return req.Name
 		},
 		update: func(ctx context.Context, h *MemberAPIHandler, memberID int, req updateMemberNameRequest) error {
-			return h.repo.UpdateMemberName(ctx, memberID, req.Name)
+			return h.repository.UpdateMemberName(ctx, memberID, req.Name)
 		},
 		logFieldKey:       "name",
 		repoErrorLog:      "Failed to update member name",

@@ -47,7 +47,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 		},
 	}
 	youTubeService := &stubYouTubeService{}
-	statsRepo := &ytstats.StatsRepository{}
+	statsRepository := &ytstats.StatsRepository{}
 	commandBuilders := []bot.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo}
 
 	cfg := &config.Config{
@@ -77,7 +77,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 		irisClient,
 		nil,
 		nil,
-		&sharedproviders.YouTubeStack{Service: youTubeService, StatsRepo: statsRepo},
+		&sharedproviders.YouTubeStack{Service: youTubeService, StatsRepository: statsRepository},
 		activityLogger,
 		settingsSvc,
 		nil,
@@ -137,8 +137,8 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	if deps.Service != youtube.Service(youTubeService) {
 		t.Fatal("Dependencies.Service did not preserve the YouTube service from the stack")
 	}
-	if deps.YouTubeStatsRepo != statsRepo {
-		t.Fatal("Dependencies.YouTubeStatsRepo did not preserve the YouTube stats repository from the stack")
+	if deps.YouTubeStatsRepository != statsRepository {
+		t.Fatal("Dependencies.YouTubeStatsRepository did not preserve the YouTube stats repository from the stack")
 	}
 	if deps.Activity != activityLogger {
 		t.Fatal("Dependencies.Activity did not preserve the activity logger")
@@ -158,8 +158,8 @@ func TestProvideBotDependenciesAcceptsDisabledYouTubeStack(t *testing.T) {
 	if deps.Service != nil {
 		t.Fatalf("Service = %T, want nil for disabled YouTube stack", deps.Service)
 	}
-	if deps.YouTubeStatsRepo != nil {
-		t.Fatalf("YouTubeStatsRepo = %T, want nil for disabled YouTube stack", deps.YouTubeStatsRepo)
+	if deps.YouTubeStatsRepository != nil {
+		t.Fatalf("YouTubeStatsRepository = %T, want nil for disabled YouTube stack", deps.YouTubeStatsRepository)
 	}
 }
 

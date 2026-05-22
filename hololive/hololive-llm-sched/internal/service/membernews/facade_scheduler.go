@@ -53,18 +53,18 @@ func NewScheduler(
 	service model.DigestService,
 	formatter DigestFormatter,
 	locker delivery.NotificationLocker,
-	outboxRepo outboxEnqueuer,
+	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 ) *Scheduler {
-	return mnscheduler.NewScheduler(service, formatter, locker, outboxRepo, logger)
+	return mnscheduler.NewScheduler(service, formatter, locker, outboxRepository, logger)
 }
 
 func NewMonthlyScheduler(
 	service model.DigestService,
 	formatter DigestFormatter,
 	locker delivery.NotificationLocker,
-	outboxRepo outboxEnqueuer,
+	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 ) *MonthlyScheduler {
-	return mnscheduler.NewMonthlyScheduler(service, formatter, locker, outboxRepo, logger)
+	return mnscheduler.NewMonthlyScheduler(service, formatter, locker, outboxRepository, logger)
 }

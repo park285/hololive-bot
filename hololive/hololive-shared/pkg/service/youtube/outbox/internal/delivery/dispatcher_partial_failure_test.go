@@ -338,7 +338,7 @@ func newDispatcherTestCache(t *testing.T) (*cache.Service, *miniredis.Miniredis)
 	port, err := strconv.Atoi(rawPort)
 	require.NoError(t, err)
 
-	svc, err := cache.NewCacheService(context.Background(), cache.Config{
+	service, err := cache.NewCacheService(context.Background(), cache.Config{
 		Host:              host,
 		Port:              port,
 		DisableCache:      true,
@@ -346,5 +346,5 @@ func newDispatcherTestCache(t *testing.T) (*cache.Service, *miniredis.Miniredis)
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
 
-	return svc, mini
+	return service, mini
 }

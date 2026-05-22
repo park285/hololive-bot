@@ -81,7 +81,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func testRepo(t *testing.T) *OutboxRepository {
+func testRepository(t *testing.T) *OutboxRepository {
 	t.Helper()
 	db := setupTestDB(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -101,9 +101,9 @@ func buildOutboxBatchItems(count int) []OutboxItem {
 	return items
 }
 
-func fetchLockedIDs(t *testing.T, repo *OutboxRepository, ctx context.Context, batchSize int) []int64 {
+func fetchLockedIDs(t *testing.T, repository *OutboxRepository, ctx context.Context, batchSize int) []int64 {
 	t.Helper()
-	locked, err := repo.FetchAndLock(ctx, batchSize, 5*time.Minute)
+	locked, err := repository.FetchAndLock(ctx, batchSize, 5*time.Minute)
 	if err != nil {
 		t.Fatalf("fetch and lock: %v", err)
 	}
@@ -115,43 +115,43 @@ func fetchLockedIDs(t *testing.T, repo *OutboxRepository, ctx context.Context, b
 }
 
 func TestEnqueue_Idempotent_PendingNoOp(t *testing.T) {
-	repo := testRepo(t)
+	repository := testRepository(t)
 	ctx := context.Background()
 
 	// 첫 번째 Enqueue
-	if err := repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg1"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg1"); err != nil {
 		t.Fatalf("first enqueue: %v", err)
 	}
 
 	// 동일 content_id로 다시 Enqueue → PENDING이므로 무시
-	if err := repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg2"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg2"); err != nil {
 		t.Fatalf("second enqueue: %v", err)
 	}
 
 	// payload가 변경되지 않아야 함 (ON CONFLICT 조건: status=FAILED만 갱신)
-	cnt, _ := repo.CountByStatus(ctx, domain.DeliveryStatusPending)
+	cnt, _ := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
 	if cnt != 1 {
 		t.Fatalf("expected 1 pending, got %d", cnt)
 	}
 }
 
 func TestEnqueue_FailedRetry(t *testing.T) {
-	repo := testRepo(t)
+	repository := testRepository(t)
 	ctx := context.Background()
 
-	if err := repo.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", "msg1"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", "msg1"); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
 	// 수동으로 FAILED 상태로 변경
-	repo.db.Exec("UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE content_id = ?", "2026-W08:room1")
+	repository.db.Exec("UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE content_id = ?", "2026-W08:room1")
 
 	// 재 Enqueue → FAILED이므로 갱신
-	if err := repo.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", "retry-msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", "retry-msg"); err != nil {
 		t.Fatalf("retry enqueue: %v", err)
 	}
 
-	cnt, _ := repo.CountByStatus(ctx, domain.DeliveryStatusPending)
+	cnt, _ := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
 	if cnt != 1 {
 		t.Fatalf("expected 1 pending after retry, got %d", cnt)
 	}
@@ -169,14 +169,14 @@ func TestEnqueueBatch(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := testRepo(t)
+			repository := testRepository(t)
 			ctx := context.Background()
 
-			if err := repo.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
+			if err := repository.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
 				t.Fatalf("enqueue batch: %v", err)
 			}
 
-			pending, err := repo.CountByStatus(ctx, domain.DeliveryStatusPending)
+			pending, err := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
 			if err != nil {
 				t.Fatalf("count pending: %v", err)
 			}
@@ -188,16 +188,16 @@ func TestEnqueueBatch(t *testing.T) {
 }
 
 func TestFetchAndLock(t *testing.T) {
-	repo := testRepo(t)
+	repository := testRepository(t)
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		if err := repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
+		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
 			t.Fatalf("enqueue %d: %v", i, err)
 		}
 	}
 
-	items, err := repo.FetchAndLock(ctx, 2, 5*time.Minute)
+	items, err := repository.FetchAndLock(ctx, 2, 5*time.Minute)
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -214,47 +214,47 @@ func TestFetchAndLock(t *testing.T) {
 }
 
 func TestMarkSent(t *testing.T) {
-	repo := testRepo(t)
+	repository := testRepository(t)
 	ctx := context.Background()
 
-	if err := repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items, _ := repo.FetchAndLock(ctx, 1, 5*time.Minute)
+	items, _ := repository.FetchAndLock(ctx, 1, 5*time.Minute)
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
 
-	if err := repo.MarkSent(ctx, items[0].ID); err != nil {
+	if err := repository.MarkSent(ctx, items[0].ID); err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
 
-	cnt, _ := repo.CountByStatus(ctx, domain.DeliveryStatusSent)
+	cnt, _ := repository.CountByStatus(ctx, domain.DeliveryStatusSent)
 	if cnt != 1 {
 		t.Fatalf("expected 1 sent, got %d", cnt)
 	}
 }
 
 func TestMarkFailed_WithBackoff(t *testing.T) {
-	repo := testRepo(t)
+	repository := testRepository(t)
 	ctx := context.Background()
 
-	if err := repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items, _ := repo.FetchAndLock(ctx, 1, 5*time.Minute)
+	items, _ := repository.FetchAndLock(ctx, 1, 5*time.Minute)
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
 
 	// maxRetries=3, 첫 실패 → 아직 PENDING 유지
-	if err := repo.MarkFailed(ctx, items[0].ID, 3, time.Minute, "send error"); err != nil {
+	if err := repository.MarkFailed(ctx, items[0].ID, 3, time.Minute, "send error"); err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
 
-	pending, _ := repo.CountByStatus(ctx, domain.DeliveryStatusPending)
+	pending, _ := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
 	if pending != 1 {
 		t.Fatalf("expected 1 pending after first failure, got %d", pending)
 	}
@@ -272,25 +272,25 @@ func TestMarkSentBatch(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := testRepo(t)
+			repository := testRepository(t)
 			ctx := context.Background()
 
 			ids := make([]int64, 0)
 			if tc.count > 0 {
-				if err := repo.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
+				if err := repository.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
 					t.Fatalf("enqueue batch: %v", err)
 				}
-				ids = fetchLockedIDs(t, repo, ctx, tc.count+1)
+				ids = fetchLockedIDs(t, repository, ctx, tc.count+1)
 				if len(ids) != tc.count {
 					t.Fatalf("locked ids = %d, want %d", len(ids), tc.count)
 				}
 			}
 
-			if err := repo.MarkSentBatch(ctx, ids); err != nil {
+			if err := repository.MarkSentBatch(ctx, ids); err != nil {
 				t.Fatalf("mark sent batch: %v", err)
 			}
 
-			sent, err := repo.CountByStatus(ctx, domain.DeliveryStatusSent)
+			sent, err := repository.CountByStatus(ctx, domain.DeliveryStatusSent)
 			if err != nil {
 				t.Fatalf("count sent: %v", err)
 			}
@@ -313,26 +313,26 @@ func TestMarkFailedBatch(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := testRepo(t)
+			repository := testRepository(t)
 			ctx := context.Background()
 			reason := "batch send failed"
 
 			ids := make([]int64, 0)
 			if tc.count > 0 {
-				if err := repo.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
+				if err := repository.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
 					t.Fatalf("enqueue batch: %v", err)
 				}
-				ids = fetchLockedIDs(t, repo, ctx, tc.count+1)
+				ids = fetchLockedIDs(t, repository, ctx, tc.count+1)
 				if len(ids) != tc.count {
 					t.Fatalf("locked ids = %d, want %d", len(ids), tc.count)
 				}
 			}
 
-			if err := repo.MarkFailedBatch(ctx, ids, reason); err != nil {
+			if err := repository.MarkFailedBatch(ctx, ids, reason); err != nil {
 				t.Fatalf("mark failed batch: %v", err)
 			}
 
-			failed, err := repo.CountByStatus(ctx, domain.DeliveryStatusFailed)
+			failed, err := repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
 			if err != nil {
 				t.Fatalf("count failed: %v", err)
 			}
@@ -344,27 +344,27 @@ func TestMarkFailedBatch(t *testing.T) {
 }
 
 func TestCleanup(t *testing.T) {
-	repo := testRepo(t)
+	repository := testRepository(t)
 	ctx := context.Background()
 
-	if err := repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items, _ := repo.FetchAndLock(ctx, 1, 5*time.Minute)
+	items, _ := repository.FetchAndLock(ctx, 1, 5*time.Minute)
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
 
-	if err := repo.MarkSent(ctx, items[0].ID); err != nil {
+	if err := repository.MarkSent(ctx, items[0].ID); err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
 
 	// sent_at을 과거로 변경
-	repo.db.Exec("UPDATE notification_delivery_outbox SET sent_at = ? WHERE id = ?",
+	repository.db.Exec("UPDATE notification_delivery_outbox SET sent_at = ? WHERE id = ?",
 		time.Now().Add(-10*24*time.Hour), items[0].ID)
 
-	cleaned, err := repo.Cleanup(ctx, 7*24*time.Hour)
+	cleaned, err := repository.Cleanup(ctx, 7*24*time.Hour)
 	if err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
@@ -374,25 +374,25 @@ func TestCleanup(t *testing.T) {
 }
 
 func TestCleanup_FailedItems(t *testing.T) {
-	repo := testRepo(t)
+	repository := testRepository(t)
 	ctx := context.Background()
 
-	if err := repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room-fail", "msg"); err != nil {
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room-fail", "msg"); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
 	// FAILED 상태로 변경 (sent_at은 NULL 유지) + created_at을 과거로
-	repo.db.Exec(
+	repository.db.Exec(
 		"UPDATE notification_delivery_outbox SET status = 'FAILED', created_at = ? WHERE content_id = ?",
 		time.Now().Add(-10*24*time.Hour), "2026-W08:room-fail",
 	)
 
-	failed, _ := repo.CountByStatus(ctx, domain.DeliveryStatusFailed)
+	failed, _ := repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
 	if failed != 1 {
 		t.Fatalf("expected 1 failed, got %d", failed)
 	}
 
-	cleaned, err := repo.Cleanup(ctx, 7*24*time.Hour)
+	cleaned, err := repository.Cleanup(ctx, 7*24*time.Hour)
 	if err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
@@ -400,23 +400,23 @@ func TestCleanup_FailedItems(t *testing.T) {
 		t.Fatalf("expected 1 failed item cleaned, got %d", cleaned)
 	}
 
-	remaining, _ := repo.CountByStatus(ctx, domain.DeliveryStatusFailed)
+	remaining, _ := repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
 	if remaining != 0 {
 		t.Fatalf("expected 0 failed after cleanup, got %d", remaining)
 	}
 }
 
 func TestCountByStatus(t *testing.T) {
-	repo := testRepo(t)
+	repository := testRepository(t)
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		if err := repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
+		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
 			t.Fatalf("enqueue %d: %v", i, err)
 		}
 	}
 
-	cnt, err := repo.CountByStatus(ctx, domain.DeliveryStatusPending)
+	cnt, err := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}

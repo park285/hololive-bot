@@ -17,9 +17,9 @@ func (d *Dispatcher) releaseDeliveryClaims(ctx context.Context, claims []deliver
 		return nil
 	}
 
-	repo := trackingrepo.NewRepository(d.db)
+	repository := trackingrepo.NewRepository(d.db)
 	for i := range claims {
-		if _, err := repo.ReleaseAlarmStateClaim(ctx, claims[i].kind, claims[i].postID, claims[i].authorizedAt); err != nil {
+		if _, err := repository.ReleaseAlarmStateClaim(ctx, claims[i].kind, claims[i].postID, claims[i].authorizedAt); err != nil {
 			return fmt.Errorf("release claim at index %d: %w", i, err)
 		}
 	}

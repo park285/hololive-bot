@@ -69,7 +69,7 @@ func ProvideCacheResources(ctx context.Context, cfg config.ValkeyConfig, logger 
 
 // ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함)
 func ProvideDatabaseResources(ctx context.Context, cfg config.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
-	dbSvc, err := database.NewPostgresService(ctx, database.PostgresConfig{
+	dbService, err := database.NewPostgresService(ctx, database.PostgresConfig{
 		Host:             cfg.Host,
 		Port:             cfg.Port,
 		SocketPath:       cfg.SocketPath,
@@ -87,9 +87,9 @@ func ProvideDatabaseResources(ctx context.Context, cfg config.PostgresConfig, lo
 	}
 
 	resources := &DatabaseResources{
-		Service: dbSvc,
+		Service: dbService,
 		Close: func() {
-			_ = dbSvc.Close()
+			_ = dbService.Close()
 		},
 	}
 	return resources, resources.Close, nil

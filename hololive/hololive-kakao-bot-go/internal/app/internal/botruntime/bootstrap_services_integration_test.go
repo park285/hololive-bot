@@ -85,7 +85,7 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 		nil,
 		nil,
 		integrationServices.ACLService,
-		integrationServices.MajorEventRepo,
+		integrationServices.MajorEventRepository,
 		integrationServices.MemberNewsService,
 		integrationServices.CommandBuilders,
 		integrationServices.WorkerPool,

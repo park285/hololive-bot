@@ -36,7 +36,7 @@ type outboxEnqueuer interface {
 // enqueueToRooms: Room별 outbox enqueue (claim 없이 DB UNIQUE로 dedup)
 func enqueueToRooms(
 	ctx context.Context,
-	outboxRepo outboxEnqueuer,
+	outboxRepository outboxEnqueuer,
 	rooms []roomTarget,
 	kind domain.DeliveryOutboxKind,
 	periodKey string,
@@ -48,7 +48,7 @@ func enqueueToRooms(
 	for _, room := range rooms {
 		result.Attempted++
 
-		if err := outboxRepo.Enqueue(ctx, kind, periodKey, room.roomID, message); err != nil {
+		if err := outboxRepository.Enqueue(ctx, kind, periodKey, room.roomID, message); err != nil {
 			logger.Error("Failed to enqueue notification",
 				slog.String("room_id", room.roomID),
 				slog.String("error", err.Error()))

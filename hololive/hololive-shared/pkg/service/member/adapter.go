@@ -96,11 +96,11 @@ func (a *ServiceAdapter) LoadAllMembers() ([]*domain.Member, error) {
 	if a.cache == nil {
 		return nil, fmt.Errorf("member cache is nil")
 	}
-	if a.cache.repo == nil {
+	if a.cache.repository == nil {
 		return nil, fmt.Errorf("member repository is nil")
 	}
 
-	members, err := a.cache.repo.GetAllMembers(memberAdapterContext(a.ctx))
+	members, err := a.cache.repository.GetAllMembers(memberAdapterContext(a.ctx))
 	if err != nil {
 		return nil, fmt.Errorf("load all members from repository: %w", err)
 	}

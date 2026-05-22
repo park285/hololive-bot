@@ -433,17 +433,17 @@ func TestAlarmServiceClose(t *testing.T) {
 	ctx := t.Context()
 	cache := newTestCacheService(ctx, t)
 
-	svc, err := NewAlarmService(cache, nil, nil, nil, nil, nil, nil, []int{5, 3, 1})
+	service, err := NewAlarmService(cache, nil, nil, nil, nil, nil, nil, []int{5, 3, 1})
 	require.NoError(t, err)
 
-	err = svc.Close(ctx)
+	err = service.Close(ctx)
 	require.NoError(t, err)
 
-	err = svc.Close(ctx)
+	err = service.Close(ctx)
 	require.NoError(t, err)
 }
 
-func TestWarmCacheFromDB_NilRepo(t *testing.T) {
+func TestWarmCacheFromDB_NilRepository(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)

@@ -53,7 +53,7 @@ import (
 //   - api_milestone.go: 마일스톤 조회
 //   - api_template.go: 템플릿 관리
 type APIHandler struct {
-	repo                       *member.Repository
+	repository                       *member.Repository
 	memberCache                *member.Cache
 	valkeyCache                cache.Client
 	profiles                   *member.ProfileService
@@ -61,7 +61,7 @@ type APIHandler struct {
 	holodex                    *holodex.Service
 	youtube                    youtube.Service
 	scraperProxyToggler        *poller.Scheduler
-	statsRepo                  stats.StatsDashboardRepository
+	statsRepository                  stats.StatsDashboardRepository
 	communityShortsOps         YouTubeCommunityShortsOpsRepository
 	activity                   *activity.Logger
 	settings                   settings.ReadWriter
@@ -90,8 +90,8 @@ func (h *APIHandler) ensureDefaults() *APIHandler {
 		h.streamState = newStreamState()
 	}
 
-	if h.memberIndexLoader == nil && h.repo != nil {
-		h.memberIndexLoader = h.repo.GetAllMembers
+	if h.memberIndexLoader == nil && h.repository != nil {
+		h.memberIndexLoader = h.repository.GetAllMembers
 	}
 
 	if h.startTime.IsZero() {
@@ -119,7 +119,7 @@ func (h *APIHandler) HasCommunityShortsOpsRepository() bool {
 }
 
 func NewAPIHandler(
-	repo *member.Repository,
+	repository *member.Repository,
 	memberCache *member.Cache,
 	valkeyCache cache.Client,
 	profilesSvc *member.ProfileService,
@@ -127,7 +127,7 @@ func NewAPIHandler(
 	holodexSvc *holodex.Service,
 	youtubeSvc youtube.Service,
 	scraperProxyToggler *poller.Scheduler,
-	statsRepo stats.StatsDashboardRepository,
+	statsRepository stats.StatsDashboardRepository,
 	communityShortsOps YouTubeCommunityShortsOpsRepository,
 	activityLogger *activity.Logger,
 	settingsSvc settings.ReadWriter,
@@ -141,12 +141,12 @@ func NewAPIHandler(
 ) *APIHandler {
 	var memberIndexLoader func(context.Context) ([]*domain.Member, error)
 
-	if repo != nil {
-		memberIndexLoader = repo.GetAllMembers
+	if repository != nil {
+		memberIndexLoader = repository.GetAllMembers
 	}
 
 	return (&APIHandler{
-		repo:                       repo,
+		repository:                       repository,
 		memberCache:                memberCache,
 		valkeyCache:                valkeyCache,
 		profiles:                   profilesSvc,
@@ -154,7 +154,7 @@ func NewAPIHandler(
 		holodex:                    holodexSvc,
 		youtube:                    youtubeSvc,
 		scraperProxyToggler:        scraperProxyToggler,
-		statsRepo:                  statsRepo,
+		statsRepository:                  statsRepository,
 		communityShortsOps:         communityShortsOps,
 		activity:                   activityLogger,
 		settings:                   settingsSvc,

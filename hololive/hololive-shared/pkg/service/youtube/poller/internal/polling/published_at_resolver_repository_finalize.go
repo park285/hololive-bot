@@ -14,13 +14,13 @@ import (
 func (r *publishedAtResolverRepository) completeFinalizePublishedAt(
 	ctx context.Context,
 	tx *gorm.DB,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	notification *domain.YouTubeNotificationOutbox,
 	result *publishedAtFinalizeResult,
 ) error {
 	if notification != nil {
-		if err := r.batchRepo.batchInsertNotifications(ctx, tx, []*domain.YouTubeNotificationOutbox{notification}); err != nil {
+		if err := r.batchRepository.batchInsertNotifications(ctx, tx, []*domain.YouTubeNotificationOutbox{notification}); err != nil {
 			return fmt.Errorf("insert pending notification: %w", err)
 		}
 		result.enqueued = true
@@ -29,7 +29,7 @@ func (r *publishedAtResolverRepository) completeFinalizePublishedAt(
 		}
 	}
 
-	if err := txRepo.ClearPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID); err != nil {
+	if err := txRepository.ClearPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID); err != nil {
 		return fmt.Errorf("clear published_at retry after: %w", err)
 	}
 
@@ -39,7 +39,7 @@ func (r *publishedAtResolverRepository) completeFinalizePublishedAt(
 func (r *publishedAtResolverRepository) finalizeShort(
 	ctx context.Context,
 	tx *gorm.DB,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider NotificationRouteDecider,
@@ -52,7 +52,7 @@ func (r *publishedAtResolverRepository) finalizeShort(
 	if err := updateShortPublishedAt(ctx, tx, videoID, publishedAt); err != nil {
 		return nil, "", err
 	}
-	if err := upsertResolvedPublishedAtState(ctx, txRepo, candidate, publishedAt, "short"); err != nil {
+	if err := upsertResolvedPublishedAtState(ctx, txRepository, candidate, publishedAt, "short"); err != nil {
 		return nil, "", err
 	}
 
@@ -62,7 +62,7 @@ func (r *publishedAtResolverRepository) finalizeShort(
 	}
 	proceed, reason, err := maybeAuthorizePublishedAtNotification(
 		ctx,
-		txRepo,
+		txRepository,
 		candidate,
 		publishedAt,
 		enqueueAllowed,
@@ -83,7 +83,7 @@ func (r *publishedAtResolverRepository) finalizeShort(
 func (r *publishedAtResolverRepository) finalizeCommunity(
 	ctx context.Context,
 	tx *gorm.DB,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider NotificationRouteDecider,
@@ -96,7 +96,7 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 	if err := updateCommunityPublishedAt(ctx, tx, postID, publishedAt); err != nil {
 		return nil, "", err
 	}
-	if err := upsertResolvedPublishedAtState(ctx, txRepo, candidate, publishedAt, "community"); err != nil {
+	if err := upsertResolvedPublishedAtState(ctx, txRepository, candidate, publishedAt, "community"); err != nil {
 		return nil, "", err
 	}
 
@@ -106,7 +106,7 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 	}
 	proceed, reason, err := maybeAuthorizePublishedAtNotification(
 		ctx,
-		txRepo,
+		txRepository,
 		candidate,
 		publishedAt,
 		enqueueAllowed,
@@ -176,7 +176,7 @@ func updateCommunityPublishedAt(ctx context.Context, tx *gorm.DB, postID string,
 
 func upsertResolvedPublishedAtState(
 	ctx context.Context,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	scope string,
@@ -188,7 +188,7 @@ func upsertResolvedPublishedAtState(
 		ActualPublishedAt: &publishedAt,
 		DetectedAt:        candidate.DetectedAt,
 	}
-	if err := txRepo.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{trackingRow}); err != nil {
+	if err := txRepository.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{trackingRow}); err != nil {
 		return fmt.Errorf("upsert %s tracking: %w", scope, err)
 	}
 
@@ -199,7 +199,7 @@ func upsertResolvedPublishedAtState(
 		ActualPublishedAt: &publishedAt,
 		DetectedAt:        candidate.DetectedAt,
 	}
-	if err := txRepo.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{sourcePost}); err != nil {
+	if err := txRepository.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{sourcePost}); err != nil {
 		return fmt.Errorf("upsert %s source post: %w", scope, err)
 	}
 
@@ -211,7 +211,7 @@ func upsertResolvedPublishedAtState(
 		ActualPublishedAt: &publishedAt,
 		DetectedAt:        candidate.DetectedAt,
 	}
-	if err := txRepo.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{alarmState}); err != nil {
+	if err := txRepository.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{alarmState}); err != nil {
 		return fmt.Errorf("upsert %s alarm state: %w", scope, err)
 	}
 
@@ -220,7 +220,7 @@ func upsertResolvedPublishedAtState(
 
 func maybeAuthorizePublishedAtNotification(
 	ctx context.Context,
-	txRepo *trackingrepo.GormRepository,
+	txRepository *trackingrepo.GormRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	enqueueAllowed bool,

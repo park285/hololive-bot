@@ -36,7 +36,7 @@ func TestNewAlarmServiceAndCloseAllAlarmServices(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newTestCacheService(ctx, t)
 
-	svc, err := NewAlarmService(
+	service, err := NewAlarmService(
 		cacheClient,
 		nil,
 		nil,
@@ -47,11 +47,11 @@ func TestNewAlarmServiceAndCloseAllAlarmServices(t *testing.T) {
 		[]int{10, 3, 1, 3},
 	)
 	require.NoError(t, err)
-	require.NotNil(t, svc)
-	assert.Equal(t, []int{10, 3, 1}, svc.GetTargetMinutes())
+	require.NotNil(t, service)
+	assert.Equal(t, []int{10, 3, 1}, service.GetTargetMinutes())
 
 	require.NoError(t, CloseAllAlarmServices(ctx))
-	require.NoError(t, svc.Close(ctx))
+	require.NoError(t, service.Close(ctx))
 }
 
 func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
@@ -197,16 +197,16 @@ func assertPlatformMappings(ctx context.Context, t *testing.T, as *AlarmService,
 func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
 	as := newTestAlarmService(t)
 
-	as.alarmRepo = &sharedalarm.Repository{}
+	as.alarmRepository = &sharedalarm.Repository{}
 
 	original := rebuildSubscriberCacheFromRepository
 	rebuildCalled := false
 
-	rebuildSubscriberCacheFromRepository = func(_ context.Context, cacheClient cache.Client, repo *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, cacheClient cache.Client, repository *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
 		rebuildCalled = true
 
 		assert.Same(t, as.cache, cacheClient)
-		assert.Same(t, as.alarmRepo, repo)
+		assert.Same(t, as.alarmRepository, repository)
 
 		return sharedalarm.CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, nil
 	}
@@ -222,7 +222,7 @@ func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
 func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {
 	as := newTestAlarmService(t)
 
-	as.alarmRepo = &sharedalarm.Repository{}
+	as.alarmRepository = &sharedalarm.Repository{}
 
 	original := rebuildSubscriberCacheFromRepository
 
@@ -250,7 +250,7 @@ func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {
 func TestWarmCacheFromDB_SuccessRecordsDurationAndSummaryMetrics(t *testing.T) {
 	as := newTestAlarmService(t)
 
-	as.alarmRepo = &sharedalarm.Repository{}
+	as.alarmRepository = &sharedalarm.Repository{}
 
 	original := rebuildSubscriberCacheFromRepository
 

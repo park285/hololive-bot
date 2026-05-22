@@ -40,8 +40,8 @@ var _ SubscriptionRepository[string] = (*mockRepository)(nil)
 func TestSubscriptionRepositoryContract(t *testing.T) {
 	t.Parallel()
 
-	repo := &mockRepository{}
-	rooms, err := repo.ListSubscribedRooms(context.Background())
+	repository := &mockRepository{}
+	rooms, err := repository.ListSubscribedRooms(context.Background())
 	if err != nil {
 		t.Fatalf("ListSubscribedRooms() error = %v", err)
 	}

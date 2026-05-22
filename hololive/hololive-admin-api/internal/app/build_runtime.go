@@ -68,8 +68,8 @@ func BuildAdminAPIRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 		return cleanupAdminAPIRuntimeBuild(infra, "foundation", err)
 	}
 
-	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
-	alarmMode, err := buildAlarmModeComponents(ctx, cfg, infra.Cache, foundation.HolodexService, foundation.MemberServiceAdapter, alarmRepo, logger)
+	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
+	alarmMode, err := buildAlarmModeComponents(ctx, cfg, infra.Cache, foundation.HolodexService, foundation.MemberServiceAdapter, alarmRepository, logger)
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "alarm mode", err)
 	}
@@ -88,7 +88,7 @@ func BuildAdminAPIRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 
 	settingsApplier, majorEventTriggerClient := buildAdminAPISettingsApplier(cfg, foundation, alarmMode, ytStack, logger)
 	systemCollector := buildAdminAPISystemCollector(cfg)
-	communityShortsOpsRepo := buildAdminAPICommunityShortsOpsRepo(infra)
+	communityShortsOpsRepository := buildAdminAPICommunityShortsOpsRepository(infra)
 	handler := buildAdminAPIHandler(
 		cfg,
 		infra,
@@ -96,7 +96,7 @@ func BuildAdminAPIRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 		alarmMode,
 		aclService,
 		ytStack,
-		communityShortsOpsRepo,
+		communityShortsOpsRepository,
 		settingsApplier,
 		systemCollector,
 		templateAdmin,
@@ -169,12 +169,12 @@ func buildAdminAPIYouTubeStack(
 	foundation *scraperHolodexProfileFoundation,
 	logger *slog.Logger,
 ) *providers.YouTubeStack {
-	statsRepo := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
+	statsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
 	return sharedmodules.BuildYouTubeAPIStack(ctx, sharedmodules.YouTubeAPIStackParams{
 		YouTubeConfig:   cfg.YouTube,
 		ScraperConfig:   cfg.Scraper,
 		CacheService:    infra.Cache,
-		StatsRepo:       statsRepo,
+		StatsRepository:       statsRepository,
 		SharedRateLimit: foundation.SharedRL,
 		Logger:          logger,
 	})
@@ -211,7 +211,7 @@ func buildAdminAPIHandler(
 	alarmMode *alarmModeComponents,
 	aclService *acl.Service,
 	ytStack *providers.YouTubeStack,
-	communityShortsOpsRepo server.YouTubeCommunityShortsOpsRepository,
+	communityShortsOpsRepository server.YouTubeCommunityShortsOpsRepository,
 	settingsApplier sharedsettings.SettingsApplier,
 	systemCollector *system.Collector,
 	templateAdmin *template.AdminService,
@@ -219,7 +219,7 @@ func buildAdminAPIHandler(
 	logger *slog.Logger,
 ) *server.APIHandler {
 	return server.NewAPIHandler(
-		infra.MemberRepo,
+		infra.MemberRepository,
 		infra.MemberCache,
 		infra.Cache,
 		foundation.ProfileService,
@@ -227,8 +227,8 @@ func buildAdminAPIHandler(
 		foundation.HolodexService,
 		ytStack.GetService(),
 		nil,
-		ytStack.GetStatsRepo(),
-		communityShortsOpsRepo,
+		ytStack.GetStatsRepository(),
+		communityShortsOpsRepository,
 		activity.NewActivityLogger("", logger),
 		sharedmodules.BuildSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger),
 		settingsApplier,
@@ -258,7 +258,7 @@ func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.L
 	)
 }
 
-func buildAdminAPICommunityShortsOpsRepo(infra *sharedmodules.InfraModule) server.YouTubeCommunityShortsOpsRepository {
+func buildAdminAPICommunityShortsOpsRepository(infra *sharedmodules.InfraModule) server.YouTubeCommunityShortsOpsRepository {
 	if infra.Postgres == nil || infra.Postgres.GetGormDB() == nil {
 		return nil
 	}
@@ -351,7 +351,7 @@ func buildAlarmModeComponents(
 	cacheClient cache.Client,
 	holodexSvc *holodex.Service,
 	memberData member.DataProvider,
-	alarmRepo *sharedalarm.Repository,
+	alarmRepository *sharedalarm.Repository,
 	logger *slog.Logger,
 ) (*alarmModeComponents, error) {
 	chzzkClient := chzzk.NewClient(nil, "", logger)
@@ -369,7 +369,7 @@ func buildAlarmModeComponents(
 		ClientSecret: cfg.Twitch.ClientSecret,
 	}, logger)
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
-	alarmService, err := notification.NewAlarmService(cacheClient, holodexSvc, chzzkClient, twitchClient, memberData, alarmRepo, logger, resolved)
+	alarmService, err := notification.NewAlarmService(cacheClient, holodexSvc, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}

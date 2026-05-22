@@ -52,7 +52,7 @@ func resolveIngestionRuntimeYouTubeState(
 		return state, nil
 	}
 
-	operationalChannels, err := communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepo)
+	operationalChannels, err := communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepository)
 	if err != nil {
 		return state, fmt.Errorf("resolve community shorts operational channels: %w", err)
 	}
@@ -211,7 +211,7 @@ func buildPollTargetRefresher(
 		},
 		logger,
 	).WithTieringDB(infra.postgresService.GetGormDB()).WithOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
-		return communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepo)
+		return communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepository)
 	})
 	if cfg != nil && cfg.Scraper.ActiveActive.Enabled {
 		refresher = refresher.WithInitialJitter(activeActiveInitialJitter(cfg.Scraper.ActiveActive.InstanceID))

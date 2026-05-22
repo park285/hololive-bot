@@ -12,6 +12,6 @@ type StatsService = statscollector.StatsService
 
 type ChannelStatistics = statscollector.ChannelStatistics
 
-func NewStatsService(oauth *OAuthService, cacheClient cache.Client, statsRepo ytstats.StatsServiceRepository, logger *slog.Logger) *StatsService {
-	return statscollector.NewStatsService(oauth, cacheClient, statsRepo, logger)
+func NewStatsService(oauth *OAuthService, cacheClient cache.Client, statsRepository ytstats.StatsServiceRepository, logger *slog.Logger) *StatsService {
+	return statscollector.NewStatsService(oauth, cacheClient, statsRepository, logger)
 }

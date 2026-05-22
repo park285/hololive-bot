@@ -172,14 +172,14 @@ func listCommunityShortsDeliveryLogsForObservationState(
 	state communityShortsObservationQueryState,
 ) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
 	if state.Finalized {
-		rows, err := session.telemetryRepo.ListByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+		rows, err := session.telemetryRepository.ListByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 		if err != nil {
 			return nil, fmt.Errorf("collect community shorts delivery log report: list finalized observation-window logs: %w", err)
 		}
 		return rows, nil
 	}
 
-	rows, err := session.telemetryRepo.ListByObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+	rows, err := session.telemetryRepository.ListByObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 	if err != nil {
 		return nil, fmt.Errorf("collect community shorts delivery log report: list active observation-window logs: %w", err)
 	}
@@ -192,7 +192,7 @@ func listCommunityShortsDeliveryRecentLogs(
 	query CommunityShortsDeliveryLogQuery,
 ) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
 	fetchLimit := query.Limit + 1
-	rows, err := session.telemetryRepo.ListCommunityShortsDeliveryLogsSince(ctx, *query.WindowStart, fetchLimit)
+	rows, err := session.telemetryRepository.ListCommunityShortsDeliveryLogsSince(ctx, *query.WindowStart, fetchLimit)
 	if err != nil {
 		return nil, fmt.Errorf("collect community shorts delivery log report: list recent logs: %w", err)
 	}

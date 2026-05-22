@@ -53,8 +53,8 @@ func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 		handler.Holodex = api.holodex
 		handler.YouTube = api.youtube
 		handler.ValkeyCache = api.valkeyCache
-		handler.StatsRepo = api.statsRepo
-		handler.MemberRepo = api.repo
+		handler.StatsRepository = api.statsRepository
+		handler.MemberRepository = api.repository
 		handler.MemberIndexLoader = api.memberIndexLoader
 	}
 

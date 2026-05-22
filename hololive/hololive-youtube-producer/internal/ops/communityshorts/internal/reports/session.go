@@ -18,7 +18,7 @@ type communityShortsOpsSession struct {
 	postgres           database.Client
 	db                 *gorm.DB
 	trackingRepository *trackingrepo.GormRepository
-	telemetryRepo      *outbox.DeliveryTelemetryRepository
+	telemetryRepository      *outbox.DeliveryTelemetryRepository
 }
 
 func openCommunityShortsOpsSession(
@@ -45,6 +45,6 @@ func newCommunityShortsOpsSession(db *gorm.DB) *communityShortsOpsSession {
 		postgres:           nil,
 		db:                 db,
 		trackingRepository: trackingrepo.NewRepository(db),
-		telemetryRepo:      outbox.NewDeliveryTelemetryRepository(db),
+		telemetryRepository:      outbox.NewDeliveryTelemetryRepository(db),
 	}
 }

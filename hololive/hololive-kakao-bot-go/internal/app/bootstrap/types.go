@@ -65,7 +65,7 @@ type ScraperHolodexProfileFoundation struct {
 
 type CoreIntegrationServices struct {
 	ACLService        *acl.Service
-	MajorEventRepo    command.MajorEventRepository
+	MajorEventRepository    command.MajorEventRepository
 	MemberNewsService command.MemberNewsService
 	CommandBuilders   []bot.CommandBuilder
 	WorkerPool        *workerpool.Pool
@@ -93,7 +93,7 @@ type BotMessagingModule struct {
 type BotDataModule struct {
 	Cache       cache.Client
 	Postgres    database.Client
-	MemberRepo  *member.Repository
+	MemberRepository  *member.Repository
 	MemberCache *member.Cache
 	Profiles    *member.ProfileService
 	MembersData member.DataProvider
@@ -116,7 +116,7 @@ type BotSupportModule struct {
 }
 
 type BotFeatureModule struct {
-	MajorEventRepo  command.MajorEventRepository
+	MajorEventRepository  command.MajorEventRepository
 	MemberNews      command.MemberNewsService
 	CommandBuilders []bot.CommandBuilder
 }

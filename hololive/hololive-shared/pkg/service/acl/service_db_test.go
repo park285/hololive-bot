@@ -235,9 +235,9 @@ func TestSettingsAndRoom_TableName(t *testing.T) {
 
 func TestNewACLService_FirstInitUsesDefaults(t *testing.T) {
 	db, cacheMock, calls := newACLServiceWithSQLite(t)
-	svc := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, []string{"room-a", "room-b"})
+	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, []string{"room-a", "room-b"})
 
-	assertACLStatus(t, svc, true, ACLModeWhitelist, 2, []string{"room-a", "room-b"})
+	assertACLStatus(t, service, true, ACLModeWhitelist, 2, []string{"room-a", "room-b"})
 	assertACLSettingValue(t, db, dbKeyEnabled, "true")
 	assertACLSettingValue(t, db, dbKeyMode, "whitelist")
 	assertACLRoomCount(t, db, "room-a", listTypeWhitelist, 1)
@@ -251,7 +251,7 @@ func TestNewACLService_FirstInitBlacklistMode(t *testing.T) {
 
 	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
 
-	svc, err := NewACLService(
+	service, err := NewACLService(
 		t.Context(),
 		dbClient,
 		cacheMock,
@@ -264,7 +264,7 @@ func TestNewACLService_FirstInitBlacklistMode(t *testing.T) {
 		t.Fatalf("NewACLService error: %v", err)
 	}
 
-	enabled, mode, rooms := svc.GetACLStatus()
+	enabled, mode, rooms := service.GetACLStatus()
 	if !enabled {
 		t.Fatal("expected enabled=true")
 	}
@@ -317,7 +317,7 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 
 	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
 
-	svc, err := NewACLService(
+	service, err := NewACLService(
 		t.Context(),
 		dbClient,
 		cacheMock,
@@ -330,7 +330,7 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 		t.Fatalf("NewACLService error: %v", err)
 	}
 
-	enabled, mode, rooms := svc.GetACLStatus()
+	enabled, mode, rooms := service.GetACLStatus()
 	if enabled {
 		t.Fatal("expected enabled=false from DB")
 	}
@@ -346,14 +346,14 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 
 func TestACLService_SetEnabledAddRemoveRoom(t *testing.T) {
 	db, cacheMock, calls := newACLServiceWithSQLite(t)
-	svc := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
 
 	baselineSet := calls.setCalls
 	baselineSAdd := calls.saddCalls
 	baselineSRem := calls.sremCalls
 
-	assertACLSetEnabled(t, svc, db, true)
-	assertACLAddRoomLifecycle(t, svc)
+	assertACLSetEnabled(t, service, db, true)
+	assertACLAddRoomLifecycle(t, service)
 	assertACLRoomRemovedFromDB(t, db, "room-x")
 	assertACLCacheCountersAdvanced(t, calls, baselineSet, baselineSAdd, baselineSRem)
 }
@@ -370,7 +370,7 @@ func newACLServiceFromDB(
 
 	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
 
-	svc, err := NewACLService(
+	service, err := NewACLService(
 		t.Context(),
 		dbClient,
 		cacheMock,
@@ -383,17 +383,17 @@ func newACLServiceFromDB(
 		t.Fatalf("NewACLService error: %v", err)
 	}
 
-	return svc
+	return service
 }
 
-func assertACLSetEnabled(t *testing.T, svc *Service, db *gorm.DB, enabled bool) {
+func assertACLSetEnabled(t *testing.T, service *Service, db *gorm.DB, enabled bool) {
 	t.Helper()
 
-	if err := svc.SetEnabled(t.Context(), enabled); err != nil {
+	if err := service.SetEnabled(t.Context(), enabled); err != nil {
 		t.Fatalf("SetEnabled error: %v", err)
 	}
 
-	gotEnabled, _, _ := svc.GetACLStatus()
+	gotEnabled, _, _ := service.GetACLStatus()
 	if gotEnabled != enabled {
 		t.Fatalf("enabled=%v want=%v", gotEnabled, enabled)
 	}
@@ -409,21 +409,21 @@ func assertACLSetEnabled(t *testing.T, svc *Service, db *gorm.DB, enabled bool) 
 	}
 }
 
-func assertACLAddRoomLifecycle(t *testing.T, svc *Service) {
+func assertACLAddRoomLifecycle(t *testing.T, service *Service) {
 	t.Helper()
 
-	assertAddRoomResult(t, svc, " room-x ", true)
-	assertAddRoomResult(t, svc, "room-x", false)
-	assertAddRoomResult(t, svc, "   ", false)
-	assertRemoveRoomResult(t, svc, " room-x ", true)
-	assertRemoveRoomResult(t, svc, "room-x", false)
-	assertRemoveRoomResult(t, svc, "   ", false)
+	assertAddRoomResult(t, service, " room-x ", true)
+	assertAddRoomResult(t, service, "room-x", false)
+	assertAddRoomResult(t, service, "   ", false)
+	assertRemoveRoomResult(t, service, " room-x ", true)
+	assertRemoveRoomResult(t, service, "room-x", false)
+	assertRemoveRoomResult(t, service, "   ", false)
 }
 
-func assertAddRoomResult(t *testing.T, svc *Service, room string, wantAdded bool) {
+func assertAddRoomResult(t *testing.T, service *Service, room string, wantAdded bool) {
 	t.Helper()
 
-	added, err := svc.AddRoom(t.Context(), room)
+	added, err := service.AddRoom(t.Context(), room)
 	if err != nil {
 		t.Fatalf("AddRoom(%q) error: %v", room, err)
 	}
@@ -433,10 +433,10 @@ func assertAddRoomResult(t *testing.T, svc *Service, room string, wantAdded bool
 	}
 }
 
-func assertRemoveRoomResult(t *testing.T, svc *Service, room string, wantRemoved bool) {
+func assertRemoveRoomResult(t *testing.T, service *Service, room string, wantRemoved bool) {
 	t.Helper()
 
-	removed, err := svc.RemoveRoom(t.Context(), room)
+	removed, err := service.RemoveRoom(t.Context(), room)
 	if err != nil {
 		t.Fatalf("RemoveRoom(%q) error: %v", room, err)
 	}
@@ -525,40 +525,40 @@ func assertACLCacheSyncTriggered(t *testing.T, calls *aclCacheCallCounter) {
 	}
 }
 
-func assertACLSetMode(t *testing.T, svc *Service, mode ACLMode) {
+func assertACLSetMode(t *testing.T, service *Service, mode ACLMode) {
 	t.Helper()
 
-	if err := svc.SetMode(t.Context(), mode); err != nil {
+	if err := service.SetMode(t.Context(), mode); err != nil {
 		t.Fatalf("SetMode(%s) error: %v", mode, err)
 	}
 }
 
 func TestACLService_SetMode(t *testing.T) {
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	svc := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, []string{"wl-room"})
+	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, []string{"wl-room"})
 
-	assertACLStatus(t, svc, true, ACLModeWhitelist, 1, []string{"wl-room"})
-	assertACLSetMode(t, svc, ACLModeBlacklist)
-	assertAddRoomResult(t, svc, "bl-room", true)
-	assertACLStatus(t, svc, true, ACLModeBlacklist, 1, []string{"bl-room"})
-	assertACLSetMode(t, svc, ACLModeWhitelist)
-	assertACLStatus(t, svc, true, ACLModeWhitelist, 1, []string{"wl-room"})
+	assertACLStatus(t, service, true, ACLModeWhitelist, 1, []string{"wl-room"})
+	assertACLSetMode(t, service, ACLModeBlacklist)
+	assertAddRoomResult(t, service, "bl-room", true)
+	assertACLStatus(t, service, true, ACLModeBlacklist, 1, []string{"bl-room"})
+	assertACLSetMode(t, service, ACLModeWhitelist)
+	assertACLStatus(t, service, true, ACLModeWhitelist, 1, []string{"wl-room"})
 	assertACLSettingValue(t, db, dbKeyMode, "whitelist")
 }
 
 func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	svc := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, nil)
+	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, nil)
 
 	// 화이트리스트 모드에서 방 추가
-	if added, addErr := svc.AddRoom(t.Context(), "shared-room"); addErr != nil || !added {
+	if added, addErr := service.AddRoom(t.Context(), "shared-room"); addErr != nil || !added {
 		t.Fatalf("AddRoom whitelist: added=%v err=%v", added, addErr)
 	}
 
 	// 블랙리스트 모드로 전환 후 같은 이름의 방 추가 (다른 list_type이므로 가능)
-	assertACLSetMode(t, svc, ACLModeBlacklist)
+	assertACLSetMode(t, service, ACLModeBlacklist)
 
-	if added, addErr := svc.AddRoom(t.Context(), "shared-room"); addErr != nil || !added {
+	if added, addErr := service.AddRoom(t.Context(), "shared-room"); addErr != nil || !added {
 		t.Fatalf("AddRoom blacklist: added=%v err=%v", added, addErr)
 	}
 
@@ -573,13 +573,13 @@ func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 	}
 
 	// 블랙리스트에서 제거해도 화이트리스트는 유지
-	if removed, removeErr := svc.RemoveRoom(t.Context(), "shared-room"); removeErr != nil || !removed {
+	if removed, removeErr := service.RemoveRoom(t.Context(), "shared-room"); removeErr != nil || !removed {
 		t.Fatalf("RemoveRoom blacklist: removed=%v err=%v", removed, removeErr)
 	}
 
-	assertACLSetMode(t, svc, ACLModeWhitelist)
+	assertACLSetMode(t, service, ACLModeWhitelist)
 
-	_, _, rooms := svc.GetACLStatus()
+	_, _, rooms := service.GetACLStatus()
 	if len(rooms) != 1 || rooms[0] != "shared-room" {
 		t.Fatalf("whitelist should still have shared-room, got %v", rooms)
 	}
@@ -654,7 +654,7 @@ func assertNewACLServiceKeepsLoadedStateOnCacheSyncFailure(
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
 
-	svc, err := NewACLService(
+	service, err := NewACLService(
 		t.Context(),
 		dbClient,
 		cacheMock,
@@ -667,7 +667,7 @@ func assertNewACLServiceKeepsLoadedStateOnCacheSyncFailure(
 		t.Fatalf("NewACLService error: %v", err)
 	}
 
-	enabled, mode, rooms := svc.GetACLStatus()
+	enabled, mode, rooms := service.GetACLStatus()
 	if enabled {
 		t.Fatal("expected DB-loaded enabled=false to remain active")
 	}
@@ -698,9 +698,9 @@ func TestACLService_SetEnabledRollsBackStateOnCacheSyncError(t *testing.T) {
 		return nil
 	}
 
-	svc := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
 
-	err := svc.SetEnabled(t.Context(), true)
+	err := service.SetEnabled(t.Context(), true)
 	if err == nil {
 		t.Fatal("expected cache sync error")
 	}
@@ -709,7 +709,7 @@ func TestACLService_SetEnabledRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected error to contain sync acl settings to cache, got %v", err)
 	}
 
-	enabled, _, _ := svc.GetACLStatus()
+	enabled, _, _ := service.GetACLStatus()
 	if enabled {
 		t.Fatal("expected in-memory enabled=false after rollback")
 	}
@@ -730,9 +730,9 @@ func TestACLService_SetModeRollsBackStateOnCacheSyncError(t *testing.T) {
 		return nil
 	}
 
-	svc := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
 
-	err := svc.SetMode(t.Context(), ACLModeBlacklist)
+	err := service.SetMode(t.Context(), ACLModeBlacklist)
 	if err == nil {
 		t.Fatal("expected cache sync error")
 	}
@@ -741,7 +741,7 @@ func TestACLService_SetModeRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected error to contain sync acl mode to cache, got %v", err)
 	}
 
-	_, mode, _ := svc.GetACLStatus()
+	_, mode, _ := service.GetACLStatus()
 	if mode != ACLModeWhitelist {
 		t.Fatalf("expected in-memory mode=whitelist after rollback, got %s", mode)
 	}
@@ -762,9 +762,9 @@ func TestACLService_AddRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		return 1, nil
 	}
 
-	svc := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
 
-	added, err := svc.AddRoom(t.Context(), "room-x")
+	added, err := service.AddRoom(t.Context(), "room-x")
 	if added {
 		t.Fatal("expected added=false on cache sync error")
 	}
@@ -777,7 +777,7 @@ func TestACLService_AddRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected error to contain sync acl room add to cache, got %v", err)
 	}
 
-	_, _, rooms := svc.GetACLStatus()
+	_, _, rooms := service.GetACLStatus()
 	if len(rooms) != 0 {
 		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
@@ -799,9 +799,9 @@ func TestACLService_RemoveRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		return 1, nil
 	}
 
-	svc := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
 
-	removed, err := svc.RemoveRoom(t.Context(), "room-x")
+	removed, err := service.RemoveRoom(t.Context(), "room-x")
 	if removed {
 		t.Fatal("expected removed=false on cache sync error")
 	}
@@ -814,7 +814,7 @@ func TestACLService_RemoveRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected error to contain sync acl room removal to cache, got %v", err)
 	}
 
-	_, _, rooms := svc.GetACLStatus()
+	_, _, rooms := service.GetACLStatus()
 	if len(rooms) != 1 || rooms[0] != "room-x" {
 		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
@@ -828,7 +828,7 @@ func TestACLService_SyncRoomsToValkeyAtomicSuccess(t *testing.T) {
 
 	cacheMock := newACLRoomSetStatefulCache(state)
 
-	svc := &Service{
+	service := &Service{
 		cache: cacheMock,
 		whitelistRooms: map[string]struct{}{
 			"room-a": {},
@@ -843,7 +843,7 @@ func TestACLService_SyncRoomsToValkeyAtomicSuccess(t *testing.T) {
 		},
 	}
 
-	if err := svc.syncRoomsToValkey(t.Context(), ACLModeWhitelist); err != nil {
+	if err := service.syncRoomsToValkey(t.Context(), ACLModeWhitelist); err != nil {
 		t.Fatalf("syncRoomsToValkey error: %v", err)
 	}
 
@@ -873,7 +873,7 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnTempWriteFailure(t *tes
 		return int64(len(members)), nil
 	}
 
-	svc := &Service{
+	service := &Service{
 		cache: cacheMock,
 		whitelistRooms: map[string]struct{}{
 			"room-a": {},
@@ -881,7 +881,7 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnTempWriteFailure(t *tes
 		blacklistRooms: make(map[string]struct{}),
 	}
 
-	err := svc.syncRoomsToValkey(t.Context(), ACLModeWhitelist)
+	err := service.syncRoomsToValkey(t.Context(), ACLModeWhitelist)
 	if err == nil {
 		t.Fatal("expected temp write failure")
 	}
@@ -906,7 +906,7 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnSwapFailure(t *testing.
 
 	cacheMock := newACLRoomSetStatefulCache(state)
 
-	svc := &Service{
+	service := &Service{
 		cache: cacheMock,
 		whitelistRooms: map[string]struct{}{
 			"room-a": {},
@@ -917,7 +917,7 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnSwapFailure(t *testing.
 		},
 	}
 
-	err := svc.syncRoomsToValkey(t.Context(), ACLModeWhitelist)
+	err := service.syncRoomsToValkey(t.Context(), ACLModeWhitelist)
 	if err == nil {
 		t.Fatal("expected swap failure")
 	}
@@ -938,7 +938,7 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnSwapFailure(t *testing.
 
 func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	svc := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
 
 	if err := db.Callback().Update().Before("gorm:update").Register("acl_fail_enabled_update", func(tx *gorm.DB) {
 		if tx.Statement.Table == (Settings{}).TableName() {
@@ -948,7 +948,7 @@ func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatalf("register update callback: %v", err)
 	}
 
-	err := svc.SetEnabled(t.Context(), true)
+	err := service.SetEnabled(t.Context(), true)
 	if err == nil {
 		t.Fatal("expected SetEnabled error")
 	}
@@ -957,7 +957,7 @@ func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	enabled, _, _ := svc.GetACLStatus()
+	enabled, _, _ := service.GetACLStatus()
 	if enabled {
 		t.Fatal("expected in-memory enabled=false after DB failure")
 	}
@@ -974,7 +974,7 @@ func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 
 func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	svc := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, nil)
+	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, nil)
 
 	if err := db.Callback().Update().Before("gorm:update").Register("acl_fail_mode_update", func(tx *gorm.DB) {
 		if tx.Statement.Table == (Settings{}).TableName() {
@@ -984,7 +984,7 @@ func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatalf("register update callback: %v", err)
 	}
 
-	err := svc.SetMode(t.Context(), ACLModeBlacklist)
+	err := service.SetMode(t.Context(), ACLModeBlacklist)
 	if err == nil {
 		t.Fatal("expected SetMode error")
 	}
@@ -993,7 +993,7 @@ func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	_, mode, _ := svc.GetACLStatus()
+	_, mode, _ := service.GetACLStatus()
 	if mode != ACLModeWhitelist {
 		t.Fatalf("expected in-memory mode=whitelist after DB failure, got %s", mode)
 	}
@@ -1010,7 +1010,7 @@ func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 
 func TestACLService_AddRoom_UsesCapturedModeForValkeySync(t *testing.T) {
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	svc := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, nil)
+	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, nil)
 
 	origSAdd := cacheMock.SAddFunc
 
@@ -1026,14 +1026,14 @@ func TestACLService_AddRoom_UsesCapturedModeForValkeySync(t *testing.T) {
 			return
 		}
 
-		svc.mu.Lock()
-		svc.mode = ACLModeBlacklist
-		svc.mu.Unlock()
+		service.mu.Lock()
+		service.mode = ACLModeBlacklist
+		service.mu.Unlock()
 	}); err != nil {
 		t.Fatalf("register create callback: %v", err)
 	}
 
-	added, err := svc.AddRoom(t.Context(), "room-x")
+	added, err := service.AddRoom(t.Context(), "room-x")
 	if err != nil {
 		t.Fatalf("AddRoom error: %v", err)
 	}
@@ -1049,7 +1049,7 @@ func TestACLService_AddRoom_UsesCapturedModeForValkeySync(t *testing.T) {
 
 func TestACLService_RemoveRoom_UsesCapturedModeForValkeySync(t *testing.T) {
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	svc := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, []string{"room-x"})
+	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, []string{"room-x"})
 
 	origSRem := cacheMock.SRemFunc
 
@@ -1065,14 +1065,14 @@ func TestACLService_RemoveRoom_UsesCapturedModeForValkeySync(t *testing.T) {
 			return
 		}
 
-		svc.mu.Lock()
-		svc.mode = ACLModeBlacklist
-		svc.mu.Unlock()
+		service.mu.Lock()
+		service.mode = ACLModeBlacklist
+		service.mu.Unlock()
 	}); err != nil {
 		t.Fatalf("register delete callback: %v", err)
 	}
 
-	removed, err := svc.RemoveRoom(t.Context(), "room-x")
+	removed, err := service.RemoveRoom(t.Context(), "room-x")
 	if err != nil {
 		t.Fatalf("RemoveRoom error: %v", err)
 	}
@@ -1172,7 +1172,7 @@ func runACLLoadFromDatabaseInitCreateErrorCase(t *testing.T, tc aclLoadFromDatab
 	db, _, _ := newACLServiceWithSQLite(t)
 	tc.setupDB(t, db)
 
-	svc := &Service{
+	service := &Service{
 		db: db,
 		cache: &cachemocks.Client{
 			SetFunc:  func(context.Context, string, any, time.Duration) error { return nil },
@@ -1184,7 +1184,7 @@ func runACLLoadFromDatabaseInitCreateErrorCase(t *testing.T, tc aclLoadFromDatab
 		blacklistRooms: make(map[string]struct{}),
 	}
 
-	err := svc.loadFromDatabase(t.Context(), true, ACLModeWhitelist, []string{"room-a"})
+	err := service.loadFromDatabase(t.Context(), true, ACLModeWhitelist, []string{"room-a"})
 	if err == nil {
 		t.Fatal("expected loadFromDatabase error")
 	}

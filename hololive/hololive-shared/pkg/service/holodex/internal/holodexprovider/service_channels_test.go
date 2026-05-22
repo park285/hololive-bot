@@ -81,9 +81,9 @@ func TestSearchChannels_UsesPaginatedHololiveChannelListCache(t *testing.T) {
 		},
 	}
 
-	svc := newServiceForFallbackTest(requester)
+	service := newServiceForFallbackTest(requester)
 
-	firstResult, err := svc.SearchChannels(context.Background(), " aqua ")
+	firstResult, err := service.SearchChannels(context.Background(), " aqua ")
 	if err != nil {
 		t.Fatalf("SearchChannels(aqua) error = %v", err)
 	}
@@ -91,7 +91,7 @@ func TestSearchChannels_UsesPaginatedHololiveChannelListCache(t *testing.T) {
 		t.Fatalf("SearchChannels(aqua) = %+v, want minato-aqua only", firstResult)
 	}
 
-	secondResult, err := svc.SearchChannels(context.Background(), "member 01")
+	secondResult, err := service.SearchChannels(context.Background(), "member 01")
 	if err != nil {
 		t.Fatalf("SearchChannels(member 01) error = %v", err)
 	}

@@ -39,7 +39,7 @@ import (
 type CommunityPoller struct {
 	client                           *scraper.Client
 	db                               *gorm.DB
-	repo                             batchRepository
+	repository                             batchRepository
 	maxResults                       int
 	keywords                         []string
 	routeDecider                     NotificationRouteDecider
@@ -57,7 +57,7 @@ func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults i
 	return &CommunityPoller{
 		client:                           scraperClient,
 		db:                               db,
-		repo:                             newBatchRepository(db),
+		repository:                             newBatchRepository(db),
 		maxResults:                       maxResults,
 		keywords:                         keywords,
 		routeDecider:                     routeDecider,
@@ -103,7 +103,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt)
 	batch := p.buildCommunityBatch(ctx, channelID, newPosts, isInitialized, detectedAt)
 
-	if err := p.repo.PersistCommunityPosts(ctx, batch.dbPosts, batch.notifications, batch.trackingRows, &domain.YouTubeContentWatermark{
+	if err := p.repository.PersistCommunityPosts(ctx, batch.dbPosts, batch.notifications, batch.trackingRows, &domain.YouTubeContentWatermark{
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeCommunityPost,
 		Initialized:   true,

@@ -23,7 +23,7 @@ func ProvideACLService(
 	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*acl.Service, error) {
-	svc, err := acl.NewACLService(
+	service, err := acl.NewACLService(
 		ctx,
 		postgres,
 		cacheClient,
@@ -36,7 +36,7 @@ func ProvideACLService(
 		return nil, fmt.Errorf("failed to create ACL service: %w", err)
 	}
 
-	return svc, nil
+	return service, nil
 }
 
 func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
@@ -44,9 +44,9 @@ func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
 }
 
 func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
-	var youTubeStatsRepo stats.StatsCommandRepository
-	if statsRepo := modules.Stream.YTStack.GetStatsRepo(); statsRepo != nil {
-		youTubeStatsRepo = statsRepo
+	var youTubeStatsRepository stats.StatsCommandRepository
+	if statsRepository := modules.Stream.YTStack.GetStatsRepository(); statsRepository != nil {
+		youTubeStatsRepository = statsRepository
 	}
 
 	var youTubeService = modules.Stream.YTStack.GetService()
@@ -61,7 +61,7 @@ func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
 		Formatter:        modules.Messaging.Formatter,
 		Cache:            modules.Data.Cache,
 		Postgres:         modules.Data.Postgres,
-		MemberRepo:       modules.Data.MemberRepo,
+		MemberRepository:       modules.Data.MemberRepository,
 		MemberCache:      modules.Data.MemberCache,
 		Holodex:          modules.Stream.Holodex,
 		Chzzk:            modules.Stream.ChzzkClient,
@@ -71,11 +71,11 @@ func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
 		Matcher:          modules.Stream.MemberMatch,
 		MembersData:      modules.Data.MembersData,
 		Service:          youTubeService,
-		YouTubeStatsRepo: youTubeStatsRepo,
+		YouTubeStatsRepository: youTubeStatsRepository,
 		Activity:         modules.Support.ActivityLogger,
 		Settings:         modules.Support.Settings,
 		ACL:              modules.Support.ACL,
-		MajorEventRepo:   modules.Feature.MajorEventRepo,
+		MajorEventRepository:   modules.Feature.MajorEventRepository,
 		MemberNews:       modules.Feature.MemberNews,
 		CommandBuilders:  modules.Feature.CommandBuilders,
 		WorkerPool:       modules.Support.WorkerPool,

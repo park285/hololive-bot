@@ -83,7 +83,7 @@ func TestPhotoSyncRunPeriodicSyncCallsSyncOnPeriodicTick(t *testing.T) {
 	}
 
 	ps := &PhotoSyncService{
-		memberRepo:     member.NewMemberRepository(photoSyncTestDBClient{db: db}, slog.Default()),
+		memberRepository:     member.NewMemberRepository(photoSyncTestDBClient{db: db}, slog.Default()),
 		logger:         slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		syncInterval:   10 * time.Millisecond,
 		staleThreshold: time.Hour,

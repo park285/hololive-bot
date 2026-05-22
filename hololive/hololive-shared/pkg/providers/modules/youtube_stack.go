@@ -23,7 +23,7 @@ type YouTubeStackParams struct {
 	CacheService    cache.Client
 	HolodexService  *holodex.Service
 	Members         member.DataProvider
-	StatsRepo       *ytstats.StatsRepository
+	StatsRepository       *ytstats.StatsRepository
 	AlarmState      domain.AlarmDispatchState
 	IrisClient      iris.Sender
 	Formatter       youtube.MilestoneMessageFormatter
@@ -36,7 +36,7 @@ func BuildYouTubeStack(ctx context.Context, params YouTubeStackParams) *provider
 		YouTubeConfig:   params.YouTubeConfig,
 		ScraperConfig:   params.ScraperConfig,
 		CacheService:    params.CacheService,
-		StatsRepo:       params.StatsRepo,
+		StatsRepository:       params.StatsRepository,
 		SharedRateLimit: params.SharedRateLimit,
 		Logger:          params.Logger,
 	})
@@ -48,7 +48,7 @@ func BuildYouTubeStack(ctx context.Context, params YouTubeStackParams) *provider
 		stack.Service,
 		params.HolodexService,
 		params.CacheService,
-		params.StatsRepo,
+		params.StatsRepository,
 		params.Members,
 		params.AlarmState,
 		params.IrisClient,

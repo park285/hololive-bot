@@ -53,7 +53,7 @@ func (h *StreamHandler) getChannelsByIDs(c *gin.Context, channelIDs string) {
 		return
 	}
 
-	channelsMap, err := h.MemberRepo.GetMembersWithPhoto(c.Request.Context(), ids)
+	channelsMap, err := h.MemberRepository.GetMembersWithPhoto(c.Request.Context(), ids)
 	if err != nil {
 		h.respondInternalError(
 			c,

@@ -95,7 +95,7 @@ func TestNewAPIHandler_BasicInitialization(t *testing.T) {
 	}
 
 	if h.memberIndexLoader != nil {
-		t.Fatal("memberIndexLoader should be nil when repo is nil")
+		t.Fatal("memberIndexLoader should be nil when repository is nil")
 	}
 
 	if h.ensureStreamState() != h.streamState {
@@ -109,7 +109,7 @@ func TestNewAPIHandler_BasicInitialization(t *testing.T) {
 		nil,
 	)
 	if repoBacked.memberIndexLoader == nil {
-		t.Fatal("memberIndexLoader should be set when repo is provided")
+		t.Fatal("memberIndexLoader should be set when repository is provided")
 	}
 }
 
@@ -123,9 +123,9 @@ func TestAPIHandler_EnsureDefaults_BackfillsDerivedFields(t *testing.T) {
 		t.Fatal("startTime should be initialized")
 	}
 
-	repoBacked := (&APIHandler{repo: &member.Repository{}}).ensureDefaults()
+	repoBacked := (&APIHandler{repository: &member.Repository{}}).ensureDefaults()
 	if repoBacked.memberIndexLoader == nil {
-		t.Fatal("memberIndexLoader should be derived from repo")
+		t.Fatal("memberIndexLoader should be derived from repository")
 	}
 }
 

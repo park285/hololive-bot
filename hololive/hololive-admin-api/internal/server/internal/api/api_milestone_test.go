@@ -115,7 +115,7 @@ func TestParseIntAndParseFloat(t *testing.T) {
 func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	t.Run("repo not initialized", func(t *testing.T) {
+	t.Run("repository not initialized", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones", nil)
 		h.GetMilestones(ctx)
@@ -125,7 +125,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 
 	t.Run("invalid limit", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{},
+			statsRepository: &stubStatsDashboardRepository{},
 			logger:    newDiscardLogger(),
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones?limit=999", nil)
@@ -136,7 +136,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 
 	t.Run("invalid offset", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{},
+			statsRepository: &stubStatsDashboardRepository{},
 			logger:    newDiscardLogger(),
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones?offset=-1", nil)
@@ -147,9 +147,9 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 		}
 	})
 
-	t.Run("repo error", func(t *testing.T) {
+	t.Run("repository error", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{
+			statsRepository: &stubStatsDashboardRepository{
 				getAllMilestones: func(context.Context, stats.MilestoneFilter) (*stats.MilestoneResult, error) {
 					return nil, errors.New("query failed")
 				},
@@ -164,7 +164,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{
+			statsRepository: &stubStatsDashboardRepository{
 				getAllMilestones: func(context.Context, stats.MilestoneFilter) (*stats.MilestoneResult, error) {
 					return &stats.MilestoneResult{
 						Milestones: []stats.MilestoneEntry{
@@ -197,7 +197,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	t.Run("repo not initialized", func(t *testing.T) {
+	t.Run("repository not initialized", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/near", nil)
 		h.GetNearMilestoneMembers(ctx)
@@ -209,7 +209,7 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 
 	t.Run("invalid threshold", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{},
+			statsRepository: &stubStatsDashboardRepository{},
 			logger:    newDiscardLogger(),
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/near?threshold=1.1", nil)
@@ -220,9 +220,9 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 		}
 	})
 
-	t.Run("repo error", func(t *testing.T) {
+	t.Run("repository error", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{
+			statsRepository: &stubStatsDashboardRepository{
 				getNearMilestoneMember: func(context.Context, float64, []uint64, int) ([]stats.NearMilestoneEntry, error) {
 					return nil, errors.New("query failed")
 				},
@@ -239,7 +239,7 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 
 	t.Run("success and trim to limit", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{
+			statsRepository: &stubStatsDashboardRepository{
 				getNearMilestoneMember: func(context.Context, float64, []uint64, int) ([]stats.NearMilestoneEntry, error) {
 					out := make([]stats.NearMilestoneEntry, 0, 8)
 
@@ -272,7 +272,7 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	t.Run("repo not initialized", func(t *testing.T) {
+	t.Run("repository not initialized", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/stats", nil)
 		h.GetMilestoneStats(ctx)
@@ -284,7 +284,7 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 
 	t.Run("milestone stats error", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{
+			statsRepository: &stubStatsDashboardRepository{
 				getMilestoneStats: func(context.Context) (*stats.MilestoneStats, error) {
 					return nil, errors.New("stats failed")
 				},
@@ -301,7 +301,7 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 
 	t.Run("near summary error", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{
+			statsRepository: &stubStatsDashboardRepository{
 				getMilestoneStats: func(context.Context) (*stats.MilestoneStats, error) {
 					return &stats.MilestoneStats{TotalAchieved: 5, RecentAchievements: 1}, nil
 				},
@@ -321,7 +321,7 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
-			statsRepo: &stubStatsDashboardRepository{
+			statsRepository: &stubStatsDashboardRepository{
 				getMilestoneStats: func(context.Context) (*stats.MilestoneStats, error) {
 					return &stats.MilestoneStats{
 						TotalAchieved:      10,

@@ -51,11 +51,11 @@ var (
 
 func NewAlarmService(
 	cacheClient cache.Client,
-	holodexSvc *holodex.Service,
+	holodexService *holodex.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	memberData domain.MemberDataProvider,
-	alarmRepo *alarm.Repository,
+	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 	advanceMinutes []int,
 ) (*AlarmService, error) {
@@ -68,41 +68,41 @@ func NewAlarmService(
 	targetPolicy := sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(advanceMinutes))
 
 	var writer alarmWriter
-	if alarmRepo != nil {
-		writer = alarmRepo
+	if alarmRepository != nil {
+		writer = alarmRepository
 	}
 
-	svc := &AlarmService{
+	service := &AlarmService{
 		cache:        cacheClient,
-		holodex:      holodexSvc,
+		holodex:      holodexService,
 		chzzk:        chzzkClient,
 		twitch:       twitchClient,
 		memberData:   memberData,
-		alarmRepo:    alarmRepo,
+		alarmRepository:    alarmRepository,
 		alarmWriter:  writer,
 		logger:       logger,
 		targetPolicy: targetPolicy,
 	}
 
-	registerAlarmService(svc)
+	registerAlarmService(service)
 
-	return svc, nil
+	return service, nil
 }
 
-func registerAlarmService(svc *AlarmService) {
-	if svc == nil {
+func registerAlarmService(service *AlarmService) {
+	if service == nil {
 		return
 	}
 
-	alarmServiceRegistry.Store(svc, struct{}{})
+	alarmServiceRegistry.Store(service, struct{}{})
 }
 
-func unregisterAlarmService(svc *AlarmService) {
-	if svc == nil {
+func unregisterAlarmService(service *AlarmService) {
+	if service == nil {
 		return
 	}
 
-	alarmServiceRegistry.Delete(svc)
+	alarmServiceRegistry.Delete(service)
 }
 
 func (as *AlarmService) getTargetMinutes() []int {
@@ -146,12 +146,12 @@ func CloseAllAlarmServices(ctx context.Context) error {
 	var joinedErr error
 
 	alarmServiceRegistry.Range(func(key, _ any) bool {
-		svc, ok := key.(*AlarmService)
-		if !ok || svc == nil {
+		service, ok := key.(*AlarmService)
+		if !ok || service == nil {
 			return true
 		}
 
-		if err := svc.Close(ctx); err != nil {
+		if err := service.Close(ctx); err != nil {
 			joinedErr = stdErrors.Join(joinedErr, err)
 		}
 

@@ -33,7 +33,7 @@ func BuildBotDependencyModules(
 	activityLogger *activity.Logger,
 	settingsService settings.ReadWriter,
 	aclService *acl.Service,
-	majorEventRepo command.MajorEventRepository,
+	majorEventRepository command.MajorEventRepository,
 	memberNewsService command.MemberNewsService,
 	commandBuilders []bot.CommandBuilder,
 	workerPool *workerpool.Pool,
@@ -45,7 +45,7 @@ func BuildBotDependencyModules(
 		Data:      buildBotDataModule(infra, alarmMode, profileService),
 		Stream:    buildBotStreamModule(alarmMode, holodexService, memberMatcher, youTubeStack),
 		Support:   buildBotSupportModule(activityLogger, settingsService, aclService, workerPool),
-		Feature:   buildBotFeatureModule(majorEventRepo, memberNewsService, commandBuilders),
+		Feature:   buildBotFeatureModule(majorEventRepository, memberNewsService, commandBuilders),
 	}
 }
 
@@ -78,7 +78,7 @@ func buildBotDataModule(
 	return BotDataModule{
 		Cache:       infra.Cache,
 		Postgres:    infra.Postgres,
-		MemberRepo:  infra.MemberRepo,
+		MemberRepository:  infra.MemberRepository,
 		MemberCache: infra.MemberCache,
 		Profiles:    profileService,
 		MembersData: alarmMode.MemberDataSource,
@@ -116,12 +116,12 @@ func buildBotSupportModule(
 }
 
 func buildBotFeatureModule(
-	majorEventRepo command.MajorEventRepository,
+	majorEventRepository command.MajorEventRepository,
 	memberNewsService command.MemberNewsService,
 	commandBuilders []bot.CommandBuilder,
 ) BotFeatureModule {
 	return BotFeatureModule{
-		MajorEventRepo:  majorEventRepo,
+		MajorEventRepository:  majorEventRepository,
 		MemberNews:      memberNewsService,
 		CommandBuilders: bot.CloneCommandBuilders(commandBuilders),
 	}

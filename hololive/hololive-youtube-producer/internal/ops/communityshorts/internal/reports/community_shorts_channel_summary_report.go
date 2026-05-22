@@ -55,7 +55,7 @@ func CollectCommunityShortsChannelSummaryReport(
 		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: session is nil")
 	}
 
-	rows, err := session.telemetryRepo.ListChannelPostDeliverySummariesSince(request.ctx, request.since)
+	rows, err := session.telemetryRepository.ListChannelPostDeliverySummariesSince(request.ctx, request.since)
 	if err != nil {
 		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: list channel summaries: %w", err)
 	}

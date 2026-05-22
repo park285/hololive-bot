@@ -279,11 +279,11 @@ func withLatencyCauseObservationWindow(query CommunityShortsLatencyCauseQuery, s
 }
 
 func collectFinalizedObservationLatencyCauseRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsLatencyCauseQuery, periods []outbox.PostLatencyPeriod, cutoverAt time.Time) (communityShortsLatencyCauseRows, error) {
-	sendCountRows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
+	sendCountRows, err := session.telemetryRepository.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
 	if err != nil {
 		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list finalized observation-window send counts: %w", err)
 	}
-	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
+	timelineRows, err := session.telemetryRepository.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
 	if err != nil {
 		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list finalized observation-window delivery timelines: %w", err)
 	}
@@ -291,11 +291,11 @@ func collectFinalizedObservationLatencyCauseRows(ctx context.Context, session *c
 }
 
 func collectActiveObservationLatencyCauseRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsLatencyCauseQuery, periods []outbox.PostLatencyPeriod, state communityShortsObservationQueryState) (communityShortsLatencyCauseRows, error) {
-	sendCountRows, err := session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	sendCountRows, err := session.telemetryRepository.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
 	if err != nil {
 		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list active observation-window send counts: %w", err)
 	}
-	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	timelineRows, err := session.telemetryRepository.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
 	if err != nil {
 		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list active observation-window delivery timelines: %w", err)
 	}
@@ -304,11 +304,11 @@ func collectActiveObservationLatencyCauseRows(ctx context.Context, session *comm
 
 func collectRecentLatencyCauseRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsLatencyCauseQuery, periods []outbox.PostLatencyPeriod) (communityShortsLatencyCauseRows, error) {
 	since := earliestCommunityShortsLatencyCausePeriodStart(periods)
-	sendCountRows, err := session.telemetryRepo.ListPostSendCountsSince(ctx, since)
+	sendCountRows, err := session.telemetryRepository.ListPostSendCountsSince(ctx, since)
 	if err != nil {
 		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list post send counts: %w", err)
 	}
-	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesSince(ctx, since)
+	timelineRows, err := session.telemetryRepository.ListPostDeliveryTimelinesSince(ctx, since)
 	if err != nil {
 		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list post delivery timelines: %w", err)
 	}

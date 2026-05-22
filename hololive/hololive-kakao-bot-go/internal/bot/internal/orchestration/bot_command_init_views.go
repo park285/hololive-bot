@@ -43,7 +43,7 @@ type commandInitView struct {
 	alarm            domain.AlarmCRUD
 	matcher          *matcher.MemberMatcher
 	officialProfiles *member.ProfileService
-	statsRepo        stats.StatsCommandRepository
+	statsRepository        stats.StatsCommandRepository
 	memberNews       command.MemberNewsService
 	membersData      member.DataProvider
 	formatter        *adapter.ResponseFormatter
@@ -51,7 +51,7 @@ type commandInitView struct {
 	sendImage        func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
 	sendError        func(ctx context.Context, room, message string) error
 	logger           *slog.Logger
-	majorEventRepo   command.MajorEventRepository
+	majorEventRepository   command.MajorEventRepository
 	commandBuilders  []CommandBuilder
 }
 
@@ -67,7 +67,7 @@ func (b *Bot) commandInitView() commandInitView {
 		alarm:            b.alarm,
 		matcher:          b.matcher,
 		officialProfiles: b.officialProfiles,
-		statsRepo:        b.statsRepo,
+		statsRepository:        b.statsRepository,
 		memberNews:       b.memberNews,
 		membersData:      b.membersData,
 		formatter:        b.formatter,
@@ -75,7 +75,7 @@ func (b *Bot) commandInitView() commandInitView {
 		sendImage:        b.sendImage,
 		sendError:        b.sendError,
 		logger:           b.logger,
-		majorEventRepo:   b.majorEventRepo,
+		majorEventRepository:   b.majorEventRepository,
 		commandBuilders:  cloneCommandBuilders(b.commandBuilders),
 	}
 }
@@ -88,7 +88,7 @@ func (v commandInitView) toCommandDependencies(registry *command.Registry) *comm
 		Alarm:            v.alarm,
 		Matcher:          v.matcher,
 		OfficialProfiles: v.officialProfiles,
-		StatsRepo:        v.statsRepo,
+		StatsRepository:        v.statsRepository,
 		MemberNews:       v.memberNews,
 		MembersData:      v.membersData,
 		Formatter:        v.formatter,
@@ -115,10 +115,10 @@ func (v commandInitView) buildCommands(deps *command.Dependencies) []command.Com
 		command.NewStatsCommand(deps),
 	}
 
-	if v.majorEventRepo != nil {
+	if v.majorEventRepository != nil {
 		v.logInfo("MajorEvent command enabled")
 
-		commands = append(commands, command.NewMajorEventCommand(deps, v.majorEventRepo))
+		commands = append(commands, command.NewMajorEventCommand(deps, v.majorEventRepository))
 	}
 
 	if v.memberNews != nil {

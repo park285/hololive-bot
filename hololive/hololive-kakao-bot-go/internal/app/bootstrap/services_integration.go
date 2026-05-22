@@ -33,7 +33,7 @@ func InitCoreIntegrationServices(
 		return nil, err
 	}
 
-	majorEventRepo, memberNewsService := ResolveLLMSchedulerClients(cfg, logger)
+	majorEventRepository, memberNewsService := ResolveLLMSchedulerClients(cfg, logger)
 
 	workerPool, err := ProvideAlarmWorkerPool()
 	if err != nil {
@@ -42,7 +42,7 @@ func InitCoreIntegrationServices(
 
 	return &CoreIntegrationServices{
 		ACLService:        aclService,
-		MajorEventRepo:    majorEventRepo,
+		MajorEventRepository:    majorEventRepository,
 		MemberNewsService: memberNewsService,
 		CommandBuilders:   []bot.CommandBuilder{},
 		WorkerPool:        workerPool,

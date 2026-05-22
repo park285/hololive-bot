@@ -30,7 +30,7 @@ import (
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
-type mockOutboxRepo struct {
+type mockOutboxRepository struct {
 	enqueuedItems []enqueueRecord
 	enqueueErr    map[string]error // roomID → error
 }
@@ -42,13 +42,13 @@ type enqueueRecord struct {
 	Message   string
 }
 
-func newMockOutboxRepo() *mockOutboxRepo {
-	return &mockOutboxRepo{
+func newMockOutboxRepository() *mockOutboxRepository {
+	return &mockOutboxRepository{
 		enqueueErr: make(map[string]error),
 	}
 }
 
-func (m *mockOutboxRepo) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
+func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
 	if err, ok := m.enqueueErr[roomID]; ok {
 		return err
 	}
@@ -89,10 +89,10 @@ func (m *mockNotificationLocker) ReleaseRoomClaims(_ context.Context, _ []string
 var testLogger = sharedlogging.NewLogger
 
 func TestEnqueueToRooms_AllSuccess(t *testing.T) {
-	repo := newMockOutboxRepo()
+	repository := newMockOutboxRepository()
 	rooms := []roomTarget{{roomID: "room1"}, {roomID: "room2"}, {roomID: "room3"}}
 
-	result := enqueueToRooms(context.Background(), repo, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", testLogger())
+	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", testLogger())
 
 	if result.Sent != 3 {
 		t.Errorf("expected 3 sent, got %d", result.Sent)
@@ -103,17 +103,17 @@ func TestEnqueueToRooms_AllSuccess(t *testing.T) {
 	if result.Attempted != 3 {
 		t.Errorf("expected 3 attempted, got %d", result.Attempted)
 	}
-	if len(repo.enqueuedItems) != 3 {
-		t.Errorf("expected 3 enqueued items, got %d", len(repo.enqueuedItems))
+	if len(repository.enqueuedItems) != 3 {
+		t.Errorf("expected 3 enqueued items, got %d", len(repository.enqueuedItems))
 	}
 }
 
 func TestEnqueueToRooms_PartialFailure(t *testing.T) {
-	repo := newMockOutboxRepo()
-	repo.enqueueErr["room2"] = fmt.Errorf("db error")
+	repository := newMockOutboxRepository()
+	repository.enqueueErr["room2"] = fmt.Errorf("db error")
 	rooms := []roomTarget{{roomID: "room1"}, {roomID: "room2"}, {roomID: "room3"}}
 
-	result := enqueueToRooms(context.Background(), repo, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", testLogger())
+	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", testLogger())
 
 	if result.Sent != 2 {
 		t.Errorf("expected 2 sent, got %d", result.Sent)
@@ -127,12 +127,12 @@ func TestEnqueueToRooms_PartialFailure(t *testing.T) {
 }
 
 func TestEnqueueToRooms_AllFail(t *testing.T) {
-	repo := newMockOutboxRepo()
-	repo.enqueueErr["room1"] = fmt.Errorf("db error")
-	repo.enqueueErr["room2"] = fmt.Errorf("db error")
+	repository := newMockOutboxRepository()
+	repository.enqueueErr["room1"] = fmt.Errorf("db error")
+	repository.enqueueErr["room2"] = fmt.Errorf("db error")
 	rooms := []roomTarget{{roomID: "room1"}, {roomID: "room2"}}
 
-	result := enqueueToRooms(context.Background(), repo, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", testLogger())
+	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", testLogger())
 
 	if result.Failed != 2 {
 		t.Errorf("expected 2 failed, got %d", result.Failed)
@@ -143,15 +143,15 @@ func TestEnqueueToRooms_AllFail(t *testing.T) {
 }
 
 func TestEnqueueToRooms_VerifiesKindAndPeriodKey(t *testing.T) {
-	repo := newMockOutboxRepo()
+	repository := newMockOutboxRepository()
 	rooms := []roomTarget{{roomID: "room1"}}
 
-	enqueueToRooms(context.Background(), repo, rooms, domain.DeliveryKindMajorEventMonthly, "2026-02", "test msg", testLogger())
+	enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventMonthly, "2026-02", "test msg", testLogger())
 
-	if len(repo.enqueuedItems) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(repo.enqueuedItems))
+	if len(repository.enqueuedItems) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(repository.enqueuedItems))
 	}
-	item := repo.enqueuedItems[0]
+	item := repository.enqueuedItems[0]
 	if item.Kind != domain.DeliveryKindMajorEventMonthly {
 		t.Errorf("expected kind %s, got %s", domain.DeliveryKindMajorEventMonthly, item.Kind)
 	}

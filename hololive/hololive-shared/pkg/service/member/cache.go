@@ -42,7 +42,7 @@ const (
 
 // DB 부하를 줄이고 빠른 조회를 지원하며, 워밍업(Warm-up) 기능을 제공합니다.
 type Cache struct {
-	repo   *Repository
+	repository   *Repository
 	cache  cache.Client
 	logger *slog.Logger
 
@@ -65,7 +65,7 @@ type CacheConfig struct {
 }
 
 // 설정에 따라 생성 시점에 자동으로 캐시 워밍업을 수행할 수 있다.
-func NewMemberCache(ctx context.Context, repo *Repository, cacheService cache.Client, logger *slog.Logger, cfg CacheConfig) (*Cache, error) {
+func NewMemberCache(ctx context.Context, repository *Repository, cacheService cache.Client, logger *slog.Logger, cfg CacheConfig) (*Cache, error) {
 	if cfg.ValkeyTTL == 0 {
 		cfg.ValkeyTTL = constants.MemberCacheDefaults.ValkeyTTL
 	}
@@ -77,7 +77,7 @@ func NewMemberCache(ctx context.Context, repo *Repository, cacheService cache.Cl
 	}
 
 	mc := &Cache{
-		repo:     repo,
+		repository:     repository,
 		cache:    cacheService,
 		logger:   logger,
 		cacheTTL: cfg.ValkeyTTL,
@@ -102,7 +102,7 @@ func (c *Cache) cacheEnabled() bool {
 
 // 병렬 처리를 통해 대량의 데이터도 빠르게 처리한다.
 func (c *Cache) WarmUpCache(ctx context.Context) error {
-	members, err := c.repo.GetAllMembers(ctx)
+	members, err := c.repository.GetAllMembers(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load all members: %w", err)
 	}
@@ -179,7 +179,7 @@ func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.M
 		}
 	}
 
-	dbMember, err := c.repo.FindByChannelID(ctx, channelID)
+	dbMember, err := c.repository.FindByChannelID(ctx, channelID)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 		}
 	}
 
-	dbMember, err := c.repo.FindByName(ctx, name)
+	dbMember, err := c.repository.FindByName(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 		return member, nil
 	}
 
-	dbMember, err := c.repo.FindByAlias(ctx, alias)
+	dbMember, err := c.repository.FindByAlias(ctx, alias)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +263,7 @@ func (c *Cache) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 		return val.([]string), nil
 	}
 
-	channelIDs, err := c.repo.GetAllChannelIDs(ctx)
+	channelIDs, err := c.repository.GetAllChannelIDs(ctx)
 	if err != nil {
 		return nil, err
 	}

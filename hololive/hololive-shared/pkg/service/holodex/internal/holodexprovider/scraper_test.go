@@ -138,7 +138,7 @@ func metricLabelsMatch(metric *dto.Metric, labels map[string]string) bool {
 
 func TestNewScraperService_UsesSharedHTTPClientPolicy(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc := NewScraperService(
+	service := NewScraperService(
 		nil,
 		testMemberDataProvider{members: []*domain.Member{{
 			Name:      "Member One",
@@ -153,15 +153,15 @@ func TestNewScraperService_UsesSharedHTTPClientPolicy(t *testing.T) {
 		nil,
 		logger,
 	)
-	if svc.httpClient == nil {
+	if service.httpClient == nil {
 		t.Fatal("httpClient is nil")
 	}
-	if svc.httpClient.Timeout != constants.OfficialScheduleConfig.Timeout {
-		t.Fatalf("timeout=%s want=%s", svc.httpClient.Timeout, constants.OfficialScheduleConfig.Timeout)
+	if service.httpClient.Timeout != constants.OfficialScheduleConfig.Timeout {
+		t.Fatalf("timeout=%s want=%s", service.httpClient.Timeout, constants.OfficialScheduleConfig.Timeout)
 	}
-	transport, ok := svc.httpClient.Transport.(*http.Transport)
+	transport, ok := service.httpClient.Transport.(*http.Transport)
 	if !ok {
-		t.Fatalf("transport type = %T, want *http.Transport", svc.httpClient.Transport)
+		t.Fatalf("transport type = %T, want *http.Transport", service.httpClient.Transport)
 	}
 	shared := httputil.NewExternalAPIClient(constants.OfficialScheduleConfig.Timeout)
 	sharedTransport, ok := shared.Transport.(*http.Transport)
@@ -174,13 +174,13 @@ func TestNewScraperService_UsesSharedHTTPClientPolicy(t *testing.T) {
 	if transport.MaxIdleConnsPerHost != sharedTransport.MaxIdleConnsPerHost {
 		t.Fatalf("MaxIdleConnsPerHost=%d want=%d", transport.MaxIdleConnsPerHost, sharedTransport.MaxIdleConnsPerHost)
 	}
-	if got := svc.memberNameMap[stringutil.Normalize("Member One")]; got != "channel-1" {
+	if got := service.memberNameMap[stringutil.Normalize("Member One")]; got != "channel-1" {
 		t.Fatalf("member mapping = %q, want channel-1", got)
 	}
-	if got := svc.memberNameMap[stringutil.Normalize("メンバー1")]; got != "channel-1" {
+	if got := service.memberNameMap[stringutil.Normalize("メンバー1")]; got != "channel-1" {
 		t.Fatalf("japanese mapping = %q, want channel-1", got)
 	}
-	if got := svc.memberNameMap[stringutil.Normalize("멤버원")]; got != "channel-1" {
+	if got := service.memberNameMap[stringutil.Normalize("멤버원")]; got != "channel-1" {
 		t.Fatalf("alias mapping = %q, want channel-1", got)
 	}
 }
@@ -204,9 +204,9 @@ func TestScraperFetchAllStreams(t *testing.T) {
 	memberMap := map[string]string{
 		stringutil.Normalize("Member One"): "channel-1",
 	}
-	svc := newTestScraper(t, html, memberMap)
+	service := newTestScraper(t, html, memberMap)
 
-	streams, err := svc.FetchAllStreams(context.Background())
+	streams, err := service.FetchAllStreams(context.Background())
 	if err != nil {
 		t.Fatalf("fetch failed: %v", err)
 	}
@@ -228,9 +228,9 @@ func TestScraperFetchAllStreams(t *testing.T) {
 
 func TestScraperFetchAllStreamsStructureError(t *testing.T) {
 	html := `<div class="container"><div class="col-12"></div></div>`
-	svc := newTestScraper(t, html, nil)
+	service := newTestScraper(t, html, nil)
 
-	_, err := svc.FetchAllStreams(context.Background())
+	_, err := service.FetchAllStreams(context.Background())
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -255,7 +255,7 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonMatched(t *test
   </div>
 </div>`
 
-	svc := newTestScraper(t, html, map[string]string{
+	service := newTestScraper(t, html, map[string]string{
 		stringutil.Normalize("Member One"): "channel-1",
 	})
 
@@ -266,7 +266,7 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonMatched(t *test
 	}
 	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
 
-	streams, err := svc.FetchAllStreams(context.Background())
+	streams, err := service.FetchAllStreams(context.Background())
 	if err != nil {
 		t.Fatalf("FetchAllStreams() error = %v", err)
 	}
@@ -282,7 +282,7 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonMatched(t *test
 
 func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonStructureDrift(t *testing.T) {
 	html := `<div class="container"><div class="col-12"></div></div>`
-	svc := newTestScraper(t, html, nil)
+	service := newTestScraper(t, html, nil)
 
 	labels := map[string]string{
 		"operation": "official_schedule_page",
@@ -291,7 +291,7 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonStructureDrift(
 	}
 	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
 
-	_, err := svc.FetchAllStreams(context.Background())
+	_, err := service.FetchAllStreams(context.Background())
 	if err == nil {
 		t.Fatal("FetchAllStreams() error = nil, want non-nil")
 	}
@@ -303,7 +303,7 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonStructureDrift(
 }
 
 func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonParseError(t *testing.T) {
-	svc := &ScraperService{
+	service := &ScraperService{
 		httpClient: &http.Client{
 			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -324,7 +324,7 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonParseError(t *t
 	}
 	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
 
-	_, err := svc.FetchAllStreams(context.Background())
+	_, err := service.FetchAllStreams(context.Background())
 	if err == nil {
 		t.Fatal("FetchAllStreams() error = nil, want non-nil")
 	}
@@ -337,36 +337,36 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonParseError(t *t
 
 func TestScraperHelpers(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc := &ScraperService{
+	service := &ScraperService{
 		logger: logger,
 		memberNameMap: map[string]string{
 			stringutil.Normalize("Member One"): "channel-1",
 		},
 	}
 
-	if got := svc.extractVideoID("https://www.youtube.com/watch?v=abc123&feature=y"); got != "abc123" {
+	if got := service.extractVideoID("https://www.youtube.com/watch?v=abc123&feature=y"); got != "abc123" {
 		t.Fatalf("unexpected video id: %s", got)
 	}
-	if got := svc.extractVideoID("invalid"); got != "" {
+	if got := service.extractVideoID("invalid"); got != "" {
 		t.Fatalf("expected empty video id, got %s", got)
 	}
 
 	onclick := "ga('send','event',{'event_category':'Tokino Sora'})"
-	if got := svc.extractMemberFromOnClick(onclick); got != "Tokino Sora" {
+	if got := service.extractMemberFromOnClick(onclick); got != "Tokino Sora" {
 		t.Fatalf("unexpected member name: %s", got)
 	}
 
-	if got := svc.matchMemberToChannel("Member One"); got != "channel-1" {
+	if got := service.matchMemberToChannel("Member One"); got != "channel-1" {
 		t.Fatalf("unexpected match: %s", got)
 	}
-	if got := svc.matchMemberToChannel("Member"); got != "channel-1" {
+	if got := service.matchMemberToChannel("Member"); got != "channel-1" {
 		t.Fatalf("unexpected partial match: %s", got)
 	}
 }
 
 func TestScraperParseDatetimeWithContext(t *testing.T) {
-	svc := &ScraperService{}
-	if _, err := svc.parseDatetimeWithContext("", ""); err == nil {
+	service := &ScraperService{}
+	if _, err := service.parseDatetimeWithContext("", ""); err == nil {
 		t.Fatalf("expected error for empty date/time")
 	}
 
@@ -375,7 +375,7 @@ func TestScraperParseDatetimeWithContext(t *testing.T) {
 	dateStr := now.Format("01/02")
 	timeStr := now.Format("15:04")
 
-	parsed, err := svc.parseDatetimeWithContext(dateStr, timeStr)
+	parsed, err := service.parseDatetimeWithContext(dateStr, timeStr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -406,7 +406,7 @@ func TestScraperFetchChannel_DoesNotFallbackOnEmptyYouTubeResult(t *testing.T) {
 		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
 	}
 
-	svc := &ScraperService{
+	service := &ScraperService{
 		httpClient: server.Client(),
 		cache:      cacheClient,
 		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -416,7 +416,7 @@ func TestScraperFetchChannel_DoesNotFallbackOnEmptyYouTubeResult(t *testing.T) {
 		},
 	}
 
-	streams, err := svc.FetchChannel(context.Background(), "channel-1")
+	streams, err := service.FetchChannel(context.Background(), "channel-1")
 	if err != nil {
 		t.Fatalf("FetchChannel() error = %v", err)
 	}
@@ -464,7 +464,7 @@ func TestScraperFetchChannel_FallbacksToOfficialOnYouTubeError(t *testing.T) {
 		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
 	}
 
-	svc := &ScraperService{
+	service := &ScraperService{
 		httpClient: server.Client(),
 		cache:      cacheClient,
 		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -477,7 +477,7 @@ func TestScraperFetchChannel_FallbacksToOfficialOnYouTubeError(t *testing.T) {
 		},
 	}
 
-	streams, err := svc.FetchChannel(context.Background(), "channel-1")
+	streams, err := service.FetchChannel(context.Background(), "channel-1")
 	if err != nil {
 		t.Fatalf("FetchChannel() error = %v", err)
 	}
@@ -494,14 +494,14 @@ func TestScraperFetchChannel_FallbacksToOfficialOnYouTubeError(t *testing.T) {
 
 func TestScraperFetchChannel_RecordsOfficialFallbackReasonStructureDrift(t *testing.T) {
 	html := `<div class="container"><div class="col-12"></div></div>`
-	svc := newTestScraper(t, html, nil)
-	svc.cache = &cachemocks.Client{
+	service := newTestScraper(t, html, nil)
+	service.cache = &cachemocks.Client{
 		GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) {
 			return nil, false
 		},
 		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
 	}
-	svc.fetchUpcoming = func(context.Context, string) ([]*ytscraper.UpcomingEvent, error) {
+	service.fetchUpcoming = func(context.Context, string) ([]*ytscraper.UpcomingEvent, error) {
 		return nil, context.DeadlineExceeded
 	}
 
@@ -512,7 +512,7 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonStructureDrift(t *test
 	}
 	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
 
-	_, err := svc.FetchChannel(context.Background(), "channel-1")
+	_, err := service.FetchChannel(context.Background(), "channel-1")
 	if err == nil {
 		t.Fatal("FetchChannel() error = nil, want non-nil")
 	}
@@ -524,7 +524,7 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonStructureDrift(t *test
 }
 
 func TestScraperFetchChannel_RecordsOfficialFallbackReasonParseError(t *testing.T) {
-	svc := &ScraperService{
+	service := &ScraperService{
 		httpClient: &http.Client{
 			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -554,7 +554,7 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonParseError(t *testing.
 	}
 	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
 
-	_, err := svc.FetchChannel(context.Background(), "channel-1")
+	_, err := service.FetchChannel(context.Background(), "channel-1")
 	if err == nil {
 		t.Fatal("FetchChannel() error = nil, want non-nil")
 	}
@@ -566,7 +566,7 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonParseError(t *testing.
 }
 
 func TestScraperFetchChannel_RecordsOfficialFallbackReasonNetworkError(t *testing.T) {
-	svc := &ScraperService{
+	service := &ScraperService{
 		httpClient: &http.Client{
 			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				return nil, context.DeadlineExceeded
@@ -592,7 +592,7 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonNetworkError(t *testin
 	}
 	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
 
-	_, err := svc.FetchChannel(context.Background(), "channel-1")
+	_, err := service.FetchChannel(context.Background(), "channel-1")
 	if err == nil {
 		t.Fatal("FetchChannel() error = nil, want non-nil")
 	}
@@ -619,16 +619,16 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonEmptyMiss(t *testing.T
   </div>
 </div>`
 
-	svc := newTestScraper(t, html, map[string]string{
+	service := newTestScraper(t, html, map[string]string{
 		stringutil.Normalize("Other Member"): "other-channel",
 	})
-	svc.cache = &cachemocks.Client{
+	service.cache = &cachemocks.Client{
 		GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) {
 			return nil, false
 		},
 		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
 	}
-	svc.fetchUpcoming = func(context.Context, string) ([]*ytscraper.UpcomingEvent, error) {
+	service.fetchUpcoming = func(context.Context, string) ([]*ytscraper.UpcomingEvent, error) {
 		return nil, context.DeadlineExceeded
 	}
 
@@ -639,7 +639,7 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonEmptyMiss(t *testing.T
 	}
 	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
 
-	streams, err := svc.FetchChannel(context.Background(), "channel-1")
+	streams, err := service.FetchChannel(context.Background(), "channel-1")
 	if err != nil {
 		t.Fatalf("FetchChannel() error = %v", err)
 	}
@@ -680,7 +680,7 @@ func TestScraperFetchAllStreams_DeduplicatesConcurrentRequests(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	now := time.Date(2026, 3, 6, 23, 40, 0, 0, time.UTC)
-	svc := &ScraperService{
+	service := &ScraperService{
 		httpClient: server.Client(),
 		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		baseURL:    server.URL,
@@ -696,7 +696,7 @@ func TestScraperFetchAllStreams_DeduplicatesConcurrentRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	for range concurrency {
 		wg.Go(func() {
-			streams, err := svc.FetchAllStreams(context.Background())
+			streams, err := service.FetchAllStreams(context.Background())
 			if err != nil {
 				t.Errorf("FetchAllStreams() error = %v", err)
 				return
@@ -745,7 +745,7 @@ func TestScraperFetchAllStreams_UsesShortTTLCacheAndClonesResults(t *testing.T) 
 	t.Cleanup(server.Close)
 
 	currentTime := time.Date(2026, 3, 6, 23, 45, 0, 0, time.UTC)
-	svc := &ScraperService{
+	service := &ScraperService{
 		httpClient: server.Client(),
 		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		baseURL:    server.URL,
@@ -755,13 +755,13 @@ func TestScraperFetchAllStreams_UsesShortTTLCacheAndClonesResults(t *testing.T) 
 		nowFunc: func() time.Time { return currentTime },
 	}
 
-	first, err := svc.FetchAllStreams(context.Background())
+	first, err := service.FetchAllStreams(context.Background())
 	if err != nil {
 		t.Fatalf("first FetchAllStreams() error = %v", err)
 	}
 	first[0].Title = "mutated"
 
-	second, err := svc.FetchAllStreams(context.Background())
+	second, err := service.FetchAllStreams(context.Background())
 	if err != nil {
 		t.Fatalf("second FetchAllStreams() error = %v", err)
 	}
@@ -775,7 +775,7 @@ func TestScraperFetchAllStreams_UsesShortTTLCacheAndClonesResults(t *testing.T) 
 
 	currentTime = currentTime.Add(constants.OfficialScheduleConfig.PageCacheTTL + time.Second)
 
-	third, err := svc.FetchAllStreams(context.Background())
+	third, err := service.FetchAllStreams(context.Background())
 	if err != nil {
 		t.Fatalf("third FetchAllStreams() error = %v", err)
 	}

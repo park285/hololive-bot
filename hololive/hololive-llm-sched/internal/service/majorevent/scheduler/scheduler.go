@@ -74,7 +74,7 @@ type EventRepository interface {
 
 type Scheduler struct {
 	repository EventRepository
-	outboxRepo outboxEnqueuer
+	outboxRepository outboxEnqueuer
 	formatter  Formatter
 	summarizer *mesummarizer.EventSummarizer // nil 허용
 	locker     delivery.NotificationLocker
@@ -87,7 +87,7 @@ func NewScheduler(
 	formatter Formatter,
 	summarizer *mesummarizer.EventSummarizer,
 	locker delivery.NotificationLocker,
-	outboxRepo outboxEnqueuer,
+	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 ) *Scheduler {
 	if locker == nil {
@@ -95,7 +95,7 @@ func NewScheduler(
 	}
 	return &Scheduler{
 		repository: repository,
-		outboxRepo: outboxRepo,
+		outboxRepository: outboxRepository,
 		formatter:  formatter,
 		summarizer: summarizer,
 		locker:     locker,
@@ -221,7 +221,7 @@ func (s *Scheduler) enqueueWeeklyNotification(
 ) ([]int, bool, error) {
 	domainEvents, eventIDs := weeklyDomainEvents(events)
 	message := s.weeklyNotificationMessage(ctx, domainEvents, weekKey)
-	result := enqueueToRooms(ctx, s.outboxRepo, roomTargets(rooms), domain.DeliveryKindMajorEventWeekly, weekKey, message, s.logger)
+	result := enqueueToRooms(ctx, s.outboxRepository, roomTargets(rooms), domain.DeliveryKindMajorEventWeekly, weekKey, message, s.logger)
 	s.logWeeklyNotificationEnqueueResult(result, len(events))
 	shouldMark, err := s.shouldMarkWeeklyEvents(result)
 	return eventIDs, shouldMark, err

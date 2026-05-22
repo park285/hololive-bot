@@ -81,7 +81,7 @@ func TestContainerGetterMappings(t *testing.T) {
 	t.Parallel()
 
 	cache := &cache.Service{}
-	memberRepo := &member.Repository{}
+	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	alarmSvc := testAlarmCRUD{}
 	streamSvc := &stubStreamProvider{}
@@ -93,7 +93,7 @@ func TestContainerGetterMappings(t *testing.T) {
 	container := &Container{
 		botDeps: &bot.Dependencies{
 			Cache:       cache,
-			MemberRepo:  memberRepo,
+			MemberRepository:  memberRepository,
 			MemberCache: memberCache,
 			Alarm:       alarmSvc,
 			Holodex:     streamSvc,
@@ -104,7 +104,7 @@ func TestContainerGetterMappings(t *testing.T) {
 		},
 	}
 
-	assert.Same(t, memberRepo, container.GetMemberRepo())
+	assert.Same(t, memberRepository, container.GetMemberRepository())
 	assert.Same(t, memberCache, container.GetMemberCache())
 	assert.Same(t, cache, container.GetCache())
 	assert.Equal(t, alarmSvc, container.GetAlarmService())

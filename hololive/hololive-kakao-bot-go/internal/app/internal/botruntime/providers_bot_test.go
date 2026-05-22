@@ -60,15 +60,15 @@ func (s *mockYouTubeService) GetRecentVideos(ctx context.Context, channelID stri
 	return nil, nil
 }
 
-type stubMajorEventRepo struct{}
+type stubMajorEventRepository struct{}
 
-func (s *stubMajorEventRepo) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
+func (s *stubMajorEventRepository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	return false, nil
 }
-func (s *stubMajorEventRepo) Subscribe(ctx context.Context, roomID, roomName string) error {
+func (s *stubMajorEventRepository) Subscribe(ctx context.Context, roomID, roomName string) error {
 	return nil
 }
-func (s *stubMajorEventRepo) Unsubscribe(ctx context.Context, roomID string) error { return nil }
+func (s *stubMajorEventRepository) Unsubscribe(ctx context.Context, roomID string) error { return nil }
 
 type stubMemberNewsService struct{}
 
@@ -90,7 +90,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 
 	cache := &cache.Service{}
 	postgres := &database.PostgresService{}
-	memberRepo := &member.Repository{}
+	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	holodexSvc := &holodex.Service{}
 	chzzkClient := &chzzk.Client{}
@@ -99,12 +99,12 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	memberMatcher := &matcher.MemberMatcher{}
 
 	var ytService youtube.Service = &mockYouTubeService{}
-	ytStatsRepo := &stats.StatsRepository{}
-	ytStack := &providers.YouTubeStack{Service: ytService, StatsRepo: ytStatsRepo}
+	ytStatsRepository := &stats.StatsRepository{}
+	ytStack := &providers.YouTubeStack{Service: ytService, StatsRepository: ytStatsRepository}
 	activityLogger := &activity.Logger{}
 	settingsSvc := &settings.Service{}
 	aclSvc := &acl.Service{}
-	majorEventRepo := &stubMajorEventRepo{}
+	majorEventRepository := &stubMajorEventRepository{}
 	memberNewsSvc := &stubMemberNewsService{}
 	workerPool := &workerpool.Pool{}
 	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command { return nil })
@@ -124,7 +124,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 		Data: appbootstrap.BotDataModule{
 			Cache:       cache,
 			Postgres:    postgres,
-			MemberRepo:  memberRepo,
+			MemberRepository:  memberRepository,
 			MemberCache: memberCache,
 			Profiles:    profiles,
 			MembersData: nil,
@@ -144,7 +144,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			WorkerPool:     workerPool,
 		},
 		Feature: appbootstrap.BotFeatureModule{
-			MajorEventRepo:  majorEventRepo,
+			MajorEventRepository:  majorEventRepository,
 			MemberNews:      memberNewsSvc,
 			CommandBuilders: []bot.CommandBuilder{commandBuilder},
 		},
@@ -165,19 +165,19 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	if deps.Cache != cache || deps.Postgres != postgres {
 		t.Fatal("infra wiring mismatch")
 	}
-	if deps.MemberRepo != memberRepo || deps.MemberCache != memberCache {
+	if deps.MemberRepository != memberRepository || deps.MemberCache != memberCache {
 		t.Fatal("member wiring mismatch")
 	}
 	if deps.Holodex != holodexSvc || deps.Chzzk != chzzkClient || deps.Twitch != twitchClient {
 		t.Fatal("stream client wiring mismatch")
 	}
-	if deps.Service != ytService || deps.YouTubeStatsRepo != ytStatsRepo {
+	if deps.Service != ytService || deps.YouTubeStatsRepository != ytStatsRepository {
 		t.Fatal("youtube stack wiring mismatch")
 	}
 	if deps.Activity != activityLogger || deps.Settings != settingsSvc || deps.ACL != aclSvc {
 		t.Fatal("runtime support wiring mismatch")
 	}
-	if deps.MajorEventRepo != majorEventRepo || deps.MemberNews != memberNewsSvc {
+	if deps.MajorEventRepository != majorEventRepository || deps.MemberNews != memberNewsSvc {
 		t.Fatal("event/news wiring mismatch")
 	}
 	if deps.WorkerPool != workerPool {
@@ -200,7 +200,7 @@ func TestProvideBotDependencies_NilYouTubeStackIsSafe(t *testing.T) {
 	if deps.Service != nil {
 		t.Fatal("Service must be nil when ytStack is nil")
 	}
-	if deps.YouTubeStatsRepo != nil {
-		t.Fatal("YouTubeStatsRepo must be nil when ytStack is nil")
+	if deps.YouTubeStatsRepository != nil {
+		t.Fatal("YouTubeStatsRepository must be nil when ytStack is nil")
 	}
 }

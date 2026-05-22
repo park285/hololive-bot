@@ -13,8 +13,8 @@
 //
 //	import outbox "github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 //
-//	func builder(ctx context.Context, repo outbox.DeliveryTelemetryRepository) ([]outbox.PostSendCount, error) {
-//		return repo.ListPostSendCountsSince(ctx, time.Now().Add(-24*time.Hour))
+//	func builder(ctx context.Context, repository outbox.DeliveryTelemetryRepository) ([]outbox.PostSendCount, error) {
+//		return repository.ListPostSendCountsSince(ctx, time.Now().Add(-24*time.Hour))
 //	}
 //
 // 내부 helper 정책

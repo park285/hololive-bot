@@ -43,7 +43,7 @@ import (
 type youtubeProducerInfrastructure struct {
 	cacheService     cache.Client
 	postgresService  database.Client
-	memberRepo       *member.Repository
+	memberRepository       *member.Repository
 	settingsService  settings.ReadWriter
 	holodexService   *holodex.Service
 	ytStack          *sharedproviders.YouTubeStack
@@ -85,7 +85,7 @@ func initYouTubeProducerInfrastructure(ctx context.Context, cfg *config.Config, 
 	return &youtubeProducerInfrastructure{
 		cacheService:     infra.Cache,
 		postgresService:  infra.Postgres,
-		memberRepo:       infra.MemberRepo,
+		memberRepository:       infra.MemberRepository,
 		settingsService:  sharedmodules.BuildSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger),
 		holodexService:   youTube.holodexService,
 		ytStack:          youTube.ytStack,
@@ -117,7 +117,7 @@ func buildYouTubeProducerResources(ctx context.Context, cfg *config.Config, logg
 		CacheService:    infra.Cache,
 		HolodexService:  holodexService,
 		Members:         memberServiceAdapter,
-		StatsRepo:       ytstats.NewYouTubeStatsRepository(infra.Postgres, logger),
+		StatsRepository:       ytstats.NewYouTubeStatsRepository(infra.Postgres, logger),
 		AlarmState:      nil,
 		Formatter:       nil,
 		SharedRateLimit: sharedRL,
@@ -127,7 +127,7 @@ func buildYouTubeProducerResources(ctx context.Context, cfg *config.Config, logg
 	return &youtubeProducerYouTubeResources{
 		holodexService: holodexService,
 		ytStack:        youTubeStack,
-		photoSync:      holodex.NewPhotoSyncService(holodexService, infra.MemberRepo, logger),
+		photoSync:      holodex.NewPhotoSyncService(holodexService, infra.MemberRepository, logger),
 		sharedRL:       sharedRL,
 		scraperClient:  scraperClient,
 	}, nil

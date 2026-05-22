@@ -94,10 +94,10 @@ func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx *gorm.DB,
 		return completed, nil
 	}
 
-	repo := trackingrepo.NewRepository(tx)
+	repository := trackingrepo.NewRepository(tx)
 	candidates := collectCompletedNotificationIdentityCandidates(notifications)
 	for i := range candidates {
-		if err := recordCompletedNotificationSentAtByCandidate(ctx, repo, completed, candidates[i]); err != nil {
+		if err := recordCompletedNotificationSentAtByCandidate(ctx, repository, completed, candidates[i]); err != nil {
 			return nil, err
 		}
 	}
@@ -107,11 +107,11 @@ func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx *gorm.DB,
 
 func recordCompletedNotificationSentAtByCandidate(
 	ctx context.Context,
-	repo *trackingrepo.GormRepository,
+	repository *trackingrepo.GormRepository,
 	completed map[string]time.Time,
 	candidate completedNotificationIdentityCandidate,
 ) error {
-	trackingRow, err := repo.FindByIdentity(ctx, candidate.notification.Kind, candidate.contentID)
+	trackingRow, err := repository.FindByIdentity(ctx, candidate.notification.Kind, candidate.contentID)
 	if err != nil {
 		return fmt.Errorf("load notification tracking row: %w", err)
 	}
@@ -121,7 +121,7 @@ func recordCompletedNotificationSentAtByCandidate(
 	if postID == "" {
 		return nil
 	}
-	stateRow, err := repo.FindAlarmStateByPostID(ctx, candidate.notification.Kind, postID)
+	stateRow, err := repository.FindAlarmStateByPostID(ctx, candidate.notification.Kind, postID)
 	if err != nil {
 		return fmt.Errorf("load notification alarm state: %w", err)
 	}

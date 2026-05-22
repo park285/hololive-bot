@@ -54,7 +54,7 @@ type schedulerImpl struct {
 	youtube              Service
 	holodex              *holodex.Service
 	cache                cache.Client
-	statsRepo            ytstats.StatsSchedulerRepository
+	statsRepository            ytstats.StatsSchedulerRepository
 	membersData          domain.MemberDataProvider
 	alarmService         domain.AlarmDispatchState
 	irisClient           iris.Sender
@@ -87,23 +87,23 @@ var SubscriberMilestones = []uint64{
 }
 
 func NewScheduler(
-	youtubeSvc Service,
-	holodexSvc *holodex.Service,
+	youtubeService Service,
+	holodexService *holodex.Service,
 	cacheClient cache.Client,
-	statsRepo ytstats.StatsSchedulerRepository,
+	statsRepository ytstats.StatsSchedulerRepository,
 	membersData domain.MemberDataProvider,
-	alarmSvc domain.AlarmDispatchState,
+	alarmService domain.AlarmDispatchState,
 	irisClient iris.Sender,
 	formatter MilestoneMessageFormatter,
 	logger *slog.Logger,
 ) Scheduler {
 	return &schedulerImpl{
-		youtube:      youtubeSvc,
-		holodex:      holodexSvc,
+		youtube:      youtubeService,
+		holodex:      holodexService,
 		cache:        cacheClient,
-		statsRepo:    statsRepo,
+		statsRepository:    statsRepository,
 		membersData:  membersData,
-		alarmService: alarmSvc,
+		alarmService: alarmService,
 		irisClient:   irisClient,
 		formatter:    formatter,
 		logger:       logger,

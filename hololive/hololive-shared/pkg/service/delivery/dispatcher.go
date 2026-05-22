@@ -78,14 +78,14 @@ func DefaultDispatcherConfig() DispatcherConfig {
 }
 
 type Dispatcher struct {
-	repo          deliveryRepository
+	repository          deliveryRepository
 	sender        MessageSender
 	logger        *slog.Logger
 	cfg           DispatcherConfig
 	lastCleanupAt time.Time
 }
 
-func NewDispatcher(repo deliveryRepository, sender MessageSender, logger *slog.Logger, cfg DispatcherConfig) *Dispatcher {
+func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, cfg DispatcherConfig) *Dispatcher {
 	defaults := DefaultDispatcherConfig()
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = defaults.BatchSize
@@ -111,7 +111,7 @@ func NewDispatcher(repo deliveryRepository, sender MessageSender, logger *slog.L
 	if cfg.CleanupInterval <= 0 {
 		cfg.CleanupInterval = defaults.CleanupInterval
 	}
-	return &Dispatcher{repo: repo, sender: sender, logger: logger, cfg: cfg}
+	return &Dispatcher{repository: repository, sender: sender, logger: logger, cfg: cfg}
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
@@ -129,7 +129,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 }
 
 func (d *Dispatcher) processOnce(ctx context.Context) {
-	items, err := d.repo.FetchAndLock(ctx, d.cfg.BatchSize, d.cfg.LockTimeout)
+	items, err := d.repository.FetchAndLock(ctx, d.cfg.BatchSize, d.cfg.LockTimeout)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.String("error", err.Error()))
 		return
@@ -145,14 +145,14 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 }
 
 func (d *Dispatcher) logAccumulatedFailures(ctx context.Context) {
-	if cnt, _ := d.repo.CountByStatus(ctx, domain.DeliveryStatusFailed); cnt > 5 {
+	if cnt, _ := d.repository.CountByStatus(ctx, domain.DeliveryStatusFailed); cnt > 5 {
 		d.logger.Error("delivery outbox accumulated failures", slog.Int64("count", cnt))
 	}
 }
 
 func (d *Dispatcher) cleanupIfDue(ctx context.Context) {
 	if d.cfg.CleanupEnabled && time.Since(d.lastCleanupAt) >= d.cfg.CleanupInterval {
-		if cleaned, cleanErr := d.repo.Cleanup(ctx, d.cfg.CleanupAfter); cleanErr != nil {
+		if cleaned, cleanErr := d.repository.Cleanup(ctx, d.cfg.CleanupAfter); cleanErr != nil {
 			d.logger.Warn("Outbox cleanup failed", slog.String("error", cleanErr.Error()))
 		} else if cleaned > 0 {
 			d.logger.Info("Outbox cleanup completed", slog.Int64("removed", cleaned))
@@ -234,7 +234,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		d.logger.Error("Failed to unmarshal outbox payload",
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))
-		_ = d.repo.MarkFailed(ctx, item.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, "payload unmarshal: "+err.Error())
+		_ = d.repository.MarkFailed(ctx, item.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, "payload unmarshal: "+err.Error())
 		return
 	}
 
@@ -243,11 +243,11 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 			slog.Int64("id", item.ID),
 			slog.String("room_id", item.RoomID),
 			slog.String("error", err.Error()))
-		_ = d.repo.MarkFailed(ctx, item.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, err.Error())
+		_ = d.repository.MarkFailed(ctx, item.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, err.Error())
 		return
 	}
 
-	if err := d.repo.MarkSent(ctx, item.ID); err != nil {
+	if err := d.repository.MarkSent(ctx, item.ID); err != nil {
 		d.logger.Error("Failed to mark outbox item as sent",
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))

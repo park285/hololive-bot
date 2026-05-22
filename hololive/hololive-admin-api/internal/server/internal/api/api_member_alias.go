@@ -135,19 +135,19 @@ func (h *MemberAPIHandler) respondAliasOperationSuccess(c *gin.Context, memberID
 }
 
 func (h *MemberAPIHandler) AddAlias(c *gin.Context) {
-	if h == nil || h.APIHandler == nil || h.repo == nil {
+	if h == nil || h.APIHandler == nil || h.repository == nil {
 		respondServiceUnavailable(c, "member service not available")
 		return
 	}
 
-	h.handleAliasOperation(c, h.repo.AddAlias, "add")
+	h.handleAliasOperation(c, h.repository.AddAlias, "add")
 }
 
 func (h *MemberAPIHandler) RemoveAlias(c *gin.Context) {
-	if h == nil || h.APIHandler == nil || h.repo == nil {
+	if h == nil || h.APIHandler == nil || h.repository == nil {
 		respondServiceUnavailable(c, "member service not available")
 		return
 	}
 
-	h.handleAliasOperation(c, h.repo.RemoveAlias, "remove")
+	h.handleAliasOperation(c, h.repository.RemoveAlias, "remove")
 }

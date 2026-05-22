@@ -60,7 +60,7 @@ func InitAlarmYouTubeStack(
 		YouTubeConfig:   cfg.YouTube,
 		ScraperConfig:   cfg.Scraper,
 		CacheService:    infra.Cache,
-		StatsRepo:       statsRepository,
+		StatsRepository:       statsRepository,
 		SharedRateLimit: foundation.SharedRL,
 		Logger:          logger,
 	})

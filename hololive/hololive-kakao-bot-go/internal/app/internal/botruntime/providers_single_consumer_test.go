@@ -74,7 +74,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 			_ = notification.CloseAllAlarmServices(t.Context())
 		})
 
-		svc, err := appbootstrap.ProvideAlarmService(
+		service, err := appbootstrap.ProvideAlarmService(
 			[]int{10, 3},
 			cachemocks.NewStrictClient(),
 			nil,
@@ -85,8 +85,8 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 			logger,
 		)
 		require.NoError(t, err)
-		require.NotNil(t, svc)
-		assert.Equal(t, []int{10, 3, 1}, svc.GetTargetMinutes())
+		require.NotNil(t, service)
+		assert.Equal(t, []int{10, 3, 1}, service.GetTargetMinutes())
 	})
 
 	t.Run("member matcher", func(t *testing.T) {

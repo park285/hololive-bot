@@ -44,8 +44,8 @@ func TestGormBatchRepositoryInsertNotificationsChunkPostgresDeduplicatesSameBatc
 			return err
 		}
 
-		repo := &gormBatchRepository{db: tx}
-		if err := repo.insertNotificationsChunk(ctx, tx, []*domain.YouTubeNotificationOutbox{
+		repository := &gormBatchRepository{db: tx}
+		if err := repository.insertNotificationsChunk(ctx, tx, []*domain.YouTubeNotificationOutbox{
 			{
 				Kind:      domain.OutboxKindNewVideo,
 				ChannelID: "channel-1",

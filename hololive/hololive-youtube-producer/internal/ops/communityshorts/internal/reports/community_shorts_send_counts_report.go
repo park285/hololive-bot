@@ -219,11 +219,11 @@ func collectObservationSendCountRows(
 }
 
 func collectFinalizedObservationSendCountRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsSendCountQuery, cutoverAt time.Time) (communityShortsSendCountRows, error) {
-	sendCountRows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
+	sendCountRows, err := session.telemetryRepository.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
 	if err != nil {
 		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window send counts: %w", err)
 	}
-	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
+	timelineRows, err := session.telemetryRepository.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
 	if err != nil {
 		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window delivery timelines: %w", err)
 	}
@@ -231,11 +231,11 @@ func collectFinalizedObservationSendCountRows(ctx context.Context, session *comm
 }
 
 func collectActiveObservationSendCountRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsSendCountQuery, state communityShortsObservationQueryState) (communityShortsSendCountRows, error) {
-	sendCountRows, err := session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	sendCountRows, err := session.telemetryRepository.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
 	if err != nil {
 		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list active observation-window send counts: %w", err)
 	}
-	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	timelineRows, err := session.telemetryRepository.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
 	if err != nil {
 		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list active observation-window delivery timelines: %w", err)
 	}
@@ -243,11 +243,11 @@ func collectActiveObservationSendCountRows(ctx context.Context, session *communi
 }
 
 func collectRecentSendCountRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsSendCountQuery) (communityShortsSendCountRows, error) {
-	sendCountRows, err := session.telemetryRepo.ListPostSendCountsSince(ctx, *query.WindowStart)
+	sendCountRows, err := session.telemetryRepository.ListPostSendCountsSince(ctx, *query.WindowStart)
 	if err != nil {
 		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list post send counts: %w", err)
 	}
-	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesSince(ctx, *query.WindowStart)
+	timelineRows, err := session.telemetryRepository.ListPostDeliveryTimelinesSince(ctx, *query.WindowStart)
 	if err != nil {
 		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list post delivery timelines: %w", err)
 	}

@@ -225,7 +225,7 @@ func buildLLMSchedulerComponents(
 
 	templateRenderer := template.NewRenderer(postgresService.GetGormDB(), logger)
 	formatter := newLLMSchedulerFormatter(cfg.Bot.Prefix, templateRenderer, logger)
-	majorEventRepo := buildMajorEventRepository(ctx, postgresService, logger, cfg.Postgres.AutoPrepareSchema)
+	majorEventRepository := buildMajorEventRepository(ctx, postgresService, logger, cfg.Postgres.AutoPrepareSchema)
 	memberNewsService := initMemberNewsService(ctx, cfg.Cliproxy, cfg.LLM, cfg.Exa, postgresService, cacheService, memberDataProvider, logger)
 
 	deliveryModule := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
@@ -234,7 +234,7 @@ func buildLLMSchedulerComponents(
 
 	majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler := buildMajorEventComponents(
 		ctx,
-		majorEventRepo,
+		majorEventRepository,
 		formatter,
 		summarizer,
 		deliveryModule.Locker,
@@ -245,7 +245,7 @@ func buildLLMSchedulerComponents(
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, logger)
 
 	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
-	httpServer, err := buildLLMSchedulerHTTPServer(ctx, cfg.Server.Port, logger, triggerHandler, cfg.Server.APIKey, majorEventRepo, memberNewsService)
+	httpServer, err := buildLLMSchedulerHTTPServer(ctx, cfg.Server.Port, logger, triggerHandler, cfg.Server.APIKey, majorEventRepository, memberNewsService)
 	if err != nil {
 		return nil, err
 	}
@@ -296,13 +296,13 @@ func buildMajorEventRepository(
 	logger *slog.Logger,
 	autoPrepareSchema bool,
 ) *majorevent.Repository {
-	repo := majorevent.NewRepository(postgresService, logger)
+	repository := majorevent.NewRepository(postgresService, logger)
 	if autoPrepareSchema {
-		if createErr := repo.CreateTable(ctx); createErr != nil {
+		if createErr := repository.CreateTable(ctx); createErr != nil {
 			logger.Error("Failed to create major_event_subscriptions table", slog.String("error", createErr.Error()))
 		}
 	}
-	return repo
+	return repository
 }
 
 func buildLLMSchedulerDeliveryModule(
@@ -319,10 +319,10 @@ func buildLLMSchedulerHTTPServer(
 	logger *slog.Logger,
 	triggerHandler *sharedserver.TriggerHandler,
 	apiKey string,
-	majorEventRepo *majorevent.Repository,
+	majorEventRepository *majorevent.Repository,
 	memberNewsService *membernews.Service,
 ) (*http.Server, error) {
-	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepo != nil || memberNewsService != nil) {
+	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepository != nil || memberNewsService != nil) {
 		return nil, fmt.Errorf("build llm scheduler router: API_SECRET_KEY required")
 	}
 
@@ -332,7 +332,7 @@ func buildLLMSchedulerHTTPServer(
 	}
 
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMajorEventInternalRoutes(router, apiKey, majorEventRepo)
+	registerMajorEventInternalRoutes(router, apiKey, majorEventRepository)
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
 	registerMemberNewsInternalRoutes(router, apiKey, memberNewsService)
 

@@ -35,8 +35,8 @@ import (
 func NewTestCacheService(t *testing.T, ctx context.Context) *cache.Service {
 	t.Helper()
 
-	svc, _ := NewTestCacheServiceWithMini(t, ctx)
-	return svc
+	service, _ := NewTestCacheServiceWithMini(t, ctx)
+	return service
 }
 
 // NewTestCacheServiceWithMini는 테스트용 캐시 서비스와 miniredis 인스턴스를 함께 반환합니다.
@@ -45,7 +45,7 @@ func NewTestCacheServiceWithMini(t *testing.T, ctx context.Context) (*cache.Serv
 
 	host, port, mini := testredis.StartMiniRedis(t)
 
-	svc, err := cache.NewCacheService(ctx, cache.Config{
+	service, err := cache.NewCacheService(ctx, cache.Config{
 		Host:              host,
 		Port:              port,
 		DB:                0,
@@ -58,9 +58,9 @@ func NewTestCacheServiceWithMini(t *testing.T, ctx context.Context) (*cache.Serv
 	}
 
 	t.Cleanup(func() {
-		_ = svc.Close()
+		_ = service.Close()
 		mini.Close()
 	})
 
-	return svc, mini
+	return service, mini
 }

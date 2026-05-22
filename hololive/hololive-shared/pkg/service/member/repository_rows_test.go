@@ -60,7 +60,7 @@ func newTestMemberRepository() *Repository {
 }
 
 func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
-	repo := newTestMemberRepository()
+	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			if len(dest) != 15 {
@@ -88,7 +88,7 @@ func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
 		}},
 	}}
 
-	members, err := repo.collectAllMembersFromRows(rows)
+	members, err := repository.collectAllMembersFromRows(rows)
 	if err != nil {
 		t.Fatalf("collectAllMembersFromRows error = %v, want nil", err)
 	}
@@ -101,7 +101,7 @@ func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
 }
 
 func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
-	repo := newTestMemberRepository()
+	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			*dest[0].(*int) = 1
@@ -143,7 +143,7 @@ func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 	}}
 
-	members, err := repo.collectAllMembersFromRows(rows)
+	members, err := repository.collectAllMembersFromRows(rows)
 	if err == nil {
 		t.Fatal("collectAllMembersFromRows error = nil, want non-nil")
 	}
@@ -156,7 +156,7 @@ func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 }
 
 func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
-	repo := newTestMemberRepository()
+	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			return errors.New("scan mismatch")
@@ -181,7 +181,7 @@ func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 	}}
 
-	members, err := repo.collectMembersWithPhotoFromRows(rows)
+	members, err := repository.collectMembersWithPhotoFromRows(rows)
 	if err == nil {
 		t.Fatal("collectMembersWithPhotoFromRows error = nil, want non-nil")
 	}
@@ -195,7 +195,7 @@ func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 }
 
 func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
-	repo := newTestMemberRepository()
+	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			*dest[0].(*int) = 1
@@ -235,7 +235,7 @@ func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 	}}
 
-	members, err := repo.collectMembersByNameFromRows(rows)
+	members, err := repository.collectMembersByNameFromRows(rows)
 	if err == nil {
 		t.Fatal("collectMembersByNameFromRows error = nil, want non-nil")
 	}

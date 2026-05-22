@@ -78,7 +78,7 @@ func collectCommunityShortsLatencyPeriodReportWithSession(
 		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: session is nil")
 	}
 
-	summaries, err := session.telemetryRepo.ListPostLatencyPeriodSummaries(ctx, periods)
+	summaries, err := session.telemetryRepository.ListPostLatencyPeriodSummaries(ctx, periods)
 	if err != nil {
 		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: list period summaries: %w", err)
 	}

@@ -39,11 +39,11 @@ func ProvideMemberRepository(postgres database.Client, logger *slog.Logger) *mem
 // ProvideMemberCache - 멤버 캐시 생성 (초기 워밍업 포함)
 func ProvideMemberCache(
 	ctx context.Context,
-	repo *member.Repository,
+	repository *member.Repository,
 	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*member.Cache, error) {
-	memberCache, err := buildMemberCache(ctx, repo, cacheClient, logger)
+	memberCache, err := buildMemberCache(ctx, repository, cacheClient, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func ProvideMemberCache(
 		logger.Warn("Cache service is nil; member database init skipped")
 		return memberCache, nil
 	}
-	if err := initializeMemberDatabase(ctx, repo, cacheClient, logger); err != nil {
+	if err := initializeMemberDatabase(ctx, repository, cacheClient, logger); err != nil {
 		return nil, err
 	}
 
@@ -61,11 +61,11 @@ func ProvideMemberCache(
 
 func initializeMemberDatabase(
 	ctx context.Context,
-	repo *member.Repository,
+	repository *member.Repository,
 	cacheClient cache.Client,
 	logger *slog.Logger,
 ) error {
-	members, err := repo.GetAllMembers(ctx)
+	members, err := repository.GetAllMembers(ctx)
 	if err != nil {
 		logger.Warn("Failed to load members for member database init", slog.Any("error", err))
 		members = []*domain.Member{}
@@ -103,10 +103,10 @@ func ProvideProfileService(
 	members member.DataProvider,
 	logger *slog.Logger,
 ) (*member.ProfileService, error) {
-	svc, err := member.NewProfileService(cacheClient, members, logger)
+	service, err := member.NewProfileService(cacheClient, members, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create profile service: %w", err)
 	}
-	svc.PreloadTranslations(ctx)
-	return svc, nil
+	service.PreloadTranslations(ctx)
+	return service, nil
 }

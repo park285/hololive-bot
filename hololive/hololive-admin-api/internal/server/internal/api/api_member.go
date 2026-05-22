@@ -74,7 +74,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	if err := h.repo.SetGraduation(ctx, memberID, req.IsGraduated); err != nil {
+	if err := h.repository.SetGraduation(ctx, memberID, req.IsGraduated); err != nil {
 		h.safeLogger().Error("Failed to set graduation status",
 			slog.Int("member_id", memberID),
 			slog.Bool("is_graduated", req.IsGraduated),
@@ -129,7 +129,7 @@ func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	members, err := h.repo.GetAllMembers(ctx)
+	members, err := h.repository.GetAllMembers(ctx)
 	if err != nil {
 		h.safeLogger().Error("Failed to get members", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get members", nil)
@@ -157,7 +157,7 @@ func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if err := h.repo.CreateMember(ctx, &req); err != nil {
+	if err := h.repository.CreateMember(ctx, &req); err != nil {
 		h.safeLogger().Error("Failed to add member", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to add member", nil)
 

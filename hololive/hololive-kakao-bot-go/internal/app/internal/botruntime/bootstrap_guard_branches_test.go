@@ -200,7 +200,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	logger := testBootstrapGuardLogger()
 	cache := &cache.Service{}
 	postgresSvc := &database.PostgresService{}
-	memberRepo := &member.Repository{}
+	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	memberData := &stubMemberDataProvider{}
 	chzzkClient := &chzzk.Client{}
@@ -219,7 +219,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Iris:         config.IrisConfig{BaseURL: "https://iris.example"},
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
-		&sharedmodules.InfraModule{Cache: cache, Postgres: postgresSvc, MemberRepo: memberRepo, MemberCache: memberCache},
+		&sharedmodules.InfraModule{Cache: cache, Postgres: postgresSvc, MemberRepository: memberRepository, MemberCache: memberCache},
 		&appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},
 		&holodex.Service{},
 		&adapter.MessageAdapter{},
@@ -231,7 +231,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 		activityLogger,
 		settingsSvc,
 		aclSvc,
-		&stubMajorEventRepo{},
+		&stubMajorEventRepository{},
 		&stubMemberNewsService{},
 		[]bot.CommandBuilder{commandBuilder},
 		workerPool,
@@ -242,7 +242,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	assert.Equal(t, "https://iris.example", modules.Core.IrisBaseURL)
 	assert.Same(t, cache, modules.Data.Cache)
 	assert.Same(t, postgresSvc, modules.Data.Postgres)
-	assert.Same(t, memberRepo, modules.Data.MemberRepo)
+	assert.Same(t, memberRepository, modules.Data.MemberRepository)
 	assert.Same(t, memberCache, modules.Data.MemberCache)
 	assert.Same(t, memberData, modules.Data.MembersData)
 	assert.Same(t, chzzkClient, modules.Stream.ChzzkClient)

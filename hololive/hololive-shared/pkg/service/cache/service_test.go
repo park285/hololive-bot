@@ -65,34 +65,34 @@ func newTestCacheService(t *testing.T) (*Service, *miniredis.Miniredis) {
 		mini.Close()
 		t.Fatalf("failed to ping miniredis: %v", err)
 	}
-	svc := &Service{client: client, logger: logger}
+	service := &Service{client: client, logger: logger}
 
 	t.Cleanup(func() {
-		_ = svc.Close()
+		_ = service.Close()
 		mini.Close()
 	})
 
-	return svc, mini
+	return service, mini
 }
 
 func TestCacheServiceSetGetAndExists(t *testing.T) {
-	svc, mini := newTestCacheService(t)
+	service, mini := newTestCacheService(t)
 	ctx := context.Background()
 
 	value := testPayload{Name: "value"}
-	if err := svc.Set(ctx, "key", value, 0); err != nil {
+	if err := service.Set(ctx, "key", value, 0); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
 
 	var got testPayload
-	if err := svc.Get(ctx, "key", &got); err != nil {
+	if err := service.Get(ctx, "key", &got); err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
 	if got.Name != "value" {
 		t.Fatalf("unexpected value: %+v", got)
 	}
 
-	exists, err := svc.Exists(ctx, "key")
+	exists, err := service.Exists(ctx, "key")
 	if err != nil {
 		t.Fatalf("exists failed: %v", err)
 	}
@@ -100,12 +100,12 @@ func TestCacheServiceSetGetAndExists(t *testing.T) {
 		t.Fatalf("expected key to exist")
 	}
 
-	if err := svc.Expire(ctx, "key", time.Second); err != nil {
+	if err := service.Expire(ctx, "key", time.Second); err != nil {
 		t.Fatalf("expire failed: %v", err)
 	}
 	mini.FastForward(2 * time.Second)
 
-	exists, err = svc.Exists(ctx, "key")
+	exists, err = service.Exists(ctx, "key")
 	if err != nil {
 		t.Fatalf("exists after expire failed: %v", err)
 	}
@@ -115,18 +115,18 @@ func TestCacheServiceSetGetAndExists(t *testing.T) {
 }
 
 func TestCacheServiceMSetMGetDel(t *testing.T) {
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
 	pairs := map[string]any{
 		"a": testPayload{Name: "A"},
 		"b": testPayload{Name: "B"},
 	}
-	if err := svc.MSet(ctx, pairs, 0); err != nil {
+	if err := service.MSet(ctx, pairs, 0); err != nil {
 		t.Fatalf("mset failed: %v", err)
 	}
 
-	values, err := svc.MGet(ctx, []string{"a", "b"})
+	values, err := service.MGet(ctx, []string{"a", "b"})
 	if err != nil {
 		t.Fatalf("mget failed: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestCacheServiceMSetMGetDel(t *testing.T) {
 		t.Fatalf("unexpected decoded value: %+v", decoded)
 	}
 
-	count, err := svc.DelMany(ctx, []string{"a", "b"})
+	count, err := service.DelMany(ctx, []string{"a", "b"})
 	if err != nil {
 		t.Fatalf("delmany failed: %v", err)
 	}
@@ -148,18 +148,18 @@ func TestCacheServiceMSetMGetDel(t *testing.T) {
 }
 
 func TestCacheServiceDelManyChunksLargeRequests(t *testing.T) {
-	svc, mini := newTestCacheService(t)
+	service, mini := newTestCacheService(t)
 	ctx := context.Background()
 
 	keys := make([]string, 0, 1200)
 	for i := range 1200 {
 		key := fmt.Sprintf("bulk:%d", i)
 		keys = append(keys, key)
-		requireNoError(t, svc.Set(ctx, key, testPayload{Name: key}, 0))
+		requireNoError(t, service.Set(ctx, key, testPayload{Name: key}, 0))
 	}
 
 	before := mini.CommandCount()
-	count, err := svc.DelMany(ctx, keys)
+	count, err := service.DelMany(ctx, keys)
 	requireNoError(t, err)
 	if count != int64(len(keys)) {
 		t.Fatalf("expected %d deletions, got %d", len(keys), count)
@@ -170,15 +170,15 @@ func TestCacheServiceDelManyChunksLargeRequests(t *testing.T) {
 }
 
 func TestCacheServiceBatchHGetReturnsExistingFields(t *testing.T) {
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
-	requireNoError(t, svc.HMSet(ctx, "members", map[string]any{
+	requireNoError(t, service.HMSet(ctx, "members", map[string]any{
 		"UC_A": "Member A",
 		"UC_B": "Member B",
 	}))
 
-	values, err := svc.BatchHGet(ctx, "members", []string{"UC_A", "UC_MISSING", "UC_B"})
+	values, err := service.BatchHGet(ctx, "members", []string{"UC_A", "UC_MISSING", "UC_B"})
 	requireNoError(t, err)
 
 	if got := values["UC_A"]; got != "Member A" {
@@ -193,10 +193,10 @@ func TestCacheServiceBatchHGetReturnsExistingFields(t *testing.T) {
 }
 
 func TestCacheServiceMSetFailsWithoutWritingOnMarshalError(t *testing.T) {
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
-	err := svc.MSet(ctx, map[string]any{
+	err := service.MSet(ctx, map[string]any{
 		"good": testPayload{Name: "A"},
 		"bad":  make(chan int),
 	}, time.Minute)
@@ -204,7 +204,7 @@ func TestCacheServiceMSetFailsWithoutWritingOnMarshalError(t *testing.T) {
 		t.Fatalf("expected marshal error from mset")
 	}
 
-	exists, existsErr := svc.Exists(ctx, "good")
+	exists, existsErr := service.Exists(ctx, "good")
 	if existsErr != nil {
 		t.Fatalf("exists failed: %v", existsErr)
 	}
@@ -214,26 +214,26 @@ func TestCacheServiceMSetFailsWithoutWritingOnMarshalError(t *testing.T) {
 }
 
 func TestCacheServiceSetCeilsSubSecondTTL(t *testing.T) {
-	svc, mini := newTestCacheService(t)
+	service, mini := newTestCacheService(t)
 	ctx := context.Background()
 
-	requireNoError(t, svc.Set(ctx, "ttl:set", testPayload{Name: "value"}, 500*time.Millisecond))
+	requireNoError(t, service.Set(ctx, "ttl:set", testPayload{Name: "value"}, 500*time.Millisecond))
 
-	exists, err := svc.Exists(ctx, "ttl:set")
+	exists, err := service.Exists(ctx, "ttl:set")
 	requireNoError(t, err)
 	if !exists {
 		t.Fatalf("expected key to exist immediately after set")
 	}
 
 	mini.FastForward(900 * time.Millisecond)
-	exists, err = svc.Exists(ctx, "ttl:set")
+	exists, err = service.Exists(ctx, "ttl:set")
 	requireNoError(t, err)
 	if !exists {
 		t.Fatalf("key expired too early; expected ceil-rounded ttl")
 	}
 
 	mini.FastForward(200 * time.Millisecond)
-	exists, err = svc.Exists(ctx, "ttl:set")
+	exists, err = service.Exists(ctx, "ttl:set")
 	requireNoError(t, err)
 	if exists {
 		t.Fatalf("expected key to expire after rounded ttl elapsed")
@@ -241,17 +241,17 @@ func TestCacheServiceSetCeilsSubSecondTTL(t *testing.T) {
 }
 
 func TestCacheServiceMSetCeilsSubSecondTTL(t *testing.T) {
-	svc, mini := newTestCacheService(t)
+	service, mini := newTestCacheService(t)
 	ctx := context.Background()
 
-	requireNoError(t, svc.MSet(ctx, map[string]any{
+	requireNoError(t, service.MSet(ctx, map[string]any{
 		"ttl:mset:a": testPayload{Name: "A"},
 		"ttl:mset:b": testPayload{Name: "B"},
 	}, 500*time.Millisecond))
 
 	mini.FastForward(900 * time.Millisecond)
 	for _, key := range []string{"ttl:mset:a", "ttl:mset:b"} {
-		exists, err := svc.Exists(ctx, key)
+		exists, err := service.Exists(ctx, key)
 		requireNoError(t, err)
 		if !exists {
 			t.Fatalf("%s expired too early; expected ceil-rounded ttl", key)
@@ -260,7 +260,7 @@ func TestCacheServiceMSetCeilsSubSecondTTL(t *testing.T) {
 
 	mini.FastForward(200 * time.Millisecond)
 	for _, key := range []string{"ttl:mset:a", "ttl:mset:b"} {
-		exists, err := svc.Exists(ctx, key)
+		exists, err := service.Exists(ctx, key)
 		requireNoError(t, err)
 		if exists {
 			t.Fatalf("expected %s to expire after rounded ttl elapsed", key)
@@ -269,21 +269,21 @@ func TestCacheServiceMSetCeilsSubSecondTTL(t *testing.T) {
 }
 
 func TestCacheServiceExpireCeilsSubSecondTTL(t *testing.T) {
-	svc, mini := newTestCacheService(t)
+	service, mini := newTestCacheService(t)
 	ctx := context.Background()
 
-	requireNoError(t, svc.Set(ctx, "ttl:expire", testPayload{Name: "value"}, 0))
-	requireNoError(t, svc.Expire(ctx, "ttl:expire", 500*time.Millisecond))
+	requireNoError(t, service.Set(ctx, "ttl:expire", testPayload{Name: "value"}, 0))
+	requireNoError(t, service.Expire(ctx, "ttl:expire", 500*time.Millisecond))
 
 	mini.FastForward(900 * time.Millisecond)
-	exists, err := svc.Exists(ctx, "ttl:expire")
+	exists, err := service.Exists(ctx, "ttl:expire")
 	requireNoError(t, err)
 	if !exists {
 		t.Fatalf("key expired too early; expected ceil-rounded ttl")
 	}
 
 	mini.FastForward(200 * time.Millisecond)
-	exists, err = svc.Exists(ctx, "ttl:expire")
+	exists, err = service.Exists(ctx, "ttl:expire")
 	requireNoError(t, err)
 	if exists {
 		t.Fatalf("expected key to expire after rounded ttl elapsed")
@@ -291,15 +291,15 @@ func TestCacheServiceExpireCeilsSubSecondTTL(t *testing.T) {
 }
 
 func TestMemberCacheOperations(t *testing.T) {
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
 	members := map[string]string{"member": "channel"}
-	if err := svc.InitializeMemberDatabase(ctx, members); err != nil {
+	if err := service.InitializeMemberDatabase(ctx, members); err != nil {
 		t.Fatalf("initialize failed: %v", err)
 	}
 
-	channelID, err := svc.GetMemberChannelID(ctx, "member")
+	channelID, err := service.GetMemberChannelID(ctx, "member")
 	if err != nil {
 		t.Fatalf("get member failed: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestMemberCacheOperations(t *testing.T) {
 		t.Fatalf("unexpected channel id: %s", channelID)
 	}
 
-	all, err := svc.GetAllMembers(ctx)
+	all, err := service.GetAllMembers(ctx)
 	if err != nil {
 		t.Fatalf("get all failed: %v", err)
 	}
@@ -315,10 +315,10 @@ func TestMemberCacheOperations(t *testing.T) {
 		t.Fatalf("unexpected members: %+v", all)
 	}
 
-	if err := svc.AddMember(ctx, "member2", "channel2"); err != nil {
+	if err := service.AddMember(ctx, "member2", "channel2"); err != nil {
 		t.Fatalf("add member failed: %v", err)
 	}
-	channelID, err = svc.GetMemberChannelID(ctx, "member2")
+	channelID, err = service.GetMemberChannelID(ctx, "member2")
 	if err != nil {
 		t.Fatalf("get member2 failed: %v", err)
 	}
@@ -328,18 +328,18 @@ func TestMemberCacheOperations(t *testing.T) {
 }
 
 func TestStreamCacheOperations(t *testing.T) {
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
 	streams := []*domain.Stream{{ID: "stream-1"}}
-	svc.SetStreams(ctx, "streams:key", streams, time.Minute)
+	service.SetStreams(ctx, "streams:key", streams, time.Minute)
 
-	got, found := svc.GetStreams(ctx, "streams:key")
+	got, found := service.GetStreams(ctx, "streams:key")
 	if !found || len(got) != 1 || got[0].ID != "stream-1" {
 		t.Fatalf("unexpected streams: %+v, found=%v", got, found)
 	}
 
-	_, found = svc.GetStreams(ctx, "streams:missing")
+	_, found = service.GetStreams(ctx, "streams:missing")
 	if found {
 		t.Fatalf("expected missing streams to return false")
 	}
@@ -366,8 +366,8 @@ func TestSetNX(t *testing.T) {
 		},
 		{
 			name: "key already exists - should fail",
-			setup: func(svc *Service, ctx context.Context) {
-				_ = svc.Set(ctx, "lock:existing", "already_set", time.Minute)
+			setup: func(service *Service, ctx context.Context) {
+				_ = service.Set(ctx, "lock:existing", "already_set", time.Minute)
 			},
 			key:        "lock:existing",
 			value:      "2",
@@ -388,14 +388,14 @@ func TestSetNX(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, _ := newTestCacheService(t)
+			service, _ := newTestCacheService(t)
 			ctx := context.Background()
 
 			if tt.setup != nil {
-				tt.setup(svc, ctx)
+				tt.setup(service, ctx)
 			}
 
-			got, err := svc.SetNX(ctx, tt.key, tt.value, tt.ttl)
+			got, err := service.SetNX(ctx, tt.key, tt.value, tt.ttl)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SetNX() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -408,10 +408,10 @@ func TestSetNX(t *testing.T) {
 }
 
 func TestSetNXWithTTLExpiry(t *testing.T) {
-	svc, mini := newTestCacheService(t)
+	service, mini := newTestCacheService(t)
 	ctx := context.Background()
 
-	acquired, err := svc.SetNX(ctx, "lock:expiry", "1", time.Second)
+	acquired, err := service.SetNX(ctx, "lock:expiry", "1", time.Second)
 	if err != nil {
 		t.Fatalf("SetNX failed: %v", err)
 	}
@@ -419,7 +419,7 @@ func TestSetNXWithTTLExpiry(t *testing.T) {
 		t.Fatal("expected to acquire lock")
 	}
 
-	acquired, err = svc.SetNX(ctx, "lock:expiry", "2", time.Second)
+	acquired, err = service.SetNX(ctx, "lock:expiry", "2", time.Second)
 	if err != nil {
 		t.Fatalf("second SetNX failed: %v", err)
 	}
@@ -429,7 +429,7 @@ func TestSetNXWithTTLExpiry(t *testing.T) {
 
 	mini.FastForward(2 * time.Second)
 
-	acquired, err = svc.SetNX(ctx, "lock:expiry", "3", time.Second)
+	acquired, err = service.SetNX(ctx, "lock:expiry", "3", time.Second)
 	if err != nil {
 		t.Fatalf("third SetNX after expiry failed: %v", err)
 	}
@@ -439,24 +439,24 @@ func TestSetNXWithTTLExpiry(t *testing.T) {
 }
 
 func TestSetNXCeilsSubSecondTTL(t *testing.T) {
-	svc, mini := newTestCacheService(t)
+	service, mini := newTestCacheService(t)
 	ctx := context.Background()
 
-	acquired, err := svc.SetNX(ctx, "lock:ceil", "1", 500*time.Millisecond)
+	acquired, err := service.SetNX(ctx, "lock:ceil", "1", 500*time.Millisecond)
 	requireNoError(t, err)
 	if !acquired {
 		t.Fatal("expected initial lock acquisition to succeed")
 	}
 
 	mini.FastForward(900 * time.Millisecond)
-	acquired, err = svc.SetNX(ctx, "lock:ceil", "2", 500*time.Millisecond)
+	acquired, err = service.SetNX(ctx, "lock:ceil", "2", 500*time.Millisecond)
 	requireNoError(t, err)
 	if acquired {
 		t.Fatal("lock should still be held before rounded ttl elapses")
 	}
 
 	mini.FastForward(200 * time.Millisecond)
-	acquired, err = svc.SetNX(ctx, "lock:ceil", "3", 500*time.Millisecond)
+	acquired, err = service.SetNX(ctx, "lock:ceil", "3", 500*time.Millisecond)
 	requireNoError(t, err)
 	if !acquired {
 		t.Fatal("expected lock acquisition after rounded ttl elapsed")
@@ -471,19 +471,19 @@ func requireNoError(t *testing.T, err error) {
 }
 
 func TestService_DoMulti(t *testing.T) {
-	svc, _ := newTestCacheService(t)
+	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
-	result := svc.DoMulti(ctx)
+	result := service.DoMulti(ctx)
 	if result != nil {
 		t.Errorf("DoMulti() with empty commands should return nil, got %v", result)
 	}
 
 	cmds := []valkey.Completed{
-		svc.Builder().Set().Key("multi1").Value("val1").Build(),
-		svc.Builder().Set().Key("multi2").Value("val2").Build(),
+		service.Builder().Set().Key("multi1").Value("val1").Build(),
+		service.Builder().Set().Key("multi2").Value("val2").Build(),
 	}
-	results := svc.DoMulti(ctx, cmds...)
+	results := service.DoMulti(ctx, cmds...)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
@@ -493,15 +493,15 @@ func TestService_DoMulti(t *testing.T) {
 		}
 	}
 
-	val1, _ := svc.GetClient().Do(ctx, svc.Builder().Get().Key("multi1").Build()).ToString()
+	val1, _ := service.GetClient().Do(ctx, service.Builder().Get().Key("multi1").Build()).ToString()
 	if val1 != "val1" {
 		t.Errorf("expected val1, got %s", val1)
 	}
 }
 
 func TestService_Builder(t *testing.T) {
-	svc, _ := newTestCacheService(t)
-	builder := svc.Builder()
+	service, _ := newTestCacheService(t)
+	builder := service.Builder()
 
 	cmd := builder.Ping().Build()
 	if cmd.Commands()[0] != "PING" {

@@ -33,8 +33,8 @@ import (
 
 var (
 	rebuildSubscriberCacheFromRepository = sharedalarm.RebuildSubscriberCacheFromRepository
-	findRoomAlarmsFromRepository         = func(ctx context.Context, repo *sharedalarm.Repository, roomID string) ([]*domain.Alarm, error) {
-		return repo.FindByRoom(ctx, roomID)
+	findRoomAlarmsFromRepository         = func(ctx context.Context, repository *sharedalarm.Repository, roomID string) ([]*domain.Alarm, error) {
+		return repository.FindByRoom(ctx, roomID)
 	}
 )
 
@@ -175,14 +175,14 @@ func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, ope
 		}
 	}()
 
-	if as.alarmRepo == nil {
+	if as.alarmRepository == nil {
 		rebuildErr = mutationErr
 		return mutationErr
 	}
 
 	var err error
 
-	summary, err = rebuildSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepo)
+	summary, err = rebuildSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepository)
 	if err != nil {
 		rebuildErr = err
 		return errors.Join(mutationErr, fmt.Errorf("rebuild subscriber cache from DB: %w", err))
@@ -195,14 +195,14 @@ func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, ope
 
 // 이 메서드는 앱 시작 시 한 번만 호출되며, 이후 런타임 중에는 Valkey만 사용한다.
 func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
-	if as.alarmRepo == nil {
+	if as.alarmRepository == nil {
 		as.logger.Info("Alarm repository not configured, skipping cache warming")
 		return nil
 	}
 
 	startedAt := time.Now()
 
-	summary, err := rebuildSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepo)
+	summary, err := rebuildSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepository)
 	observeAlarmCacheRebuild("warm", err)
 	observeAlarmCacheRebuildDuration("warm", startedAt, err)
 

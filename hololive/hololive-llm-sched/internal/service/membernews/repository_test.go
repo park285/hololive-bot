@@ -214,17 +214,17 @@ func (r *fakeRows) Scan(dest ...any) error {
 }
 
 func TestRepository_SubscribeIdempotent(t *testing.T) {
-	repo := &Repository{pool: newFakeMemberNewsPool()}
+	repository := &Repository{pool: newFakeMemberNewsPool()}
 
 	ctx := context.Background()
-	if err := repo.Subscribe(ctx, "room-a", "Alpha"); err != nil {
+	if err := repository.Subscribe(ctx, "room-a", "Alpha"); err != nil {
 		t.Fatalf("first subscribe failed: %v", err)
 	}
-	if err := repo.Subscribe(ctx, "room-a", "Alpha Updated"); err != nil {
+	if err := repository.Subscribe(ctx, "room-a", "Alpha Updated"); err != nil {
 		t.Fatalf("second subscribe failed: %v", err)
 	}
 
-	subscribed, err := repo.IsSubscribed(ctx, "room-a")
+	subscribed, err := repository.IsSubscribed(ctx, "room-a")
 	if err != nil {
 		t.Fatalf("is subscribed failed: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestRepository_SubscribeIdempotent(t *testing.T) {
 		t.Fatalf("expected room-a to remain subscribed")
 	}
 
-	rooms, err := repo.ListSubscribedRooms(ctx)
+	rooms, err := repository.ListSubscribedRooms(ctx)
 	if err != nil {
 		t.Fatalf("list subscribed rooms failed: %v", err)
 	}
@@ -245,18 +245,18 @@ func TestRepository_SubscribeIdempotent(t *testing.T) {
 }
 
 func TestRepository_UnsubscribeThenIsSubscribedFalse(t *testing.T) {
-	repo := &Repository{pool: newFakeMemberNewsPool()}
+	repository := &Repository{pool: newFakeMemberNewsPool()}
 	ctx := context.Background()
 
-	if err := repo.Subscribe(ctx, "room-a", "Alpha"); err != nil {
+	if err := repository.Subscribe(ctx, "room-a", "Alpha"); err != nil {
 		t.Fatalf("subscribe failed: %v", err)
 	}
 
-	if err := repo.Unsubscribe(ctx, "room-a"); err != nil {
+	if err := repository.Unsubscribe(ctx, "room-a"); err != nil {
 		t.Fatalf("unsubscribe failed: %v", err)
 	}
 
-	subscribed, err := repo.IsSubscribed(ctx, "room-a")
+	subscribed, err := repository.IsSubscribed(ctx, "room-a")
 	if err != nil {
 		t.Fatalf("is subscribed failed: %v", err)
 	}
@@ -266,17 +266,17 @@ func TestRepository_UnsubscribeThenIsSubscribedFalse(t *testing.T) {
 }
 
 func TestRepository_ListSubscribedRoomsCreatedAtAsc(t *testing.T) {
-	repo := &Repository{pool: newFakeMemberNewsPool()}
+	repository := &Repository{pool: newFakeMemberNewsPool()}
 	ctx := context.Background()
 
-	if err := repo.Subscribe(ctx, "room-b", "Bravo"); err != nil {
+	if err := repository.Subscribe(ctx, "room-b", "Bravo"); err != nil {
 		t.Fatalf("subscribe room-b failed: %v", err)
 	}
-	if err := repo.Subscribe(ctx, "room-a", "Alpha"); err != nil {
+	if err := repository.Subscribe(ctx, "room-a", "Alpha"); err != nil {
 		t.Fatalf("subscribe room-a failed: %v", err)
 	}
 
-	rooms, err := repo.ListSubscribedRooms(ctx)
+	rooms, err := repository.ListSubscribedRooms(ctx)
 	if err != nil {
 		t.Fatalf("list subscribed rooms failed: %v", err)
 	}

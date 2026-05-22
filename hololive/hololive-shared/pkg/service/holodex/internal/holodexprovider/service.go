@@ -80,7 +80,7 @@ type Service struct {
 	retry        *retryScheduler
 }
 
-func NewHolodexService(baseURL string, apiKey string, cacheClient cache.Client, scraperSvc *ScraperService, logger *slog.Logger) (*Service, error) {
+func NewHolodexService(baseURL string, apiKey string, cacheClient cache.Client, scraperService *ScraperService, logger *slog.Logger) (*Service, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, fmt.Errorf("holodex api key is required")
 	}
@@ -109,21 +109,21 @@ func NewHolodexService(baseURL string, apiKey string, cacheClient cache.Client, 
 
 	requester := NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter)
 
-	svc := &Service{
+	service := &Service{
 		requester:    requester,
-		scraper:      scraperSvc,
+		scraper:      scraperService,
 		logger:       logger,
 		cacheManager: NewCacheManager(cacheClient, logger),
 		mapper:       NewStreamMapper(logger),
 		filter:       NewStreamFilter(logger),
 	}
-	svc.retry = newRetryScheduler(
+	service.retry = newRetryScheduler(
 		constants.RetrySchedulerConfig.Delay,
 		constants.RetrySchedulerConfig.Timeout,
 		constants.RetrySchedulerConfig.MaxSize,
 		logger,
 	)
-	return svc, nil
+	return service, nil
 }
 
 func (h *Service) SetScraperProxyEnabled(enabled bool) bool {

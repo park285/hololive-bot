@@ -36,7 +36,7 @@ func (h *AlarmAPIHandler) requireAlarm(c *gin.Context) bool {
 }
 
 func (h *MemberAPIHandler) requireMemberDeps(c *gin.Context) bool {
-	if h == nil || h.APIHandler == nil || h.repo == nil || h.memberCache == nil {
+	if h == nil || h.APIHandler == nil || h.repository == nil || h.memberCache == nil {
 		respondServiceUnavailable(c, "member service not available")
 		return false
 	}
@@ -54,7 +54,7 @@ func (h *RoomAPIHandler) requireACL(c *gin.Context) bool {
 }
 
 func (h *StatsAPIHandler) requireStatsDeps(c *gin.Context) bool {
-	if h == nil || h.APIHandler == nil || h.repo == nil || h.alarm == nil {
+	if h == nil || h.APIHandler == nil || h.repository == nil || h.alarm == nil {
 		respondServiceUnavailable(c, "stats dependencies not available")
 		return false
 	}
@@ -71,8 +71,8 @@ func (h *ProfileAPIHandler) requireProfiles(c *gin.Context) bool {
 	return true
 }
 
-func (h *MilestoneAPIHandler) requireStatsRepo(c *gin.Context) bool {
-	if h == nil || h.APIHandler == nil || h.statsRepo == nil {
+func (h *MilestoneAPIHandler) requireStatsRepository(c *gin.Context) bool {
+	if h == nil || h.APIHandler == nil || h.statsRepository == nil {
 		respondServiceUnavailable(c, "Stats repository not available")
 		return false
 	}
