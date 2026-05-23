@@ -115,6 +115,33 @@ func (s *Service) TryClaimLogicalEvent(ctx context.Context, roomID, channelID st
 	return key, acquired, nil
 }
 
+func (s *Service) TryClaimPair(ctx context.Context, key1, key2 string, ttl time.Duration) (acquired1, acquired2 bool) {
+	results, err := s.cache.SetNXMulti(ctx, []cache.SetNXEntry{
+		{Key: key1, Value: "1", TTL: ttl},
+		{Key: key2, Value: "1", TTL: ttl},
+	})
+	if err != nil {
+		return s.fallback.TryClaimOnOutage(key1, ttl, err),
+			s.fallback.TryClaimOnOutage(key2, ttl, err)
+	}
+	for i, r := range results {
+		if r.Err != nil {
+			if i == 0 {
+				acquired1 = s.fallback.TryClaimOnOutage(key1, ttl, r.Err)
+			} else {
+				acquired2 = s.fallback.TryClaimOnOutage(key2, ttl, r.Err)
+			}
+		} else {
+			if i == 0 {
+				acquired1 = r.Acquired
+			} else {
+				acquired2 = r.Acquired
+			}
+		}
+	}
+	return
+}
+
 func (s *Service) TryClaimScheduleTransition(ctx context.Context, streamID string, oldScheduled, newScheduled time.Time) (string, bool, error) {
 	key := keys.BuildScheduleTransitionKey(streamID, oldScheduled, newScheduled)
 	acquired := s.tryClaimKey(ctx, key, constants.CacheTTL.NotificationSent)
@@ -204,11 +231,12 @@ func (s *Service) markLegacyNotified(ctx context.Context, key string, existing *
 }
 
 func (s *Service) writeNotifiedHashFields(ctx context.Context, key string, scheduledStr string, minutesUntil int) error {
-	if err := s.cache.HSet(ctx, key, "start_scheduled", scheduledStr); err != nil {
-		return fmt.Errorf("mark as notified: set start_scheduled field: %w", err)
+	fields := map[string]any{
+		"start_scheduled":          scheduledStr,
+		strconv.Itoa(minutesUntil): "1",
 	}
-	if err := s.cache.HSet(ctx, key, strconv.Itoa(minutesUntil), "1"); err != nil {
-		return fmt.Errorf("mark as notified: set minute field: %w", err)
+	if err := s.cache.HMSet(ctx, key, fields); err != nil {
+		return fmt.Errorf("mark as notified: hmset fields: %w", err)
 	}
 	if err := s.cache.Expire(ctx, key, constants.CacheTTL.NotificationSent); err != nil {
 		return fmt.Errorf("mark as notified: set expiration: %w", err)
@@ -363,13 +391,25 @@ func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, 
 func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration) bool {
 	acquired, err := s.cache.SetNX(ctx, key, "1", ttl)
 	if err != nil {
+		s.logger.Debug("dedup claim fallback",
+			slog.String("key", key),
+			slog.String("error", err.Error()),
+		)
 		return s.fallback.TryClaimOnOutage(key, ttl, err)
 	}
+	s.logger.Debug("dedup claim result",
+		slog.String("key", key),
+		slog.Bool("acquired", acquired),
+	)
 	return acquired
 }
 
 func (s *Service) targetMinutesSnapshot() []int {
 	return s.targetPolicySnapshot().Clone()
+}
+
+func (s *Service) TargetMinutesSnapshot() []int {
+	return s.targetMinutesSnapshot()
 }
 
 func (s *Service) targetPolicySnapshot() sharedchecker.TargetMinutePolicy {

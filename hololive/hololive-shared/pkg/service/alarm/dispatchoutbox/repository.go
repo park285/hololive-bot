@@ -3,6 +3,7 @@ package dispatchoutbox
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -15,19 +16,26 @@ import (
 )
 
 type PgxRepository struct {
-	pool *pgxpool.Pool
-	now  func() time.Time
+	pool   *pgxpool.Pool
+	now    func() time.Time
+	logger *slog.Logger
 }
 
-func NewPgxRepository(postgres database.Client) *PgxRepository {
-	if postgres == nil {
-		return &PgxRepository{now: time.Now}
+func NewPgxRepository(postgres database.Client, logger *slog.Logger) *PgxRepository {
+	if logger == nil {
+		logger = slog.Default()
 	}
-	return &PgxRepository{pool: postgres.GetPool(), now: time.Now}
+	if postgres == nil {
+		return &PgxRepository{now: time.Now, logger: logger}
+	}
+	return &PgxRepository{pool: postgres.GetPool(), now: time.Now, logger: logger}
 }
 
-func NewPgxRepositoryFromPool(pool *pgxpool.Pool) *PgxRepository {
-	return &PgxRepository{pool: pool, now: time.Now}
+func NewPgxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *PgxRepository {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &PgxRepository{pool: pool, now: time.Now, logger: logger}
 }
 
 func (r *PgxRepository) InsertShadowed(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*Record, error) {
@@ -129,10 +137,26 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 	defer rollbackDispatchBatchOnError(ctx, tx, &err)
 
 	var eventIDs map[string]int64
-	eventIDs, result, err = insertPreparedEvents(ctx, tx, eventRows, result)
+	var conflictKeys []string
+	eventIDs, conflictKeys, result, err = insertPreparedEvents(ctx, tx, eventRows, result, r.logger)
 	if err != nil {
 		return result, err
 	}
+
+	if len(conflictKeys) > 0 {
+		conflictSet := make(map[string]struct{}, len(conflictKeys))
+		for _, k := range conflictKeys {
+			conflictSet[k] = struct{}{}
+		}
+		filtered := make([]deliveryInsert, 0, len(deliveries))
+		for _, d := range deliveries {
+			if _, conflict := conflictSet[d.EventKey]; !conflict {
+				filtered = append(filtered, d)
+			}
+		}
+		deliveries = filtered
+	}
+
 	assignDeliveryEventIDs(deliveries, eventIDs)
 
 	insertedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
@@ -153,17 +177,15 @@ func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err *error) {
 	}
 }
 
-func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result PublishBatchResult) (map[string]int64, PublishBatchResult, error) {
-	eventIDs, insertedEvents, err := insertEvents(ctx, tx, eventRows)
+func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result PublishBatchResult, logger *slog.Logger) (map[string]int64, []string, PublishBatchResult, error) {
+	eventIDs, conflictKeys, insertedEvents, err := insertEvents(ctx, tx, eventRows, logger)
 	if err != nil {
-		if strings.Contains(err.Error(), "dispatch event hash conflict") {
-			result.HashConflictEvents++
-		}
-		return nil, result, err
+		return nil, nil, result, err
 	}
 	result.InsertedEvents = insertedEvents
-	result.DuplicateEvents = len(eventRows) - insertedEvents
-	return eventIDs, result, nil
+	result.DuplicateEvents = len(eventRows) - insertedEvents - len(conflictKeys)
+	result.HashConflictEvents += len(conflictKeys)
+	return eventIDs, conflictKeys, result, nil
 }
 
 func assignDeliveryEventIDs(deliveries []deliveryInsert, eventIDs map[string]int64) {

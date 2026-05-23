@@ -28,8 +28,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 )
@@ -73,6 +75,13 @@ func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotifi
 	if len(prepared) > 0 {
 		errs = n.publishPreparedBatch(ctx, prepared, &result, errs)
 	}
+
+	n.logger.Info("notification batch completed",
+		slog.Int("total", len(notifications)),
+		slog.Int("sent", result.Sent),
+		slog.Int("skipped", result.Skipped),
+		slog.Int("failed", result.Failed),
+	)
 
 	return result, errors.Join(errs...)
 }
@@ -319,39 +328,41 @@ func resolveChannelID(stream *domain.Stream) string {
 }
 
 func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string, bool, error) {
-	notifyClaimKey, notifyClaimed, err := n.dedupService.TryClaimNotification(
-		ctx,
+	category := keys.NotificationCategory(
+		n.dedupService.TargetMinutesSnapshot(),
+		payload.notification.MinutesUntil,
+	)
+	notifyKey := keys.BuildNotifyClaimKey(
 		payload.notification.RoomID,
 		payload.streamID,
 		payload.startScheduled,
-		payload.notification.MinutesUntil,
+		category,
 	)
-	if err != nil {
-		return nil, false, fmt.Errorf("claim notification: %w", err)
-	}
-
-	if !notifyClaimed {
-		return nil, false, nil
-	}
-
-	logicalClaimKey, logicalClaimed, err := n.dedupService.TryClaimLogicalEvent(
-		ctx,
+	logicalKey := keys.BuildLogicalEventClaimKey(
 		payload.notification.RoomID,
 		payload.channelID,
-		payload.notification.Stream,
-		payload.notification.MinutesUntil,
+		payload.notification.Stream.ID,
+		payload.notification.Stream.Title,
+		payload.startScheduled,
+		category,
 	)
-	if err != nil {
-		n.releaseClaimsBestEffort(ctx, []string{notifyClaimKey}, "failed to release notification claim after logical claim error")
-		return nil, false, fmt.Errorf("claim logical event: %w", err)
-	}
 
+	notifyClaimed, logicalClaimed := n.dedupService.TryClaimPair(
+		ctx, notifyKey, logicalKey, constants.CacheTTL.NotificationSent,
+	)
+
+	if !notifyClaimed {
+		if logicalClaimed {
+			n.releaseClaimsBestEffort(ctx, []string{logicalKey}, "release logical claim after notification dedup skip")
+		}
+		return nil, false, nil
+	}
 	if !logicalClaimed {
-		n.releaseClaimsBestEffort(ctx, []string{notifyClaimKey}, "failed to release notification claim after logical dedup skip")
+		n.releaseClaimsBestEffort(ctx, []string{notifyKey}, "release notification claim after logical dedup skip")
 		return nil, false, nil
 	}
 
-	claimKeys := compactClaimKeys(notifyClaimKey, logicalClaimKey)
+	claimKeys := compactClaimKeys(notifyKey, logicalKey)
 	scheduleClaimKeys, scheduleClaimed, err := n.claimScheduleChangeDedup(ctx, payload)
 	if err != nil {
 		n.releaseClaimsBestEffort(ctx, append(claimKeys, scheduleClaimKeys...), "failed to release claims after schedule change claim error")

@@ -94,7 +94,7 @@ func buildAlarmDispatchRunner(
 		lease := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_LEASE_SECONDS", 60*time.Second)
 		return &alarmDispatchRunner{
 			consumer: dispatchoutbox.NewConsumer(
-				dispatchoutbox.NewPgxRepository(infra.Postgres),
+				dispatchoutbox.NewPgxRepository(infra.Postgres, logger),
 				logger,
 				dispatchoutbox.WithLease(lease),
 				dispatchoutbox.WithRecoveryInterval(parsePositiveDurationMSEnv("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", 30*time.Second)),

@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/valkey-io/valkey-go"
 	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 )
 
@@ -266,9 +267,26 @@ func (p *Publisher) publishPGFirstBatch(ctx context.Context, envelopes []domain.
 
 func (p *Publisher) publishValkeyBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
+	if len(envelopes) == 0 {
+		return result, nil
+	}
+
+	cmds := make([]valkey.Completed, 0, len(envelopes))
 	for i := range envelopes {
-		if err := p.publishValkey(ctx, envelopes[i]); err != nil {
-			return result, err
+		jsonBytes, err := json.Marshal(envelopes[i])
+		if err != nil {
+			return result, fmt.Errorf("publish alarm queue batch: marshal envelope %d: %w", i, err)
+		}
+		cmds = append(cmds, p.cache.B().Lpush().Key(AlarmDispatchQueue).Element(string(jsonBytes)).Build())
+	}
+
+	responses := p.cache.DoMulti(ctx, cmds...)
+	if len(responses) != len(cmds) {
+		return result, fmt.Errorf("publish alarm queue batch: unexpected response count %d for %d commands", len(responses), len(cmds))
+	}
+	for i, resp := range responses {
+		if err := resp.Error(); err != nil {
+			return result, fmt.Errorf("publish alarm queue batch: lpush envelope %d: %w", i, err)
 		}
 		result.ProcessedDeliveries++
 	}
@@ -309,28 +327,6 @@ func (p *Publisher) buildEnvelope(notification *domain.AlarmNotification, claimK
 		EnqueuedAt:   p.now().UTC().Format(time.RFC3339),
 		Version:      contractsalarm.QueueEnvelopeVersionV1,
 	}
-}
-
-func (p *Publisher) publishValkey(ctx context.Context, envelope domain.AlarmQueueEnvelope) error {
-	jsonBytes, err := json.Marshal(envelope)
-	if err != nil {
-		return fmt.Errorf("publish alarm queue: marshal envelope: %w", err)
-	}
-
-	cmd := p.cache.B().Lpush().Key(AlarmDispatchQueue).Element(string(jsonBytes)).Build()
-	results := p.cache.DoMulti(ctx, cmd)
-	if len(results) != 1 {
-		return fmt.Errorf("publish alarm queue: lpush dispatch queue: unexpected result count: %d", len(results))
-	}
-	if err := results[0].Error(); err != nil {
-		return fmt.Errorf("publish alarm queue: lpush dispatch queue: %w", err)
-	}
-
-	p.logger.Debug("알림 큐 발행 완료",
-		slog.String("room_id", envelope.Notification.RoomID),
-		slog.String("queue", AlarmDispatchQueue),
-	)
-	return nil
 }
 
 func (p *Publisher) publishWakeup(ctx context.Context) {

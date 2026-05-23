@@ -36,6 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
@@ -724,4 +725,87 @@ func TestService_ReadNotifiedData_LegacyJSONMigrated(t *testing.T) {
 	require.NotNil(t, hashFields)
 	assert.Equal(t, "2026-03-04T10:00:00Z", hashFields["start_scheduled"])
 	assert.Equal(t, "1", hashFields["5"])
+}
+
+func newMockDedupCacheWithSetNXMulti(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) {
+	t.Helper()
+	client, state := newMockDedupCache(t)
+	client.SetNXMultiFunc = func(_ context.Context, entries []cache.SetNXEntry) ([]cache.SetNXResult, error) {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+
+		now := state.now()
+		results := make([]cache.SetNXResult, len(entries))
+		for i, e := range entries {
+			if expiresAt, exists := state.setNX[e.Key]; exists && now.Before(expiresAt) {
+				results[i] = cache.SetNXResult{Key: e.Key, Acquired: false}
+				continue
+			}
+			if e.TTL <= 0 {
+				state.setNX[e.Key] = now
+			} else {
+				state.setNX[e.Key] = now.Add(e.TTL)
+			}
+			results[i] = cache.SetNXResult{Key: e.Key, Acquired: true}
+		}
+		return results, nil
+	}
+	return client, state
+}
+
+func TestService_TryClaimPair_BothAcquired(t *testing.T) {
+	cacheMock, _ := newMockDedupCacheWithSetNXMulti(t)
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	a1, a2 := service.TryClaimPair(t.Context(), "pair:k1", "pair:k2", 5*time.Minute)
+	assert.True(t, a1)
+	assert.True(t, a2)
+}
+
+func TestService_TryClaimPair_Key1AcquiredKey2Exists(t *testing.T) {
+	cacheMock, state := newMockDedupCacheWithSetNXMulti(t)
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	state.mu.Lock()
+	state.setNX["pair:k2"] = state.now().Add(10 * time.Minute)
+	state.mu.Unlock()
+
+	a1, a2 := service.TryClaimPair(t.Context(), "pair:k1", "pair:k2", 5*time.Minute)
+	assert.True(t, a1)
+	assert.False(t, a2)
+}
+
+func TestService_TryClaimPair_SetNXMultiError_Fallback(t *testing.T) {
+	cacheMock, _ := newMockDedupCache(t)
+	cacheMock.SetNXMultiFunc = func(_ context.Context, _ []cache.SetNXEntry) ([]cache.SetNXResult, error) {
+		return nil, errors.New("pipeline broken")
+	}
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	a1, a2 := service.TryClaimPair(t.Context(), "fb:k1", "fb:k2", 5*time.Minute)
+	assert.True(t, a1, "fallback grants first claim")
+	assert.True(t, a2, "fallback grants first claim")
+
+	a1, a2 = service.TryClaimPair(t.Context(), "fb:k1", "fb:k2", 5*time.Minute)
+	assert.False(t, a1, "fallback dedup blocks second claim")
+	assert.False(t, a2, "fallback dedup blocks second claim")
+}
+
+func TestService_TryClaimPair_PerKeyError_Fallback(t *testing.T) {
+	cacheMock, _ := newMockDedupCache(t)
+	cacheMock.SetNXMultiFunc = func(_ context.Context, entries []cache.SetNXEntry) ([]cache.SetNXResult, error) {
+		results := make([]cache.SetNXResult, len(entries))
+		results[0] = cache.SetNXResult{Key: entries[0].Key, Acquired: true}
+		results[1] = cache.SetNXResult{Key: entries[1].Key, Err: errors.New("key2 error")}
+		return results, nil
+	}
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	a1, a2 := service.TryClaimPair(t.Context(), "pk:k1", "pk:k2", 5*time.Minute)
+	assert.True(t, a1, "key1 acquired from pipeline result")
+	assert.True(t, a2, "key2 falls back and grants first claim")
+
+	a1Again, a2Again := service.TryClaimPair(t.Context(), "pk:k1", "pk:k2", 5*time.Minute)
+	assert.True(t, a1Again, "key1 still acquired from pipeline (mock always returns true)")
+	assert.False(t, a2Again, "key2 fallback dedup blocks second claim")
 }
