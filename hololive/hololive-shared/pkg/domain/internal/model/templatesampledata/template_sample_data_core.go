@@ -18,10 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package model
+package templatesampledata
 
-func templateSampleCoreData() map[TemplateKey]any {
-	data := map[TemplateKey]any{}
+import "github.com/kapu/hololive-shared/pkg/domain/internal/model"
+
+func templateSampleCoreData() map[model.TemplateKey]any {
+	data := map[model.TemplateKey]any{}
 	addTemplateOutboxSingles(data)
 	addTemplateOutboxGroups(data)
 	addTemplateCommandStreamSamples(data)
@@ -30,43 +32,43 @@ func templateSampleCoreData() map[TemplateKey]any {
 	return data
 }
 
-func addTemplateOutboxSingles(data map[TemplateKey]any) {
-	data[TemplateKeyOutboxShorts] = map[string]any{
+func addTemplateOutboxSingles(data map[model.TemplateKey]any) {
+	data[model.TemplateKeyOutboxShorts] = map[string]any{
 		"MemberName": "사쿠라 미코",
 		"Title":      "새 쇼츠 제목 - 귀여운 미코치",
 		"URL":        "https://www.youtube.com/shorts/abc123xyz",
 		"VideoID":    "abc123xyz",
 	}
-	data[TemplateKeyOutboxCommunity] = map[string]any{
+	data[model.TemplateKeyOutboxCommunity] = map[string]any{
 		"MemberName":  "사쿠라 미코",
 		"ContentText": "오늘 밤 10시에 방송합니다! 많이 놀러오세요~",
 		"URL":         "https://www.youtube.com/post/Ugkxyz123",
 		"PostID":      "Ugkxyz123",
 	}
-	data[TemplateKeyOutboxVideo] = map[string]any{
+	data[model.TemplateKeyOutboxVideo] = map[string]any{
 		"MemberName": "사쿠라 미코",
 		"Title":      "마인크래프트 건축 배틀 #미코라이브",
 		"URL":        "https://youtu.be/video123xyz",
 		"VideoID":    "video123xyz",
 	}
-	data[TemplateKeyOutboxMilestone] = map[string]any{
+	data[model.TemplateKeyOutboxMilestone] = map[string]any{
 		"MemberName": "사쿠라 미코",
 		"Milestone":  "200만",
 	}
 }
 
-func addTemplateOutboxGroups(data map[TemplateKey]any) {
-	data[TemplateKeyOutboxVideoGroup] = map[string]any{
+func addTemplateOutboxGroups(data map[model.TemplateKey]any) {
+	data[model.TemplateKeyOutboxVideoGroup] = map[string]any{
 		"MemberName": "사쿠라 미코",
 		"Count":      2,
 		"Items":      templateOutboxVideoGroupItems(),
 	}
-	data[TemplateKeyOutboxShortsGroup] = map[string]any{
+	data[model.TemplateKeyOutboxShortsGroup] = map[string]any{
 		"MemberName": "사쿠라 미코",
 		"Count":      2,
 		"Items":      templateOutboxShortsGroupItems(),
 	}
-	data[TemplateKeyOutboxCommunityGroup] = map[string]any{
+	data[model.TemplateKeyOutboxCommunityGroup] = map[string]any{
 		"MemberName": "사쿠라 미코",
 		"Count":      2,
 		"Items":      templateOutboxCommunityGroupItems(),
@@ -94,23 +96,23 @@ func templateOutboxCommunityGroupItems() []map[string]any {
 	}
 }
 
-func addTemplateCommandStreamSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdHelp] = map[string]any{
+func addTemplateCommandStreamSamples(data map[model.TemplateKey]any) {
+	data[model.TemplateKeyCmdHelp] = map[string]any{
 		"Emoji":  map[string]string{"Mic": "🎙", "Star": "⭐", "Bell": "🔔", "Clock": "⏰", "Sparkle": "✨"},
 		"Prefix": "!",
 	}
-	data[TemplateKeyCmdLiveStreams] = map[string]any{
+	data[model.TemplateKeyCmdLiveStreams] = map[string]any{
 		"Emoji":   map[string]string{"Live": "🔴"},
 		"Count":   3,
 		"Streams": templateLiveStreamSamples(),
 	}
-	data[TemplateKeyCmdUpcomingStreams] = map[string]any{
+	data[model.TemplateKeyCmdUpcomingStreams] = map[string]any{
 		"Emoji":   map[string]string{"Calendar": "📅"},
 		"Count":   2,
 		"Hours":   24,
 		"Streams": templateUpcomingStreamSamples(),
 	}
-	data[TemplateKeyCmdChannelSchedule] = map[string]any{
+	data[model.TemplateKeyCmdChannelSchedule] = map[string]any{
 		"Emoji":       map[string]string{"Calendar": "📅"},
 		"ChannelName": "사쿠라 미코",
 		"Days":        7,
@@ -139,28 +141,28 @@ func templateChannelScheduleSamples() []map[string]any {
 	}
 }
 
-func addTemplateCommandAlarmSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdAlarmList] = map[string]any{
+func addTemplateCommandAlarmSamples(data map[model.TemplateKey]any) {
+	data[model.TemplateKeyCmdAlarmList] = map[string]any{
 		"Emoji":  map[string]string{"Bell": "🔔"},
 		"Count":  3,
 		"Prefix": "!",
 		"Alarms": []map[string]any{templateAlarmListItem()},
 	}
-	data[TemplateKeyCmdAlarmNotification] = templateAlarmNotificationSample(5)
-	data[TemplateKeyCmdAlarmLiveStarted] = templateAlarmNotificationSample(0)
-	data[TemplateKeyCmdAlarmAdded] = map[string]any{
+	data[model.TemplateKeyCmdAlarmNotification] = templateAlarmNotificationSample(5)
+	data[model.TemplateKeyCmdAlarmLiveStarted] = templateAlarmNotificationSample(0)
+	data[model.TemplateKeyCmdAlarmAdded] = map[string]any{
 		"Emoji":      map[string]string{"Bell": "🔔", "Check": "✅"},
 		"MemberName": "사쿠라 미코",
 		"Added":      true,
 		"Prefix":     "!",
 		"NextStream": templateNextStreamSample(),
 	}
-	data[TemplateKeyCmdAlarmRemoved] = map[string]any{
+	data[model.TemplateKeyCmdAlarmRemoved] = map[string]any{
 		"Emoji":      map[string]string{"Bell": "🔕"},
 		"MemberName": "사쿠라 미코",
 		"Removed":    true,
 	}
-	data[TemplateKeyCmdAlarmCleared] = map[string]any{
+	data[model.TemplateKeyCmdAlarmCleared] = map[string]any{
 		"Emoji": map[string]string{"Bell": "🔕"},
 		"Count": 5,
 	}
@@ -197,18 +199,18 @@ func templateAlarmNotificationSample(minutesUntil int) map[string]any {
 	}
 }
 
-func addTemplateDirectoryMilestoneSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdMemberDirectory] = map[string]any{
+func addTemplateDirectoryMilestoneSamples(data map[model.TemplateKey]any) {
+	data[model.TemplateKeyCmdMemberDirectory] = map[string]any{
 		"Emoji":  map[string]string{"Star": "⭐"},
 		"Total":  50,
 		"Groups": []map[string]any{templateMemberDirectoryGroup()},
 	}
-	data[TemplateKeyCmdMilestoneAchieved] = map[string]any{
+	data[model.TemplateKeyCmdMilestoneAchieved] = map[string]any{
 		"MemberName": "사쿠라 미코",
 		"Milestone":  "200만",
 		"Emoji":      map[string]string{"Trophy": "🏆"},
 	}
-	data[TemplateKeyCmdMilestoneApproach] = map[string]any{
+	data[model.TemplateKeyCmdMilestoneApproach] = map[string]any{
 		"MemberName":      "사쿠라 미코",
 		"CurrentSubs":     1990000,
 		"TargetMilestone": "200만",
