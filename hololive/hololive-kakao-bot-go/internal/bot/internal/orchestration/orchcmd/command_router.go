@@ -53,7 +53,7 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 		return errors.New("command registry is not initialized")
 	}
 
-	key, normalizedParams := r.normalizeCommand(cmdType, params)
+	key, normalizedParams := r.NormalizeCommand(cmdType, params)
 	ctx = sharedlog.WithRuntime(ctx, "bot")
 	ctx = sharedlog.WithComponent(ctx, "command")
 
@@ -89,7 +89,7 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 	return nil
 }
 
-// normalizeCommand: 명령어 타입과 파라미터를 정규화합니다.
-func (r *CommandRouter) normalizeCommand(cmdType domain.CommandType, params map[string]any) (string, map[string]any) {
+// NormalizeCommand 명령어 타입과 파라미터를 정규화합니다.
+func (r *CommandRouter) NormalizeCommand(cmdType domain.CommandType, params map[string]any) (string, map[string]any) {
 	return NormalizeCommandKey(cmdType, params)
 }

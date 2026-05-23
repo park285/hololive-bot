@@ -31,6 +31,7 @@ import (
 	"github.com/park285/hololive-bot/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 )
 
@@ -66,7 +67,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	workerPool := &workerpool.Pool{}
-	externalBuilder := CommandBuilder(func(_ *command.Dependencies) command.Command {
+	externalBuilder := orchcmd.CommandBuilder(func(_ *command.Dependencies) command.Command {
 		return command.NewHelpCommand(nil)
 	})
 
@@ -82,7 +83,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 		Postgres:         postgresService,
 		MemberRepository: memberRepository,
 		MemberCache:      memberCache,
-		CommandBuilders:  []CommandBuilder{externalBuilder},
+		CommandBuilders:  []orchcmd.CommandBuilder{externalBuilder},
 		WorkerPool:       workerPool,
 	}
 
