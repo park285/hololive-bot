@@ -89,7 +89,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		NotificationEgress: notificationEgress,
 		ConfigSubscriber:   BuildAlarmWorkerConfigSubscriber(infra.Cache, foundation.AlarmCRUD, logger),
 		ServerAddr:         addr,
-		HttpServer:         sharedserver.NewH2CServer(addr, router, "hololive-alarm-worker.http"),
+		HTTPServer:         sharedserver.NewH2CServer(addr, router, "hololive-alarm-worker.http"),
 		Managed:            lifecycle.NewManaged(infra.Cleanup),
 	}, nil
 }

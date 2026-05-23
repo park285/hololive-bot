@@ -402,7 +402,7 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 				PhotoSync:        infra.photoSync,
 				ConfigSubscriber: configSubscriber,
 				ServerAddr:       fmt.Sprintf(":%d", ingestionConfig.Server.Port),
-				HttpServer:       httpServer,
+				HTTPServer:       httpServer,
 				Readiness:        readiness,
 				Managed:          lifecycle.NewManaged(infra.cleanup),
 			}
@@ -413,7 +413,7 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			assert.NotNil(t, runtime.ScraperScheduler)
 			assert.NotNil(t, runtime.ConfigSubscriber)
 			assert.NotNil(t, runtime.PhotoSync)
-			assert.NotNil(t, runtime.HttpServer)
+			assert.NotNil(t, runtime.HTTPServer)
 			assert.Equal(t, 0, cleanupCalls)
 
 			runtime.Close()

@@ -183,7 +183,7 @@ func newYouTubeProducerRuntime(
 		ConfigSubscriber:                       configSubscriber,
 		PollTargetRefresher:                    youtubeDeps.pollTargetRefresher,
 		ServerAddr:                             fmt.Sprintf(":%d", appConfig.Server.Port),
-		HttpServer:                             httpServer,
+		HTTPServer:                             httpServer,
 		Readiness:                              readinessState,
 		CommunityShortsBigBangPolicy:           youtubeState.communityShortsPolicy,
 		communityShortsObservationWindowWriter: observationWindowWriter,

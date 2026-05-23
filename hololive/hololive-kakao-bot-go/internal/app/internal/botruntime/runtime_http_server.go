@@ -33,7 +33,7 @@ func (r *BotRuntime) StartHTTPServer(errCh chan<- error) {
 		return
 	}
 
-	httpserver.StartHTTPServer(r.HttpServer, r.Logger, errCh)
+	httpserver.StartHTTPServer(r.HTTPServer, r.Logger, errCh)
 	appruntime.StartHTTP3Server(r.H3Server, r.Logger, errCh)
 }
 
@@ -43,7 +43,7 @@ func (r *BotRuntime) ShutdownHTTPServer(ctx context.Context) error {
 	}
 
 	return errors.Join(
-		httpserver.ShutdownHTTPServer(ctx, r.HttpServer),
+		httpserver.ShutdownHTTPServer(ctx, r.HTTPServer),
 		appruntime.ShutdownHTTP3Server(ctx, r.H3Server),
 	)
 }
