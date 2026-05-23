@@ -230,6 +230,8 @@ docs/doc-gen/
 docs/superpowers/
 docs/history/plan-kits/
 docs/agent-workflows/
+docs/closeout-*/
+*-review-request-*.tar.gz
 
 # Build outputs
 admin-dashboard/backend/admin
