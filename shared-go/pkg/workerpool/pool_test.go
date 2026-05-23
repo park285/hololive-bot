@@ -90,6 +90,92 @@ func TestPool_ShutdownWait(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	if cfg.Size != 10 {
+		t.Fatalf("Size = %d, want 10", cfg.Size)
+	}
+	if cfg.PreAlloc {
+		t.Fatal("PreAlloc = true, want false")
+	}
+	if cfg.ExpiryDuration != 10*time.Second {
+		t.Fatalf("ExpiryDuration = %v, want 10s", cfg.ExpiryDuration)
+	}
+}
+
+func TestPool_CapRunningFree(t *testing.T) {
+	t.Parallel()
+
+	p, err := New(Config{Size: 4, ExpiryDuration: time.Second})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer p.Shutdown()
+
+	if p.Cap() != 4 {
+		t.Fatalf("Cap() = %d, want 4", p.Cap())
+	}
+	if p.Free() < 0 {
+		t.Fatalf("Free() = %d, want >= 0", p.Free())
+	}
+
+	started := make(chan struct{})
+	_ = p.Submit(func() {
+		close(started)
+		time.Sleep(100 * time.Millisecond)
+	})
+	<-started
+
+	if p.Running() < 1 {
+		t.Fatalf("Running() = %d, want >= 1", p.Running())
+	}
+
+	p.Wait()
+}
+
+func TestNew_WithPreAllocAndMaxBlocking(t *testing.T) {
+	t.Parallel()
+
+	p, err := New(Config{
+		Size:            3,
+		PreAlloc:        true,
+		ExpiryDuration:  time.Second,
+		MaxBlockingTask: 5,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer p.Shutdown()
+
+	if p.Cap() != 3 {
+		t.Fatalf("Cap() = %d, want 3", p.Cap())
+	}
+}
+
+func TestPool_Submit_RejectsWhenNonblockingFull(t *testing.T) {
+	t.Parallel()
+
+	p, err := New(Config{Size: 1, ExpiryDuration: time.Second, Nonblocking: true})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer p.Shutdown()
+
+	started := make(chan struct{})
+	_ = p.Submit(func() {
+		close(started)
+		time.Sleep(200 * time.Millisecond)
+	})
+	<-started
+
+	if err := p.Submit(func() {}); err == nil {
+		t.Fatal("Submit() expected error when pool is full and nonblocking")
+	}
+	p.Wait()
+}
+
 func TestPool_ShutdownWait_Timeout(t *testing.T) {
 	p, err := New(Config{Size: 1, ExpiryDuration: time.Second})
 	if err != nil {
