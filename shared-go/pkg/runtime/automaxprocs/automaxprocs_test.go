@@ -1,6 +1,10 @@
 package automaxprocs
 
-import "testing"
+import (
+	"io"
+	"log/slog"
+	"testing"
+)
 
 func TestShouldRunAutomaxprocsUsesNativeRuntimeByDefault(t *testing.T) {
 	t.Setenv(DisableEnv, "")
@@ -53,6 +57,39 @@ func TestAutomaxprocsDecision(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLogInfo_NilLogger(t *testing.T) {
+	logInfo(nil, "should not panic")
+}
+
+func TestLogInfo_WithLogger(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logInfo(logger, "test message", "key", "value")
+}
+
+func TestInit_DisabledByEnv(t *testing.T) {
+	t.Setenv(DisableEnv, "1")
+	t.Setenv(ForceEnv, "")
+	Init(slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+func TestInit_NilLogger(t *testing.T) {
+	t.Setenv(DisableEnv, "1")
+	t.Setenv(ForceEnv, "")
+	Init(nil)
+}
+
+func TestInit_Forced(t *testing.T) {
+	t.Setenv(DisableEnv, "")
+	t.Setenv(ForceEnv, "1")
+	Init(slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+func TestInit_ForcedNilLogger(t *testing.T) {
+	t.Setenv(DisableEnv, "")
+	t.Setenv(ForceEnv, "1")
+	Init(nil)
 }
 
 func TestIsTruthy(t *testing.T) {
