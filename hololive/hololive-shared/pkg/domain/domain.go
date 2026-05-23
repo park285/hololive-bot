@@ -1,6 +1,9 @@
 package domain
 
-import model "github.com/kapu/hololive-shared/pkg/domain/internal/model"
+import (
+	model "github.com/kapu/hololive-shared/pkg/domain/internal/model"
+	"github.com/kapu/hololive-shared/pkg/domain/internal/model/templatesampledata"
+)
 
 type AlarmType = model.AlarmType
 type AlarmTypes = model.AlarmTypes
@@ -207,9 +210,9 @@ var LoadProfiles = model.LoadProfiles
 var NormalizeStatsPeriodToken = model.NormalizeStatsPeriodToken
 var ResolveStatsPeriod = model.ResolveStatsPeriod
 var LoadTalents = model.LoadTalents
-var GetTemplateSampleData = model.GetTemplateSampleData
-var GetAllTemplateKeys = model.GetAllTemplateKeys
-var IsValidTemplateKey = model.IsValidTemplateKey
+var GetTemplateSampleData = templatesampledata.GetTemplateSampleData
+var GetAllTemplateKeys = templatesampledata.GetAllTemplateKeys
+var IsValidTemplateKey = templatesampledata.IsValidTemplateKey
 var LoadTranslated = model.LoadTranslated
 var ResolveYouTubeContentAlarmDeliveryStatus = model.ResolveYouTubeContentAlarmDeliveryStatus
 var ResolveYouTubeCommunityShortsAlarmStateStatus = model.ResolveYouTubeCommunityShortsAlarmStateStatus
