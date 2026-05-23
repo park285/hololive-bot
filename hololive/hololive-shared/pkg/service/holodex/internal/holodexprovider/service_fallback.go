@@ -23,6 +23,8 @@ package holodexprovider
 import (
 	"context"
 	stdErrors "errors"
+
+	"github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider/apiclient"
 )
 
 func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
@@ -38,17 +40,17 @@ func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
 		return true
 	}
 
-	apiErr := &APIError{}
+	apiErr := &apiclient.APIError{}
 	if stdErrors.As(err, &apiErr) && apiErr.StatusCode >= 500 {
 		return true
 	}
 
-	keyRotationError := &KeyRotationError{}
+	keyRotationError := &apiclient.KeyRotationError{}
 	if stdErrors.As(err, &keyRotationError) {
 		return true
 	}
 
-	return isTimeoutError(err)
+	return apiclient.IsTimeoutError(err)
 }
 
 func errorsJoin(errs ...error) error {

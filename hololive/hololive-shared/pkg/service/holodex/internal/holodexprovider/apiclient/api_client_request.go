@@ -1,4 +1,4 @@
-package holodexprovider
+package apiclient
 
 import (
 	"context"

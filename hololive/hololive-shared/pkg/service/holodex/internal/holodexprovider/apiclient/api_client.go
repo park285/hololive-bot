@@ -29,7 +29,7 @@
 //
 // See: https://holodex.net/api/terms for full terms.
 
-package holodexprovider
+package apiclient
 
 import (
 	"context"
