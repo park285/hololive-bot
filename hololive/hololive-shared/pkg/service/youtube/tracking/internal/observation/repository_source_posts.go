@@ -11,14 +11,14 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-func (r *GormRepository) UpsertSourcePost(ctx context.Context, record *domain.YouTubeCommunityShortsSourcePost) error {
+func (r *sourcePostRepository) UpsertSourcePost(ctx context.Context, record *domain.YouTubeCommunityShortsSourcePost) error {
 	if record == nil {
 		return fmt.Errorf("upsert source post: record is nil")
 	}
 	return r.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{record})
 }
 
-func (r *GormRepository) UpsertSourcePostsBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsSourcePost) error {
+func (r *sourcePostRepository) UpsertSourcePostsBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsSourcePost) error {
 	if len(records) == 0 {
 		return nil
 	}
@@ -87,7 +87,7 @@ func buildSourcePostsBatchUpsert(
 	return sb.String(), args
 }
 
-func (r *GormRepository) ListSourcePostsDetectedWithinWindow(
+func (r *sourcePostRepository) ListSourcePostsDetectedWithinWindow(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd time.Time,
@@ -122,7 +122,7 @@ func (r *GormRepository) ListSourcePostsDetectedWithinWindow(
 	return rows, nil
 }
 
-func (r *GormRepository) ListSourcePostsWithinObservationWindow(
+func (r *sourcePostRepository) ListSourcePostsWithinObservationWindow(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd time.Time,

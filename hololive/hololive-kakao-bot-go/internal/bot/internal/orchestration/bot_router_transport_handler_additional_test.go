@@ -236,7 +236,6 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		client := &testIrisClient{}
 		transport := NewCommandTransport(client, nil)
 		require.NotNil(t, transport)
-		assert.Equal(t, client, transport.irisClient)
 	})
 
 	t.Run("send message with nil client", func(t *testing.T) {

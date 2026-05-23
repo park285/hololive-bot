@@ -28,8 +28,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type NormalizeFunc func(domain.CommandType, map[string]any) (string, map[string]any)
-
 type sequentialDispatcher struct {
 	registry  *Registry
 	normalize NormalizeFunc

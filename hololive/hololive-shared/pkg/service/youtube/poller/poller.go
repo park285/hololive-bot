@@ -51,6 +51,8 @@ type LivePoller = pollers.LivePoller
 
 type LiveStatusProvider = pollers.LiveStatusProvider
 
+type Metrics = polling.Metrics
+
 const (
 	PendingPublishedAtResolverPollerName          = polling.PendingPublishedAtResolverPollerName
 	PendingPublishedAtResolverCandidatePollerName = polling.PendingPublishedAtResolverCandidatePollerName
@@ -93,3 +95,5 @@ var NewPendingPublishedAtResolverWithControls = polling.NewPendingPublishedAtRes
 var NewLivePoller = pollers.NewLivePoller
 
 var NewLivePollerWithStatusProvider = pollers.NewLivePollerWithStatusProvider
+
+var NewMetrics = polling.NewMetrics

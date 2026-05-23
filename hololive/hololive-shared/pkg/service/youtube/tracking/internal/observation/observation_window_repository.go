@@ -16,7 +16,7 @@ import (
 
 const communityShortsObservationWindowDuration = 24 * time.Hour
 
-func (r *GormRepository) FindCommunityShortsObservationWindow(
+func (r *windowRepository) FindCommunityShortsObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,
@@ -46,7 +46,7 @@ func (r *GormRepository) FindCommunityShortsObservationWindow(
 	return &record, nil
 }
 
-func (r *GormRepository) FindClosedCommunityShortsObservationWindow(
+func (r *windowRepository) FindClosedCommunityShortsObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,
@@ -89,14 +89,14 @@ func (r *GormRepository) FindClosedCommunityShortsObservationWindow(
 	return window, nil
 }
 
-func (r *GormRepository) requireCommunityShortsObservationWindowDB(action string) error {
+func (r *windowRepository) requireCommunityShortsObservationWindowDB(action string) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("%s: db is nil", action)
 	}
 	return nil
 }
 
-func (r *GormRepository) closeDueCommunityShortsObservationWindow(
+func (r *windowRepository) closeDueCommunityShortsObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,
@@ -130,13 +130,13 @@ func requireClosedCommunityShortsObservationWindow(window *domain.YouTubeCommuni
 	)
 }
 
-func (r *GormRepository) finalizeCommunityShortsObservationWindow(
+func (r *windowRepository) finalizeCommunityShortsObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,
 	window *domain.YouTubeCommunityShortsObservationWindow,
 ) (*domain.YouTubeCommunityShortsObservationWindow, error) {
-	finalizeErr := r.ensureCommunityShortsObservationPostBaselines(ctx, window)
+	finalizeErr := r.owner.baseline.ensureCommunityShortsObservationPostBaselines(ctx, window)
 	if finalizeErr != nil {
 		return nil, fmt.Errorf("finalize observation post baseline: %w", finalizeErr)
 	}
@@ -149,7 +149,7 @@ func (r *GormRepository) finalizeCommunityShortsObservationWindow(
 	return window, nil
 }
 
-func (r *GormRepository) EnsureCommunityShortsObservationWindow(
+func (r *windowRepository) EnsureCommunityShortsObservationWindow(
 	ctx context.Context,
 	window *domain.YouTubeCommunityShortsObservationWindow,
 ) error {
@@ -194,7 +194,7 @@ func (r *GormRepository) EnsureCommunityShortsObservationWindow(
 	return nil
 }
 
-func (r *GormRepository) closeCommunityShortsObservationWindow(
+func (r *windowRepository) closeCommunityShortsObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,

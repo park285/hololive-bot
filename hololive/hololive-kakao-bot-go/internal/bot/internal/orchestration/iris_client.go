@@ -26,6 +26,8 @@ import (
 	"github.com/park285/iris-client-go/iris"
 )
 
+const serviceNameIris = "iris"
+
 type irisClient interface {
 	iris.Sender
 	Ping(ctx context.Context) bool

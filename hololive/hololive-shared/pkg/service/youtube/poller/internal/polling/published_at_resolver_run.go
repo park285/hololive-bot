@@ -153,7 +153,8 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPage(
 	if err != nil {
 		return publishedAtResolverPageResult{}, fmt.Errorf("run pending published_at resolver: list candidates: %w", err)
 	}
-	setPublishedAtResolverPageCandidates(len(candidates))
+	m := r.ensureMetrics()
+	m.SetPublishedAtResolverPageCandidates(len(candidates))
 	if len(candidates) == 0 {
 		return publishedAtResolverPageResult{recoverGaps: true}, nil
 	}
@@ -214,8 +215,9 @@ func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGap(
 	gap resolvedPublishedAtDispatchGap,
 	retryAfter func() time.Time,
 ) {
+	m := r.ensureMetrics()
 	candidate := gap.candidate
-	observePublishedAtResolverScanned(candidate.Kind)
+	m.ObservePublishedAtResolverScanned(candidate.Kind)
 	finalizeResult, err := repository.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, gap.publishedAt, r.routeDecider)
 	if err != nil {
 		r.reportResolvedPublishedAtDispatchGapRecoveryFailure(tracking, ctx, candidate, gap.publishedAt, retryAfter(), err)
@@ -238,7 +240,8 @@ func (r *PendingPublishedAtResolver) reportResolvedPublishedAtDispatchGapRecover
 	retryAfter time.Time,
 	err error,
 ) {
-	observePublishedAtResolverSkipped(candidate.Kind, "dispatch_gap_recovery_failed")
+	m := r.ensureMetrics()
+	m.ObservePublishedAtResolverSkipped(candidate.Kind, "dispatch_gap_recovery_failed")
 	r.markPublishedAtRetryAfterWithReporting(tracking, ctx, candidate, retryAfter, false, "dispatch_gap_recovery_failed")
 	r.logger.Warn("Resolved published_at dispatch gap recovery failed",
 		slog.String("kind", string(candidate.Kind)),

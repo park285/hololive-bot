@@ -255,7 +255,7 @@ func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelI
 	var lastErr error
 
 	for _, channelID := range channelIDs {
-		streams, err := h.scraper.fetchFromYouTubeProducer(ctx, channelID)
+		streams, err := h.scraper.FetchFromYouTubeProducer(ctx, channelID)
 		if err != nil {
 			lastErr = err
 			continue

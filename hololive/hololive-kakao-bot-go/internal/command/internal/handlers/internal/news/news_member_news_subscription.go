@@ -1,0 +1,120 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package news
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/command/internal/handlers/internal/handlercore"
+)
+
+type MemberNewsSubscriptionCommand struct {
+	handlercore.BaseCommand
+}
+
+func NewMemberNewsSubscriptionCommand(deps *handlercore.Dependencies) *MemberNewsSubscriptionCommand {
+	return &MemberNewsSubscriptionCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
+}
+
+func (c *MemberNewsSubscriptionCommand) Name() string {
+	return "news_subscription"
+}
+
+func (c *MemberNewsSubscriptionCommand) Description() string {
+	return "뉴스 알림 구독 제어"
+}
+
+func (c *MemberNewsSubscriptionCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+	if err := c.EnsureBaseDeps(); err != nil {
+		return fmt.Errorf("ensure base deps: %w", err)
+	}
+
+	if c.Deps().MemberNews == nil {
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsServiceNotInitialized)
+	}
+
+	switch memberNewsSubscriptionAction(params) {
+	case "on", "켜기", "구독":
+		return c.handleSubscribe(ctx, cmdCtx)
+	case "off", "끄기", "해제":
+		return c.handleUnsubscribe(ctx, cmdCtx)
+	default:
+		return c.handleStatus(ctx, cmdCtx)
+	}
+}
+
+func memberNewsSubscriptionAction(params map[string]any) string {
+	rawAction, ok := params["action"].(string)
+	if !ok || rawAction == "" {
+		return "status"
+	}
+
+	return rawAction
+}
+
+func (c *MemberNewsSubscriptionCommand) handleSubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
+	isSubscribed, err := c.Deps().MemberNews.IsRoomSubscribed(ctx, cmdCtx.Room)
+	if err != nil {
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+	}
+
+	if isSubscribed {
+		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsAlreadySubscribed(ctx))
+	}
+
+	if err := c.Deps().MemberNews.SubscribeRoom(ctx, cmdCtx.Room, cmdCtx.RoomName); err != nil {
+		c.Deps().Logger.Error("Member news subscribe failed", "room", cmdCtx.Room, "error", err)
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+	}
+
+	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsSubscribed(ctx))
+}
+
+func (c *MemberNewsSubscriptionCommand) handleUnsubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
+	isSubscribed, err := c.Deps().MemberNews.IsRoomSubscribed(ctx, cmdCtx.Room)
+	if err != nil {
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+	}
+
+	if !isSubscribed {
+		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsNotSubscribed(ctx))
+	}
+
+	if err := c.Deps().MemberNews.UnsubscribeRoom(ctx, cmdCtx.Room); err != nil {
+		c.Deps().Logger.Error("Member news unsubscribe failed", "room", cmdCtx.Room, "error", err)
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+	}
+
+	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsUnsubscribed(ctx))
+}
+
+func (c *MemberNewsSubscriptionCommand) handleStatus(ctx context.Context, cmdCtx *domain.CommandContext) error {
+	isSubscribed, err := c.Deps().MemberNews.IsRoomSubscribed(ctx, cmdCtx.Room)
+	if err != nil {
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+	}
+
+	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsStatus(ctx, isSubscribed))
+}

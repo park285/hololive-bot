@@ -26,7 +26,9 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/ingress"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/transport"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 	"github.com/park285/iris-client-go/iris"
@@ -66,7 +68,7 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 	}
 }
 
-func newCommandContextFromIngress(envelope *ingressEnvelope) *domain.CommandContext {
+func newCommandContextFromIngress(envelope *ingress.Envelope) *domain.CommandContext {
 	return domain.NewCommandContext(
 		envelope.ChatID,
 		envelope.RoomName,
@@ -91,10 +93,10 @@ func messageThreadID(message *iris.Message) *string {
 
 func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext, message *iris.Message) context.Context {
 	if identity := messageReplyIdentity(message); identity != "" {
-		ctx = withReplyIdentity(ctx, identity)
+		ctx = transport.WithReplyIdentity(ctx, identity)
 	}
 	if cmdCtx.ThreadID != nil {
-		ctx = withThreadID(ctx, *cmdCtx.ThreadID)
+		ctx = transport.WithThreadID(ctx, *cmdCtx.ThreadID)
 	}
 	return ctx
 }

@@ -21,7 +21,7 @@ type pendingResolutionRow struct {
 	PublishedAtRetryAfter *time.Time        `gorm:"column:published_at_retry_after"`
 }
 
-func (r *GormRepository) ListPendingPublishedAtResolutions(
+func (r *alarmStateRepository) ListPendingPublishedAtResolutions(
 	ctx context.Context,
 	detectedBefore time.Time,
 	limit int,
@@ -33,7 +33,7 @@ func (r *GormRepository) ListPendingPublishedAtResolutions(
 	return candidates, nil
 }
 
-func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
+func (r *alarmStateRepository) ListPendingPublishedAtResolutionsPage(
 	ctx context.Context,
 	referenceNow time.Time,
 	detectedBefore time.Time,
@@ -58,7 +58,7 @@ func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
 	return candidates, buildPendingPublishedAtResolutionCursor(rows, candidates, limit), nil
 }
 
-func (r *GormRepository) MarkPublishedAtRetryAfter(
+func (r *alarmStateRepository) MarkPublishedAtRetryAfter(
 	ctx context.Context,
 	kind domain.OutboxKind,
 	postID string,
@@ -90,7 +90,7 @@ func (r *GormRepository) MarkPublishedAtRetryAfter(
 	return nil
 }
 
-func (r *GormRepository) ClearPublishedAtRetryAfter(
+func (r *alarmStateRepository) ClearPublishedAtRetryAfter(
 	ctx context.Context,
 	kind domain.OutboxKind,
 	postID string,
@@ -121,7 +121,7 @@ func (r *GormRepository) ClearPublishedAtRetryAfter(
 	return nil
 }
 
-func (r *GormRepository) FindAlarmStateByPostID(ctx context.Context, kind domain.OutboxKind, postID string) (*domain.YouTubeCommunityShortsAlarmState, error) {
+func (r *alarmStateRepository) FindAlarmStateByPostID(ctx context.Context, kind domain.OutboxKind, postID string) (*domain.YouTubeCommunityShortsAlarmState, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("find alarm state by post id: db is nil")
 	}
@@ -153,7 +153,7 @@ func hasPublishedAtRetryAfterColumn(db *gorm.DB) bool {
 	return db.Migrator().HasColumn(&domain.YouTubeCommunityShortsAlarmState{}, "published_at_retry_after")
 }
 
-func (r *GormRepository) requirePublishedAtRetryAfterColumn(action string) error {
+func (r *alarmStateRepository) requirePublishedAtRetryAfterColumn(action string) error {
 	if r == nil || r.hasPublishedAtRetryAfter {
 		return nil
 	}

@@ -37,12 +37,12 @@ const (
 	inlinePublishedAtFallbackTimeout = 10 * time.Second
 )
 
-func observeCommunityShortsDetectionBatch(ctx context.Context, channelID string, alarmType domain.AlarmType, detectedCount int, detectedAt time.Time) {
+func observeCommunityShortsDetectionBatch(ctx context.Context, channelID string, alarmType domain.AlarmType, detectedCount int, detectedAt time.Time, metrics *polling.Metrics) {
 	if detectedCount <= 0 {
 		return
 	}
 
-	polling.ObserveCommunityShortsDetectedPosts(alarmType, detectedCount)
+	metrics.ObserveCommunityShortsDetectedPosts(alarmType, detectedCount)
 	slog.LogAttrs(ctx, slog.LevelInfo, logschema.CommunityShortsDetectionBatchMessage,
 		slog.String(logschema.FieldChannelID, channelID),
 		slog.String(logschema.FieldAlarmType, string(alarmType)),

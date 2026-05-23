@@ -134,7 +134,7 @@ func (s *Scheduler) dispatchDueJobs(jobCh chan<- *Job) bool {
 		case jobCh <- job:
 		default:
 			// 채널 가득 참 - 현재 슬롯 anchor를 유지한 채 재시도한다.
-			schedulerDispatchDefer.WithLabelValues("worker_channel_full").Inc()
+			s.metrics.SchedulerDispatchDefer.WithLabelValues("worker_channel_full").Inc()
 			heap.Push(&s.jobs, job)
 			return true
 		}

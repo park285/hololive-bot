@@ -21,7 +21,8 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 	resolveTimeout time.Duration,
 	failureBackoffTTL time.Duration,
 ) (publishedAtResolverCandidateResult, error) {
-	budgetResult, stop, err := checkPendingPublishedAtCandidateBudget(ctx, candidate, runDeadline, resolveTimeout)
+	m := r.ensureMetrics()
+	budgetResult, stop, err := checkPendingPublishedAtCandidateBudget(ctx, candidate, runDeadline, resolveTimeout, m)
 	if stop || err != nil {
 		return budgetResult, err
 	}
@@ -64,8 +65,9 @@ func (r *PendingPublishedAtResolver) processClaimedPendingPublishedAtCandidate(
 	failureBackoffTTL time.Duration,
 	claim JobClaim,
 ) (publishedAtResolverCandidateResult, bool, error) {
+	m := r.ensureMetrics()
 	result := publishedAtResolverCandidateResult{processed: 1}
-	observePublishedAtResolutionAttempt(candidate.Kind)
+	m.ObservePublishedAtResolutionAttempt(candidate.Kind)
 	publishedAt, err := r.resolveCandidateWithTimeout(ctx, candidate, resolveTimeout)
 	if err != nil {
 		result, err := r.handlePendingPublishedAtResolveError(
@@ -83,7 +85,7 @@ func (r *PendingPublishedAtResolver) processClaimedPendingPublishedAtCandidate(
 		r.handleEmptyPendingPublishedAt(ctx, tracking, candidate, failureBackoffTTL)
 		return result, false, nil
 	}
-	observePublishedAtResolutionSuccess(candidate.Kind)
+	m.ObservePublishedAtResolutionSuccess(candidate.Kind)
 
 	finalizeResult, err := repository.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, *publishedAt, r.routeDecider)
 	if err != nil {
@@ -108,6 +110,7 @@ func (r *PendingPublishedAtResolver) tryClaimPendingPublishedAtCandidate(
 		return nil, true, nil
 	}
 
+	m := r.ensureMetrics()
 	leaseTTL := max(resolveTimeout+5*time.Second, time.Minute)
 	status, claim, err := r.candidateClaimer.TryClaim(
 		ctx,
@@ -117,10 +120,10 @@ func (r *PendingPublishedAtResolver) tryClaimPendingPublishedAtCandidate(
 		failureBackoffTTL,
 	)
 	if err != nil {
-		observeJobClaim(PendingPublishedAtResolverCandidatePollerName, string(JobClaimUnavailable))
+		m.ObserveJobClaim(PendingPublishedAtResolverCandidatePollerName, string(JobClaimUnavailable))
 		return nil, false, fmt.Errorf("claim pending published_at candidate: %w", err)
 	}
-	observeJobClaim(PendingPublishedAtResolverCandidatePollerName, string(status.Result))
+	m.ObserveJobClaim(PendingPublishedAtResolverCandidatePollerName, string(status.Result))
 	return r.resolvePendingPublishedAtCandidateClaimStatus(candidate, status, claim)
 }
 
@@ -129,11 +132,12 @@ func (r *PendingPublishedAtResolver) resolvePendingPublishedAtCandidateClaimStat
 	status JobClaimStatus,
 	claim JobClaim,
 ) (JobClaim, bool, error) {
+	m := r.ensureMetrics()
 	switch status.Result {
 	case JobClaimAcquired:
 		return requirePendingPublishedAtCandidateClaimHandle(claim)
 	case JobClaimPeerOwned, JobClaimAlreadyCompleted:
-		observePublishedAtResolverSkipped(candidate.Kind, string(status.Result))
+		m.ObservePublishedAtResolverSkipped(candidate.Kind, string(status.Result))
 		return nil, false, nil
 	case JobClaimUnavailable:
 		return nil, false, fmt.Errorf("claim pending published_at candidate: unavailable")
@@ -169,8 +173,9 @@ func (r *PendingPublishedAtResolver) completePendingPublishedAtCandidateClaim(
 	if claim == nil {
 		return nil
 	}
+	m := r.ensureMetrics()
 	completed, err := claim.MarkCompleted(ctx, cooldownTTL)
-	observeJobMarkCompleted(PendingPublishedAtResolverCandidatePollerName, boolResult(completed, err))
+	m.ObserveJobMarkCompleted(PendingPublishedAtResolverCandidatePollerName, boolResult(completed, err))
 	if err != nil {
 		return fmt.Errorf("complete pending published_at candidate claim: %w", err)
 	}
@@ -190,8 +195,9 @@ func (r *PendingPublishedAtResolver) releasePendingPublishedAtCandidateClaim(
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	claim JobClaim,
 ) {
+	m := r.ensureMetrics()
 	released, err := claim.Release(ctx)
-	observeJobRelease(PendingPublishedAtResolverCandidatePollerName, boolResult(released, err))
+	m.ObserveJobRelease(PendingPublishedAtResolverCandidatePollerName, boolResult(released, err))
 	if err != nil {
 		r.logger.Warn("Pending published_at candidate claim release failed",
 			slog.String("kind", string(candidate.Kind)),
@@ -215,6 +221,7 @@ func checkPendingPublishedAtCandidateBudget(
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	runDeadline time.Time,
 	resolveTimeout time.Duration,
+	m *Metrics,
 ) (publishedAtResolverCandidateResult, bool, error) {
 	select {
 	case <-ctx.Done():
@@ -222,12 +229,12 @@ func checkPendingPublishedAtCandidateBudget(
 	default:
 	}
 
-	observePublishedAtResolverScanned(candidate.Kind)
+	m.ObservePublishedAtResolverScanned(candidate.Kind)
 	if time.Now().After(runDeadline) {
 		return publishedAtResolverCandidateResult{stop: true}, true, nil
 	}
 	if time.Until(runDeadline) < resolveTimeout {
-		observePublishedAtResolverSkipped(candidate.Kind, "run_budget_exhausted")
+		m.ObservePublishedAtResolverSkipped(candidate.Kind, "run_budget_exhausted")
 		return publishedAtResolverCandidateResult{stop: true}, true, nil
 	}
 
@@ -247,7 +254,8 @@ func (r *PendingPublishedAtResolver) handlePendingPublishedAtResolveError(
 		return publishedAtResolverCandidateResult{}, fmt.Errorf("run pending published_at resolver: parent context canceled: %w", ctx.Err())
 	}
 
-	observePublishedAtResolutionFailure(candidate.Kind)
+	m := r.ensureMetrics()
+	m.ObservePublishedAtResolutionFailure(candidate.Kind)
 	isResolveTimeout := errors.Is(err, context.DeadlineExceeded)
 	r.markPublishedAtRetryAfterWithReporting(
 		tracking,
@@ -258,7 +266,7 @@ func (r *PendingPublishedAtResolver) handlePendingPublishedAtResolveError(
 		"resolve_failed",
 	)
 	if isResolveTimeout {
-		observePublishedAtResolverSkipped(candidate.Kind, "resolve_timeout")
+		m.ObservePublishedAtResolverSkipped(candidate.Kind, "resolve_timeout")
 	}
 	r.logger.Warn("Pending published_at resolver failed to resolve candidate",
 		slog.String("kind", string(candidate.Kind)),
@@ -276,6 +284,7 @@ func (r *PendingPublishedAtResolver) handleEmptyPendingPublishedAt(
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	failureBackoffTTL time.Duration,
 ) {
+	m := r.ensureMetrics()
 	r.markPublishedAtRetryAfterWithReporting(
 		tracking,
 		ctx,
@@ -284,7 +293,7 @@ func (r *PendingPublishedAtResolver) handleEmptyPendingPublishedAt(
 		false,
 		"published_at_empty",
 	)
-	observePublishedAtResolverSkipped(candidate.Kind, "published_at_empty")
+	m.ObservePublishedAtResolverSkipped(candidate.Kind, "published_at_empty")
 }
 
 func (r *PendingPublishedAtResolver) handlePendingPublishedAtFinalizeError(
@@ -315,8 +324,9 @@ func (r *PendingPublishedAtResolver) reportPendingPublishedAtCandidateResult(
 	publishedAt *time.Time,
 	result publishedAtFinalizeResult,
 ) {
+	m := r.ensureMetrics()
 	if result.enqueued {
-		observePublishedAtResolverEnqueued(candidate.Kind)
+		m.ObservePublishedAtResolverEnqueued(candidate.Kind)
 		r.logger.Info("published_at_resolver_enqueued",
 			slog.String("kind", string(candidate.Kind)),
 			slog.String("post_id", candidate.PostID),
@@ -327,7 +337,7 @@ func (r *PendingPublishedAtResolver) reportPendingPublishedAtCandidateResult(
 		return
 	}
 
-	observePublishedAtResolverSkipped(candidate.Kind, result.reason)
+	m.ObservePublishedAtResolverSkipped(candidate.Kind, result.reason)
 	r.logger.Info("published_at_resolver_enqueue_skipped",
 		slog.String("kind", string(candidate.Kind)),
 		slog.String("post_id", candidate.PostID),

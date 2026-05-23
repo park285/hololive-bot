@@ -13,7 +13,7 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-func (r *GormRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSentMark) error {
+func (r *deliveryStateRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSentMark) error {
 	if len(marks) == 0 {
 		return nil
 	}
@@ -27,7 +27,8 @@ func (r *GormRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSe
 	}
 
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return NewRepository(tx).applyAlarmSentMarks(ctx, normalized)
+		txRepo := NewRepository(tx)
+		return txRepo.delivery.applyAlarmSentMarks(ctx, normalized)
 	}); err != nil {
 		return fmt.Errorf("mark alarm sent batch transaction: %w", err)
 	}
@@ -35,7 +36,7 @@ func (r *GormRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSe
 	return nil
 }
 
-func (r *GormRepository) applyAlarmSentMarks(ctx context.Context, marks []AlarmSentMark) error {
+func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks []AlarmSentMark) error {
 	updatedAt := yttimestamp.Normalize(time.Now())
 	for i, mark := range marks {
 		if err := r.applyAlarmSentMark(ctx, mark, updatedAt); err != nil {
@@ -45,8 +46,8 @@ func (r *GormRepository) applyAlarmSentMarks(ctx context.Context, marks []AlarmS
 	return nil
 }
 
-func (r *GormRepository) applyAlarmSentMark(ctx context.Context, mark AlarmSentMark, updatedAt time.Time) error {
-	trackingRow, err := r.FindByIdentity(ctx, mark.Kind, mark.ContentID)
+func (r *deliveryStateRepository) applyAlarmSentMark(ctx context.Context, mark AlarmSentMark, updatedAt time.Time) error {
+	trackingRow, err := r.owner.FindByIdentity(ctx, mark.Kind, mark.ContentID)
 	if err != nil {
 		return fmt.Errorf("load tracking row: %w", err)
 	}
@@ -84,7 +85,7 @@ func (r *GormRepository) applyAlarmSentMark(ctx context.Context, mark AlarmSentM
 	return r.applyAlarmStateSentMark(ctx, mark, postID, targetContentID, trackingRow, updatedAt)
 }
 
-func (r *GormRepository) applyAlarmStateSentMark(
+func (r *deliveryStateRepository) applyAlarmStateSentMark(
 	ctx context.Context,
 	mark AlarmSentMark,
 	postID string,
@@ -97,7 +98,7 @@ func (r *GormRepository) applyAlarmStateSentMark(
 		return err
 	}
 
-	stateRow, err := r.FindAlarmStateByPostID(ctx, mark.Kind, postID)
+	stateRow, err := r.owner.FindAlarmStateByPostID(ctx, mark.Kind, postID)
 	if err != nil {
 		return fmt.Errorf("load alarm state row: %w", err)
 	}
@@ -109,7 +110,7 @@ func (r *GormRepository) applyAlarmStateSentMark(
 	return r.applyMissingAlarmStateSentMark(ctx, mark, postID, targetContentID, trackingRow)
 }
 
-func (r *GormRepository) finalizeClaimedAlarmState(ctx context.Context, mark AlarmSentMark, postID string, updatedAt time.Time) (bool, error) {
+func (r *deliveryStateRepository) finalizeClaimedAlarmState(ctx context.Context, mark AlarmSentMark, postID string, updatedAt time.Time) (bool, error) {
 	if mark.AuthorizedAt == nil {
 		return false, nil
 	}
@@ -131,7 +132,7 @@ func (r *GormRepository) finalizeClaimedAlarmState(ctx context.Context, mark Ala
 	return result.RowsAffected > 0, nil
 }
 
-func (r *GormRepository) applyExistingAlarmStateSentMark(ctx context.Context, mark AlarmSentMark, postID string, stateRow *domain.YouTubeCommunityShortsAlarmState, updatedAt time.Time) error {
+func (r *deliveryStateRepository) applyExistingAlarmStateSentMark(ctx context.Context, mark AlarmSentMark, postID string, stateRow *domain.YouTubeCommunityShortsAlarmState, updatedAt time.Time) error {
 	if stateRow.AlarmSentAt != nil && !stateRow.AlarmSentAt.IsZero() {
 		if err := r.updateAlarmStateSentRow(ctx, mark.Kind, postID, mark.AlarmSentAt, updatedAt); err != nil {
 			return fmt.Errorf("refresh existing sent alarm state row: %w", err)
@@ -147,7 +148,7 @@ func (r *GormRepository) applyExistingAlarmStateSentMark(ctx context.Context, ma
 	return nil
 }
 
-func (r *GormRepository) applyMissingAlarmStateSentMark(ctx context.Context, mark AlarmSentMark, postID string, targetContentID string, trackingRow *domain.YouTubeContentAlarmTracking) error {
+func (r *deliveryStateRepository) applyMissingAlarmStateSentMark(ctx context.Context, mark AlarmSentMark, postID string, targetContentID string, trackingRow *domain.YouTubeContentAlarmTracking) error {
 	if trackingRow == nil {
 		if mark.AuthorizedAt != nil {
 			return fmt.Errorf("finalize claimed alarm state: tracking row missing")
@@ -156,7 +157,7 @@ func (r *GormRepository) applyMissingAlarmStateSentMark(ctx context.Context, mar
 	}
 
 	alarmSentAt := mark.AlarmSentAt
-	if err := r.UpsertAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
+	if err := r.owner.UpsertAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
 		Kind:              mark.Kind,
 		PostID:            postID,
 		ContentID:         targetContentID,
@@ -171,7 +172,7 @@ func (r *GormRepository) applyMissingAlarmStateSentMark(ctx context.Context, mar
 	return nil
 }
 
-func (r *GormRepository) updateAlarmStateSentRow(ctx context.Context, kind domain.OutboxKind, postID string, alarmSentAt time.Time, updatedAt time.Time) error {
+func (r *deliveryStateRepository) updateAlarmStateSentRow(ctx context.Context, kind domain.OutboxKind, postID string, alarmSentAt time.Time, updatedAt time.Time) error {
 	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(kind, postID)
 	if err != nil {
 		return err
