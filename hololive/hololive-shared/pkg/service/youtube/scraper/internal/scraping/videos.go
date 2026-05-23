@@ -336,6 +336,14 @@ func parseLockupVideoViewModel(lockup gjson.Result, channelID string) *Video {
 // parseViewCount > 0인 항목을 viewCount로 식별하고, 나머지 첫 번째 항목을 published 텍스트로 사용.
 // 모든 항목에서 viewCount를 식별하지 못하면 기존 동작(0=viewCount, 1=published)으로 폴백.
 func pickLockupMetadataTexts(parts gjson.Result) (int64, string) {
+	texts := collectLockupTexts(parts)
+	if viewCount, published, ok := pickViewCountAndPublished(texts); ok {
+		return viewCount, published
+	}
+	return fallbackPickMetadata(texts)
+}
+
+func collectLockupTexts(parts gjson.Result) []string {
 	var texts []string
 	parts.ForEach(func(_, part gjson.Result) bool {
 		text := part.Get("text.content").String()
@@ -344,34 +352,37 @@ func pickLockupMetadataTexts(parts gjson.Result) (int64, string) {
 		}
 		return true
 	})
+	return texts
+}
 
-	viewCountIdx := -1
-	var viewCount int64
+func pickViewCountAndPublished(texts []string) (int64, string, bool) {
 	for i, t := range texts {
-		if parsed := parseViewCount(t); parsed > 0 {
-			viewCount = parsed
-			viewCountIdx = i
-			break
+		parsed := parseViewCount(t)
+		if parsed <= 0 {
+			continue
 		}
+		return parsed, firstOtherText(texts, i), true
 	}
+	return 0, "", false
+}
 
-	if viewCountIdx >= 0 {
-		for i, t := range texts {
-			if i == viewCountIdx {
-				continue
-			}
-			return viewCount, t
+func firstOtherText(texts []string, excludeIdx int) string {
+	for i, t := range texts {
+		if i == excludeIdx {
+			continue
 		}
-		return viewCount, ""
+		return t
 	}
+	return ""
+}
 
-	// 폴백: 기존 위치 기반 추출.
-	var fallbackViewText, fallbackPublishedText string
+func fallbackPickMetadata(texts []string) (int64, string) {
+	var viewText, publishedText string
 	if len(texts) > 0 {
-		fallbackViewText = texts[0]
+		viewText = texts[0]
 	}
 	if len(texts) > 1 {
-		fallbackPublishedText = texts[1]
+		publishedText = texts[1]
 	}
-	return parseViewCount(fallbackViewText), fallbackPublishedText
+	return parseViewCount(viewText), publishedText
 }
