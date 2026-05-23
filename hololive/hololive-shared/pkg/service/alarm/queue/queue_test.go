@@ -33,6 +33,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/valkey-io/valkey-go"
 	"github.com/stretchr/testify/require"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
@@ -220,6 +221,24 @@ func TestPublisherPublishDispatchBatchAcceptsYouTubeOutboxContentEnvelope(t *tes
 	result, err := publisher.PublishDispatchBatch(context.Background(), []domain.AlarmQueueEnvelope{envelope})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.RequestedDeliveries)
+}
+
+func TestPublisherPublishValkeyBatch_ReturnsErrorOnResponseCountMismatch(t *testing.T) {
+	realCache, _ := newTestCacheClient(t)
+	client := &cachemocks.Client{
+		BFunc: realCache.B,
+		DoMultiFunc: func(_ context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
+			return nil
+		},
+	}
+	publisher := NewPublisher(client, newTestLogger())
+
+	result, err := publisher.PublishBatch(context.Background(), []*domain.AlarmNotification{
+		{AlarmType: domain.AlarmTypeLive, RoomID: "room-mismatch"},
+	}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected response count")
+	assert.Equal(t, 0, result.ProcessedDeliveries)
 }
 
 func TestParseEnvelopeSupportsV0AndV1(t *testing.T) {
