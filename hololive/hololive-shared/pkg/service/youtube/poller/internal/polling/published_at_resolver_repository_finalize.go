@@ -20,7 +20,7 @@ func (r *publishedAtResolverRepository) completeFinalizePublishedAt(
 	result *publishedAtFinalizeResult,
 ) error {
 	if notification != nil {
-		if err := r.batchRepository.batchInsertNotifications(ctx, tx, []*domain.YouTubeNotificationOutbox{notification}); err != nil {
+		if err := r.batchRepository.BatchInsertNotifications(ctx, tx, []*domain.YouTubeNotificationOutbox{notification}); err != nil {
 			return fmt.Errorf("insert pending notification: %w", err)
 		}
 		result.enqueued = true

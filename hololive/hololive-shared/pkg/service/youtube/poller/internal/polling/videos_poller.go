@@ -26,6 +26,8 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
@@ -33,7 +35,7 @@ import (
 type VideosPoller struct {
 	client     *scraper.Client
 	db         *gorm.DB
-	repository batchRepository
+	repository batchrepo.BatchRepository
 	maxResults int
 }
 
@@ -44,7 +46,7 @@ func NewVideosPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int)
 	return &VideosPoller{
 		client:     scraperClient,
 		db:         db,
-		repository: newBatchRepository(db),
+		repository: batchrepo.NewBatchRepository(db),
 		maxResults: maxResults,
 	}
 }

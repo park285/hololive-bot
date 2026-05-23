@@ -30,6 +30,8 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -39,7 +41,7 @@ import (
 type ShortsPoller struct {
 	client                           *scraper.Client
 	db                               *gorm.DB
-	repository                       batchRepository
+	repository                       batchrepo.BatchRepository
 	maxResults                       int
 	routeDecider                     NotificationRouteDecider
 	inlinePublishedAtFallbackEnabled bool
@@ -56,7 +58,7 @@ func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int,
 	return &ShortsPoller{
 		client:                           scraperClient,
 		db:                               db,
-		repository:                       newBatchRepository(db),
+		repository:                       batchrepo.NewBatchRepository(db),
 		maxResults:                       maxResults,
 		routeDecider:                     routeDecider,
 		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,
