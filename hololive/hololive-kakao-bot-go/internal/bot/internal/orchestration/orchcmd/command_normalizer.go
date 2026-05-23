@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package orchestration
+package orchcmd
 
 import (
 	"maps"
@@ -28,20 +28,25 @@ import (
 	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
-func normalizeCommandKey(cmdType domain.CommandType, params map[string]any) (string, map[string]any) {
+const (
+	CommandKeyAlarm            = "alarm"
+	CommandKeyNewsSubscription = "news_subscription"
+)
+
+func NormalizeCommandKey(cmdType domain.CommandType, params map[string]any) (string, map[string]any) {
 	typeStr := stringutil.Normalize(cmdType.String())
 
 	if after, ok := strings.CutPrefix(typeStr, "alarm_"); ok {
 		action := after
 		newParams := cloneParamsWithAction(params, action)
 
-		return commandKeyAlarm, newParams
+		return CommandKeyAlarm, newParams
 	}
 
-	if typeStr == commandKeyAlarm {
+	if typeStr == CommandKeyAlarm {
 		if _, hasAction := params["action"]; !hasAction {
 			newParams := cloneParamsWithAction(params, "list")
-			return commandKeyAlarm, newParams
+			return CommandKeyAlarm, newParams
 		}
 	}
 
@@ -49,13 +54,13 @@ func normalizeCommandKey(cmdType domain.CommandType, params map[string]any) (str
 		action := after
 		newParams := cloneParamsWithAction(params, action)
 
-		return commandKeyNewsSubscription, newParams
+		return CommandKeyNewsSubscription, newParams
 	}
 
-	if typeStr == commandKeyNewsSubscription {
+	if typeStr == CommandKeyNewsSubscription {
 		if _, hasAction := params["action"]; !hasAction {
 			newParams := cloneParamsWithAction(params, "status")
-			return commandKeyNewsSubscription, newParams
+			return CommandKeyNewsSubscription, newParams
 		}
 	}
 

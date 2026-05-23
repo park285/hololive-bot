@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package orchestration
+package orchcmd
 
 import (
 	"maps"
@@ -124,10 +124,10 @@ func TestNormalizeCommandKey(t *testing.T) {
 			origParams := make(map[string]any, len(tc.params))
 			maps.Copy(origParams, tc.params)
 
-			gotKey, gotParams := normalizeCommandKey(tc.cmdType, tc.params)
+			gotKey, gotParams := NormalizeCommandKey(tc.cmdType, tc.params)
 
 			if gotKey != tc.wantKey {
-				t.Errorf("normalizeCommandKey(%q) key = %q, want %q", tc.cmdType, gotKey, tc.wantKey)
+				t.Errorf("NormalizeCommandKey(%q) key = %q, want %q", tc.cmdType, gotKey, tc.wantKey)
 			}
 
 			// action 검증 (alarm/news_subscription 계열만)

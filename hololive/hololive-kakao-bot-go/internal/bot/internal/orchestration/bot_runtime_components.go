@@ -20,9 +20,11 @@
 
 package orchestration
 
-func (b *Bot) ensureCommandExecutor() *CommandRouter {
+import "github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
+
+func (b *Bot) ensureCommandExecutor() *orchcmd.CommandRouter {
 	if b.commandExecutor == nil {
-		b.commandExecutor = NewCommandRouter(b.commandRegistry, b.logger, b.sendMessage)
+		b.commandExecutor = orchcmd.NewCommandRouter(b.commandRegistry, b.logger, b.sendMessage)
 	}
 
 	return b.commandExecutor

@@ -18,37 +18,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package orchestration
+package orchcmd
 
-import (
-	"testing"
+import "github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-)
-
-func TestShouldExecuteAsync(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		cmdType domain.CommandType
-		want    bool
-	}{
-		{name: "help", cmdType: domain.CommandHelp, want: true},
-		{name: "live", cmdType: domain.CommandLive, want: true},
-		{name: "alarm add", cmdType: domain.CommandAlarmAdd, want: false},
-		{name: "alarm list", cmdType: domain.CommandAlarmList, want: false},
-		{name: "member news digest", cmdType: domain.CommandMemberNews, want: false},
-		{name: "news subscription", cmdType: domain.CommandMemberNewsSubscription, want: false},
-		{name: "major event", cmdType: domain.CommandMajorEvent, want: false},
-		{name: "custom command", cmdType: domain.CommandType("custom"), want: false},
+func ShouldExecuteAsync(cmdType domain.CommandType) bool {
+	if !cmdType.IsValid() {
+		// 외부 플러그인/추가 명령은 상태형일 수 있으므로 보수적으로 직렬 실행합니다.
+		return false
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := shouldExecuteAsync(tt.cmdType); got != tt.want {
-				t.Fatalf("shouldExecuteAsync(%q) = %v, want %v", tt.cmdType, got, tt.want)
-			}
-		})
+	switch cmdType {
+	case domain.CommandHelp,
+		domain.CommandLive,
+		domain.CommandUpcoming,
+		domain.CommandSchedule,
+		domain.CommandMemberInfo,
+		domain.CommandStats,
+		domain.CommandSubscriber:
+		return true
+	default:
+		// 상태형(알람/구독/뉴스 다이제스트 등)은 room 순서를 보장해야 하므로 직렬 실행합니다.
+		return false
 	}
 }

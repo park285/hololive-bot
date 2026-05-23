@@ -1,4 +1,4 @@
-package orchestration
+package orchcmd
 
 func CloneCommandBuilders(src []CommandBuilder) []CommandBuilder {
 	if src == nil {
@@ -9,8 +9,4 @@ func CloneCommandBuilders(src []CommandBuilder) []CommandBuilder {
 	copy(dst, src)
 
 	return dst
-}
-
-func cloneCommandBuilders(src []CommandBuilder) []CommandBuilder {
-	return CloneCommandBuilders(src)
 }

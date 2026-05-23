@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package orchestration
+package orchcmd
 
 import (
 	"context"
@@ -91,5 +91,5 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 
 // normalizeCommand: 명령어 타입과 파라미터를 정규화합니다.
 func (r *CommandRouter) normalizeCommand(cmdType domain.CommandType, params map[string]any) (string, map[string]any) {
-	return normalizeCommandKey(cmdType, params)
+	return NormalizeCommandKey(cmdType, params)
 }

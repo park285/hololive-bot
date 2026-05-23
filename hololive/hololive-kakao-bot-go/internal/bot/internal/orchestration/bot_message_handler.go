@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 	"github.com/park285/iris-client-go/iris"
@@ -55,7 +56,7 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 	cmdCtx.ThreadID = messageThreadID(message)
 	reqCtx := commandRequestContext(ctx, cmdCtx, message)
 
-	if shouldExecuteAsync(envelope.Parsed.Type) {
+	if orchcmd.ShouldExecuteAsync(envelope.Parsed.Type) {
 		b.executeCommandAsync(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params, commandType, envelope.ChatID)
 		return
 	}

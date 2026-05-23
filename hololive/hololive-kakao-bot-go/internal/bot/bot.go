@@ -1,6 +1,9 @@
 package bot
 
-import orchestration "github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration"
+import (
+	orchestration "github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
+)
 
 type MessageIngress = orchestration.MessageIngress
 
@@ -10,11 +13,11 @@ type CommandTransport = orchestration.CommandTransport
 
 type Dependencies = orchestration.Dependencies
 
-type CommandBuilder = orchestration.CommandBuilder
+type CommandBuilder = orchcmd.CommandBuilder
 
 type BotLifecycle = orchestration.BotLifecycle
 
-type CommandRouter = orchestration.CommandRouter
+type CommandRouter = orchcmd.CommandRouter
 
 const (
 	EventBotMessageSkipped             = orchestration.EventBotMessageSkipped
@@ -35,7 +38,7 @@ const (
 
 var NewMessageIngress = orchestration.NewMessageIngress
 var NewBot = orchestration.NewBot
-var CloneCommandBuilders = orchestration.CloneCommandBuilders
+var CloneCommandBuilders = orchcmd.CloneCommandBuilders
 var NewCommandTransport = orchestration.NewCommandTransport
 var NewBotLifecycle = orchestration.NewBotLifecycle
-var NewCommandRouter = orchestration.NewCommandRouter
+var NewCommandRouter = orchcmd.NewCommandRouter
