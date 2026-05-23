@@ -13,7 +13,7 @@ import (
 )
 
 type Consumer struct {
-	repository              Repository
+	repository        Repository
 	workerID          string
 	lease             time.Duration
 	recoveryBatchSize int
@@ -63,7 +63,7 @@ func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOpt
 	}
 	host, _ := os.Hostname()
 	consumer := &Consumer{
-		repository:              repository,
+		repository:        repository,
 		workerID:          "dispatcher-" + host,
 		lease:             60 * time.Second,
 		recoveryBatchSize: 100,

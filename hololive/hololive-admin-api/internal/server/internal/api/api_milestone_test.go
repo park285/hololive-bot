@@ -126,7 +126,7 @@ func TestMilestoneHandler_GetMilestones(t *testing.T) {
 	t.Run("invalid limit", func(t *testing.T) {
 		h := &MilestoneHandler{Handler: &Handler{
 			statsRepository: &stubStatsDashboardRepository{},
-			logger:    newDiscardLogger(),
+			logger:          newDiscardLogger(),
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones?limit=999", nil)
 		h.GetMilestones(ctx)
@@ -137,7 +137,7 @@ func TestMilestoneHandler_GetMilestones(t *testing.T) {
 	t.Run("invalid offset", func(t *testing.T) {
 		h := &MilestoneHandler{Handler: &Handler{
 			statsRepository: &stubStatsDashboardRepository{},
-			logger:    newDiscardLogger(),
+			logger:          newDiscardLogger(),
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones?offset=-1", nil)
 		h.GetMilestones(ctx)
@@ -210,7 +210,7 @@ func TestMilestoneHandler_GetNearMilestoneMembers(t *testing.T) {
 	t.Run("invalid threshold", func(t *testing.T) {
 		h := &MilestoneHandler{Handler: &Handler{
 			statsRepository: &stubStatsDashboardRepository{},
-			logger:    newDiscardLogger(),
+			logger:          newDiscardLogger(),
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/near?threshold=1.1", nil)
 		h.GetNearMilestoneMembers(ctx)

@@ -47,7 +47,7 @@ var queryExecModes = map[string]pgx.QueryExecMode{
 
 type Client struct {
 	config Config
-	opt OpenOptions
+	opt    OpenOptions
 
 	mu     sync.RWMutex
 	pool   *pgxpool.Pool
@@ -150,7 +150,7 @@ func NewLazy(config Config, opt OpenOptions) *Client {
 	}
 	return &Client{
 		config: config,
-		opt: opt,
+		opt:    opt,
 	}
 }
 

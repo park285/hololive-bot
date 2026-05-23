@@ -78,10 +78,10 @@ func DefaultDispatcherConfig() DispatcherConfig {
 }
 
 type Dispatcher struct {
-	repository          deliveryRepository
+	repository    deliveryRepository
 	sender        MessageSender
 	logger        *slog.Logger
-	config           DispatcherConfig
+	config        DispatcherConfig
 	lastCleanupAt time.Time
 }
 

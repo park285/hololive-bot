@@ -29,7 +29,7 @@ import (
 func TestSafeDSN(t *testing.T) {
 	tests := []struct {
 		name     string
-		config      Config
+		config   Config
 		wantSafe string
 	}{
 		{

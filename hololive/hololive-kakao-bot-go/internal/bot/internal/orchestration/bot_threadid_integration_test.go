@@ -27,8 +27,8 @@ import (
 	"time"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/hololive-bot/shared-go/pkg/json"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"

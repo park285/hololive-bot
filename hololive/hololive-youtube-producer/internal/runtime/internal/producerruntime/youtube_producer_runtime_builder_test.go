@@ -187,7 +187,7 @@ func TestIngestionRuntimeSpecs_YouTubeProducerOwnsConfiguredYouTubeState(t *test
 	t.Parallel()
 
 	tests := map[string]struct {
-		ingestionConfig                  config.IngestionConfig
+		ingestionConfig      config.IngestionConfig
 		wantYouTube          bool
 		wantCommunityBigBang bool
 	}{

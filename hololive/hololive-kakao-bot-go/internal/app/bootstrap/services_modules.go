@@ -76,12 +76,12 @@ func buildBotDataModule(
 	profileService *member.ProfileService,
 ) BotDataModule {
 	return BotDataModule{
-		Cache:       infra.Cache,
-		Postgres:    infra.Postgres,
-		MemberRepository:  infra.MemberRepository,
-		MemberCache: infra.MemberCache,
-		Profiles:    profileService,
-		MembersData: alarmMode.MemberDataSource,
+		Cache:            infra.Cache,
+		Postgres:         infra.Postgres,
+		MemberRepository: infra.MemberRepository,
+		MemberCache:      infra.MemberCache,
+		Profiles:         profileService,
+		MembersData:      alarmMode.MemberDataSource,
 	}
 }
 
@@ -121,8 +121,8 @@ func buildBotFeatureModule(
 	commandBuilders []bot.CommandBuilder,
 ) BotFeatureModule {
 	return BotFeatureModule{
-		MajorEventRepository:  majorEventRepository,
-		MemberNews:      memberNewsService,
-		CommandBuilders: bot.CloneCommandBuilders(commandBuilders),
+		MajorEventRepository: majorEventRepository,
+		MemberNews:           memberNewsService,
+		CommandBuilders:      bot.CloneCommandBuilders(commandBuilders),
 	}
 }

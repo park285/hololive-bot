@@ -17,7 +17,7 @@ import (
 
 type upcomingStreamProviderStub struct {
 	upcomingStreams []*domain.Stream
-	upcomingErr    error
+	upcomingErr     error
 }
 
 func (s *upcomingStreamProviderStub) GetLiveStreams(_ context.Context) ([]*domain.Stream, error) {

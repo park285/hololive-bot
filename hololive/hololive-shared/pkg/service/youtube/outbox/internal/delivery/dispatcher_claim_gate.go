@@ -50,7 +50,6 @@ type deliveryClaimSelection struct {
 	retryOutboxIDs         []int64
 }
 
-
 func (d *Dispatcher) selectClaimedDeliveries(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
@@ -161,7 +160,6 @@ func appendProceedingDeliveryClaim(
 	selection.sendOutboxes = append(selection.sendOutboxes, outbox)
 	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
 }
-
 
 func (d *Dispatcher) applyClaimSelection(result *deliveryDispatchResult, mu *sync.Mutex, selection deliveryClaimSelection) {
 	if len(selection.alreadySentDeliveryIDs) > 0 {

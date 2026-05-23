@@ -14,7 +14,7 @@ import (
 )
 
 type publishedAtResolverRepository struct {
-	db        *gorm.DB
+	db              *gorm.DB
 	batchRepository *gormBatchRepository
 }
 
@@ -49,7 +49,7 @@ const (
 
 func newPublishedAtResolverRepository(db *gorm.DB) *publishedAtResolverRepository {
 	return &publishedAtResolverRepository{
-		db:        db,
+		db:              db,
 		batchRepository: &gormBatchRepository{db: db},
 	}
 }

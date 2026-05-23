@@ -42,9 +42,9 @@ const (
 
 // DB 부하를 줄이고 빠른 조회를 지원하며, 워밍업(Warm-up) 기능을 제공합니다.
 type Cache struct {
-	repository   *Repository
-	cache  cache.Client
-	logger *slog.Logger
+	repository *Repository
+	cache      cache.Client
+	logger     *slog.Logger
 
 	byChannelID sync.Map // map[string]*domain.Member
 	byName      sync.Map // map[string]*domain.Member
@@ -77,11 +77,11 @@ func NewMemberCache(ctx context.Context, repository *Repository, cacheService ca
 	}
 
 	mc := &Cache{
-		repository:     repository,
-		cache:    cacheService,
-		logger:   logger,
-		cacheTTL: config.ValkeyTTL,
-		warmup:   config.WarmUp,
+		repository: repository,
+		cache:      cacheService,
+		logger:     logger,
+		cacheTTL:   config.ValkeyTTL,
+		warmup:     config.WarmUp,
 
 		warmUpChunkSize:     config.WarmUpChunkSize,
 		warmUpMaxGoroutines: config.WarmUpMaxGoroutines,

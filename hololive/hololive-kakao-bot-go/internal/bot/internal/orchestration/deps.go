@@ -43,33 +43,33 @@ import (
 )
 
 type Dependencies struct {
-	BotSelfUser      string
-	IrisBaseURL      string
-	Notification     config.NotificationConfig
-	Logger           *slog.Logger
-	Client           irisClient
-	MessageAdapter   *adapter.MessageAdapter
-	Formatter        *adapter.ResponseFormatter
-	Cache            cache.Client
-	Postgres         database.Client
+	BotSelfUser            string
+	IrisBaseURL            string
+	Notification           config.NotificationConfig
+	Logger                 *slog.Logger
+	Client                 irisClient
+	MessageAdapter         *adapter.MessageAdapter
+	Formatter              *adapter.ResponseFormatter
+	Cache                  cache.Client
+	Postgres               database.Client
 	MemberRepository       *member.Repository
-	MemberCache      *member.Cache
-	Holodex          domain.StreamProvider
-	Chzzk            *chzzk.Client
-	Twitch           *twitch.Client
-	Profiles         *member.ProfileService
-	Alarm            domain.AlarmCRUD
-	Matcher          *matcher.Matcher
-	MembersData      member.DataProvider
-	Service          youtube.Service
+	MemberCache            *member.Cache
+	Holodex                domain.StreamProvider
+	Chzzk                  *chzzk.Client
+	Twitch                 *twitch.Client
+	Profiles               *member.ProfileService
+	Alarm                  domain.AlarmCRUD
+	Matcher                *matcher.Matcher
+	MembersData            member.DataProvider
+	Service                youtube.Service
 	YouTubeStatsRepository stats.StatsCommandRepository
-	Activity         *activity.Logger
-	Settings         settings.ReadWriter
-	ACL              *acl.Service
+	Activity               *activity.Logger
+	Settings               settings.ReadWriter
+	ACL                    *acl.Service
 	MajorEventRepository   command.MajorEventRepository
-	MemberNews       command.MemberNewsService
-	CommandBuilders  []CommandBuilder
-	WorkerPool       *workerpool.Pool
+	MemberNews             command.MemberNewsService
+	CommandBuilders        []CommandBuilder
+	WorkerPool             *workerpool.Pool
 }
 
 type coreDependencies struct {
@@ -86,21 +86,21 @@ type messagingDependencies struct {
 }
 
 type dataDependencies struct {
-	cache       cache.Client
-	postgres    database.Client
-	memberRepository  *member.Repository
-	memberCache *member.Cache
+	cache            cache.Client
+	postgres         database.Client
+	memberRepository *member.Repository
+	memberCache      *member.Cache
 }
 
 type streamDependencies struct {
-	holodex          domain.StreamProvider
-	chzzk            *chzzk.Client
-	twitch           *twitch.Client
-	profiles         *member.ProfileService
-	alarm            domain.AlarmCRUD
-	matcher          *matcher.Matcher
-	membersData      member.DataProvider
-	service          youtube.Service
+	holodex                domain.StreamProvider
+	chzzk                  *chzzk.Client
+	twitch                 *twitch.Client
+	profiles               *member.ProfileService
+	alarm                  domain.AlarmCRUD
+	matcher                *matcher.Matcher
+	membersData            member.DataProvider
+	service                youtube.Service
 	youTubeStatsRepository stats.StatsCommandRepository
 }
 
@@ -112,9 +112,9 @@ type supportDependencies struct {
 }
 
 type featureDependencies struct {
-	majorEventRepository  command.MajorEventRepository
-	memberNews      command.MemberNewsService
-	commandBuilders []CommandBuilder
+	majorEventRepository command.MajorEventRepository
+	memberNews           command.MemberNewsService
+	commandBuilders      []CommandBuilder
 }
 
 func (d *Dependencies) coreDeps() coreDependencies {
@@ -148,10 +148,10 @@ func (d *Dependencies) dataDeps() dataDependencies {
 	}
 
 	return dataDependencies{
-		cache:       d.Cache,
-		postgres:    d.Postgres,
-		memberRepository:  d.MemberRepository,
-		memberCache: d.MemberCache,
+		cache:            d.Cache,
+		postgres:         d.Postgres,
+		memberRepository: d.MemberRepository,
+		memberCache:      d.MemberCache,
 	}
 }
 
@@ -161,14 +161,14 @@ func (d *Dependencies) streamDeps() streamDependencies {
 	}
 
 	return streamDependencies{
-		holodex:          d.Holodex,
-		chzzk:            d.Chzzk,
-		twitch:           d.Twitch,
-		profiles:         d.Profiles,
-		alarm:            d.Alarm,
-		matcher:          d.Matcher,
-		membersData:      d.MembersData,
-		service:          d.Service,
+		holodex:                d.Holodex,
+		chzzk:                  d.Chzzk,
+		twitch:                 d.Twitch,
+		profiles:               d.Profiles,
+		alarm:                  d.Alarm,
+		matcher:                d.Matcher,
+		membersData:            d.MembersData,
+		service:                d.Service,
 		youTubeStatsRepository: d.YouTubeStatsRepository,
 	}
 }
@@ -192,8 +192,8 @@ func (d *Dependencies) featureDeps() featureDependencies {
 	}
 
 	return featureDependencies{
-		majorEventRepository:  d.MajorEventRepository,
-		memberNews:      d.MemberNews,
-		commandBuilders: cloneCommandBuilders(d.CommandBuilders),
+		majorEventRepository: d.MajorEventRepository,
+		memberNews:           d.MemberNews,
+		commandBuilders:      cloneCommandBuilders(d.CommandBuilders),
 	}
 }

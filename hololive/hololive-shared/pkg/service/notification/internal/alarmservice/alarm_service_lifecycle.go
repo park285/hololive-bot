@@ -73,15 +73,15 @@ func NewAlarmService(
 	}
 
 	service := &AlarmService{
-		cache:        cacheClient,
-		holodex:      holodexService,
-		chzzk:        chzzkClient,
-		twitch:       twitchClient,
-		memberData:   memberData,
-		alarmRepository:    alarmRepository,
-		alarmWriter:  writer,
-		logger:       logger,
-		targetPolicy: targetPolicy,
+		cache:           cacheClient,
+		holodex:         holodexService,
+		chzzk:           chzzkClient,
+		twitch:          twitchClient,
+		memberData:      memberData,
+		alarmRepository: alarmRepository,
+		alarmWriter:     writer,
+		logger:          logger,
+		targetPolicy:    targetPolicy,
 	}
 
 	registerAlarmService(service)

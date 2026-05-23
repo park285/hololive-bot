@@ -86,7 +86,7 @@ type Dispatcher struct {
 	sender    delivery.MessageSender
 	renderer  *template.Renderer
 	logger    *slog.Logger
-	config       Config
+	config    Config
 	delivery  *DeliveryRepository
 	telemetry *DeliveryTelemetryRepository
 	formatter *MessageFormatter
@@ -117,7 +117,7 @@ func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.Messag
 		sender:    sender,
 		renderer:  renderer,
 		logger:    logger,
-		config:       config,
+		config:    config,
 		delivery:  NewDeliveryRepository(db, logger),
 		telemetry: telemetryRepository,
 		formatter: &MessageFormatter{

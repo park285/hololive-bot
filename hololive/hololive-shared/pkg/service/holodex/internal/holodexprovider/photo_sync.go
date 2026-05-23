@@ -33,9 +33,9 @@ import (
 )
 
 type PhotoSyncService struct {
-	holodex    *Service
+	holodex          *Service
 	memberRepository *member.Repository
-	logger     *slog.Logger
+	logger           *slog.Logger
 
 	syncInterval   time.Duration // 동기화 주기 (기본: 24시간)
 	staleThreshold time.Duration // 이 기간 이상 지난 photo는 재동기화 (기본: 24시간)
@@ -47,11 +47,11 @@ func NewPhotoSyncService(
 	logger *slog.Logger,
 ) *PhotoSyncService {
 	return &PhotoSyncService{
-		holodex:        holodex,
-		memberRepository:     memberRepository,
-		logger:         logger.With(slog.String("service", "photo_sync")),
-		syncInterval:   7 * 24 * time.Hour, // 7일마다 동기화 (프로필은 자주 변하지 않음)
-		staleThreshold: 7 * 24 * time.Hour, // 7일 이상 된 photo는 재동기화
+		holodex:          holodex,
+		memberRepository: memberRepository,
+		logger:           logger.With(slog.String("service", "photo_sync")),
+		syncInterval:     7 * 24 * time.Hour, // 7일마다 동기화 (프로필은 자주 변하지 않음)
+		staleThreshold:   7 * 24 * time.Hour, // 7일 이상 된 photo는 재동기화
 	}
 }
 

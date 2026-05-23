@@ -105,8 +105,8 @@ type StreamHandler struct {
 	Holodex              *holodex.Service
 	YouTube              youtube.Service
 	ValkeyCache          cache.Client
-	StatsRepository            ytstats.StatsDashboardRepository
-	MemberRepository           StreamMemberRepository
+	StatsRepository      ytstats.StatsDashboardRepository
+	MemberRepository     StreamMemberRepository
 	MemberIndexLoader    func(context.Context) ([]*domain.Member, error)
 	State                *StreamState
 	RespondError         StreamRespondErrorFunc

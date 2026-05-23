@@ -38,25 +38,25 @@ type Features struct {
 }
 
 type State struct {
-	runtimeName       string
-	youtubeEnabled    bool
-	photoSyncEnabled  bool
-	activeActiveEnabled      bool
-	instanceID        string
-	leaseAvailable    atomic.Bool
-	httpServerStarted atomic.Bool
-	shuttingDown      atomic.Bool
-	leaseReason       atomic.Value // string
-	lastError         atomic.Value // string
+	runtimeName         string
+	youtubeEnabled      bool
+	photoSyncEnabled    bool
+	activeActiveEnabled bool
+	instanceID          string
+	leaseAvailable      atomic.Bool
+	httpServerStarted   atomic.Bool
+	shuttingDown        atomic.Bool
+	leaseReason         atomic.Value // string
+	lastError           atomic.Value // string
 }
 
 func New(runtimeName string, features Features) *State {
 	state := &State{
-		runtimeName:      strings.TrimSpace(runtimeName),
-		youtubeEnabled:   features.YouTubeEnabled,
-		photoSyncEnabled: features.PhotoSyncEnabled,
-		activeActiveEnabled:     features.ActiveActiveEnabled,
-		instanceID:       strings.TrimSpace(features.ActiveActiveInstance),
+		runtimeName:         strings.TrimSpace(runtimeName),
+		youtubeEnabled:      features.YouTubeEnabled,
+		photoSyncEnabled:    features.PhotoSyncEnabled,
+		activeActiveEnabled: features.ActiveActiveEnabled,
+		instanceID:          strings.TrimSpace(features.ActiveActiveInstance),
 	}
 	state.leaseReason.Store("")
 	state.lastError.Store("")
