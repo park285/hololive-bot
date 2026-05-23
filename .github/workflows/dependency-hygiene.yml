@@ -3,6 +3,10 @@ name: Dependency Hygiene
 on:
   pull_request:
 
+concurrency:
+  group: dependency-hygiene-${{ github.head_ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
