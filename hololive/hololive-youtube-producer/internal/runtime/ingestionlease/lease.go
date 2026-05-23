@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/park285/hololive-bot/shared-go/pkg/backoff"
 )
 
 const (
@@ -281,14 +282,7 @@ func leaseSleepBeforeRetry(ctx context.Context, opts leaseRetryOptions, attempt 
 }
 
 func leaseBackoffDelay(attempt int, baseDelay, jitter time.Duration) time.Duration {
-	delay := baseDelay
-	for range attempt {
-		delay *= 2
-	}
-	if jitter > 0 {
-		delay += time.Duration(time.Now().UnixNano() % int64(jitter))
-	}
-	return delay
+	return backoff.ComputeExponentialBackoff(attempt, baseDelay, 0, jitter)
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) bool {

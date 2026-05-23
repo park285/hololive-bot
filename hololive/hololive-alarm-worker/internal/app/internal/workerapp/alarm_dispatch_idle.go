@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/park285/hololive-bot/shared-go/pkg/backoff"
 )
 
 type alarmDispatchWakeupWaitResult string
@@ -130,12 +131,9 @@ func (w *alarmDispatchWakeupWaiter) waitForValkeyWakeup(ctx context.Context, tim
 }
 
 func (w *alarmDispatchWakeupWaiter) increaseBackoff() {
-	next := w.effectiveCurrentWait() * 2
-	maxWait := w.effectiveBackoffMax()
-	if next > maxWait {
-		next = maxWait
-	}
-	w.currentWait = next
+	w.currentWait = backoff.NextExponentialBackoff(
+		w.effectiveCurrentWait(), w.effectiveBackoffMax(), w.effectiveBackoffMin(),
+	)
 }
 
 func (w *alarmDispatchWakeupWaiter) effectiveCurrentWait() time.Duration {

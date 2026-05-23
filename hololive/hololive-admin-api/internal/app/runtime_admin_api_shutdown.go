@@ -25,6 +25,7 @@ import (
 
 	appruntime "github.com/kapu/hololive-admin-api/internal/app/runtime"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
 )
 
 func (r *AdminAPIRuntime) Shutdown(ctx context.Context) {
@@ -44,5 +45,5 @@ func (r *AdminAPIRuntime) ShutdownHTTPServer(ctx context.Context) error {
 		return nil
 	}
 
-	return appruntime.ShutdownHTTPServer(r.HttpServer, ctx)
+	return httpserver.ShutdownHTTPServer(ctx, r.HttpServer)
 }

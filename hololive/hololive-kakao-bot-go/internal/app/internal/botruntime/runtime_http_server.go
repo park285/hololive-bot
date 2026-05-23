@@ -25,6 +25,7 @@ import (
 	"errors"
 
 	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
 )
 
 func (r *BotRuntime) StartHTTPServer(errCh chan<- error) {
@@ -32,7 +33,7 @@ func (r *BotRuntime) StartHTTPServer(errCh chan<- error) {
 		return
 	}
 
-	appruntime.StartHTTPServer(r.HttpServer, r.Logger, errCh)
+	httpserver.StartHTTPServer(r.HttpServer, r.Logger, errCh)
 	appruntime.StartHTTP3Server(r.H3Server, r.Logger, errCh)
 }
 
@@ -42,7 +43,7 @@ func (r *BotRuntime) ShutdownHTTPServer(ctx context.Context) error {
 	}
 
 	return errors.Join(
-		appruntime.ShutdownHTTPServer(r.HttpServer, ctx),
-		appruntime.ShutdownHTTP3Server(r.H3Server, ctx),
+		httpserver.ShutdownHTTPServer(ctx, r.HttpServer),
+		appruntime.ShutdownHTTP3Server(ctx, r.H3Server),
 	)
 }

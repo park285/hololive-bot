@@ -22,8 +22,9 @@ package apiservice
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 
 	"google.golang.org/api/youtube/v3"
 
@@ -58,10 +59,7 @@ func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, ma
 
 	response, err := call.Context(ctx).Do()
 	if err != nil {
-		ys.logger.Error("Failed to fetch recent videos",
-			slog.String("channel", channelID),
-			slog.Any("error", err))
-		return nil, fmt.Errorf("YouTube search error: %w", err)
+		return nil, sharedlog.LogAndWrapError(ctx, ys.logger, "YouTube search error", err, slog.String("channel", channelID))
 	}
 
 	videoIDs := recentAPIResponseVideoIDs(response.Items)

@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/park285/hololive-bot/shared-go/pkg/backoff"
 )
 
 // 스키마 마이그레이션이 완료되기 전 앱이 시작되는 Race Condition 방어용.
@@ -49,7 +51,7 @@ func OpenWithRetry(
 			break
 		}
 
-		delay := min(retry.BaseDelay*time.Duration(1<<uint(attempt)), retry.MaxDelay)
+		delay := backoff.ComputeExponentialBackoff(attempt, retry.BaseDelay, retry.MaxDelay, 0)
 		logOpenRetryAttempt(logger, retry, attempt, delay, err)
 		if waitErr := waitOpenRetryDelay(ctx, delay); waitErr != nil {
 			return nil, waitErr

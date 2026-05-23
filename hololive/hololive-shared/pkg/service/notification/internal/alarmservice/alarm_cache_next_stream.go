@@ -22,8 +22,9 @@ package alarmservice
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+
+	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/valkey-io/valkey-go"
@@ -34,12 +35,7 @@ func (as *AlarmService) GetNextStreamInfo(ctx context.Context, channelID string)
 
 	data, err := as.cache.HGetAll(ctx, key)
 	if err != nil {
-		as.logger.Error("Failed to get next stream info from cache",
-			slog.String("channel_id", channelID),
-			slog.Any("error", err),
-		)
-
-		return nil, fmt.Errorf("get next stream info: %w", err)
+		return nil, sharedlogging.LogAndWrapError(ctx, as.logger, "get next stream info", err, slog.String("channel_id", channelID))
 	}
 
 	return as.parseNextStreamInfo(channelID, data), nil

@@ -22,73 +22,22 @@ package runtime
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
 	"github.com/quic-go/quic-go/http3"
 )
 
-type listenErrorPrefixServer struct {
-	httpserver.Server
-	errorText string
-	logger    *slog.Logger
-	errCh     chan<- error
-}
-
-func (s listenErrorPrefixServer) ListenAndServe() error {
-	err := s.Server.ListenAndServe()
-	if err == nil || errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-
-	if s.errCh == nil && s.logger != nil {
-		s.logger.Error(s.errorText, slog.Any("error", err))
-	}
-
-	return fmt.Errorf("%s: %w", s.errorText, err)
-}
-
-func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
-	if server == nil {
-		return
-	}
-
-	httpserver.Start(listenErrorPrefixServer{
-		Server:    server,
-		errorText: "HTTP server error",
-		logger:    logger,
-		errCh:     errCh,
-	}, nil, errCh)
-}
-
 func StartHTTP3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
 	if server == nil {
 		return
 	}
-
-	httpserver.Start(listenErrorPrefixServer{
-		Server:    server,
-		errorText: "HTTP/3 server error",
-		logger:    logger,
-		errCh:     errCh,
-	}, nil, errCh)
+	httpserver.StartServerWithPrefix(server, "HTTP/3 server error", logger, errCh)
 }
 
-func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
+func ShutdownHTTP3Server(ctx context.Context, server *http3.Server) error {
 	if server == nil {
 		return nil
 	}
-
-	return httpserver.Shutdown(ctx, server, "HTTP server shutdown failed")
-}
-
-func ShutdownHTTP3Server(server *http3.Server, ctx context.Context) error {
-	if server == nil {
-		return nil
-	}
-
 	return httpserver.Shutdown(ctx, server, "HTTP/3 server shutdown failed")
 }

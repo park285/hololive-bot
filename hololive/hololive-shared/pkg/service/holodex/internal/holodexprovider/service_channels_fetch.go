@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
+
 	"github.com/park285/hololive-bot/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -57,8 +59,7 @@ func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Cha
 		)
 	}
 
-	h.logger.Error("Failed to get channel", slog.String("channel_id", channelID), slog.Any("error", err))
-	return nil, fmt.Errorf("get channel: %w", err)
+	return nil, sharedlog.LogAndWrapError(ctx, h.logger, "get channel", err, slog.String("channel_id", channelID))
 }
 
 func (h *Service) fetchChannelDirect(ctx context.Context, channelID string) (*domain.Channel, error) {
