@@ -40,13 +40,14 @@ var ErrDeliveryDedupeKeyRequired = errors.New("delivery dedupe key is required")
 var errDeliverySendTimeout = errors.New("delivery send timeout exceeded")
 
 var deliveryFailureReasonBySentinel = []struct {
-	err    error
-	reason string
+	err       error
+	reason    string
+	permanent bool
 }{
-	{err: iris.ErrAuthFailed, reason: "auth"},
+	{err: iris.ErrAuthFailed, reason: "auth", permanent: true},
 	{err: iris.ErrRateLimited, reason: "rate-limited"},
 	{err: iris.ErrTransport, reason: "transport"},
-	{err: iris.ErrPermanent, reason: "http-permanent"},
+	{err: iris.ErrPermanent, reason: "http-permanent", permanent: true},
 }
 
 func buildDeliverySendRequest(roomID, message string, outboxes []domain.YouTubeNotificationOutbox) (deliverySendRequest, error) {
@@ -117,6 +118,15 @@ func deliveryFailureReason(err error) string {
 		}
 	}
 	return "send message"
+}
+
+func deliveryFailureReasonIsPermanent(reason string) bool {
+	for _, item := range deliveryFailureReasonBySentinel {
+		if item.reason == reason {
+			return item.permanent
+		}
+	}
+	return false
 }
 
 func deliveryClientRequestID(roomID string, dedupeKeys []string) string {
