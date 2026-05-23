@@ -207,7 +207,7 @@ func TestRun_NilStartCallback(t *testing.T) {
 
 	err := Run(Options{
 		BaseContext: ctx,
-		Start:      nil,
+		Start:       nil,
 		NotifySignals: func(...os.Signal) (<-chan os.Signal, func()) {
 			return make(chan os.Signal), func() {}
 		},
