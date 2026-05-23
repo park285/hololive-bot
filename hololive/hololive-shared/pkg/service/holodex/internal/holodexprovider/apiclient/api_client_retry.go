@@ -1,4 +1,4 @@
-package holodexprovider
+package apiclient
 
 import (
 	"context"
@@ -14,7 +14,7 @@ func (state *holodexRequestRetryState) recordAttemptError(logger *slog.Logger, p
 		return false
 	}
 	state.lastErr = err
-	if !isTimeoutError(err) {
+	if !IsTimeoutError(err) {
 		return false
 	}
 	state.timeoutCount++
@@ -42,7 +42,7 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 	}
 
 	errorType := "network"
-	if isTimeoutError(err) {
+	if IsTimeoutError(err) {
 		errorType = "timeout"
 	}
 
@@ -64,7 +64,7 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 	return false
 }
 
-func isTimeoutError(err error) bool {
+func IsTimeoutError(err error) bool {
 	if stdErrors.Is(err, context.DeadlineExceeded) {
 		return true
 	}

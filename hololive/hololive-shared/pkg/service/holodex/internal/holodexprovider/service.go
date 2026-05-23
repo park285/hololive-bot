@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider/apiclient"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
@@ -71,7 +72,7 @@ type StreamRaw struct {
 
 // 캐싱 및 스크래핑 폴백(Fallback) 기능을 포함한다.
 type Service struct {
-	requester    Requester
+	requester    apiclient.Requester
 	scraper      *ScraperService
 	logger       *slog.Logger
 	cacheManager *CacheManager
@@ -107,7 +108,7 @@ func NewHolodexService(baseURL string, apiKey string, cacheClient cache.Client, 
 		}
 	}
 
-	requester := NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter)
+	requester := apiclient.NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter)
 
 	service := &Service{
 		requester:    requester,

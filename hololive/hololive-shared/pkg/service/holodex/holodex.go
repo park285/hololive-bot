@@ -1,14 +1,17 @@
 package holodex
 
-import holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider"
+import (
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider"
+	"github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider/apiclient"
+)
 
-type Requester = holodexprovider.Requester
+type Requester = apiclient.Requester
 
-type APIClient = holodexprovider.APIClient
+type APIClient = apiclient.APIClient
 
-type APIError = holodexprovider.APIError
+type APIError = apiclient.APIError
 
-type KeyRotationError = holodexprovider.KeyRotationError
+type KeyRotationError = apiclient.KeyRotationError
 
 type ChannelRaw = holodexprovider.ChannelRaw
 
@@ -30,11 +33,11 @@ type PhotoSyncService = holodexprovider.PhotoSyncService
 
 var ErrInvalidStreamOrg = holodexprovider.ErrInvalidStreamOrg
 
-var NewHolodexAPIClient = holodexprovider.NewHolodexAPIClient
+var NewHolodexAPIClient = apiclient.NewHolodexAPIClient
 
-var NewAPIError = holodexprovider.NewAPIError
+var NewAPIError = apiclient.NewAPIError
 
-var NewKeyRotationError = holodexprovider.NewKeyRotationError
+var NewKeyRotationError = apiclient.NewKeyRotationError
 
 var NewHolodexService = holodexprovider.NewHolodexService
 
