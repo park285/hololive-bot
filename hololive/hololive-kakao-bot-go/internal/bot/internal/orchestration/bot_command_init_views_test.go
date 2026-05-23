@@ -29,6 +29,7 @@ import (
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 )
 
@@ -108,11 +109,11 @@ func (s *stubCommandInitCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 }
 
 func TestCommandInitView_DefensiveCopyCommandBuilders(t *testing.T) {
-	external := CommandBuilder(func(_ *command.Dependencies) command.Command {
+	external := orchcmd.CommandBuilder(func(_ *command.Dependencies) command.Command {
 		return &stubCommandInitCommand{name: "external"}
 	})
 	b := &Bot{
-		commandBuilders: []CommandBuilder{external},
+		commandBuilders: []orchcmd.CommandBuilder{external},
 		logger:          slog.New(slog.DiscardHandler),
 	}
 
@@ -165,7 +166,7 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 		logger:               slog.New(slog.DiscardHandler),
 		majorEventRepository: &stubCommandInitMajorEventRepository{},
 		memberNews:           &stubCommandInitMemberNewsService{},
-		commandBuilders: []CommandBuilder{
+		commandBuilders: []orchcmd.CommandBuilder{
 			nil,
 			func(_ *command.Dependencies) command.Command {
 				return &stubCommandInitCommand{name: "external"}
@@ -211,7 +212,7 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 	registry.Register(target)
 
 	var builtDeps *command.Dependencies
-	builder := CommandBuilder(func(deps *command.Dependencies) command.Command {
+	builder := orchcmd.CommandBuilder(func(deps *command.Dependencies) command.Command {
 		builtDeps = deps
 
 		return &stubCommandInitCommand{
@@ -225,7 +226,7 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 
 	view := commandInitView{
 		logger:          slog.New(slog.DiscardHandler),
-		commandBuilders: []CommandBuilder{builder},
+		commandBuilders: []orchcmd.CommandBuilder{builder},
 	}
 
 	deps := view.toCommandDependencies(registry)
