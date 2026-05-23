@@ -3,6 +3,7 @@ package logging
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -224,4 +225,97 @@ func TestEnableFileLoggingWithLevel(t *testing.T) {
 	if logger == nil {
 		t.Fatal("EnableFileLoggingWithLevel returned nil")
 	}
+}
+
+func TestLogError_LogsWarnWithErrField(t *testing.T) {
+	t.Parallel()
+
+	handler := newCaptureLogHandler(true)
+	logger := slog.New(handler)
+	testErr := errors.New("something broke")
+
+	LogError(logger, "op.failed", testErr)
+
+	if len(handler.records) != 1 {
+		t.Fatalf("got %d records, want 1", len(handler.records))
+	}
+	rec := handler.records[0]
+	if rec.level != slog.LevelWarn {
+		t.Fatalf("level = %v, want %v", rec.level, slog.LevelWarn)
+	}
+	errVal, ok := rec.attrs["err"]
+	if !ok {
+		t.Fatal("record missing \"err\" attr")
+	}
+	if errVal.String() != testErr.Error() {
+		t.Fatalf("err attr = %q, want %q", errVal.String(), testErr.Error())
+	}
+}
+
+func TestLogError_NilLoggerNoops(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("LogError panicked with nil logger: %v", r)
+		}
+	}()
+
+	LogError(nil, "op.failed", errors.New("err"))
+}
+
+func TestLogError_NilErrorNoops(t *testing.T) {
+	t.Parallel()
+
+	handler := newCaptureLogHandler(true)
+	logger := slog.New(handler)
+
+	LogError(logger, "op.failed", nil)
+
+	if len(handler.records) != 0 {
+		t.Fatalf("got %d records, want 0", len(handler.records))
+	}
+}
+
+func TestLogInfo_LogsInfoWithFields(t *testing.T) {
+	t.Parallel()
+
+	handler := newCaptureLogHandler(true)
+	logger := slog.New(handler)
+
+	LogInfo(logger, "sync.done", "count", 42, "source", "yt")
+
+	if len(handler.records) != 1 {
+		t.Fatalf("got %d records, want 1", len(handler.records))
+	}
+	rec := handler.records[0]
+	if rec.level != slog.LevelInfo {
+		t.Fatalf("level = %v, want %v", rec.level, slog.LevelInfo)
+	}
+	countVal, ok := rec.attrs["count"]
+	if !ok {
+		t.Fatal("record missing \"count\" attr")
+	}
+	if countVal.String() != "42" {
+		t.Fatalf("count attr = %q, want \"42\"", countVal.String())
+	}
+	sourceVal, ok := rec.attrs["source"]
+	if !ok {
+		t.Fatal("record missing \"source\" attr")
+	}
+	if sourceVal.String() != "yt" {
+		t.Fatalf("source attr = %q, want \"yt\"", sourceVal.String())
+	}
+}
+
+func TestLogInfo_NilLoggerNoops(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("LogInfo panicked with nil logger: %v", r)
+		}
+	}()
+
+	LogInfo(nil, "sync.done", "key", "value")
 }

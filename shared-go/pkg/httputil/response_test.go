@@ -171,3 +171,80 @@ func (t *trackCloseReadCloser) Close() error {
 	t.closed = true
 	return nil
 }
+
+func TestAPIError_UnwrapReturnsInnerError(t *testing.T) {
+	t.Parallel()
+
+	inner := fmt.Errorf("connection refused")
+	apiErr := &APIError{
+		StatusCode: http.StatusBadGateway,
+		Err:        inner,
+	}
+
+	got := apiErr.Unwrap()
+	if got != inner {
+		t.Fatalf("Unwrap() = %v, want %v", got, inner)
+	}
+}
+
+func TestAPIError_UnwrapNilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var apiErr *APIError
+	got := apiErr.Unwrap()
+	if got != nil {
+		t.Fatalf("Unwrap() on nil receiver = %v, want nil", got)
+	}
+}
+
+func TestAPIError_UnwrapNoInnerError(t *testing.T) {
+	t.Parallel()
+
+	apiErr := &APIError{
+		StatusCode: http.StatusNotFound,
+		Code:       "not_found",
+	}
+
+	got := apiErr.Unwrap()
+	if got != nil {
+		t.Fatalf("Unwrap() = %v, want nil", got)
+	}
+}
+
+func TestDecodeJSON_MalformedJSON(t *testing.T) {
+	t.Parallel()
+
+	rc := &trackCloseReadCloser{Reader: strings.NewReader(`{not json`)}
+	resp := &http.Response{Body: rc}
+
+	var out struct{ Name string }
+	err := DecodeJSON(resp, &out)
+	if err == nil {
+		t.Fatal("DecodeJSON() expected error for malformed JSON")
+	}
+	if !rc.closed {
+		t.Fatal("DecodeJSON() expected body close even on error")
+	}
+}
+
+func TestCheckStatus_TruncatesLargeBody(t *testing.T) {
+	t.Parallel()
+
+	largeBody := strings.Repeat("x", 8192)
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Body:       io.NopCloser(strings.NewReader(largeBody)),
+	}
+
+	err := CheckStatus(resp)
+	if err == nil {
+		t.Fatal("CheckStatus() expected error")
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error type = %T, want *APIError", err)
+	}
+	if len(apiErr.Body) > 4096 {
+		t.Fatalf("Body len = %d, want <= 4096", len(apiErr.Body))
+	}
+}
