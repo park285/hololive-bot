@@ -261,6 +261,184 @@ func TestMapCarrier_GetSetKeys(t *testing.T) {
 	}
 }
 
+func TestNewProvider_Enabled(t *testing.T) {
+	prevTP := otel.GetTracerProvider()
+	prevProp := otel.GetTextMapPropagator()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		otel.SetTextMapPropagator(prevProp)
+	})
+
+	config := Config{
+		Enabled:        true,
+		ServiceName:    "test-service",
+		ServiceVersion: "0.1.0",
+		Environment:    "test",
+		OTLPEndpoint:   "localhost:4317",
+		OTLPInsecure:   true,
+		SampleRate:     1.0,
+	}
+
+	provider, err := NewProvider(context.Background(), config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+
+	if !provider.IsEnabled() {
+		t.Error("enabled provider should return true for IsEnabled")
+	}
+	if provider.tracerProvider == nil {
+		t.Fatal("tracerProvider should not be nil")
+	}
+}
+
+func TestProvider_Shutdown_Success(t *testing.T) {
+	prevTP := otel.GetTracerProvider()
+	prevProp := otel.GetTextMapPropagator()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		otel.SetTextMapPropagator(prevProp)
+	})
+
+	provider, err := NewProvider(context.Background(), Config{
+		Enabled:      true,
+		ServiceName:  "shutdown-test",
+		OTLPEndpoint: "localhost:4317",
+		OTLPInsecure: true,
+		SampleRate:   1.0,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := provider.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown should succeed: %v", err)
+	}
+}
+
+func TestProvider_Shutdown_Error(t *testing.T) {
+	prevTP := otel.GetTracerProvider()
+	prevProp := otel.GetTextMapPropagator()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		otel.SetTextMapPropagator(prevProp)
+	})
+
+	provider, err := NewProvider(context.Background(), Config{
+		Enabled:      true,
+		ServiceName:  "shutdown-err-test",
+		OTLPEndpoint: "localhost:4317",
+		OTLPInsecure: true,
+		SampleRate:   1.0,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err = provider.Shutdown(ctx)
+	if err == nil {
+		t.Fatal("shutdown with cancelled context should return error")
+	}
+	if !strings.Contains(err.Error(), "shutdown otel tracer provider") {
+		t.Fatalf("expected wrapped error message, got: %v", err)
+	}
+}
+
+func TestInjectContext(t *testing.T) {
+	prevProp := otel.GetTextMapPropagator()
+	t.Cleanup(func() { otel.SetTextMapPropagator(prevProp) })
+
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10},
+		SpanID:     trace.SpanID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
+		TraceFlags: trace.FlagsSampled,
+	})
+	ctx := trace.ContextWithSpanContext(context.Background(), sc)
+
+	carrier := MapCarrier{}
+	InjectContext(ctx, carrier)
+
+	if carrier.Get("traceparent") == "" {
+		t.Fatal("expected traceparent header to be injected")
+	}
+	if !strings.HasPrefix(carrier.Get("traceparent"), "00-") {
+		t.Fatalf("unexpected traceparent format: %q", carrier.Get("traceparent"))
+	}
+}
+
+func TestExtractContext(t *testing.T) {
+	prevProp := otel.GetTextMapPropagator()
+	t.Cleanup(func() { otel.SetTextMapPropagator(prevProp) })
+
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+
+	carrier := MapCarrier{
+		"traceparent": "00-0102030405060708090a0b0c0d0e0f10-0102030405060708-01",
+	}
+
+	ctx := ExtractContext(context.Background(), carrier)
+
+	sc := trace.SpanContextFromContext(ctx)
+	if !sc.IsValid() {
+		t.Fatal("expected valid span context after extraction")
+	}
+	wantTraceID := trace.TraceID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	if sc.TraceID() != wantTraceID {
+		t.Fatalf("expected trace ID %v, got %v", wantTraceID, sc.TraceID())
+	}
+	wantSpanID := trace.SpanID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	if sc.SpanID() != wantSpanID {
+		t.Fatalf("expected span ID %v, got %v", wantSpanID, sc.SpanID())
+	}
+	if !sc.IsSampled() {
+		t.Fatal("expected sampled flag to be set")
+	}
+}
+
+func TestMapCarrier_GetMissingKey(t *testing.T) {
+	t.Parallel()
+	carrier := MapCarrier{}
+	if got := carrier.Get("nonexistent"); got != "" {
+		t.Fatalf("expected empty string for missing key, got %q", got)
+	}
+}
+
+func TestMapCarrier_EmptyKeys(t *testing.T) {
+	t.Parallel()
+	carrier := MapCarrier{}
+	keys := carrier.Keys()
+	if len(keys) != 0 {
+		t.Fatalf("expected empty keys, got %v", keys)
+	}
+}
+
+func TestBuildSampler_NegativeRate(t *testing.T) {
+	t.Parallel()
+	sampler := buildSampler(Config{SampleRate: -0.5})
+	if !strings.Contains(sampler.Description(), "AlwaysOffSampler") {
+		t.Fatalf("expected AlwaysOffSampler for negative rate, got %q", sampler.Description())
+	}
+}
+
+func TestBuildSampler_AboveOneRate(t *testing.T) {
+	t.Parallel()
+	sampler := buildSampler(Config{SampleRate: 2.0})
+	if !strings.Contains(sampler.Description(), "AlwaysOnSampler") {
+		t.Fatalf("expected AlwaysOnSampler for rate > 1, got %q", sampler.Description())
+	}
+}
 func assertAttributeValue(t *testing.T, attrs map[attribute.Key]string, key attribute.Key, want string) {
 	t.Helper()
 

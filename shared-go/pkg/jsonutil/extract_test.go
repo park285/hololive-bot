@@ -6,6 +6,8 @@ import (
 )
 
 func TestExtract(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		input     string
@@ -111,6 +113,7 @@ func TestExtract(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := Extract(tt.input)
 
 			if tt.wantError != nil {
@@ -132,6 +135,8 @@ func TestExtract(t *testing.T) {
 }
 
 func TestExtractToMap(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		input     string
@@ -156,10 +161,16 @@ func TestExtractToMap(t *testing.T) {
 			input:     "No JSON",
 			wantError: true,
 		},
+		{
+			name:      "유효 JSON이지만 map 변환 실패 (array)",
+			input:     `[1, 2, 3]`,
+			wantError: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := ExtractToMap(tt.input)
 
 			if tt.wantError {
@@ -181,6 +192,8 @@ func TestExtractToMap(t *testing.T) {
 }
 
 func TestFindMatchingEnd(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input string
@@ -221,6 +234,7 @@ func TestFindMatchingEnd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := findMatchingEnd([]byte(tt.input), tt.start)
 			if result != tt.want {
 				t.Errorf("findMatchingEnd() = %d, want %d", result, tt.want)
