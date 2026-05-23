@@ -17,15 +17,7 @@ func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot Snaps
 	if !c.shouldCaptureSnapshot(snapshot, policy) {
 		return
 	}
-	if snapshot.CapturedAt.IsZero() {
-		snapshot.CapturedAt = time.Now().UTC()
-	}
-	if snapshot.SchemaVersion == "" {
-		snapshot.SchemaVersion = SnapshotSchemaVersion
-	}
-	if policy.MaxBodyBytes > 0 && len(snapshot.Body) > policy.MaxBodyBytes {
-		snapshot.Body = snapshot.Body[:policy.MaxBodyBytes]
-	}
+	snapshot = normalizeSnapshotPayload(snapshot, policy)
 	if len(snapshot.Body) == 0 {
 		return
 	}
@@ -41,6 +33,19 @@ func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot Snaps
 			"stage", snapshot.Stage,
 			"error", err)
 	}
+}
+
+func normalizeSnapshotPayload(snapshot Snapshot, policy SnapshotPolicy) Snapshot {
+	if snapshot.CapturedAt.IsZero() {
+		snapshot.CapturedAt = time.Now().UTC()
+	}
+	if snapshot.SchemaVersion == "" {
+		snapshot.SchemaVersion = SnapshotSchemaVersion
+	}
+	if policy.MaxBodyBytes > 0 && len(snapshot.Body) > policy.MaxBodyBytes {
+		snapshot.Body = snapshot.Body[:policy.MaxBodyBytes]
+	}
+	return snapshot
 }
 
 func (c *Client) shouldCaptureSnapshot(snapshot Snapshot, policy SnapshotPolicy) bool {
