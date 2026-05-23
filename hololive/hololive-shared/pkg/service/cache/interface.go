@@ -29,10 +29,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Client defines the behavior that *Service provides.
-//
-// Goal: allow service consumers to depend on interfaces rather than concrete implementations.
-// NOTE: keep this interface aligned with Service's public surface to avoid consumer breakage.
+type SetNXEntry struct {
+	Key   string
+	Value string
+	TTL   time.Duration
+}
+
+type SetNXResult struct {
+	Key      string
+	Acquired bool
+	Err      error
+}
+
 type Client interface {
 	Get(ctx context.Context, key string, dest any) error
 	GetJSON(ctx context.Context, key string, dest any) (bool, error)
@@ -72,10 +80,10 @@ type Client interface {
 	Builder() valkey.Builder
 	B() valkey.Builder
 
+	SetNXMulti(ctx context.Context, entries []SetNXEntry) ([]SetNXResult, error)
+
 	CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error)
 	CompareAndExpire(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error)
-
-	// Domain helpers (thin wrappers on top of generic operations)
 	GetStreams(ctx context.Context, key string) ([]*domain.Stream, bool)
 	SetStreams(ctx context.Context, key string, streams []*domain.Stream, ttl time.Duration)
 

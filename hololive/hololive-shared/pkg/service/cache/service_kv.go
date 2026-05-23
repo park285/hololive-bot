@@ -290,3 +290,34 @@ func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duratio
 
 	return true, nil
 }
+
+func (c *Service) SetNXMulti(ctx context.Context, entries []SetNXEntry) ([]SetNXResult, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	cmds := make([]valkey.Completed, 0, len(entries))
+	for _, e := range entries {
+		if e.TTL > 0 {
+			ttlSeconds, err := ttlSecondsCeil(e.TTL)
+			if err != nil {
+				return nil, NewCacheError("invalid ttl", "setnx_multi", e.Key, err)
+			}
+			cmds = append(cmds, c.client.B().Set().Key(e.Key).Value(e.Value).Nx().ExSeconds(ttlSeconds).Build())
+		} else {
+			cmds = append(cmds, c.client.B().Set().Key(e.Key).Value(e.Value).Nx().Build())
+		}
+	}
+	responses := c.client.DoMulti(ctx, cmds...)
+	results := make([]SetNXResult, len(entries))
+	for i, resp := range responses {
+		results[i].Key = entries[i].Key
+		if util.IsValkeyNil(resp.Error()) {
+			results[i].Acquired = false
+		} else if resp.Error() != nil {
+			results[i].Err = resp.Error()
+		} else {
+			results[i].Acquired = true
+		}
+	}
+	return results, nil
+}

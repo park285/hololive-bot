@@ -92,8 +92,10 @@ func (f *LocalFallback) tryClaim(key string, ttl time.Duration) bool {
 	now := f.now()
 	expiresAt := now.Add(ttl).UnixNano()
 
-	// 용량 초과 시 만료 항목 정리
 	if f.keyCount.Load() >= int64(constants.LocalFallbackCleanupMaxKeys) {
+		f.logger.Info("fallback cleanup triggered",
+			slog.Int64("key_count", f.keyCount.Load()),
+		)
 		f.cleanupExpired(now)
 	}
 

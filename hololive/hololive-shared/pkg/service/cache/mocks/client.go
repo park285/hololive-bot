@@ -74,6 +74,8 @@ type Client struct {
 	BuilderFunc   func() valkey.Builder
 	BFunc         func() valkey.Builder
 
+	SetNXMultiFunc func(ctx context.Context, entries []cache.SetNXEntry) ([]cache.SetNXResult, error)
+
 	CompareAndDeleteFunc func(ctx context.Context, key, expectedValue string) (bool, error)
 	CompareAndExpireFunc func(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error)
 
@@ -336,6 +338,14 @@ func (m *Client) B() valkey.Builder {
 	}
 	m.panicIfUnset("BFunc")
 	return valkey.Builder{}
+}
+
+func (m *Client) SetNXMulti(ctx context.Context, entries []cache.SetNXEntry) ([]cache.SetNXResult, error) {
+	if m.SetNXMultiFunc != nil {
+		return m.SetNXMultiFunc(ctx, entries)
+	}
+	m.panicIfUnset("SetNXMultiFunc")
+	return nil, nil
 }
 
 func (m *Client) CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error) {

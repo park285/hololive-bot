@@ -3,6 +3,7 @@ package dispatchoutbox
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	json "github.com/park285/hololive-bot/shared-go/pkg/json"
@@ -51,30 +52,28 @@ type deliveryBatchRow struct {
 	Status          string          `json:"status"`
 }
 
-func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[string]int64, int, error) {
+func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert, logger *slog.Logger) (map[string]int64, []string, int, error) {
 	eventIDs := make(map[string]int64, len(events))
 	if len(events) == 0 {
-		return eventIDs, 0, nil
+		return eventIDs, nil, 0, nil
 	}
-	rows, keys, expectedHashes := buildEventBatchRows(events)
+	rows, expectedHashes := buildEventBatchRows(events)
 	raw, err := json.Marshal(rows)
 	if err != nil {
-		return nil, 0, fmt.Errorf("insert dispatch events: marshal batch: %w", err)
+		return nil, nil, 0, fmt.Errorf("insert dispatch events: marshal batch: %w", err)
 	}
-	inserted, err := insertEventBatch(ctx, tx, raw)
+	eventIDs, conflictKeys, inserted, err := insertEventBatch(ctx, tx, raw, expectedHashes, logger)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
-	eventIDs, err = loadEventIDs(ctx, tx, keys, expectedHashes, len(events))
-	if err != nil {
-		return nil, 0, err
+	if len(eventIDs)+len(conflictKeys) != len(events) {
+		return nil, nil, 0, fmt.Errorf("insert dispatch events: found %d+%d of %d rows", len(eventIDs), len(conflictKeys), len(events))
 	}
-	return eventIDs, inserted, nil
+	return eventIDs, conflictKeys, inserted, nil
 }
 
-func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, []string, map[string]string) {
+func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, map[string]string) {
 	rows := make([]eventBatchRow, 0, len(events))
-	keys := make([]string, 0, len(events))
 	expectedHashes := make(map[string]string, len(events))
 	for _, event := range events {
 		rows = append(rows, eventBatchRow{
@@ -86,14 +85,13 @@ func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, []string, map[s
 			Category:    event.Category,
 			Payload:     json.RawMessage(event.Payload),
 		})
-		keys = append(keys, event.EventKey)
 		expectedHashes[event.EventKey] = event.PayloadHash
 	}
-	return rows, keys, expectedHashes
+	return rows, expectedHashes
 }
 
-func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (int, error) {
-	insertedRows, err := tx.Query(ctx, `
+func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte, expectedHashes map[string]string, logger *slog.Logger) (map[string]int64, []string, int, error) {
+	rows, err := tx.Query(ctx, `
 		WITH input AS (
 			SELECT *
 			FROM jsonb_to_recordset($1::jsonb) AS x(
@@ -112,52 +110,45 @@ func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (int, error) {
 		)
 		SELECT event_key, payload_hash, alarm_type::alarm_type, channel_id, stream_id, category, 1, payload
 		FROM input
-		ON CONFLICT (event_key) DO NOTHING
-		RETURNING event_key`, jsonbRecordsetParam(raw))
+		ON CONFLICT (event_key) DO UPDATE SET updated_at = NOW()
+		RETURNING id, event_key, payload_hash`, jsonbRecordsetParam(raw))
 	if err != nil {
-		return 0, fmt.Errorf("insert dispatch events: %w", err)
+		return nil, nil, 0, fmt.Errorf("insert dispatch events: %w", err)
 	}
-	inserted := 0
-	for insertedRows.Next() {
-		inserted++
-	}
-	if err := insertedRows.Err(); err != nil {
-		insertedRows.Close()
-		return 0, fmt.Errorf("insert dispatch events: rows: %w", err)
-	}
-	insertedRows.Close()
-	return inserted, nil
-}
+	defer rows.Close()
 
-func loadEventIDs(ctx context.Context, tx pgx.Tx, keys []string, expectedHashes map[string]string, eventCount int) (map[string]int64, error) {
-	existingRows, err := tx.Query(ctx, `
-		SELECT id, event_key, payload_hash
-		FROM alarm_dispatch_events
-		WHERE event_key = ANY($1)`, keys)
-	if err != nil {
-		return nil, fmt.Errorf("load dispatch event ids: %w", err)
-	}
-	defer existingRows.Close()
-	eventIDs := make(map[string]int64, eventCount)
-	for existingRows.Next() {
+	eventIDs := make(map[string]int64, len(expectedHashes))
+	var conflictKeys []string
+	for rows.Next() {
 		var id int64
-		var hash string
-		var key string
-		if err := existingRows.Scan(&id, &key, &hash); err != nil {
-			return nil, fmt.Errorf("load dispatch event ids: scan: %w", err)
+		var key, hash string
+		if err := rows.Scan(&id, &key, &hash); err != nil {
+			return nil, nil, 0, fmt.Errorf("insert dispatch events: scan: %w", err)
 		}
-		if expectedHashes[key] != hash {
-			return nil, fmt.Errorf("dispatch event hash conflict: event_key=%s", key)
+		expected, ok := expectedHashes[key]
+		if ok && expected != hash {
+			logger.Warn("dispatch event hash conflict, skipping",
+				slog.String("event_key", key),
+				slog.String("expected_hash", truncateHash(expected)),
+				slog.String("actual_hash", truncateHash(hash)),
+			)
+			conflictKeys = append(conflictKeys, key)
+			continue
 		}
 		eventIDs[key] = id
 	}
-	if err := existingRows.Err(); err != nil {
-		return nil, fmt.Errorf("load dispatch event ids: rows: %w", err)
+	if err := rows.Err(); err != nil {
+		return nil, nil, 0, fmt.Errorf("insert dispatch events: rows: %w", err)
 	}
-	if len(eventIDs) != eventCount {
-		return nil, fmt.Errorf("load dispatch event ids: found %d of %d rows", len(eventIDs), eventCount)
+	inserted := len(eventIDs)
+	return eventIDs, conflictKeys, inserted, nil
+}
+
+func truncateHash(h string) string {
+	if len(h) <= 8 {
+		return h
 	}
-	return eventIDs, nil
+	return h[:8] + "..."
 }
 
 func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInsert) (int, error) {
