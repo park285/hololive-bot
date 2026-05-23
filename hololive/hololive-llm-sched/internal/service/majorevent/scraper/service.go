@@ -49,11 +49,11 @@ type sourceScrapeResult struct {
 
 // Service는 RSS 수집/파싱/저장을 담당한다.
 type Service struct {
-	repository    eventRepository
-	fetcher *FeedFetcher
-	parser  *RSSParser
-	config  ServiceConfig
-	logger  *slog.Logger
+	repository eventRepository
+	fetcher    *FeedFetcher
+	parser     *RSSParser
+	config     ServiceConfig
+	logger     *slog.Logger
 }
 
 // NewService는 Service를 생성한다.
@@ -80,11 +80,11 @@ func NewService(
 	}
 
 	return &Service{
-		repository:    repository,
-		fetcher: fetcher,
-		parser:  parser,
-		config:  normalized,
-		logger:  logger,
+		repository: repository,
+		fetcher:    fetcher,
+		parser:     parser,
+		config:     normalized,
+		logger:     logger,
 	}, nil
 }
 

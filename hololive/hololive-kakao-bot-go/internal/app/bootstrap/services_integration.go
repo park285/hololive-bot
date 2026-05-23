@@ -41,11 +41,11 @@ func InitCoreIntegrationServices(
 	}
 
 	return &CoreIntegrationServices{
-		ACLService:        aclService,
-		MajorEventRepository:    majorEventRepository,
-		MemberNewsService: memberNewsService,
-		CommandBuilders:   []bot.CommandBuilder{},
-		WorkerPool:        workerPool,
+		ACLService:           aclService,
+		MajorEventRepository: majorEventRepository,
+		MemberNewsService:    memberNewsService,
+		CommandBuilders:      []bot.CommandBuilder{},
+		WorkerPool:           workerPool,
 	}, nil
 }
 

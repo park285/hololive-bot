@@ -607,11 +607,11 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 	})
 
 	as := &AlarmService{
-		cache:       cacheMock,
-		logger:      newDiscardAlarmLogger(),
-		memberData:  &mockMemberDataProvider{members: []*domain.Member{}},
-		alarmRepository:   &sharedalarm.Repository{},
-		alarmWriter: &stubAlarmWriter{},
+		cache:           cacheMock,
+		logger:          newDiscardAlarmLogger(),
+		memberData:      &mockMemberDataProvider{members: []*domain.Member{}},
+		alarmRepository: &sharedalarm.Repository{},
+		alarmWriter:     &stubAlarmWriter{},
 	}
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }
 

@@ -162,9 +162,9 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 func TestCommandInitView_AssemblesCommands(t *testing.T) {
 	registry := command.NewRegistry()
 	view := commandInitView{
-		logger:         slog.New(slog.DiscardHandler),
+		logger:               slog.New(slog.DiscardHandler),
 		majorEventRepository: &stubCommandInitMajorEventRepository{},
-		memberNews:     &stubCommandInitMemberNewsService{},
+		memberNews:           &stubCommandInitMemberNewsService{},
 		commandBuilders: []CommandBuilder{
 			nil,
 			func(_ *command.Dependencies) command.Command {

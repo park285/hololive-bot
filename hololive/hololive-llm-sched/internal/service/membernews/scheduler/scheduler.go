@@ -50,12 +50,12 @@ type outboxEnqueuer interface {
 }
 
 type Scheduler struct {
-	service    model.DigestService
-	formatter  model.DigestFormatter
-	locker     delivery.NotificationLocker
+	service          model.DigestService
+	formatter        model.DigestFormatter
+	locker           delivery.NotificationLocker
 	outboxRepository outboxEnqueuer
-	logger     *slog.Logger
-	runtime    *schedulerkit.Runtime
+	logger           *slog.Logger
+	runtime          *schedulerkit.Runtime
 }
 
 func NewScheduler(
@@ -73,12 +73,12 @@ func NewScheduler(
 	}
 
 	return &Scheduler{
-		service:    service,
-		formatter:  formatter,
-		locker:     locker,
+		service:          service,
+		formatter:        formatter,
+		locker:           locker,
 		outboxRepository: outboxRepository,
-		logger:     logger,
-		runtime:    schedulerkit.NewRuntime(),
+		logger:           logger,
+		runtime:          schedulerkit.NewRuntime(),
 	}
 }
 

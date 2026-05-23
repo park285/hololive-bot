@@ -54,7 +54,7 @@ type schedulerImpl struct {
 	youtube              Service
 	holodex              *holodex.Service
 	cache                cache.Client
-	statsRepository            ytstats.StatsSchedulerRepository
+	statsRepository      ytstats.StatsSchedulerRepository
 	membersData          domain.MemberDataProvider
 	alarmService         domain.AlarmDispatchState
 	irisClient           iris.Sender
@@ -98,16 +98,16 @@ func NewScheduler(
 	logger *slog.Logger,
 ) Scheduler {
 	return &schedulerImpl{
-		youtube:      youtubeService,
-		holodex:      holodexService,
-		cache:        cacheClient,
-		statsRepository:    statsRepository,
-		membersData:  membersData,
-		alarmService: alarmService,
-		irisClient:   irisClient,
-		formatter:    formatter,
-		logger:       logger,
-		currentBatch: 0,
-		stopCh:       make(chan struct{}),
+		youtube:         youtubeService,
+		holodex:         holodexService,
+		cache:           cacheClient,
+		statsRepository: statsRepository,
+		membersData:     membersData,
+		alarmService:    alarmService,
+		irisClient:      irisClient,
+		formatter:       formatter,
+		logger:          logger,
+		currentBatch:    0,
+		stopCh:          make(chan struct{}),
 	}
 }

@@ -39,7 +39,7 @@ import (
 type CommunityPoller struct {
 	client                           *scraper.Client
 	db                               *gorm.DB
-	repository                             batchRepository
+	repository                       batchRepository
 	maxResults                       int
 	keywords                         []string
 	routeDecider                     NotificationRouteDecider
@@ -57,7 +57,7 @@ func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults i
 	return &CommunityPoller{
 		client:                           scraperClient,
 		db:                               db,
-		repository:                             newBatchRepository(db),
+		repository:                       newBatchRepository(db),
 		maxResults:                       maxResults,
 		keywords:                         keywords,
 		routeDecider:                     routeDecider,

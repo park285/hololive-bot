@@ -16,7 +16,7 @@ type YouTubeAPIStackParams struct {
 	YouTubeConfig   config.YouTubeConfig
 	ScraperConfig   config.ScraperConfig
 	CacheService    cache.Client
-	StatsRepository       *ytstats.StatsRepository
+	StatsRepository *ytstats.StatsRepository
 	SharedRateLimit *scraper.RateLimiter
 	Logger          *slog.Logger
 }
@@ -41,7 +41,7 @@ func BuildYouTubeAPIStack(ctx context.Context, params YouTubeAPIStackParams) *pr
 	}
 
 	return &providers.YouTubeStack{
-		Service:   service,
+		Service:         service,
 		StatsRepository: params.StatsRepository,
 	}
 }

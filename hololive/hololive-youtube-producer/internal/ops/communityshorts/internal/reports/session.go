@@ -15,10 +15,10 @@ import (
 )
 
 type communityShortsOpsSession struct {
-	postgres           database.Client
-	db                 *gorm.DB
-	trackingRepository *trackingrepo.GormRepository
-	telemetryRepository      *outbox.DeliveryTelemetryRepository
+	postgres            database.Client
+	db                  *gorm.DB
+	trackingRepository  *trackingrepo.GormRepository
+	telemetryRepository *outbox.DeliveryTelemetryRepository
 }
 
 func openCommunityShortsOpsSession(
@@ -42,9 +42,9 @@ func openCommunityShortsOpsSession(
 
 func newCommunityShortsOpsSession(db *gorm.DB) *communityShortsOpsSession {
 	return &communityShortsOpsSession{
-		postgres:           nil,
-		db:                 db,
-		trackingRepository: trackingrepo.NewRepository(db),
-		telemetryRepository:      outbox.NewDeliveryTelemetryRepository(db),
+		postgres:            nil,
+		db:                  db,
+		trackingRepository:  trackingrepo.NewRepository(db),
+		telemetryRepository: outbox.NewDeliveryTelemetryRepository(db),
 	}
 }

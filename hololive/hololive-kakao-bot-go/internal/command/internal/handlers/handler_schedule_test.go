@@ -17,7 +17,7 @@ import (
 
 type scheduleStreamProviderStub struct {
 	scheduleStreams []*domain.Stream
-	scheduleErr    error
+	scheduleErr     error
 }
 
 func (s *scheduleStreamProviderStub) GetLiveStreams(_ context.Context) ([]*domain.Stream, error) {

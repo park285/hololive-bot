@@ -33,7 +33,7 @@ import (
 type VideosPoller struct {
 	client     *scraper.Client
 	db         *gorm.DB
-	repository       batchRepository
+	repository batchRepository
 	maxResults int
 }
 
@@ -44,7 +44,7 @@ func NewVideosPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int)
 	return &VideosPoller{
 		client:     scraperClient,
 		db:         db,
-		repository:       newBatchRepository(db),
+		repository: newBatchRepository(db),
 		maxResults: maxResults,
 	}
 }

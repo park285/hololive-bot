@@ -53,9 +53,9 @@ type Session struct {
 }
 
 type Service struct {
-	db       *gorm.DB
+	db          *gorm.DB
 	cacheClient cache.Client
-	logger   *slog.Logger
+	logger      *slog.Logger
 	config      Config
 }
 
@@ -74,9 +74,9 @@ func NewService(ctx context.Context, db *gorm.DB, cacheClient cache.Client, logg
 	}
 
 	service := &Service{
-		db:       db,
+		db:          db,
 		cacheClient: cacheClient,
-		logger:   logger,
+		logger:      logger,
 		config:      config,
 	}
 

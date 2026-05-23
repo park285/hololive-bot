@@ -14,8 +14,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/hololive-bot/shared-go/pkg/workerpool"
+	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
@@ -64,11 +64,11 @@ type ScraperHolodexProfileFoundation struct {
 }
 
 type CoreIntegrationServices struct {
-	ACLService        *acl.Service
-	MajorEventRepository    command.MajorEventRepository
-	MemberNewsService command.MemberNewsService
-	CommandBuilders   []bot.CommandBuilder
-	WorkerPool        *workerpool.Pool
+	ACLService           *acl.Service
+	MajorEventRepository command.MajorEventRepository
+	MemberNewsService    command.MemberNewsService
+	CommandBuilders      []bot.CommandBuilder
+	WorkerPool           *workerpool.Pool
 }
 
 type BotIrisClient interface {
@@ -91,12 +91,12 @@ type BotMessagingModule struct {
 }
 
 type BotDataModule struct {
-	Cache       cache.Client
-	Postgres    database.Client
-	MemberRepository  *member.Repository
-	MemberCache *member.Cache
-	Profiles    *member.ProfileService
-	MembersData member.DataProvider
+	Cache            cache.Client
+	Postgres         database.Client
+	MemberRepository *member.Repository
+	MemberCache      *member.Cache
+	Profiles         *member.ProfileService
+	MembersData      member.DataProvider
 }
 
 type BotStreamModule struct {
@@ -116,9 +116,9 @@ type BotSupportModule struct {
 }
 
 type BotFeatureModule struct {
-	MajorEventRepository  command.MajorEventRepository
-	MemberNews      command.MemberNewsService
-	CommandBuilders []bot.CommandBuilder
+	MajorEventRepository command.MajorEventRepository
+	MemberNews           command.MemberNewsService
+	CommandBuilders      []bot.CommandBuilder
 }
 
 type BotDependencyModules struct {

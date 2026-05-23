@@ -77,11 +77,11 @@ type Decision struct {
 }
 
 type SlidingWindowLimiter struct {
-	cacheClient   cache.Client
-	keyPrefix  string
-	logger     *slog.Logger
-	instanceID string
-	sequence   atomic.Uint64
+	cacheClient cache.Client
+	keyPrefix   string
+	logger      *slog.Logger
+	instanceID  string
+	sequence    atomic.Uint64
 }
 
 func NewSlidingWindowLimiter(cacheClient cache.Client, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
@@ -95,10 +95,10 @@ func NewSlidingWindowLimiter(cacheClient cache.Client, keyPrefix string, logger 
 		logger = slog.Default()
 	}
 	return &SlidingWindowLimiter{
-		cacheClient:   cacheClient,
-		keyPrefix:  keyPrefix,
-		logger:     logger,
-		instanceID: resolveInstanceID(),
+		cacheClient: cacheClient,
+		keyPrefix:   keyPrefix,
+		logger:      logger,
+		instanceID:  resolveInstanceID(),
 	}, nil
 }
 
