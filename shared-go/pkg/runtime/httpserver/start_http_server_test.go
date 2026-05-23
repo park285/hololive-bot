@@ -167,4 +167,3 @@ func (h *countingLogHandler) Handle(context.Context, slog.Record) error {
 }
 func (h *countingLogHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h *countingLogHandler) WithGroup(string) slog.Handler      { return h }
-

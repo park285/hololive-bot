@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -16,7 +17,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
 func buildScraperHolodexProfileFoundation(

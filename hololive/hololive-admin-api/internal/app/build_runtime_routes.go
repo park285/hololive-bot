@@ -6,14 +6,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/repository"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 
