@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -40,11 +41,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
-)
-
-const (
-	commandKeyAlarm            = "alarm"
-	commandKeyNewsSubscription = "news_subscription"
 )
 
 type streamRuntime interface {
@@ -73,14 +69,14 @@ type Bot struct {
 	acl                  *acl.Service
 	majorEventRepository command.MajorEventRepository
 	memberNews           command.MemberNewsService
-	commandBuilders      []CommandBuilder
+	commandBuilders      []orchcmd.CommandBuilder
 	membersData          member.DataProvider
 	stopCh               chan struct{}
 	doneCh               chan struct{}
 	selfSender           string
 	workerPool           *workerpool.Pool
 	ingress              *MessageIngress
-	commandExecutor      *CommandRouter
+	commandExecutor      *orchcmd.CommandRouter
 	transport            *CommandTransport
 	lifecycle            *BotLifecycle
 }
@@ -160,7 +156,7 @@ func (b *Bot) initializeCommands() {
 		registry.Register(cmd)
 	}
 
-	b.commandExecutor = NewCommandRouter(registry, b.logger, b.sendMessage)
+	b.commandExecutor = orchcmd.NewCommandRouter(registry, b.logger, b.sendMessage)
 	b.logger.Info("Commands initialized", slog.Int("count", registry.Count()))
 }
 

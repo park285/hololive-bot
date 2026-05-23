@@ -23,6 +23,7 @@ package orchestration
 import (
 	"log/slog"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -68,7 +69,7 @@ type Dependencies struct {
 	ACL                    *acl.Service
 	MajorEventRepository   command.MajorEventRepository
 	MemberNews             command.MemberNewsService
-	CommandBuilders        []CommandBuilder
+	CommandBuilders        []orchcmd.CommandBuilder
 	WorkerPool             *workerpool.Pool
 }
 
@@ -114,7 +115,7 @@ type supportDependencies struct {
 type featureDependencies struct {
 	majorEventRepository command.MajorEventRepository
 	memberNews           command.MemberNewsService
-	commandBuilders      []CommandBuilder
+	commandBuilders      []orchcmd.CommandBuilder
 }
 
 func (d *Dependencies) coreDeps() coreDependencies {
@@ -194,6 +195,6 @@ func (d *Dependencies) featureDeps() featureDependencies {
 	return featureDependencies{
 		majorEventRepository: d.MajorEventRepository,
 		memberNews:           d.MemberNews,
-		commandBuilders:      cloneCommandBuilders(d.CommandBuilders),
+		commandBuilders:      orchcmd.CloneCommandBuilders(d.CommandBuilders),
 	}
 }

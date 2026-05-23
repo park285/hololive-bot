@@ -1,4 +1,4 @@
-package orchestration
+package orchcmd
 
 import "github.com/kapu/hololive-kakao-bot-go/internal/command"
 

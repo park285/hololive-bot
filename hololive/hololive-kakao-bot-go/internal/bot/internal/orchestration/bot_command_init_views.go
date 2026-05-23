@@ -24,6 +24,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -52,7 +53,7 @@ type commandInitView struct {
 	sendError            func(ctx context.Context, room, message string) error
 	logger               *slog.Logger
 	majorEventRepository command.MajorEventRepository
-	commandBuilders      []CommandBuilder
+	commandBuilders      []orchcmd.CommandBuilder
 }
 
 func (b *Bot) commandInitView() commandInitView {
@@ -76,7 +77,7 @@ func (b *Bot) commandInitView() commandInitView {
 		sendError:            b.sendError,
 		logger:               b.logger,
 		majorEventRepository: b.majorEventRepository,
-		commandBuilders:      cloneCommandBuilders(b.commandBuilders),
+		commandBuilders:      orchcmd.CloneCommandBuilders(b.commandBuilders),
 	}
 }
 
@@ -98,7 +99,7 @@ func (v commandInitView) toCommandDependencies(registry *command.Registry) *comm
 		Logger:           v.logger,
 	}
 
-	deps.Dispatcher = command.NewSequentialDispatcher(registry, normalizeCommandKey)
+	deps.Dispatcher = command.NewSequentialDispatcher(registry, orchcmd.NormalizeCommandKey)
 
 	return deps
 }
