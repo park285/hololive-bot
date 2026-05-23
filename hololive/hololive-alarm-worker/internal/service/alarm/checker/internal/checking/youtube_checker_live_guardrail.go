@@ -293,7 +293,7 @@ func persistedLiveGuardrailMetaFromSession(
 		streamID:   stream.ID,
 		channelID:  channelID,
 		lastSeenAt: session.LastSeenAt,
-		rooms:      uniqueStrings(rooms),
+		rooms:      UniqueStrings(rooms),
 	}, true
 }
 
@@ -308,7 +308,7 @@ func persistedLiveGuardrailObservedAt(session PersistedYouTubeLiveSession) time.
 }
 
 func missingLiveDeliveryRooms(rooms []string, sentRooms map[string]struct{}) []string {
-	uniqueRooms := uniqueStrings(rooms)
+	uniqueRooms := UniqueStrings(rooms)
 	if len(uniqueRooms) == 0 {
 		return nil
 	}

@@ -116,7 +116,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		persistedLiveSource: persistedLiveSource,
 		targetPolicy:        sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
 		evaluationWindowCap: evaluationWindowCap,
-		logger:              safeLogger(logger),
+		logger:              SafeLogger(logger),
 	}, nil
 }
 

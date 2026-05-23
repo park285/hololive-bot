@@ -37,10 +37,10 @@ import (
 )
 
 const (
-	defaultLookupConcurrency = 16
+	DefaultLookupConcurrency = 16
 )
 
-func uniqueStrings(values []string) []string {
+func UniqueStrings(values []string) []string {
 	if len(values) <= 1 {
 		return values
 	}
@@ -64,7 +64,7 @@ func uniqueStrings(values []string) []string {
 	return unique
 }
 
-func cloneStream(stream *domain.Stream) *domain.Stream {
+func CloneStream(stream *domain.Stream) *domain.Stream {
 	if stream == nil {
 		return nil
 	}
@@ -91,7 +91,7 @@ func cloneStream(stream *domain.Stream) *domain.Stream {
 	return &copied
 }
 
-func ensureScheduledTime(stream *domain.Stream, fallback time.Time) *domain.Stream {
+func EnsureScheduledTime(stream *domain.Stream, fallback time.Time) *domain.Stream {
 	if stream == nil {
 		return nil
 	}
@@ -100,7 +100,7 @@ func ensureScheduledTime(stream *domain.Stream, fallback time.Time) *domain.Stre
 		return stream
 	}
 
-	updated := cloneStream(stream)
+	updated := CloneStream(stream)
 	if updated.StartActual != nil && !updated.StartActual.IsZero() {
 		start := updated.StartActual.UTC()
 
@@ -116,8 +116,8 @@ func ensureScheduledTime(stream *domain.Stream, fallback time.Time) *domain.Stre
 	return updated
 }
 
-func loadMemberNamesByChannel(ctx context.Context, cacheClient cache.Client, channelIDs []string) (map[string]string, error) {
-	channelIDs = uniqueStrings(channelIDs)
+func LoadMemberNamesByChannel(ctx context.Context, cacheClient cache.Client, channelIDs []string) (map[string]string, error) {
+	channelIDs = UniqueStrings(channelIDs)
 	if len(channelIDs) == 0 {
 		return map[string]string{}, nil
 	}
@@ -129,19 +129,19 @@ func loadMemberNamesByChannel(ctx context.Context, cacheClient cache.Client, cha
 	return memberNames, nil
 }
 
-func applyMemberNamesToStreams(streamsByChannel map[string][]*domain.Stream, memberNames map[string]string) {
+func ApplyMemberNamesToStreams(streamsByChannel map[string][]*domain.Stream, memberNames map[string]string) {
 	for channelID, streams := range streamsByChannel {
 		memberName := strings.TrimSpace(memberNames[channelID])
 		if memberName == "" {
 			continue
 		}
 		for _, stream := range streams {
-			applyMemberNameToStream(stream, channelID, memberName)
+			ApplyMemberNameToStream(stream, channelID, memberName)
 		}
 	}
 }
 
-func applyMemberNameToStream(stream *domain.Stream, channelID string, memberName string) {
+func ApplyMemberNameToStream(stream *domain.Stream, channelID string, memberName string) {
 	if stream == nil {
 		return
 	}
@@ -155,7 +155,7 @@ func applyMemberNameToStream(stream *domain.Stream, channelID string, memberName
 	stream.Channel.Name = memberName
 }
 
-func channelNameForMember(channelID string, memberName string, fallback string) string {
+func ChannelNameForMember(channelID string, memberName string, fallback string) string {
 	if memberName = strings.TrimSpace(memberName); memberName != "" {
 		return memberName
 	}
@@ -165,7 +165,7 @@ func channelNameForMember(channelID string, memberName string, fallback string) 
 	return strings.TrimSpace(channelID)
 }
 
-func roomNotifications(
+func RoomNotifications(
 	roomIDs []string,
 	channel *domain.Channel,
 	stream *domain.Stream,
@@ -191,7 +191,7 @@ func roomNotifications(
 	return notifications
 }
 
-func roomNotificationsWithScheduleChanges(
+func RoomNotificationsWithScheduleChanges(
 	roomIDs []string,
 	channel *domain.Channel,
 	stream *domain.Stream,
@@ -210,11 +210,11 @@ func roomNotificationsWithScheduleChanges(
 		}
 
 		change := scheduleChanges[roomID]
-		if !shouldSendScheduleChangeNotification(change, scheduleChangeOnly) {
+		if !ShouldSendScheduleChangeNotification(change, scheduleChangeOnly) {
 			continue
 		}
 
-		scheduleMessage, previousScheduled := scheduleChangeNotificationDetails(change)
+		scheduleMessage, previousScheduled := ScheduleChangeNotificationDetails(change)
 		notification := domain.NewAlarmNotification(roomID, channel, stream, minutesUntil, []string{}, scheduleMessage)
 		notification.ScheduleChangePreviousStart = previousScheduled
 		notifications = append(notifications, notification)
@@ -223,7 +223,7 @@ func roomNotificationsWithScheduleChanges(
 	return notifications
 }
 
-func shouldSendScheduleChangeNotification(change *dedup.ScheduleChange, scheduleChangeOnly bool) bool {
+func ShouldSendScheduleChangeNotification(change *dedup.ScheduleChange, scheduleChangeOnly bool) bool {
 	if !scheduleChangeOnly {
 		return true
 	}
@@ -231,7 +231,7 @@ func shouldSendScheduleChangeNotification(change *dedup.ScheduleChange, schedule
 	return change != nil
 }
 
-func scheduleChangeNotificationDetails(change *dedup.ScheduleChange) (string, string) {
+func ScheduleChangeNotificationDetails(change *dedup.ScheduleChange) (string, string) {
 	if change == nil {
 		return "", ""
 	}
@@ -239,24 +239,24 @@ func scheduleChangeNotificationDetails(change *dedup.ScheduleChange) (string, st
 	return change.Message, change.PreviousScheduledString()
 }
 
-func loadSubscriberRoomsByChannel(
+func LoadSubscriberRoomsByChannel(
 	ctx context.Context,
 	cacheClient cache.Client,
 	channelIDs []string,
 ) (map[string][]string, error) {
-	uniqueChannelIDs := uniqueStrings(channelIDs)
+	uniqueChannelIDs := UniqueStrings(channelIDs)
 	if len(uniqueChannelIDs) == 0 {
 		return map[string][]string{}, nil
 	}
 
-	if result, ok, err := tryLoadSubscriberRoomsByChannelBatched(ctx, cacheClient, uniqueChannelIDs); ok {
+	if result, ok, err := TryLoadSubscriberRoomsByChannelBatched(ctx, cacheClient, uniqueChannelIDs); ok {
 		return result, err
 	}
 
-	return loadSubscriberRoomsByChannelSequential(ctx, cacheClient, uniqueChannelIDs)
+	return LoadSubscriberRoomsByChannelSequential(ctx, cacheClient, uniqueChannelIDs)
 }
 
-func tryLoadSubscriberRoomsByChannelBatched(
+func TryLoadSubscriberRoomsByChannelBatched(
 	ctx context.Context,
 	cacheClient cache.Client,
 	uniqueChannelIDs []string,
@@ -281,11 +281,11 @@ func tryLoadSubscriberRoomsByChannelBatched(
 		return nil, false, nil
 	}
 
-	result, err := collectBatchedSubscriberRooms(results, uniqueChannelIDs)
+	result, err := CollectBatchedSubscriberRooms(results, uniqueChannelIDs)
 	return result, true, err
 }
 
-func collectBatchedSubscriberRooms(
+func CollectBatchedSubscriberRooms(
 	results []valkey.ValkeyResult,
 	uniqueChannelIDs []string,
 ) (map[string][]string, error) {
@@ -303,7 +303,7 @@ func collectBatchedSubscriberRooms(
 	return result, nil
 }
 
-func loadSubscriberRoomsByChannelSequential(
+func LoadSubscriberRoomsByChannelSequential(
 	ctx context.Context,
 	cacheClient cache.Client,
 	uniqueChannelIDs []string,
@@ -313,7 +313,7 @@ func loadSubscriberRoomsByChannelSequential(
 	var mu sync.Mutex
 
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(defaultLookupConcurrency)
+	eg.SetLimit(DefaultLookupConcurrency)
 
 	for _, channelID := range uniqueChannelIDs {
 		eg.Go(func() error {
@@ -340,7 +340,7 @@ func loadSubscriberRoomsByChannelSequential(
 
 	return result, nil
 }
-func safeLogger(logger *slog.Logger) *slog.Logger {
+func SafeLogger(logger *slog.Logger) *slog.Logger {
 	if logger == nil {
 		return slog.Default()
 	}

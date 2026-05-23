@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package checking
+package notifier
 
 import (
 	"context"
@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
@@ -63,13 +64,13 @@ func NewNotifier(
 		dedupService:   dedupService,
 		queuePublisher: queuePublisher,
 		tierScheduler:  tierScheduler,
-		logger:         safeLogger(logger),
+		logger:         checking.SafeLogger(logger),
 	}, nil
 }
 
 // Send는 알림 목록을 독립 처리한다. 단일 큐 발행 실패가 전체 배치를 중단하지 않도록
 // 실패는 집계하고 나머지 알림은 계속 처리한다.
-func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotification) (SendResult, error) {
+func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotification) (checking.SendResult, error) {
 	result, prepared, errs := n.prepareSendBatch(ctx, notifications)
 
 	if len(prepared) > 0 {
@@ -86,8 +87,8 @@ func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotifi
 	return result, errors.Join(errs...)
 }
 
-func (n *Notifier) prepareSendBatch(ctx context.Context, notifications []*domain.AlarmNotification) (SendResult, []claimedSend, []error) {
-	result := SendResult{}
+func (n *Notifier) prepareSendBatch(ctx context.Context, notifications []*domain.AlarmNotification) (checking.SendResult, []claimedSend, []error) {
+	result := checking.SendResult{}
 	var errs []error
 	prepared := make([]claimedSend, 0, len(notifications))
 	for _, notification := range notifications {
@@ -106,7 +107,7 @@ func (n *Notifier) prepareBatchNotification(
 	ctx context.Context,
 	notification *domain.AlarmNotification,
 	prepared []claimedSend,
-	result *SendResult,
+	result *checking.SendResult,
 	errs *[]error,
 ) []claimedSend {
 	payload, claimKeys, singleResult, err := n.prepareOne(ctx, notification)
@@ -124,7 +125,7 @@ func appendPreparedOutcome(
 	claimKeys []string,
 	outcome sendOutcome,
 	err error,
-	result *SendResult,
+	result *checking.SendResult,
 ) []claimedSend {
 	if outcome == sendOutcomeSent {
 		return append(prepared, claimedSend{payload: payload, claimKeys: claimKeys})
@@ -134,7 +135,7 @@ func appendPreparedOutcome(
 	return prepared
 }
 
-func applyNonSentOutcome(outcome sendOutcome, err error, result *SendResult) {
+func applyNonSentOutcome(outcome sendOutcome, err error, result *checking.SendResult) {
 	if outcome == sendOutcomeSkipped {
 		result.Skipped++
 		return
@@ -154,7 +155,7 @@ func (n *Notifier) recordPrepareError(notification *domain.AlarmNotification, er
 	)
 }
 
-func (n *Notifier) publishPreparedBatch(ctx context.Context, prepared []claimedSend, result *SendResult, errs []error) []error {
+func (n *Notifier) publishPreparedBatch(ctx context.Context, prepared []claimedSend, result *checking.SendResult, errs []error) []error {
 	publishedCount, err := n.publishBatchAndMark(ctx, prepared)
 	if err != nil {
 		result.Sent += publishedCount
@@ -293,7 +294,7 @@ func resolveScheduledStream(notif *domain.AlarmNotification, now time.Time) (*do
 		return nil, time.Time{}, false
 	}
 
-	resolvedStream := ensureScheduledTime(notif.Stream, now)
+	resolvedStream := checking.EnsureScheduledTime(notif.Stream, now)
 	if resolvedStream == nil || resolvedStream.StartScheduled == nil {
 		return nil, time.Time{}, false
 	}
