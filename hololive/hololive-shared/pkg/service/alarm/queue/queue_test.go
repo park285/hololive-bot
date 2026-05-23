@@ -33,8 +33,8 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
-	"github.com/valkey-io/valkey-go"
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
