@@ -231,7 +231,10 @@ docs/superpowers/
 docs/history/plan-kits/
 docs/agent-workflows/
 docs/closeout-*/
+docs/closeout-*.tar.gz
+docs/closeout-process.md
 *-review-request-*.tar.gz
+scripts/export-closeout-packet.sh
 
 # Build outputs
 admin-dashboard/backend/admin
