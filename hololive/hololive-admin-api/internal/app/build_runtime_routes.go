@@ -1,0 +1,106 @@
+package app
+
+import (
+	"context"
+	"log/slog"
+
+	"github.com/gin-gonic/gin"
+	"github.com/kapu/hololive-shared/pkg/config"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/repository"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
+	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
+	"github.com/kapu/hololive-shared/pkg/service/template"
+
+	apphttp "github.com/kapu/hololive-admin-api/internal/app/http"
+	"github.com/kapu/hololive-admin-api/internal/server"
+	"github.com/kapu/hololive-admin-api/internal/service/system"
+	triggerclient "github.com/kapu/hololive-admin-api/internal/service/trigger"
+)
+
+func buildAdminHandler(
+	appConfig *config.Config,
+	infra *sharedmodules.InfraModule,
+	foundation *scraperHolodexProfileFoundation,
+	alarmMode *alarmModeComponents,
+	aclService *acl.Service,
+	ytStack *providers.YouTubeStack,
+	communityShortsOpsRepository server.YouTubeCommunityShortsOpsRepository,
+	settingsApplier sharedsettings.SettingsApplier,
+	systemCollector *system.Collector,
+	templateAdmin *template.AdminService,
+	majorEventTriggerClient *triggerclient.Client,
+	logger *slog.Logger,
+) *server.Handler {
+	return server.NewHandler(
+		infra.MemberRepository,
+		infra.MemberCache,
+		infra.Cache,
+		foundation.ProfileService,
+		alarmMode.AlarmCRUD,
+		foundation.HolodexService,
+		ytStack.GetService(),
+		nil,
+		ytStack.GetStatsRepository(),
+		communityShortsOpsRepository,
+		activity.NewActivityLogger("", logger),
+		sharedmodules.BuildSettingsService(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger),
+		settingsApplier,
+		aclService,
+		systemCollector,
+		templateAdmin,
+		majorEventTriggerClient,
+		majorEventTriggerClient,
+		logger,
+	)
+}
+
+func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.Logger) *template.AdminService {
+	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
+	return template.NewAdminService(
+		repository.NewTemplateRepository(infra.Postgres.GetGormDB(), logger),
+		templateRenderer,
+		logger,
+	)
+}
+
+func buildAdminAPIRouter(
+	ctx context.Context,
+	appConfig *config.Config,
+	infra *sharedmodules.InfraModule,
+	authService *authsvc.Service,
+	handler *server.Handler,
+	logger *slog.Logger,
+) (*gin.Engine, error) {
+	return apphttp.ProvideAPIRouter(
+		ctx,
+		appConfig,
+		logger,
+		handler.DomainHandlers(),
+		server.NewAuthHandler(authService, logger),
+		nil,
+		nil,
+		infra.Cache,
+	)
+}
+
+func registerAdminAPIInternalAlarmRoutes(
+	router *gin.Engine,
+	appConfig *config.Config,
+	alarmMode *alarmModeComponents,
+	logger *slog.Logger,
+) {
+	if alarmMode.AlarmCRUD == nil {
+		return
+	}
+
+	alarmAPI := sharedalarm.NewHandler(alarmMode.AlarmCRUD, logger)
+	internalAlarm := router.Group("")
+	internalAlarm.Use(middleware.APIKeyAuthMiddleware(appConfig.Server.APIKey))
+	alarmAPI.RegisterInternalRoutes(internalAlarm)
+}
