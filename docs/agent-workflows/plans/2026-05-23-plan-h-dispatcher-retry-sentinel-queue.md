@@ -61,28 +61,33 @@ Go 1.26.3, postgres + pgx, hololive-shared retry queue.
 ---
 
 ## Task 1 — call chain mapping (read-only)
-- [ ] `dispatcher_claim.go:279` → `MarkFailedRetryBatch` 호출처와 인자 매핑
-- [ ] `MarkFailedRetryBatch` interface + implementation 확인
-- [ ] `delivery_repository.go:267` row update SQL 캡처
-- [ ] state machine 다이어그램 (idle → claimed → success | failed_retry → ... → permanent_failure)
+- [x] `dispatcher_claim.go:279` → `MarkFailedRetryBatch` 호출처와 인자 매핑
+- [x] `MarkFailedRetryBatch` interface + implementation 확인
+- [x] `delivery_repository.go:267` row update SQL 캡처
+- [x] state machine 다이어그램 (idle → claimed → success | failed_retry → ... → permanent_failure)
+> note: delivery state machine: `PENDING unlocked` → `PENDING locked` via `FetchAndLock` (`FOR UPDATE SKIP LOCKED` on Postgres, sqlite fallback in tests) → send success `SENT` | retry failure `PENDING unlocked` with incremented `attempt_count` and future `next_attempt_at` | max retry/permanent `FAILED unlocked`; aggregate outbox reconciliation maps delivery terminal states back to outbox status.
 
 ## Task 2 — sentinel-aware bucket 분류
-- [ ] RED: `TestDispatcherFlowCategorizesPermanentSentinel` (auth/permanent → permanent bucket)
-- [ ] GREEN: `dispatcher_send_flow.go`의 failure bucket 분류 함수에서 sentinel 분기
+- [x] RED: `TestDispatcherFlowCategorizesPermanentSentinel` (auth/permanent → permanent bucket)
+- [x] GREEN: `dispatcher_send_flow.go`의 failure bucket 분류 함수에서 sentinel 분기
+> note: scope kept `dispatcher_send.go` untouched; send flow emits existing reason bucket, and `deliveryFailureReasonIsPermanent` classifies `auth`/`http-permanent` for repository routing.
 
 ## Task 3 — repository permanent update
-- [ ] RED: `TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED`
-- [ ] GREEN: 신규 메서드 `MarkPermanentFailureBatch` 또는 기존 메서드 시그니처 확장
-- [ ] 회귀 테스트: 기존 retry 동작 영향 0
+- [x] RED: `TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED`
+- [x] GREEN: 신규 메서드 `MarkPermanentFailureBatch` 또는 기존 메서드 시그니처 확장
+- [x] 회귀 테스트: 기존 retry 동작 영향 0
+> note: no new column; permanent update sets existing delivery row `status = FAILED`, clears `locked_at`, stores error, and raises `attempt_count` to at least `maxRetries`.
 
 ## Task 4 — wire end-to-end
-- [ ] `dispatcher_claim.go`에서 permanent bucket 발생 시 새 repository 메서드 호출
-- [ ] integration test (DB sandbox) — auth 실패 시 outbox row가 즉시 FAILED 상태
+- [x] `dispatcher_claim.go`에서 permanent bucket 발생 시 새 repository 메서드 호출
+- [x] integration test (DB sandbox) — auth 실패 시 outbox row가 즉시 FAILED 상태
+> note: `TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately` covers SQLite DB sandbox dispatch path from locked delivery fetch through aggregate outbox reconciliation.
 
 ## Task 5 — 검증 + metric
-- [ ] `delivery_failure_reason` metric의 `auth`/`http-permanent` 라벨이 permanent 분기와 일치하는지 확인 (Plan B Task 3 결과와 정합)
-- [ ] `go test ./hololive/hololive-shared/pkg/service/youtube/outbox/... -race`
-- [ ] `./build-all.sh --no-bump` (budget violation은 별도 follow-up)
+- [x] `delivery_failure_reason` metric의 `auth`/`http-permanent` 라벨이 permanent 분기와 일치하는지 확인 (Plan B Task 3 결과와 정합)
+- [x] `go test ./hololive/hololive-shared/pkg/service/youtube/outbox/... -race`
+- [x] `./build-all.sh --no-bump` (budget violation은 별도 follow-up)
+> note: no Prometheus metric named `delivery_failure_reason` exists in `metrics.go`; failure-reason labels are emitted through delivery audit/result logging. `auth` and `http-permanent` are the same reason values used for permanent repository routing. `build-all` was executed with `IRIS_CLIENT_GO_WORKSPACE_PATH=/home/kapu/work/iris-stack/iris-client-go` and stopped only on pre-existing function budget violations in `snapshot_capture.go` and `videos.go`.
 
 ---
 
