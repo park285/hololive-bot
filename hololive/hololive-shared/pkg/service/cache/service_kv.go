@@ -295,29 +295,47 @@ func (c *Service) SetNXMulti(ctx context.Context, entries []SetNXEntry) ([]SetNX
 	if len(entries) == 0 {
 		return nil, nil
 	}
-	cmds := make([]valkey.Completed, 0, len(entries))
-	for _, e := range entries {
-		if e.TTL > 0 {
-			ttlSeconds, err := ttlSecondsCeil(e.TTL)
-			if err != nil {
-				return nil, NewCacheError("invalid ttl", "setnx_multi", e.Key, err)
-			}
-			cmds = append(cmds, c.client.B().Set().Key(e.Key).Value(e.Value).Nx().ExSeconds(ttlSeconds).Build())
-		} else {
-			cmds = append(cmds, c.client.B().Set().Key(e.Key).Value(e.Value).Nx().Build())
-		}
+	cmds, err := c.buildSetNXCmds(entries)
+	if err != nil {
+		return nil, err
 	}
 	responses := c.client.DoMulti(ctx, cmds...)
 	results := make([]SetNXResult, len(entries))
 	for i, resp := range responses {
-		results[i].Key = entries[i].Key
-		if util.IsValkeyNil(resp.Error()) {
-			results[i].Acquired = false
-		} else if resp.Error() != nil {
-			results[i].Err = resp.Error()
-		} else {
-			results[i].Acquired = true
-		}
+		results[i] = parseSetNXResponse(entries[i].Key, resp)
 	}
 	return results, nil
+}
+
+func (c *Service) buildSetNXCmds(entries []SetNXEntry) ([]valkey.Completed, error) {
+	cmds := make([]valkey.Completed, 0, len(entries))
+	for _, e := range entries {
+		cmd, err := c.buildSetNXCmd(e)
+		if err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, cmd)
+	}
+	return cmds, nil
+}
+
+func (c *Service) buildSetNXCmd(e SetNXEntry) (valkey.Completed, error) {
+	if e.TTL <= 0 {
+		return c.client.B().Set().Key(e.Key).Value(e.Value).Nx().Build(), nil
+	}
+	ttlSeconds, err := ttlSecondsCeil(e.TTL)
+	if err != nil {
+		return valkey.Completed{}, NewCacheError("invalid ttl", "setnx_multi", e.Key, err)
+	}
+	return c.client.B().Set().Key(e.Key).Value(e.Value).Nx().ExSeconds(ttlSeconds).Build(), nil
+}
+
+func parseSetNXResponse(key string, resp valkey.ValkeyResult) SetNXResult {
+	if util.IsValkeyNil(resp.Error()) {
+		return SetNXResult{Key: key, Acquired: false}
+	}
+	if resp.Error() != nil {
+		return SetNXResult{Key: key, Err: resp.Error()}
+	}
+	return SetNXResult{Key: key, Acquired: true}
 }

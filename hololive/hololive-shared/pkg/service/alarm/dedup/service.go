@@ -124,22 +124,15 @@ func (s *Service) TryClaimPair(ctx context.Context, key1, key2 string, ttl time.
 		return s.fallback.TryClaimOnOutage(key1, ttl, err),
 			s.fallback.TryClaimOnOutage(key2, ttl, err)
 	}
-	for i, r := range results {
-		if r.Err != nil {
-			if i == 0 {
-				acquired1 = s.fallback.TryClaimOnOutage(key1, ttl, r.Err)
-			} else {
-				acquired2 = s.fallback.TryClaimOnOutage(key2, ttl, r.Err)
-			}
-		} else {
-			if i == 0 {
-				acquired1 = r.Acquired
-			} else {
-				acquired2 = r.Acquired
-			}
-		}
+	return s.resolveClaimResult(key1, ttl, results[0]),
+		s.resolveClaimResult(key2, ttl, results[1])
+}
+
+func (s *Service) resolveClaimResult(key string, ttl time.Duration, r cache.SetNXResult) bool {
+	if r.Err != nil {
+		return s.fallback.TryClaimOnOutage(key, ttl, r.Err)
 	}
-	return
+	return r.Acquired
 }
 
 func (s *Service) TryClaimScheduleTransition(ctx context.Context, streamID string, oldScheduled, newScheduled time.Time) (string, bool, error) {
