@@ -18,13 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"fmt"
 	"strings"
 	"time"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
@@ -32,7 +33,7 @@ import (
 
 func (f *ResponseFormatter) FormatStatsTopGainers(periodLabel string, gainers []domain.RankEntry) string {
 	trimmedPeriod := stringutil.TrimSpace(periodLabel)
-	instruction := fmt.Sprintf("%s %s", DefaultEmoji.Stats, MsgStatsGainersHeader)
+	instruction := fmt.Sprintf("%s %s", msging.DefaultEmoji.Stats, msging.MsgStatsGainersHeader)
 
 	if trimmedPeriod != "" {
 		instruction = fmt.Sprintf("%s (%s)", instruction, trimmedPeriod)
@@ -62,9 +63,9 @@ func (f *ResponseFormatter) FormatSubscriberCount(memberName string, subscribers
 	formattedSubs := util.FormatKoreanNumber(int64(subscribers))
 
 	return fmt.Sprintf("%s %s\n\n%s 현재 구독자: %s명",
-		DefaultEmoji.Member,
+		msging.DefaultEmoji.Member,
 		memberName,
-		DefaultEmoji.Stats,
+		msging.DefaultEmoji.Stats,
 		formattedSubs,
 	)
 }
@@ -79,7 +80,7 @@ func (f *ResponseFormatter) FormatSubscriberGraph(
 ) string {
 	var builder strings.Builder
 
-	fmt.Fprintf(&builder, "%s %s 구독자 추이 (%d일)\n\n", DefaultEmoji.Stats, memberName, days)
+	fmt.Fprintf(&builder, "%s %s 구독자 추이 (%d일)\n\n", msging.DefaultEmoji.Stats, memberName, days)
 	fmt.Fprintf(&builder, "현재: %s명\n", util.FormatKoreanNumber(current))
 
 	writeSubscriberGraphChange(&builder, "7일", change7d)

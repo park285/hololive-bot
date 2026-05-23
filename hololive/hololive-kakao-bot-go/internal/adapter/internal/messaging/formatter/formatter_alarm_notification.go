@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"slices"
 	"strings"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -40,7 +41,7 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 	channelName := alarmChannelName(notification)
 	stream := notification.Stream
 	data := alarmNotificationTemplateData{
-		Emoji:            DefaultEmoji,
+		Emoji:            msging.DefaultEmoji,
 		ChannelName:      channelName,
 		MinutesUntil:     notification.MinutesUntil,
 		Title:            stringutil.TruncateString(stream.Title, constants.StringLimits.StreamTitle),
@@ -102,7 +103,7 @@ func alarmNotificationRenderFallback(templateKey domain.TemplateKey, data alarmN
 		return fmt.Sprintf("🔴 %s 방송 시작됨\n📺 %s\n🔗 %s", data.ChannelName, data.Title, data.URL)
 	}
 
-	return ErrorMessage(ErrDisplayAlarmNotifyFailed)
+	return msging.ErrorMessage(msging.ErrDisplayAlarmNotifyFailed)
 }
 
 func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notifications []*domain.AlarmNotification) string {
@@ -166,10 +167,10 @@ func compareAlarmNotificationGroupEntry(a, b alarmNotificationGroupEntry) int {
 }
 
 func renderAlarmNotificationGroup(minutesUntil int, entries []alarmNotificationGroupEntry) string {
-	instruction := DefaultEmoji.Alarm + " 방송 알림"
+	instruction := msging.DefaultEmoji.Alarm + " 방송 알림"
 
 	var sb strings.Builder
-	sb.WriteString(CountedHeader(DefaultEmoji.Alarm, "방송 알림", len(entries)))
+	sb.WriteString(msging.CountedHeader(msging.DefaultEmoji.Alarm, "방송 알림", len(entries)))
 	sb.WriteString("\n\n")
 	sb.WriteString(groupAlarmSummaryLine(minutesUntil, entries))
 	sb.WriteString("\n\n")
@@ -224,7 +225,7 @@ func groupAlarmEntryLine(index int, channelName, scheduledKST string, minutesUnt
 
 func groupAlarmSummaryLine(minutesUntil int, entries []alarmNotificationGroupEntry) string {
 	if minutesUntil <= 0 {
-		return DefaultEmoji.Time + " 여러 방송이 시작되었습니다."
+		return msging.DefaultEmoji.Time + " 여러 방송이 시작되었습니다."
 	}
 
 	seen := make(map[string]struct{}, len(entries))
@@ -245,14 +246,14 @@ func groupAlarmSummaryLine(minutesUntil int, entries []alarmNotificationGroupEnt
 	}
 
 	if len(scheduledTimes) == 0 {
-		return DefaultEmoji.Time + " 여러 방송이 곧 시작됩니다."
+		return msging.DefaultEmoji.Time + " 여러 방송이 곧 시작됩니다."
 	}
 
 	slices.Sort(scheduledTimes)
 
 	if len(scheduledTimes) == 1 {
-		return fmt.Sprintf("%s %s 방송예정", DefaultEmoji.Time, scheduledTimes[0])
+		return fmt.Sprintf("%s %s 방송예정", msging.DefaultEmoji.Time, scheduledTimes[0])
 	}
 
-	return fmt.Sprintf("%s 방송예정: %s", DefaultEmoji.Time, strings.Join(scheduledTimes, ", "))
+	return fmt.Sprintf("%s 방송예정: %s", msging.DefaultEmoji.Time, strings.Join(scheduledTimes, ", "))
 }

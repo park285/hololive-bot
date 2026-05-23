@@ -18,26 +18,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"context"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type helpTemplateData struct {
-	Emoji  UIEmoji
+	Emoji  msging.UIEmoji
 	Prefix string
 }
 
 func (f *ResponseFormatter) FormatHelp(ctx context.Context) string {
-	data := helpTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix}
+	data := helpTemplateData{Emoji: msging.DefaultEmoji, Prefix: f.prefix}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdHelp, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayHelpFailed)
+		return msging.ErrorMessage(msging.ErrDisplayHelpFailed)
 	}
 
 	instruction, body := splitTemplateInstruction(rendered)

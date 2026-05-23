@@ -18,13 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"strings"
 	"testing"
 	"time"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -80,9 +81,9 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 	errorFormatter := NewResponseFormatter("!", errorRenderer)
-	assert.Equal(t, ErrorMessage(ErrDisplayLiveStreamsFailed), errorFormatter.FormatLiveStreams(t.Context(), streams))
-	assert.Equal(t, ErrorMessage(ErrDisplayUpcomingFailed), errorFormatter.UpcomingStreams(t.Context(), streams, 12))
-	assert.Equal(t, ErrorMessage(ErrDisplayScheduleFailed), errorFormatter.ChannelSchedule(t.Context(), channel, streams, 7))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayLiveStreamsFailed), errorFormatter.FormatLiveStreams(t.Context(), streams))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayUpcomingFailed), errorFormatter.UpcomingStreams(t.Context(), streams, 12))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayScheduleFailed), errorFormatter.ChannelSchedule(t.Context(), channel, streams, 7))
 }
 
 func TestStreamHelpers(t *testing.T) {
@@ -100,8 +101,8 @@ func TestStreamHelpers(t *testing.T) {
 
 	t.Run("streamTimeInfo branches", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, MsgTimeUnknown, formatter.streamTimeInfo(nil))
-		assert.Equal(t, MsgTimeUnknown, formatter.streamTimeInfo(&domain.Stream{}))
+		assert.Equal(t, msging.MsgTimeUnknown, formatter.streamTimeInfo(nil))
+		assert.Equal(t, msging.MsgTimeUnknown, formatter.streamTimeInfo(&domain.Stream{}))
 
 		futureDays := time.Now().Add(50 * time.Hour)
 		assert.Contains(t, formatter.streamTimeInfo(&domain.Stream{StartScheduled: &futureDays}), "일 후")
@@ -186,7 +187,7 @@ func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 	errorFormatter := NewResponseFormatter("!", errorRenderer)
-	assert.Equal(t, ErrorMessage(ErrDisplayMemberListFailed), errorFormatter.MemberDirectory(t.Context(), groups, 1))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayMemberListFailed), errorFormatter.MemberDirectory(t.Context(), groups, 1))
 }
 
 func TestFormatChannelName_IndependentsOrg(t *testing.T) {

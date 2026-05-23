@@ -18,12 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"context"
 	"fmt"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -38,7 +39,7 @@ type liveStreamView struct {
 }
 
 type liveStreamsTemplateData struct {
-	Emoji   UIEmoji
+	Emoji   msging.UIEmoji
 	Count   int
 	Streams []liveStreamView
 }
@@ -51,7 +52,7 @@ type upcomingStreamView struct {
 }
 
 type upcomingStreamsTemplateData struct {
-	Emoji   UIEmoji
+	Emoji   msging.UIEmoji
 	Count   int
 	Hours   int
 	Streams []upcomingStreamView
@@ -65,7 +66,7 @@ type scheduleEntryView struct {
 }
 
 type channelScheduleTemplateData struct {
-	Emoji       UIEmoji
+	Emoji       msging.UIEmoji
 	ChannelName string
 	Days        int
 	Count       int
@@ -76,7 +77,7 @@ func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*do
 	data := f.liveStreamsTemplateData(streams)
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdLiveStreams, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayLiveStreamsFailed)
+		return msging.ErrorMessage(msging.ErrDisplayLiveStreamsFailed)
 	}
 
 	if data.Count == 0 {
@@ -93,7 +94,7 @@ func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*do
 
 func (f *ResponseFormatter) liveStreamsTemplateData(streams []*domain.Stream) liveStreamsTemplateData {
 	return liveStreamsTemplateData{
-		Emoji:   DefaultEmoji,
+		Emoji:   msging.DefaultEmoji,
 		Count:   len(streams),
 		Streams: f.liveStreamViews(streams),
 	}
@@ -126,7 +127,7 @@ func (f *ResponseFormatter) liveStreamView(stream *domain.Stream) liveStreamView
 }
 
 func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*domain.Stream, hours int) string {
-	data := upcomingStreamsTemplateData{Emoji: DefaultEmoji, Count: len(streams), Hours: hours}
+	data := upcomingStreamsTemplateData{Emoji: msging.DefaultEmoji, Count: len(streams), Hours: hours}
 	if len(streams) > 0 {
 		data.Streams = make([]upcomingStreamView, len(streams))
 		for i, stream := range streams {
@@ -141,7 +142,7 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdUpcomingStreams, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayUpcomingFailed)
+		return msging.ErrorMessage(msging.ErrDisplayUpcomingFailed)
 	}
 
 	if data.Count == 0 {
@@ -160,7 +161,7 @@ func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain
 	data := f.channelScheduleTemplateData(channel, streams, days)
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdChannelSchedule, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayScheduleFailed)
+		return msging.ErrorMessage(msging.ErrDisplayScheduleFailed)
 	}
 
 	if data.Count == 0 {
@@ -177,7 +178,7 @@ func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain
 
 func (f *ResponseFormatter) channelScheduleTemplateData(channel *domain.Channel, streams []*domain.Stream, days int) channelScheduleTemplateData {
 	return channelScheduleTemplateData{
-		Emoji:       DefaultEmoji,
+		Emoji:       msging.DefaultEmoji,
 		ChannelName: channelScheduleName(channel),
 		Days:        days,
 		Count:       len(streams),
@@ -224,7 +225,7 @@ func (f *ResponseFormatter) truncateTitle(title string) string {
 
 func (f *ResponseFormatter) streamTimeInfo(stream *domain.Stream) string {
 	if stream == nil || stream.StartScheduled == nil {
-		return MsgTimeUnknown
+		return msging.MsgTimeUnknown
 	}
 
 	kstTime := util.FormatKST(*stream.StartScheduled, "01/02 15:04")
@@ -286,7 +287,7 @@ func formatStreamOrg(org string) string {
 }
 
 func (f *ResponseFormatter) FormatMemberNotLive(memberName string) string {
-	return fmt.Sprintf(MsgMemberNotLive, memberName)
+	return fmt.Sprintf(msging.MsgMemberNotLive, memberName)
 }
 
 func (f *ResponseFormatter) FormatLiveOverflowCount(extraCount int) string {
@@ -294,7 +295,7 @@ func (f *ResponseFormatter) FormatLiveOverflowCount(extraCount int) string {
 }
 
 func (f *ResponseFormatter) FormatMemberNoUpcoming(memberName string, hours int) string {
-	return fmt.Sprintf(MsgMemberNoUpcoming, memberName, hours)
+	return fmt.Sprintf(msging.MsgMemberNoUpcoming, memberName, hours)
 }
 
 func (f *ResponseFormatter) FormatUpcomingOverflowCount(extraCount int) string {

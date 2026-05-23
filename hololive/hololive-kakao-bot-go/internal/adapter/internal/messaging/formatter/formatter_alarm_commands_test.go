@@ -18,13 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"strings"
 	"testing"
 	"time"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
@@ -71,7 +72,7 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 	assert.Equal(t, "알람 목록", emptyList)
 
 	assert.Equal(t, "CLEAR 3", formatter.FormatAlarmCleared(t.Context(), 3))
-	assert.Equal(t, ErrInvalidAlarmUsage, formatter.InvalidAlarmUsage())
+	assert.Equal(t, msging.ErrInvalidAlarmUsage, formatter.InvalidAlarmUsage())
 
 	notify := formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{
 		Channel: &domain.Channel{Name: "미코"},
@@ -111,11 +112,11 @@ func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 	t.Parallel()
 
 	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmAddFailed), formatter.FormatAlarmAdded(t.Context(), "미코", true, nil))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmRemoveFailed), formatter.FormatAlarmRemoved(t.Context(), "미코", true))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmListFailed), formatter.FormatAlarmList(t.Context(), []AlarmListEntry{{MemberName: "미코"}}))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmClearFailed), formatter.FormatAlarmCleared(t.Context(), 1))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmNotifyFailed), formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 1, Stream: &domain.Stream{ID: "yt", Title: "t", ChannelName: "c"}}))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmAddFailed), formatter.FormatAlarmAdded(t.Context(), "미코", true, nil))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmRemoveFailed), formatter.FormatAlarmRemoved(t.Context(), "미코", true))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmListFailed), formatter.FormatAlarmList(t.Context(), []AlarmListEntry{{MemberName: "미코"}}))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmClearFailed), formatter.FormatAlarmCleared(t.Context(), 1))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmNotifyFailed), formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 1, Stream: &domain.Stream{ID: "yt", Title: "t", ChannelName: "c"}}))
 
 	fallbackLive := formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 0, Channel: &domain.Channel{Name: "미코"}, Stream: &domain.Stream{ID: "yt", Title: "제목", ChannelName: "미코"}})
 	assert.Contains(t, fallbackLive, "방송 시작됨")

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"log/slog"
@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -172,7 +173,7 @@ func TestFormatHelp(t *testing.T) {
 		formatter := NewResponseFormatter("!", renderer)
 
 		got := formatter.FormatHelp(t.Context())
-		assert.Equal(t, ErrorMessage(ErrDisplayHelpFailed), got)
+		assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayHelpFailed), got)
 	})
 }
 
@@ -180,6 +181,6 @@ func TestFormatErrorAndMemberNotFound(t *testing.T) {
 	t.Parallel()
 
 	formatter := NewResponseFormatter("!", nil)
-	assert.Equal(t, ErrorMessage("테스트 오류"), formatter.FormatError("테스트 오류"))
-	assert.Equal(t, ErrorMessage("'후부키' 멤버를 찾을 수 없습니다."), formatter.MemberNotFound("후부키"))
+	assert.Equal(t, msging.ErrorMessage("테스트 오류"), formatter.FormatError("테스트 오류"))
+	assert.Equal(t, msging.ErrorMessage("'후부키' 멤버를 찾을 수 없습니다."), formatter.MemberNotFound("후부키"))
 }
