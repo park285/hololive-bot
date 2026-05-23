@@ -24,7 +24,8 @@ import (
 	"context"
 	stdErrors "errors"
 	"fmt"
-	"log/slog"
+
+	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -34,8 +35,7 @@ func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]str
 
 	channelIDs, err := as.cache.SMembers(ctx, alarmKey)
 	if err != nil {
-		as.logger.Error("Failed to get room alarms", slog.Any("error", err))
-		return []string{}, fmt.Errorf("get room alarms: %w", err)
+		return []string{}, sharedlogging.LogAndWrapError(ctx, as.logger, "get room alarms", err)
 	}
 
 	return channelIDs, nil

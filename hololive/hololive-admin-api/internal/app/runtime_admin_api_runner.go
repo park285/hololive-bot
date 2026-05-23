@@ -24,6 +24,7 @@ import (
 	"context"
 
 	appruntime "github.com/kapu/hololive-admin-api/internal/app/runtime"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
 )
 
 func (r *AdminAPIRuntime) Run() {
@@ -51,5 +52,5 @@ func (r *AdminAPIRuntime) StartHTTPServer(errCh chan<- error) {
 		return
 	}
 
-	appruntime.StartHTTPServer(r.HttpServer, r.Logger, errCh)
+	httpserver.StartHTTPServer(r.HttpServer, r.Logger, errCh)
 }

@@ -43,7 +43,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
 	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
+
 )
 
 type LLMSchedulerRuntime struct {
@@ -95,7 +97,7 @@ func (r *LLMSchedulerRuntime) Run() {
 }
 
 func (r *LLMSchedulerRuntime) startHTTPServer(errCh chan<- error) {
-	StartHTTPServer(r.httpServer, r.Logger, errCh)
+	httpserver.StartHTTPServer(r.httpServer, r.Logger, errCh)
 	r.Logger.Info("LLM scheduler HTTP server started",
 		slog.String("addr", r.httpServer.Addr))
 }
@@ -164,7 +166,7 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	var errs []error
 	r.stopSchedulers()
-	if err := ShutdownHTTPServer(r.httpServer, ctx); err != nil {
+	if err := httpserver.ShutdownHTTPServer(ctx, r.httpServer); err != nil {
 		r.Logger.Error("HTTP server shutdown error", slog.Any("error", err))
 		errs = append(errs, err)
 	} else {

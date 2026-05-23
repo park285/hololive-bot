@@ -24,9 +24,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"log/slog"
 	"strings"
+
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 
 	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 
@@ -42,8 +43,7 @@ func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.C
 
 	channels, err := h.fetchHololiveChannelList(ctx)
 	if err != nil {
-		h.logger.Error("Failed to search channels", slog.String("query", query), slog.Any("error", err))
-		return nil, fmt.Errorf("search channels: %w", err)
+		return nil, sharedlog.LogAndWrapError(ctx, h.logger, "search channels", err, slog.String("query", query))
 	}
 
 	h.logger.Debug("Holodex API search results",

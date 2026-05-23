@@ -24,6 +24,7 @@ import (
 	"context"
 
 	appruntime "github.com/kapu/hololive-alarm-worker/internal/app/runtime"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -76,5 +77,5 @@ func (r *AlarmWorkerRuntime) StartHTTPServer(errCh chan<- error) {
 		return
 	}
 
-	appruntime.StartHTTPServer(r.HttpServer, r.Logger, errCh)
+	httpserver.StartHTTPServer(r.HttpServer, r.Logger, errCh)
 }
