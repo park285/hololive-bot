@@ -32,13 +32,6 @@ type deliveryClaimToken struct {
 	authorizedAt time.Time
 }
 
-func (t *deliveryClaimToken) authorizedAtOrZero() time.Time {
-	if t == nil {
-		return time.Time{}
-	}
-	return t.authorizedAt
-}
-
 type deliveryClaimSelection struct {
 	sendRows               []domain.YouTubeNotificationDelivery
 	sendOutboxes           []domain.YouTubeNotificationOutbox
