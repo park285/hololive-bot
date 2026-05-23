@@ -18,13 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"context"
 	"fmt"
 	"time"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -38,7 +39,7 @@ type AlarmListEntry struct {
 }
 
 type alarmAddedTemplateData struct {
-	Emoji      UIEmoji
+	Emoji      msging.UIEmoji
 	MemberName string
 	Added      bool
 	NextStream *nextStreamInfoView
@@ -46,13 +47,13 @@ type alarmAddedTemplateData struct {
 }
 
 type alarmRemovedTemplateData struct {
-	Emoji      UIEmoji
+	Emoji      msging.UIEmoji
 	MemberName string
 	Removed    bool
 }
 
 type alarmListTemplateData struct {
-	Emoji  UIEmoji
+	Emoji  msging.UIEmoji
 	Count  int
 	Prefix string
 	Alarms []alarmListEntryView
@@ -74,12 +75,12 @@ type nextStreamInfoView struct {
 }
 
 type alarmClearedTemplateData struct {
-	Emoji UIEmoji
+	Emoji msging.UIEmoji
 	Count int
 }
 
 type alarmNotificationTemplateData struct {
-	Emoji            UIEmoji
+	Emoji            msging.UIEmoji
 	ChannelName      string
 	MinutesUntil     int
 	Title            string
@@ -154,7 +155,7 @@ func displayAlarmOrg(org string) string {
 
 func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName string, added bool, nextStreamInfo *domain.NextStreamInfo) string {
 	data := alarmAddedTemplateData{
-		Emoji:      DefaultEmoji,
+		Emoji:      msging.DefaultEmoji,
 		MemberName: memberName,
 		Added:      added,
 		NextStream: buildNextStreamInfoView(nextStreamInfo),
@@ -163,7 +164,7 @@ func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName str
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmAdded, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayAlarmAddFailed)
+		return msging.ErrorMessage(msging.ErrDisplayAlarmAddFailed)
 	}
 
 	return rendered
@@ -171,14 +172,14 @@ func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName str
 
 func (f *ResponseFormatter) FormatAlarmRemoved(ctx context.Context, memberName string, removed bool) string {
 	data := alarmRemovedTemplateData{
-		Emoji:      DefaultEmoji,
+		Emoji:      msging.DefaultEmoji,
 		MemberName: memberName,
 		Removed:    removed,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmRemoved, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayAlarmRemoveFailed)
+		return msging.ErrorMessage(msging.ErrDisplayAlarmRemoveFailed)
 	}
 
 	return rendered

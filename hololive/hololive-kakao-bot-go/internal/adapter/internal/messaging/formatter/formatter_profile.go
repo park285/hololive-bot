@@ -18,12 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"fmt"
 	"strings"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
@@ -52,7 +53,7 @@ func formatProfileCatchphrase(raw *domain.TalentProfile, translated *domain.Tran
 		return ""
 	}
 
-	return fmt.Sprintf("%s %s\n", DefaultEmoji.Speech, catchphrase)
+	return fmt.Sprintf("%s %s\n", msging.DefaultEmoji.Speech, catchphrase)
 }
 
 // 요약 섹션 포맷팅.
@@ -79,7 +80,7 @@ func formatProfileHighlights(translated *domain.Translated) string {
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n%s 하이라이트\n", DefaultEmoji.Highlight)
+	fmt.Fprintf(&sb, "\n%s 하이라이트\n", msging.DefaultEmoji.Highlight)
 
 	for _, highlight := range translated.Highlights {
 		if trimmed := stringutil.TrimSpace(highlight); trimmed != "" {
@@ -121,7 +122,7 @@ func formatProfileDataEntries(raw *domain.TalentProfile, translated *domain.Tran
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n%s 프로필 데이터\n", DefaultEmoji.Data)
+	fmt.Fprintf(&sb, "\n%s 프로필 데이터\n", msging.DefaultEmoji.Data)
 
 	maxRows := min(len(dataEntries), 8)
 
@@ -152,7 +153,7 @@ func formatProfileSocialLinks(raw *domain.TalentProfile) string {
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n%s 링크\n", DefaultEmoji.Link)
+	fmt.Fprintf(&sb, "\n%s 링크\n", msging.DefaultEmoji.Link)
 
 	maxLinks := min(len(raw.SocialLinks), 4)
 
@@ -175,12 +176,12 @@ func formatProfileOfficialURL(raw *domain.TalentProfile) string {
 		return ""
 	}
 
-	return fmt.Sprintf("\n%s 공식 프로필: %s", DefaultEmoji.Web, stringutil.TrimSpace(raw.OfficialURL))
+	return fmt.Sprintf("\n%s 공식 프로필: %s", msging.DefaultEmoji.Web, stringutil.TrimSpace(raw.OfficialURL))
 }
 
 func (f *ResponseFormatter) FormatTalentProfile(raw *domain.TalentProfile, translated *domain.Translated) string {
 	if raw == nil {
-		return ErrorMessage(ErrDisplayProfileDataFailed)
+		return msging.ErrorMessage(msging.ErrDisplayProfileDataFailed)
 	}
 
 	var sb strings.Builder
@@ -210,7 +211,7 @@ func (f *ResponseFormatter) FormatTalentProfile(raw *domain.TalentProfile, trans
 
 	instructionBase := stringutil.TrimSpace(header)
 	if instructionBase == "" {
-		instructionBase = DefaultEmoji.Member + " 멤버 정보"
+		instructionBase = msging.DefaultEmoji.Member + " 멤버 정보"
 	}
 
 	return util.ApplyKakaoSeeMorePadding(body, instructionBase)
@@ -232,7 +233,7 @@ func socialLinkLabel(label string) string {
 
 func buildTalentHeader(raw *domain.TalentProfile, translated *domain.Translated) string {
 	names := talentDisplayNames(raw, translated)
-	return MemberHeader(names)
+	return msging.MemberHeader(names)
 }
 
 func talentDisplayNames(raw *domain.TalentProfile, translated *domain.Translated) []string {

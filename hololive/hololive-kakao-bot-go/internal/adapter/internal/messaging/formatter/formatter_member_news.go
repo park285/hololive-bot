@@ -18,18 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"context"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 )
 
 type memberNewsDigestTemplateData struct {
-	Emoji       UIEmoji
+	Emoji       msging.UIEmoji
 	Headline    string
 	TopItems    []membernewscontracts.SummaryItem
 	MoreSummary string
@@ -37,22 +38,22 @@ type memberNewsDigestTemplateData struct {
 }
 
 type memberNewsSubscriptionTemplateData struct {
-	Emoji        UIEmoji
+	Emoji        msging.UIEmoji
 	Prefix       string
 	IsSubscribed bool
 }
 
 func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *membernewscontracts.Digest) string {
 	if digest == nil {
-		return ErrorMessage(ErrDisplayMemberNewsFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMemberNewsFailed)
 	}
 
 	if f == nil || f.renderer == nil {
-		return ErrorMessage(ErrDisplayMemberNewsFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMemberNewsFailed)
 	}
 
 	data := memberNewsDigestTemplateData{
-		Emoji:       DefaultEmoji,
+		Emoji:       msging.DefaultEmoji,
 		Headline:    digest.Headline,
 		TopItems:    localizeMemberNewsItems(digest.TopItems),
 		MoreSummary: digest.MoreSummary,
@@ -61,7 +62,7 @@ func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsDigest, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayMemberNewsFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMemberNewsFailed)
 	}
 
 	return rendered
@@ -69,12 +70,12 @@ func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *
 
 func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return MsgMemberNewsNoMembers
+		return msging.MsgMemberNewsNoMembers
 	}
 
-	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNoMembers, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNoMembers, memberNewsSubscriptionTemplateData{Emoji: msging.DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
-		return MsgMemberNewsNoMembers
+		return msging.MsgMemberNewsNoMembers
 	}
 
 	return message
@@ -82,12 +83,12 @@ func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) strin
 
 func (f *ResponseFormatter) FormatMemberNewsSubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return MsgMemberNewsSubscribed
+		return msging.MsgMemberNewsSubscribed
 	}
 
-	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsSubscribed, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsSubscribed, memberNewsSubscriptionTemplateData{Emoji: msging.DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
-		return MsgMemberNewsSubscribed
+		return msging.MsgMemberNewsSubscribed
 	}
 
 	return message
@@ -95,12 +96,12 @@ func (f *ResponseFormatter) FormatMemberNewsSubscribed(ctx context.Context) stri
 
 func (f *ResponseFormatter) FormatMemberNewsAlreadySubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return MsgMemberNewsAlreadySubscribed
+		return msging.MsgMemberNewsAlreadySubscribed
 	}
 
-	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsAlreadySub, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsAlreadySub, memberNewsSubscriptionTemplateData{Emoji: msging.DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
-		return MsgMemberNewsAlreadySubscribed
+		return msging.MsgMemberNewsAlreadySubscribed
 	}
 
 	return message
@@ -108,12 +109,12 @@ func (f *ResponseFormatter) FormatMemberNewsAlreadySubscribed(ctx context.Contex
 
 func (f *ResponseFormatter) FormatMemberNewsUnsubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return MsgMemberNewsUnsubscribed
+		return msging.MsgMemberNewsUnsubscribed
 	}
 
-	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsUnsubscribed, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsUnsubscribed, memberNewsSubscriptionTemplateData{Emoji: msging.DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
-		return MsgMemberNewsUnsubscribed
+		return msging.MsgMemberNewsUnsubscribed
 	}
 
 	return message
@@ -121,12 +122,12 @@ func (f *ResponseFormatter) FormatMemberNewsUnsubscribed(ctx context.Context) st
 
 func (f *ResponseFormatter) FormatMemberNewsNotSubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return MsgMemberNewsNotSubscribed
+		return msging.MsgMemberNewsNotSubscribed
 	}
 
-	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNotSub, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNotSub, memberNewsSubscriptionTemplateData{Emoji: msging.DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
-		return MsgMemberNewsNotSubscribed
+		return msging.MsgMemberNewsNotSubscribed
 	}
 
 	return message
@@ -135,23 +136,23 @@ func (f *ResponseFormatter) FormatMemberNewsNotSubscribed(ctx context.Context) s
 func (f *ResponseFormatter) FormatMemberNewsStatus(ctx context.Context, isSubscribed bool) string {
 	if f == nil || f.renderer == nil {
 		if isSubscribed {
-			return MsgMemberNewsStatusOn
+			return msging.MsgMemberNewsStatusOn
 		}
 
-		return MsgMemberNewsStatusOff
+		return msging.MsgMemberNewsStatusOff
 	}
 
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsStatus, memberNewsSubscriptionTemplateData{
-		Emoji:        DefaultEmoji,
+		Emoji:        msging.DefaultEmoji,
 		Prefix:       f.prefix,
 		IsSubscribed: isSubscribed,
 	})
 	if err != nil {
 		if isSubscribed {
-			return MsgMemberNewsStatusOn
+			return msging.MsgMemberNewsStatusOn
 		}
 
-		return MsgMemberNewsStatusOff
+		return msging.MsgMemberNewsStatusOff
 	}
 
 	return message

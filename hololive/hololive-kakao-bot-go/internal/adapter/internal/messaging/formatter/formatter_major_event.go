@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"context"
@@ -26,20 +26,21 @@ import (
 	"strings"
 	"time"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type majorEventWeeklySummaryData struct {
-	Emoji      UIEmoji
+	Emoji      msging.UIEmoji
 	Count      int
 	Events     []majorEventView
 	LLMSummary string
 }
 
 type majorEventMonthlySummaryData struct {
-	Emoji      UIEmoji
+	Emoji      msging.UIEmoji
 	Count      int
 	Events     []majorEventView
 	LLMSummary string
@@ -48,18 +49,18 @@ type majorEventMonthlySummaryData struct {
 type majorEventView = templateview.MajorEventView
 
 type majorEventSubscribedData struct {
-	Emoji  UIEmoji
+	Emoji  msging.UIEmoji
 	Prefix string
 }
 
 type majorEventStatusData struct {
-	Emoji        UIEmoji
+	Emoji        msging.UIEmoji
 	IsSubscribed bool
 	Prefix       string
 }
 
 type majorEventUsageData struct {
-	Emoji  UIEmoji
+	Emoji  msging.UIEmoji
 	Prefix string
 }
 
@@ -77,7 +78,7 @@ func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, e
 	}
 
 	data := majorEventWeeklySummaryData{
-		Emoji:      DefaultEmoji,
+		Emoji:      msging.DefaultEmoji,
 		Count:      len(events),
 		Events:     views,
 		LLMSummary: normalizedSummary,
@@ -85,7 +86,7 @@ func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, e
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventWeeklySummary, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayMajorEventFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
 	instruction, body := splitTemplateInstruction(rendered)
@@ -110,7 +111,7 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 	}
 
 	data := majorEventMonthlySummaryData{
-		Emoji:      DefaultEmoji,
+		Emoji:      msging.DefaultEmoji,
 		Count:      len(events),
 		Events:     views,
 		LLMSummary: normalizedSummary,
@@ -118,7 +119,7 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventMonthlySummary, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayMajorEventFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
 	instruction, body := splitTemplateInstruction(rendered)
@@ -135,42 +136,42 @@ func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {
 
 func (f *ResponseFormatter) FormatMajorEventSubscribed(ctx context.Context) string {
 	data := majorEventSubscribedData{
-		Emoji:  DefaultEmoji,
+		Emoji:  msging.DefaultEmoji,
 		Prefix: f.prefix,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventSubscribed, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayMajorEventFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
 	return rendered
 }
 
 func (f *ResponseFormatter) FormatMajorEventUnsubscribed(ctx context.Context) string {
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventUnsubscribed, majorEventSubscribedData{Emoji: DefaultEmoji})
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventUnsubscribed, majorEventSubscribedData{Emoji: msging.DefaultEmoji})
 	if err != nil {
-		return ErrorMessage(ErrDisplayMajorEventFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
 	return rendered
 }
 
 func (f *ResponseFormatter) FormatMajorEventAlreadySubscribed(ctx context.Context) string {
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventAlreadySub, majorEventSubscribedData{Emoji: DefaultEmoji})
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventAlreadySub, majorEventSubscribedData{Emoji: msging.DefaultEmoji})
 	if err != nil {
-		return ErrorMessage(ErrDisplayMajorEventFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
 	return rendered
 }
 
 func (f *ResponseFormatter) FormatMajorEventNotSubscribed(ctx context.Context) string {
-	data := majorEventSubscribedData{Emoji: DefaultEmoji, Prefix: f.prefix}
+	data := majorEventSubscribedData{Emoji: msging.DefaultEmoji, Prefix: f.prefix}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventNotSub, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayMajorEventFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
 	return rendered
@@ -178,14 +179,14 @@ func (f *ResponseFormatter) FormatMajorEventNotSubscribed(ctx context.Context) s
 
 func (f *ResponseFormatter) FormatMajorEventStatus(ctx context.Context, isSubscribed bool) string {
 	data := majorEventStatusData{
-		Emoji:        DefaultEmoji,
+		Emoji:        msging.DefaultEmoji,
 		IsSubscribed: isSubscribed,
 		Prefix:       f.prefix,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventStatus, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayMajorEventFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
 	return rendered
@@ -193,13 +194,13 @@ func (f *ResponseFormatter) FormatMajorEventStatus(ctx context.Context, isSubscr
 
 func (f *ResponseFormatter) FormatMajorEventUsage(ctx context.Context) string {
 	data := majorEventUsageData{
-		Emoji:  DefaultEmoji,
+		Emoji:  msging.DefaultEmoji,
 		Prefix: f.prefix,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventUsage, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayMajorEventFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
 	return rendered

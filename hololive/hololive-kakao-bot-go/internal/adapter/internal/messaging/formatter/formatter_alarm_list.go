@@ -18,11 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"context"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
@@ -38,7 +39,7 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 	}
 
 	data := alarmListTemplateData{
-		Emoji:  DefaultEmoji,
+		Emoji:  msging.DefaultEmoji,
 		Count:  len(processed),
 		Prefix: f.prefix,
 		Alarms: processed,
@@ -46,7 +47,7 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmList, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayAlarmListFailed)
+		return msging.ErrorMessage(msging.ErrDisplayAlarmListFailed)
 	}
 
 	if data.Count == 0 {
@@ -62,16 +63,16 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 }
 
 func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) string {
-	data := alarmClearedTemplateData{Emoji: DefaultEmoji, Count: count}
+	data := alarmClearedTemplateData{Emoji: msging.DefaultEmoji, Count: count}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmCleared, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayAlarmClearFailed)
+		return msging.ErrorMessage(msging.ErrDisplayAlarmClearFailed)
 	}
 
 	return rendered
 }
 
 func (f *ResponseFormatter) InvalidAlarmUsage() string {
-	return ErrInvalidAlarmUsage
+	return msging.ErrInvalidAlarmUsage
 }

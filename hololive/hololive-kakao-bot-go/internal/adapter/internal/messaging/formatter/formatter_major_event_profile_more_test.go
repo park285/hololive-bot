@@ -18,13 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"strings"
 	"testing"
 	"time"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
@@ -74,7 +75,7 @@ func TestFormatMajorEventCommandMessages_Fallback(t *testing.T) {
 	t.Parallel()
 
 	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
-	want := ErrorMessage(ErrDisplayMajorEventFailed)
+	want := msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 
 	assert.Equal(t, want, formatter.FormatMajorEventSubscribed(t.Context()))
 	assert.Equal(t, want, formatter.FormatMajorEventUnsubscribed(t.Context()))
@@ -115,7 +116,7 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 
 	assert.Equal(t, "친구야!", getTranslatedText("친구야!", "Friend!"))
 	assert.Equal(t, "Friend!", getTranslatedText(" ", "Friend!"))
-	assert.Contains(t, formatProfileCatchphrase(raw, translated), DefaultEmoji.Speech)
+	assert.Contains(t, formatProfileCatchphrase(raw, translated), msging.DefaultEmoji.Speech)
 	assert.Contains(t, formatProfileSummary(raw, translated), "홀로라이브")
 	assert.Contains(t, formatProfileHighlights(translated), "하이라이트")
 	assert.Len(t, getProfileDataEntries(raw, translated), 2)
@@ -145,5 +146,5 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 	assert.Contains(t, msg, "공식 프로필")
 	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(msg, util.KakaoZeroWidthSpace))
 
-	assert.Equal(t, ErrorMessage(ErrDisplayProfileDataFailed), formatter.FormatTalentProfile(nil, translated))
+	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayProfileDataFailed), formatter.FormatTalentProfile(nil, translated))
 }

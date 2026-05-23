@@ -1,15 +1,18 @@
 package adapter
 
-import messaging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
+import (
+	messaging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging/formatter"
+)
 
-type AlarmListEntry = messaging.AlarmListEntry
+type AlarmListEntry = formatter.AlarmListEntry
 type CommandParser = messaging.CommandParser
-type MemberDirectoryEntry = messaging.MemberDirectoryEntry
-type MemberDirectoryGroup = messaging.MemberDirectoryGroup
+type MemberDirectoryEntry = formatter.MemberDirectoryEntry
+type MemberDirectoryGroup = formatter.MemberDirectoryGroup
 type MessageAdapter = messaging.MessageAdapter
 type MessageBuilder = messaging.MessageBuilder
 type ParsedCommand = messaging.ParsedCommand
-type ResponseFormatter = messaging.ResponseFormatter
+type ResponseFormatter = formatter.ResponseFormatter
 type UIEmoji = messaging.UIEmoji
 
 const (
@@ -97,4 +100,4 @@ var UsageHint = messaging.UsageHint
 
 var NewMessageAdapter = messaging.NewMessageAdapter
 var NewMessageBuilder = messaging.NewMessageBuilder
-var NewResponseFormatter = messaging.NewResponseFormatter
+var NewResponseFormatter = formatter.NewResponseFormatter

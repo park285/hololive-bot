@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"log/slog"
@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
@@ -86,7 +87,7 @@ func TestFormatMemberNewsDigest_RenderFailFallback(t *testing.T) {
 
 	output := formatter.FormatMemberNewsDigest(t.Context(), digest)
 
-	expected := ErrorMessage(ErrDisplayMemberNewsFailed)
+	expected := msging.ErrorMessage(msging.ErrDisplayMemberNewsFailed)
 	if output != expected {
 		t.Fatalf("expected %q, got %q", expected, output)
 	}

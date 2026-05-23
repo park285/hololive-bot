@@ -18,11 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"testing"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
@@ -57,13 +58,13 @@ func TestFormatMemberNewsSubscriptionMessages_Fallback(t *testing.T) {
 	ctx := t.Context()
 	formatter := NewResponseFormatter("!", nil)
 
-	assert.Equal(t, MsgMemberNewsNoMembers, formatter.FormatMemberNewsNoMembers(ctx))
-	assert.Equal(t, MsgMemberNewsSubscribed, formatter.FormatMemberNewsSubscribed(ctx))
-	assert.Equal(t, MsgMemberNewsAlreadySubscribed, formatter.FormatMemberNewsAlreadySubscribed(ctx))
-	assert.Equal(t, MsgMemberNewsUnsubscribed, formatter.FormatMemberNewsUnsubscribed(ctx))
-	assert.Equal(t, MsgMemberNewsNotSubscribed, formatter.FormatMemberNewsNotSubscribed(ctx))
-	assert.Equal(t, MsgMemberNewsStatusOn, formatter.FormatMemberNewsStatus(ctx, true))
-	assert.Equal(t, MsgMemberNewsStatusOff, formatter.FormatMemberNewsStatus(ctx, false))
+	assert.Equal(t, msging.MsgMemberNewsNoMembers, formatter.FormatMemberNewsNoMembers(ctx))
+	assert.Equal(t, msging.MsgMemberNewsSubscribed, formatter.FormatMemberNewsSubscribed(ctx))
+	assert.Equal(t, msging.MsgMemberNewsAlreadySubscribed, formatter.FormatMemberNewsAlreadySubscribed(ctx))
+	assert.Equal(t, msging.MsgMemberNewsUnsubscribed, formatter.FormatMemberNewsUnsubscribed(ctx))
+	assert.Equal(t, msging.MsgMemberNewsNotSubscribed, formatter.FormatMemberNewsNotSubscribed(ctx))
+	assert.Equal(t, msging.MsgMemberNewsStatusOn, formatter.FormatMemberNewsStatus(ctx, true))
+	assert.Equal(t, msging.MsgMemberNewsStatusOff, formatter.FormatMemberNewsStatus(ctx, false))
 }
 
 func TestMemberNewsLocalizationHelpers(t *testing.T) {

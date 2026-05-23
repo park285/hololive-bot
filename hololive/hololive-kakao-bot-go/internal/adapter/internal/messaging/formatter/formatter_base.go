@@ -18,13 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	templateview "github.com/kapu/hololive-shared/pkg/templateview"
@@ -70,7 +71,7 @@ func (f *ResponseFormatter) Prefix() string {
 }
 
 func (f *ResponseFormatter) FormatError(message string) string {
-	return ErrorMessage(message)
+	return msging.ErrorMessage(message)
 }
 
 func (f *ResponseFormatter) MemberNotFound(memberName string) string {

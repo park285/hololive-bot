@@ -18,12 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package messaging
+package formatter
 
 import (
 	"context"
 	"strings"
 
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
@@ -40,7 +41,7 @@ type MemberDirectoryEntry struct {
 }
 
 type memberDirectoryTemplateData struct {
-	Emoji  UIEmoji
+	Emoji  msging.UIEmoji
 	Total  int
 	Groups []memberDirectoryGroupView
 }
@@ -66,14 +67,14 @@ func (f *ResponseFormatter) MemberDirectory(ctx context.Context, groups []Member
 	}
 
 	data := memberDirectoryTemplateData{
-		Emoji:  DefaultEmoji,
+		Emoji:  msging.DefaultEmoji,
 		Total:  total,
 		Groups: viewGroups,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberDirectory, data)
 	if err != nil {
-		return ErrorMessage(ErrDisplayMemberListFailed)
+		return msging.ErrorMessage(msging.ErrDisplayMemberListFailed)
 	}
 
 	if len(viewGroups) == 0 {
