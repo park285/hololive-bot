@@ -43,13 +43,13 @@ func DefaultViewerSampleCleanerConfig() ViewerSampleCleanerConfig {
 }
 
 type ViewerSampleCleaner struct {
-	db  *gorm.DB
+	db     *gorm.DB
 	config ViewerSampleCleanerConfig
 }
 
 func NewViewerSampleCleaner(db *gorm.DB, config ViewerSampleCleanerConfig) *ViewerSampleCleaner {
 	return &ViewerSampleCleaner{
-		db:  db,
+		db:     db,
 		config: config,
 	}
 }

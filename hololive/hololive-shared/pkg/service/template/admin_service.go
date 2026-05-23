@@ -43,16 +43,16 @@ var (
 const maxRevisions = 5
 
 type AdminService struct {
-	repository     *repository.TemplateRepository
-	renderer *Renderer
-	logger   *slog.Logger
+	repository *repository.TemplateRepository
+	renderer   *Renderer
+	logger     *slog.Logger
 }
 
 func NewAdminService(repository *repository.TemplateRepository, renderer *Renderer, logger *slog.Logger) *AdminService {
 	return &AdminService{
-		repository:     repository,
-		renderer: renderer,
-		logger:   logger,
+		repository: repository,
+		renderer:   renderer,
+		logger:     logger,
 	}
 }
 

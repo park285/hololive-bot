@@ -73,13 +73,13 @@ type EventRepository interface {
 }
 
 type Scheduler struct {
-	repository EventRepository
+	repository       EventRepository
 	outboxRepository outboxEnqueuer
-	formatter  Formatter
-	summarizer *mesummarizer.EventSummarizer // nil 허용
-	locker     delivery.NotificationLocker
-	logger     *slog.Logger
-	runtime    *schedulerkit.Runtime
+	formatter        Formatter
+	summarizer       *mesummarizer.EventSummarizer // nil 허용
+	locker           delivery.NotificationLocker
+	logger           *slog.Logger
+	runtime          *schedulerkit.Runtime
 }
 
 func NewScheduler(
@@ -94,13 +94,13 @@ func NewScheduler(
 		locker = delivery.NewLocker(nil, logger)
 	}
 	return &Scheduler{
-		repository: repository,
+		repository:       repository,
 		outboxRepository: outboxRepository,
-		formatter:  formatter,
-		summarizer: summarizer,
-		locker:     locker,
-		logger:     logger,
-		runtime:    schedulerkit.NewRuntime(),
+		formatter:        formatter,
+		summarizer:       summarizer,
+		locker:           locker,
+		logger:           logger,
+		runtime:          schedulerkit.NewRuntime(),
 	}
 }
 

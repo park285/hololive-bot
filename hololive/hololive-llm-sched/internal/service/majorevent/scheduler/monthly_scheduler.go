@@ -36,13 +36,13 @@ import (
 )
 
 type MonthlyScheduler struct {
-	repository EventRepository
+	repository       EventRepository
 	outboxRepository outboxEnqueuer
-	formatter  Formatter
-	summarizer *mesummarizer.EventSummarizer
-	locker     delivery.NotificationLocker
-	logger     *slog.Logger
-	runtime    *schedulerkit.Runtime
+	formatter        Formatter
+	summarizer       *mesummarizer.EventSummarizer
+	locker           delivery.NotificationLocker
+	logger           *slog.Logger
+	runtime          *schedulerkit.Runtime
 }
 
 func NewMonthlyScheduler(
@@ -57,13 +57,13 @@ func NewMonthlyScheduler(
 		locker = delivery.NewLocker(nil, logger)
 	}
 	return &MonthlyScheduler{
-		repository: repository,
+		repository:       repository,
 		outboxRepository: outboxRepository,
-		formatter:  formatter,
-		summarizer: summarizer,
-		locker:     locker,
-		logger:     logger,
-		runtime:    schedulerkit.NewRuntime(),
+		formatter:        formatter,
+		summarizer:       summarizer,
+		locker:           locker,
+		logger:           logger,
+		runtime:          schedulerkit.NewRuntime(),
 	}
 }
 

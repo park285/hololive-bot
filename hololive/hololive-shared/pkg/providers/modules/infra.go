@@ -13,11 +13,11 @@ import (
 )
 
 type InfraModule struct {
-	Cache       cache.Client
-	Postgres    database.Client
-	MemberRepository  *member.Repository
-	MemberCache *member.Cache
-	Cleanup     func()
+	Cache            cache.Client
+	Postgres         database.Client
+	MemberRepository *member.Repository
+	MemberCache      *member.Cache
+	Cleanup          func()
 }
 
 func BuildInfraModule(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (_ *InfraModule, retErr error) {
@@ -100,10 +100,10 @@ func newInfraModule(
 	cleanupCache func(),
 ) *InfraModule {
 	return &InfraModule{
-		Cache:       cacheService,
-		Postgres:    postgresService,
-		MemberRepository:  memberRepository,
-		MemberCache: memberCache,
+		Cache:            cacheService,
+		Postgres:         postgresService,
+		MemberRepository: memberRepository,
+		MemberCache:      memberCache,
 		Cleanup: func() {
 			if cleanupDB != nil {
 				cleanupDB()

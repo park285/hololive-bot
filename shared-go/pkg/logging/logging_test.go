@@ -113,27 +113,27 @@ func TestOTelHandler_WithGroup(t *testing.T) {
 func TestConfig_Validation(t *testing.T) {
 	tests := []struct {
 		name    string
-		config     Config
+		config  Config
 		wantErr bool
 	}{
 		{
 			name:    "empty dir returns nil",
-			config:     Config{Dir: "", MaxSizeMB: 10, MaxBackups: 5, MaxAgeDays: 7},
+			config:  Config{Dir: "", MaxSizeMB: 10, MaxBackups: 5, MaxAgeDays: 7},
 			wantErr: false,
 		},
 		{
 			name:    "invalid size",
-			config:     Config{Dir: "/tmp", MaxSizeMB: 0, MaxBackups: 5, MaxAgeDays: 7},
+			config:  Config{Dir: "/tmp", MaxSizeMB: 0, MaxBackups: 5, MaxAgeDays: 7},
 			wantErr: true,
 		},
 		{
 			name:    "invalid backups",
-			config:     Config{Dir: "/tmp", MaxSizeMB: 10, MaxBackups: 0, MaxAgeDays: 7},
+			config:  Config{Dir: "/tmp", MaxSizeMB: 10, MaxBackups: 0, MaxAgeDays: 7},
 			wantErr: true,
 		},
 		{
 			name:    "invalid age",
-			config:     Config{Dir: "/tmp", MaxSizeMB: 10, MaxBackups: 5, MaxAgeDays: 0},
+			config:  Config{Dir: "/tmp", MaxSizeMB: 10, MaxBackups: 5, MaxAgeDays: 0},
 			wantErr: true,
 		},
 	}

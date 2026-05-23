@@ -53,7 +53,7 @@ func TestStatsCommand_Execute_TopGainers_GoldenPath(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -86,7 +86,7 @@ func TestStatsCommand_Execute_DefaultActionIsGainers(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -111,7 +111,7 @@ func TestStatsCommand_Execute_UnknownAction(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: &statsRepoStub{},
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -144,7 +144,7 @@ func TestStatsCommand_Execute_RepoError(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -177,7 +177,7 @@ func TestStatsCommand_Execute_NoData(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -237,7 +237,7 @@ func TestStatsCommand_Execute_WithPeriodParam(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil

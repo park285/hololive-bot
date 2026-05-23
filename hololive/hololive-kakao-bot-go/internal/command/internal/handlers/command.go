@@ -71,7 +71,7 @@ type Dependencies struct {
 	Alarm            domain.AlarmCRUD
 	Matcher          *matcher.Matcher
 	OfficialProfiles *member.ProfileService
-	StatsRepository        stats.StatsCommandRepository
+	StatsRepository  stats.StatsCommandRepository
 	MemberNews       MemberNewsService
 	MembersData      member.DataProvider
 	Formatter        *adapter.ResponseFormatter

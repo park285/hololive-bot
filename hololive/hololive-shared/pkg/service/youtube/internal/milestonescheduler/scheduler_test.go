@@ -1010,9 +1010,9 @@ func TestSendMilestoneAlerts_SendsAndMarksBothKinds(t *testing.T) {
 
 	scheduler := &schedulerImpl{
 		statsRepository: repository,
-		formatter: mockMilestoneFormatter{},
-		logger:    logger,
-		stopCh:    make(chan struct{}),
+		formatter:       mockMilestoneFormatter{},
+		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	var sent []string
@@ -1053,9 +1053,9 @@ func TestSendMilestoneAlerts_DoesNotMarkWhenAllRoomSendsFail(t *testing.T) {
 
 	scheduler := &schedulerImpl{
 		statsRepository: repository,
-		formatter: mockMilestoneFormatter{},
-		logger:    logger,
-		stopCh:    make(chan struct{}),
+		formatter:       mockMilestoneFormatter{},
+		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	sendMessage := func(room, message string) error {
@@ -1087,9 +1087,9 @@ func TestSendMilestoneAlerts_DoesNotMarkMilestoneWhenAnyRoomFails(t *testing.T) 
 
 	scheduler := &schedulerImpl{
 		statsRepository: repository,
-		formatter: mockMilestoneFormatter{},
-		logger:    logger,
-		stopCh:    make(chan struct{}),
+		formatter:       mockMilestoneFormatter{},
+		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	sendMessage := func(room, message string) error {
@@ -1123,9 +1123,9 @@ func TestSendMilestoneAlerts_DoesNotMarkApproachingWhenAnyRoomFails(t *testing.T
 
 	scheduler := &schedulerImpl{
 		statsRepository: repository,
-		formatter: mockMilestoneFormatter{},
-		logger:    logger,
-		stopCh:    make(chan struct{}),
+		formatter:       mockMilestoneFormatter{},
+		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	sendMessage := func(room, message string) error {
@@ -1174,11 +1174,11 @@ func TestTrackAllSubscribers_UsesSaveStatsBatch(t *testing.T) {
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeService,
-		statsRepository:   repository,
-		membersData: members,
-		logger:      logger,
-		stopCh:      make(chan struct{}),
+		youtube:         youtubeService,
+		statsRepository: repository,
+		membersData:     members,
+		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	scheduler.trackAllSubscribers(context.Background())
@@ -1229,11 +1229,11 @@ func TestTrackAllSubscribers_SkipsChangeProcessingWhenBatchSaveFails(t *testing.
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeService,
-		statsRepository:   repository,
-		membersData: members,
-		logger:      logger,
-		stopCh:      make(chan struct{}),
+		youtube:         youtubeService,
+		statsRepository: repository,
+		membersData:     members,
+		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	scheduler.trackAllSubscribers(context.Background())
@@ -1275,11 +1275,11 @@ func TestTrackAllSubscribers_UsesHasAchievedFallbackWhenMilestonePreloadFails(t 
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeService,
-		statsRepository:   repository,
-		membersData: members,
-		logger:      logger,
-		stopCh:      make(chan struct{}),
+		youtube:         youtubeService,
+		statsRepository: repository,
+		membersData:     members,
+		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	scheduler.trackAllSubscribers(context.Background())
@@ -1303,8 +1303,8 @@ func TestProcessMilestones_FallsBackToHasAchievedWhenPreloadUnavailable(t *testi
 
 	scheduler := &schedulerImpl{
 		statsRepository: repository,
-		logger:    logger,
-		stopCh:    make(chan struct{}),
+		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	member := &domain.Member{
@@ -1524,12 +1524,12 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 	}
 
 	scheduler := &schedulerImpl{
-		youtube:     youtubeService,
-		statsRepository:   &mockTrackAllSubscribersRepository{latestByChannel: map[string]*domain.TimestampedStats{}},
-		cache:       cache,
-		membersData: members,
-		logger:      logger,
-		stopCh:      make(chan struct{}),
+		youtube:         youtubeService,
+		statsRepository: &mockTrackAllSubscribersRepository{latestByChannel: map[string]*domain.TimestampedStats{}},
+		cache:           cache,
+		membersData:     members,
+		logger:          logger,
+		stopCh:          make(chan struct{}),
 	}
 
 	ctx := t.Context()

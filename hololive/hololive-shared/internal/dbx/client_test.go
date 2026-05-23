@@ -85,9 +85,9 @@ func TestNormalizePoolConfig(t *testing.T) {
 
 func TestConfigDSN(t *testing.T) {
 	tests := []struct {
-		name string
-		config  Config
-		want string
+		name   string
+		config Config
+		want   string
 	}{
 		{
 			name: "TCP connection",

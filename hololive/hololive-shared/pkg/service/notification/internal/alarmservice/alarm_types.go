@@ -91,7 +91,7 @@ type AlarmService struct {
 	chzzk            *chzzk.Client
 	twitch           *twitch.Client
 	memberData       domain.MemberDataProvider
-	alarmRepository        *alarm.Repository
+	alarmRepository  *alarm.Repository
 	alarmWriter      alarmWriter
 	logger           *slog.Logger
 	targetPolicy     sharedchecker.TargetMinutePolicy

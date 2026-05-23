@@ -37,22 +37,22 @@ import (
 )
 
 type commandInitView struct {
-	holodex          domain.StreamProvider
-	chzzk            *chzzk.Client
-	cache            cache.Client
-	alarm            domain.AlarmCRUD
-	matcher          *matcher.Matcher
-	officialProfiles *member.ProfileService
-	statsRepository        stats.StatsCommandRepository
-	memberNews       command.MemberNewsService
-	membersData      member.DataProvider
-	formatter        *adapter.ResponseFormatter
-	sendMessage      func(ctx context.Context, room, message string) error
-	sendImage        func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
-	sendError        func(ctx context.Context, room, message string) error
-	logger           *slog.Logger
-	majorEventRepository   command.MajorEventRepository
-	commandBuilders  []CommandBuilder
+	holodex              domain.StreamProvider
+	chzzk                *chzzk.Client
+	cache                cache.Client
+	alarm                domain.AlarmCRUD
+	matcher              *matcher.Matcher
+	officialProfiles     *member.ProfileService
+	statsRepository      stats.StatsCommandRepository
+	memberNews           command.MemberNewsService
+	membersData          member.DataProvider
+	formatter            *adapter.ResponseFormatter
+	sendMessage          func(ctx context.Context, room, message string) error
+	sendImage            func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
+	sendError            func(ctx context.Context, room, message string) error
+	logger               *slog.Logger
+	majorEventRepository command.MajorEventRepository
+	commandBuilders      []CommandBuilder
 }
 
 func (b *Bot) commandInitView() commandInitView {
@@ -61,22 +61,22 @@ func (b *Bot) commandInitView() commandInitView {
 	}
 
 	return commandInitView{
-		holodex:          b.holodex,
-		chzzk:            b.chzzk,
-		cache:            b.cache,
-		alarm:            b.alarm,
-		matcher:          b.matcher,
-		officialProfiles: b.officialProfiles,
-		statsRepository:        b.statsRepository,
-		memberNews:       b.memberNews,
-		membersData:      b.membersData,
-		formatter:        b.formatter,
-		sendMessage:      b.sendMessage,
-		sendImage:        b.sendImage,
-		sendError:        b.sendError,
-		logger:           b.logger,
-		majorEventRepository:   b.majorEventRepository,
-		commandBuilders:  cloneCommandBuilders(b.commandBuilders),
+		holodex:              b.holodex,
+		chzzk:                b.chzzk,
+		cache:                b.cache,
+		alarm:                b.alarm,
+		matcher:              b.matcher,
+		officialProfiles:     b.officialProfiles,
+		statsRepository:      b.statsRepository,
+		memberNews:           b.memberNews,
+		membersData:          b.membersData,
+		formatter:            b.formatter,
+		sendMessage:          b.sendMessage,
+		sendImage:            b.sendImage,
+		sendError:            b.sendError,
+		logger:               b.logger,
+		majorEventRepository: b.majorEventRepository,
+		commandBuilders:      cloneCommandBuilders(b.commandBuilders),
 	}
 }
 
@@ -88,7 +88,7 @@ func (v commandInitView) toCommandDependencies(registry *command.Registry) *comm
 		Alarm:            v.alarm,
 		Matcher:          v.matcher,
 		OfficialProfiles: v.officialProfiles,
-		StatsRepository:        v.statsRepository,
+		StatsRepository:  v.statsRepository,
 		MemberNews:       v.memberNews,
 		MembersData:      v.membersData,
 		Formatter:        v.formatter,

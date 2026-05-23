@@ -39,7 +39,7 @@ import (
 type ShortsPoller struct {
 	client                           *scraper.Client
 	db                               *gorm.DB
-	repository                             batchRepository
+	repository                       batchRepository
 	maxResults                       int
 	routeDecider                     NotificationRouteDecider
 	inlinePublishedAtFallbackEnabled bool
@@ -56,7 +56,7 @@ func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int,
 	return &ShortsPoller{
 		client:                           scraperClient,
 		db:                               db,
-		repository:                             newBatchRepository(db),
+		repository:                       newBatchRepository(db),
 		maxResults:                       maxResults,
 		routeDecider:                     routeDecider,
 		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,

@@ -27,8 +27,8 @@ import (
 
 // YouTubeStack - YouTube 관련 서비스 묶음 (선택적 활성화)
 type YouTubeStack struct {
-	Service   youtube.Service
-	Scheduler youtube.Scheduler
+	Service         youtube.Service
+	Scheduler       youtube.Scheduler
 	StatsRepository *ytstats.StatsRepository
 }
 

@@ -36,10 +36,10 @@ import (
 )
 
 type StatsService struct {
-	oauth     *oauthservice.OAuthService
-	cache     cache.Client
+	oauth           *oauthservice.OAuthService
+	cache           cache.Client
 	statsRepository ytstats.StatsServiceRepository
-	logger    *slog.Logger
+	logger          *slog.Logger
 }
 
 const (
@@ -57,10 +57,10 @@ type ChannelStatistics struct {
 
 func NewStatsService(oauth *oauthservice.OAuthService, cacheClient cache.Client, statsRepository ytstats.StatsServiceRepository, logger *slog.Logger) *StatsService {
 	return &StatsService{
-		oauth:     oauth,
-		cache:     cacheClient,
+		oauth:           oauth,
+		cache:           cacheClient,
 		statsRepository: statsRepository,
-		logger:    logger,
+		logger:          logger,
 	}
 }
 
