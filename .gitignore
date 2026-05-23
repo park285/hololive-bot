@@ -228,6 +228,7 @@ hololive/hololive-rs/docs/reports/**/*.tsv
 docs/.omx/
 docs/doc-gen/
 docs/superpowers/
+docs/history/plan-kits/
 
 # Build outputs
 admin-dashboard/backend/admin
