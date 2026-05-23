@@ -286,11 +286,31 @@ func (d *Dispatcher) markDispatchResult(ctx context.Context, result deliveryDisp
 		}
 	}
 	for reason, ids := range result.failureBuckets {
-		if err := d.delivery.MarkFailedRetryBatch(ctx, ids, d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
-			d.logger.Error("Failed to mark delivery rows as failed",
-				slog.String("reason", reason),
-				slog.Any("error", err))
-		}
+		d.markFailedDispatchBucket(ctx, reason, ids)
+	}
+}
+
+func (d *Dispatcher) markFailedDispatchBucket(ctx context.Context, reason string, ids []int64) {
+	if deliveryFailureReasonIsPermanent(reason) {
+		d.markPermanentDispatchFailureBucket(ctx, reason, ids)
+		return
+	}
+	d.markRetryDispatchFailureBucket(ctx, reason, ids)
+}
+
+func (d *Dispatcher) markPermanentDispatchFailureBucket(ctx context.Context, reason string, ids []int64) {
+	if err := d.delivery.MarkPermanentFailureBatch(ctx, ids, d.config.MaxRetries, reason); err != nil {
+		d.logger.Error("Failed to mark delivery rows as permanent failed",
+			slog.String("reason", reason),
+			slog.Any("error", err))
+	}
+}
+
+func (d *Dispatcher) markRetryDispatchFailureBucket(ctx context.Context, reason string, ids []int64) {
+	if err := d.delivery.MarkFailedRetryBatch(ctx, ids, d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
+		d.logger.Error("Failed to mark delivery rows as failed",
+			slog.String("reason", reason),
+			slog.Any("error", err))
 	}
 }
 

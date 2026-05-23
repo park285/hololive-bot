@@ -280,6 +280,27 @@ func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int
 	return nil
 }
 
+func (r *DeliveryRepository) MarkPermanentFailureBatch(ctx context.Context, ids []int64, maxRetries int, errMsg string) error {
+	uniqueIDs := uniqueInt64s(ids)
+	if len(uniqueIDs) == 0 {
+		return nil
+	}
+
+	err := r.db.WithContext(ctx).Exec(`
+		UPDATE youtube_notification_delivery
+		SET attempt_count = CASE WHEN attempt_count >= ? THEN attempt_count ELSE ? END,
+		    error = ?,
+		    status = ?,
+		    locked_at = NULL
+		WHERE id IN ? AND status = ?
+	`, maxRetries, maxRetries, truncateString(errMsg, 500), domain.OutboxStatusFailed, uniqueIDs, domain.OutboxStatusPending).Error
+	if err != nil {
+		return fmt.Errorf("mark delivery rows permanent failed batch: %w", err)
+	}
+
+	return nil
+}
+
 func (r *DeliveryRepository) UpdateOutboxAggregateStatus(ctx context.Context, outboxID int64) error {
 	return r.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID})
 }
