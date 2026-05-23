@@ -229,6 +229,7 @@ docs/.omx/
 docs/doc-gen/
 docs/superpowers/
 docs/history/plan-kits/
+docs/agent-workflows/
 
 # Build outputs
 admin-dashboard/backend/admin
