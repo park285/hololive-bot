@@ -28,7 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/internal/testredis"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
 )
 
 // NewTestCacheService는 miniredis 기반 테스트용 캐시 서비스를 생성합니다.

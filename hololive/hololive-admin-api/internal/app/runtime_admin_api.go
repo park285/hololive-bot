@@ -25,7 +25,7 @@ import (
 	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
 )
 
 type AdminAPIRuntime struct {

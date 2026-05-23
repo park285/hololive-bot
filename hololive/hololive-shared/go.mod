@@ -16,7 +16,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.1.3 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/park285/llm-kakao-bots/shared-go v0.1.2
+	github.com/park285/hololive-bot/shared-go v0.1.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.18.0
@@ -34,7 +34,7 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
-replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
+replace github.com/park285/hololive-bot/shared-go => ../../shared-go
 
 require (
 	github.com/gin-contrib/gzip v1.2.6

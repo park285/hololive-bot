@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )

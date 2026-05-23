@@ -24,7 +24,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/ginjson"
+	"github.com/park285/hololive-bot/shared-go/pkg/ginjson"
 )
 
 func Success(c *gin.Context, data any) {

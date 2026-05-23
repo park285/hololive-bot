@@ -23,7 +23,7 @@ package settings_test
 import (
 	"testing"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/park285/hololive-bot/shared-go/pkg/json"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"

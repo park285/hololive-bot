@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
+	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )

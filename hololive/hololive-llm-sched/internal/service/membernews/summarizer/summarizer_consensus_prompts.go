@@ -23,7 +23,7 @@ package summarizer
 import (
 	"fmt"
 
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"

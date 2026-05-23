@@ -27,7 +27,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/httpserver"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
 	"github.com/quic-go/quic-go/http3"
 )
 

@@ -27,7 +27,7 @@ import (
 	"regexp"
 	"strings"
 
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 )
 
 var (

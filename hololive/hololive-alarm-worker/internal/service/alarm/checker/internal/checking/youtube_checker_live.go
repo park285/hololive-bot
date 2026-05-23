@@ -8,7 +8,7 @@ import (
 
 	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 )
 
 func (c *YouTubeChecker) buildLiveCatchupNotifications(

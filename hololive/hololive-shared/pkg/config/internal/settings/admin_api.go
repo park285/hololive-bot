@@ -26,7 +26,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
+	sharedenv "github.com/park285/hololive-bot/shared-go/pkg/envutil"
 )
 
 // Deprecated: current admin-api runtime uses config.Load() with SERVER_PORT=30006.

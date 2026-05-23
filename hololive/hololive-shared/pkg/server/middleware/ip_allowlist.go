@@ -27,7 +27,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
 func NewIPAllowList(allowed []string) ([]*net.IPNet, error) {

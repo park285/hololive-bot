@@ -26,7 +26,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 
 	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"

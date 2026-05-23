@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/llm"
 	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 )
 
 func skipIfNoLLMKey(t *testing.T) {

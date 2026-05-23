@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/jsonutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )

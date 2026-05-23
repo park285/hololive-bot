@@ -20,7 +20,7 @@
 
 package model
 
-import "github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+import "github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 
 type MemberIntentType string
 

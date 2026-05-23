@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"

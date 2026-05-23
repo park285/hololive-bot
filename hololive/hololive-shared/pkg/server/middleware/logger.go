@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 )
 
 // skipPaths는 다음 형식을 지원합니다:

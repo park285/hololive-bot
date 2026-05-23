@@ -32,8 +32,8 @@ import (
 
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
+	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
 )
 
 type fakeYouTubeService struct {
