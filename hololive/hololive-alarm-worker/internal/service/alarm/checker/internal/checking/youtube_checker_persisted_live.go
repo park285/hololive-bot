@@ -112,7 +112,7 @@ func mergePersistedLiveSessionStream(
 		fillMissingYouTubeStreamFields(existing, stream)
 		return
 	}
-	streamsByChannel[channelID] = append(streams, cloneStream(stream))
+	streamsByChannel[channelID] = append(streams, CloneStream(stream))
 }
 
 func findYouTubeStreamByID(streams []*domain.Stream, streamID string) *domain.Stream {

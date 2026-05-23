@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package checking
+package twitch
 
 import (
 	"context"
@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -57,7 +58,7 @@ func NewTwitchChecker(cacheClient cache.Client, twitchClient *twitch.Client, log
 	return &TwitchChecker{
 		cacheClient:  cacheClient,
 		twitchClient: twitchClient,
-		logger:       safeLogger(logger),
+		logger:       checking.SafeLogger(logger),
 	}, nil
 }
 
@@ -103,12 +104,12 @@ func (c *TwitchChecker) loadCheckInputs(ctx context.Context) (twitchCheckInputs,
 		return twitchCheckInputs{}, nil
 	}
 
-	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheClient, youtubeChannelIDs)
+	subscriberMap, err := checking.LoadSubscriberRoomsByChannel(ctx, c.cacheClient, youtubeChannelIDs)
 	if err != nil {
 		return twitchCheckInputs{}, fmt.Errorf("check twitch streams: load subscriber rooms: %w", err)
 	}
 
-	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheClient, youtubeChannelIDs)
+	memberNames, err := checking.LoadMemberNamesByChannel(ctx, c.cacheClient, youtubeChannelIDs)
 	if err != nil {
 		return twitchCheckInputs{}, fmt.Errorf("check twitch streams: load member names: %w", err)
 	}
@@ -154,7 +155,7 @@ func buildTwitchLookupLogins(loginMappings map[string]string, subscriberMap map[
 		loginsToLookup = append(loginsToLookup, login)
 	}
 
-	return uniqueStrings(loginsToLookup)
+	return checking.UniqueStrings(loginsToLookup)
 }
 
 func (c *TwitchChecker) buildLiveNotifications(
@@ -201,7 +202,7 @@ func buildTwitchStreamNotifications(
 		return nil
 	}
 
-	return roomNotifications(subscriberRooms, stream.Channel, stream, 0, "")
+	return checking.RoomNotifications(subscriberRooms, stream.Channel, stream, 0, "")
 }
 
 // buildTwitchLiveDedupKey는 이전 checker-level preclaim 테스트 호환을 위해 남겨둔다.
@@ -222,7 +223,7 @@ func buildTwitchLiveStream(youtubeChannelID string, memberName string, streamDat
 	if channelName == "" {
 		channelName = strings.TrimSpace(streamData.UserLogin)
 	}
-	channelName = channelNameForMember(youtubeChannelID, memberName, channelName)
+	channelName = checking.ChannelNameForMember(youtubeChannelID, memberName, channelName)
 
 	title := strings.TrimSpace(streamData.Title)
 	if title == "" {

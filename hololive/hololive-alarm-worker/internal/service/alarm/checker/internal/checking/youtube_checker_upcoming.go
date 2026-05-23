@@ -119,12 +119,12 @@ func buildYouTubeUpcomingRoomNotifications(
 	subscriberRooms []string,
 	selection youtubeUpcomingSelection,
 ) []*domain.AlarmNotification {
-	resolvedStream := ensureScheduledTime(stream, *stream.StartScheduled)
+	resolvedStream := EnsureScheduledTime(stream, *stream.StartScheduled)
 	notificationScheduleChanges := selection.scheduleChanges
 	if selection.targetCrossed {
 		notificationScheduleChanges = nil
 	}
-	return roomNotificationsWithScheduleChanges(
+	return RoomNotificationsWithScheduleChanges(
 		subscriberRooms,
 		resolvedStream.Channel,
 		resolvedStream,
@@ -171,7 +171,7 @@ func (c *YouTubeChecker) detectRoomScheduleChanges(
 	}
 
 	changes := make(map[string]*dedup.ScheduleChange)
-	for _, roomID := range uniqueStrings(subscriberRooms) {
+	for _, roomID := range UniqueStrings(subscriberRooms) {
 		change, err := c.dedupService.DetectNotificationScheduleChange(ctx, roomID, channelID, stream)
 		if err != nil {
 			return nil, fmt.Errorf("detect room schedule changes: room %s: %w", roomID, err)

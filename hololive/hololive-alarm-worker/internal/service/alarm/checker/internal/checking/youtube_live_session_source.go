@@ -72,7 +72,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentSessions(
 		return nil, nil
 	}
 
-	uniqueChannelIDs := uniqueStrings(channelIDs)
+	uniqueChannelIDs := UniqueStrings(channelIDs)
 	if len(uniqueChannelIDs) == 0 {
 		return nil, nil
 	}
@@ -125,7 +125,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 		return nil, nil
 	}
 
-	uniqueChannelIDs := uniqueStrings(channelIDs)
+	uniqueChannelIDs := UniqueStrings(channelIDs)
 	if len(uniqueChannelIDs) == 0 {
 		return nil, nil
 	}
@@ -147,7 +147,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 	if err != nil {
 		return nil, err
 	}
-	return uniqueStrings(rows), nil
+	return UniqueStrings(rows), nil
 }
 
 func (s *PgYouTubeLiveSessionSource) effectiveLiveRecentWindow() time.Duration {
@@ -174,7 +174,7 @@ func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 		return result, nil
 	}
 
-	streamIDs = uniqueStrings(streamIDs)
+	streamIDs = UniqueStrings(streamIDs)
 	if len(streamIDs) == 0 {
 		return result, nil
 	}
@@ -220,7 +220,7 @@ func (s *PgYouTubeLiveSessionSource) normalizedStreamIDs(streamIDs []string) ([]
 	if s == nil || s.db == nil || len(streamIDs) == 0 {
 		return nil, false
 	}
-	streamIDs = uniqueStrings(streamIDs)
+	streamIDs = UniqueStrings(streamIDs)
 	return streamIDs, len(streamIDs) > 0
 }
 

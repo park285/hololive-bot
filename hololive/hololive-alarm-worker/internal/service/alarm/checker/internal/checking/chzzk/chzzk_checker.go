@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package checking
+package chzzk
 
 import (
 	"context"
@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -64,7 +65,7 @@ func NewChzzkChecker(cacheClient cache.Client, chzzkClient *chzzk.Client, logger
 	return &ChzzkChecker{
 		cacheClient: cacheClient,
 		chzzkClient: chzzkClient,
-		logger:      safeLogger(logger),
+		logger:      checking.SafeLogger(logger),
 	}, nil
 }
 
@@ -84,12 +85,12 @@ func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, 
 		youtubeChannelIDs = append(youtubeChannelIDs, youtubeChannelID)
 	}
 
-	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheClient, youtubeChannelIDs)
+	subscriberMap, err := checking.LoadSubscriberRoomsByChannel(ctx, c.cacheClient, youtubeChannelIDs)
 	if err != nil {
 		return nil, fmt.Errorf("check chzzk streams: load subscriber rooms: %w", err)
 	}
 
-	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheClient, youtubeChannelIDs)
+	memberNames, err := checking.LoadMemberNamesByChannel(ctx, c.cacheClient, youtubeChannelIDs)
 	if err != nil {
 		return nil, fmt.Errorf("check chzzk streams: load member names: %w", err)
 	}
@@ -108,7 +109,7 @@ func (c *ChzzkChecker) collectChzzkNotifications(
 
 	var mu sync.Mutex
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(defaultLookupConcurrency)
+	eg.SetLimit(checking.DefaultLookupConcurrency)
 
 	for youtubeChannelID, chzzkChannelID := range channelMappings {
 		job, ok := newChzzkLookupJob(youtubeChannelID, chzzkChannelID, subscriberMap)
@@ -157,7 +158,7 @@ func (c *ChzzkChecker) lookupChzzkNotifications(ctx context.Context, job chzzkLo
 		return nil
 	}
 
-	return roomNotifications(job.subscriberRooms, stream.Channel, stream, 0, "")
+	return checking.RoomNotifications(job.subscriberRooms, stream.Channel, stream, 0, "")
 }
 
 func isChzzkLive(status *chzzk.LiveStatusContent) bool {
@@ -197,7 +198,7 @@ func buildChzzkLiveStream(
 	streamIdentity := chzzkStableLiveIdentity(chzzkChannelID, status, startAt, title)
 	streamID := fmt.Sprintf("chzzk:%s", streamIdentity)
 
-	channelName := channelNameForMember(youtubeChannelID, memberName, youtubeChannelID)
+	channelName := checking.ChannelNameForMember(youtubeChannelID, memberName, youtubeChannelID)
 	liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", chzzkChannelID)
 	link := liveURL
 

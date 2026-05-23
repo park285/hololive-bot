@@ -867,7 +867,7 @@ func TestUniqueStrings(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, uniqueStrings(tc.input))
+			assert.Equal(t, tc.want, UniqueStrings(tc.input))
 		})
 	}
 }
@@ -900,7 +900,7 @@ func TestCloneStream(t *testing.T) {
 
 	t.Run("nil 입력", func(t *testing.T) {
 		t.Parallel()
-		assert.Nil(t, cloneStream(nil))
+		assert.Nil(t, CloneStream(nil))
 	})
 
 	t.Run("deep copy 검증", func(t *testing.T) {
@@ -914,7 +914,7 @@ func TestCloneStream(t *testing.T) {
 			StartActual:    &actual,
 			Channel:        &domain.Channel{ID: "ch1"},
 		}
-		copied := cloneStream(original)
+		copied := CloneStream(original)
 
 		assert.Equal(t, original.ID, copied.ID)
 		assert.NotSame(t, original.StartScheduled, copied.StartScheduled)
@@ -946,7 +946,7 @@ func TestEnsureScheduledTime(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got := ensureScheduledTime(tc.stream, tc.fallback)
+			got := EnsureScheduledTime(tc.stream, tc.fallback)
 			if tc.wantNil {
 				assert.Nil(t, got)
 			} else {
@@ -980,7 +980,7 @@ func TestRoomNotifications(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			assert.Len(t, roomNotifications(tc.roomIDs, ch, tc.stream, 5, ""), tc.wantLen)
+			assert.Len(t, RoomNotifications(tc.roomIDs, ch, tc.stream, 5, ""), tc.wantLen)
 		})
 	}
 }
@@ -1009,7 +1009,7 @@ func TestLoadSubscriberRoomsByChannel_Table(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, loadErr := loadSubscriberRoomsByChannel(ctx, cache, tc.channelIDs)
+			got, loadErr := LoadSubscriberRoomsByChannel(ctx, cache, tc.channelIDs)
 			require.NoError(t, loadErr)
 			assert.Len(t, got, tc.wantLen)
 		})
@@ -1021,14 +1021,14 @@ func TestSafeLogger(t *testing.T) {
 
 	t.Run("nil 반환 기본 로거", func(t *testing.T) {
 		t.Parallel()
-		assert.NotNil(t, safeLogger(nil))
+		assert.NotNil(t, SafeLogger(nil))
 	})
 
 	t.Run("정상 로거 통과", func(t *testing.T) {
 		t.Parallel()
 
 		l := newCheckerTestLogger()
-		assert.Same(t, l, safeLogger(l))
+		assert.Same(t, l, SafeLogger(l))
 	})
 }
 

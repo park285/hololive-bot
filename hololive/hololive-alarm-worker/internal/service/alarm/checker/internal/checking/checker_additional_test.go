@@ -130,8 +130,8 @@ func TestCommonHelperFunctions(t *testing.T) {
 
 	t.Run("unique strings", func(t *testing.T) {
 		input := []string{"a", "", "b", "a", "c", "b"}
-		assert.Equal(t, []string{"a", "b", "c"}, uniqueStrings(input))
-		assert.Equal(t, []string{"x"}, uniqueStrings([]string{"x"}))
+		assert.Equal(t, []string{"a", "b", "c"}, UniqueStrings(input))
+		assert.Equal(t, []string{"x"}, UniqueStrings([]string{"x"}))
 	})
 
 	t.Run("clone stream deep copy", func(t *testing.T) {
@@ -139,7 +139,7 @@ func TestCommonHelperFunctions(t *testing.T) {
 		channel := &domain.Channel{ID: "ch1", Name: "name"}
 		stream := &domain.Stream{ID: "s1", StartScheduled: &now, StartActual: &now, Channel: channel}
 
-		cloned := cloneStream(stream)
+		cloned := CloneStream(stream)
 		require.NotNil(t, cloned)
 		require.NotSame(t, stream, cloned)
 		require.NotSame(t, stream.Channel, cloned.Channel)
@@ -154,34 +154,34 @@ func TestCommonHelperFunctions(t *testing.T) {
 		actual := time.Date(2026, time.March, 5, 1, 1, 30, 0, time.FixedZone("KST", 9*60*60))
 
 		streamWithSchedule := &domain.Stream{StartScheduled: &fallback}
-		assert.Same(t, streamWithSchedule, ensureScheduledTime(streamWithSchedule, fallback))
+		assert.Same(t, streamWithSchedule, EnsureScheduledTime(streamWithSchedule, fallback))
 
 		streamWithActual := &domain.Stream{StartActual: &actual}
-		updated := ensureScheduledTime(streamWithActual, fallback)
+		updated := EnsureScheduledTime(streamWithActual, fallback)
 		require.NotNil(t, updated)
 		require.NotNil(t, updated.StartScheduled)
 		assert.Equal(t, actual.UTC(), *updated.StartScheduled)
 
 		streamWithoutTimes := &domain.Stream{}
 
-		updated = ensureScheduledTime(streamWithoutTimes, fallback)
+		updated = EnsureScheduledTime(streamWithoutTimes, fallback)
 		require.NotNil(t, updated.StartScheduled)
 		assert.Equal(t, fallback.UTC().Truncate(time.Minute), *updated.StartScheduled)
 
-		assert.Nil(t, ensureScheduledTime(nil, fallback))
+		assert.Nil(t, EnsureScheduledTime(nil, fallback))
 	})
 
 	t.Run("room notifications", func(t *testing.T) {
 		stream := &domain.Stream{ID: "s1"}
 		channel := &domain.Channel{ID: "ch1"}
 
-		notifications := roomNotifications([]string{"room1", "", "room2"}, channel, stream, 5, "msg")
+		notifications := RoomNotifications([]string{"room1", "", "room2"}, channel, stream, 5, "msg")
 		require.Len(t, notifications, 2)
 		assert.Equal(t, "room1", notifications[0].RoomID)
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
-		assert.Nil(t, roomNotifications(nil, channel, stream, 0, ""))
-		assert.Nil(t, roomNotifications([]string{"room1"}, channel, nil, 0, ""))
+		assert.Nil(t, RoomNotifications(nil, channel, stream, 0, ""))
+		assert.Nil(t, RoomNotifications([]string{"room1"}, channel, nil, 0, ""))
 	})
 
 	t.Run("normalize target minutes", func(t *testing.T) {
@@ -192,10 +192,10 @@ func TestCommonHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("safe logger", func(t *testing.T) {
-		require.NotNil(t, safeLogger(nil))
+		require.NotNil(t, SafeLogger(nil))
 
 		logger := newCheckerTestLogger()
-		assert.Same(t, logger, safeLogger(logger))
+		assert.Same(t, logger, SafeLogger(logger))
 	})
 
 	t.Run("youtube upcoming selection label", func(t *testing.T) {
@@ -216,14 +216,14 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 		_, err := cache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"ch1", []string{"room1", "room2"})
 		require.NoError(t, err)
 
-		result, err := loadSubscriberRoomsByChannel(ctx, cache, []string{"ch1", "ch1", "ch2"})
+		result, err := LoadSubscriberRoomsByChannel(ctx, cache, []string{"ch1", "ch1", "ch2"})
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 		assert.ElementsMatch(t, []string{"room1", "room2"}, result["ch1"])
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		result, err := loadSubscriberRoomsByChannel(t.Context(), cachemocks.NewStrictClient(), nil)
+		result, err := LoadSubscriberRoomsByChannel(t.Context(), cachemocks.NewStrictClient(), nil)
 		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
@@ -234,7 +234,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 				return nil, errors.New("smembers failed")
 			},
 		}
-		_, err := loadSubscriberRoomsByChannel(t.Context(), mockCache, []string{"ch1"})
+		_, err := LoadSubscriberRoomsByChannel(t.Context(), mockCache, []string{"ch1"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "smembers channel ch1")
 	})
@@ -250,7 +250,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 		_, err = countingCache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"ch2", []string{"room3"})
 		require.NoError(t, err)
 
-		result, err := loadSubscriberRoomsByChannel(ctx, countingCache, []string{"ch1", "ch2", "ch1"})
+		result, err := LoadSubscriberRoomsByChannel(ctx, countingCache, []string{"ch1", "ch2", "ch1"})
 		require.NoError(t, err)
 		require.Len(t, result, 2)
 		assert.ElementsMatch(t, []string{"room1", "room2"}, result["ch1"])
