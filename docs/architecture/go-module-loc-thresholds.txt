@@ -2,7 +2,7 @@
 # Format:
 # relative/path/to/file.go:MAX_LINES
 hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/scraper.go:750
-hololive/hololive-shared/pkg/service/youtube/poller/internal/polling/repository_batch_delivery_state.go:480
+hololive/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo/repository_batch_delivery_state.go:480
 hololive/hololive-kakao-bot-go/internal/adapter/internal/messaging/formatter/formatter_alarm.go:580
 hololive/hololive-shared/pkg/server/internal/httpserver/stream_handler.go:560
 hololive/hololive-shared/pkg/service/youtube/stats/stats_repository_milestone.go:460

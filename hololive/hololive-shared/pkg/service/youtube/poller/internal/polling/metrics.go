@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo"
 )
 
 var (
@@ -138,6 +139,7 @@ func registerPublishedAtResolverMetrics() {
 
 func init() {
 	ensureMetrics()
+	batchrepo.ObserveOutboxInsert = observeOutboxInsert
 }
 
 func observePublishedAtResolutionAttempt(kind domain.OutboxKind) {

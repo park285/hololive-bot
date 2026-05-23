@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package polling
+package batchrepo
 
 import (
 	"context"
@@ -32,27 +32,31 @@ import (
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-const pollerBatchMaxSize = 50
+const PollerBatchMaxSize = 50
 
-type batchRepository interface {
+type BatchRepository interface {
 	PersistVideos(ctx context.Context, videos []*domain.YouTubeVideo, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking, watermark *domain.YouTubeContentWatermark) error
 	PersistCommunityPosts(ctx context.Context, posts []*domain.YouTubeCommunityPost, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking, watermark *domain.YouTubeContentWatermark) error
 }
 
-type gormBatchRepository struct {
-	db *gorm.DB
+type GormBatchRepository struct {
+	DB *gorm.DB
 }
 
-func newBatchRepository(db *gorm.DB) batchRepository {
-	return &gormBatchRepository{db: db}
+func NewBatchRepository(db *gorm.DB) BatchRepository {
+	return &GormBatchRepository{DB: db}
 }
 
-func (r *gormBatchRepository) PersistVideos(ctx context.Context, videos []*domain.YouTubeVideo, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking, watermark *domain.YouTubeContentWatermark) error {
+func NewGormBatchRepository(db *gorm.DB) *GormBatchRepository {
+	return &GormBatchRepository{DB: db}
+}
+
+func (r *GormBatchRepository) PersistVideos(ctx context.Context, videos []*domain.YouTubeVideo, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking, watermark *domain.YouTubeContentWatermark) error {
 	if err := validateShortNotificationPublishedAt(videos, notifications); err != nil {
 		return fmt.Errorf("validate short notifications: %w", err)
 	}
 
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := r.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return r.persistVideosTx(ctx, tx, videos, notifications, trackingRows, watermark)
 	}); err != nil {
 		return fmt.Errorf("persist videos transaction: %w", err)
@@ -61,12 +65,12 @@ func (r *gormBatchRepository) PersistVideos(ctx context.Context, videos []*domai
 	return nil
 }
 
-func (r *gormBatchRepository) PersistCommunityPosts(ctx context.Context, posts []*domain.YouTubeCommunityPost, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking, watermark *domain.YouTubeContentWatermark) error {
+func (r *GormBatchRepository) PersistCommunityPosts(ctx context.Context, posts []*domain.YouTubeCommunityPost, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking, watermark *domain.YouTubeContentWatermark) error {
 	if err := validateCommunityNotificationPublishedAt(posts, notifications); err != nil {
 		return fmt.Errorf("validate community notifications: %w", err)
 	}
 
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := r.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return r.persistCommunityPostsTx(ctx, tx, posts, notifications, trackingRows, watermark)
 	}); err != nil {
 		return fmt.Errorf("persist community posts transaction: %w", err)
@@ -75,7 +79,7 @@ func (r *gormBatchRepository) PersistCommunityPosts(ctx context.Context, posts [
 	return nil
 }
 
-func (r *gormBatchRepository) persistVideosTx(
+func (r *GormBatchRepository) persistVideosTx(
 	ctx context.Context,
 	tx *gorm.DB,
 	videos []*domain.YouTubeVideo,
@@ -96,7 +100,7 @@ func (r *gormBatchRepository) persistVideosTx(
 	return r.persistTrackingAndWatermark(ctx, tx, notifications, trackingRows, watermark, "video", "short")
 }
 
-func (r *gormBatchRepository) persistCommunityPostsTx(
+func (r *GormBatchRepository) persistCommunityPostsTx(
 	ctx context.Context,
 	tx *gorm.DB,
 	posts []*domain.YouTubeCommunityPost,
@@ -114,7 +118,7 @@ func (r *gormBatchRepository) persistCommunityPostsTx(
 	return r.persistTrackingAndWatermark(ctx, tx, notifications, trackingRows, watermark, "community", "community")
 }
 
-func (r *gormBatchRepository) persistTrackingAndWatermark(
+func (r *GormBatchRepository) persistTrackingAndWatermark(
 	ctx context.Context,
 	tx *gorm.DB,
 	notifications []*domain.YouTubeNotificationOutbox,
@@ -123,7 +127,7 @@ func (r *gormBatchRepository) persistTrackingAndWatermark(
 	trackingLabel string,
 	alarmStateLabel string,
 ) error {
-	if err := r.batchInsertNotifications(ctx, tx, notifications); err != nil {
+	if err := r.BatchInsertNotifications(ctx, tx, notifications); err != nil {
 		return fmt.Errorf("batch insert notifications: %w", err)
 	}
 	if err := reconcileTrackingRowsWithPersistedSendState(ctx, tx, trackingRows); err != nil {
@@ -142,11 +146,11 @@ func (r *gormBatchRepository) persistTrackingAndWatermark(
 	return nil
 }
 
-func (r *gormBatchRepository) persistLatencyClassificationsAfterCommit(
+func (r *GormBatchRepository) persistLatencyClassificationsAfterCommit(
 	ctx context.Context,
 	trackingRows []*domain.YouTubeContentAlarmTracking,
 ) {
-	if r == nil || r.db == nil || len(trackingRows) == 0 {
+	if r == nil || r.DB == nil || len(trackingRows) == 0 {
 		return
 	}
 
@@ -164,7 +168,7 @@ func (r *gormBatchRepository) persistLatencyClassificationsAfterCommit(
 		return
 	}
 
-	if err := outbox.NewDeliveryTelemetryRepository(r.db).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+	if err := outbox.NewDeliveryTelemetryRepository(r.DB).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
 		slog.Default().Warn("Failed to persist post latency classifications after detection commit",
 			slog.Int("tracking_rows", len(identities)),
 			slog.Any("error", err),

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package polling
+package batchrepo
 
 import (
 	"context"
@@ -44,12 +44,12 @@ func TestGormBatchRepositoryPersistVideos(t *testing.T) {
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
-	videos := make([]*domain.YouTubeVideo, 0, pollerBatchMaxSize+5)
-	notifications := make([]*domain.YouTubeNotificationOutbox, 0, pollerBatchMaxSize+5)
-	for i := range pollerBatchMaxSize + 5 {
+	videos := make([]*domain.YouTubeVideo, 0, PollerBatchMaxSize+5)
+	notifications := make([]*domain.YouTubeNotificationOutbox, 0, PollerBatchMaxSize+5)
+	for i := range PollerBatchMaxSize + 5 {
 		videoID := fmt.Sprintf("video-%03d", i)
 		videos = append(videos, &domain.YouTubeVideo{
 			VideoID:   videoID,
@@ -77,11 +77,11 @@ func TestGormBatchRepositoryPersistVideos(t *testing.T) {
 
 	var videoCount int64
 	require.NoError(t, db.Model(&domain.YouTubeVideo{}).Count(&videoCount).Error)
-	require.EqualValues(t, pollerBatchMaxSize+5, videoCount)
+	require.EqualValues(t, PollerBatchMaxSize+5, videoCount)
 
 	var outboxCount int64
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
-	require.EqualValues(t, pollerBatchMaxSize+5, outboxCount)
+	require.EqualValues(t, PollerBatchMaxSize+5, outboxCount)
 
 	var watermark domain.YouTubeContentWatermark
 	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", "channel-1", domain.WatermarkTypeVideo).First(&watermark).Error)
@@ -111,7 +111,7 @@ func TestGormBatchRepositoryPersistVideos(t *testing.T) {
 	require.EqualValues(t, 999, updated.ViewCount)
 
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
-	require.EqualValues(t, pollerBatchMaxSize+5, outboxCount)
+	require.EqualValues(t, PollerBatchMaxSize+5, outboxCount)
 }
 
 func TestGormBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t *testing.T) {
@@ -120,7 +120,7 @@ func TestGormBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t 
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	videoSuccessBefore := testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "success"))
@@ -181,7 +181,7 @@ func TestGormBatchRepositoryPersistVideosConcurrentOutboxInsertIsIdempotent(t *t
 	ctx := context.Background()
 
 	runPersist := func() error {
-		repository := newBatchRepository(db)
+		repository := NewBatchRepository(db)
 		return persistVideos(repository, ctx, []*domain.YouTubeVideo{{
 			VideoID:   "video-race",
 			ChannelID: "channel-1",
@@ -228,7 +228,7 @@ func TestGormBatchRepositoryPersistVideosPrimaryAndBackfillSameContentLeaveOneOu
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	video := &domain.YouTubeVideo{
 		VideoID:   "short-backfill",
@@ -272,7 +272,7 @@ func TestGormBatchRepositoryPersistVideosPersistsShortPublishedAt(t *testing.T) 
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	rawPublishedAt := time.Date(2026, 4, 10, 10, 11, 12, 123000000, time.FixedZone("KST", 9*60*60))
 	canonicalPublishedAt := yttimestamp.Normalize(rawPublishedAt)
@@ -320,7 +320,7 @@ func TestGormBatchRepositoryPersistVideosPreservesExistingPublishedAt(t *testing
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	firstPublishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	laterPublishedAt := firstPublishedAt.Add(5 * time.Minute)
@@ -365,7 +365,7 @@ func TestGormBatchRepositoryPersistVideosRejectsShortPublishedAtStorageRuleMisma
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 
@@ -391,7 +391,7 @@ func TestGormBatchRepositoryPersistCommunityPosts(t *testing.T) {
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	communityPost := &domain.YouTubeCommunityPost{
@@ -442,7 +442,7 @@ func TestGormBatchRepositoryPersistCommunityPostsPreservesExistingPublishedAt(t 
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	firstPublishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	laterPublishedAt := firstPublishedAt.Add(5 * time.Minute)
@@ -492,7 +492,7 @@ func TestGormBatchRepositoryPersistCommunityPostsUpsertsAlarmState(t *testing.T)
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	detectedAt := publishedAt.Add(20 * time.Second)
@@ -543,7 +543,7 @@ func TestGormBatchRepositoryPersistCommunityShortsDuplicatePollKeepsExistingClai
 		postID    string
 		contentID string
 		seed      func(t *testing.T, db *gorm.DB, publishedAt, detectedAt, authorizedAt time.Time)
-		persist   func(t *testing.T, repository batchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error
+		persist   func(t *testing.T, repository BatchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error
 	}{
 		{
 			name:      "community post",
@@ -583,7 +583,7 @@ func TestGormBatchRepositoryPersistCommunityShortsDuplicatePollKeepsExistingClai
 					DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
 				}).Error)
 			},
-			persist: func(t *testing.T, repository batchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error {
+			persist: func(t *testing.T, repository BatchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error {
 				t.Helper()
 
 				post := &domain.YouTubeCommunityPost{
@@ -640,7 +640,7 @@ func TestGormBatchRepositoryPersistCommunityShortsDuplicatePollKeepsExistingClai
 					DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
 				}).Error)
 			},
-			persist: func(t *testing.T, repository batchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error {
+			persist: func(t *testing.T, repository BatchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error {
 				t.Helper()
 
 				video := &domain.YouTubeVideo{VideoID: "video-duplicate", ChannelID: "channel-1", Title: "title-short-duplicate", IsShort: true, PublishedAt: &publishedAt, ViewCount: 42}
@@ -669,7 +669,7 @@ func TestGormBatchRepositoryPersistCommunityShortsDuplicatePollKeepsExistingClai
 				&domain.YouTubeNotificationOutbox{},
 				&domain.YouTubeContentWatermark{},
 			)
-			repository := newBatchRepository(db)
+			repository := NewBatchRepository(db)
 			ctx := context.Background()
 			publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 			detectedAt := publishedAt.Add(20 * time.Second)
@@ -703,7 +703,7 @@ func TestGormBatchRepositoryPersistCommunityPostsCollectsSourcePostsWithoutTrack
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 
@@ -738,7 +738,7 @@ func TestGormBatchRepositoryPersistCommunityPostsRejectsPublishedAtStorageRuleMi
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 
@@ -779,7 +779,7 @@ func TestGormBatchRepositoryPersistVideosCollectsSourcePostsWithoutTrackingRows(
 		&domain.YouTubeVideo{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 
@@ -806,7 +806,7 @@ func TestGormBatchRepositoryPersistVideosRejectsShortCanonicalPostIDMismatch(t *
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 
@@ -832,7 +832,7 @@ func TestGormBatchRepositoryPersistVideosReusesLegacyRawShortIdentity(t *testing
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	shortVideo := &domain.YouTubeVideo{
@@ -902,7 +902,7 @@ func TestGormBatchRepositoryPersistCommunityPostsRejectsCanonicalPostIDMismatch(
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 
@@ -935,7 +935,7 @@ func TestGormBatchRepositoryPersistCommunityPostsBackfillsPublishedAt(t *testing
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	err := persistCommunityPosts(repository, ctx, []*domain.YouTubeCommunityPost{{
@@ -987,7 +987,7 @@ func TestGormBatchRepositoryPersistCommunityPostsReactivatesFailedOutboxAndFaile
 		&domain.YouTubeNotificationDelivery{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
@@ -1091,7 +1091,7 @@ func TestGormBatchRepositoryPersistCommunityPostsFinalizesFailedOutboxWhenTracki
 		&domain.YouTubeNotificationDelivery{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
@@ -1183,7 +1183,7 @@ func TestGormBatchRepositoryPersistVideosFinalizesFailedOutboxWhenAlarmStateAlre
 		&domain.YouTubeNotificationDelivery{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
@@ -1278,7 +1278,7 @@ func TestGormBatchRepositoryPersistCommunityPostsConflictWithSentOutboxBackfills
 		&domain.YouTubeNotificationDelivery{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
@@ -1340,7 +1340,7 @@ func TestGormBatchRepositoryPersistCommunityPostsConflictWithSentDeliveryBackfil
 		&domain.YouTubeNotificationDelivery{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
@@ -1412,7 +1412,7 @@ func TestGormBatchRepositoryPersistVideosConflictWithSentOutboxBackfillsTracking
 		&domain.YouTubeNotificationDelivery{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
@@ -1474,7 +1474,7 @@ func TestGormBatchRepositoryPersistVideosDoesNotReactivateFailedOutboxForNonTarg
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	createdAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
@@ -1527,7 +1527,7 @@ func TestGormBatchRepositoryPersistVideosRollsBackOnNotificationError(t *testing
 		&domain.YouTubeVideo{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	err := persistVideos(repository, ctx, []*domain.YouTubeVideo{{
@@ -1564,7 +1564,7 @@ func TestGormBatchRepositoryPersistVideosRejectsBlankNotificationContentID(t *te
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
-	repository := newBatchRepository(db)
+	repository := NewBatchRepository(db)
 	ctx := context.Background()
 
 	err := persistVideos(repository, ctx, []*domain.YouTubeVideo{{
@@ -1622,11 +1622,11 @@ func newBatchTestDB(t *testing.T, models ...any) *gorm.DB {
 	return db
 }
 
-func persistVideos(repository batchRepository, ctx context.Context, videos []*domain.YouTubeVideo, notifications []*domain.YouTubeNotificationOutbox, watermark *domain.YouTubeContentWatermark) error {
+func persistVideos(repository BatchRepository, ctx context.Context, videos []*domain.YouTubeVideo, notifications []*domain.YouTubeNotificationOutbox, watermark *domain.YouTubeContentWatermark) error {
 	return repository.PersistVideos(ctx, videos, notifications, nil, watermark)
 }
 
-func persistCommunityPosts(repository batchRepository, ctx context.Context, posts []*domain.YouTubeCommunityPost, notifications []*domain.YouTubeNotificationOutbox, watermark *domain.YouTubeContentWatermark) error {
+func persistCommunityPosts(repository BatchRepository, ctx context.Context, posts []*domain.YouTubeCommunityPost, notifications []*domain.YouTubeNotificationOutbox, watermark *domain.YouTubeContentWatermark) error {
 	return repository.PersistCommunityPosts(ctx, posts, notifications, nil, watermark)
 }
 

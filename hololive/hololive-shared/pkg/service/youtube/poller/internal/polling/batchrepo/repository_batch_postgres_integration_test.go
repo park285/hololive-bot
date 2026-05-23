@@ -1,6 +1,6 @@
 //go:build integration
 
-package polling
+package batchrepo
 
 import (
 	"context"
@@ -44,7 +44,7 @@ func TestGormBatchRepositoryInsertNotificationsChunkPostgresDeduplicatesSameBatc
 			return err
 		}
 
-		repository := &gormBatchRepository{db: tx}
+		repository := &GormBatchRepository{DB: tx}
 		if err := repository.insertNotificationsChunk(ctx, tx, []*domain.YouTubeNotificationOutbox{
 			{
 				Kind:      domain.OutboxKindNewVideo,

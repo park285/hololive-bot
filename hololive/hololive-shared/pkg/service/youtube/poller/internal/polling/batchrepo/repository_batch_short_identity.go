@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package polling
+package batchrepo
 
 import (
 	"context"
@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (r *gormBatchRepository) resolveShortPersistedContentIDs(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking) error {
+func (r *GormBatchRepository) resolveShortPersistedContentIDs(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking) error {
 	canonicalIDs, aliases := collectShortIdentityAliases(notifications, trackingRows)
 	if len(canonicalIDs) == 0 {
 		return nil

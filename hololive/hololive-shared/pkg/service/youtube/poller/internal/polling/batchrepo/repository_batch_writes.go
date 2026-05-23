@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package polling
+package batchrepo
 
 import (
 	"context"
@@ -32,13 +32,13 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-func (r *gormBatchRepository) batchUpsertVideos(ctx context.Context, tx *gorm.DB, videos []*domain.YouTubeVideo) error {
+func (r *GormBatchRepository) batchUpsertVideos(ctx context.Context, tx *gorm.DB, videos []*domain.YouTubeVideo) error {
 	if len(videos) == 0 {
 		return nil
 	}
 
-	for start := 0; start < len(videos); start += pollerBatchMaxSize {
-		end := min(start+pollerBatchMaxSize, len(videos))
+	for start := 0; start < len(videos); start += PollerBatchMaxSize {
+		end := min(start+PollerBatchMaxSize, len(videos))
 		chunk := videos[start:end]
 		if err := r.upsertVideosChunk(ctx, tx, chunk); err != nil {
 			return err
@@ -48,7 +48,7 @@ func (r *gormBatchRepository) batchUpsertVideos(ctx context.Context, tx *gorm.DB
 	return nil
 }
 
-func (r *gormBatchRepository) upsertVideosChunk(ctx context.Context, tx *gorm.DB, videos []*domain.YouTubeVideo) error {
+func (r *GormBatchRepository) upsertVideosChunk(ctx context.Context, tx *gorm.DB, videos []*domain.YouTubeVideo) error {
 	now := time.Now()
 	args := make([]any, 0, len(videos)*12)
 	var sb strings.Builder
@@ -95,13 +95,13 @@ func (r *gormBatchRepository) upsertVideosChunk(ctx context.Context, tx *gorm.DB
 	return nil
 }
 
-func (r *gormBatchRepository) batchUpsertCommunityPosts(ctx context.Context, tx *gorm.DB, posts []*domain.YouTubeCommunityPost) error {
+func (r *GormBatchRepository) batchUpsertCommunityPosts(ctx context.Context, tx *gorm.DB, posts []*domain.YouTubeCommunityPost) error {
 	if len(posts) == 0 {
 		return nil
 	}
 
-	for start := 0; start < len(posts); start += pollerBatchMaxSize {
-		end := min(start+pollerBatchMaxSize, len(posts))
+	for start := 0; start < len(posts); start += PollerBatchMaxSize {
+		end := min(start+PollerBatchMaxSize, len(posts))
 		chunk := posts[start:end]
 		if err := r.upsertCommunityPostsChunk(ctx, tx, chunk); err != nil {
 			return err
@@ -111,7 +111,7 @@ func (r *gormBatchRepository) batchUpsertCommunityPosts(ctx context.Context, tx 
 	return nil
 }
 
-func (r *gormBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx *gorm.DB, posts []*domain.YouTubeCommunityPost) error {
+func (r *GormBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx *gorm.DB, posts []*domain.YouTubeCommunityPost) error {
 	now := time.Now()
 	args := make([]any, 0, len(posts)*13)
 	var sb strings.Builder
@@ -160,13 +160,13 @@ func (r *gormBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx 
 	return nil
 }
 
-func (r *gormBatchRepository) batchInsertNotifications(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) error {
+func (r *GormBatchRepository) BatchInsertNotifications(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) error {
 	if len(notifications) == 0 {
 		return nil
 	}
 
-	for start := 0; start < len(notifications); start += pollerBatchMaxSize {
-		end := min(start+pollerBatchMaxSize, len(notifications))
+	for start := 0; start < len(notifications); start += PollerBatchMaxSize {
+		end := min(start+PollerBatchMaxSize, len(notifications))
 		chunk := notifications[start:end]
 		if err := r.insertNotificationsChunk(ctx, tx, chunk); err != nil {
 			return err
@@ -176,7 +176,7 @@ func (r *gormBatchRepository) batchInsertNotifications(ctx context.Context, tx *
 	return nil
 }
 
-func (r *gormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) error {
+func (r *GormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) error {
 	completedSentAtByIdentity, reactivationRows, err := prepareNotificationInsertChunk(ctx, tx, notifications)
 	if err != nil {
 		return err
@@ -224,7 +224,7 @@ func notificationChunksByKind(notifications []*domain.YouTubeNotificationOutbox)
 	return chunks
 }
 
-func (r *gormBatchRepository) insertNotificationsSameKindChunk(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox, now time.Time) error {
+func (r *GormBatchRepository) insertNotificationsSameKindChunk(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox, now time.Time) error {
 	if len(notifications) == 0 {
 		return nil
 	}
@@ -339,7 +339,7 @@ func appendNotificationInsertArgs(
 	)
 }
 
-func (r *gormBatchRepository) upsertWatermark(ctx context.Context, tx *gorm.DB, watermark *domain.YouTubeContentWatermark) error {
+func (r *GormBatchRepository) upsertWatermark(ctx context.Context, tx *gorm.DB, watermark *domain.YouTubeContentWatermark) error {
 	if watermark == nil {
 		return nil
 	}

@@ -8,6 +8,8 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
@@ -15,7 +17,7 @@ import (
 
 type publishedAtResolverRepository struct {
 	db              *gorm.DB
-	batchRepository *gormBatchRepository
+	batchRepository *batchrepo.GormBatchRepository
 }
 
 type publishedAtFinalizeResult struct {
@@ -50,7 +52,7 @@ const (
 func newPublishedAtResolverRepository(db *gorm.DB) *publishedAtResolverRepository {
 	return &publishedAtResolverRepository{
 		db:              db,
-		batchRepository: &gormBatchRepository{db: db},
+		batchRepository: batchrepo.NewGormBatchRepository(db),
 	}
 }
 

@@ -1,4 +1,4 @@
-package polling
+package batchrepo
 
 import (
 	"sort"
