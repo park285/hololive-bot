@@ -26,7 +26,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
 func (c *MemberInfoCommand) memberGroups(ctx context.Context, member *domain.Member) []string {

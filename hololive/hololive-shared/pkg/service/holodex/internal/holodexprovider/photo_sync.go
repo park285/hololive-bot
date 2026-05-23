@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/internal/ctxutil"
 	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/loop"
 )
 
 type PhotoSyncService struct {

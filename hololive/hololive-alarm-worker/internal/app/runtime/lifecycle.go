@@ -28,7 +28,7 @@ import (
 	"os"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
 )
 
 type StartHooks struct {

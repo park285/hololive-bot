@@ -28,7 +28,7 @@ import (
 
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/membernewsclient"
 )

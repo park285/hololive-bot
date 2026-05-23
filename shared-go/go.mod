@@ -1,4 +1,4 @@
-module github.com/park285/llm-kakao-bots/shared-go
+module github.com/park285/hololive-bot/shared-go
 
 go 1.26
 

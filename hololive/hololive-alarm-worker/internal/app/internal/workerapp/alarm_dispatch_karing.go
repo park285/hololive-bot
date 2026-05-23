@@ -10,7 +10,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 )
 
 const alarmDispatchKaringMaxItemsPerRequest = 4

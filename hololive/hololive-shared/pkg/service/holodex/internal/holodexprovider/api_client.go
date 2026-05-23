@@ -40,7 +40,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
+	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
 	"golang.org/x/time/rate"
 
 	"github.com/kapu/hololive-shared/pkg/constants"

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"

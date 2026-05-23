@@ -26,7 +26,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 )
 
 const asyncCommandBackpressureMessage = "요청이 많아 잠시 후 다시 시도해주세요."

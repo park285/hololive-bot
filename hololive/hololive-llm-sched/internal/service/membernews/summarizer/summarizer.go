@@ -26,7 +26,7 @@ import (
 	"log/slog"
 	"strings"
 
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 
 	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"

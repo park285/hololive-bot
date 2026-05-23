@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 )
 
 func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalUpdate, status Status, workerID string) error {

@@ -28,7 +28,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/loop"
 )
 
 var errJobClaimRenewLoopStopped = errors.New("job claim renew loop stopped")

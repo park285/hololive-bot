@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
+	sharedenv "github.com/park285/hololive-bot/shared-go/pkg/envutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )

@@ -27,7 +27,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
 type liveStreamView struct {

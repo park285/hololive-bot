@@ -32,9 +32,9 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
+	"github.com/park285/hololive-bot/shared-go/pkg/json"
+	"github.com/park285/hololive-bot/shared-go/pkg/jsonutil"
 )
 
 const maxUserLoginsPerRequest = 100

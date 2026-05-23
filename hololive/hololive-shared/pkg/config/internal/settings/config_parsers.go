@@ -25,8 +25,8 @@ import (
 	"strconv"
 	"strings"
 
-	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	sharedenv "github.com/park285/hololive-bot/shared-go/pkg/envutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
 // clampConfidence: confidence 값을 [0, 1] 범위로 정규화한다.

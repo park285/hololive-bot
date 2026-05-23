@@ -23,7 +23,7 @@ package util
 import (
 	"strings"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
 // 카카오 메시지 관련 상수 목록.

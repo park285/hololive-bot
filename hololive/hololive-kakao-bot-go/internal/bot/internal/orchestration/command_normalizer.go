@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
 func normalizeCommandKey(cmdType domain.CommandType, params map[string]any) (string, map[string]any) {

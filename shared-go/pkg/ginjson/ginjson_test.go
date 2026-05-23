@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/ginjson"
-	sharedjson "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/park285/hololive-bot/shared-go/pkg/ginjson"
+	sharedjson "github.com/park285/hololive-bot/shared-go/pkg/json"
 )
 
 func init() {

@@ -28,7 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
 // tryExactValkeyMatch: 동적 Valkey 데이터에서 정확한 매칭을 시도함 (Holodex 호출 없이).

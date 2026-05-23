@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
+	sharedenv "github.com/park285/hololive-bot/shared-go/pkg/envutil"
 )
 
 var queryExecModeNames = map[string]string{

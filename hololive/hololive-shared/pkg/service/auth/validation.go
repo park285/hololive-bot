@@ -24,7 +24,7 @@ import (
 	"net/mail"
 	"regexp"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
 var (
