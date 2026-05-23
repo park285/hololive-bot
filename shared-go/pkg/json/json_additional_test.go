@@ -41,3 +41,50 @@ func TestNumberParsers_InvalidInput(t *testing.T) {
 		t.Fatal("Int64() expected error for non-integer input")
 	}
 }
+
+func TestNewEncoderNewDecoder_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	type item struct {
+		Name string `json:"name"`
+	}
+
+	var buf strings.Builder
+	enc := NewEncoder(&buf)
+	if err := enc.Encode(item{Name: "test"}); err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	dec := NewDecoder(strings.NewReader(buf.String()))
+	var got item
+	if err := dec.Decode(&got); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if got.Name != "test" {
+		t.Fatalf("Decode() Name = %q, want %q", got.Name, "test")
+	}
+}
+
+func TestMarshalIndent(t *testing.T) {
+	t.Parallel()
+
+	data, err := MarshalIndent(map[string]int{"a": 1}, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent() error = %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "  ") {
+		t.Fatalf("MarshalIndent() = %q, want indented output", got)
+	}
+}
+
+func TestValid(t *testing.T) {
+	t.Parallel()
+
+	if !Valid([]byte(`{"a":1}`)) {
+		t.Fatal("Valid() = false for valid JSON")
+	}
+	if Valid([]byte(`{invalid`)) {
+		t.Fatal("Valid() = true for invalid JSON")
+	}
+}
