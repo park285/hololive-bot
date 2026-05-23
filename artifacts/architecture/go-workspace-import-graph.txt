@@ -32,6 +32,7 @@ github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shar
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
+github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-admin-api/internal/app/http -> github.com/kapu/hololive-admin-api/internal/server
 github.com/kapu/hololive-admin-api/internal/app/http -> github.com/kapu/hololive-shared/pkg/config
@@ -42,7 +43,6 @@ github.com/kapu/hololive-admin-api/internal/app/http -> github.com/kapu/hololive
 github.com/kapu/hololive-admin-api/internal/app/http -> github.com/kapu/hololive-shared/pkg/service/ratelimit
 github.com/kapu/hololive-admin-api/internal/app/http -> github.com/park285/hololive-bot/shared-go/pkg/json
 github.com/kapu/hololive-admin-api/internal/app/runtime -> github.com/kapu/hololive-shared/pkg/constants
-github.com/kapu/hololive-admin-api/internal/app/runtime -> github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-admin-api/internal/app/runtime -> github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-admin-api/internal/server -> github.com/kapu/hololive-admin-api/internal/server/internal/api
 github.com/kapu/hololive-admin-api/internal/server/httputil -> github.com/park285/hololive-bot/shared-go/pkg/ginjson
@@ -111,10 +111,11 @@ github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/util
+github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/park285/hololive-bot/shared-go/pkg/backoff
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/park285/hololive-bot/shared-go/pkg/json
+github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-alarm-worker/internal/app/runtime -> github.com/kapu/hololive-shared/pkg/constants
-github.com/kapu/hololive-alarm-worker/internal/app/runtime -> github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-alarm-worker/internal/app/runtime -> github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
@@ -262,6 +263,7 @@ github.com/kapu/hololive-kakao-bot-go/internal/app/internal/botruntime -> github
 github.com/kapu/hololive-kakao-bot-go/internal/app/internal/botruntime -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
 github.com/kapu/hololive-kakao-bot-go/internal/app/internal/botruntime -> github.com/park285/hololive-bot/shared-go/pkg/httputil
 github.com/kapu/hololive-kakao-bot-go/internal/app/internal/botruntime -> github.com/park285/hololive-bot/shared-go/pkg/json
+github.com/kapu/hololive-kakao-bot-go/internal/app/internal/botruntime -> github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-kakao-bot-go/internal/app/internal/botruntime -> github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-kakao-bot-go/internal/app/internal/botruntime -> github.com/park285/hololive-bot/shared-go/pkg/workerpool
 github.com/kapu/hololive-kakao-bot-go/internal/app/runtime -> github.com/kapu/hololive-shared/pkg/constants
@@ -440,6 +442,7 @@ github.com/kapu/hololive-llm-sched/internal/service/membernews/summarizer -> git
 github.com/kapu/hololive-llm-sched/internal/service/membernews/summarizer -> github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model
 github.com/kapu/hololive-llm-sched/internal/service/membernews/summarizer -> github.com/park285/hololive-bot/shared-go/pkg/json
 github.com/kapu/hololive-shared/internal/ctxutil -> github.com/kapu/hololive-shared/internal/ctxutil
+github.com/kapu/hololive-shared/internal/dbx -> github.com/park285/hololive-bot/shared-go/pkg/backoff
 github.com/kapu/hololive-shared/internal/dbx -> github.com/park285/hololive-bot/shared-go/pkg/envutil
 github.com/kapu/hololive-shared/internal/dbx -> github.com/park285/hololive-bot/shared-go/pkg/json
 github.com/kapu/hololive-shared/internal/retry -> github.com/kapu/hololive-shared/internal/ctxutil
@@ -598,6 +601,7 @@ github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> 
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/hololive-bot/shared-go/pkg/httputil
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/hololive-bot/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/hololive-bot/shared-go/pkg/jsonutil
+github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/hololive-bot/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/hololive-bot/shared-go/pkg/runtime/loop
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/hololive-bot/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/pkg/constants
@@ -653,6 +657,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> githu
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/kapu/hololive-shared/pkg/service/fallback
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
+github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/park285/hololive-bot/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
@@ -770,6 +775,7 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> gith
 github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease -> github.com/kapu/hololive-shared/pkg/testutil
+github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease -> github.com/park285/hololive-bot/shared-go/pkg/backoff
 github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease -> github.com/park285/hololive-bot/shared-go/pkg/logging
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/kapu/hololive-shared/pkg/constants

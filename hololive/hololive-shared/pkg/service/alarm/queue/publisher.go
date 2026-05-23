@@ -31,8 +31,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/valkey-io/valkey-go"
 	json "github.com/park285/hololive-bot/shared-go/pkg/json"
+	"github.com/valkey-io/valkey-go"
 )
 
 const AlarmDispatchQueue = contractsalarm.DispatchQueueKey
@@ -271,13 +271,9 @@ func (p *Publisher) publishValkeyBatch(ctx context.Context, envelopes []domain.A
 		return result, nil
 	}
 
-	cmds := make([]valkey.Completed, 0, len(envelopes))
-	for i := range envelopes {
-		jsonBytes, err := json.Marshal(envelopes[i])
-		if err != nil {
-			return result, fmt.Errorf("publish alarm queue batch: marshal envelope %d: %w", i, err)
-		}
-		cmds = append(cmds, p.cache.B().Lpush().Key(AlarmDispatchQueue).Element(string(jsonBytes)).Build())
+	cmds, err := p.buildValkeyLpushCmds(envelopes)
+	if err != nil {
+		return result, err
 	}
 
 	responses := p.cache.DoMulti(ctx, cmds...)
@@ -291,6 +287,18 @@ func (p *Publisher) publishValkeyBatch(ctx context.Context, envelopes []domain.A
 		result.ProcessedDeliveries++
 	}
 	return result, nil
+}
+
+func (p *Publisher) buildValkeyLpushCmds(envelopes []domain.AlarmQueueEnvelope) ([]valkey.Completed, error) {
+	cmds := make([]valkey.Completed, 0, len(envelopes))
+	for i := range envelopes {
+		jsonBytes, err := json.Marshal(envelopes[i])
+		if err != nil {
+			return nil, fmt.Errorf("publish alarm queue batch: marshal envelope %d: %w", i, err)
+		}
+		cmds = append(cmds, p.cache.B().Lpush().Key(AlarmDispatchQueue).Element(string(jsonBytes)).Build())
+	}
+	return cmds, nil
 }
 
 func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {

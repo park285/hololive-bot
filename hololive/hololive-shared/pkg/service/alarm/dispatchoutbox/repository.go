@@ -143,20 +143,7 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 		return result, err
 	}
 
-	if len(conflictKeys) > 0 {
-		conflictSet := make(map[string]struct{}, len(conflictKeys))
-		for _, k := range conflictKeys {
-			conflictSet[k] = struct{}{}
-		}
-		filtered := make([]deliveryInsert, 0, len(deliveries))
-		for _, d := range deliveries {
-			if _, conflict := conflictSet[d.EventKey]; !conflict {
-				filtered = append(filtered, d)
-			}
-		}
-		deliveries = filtered
-	}
-
+	deliveries = filterConflictDeliveries(deliveries, conflictKeys)
 	assignDeliveryEventIDs(deliveries, eventIDs)
 
 	insertedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
@@ -169,6 +156,23 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: commit: %w", err)
 	}
 	return processedPublishBatchResult(result), nil
+}
+
+func filterConflictDeliveries(deliveries []deliveryInsert, conflictKeys []string) []deliveryInsert {
+	if len(conflictKeys) == 0 {
+		return deliveries
+	}
+	conflictSet := make(map[string]struct{}, len(conflictKeys))
+	for _, k := range conflictKeys {
+		conflictSet[k] = struct{}{}
+	}
+	filtered := make([]deliveryInsert, 0, len(deliveries))
+	for _, d := range deliveries {
+		if _, conflict := conflictSet[d.EventKey]; !conflict {
+			filtered = append(filtered, d)
+		}
+	}
+	return filtered
 }
 
 func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err *error) {
