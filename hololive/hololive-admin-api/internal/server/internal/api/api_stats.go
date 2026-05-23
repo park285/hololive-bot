@@ -33,7 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/loop"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/loop"
 )
 
 var systemStatsStreamInterval = 5 * time.Second

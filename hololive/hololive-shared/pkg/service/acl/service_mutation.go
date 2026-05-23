@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"sort"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 )
 
 // GetACLStatus 현재 ACL 상태 반환.

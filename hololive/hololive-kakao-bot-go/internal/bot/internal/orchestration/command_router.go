@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"

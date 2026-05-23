@@ -38,7 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
+	"github.com/park285/hololive-bot/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

@@ -20,7 +20,7 @@
 
 package filter
 
-import "github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+import "github.com/park285/hololive-bot/shared-go/pkg/stringutil"
 
 func buildCandidateMemberTokenSet(members []string) map[string]struct{} {
 	memberTokenSet := make(map[string]struct{}, len(members))

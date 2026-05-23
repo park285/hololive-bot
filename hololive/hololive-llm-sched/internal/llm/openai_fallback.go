@@ -29,7 +29,7 @@ import (
 	"syscall"
 
 	"github.com/openai/openai-go/v3"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 )
 
 func shouldFallbackToChatCompletions(err error) bool {

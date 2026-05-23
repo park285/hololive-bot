@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
+	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 )

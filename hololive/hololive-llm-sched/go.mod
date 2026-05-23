@@ -11,7 +11,7 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go/v3 v3.31.0
-	github.com/park285/llm-kakao-bots/shared-go v0.1.2
+	github.com/park285/hololive-bot/shared-go v0.1.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
 	gorm.io/gorm v1.31.1
@@ -152,6 +152,6 @@ require (
 	modernc.org/sqlite v1.46.1 // indirect
 )
 
-replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
+replace github.com/park285/hololive-bot/shared-go => ../../shared-go
 
 replace github.com/kapu/hololive-shared => ../hololive-shared

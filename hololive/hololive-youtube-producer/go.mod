@@ -9,7 +9,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/llm-kakao-bots/shared-go v0.1.2
+	github.com/park285/hololive-bot/shared-go v0.1.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/quic-go/quic-go v0.59.0
 	github.com/stretchr/testify v1.11.1
@@ -154,6 +154,6 @@ require (
 	modernc.org/sqlite v1.46.1 // indirect
 )
 
-replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
+replace github.com/park285/hololive-bot/shared-go => ../../shared-go
 
 replace github.com/kapu/hololive-shared => ../hololive-shared

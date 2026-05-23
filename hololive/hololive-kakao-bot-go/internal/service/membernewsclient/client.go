@@ -30,8 +30,8 @@ import (
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
-	sharedjson "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
+	sharedjson "github.com/park285/hololive-bot/shared-go/pkg/json"
 )
 
 type Client struct {

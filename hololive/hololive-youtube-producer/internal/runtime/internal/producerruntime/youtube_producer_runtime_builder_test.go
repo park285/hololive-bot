@@ -46,7 +46,7 @@ import (
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
 )
 
 func TestBuildYouTubeProducerHTTPServer_Success(t *testing.T) {

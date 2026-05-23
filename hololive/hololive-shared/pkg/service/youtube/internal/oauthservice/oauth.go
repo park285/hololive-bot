@@ -26,7 +26,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/park285/hololive-bot/shared-go/pkg/json"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"

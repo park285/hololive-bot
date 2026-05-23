@@ -25,7 +25,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
 
 	apphttp "github.com/kapu/hololive-admin-api/internal/app/http"
 	"github.com/kapu/hololive-admin-api/internal/server"

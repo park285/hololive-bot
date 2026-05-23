@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 	"golang.org/x/sync/errgroup"
 )
 

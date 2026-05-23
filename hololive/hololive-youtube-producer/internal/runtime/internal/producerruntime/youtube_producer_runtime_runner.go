@@ -36,8 +36,8 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
-	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
 )
 
 type YouTubeProducerRuntime struct {

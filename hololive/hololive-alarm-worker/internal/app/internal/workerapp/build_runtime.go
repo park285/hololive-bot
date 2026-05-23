@@ -25,7 +25,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
 
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
 )

@@ -3,7 +3,7 @@ package settings
 import (
 	"strings"
 
-	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
+	sharedenv "github.com/park285/hololive-bot/shared-go/pkg/envutil"
 )
 
 func loadRuntimeTokensAndCORS() (string, string, []string, bool) {

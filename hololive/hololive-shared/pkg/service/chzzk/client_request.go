@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/jsonutil"
 
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )

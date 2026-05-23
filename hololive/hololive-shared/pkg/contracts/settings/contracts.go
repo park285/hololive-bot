@@ -20,7 +20,7 @@
 
 package settings
 
-import "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+import "github.com/park285/hololive-bot/shared-go/pkg/json"
 
 const (
 	// PubSubChannelV1: 설정 변경 Pub/Sub 채널 이름 (SSOT).

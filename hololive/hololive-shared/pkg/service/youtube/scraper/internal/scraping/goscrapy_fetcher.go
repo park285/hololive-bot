@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
+	"github.com/park285/hololive-bot/shared-go/pkg/jsonutil"
 	"github.com/tech-engine/goscrapy/pkg/core"
 	"github.com/tech-engine/goscrapy/pkg/gos"
 	goslogger "github.com/tech-engine/goscrapy/pkg/logger"

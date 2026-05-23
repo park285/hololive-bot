@@ -28,7 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
-	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
 )
 
 // HTTP webhook 핸들러에서 호출하기 위해 public으로 노출됩니다.

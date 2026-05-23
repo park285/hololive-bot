@@ -30,7 +30,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
+	"github.com/park285/hololive-bot/shared-go/pkg/workerpool"
 )
 
 type BotLifecycle struct {
