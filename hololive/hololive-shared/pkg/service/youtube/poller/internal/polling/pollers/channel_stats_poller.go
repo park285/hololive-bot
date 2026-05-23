@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package polling
+package pollers
 
 import (
 	"context"
@@ -30,6 +30,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -114,8 +115,8 @@ func (p *ChannelStatsPoller) updateProfileIfStale(ctx context.Context, channelID
 		return
 	}
 
-	avatars := convertThumbnails(snippet.Avatar)
-	banners := convertThumbnails(snippet.Banner)
+	avatars := polling.ConvertThumbnails(snippet.Avatar)
+	banners := polling.ConvertThumbnails(snippet.Banner)
 
 	newProfile := &domain.YouTubeChannelProfile{
 		ChannelID: channelID,

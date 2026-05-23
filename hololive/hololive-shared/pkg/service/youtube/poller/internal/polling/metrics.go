@@ -175,6 +175,14 @@ func observeOutboxInsert(kind domain.OutboxKind, result string, count int64) {
 	outboxInsertTotal.WithLabelValues(string(kind), result).Add(float64(count))
 }
 
+func ObserveCommunityShortsDetectedPosts(alarmType domain.AlarmType, count int) {
+	if count <= 0 {
+		return
+	}
+	ensureMetrics()
+	communityShortsDetectedPostsTotal.WithLabelValues(string(alarmType)).Add(float64(count))
+}
+
 func boolResult(ok bool, err error) string {
 	if err != nil {
 		return "error"

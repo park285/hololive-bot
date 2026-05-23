@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package polling
+package pollers
 
 import (
 	"context"
@@ -30,6 +30,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -43,11 +44,11 @@ type ShortsPoller struct {
 	db                               *gorm.DB
 	repository                       batchrepo.BatchRepository
 	maxResults                       int
-	routeDecider                     NotificationRouteDecider
+	routeDecider                     polling.NotificationRouteDecider
 	inlinePublishedAtFallbackEnabled bool
 }
 
-func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, routeDecider NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *ShortsPoller {
+func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *ShortsPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
@@ -89,7 +90,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		return fmt.Errorf("failed to get shorts: %w", err)
 	}
 
-	shorts = normalizeCollectedShortsByCanonicalPostID(shorts)
+	shorts = polling.NormalizeCollectedShortsByCanonicalPostID(shorts)
 	if len(shorts) == 0 {
 		return nil
 	}
@@ -165,8 +166,8 @@ func (p *ShortsPoller) buildShortArtifacts(
 		return nil, nil, nil, false
 	}
 
-	canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
-	resourceVideoID := normalizeShortVideoResourceID(short.VideoID)
+	canonicalPostID := polling.NormalizeContentID(domain.OutboxKindNewShort, short.VideoID)
+	resourceVideoID := polling.NormalizeShortVideoResourceID(short.VideoID)
 	publishedAt := yttimestamp.NormalizePtr(short.PublishedAt)
 	if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled {
 		publishedAt = p.resolveShortPublishedAtInline(ctx, resourceVideoID)
@@ -175,7 +176,7 @@ func (p *ShortsPoller) buildShortArtifacts(
 		VideoID:     resourceVideoID,
 		ChannelID:   channelID,
 		Title:       short.Title,
-		Thumbnail:   convertThumbnails(short.Thumbnail),
+		Thumbnail:   polling.ConvertThumbnails(short.Thumbnail),
 		PublishedAt: publishedAt,
 		IsShort:     true,
 		ViewCount:   short.ViewCount,
@@ -205,7 +206,7 @@ func (p *ShortsPoller) buildShortNotification(
 	if p.routeDecider != nil && routePublishedAt.IsZero() {
 		return nil, p.inlinePublishedAtFallbackEnabled
 	}
-	if p.routeDecider != nil && !shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeShorts, channelID, routePublishedAt) {
+	if p.routeDecider != nil && !polling.ShouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeShorts, channelID, routePublishedAt) {
 		return nil, false
 	}
 
@@ -213,7 +214,7 @@ func (p *ShortsPoller) buildShortNotification(
 		Kind:      domain.OutboxKindNewShort,
 		ChannelID: channelID,
 		ContentID: canonicalPostID,
-		Payload:   buildShortNotificationPayload(dbVideo, canonicalPostID),
+		Payload:   polling.BuildShortNotificationPayload(dbVideo, canonicalPostID),
 		Status:    domain.OutboxStatusPending,
 	}, false
 }
@@ -225,8 +226,8 @@ func collectNewShorts(
 ) []*scraper.Short {
 	newShorts := make([]*scraper.Short, 0, len(shorts))
 	for _, short := range shorts {
-		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
-		if isInitialized && canonicalPostID == normalizeContentID(domain.OutboxKindNewShort, watermark.LastContentID) {
+		canonicalPostID := polling.NormalizeContentID(domain.OutboxKindNewShort, short.VideoID)
+		if isInitialized && canonicalPostID == polling.NormalizeContentID(domain.OutboxKindNewShort, watermark.LastContentID) {
 			break
 		}
 		newShorts = append(newShorts, short)

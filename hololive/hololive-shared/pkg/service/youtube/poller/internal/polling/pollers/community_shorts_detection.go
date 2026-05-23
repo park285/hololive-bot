@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package polling
+package pollers
 
 import (
 	"context"
@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
@@ -36,29 +37,12 @@ const (
 	inlinePublishedAtFallbackTimeout = 10 * time.Second
 )
 
-func shouldEnqueueRoutedNotification(
-	routeDecider NotificationRouteDecider,
-	alarmType domain.AlarmType,
-	channelID string,
-	publishedAt time.Time,
-) bool {
-	if routeDecider == nil {
-		return true
-	}
-	return routeDecider(NotificationRouteRequest{
-		AlarmType:   alarmType,
-		ChannelID:   channelID,
-		PublishedAt: yttimestamp.Normalize(publishedAt),
-	})
-}
-
 func observeCommunityShortsDetectionBatch(ctx context.Context, channelID string, alarmType domain.AlarmType, detectedCount int, detectedAt time.Time) {
 	if detectedCount <= 0 {
 		return
 	}
 
-	ensureMetrics()
-	communityShortsDetectedPostsTotal.WithLabelValues(string(alarmType)).Add(float64(detectedCount))
+	polling.ObserveCommunityShortsDetectedPosts(alarmType, detectedCount)
 	slog.LogAttrs(ctx, slog.LevelInfo, logschema.CommunityShortsDetectionBatchMessage,
 		slog.String(logschema.FieldChannelID, channelID),
 		slog.String(logschema.FieldAlarmType, string(alarmType)),

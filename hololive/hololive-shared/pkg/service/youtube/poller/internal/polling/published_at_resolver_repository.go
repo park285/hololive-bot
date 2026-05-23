@@ -315,8 +315,8 @@ func validateResolvedPublishedAtDispatchGapRequest(referenceNow time.Time, detec
 func buildResolvedPublishedAtDispatchGaps(rows []resolvedPublishedAtDispatchGapRow) []resolvedPublishedAtDispatchGap {
 	gaps := make([]resolvedPublishedAtDispatchGap, 0, len(rows))
 	for i := range rows {
-		postID := normalizeContentID(rows[i].Kind, rows[i].PostID)
-		contentID := normalizeContentID(rows[i].Kind, rows[i].ContentID)
+		postID := NormalizeContentID(rows[i].Kind, rows[i].PostID)
+		contentID := NormalizeContentID(rows[i].Kind, rows[i].ContentID)
 		if postID == "" || contentID == "" {
 			continue
 		}

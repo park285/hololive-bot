@@ -1,10 +1,11 @@
-package polling
+package pollers
 
 import (
 	"fmt"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -41,7 +42,7 @@ func streamFromUpcomingEvent(channelID string, event *scraper.UpcomingEvent) *do
 	}
 	link := fmt.Sprintf("https://www.youtube.com/watch?v=%s", event.VideoID)
 	stream.Link = &link
-	if viewers := parseViewerCount(event.ViewCountText); viewers > 0 {
+	if viewers := polling.ParseViewerCount(event.ViewCountText); viewers > 0 {
 		stream.ViewerCount = &viewers
 	}
 	return stream

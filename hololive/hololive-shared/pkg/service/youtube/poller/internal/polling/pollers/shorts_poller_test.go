@@ -1,4 +1,4 @@
-package polling
+package pollers
 
 import (
 	"bytes"

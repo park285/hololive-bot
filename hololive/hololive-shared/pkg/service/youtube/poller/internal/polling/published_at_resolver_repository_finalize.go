@@ -125,9 +125,9 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 }
 
 func resolveShortFinalizeVideoID(candidate trackingrepo.PublishedAtResolutionCandidate) (string, error) {
-	videoID := normalizeShortVideoResourceID(candidate.PostID)
+	videoID := NormalizeShortVideoResourceID(candidate.PostID)
 	if videoID == "" {
-		videoID = normalizeShortVideoResourceID(candidate.ContentID)
+		videoID = NormalizeShortVideoResourceID(candidate.ContentID)
 	}
 	if videoID == "" {
 		return "", fmt.Errorf("finalize short published_at: empty video id")
@@ -136,9 +136,9 @@ func resolveShortFinalizeVideoID(candidate trackingrepo.PublishedAtResolutionCan
 }
 
 func resolveCommunityFinalizePostID(candidate trackingrepo.PublishedAtResolutionCandidate) (string, error) {
-	postID := normalizeContentID(candidate.Kind, candidate.PostID)
+	postID := NormalizeContentID(candidate.Kind, candidate.PostID)
 	if postID == "" {
-		postID = normalizeContentID(candidate.Kind, candidate.ContentID)
+		postID = NormalizeContentID(candidate.Kind, candidate.ContentID)
 	}
 	if postID == "" {
 		return "", fmt.Errorf("finalize community published_at: empty post id")
@@ -231,7 +231,7 @@ func maybeAuthorizePublishedAtNotification(
 	if !enqueueAllowed {
 		return false, "", nil
 	}
-	if !shouldEnqueueRoutedNotification(routeDecider, alarmType, candidate.ChannelID, publishedAt) {
+	if !ShouldEnqueueRoutedNotification(routeDecider, alarmType, candidate.ChannelID, publishedAt) {
 		return false, "route_decider_rejected", nil
 	}
 

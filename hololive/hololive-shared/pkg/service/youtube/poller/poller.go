@@ -1,6 +1,9 @@
 package poller
 
-import polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling"
+import (
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/pollers"
+)
 
 type NotificationRouteRequest = polling.NotificationRouteRequest
 
@@ -14,7 +17,7 @@ type PendingPublishedAtResolverPoller = polling.PendingPublishedAtResolverPoller
 
 type RateLimiter = polling.RateLimiter
 
-type ShortsPoller = polling.ShortsPoller
+type ShortsPoller = pollers.ShortsPoller
 
 type Poller = polling.Poller
 
@@ -36,17 +39,17 @@ type JobClaim = polling.JobClaim
 
 type JobClaimer = polling.JobClaimer
 
-type ChannelStatsPoller = polling.ChannelStatsPoller
+type ChannelStatsPoller = pollers.ChannelStatsPoller
 
-type VideosPoller = polling.VideosPoller
+type VideosPoller = pollers.VideosPoller
 
-type CommunityPoller = polling.CommunityPoller
+type CommunityPoller = pollers.CommunityPoller
 
 type PendingPublishedAtResolver = polling.PendingPublishedAtResolver
 
-type LivePoller = polling.LivePoller
+type LivePoller = pollers.LivePoller
 
-type LiveStatusProvider = polling.LiveStatusProvider
+type LiveStatusProvider = pollers.LiveStatusProvider
 
 const (
 	PendingPublishedAtResolverPollerName          = polling.PendingPublishedAtResolverPollerName
@@ -71,22 +74,22 @@ var NewPendingPublishedAtResolverPoller = polling.NewPendingPublishedAtResolverP
 
 var NewRateLimiter = polling.NewRateLimiter
 
-var NewShortsPoller = polling.NewShortsPoller
+var NewShortsPoller = pollers.NewShortsPoller
 
 var DefaultSchedulerConfig = polling.DefaultSchedulerConfig
 
 var NewScheduler = polling.NewScheduler
 
-var NewChannelStatsPoller = polling.NewChannelStatsPoller
+var NewChannelStatsPoller = pollers.NewChannelStatsPoller
 
-var NewVideosPoller = polling.NewVideosPoller
+var NewVideosPoller = pollers.NewVideosPoller
 
-var NewCommunityPoller = polling.NewCommunityPoller
+var NewCommunityPoller = pollers.NewCommunityPoller
 
 var NewPendingPublishedAtResolver = polling.NewPendingPublishedAtResolver
 
 var NewPendingPublishedAtResolverWithControls = polling.NewPendingPublishedAtResolverWithControls
 
-var NewLivePoller = polling.NewLivePoller
+var NewLivePoller = pollers.NewLivePoller
 
-var NewLivePollerWithStatusProvider = polling.NewLivePollerWithStatusProvider
+var NewLivePollerWithStatusProvider = pollers.NewLivePollerWithStatusProvider
