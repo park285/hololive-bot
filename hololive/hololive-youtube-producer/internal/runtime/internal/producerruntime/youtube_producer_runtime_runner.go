@@ -53,7 +53,7 @@ type YouTubeProducerRuntime struct {
 	PollTargetRefresher *polltarget.Refresher
 
 	ServerAddr string
-	HttpServer *http.Server
+	HTTPServer *http.Server
 
 	Readiness *readiness.State
 

@@ -45,5 +45,5 @@ func (r *AdminAPIRuntime) ShutdownHTTPServer(ctx context.Context) error {
 		return nil
 	}
 
-	return httpserver.ShutdownHTTPServer(ctx, r.HttpServer)
+	return httpserver.ShutdownHTTPServer(ctx, r.HTTPServer)
 }

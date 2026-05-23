@@ -60,7 +60,7 @@ func TestBotRuntimeStartHTTPServer_Branches(t *testing.T) {
 
 	t.Run("listen error pushes err channel", func(t *testing.T) {
 		runtime := &BotRuntime{
-			HttpServer: &http.Server{Addr: "invalid::addr"},
+			HTTPServer: &http.Server{Addr: "invalid::addr"},
 		}
 		errCh := make(chan error, 1)
 
@@ -101,7 +101,7 @@ func TestBotRuntimeRun_ExitsOnServerError(t *testing.T) {
 	runtime := &BotRuntime{
 		Logger:     slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		ServerAddr: "invalid::addr",
-		HttpServer: &http.Server{
+		HTTPServer: &http.Server{
 			Addr: "invalid::addr",
 		},
 	}

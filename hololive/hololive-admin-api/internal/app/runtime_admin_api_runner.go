@@ -52,5 +52,5 @@ func (r *AdminAPIRuntime) StartHTTPServer(errCh chan<- error) {
 		return
 	}
 
-	httpserver.StartHTTPServer(r.HttpServer, r.Logger, errCh)
+	httpserver.StartHTTPServer(r.HTTPServer, r.Logger, errCh)
 }

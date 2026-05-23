@@ -145,7 +145,7 @@ func TestYouTubeProducerRuntimeShutdown(t *testing.T) {
 	runtime := &YouTubeProducerRuntime{
 		Logger:    testLogger(),
 		Scheduler: scheduler,
-		HttpServer: &http.Server{
+		HTTPServer: &http.Server{
 			Addr:    "invalid-address",
 			Handler: http.NewServeMux(),
 		},
@@ -163,7 +163,7 @@ func TestYouTubeProducerRuntimeStartHTTPServerSendsListenError(t *testing.T) {
 	runtime := &YouTubeProducerRuntime{
 		Logger:     testLogger(),
 		ServerAddr: "invalid::addr",
-		HttpServer: &http.Server{
+		HTTPServer: &http.Server{
 			Addr: "invalid::addr",
 		},
 	}
@@ -193,7 +193,7 @@ func TestYouTubeProducerRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 		Logger:     testLogger(),
 		Scheduler:  scheduler,
 		ServerAddr: "invalid-address",
-		HttpServer: &http.Server{
+		HTTPServer: &http.Server{
 			Addr:    "invalid-address",
 			Handler: http.NewServeMux(),
 		},

@@ -43,7 +43,7 @@ type BotRuntime struct {
 	ConfigSubscriber *configsub.Subscriber
 
 	ServerAddr string
-	HttpServer *http.Server
+	HTTPServer *http.Server
 	H3Server   *http3.Server
 
 	webhookHandlerCloser interface{ Close() error }

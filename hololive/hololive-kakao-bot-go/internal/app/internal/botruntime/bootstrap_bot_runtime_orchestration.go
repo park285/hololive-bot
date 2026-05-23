@@ -70,7 +70,7 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 		Bot:                  botBot,
 		ConfigSubscriber:     configSubscriber,
 		ServerAddr:           appConfig.Server.H2CAddr,
-		HttpServer:           botServer,
+		HTTPServer:           botServer,
 		H3Server:             h3Server,
 		webhookHandlerCloser: webhookHandler,
 	}, nil

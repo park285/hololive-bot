@@ -33,7 +33,7 @@ type AdminAPIRuntime struct {
 	Logger *slog.Logger
 
 	ServerAddr string
-	HttpServer *http.Server
+	HTTPServer *http.Server
 
 	lifecycle.Managed
 }

@@ -129,7 +129,7 @@ func newAdminAPIRuntime(
 		Config:     appConfig,
 		Logger:     logger,
 		ServerAddr: addr,
-		HttpServer: sharedserver.NewH2CServer(addr, router, "hololive-admin-api.http"),
+		HTTPServer: sharedserver.NewH2CServer(addr, router, "hololive-admin-api.http"),
 		Managed:    lifecycle.NewManaged(cleanup),
 	}
 }

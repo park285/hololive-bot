@@ -51,7 +51,7 @@ type AlarmWorkerRuntime struct {
 	NotificationEgress runtimeAlarmScheduler
 	ConfigSubscriber   *configsub.Subscriber
 	ServerAddr         string
-	HttpServer         *http.Server
+	HTTPServer         *http.Server
 
 	schedulerMu     sync.Mutex
 	schedulerCancel context.CancelFunc
