@@ -25,7 +25,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/ingress"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/lifecycle"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/transport"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -75,10 +78,10 @@ type Bot struct {
 	doneCh               chan struct{}
 	selfSender           string
 	workerPool           *workerpool.Pool
-	ingress              *MessageIngress
+	ingress              *ingress.MessageIngress
 	commandExecutor      *orchcmd.CommandRouter
-	transport            *CommandTransport
-	lifecycle            *BotLifecycle
+	transport            *transport.CommandTransport
+	lifecycle            *lifecycle.BotLifecycle
 }
 
 func NewBot(deps *Dependencies) (*Bot, error) {
@@ -122,9 +125,9 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		selfSender:           stringutil.Normalize(core.botSelfUser),
 	}
 
-	bot.transport = NewCommandTransport(bot.irisClient, bot.formatter)
-	bot.ingress = NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender)
-	bot.lifecycle = NewBotLifecycle(
+	bot.transport = transport.NewCommandTransport(bot.irisClient, bot.formatter)
+	bot.ingress = ingress.NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender)
+	bot.lifecycle = lifecycle.NewBotLifecycle(
 		bot.logger,
 		bot.cache,
 		bot.irisClient,

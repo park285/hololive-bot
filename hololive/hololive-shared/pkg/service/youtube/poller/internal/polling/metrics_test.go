@@ -14,24 +14,24 @@ import (
 )
 
 func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
-	reg := newIsolatedPollerMetricRegistry(t)
+	m, reg := newIsolatedPollerMetrics(t)
 
-	schedulerRegisteredJobs.Set(2)
-	schedulerDispatchDefer.WithLabelValues("").Inc()
-	schedulerPollDuration.WithLabelValues("videos", "success").Observe(0.25)
-	observeJobClaim("videos", "acquired")
-	observeJobLeaseRenew("", "success")
-	observeJobMarkCompleted("resolver", "lost")
-	observeJobRelease("resolver", "error")
-	observeOutboxInsert(domain.OutboxKindNewVideo, "success", 2)
-	communityShortsDetectedPostsTotal.WithLabelValues(string(domain.AlarmTypeShorts)).Add(3)
-	observePublishedAtResolutionAttempt(domain.OutboxKindNewShort)
-	observePublishedAtResolutionSuccess(domain.OutboxKindNewShort)
-	observePublishedAtResolutionFailure(domain.OutboxKindNewShort)
-	observePublishedAtResolverSkipped(domain.OutboxKindNewShort, "")
-	observePublishedAtResolverEnqueued(domain.OutboxKindNewShort)
-	setPublishedAtResolverPageCandidates(7)
-	observePublishedAtResolverScanned(domain.OutboxKindNewShort)
+	m.SchedulerRegisteredJobs.Set(2)
+	m.SchedulerDispatchDefer.WithLabelValues("").Inc()
+	m.SchedulerPollDuration.WithLabelValues("videos", "success").Observe(0.25)
+	m.ObserveJobClaim("videos", "acquired")
+	m.ObserveJobLeaseRenew("", "success")
+	m.ObserveJobMarkCompleted("resolver", "lost")
+	m.ObserveJobRelease("resolver", "error")
+	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, "success", 2)
+	m.CommunityShortsDetectedPostsTotal.WithLabelValues(string(domain.AlarmTypeShorts)).Add(3)
+	m.ObservePublishedAtResolutionAttempt(domain.OutboxKindNewShort)
+	m.ObservePublishedAtResolutionSuccess(domain.OutboxKindNewShort)
+	m.ObservePublishedAtResolutionFailure(domain.OutboxKindNewShort)
+	m.ObservePublishedAtResolverSkipped(domain.OutboxKindNewShort, "")
+	m.ObservePublishedAtResolverEnqueued(domain.OutboxKindNewShort)
+	m.SetPublishedAtResolverPageCandidates(7)
+	m.ObservePublishedAtResolverScanned(domain.OutboxKindNewShort)
 
 	families, err := reg.Gather()
 	require.NoError(t, err)
@@ -92,10 +92,10 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 }
 
 func TestObserveOutboxInsertSkipsNonPositiveCounts(t *testing.T) {
-	reg := newIsolatedPollerMetricRegistry(t)
+	m, reg := newIsolatedPollerMetrics(t)
 
-	observeOutboxInsert(domain.OutboxKindNewVideo, "success", 0)
-	observeOutboxInsert(domain.OutboxKindNewVideo, "success", -1)
+	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, "success", 0)
+	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, "success", -1)
 
 	families, err := reg.Gather()
 	require.NoError(t, err)
@@ -122,57 +122,27 @@ func TestBoolResultMapsClaimOutcomesToMetricLabels(t *testing.T) {
 	}
 }
 
-func newIsolatedPollerMetricRegistry(t *testing.T) *prometheus.Registry {
+func newIsolatedPollerMetrics(t *testing.T) (*Metrics, *prometheus.Registry) {
 	t.Helper()
 
 	reg := prometheus.NewRegistry()
 	oldRegisterer := prometheus.DefaultRegisterer
 	oldGatherer := prometheus.DefaultGatherer
-	oldSchedulerRegisteredJobs := schedulerRegisteredJobs
-	oldSchedulerDispatchDefer := schedulerDispatchDefer
-	oldSchedulerPollDuration := schedulerPollDuration
-	oldJobClaimTotal := jobClaimTotal
-	oldJobLeaseRenewTotal := jobLeaseRenewTotal
-	oldJobMarkCompletedTotal := jobMarkCompletedTotal
-	oldJobReleaseTotal := jobReleaseTotal
-	oldOutboxInsertTotal := outboxInsertTotal
-	oldCommunityShortsDetectedPostsTotal := communityShortsDetectedPostsTotal
-	oldPublishedAtResolutionAttemptTotal := publishedAtResolutionAttemptTotal
-	oldPublishedAtResolutionSuccessTotal := publishedAtResolutionSuccessTotal
-	oldPublishedAtResolutionFailureTotal := publishedAtResolutionFailureTotal
-	oldPublishedAtResolverSkippedTotal := publishedAtResolverSkippedTotal
-	oldPublishedAtResolverEnqueuedTotal := publishedAtResolverEnqueuedTotal
-	oldPublishedAtResolverPageCandidates := publishedAtResolverPageCandidates
-	oldPublishedAtResolverScannedTotal := publishedAtResolverScannedTotal
 
 	prometheus.DefaultRegisterer = reg
 	prometheus.DefaultGatherer = reg
-	registerSchedulerMetrics()
-	registerJobClaimMetrics()
-	registerContentMetrics()
+
+	m := &Metrics{}
+	m.registerSchedulerMetrics()
+	m.registerJobClaimMetrics()
+	m.registerContentMetrics()
 
 	t.Cleanup(func() {
 		prometheus.DefaultRegisterer = oldRegisterer
 		prometheus.DefaultGatherer = oldGatherer
-		schedulerRegisteredJobs = oldSchedulerRegisteredJobs
-		schedulerDispatchDefer = oldSchedulerDispatchDefer
-		schedulerPollDuration = oldSchedulerPollDuration
-		jobClaimTotal = oldJobClaimTotal
-		jobLeaseRenewTotal = oldJobLeaseRenewTotal
-		jobMarkCompletedTotal = oldJobMarkCompletedTotal
-		jobReleaseTotal = oldJobReleaseTotal
-		outboxInsertTotal = oldOutboxInsertTotal
-		communityShortsDetectedPostsTotal = oldCommunityShortsDetectedPostsTotal
-		publishedAtResolutionAttemptTotal = oldPublishedAtResolutionAttemptTotal
-		publishedAtResolutionSuccessTotal = oldPublishedAtResolutionSuccessTotal
-		publishedAtResolutionFailureTotal = oldPublishedAtResolutionFailureTotal
-		publishedAtResolverSkippedTotal = oldPublishedAtResolverSkippedTotal
-		publishedAtResolverEnqueuedTotal = oldPublishedAtResolverEnqueuedTotal
-		publishedAtResolverPageCandidates = oldPublishedAtResolverPageCandidates
-		publishedAtResolverScannedTotal = oldPublishedAtResolverScannedTotal
 	})
 
-	return reg
+	return m, reg
 }
 
 func assertMetricNamesAreDomainScoped(t *testing.T, families []*dto.MetricFamily) {

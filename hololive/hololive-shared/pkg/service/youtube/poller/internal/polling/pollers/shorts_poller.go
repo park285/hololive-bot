@@ -46,6 +46,7 @@ type ShortsPoller struct {
 	maxResults                       int
 	routeDecider                     polling.NotificationRouteDecider
 	inlinePublishedAtFallbackEnabled bool
+	metrics                          *polling.Metrics
 }
 
 func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *ShortsPoller {
@@ -64,6 +65,20 @@ func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int,
 		routeDecider:                     routeDecider,
 		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,
 	}
+}
+
+func (p *ShortsPoller) SetMetrics(m *polling.Metrics) {
+	if p == nil {
+		return
+	}
+	p.metrics = m
+}
+
+func (p *ShortsPoller) ensureMetrics() *polling.Metrics {
+	if p.metrics != nil {
+		return p.metrics
+	}
+	return polling.NewMetrics()
 }
 
 func (p *ShortsPoller) Name() string {
@@ -105,7 +120,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	}
 
 	detectedAt := yttimestamp.Normalize(time.Now())
-	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt)
+	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt, p.ensureMetrics())
 	batch := p.buildShortBatch(ctx, channelID, newShorts, isInitialized, detectedAt)
 
 	if err := p.repository.PersistVideos(ctx, batch.dbVideos, batch.notifications, batch.trackingRows, &domain.YouTubeContentWatermark{

@@ -76,7 +76,7 @@ func (s *Scheduler) RegisterChecked(channelID string, poller Poller, priority Pr
 
 	heap.Push(&s.jobs, job)
 	s.jobMap[key] = job
-	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
+	s.metrics.SchedulerRegisteredJobs.Set(float64(len(s.jobMap)))
 	s.notifyDispatcher()
 	return nil
 }
@@ -120,7 +120,7 @@ func (s *Scheduler) SyncPollerTargets(targetSync PollerTargetSync) {
 	s.syncExistingPollerTargetJobs(pollerName, targetSync, desired)
 	s.addMissingPollerTargetJobs(pollerName, targetSync, desired)
 
-	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
+	s.metrics.SchedulerRegisteredJobs.Set(float64(len(s.jobMap)))
 	s.notifyDispatcher()
 }
 
@@ -135,7 +135,7 @@ func (s *Scheduler) SyncPollerTargetGroups(targetSyncs []PollerTargetSync) {
 
 	s.syncExistingGroupedPollerTargetJobs(pollerName, desired)
 	s.addMissingGroupedPollerTargetJobs(pollerName, desired)
-	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
+	s.metrics.SchedulerRegisteredJobs.Set(float64(len(s.jobMap)))
 	s.notifyDispatcher()
 }
 

@@ -282,29 +282,25 @@ func TestGetChannelsLiveStatus_UsesYouTubeProducerWithoutOfficialScheduleFallbac
 		},
 	}
 
-	scraperService := &ScraperService{
-		httpClient: server.Client(),
-		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
-		baseURL:    server.URL,
-		fetchUpcoming: func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
-			switch channelID {
-			case "c1":
-				return []*ytscraper.UpcomingEvent{
-					{
-						VideoID:      "video-1",
-						Title:        "stream-1",
-						Status:       "UPCOMING",
-						StartTime:    &startUnix,
-						ChannelTitle: "channel-1",
-					},
-				}, nil
-			case "c2":
-				return []*ytscraper.UpcomingEvent{}, nil
-			default:
-				return nil, fmt.Errorf("unexpected channel: %s", channelID)
-			}
-		},
-	}
+	scraperService := newScraperServiceForTest(server.Client(), slog.New(slog.NewTextHandler(io.Discard, nil)), server.URL, func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
+		switch channelID {
+		case "c1":
+			return []*ytscraper.UpcomingEvent{
+				{
+					VideoID:      "video-1",
+					Title:        "stream-1",
+					Status:       "UPCOMING",
+					StartTime:    &startUnix,
+					ChannelTitle: "channel-1",
+				},
+			}, nil
+		case "c2":
+			return []*ytscraper.UpcomingEvent{}, nil
+		default:
+			return nil, fmt.Errorf("unexpected channel: %s", channelID)
+		}
+	},
+	)
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
@@ -340,15 +336,11 @@ func TestGetChannelsLiveStatus_DoesNotFallbackOnNonRetryableError(t *testing.T) 
 			}
 		},
 	}
-
-	scraperService := &ScraperService{
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		baseURL: "http://example.invalid",
-		fetchUpcoming: func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
-			scraperCalls.Add(1)
-			return nil, fmt.Errorf("unexpected scraper call for %s", channelID)
-		},
-	}
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
+		scraperCalls.Add(1)
+		return nil, fmt.Errorf("unexpected scraper call for %s", channelID)
+	},
+	)
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
@@ -383,10 +375,8 @@ func TestGetChannel_DoesNotFallbackOnNonRetryableAPIError(t *testing.T) {
 			}
 		},
 	}
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "", nil)
 
-	scraperService := &ScraperService{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
 	channel, err := service.GetChannel(context.Background(), "c1")
@@ -401,6 +391,83 @@ func TestGetChannel_DoesNotFallbackOnNonRetryableAPIError(t *testing.T) {
 	}
 	if channel != nil {
 		t.Fatalf("GetChannel() channel = %#v, want nil", channel)
+	}
+}
+
+type mockTimeoutError struct {
+	msg     string
+	timeout bool
+}
+
+func (e *mockTimeoutError) Error() string   { return e.msg }
+func (e *mockTimeoutError) Timeout() bool   { return e.timeout }
+func (e *mockTimeoutError) Temporary() bool { return false }
+
+func TestShouldUseFallbackTimeout(t *testing.T) {
+	service := newServiceForFallbackTest(&MockRequester{})
+
+	activeCtx := context.Background()
+
+	tests := []struct {
+		name     string
+		ctx      context.Context
+		err      error
+		expected bool
+	}{
+		{
+			name:     "DeadlineExceeded with active ctx",
+			ctx:      activeCtx,
+			err:      context.DeadlineExceeded,
+			expected: true,
+		},
+		{
+			name:     "wrapped timeout with active ctx",
+			ctx:      activeCtx,
+			err:      fmt.Errorf("request: %w", context.DeadlineExceeded),
+			expected: true,
+		},
+		{
+			name:     "net timeout with active ctx",
+			ctx:      activeCtx,
+			err:      &mockTimeoutError{msg: "i/o timeout", timeout: true},
+			expected: true,
+		},
+		{
+			name:     "일반 에러는 폴백 안함",
+			ctx:      activeCtx,
+			err:      fmt.Errorf("some error"),
+			expected: false,
+		},
+		{
+			name:     "nil 에러",
+			ctx:      activeCtx,
+			err:      nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := service.shouldUseFallback(tt.ctx, tt.err)
+			if got != tt.expected {
+				t.Errorf("shouldUseFallback(%v) = %v, want %v", tt.err, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestShouldUseFallbackCallerContextExpired(t *testing.T) {
+	service := newServiceForFallbackTest(&MockRequester{})
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if service.shouldUseFallback(canceledCtx, context.DeadlineExceeded) {
+		t.Error("호출자 context 만료 시 폴백하면 안 됨")
+	}
+
+	if service.shouldUseFallback(canceledCtx, &mockTimeoutError{msg: "timeout", timeout: true}) {
+		t.Error("호출자 context 만료 시 net timeout도 폴백하면 안 됨")
 	}
 }
 
@@ -420,10 +487,8 @@ func TestGetChannel_ReturnsErrorWhenRetryableFallbackAlsoFails(t *testing.T) {
 			}
 		},
 	}
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "", nil)
 
-	scraperService := &ScraperService{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
 	channel, err := service.GetChannel(context.Background(), "c1")

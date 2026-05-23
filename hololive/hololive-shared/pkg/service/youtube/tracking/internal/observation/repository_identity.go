@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-func (r *GormRepository) FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error) {
+func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("find tracking by identity: db is nil")
 	}
@@ -31,7 +31,7 @@ func (r *GormRepository) FindByIdentity(ctx context.Context, kind domain.OutboxK
 	return preferTrackingIdentityRecord(records, preferredContentID), nil
 }
 
-func (r *GormRepository) findByIdentityRecords(
+func (r *identityRepository) findByIdentityRecords(
 	ctx context.Context,
 	normalizedKind domain.OutboxKind,
 	preferredContentID string,
@@ -72,14 +72,14 @@ func preferTrackingIdentityRecord(
 	return &records[0]
 }
 
-func (r *GormRepository) Upsert(ctx context.Context, record *domain.YouTubeContentAlarmTracking) error {
+func (r *identityRepository) Upsert(ctx context.Context, record *domain.YouTubeContentAlarmTracking) error {
 	if record == nil {
 		return fmt.Errorf("upsert tracking: record is nil")
 	}
 	return r.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{record})
 }
 
-func (r *GormRepository) UpsertBatch(ctx context.Context, records []*domain.YouTubeContentAlarmTracking) error {
+func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.YouTubeContentAlarmTracking) error {
 	if len(records) == 0 {
 		return nil
 	}

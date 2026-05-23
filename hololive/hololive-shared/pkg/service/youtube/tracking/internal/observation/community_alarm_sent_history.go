@@ -22,7 +22,7 @@ type CommunityAlarmSentHistoryRow = ObservationAlarmSentHistoryRow
 
 type ShortsAlarmSentHistoryRow = ObservationAlarmSentHistoryRow
 
-func (r *GormRepository) ListCommunityAlarmSentHistoriesByFinalizedObservationWindow(
+func (r *historyRepository) ListCommunityAlarmSentHistoriesByFinalizedObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,
@@ -40,7 +40,7 @@ func (r *GormRepository) ListCommunityAlarmSentHistoriesByFinalizedObservationWi
 	return rows, nil
 }
 
-func (r *GormRepository) ListShortsAlarmSentHistoriesByFinalizedObservationWindow(
+func (r *historyRepository) ListShortsAlarmSentHistoriesByFinalizedObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,
@@ -58,7 +58,7 @@ func (r *GormRepository) ListShortsAlarmSentHistoriesByFinalizedObservationWindo
 	return rows, nil
 }
 
-func (r *GormRepository) ListCommunityAlarmSentHistoriesWithinObservationWindow(
+func (r *historyRepository) ListCommunityAlarmSentHistoriesWithinObservationWindow(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd time.Time,
@@ -78,7 +78,7 @@ func (r *GormRepository) ListCommunityAlarmSentHistoriesWithinObservationWindow(
 	return rows, nil
 }
 
-func (r *GormRepository) ListShortsAlarmSentHistoriesWithinObservationWindow(
+func (r *historyRepository) ListShortsAlarmSentHistoriesWithinObservationWindow(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd time.Time,
@@ -98,7 +98,7 @@ func (r *GormRepository) ListShortsAlarmSentHistoriesWithinObservationWindow(
 	return rows, nil
 }
 
-func (r *GormRepository) listAlarmSentHistoriesWithinObservationWindow(
+func (r *historyRepository) listAlarmSentHistoriesWithinObservationWindow(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd time.Time,
@@ -154,7 +154,7 @@ func (r *GormRepository) listAlarmSentHistoriesWithinObservationWindow(
 	return rows, nil
 }
 
-func (r *GormRepository) listAlarmSentHistoriesByFinalizedObservationWindow(
+func (r *historyRepository) listAlarmSentHistoriesByFinalizedObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,

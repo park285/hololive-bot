@@ -21,8 +21,6 @@
 package polling
 
 import (
-	"sync"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -30,157 +28,144 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo"
 )
 
-var (
-	pollerMetricsOnce sync.Once
-
-	schedulerRegisteredJobs           prometheus.Gauge
-	schedulerDispatchDefer            *prometheus.CounterVec
-	schedulerPollDuration             *prometheus.HistogramVec
-	jobClaimTotal                     *prometheus.CounterVec
-	jobLeaseRenewTotal                *prometheus.CounterVec
-	jobMarkCompletedTotal             *prometheus.CounterVec
-	jobReleaseTotal                   *prometheus.CounterVec
-	outboxInsertTotal                 *prometheus.CounterVec
-	communityShortsDetectedPostsTotal *prometheus.CounterVec
-	publishedAtResolutionAttemptTotal *prometheus.CounterVec
-	publishedAtResolutionSuccessTotal *prometheus.CounterVec
-	publishedAtResolutionFailureTotal *prometheus.CounterVec
-	publishedAtResolverSkippedTotal   *prometheus.CounterVec
-	publishedAtResolverEnqueuedTotal  *prometheus.CounterVec
-	publishedAtResolverPageCandidates prometheus.Gauge
-	publishedAtResolverScannedTotal   *prometheus.CounterVec
-)
-
-func ensureMetrics() {
-	pollerMetricsOnce.Do(func() {
-		registerSchedulerMetrics()
-		registerJobClaimMetrics()
-		registerContentMetrics()
-	})
+type Metrics struct {
+	SchedulerRegisteredJobs           prometheus.Gauge
+	SchedulerDispatchDefer            *prometheus.CounterVec
+	SchedulerPollDuration             *prometheus.HistogramVec
+	JobClaimTotal                     *prometheus.CounterVec
+	JobLeaseRenewTotal                *prometheus.CounterVec
+	JobMarkCompletedTotal             *prometheus.CounterVec
+	JobReleaseTotal                   *prometheus.CounterVec
+	OutboxInsertTotal                 *prometheus.CounterVec
+	CommunityShortsDetectedPostsTotal *prometheus.CounterVec
+	PublishedAtResolutionAttemptTotal *prometheus.CounterVec
+	PublishedAtResolutionSuccessTotal *prometheus.CounterVec
+	PublishedAtResolutionFailureTotal *prometheus.CounterVec
+	PublishedAtResolverSkippedTotal   *prometheus.CounterVec
+	PublishedAtResolverEnqueuedTotal  *prometheus.CounterVec
+	PublishedAtResolverPageCandidates prometheus.Gauge
+	PublishedAtResolverScannedTotal   *prometheus.CounterVec
 }
 
-func registerSchedulerMetrics() {
-	schedulerRegisteredJobs = promauto.NewGauge(prometheus.GaugeOpts{
+func NewMetrics() *Metrics {
+	m := &Metrics{}
+	m.registerSchedulerMetrics()
+	m.registerJobClaimMetrics()
+	m.registerContentMetrics()
+	batchrepo.ObserveOutboxInsert = m.ObserveOutboxInsert
+	return m
+}
+
+func (m *Metrics) registerSchedulerMetrics() {
+	m.SchedulerRegisteredJobs = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "youtube_poller_scheduler_job_count",
 		Help: "현재 YouTube poller scheduler에 등록된 job 수",
 	})
-	schedulerDispatchDefer = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.SchedulerDispatchDefer = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_scheduler_dispatch_deferred_total",
 		Help: "worker channel 포화 등으로 scheduler dispatch가 defer된 횟수",
 	}, []string{"reason"})
-	schedulerPollDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	m.SchedulerPollDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_poller_poll_duration_seconds",
 		Help:    "poller별 channel poll 실행 시간",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"poller", "status"})
 }
 
-func registerJobClaimMetrics() {
-	jobClaimTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+func (m *Metrics) registerJobClaimMetrics() {
+	m.JobClaimTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_claim_total",
 		Help: "poller별 distributed job claim 결과",
 	}, []string{"poller", "result"})
-	jobLeaseRenewTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.JobLeaseRenewTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_lease_renew_total",
 		Help: "poller별 distributed job lease renew 결과",
 	}, []string{"poller", "result"})
-	jobMarkCompletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.JobMarkCompletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_mark_completed_total",
 		Help: "poller별 distributed job completion marker 결과",
 	}, []string{"poller", "result"})
-	jobReleaseTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.JobReleaseTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_release_total",
 		Help: "poller별 distributed job lease release 결과",
 	}, []string{"poller", "result"})
 }
 
-func registerContentMetrics() {
-	outboxInsertTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+func (m *Metrics) registerContentMetrics() {
+	m.OutboxInsertTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_outbox_insert_total",
 		Help: "YouTube notification outbox insert 결과",
 	}, []string{"kind", "result"})
-	communityShortsDetectedPostsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.CommunityShortsDetectedPostsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_community_shorts_detected_posts_total",
 		Help: "커뮤니티/쇼츠 감지 게시물 수",
 	}, []string{"alarm_type"})
-	registerPublishedAtResolverMetrics()
+	m.registerPublishedAtResolverMetrics()
 }
 
-func registerPublishedAtResolverMetrics() {
-	publishedAtResolutionAttemptTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+func (m *Metrics) registerPublishedAtResolverMetrics() {
+	m.PublishedAtResolutionAttemptTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_published_at_resolution_attempt_total",
 		Help: "resolver published_at 해석 시도 횟수",
 	}, []string{"kind"})
-	publishedAtResolutionSuccessTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.PublishedAtResolutionSuccessTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_published_at_resolution_success_total",
 		Help: "resolver published_at 해석 성공 횟수",
 	}, []string{"kind"})
-	publishedAtResolutionFailureTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.PublishedAtResolutionFailureTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_published_at_resolution_failure_total",
 		Help: "resolver published_at 해석 실패 횟수",
 	}, []string{"kind"})
-	publishedAtResolverSkippedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.PublishedAtResolverSkippedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_published_at_resolver_skipped_total",
 		Help: "resolver가 후보를 enqueue 없이 건너뛴 횟수",
 	}, []string{"kind", "reason"})
-	publishedAtResolverEnqueuedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.PublishedAtResolverEnqueuedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_published_at_resolver_enqueued_total",
 		Help: "resolver가 enqueue한 알림 수",
 	}, []string{"kind"})
-	publishedAtResolverPageCandidates = promauto.NewGauge(prometheus.GaugeOpts{
+	m.PublishedAtResolverPageCandidates = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "youtube_poller_published_at_resolver_page_candidates",
 		Help: "현재 resolver iteration에서 마지막으로 조회한 candidate page 길이",
 	})
-	publishedAtResolverScannedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	m.PublishedAtResolverScannedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_published_at_resolver_scanned_total",
 		Help: "resolver가 iteration 동안 스캔한 candidate 수",
 	}, []string{"kind"})
 }
 
-func init() {
-	ensureMetrics()
-	batchrepo.ObserveOutboxInsert = observeOutboxInsert
+func (m *Metrics) ObservePublishedAtResolutionAttempt(kind domain.OutboxKind) {
+	m.PublishedAtResolutionAttemptTotal.WithLabelValues(string(kind)).Inc()
 }
 
-func observePublishedAtResolutionAttempt(kind domain.OutboxKind) {
-	ensureMetrics()
-	publishedAtResolutionAttemptTotal.WithLabelValues(string(kind)).Inc()
+func (m *Metrics) ObserveJobClaim(pollerName, result string) {
+	m.JobClaimTotal.WithLabelValues(pollerName, result).Inc()
 }
 
-func observeJobClaim(pollerName, result string) {
-	ensureMetrics()
-	jobClaimTotal.WithLabelValues(pollerName, result).Inc()
+func (m *Metrics) ObserveJobLeaseRenew(pollerName, result string) {
+	m.JobLeaseRenewTotal.WithLabelValues(pollerName, result).Inc()
 }
 
-func observeJobLeaseRenew(pollerName, result string) {
-	ensureMetrics()
-	jobLeaseRenewTotal.WithLabelValues(pollerName, result).Inc()
+func (m *Metrics) ObserveJobMarkCompleted(pollerName, result string) {
+	m.JobMarkCompletedTotal.WithLabelValues(pollerName, result).Inc()
 }
 
-func observeJobMarkCompleted(pollerName, result string) {
-	ensureMetrics()
-	jobMarkCompletedTotal.WithLabelValues(pollerName, result).Inc()
+func (m *Metrics) ObserveJobRelease(pollerName, result string) {
+	m.JobReleaseTotal.WithLabelValues(pollerName, result).Inc()
 }
 
-func observeJobRelease(pollerName, result string) {
-	ensureMetrics()
-	jobReleaseTotal.WithLabelValues(pollerName, result).Inc()
-}
-
-func observeOutboxInsert(kind domain.OutboxKind, result string, count int64) {
+func (m *Metrics) ObserveOutboxInsert(kind domain.OutboxKind, result string, count int64) {
 	if count <= 0 {
 		return
 	}
-	ensureMetrics()
-	outboxInsertTotal.WithLabelValues(string(kind), result).Add(float64(count))
+	m.OutboxInsertTotal.WithLabelValues(string(kind), result).Add(float64(count))
 }
 
-func ObserveCommunityShortsDetectedPosts(alarmType domain.AlarmType, count int) {
+func (m *Metrics) ObserveCommunityShortsDetectedPosts(alarmType domain.AlarmType, count int) {
 	if count <= 0 {
 		return
 	}
-	ensureMetrics()
-	communityShortsDetectedPostsTotal.WithLabelValues(string(alarmType)).Add(float64(count))
+	m.CommunityShortsDetectedPostsTotal.WithLabelValues(string(alarmType)).Add(float64(count))
 }
 
 func boolResult(ok bool, err error) string {
@@ -193,32 +178,26 @@ func boolResult(ok bool, err error) string {
 	return "lost"
 }
 
-func observePublishedAtResolutionSuccess(kind domain.OutboxKind) {
-	ensureMetrics()
-	publishedAtResolutionSuccessTotal.WithLabelValues(string(kind)).Inc()
+func (m *Metrics) ObservePublishedAtResolutionSuccess(kind domain.OutboxKind) {
+	m.PublishedAtResolutionSuccessTotal.WithLabelValues(string(kind)).Inc()
 }
 
-func observePublishedAtResolutionFailure(kind domain.OutboxKind) {
-	ensureMetrics()
-	publishedAtResolutionFailureTotal.WithLabelValues(string(kind)).Inc()
+func (m *Metrics) ObservePublishedAtResolutionFailure(kind domain.OutboxKind) {
+	m.PublishedAtResolutionFailureTotal.WithLabelValues(string(kind)).Inc()
 }
 
-func observePublishedAtResolverSkipped(kind domain.OutboxKind, reason string) {
-	ensureMetrics()
-	publishedAtResolverSkippedTotal.WithLabelValues(string(kind), reason).Inc()
+func (m *Metrics) ObservePublishedAtResolverSkipped(kind domain.OutboxKind, reason string) {
+	m.PublishedAtResolverSkippedTotal.WithLabelValues(string(kind), reason).Inc()
 }
 
-func observePublishedAtResolverEnqueued(kind domain.OutboxKind) {
-	ensureMetrics()
-	publishedAtResolverEnqueuedTotal.WithLabelValues(string(kind)).Inc()
+func (m *Metrics) ObservePublishedAtResolverEnqueued(kind domain.OutboxKind) {
+	m.PublishedAtResolverEnqueuedTotal.WithLabelValues(string(kind)).Inc()
 }
 
-func setPublishedAtResolverPageCandidates(count int) {
-	ensureMetrics()
-	publishedAtResolverPageCandidates.Set(float64(count))
+func (m *Metrics) SetPublishedAtResolverPageCandidates(count int) {
+	m.PublishedAtResolverPageCandidates.Set(float64(count))
 }
 
-func observePublishedAtResolverScanned(kind domain.OutboxKind) {
-	ensureMetrics()
-	publishedAtResolverScannedTotal.WithLabelValues(string(kind)).Inc()
+func (m *Metrics) ObservePublishedAtResolverScanned(kind domain.OutboxKind) {
+	m.PublishedAtResolverScannedTotal.WithLabelValues(string(kind)).Inc()
 }

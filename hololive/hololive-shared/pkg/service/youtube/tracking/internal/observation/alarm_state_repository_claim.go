@@ -9,14 +9,14 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-func (r *GormRepository) UpsertAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) error {
+func (r *alarmStateRepository) UpsertAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) error {
 	if record == nil {
 		return fmt.Errorf("upsert alarm state: record is nil")
 	}
 	return r.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{record})
 }
 
-func (r *GormRepository) TryClaimAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) (bool, error) {
+func (r *alarmStateRepository) TryClaimAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) (bool, error) {
 	if r == nil || r.db == nil {
 		return false, fmt.Errorf("try claim alarm state: db is nil")
 	}
@@ -33,7 +33,7 @@ func (r *GormRepository) TryClaimAlarmState(ctx context.Context, record *domain.
 	return r.confirmAlarmStateClaim(ctx, normalizedRecord)
 }
 
-func (r *GormRepository) insertAlarmStateClaim(
+func (r *alarmStateRepository) insertAlarmStateClaim(
 	ctx context.Context,
 	normalizedRecord *domain.YouTubeCommunityShortsAlarmState,
 ) (bool, error) {
@@ -77,7 +77,7 @@ func (r *GormRepository) insertAlarmStateClaim(
 	return true, nil
 }
 
-func (r *GormRepository) confirmAlarmStateClaim(
+func (r *alarmStateRepository) confirmAlarmStateClaim(
 	ctx context.Context,
 	normalizedRecord *domain.YouTubeCommunityShortsAlarmState,
 ) (bool, error) {
@@ -95,7 +95,7 @@ func (r *GormRepository) confirmAlarmStateClaim(
 	return current.AuthorizedAt.UTC().Equal(normalizedRecord.AuthorizedAt.UTC()), nil
 }
 
-func (r *GormRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain.OutboxKind, postID string, authorizedAt time.Time) (bool, error) {
+func (r *alarmStateRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain.OutboxKind, postID string, authorizedAt time.Time) (bool, error) {
 	if r == nil || r.db == nil {
 		return false, fmt.Errorf("release alarm state claim: db is nil")
 	}

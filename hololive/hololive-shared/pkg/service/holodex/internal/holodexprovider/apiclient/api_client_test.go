@@ -478,100 +478,10 @@ func TestIsTimeoutError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isTimeoutError(tt.err)
+			got := IsTimeoutError(tt.err)
 			if got != tt.expected {
 				t.Errorf("isTimeoutError(%v) = %v, want %v", tt.err, got, tt.expected)
 			}
 		})
-	}
-}
-
-func TestShouldUseFallbackTimeout(t *testing.T) {
-	service := &Service{
-		requester: &APIClient{
-			httpClient:  &http.Client{},
-			baseURL:     "https://holodex.net/api/v2",
-			apiKey:      "k1",
-			logger:      slog.Default(),
-			rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
-			semaphore:   make(chan struct{}, 2),
-		},
-		logger: slog.Default(),
-	}
-
-	activeCtx := context.Background()
-
-	tests := []struct {
-		name     string
-		ctx      context.Context
-		err      error
-		expected bool
-	}{
-		{
-			name:     "DeadlineExceeded with active ctx",
-			ctx:      activeCtx,
-			err:      context.DeadlineExceeded,
-			expected: true,
-		},
-		{
-			name:     "wrapped timeout with active ctx",
-			ctx:      activeCtx,
-			err:      fmt.Errorf("request: %w", context.DeadlineExceeded),
-			expected: true,
-		},
-		{
-			name:     "net timeout with active ctx",
-			ctx:      activeCtx,
-			err:      &mockTimeoutError{msg: "i/o timeout", timeout: true},
-			expected: true,
-		},
-		{
-			name:     "일반 에러는 폴백 안함",
-			ctx:      activeCtx,
-			err:      fmt.Errorf("some error"),
-			expected: false,
-		},
-		{
-			name:     "nil 에러",
-			ctx:      activeCtx,
-			err:      nil,
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := service.shouldUseFallback(tt.ctx, tt.err)
-			if got != tt.expected {
-				t.Errorf("shouldUseFallback(%v) = %v, want %v", tt.err, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestShouldUseFallbackCallerContextExpired(t *testing.T) {
-	service := &Service{
-		requester: &APIClient{
-			httpClient:  &http.Client{},
-			baseURL:     "https://holodex.net/api/v2",
-			apiKey:      "k1",
-			logger:      slog.Default(),
-			rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
-			semaphore:   make(chan struct{}, 2),
-		},
-		logger: slog.Default(),
-	}
-
-	// 이미 만료된 context
-	canceledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	// timeout 에러지만, 호출자 ctx가 만료되었으므로 폴백하면 안 됨
-	if service.shouldUseFallback(canceledCtx, context.DeadlineExceeded) {
-		t.Error("호출자 context 만료 시 폴백하면 안 됨")
-	}
-
-	if service.shouldUseFallback(canceledCtx, &mockTimeoutError{msg: "timeout", timeout: true}) {
-		t.Error("호출자 context 만료 시 net timeout도 폴백하면 안 됨")
 	}
 }

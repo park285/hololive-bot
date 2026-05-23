@@ -28,7 +28,7 @@ type observationShortMetadataRow struct {
 	PublishedAt *time.Time `gorm:"column:published_at"`
 }
 
-func (r *GormRepository) EnrichObservationPostComparisonInputs(
+func (r *compareMetadataRepository) EnrichObservationPostComparisonInputs(
 	ctx context.Context,
 	inputs []ObservationPostComparisonInput,
 ) ([]ObservationPostComparisonInput, error) {
@@ -70,7 +70,7 @@ func enrichObservationPostComparisonInput(
 	return input
 }
 
-func (r *GormRepository) loadObservationComparisonMetadata(
+func (r *compareMetadataRepository) loadObservationComparisonMetadata(
 	ctx context.Context,
 	inputs []ObservationPostComparisonInput,
 ) (map[string]observationComparisonMetadata, error) {
@@ -143,7 +143,7 @@ func appendUniqueObservationComparisonID(seen map[string]struct{}, ids []string,
 	return append(ids, canonicalID)
 }
 
-func (r *GormRepository) loadObservationCommunityPostMetadata(
+func (r *compareMetadataRepository) loadObservationCommunityPostMetadata(
 	ctx context.Context,
 	canonicalIDs []string,
 ) (map[string]observationComparisonMetadata, error) {
@@ -176,7 +176,7 @@ func (r *GormRepository) loadObservationCommunityPostMetadata(
 	return metadataByKey, nil
 }
 
-func (r *GormRepository) loadObservationShortMetadata(
+func (r *compareMetadataRepository) loadObservationShortMetadata(
 	ctx context.Context,
 	canonicalIDs []string,
 ) (map[string]observationComparisonMetadata, error) {

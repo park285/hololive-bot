@@ -10,7 +10,7 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-func validatePendingPublishedAtResolutionPageRequest(r *GormRepository, detectedBefore, referenceNow time.Time, limit int) error {
+func validatePendingPublishedAtResolutionPageRequest(r *alarmStateRepository, detectedBefore, referenceNow time.Time, limit int) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("list pending published_at resolutions page: db is nil")
 	}
@@ -26,7 +26,7 @@ func validatePendingPublishedAtResolutionPageRequest(r *GormRepository, detected
 	return nil
 }
 
-func (r *GormRepository) loadPendingPublishedAtResolutionRows(
+func (r *alarmStateRepository) loadPendingPublishedAtResolutionRows(
 	ctx context.Context,
 	referenceNow time.Time,
 	detectedBefore time.Time,

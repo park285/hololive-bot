@@ -97,6 +97,7 @@ type Scheduler struct {
 	errorBackoffMin time.Duration
 	errorBackoffMax time.Duration
 	jobClaimer      JobClaimer
+	metrics         *Metrics
 	stopCh          chan struct{}
 	stopCancel      context.CancelFunc
 	wakeCh          chan struct{}
@@ -119,6 +120,7 @@ type SchedulerConfig struct {
 	ErrorBackoffMin time.Duration // 실패 후 최소 재시도 지연 (기본: 30초)
 	ErrorBackoffMax time.Duration // 실패 후 최대 재시도 지연 (기본: 5분)
 	JobClaimer      JobClaimer
+	Metrics         *Metrics
 }
 
 func DefaultSchedulerConfig() SchedulerConfig {
@@ -158,7 +160,10 @@ func NewScheduler(config SchedulerConfig) *Scheduler {
 	}
 	// RequestInterval이 0이면 NewRateLimiter(0)이 생성되어 Wait()가 즉시 반환.
 	// 외부 RateLimiter에 rate limiting을 위임하는 경우에 사용.
-	ensureMetrics()
+	metrics := config.Metrics
+	if metrics == nil {
+		metrics = NewMetrics()
+	}
 
 	return &Scheduler{
 		jobs:            make(jobHeap, 0),
@@ -169,7 +174,12 @@ func NewScheduler(config SchedulerConfig) *Scheduler {
 		errorBackoffMin: config.ErrorBackoffMin,
 		errorBackoffMax: config.ErrorBackoffMax,
 		jobClaimer:      config.JobClaimer,
+		metrics:         metrics,
 		stopCh:          make(chan struct{}),
 		wakeCh:          make(chan struct{}, 1),
 	}
+}
+
+func (s *Scheduler) Metrics() *Metrics {
+	return s.metrics
 }

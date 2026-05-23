@@ -47,6 +47,7 @@ type CommunityPoller struct {
 	keywords                         []string
 	routeDecider                     polling.NotificationRouteDecider
 	inlinePublishedAtFallbackEnabled bool
+	metrics                          *polling.Metrics
 }
 
 func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, keywords []string, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *CommunityPoller {
@@ -66,6 +67,20 @@ func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults i
 		routeDecider:                     routeDecider,
 		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,
 	}
+}
+
+func (p *CommunityPoller) SetMetrics(m *polling.Metrics) {
+	if p == nil {
+		return
+	}
+	p.metrics = m
+}
+
+func (p *CommunityPoller) ensureMetrics() *polling.Metrics {
+	if p.metrics != nil {
+		return p.metrics
+	}
+	return polling.NewMetrics()
 }
 
 func (p *CommunityPoller) Name() string {
@@ -103,7 +118,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 	}
 	newPosts := collectNewCommunityPosts(posts, watermark, isInitialized)
 	detectedAt := yttimestamp.Normalize(time.Now())
-	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt)
+	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt, p.ensureMetrics())
 	batch := p.buildCommunityBatch(ctx, channelID, newPosts, isInitialized, detectedAt)
 
 	if err := p.repository.PersistCommunityPosts(ctx, batch.dbPosts, batch.notifications, batch.trackingRows, &domain.YouTubeContentWatermark{

@@ -87,7 +87,7 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 		err = s.finishJobClaim(ctx, job, decision.claim, err)
 	}
 	status := s.logPollResult(job, workerID, pollCtx, elapsed, err)
-	schedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
+	s.metrics.SchedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
 
 	s.rescheduleJobAfterPoll(job, err)
 }
@@ -106,7 +106,7 @@ func (s *Scheduler) claimJobRun(ctx context.Context, job *Job) jobClaimDecision 
 	leaseTTL := s.jobClaimLeaseTTL()
 	status, claim, err := s.jobClaimer.TryClaim(ctx, job.Poller.Name(), job.ChannelID, leaseTTL, job.Interval)
 	if err != nil {
-		observeJobClaim(job.Poller.Name(), string(JobClaimUnavailable))
+		s.metrics.ObserveJobClaim(job.Poller.Name(), string(JobClaimUnavailable))
 		slog.Warn("job_claim",
 			slog.String("poller", job.Poller.Name()),
 			slog.String("result", string(JobClaimUnavailable)),
@@ -114,7 +114,7 @@ func (s *Scheduler) claimJobRun(ctx context.Context, job *Job) jobClaimDecision 
 		)
 		return jobClaimDecision{err: fmt.Errorf("claim poll job: %w", err)}
 	}
-	observeJobClaim(job.Poller.Name(), string(status.Result))
+	s.metrics.ObserveJobClaim(job.Poller.Name(), string(status.Result))
 	slog.Debug("job_claim",
 		slog.String("poller", job.Poller.Name()),
 		slog.String("result", string(status.Result)),
@@ -201,8 +201,9 @@ func (s *Scheduler) startJobClaimRenewLoop(ctx context.Context, pollerName strin
 		interval = 20 * time.Second
 	}
 
+	metrics := s.metrics
 	go func() {
-		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, pollerName, ttl, interval, errCh)
+		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, pollerName, ttl, interval, errCh, metrics)
 	}()
 
 	cancel := func() {
@@ -221,6 +222,7 @@ func runJobClaimRenewLoop(
 	ttl time.Duration,
 	interval time.Duration,
 	errCh chan<- error,
+	metrics *Metrics,
 ) {
 	loopCtx, cancelLoop := context.WithCancel(renewCtx)
 	stopPollCancel := context.AfterFunc(pollCtx, cancelLoop)
@@ -230,7 +232,7 @@ func runJobClaimRenewLoop(
 	}()
 
 	_ = loop.RunTickerLoop(loopCtx, interval, func(context.Context) error {
-		if !renewJobClaim(pollCtx, pollCancel, claim, pollerName, ttl, errCh) {
+		if !renewJobClaim(pollCtx, pollCancel, claim, pollerName, ttl, errCh, metrics) {
 			return errJobClaimRenewLoopStopped
 		}
 		return nil
@@ -244,9 +246,10 @@ func renewJobClaim(
 	pollerName string,
 	ttl time.Duration,
 	errCh chan<- error,
+	metrics *Metrics,
 ) bool {
 	renewed, err := claim.Renew(ctx, ttl)
-	observeJobLeaseRenew(pollerName, boolResult(renewed, err))
+	metrics.ObserveJobLeaseRenew(pollerName, boolResult(renewed, err))
 	if err != nil {
 		slog.Warn("job_lease_lost",
 			slog.String("poller", pollerName),
@@ -284,7 +287,7 @@ func drainJobClaimRenewError(errCh <-chan error) error {
 func (s *Scheduler) finishJobClaim(ctx context.Context, job *Job, claim JobClaim, pollErr error) error {
 	if pollErr == nil {
 		completed, err := claim.MarkCompleted(ctx, job.Interval)
-		observeJobMarkCompleted(job.Poller.Name(), boolResult(completed, err))
+		s.metrics.ObserveJobMarkCompleted(job.Poller.Name(), boolResult(completed, err))
 		slog.Debug("job_mark_completed",
 			slog.String("poller", job.Poller.Name()),
 			slog.String("result", boolResult(completed, err)),
@@ -304,7 +307,7 @@ func (s *Scheduler) finishJobClaim(ctx context.Context, job *Job, claim JobClaim
 
 func (s *Scheduler) releaseJobClaim(ctx context.Context, job *Job, claim JobClaim) {
 	released, err := claim.Release(ctx)
-	observeJobRelease(job.Poller.Name(), boolResult(released, err))
+	s.metrics.ObserveJobRelease(job.Poller.Name(), boolResult(released, err))
 	if err != nil {
 		slog.Warn("Poll job claim release failed",
 			"poller", job.Poller.Name(),

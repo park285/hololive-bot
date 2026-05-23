@@ -113,7 +113,8 @@ func (r *PendingPublishedAtResolver) markPublishedAtRetryAfterWithReporting(
 	reason string,
 ) {
 	if err := r.markPublishedAtRetryAfter(tracking, ctx, candidate, retryAfter, forceLive); err != nil {
-		observePublishedAtResolverSkipped(candidate.Kind, "retry_after_write_failed")
+		m := r.ensureMetrics()
+		m.ObservePublishedAtResolverSkipped(candidate.Kind, "retry_after_write_failed")
 		r.logger.Warn("Pending published_at resolver failed to write retry_after",
 			slog.String("kind", string(candidate.Kind)),
 			slog.String("post_id", candidate.PostID),

@@ -20,7 +20,12 @@
 
 package orchestration
 
-import "github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
+import (
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/ingress"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/lifecycle"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/transport"
+)
 
 func (b *Bot) ensureCommandExecutor() *orchcmd.CommandRouter {
 	if b.commandExecutor == nil {
@@ -30,25 +35,25 @@ func (b *Bot) ensureCommandExecutor() *orchcmd.CommandRouter {
 	return b.commandExecutor
 }
 
-func (b *Bot) ensureIngress() *MessageIngress {
+func (b *Bot) ensureIngress() *ingress.MessageIngress {
 	if b.ingress == nil {
-		b.ingress = NewMessageIngress(b.messageAdapter, b.acl, b.logger, b.selfSender)
+		b.ingress = ingress.NewMessageIngress(b.messageAdapter, b.acl, b.logger, b.selfSender)
 	}
 
 	return b.ingress
 }
 
-func (b *Bot) ensureTransport() *CommandTransport {
+func (b *Bot) ensureTransport() *transport.CommandTransport {
 	if b.transport == nil {
-		b.transport = NewCommandTransport(b.irisClient, b.formatter)
+		b.transport = transport.NewCommandTransport(b.irisClient, b.formatter)
 	}
 
 	return b.transport
 }
 
-func (b *Bot) ensureLifecycle() *BotLifecycle {
+func (b *Bot) ensureLifecycle() *lifecycle.BotLifecycle {
 	if b.lifecycle == nil {
-		b.lifecycle = NewBotLifecycle(
+		b.lifecycle = lifecycle.NewBotLifecycle(
 			b.logger,
 			b.cache,
 			b.irisClient,

@@ -23,6 +23,7 @@ type PendingPublishedAtResolver struct {
 	minDetectedAge    time.Duration
 	failureBackoffTTL time.Duration
 	candidateClaimer  JobClaimer
+	metrics           *Metrics
 	logger            *slog.Logger
 }
 
@@ -109,6 +110,13 @@ func NewPendingPublishedAtResolverWithControls(
 	}
 }
 
+func (r *PendingPublishedAtResolver) SetMetrics(m *Metrics) {
+	if r == nil {
+		return
+	}
+	r.metrics = m
+}
+
 func (r *PendingPublishedAtResolver) Start(ctx context.Context) {
 	if !r.canStart() {
 		return
@@ -131,6 +139,13 @@ func (r *PendingPublishedAtResolver) SetCandidateClaimer(claimer JobClaimer) {
 
 func (r *PendingPublishedAtResolver) canStart() bool {
 	return r != nil && r.db != nil && r.client != nil
+}
+
+func (r *PendingPublishedAtResolver) ensureMetrics() *Metrics {
+	if r.metrics != nil {
+		return r.metrics
+	}
+	return NewMetrics()
 }
 
 func (r *PendingPublishedAtResolver) runResolverIteration(ctx context.Context) {
