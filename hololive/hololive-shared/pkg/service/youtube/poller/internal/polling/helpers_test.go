@@ -45,8 +45,8 @@ func TestIsLiveReplayVideo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := isLiveReplayVideo(tt.text); got != tt.want {
-				t.Fatalf("isLiveReplayVideo(%q) = %v, want %v", tt.text, got, tt.want)
+			if got := IsLiveReplayVideo(tt.text); got != tt.want {
+				t.Fatalf("IsLiveReplayVideo(%q) = %v, want %v", tt.text, got, tt.want)
 			}
 		})
 	}
@@ -81,13 +81,13 @@ func TestConvertThumbnails(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := convertThumbnails(tt.in)
+			got := ConvertThumbnails(tt.in)
 			if len(got) != len(tt.want) {
-				t.Fatalf("convertThumbnails() len = %d, want %d", len(got), len(tt.want))
+				t.Fatalf("ConvertThumbnails() len = %d, want %d", len(got), len(tt.want))
 			}
 			for i := range got {
 				if got[i] != tt.want[i] {
-					t.Fatalf("convertThumbnails()[%d] = %#v, want %#v", i, got[i], tt.want[i])
+					t.Fatalf("ConvertThumbnails()[%d] = %#v, want %#v", i, got[i], tt.want[i])
 				}
 			}
 		})
@@ -119,13 +119,13 @@ func TestMustMarshalJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := mustMarshalJSON(tt.value)
+			got := MustMarshalJSON(tt.value)
 			if tt.wantExact != "" && got != tt.wantExact {
-				t.Fatalf("mustMarshalJSON() = %q, want %q", got, tt.wantExact)
+				t.Fatalf("MustMarshalJSON() = %q, want %q", got, tt.wantExact)
 			}
 			for _, needle := range tt.contains {
 				if !strings.Contains(got, needle) {
-					t.Fatalf("mustMarshalJSON() = %q, expected substring %q", got, needle)
+					t.Fatalf("MustMarshalJSON() = %q, expected substring %q", got, needle)
 				}
 			}
 		})
@@ -151,8 +151,8 @@ func TestParseViewerCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := parseViewerCount(tt.text); got != tt.want {
-				t.Fatalf("parseViewerCount(%q) = %d, want %d", tt.text, got, tt.want)
+			if got := ParseViewerCount(tt.text); got != tt.want {
+				t.Fatalf("ParseViewerCount(%q) = %d, want %d", tt.text, got, tt.want)
 			}
 		})
 	}

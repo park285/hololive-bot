@@ -37,13 +37,13 @@ var numericRe = regexp.MustCompile(`[\d.]+`)
 
 // isLiveReplayVideo: 라이브 다시보기 영상인지 판별
 // published_text에 "streamed", "premiered" 등의 키워드가 포함되면 true
-func isLiveReplayVideo(publishedText string) bool {
+func IsLiveReplayVideo(publishedText string) bool {
 	lower := strings.ToLower(publishedText)
 	return strings.Contains(lower, "streamed") || strings.Contains(lower, "premiered")
 }
 
 // convertThumbnails: scraper.Thumbnail을 domain.ThumbnailsJSON으로 변환
-func convertThumbnails(thumbnails []scraper.Thumbnail) domain.ThumbnailsJSON {
+func ConvertThumbnails(thumbnails []scraper.Thumbnail) domain.ThumbnailsJSON {
 	if len(thumbnails) == 0 {
 		return nil
 	}
@@ -60,7 +60,7 @@ func convertThumbnails(thumbnails []scraper.Thumbnail) domain.ThumbnailsJSON {
 }
 
 // mustMarshalJSON: JSON 마샬링 (에러 시 빈 객체)
-func mustMarshalJSON(v any) string {
+func MustMarshalJSON(v any) string {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return "{}"
@@ -86,7 +86,7 @@ func normalizeNotificationCanonicalPostID(kind domain.OutboxKind, id string) str
 	return canonicalID
 }
 
-func normalizeContentID(kind domain.OutboxKind, id string) string {
+func NormalizeContentID(kind domain.OutboxKind, id string) string {
 	trimmed := strings.TrimSpace(id)
 	switch kind {
 	case domain.OutboxKindNewShort, domain.OutboxKindCommunityPost:
@@ -100,7 +100,7 @@ func normalizeContentID(kind domain.OutboxKind, id string) string {
 	}
 }
 
-func normalizeShortVideoResourceID(id string) string {
+func NormalizeShortVideoResourceID(id string) string {
 	normalized, err := ytcontentid.NormalizeShortVideoID(id)
 	if err != nil {
 		return strings.TrimSpace(id)
@@ -108,7 +108,7 @@ func normalizeShortVideoResourceID(id string) string {
 	return normalized
 }
 
-func normalizeCommunityResourceID(id string) string {
+func NormalizeCommunityResourceID(id string) string {
 	normalized, err := ytcontentid.NormalizeCommunityPostID(id)
 	if err != nil {
 		return strings.TrimSpace(id)
@@ -116,7 +116,7 @@ func normalizeCommunityResourceID(id string) string {
 	return normalized
 }
 
-func normalizeCollectedShortsByCanonicalPostID(shorts []*scraper.Short) []*scraper.Short {
+func NormalizeCollectedShortsByCanonicalPostID(shorts []*scraper.Short) []*scraper.Short {
 	if len(shorts) == 0 {
 		return nil
 	}
@@ -128,7 +128,7 @@ func normalizeCollectedShortsByCanonicalPostID(shorts []*scraper.Short) []*scrap
 			continue
 		}
 
-		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
+		canonicalPostID := NormalizeContentID(domain.OutboxKindNewShort, short.VideoID)
 		if canonicalPostID == "" {
 			copyShort := *short
 			normalized = append(normalized, &copyShort)
@@ -174,7 +174,7 @@ func mergeShortPublishedAt(dst *scraper.Short, src *scraper.Short) {
 	}
 }
 
-func normalizeCollectedCommunityPostsByCanonicalPostID(posts []*scraper.CommunityPost) []*scraper.CommunityPost {
+func NormalizeCollectedCommunityPostsByCanonicalPostID(posts []*scraper.CommunityPost) []*scraper.CommunityPost {
 	if len(posts) == 0 {
 		return nil
 	}
@@ -186,7 +186,7 @@ func normalizeCollectedCommunityPostsByCanonicalPostID(posts []*scraper.Communit
 			continue
 		}
 
-		canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
+		canonicalPostID := NormalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
 		if canonicalPostID == "" {
 			copyPost := *post
 			normalized = append(normalized, &copyPost)
@@ -261,26 +261,26 @@ func mergeCommunityPostAttachmentFields(dst *scraper.CommunityPost, src *scraper
 	}
 }
 
-func buildShortNotificationPayload(video *domain.YouTubeVideo, canonicalPostID string) string {
+func BuildShortNotificationPayload(video *domain.YouTubeVideo, canonicalPostID string) string {
 	if video == nil {
 		return "{}"
 	}
 
-	return mustMarshalJSON(shortNotificationPayload{
+	return MustMarshalJSON(shortNotificationPayload{
 		YouTubeVideo:    *video,
 		CanonicalPostID: normalizeNotificationCanonicalPostID(domain.OutboxKindNewShort, canonicalPostID),
 	})
 }
 
-func buildCommunityNotificationPayload(post *domain.YouTubeCommunityPost, canonicalPostID string) string {
+func BuildCommunityNotificationPayload(post *domain.YouTubeCommunityPost, canonicalPostID string) string {
 	if post == nil {
 		return "{}"
 	}
 
 	payloadPost := *post
-	payloadPost.PostID = normalizeCommunityResourceID(payloadPost.PostID)
+	payloadPost.PostID = NormalizeCommunityResourceID(payloadPost.PostID)
 
-	return mustMarshalJSON(communityNotificationPayload{
+	return MustMarshalJSON(communityNotificationPayload{
 		YouTubeCommunityPost: payloadPost,
 		CanonicalPostID:      normalizeNotificationCanonicalPostID(domain.OutboxKindCommunityPost, canonicalPostID),
 	})
@@ -289,7 +289,7 @@ func buildCommunityNotificationPayload(post *domain.YouTubeCommunityPost, canoni
 // parseViewerCount: 시청자 수 텍스트 파싱
 // "12,345 watching" -> 12345
 // "1.2K watching" -> 1200
-func parseViewerCount(text string) int {
+func ParseViewerCount(text string) int {
 	if text == "" {
 		return 0
 	}

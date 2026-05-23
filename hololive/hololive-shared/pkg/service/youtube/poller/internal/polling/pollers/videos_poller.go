@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package polling
+package pollers
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -120,7 +121,7 @@ func buildVideoPollResults(
 	dbVideos := make([]*domain.YouTubeVideo, 0, len(newVideos))
 	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newVideos))
 	for _, video := range newVideos {
-		isLiveReplay := isLiveReplayVideo(video.PublishedText)
+		isLiveReplay := polling.IsLiveReplayVideo(video.PublishedText)
 		dbVideo := buildYouTubeVideo(channelID, video, isLiveReplay)
 		dbVideos = append(dbVideos, dbVideo)
 
@@ -136,7 +137,7 @@ func buildYouTubeVideo(channelID string, video *scraper.Video, isLiveReplay bool
 		VideoID:       video.VideoID,
 		ChannelID:     channelID,
 		Title:         video.Title,
-		Thumbnail:     convertThumbnails(video.Thumbnail),
+		Thumbnail:     polling.ConvertThumbnails(video.Thumbnail),
 		Duration:      video.Duration,
 		PublishedText: video.PublishedText,
 		IsShort:       false,
@@ -150,7 +151,7 @@ func buildVideoNotification(channelID string, video *domain.YouTubeVideo) *domai
 		Kind:      domain.OutboxKindNewVideo,
 		ChannelID: channelID,
 		ContentID: video.VideoID,
-		Payload:   mustMarshalJSON(video),
+		Payload:   polling.MustMarshalJSON(video),
 		Status:    domain.OutboxStatusPending,
 	}
 }

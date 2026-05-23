@@ -13,7 +13,7 @@ func newShortPublishedAtNotification(
 		Kind:      candidate.Kind,
 		ChannelID: candidate.ChannelID,
 		ContentID: candidate.ContentID,
-		Payload:   buildShortNotificationPayload(video, candidate.PostID),
+		Payload:   BuildShortNotificationPayload(video, candidate.PostID),
 		Status:    domain.OutboxStatusPending,
 	}
 }
@@ -26,7 +26,7 @@ func newCommunityPublishedAtNotification(
 		Kind:      candidate.Kind,
 		ChannelID: candidate.ChannelID,
 		ContentID: candidate.ContentID,
-		Payload:   buildCommunityNotificationPayload(post, candidate.PostID),
+		Payload:   BuildCommunityNotificationPayload(post, candidate.PostID),
 		Status:    domain.OutboxStatusPending,
 	}
 }

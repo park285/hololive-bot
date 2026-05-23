@@ -145,7 +145,7 @@ func (r *PendingPublishedAtResolver) resolveShortCandidatePublishedAt(
 ) (*time.Time, error) {
 	videoID := normalizeCandidateResourceID(
 		candidate,
-		normalizeShortVideoResourceID,
+		NormalizeShortVideoResourceID,
 	)
 	if videoID == "" {
 		return nil, fmt.Errorf("resolve candidate published_at: empty short video id")
@@ -166,7 +166,7 @@ func (r *PendingPublishedAtResolver) resolveCommunityCandidatePublishedAt(
 ) (*time.Time, error) {
 	postID := normalizeCandidateResourceID(
 		candidate,
-		normalizeCommunityResourceID,
+		NormalizeCommunityResourceID,
 	)
 	if postID == "" {
 		return nil, fmt.Errorf("resolve candidate published_at: empty community post id")

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package polling
+package pollers
 
 import (
 	"context"
@@ -30,6 +30,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -44,11 +45,11 @@ type CommunityPoller struct {
 	repository                       batchrepo.BatchRepository
 	maxResults                       int
 	keywords                         []string
-	routeDecider                     NotificationRouteDecider
+	routeDecider                     polling.NotificationRouteDecider
 	inlinePublishedAtFallbackEnabled bool
 }
 
-func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, keywords []string, routeDecider NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *CommunityPoller {
+func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, keywords []string, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *CommunityPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
@@ -91,7 +92,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 		return fmt.Errorf("failed to get community posts: %w", err)
 	}
 
-	posts = normalizeCollectedCommunityPostsByCanonicalPostID(posts)
+	posts = polling.NormalizeCollectedCommunityPostsByCanonicalPostID(posts)
 	if len(posts) == 0 {
 		return nil
 	}
@@ -163,10 +164,10 @@ func (p *CommunityPoller) buildCommunityPostArtifacts(
 		return nil, nil, nil, false
 	}
 
-	canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
+	canonicalPostID := polling.NormalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
 	publishedAt := yttimestamp.NormalizePtr(post.PublishedAt)
 	if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled {
-		publishedAt = p.resolveCommunityPublishedAtInline(ctx, normalizeCommunityResourceID(post.PostID))
+		publishedAt = p.resolveCommunityPublishedAtInline(ctx, polling.NormalizeCommunityResourceID(post.PostID))
 	}
 	logCommunityPostDetected(ctx, channelID, canonicalPostID, publishedAt, detectedAt)
 
@@ -174,13 +175,13 @@ func (p *CommunityPoller) buildCommunityPostArtifacts(
 		PostID:        canonicalPostID,
 		ChannelID:     channelID,
 		AuthorName:    post.AuthorName,
-		AuthorPhoto:   convertThumbnails(post.AuthorPhoto),
+		AuthorPhoto:   polling.ConvertThumbnails(post.AuthorPhoto),
 		ContentText:   post.ContentText,
 		PublishedText: post.PublishedText,
 		PublishedAt:   publishedAt,
 		LikeCount:     post.LikeCount,
 		CommentCount:  post.CommentCount,
-		Images:        convertThumbnails(post.Images),
+		Images:        polling.ConvertThumbnails(post.Images),
 		AttachedVideo: post.VideoID,
 	}
 	if !isInitialized || !p.matchesKeywords(post.ContentText) {
@@ -207,7 +208,7 @@ func (p *CommunityPoller) buildCommunityNotification(
 	if p.routeDecider != nil && routePublishedAt.IsZero() {
 		return nil, p.inlinePublishedAtFallbackEnabled
 	}
-	if p.routeDecider != nil && !shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeCommunity, channelID, routePublishedAt) {
+	if p.routeDecider != nil && !polling.ShouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeCommunity, channelID, routePublishedAt) {
 		return nil, false
 	}
 
@@ -215,7 +216,7 @@ func (p *CommunityPoller) buildCommunityNotification(
 		Kind:      domain.OutboxKindCommunityPost,
 		ChannelID: channelID,
 		ContentID: canonicalPostID,
-		Payload:   buildCommunityNotificationPayload(dbPost, canonicalPostID),
+		Payload:   polling.BuildCommunityNotificationPayload(dbPost, canonicalPostID),
 		Status:    domain.OutboxStatusPending,
 	}, false
 }
@@ -227,8 +228,8 @@ func collectNewCommunityPosts(
 ) []*scraper.CommunityPost {
 	newPosts := make([]*scraper.CommunityPost, 0, len(posts))
 	for _, post := range posts {
-		canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
-		if isInitialized && canonicalPostID == normalizeContentID(domain.OutboxKindCommunityPost, watermark.LastContentID) {
+		canonicalPostID := polling.NormalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
+		if isInitialized && canonicalPostID == polling.NormalizeContentID(domain.OutboxKindCommunityPost, watermark.LastContentID) {
 			break
 		}
 		newPosts = append(newPosts, post)
@@ -296,7 +297,7 @@ func selectLastWatermarkContentID(kind domain.OutboxKind, latestID, existingID s
 	if keepExisting && strings.TrimSpace(existingID) != "" {
 		return existingID
 	}
-	return normalizeContentID(kind, latestID)
+	return polling.NormalizeContentID(kind, latestID)
 }
 
 func derefTime(value *time.Time) time.Time {
