@@ -628,7 +628,7 @@ func TestHttpStatusError(t *testing.T) {
 }
 
 func TestBackoffState_WithCooldownJitterStaysInRange(t *testing.T) {
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		bs := NewBackoffState(WithCooldownJitter(0.1))
 		bs.RecordError()
 		cd := bs.HardCooldownRemaining()
