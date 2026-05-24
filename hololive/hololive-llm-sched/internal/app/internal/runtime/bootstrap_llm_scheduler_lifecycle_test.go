@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 func testRuntimeLogger() *slog.Logger {

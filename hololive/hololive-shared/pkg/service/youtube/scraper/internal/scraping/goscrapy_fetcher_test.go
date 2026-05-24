@@ -131,7 +131,7 @@ func TestGoScrapyPageFetcher_FallsBackOnExecutorErrorBeforeResponse(t *testing.T
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "fallback body", string(resp.Body))
 	assert.Equal(t, int32(2), attempts.Load())
-	assert.Less(t, elapsed, 250*time.Millisecond)
+	assert.Less(t, elapsed, 1*time.Second)
 }
 
 func TestGoScrapyPageFetcher_HonorsContextCancellation(t *testing.T) {

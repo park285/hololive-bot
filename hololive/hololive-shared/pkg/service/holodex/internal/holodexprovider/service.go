@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"

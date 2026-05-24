@@ -43,7 +43,7 @@ const (
 // DB 부하를 줄이고 빠른 조회를 지원하며, 워밍업(Warm-up) 기능을 제공합니다.
 type Cache struct {
 	repository *Repository
-	cache      cache.Client
+	cache      cache.KeyValueCache
 	logger     *slog.Logger
 
 	byChannelID sync.Map // map[string]*domain.Member
@@ -65,7 +65,7 @@ type CacheConfig struct {
 }
 
 // 설정에 따라 생성 시점에 자동으로 캐시 워밍업을 수행할 수 있다.
-func NewMemberCache(ctx context.Context, repository *Repository, cacheService cache.Client, logger *slog.Logger, config CacheConfig) (*Cache, error) {
+func NewMemberCache(ctx context.Context, repository *Repository, cacheService cache.KeyValueCache, logger *slog.Logger, config CacheConfig) (*Cache, error) {
 	if config.ValkeyTTL == 0 {
 		config.ValkeyTTL = constants.MemberCacheDefaults.ValkeyTTL
 	}

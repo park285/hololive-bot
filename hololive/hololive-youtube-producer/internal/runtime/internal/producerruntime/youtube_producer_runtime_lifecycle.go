@@ -27,8 +27,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
+	sharedlog "github.com/park285/shared-go/pkg/logging"
+	"github.com/park285/shared-go/pkg/runtime/httpserver"
 )
 
 type listenErrorPrefixServer struct {

@@ -24,7 +24,7 @@ import (
 	"context"
 
 	appruntime "github.com/kapu/hololive-admin-api/internal/app/runtime"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
+	"github.com/park285/shared-go/pkg/runtime/httpserver"
 )
 
 func (r *AdminAPIRuntime) Run() {

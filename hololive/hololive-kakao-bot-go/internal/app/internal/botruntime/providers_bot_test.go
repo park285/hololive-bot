@@ -35,7 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
-	"github.com/park285/hololive-bot/shared-go/pkg/workerpool"
+	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"

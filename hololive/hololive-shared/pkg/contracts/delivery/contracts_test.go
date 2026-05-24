@@ -23,7 +23,7 @@ package delivery_test
 import (
 	"testing"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/json"
 
 	contractsdelivery "github.com/kapu/hololive-shared/pkg/contracts/delivery"
 	"github.com/kapu/hololive-shared/pkg/domain"

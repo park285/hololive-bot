@@ -29,7 +29,7 @@ import (
 	"sync"
 
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	"github.com/park285/hololive-bot/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/json"
 )
 
 type Settings struct {

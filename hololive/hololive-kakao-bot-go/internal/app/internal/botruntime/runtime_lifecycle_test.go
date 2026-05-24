@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 func TestBotRuntimeClose_CallsCleanup(t *testing.T) {

@@ -23,7 +23,7 @@ package holodexprovider
 import (
 	"context"
 	"fmt"
-	sharedjson "github.com/park285/hololive-bot/shared-go/pkg/json"
+	sharedjson "github.com/park285/shared-go/pkg/json"
 	"io"
 	"log/slog"
 	"net/http"

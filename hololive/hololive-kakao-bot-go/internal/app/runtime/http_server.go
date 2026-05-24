@@ -24,7 +24,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
+	"github.com/park285/shared-go/pkg/runtime/httpserver"
 	"github.com/quic-go/quic-go/http3"
 )
 

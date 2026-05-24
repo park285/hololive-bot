@@ -33,7 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/loop"
+	"github.com/park285/shared-go/pkg/runtime/loop"
 )
 
 const defaultTelemetryRetention = 24 * time.Hour

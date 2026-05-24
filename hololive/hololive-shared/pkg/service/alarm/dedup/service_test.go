@@ -38,8 +38,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
-	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
+	json "github.com/park285/shared-go/pkg/json"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
 var newTestLogger = sharedlogging.NewLogger

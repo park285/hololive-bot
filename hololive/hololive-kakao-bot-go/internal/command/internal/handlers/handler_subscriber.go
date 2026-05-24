@@ -27,7 +27,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )

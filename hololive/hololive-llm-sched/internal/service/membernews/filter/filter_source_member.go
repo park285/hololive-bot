@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"

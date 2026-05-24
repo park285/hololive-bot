@@ -10,21 +10,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/jsonutil"
+	"github.com/park285/shared-go/pkg/jsonutil"
 	"github.com/tech-engine/goscrapy/pkg/core"
 	"github.com/tech-engine/goscrapy/pkg/gos"
 	goslogger "github.com/tech-engine/goscrapy/pkg/logger"
-	"github.com/tech-engine/goscrapy/pkg/scheduler"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-const (
-	goscrapyRunnerWorkers       uint16        = 1
-	goscrapyRunnerReqResPool    uint64        = 2
-	goscrapyRunnerWorkQueueSize uint64        = 1
-	goscrapyRunnerPollInterval  time.Duration = 10 * time.Millisecond
-)
+const goscrapyRunnerPollInterval = 10 * time.Millisecond
 
 type goscrapyRunner interface {
 	Run(ctx context.Context, client *Client, req pageFetchRequest) (pageFetchResponse, bool, error)
@@ -107,15 +101,12 @@ func (defaultGoscrapyRunner) Run(ctx context.Context, client *Client, req pageFe
 	appCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	app := gos.New[struct{}](gos.WithClient(client.currentHTTPClient()))
-	limitedScheduler := scheduler.New(
-		app.Executor,
-		scheduler.WithWorkers(goscrapyRunnerWorkers),
-		scheduler.WithReqResPoolSize(goscrapyRunnerReqResPool),
-		scheduler.WithWorkQueueSize(goscrapyRunnerWorkQueueSize),
-	)
-	app.Scheduler = limitedScheduler
-	app.Engine.WithScheduler(limitedScheduler)
+	app, err := gos.New[struct{}](&gos.Config{
+		Client: client.currentHTTPClient(),
+	})
+	if err != nil {
+		return pageFetchResponse{}, false, fmt.Errorf("goscrapy init: %w", err)
+	}
 	app.WithLogger(goslogger.NewNoopLogger())
 
 	resultCh := make(chan goscrapyFetchResult, 1)

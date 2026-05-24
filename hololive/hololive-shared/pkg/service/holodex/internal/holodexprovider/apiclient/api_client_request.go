@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/jsonutil"
+	"github.com/park285/shared-go/pkg/jsonutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/util"

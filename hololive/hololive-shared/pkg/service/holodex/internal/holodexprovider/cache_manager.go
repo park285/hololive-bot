@@ -34,11 +34,11 @@ import (
 )
 
 type CacheManager struct {
-	cache  cache.Client
+	cache  cache.KeyValueCache
 	logger *slog.Logger
 }
 
-func NewCacheManager(cacheClient cache.Client, logger *slog.Logger) *CacheManager {
+func NewCacheManager(cacheClient cache.KeyValueCache, logger *slog.Logger) *CacheManager {
 	return &CacheManager{
 		cache:  cacheClient,
 		logger: logger,

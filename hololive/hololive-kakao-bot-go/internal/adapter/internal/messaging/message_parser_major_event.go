@@ -22,7 +22,7 @@ package messaging
 
 import (
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 func (ma *MessageAdapter) isMajorEventCommand(cmd string) bool {

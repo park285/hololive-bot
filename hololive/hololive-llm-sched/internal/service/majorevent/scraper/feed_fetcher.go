@@ -27,7 +27,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/pkg/httputil"
 )
 
 // FeedFetcher는 RSS 원문을 HTTP로 가져온다.

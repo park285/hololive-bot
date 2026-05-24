@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
 // newTestLogger: 테스트용 무음 slog 로거를 반환합니다.

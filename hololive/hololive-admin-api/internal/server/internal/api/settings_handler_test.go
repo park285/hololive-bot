@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
+	json "github.com/park285/shared-go/pkg/json"
 
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"

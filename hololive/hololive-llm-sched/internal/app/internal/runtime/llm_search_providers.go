@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/pkg/httputil"
 
 	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 	mesummarizer "github.com/kapu/hololive-llm-sched/internal/service/majorevent/summarizer"

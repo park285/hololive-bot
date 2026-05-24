@@ -9,7 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/hololive-bot/shared-go/pkg/backoff"
+	"github.com/park285/shared-go/pkg/backoff"
 )
 
 type alarmDispatchWakeupWaitResult string
@@ -20,7 +20,7 @@ const (
 )
 
 type alarmDispatchWakeupWaiter struct {
-	cache         cache.Client
+	cache         cache.LowLevelCache
 	wakeupEnabled bool
 	pollInterval  time.Duration
 	backoffMin    time.Duration
@@ -31,7 +31,7 @@ type alarmDispatchWakeupWaiter struct {
 	logger        *slog.Logger
 }
 
-func newAlarmDispatchWakeupWaiter(c cache.Client, logger *slog.Logger) *alarmDispatchWakeupWaiter {
+func newAlarmDispatchWakeupWaiter(c cache.LowLevelCache, logger *slog.Logger) *alarmDispatchWakeupWaiter {
 	waiter := &alarmDispatchWakeupWaiter{
 		cache:         c,
 		wakeupEnabled: parseBoolEnv("ALARM_DISPATCH_WAKEUP_ENABLED", true),

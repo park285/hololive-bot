@@ -27,7 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 func (as *AlarmService) CacheMemberName(ctx context.Context, channelID, memberName string) error {

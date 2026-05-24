@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/hololive-bot/shared-go/pkg/backoff"
+	"github.com/park285/shared-go/pkg/backoff"
 )
 
 const (

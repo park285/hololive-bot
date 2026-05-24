@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -21,7 +21,7 @@ import (
 
 type Service struct {
 	httpClient      *http.Client
-	cache           cache.Client
+	cache           cache.StreamCache
 	membersData     domain.MemberDataProvider
 	memberNameMap   map[string]string
 	logger          *slog.Logger
@@ -45,7 +45,7 @@ type officialSchedulePageCache struct {
 }
 
 func NewService(
-	cacheClient cache.Client,
+	cacheClient cache.StreamCache,
 	membersData domain.MemberDataProvider,
 	youtubeProxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
@@ -60,7 +60,7 @@ func NewService(
 }
 
 func NewServiceWithYouTubeProducer(
-	cacheClient cache.Client,
+	cacheClient cache.StreamCache,
 	membersData domain.MemberDataProvider,
 	youtubeProducer *scraper.Client,
 	logger *slog.Logger,
@@ -259,6 +259,6 @@ func (s *Service) GetPopularVideos(ctx context.Context, channelID string, maxRes
 	return videos, nil
 }
 
-func NewTestService(cacheClient cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger) *Service {
+func NewTestService(cacheClient cache.StreamCache, membersData domain.MemberDataProvider, logger *slog.Logger) *Service {
 	return NewServiceWithYouTubeProducer(cacheClient, membersData, nil, logger)
 }

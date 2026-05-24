@@ -77,14 +77,14 @@ type Decision struct {
 }
 
 type SlidingWindowLimiter struct {
-	cacheClient cache.Client
+	cacheClient cache.LowLevelCache
 	keyPrefix   string
 	logger      *slog.Logger
 	instanceID  string
 	sequence    atomic.Uint64
 }
 
-func NewSlidingWindowLimiter(cacheClient cache.Client, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
+func NewSlidingWindowLimiter(cacheClient cache.LowLevelCache, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
 	if cacheClient == nil {
 		return nil, fmt.Errorf("new sliding window limiter: cache service must not be nil")
 	}

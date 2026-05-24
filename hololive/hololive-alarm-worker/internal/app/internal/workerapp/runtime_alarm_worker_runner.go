@@ -24,7 +24,7 @@ import (
 	"context"
 
 	appruntime "github.com/kapu/hololive-alarm-worker/internal/app/runtime"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
+	"github.com/park285/shared-go/pkg/runtime/httpserver"
 	"golang.org/x/sync/errgroup"
 )
 

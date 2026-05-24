@@ -104,7 +104,7 @@ type StreamHandler struct {
 	Logger               *slog.Logger
 	Holodex              *holodex.Service
 	YouTube              youtube.Service
-	ValkeyCache          cache.Client
+	ValkeyCache          cache.KeyValueCache
 	StatsRepository      ytstats.StatsDashboardRepository
 	MemberRepository     StreamMemberRepository
 	MemberIndexLoader    func(context.Context) ([]*domain.Member, error)

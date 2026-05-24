@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
 	"github.com/park285/iris-client-go/iris"
+	json "github.com/park285/shared-go/pkg/json"
 )
 
 const alarmDispatchKaringMaxItemsPerRequest = 4
