@@ -130,32 +130,48 @@ func runMemberNewsDigest(
 	config digestDispatchConfig,
 ) error {
 	config.processRoom = processRoom
-	return schedulerkit.RunDigest(ctx, digest, schedulerkit.DigestOp[[]model.SubscribedRoom]{
+	return schedulerkit.RunDigest(ctx, digest, buildDigestOp(digest, service, config))
+}
+
+func buildDigestOp(
+	digest *schedulerkit.DigestScheduler,
+	service model.DigestService,
+	config digestDispatchConfig,
+) schedulerkit.DigestOp[[]model.SubscribedRoom] {
+	return schedulerkit.DigestOp[[]model.SubscribedRoom]{
 		LockKey: config.lockKey,
 		OnLockNotAcquired: func() error {
 			digest.Logger.Info(config.lockSkipMessage, slog.String(config.periodFieldName, config.periodKey))
 			return nil
 		},
-		Collect: func(ctx context.Context) ([]model.SubscribedRoom, bool, error) {
-			rooms, err := service.ListSubscribedRooms(ctx)
-			if err != nil {
-				return nil, false, fmt.Errorf("list subscribed rooms: %w", err)
-			}
-			if len(rooms) == 0 {
-				digest.Logger.Info(config.skipMessage)
-				return nil, false, nil
-			}
-			return rooms, true, nil
-		},
-		Execute: func(ctx context.Context, rooms []model.SubscribedRoom) error {
-			result := dispatchDigestRooms(ctx, rooms, config)
-			logDigestResult(digest.Logger, config, result)
-			if result.Sent == 0 && result.Failed > 0 {
-				return fmt.Errorf(config.allFailedMessage, result.Failed)
-			}
-			return nil
-		},
-	})
+		Collect: collectSubscribedRooms(service, digest.Logger, config.skipMessage),
+		Execute: executeDigestDispatch(digest.Logger, config),
+	}
+}
+
+func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, skipMsg string) func(context.Context) ([]model.SubscribedRoom, bool, error) {
+	return func(ctx context.Context) ([]model.SubscribedRoom, bool, error) {
+		rooms, err := service.ListSubscribedRooms(ctx)
+		if err != nil {
+			return nil, false, fmt.Errorf("list subscribed rooms: %w", err)
+		}
+		if len(rooms) == 0 {
+			logger.Info(skipMsg)
+			return nil, false, nil
+		}
+		return rooms, true, nil
+	}
+}
+
+func executeDigestDispatch(logger *slog.Logger, config digestDispatchConfig) func(context.Context, []model.SubscribedRoom) error {
+	return func(ctx context.Context, rooms []model.SubscribedRoom) error {
+		result := dispatchDigestRooms(ctx, rooms, config)
+		logDigestResult(logger, config, result)
+		if result.Sent == 0 && result.Failed > 0 {
+			return fmt.Errorf(config.allFailedMessage, result.Failed)
+		}
+		return nil
+	}
 }
 
 func logDigestResult(logger *slog.Logger, config digestDispatchConfig, result delivery.SendResult) {

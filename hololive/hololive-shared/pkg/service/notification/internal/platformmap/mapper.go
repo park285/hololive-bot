@@ -25,19 +25,28 @@ const (
 	AlarmChannelRegistryKey       = sharedalarmkeys.AlarmChannelRegistryKey
 )
 
+type MemberDataFunc func() domain.MemberDataProvider
+
 type Mapper struct {
-	cache      cache.Client
-	memberData domain.MemberDataProvider
-	logger     *slog.Logger
-	mu         sync.Mutex
+	cache        cache.Client
+	memberDataFn MemberDataFunc
+	logger       *slog.Logger
+	mu           sync.Mutex
 }
 
-func NewMapper(cacheClient cache.Client, memberData domain.MemberDataProvider, logger *slog.Logger) *Mapper {
+func NewMapper(cacheClient cache.Client, memberDataFn MemberDataFunc, logger *slog.Logger) *Mapper {
 	return &Mapper{
-		cache:      cacheClient,
-		memberData: memberData,
-		logger:     logger,
+		cache:        cacheClient,
+		memberDataFn: memberDataFn,
+		logger:       logger,
 	}
+}
+
+func (m *Mapper) memberData() domain.MemberDataProvider {
+	if m.memberDataFn == nil {
+		return nil
+	}
+	return m.memberDataFn()
 }
 
 func (m *Mapper) SyncAll(ctx context.Context) error {
@@ -45,7 +54,8 @@ func (m *Mapper) SyncAll(ctx context.Context) error {
 		return errors.New("cache service not configured")
 	}
 
-	if m.memberData == nil {
+	memberData := m.memberData()
+	if memberData == nil {
 		return errors.New("member data provider not configured")
 	}
 
@@ -57,7 +67,7 @@ func (m *Mapper) SyncAll(ctx context.Context) error {
 		return fmt.Errorf("get channel registry: %w", err)
 	}
 
-	chzzkMappings, twitchMappings, twitchChannelMappings := m.collectPlatformMappings(channelIDs)
+	chzzkMappings, twitchMappings, twitchChannelMappings := m.collectPlatformMappings(memberData, channelIDs)
 
 	if err := m.replaceHashMappingsWithEmptyMarker(ctx, ChzzkChannelMapKey, ChzzkChannelMapEmptyKey, chzzkMappings); err != nil {
 		return fmt.Errorf("sync chzzk channel mappings: %w", err)
@@ -107,25 +117,26 @@ func (m *Mapper) SyncForChannel(ctx context.Context, channelID string) error {
 	return m.syncRegisteredMappingForChannel(ctx, channelID)
 }
 
-func (m *Mapper) collectPlatformMappings(channelIDs []string) (map[string]string, map[string]string, map[string]string) {
+func (m *Mapper) collectPlatformMappings(memberData domain.MemberDataProvider, channelIDs []string) (map[string]string, map[string]string, map[string]string) {
 	chzzkMappings := make(map[string]string, len(channelIDs))
 	twitchMappings := make(map[string]string, len(channelIDs))
 	twitchChannelMappings := make(map[string]string, len(channelIDs))
 
 	for _, channelID := range channelIDs {
-		m.collectMappingForChannel(channelID, chzzkMappings, twitchMappings, twitchChannelMappings)
+		m.collectMappingForChannel(memberData, channelID, chzzkMappings, twitchMappings, twitchChannelMappings)
 	}
 
 	return chzzkMappings, twitchMappings, twitchChannelMappings
 }
 
 func (m *Mapper) collectMappingForChannel(
+	memberData domain.MemberDataProvider,
 	channelID string,
 	chzzkMappings map[string]string,
 	twitchMappings map[string]string,
 	twitchChannelMappings map[string]string,
 ) {
-	member := m.memberData.FindMemberByChannelID(channelID)
+	member := memberData.FindMemberByChannelID(channelID)
 	if member == nil {
 		m.logUnknownChannel(channelID)
 		return
@@ -175,7 +186,7 @@ func (m *Mapper) validateDependencies() error {
 	if m.cache == nil {
 		return errors.New("cache service not configured")
 	}
-	if m.memberData == nil {
+	if m.memberData() == nil {
 		return errors.New("member data provider not configured")
 	}
 	return nil
@@ -189,7 +200,7 @@ func (m *Mapper) removeStaleMappingsForChannel(ctx context.Context, channelID st
 }
 
 func (m *Mapper) syncRegisteredMappingForChannel(ctx context.Context, channelID string) error {
-	member := m.memberData.FindMemberByChannelID(channelID)
+	member := m.memberData().FindMemberByChannelID(channelID)
 	if member == nil {
 		return m.removeUnknownMappingsForChannel(ctx, channelID)
 	}
