@@ -31,6 +31,8 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap"
 
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"

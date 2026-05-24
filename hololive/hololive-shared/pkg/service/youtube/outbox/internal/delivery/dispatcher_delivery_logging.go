@@ -71,37 +71,7 @@ func (d *Dispatcher) logCommunityShortsDeliveryAttemptStarted(
 	attemptStartedAt time.Time,
 	deliveryMode string,
 ) {
-	limit := min(len(outboxes), len(rows))
-	if limit == 0 {
-		return
-	}
-
-	attemptStartedAt = attemptStartedAt.UTC()
-	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
-	limitedRows := rows[:limit]
-	limitedOutboxes := outboxes[:limit]
-
-	for i := range limitedOutboxes {
-		outbox := limitedOutboxes[i]
-		if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
-			continue
-		}
-
-		d.logger.Info(deliveryAttemptStartedLogMessage,
-			slog.Int64(logschema.FieldDeliveryID, limitedRows[i].ID),
-			slog.Int64(logschema.FieldOutboxID, outbox.ID),
-			slog.String(logschema.FieldRoomID, limitedRows[i].RoomID),
-			slog.String(logschema.FieldChannelID, outbox.ChannelID),
-			slog.String(deliveryAuditPostIDLogField, resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload)),
-			slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
-			slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
-			slog.Time(deliveryAttemptStartedAtLogField, attemptStartedAt),
-			slog.Int(logschema.FieldAttemptOrdinal, deliveryAttemptOrdinal(limitedRows[i])),
-			slog.String(deliveryAuditPathLogField, deliveryPath),
-			slog.String(deliveryAuditModeLogField, deliveryMode),
-			slog.String(deliveryDedupeKeyLogField, dedupeKeyLogValue(outbox)),
-		)
-	}
+	d.auditLogger.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, deliveryMode)
 }
 
 func (d *Dispatcher) logCommunityShortsDeliveryResult(
@@ -112,50 +82,7 @@ func (d *Dispatcher) logCommunityShortsDeliveryResult(
 	sendResult string,
 	failureReason string,
 ) {
-	if d == nil || d.logger == nil {
-		return
-	}
-
-	limit := min(len(outboxes), len(rows))
-	if limit == 0 {
-		return
-	}
-
-	sentAt = sentAt.UTC()
-	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
-	summary := summarizeCommunityShortsDeliveryResult(rows[:limit], outboxes[:limit])
-	if summary.alarmCount == 0 {
-		return
-	}
-
-	roomCount := len(summary.uniqueRooms)
-	successfulAlarmCount, failedAlarmCount, successfulRoomCount, failedRoomCount := deliveryResultCounts(sendResult, summary.alarmCount, roomCount)
-
-	attrs := []any{
-		slog.String(logschema.FieldChannelID, summary.channelID),
-		slog.String(deliveryAuditAlarmTypeLogField, string(summary.alarmType)),
-		slog.Time(deliveryAuditSentAtLogField, sentAt),
-		slog.String(deliveryAuditSendResultLogField, sendResult),
-		slog.String(deliveryAuditPathLogField, deliveryPath),
-		slog.String(deliveryAuditModeLogField, deliveryMode),
-		slog.Int(logschema.FieldTargetAlarmCount, summary.alarmCount),
-		slog.Int(logschema.FieldSuccessfulAlarmCount, successfulAlarmCount),
-		slog.Int(logschema.FieldFailedAlarmCount, failedAlarmCount),
-		slog.Int(logschema.FieldTargetRoomCount, roomCount),
-		slog.Int(logschema.FieldSuccessfulRoomCount, successfulRoomCount),
-		slog.Int(logschema.FieldFailedRoomCount, failedRoomCount),
-	}
-	if roomCount == 1 {
-		for roomID := range summary.uniqueRooms {
-			attrs = append(attrs, slog.String(logschema.FieldRoomID, roomID))
-			break
-		}
-	}
-	if trimmedReason := strings.TrimSpace(failureReason); trimmedReason != "" {
-		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, truncateString(trimmedReason, 100)))
-	}
-
-	d.logger.Info(deliveryResultLogMessage, attrs...)
+	d.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, deliveryMode, sendResult, failureReason)
 }
 
 type communityShortsDeliveryResultSummary struct {
@@ -224,32 +151,7 @@ func (d *Dispatcher) logCommunityShortsDeliveryAudit(
 	failureReason string,
 	sendErr error,
 ) {
-	limit := min(len(outboxes), len(rows))
-	if limit == 0 {
-		return
-	}
-
-	sentAt = sentAt.UTC()
-	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
-	events := buildCommunityShortsDeliveryAuditEvents(
-		rows[:limit],
-		outboxes[:limit],
-		sentAt,
-		deliveryPath,
-		deliveryMode,
-		sendResult,
-		failureReason,
-	)
-	if len(events) == 0 {
-		return
-	}
-
-	preparedEvents, telemetryAvailable := d.prepareCommunityShortsDeliveryAuditEvents(ctx, events)
-	if telemetryAvailable && d.enqueueCommunityShortsDeliveryAuditEvents(ctx, preparedEvents) {
-		return
-	}
-
-	d.logCommunityShortsDeliveryAuditFallback(ctx, preparedEvents, sendErr)
+	d.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, sentAt, deliveryMode, sendResult, failureReason, sendErr)
 }
 
 func buildCommunityShortsDeliveryAuditEvents(
@@ -314,38 +216,14 @@ func (d *Dispatcher) prepareCommunityShortsDeliveryAuditEvents(
 	ctx context.Context,
 	events []domain.YouTubeNotificationDeliveryTelemetry,
 ) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {
-	if d.telemetry == nil {
-		return events, false
-	}
-
-	prepared, err := d.telemetry.prepareRows(ctx, events)
-	if err != nil {
-		d.logger.Warn("Failed to enrich persistent delivery audit",
-			slog.Int("events", len(events)),
-			slog.Any("error", err))
-		return events, false
-	}
-	return prepared, true
+	return d.auditLogger.prepareCommunityShortsDeliveryAuditEvents(ctx, events)
 }
 
 func (d *Dispatcher) enqueueCommunityShortsDeliveryAuditEvents(
 	ctx context.Context,
 	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
 ) bool {
-	enqueueErr := d.telemetry.enqueuePrepared(ctx, preparedEvents)
-	if enqueueErr != nil {
-		d.logger.Warn("Failed to enqueue persistent delivery audit",
-			slog.Int("events", len(preparedEvents)),
-			slog.Any("error", enqueueErr))
-		return false
-	}
-
-	if err := d.telemetry.PersistPostLatencyClassificationsByOutboxIDs(ctx, collectTelemetryOutboxIDs(preparedEvents)); err != nil {
-		d.logger.Warn("Failed to persist post latency classifications",
-			slog.Int("events", len(preparedEvents)),
-			slog.Any("error", err))
-	}
-	return true
+	return d.auditLogger.enqueueCommunityShortsDeliveryAuditEvents(ctx, preparedEvents)
 }
 
 func (d *Dispatcher) logCommunityShortsDeliveryAuditFallback(
@@ -353,20 +231,12 @@ func (d *Dispatcher) logCommunityShortsDeliveryAuditFallback(
 	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
 	sendErr error,
 ) {
-	fallbackClassificationsByOutboxID, err := d.loadDeliveryTelemetryLatencyClassifications(ctx, preparedEvents)
-	if err != nil {
-		d.logger.Warn("Failed to load fallback delivery telemetry latency classifications",
-			slog.Int("events", len(preparedEvents)),
-			slog.Any("error", err))
-	}
+	d.auditLogger.logCommunityShortsDeliveryAuditFallback(ctx, preparedEvents, sendErr)
+}
 
-	for i := range preparedEvents {
-		attrs := buildDeliveryAuditLogAttrsWithClassification(preparedEvents[i], fallbackClassificationsByOutboxID[preparedEvents[i].OutboxID])
-		attrs = append(attrs, slog.String(logschema.FieldTelemetrySource, "direct_fallback"))
-		if sendErr != nil {
-			attrs = append(attrs, slog.String("error", sendErr.Error()))
-		}
-
-		d.logger.Info(deliveryAuditLogMessage, attrs...)
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
 	}
+	return s[:maxLen]
 }
