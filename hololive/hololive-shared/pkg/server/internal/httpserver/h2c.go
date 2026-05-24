@@ -23,7 +23,6 @@ package httpserver
 import (
 	"net/http"
 
-	//lint:ignore SA1019 http.Server.Protocols 전환 별도 진행
 	"golang.org/x/net/http2"
 	//lint:ignore SA1019 http.Server.Protocols 전환 별도 진행
 	"golang.org/x/net/http2/h2c"
