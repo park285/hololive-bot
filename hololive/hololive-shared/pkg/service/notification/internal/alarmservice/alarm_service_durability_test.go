@@ -216,14 +216,14 @@ func TestCacheAddAlarmMutationFailureLogsWrappedEvent(t *testing.T) {
 	})
 
 	logger := slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
-	memberData := &mockMemberDataProvider{members: []*domain.Member{}}
 	as := &AlarmService{
-		cache:          cacheMock,
-		logger:         logger,
-		memberData:     memberData,
-		cacheState:     alarmcache.NewState(cacheMock, memberData, logger),
-		platformMapper: platformmap.NewMapper(cacheMock, memberData, logger),
+		cache:      cacheMock,
+		logger:     logger,
+		memberData: &mockMemberDataProvider{members: []*domain.Member{}},
 	}
+	memberDataFn := func() domain.MemberDataProvider { return as.memberData }
+	as.cacheState = alarmcache.NewState(cacheMock, memberDataFn, logger)
+	as.platformMapper = platformmap.NewMapper(cacheMock, memberDataFn, logger)
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }
 
 	_, err := as.cacheAddAlarmMutation(ctx, addAlarmMutation{
@@ -518,11 +518,12 @@ func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
 
 			warnLogger := slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn}))
 			as := &AlarmService{
-				cache:          cacheMock,
-				logger:         warnLogger,
-				cacheState:     alarmcache.NewState(cacheMock, nil, warnLogger),
-				platformMapper: platformmap.NewMapper(cacheMock, nil, warnLogger),
+				cache:  cacheMock,
+				logger: warnLogger,
 			}
+			memberDataFn := func() domain.MemberDataProvider { return as.memberData }
+			as.cacheState = alarmcache.NewState(cacheMock, memberDataFn, warnLogger)
+			as.platformMapper = platformmap.NewMapper(cacheMock, memberDataFn, warnLogger)
 
 			tt.run(ctx, as)
 
@@ -616,16 +617,16 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 	})
 
 	discardLogger := newDiscardAlarmLogger()
-	rebuildMemberData := &mockMemberDataProvider{members: []*domain.Member{}}
 	as := &AlarmService{
 		cache:           cacheMock,
 		logger:          discardLogger,
-		memberData:      rebuildMemberData,
+		memberData:      &mockMemberDataProvider{members: []*domain.Member{}},
 		alarmRepository: &sharedalarm.Repository{},
 		alarmWriter:     &stubAlarmWriter{},
-		cacheState:      alarmcache.NewState(cacheMock, rebuildMemberData, discardLogger),
-		platformMapper:  platformmap.NewMapper(cacheMock, rebuildMemberData, discardLogger),
 	}
+	rebuildMemberDataFn := func() domain.MemberDataProvider { return as.memberData }
+	as.cacheState = alarmcache.NewState(cacheMock, rebuildMemberDataFn, discardLogger)
+	as.platformMapper = platformmap.NewMapper(cacheMock, rebuildMemberDataFn, discardLogger)
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }
 
 	originalRebuild := rebuildSubscriberCacheFromRepository

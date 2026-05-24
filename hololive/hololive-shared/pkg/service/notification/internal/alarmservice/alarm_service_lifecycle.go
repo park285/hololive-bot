@@ -84,9 +84,10 @@ func NewAlarmService(
 		alarmWriter:     writer,
 		logger:          logger,
 		targetPolicy:    targetPolicy,
-		cacheState:      alarmcache.NewState(cacheClient, memberData, logger),
-		platformMapper:  platformmap.NewMapper(cacheClient, memberData, logger),
 	}
+	memberDataFn := func() domain.MemberDataProvider { return service.memberData }
+	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
+	service.platformMapper = platformmap.NewMapper(cacheClient, memberDataFn, logger)
 
 	registerAlarmService(service)
 

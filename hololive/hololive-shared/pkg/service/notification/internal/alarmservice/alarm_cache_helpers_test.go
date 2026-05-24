@@ -188,7 +188,8 @@ func TestResolveStreamChannelID(t *testing.T) {
 func TestBuildUpcomingEventKey(t *testing.T) {
 	t.Parallel()
 
-	as := &AlarmService{cacheState: alarmcache.NewState(nil, nil, nil)}
+	as := &AlarmService{}
+	as.cacheState = alarmcache.NewState(nil, nil, nil)
 	start := time.Date(2026, time.March, 2, 10, 30, 59, 0, time.UTC)
 	key := as.buildUpcomingEventKey("room1", "channel1", "stream1", "Title", start)
 

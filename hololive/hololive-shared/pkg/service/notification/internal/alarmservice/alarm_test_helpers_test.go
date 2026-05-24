@@ -82,11 +82,13 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	cacheClient := newTestCacheService(ctx, t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	return &AlarmService{
-		cache:          cacheClient,
-		logger:         logger,
-		targetPolicy:   sharedchecker.NewTargetMinutePolicyFromConfigured([]int{30, 15, 5, 1}),
-		cacheState:     alarmcache.NewState(cacheClient, nil, logger),
-		platformMapper: platformmap.NewMapper(cacheClient, nil, logger),
+	service := &AlarmService{
+		cache:        cacheClient,
+		logger:       logger,
+		targetPolicy: sharedchecker.NewTargetMinutePolicyFromConfigured([]int{30, 15, 5, 1}),
 	}
+	memberDataFn := func() domain.MemberDataProvider { return service.memberData }
+	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
+	service.platformMapper = platformmap.NewMapper(cacheClient, memberDataFn, logger)
+	return service
 }
