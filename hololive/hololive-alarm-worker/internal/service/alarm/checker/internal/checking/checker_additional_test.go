@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -39,37 +38,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 func TestCheckerConstructorsValidation(t *testing.T) {
 	t.Parallel()
-
-	t.Run("new chzzk checker nil deps", func(t *testing.T) {
-		_, err := NewChzzkChecker(nil, &chzzk.Client{}, newCheckerTestLogger())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "cache service is nil")
-
-		cache := newCheckerTestCacheClient(t)
-
-		_, err = NewChzzkChecker(cache, nil, newCheckerTestLogger())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "chzzk client is nil")
-	})
-
-	t.Run("new twitch checker nil deps", func(t *testing.T) {
-		_, err := NewTwitchChecker(nil, &twitch.Client{}, newCheckerTestLogger())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "cache service is nil")
-
-		cache := newCheckerTestCacheClient(t)
-
-		_, err = NewTwitchChecker(cache, nil, newCheckerTestLogger())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "twitch client is nil")
-	})
 
 	t.Run("new youtube checker validation and success", func(t *testing.T) {
 		cache := newCheckerTestCacheClient(t)
@@ -108,20 +81,6 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 
 		checker.UpdateTargetMinutes([]int{15, 0, 15, 3})
 		assert.Equal(t, []int{15, 3, 1}, checker.targetMinutesSnapshot())
-	})
-
-	t.Run("new notifier nil deps", func(t *testing.T) {
-		cache := newCheckerTestCacheClient(t)
-		dedupService := dedup.NewService(cache, []int{5, 3, 1}, newCheckerTestLogger())
-		queuePublisher := queue.NewPublisher(cache, newCheckerTestLogger())
-
-		_, err := NewNotifier(nil, queuePublisher, nil, newCheckerTestLogger())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "dedup service is nil")
-
-		_, err = NewNotifier(dedupService, nil, nil, newCheckerTestLogger())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "queue publisher is nil")
 	})
 }
 
@@ -274,165 +233,6 @@ func (c *countingCheckerCacheClient) DoMulti(ctx context.Context, cmds ...valkey
 func (c *countingCheckerCacheClient) SMembers(ctx context.Context, key string) ([]string, error) {
 	c.sMembersCalls++
 	return c.Client.SMembers(ctx, key)
-}
-
-func TestChzzkHelperFunctions(t *testing.T) {
-	t.Parallel()
-
-	assert.False(t, isChzzkLive(nil))
-	assert.True(t, isChzzkLive(&chzzk.LiveStatusContent{Status: "OPEN"}))
-	assert.True(t, isChzzkLive(&chzzk.LiveStatusContent{Status: "open"}))
-	assert.False(t, isChzzkLive(&chzzk.LiveStatusContent{Status: "CLOSE"}))
-
-	detected := time.Date(2026, time.March, 5, 2, 4, 59, 0, time.UTC)
-	assert.Equal(
-		t,
-		notification.ChzzkLiveNotifiedKeyPrefix+"chzzk1:20260305T0200",
-		buildChzzkLiveDedupKey("chzzk1", detected),
-	)
-
-	stream := buildChzzkLiveStream("yt1", "chzzk1", "", nil, detected)
-	require.NotNil(t, stream)
-	assert.Equal(t, domain.StreamStatusLive, stream.Status)
-	assert.Equal(t, "치지직 라이브", stream.Title)
-	assert.Equal(t, "yt1", stream.ChannelID)
-	assert.Equal(t, "yt1", stream.ChannelName)
-	assert.True(t, stream.IsChzzkOnly)
-	assert.Equal(t, "https://chzzk.naver.com/live/chzzk1", stream.ChzzkLiveURL)
-
-	status := &chzzk.LiveStatusContent{
-		Status:              "OPEN",
-		LiveTitle:           "  치지직 타이틀  ",
-		LiveCategoryValue:   "게임",
-		ConcurrentUserCount: 777,
-	}
-
-	stream = buildChzzkLiveStream("yt2", "chzzk2", "라덴", status, detected)
-	require.NotNil(t, stream.ViewerCount)
-	assert.Equal(t, 777, *stream.ViewerCount)
-	assert.Equal(t, "치지직 타이틀", stream.Title)
-	assert.Equal(t, "라덴", stream.ChannelName)
-}
-
-func TestTwitchHelperFunctions(t *testing.T) {
-	t.Parallel()
-
-	mappings, channelIDs := normalizeTwitchLoginMappings(map[string]string{
-		" Aqua ": " ch1 ",
-		"":       "ch2",
-		"SuI":    "",
-	})
-	require.Len(t, mappings, 1)
-	assert.Equal(t, "ch1", mappings["aqua"])
-	assert.Equal(t, []string{"ch1"}, channelIDs)
-
-	lookup := buildTwitchLookupLogins(
-		map[string]string{"aqua": "ch1", "sui": "ch2"},
-		map[string][]string{"ch1": {"room1"}, "ch2": {}},
-	)
-	assert.Equal(t, []string{"aqua"}, lookup)
-
-	assert.Equal(t, twitchLiveNotifiedKeyPrefix+"u1:s1", buildTwitchLiveDedupKey("u1", "s1"))
-
-	assert.Nil(t, buildTwitchLiveStream("yt", "", nil))
-
-	startedAt := time.Date(2026, time.March, 5, 3, 0, 0, 0, time.UTC)
-	stream := buildTwitchLiveStream("yt1", "아쿠아", &twitch.StreamData{
-		ID:          "stream-1",
-		UserID:      "user-1",
-		UserLogin:   " Aqua ",
-		UserName:    "AquaName",
-		Title:       "  Twitch Live  ",
-		ViewerCount: 321,
-		StartedAt:   startedAt,
-		Type:        "live",
-	})
-	require.NotNil(t, stream)
-	assert.Equal(t, domain.StreamStatusLive, stream.Status)
-	assert.Equal(t, "yt1", stream.ChannelID)
-	assert.Equal(t, "아쿠아", stream.ChannelName)
-	assert.Equal(t, "Twitch Live", stream.Title)
-	assert.Equal(t, "twitch:user-1:stream-1", stream.ID)
-	require.NotNil(t, stream.ViewerCount)
-	assert.Equal(t, 321, *stream.ViewerCount)
-	assert.Equal(t, "user-1", stream.TwitchUserID)
-	assert.Equal(t, "aqua", stream.TwitchUserLogin)
-	assert.Equal(t, "stream-1", stream.TwitchStreamID)
-	assert.Equal(t, "https://twitch.tv/aqua", stream.TwitchLiveURL)
-	assert.True(t, stream.IsTwitchOnly)
-
-	fallback := buildTwitchLiveStream("yt2", "", &twitch.StreamData{
-		ID:        "stream-2",
-		UserLogin: "NoID",
-		StartedAt: startedAt,
-		Type:      "live",
-	})
-	require.NotNil(t, fallback)
-	assert.Equal(t, "twitch:noid:stream-2", fallback.ID)
-	assert.Equal(t, "noid", fallback.TwitchUserID)
-	assert.Equal(t, "NoID", fallback.ChannelName)
-	assert.Equal(t, "Twitch 라이브", fallback.Title)
-}
-
-func TestTwitchBuildLiveNotifications(t *testing.T) {
-	t.Parallel()
-
-	startedAt := time.Date(2026, time.March, 5, 4, 0, 0, 0, time.UTC)
-	liveResponse := &twitch.StreamsResponse{
-		Data: []twitch.StreamData{
-			{
-				ID:        "stream-1",
-				UserID:    "user-1",
-				UserLogin: "AQUA",
-				UserName:  "Aqua",
-				Title:     "live now",
-				Type:      "live",
-				StartedAt: startedAt,
-			},
-			{
-				ID:        "stream-2",
-				UserID:    "user-2",
-				UserLogin: "sui",
-				Type:      "", // not live
-				StartedAt: startedAt,
-			},
-		},
-	}
-
-	t.Run("success without checker-level dedup preclaim", func(t *testing.T) {
-		setNXCalls := 0
-		checker := &TwitchChecker{
-			cacheClient: &cachemocks.Client{
-				SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
-					setNXCalls++
-					return false, errors.New("checker must not preclaim dedup")
-				},
-			},
-			logger: newCheckerTestLogger(),
-		}
-
-		notifications, err := checker.buildLiveNotifications(
-			t.Context(),
-			map[string]string{"aqua": "ch1"},
-			map[string][]string{"ch1": {"room1", "room2"}},
-			map[string]string{"ch1": "아쿠아"},
-			liveResponse,
-		)
-		require.NoError(t, err)
-		require.Len(t, notifications, 2)
-		assert.ElementsMatch(t, []string{"room1", "room2"}, []string{notifications[0].RoomID, notifications[1].RoomID})
-
-		notifications, err = checker.buildLiveNotifications(
-			t.Context(),
-			map[string]string{"aqua": "ch1"},
-			map[string][]string{"ch1": {"room1", "room2"}},
-			map[string]string{"ch1": "아쿠아"},
-			liveResponse,
-		)
-		require.NoError(t, err)
-		require.Len(t, notifications, 2)
-		assert.Equal(t, 0, setNXCalls, "checker must not preclaim dedup before queue publish")
-	})
 }
 
 func TestYouTubeHelperFunctions(t *testing.T) {
@@ -1051,23 +851,6 @@ func newTestYouTubeCheckerWithDedup(t *testing.T) (*YouTubeChecker, *dedup.Servi
 		logger:              newCheckerTestLogger(),
 	}
 	return checker, dedupService
-}
-
-func TestNotifierReleaseClaimsBestEffort(t *testing.T) {
-	t.Parallel()
-
-	notifier := &Notifier{
-		dedupService: dedup.NewService(&cachemocks.Client{
-			DelManyFunc: func(context.Context, []string) (int64, error) {
-				return 0, errors.New("delmany failed")
-			},
-		}, []int{5, 3, 1}, newCheckerTestLogger()),
-		logger: newCheckerTestLogger(),
-	}
-
-	// error should be swallowed as best-effort path.
-	notifier.releaseClaimsBestEffort(t.Context(), []string{"claim-1"}, "release failed")
-	notifier.releaseClaimsBestEffort(t.Context(), nil, "release failed")
 }
 
 var _ cache.Client = (*cachemocks.Client)(nil)

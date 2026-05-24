@@ -22,12 +22,6 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-type shortsPollerRoundTripFunc func(req *http.Request) (*http.Response, error)
-
-func (f shortsPollerRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
-}
-
 func TestShortsPollerPollPersistsPublishedAtFromScrapeAndDetectedAt(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
