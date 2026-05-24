@@ -466,6 +466,7 @@ github.com/kapu/hololive-llm-sched/internal/llm -> github.com/park285/shared-go/
 github.com/kapu/hololive-llm-sched/internal/llm -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-llm-sched/internal/llm -> github.com/park285/shared-go/pkg/jsonutil
 github.com/kapu/hololive-llm-sched/internal/llm -> github.com/park285/shared-go/pkg/logging
+github.com/kapu/hololive-llm-sched/internal/schedulerkit -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-llm-sched/internal/service/majorevent -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-llm-sched/internal/service/majorevent -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler -> github.com/kapu/hololive-llm-sched/internal/schedulerkit
@@ -710,6 +711,13 @@ github.com/kapu/hololive-shared/pkg/service/member -> github.com/park285/shared-
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/member/mocks -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/notification -> github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice
+github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache -> github.com/kapu/hololive-shared/pkg/constants
+github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache -> github.com/kapu/hololive-shared/pkg/service/alarm
+github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache -> github.com/kapu/hololive-shared/pkg/service/alarm/keys
+github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache -> github.com/kapu/hololive-shared/pkg/service/cache
+github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache -> github.com/park285/shared-go/pkg/logging
+github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -> github.com/kapu/hololive-shared/pkg/service/alarm
