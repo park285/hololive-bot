@@ -88,7 +88,7 @@ func initializeMemberDatabase(
 // ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성
 func ProvideMemberServiceAdapter(ctx context.Context, memberCache *member.Cache, logger *slog.Logger) member.DataProvider {
 	if ctx == nil {
-		ctx = context.TODO()
+		ctx = context.Background()
 	} else {
 		ctx = context.WithoutCancel(ctx)
 	}

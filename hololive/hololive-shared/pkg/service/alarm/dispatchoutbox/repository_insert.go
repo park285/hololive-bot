@@ -236,3 +236,163 @@ func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (int, int, 
 	}
 	return selected, inserted, nil
 }
+
+func (r *PgxRepository) InsertShadowed(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*Record, error) {
+	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusShadowed})
+	if err != nil {
+		return nil, err
+	}
+	if result.InsertedDeliveries == 0 {
+		return r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
+	}
+	return r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
+}
+
+func (r *PgxRepository) InsertPending(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
+	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
+	if err != nil {
+		return nil, "", err
+	}
+	record, err := r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
+	if err != nil {
+		return nil, "", err
+	}
+	if result.InsertedDeliveries > 0 {
+		return record, Inserted, nil
+	}
+	switch record.Status {
+	case StatusShadowed:
+		return record, DuplicateShadowed, nil
+	case StatusSent, StatusDLQ, StatusQuarantined, StatusCancelled:
+		return record, DuplicateTerminal, nil
+	default:
+		return record, DuplicateActive, nil
+	}
+}
+
+func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput) (PublishBatchResult, error) {
+	if r == nil || r.pool == nil {
+		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: postgres pool is nil")
+	}
+	status := input.Status
+	if status == "" {
+		status = StatusPending
+	}
+	if status != StatusPending && status != StatusShadowed {
+		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: unsupported status %q", status)
+	}
+	result := PublishBatchResult{RequestedDeliveries: len(input.Envelopes)}
+	if len(input.Envelopes) == 0 {
+		return result, nil
+	}
+
+	eventRows, deliveries, result, err := prepareInsertBatchRows(input.Envelopes, status, result)
+	if err != nil {
+		return result, err
+	}
+	return r.insertPreparedBatch(ctx, eventRows, deliveries, result)
+}
+
+func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status, result PublishBatchResult) ([]eventInsert, []deliveryInsert, PublishBatchResult, error) {
+	events := make(map[string]eventInsert, len(envelopes))
+	deliveries := make([]deliveryInsert, 0, len(envelopes))
+	for _, envelope := range envelopes {
+		event, delivery, err := buildLedgerRows(envelope, status)
+		if err != nil {
+			return nil, nil, PublishBatchResult{}, err
+		}
+		result, err = addPreparedEvent(events, event, result)
+		if err != nil {
+			return nil, nil, result, err
+		}
+		deliveries = append(deliveries, delivery)
+	}
+
+	eventRows := make([]eventInsert, 0, len(events))
+	for _, event := range events {
+		eventRows = append(eventRows, event)
+	}
+	return eventRows, deliveries, result, nil
+}
+
+func addPreparedEvent(events map[string]eventInsert, event eventInsert, result PublishBatchResult) (PublishBatchResult, error) {
+	existing, ok := events[event.EventKey]
+	if ok && existing.PayloadHash != event.PayloadHash {
+		result.HashConflictEvents++
+		return result, fmt.Errorf("dispatch event hash conflict: event_key=%s", event.EventKey)
+	}
+	if !ok {
+		events[event.EventKey] = event
+		result.RequestedEvents++
+	}
+	return result, nil
+}
+
+func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eventInsert, deliveries []deliveryInsert, result PublishBatchResult) (PublishBatchResult, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: begin tx: %w", err)
+	}
+	defer rollbackDispatchBatchOnError(ctx, tx, &err)
+
+	var eventIDs map[string]int64
+	var conflictKeys []string
+	eventIDs, conflictKeys, result, err = insertPreparedEvents(ctx, tx, eventRows, result, r.logger)
+	if err != nil {
+		return result, err
+	}
+
+	deliveries = filterConflictDeliveries(deliveries, conflictKeys)
+	assignDeliveryEventIDs(deliveries, eventIDs)
+
+	insertedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
+	if err != nil {
+		return result, err
+	}
+	result.InsertedDeliveries = insertedDeliveries
+	result.DuplicateDeliveries = len(deliveries) - insertedDeliveries
+	if err = tx.Commit(ctx); err != nil {
+		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: commit: %w", err)
+	}
+	return processedPublishBatchResult(result), nil
+}
+
+func filterConflictDeliveries(deliveries []deliveryInsert, conflictKeys []string) []deliveryInsert {
+	if len(conflictKeys) == 0 {
+		return deliveries
+	}
+	conflictSet := make(map[string]struct{}, len(conflictKeys))
+	for _, k := range conflictKeys {
+		conflictSet[k] = struct{}{}
+	}
+	filtered := make([]deliveryInsert, 0, len(deliveries))
+	for _, d := range deliveries {
+		if _, conflict := conflictSet[d.EventKey]; !conflict {
+			filtered = append(filtered, d)
+		}
+	}
+	return filtered
+}
+
+func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err *error) {
+	if *err != nil {
+		_ = tx.Rollback(ctx)
+	}
+}
+
+func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result PublishBatchResult, logger *slog.Logger) (map[string]int64, []string, PublishBatchResult, error) {
+	eventIDs, conflictKeys, insertedEvents, err := insertEvents(ctx, tx, eventRows, logger)
+	if err != nil {
+		return nil, nil, result, err
+	}
+	result.InsertedEvents = insertedEvents
+	result.DuplicateEvents = len(eventRows) - insertedEvents - len(conflictKeys)
+	result.HashConflictEvents += len(conflictKeys)
+	return eventIDs, conflictKeys, result, nil
+}
+
+func assignDeliveryEventIDs(deliveries []deliveryInsert, eventIDs map[string]int64) {
+	for i := range deliveries {
+		deliveries[i].EventID = eventIDs[deliveries[i].EventKey]
+	}
+}
