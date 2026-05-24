@@ -115,21 +115,29 @@ func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.Messag
 		telemetryRepository = NewDeliveryTelemetryRepository(db)
 	}
 
-	return &Dispatcher{
+	deliveryRepo := NewDeliveryRepository(db, logger)
+	tp := newTelemetryProcessor(telemetryRepository, logger, config)
+	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, config, tp)
+
+	d := &Dispatcher{
 		db:        db,
 		cache:     cacheClient,
 		sender:    sender,
 		renderer:  renderer,
 		logger:    logger,
 		config:    config,
-		delivery:  NewDeliveryRepository(db, logger),
+		delivery:  deliveryRepo,
 		telemetry: telemetryRepository,
 		formatter: &MessageFormatter{
 			renderer: renderer,
 			cache:    cacheClient,
 			logger:   logger,
 		},
+		telemetryProcessor: tp,
+		auditLogger:        al,
 	}
+	d.metricsRecorder = newMetricsRecorder(logger, al, d)
+	return d
 }
 
 func normalizeDispatcherConfig(config Config) Config {
