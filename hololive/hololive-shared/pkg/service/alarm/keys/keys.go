@@ -31,7 +31,7 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 // Valkey 키 접두사 (Go alarm_types.go, Rust keys.rs 1:1 대응)

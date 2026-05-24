@@ -27,9 +27,9 @@ import (
 	"log/slog"
 	"strings"
 
-	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
+	sharedlog "github.com/park285/shared-go/pkg/logging"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"

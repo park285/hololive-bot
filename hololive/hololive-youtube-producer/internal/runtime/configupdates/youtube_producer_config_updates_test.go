@@ -36,7 +36,7 @@ import (
 	svcsettings "github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"

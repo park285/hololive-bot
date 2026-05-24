@@ -13,7 +13,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
-	"github.com/park285/hololive-bot/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/json"
 )
 
 func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t *testing.T) {

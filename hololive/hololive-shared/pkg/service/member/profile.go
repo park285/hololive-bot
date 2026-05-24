@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -37,7 +37,7 @@ const (
 )
 
 type ProfileService struct {
-	cache         cache.Client
+	cache         cache.KeyValueCache
 	logger        *slog.Logger
 	membersData   domain.MemberDataProvider
 	profiles      map[string]*domain.TalentProfile // slug -> profile
@@ -46,7 +46,7 @@ type ProfileService struct {
 	channelToSlug map[string]string
 }
 
-func NewProfileService(cacheClient cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger) (*ProfileService, error) {
+func NewProfileService(cacheClient cache.KeyValueCache, membersData domain.MemberDataProvider, logger *slog.Logger) (*ProfileService, error) {
 	if membersData == nil {
 		return nil, fmt.Errorf("members data is nil")
 	}
@@ -91,7 +91,7 @@ func loadProfileServiceData(membersData domain.MemberDataProvider) (map[string]*
 	return profiles, preTranslated, members, nil
 }
 
-func newProfileService(cacheClient cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger, profiles map[string]*domain.TalentProfile, preTranslated map[string]*domain.Translated, members []*domain.Member) *ProfileService {
+func newProfileService(cacheClient cache.KeyValueCache, membersData domain.MemberDataProvider, logger *slog.Logger, profiles map[string]*domain.TalentProfile, preTranslated map[string]*domain.Translated, members []*domain.Member) *ProfileService {
 	return &ProfileService{
 		cache:         cacheClient,
 		logger:        logger,

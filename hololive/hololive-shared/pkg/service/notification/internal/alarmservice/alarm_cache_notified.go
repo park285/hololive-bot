@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/logging"
+	"github.com/park285/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )

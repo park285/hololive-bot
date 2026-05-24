@@ -36,8 +36,8 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/alarmcache"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
-	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
+	sharedlog "github.com/park285/shared-go/pkg/logging"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 const (

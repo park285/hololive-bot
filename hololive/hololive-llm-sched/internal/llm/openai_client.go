@@ -34,10 +34,10 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
-	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
-	"github.com/park285/hololive-bot/shared-go/pkg/jsonutil"
-	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
+	"github.com/park285/shared-go/pkg/httputil"
+	json "github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/jsonutil"
+	sharedlog "github.com/park285/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )

@@ -91,6 +91,14 @@ type Client struct {
 }
 
 var _ cache.Client = (*Client)(nil)
+var _ cache.KeyValueCache = (*Client)(nil)
+var _ cache.SetCache = (*Client)(nil)
+var _ cache.HashCache = (*Client)(nil)
+var _ cache.ScriptCache = (*Client)(nil)
+var _ cache.StreamCache = (*Client)(nil)
+var _ cache.MemberCache = (*Client)(nil)
+var _ cache.ConnectionManager = (*Client)(nil)
+var _ cache.LowLevelCache = (*Client)(nil)
 
 var ErrUnimplemented = errors.New("cache mock: method not configured")
 

@@ -8,7 +8,7 @@ import (
 )
 
 type youTubePollRegistryVersionSource struct {
-	cacheService cache.Client
+	cacheService cache.KeyValueCache
 }
 
 func (s *youTubePollRegistryVersionSource) Version(ctx context.Context) (version int64, trusted bool, err error) {

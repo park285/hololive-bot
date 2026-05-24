@@ -24,7 +24,7 @@ import (
 	"context"
 	"log/slog"
 
-	sharedlog "github.com/park285/hololive-bot/shared-go/pkg/logging"
+	sharedlog "github.com/park285/shared-go/pkg/logging"
 
 	"google.golang.org/api/youtube/v3"
 

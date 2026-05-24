@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 func buildTitleFingerprint(title, streamID string) string {

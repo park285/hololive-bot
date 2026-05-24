@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/json"
 )
 
 var ErrNoJSONFound = errors.New("no valid JSON found in response")

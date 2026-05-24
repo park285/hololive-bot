@@ -13,6 +13,8 @@ import (
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 
+	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+
 	"github.com/kapu/hololive-admin-api/internal/server"
 )
 
@@ -29,12 +31,12 @@ func (s *memberNewsRunNowStub) SendMemberNewsWeekly(context.Context) error {
 func TestNormalizeRuntimeBuildInputsDefaultsTODOContext(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := normalizeRuntimeBuildInputs(context.TODO(), &config.Config{}, slog.New(slog.DiscardHandler))
+	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(context.TODO(), &config.Config{}, slog.New(slog.DiscardHandler))
 	if err != nil {
-		t.Fatalf("normalizeRuntimeBuildInputs() error = %v", err)
+		t.Fatalf("NormalizeRuntimeBuildInputs() error = %v", err)
 	}
 	if ctx == nil {
-		t.Fatal("normalizeRuntimeBuildInputs() returned nil context")
+		t.Fatal("NormalizeRuntimeBuildInputs() returned nil context")
 	}
 }
 

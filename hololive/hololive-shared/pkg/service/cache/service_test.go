@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/park285/hololive-bot/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/json"
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/internal/testredis"

@@ -18,26 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package botruntime
+package cache
 
 import (
 	"context"
-	"errors"
-	"log/slog"
-
-	"github.com/kapu/hololive-shared/pkg/config"
+	"time"
 )
 
-func normalizeRuntimeBuildInputs(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (context.Context, error) {
-	if appConfig == nil {
-		return nil, errors.New("config must not be nil")
-	}
-	if logger == nil {
-		return nil, errors.New("logger must not be nil")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	return ctx, nil
+type ScriptCache interface {
+	CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error)
+	CompareAndExpire(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error)
 }

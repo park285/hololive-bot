@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
+	json "github.com/park285/shared-go/pkg/json"
 )
 
 func (r *PgxRepository) MarkSending(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/jsonutil"
+	"github.com/park285/shared-go/pkg/jsonutil"
 )
 
 type Config struct {

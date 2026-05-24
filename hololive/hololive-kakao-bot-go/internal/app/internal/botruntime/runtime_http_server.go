@@ -25,7 +25,7 @@ import (
 	"errors"
 
 	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
+	"github.com/park285/shared-go/pkg/runtime/httpserver"
 )
 
 func (r *BotRuntime) StartHTTPServer(errCh chan<- error) {

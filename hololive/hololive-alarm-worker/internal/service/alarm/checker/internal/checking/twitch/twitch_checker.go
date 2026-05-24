@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
@@ -45,7 +45,6 @@ type TwitchChecker struct {
 	logger       *slog.Logger
 }
 
-// NewTwitchChecker는 Twitch 체커를 생성한다.
 func NewTwitchChecker(cacheClient cache.Client, twitchClient *twitch.Client, logger *slog.Logger) (*TwitchChecker, error) {
 	if cacheClient == nil {
 		return nil, errors.New("new twitch checker: cache service is nil")

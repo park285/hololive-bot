@@ -53,7 +53,7 @@ type MilestoneMessageFormatter interface {
 type schedulerImpl struct {
 	youtube              Service
 	holodex              *holodex.Service
-	cache                cache.Client
+	cache                cache.KeyValueCache
 	statsRepository      ytstats.StatsSchedulerRepository
 	membersData          domain.MemberDataProvider
 	alarmService         domain.AlarmDispatchState
@@ -89,7 +89,7 @@ var SubscriberMilestones = []uint64{
 func NewScheduler(
 	youtubeService Service,
 	holodexService *holodex.Service,
-	cacheClient cache.Client,
+	cacheClient cache.KeyValueCache,
 	statsRepository ytstats.StatsSchedulerRepository,
 	membersData domain.MemberDataProvider,
 	alarmService domain.AlarmDispatchState,

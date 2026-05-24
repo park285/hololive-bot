@@ -28,7 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 type DBIntegrationRuntime struct {

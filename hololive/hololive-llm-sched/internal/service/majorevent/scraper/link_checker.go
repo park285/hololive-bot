@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"

@@ -12,7 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/pkg/httputil"
 )
 
 func InitAlarmDependencies(

@@ -43,8 +43,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/httpserver"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/runtime/httpserver"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 type LLMSchedulerRuntime struct {

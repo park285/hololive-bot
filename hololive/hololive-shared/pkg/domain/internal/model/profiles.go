@@ -28,7 +28,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/json"
 )
 
 //go:embed data/official_profiles_raw/*.json

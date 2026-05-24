@@ -25,7 +25,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
 )
@@ -47,7 +48,7 @@ type alarmFoundation struct {
 }
 
 func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*AlarmWorkerRuntime, error) {
-	ctx, err := normalizeRuntimeBuildInputs(ctx, appConfig, logger)
+	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}

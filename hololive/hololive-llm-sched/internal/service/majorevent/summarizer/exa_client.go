@@ -30,9 +30,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
-	"github.com/park285/hololive-bot/shared-go/pkg/jsonutil"
+	"github.com/park285/shared-go/pkg/httputil"
+	json "github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/jsonutil"
 
 	"github.com/kapu/hololive-llm-sched/internal/model"
 

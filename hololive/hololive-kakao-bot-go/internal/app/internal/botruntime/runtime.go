@@ -28,7 +28,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 	"github.com/quic-go/quic-go/http3"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
@@ -51,7 +52,7 @@ type BotRuntime struct {
 }
 
 func BuildRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*BotRuntime, error) {
-	ctx, err := normalizeRuntimeBuildInputs(ctx, appConfig, logger)
+	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}

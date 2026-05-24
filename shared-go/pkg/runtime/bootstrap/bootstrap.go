@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/automaxprocs"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
 )
 
 type runtime interface {

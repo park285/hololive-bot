@@ -25,7 +25,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
 	appwiring "github.com/kapu/hololive-kakao-bot-go/internal/app/wiring"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"

@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
+	json "github.com/park285/shared-go/pkg/json"
 	"github.com/valkey-io/valkey-go"
 )
 

@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/hololive-bot/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/pkg/httputil"
 
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )

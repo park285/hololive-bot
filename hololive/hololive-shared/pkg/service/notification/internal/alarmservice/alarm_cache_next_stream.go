@@ -24,7 +24,7 @@ import (
 	"context"
 	"log/slog"
 
-	sharedlogging "github.com/park285/hololive-bot/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/valkey-io/valkey-go"

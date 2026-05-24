@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	sharedjson "github.com/park285/hololive-bot/shared-go/pkg/json"
+	sharedjson "github.com/park285/shared-go/pkg/json"
 )
 
 const apiKeyHeader = "X-API-Key" //nolint:gosec // G101: 헤더 이름일 뿐 실제 credential이 아님

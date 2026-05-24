@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
-	sharedenv "github.com/park285/hololive-bot/shared-go/pkg/envutil"
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	sharedenv "github.com/park285/shared-go/pkg/envutil"
+	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 func (c *Config) Validate() error {

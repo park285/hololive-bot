@@ -28,7 +28,7 @@ import (
 	"syscall"
 	"testing"
 
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
+	json "github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

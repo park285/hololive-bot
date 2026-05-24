@@ -26,8 +26,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/hololive-bot/shared-go/pkg/logging"
-	"github.com/park285/hololive-bot/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/logging"
+	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 // - alarm:chzzk_channels (youtube_channel_id -> chzzk_channel_id)

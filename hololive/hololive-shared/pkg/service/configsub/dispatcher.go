@@ -23,7 +23,7 @@ package configsub
 import (
 	"log/slog"
 
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
+	json "github.com/park285/shared-go/pkg/json"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )

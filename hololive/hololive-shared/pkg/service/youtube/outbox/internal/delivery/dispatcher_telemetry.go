@@ -9,7 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
-	"github.com/park285/hololive-bot/shared-go/pkg/runtime/loop"
+	"github.com/park285/shared-go/pkg/runtime/loop"
 )
 
 func (d *Dispatcher) telemetryLoop(ctx context.Context) {

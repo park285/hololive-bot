@@ -22,7 +22,7 @@ package summarizer
 
 import (
 	"context"
-	json "github.com/park285/hololive-bot/shared-go/pkg/json"
+	json "github.com/park285/shared-go/pkg/json"
 	"log/slog"
 	"os"
 	"strings"

@@ -52,7 +52,6 @@ type ChzzkChecker struct {
 	logger      *slog.Logger
 }
 
-// NewChzzkChecker는 치지직 체커를 생성한다.
 func NewChzzkChecker(cacheClient cache.Client, chzzkClient *chzzk.Client, logger *slog.Logger) (*ChzzkChecker, error) {
 	if cacheClient == nil {
 		return nil, errors.New("new chzzk checker: cache service is nil")
