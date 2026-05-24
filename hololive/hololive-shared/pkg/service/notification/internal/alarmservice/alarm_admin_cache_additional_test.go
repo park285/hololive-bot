@@ -196,10 +196,10 @@ func TestMarkAsNotified_SetFailure(t *testing.T) {
 	}
 	discardLogger := newDiscardAlarmLogger()
 	as := &AlarmService{
-		cache:      mockCache,
-		logger:     discardLogger,
-		cacheState: alarmcache.NewState(mockCache, nil, discardLogger),
+		cache:  mockCache,
+		logger: discardLogger,
 	}
+	as.cacheState = alarmcache.NewState(mockCache, func() domain.MemberDataProvider { return as.memberData }, discardLogger)
 
 	err := as.MarkAsNotified(t.Context(), "stream-1", time.Now().UTC(), 5)
 	require.Error(t, err)

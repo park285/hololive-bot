@@ -45,20 +45,6 @@ func (d *Dispatcher) markDeliveryTelemetryResults(ctx context.Context, loggedIDs
 	d.telemetryProcessor.markDeliveryTelemetryResults(ctx, loggedIDs, failedIDs)
 }
 
-func (d *Dispatcher) loadDeliveryTelemetryLatencyClassifications(
-	ctx context.Context,
-	rows []domain.YouTubeNotificationDeliveryTelemetry,
-) (map[int64]PostLatencyClassificationResult, error) {
-	return d.telemetryProcessor.loadDeliveryTelemetryLatencyClassifications(ctx, rows)
-}
-
-func (d *Dispatcher) emitDeliveryTelemetry(
-	row domain.YouTubeNotificationDeliveryTelemetry,
-	classification PostLatencyClassificationResult,
-) error {
-	return d.telemetryProcessor.emitDeliveryTelemetry(row, classification)
-}
-
 func buildDeliveryAuditLogAttrs(row domain.YouTubeNotificationDeliveryTelemetry) []any {
 	return buildDeliveryAuditLogAttrsWithClassification(row, PostLatencyClassificationResult{})
 }
