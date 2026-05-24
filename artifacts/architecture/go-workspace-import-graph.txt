@@ -24,6 +24,7 @@ github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shar
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/auth
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/chzzk
+github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/database/mocks
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/notification
@@ -876,9 +877,11 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> gith
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/server/settings
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/cache
+github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/configsub
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/settings
+github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/settings/mocks
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/youtube
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/youtube/poller
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/park285/hololive-bot/shared-go/pkg/logging
