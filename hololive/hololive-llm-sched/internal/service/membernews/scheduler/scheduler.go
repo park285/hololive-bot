@@ -36,26 +36,21 @@ import (
 const maxConcurrentDigests = 5
 
 const (
-	// WeeklyScheduleWeekday: 주간 발송 요일 (runtime 로그에서도 참조)
 	WeeklyScheduleWeekday = time.Monday
 
-	// WeeklyScheduleHourKST: 주간 발송 시각 (KST, runtime 로그에서도 참조)
 	WeeklyScheduleHourKST   = 9
 	weeklyScheduleMinuteKST = 0
 )
 
-// outboxEnqueuer: outbox enqueue 연산 인터페이스 (테스트 mock 용도)
 type outboxEnqueuer interface {
 	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error
 }
 
 type Scheduler struct {
+	digest           *schedulerkit.DigestScheduler
 	service          model.DigestService
 	formatter        model.DigestFormatter
-	locker           delivery.NotificationLocker
 	outboxRepository outboxEnqueuer
-	logger           *slog.Logger
-	runtime          *schedulerkit.Runtime
 }
 
 func NewScheduler(
@@ -65,20 +60,11 @@ func NewScheduler(
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 ) *Scheduler {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	if locker == nil {
-		locker = delivery.NewLocker(nil, logger)
-	}
-
 	return &Scheduler{
+		digest:           schedulerkit.NewDigestScheduler(locker, logger),
 		service:          service,
 		formatter:        formatter,
-		locker:           locker,
 		outboxRepository: outboxRepository,
-		logger:           logger,
-		runtime:          schedulerkit.NewRuntime(),
 	}
 }
 
@@ -86,29 +72,22 @@ func (s *Scheduler) SetClock(clockFn func() time.Time) {
 	if s == nil {
 		return
 	}
-	s.runtime.SetClock(clockFn)
-}
-
-func (s *Scheduler) clock() time.Time {
-	if s == nil || s.runtime == nil {
-		return time.Now()
-	}
-	return s.runtime.Now()
+	s.digest.SetClock(clockFn)
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.runtime.Start(ctx, schedulerkit.Config{
-		Logger:           s.logger,
+	s.digest.Start(ctx, schedulerkit.Config{
+		Logger:           s.digest.Logger,
 		WaitingLog:       "Member news scheduler waiting",
 		ContextStopLog:   "Member news scheduler stopped by context",
 		StopLog:          "Member news scheduler stopped",
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
 			if err := s.SendWeeklyDigest(ctx); err != nil {
-				s.logger.Error("Member news weekly send failed", slog.String("error", err.Error()))
+				s.digest.Logger.Error("Member news weekly send failed", slog.String("error", err.Error()))
 			}
 		},
 	})
@@ -118,7 +97,7 @@ func (s *Scheduler) Stop() {
 	if s == nil {
 		return
 	}
-	s.runtime.Stop()
+	s.digest.Stop()
 }
 
 func (s *Scheduler) calculateNextRun(now time.Time) time.Time {
@@ -144,23 +123,20 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 		return fmt.Errorf("member news service is nil")
 	}
 
-	weekKey := startOfWeek(s.clock()).Format("2006-01-02")
-	lockKey := fmt.Sprintf("membernews:lock:weekly:%s", weekKey)
-	return runDigestDispatch(ctx, s.service, s.locker, s.logger, digestDispatchConfig{
-		lockKey:           lockKey,
-		periodKey:         weekKey,
-		periodFieldName:   "week_key",
-		lockHeldMessage:   "Member news weekly execution skipped: lock already acquired",
-		emptyRoomsMessage: "Member news weekly skipped: no subscribed room",
-		resultMessage:     "Member news weekly result",
-		allFailedMessage:  "all %d room(s) failed to receive member news",
-		processRoom:       s.processRoomDigest,
+	weekKey := startOfWeek(s.digest.Clock()).Format("2006-01-02")
+	return runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, digestDispatchConfig{
+		periodKey:        weekKey,
+		periodFieldName:  "week_key",
+		resultMessage:    "Member news weekly result",
+		allFailedMessage: "all %d room(s) failed to receive member news",
+		lockKey:          fmt.Sprintf("membernews:lock:weekly:%s", weekKey),
+		skipMessage:      "Member news weekly skipped: no subscribed room",
+		lockSkipMessage:  "Member news weekly execution skipped: lock already acquired",
 	})
 }
 
-// processRoomDigest: 단일 room의 주간 다이제스트 생성 + outbox enqueue.
 func (s *Scheduler) processRoomDigest(ctx context.Context, weekKey, roomID string) delivery.SendResult {
-	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.logger,
+	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.digest.Logger,
 		model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, weekKey, roomID, "🗞️ 이번주 구독 멤버 뉴스")
 }
 

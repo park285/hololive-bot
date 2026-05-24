@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-llm-sched/internal/schedulerkit"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -149,15 +148,13 @@ func TestNewScheduler(t *testing.T) {
 	if scheduler.formatter == nil {
 		t.Error("formatter not set")
 	}
-	if scheduler.runtime == nil {
-		t.Error("runtime not initialized")
+	if scheduler.digest == nil {
+		t.Error("digest not initialized")
 	}
 }
 
 func TestScheduler_StopOnce(t *testing.T) {
-	scheduler := &Scheduler{
-		runtime: schedulerkit.NewRuntime(),
-	}
+	scheduler := NewScheduler(nil, &mockFormatter{message: "test"}, nil, nil, nil, nil)
 
 	scheduler.Stop()
 	scheduler.Stop()
@@ -417,10 +414,7 @@ func TestSendWeeklyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing.
 		acquireAcquired: false,
 	}
 
-	scheduler := &Scheduler{
-		locker: locker,
-		logger: testLogger(),
-	}
+	scheduler := newTestScheduler(nil, newMockOutboxRepository(), locker)
 
 	err := scheduler.SendWeeklyNotification(context.Background())
 	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
@@ -434,10 +428,7 @@ func TestSendMonthlyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing
 		acquireAcquired: false,
 	}
 
-	scheduler := &MonthlyScheduler{
-		locker: locker,
-		logger: testLogger(),
-	}
+	scheduler := newTestMonthlyScheduler(nil, newMockOutboxRepository(), locker)
 
 	err := scheduler.SendMonthlyNotification(context.Background())
 	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {

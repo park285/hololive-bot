@@ -34,21 +34,17 @@ import (
 )
 
 const (
-	// MonthlyScheduleHourKST: 월간 발송 시각 (KST, runtime 로그에서도 참조)
 	MonthlyScheduleHourKST   = 10
 	monthlyScheduleMinuteKST = 0
 
-	// MonthlyScheduleDay: 월간 발송 일자 (runtime 로그에서도 참조)
 	MonthlyScheduleDay = 1
 )
 
 type MonthlyScheduler struct {
+	digest           *schedulerkit.DigestScheduler
 	service          model.DigestService
 	formatter        model.DigestFormatter
-	locker           delivery.NotificationLocker
 	outboxRepository outboxEnqueuer
-	logger           *slog.Logger
-	runtime          *schedulerkit.Runtime
 }
 
 func NewMonthlyScheduler(
@@ -58,20 +54,11 @@ func NewMonthlyScheduler(
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
 ) *MonthlyScheduler {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	if locker == nil {
-		locker = delivery.NewLocker(nil, logger)
-	}
-
 	return &MonthlyScheduler{
+		digest:           schedulerkit.NewDigestScheduler(locker, logger),
 		service:          service,
 		formatter:        formatter,
-		locker:           locker,
 		outboxRepository: outboxRepository,
-		logger:           logger,
-		runtime:          schedulerkit.NewRuntime(),
 	}
 }
 
@@ -79,29 +66,22 @@ func (s *MonthlyScheduler) SetClock(clockFn func() time.Time) {
 	if s == nil {
 		return
 	}
-	s.runtime.SetClock(clockFn)
-}
-
-func (s *MonthlyScheduler) clock() time.Time {
-	if s == nil || s.runtime == nil {
-		return time.Now()
-	}
-	return s.runtime.Now()
+	s.digest.SetClock(clockFn)
 }
 
 func (s *MonthlyScheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.runtime.Start(ctx, schedulerkit.Config{
-		Logger:           s.logger,
+	s.digest.Start(ctx, schedulerkit.Config{
+		Logger:           s.digest.Logger,
 		WaitingLog:       "Member news monthly scheduler waiting",
 		ContextStopLog:   "Member news monthly scheduler stopped by context",
 		StopLog:          "Member news monthly scheduler stopped",
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
 			if err := s.SendMonthlyDigest(ctx); err != nil {
-				s.logger.Error("Member news monthly send failed", slog.String("error", err.Error()))
+				s.digest.Logger.Error("Member news monthly send failed", slog.String("error", err.Error()))
 			}
 		},
 	})
@@ -111,7 +91,7 @@ func (s *MonthlyScheduler) Stop() {
 	if s == nil {
 		return
 	}
-	s.runtime.Stop()
+	s.digest.Stop()
 }
 
 func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
@@ -122,7 +102,6 @@ func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
 		MonthlyScheduleHourKST, monthlyScheduleMinuteKST, 0, 0, model.KST,
 	)
 
-	// 이미 지났으면 다음 달로
 	if !target.After(nowKST) {
 		target = target.AddDate(0, 1, 0)
 	}
@@ -138,26 +117,23 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 	}
 
 	monthKey := s.getMonthKey()
-	lockKey := fmt.Sprintf("membernews:lock:monthly:%s", monthKey)
-	return runDigestDispatch(ctx, s.service, s.locker, s.logger, digestDispatchConfig{
-		lockKey:           lockKey,
-		periodKey:         monthKey,
-		periodFieldName:   "month_key",
-		lockHeldMessage:   "Member news monthly execution skipped: lock already acquired",
-		emptyRoomsMessage: "Member news monthly skipped: no subscribed room",
-		resultMessage:     "Member news monthly result",
-		allFailedMessage:  "all %d room(s) failed to receive monthly member news",
-		processRoom:       s.processRoomDigest,
+	return runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, digestDispatchConfig{
+		periodKey:        monthKey,
+		periodFieldName:  "month_key",
+		resultMessage:    "Member news monthly result",
+		allFailedMessage: "all %d room(s) failed to receive monthly member news",
+		lockKey:          fmt.Sprintf("membernews:lock:monthly:%s", monthKey),
+		skipMessage:      "Member news monthly skipped: no subscribed room",
+		lockSkipMessage:  "Member news monthly execution skipped: lock already acquired",
 	})
 }
 
-// processRoomDigest: 단일 room의 월간 다이제스트 생성 + outbox enqueue.
 func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, monthKey, roomID string) delivery.SendResult {
-	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.logger,
+	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.digest.Logger,
 		model.PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID, "📅 이번달 구독 멤버 뉴스")
 }
 
 func (s *MonthlyScheduler) getMonthKey() string {
-	now := s.clock().In(model.KST)
+	now := s.digest.Clock().In(model.KST)
 	return fmt.Sprintf("%d-%02d", now.Year(), now.Month())
 }

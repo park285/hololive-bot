@@ -32,6 +32,8 @@ import (
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap"
 
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
@@ -82,6 +84,8 @@ func NewAlarmService(
 		alarmWriter:     writer,
 		logger:          logger,
 		targetPolicy:    targetPolicy,
+		cacheState:      alarmcache.NewState(cacheClient, memberData, logger),
+		platformMapper:  platformmap.NewMapper(cacheClient, memberData, logger),
 	}
 
 	registerAlarmService(service)

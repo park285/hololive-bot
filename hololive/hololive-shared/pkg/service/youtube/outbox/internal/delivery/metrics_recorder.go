@@ -293,7 +293,6 @@ func (mr *MetricsRecorder) recordKaringSendFailure(
 		slog.String("channel_id", channelID),
 	)
 	failedAt := time.Now()
-	reason := deliveryFailureReason(err)
 	mr.logger.Warn("Failed to send Karing delivery",
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),

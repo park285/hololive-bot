@@ -13,6 +13,8 @@ import (
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -213,10 +215,14 @@ func TestCacheAddAlarmMutationFailureLogsWrappedEvent(t *testing.T) {
 		return cacheClient.SAdd(ctx, key, members)
 	})
 
+	logger := slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
+	memberData := &mockMemberDataProvider{members: []*domain.Member{}}
 	as := &AlarmService{
-		cache:      cacheMock,
-		logger:     slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError})),
-		memberData: &mockMemberDataProvider{members: []*domain.Member{}},
+		cache:          cacheMock,
+		logger:         logger,
+		memberData:     memberData,
+		cacheState:     alarmcache.NewState(cacheMock, memberData, logger),
+		platformMapper: platformmap.NewMapper(cacheMock, memberData, logger),
 	}
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }
 
@@ -510,9 +516,12 @@ func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
 				tt.setup(cacheMock)
 			}
 
+			warnLogger := slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn}))
 			as := &AlarmService{
-				cache:  cacheMock,
-				logger: slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn})),
+				cache:          cacheMock,
+				logger:         warnLogger,
+				cacheState:     alarmcache.NewState(cacheMock, nil, warnLogger),
+				platformMapper: platformmap.NewMapper(cacheMock, nil, warnLogger),
 			}
 
 			tt.run(ctx, as)
@@ -606,12 +615,16 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 		return cacheClient.SAdd(ctx, key, members)
 	})
 
+	discardLogger := newDiscardAlarmLogger()
+	rebuildMemberData := &mockMemberDataProvider{members: []*domain.Member{}}
 	as := &AlarmService{
 		cache:           cacheMock,
-		logger:          newDiscardAlarmLogger(),
-		memberData:      &mockMemberDataProvider{members: []*domain.Member{}},
+		logger:          discardLogger,
+		memberData:      rebuildMemberData,
 		alarmRepository: &sharedalarm.Repository{},
 		alarmWriter:     &stubAlarmWriter{},
+		cacheState:      alarmcache.NewState(cacheMock, rebuildMemberData, discardLogger),
+		platformMapper:  platformmap.NewMapper(cacheMock, rebuildMemberData, discardLogger),
 	}
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }
 

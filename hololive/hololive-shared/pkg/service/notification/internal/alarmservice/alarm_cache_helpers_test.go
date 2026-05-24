@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -187,7 +188,7 @@ func TestResolveStreamChannelID(t *testing.T) {
 func TestBuildUpcomingEventKey(t *testing.T) {
 	t.Parallel()
 
-	as := &AlarmService{}
+	as := &AlarmService{cacheState: alarmcache.NewState(nil, nil, nil)}
 	start := time.Date(2026, time.March, 2, 10, 30, 59, 0, time.UTC)
 	key := as.buildUpcomingEventKey("room1", "channel1", "stream1", "Title", start)
 

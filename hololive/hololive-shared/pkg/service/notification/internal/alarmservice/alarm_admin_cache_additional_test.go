@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -185,16 +186,19 @@ func TestMarkAsNotified(t *testing.T) {
 func TestMarkAsNotified_SetFailure(t *testing.T) {
 	t.Parallel()
 
-	as := &AlarmService{
-		cache: &cachemocks.Client{
-			GetFunc: func(context.Context, string, any) error {
-				return nil
-			},
-			SetFunc: func(context.Context, string, any, time.Duration) error {
-				return errors.New("set failed")
-			},
+	mockCache := &cachemocks.Client{
+		GetFunc: func(context.Context, string, any) error {
+			return nil
 		},
-		logger: newDiscardAlarmLogger(),
+		SetFunc: func(context.Context, string, any, time.Duration) error {
+			return errors.New("set failed")
+		},
+	}
+	discardLogger := newDiscardAlarmLogger()
+	as := &AlarmService{
+		cache:      mockCache,
+		logger:     discardLogger,
+		cacheState: alarmcache.NewState(mockCache, nil, discardLogger),
 	}
 
 	err := as.MarkAsNotified(t.Context(), "stream-1", time.Now().UTC(), 5)

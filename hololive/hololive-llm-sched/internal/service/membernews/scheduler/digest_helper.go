@@ -28,6 +28,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kapu/hololive-llm-sched/internal/schedulerkit"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -35,17 +36,16 @@ import (
 )
 
 type digestDispatchConfig struct {
-	lockKey           string
-	periodKey         string
-	periodFieldName   string
-	lockHeldMessage   string
-	emptyRoomsMessage string
-	resultMessage     string
-	allFailedMessage  string
-	processRoom       func(context.Context, string, string) delivery.SendResult
+	periodKey        string
+	periodFieldName  string
+	resultMessage    string
+	allFailedMessage string
+	lockKey          string
+	skipMessage      string
+	lockSkipMessage  string
+	processRoom      func(context.Context, string, string) delivery.SendResult
 }
 
-// processDigestForRoom: 단일 room의 다이제스트 생성 + outbox enqueue (weekly/monthly 공용).
 func processDigestForRoom(
 	ctx context.Context,
 	service model.DigestService,
@@ -96,50 +96,6 @@ func processDigestForRoom(
 	return result
 }
 
-func runDigestDispatch(
-	ctx context.Context,
-	service model.DigestService,
-	locker delivery.NotificationLocker,
-	logger *slog.Logger,
-	config digestDispatchConfig,
-) error {
-	token, acquired, err := locker.TryAcquire(ctx, config.lockKey, delivery.DefaultExecutionLockTTL)
-	if err != nil {
-		return fmt.Errorf("acquire digest execution lock: %w", err)
-	}
-	if !acquired {
-		logger.Info(config.lockHeldMessage, slog.String(config.periodFieldName, config.periodKey))
-		return nil
-	}
-	defer func() { _ = locker.Release(ctx, config.lockKey, token) }()
-
-	rooms, err := service.ListSubscribedRooms(ctx)
-	if err != nil {
-		return fmt.Errorf("list subscribed rooms: %w", err)
-	}
-	if len(rooms) == 0 {
-		logger.Info(config.emptyRoomsMessage)
-		return nil
-	}
-
-	result := dispatchDigestRooms(ctx, rooms, config)
-
-	logger.Info(config.resultMessage,
-		slog.String(config.periodFieldName, config.periodKey),
-		slog.Int("attempted", result.Attempted),
-		slog.Int("sent", result.Sent),
-		slog.Int("skipped", result.Skipped),
-		slog.Int("failed", result.Failed),
-		slog.Any("failed_rooms", result.FailedRooms),
-	)
-
-	if result.Sent == 0 && result.Failed > 0 {
-		return fmt.Errorf(config.allFailedMessage, result.Failed)
-	}
-
-	return nil
-}
-
 func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, config digestDispatchConfig) delivery.SendResult {
 	var (
 		mu     sync.Mutex
@@ -166,7 +122,53 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 	return result
 }
 
-// renderDigestMessage: 다이제스트 메시지 포맷팅 (weekly/monthly 공용).
+func runMemberNewsDigest(
+	ctx context.Context,
+	digest *schedulerkit.DigestScheduler,
+	service model.DigestService,
+	processRoom func(context.Context, string, string) delivery.SendResult,
+	config digestDispatchConfig,
+) error {
+	config.processRoom = processRoom
+	return schedulerkit.RunDigest(ctx, digest, schedulerkit.DigestOp[[]model.SubscribedRoom]{
+		LockKey: config.lockKey,
+		OnLockNotAcquired: func() error {
+			digest.Logger.Info(config.lockSkipMessage, slog.String(config.periodFieldName, config.periodKey))
+			return nil
+		},
+		Collect: func(ctx context.Context) ([]model.SubscribedRoom, bool, error) {
+			rooms, err := service.ListSubscribedRooms(ctx)
+			if err != nil {
+				return nil, false, fmt.Errorf("list subscribed rooms: %w", err)
+			}
+			if len(rooms) == 0 {
+				digest.Logger.Info(config.skipMessage)
+				return nil, false, nil
+			}
+			return rooms, true, nil
+		},
+		Execute: func(ctx context.Context, rooms []model.SubscribedRoom) error {
+			result := dispatchDigestRooms(ctx, rooms, config)
+			logDigestResult(digest.Logger, config, result)
+			if result.Sent == 0 && result.Failed > 0 {
+				return fmt.Errorf(config.allFailedMessage, result.Failed)
+			}
+			return nil
+		},
+	})
+}
+
+func logDigestResult(logger *slog.Logger, config digestDispatchConfig, result delivery.SendResult) {
+	logger.Info(config.resultMessage,
+		slog.String(config.periodFieldName, config.periodKey),
+		slog.Int("attempted", result.Attempted),
+		slog.Int("sent", result.Sent),
+		slog.Int("skipped", result.Skipped),
+		slog.Int("failed", result.Failed),
+		slog.Any("failed_rooms", result.FailedRooms),
+	)
+}
+
 func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest *model.Digest, emptyHeader string) string {
 	if digest == nil {
 		return emptyHeader + "\n- 표시할 항목이 없습니다."
