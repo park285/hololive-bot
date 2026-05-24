@@ -79,15 +79,17 @@ func NewH2CServer(addr string, handler http.Handler, operation string) *http.Ser
 		handler = otelhttp.NewHandler(handler, operation)
 	}
 
-	return &http.Server{
+	srv := &http.Server{
 		Addr:              addr,
-		Handler:           WrapH2C(handler),
+		Handler:           handler,
 		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
 		ReadTimeout:       constants.ServerTimeout.Read,
 		WriteTimeout:      constants.ServerTimeout.Write,
 		IdleTimeout:       constants.ServerTimeout.Idle,
 		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
 	}
+	EnableH2C(srv)
+	return srv
 }
 
 func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts RuntimeRouterOptions) (*gin.Engine, error) {

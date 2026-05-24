@@ -11,9 +11,6 @@ import (
 	"testing"
 
 	"github.com/park285/iris-client-go/iris"
-	"golang.org/x/net/http2"
-	//lint:ignore SA1019 http.Server.Protocols 전환 별도 진행
-	"golang.org/x/net/http2/h2c"
 )
 
 func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *testing.T) {
@@ -264,8 +261,7 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 
 	var gotPath string
 	var gotRequest iris.ReplyRequest
-	//lint:ignore SA1019 http.Server.Protocols 전환 별도 진행
-	server := httptest.NewServer(h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		if r.Header.Get("X-Iris-Signature") == "" {
 			t.Fatal("missing iris signature")
@@ -283,7 +279,13 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
-	}), &http2.Server{}))
+	}))
+	if server.Config.Protocols == nil {
+		server.Config.Protocols = new(http.Protocols)
+	}
+	server.Config.Protocols.SetHTTP1(true)
+	server.Config.Protocols.SetUnencryptedHTTP2(true)
+	server.Start()
 	defer server.Close()
 
 	client := NewRuntimeIrisClient(server.URL, "bot-token", "", nil, iris.WithTransport("h2c"))

@@ -1,6 +1,6 @@
 package app
 
-import botruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/internal/botruntime"
+import botruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime"
 
 type Container = botruntime.Container
 type DBIntegrationRuntime = botruntime.DBIntegrationRuntime

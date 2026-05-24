@@ -18,14 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package httpserver
+package orchestration
 
-import "net/http"
+import (
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/orchestration/ingress"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/orchestration/lifecycle"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/orchestration/transport"
+)
 
-func EnableH2C(srv *http.Server) {
-	if srv.Protocols == nil {
-		srv.Protocols = new(http.Protocols)
-	}
-	srv.Protocols.SetHTTP1(true)
-	srv.Protocols.SetUnencryptedHTTP2(true)
-}
+type MessageIngress = ingress.MessageIngress
+type CommandTransport = transport.CommandTransport
+type BotLifecycle = lifecycle.BotLifecycle
+
+var NewMessageIngress = ingress.NewMessageIngress
+var NewCommandTransport = transport.NewCommandTransport
+var NewBotLifecycle = lifecycle.NewBotLifecycle

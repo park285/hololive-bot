@@ -1,6 +1,6 @@
 package command
 
-import handlers "github.com/kapu/hololive-kakao-bot-go/internal/command/internal/handlers"
+import handlers "github.com/kapu/hololive-kakao-bot-go/internal/command/handlers"
 
 type AlarmCommand = handlers.AlarmCommand
 type BaseCommand = handlers.BaseCommand

@@ -93,6 +93,10 @@ type Dispatcher struct {
 	karingMu  sync.Mutex
 	started   atomic.Bool
 
+	telemetryProcessor *TelemetryProcessor
+	auditLogger        *AuditLogger
+	metricsRecorder    *MetricsRecorder
+
 	onProcessOnce   func()
 	onAggregateSync func()
 	onCleanup       func()
