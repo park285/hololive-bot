@@ -1,8 +1,8 @@
 package bot
 
 import (
-	orchestration "github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration"
-	"github.com/kapu/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd"
+	orchestration "github.com/kapu/hololive-kakao-bot-go/internal/bot/orchestration"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/orchestration/orchcmd"
 )
 
 type MessageIngress = orchestration.MessageIngress

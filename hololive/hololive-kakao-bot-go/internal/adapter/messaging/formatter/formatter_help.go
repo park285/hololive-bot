@@ -18,14 +18,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package httpserver
+package formatter
 
-import "net/http"
+import (
+	"context"
 
-func EnableH2C(srv *http.Server) {
-	if srv.Protocols == nil {
-		srv.Protocols = new(http.Protocols)
+	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
+)
+
+type helpTemplateData struct {
+	Emoji  msging.UIEmoji
+	Prefix string
+}
+
+func (f *ResponseFormatter) FormatHelp(ctx context.Context) string {
+	data := helpTemplateData{Emoji: msging.DefaultEmoji, Prefix: f.prefix}
+
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdHelp, data)
+	if err != nil {
+		return msging.ErrorMessage(msging.ErrDisplayHelpFailed)
 	}
-	srv.Protocols.SetHTTP1(true)
-	srv.Protocols.SetUnencryptedHTTP2(true)
+
+	instruction, body := splitTemplateInstruction(rendered)
+	if instruction == "" || body == "" {
+		return rendered
+	}
+
+	return util.ApplyKakaoSeeMorePadding(body, instruction)
 }

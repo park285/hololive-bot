@@ -31,7 +31,7 @@ const (
 var WSUpgrader = httpserver.WSUpgrader
 
 var SplitChannelIDs = httpserver.SplitChannelIDs
-var WrapH2C = httpserver.WrapH2C
+var EnableH2C = httpserver.EnableH2C
 var BuildOAuthDeepLinkURL = httpserver.BuildOAuthDeepLinkURL
 var BuildOAuthRedirectHTML = httpserver.BuildOAuthRedirectHTML
 var RespondError = httpserver.RespondError

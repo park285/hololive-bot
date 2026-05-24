@@ -1,8 +1,8 @@
 package poller
 
 import (
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/pollers"
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers"
 )
 
 type NotificationRouteRequest = polling.NotificationRouteRequest

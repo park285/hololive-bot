@@ -1,8 +1,8 @@
 package adapter
 
 import (
-	messaging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging"
-	"github.com/kapu/hololive-kakao-bot-go/internal/adapter/internal/messaging/formatter"
+	messaging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging/formatter"
 )
 
 type AlarmListEntry = formatter.AlarmListEntry

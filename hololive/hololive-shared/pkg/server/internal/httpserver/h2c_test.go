@@ -48,8 +48,9 @@ func healthHandler() http.Handler {
 
 func TestH2CProtocolDetection(t *testing.T) {
 	// H2C 서버 생성
-	h2cHandler := sharedserver.WrapH2C(healthHandler())
+	h2cHandler := healthHandler()
 	ts := httptest.NewUnstartedServer(h2cHandler)
+	sharedserver.EnableH2C(ts.Config)
 	ts.Start()
 	defer ts.Close()
 
@@ -85,8 +86,9 @@ func TestH2CProtocolDetection(t *testing.T) {
 }
 
 func TestHTTP1Fallback(t *testing.T) {
-	h2cHandler := sharedserver.WrapH2C(healthHandler())
+	h2cHandler := healthHandler()
 	ts := httptest.NewUnstartedServer(h2cHandler)
+	sharedserver.EnableH2C(ts.Config)
 	ts.Start()
 	defer ts.Close()
 
@@ -141,8 +143,9 @@ func BenchmarkHTTP1(b *testing.B) {
 }
 
 func BenchmarkH2C(b *testing.B) {
-	h2cHandler := sharedserver.WrapH2C(healthHandler())
+	h2cHandler := healthHandler()
 	ts := httptest.NewUnstartedServer(h2cHandler)
+	sharedserver.EnableH2C(ts.Config)
 	ts.Start()
 	defer ts.Close()
 
@@ -193,8 +196,9 @@ func BenchmarkHTTP1Concurrent(b *testing.B) {
 }
 
 func BenchmarkH2CConcurrent(b *testing.B) {
-	h2cHandler := sharedserver.WrapH2C(healthHandler())
+	h2cHandler := healthHandler()
 	ts := httptest.NewUnstartedServer(h2cHandler)
+	sharedserver.EnableH2C(ts.Config)
 	ts.Start()
 	defer ts.Close()
 
@@ -228,8 +232,9 @@ func TestLatencyComparison(t *testing.T) {
 	defer h1Server.Close()
 
 	// H2C 서버
-	h2cHandler := sharedserver.WrapH2C(healthHandler())
+	h2cHandler := healthHandler()
 	h2cServer := httptest.NewUnstartedServer(h2cHandler)
+	sharedserver.EnableH2C(h2cServer.Config)
 	h2cServer.Start()
 	defer h2cServer.Close()
 
@@ -343,8 +348,9 @@ func max(vals []float64) float64 {
 }
 
 func TestMultiplexingBenefit(t *testing.T) {
-	h2cHandler := sharedserver.WrapH2C(healthHandler())
+	h2cHandler := healthHandler()
 	ts := httptest.NewUnstartedServer(h2cHandler)
+	sharedserver.EnableH2C(ts.Config)
 	ts.Start()
 	defer ts.Close()
 

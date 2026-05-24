@@ -1,0 +1,461 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package orchestration
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/park285/iris-client-go/iris"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot/orchestration/orchcmd"
+	"github.com/kapu/hololive-kakao-bot-go/internal/command"
+	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
+)
+
+type testCommand struct {
+	name    string
+	execute func(context.Context, *domain.CommandContext, map[string]any) error
+}
+
+func (c *testCommand) Name() string        { return c.name }
+func (c *testCommand) Description() string { return "test" }
+func (c *testCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+	if c.execute == nil {
+		return nil
+	}
+
+	return c.execute(ctx, cmdCtx, params)
+}
+
+type testIrisClient struct {
+	sendMessageErr        error
+	sendImageErr          error
+	sendMultipleImagesErr error
+
+	mu sync.Mutex
+
+	messageCh chan sentMessage
+
+	lastMessageRoom string
+	lastMessage     string
+	lastImageRoom   string
+	lastImage       []byte
+	lastMultiImages [][]byte
+}
+
+type sentMessage struct {
+	room    string
+	message string
+}
+
+type acceptedTestIrisClient struct {
+	testIrisClient
+
+	acceptedCalls int
+	statuses      []*iris.ReplyStatusSnapshot
+}
+
+func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+	c.mu.Lock()
+	c.lastMessageRoom = room
+	c.lastMessage = message
+
+	ch := c.messageCh
+	c.mu.Unlock()
+
+	if ch != nil {
+		select {
+		case ch <- sentMessage{room: room, message: message}:
+		default:
+		}
+	}
+
+	return c.sendMessageErr
+}
+
+func (c *testIrisClient) SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	if err := c.SendMessage(ctx, room, message, opts...); err != nil {
+		return nil, err
+	}
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-test", Delivery: "queued", Room: room, Type: "text"}, nil
+}
+
+func (c *testIrisClient) SendImage(ctx context.Context, room string, imageData []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.mu.Lock()
+	c.lastImageRoom = room
+	c.lastImage = imageData
+	c.mu.Unlock()
+
+	return nil, c.sendImageErr
+}
+
+func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, images [][]byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.mu.Lock()
+	c.lastMultiImages = images
+	c.mu.Unlock()
+
+	return nil, c.sendMultipleImagesErr
+}
+
+func (c *testIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
+}
+
+func (c *testIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
+	return nil, nil
+}
+
+func (c *acceptedTestIrisClient) SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.acceptedCalls++
+	if err := c.SendMessage(ctx, room, message, opts...); err != nil {
+		return nil, err
+	}
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-1", Delivery: "queued", Room: room, Type: "text"}, nil
+}
+
+func (c *acceptedTestIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
+	if len(c.statuses) == 0 {
+		return &iris.ReplyStatusSnapshot{State: "handoff_completed"}, nil
+	}
+	status := c.statuses[0]
+	c.statuses = c.statuses[1:]
+	return status, nil
+}
+
+func (c *testIrisClient) Ping(ctx context.Context) bool { return true }
+
+func (c *testIrisClient) GetConfig(ctx context.Context) (*iris.ConfigResponse, error) {
+	return &iris.ConfigResponse{}, nil
+}
+
+func (c *testIrisClient) Decrypt(ctx context.Context, data string) (string, error) {
+	return data, nil
+}
+
+func newBotTestLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
+
+func TestCommandRouterExecuteBranches(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cmdCtx := domain.NewCommandContext("room-1", "room", "user-1", "user", "!help", false)
+
+	t.Run("nil registry", func(t *testing.T) {
+		router := orchcmd.NewCommandRouter(nil, newBotTestLogger(), func(context.Context, string, string) error { return nil })
+		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "command registry is not initialized")
+	})
+
+	t.Run("unknown command sends fallback", func(t *testing.T) {
+		var gotRoom, gotMessage string
+
+		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(_ context.Context, room, message string) error {
+			gotRoom = room
+			gotMessage = message
+
+			return nil
+		})
+
+		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "room-1", gotRoom)
+		assert.Equal(t, adapter.ErrUnknownCommand, gotMessage)
+	})
+
+	t.Run("unknown command fallback send failure", func(t *testing.T) {
+		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error {
+			return errors.New("send failed")
+		})
+
+		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to send unknown command message")
+	})
+
+	t.Run("command execution failure", func(t *testing.T) {
+		registry := command.NewRegistry()
+		registry.Register(&testCommand{
+			name: "help",
+			execute: func(context.Context, *domain.CommandContext, map[string]any) error {
+				return errors.New("handler failed")
+			},
+		})
+
+		router := orchcmd.NewCommandRouter(registry, newBotTestLogger(), func(context.Context, string, string) error { return nil })
+
+		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "execute command")
+	})
+
+	t.Run("normalize alarm add command", func(t *testing.T) {
+		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error { return nil })
+		key, params := router.NormalizeCommand(domain.CommandAlarmAdd, map[string]any{"member": "miko"})
+		assert.Equal(t, orchcmd.CommandKeyAlarm, key)
+		assert.Equal(t, "add", params["action"])
+		assert.Equal(t, "miko", params["member"])
+	})
+}
+
+func TestCommandTransportSendMethods(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+
+	t.Run("constructor", func(t *testing.T) {
+		client := &testIrisClient{}
+		transport := NewCommandTransport(client, nil)
+		require.NotNil(t, transport)
+	})
+
+	t.Run("send message with nil client", func(t *testing.T) {
+		var transport *CommandTransport
+
+		err := transport.SendMessage(ctx, "room", "hello")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "iris client is not configured")
+	})
+
+	t.Run("send message wraps iris error", func(t *testing.T) {
+		client := &testIrisClient{sendMessageErr: errors.New("iris unavailable")}
+		transport := NewCommandTransport(client, nil)
+
+		err := transport.SendMessage(ctx, "room", "hello")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send message to room room")
+	})
+
+	t.Run("send message retries failed accepted reply once", func(t *testing.T) {
+		failedDetail := "callback failed"
+		client := &acceptedTestIrisClient{
+			statuses: []*iris.ReplyStatusSnapshot{
+				{State: "failed", Detail: &failedDetail},
+				{State: "handoff_completed"},
+			},
+		}
+		transport := NewCommandTransport(client, nil)
+
+		err := transport.SendMessage(ctx, "room", "hello")
+		require.NoError(t, err)
+		assert.Equal(t, 2, client.acceptedCalls)
+		assert.Equal(t, "hello", client.lastMessage)
+	})
+
+	t.Run("send image wraps iris error", func(t *testing.T) {
+		client := &testIrisClient{sendImageErr: errors.New("image failed")}
+		transport := NewCommandTransport(client, nil)
+
+		err := transport.SendImage(ctx, "room", []byte("img"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send image to room room")
+	})
+
+	t.Run("send image forwards byte data to client", func(t *testing.T) {
+		client := &testIrisClient{}
+		transport := NewCommandTransport(client, nil)
+
+		imageData := []byte{0x89, 0x50, 0x4E, 0x47} // PNG 매직 바이트
+		err := transport.SendImage(ctx, "room-1", imageData)
+		require.NoError(t, err)
+		assert.Equal(t, "room-1", client.lastImageRoom)
+		assert.Equal(t, imageData, client.lastImage)
+	})
+
+	t.Run("send multiple images forwards byte slices to client", func(t *testing.T) {
+		client := &testIrisClient{}
+		transport := NewCommandTransport(client, nil)
+
+		images := [][]byte{
+			{0x89, 0x50, 0x4E, 0x47}, // PNG 매직 바이트
+			{0xFF, 0xD8, 0xFF, 0xE0}, // JPEG 매직 바이트
+		}
+		err := transport.SendMultipleImages(ctx, "room-2", images)
+		require.NoError(t, err)
+		require.Len(t, client.lastMultiImages, 2)
+		assert.Equal(t, images[0], client.lastMultiImages[0])
+		assert.Equal(t, images[1], client.lastMultiImages[1])
+	})
+
+	t.Run("send image with nil client returns error", func(t *testing.T) {
+		var transport *CommandTransport
+		err := transport.SendImage(ctx, "room", []byte("data"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "iris client is not configured")
+	})
+
+	t.Run("send multiple images with nil client returns error", func(t *testing.T) {
+		var transport *CommandTransport
+		err := transport.SendMultipleImages(ctx, "room", [][]byte{[]byte("data")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "iris client is not configured")
+	})
+
+	t.Run("send multiple images rejects empty batch", func(t *testing.T) {
+		transport := NewCommandTransport(&testIrisClient{}, nil)
+		err := transport.SendMultipleImages(ctx, "room", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "images must not be empty")
+	})
+
+	t.Run("send multiple images wraps iris error", func(t *testing.T) {
+		client := &testIrisClient{sendMultipleImagesErr: errors.New("multi failed")}
+		transport := NewCommandTransport(client, nil)
+
+		err := transport.SendMultipleImages(ctx, "room", [][]byte{[]byte("img")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send multiple images to room room")
+	})
+
+	t.Run("send error uses formatter", func(t *testing.T) {
+		client := &testIrisClient{}
+		formatter := adapter.NewResponseFormatter("!", nil)
+		transport := NewCommandTransport(client, formatter)
+
+		require.NoError(t, transport.SendError(ctx, "room", "boom"))
+		assert.Equal(t, "room", client.lastMessageRoom)
+		assert.Contains(t, client.lastMessage, "boom")
+		assert.Contains(t, client.lastMessage, "❌")
+	})
+}
+
+func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
+	t.Parallel()
+
+	logger := newBotTestLogger()
+	msgCh := make(chan sentMessage, 1)
+	irisClient := &testIrisClient{messageCh: msgCh}
+	b := &Bot{
+		logger:          logger,
+		commandRegistry: command.NewRegistry(),
+		messageAdapter:  adapter.NewMessageAdapter("!", ""),
+		irisClient:      irisClient,
+		formatter:       adapter.NewResponseFormatter("!", nil),
+	}
+
+	commandExecutor := b.ensureCommandExecutor()
+	require.NotNil(t, commandExecutor)
+	assert.Same(t, commandExecutor, b.ensureCommandExecutor())
+
+	ingress := b.ensureIngress()
+	require.NotNil(t, ingress)
+	assert.Same(t, ingress, b.ensureIngress())
+
+	transport := b.ensureTransport()
+	require.NotNil(t, transport)
+	assert.Same(t, transport, b.ensureTransport())
+
+	// unknown command path: fallback message should be sent
+	sender := "user"
+	b.HandleMessage(t.Context(), &iris.Message{
+		Msg:    "!help",
+		Room:   "room-name",
+		Sender: &sender,
+		JSON: &iris.MessageJSON{
+			UserID: "user-1",
+			ChatID: "room-1",
+		},
+	})
+
+	select {
+	case msg := <-msgCh:
+		assert.Equal(t, "room-1", msg.room)
+		assert.Equal(t, adapter.ErrUnknownCommand, msg.message)
+	case <-time.After(1 * time.Second):
+		t.Fatal("did not receive message in time")
+	}
+}
+
+func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
+	t.Parallel()
+
+	logger := newBotTestLogger()
+	msgCh := make(chan sentMessage, 1)
+	irisClient := &testIrisClient{messageCh: msgCh}
+
+	registry := command.NewRegistry()
+	registry.Register(&testCommand{
+		name: "help",
+		execute: func(context.Context, *domain.CommandContext, map[string]any) error {
+			return errors.New("boom")
+		},
+	})
+
+	b := &Bot{
+		logger:          logger,
+		commandRegistry: registry,
+		messageAdapter:  adapter.NewMessageAdapter("!", ""),
+		irisClient:      irisClient,
+		formatter:       adapter.NewResponseFormatter("!", nil),
+	}
+
+	sender := "user"
+	b.HandleMessage(t.Context(), &iris.Message{
+		Msg:    "!help",
+		Room:   "room-name",
+		Sender: &sender,
+		JSON: &iris.MessageJSON{
+			UserID: "user-1",
+			ChatID: "room-1",
+		},
+	})
+
+	select {
+	case msg := <-msgCh:
+		assert.Equal(t, "room-1", msg.room)
+		assert.Contains(t, msg.message, "help 명령어 처리 중 오류")
+	case <-time.After(1 * time.Second):
+		t.Fatal("did not receive message in time")
+	}
+
+	t.Run("getErrorMessage mappings", func(t *testing.T) {
+		assert.Empty(t, b.getErrorMessage(nil, "help"))
+
+		irisServiceErr := appErrors.NewServiceError("msg", serviceNameIris, "send_message", errors.New("down"))
+		assert.Equal(t, adapter.ErrIrisConnectionFailed, b.getErrorMessage(irisServiceErr, "help"))
+
+		apiErr := appErrors.NewAPIError("api", 500, map[string]any{"operation": "fetch"})
+		assert.Equal(t, adapter.ErrExternalAPICallFailed, b.getErrorMessage(apiErr, "help"))
+
+		keyRotationErr := appErrors.NewKeyRotationError("key", 429, map[string]any{"url": "https://example.com"})
+		assert.Equal(t, adapter.ErrExternalAPICallFailed, b.getErrorMessage(keyRotationErr, "help"))
+
+		cacheErr := appErrors.NewCacheError("cache", "get", "k1", errors.New("down"))
+		assert.Equal(t, adapter.ErrCacheConnectionFailed, b.getErrorMessage(cacheErr, "help"))
+
+		validationErr := appErrors.NewValidationError("invalid input", "field", "v")
+		assert.Equal(t, validationErr.Error(), b.getErrorMessage(validationErr, "help"))
+
+		fallback := b.getErrorMessage(errors.New("generic error"), "help")
+		assert.Contains(t, fallback, "help 명령어 처리 중 오류")
+	})
+}
