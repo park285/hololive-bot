@@ -6,14 +6,18 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 cd "${ROOT_DIR}"
 
-GO_PACKAGES=(./...)
-mapfile -t workspace_packages < <(go_workspace_package_patterns)
-GO_PACKAGES+=("${workspace_packages[@]}")
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
+source "${SCRIPT_DIR}/local-ci-files.sh"
+mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
+mapfile -t WORKSPACE_GO_PACKAGES < <(go_workspace_package_patterns)
+GO_PACKAGES=()
+source "${SCRIPT_DIR}/local-ci-packages.sh"
 
+LOCAL_CI_GO_SCOPE="${LOCAL_CI_GO_SCOPE:-all}"
 RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-true}"
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-false}"
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}"
+RUN_ADMIN_TOUCH_GUARDRAIL="${RUN_ADMIN_TOUCH_GUARDRAIL:-true}"
 STATICCHECK_VERSION="${STATICCHECK_VERSION:-2026.1}"
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.3.0}"
 
@@ -98,31 +102,6 @@ ensure_govulncheck() {
     fi
 
     printf '%s\n' "${bin}"
-}
-
-go_source_files() {
-    local file
-    git ls-files --cached --others --exclude-standard '*.go' | while IFS= read -r file; do
-        [[ -f "${file}" ]] && printf '%s\n' "${file}"
-    done
-}
-
-workspace_metadata_files() {
-    git ls-files --cached --others --exclude-standard \
-        go.work go.work.sum \
-        'go.mod' 'go.sum' \
-        '*/go.mod' '*/go.sum'
-}
-
-snapshot_files() {
-    local file
-    while IFS= read -r file; do
-        if [[ -f "${file}" ]]; then
-            sha256sum "${file}"
-        else
-            printf 'missing  %s\n' "${file}"
-        fi
-    done | sort
 }
 
 run_step() {
@@ -230,35 +209,38 @@ check_go_fix() {
         --exclude='.env.*'
     )
 
+    if ! has_go_packages; then
+        echo "[LOCAL CI] Skip go fix drift: no Go packages in scope"
+        return 0
+    fi
+
     mkdir -p "${tmp_parent}"
     find "${tmp_parent}" -mindepth 1 -maxdepth 1 -type d -name 'go-fix.*' -mmin +60 -exec rm -rf {} +
     tmp_dir="$(mktemp -d "${tmp_parent%/}/go-fix.XXXXXX")"
 
     cleanup_go_fix_tmp() {
-        rm -rf "${tmp_dir}"
+        [[ -n "${tmp_dir:-}" ]] && rm -rf "${tmp_dir}"
+        trap - RETURN
     }
+    trap cleanup_go_fix_tmp RETURN
 
     mkdir -p "${tmp_dir}/repo"
     if ! tar "${tar_excludes[@]}" -C "${ROOT_DIR}" -cf - . | tar -C "${tmp_dir}/repo" -xf -; then
-        cleanup_go_fix_tmp
         return 1
     fi
 
     if grep -q '../iris-client-go' "${ROOT_DIR}/go.work"; then
         if [[ ! -d "${iris_client_go_dir}" ]]; then
             echo "active iris-client-go workspace not found: ${iris_client_go_dir}" >&2
-            cleanup_go_fix_tmp
             return 1
         fi
         mkdir -p "${tmp_dir}/iris-client-go"
         if ! tar "${tar_excludes[@]}" -C "${iris_client_go_dir}" -cf - . | tar -C "${tmp_dir}/iris-client-go" -xf -; then
-            cleanup_go_fix_tmp
             return 1
         fi
     fi
 
     if ! (cd "${tmp_dir}/repo" && go fix "${GO_PACKAGES[@]}"); then
-        cleanup_go_fix_tmp
         return 1
     fi
 
@@ -274,11 +256,8 @@ check_go_fix() {
         echo "go fix would update modern Go compatibility rewrites:" >&2
         printf ' - %s\n' "${changed[@]}" >&2
         echo "Run go fix on the listed packages/files and commit the result." >&2
-        cleanup_go_fix_tmp
         return 1
     fi
-
-    cleanup_go_fix_tmp
 }
 
 check_go_mod_tidy() {
@@ -311,6 +290,12 @@ check_staticcheck() {
         return 0
     fi
 
+    if ! has_go_packages; then
+        echo "[LOCAL CI] Skip staticcheck: no Go packages in scope"
+        echo
+        return 0
+    fi
+
     local staticcheck_bin
     staticcheck_bin="$(ensure_staticcheck)"
 
@@ -321,21 +306,49 @@ go_mod_readonly() {
     GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" "$@"
 }
 
+run_go_package_step() {
+    local name="$1"
+    shift
+
+    if ! has_go_packages; then
+        echo "[LOCAL CI] Skip ${name}: no Go packages in scope"
+        echo
+        return 0
+    fi
+
+    run_step "${name}" "$@" "${GO_PACKAGES[@]}"
+}
+
+run_step "local-ci package scope tests" ./scripts/ci/test-local-ci-packages.sh
+configure_go_packages
+echo "[LOCAL CI] Go package scope: ${LOCAL_CI_GO_SCOPE} (${#GO_PACKAGES[@]} packages)"
+if has_go_packages; then
+    printf '[LOCAL CI]   %s\n' "${GO_PACKAGES[@]}"
+else
+    echo "[LOCAL CI]   no Go packages selected"
+fi
+echo
+
 run_step "Architecture gates" ./scripts/architecture/ci-boundary-gate.sh
-run_step "Refactor admin-dashboard guardrail" ./scripts/refactor/validate-no-admin-touch.sh
-run_step "Refactor admin-dashboard guardrail tests" ./scripts/refactor/test-validate-no-admin-touch.sh
+if [[ "${RUN_ADMIN_TOUCH_GUARDRAIL}" == "true" ]]; then
+    run_step "Refactor admin-dashboard guardrail" ./scripts/refactor/validate-no-admin-touch.sh
+    run_step "Refactor admin-dashboard guardrail tests" ./scripts/refactor/test-validate-no-admin-touch.sh
+else
+    echo "[LOCAL CI] Skip refactor admin-dashboard guardrail: RUN_ADMIN_TOUCH_GUARDRAIL=${RUN_ADMIN_TOUCH_GUARDRAIL}"
+    echo
+fi
 run_step "Go toolchain" check_go_toolchain
 run_step "go work sync drift" check_go_work_sync
 run_step "gofmt" check_gofmt
 run_step "go fix drift" check_go_fix
 check_go_mod_tidy
-run_step "Go vet" go_mod_readonly go vet "${GO_PACKAGES[@]}"
+run_go_package_step "Go vet" go_mod_readonly go vet
 check_staticcheck
-run_step "Go build" go_mod_readonly go build "${GO_PACKAGES[@]}"
-run_step "Go test" go_mod_readonly go test -count=1 "${GO_PACKAGES[@]}"
+run_go_package_step "Go build" go_mod_readonly go build
+run_go_package_step "Go test" go_mod_readonly go test -count=1
 
 if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
-    run_step "Go race test" go_mod_readonly go test -race -count=1 "${GO_PACKAGES[@]}"
+    run_go_package_step "Go race test" go_mod_readonly go test -race -count=1
 else
     echo "[LOCAL CI] Skip race tests: set RUN_RACE_TESTS=true to run go test -race"
     echo

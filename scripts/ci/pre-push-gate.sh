@@ -13,16 +13,45 @@ echo "════════════════════════�
 echo "  pre-push quality gate"
 echo "════════════════════════════════════════"
 
-RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-false}" \
-STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}" \
-RUN_RACE_TESTS="${RUN_RACE_TESTS:-false}" \
-  ./scripts/ci/local-ci.sh
-
 if git rev-parse --verify origin/main >/dev/null 2>&1; then
   changed_files="$(git diff --name-only origin/main..HEAD 2>/dev/null || true)"
 else
   changed_files="$(git diff --name-only HEAD~1..HEAD 2>/dev/null || true)"
 fi
+
+if [[ "${FULL_PRE_PUSH:-false}" == "true" ]]; then
+  PRE_PUSH_MODE="${PRE_PUSH_MODE:-full}"
+else
+  PRE_PUSH_MODE="${PRE_PUSH_MODE:-fast}"
+fi
+
+case "${PRE_PUSH_MODE}" in
+  fast)
+    local_ci_go_scope="changed"
+    ;;
+  full)
+    local_ci_go_scope="all"
+    ;;
+  *)
+    echo "unsupported PRE_PUSH_MODE=${PRE_PUSH_MODE}; expected fast or full" >&2
+    exit 1
+    ;;
+esac
+
+admin_touch_guardrail="${RUN_ADMIN_TOUCH_GUARDRAIL:-true}"
+if echo "$changed_files" | grep -q '^admin-dashboard/' && [[ -z "${RUN_ADMIN_TOUCH_GUARDRAIL+x}" ]]; then
+  admin_touch_guardrail=false
+fi
+
+resolved_local_ci_go_scope="${LOCAL_CI_GO_SCOPE:-${local_ci_go_scope}}"
+echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${resolved_local_ci_go_scope}"
+
+LOCAL_CI_GO_SCOPE="${resolved_local_ci_go_scope}" \
+RUN_ADMIN_TOUCH_GUARDRAIL="${admin_touch_guardrail}" \
+RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-false}" \
+STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}" \
+RUN_RACE_TESTS="${RUN_RACE_TESTS:-false}" \
+  ./scripts/ci/local-ci.sh
 
 if echo "$changed_files" | grep -q '^admin-dashboard/backend/'; then
   echo "[pre-push] admin-dashboard backend Rust 품질 게이트"
