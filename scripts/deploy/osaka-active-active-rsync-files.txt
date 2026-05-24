@@ -467,7 +467,7 @@ hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_ca
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_keys.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_persistence.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_platform_mapping.go
-hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_platform_mapping_hash.go
+hololive/hololive-shared/pkg/service/notification/internal/platformmap/mapper_hash.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service_cache_mutation.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service_cache_removal.go
