@@ -191,35 +191,76 @@ check_gofmt() {
 
 check_go_fix() {
     local tmp_dir
-    tmp_dir="$(mktemp -d)"
+    local tmp_parent
+    tmp_parent="${LOCAL_CI_TMPDIR:-${ROOT_DIR}/.tmp/local-ci}"
     local iris_client_go_dir
     iris_client_go_dir="${IRIS_CLIENT_GO_WORKSPACE_PATH:-${ROOT_DIR}/../iris-client-go}"
+    local tar_excludes=(
+        --exclude=.git
+        --exclude=.worktrees
+        --exclude=.tasklists
+        --exclude=.runlogs
+        --exclude=.codex
+        --exclude=.claude
+        --exclude=.serena
+        --exclude=.gemini
+        --exclude=.tmp
+        --exclude=./admin-dashboard
+        --exclude=./admin-dashboard/*
+        --exclude=./artifacts
+        --exclude=./artifacts/*
+        --exclude=./backups
+        --exclude=./backups/*
+        --exclude=./data
+        --exclude=./data/*
+        --exclude=./logs
+        --exclude=./logs/*
+        --exclude=./runtime-config
+        --exclude=./runtime-config/*
+        --exclude=target
+        --exclude='*/target'
+        --exclude='*/target/*'
+        --exclude=node_modules
+        --exclude='*/node_modules'
+        --exclude='*/node_modules/*'
+        --exclude='*.key'
+        --exclude='*.pem'
+        --exclude='*.p12'
+        --exclude=.env
+        --exclude='.env.*'
+    )
+
+    mkdir -p "${tmp_parent}"
+    find "${tmp_parent}" -mindepth 1 -maxdepth 1 -type d -name 'go-fix.*' -mmin +60 -exec rm -rf {} +
+    tmp_dir="$(mktemp -d "${tmp_parent%/}/go-fix.XXXXXX")"
+
+    cleanup_go_fix_tmp() {
+        rm -rf "${tmp_dir}"
+    }
 
     mkdir -p "${tmp_dir}/repo"
-    tar \
-        --exclude=.git \
-        --exclude=.worktrees \
-        --exclude=.tasklists \
-        --exclude=.runlogs \
-        --exclude=.codex \
-        --exclude=.claude \
-        --exclude=.serena \
-        --exclude=.gemini \
-        -C "${ROOT_DIR}" -cf - . | tar -C "${tmp_dir}/repo" -xf -
+    if ! tar "${tar_excludes[@]}" -C "${ROOT_DIR}" -cf - . | tar -C "${tmp_dir}/repo" -xf -; then
+        cleanup_go_fix_tmp
+        return 1
+    fi
 
     if grep -q '../iris-client-go' "${ROOT_DIR}/go.work"; then
         if [[ ! -d "${iris_client_go_dir}" ]]; then
             echo "active iris-client-go workspace not found: ${iris_client_go_dir}" >&2
-            rm -rf "${tmp_dir}"
-            exit 1
+            cleanup_go_fix_tmp
+            return 1
         fi
         mkdir -p "${tmp_dir}/iris-client-go"
-        tar \
-            --exclude=.git \
-            -C "${iris_client_go_dir}" -cf - . | tar -C "${tmp_dir}/iris-client-go" -xf -
+        if ! tar "${tar_excludes[@]}" -C "${iris_client_go_dir}" -cf - . | tar -C "${tmp_dir}/iris-client-go" -xf -; then
+            cleanup_go_fix_tmp
+            return 1
+        fi
     fi
 
-    (cd "${tmp_dir}/repo" && go fix "${GO_PACKAGES[@]}")
+    if ! (cd "${tmp_dir}/repo" && go fix "${GO_PACKAGES[@]}"); then
+        cleanup_go_fix_tmp
+        return 1
+    fi
 
     local changed=()
     local file
@@ -233,11 +274,11 @@ check_go_fix() {
         echo "go fix would update modern Go compatibility rewrites:" >&2
         printf ' - %s\n' "${changed[@]}" >&2
         echo "Run go fix on the listed packages/files and commit the result." >&2
-        rm -rf "${tmp_dir}"
-        exit 1
+        cleanup_go_fix_tmp
+        return 1
     fi
 
-    rm -rf "${tmp_dir}"
+    cleanup_go_fix_tmp
 }
 
 check_go_mod_tidy() {
