@@ -12,6 +12,51 @@ import (
 	"github.com/park285/shared-go/pkg/runtime/loop"
 )
 
+func buildDeliveryAuditLogAttrsWithClassification(row domain.YouTubeNotificationDeliveryTelemetry, classification PostLatencyClassificationResult) []any {
+	attrs := []any{
+		slog.Int64(logschema.FieldDeliveryID, row.DeliveryID),
+		slog.Int64(logschema.FieldOutboxID, row.OutboxID),
+		slog.String(logschema.FieldRoomID, row.RoomID),
+		slog.String(logschema.FieldChannelID, row.ChannelID),
+		slog.String(deliveryAuditPostIDLogField, row.PostID),
+		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(row.ContentID)),
+		slog.String(deliveryAuditAlarmTypeLogField, string(row.AlarmType)),
+		slog.Time(deliveryAuditSentAtLogField, row.EventAt.UTC()),
+		slog.String(deliveryAuditSendResultLogField, row.SendResult),
+		slog.String(deliveryAuditPathLogField, normalizeCommunityShortsDeliveryPath(row.DeliveryPath)),
+		slog.String(deliveryAuditModeLogField, row.DeliveryMode),
+		slog.String(deliveryDedupeKeyLogField, row.DedupeKey),
+		slog.Int(logschema.FieldAttemptOrdinal, row.AttemptOrdinal),
+	}
+	attrs = appendCommunityShortsAlarmTimingLogAttrs(attrs, communityShortsAlarmTimingForTelemetryRow(row))
+	attrs = appendDeliveryObservationLogAttrs(attrs, row)
+	if strings.TrimSpace(row.FailureReason) != "" {
+		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, row.FailureReason))
+	}
+	attrs = appendLatencyClassificationLogAttr(attrs, classification)
+	return attrs
+}
+
+func appendDeliveryObservationLogAttrs(attrs []any, row domain.YouTubeNotificationDeliveryTelemetry) []any {
+	if row.DetectedAt != nil {
+		attrs = append(attrs, slog.Time(logschema.FieldDetectedAt, row.DetectedAt.UTC()))
+	}
+	attrs = append(attrs, slog.String(logschema.FieldObservationStatus, normalizeDeliveryTelemetryObservationStatus(row.ObservationStatus)))
+	if strings.TrimSpace(row.ObservationRuntimeName) != "" {
+		attrs = append(attrs, slog.String(logschema.FieldObservationRuntimeName, strings.TrimSpace(row.ObservationRuntimeName)))
+	}
+	if row.ObservationBigBangCutoverAt != nil {
+		attrs = append(attrs, slog.Time(logschema.FieldObservationBigBangCutoverAt, row.ObservationBigBangCutoverAt.UTC()))
+	}
+	if row.ObservationStartedAt != nil {
+		attrs = append(attrs, slog.Time(logschema.FieldObservationStartedAt, row.ObservationStartedAt.UTC()))
+	}
+	if row.ObservationEndedAt != nil {
+		attrs = append(attrs, slog.Time(logschema.FieldObservationEndedAt, row.ObservationEndedAt.UTC()))
+	}
+	return attrs
+}
+
 type TelemetryProcessor struct {
 	telemetry *DeliveryTelemetryRepository
 	logger    *slog.Logger
