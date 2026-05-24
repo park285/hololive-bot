@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 )
 
 func dedupeKeyLogValue(outbox domain.YouTubeNotificationOutbox) string {
@@ -232,11 +231,4 @@ func (d *Dispatcher) logCommunityShortsDeliveryAuditFallback(
 	sendErr error,
 ) {
 	d.auditLogger.logCommunityShortsDeliveryAuditFallback(ctx, preparedEvents, sendErr)
-}
-
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen]
 }

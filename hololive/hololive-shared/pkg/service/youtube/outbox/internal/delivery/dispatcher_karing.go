@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -146,23 +145,7 @@ func (d *Dispatcher) recordKaringRequestBuildFailure(
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release Karing delivery claims after request build error",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-	)
-	failedAt := time.Now()
-	d.logger.Warn("Failed to build Karing delivery request",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-		slog.String("kind", string(kind)),
-		slog.Int("count", len(outboxes)),
-		dedupeKeyLogAttrForOutboxes(outboxes),
-		slog.Any("error", err))
-	d.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, mode, "failure", "karing request", err)
-	d.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, mode, "failure", "karing request")
-	for i := range rows {
-		d.recordDeliveryFailure(result, mu, "karing request", rows[i].ID, rows[i].OutboxID)
-	}
+	d.metricsRecorder.recordKaringRequestBuildFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu)
 }
 
 func (d *Dispatcher) recordKaringSendFailure(
@@ -179,23 +162,7 @@ func (d *Dispatcher) recordKaringSendFailure(
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release Karing delivery claims after send failure",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-	)
-	failedAt := time.Now()
-	d.logger.Warn("Failed to send Karing delivery",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-		slog.String("kind", string(kind)),
-		slog.Int("count", len(rows)),
-		dedupeKeyLogAttr(sendReq.dedupeKeys),
-		slog.Any("error", err))
-	d.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, mode, "failure", "karing send", err)
-	d.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, mode, "failure", "karing send")
-	for i := range rows {
-		d.recordDeliveryFailure(result, mu, "karing send", rows[i].ID, rows[i].OutboxID)
-	}
+	d.metricsRecorder.recordKaringSendFailure(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu)
 }
 
 func (d *Dispatcher) recordKaringSuccess(
@@ -211,22 +178,5 @@ func (d *Dispatcher) recordKaringSuccess(
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
-	sentAt := time.Now()
-	d.logger.Info("Sent Karing delivery",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-		slog.String("kind", string(kind)),
-		slog.String("delivery_mode", mode),
-		slog.Int("count", len(rows)),
-		dedupeKeyLogAttr(sendReq.dedupeKeys))
-	d.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, sentAt, mode, "success", "", nil)
-	d.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, mode, "success", "")
-
-	mu.Lock()
-	for i := range rows {
-		result.successDeliveryIDs = append(result.successDeliveryIDs, rows[i].ID)
-		result.touchedOutboxIDs = append(result.touchedOutboxIDs, rows[i].OutboxID)
-	}
-	result.successClaimTokens = append(result.successClaimTokens, claimTokens...)
-	mu.Unlock()
+	d.metricsRecorder.recordKaringSuccess(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, result, mu)
 }

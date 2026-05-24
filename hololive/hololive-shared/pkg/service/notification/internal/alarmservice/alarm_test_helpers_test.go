@@ -29,6 +29,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache"
+	"github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -81,8 +83,10 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	return &AlarmService{
-		cache:        cacheClient,
-		logger:       logger,
-		targetPolicy: sharedchecker.NewTargetMinutePolicyFromConfigured([]int{30, 15, 5, 1}),
+		cache:          cacheClient,
+		logger:         logger,
+		targetPolicy:   sharedchecker.NewTargetMinutePolicyFromConfigured([]int{30, 15, 5, 1}),
+		cacheState:     alarmcache.NewState(cacheClient, nil, logger),
+		platformMapper: platformmap.NewMapper(cacheClient, nil, logger),
 	}
 }
