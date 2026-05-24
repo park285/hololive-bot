@@ -21,11 +21,18 @@
 package polling
 
 import (
+	"sync"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/polling/batchrepo"
+)
+
+var (
+	defaultMetrics     *Metrics
+	defaultMetricsOnce sync.Once
 )
 
 type Metrics struct {
@@ -48,12 +55,16 @@ type Metrics struct {
 }
 
 func NewMetrics() *Metrics {
-	m := &Metrics{}
-	m.registerSchedulerMetrics()
-	m.registerJobClaimMetrics()
-	m.registerContentMetrics()
-	batchrepo.ObserveOutboxInsert = m.ObserveOutboxInsert
-	return m
+	defaultMetricsOnce.Do(func() {
+		m := &Metrics{}
+		m.registerSchedulerMetrics()
+		m.registerJobClaimMetrics()
+		m.registerContentMetrics()
+		batchrepo.ObserveOutboxInsert = m.ObserveOutboxInsert
+		defaultMetrics = m
+	})
+
+	return defaultMetrics
 }
 
 func (m *Metrics) registerSchedulerMetrics() {
