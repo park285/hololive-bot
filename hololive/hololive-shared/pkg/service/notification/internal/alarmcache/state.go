@@ -31,17 +31,26 @@ type UpcomingEventNotifiedData struct {
 	NotifiedAt string `json:"notified_at"`
 }
 
+type MemberDataFunc func() domain.MemberDataProvider
+
 type State struct {
 	Cache            cache.Client
-	MemberData       domain.MemberDataProvider
+	memberDataFn     MemberDataFunc
 	Logger           *slog.Logger
 	NotifiedLegacyMu sync.Mutex
 }
 
-func NewState(cacheClient cache.Client, memberData domain.MemberDataProvider, logger *slog.Logger) *State {
+func NewState(cacheClient cache.Client, memberDataFn MemberDataFunc, logger *slog.Logger) *State {
 	return &State{
-		Cache:      cacheClient,
-		MemberData: memberData,
-		Logger:     logger,
+		Cache:        cacheClient,
+		memberDataFn: memberDataFn,
+		Logger:       logger,
 	}
+}
+
+func (s *State) memberData() domain.MemberDataProvider {
+	if s.memberDataFn == nil {
+		return nil
+	}
+	return s.memberDataFn()
 }

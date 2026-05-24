@@ -35,7 +35,7 @@ func (s *State) ResolveCacheMemberName(ctx context.Context, channelID, fallback 
 }
 
 func (s *State) ResolveMemberDataName(ctx context.Context, channelID string) string {
-	provider := s.MemberData
+	provider := s.memberData()
 	if provider == nil {
 		return ""
 	}
