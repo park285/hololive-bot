@@ -23,11 +23,11 @@ package httpserver
 import (
 	"net/http"
 
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2"     //nolint:staticcheck // SA1019: http.Server.Protocols 전환 별도 진행
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck // SA1019: http.Server.Protocols 전환 별도 진행
 )
 
 // TLS 없이 HTTP/2 프로토콜을 사용하여 멀티플렉싱과 헤더 압축 이점을 제공합니다.
 func WrapH2C(handler http.Handler) http.Handler {
-	return h2c.NewHandler(handler, &http2.Server{})
+	return h2c.NewHandler(handler, &http2.Server{}) //nolint:staticcheck // SA1019
 }
