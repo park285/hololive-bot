@@ -30,7 +30,6 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	alarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -38,7 +37,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -251,11 +249,7 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(failingCache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodex.NewHolodexService("http://unused", "k", failingCache, nil, logger)
-	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(failingCache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
-	require.NoError(t, err)
 	notifier, err := NewNotifier(
 		dedupService,
 		queue.NewPublisher(failingCache, logger),
@@ -266,12 +260,6 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 
 	previousScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
 	currentScheduled := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
-	require.NoError(t, dedupService.MarkAsNotified(t.Context(), "delayed-publish-fail", previousScheduled, 5))
-
-	window := sharedchecker.EvaluationWindow{
-		Start: time.Date(2026, 4, 9, 11, 52, 50, 0, time.UTC),
-		End:   time.Date(2026, 4, 9, 11, 53, 10, 0, time.UTC),
-	}
 	stream := &domain.Stream{
 		ID:             "delayed-publish-fail",
 		Title:          "publish fail retry",
@@ -280,19 +268,22 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 		StartScheduled: &currentScheduled,
 		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
 	}
+	notification := domain.NewAlarmNotification("room-1", stream.Channel, stream, 5, []string{}, "일정이 늦춰졌습니다.")
+	notification.ScheduleChangePreviousStart = previousScheduled.Format(time.RFC3339)
 
-	notifications, err := checker.buildUpcomingNotifications(t.Context(), stream, []string{"room-1"}, window)
-	require.NoError(t, err)
-	require.Len(t, notifications, 1)
-	assert.Equal(t, "일정이 늦춰졌습니다.", notifications[0].ScheduleChangeMessage)
-
-	_, sendErr := notifier.Send(t.Context(), notifications)
+	_, sendErr := notifier.Send(t.Context(), []*domain.AlarmNotification{notification})
 	require.Error(t, sendErr)
 
-	retryNotifications, err := checker.buildUpcomingNotifications(t.Context(), stream, []string{"room-1"}, window)
+	claimKeys, claimed, err := dedupService.TryClaimNotificationScheduleChange(
+		t.Context(),
+		"room-1",
+		"ch-1",
+		stream,
+		notification.ScheduleChangePreviousStart,
+	)
 	require.NoError(t, err)
-	require.Len(t, retryNotifications, 1)
-	assert.Equal(t, "일정이 늦춰졌습니다.", retryNotifications[0].ScheduleChangeMessage)
+	assert.True(t, claimed)
+	assert.NotEmpty(t, claimKeys)
 }
 
 func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {

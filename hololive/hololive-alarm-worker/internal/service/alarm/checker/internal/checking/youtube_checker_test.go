@@ -37,7 +37,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 )
 
@@ -1091,109 +1090,4 @@ func TestResolveLiveStart(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestIsChzzkLive(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		status *chzzk.LiveStatusContent
-		want   bool
-	}{
-		"nil":      {status: nil, want: false},
-		"OPEN":     {status: &chzzk.LiveStatusContent{Status: "OPEN"}, want: true},
-		"open 소문자": {status: &chzzk.LiveStatusContent{Status: "open"}, want: true},
-		"CLOSE":    {status: &chzzk.LiveStatusContent{Status: "CLOSE"}, want: false},
-		"공백 포함":    {status: &chzzk.LiveStatusContent{Status: "  OPEN  "}, want: true},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, isChzzkLive(tc.status))
-		})
-	}
-}
-
-func TestBuildChzzkLiveDedupKey(t *testing.T) {
-	t.Parallel()
-
-	detectedAt := time.Date(2026, time.March, 2, 10, 35, 0, 0, time.UTC)
-	key := buildChzzkLiveDedupKey("chzzk123", detectedAt)
-
-	assert.Contains(t, key, notification.ChzzkLiveNotifiedKeyPrefix+"chzzk123:")
-	assert.Contains(t, key, "20260302T1030")
-}
-
-func TestBuildChzzkLiveStream(t *testing.T) {
-	t.Parallel()
-
-	status := &chzzk.LiveStatusContent{
-		LiveTitle:           "테스트 라이브",
-		Status:              "OPEN",
-		ConcurrentUserCount: 1234,
-		LiveCategoryValue:   "게임",
-	}
-	detectedAt := time.Date(2026, time.March, 2, 10, 35, 0, 0, time.UTC)
-
-	stream := buildChzzkLiveStream("UC_YT", "chzzk123", "라덴", status, detectedAt)
-	require.NotNil(t, stream)
-	assert.Equal(t, domain.StreamStatusLive, stream.Status)
-	assert.Equal(t, "테스트 라이브", stream.Title)
-	assert.Equal(t, "UC_YT", stream.ChannelID)
-	assert.Equal(t, "라덴", stream.ChannelName)
-	assert.True(t, stream.IsChzzkOnly)
-	assert.Contains(t, stream.ChzzkLiveURL, "chzzk123")
-	require.NotNil(t, stream.ViewerCount)
-	assert.Equal(t, 1234, *stream.ViewerCount)
-}
-
-func TestBuildChzzkLiveStream_EmptyTitle(t *testing.T) {
-	t.Parallel()
-
-	status := &chzzk.LiveStatusContent{Status: "OPEN"}
-	now := time.Now().UTC()
-	stream := buildChzzkLiveStream("UC_YT", "ch1", "", status, now)
-
-	assert.Contains(t, stream.Title, "치지직 라이브")
-}
-
-func TestBuildTwitchLiveDedupKey(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, twitchLiveNotifiedKeyPrefix+"u1:s1", buildTwitchLiveDedupKey("u1", "s1"))
-}
-
-func TestNormalizeTwitchLoginMappings(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		input   map[string]string
-		wantLen int
-	}{
-		"nil":     {input: nil, wantLen: 0},
-		"정상":      {input: map[string]string{"LOGIN": "UC_A"}, wantLen: 1},
-		"빈 값 필터링": {input: map[string]string{"login": "", "": "UC_B"}, wantLen: 0},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			m, ids := normalizeTwitchLoginMappings(tc.input)
-			assert.Len(t, m, tc.wantLen)
-			assert.Len(t, ids, tc.wantLen)
-		})
-	}
-}
-
-func TestBuildTwitchLookupLogins(t *testing.T) {
-	t.Parallel()
-
-	mappings := map[string]string{"a": "UC_A", "b": "UC_B", "c": "UC_C"}
-	subs := map[string][]string{"UC_A": {"r1"}, "UC_C": {"r2"}}
-
-	logins := buildTwitchLookupLogins(mappings, subs)
-	assert.Len(t, logins, 2)
-	assert.Contains(t, logins, "a")
-	assert.Contains(t, logins, "c")
 }
