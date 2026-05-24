@@ -124,6 +124,14 @@ func (c *RuntimeIrisClient) GetBridgeHealth(ctx context.Context) (*iris.BridgeHe
 	return client.GetBridgeHealth(ctx)
 }
 
+func (c *RuntimeIrisClient) GetNativeCoreDiagnostics(ctx context.Context) (*iris.NativeCoreDiagnostics, error) {
+	client, err := c.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetNativeCoreDiagnostics(ctx)
+}
+
 func (c *RuntimeIrisClient) SendKaring(ctx context.Context, req iris.KaringSendRequest) (*iris.KaringDryRunResponse, error) {
 	client, err := c.currentClient()
 	if err != nil {

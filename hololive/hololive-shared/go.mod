@@ -38,7 +38,7 @@ replace github.com/park285/hololive-bot/shared-go => ../../shared-go
 
 require (
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v0.13.0
+	github.com/park285/iris-client-go v0.13.2-0.20260524122903-4b1a0a17f276
 	github.com/prometheus/client_model v0.6.2
 	github.com/tech-engine/goscrapy v0.25.0
 	gorm.io/driver/sqlite v1.6.0

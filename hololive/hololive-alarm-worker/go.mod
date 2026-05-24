@@ -10,7 +10,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/hololive-bot/shared-go v0.1.2
-	github.com/park285/iris-client-go v0.13.0
+	github.com/park285/iris-client-go v0.13.2-0.20260524122903-4b1a0a17f276
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.73
