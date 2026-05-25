@@ -16,7 +16,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.1.3 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/park285/shared-go v1.0.0
+	github.com/park285/shared-go v1.4.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.19.0
@@ -38,7 +38,7 @@ replace github.com/park285/shared-go => ../../../shared-go
 
 require (
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v0.14.0
+	github.com/park285/iris-client-go v0.15.1
 	github.com/prometheus/client_model v0.6.2
 	github.com/tech-engine/goscrapy v0.27.17
 	gorm.io/driver/sqlite v1.6.0

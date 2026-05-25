@@ -11,7 +11,7 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go/v3 v3.37.0
-	github.com/park285/shared-go v1.0.0
+	github.com/park285/shared-go v1.4.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
 	gorm.io/gorm v1.31.1
@@ -101,7 +101,7 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/park285/iris-client-go v0.14.0 // indirect
+	github.com/park285/iris-client-go v0.15.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect

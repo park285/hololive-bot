@@ -9,8 +9,8 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.14.0
-	github.com/park285/shared-go v1.0.0
+	github.com/park285/iris-client-go v0.15.1
+	github.com/park285/shared-go v1.4.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.75

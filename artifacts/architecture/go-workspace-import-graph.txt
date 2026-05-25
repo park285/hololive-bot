@@ -303,6 +303,7 @@ github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/park
 github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/park285/shared-go/pkg/workerpool
 github.com/kapu/hololive-kakao-bot-go/internal/app/http -> github.com/kapu/hololive-shared/pkg/config
+github.com/kapu/hololive-kakao-bot-go/internal/app/http -> github.com/kapu/hololive-shared/pkg/health
 github.com/kapu/hololive-kakao-bot-go/internal/app/http -> github.com/kapu/hololive-shared/pkg/server
 github.com/kapu/hololive-kakao-bot-go/internal/app/runtime -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-kakao-bot-go/internal/app/runtime -> github.com/park285/shared-go/pkg/runtime/httpserver
@@ -536,6 +537,7 @@ github.com/kapu/hololive-shared/pkg/config -> github.com/kapu/hololive-shared/pk
 github.com/kapu/hololive-shared/pkg/config/internal/settings -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/config/internal/settings -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/hololive-shared/pkg/config/internal/settings -> github.com/park285/shared-go/pkg/stringutil
+github.com/kapu/hololive-shared/pkg/config/internal/settings -> github.com/park285/shared-go/pkg/workerconfig
 github.com/kapu/hololive-shared/pkg/contracts/alarm -> github.com/kapu/hololive-shared/pkg/contracts/alarm
 github.com/kapu/hololive-shared/pkg/contracts/alarm -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/contracts/alarm -> github.com/park285/shared-go/pkg/json

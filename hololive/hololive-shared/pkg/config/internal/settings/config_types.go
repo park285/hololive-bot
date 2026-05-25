@@ -64,10 +64,18 @@ type WebhookConfig struct {
 	QueueSize      int
 	EnqueueTimeout time.Duration
 	HandlerTimeout time.Duration
+	MaxBodyBytes   int64
+	DedupTTL       time.Duration
+	DedupTimeout   time.Duration
 	RequireHTTP2   bool
 }
 
 type WorkerPoolConfig struct {
 	Workers   int
 	QueueSize int
+}
+
+type WorkerProfileConfig struct {
+	Version int
+	Hash    string
 }

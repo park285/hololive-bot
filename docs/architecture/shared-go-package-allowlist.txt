@@ -12,4 +12,5 @@ runtime/httpserver
 runtime/lifecycle
 stringutil
 telemetry
+workerconfig
 workerpool

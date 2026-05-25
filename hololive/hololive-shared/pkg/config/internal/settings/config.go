@@ -21,11 +21,18 @@
 package settings
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/park285/iris-client-go/iris"
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
+	"github.com/park285/shared-go/pkg/workerconfig"
 )
 
 type Config struct {
@@ -47,6 +54,7 @@ type Config struct {
 	Scraper              ScraperConfig
 	Webhook              WebhookConfig
 	WorkerPool           WorkerPoolConfig
+	WorkerProfile        WorkerProfileConfig
 	CORS                 CORSConfig
 	Cliproxy             CliproxyConfig
 	LLM                  LLMConfig
@@ -76,17 +84,18 @@ func Load() (*Config, error) {
 
 //nolint:funlen // central environment-to-config assembly is intentionally kept in one place
 func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) (*Config, error) {
-	llmSchedulerHealthURL := sharedenv.StringAny(
-		"SERVICES_LLM_SCHEDULER_HEALTH_URL",
-		"SERVICES_LLM_SERVER_HEALTH_URL",
-	)
 	communityShortsBigBangCutoverAt, err := loadCommunityShortsBigBangCutoverAt()
 	if err != nil {
 		return nil, err
 	}
+	irisConfig := loadIrisConfig(webhookToken, botToken)
+	workerProfile, err := fetchIrisBotWebhookWorkerProfile(irisConfig)
+	if err != nil && !errors.Is(err, workerconfig.ErrWorkerProfileDisabled) {
+		return nil, fmt.Errorf("fetch Iris bot webhook worker profile: %w", err)
+	}
 
 	return &Config{
-		Iris:    loadIrisConfig(webhookToken, botToken),
+		Iris:    irisConfig,
 		Server:  loadServerConfig(),
 		Kakao:   loadKakaoConfig(),
 		Holodex: loadHolodexConfig(),
@@ -102,15 +111,15 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Notification: loadNotificationConfig(),
 		Logging:      loadLoggingConfig(),
 		Bot:          loadBotConfig(),
-		Services: ServicesConfig{
-			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
-			GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
-			GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
+		Services:     loadServicesConfig(),
+		Environment:  loadAppEnvironment(),
+		Scraper:      loadScraperConfig(),
+		Webhook:      loadWebhookConfig(workerProfile),
+		WorkerPool:   loadWorkerPoolConfig(workerProfile),
+		WorkerProfile: WorkerProfileConfig{
+			Version: workerProfile.Version,
+			Hash:    workerProfile.ProfileHash(),
 		},
-		Environment:          loadAppEnvironment(),
-		Scraper:              loadScraperConfig(),
-		Webhook:              loadWebhookConfig(),
-		WorkerPool:           loadWorkerPoolConfig(),
 		Chzzk:                loadChzzkConfig(),
 		Twitch:               loadTwitchConfig(),
 		Cliproxy:             loadCliproxyConfig(),
@@ -129,6 +138,17 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 	}, nil
 }
 
+func loadServicesConfig() ServicesConfig {
+	return ServicesConfig{
+		LLMSchedulerHealthURL: sharedenv.StringAny(
+			"SERVICES_LLM_SCHEDULER_HEALTH_URL",
+			"SERVICES_LLM_SERVER_HEALTH_URL",
+		),
+		GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
+		GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
+	}
+}
+
 func loadIrisConfig(webhookToken, botToken string) IrisConfig {
 	return IrisConfig{
 		BaseURL:                   sharedenv.String("IRIS_BASE_URL", ""),
@@ -139,6 +159,54 @@ func loadIrisConfig(webhookToken, botToken string) IrisConfig {
 		HTTPDialTimeout:           time.Duration(sharedenv.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
 		HTTPResponseHeaderTimeout: time.Duration(sharedenv.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
 	}
+}
+
+func fetchIrisBotWebhookWorkerProfile(config IrisConfig) (workerconfig.IrisBotWebhookWorkerProfile, error) {
+	if strings.TrimSpace(config.BotToken) == "" {
+		return workerconfig.LegacyIrisBotWebhookWorkerProfile(), workerconfig.ErrWorkerProfileDisabled
+	}
+	baseURL, err := resolveIrisBaseURL(config)
+	if err != nil {
+		return workerconfig.IrisBotWebhookWorkerProfile{}, err
+	}
+	irisClient, err := iris.NewClient(
+		iris.WithBaseURL(baseURL),
+		iris.WithBotToken(config.BotToken),
+		iris.WithTransport(sharedenv.String("IRIS_TRANSPORT", "")),
+		iris.WithTimeout(config.HTTPTimeout),
+		iris.WithDialTimeout(config.HTTPDialTimeout),
+		iris.WithResponseHeaderTimeout(config.HTTPResponseHeaderTimeout),
+	)
+	if err != nil {
+		return workerconfig.IrisBotWebhookWorkerProfile{}, err
+	}
+	defer irisClient.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), config.HTTPTimeout)
+	defer cancel()
+
+	diagnostics, err := irisClient.GetRuntimeDiagnostics(ctx)
+	if err != nil {
+		return workerconfig.IrisBotWebhookWorkerProfile{}, err
+	}
+	return workerconfig.DecodeIrisBotWebhookWorkerProfileFromRuntimeDiagnostics(bytes.NewReader(diagnostics))
+}
+
+func resolveIrisBaseURL(config IrisConfig) (string, error) {
+	if baseURL := strings.TrimSpace(config.BaseURL); baseURL != "" {
+		return baseURL, nil
+	}
+	if path := strings.TrimSpace(config.BaseURLFile); path != "" {
+		raw, err := os.ReadFile(path) //nolint:gosec // Runtime operator-provided Iris base URL file.
+		if err != nil {
+			return "", fmt.Errorf("read IRIS_BASE_URL_FILE: %w", err)
+		}
+		if baseURL := strings.TrimSpace(string(raw)); baseURL != "" {
+			return baseURL, nil
+		}
+		return "", fmt.Errorf("IRIS_BASE_URL_FILE is empty")
+	}
+	return "", fmt.Errorf("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 }
 
 func loadKakaoConfig() KakaoConfig {
