@@ -16,7 +16,7 @@ func TestMonorepoModuleSuites(t *testing.T) {
 	cmd := exec.Command(
 		"go",
 		"test",
-		"./shared-go/...",
+		"../shared-go/...",
 		"./hololive/hololive-shared/...",
 		"./hololive/hololive-kakao-bot-go/...",
 		"./hololive/hololive-llm-sched/...",
