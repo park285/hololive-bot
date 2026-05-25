@@ -34,7 +34,7 @@ func InitCoreIntegrationServices(
 
 	majorEventRepository, memberNewsService := ResolveLLMSchedulerClients(appConfig, logger)
 
-	workerPool := ProvideAlarmWorkerPool()
+	workerPool := ProvideAlarmWorkerPool(appConfig.WorkerPool)
 
 	return &CoreIntegrationServices{
 		ACLService:           aclService,

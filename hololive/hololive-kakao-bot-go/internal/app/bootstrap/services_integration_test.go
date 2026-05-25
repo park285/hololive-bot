@@ -71,7 +71,8 @@ func TestInitCoreIntegrationServicesCreatesWorkerPool(t *testing.T) {
 				ACLMode:    "whitelist",
 				Rooms:      []string{"room-a"},
 			},
-			Server: config.ServerConfig{APIKey: "test-api-key"},
+			Server:     config.ServerConfig{APIKey: "test-api-key"},
+			WorkerPool: config.WorkerPoolConfig{Workers: 10, QueueSize: 100},
 		},
 		&sharedmodules.InfraModule{
 			Cache:    cacheClient,

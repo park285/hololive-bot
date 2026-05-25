@@ -166,7 +166,7 @@ func TestProvideBotDependenciesAcceptsDisabledYouTubeStack(t *testing.T) {
 func TestProvideAlarmWorkerPoolUsesDispatchCapacity(t *testing.T) {
 	t.Parallel()
 
-	pool := ProvideAlarmWorkerPool()
+	pool := ProvideAlarmWorkerPool(config.WorkerPoolConfig{Workers: 10, QueueSize: 100})
 	t.Cleanup(pool.StopAndWait)
 
 	if pool.Workers() != 10 {

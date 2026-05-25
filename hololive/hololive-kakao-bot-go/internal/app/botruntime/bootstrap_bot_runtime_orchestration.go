@@ -49,6 +49,7 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 
 	webhookHandler, err := appbootstrap.BuildBotWebhookHandler(appConfig, botBot, runtimeViews.webhook, webhookPool, logger)
 	if err != nil {
+		webhookPool.StopAndWait()
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
 	}
 
