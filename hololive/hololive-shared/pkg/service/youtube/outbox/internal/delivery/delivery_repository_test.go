@@ -29,7 +29,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestUniqueStrings(t *testing.T) {
@@ -169,4 +172,70 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 	if !reflect.DeepEqual(gotTouched, wantTouched) {
 		t.Fatalf("touchedOutboxIDs (sorted) = %#v, want %#v", gotTouched, wantTouched)
 	}
+}
+
+func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnotherWorker(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&sqliteDeliveryModel{}))
+
+	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
+	currentLockedAt := staleLockedAt.Add(time.Minute)
+	row := domain.YouTubeNotificationDelivery{
+		OutboxID:      10,
+		RoomID:        "room-relocked",
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now().UTC(),
+		LockedAt:      &currentLockedAt,
+	}
+	require.NoError(t, db.Create(&row).Error)
+
+	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	err = repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: staleLockedAt}}, 3, time.Minute, "stale failure")
+	require.NoError(t, err)
+
+	var got domain.YouTubeNotificationDelivery
+	require.NoError(t, db.First(&got, row.ID).Error)
+	require.Equal(t, domain.OutboxStatusPending, got.Status)
+	require.Equal(t, 0, got.AttemptCount)
+	require.NotNil(t, got.LockedAt)
+	require.True(t, got.LockedAt.Equal(currentLockedAt), "locked_at = %s, want %s", got.LockedAt, currentLockedAt)
+	require.Empty(t, got.Error)
+}
+
+func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnotherWorker(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&sqliteDeliveryModel{}))
+
+	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
+	sentAt := time.Now().UTC()
+	row := domain.YouTubeNotificationDelivery{
+		OutboxID:      11,
+		RoomID:        "room-sent",
+		Status:        domain.OutboxStatusSent,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now().UTC(),
+		SentAt:        &sentAt,
+	}
+	require.NoError(t, db.Create(&row).Error)
+
+	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	err = repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: staleLockedAt}}, 3, time.Minute, "stale failure")
+	require.NoError(t, err)
+
+	var got domain.YouTubeNotificationDelivery
+	require.NoError(t, db.First(&got, row.ID).Error)
+	require.Equal(t, domain.OutboxStatusSent, got.Status)
+	require.Equal(t, 0, got.AttemptCount)
+	require.Nil(t, got.LockedAt)
+	require.NotNil(t, got.SentAt)
+	require.Empty(t, got.Error)
 }
