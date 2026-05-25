@@ -8,7 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/shared-go v1.4.0
+	github.com/park285/shared-go v1.5.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/quic-go/quic-go v0.59.1
 	github.com/stretchr/testify v1.11.1
