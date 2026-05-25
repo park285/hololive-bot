@@ -461,7 +461,6 @@ hololive/hololive-shared/pkg/service/member/repository_scan.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_admin.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_cache.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_cache_next_stream.go
-hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_cache_next_stream_parse.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_cache_notified.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_cache_upcoming_event.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_cache_view.go
