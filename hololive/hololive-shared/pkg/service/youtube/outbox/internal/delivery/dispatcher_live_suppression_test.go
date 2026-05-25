@@ -38,7 +38,7 @@ func TestFilterLiveCatchupSuppressedRoomsSkipsRecentUpcomingRooms(t *testing.T) 
 		grouper: newOutboxGrouper(nil, cache, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{}),
 	}
 
-	filtered := dispatcher.filterLiveCatchupSuppressedRooms(context.Background(), item, map[string]bool{
+	filtered := dispatcher.grouper.filterLiveCatchupSuppressedRooms(context.Background(), item, map[string]bool{
 		"room-suppressed": true,
 		"room-live-only":  true,
 	})

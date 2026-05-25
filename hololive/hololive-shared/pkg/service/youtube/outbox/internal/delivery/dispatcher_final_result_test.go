@@ -177,7 +177,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 		DeliveryParallelism: 1,
 	})
 
-	dispatcher.processPendingDeliveries(ctx)
+	dispatcher.claim.processPendingDeliveries(ctx)
 
 	entry := findAuditLogEntryByTelemetrySource(t, logBuffer, logschema.TelemetrySourceOutboxFinalResult)
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "short-final-success")
@@ -252,7 +252,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 		DeliveryParallelism: 1,
 	})
 
-	dispatcher.processPendingDeliveries(ctx)
+	dispatcher.claim.processPendingDeliveries(ctx)
 
 	entry := findAuditLogEntryByTelemetrySource(t, logBuffer, logschema.TelemetrySourceOutboxFinalResult)
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-community-success")
@@ -326,7 +326,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCod
 		DeliveryParallelism: 1,
 	})
 
-	dispatcher.processPendingDeliveries(ctx)
+	dispatcher.claim.processPendingDeliveries(ctx)
 
 	entry := findAuditLogEntryByTelemetrySource(t, logBuffer, logschema.TelemetrySourceOutboxFinalResult)
 	classification := readLogObjectField(t, entry, logschema.FieldLatencyClassification)
@@ -386,7 +386,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 		DeliveryParallelism: 1,
 	})
 
-	dispatcher.processPendingDeliveries(ctx)
+	dispatcher.claim.processPendingDeliveries(ctx)
 
 	entry := findAuditLogEntryByTelemetrySource(t, logBuffer, logschema.TelemetrySourceOutboxFinalResult)
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-failure")

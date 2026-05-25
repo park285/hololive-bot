@@ -132,7 +132,7 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 
 	done := make(chan struct{}, 1)
 	go func() {
-		dispatcher.telemetryLoop(ctx)
+		dispatcher.telemetry.telemetryLoop(ctx)
 		done <- struct{}{}
 	}()
 
@@ -173,7 +173,7 @@ func TestDispatcherTelemetryLoop_StopsOnContextCancelBeforeNextTick(t *testing.T
 
 	done := make(chan struct{}, 1)
 	go func() {
-		dispatcher.telemetryLoop(ctx)
+		dispatcher.telemetry.telemetryLoop(ctx)
 		done <- struct{}{}
 	}()
 

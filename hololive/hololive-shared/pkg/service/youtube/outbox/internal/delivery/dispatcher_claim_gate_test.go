@@ -190,7 +190,7 @@ func TestDispatchDeliveryRowsClaimsCommunityPostBeforeSending(t *testing.T) {
 	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{})
 	row, outbox, postID := newCommunityClaimGateFixture(now, "claim-win")
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
 		outbox.ID: outbox,
 	})
 
@@ -224,7 +224,7 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaim(t *te
 		DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
 	}).Error)
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
 		outbox.ID: outbox,
 	})
 
@@ -261,7 +261,7 @@ func TestDispatchDeliveryRowsSkipsAlreadySentDuplicateWithoutSending(t *testing.
 		DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusSent,
 	}).Error)
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
 		outbox.ID: outbox,
 	})
 
@@ -289,7 +289,7 @@ func TestDispatchDeliveryRowsSkipsAlreadySentTrackingRowWithoutReclaim(t *testin
 		DeliveryStatus:     domain.YouTubeContentAlarmDeliveryStatusSent,
 	}).Error)
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
 		outbox.ID: outbox,
 	})
 
@@ -312,7 +312,7 @@ func TestDispatchDeliveryRowsReleasesClaimAfterSendFailure(t *testing.T) {
 	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{})
 	row, outbox, postID := newCommunityClaimGateFixture(now, "release-on-fail")
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
 		outbox.ID: outbox,
 	})
 
@@ -347,7 +347,7 @@ func TestDispatchDeliveryRowsReclaimsStaleLegacyAuthorizationBeforeSending(t *te
 		DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
 	}).Error)
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
 		outbox.ID: outbox,
 	})
 
@@ -388,7 +388,7 @@ func TestDispatchDeliveryRowsGroupedSendFiltersOutAlreadySentDuplicate(t *testin
 		DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusSent,
 	}).Error)
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{firstRow, secondRow}, map[int64]domain.YouTubeNotificationOutbox{
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{firstRow, secondRow}, map[int64]domain.YouTubeNotificationOutbox{
 		firstOutbox.ID:  firstOutbox,
 		secondOutbox.ID: secondOutbox,
 	})
@@ -432,7 +432,7 @@ func TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOnc
 				go func(idx int) {
 					defer wg.Done()
 					<-start
-					results[idx] = dispatchers[idx].dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
+					results[idx] = dispatchers[idx].send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
 						outbox.ID: outbox,
 					})
 				}(i)
@@ -484,7 +484,7 @@ func TestSelectClaimedDeliveriesTracksRowClaimOwnership(t *testing.T) {
 	duplicateOutbox.ID = duplicateRow.OutboxID
 	duplicateRow.RoomID = "room-duplicate"
 
-	selection := dispatcher.selectClaimedDeliveries(
+	selection := dispatcher.claim.selectClaimedDeliveries(
 		context.Background(),
 		[]domain.YouTubeNotificationDelivery{firstRow, secondRow, duplicateRow},
 		[]domain.YouTubeNotificationOutbox{firstOutbox, secondOutbox, duplicateOutbox},
@@ -517,7 +517,7 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 	duplicateOutbox.ID = duplicateRow.OutboxID
 	duplicateRow.RoomID = "room-duplicate"
 
-	selection := dispatcher.selectClaimedDeliveries(
+	selection := dispatcher.claim.selectClaimedDeliveries(
 		context.Background(),
 		[]domain.YouTubeNotificationDelivery{firstRow, secondRow, duplicateRow},
 		[]domain.YouTubeNotificationOutbox{firstOutbox, secondOutbox, duplicateOutbox},
@@ -526,7 +526,7 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 
 	result := &deliveryDispatchResult{failureBuckets: make(map[string][]int64)}
 	var mu sync.Mutex
-	dispatcher.dispatchClaimedRowsIndividually(
+	dispatcher.send.dispatchClaimedRowsIndividually(
 		context.Background(),
 		selection.sendRows,
 		selection.sendOutboxes,

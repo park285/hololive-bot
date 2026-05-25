@@ -189,8 +189,8 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 		DeliveryParallelism: 1,
 	})
 
-	roomsByChannel := dispatcher.collectRoomsByChannel(ctx, items)
-	dispatcher.enqueueDeliveries(ctx, items, roomsByChannel)
+	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(ctx, items)
+	dispatcher.claim.enqueueDeliveries(ctx, items, roomsByChannel)
 
 	var deliveryRows []domain.YouTubeNotificationDelivery
 	require.NoError(t, db.Order("id ASC").Find(&deliveryRows).Error)
@@ -201,7 +201,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 		outboxByID[item.ID] = item
 	}
 
-	result := dispatcher.dispatchDeliveryRows(ctx, deliveryRows, outboxByID)
+	result := dispatcher.send.dispatchDeliveryRows(ctx, deliveryRows, outboxByID)
 	require.Zerof(t, result.failedDeliveries, "failure buckets: %+v", result.failureBuckets)
 	require.Emptyf(t, result.failureBuckets, "failure buckets: %+v", result.failureBuckets)
 	require.Len(t, result.successDeliveryIDs, totalRouteAuditDeliveries(expectedTargets))
