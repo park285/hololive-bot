@@ -33,11 +33,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	json "github.com/park285/shared-go/pkg/json"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
 func TestConsumerDrainBatchDropsInvalidCanonicalEnvelopeAndReleasesClaims(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 	claimKey := "notified:claim:canonical-invalid"
 	require.NoError(t, mini.Set(claimKey, "1"))
 
@@ -120,7 +121,7 @@ func TestUnwrapRetryMemberRejectsInvalidEncodedPayload(t *testing.T) {
 }
 
 func TestDrainDelayedRetriesSkipsNonPositiveCountWithoutCacheAccess(t *testing.T) {
-	consumer := NewConsumer(cachemocks.NewStrictClient(), newTestLogger())
+	consumer := NewConsumer(cachemocks.NewStrictClient(), sharedlogging.NewTestLogger())
 
 	values, err := consumer.drainDelayedRetries(context.Background(), 0, time.Now().UTC())
 	require.NoError(t, err)

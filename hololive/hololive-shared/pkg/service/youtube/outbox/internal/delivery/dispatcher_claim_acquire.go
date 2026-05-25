@@ -11,7 +11,7 @@ import (
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-func (d *Dispatcher) tryClaimDelivery(
+func (d *ClaimManager) tryClaimDelivery(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
@@ -52,7 +52,7 @@ func (d *Dispatcher) tryClaimDelivery(
 	return d.acquireAlarmStateClaim(ctx, repository, row, outbox, postID, state, claimAt)
 }
 
-func shouldSkipDeliveryClaim(d *Dispatcher, outbox domain.YouTubeNotificationOutbox) bool {
+func shouldSkipDeliveryClaim(d *ClaimManager, outbox domain.YouTubeNotificationOutbox) bool {
 	return d == nil || d.db == nil || !isCommunityShortsDeliveryAuditKind(outbox.Kind)
 }
 
@@ -86,7 +86,7 @@ func deliveryClaimIdentityForOutbox(outbox domain.YouTubeNotificationOutbox) (st
 	return deliveryClaimIdentityKey(outbox.Kind, postID), nil
 }
 
-func (d *Dispatcher) isCommunityShortsDeliveryAlreadyCompleted(
+func (d *ClaimManager) isCommunityShortsDeliveryAlreadyCompleted(
 	ctx context.Context,
 	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
@@ -111,7 +111,7 @@ func communityShortsTrackingRowMarkedSent(row *domain.YouTubeContentAlarmTrackin
 	return row != nil && row.AlarmSentAt != nil && !row.AlarmSentAt.IsZero()
 }
 
-func (d *Dispatcher) buildAlarmStateClaimRecord(
+func (d *ClaimManager) buildAlarmStateClaimRecord(
 	ctx context.Context,
 	repository *trackingrepo.GormRepository,
 	row domain.YouTubeNotificationDelivery,
@@ -146,7 +146,7 @@ func (d *Dispatcher) buildAlarmStateClaimRecord(
 	}, nil
 }
 
-func (d *Dispatcher) refreshStaleAlarmStateClaim(
+func (d *ClaimManager) refreshStaleAlarmStateClaim(
 	ctx context.Context,
 	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
@@ -184,7 +184,7 @@ func isStaleAlarmStateClaim(
 		state.AuthorizedAt.UTC().Before(claimAt.Add(-claimTimeout))
 }
 
-func (d *Dispatcher) acquireAlarmStateClaim(
+func (d *ClaimManager) acquireAlarmStateClaim(
 	ctx context.Context,
 	repository *trackingrepo.GormRepository,
 	row domain.YouTubeNotificationDelivery,

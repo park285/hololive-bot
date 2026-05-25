@@ -26,34 +26,35 @@ import (
 
 	"github.com/joho/godotenv"
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 type Config struct {
-	Iris            IrisConfig
-	Server          ServerConfig
-	Kakao           KakaoConfig
-	Holodex         HolodexConfig
-	YouTube         YouTubeConfig
-	Ingestion       IngestionConfig
-	Chzzk           ChzzkConfig // 치지직 Open API 설정
-	Twitch          TwitchConfig
-	Valkey          ValkeyConfig
-	Postgres        PostgresConfig
-	Notification    NotificationConfig
-	Logging         LoggingConfig
-	Bot             BotConfig
-	Services        ServicesConfig
-	Environment     string
-	Scraper         ScraperConfig // YouTube 스크래퍼 프록시 설정
-	Webhook         WebhookConfig
-	CORS            CORSConfig // CORS 설정
-	Cliproxy        CliproxyConfig
-	LLM             LLMConfig
-	Exa             ExaConfig
-	LLMSchedulerURL string // llm-scheduler 내부 API URL (bot이 구독/다이제스트 요청 시 사용)
-	Version         string
+	Iris                 IrisConfig
+	Server               ServerConfig
+	Kakao                KakaoConfig
+	Holodex              HolodexConfig
+	YouTube              YouTubeConfig
+	Ingestion            IngestionConfig
+	Chzzk                ChzzkConfig
+	Twitch               TwitchConfig
+	Valkey               ValkeyConfig
+	Postgres             PostgresConfig
+	Notification         NotificationConfig
+	Logging              LoggingConfig
+	Bot                  BotConfig
+	Services             ServicesConfig
+	Environment          string
+	Scraper              ScraperConfig
+	Webhook              WebhookConfig
+	CORS                 CORSConfig
+	Cliproxy             CliproxyConfig
+	LLM                  LLMConfig
+	Exa                  ExaConfig
+	OfficialSchedule     OfficialScheduleConfig
+	OfficialProfile      OfficialProfileConfig
+	MaxResponseBodyBytes int64
+	LLMSchedulerURL      string
+	Version              string
 }
 
 func Load() (*Config, error) {
@@ -84,17 +85,11 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 	}
 
 	return &Config{
-		Iris:   loadIrisConfig(webhookToken, botToken),
-		Server: loadServerConfig(),
-		Kakao:  loadKakaoConfig(),
-		Holodex: HolodexConfig{
-			BaseURL: sharedenv.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
-			APIKey:  resolveHolodexAPIKey(),
-		},
-		YouTube: YouTubeConfig{
-			APIKey:              sharedenv.String("YOUTUBE_API_KEY", ""),
-			EnableQuotaBuilding: sharedenv.Bool("YOUTUBE_ENABLE_QUOTA_BUILDING", false),
-		},
+		Iris:    loadIrisConfig(webhookToken, botToken),
+		Server:  loadServerConfig(),
+		Kakao:   loadKakaoConfig(),
+		Holodex: loadHolodexConfig(),
+		YouTube: loadYouTubeConfig(),
 		Ingestion: IngestionConfig{
 			YouTubeEnabled:                  sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
 			PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
@@ -111,15 +106,18 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
 			GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
 		},
-		Environment:     loadAppEnvironment(),
-		Scraper:         loadScraperConfig(),
-		Webhook:         loadWebhookConfig(),
-		Chzzk:           loadChzzkConfig(),
-		Twitch:          loadTwitchConfig(),
-		Cliproxy:        loadCliproxyConfig(),
-		LLM:             loadLLMConfig(),
-		Exa:             loadExaConfig(),
-		LLMSchedulerURL: sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
+		Environment:          loadAppEnvironment(),
+		Scraper:              loadScraperConfig(),
+		Webhook:              loadWebhookConfig(),
+		Chzzk:                loadChzzkConfig(),
+		Twitch:               loadTwitchConfig(),
+		Cliproxy:             loadCliproxyConfig(),
+		LLM:                  loadLLMConfig(),
+		Exa:                  loadExaConfig(),
+		OfficialSchedule:     loadOfficialScheduleConfig(),
+		OfficialProfile:      loadOfficialProfileConfig(),
+		MaxResponseBodyBytes: int64(sharedenv.Int("MAX_RESPONSE_BODY_BYTES", int(DefaultMaxResponseBodyBytes))),
+		LLMSchedulerURL:      sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		CORS: CORSConfig{
 			AllowedOrigins:      corsAllowedOrigins,
 			Enforce:             sharedenv.Bool("CORS_ENFORCE", false),
@@ -168,16 +166,112 @@ func loadBotConfig() BotConfig {
 	}
 }
 
+func loadHolodexConfig() HolodexConfig {
+	d := DefaultHolodexOperationalConfig()
+	return HolodexConfig{
+		BaseURL:           sharedenv.String("HOLODEX_BASE_URL", d.BaseURL),
+		APIKey:            resolveHolodexAPIKey(),
+		Timeout:           time.Duration(sharedenv.Int("HOLODEX_TIMEOUT_SECONDS", int(d.Timeout/time.Second))) * time.Second,
+		PerAttemptTimeout: time.Duration(sharedenv.Int("HOLODEX_PER_ATTEMPT_TIMEOUT_SECONDS", int(d.PerAttemptTimeout/time.Second))) * time.Second,
+		MaxRetryAttempts:  sharedenv.Int("HOLODEX_MAX_RETRY_ATTEMPTS", d.MaxRetryAttempts),
+		Transport: HolodexTransportConfig{
+			MaxConnsPerHost:     sharedenv.Int("HOLODEX_MAX_CONNS_PER_HOST", d.Transport.MaxConnsPerHost),
+			MaxIdleConnsPerHost: sharedenv.Int("HOLODEX_MAX_IDLE_CONNS_PER_HOST", d.Transport.MaxIdleConnsPerHost),
+			IdleConnTimeout:     time.Duration(sharedenv.Int("HOLODEX_IDLE_CONN_TIMEOUT_SECONDS", int(d.Transport.IdleConnTimeout/time.Second))) * time.Second,
+		},
+		Concurrency: HolodexConcurrencyConfig{
+			MaxConcurrentRequests: sharedenv.Int("HOLODEX_MAX_CONCURRENT_REQUESTS", d.Concurrency.MaxConcurrentRequests),
+			OrgAllParallelism:     sharedenv.Int("HOLODEX_ORG_ALL_PARALLELISM", d.Concurrency.OrgAllParallelism),
+			RequestDelay:          time.Duration(sharedenv.Int("HOLODEX_REQUEST_DELAY_MS", int(d.Concurrency.RequestDelay/time.Millisecond))) * time.Millisecond,
+		},
+		DistributedRateLimit: DistributedRateLimitConfig{
+			Enabled:    sharedenv.Bool("HOLODEX_DISTRIBUTED_RATELIMIT_ENABLED", d.DistributedRateLimit.Enabled),
+			Limit:      sharedenv.Int("HOLODEX_DISTRIBUTED_RATELIMIT_LIMIT", d.DistributedRateLimit.Limit),
+			Window:     time.Duration(sharedenv.Int("HOLODEX_DISTRIBUTED_RATELIMIT_WINDOW_MS", int(d.DistributedRateLimit.Window/time.Millisecond))) * time.Millisecond,
+			KeyPrefix:  sharedenv.String("HOLODEX_DISTRIBUTED_RATELIMIT_KEY_PREFIX", d.DistributedRateLimit.KeyPrefix),
+			BucketBase: sharedenv.String("HOLODEX_DISTRIBUTED_RATELIMIT_BUCKET_BASE", d.DistributedRateLimit.BucketBase),
+		},
+	}
+}
+
+func loadYouTubeConfig() YouTubeConfig {
+	d := DefaultYouTubeOperationalConfig()
+	producerInterval := time.Duration(sharedenv.Int("YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS", int(d.ProducerRequestInterval/time.Second))) * time.Second
+	return YouTubeConfig{
+		APIKey:                  sharedenv.String("YOUTUBE_API_KEY", ""),
+		EnableQuotaBuilding:     sharedenv.Bool("YOUTUBE_ENABLE_QUOTA_BUILDING", false),
+		DailyQuotaLimit:         sharedenv.Int("YOUTUBE_DAILY_QUOTA_LIMIT", d.DailyQuotaLimit),
+		SearchQuotaCost:         sharedenv.Int("YOUTUBE_SEARCH_QUOTA_COST", d.SearchQuotaCost),
+		ChannelsQuotaCost:       sharedenv.Int("YOUTUBE_CHANNELS_QUOTA_COST", d.ChannelsQuotaCost),
+		MaxChannelsPerCall:      sharedenv.Int("YOUTUBE_MAX_CHANNELS_PER_CALL", d.MaxChannelsPerCall),
+		MaxConcurrentRequests:   sharedenv.Int("YOUTUBE_MAX_CONCURRENT_REQUESTS", d.MaxConcurrentRequests),
+		SearchMaxResults:        sharedenv.Int("YOUTUBE_SEARCH_MAX_RESULTS", d.SearchMaxResults),
+		QuotaSafetyMargin:       sharedenv.Int("YOUTUBE_QUOTA_SAFETY_MARGIN", d.QuotaSafetyMargin),
+		CacheExpiration:         time.Duration(sharedenv.Int("YOUTUBE_CACHE_EXPIRATION_SECONDS", int(d.CacheExpiration/time.Second))) * time.Second,
+		MaxPageBodyBytes:        int64(sharedenv.Int("YOUTUBE_MAX_PAGE_BODY_BYTES", int(d.MaxPageBodyBytes))),
+		ScraperHTTPTimeout:      time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HTTP_TIMEOUT_SECONDS", int(d.ScraperHTTPTimeout/time.Second))) * time.Second,
+		ScraperDialTimeout:      time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_DIAL_TIMEOUT_SECONDS", int(d.ScraperDialTimeout/time.Second))) * time.Second,
+		ScraperHeaderTimeout:    time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HEADER_TIMEOUT_SECONDS", int(d.ScraperHeaderTimeout/time.Second))) * time.Second,
+		ScraperPhaseTimeout:     time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS", int(d.ScraperPhaseTimeout/time.Second))) * time.Second,
+		APIFallbackTimeout:      time.Duration(sharedenv.Int("YOUTUBE_API_FALLBACK_TIMEOUT_SECONDS", int(d.APIFallbackTimeout/time.Second))) * time.Second,
+		CacheSaveTimeout:        time.Duration(sharedenv.Int("YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS", int(d.CacheSaveTimeout/time.Second))) * time.Second,
+		CommunityMissingTTL:     time.Duration(sharedenv.Int("YOUTUBE_COMMUNITY_MISSING_TTL_SECONDS", int(d.CommunityMissingTTL/time.Second))) * time.Second,
+		VideoRSSBackoffTTL:      time.Duration(sharedenv.Int("YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS", int(d.VideoRSSBackoffTTL/time.Second))) * time.Second,
+		ProducerRequestInterval: producerInterval,
+		ProducerDistributedRateLimit: DistributedRateLimitConfig{
+			Enabled:    sharedenv.Bool("YOUTUBE_PRODUCER_DISTRIBUTED_RATELIMIT_ENABLED", d.ProducerDistributedRateLimit.Enabled),
+			Limit:      sharedenv.Int("YOUTUBE_PRODUCER_DISTRIBUTED_RATELIMIT_LIMIT", d.ProducerDistributedRateLimit.Limit),
+			Window:     producerInterval,
+			KeyPrefix:  sharedenv.String("YOUTUBE_PRODUCER_DISTRIBUTED_RATELIMIT_KEY_PREFIX", d.ProducerDistributedRateLimit.KeyPrefix),
+			BucketBase: sharedenv.String("YOUTUBE_PRODUCER_DISTRIBUTED_RATELIMIT_BUCKET_BASE", d.ProducerDistributedRateLimit.BucketBase),
+		},
+	}
+}
+
 func loadChzzkConfig() ChzzkConfig {
+	d := DefaultChzzkOperationalConfig()
 	return ChzzkConfig{
-		ClientID:     sharedenv.String("CHZZK_CLIENT_ID", ""),
-		ClientSecret: sharedenv.String("CHZZK_CLIENT_SECRET", ""),
+		ClientID:                  sharedenv.String("CHZZK_CLIENT_ID", ""),
+		ClientSecret:              sharedenv.String("CHZZK_CLIENT_SECRET", ""),
+		MaxLivesPageSize:          sharedenv.Int("CHZZK_MAX_LIVES_PAGE_SIZE", d.MaxLivesPageSize),
+		BatchLookupThreshold:      sharedenv.Int("CHZZK_BATCH_LOOKUP_THRESHOLD", d.BatchLookupThreshold),
+		MaxConcurrentStatusChecks: sharedenv.Int("CHZZK_MAX_CONCURRENT_STATUS_CHECKS", d.MaxConcurrentStatusChecks),
 	}
 }
 
 func loadTwitchConfig() TwitchConfig {
+	d := DefaultTwitchOperationalConfig()
 	return TwitchConfig{
-		ClientID:     sharedenv.String("TWITCH_CLIENT_ID", ""),
-		ClientSecret: sharedenv.String("TWITCH_CLIENT_SECRET", ""),
+		ClientID:           sharedenv.String("TWITCH_CLIENT_ID", ""),
+		ClientSecret:       sharedenv.String("TWITCH_CLIENT_SECRET", ""),
+		BaseURL:            sharedenv.String("TWITCH_BASE_URL", d.BaseURL),
+		AuthURL:            sharedenv.String("TWITCH_AUTH_URL", d.AuthURL),
+		Timeout:            time.Duration(sharedenv.Int("TWITCH_TIMEOUT_SECONDS", int(d.Timeout/time.Second))) * time.Second,
+		PollInterval:       time.Duration(sharedenv.Int("TWITCH_POLL_INTERVAL_SECONDS", int(d.PollInterval/time.Second))) * time.Second,
+		TokenRefreshSkew:   time.Duration(sharedenv.Int("TWITCH_TOKEN_REFRESH_SKEW_SECONDS", int(d.TokenRefreshSkew/time.Second))) * time.Second,
+		MarkerTTL:          time.Duration(sharedenv.Int("TWITCH_MARKER_TTL_HOURS", int(d.MarkerTTL/time.Hour))) * time.Hour,
+		MaxUsersPerRequest: sharedenv.Int("TWITCH_MAX_USERS_PER_REQUEST", d.MaxUsersPerRequest),
+	}
+}
+
+func loadOfficialScheduleConfig() OfficialScheduleConfig {
+	d := DefaultOfficialScheduleConfig()
+	return OfficialScheduleConfig{
+		BaseURL:      sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", d.BaseURL),
+		Timeout:      time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", int(d.Timeout/time.Second))) * time.Second,
+		CacheExpiry:  time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS", int(d.CacheExpiry/time.Second))) * time.Second,
+		PageCacheTTL: time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", int(d.PageCacheTTL/time.Second))) * time.Second,
+	}
+}
+
+func loadOfficialProfileConfig() OfficialProfileConfig {
+	d := DefaultOfficialProfileConfig()
+	return OfficialProfileConfig{
+		BaseURL:        sharedenv.String("OFFICIAL_PROFILE_BASE_URL", d.BaseURL),
+		UserAgent:      sharedenv.String("OFFICIAL_PROFILE_USER_AGENT", d.UserAgent),
+		AcceptLanguage: sharedenv.String("OFFICIAL_PROFILE_ACCEPT_LANGUAGE", d.AcceptLanguage),
+		RequestTimeout: time.Duration(sharedenv.Int("OFFICIAL_PROFILE_REQUEST_TIMEOUT_SECONDS", int(d.RequestTimeout/time.Second))) * time.Second,
+		DelayBetween:   time.Duration(sharedenv.Int("OFFICIAL_PROFILE_DELAY_BETWEEN_MS", int(d.DelayBetween/time.Millisecond))) * time.Millisecond,
+		OutputFile:     sharedenv.String("OFFICIAL_PROFILE_OUTPUT_FILE", d.OutputFile),
 	}
 }

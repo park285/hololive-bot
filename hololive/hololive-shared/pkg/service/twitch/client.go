@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/park285/shared-go/pkg/json"
@@ -40,16 +41,25 @@ import (
 const maxUserLoginsPerRequest = 100
 
 type ClientConfig struct {
-	HTTPClient   *http.Client
-	ClientID     string
-	ClientSecret string
+	HTTPClient           *http.Client
+	ClientID             string
+	ClientSecret         string
+	BaseURL              string
+	AuthURL              string
+	Timeout              time.Duration
+	TokenRefreshSkew     time.Duration
+	MaxResponseBodyBytes int64
 }
 
 type Client struct {
-	httpClient   *http.Client
-	clientID     string
-	clientSecret string
-	logger       *slog.Logger
+	httpClient           *http.Client
+	clientID             string
+	clientSecret         string
+	baseURL              string
+	authURL              string
+	tokenRefreshSkew     time.Duration
+	maxResponseBodyBytes int64
+	logger               *slog.Logger
 
 	token       atomic.Value // string
 	tokenExpiry atomic.Value // time.Time
@@ -60,21 +70,48 @@ type Client struct {
 	failureCount    atomic.Int32
 }
 
-func NewClient(config ClientConfig, logger *slog.Logger) *Client {
+func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	httpClient := config.HTTPClient
+	d := config.DefaultTwitchOperationalConfig()
+
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = d.BaseURL
+	}
+	authURL := cfg.AuthURL
+	if authURL == "" {
+		authURL = d.AuthURL
+	}
+	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeout = d.Timeout
+	}
+	tokenRefreshSkew := cfg.TokenRefreshSkew
+	if tokenRefreshSkew == 0 {
+		tokenRefreshSkew = d.TokenRefreshSkew
+	}
+	maxBody := cfg.MaxResponseBodyBytes
+	if maxBody == 0 {
+		maxBody = config.DefaultMaxResponseBodyBytes
+	}
+
+	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		httpClient = httputil.NewExternalAPIClient(constants.TwitchConfig.Timeout)
+		httpClient = httputil.NewExternalAPIClient(timeout)
 	}
 
 	c := &Client{
-		httpClient:   httpClient,
-		clientID:     config.ClientID,
-		clientSecret: config.ClientSecret,
-		logger:       logger,
+		httpClient:           httpClient,
+		clientID:             cfg.ClientID,
+		clientSecret:         cfg.ClientSecret,
+		baseURL:              baseURL,
+		authURL:              authURL,
+		tokenRefreshSkew:     tokenRefreshSkew,
+		maxResponseBodyBytes: maxBody,
+		logger:               logger,
 	}
 	c.tokenExpiry.Store(time.Time{})
 	c.circuitOpenedAt.Store(time.Time{})
@@ -88,7 +125,7 @@ func (c *Client) IsConfigured() bool {
 
 func (c *Client) ensureValidToken(ctx context.Context) error {
 	expiry, _ := c.tokenExpiry.Load().(time.Time)
-	if time.Now().Before(expiry.Add(-constants.TwitchConfig.TokenRefreshSkew)) {
+	if time.Now().Before(expiry.Add(-c.tokenRefreshSkew)) {
 		return nil
 	}
 
@@ -105,7 +142,7 @@ func (c *Client) refreshToken(ctx context.Context) error {
 
 	// Double-check: 다른 고루틴이 이미 갱신했을 수 있음
 	expiry, _ := c.tokenExpiry.Load().(time.Time)
-	if time.Now().Before(expiry.Add(-constants.TwitchConfig.TokenRefreshSkew)) {
+	if time.Now().Before(expiry.Add(-c.tokenRefreshSkew)) {
 		return nil
 	}
 
@@ -114,7 +151,7 @@ func (c *Client) refreshToken(ctx context.Context) error {
 	params.Set("client_secret", c.clientSecret)
 	params.Set("grant_type", "client_credentials")
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, constants.TwitchConfig.AuthURL, strings.NewReader(params.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.authURL, strings.NewReader(params.Encode()))
 	if err != nil {
 		return fmt.Errorf("create token request: %w", err)
 	}
@@ -132,7 +169,7 @@ func (c *Client) refreshToken(ctx context.Context) error {
 		return fmt.Errorf("token request failed: status %d", resp.StatusCode)
 	}
 
-	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
+	body, err := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
 	if err != nil {
 		return fmt.Errorf("read token response: %w", err)
 	}

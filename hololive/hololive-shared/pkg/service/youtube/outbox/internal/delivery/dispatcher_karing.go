@@ -15,7 +15,7 @@ type YouTubeOutboxKaringSender interface {
 	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload domain.YouTubeOutboxDispatchPayload) error
 }
 
-func (d *Dispatcher) dispatchClaimedRowsWithKaringIfSupported(
+func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
 	ctx context.Context,
 	roomID string,
 	channelID string,
@@ -67,7 +67,7 @@ func isYouTubeOutboxKaringKind(kind domain.OutboxKind) bool {
 	}
 }
 
-func (d *Dispatcher) sendYouTubeOutboxKaring(
+func (d *SendEngine) sendYouTubeOutboxKaring(
 	ctx context.Context,
 	sender YouTubeOutboxKaringSender,
 	roomID string,
@@ -92,7 +92,7 @@ func (d *Dispatcher) sendYouTubeOutboxKaring(
 	return nil
 }
 
-func (d *Dispatcher) buildYouTubeOutboxKaringPayload(
+func (d *SendEngine) buildYouTubeOutboxKaringPayload(
 	ctx context.Context,
 	channelID string,
 	kind domain.OutboxKind,
@@ -132,7 +132,7 @@ func buildDeliveryKaringSendRequest(roomID string, outboxes []domain.YouTubeNoti
 	return req, nil
 }
 
-func (d *Dispatcher) recordKaringRequestBuildFailure(
+func (d *SendEngine) recordKaringRequestBuildFailure(
 	ctx context.Context,
 	roomID string,
 	channelID string,
@@ -148,7 +148,7 @@ func (d *Dispatcher) recordKaringRequestBuildFailure(
 	d.metricsRecorder.recordKaringRequestBuildFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu)
 }
 
-func (d *Dispatcher) recordKaringSendFailure(
+func (d *SendEngine) recordKaringSendFailure(
 	ctx context.Context,
 	roomID string,
 	channelID string,
@@ -165,7 +165,7 @@ func (d *Dispatcher) recordKaringSendFailure(
 	d.metricsRecorder.recordKaringSendFailure(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu)
 }
 
-func (d *Dispatcher) recordKaringSuccess(
+func (d *SendEngine) recordKaringSuccess(
 	ctx context.Context,
 	roomID string,
 	channelID string,

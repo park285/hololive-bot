@@ -27,7 +27,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
@@ -144,7 +144,7 @@ func (h *StreamHandler) cacheChannelStatsAsync(ctx context.Context, stats map[st
 	h.runAsyncWithLimiter(state.channelStatsCacheLimiter, "cache_channel_stats", func() {
 		cacheCtx, cancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
-			constants.YouTubeConfig.CacheSaveTimeout,
+			config.DefaultYouTubeOperationalConfig().CacheSaveTimeout,
 		)
 		defer cancel()
 
@@ -163,7 +163,7 @@ func (h *StreamHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
 	h.runAsyncWithLimiter(state.channelStatsRefreshLimiter, "refresh_channel_stats", func() {
 		bgCtx, cancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
-			constants.YouTubeConfig.ScraperPhaseTimeout,
+			config.DefaultYouTubeOperationalConfig().ScraperPhaseTimeout,
 		)
 		defer cancel()
 

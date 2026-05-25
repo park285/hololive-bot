@@ -11,7 +11,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/park285/shared-go/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -158,7 +158,7 @@ func (s *Service) logOfficialScheduleParseSummary(streams []*domain.Stream, pars
 }
 
 func (s *Service) getOfficialPageCache() ([]*domain.Stream, bool) {
-	ttl := constants.OfficialScheduleConfig.PageCacheTTL
+	ttl := config.DefaultOfficialScheduleConfig().PageCacheTTL
 	if ttl <= 0 {
 		return nil, false
 	}
@@ -174,7 +174,7 @@ func (s *Service) getOfficialPageCache() ([]*domain.Stream, bool) {
 }
 
 func (s *Service) setOfficialPageCache(streams []*domain.Stream) {
-	ttl := constants.OfficialScheduleConfig.PageCacheTTL
+	ttl := config.DefaultOfficialScheduleConfig().PageCacheTTL
 	if ttl <= 0 {
 		return
 	}

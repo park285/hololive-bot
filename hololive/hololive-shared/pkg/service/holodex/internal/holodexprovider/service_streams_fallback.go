@@ -50,7 +50,7 @@ func getCachedStreamsByOrg(ctx context.Context, plan streamFetchPlan) ([]*domain
 
 func (h *Service) runStreamPrimaryFetches(ctx context.Context, plan streamFetchPlan, targetOrgs []string, state *streamFetchState) fallback.PrimaryResult[string] {
 	return fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{
-		Parallelism: holodexOrgFetchParallelism(plan.resolvedOrg),
+		Parallelism: holodexOrgFetchParallelism(plan.resolvedOrg, h.concurrency.OrgAllParallelism),
 	}, func(fetchCtx context.Context, targetOrg string) error {
 		return h.fetchAndStoreStreamsForOrg(fetchCtx, targetOrg, plan, state)
 	})

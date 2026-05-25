@@ -38,7 +38,7 @@ import (
 	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/park285/shared-go/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	ytscraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -156,14 +156,14 @@ func TestNewService_UsesSharedHTTPClientPolicy(t *testing.T) {
 	if service.httpClient == nil {
 		t.Fatal("httpClient is nil")
 	}
-	if service.httpClient.Timeout != constants.OfficialScheduleConfig.Timeout {
-		t.Fatalf("timeout=%s want=%s", service.httpClient.Timeout, constants.OfficialScheduleConfig.Timeout)
+	if service.httpClient.Timeout != config.DefaultOfficialScheduleConfig().Timeout {
+		t.Fatalf("timeout=%s want=%s", service.httpClient.Timeout, config.DefaultOfficialScheduleConfig().Timeout)
 	}
 	transport, ok := service.httpClient.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("transport type = %T, want *http.Transport", service.httpClient.Transport)
 	}
-	shared := httputil.NewExternalAPIClient(constants.OfficialScheduleConfig.Timeout)
+	shared := httputil.NewExternalAPIClient(config.DefaultOfficialScheduleConfig().Timeout)
 	sharedTransport, ok := shared.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("shared transport type = %T, want *http.Transport", shared.Transport)
@@ -773,7 +773,7 @@ func TestScraperFetchAllStreams_UsesShortTTLCacheAndClonesResults(t *testing.T) 
 		t.Fatalf("cached result should be cloned, got mutated title")
 	}
 
-	currentTime = currentTime.Add(constants.OfficialScheduleConfig.PageCacheTTL + time.Second)
+	currentTime = currentTime.Add(config.DefaultOfficialScheduleConfig().PageCacheTTL + time.Second)
 
 	third, err := service.FetchAllStreams(context.Background())
 	if err != nil {

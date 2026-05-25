@@ -27,8 +27,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 type testStateStore struct {
@@ -117,8 +115,8 @@ func TestStateStorePersistsAcrossClientInstances(t *testing.T) {
 	clientA := NewClient(WithStateStore(store))
 	clientA.markCommunityMissing(ctx, "UC_TEST")
 	clientA.markVideoRSSBackoff(ctx, "UC_TEST")
-	require.Greater(t, constants.YouTubeConfig.CommunityMissingTTL, time.Duration(0))
-	require.Greater(t, constants.YouTubeConfig.VideoRSSBackoffTTL, time.Duration(0))
+	require.Greater(t, ytDefaults.CommunityMissingTTL, time.Duration(0))
+	require.Greater(t, ytDefaults.VideoRSSBackoffTTL, time.Duration(0))
 	require.Len(t, store.data, 2)
 	require.Contains(t, store.data, clientA.communityMissingStateKey("UC_TEST"))
 	require.Contains(t, store.data, clientA.videoRSSBackoffStateKey("UC_TEST"))

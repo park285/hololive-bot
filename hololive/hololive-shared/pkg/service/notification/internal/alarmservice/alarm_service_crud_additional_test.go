@@ -28,13 +28,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewAlarmServiceAndCloseAllAlarmServices(t *testing.T) {
 	ctx := t.Context()
-	cacheClient := newTestCacheService(ctx, t)
+	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
 
 	service, err := NewAlarmService(
 		cacheClient,

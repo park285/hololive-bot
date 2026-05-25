@@ -26,7 +26,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/shared-go/pkg/httputil"
@@ -100,7 +99,7 @@ func InitializeDBIntegrationRuntime(ctx context.Context, postgresConfig config.P
 func InitializeFetchProfilesRuntime(_ context.Context) (*FetchProfilesRuntime, func(), error) {
 	logger := slog.Default()
 	cleanupLogger := func() {}
-	httpClient := httputil.NewExternalAPIClient(constants.OfficialProfileConfig.RequestTimeout)
+	httpClient := httputil.NewExternalAPIClient(config.DefaultOfficialProfileConfig().RequestTimeout)
 
 	runtime := &FetchProfilesRuntime{
 		Logger:     logger,

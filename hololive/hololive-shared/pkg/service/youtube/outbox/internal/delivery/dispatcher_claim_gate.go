@@ -43,7 +43,7 @@ type deliveryClaimSelection struct {
 	retryOutboxIDs         []int64
 }
 
-func (d *Dispatcher) selectClaimedDeliveries(
+func (d *ClaimManager) selectClaimedDeliveries(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
@@ -64,7 +64,7 @@ func (d *Dispatcher) selectClaimedDeliveries(
 	return selection
 }
 
-func (d *Dispatcher) applyDeliveryClaimSelection(
+func (d *ClaimManager) applyDeliveryClaimSelection(
 	ctx context.Context,
 	selection *deliveryClaimSelection,
 	row domain.YouTubeNotificationDelivery,
@@ -102,7 +102,7 @@ func (d *Dispatcher) applyDeliveryClaimSelection(
 	d.applyDeliveryClaimDecision(selection, row, outbox, cr.decision, cr.claimToken, result.Hit)
 }
 
-func (d *Dispatcher) retryDeliveryClaimSelection(
+func (d *ClaimManager) retryDeliveryClaimSelection(
 	selection *deliveryClaimSelection,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
@@ -114,7 +114,7 @@ func (d *Dispatcher) retryDeliveryClaimSelection(
 	selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
 }
 
-func (d *Dispatcher) applyDeliveryClaimDecision(
+func (d *ClaimManager) applyDeliveryClaimDecision(
 	selection *deliveryClaimSelection,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
@@ -154,7 +154,7 @@ func appendProceedingDeliveryClaim(
 	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
 }
 
-func (d *Dispatcher) applyClaimSelection(result *deliveryDispatchResult, mu *sync.Mutex, selection deliveryClaimSelection) {
+func (d *ClaimManager) applyClaimSelection(result *deliveryDispatchResult, mu *sync.Mutex, selection deliveryClaimSelection) {
 	if len(selection.alreadySentDeliveryIDs) > 0 {
 		mu.Lock()
 		result.successDeliveryIDs = append(result.successDeliveryIDs, selection.alreadySentDeliveryIDs...)
@@ -171,7 +171,7 @@ func (d *Dispatcher) applyClaimSelection(result *deliveryDispatchResult, mu *syn
 	}
 }
 
-func (d *Dispatcher) recoverSuccessfulCommunityShortsSentState(ctx context.Context, deliveryIDs []int64) error {
+func (d *ClaimManager) recoverSuccessfulCommunityShortsSentState(ctx context.Context, deliveryIDs []int64) error {
 	uniqueIDs := uniqueInt64s(deliveryIDs)
 	if d == nil || d.db == nil || len(uniqueIDs) == 0 {
 		return nil

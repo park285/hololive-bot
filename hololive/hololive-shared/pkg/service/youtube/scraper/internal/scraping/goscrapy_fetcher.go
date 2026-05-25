@@ -14,8 +14,6 @@ import (
 	"github.com/tech-engine/goscrapy/pkg/core"
 	"github.com/tech-engine/goscrapy/pkg/gos"
 	goslogger "github.com/tech-engine/goscrapy/pkg/logger"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 const goscrapyRunnerPollInterval = 10 * time.Millisecond
@@ -263,7 +261,7 @@ func readGoScrapyResponse(resp core.IResponseReader) (pageFetchResponse, error) 
 		return out, nil
 	}
 
-	data, err := jsonutil.ReadAllLimit(body, constants.YouTubeConfig.MaxPageBodyBytes)
+	data, err := jsonutil.ReadAllLimit(body, ytDefaults.MaxPageBodyBytes)
 	if err != nil {
 		return out, fmt.Errorf("failed to read response body: %w", err)
 	}

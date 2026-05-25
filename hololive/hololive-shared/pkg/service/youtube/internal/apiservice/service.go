@@ -31,10 +31,12 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
+
+var ytDefaults = config.DefaultYouTubeOperationalConfig()
 
 type serviceImpl struct {
 	service       *youtube.Service
@@ -187,10 +189,10 @@ func (ys *serviceImpl) checkQuota(cost int) error {
 			slog.Time("nextReset", ys.quotaReset))
 	}
 
-	if ys.quotaUsed+cost > (constants.YouTubeConfig.DailyQuotaLimit - constants.YouTubeConfig.QuotaSafetyMargin) {
+	if ys.quotaUsed+cost > (ytDefaults.DailyQuotaLimit - ytDefaults.QuotaSafetyMargin) {
 		return &QuotaExceededError{
 			Used:      ys.quotaUsed,
-			Limit:     constants.YouTubeConfig.DailyQuotaLimit,
+			Limit:     ytDefaults.DailyQuotaLimit,
 			Requested: cost,
 			ResetTime: ys.quotaReset,
 		}
@@ -204,15 +206,15 @@ func (ys *serviceImpl) consumeQuota(cost int) {
 	defer ys.quotaMu.Unlock()
 
 	ys.quotaUsed += cost
-	remaining := constants.YouTubeConfig.DailyQuotaLimit - ys.quotaUsed
+	remaining := ytDefaults.DailyQuotaLimit - ys.quotaUsed
 
 	ys.logger.Debug("YouTube API quota consumed",
 		slog.Int("cost", cost),
 		slog.Int("used", ys.quotaUsed),
 		slog.Int("remaining", remaining),
-		slog.Float64("usagePercent", float64(ys.quotaUsed)/float64(constants.YouTubeConfig.DailyQuotaLimit)*100))
+		slog.Float64("usagePercent", float64(ys.quotaUsed)/float64(ytDefaults.DailyQuotaLimit)*100))
 
-	if remaining < constants.YouTubeConfig.QuotaSafetyMargin {
+	if remaining < ytDefaults.QuotaSafetyMargin {
 		ys.logger.Warn("YouTube API quota running low",
 			slog.Int("remaining", remaining),
 			slog.Time("resetTime", ys.quotaReset))
@@ -224,14 +226,14 @@ func (ys *serviceImpl) GetQuotaStatus() (used int, remaining int, resetTime time
 	defer ys.quotaMu.Unlock()
 
 	if time.Now().After(ys.quotaReset) {
-		return 0, constants.YouTubeConfig.DailyQuotaLimit, getNextQuotaReset()
+		return 0, ytDefaults.DailyQuotaLimit, getNextQuotaReset()
 	}
 
-	return ys.quotaUsed, constants.YouTubeConfig.DailyQuotaLimit - ys.quotaUsed, ys.quotaReset
+	return ys.quotaUsed, ytDefaults.DailyQuotaLimit - ys.quotaUsed, ys.quotaReset
 }
 
 func (ys *serviceImpl) IsQuotaAvailable(channelCount int) bool {
-	estimatedCost := channelCount * constants.YouTubeConfig.SearchQuotaCost
+	estimatedCost := channelCount * ytDefaults.SearchQuotaCost
 	err := ys.checkQuota(estimatedCost)
 	return err == nil
 }

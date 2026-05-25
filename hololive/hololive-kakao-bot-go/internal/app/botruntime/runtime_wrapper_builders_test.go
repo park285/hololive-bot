@@ -26,7 +26,6 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,7 +72,7 @@ func TestBuildFetchProfilesRuntime_WithNilContext(t *testing.T) {
 	require.NotNil(t, runtime)
 	require.NotNil(t, runtime.Logger)
 	require.NotNil(t, runtime.HTTPClient)
-	assert.Equal(t, constants.OfficialProfileConfig.RequestTimeout, runtime.HTTPClient.Timeout)
+	assert.Equal(t, config.DefaultOfficialProfileConfig().RequestTimeout, runtime.HTTPClient.Timeout)
 	assert.NotNil(t, runtime.HTTPClient.Transport)
 
 	runtime.Close()

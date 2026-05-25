@@ -28,30 +28,13 @@ import (
 
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/majoreventclient"
 )
 
 const testAPIKey = "test-api-key"
-
-// newTestServer: httptest 서버를 생성하고 요청 검증 핸들러를 반환합니다.
-func newTestServer(t *testing.T, statusCode int, responseBody any, assertFn func(r *http.Request)) *httptest.Server {
-	t.Helper()
-
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if assertFn != nil {
-			assertFn(r)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(statusCode)
-
-		if responseBody != nil {
-			_ = json.NewEncoder(w).Encode(responseBody)
-		}
-	}))
-}
 
 func TestNew(t *testing.T) {
 	t.Parallel()
@@ -227,7 +210,7 @@ func TestIsSubscribed(t *testing.T) {
 				return
 			}
 
-			srv := newTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
+			srv := testutil.NewJSONTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
 				if r.Method != http.MethodGet {
 					t.Errorf("method = %q, want GET", r.Method)
 				}
@@ -241,7 +224,6 @@ func TestIsSubscribed(t *testing.T) {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
-			defer srv.Close()
 
 			c := majoreventclient.New(srv.URL, testAPIKey)
 			got, err := c.IsSubscribed(t.Context(), tc.roomID)
@@ -319,7 +301,7 @@ func TestSubscribe(t *testing.T) {
 				return
 			}
 
-			srv := newTestServer(t, tc.statusCode, nil, func(r *http.Request) {
+			srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %q, want POST", r.Method)
 				}
@@ -336,7 +318,6 @@ func TestSubscribe(t *testing.T) {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
-			defer srv.Close()
 
 			c := majoreventclient.New(srv.URL, testAPIKey)
 			err := c.Subscribe(t.Context(), tc.roomID, tc.roomName)
@@ -398,7 +379,7 @@ func TestUnsubscribe(t *testing.T) {
 				return
 			}
 
-			srv := newTestServer(t, tc.statusCode, nil, func(r *http.Request) {
+			srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
 				if r.Method != http.MethodDelete {
 					t.Errorf("method = %q, want DELETE", r.Method)
 				}
@@ -412,7 +393,6 @@ func TestUnsubscribe(t *testing.T) {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
-			defer srv.Close()
 
 			c := majoreventclient.New(srv.URL, testAPIKey)
 			err := c.Unsubscribe(t.Context(), tc.roomID)

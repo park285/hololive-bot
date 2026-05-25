@@ -19,11 +19,11 @@ func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
 }
 
 func (c *APIClient) waitForDistributedRateLimiter(ctx context.Context, path string) error {
-	if c.distributed == nil || !constants.HolodexDistributedRateLimitConfig.Enabled {
+	if c.distributed == nil || !c.distributedRLCfg.Enabled {
 		return nil
 	}
 
-	return c.waitForDistributedRateLimitBucket(ctx, distributedRateLimitBucket(path))
+	return c.waitForDistributedRateLimitBucket(ctx, c.distributedRateLimitBucket(path))
 }
 
 func (c *APIClient) waitForDistributedRateLimitBucket(ctx context.Context, bucket string) error {
@@ -46,8 +46,8 @@ func (c *APIClient) allowDistributedRateLimit(ctx context.Context, bucket string
 	decision, err := c.distributed.Allow(
 		ctx,
 		bucket,
-		constants.HolodexDistributedRateLimitConfig.Limit,
-		constants.HolodexDistributedRateLimitConfig.Window,
+		c.distributedRLCfg.Limit,
+		c.distributedRLCfg.Window,
 	)
 	if err != nil {
 		return ratelimit.Decision{}, fmt.Errorf("distributed rate limiter allow failed: %w", err)
@@ -73,13 +73,13 @@ func waitDistributedRateLimitDecision(ctx context.Context, bucket string, decisi
 	return false, nil
 }
 
-func distributedRateLimitBucket(path string) string {
+func (c *APIClient) distributedRateLimitBucket(path string) string {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
 		trimmed = "root"
 	}
 	normalized := strings.ReplaceAll(trimmed, "/", ":")
-	return constants.HolodexDistributedRateLimitConfig.BucketBase + ":" + normalized
+	return c.distributedRLCfg.BucketBase + ":" + normalized
 }
 
 func (c *APIClient) waitBackoff(ctx context.Context, attempt int) error {

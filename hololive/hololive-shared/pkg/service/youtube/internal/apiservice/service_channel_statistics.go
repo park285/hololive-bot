@@ -31,7 +31,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/youtube/v3"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/fallback"
 )
 
@@ -84,7 +83,7 @@ func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs [
 
 	scraperCtx, scraperCancel := context.WithTimeout(
 		context.WithoutCancel(ctx),
-		constants.YouTubeConfig.ScraperPhaseTimeout,
+		ytDefaults.ScraperPhaseTimeout,
 	)
 	defer scraperCancel()
 
@@ -153,7 +152,7 @@ func (ys *serviceImpl) runChannelStatisticsAPIFallback(
 ) (fallback.SecondaryExecution, error) {
 	apiCtx, apiCancel := context.WithTimeout(
 		context.WithoutCancel(ctx),
-		constants.YouTubeConfig.APIFallbackTimeout,
+		ytDefaults.APIFallbackTimeout,
 	)
 	defer apiCancel()
 
@@ -203,7 +202,7 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 		return channelStatsAPIFallbackResult{stats: make(map[string]*ChannelStats)}, nil
 	}
 
-	cost := len(channelIDs) * constants.YouTubeConfig.ChannelsQuotaCost
+	cost := len(channelIDs) * ytDefaults.ChannelsQuotaCost
 	if err := ys.checkQuota(cost); err != nil {
 		return channelStatsAPIFallbackResult{}, err
 	}

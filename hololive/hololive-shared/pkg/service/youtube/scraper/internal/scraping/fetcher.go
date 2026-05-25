@@ -6,8 +6,6 @@ import (
 	"net/http"
 
 	"github.com/park285/shared-go/pkg/jsonutil"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 type FetcherEngine string
@@ -71,7 +69,7 @@ func (f netHTTPPageFetcher) FetchPage(ctx context.Context, fetchReq pageFetchReq
 		return fetchResp, nil
 	}
 
-	body, err := jsonutil.ReadAllLimit(resp.Body, constants.YouTubeConfig.MaxPageBodyBytes)
+	body, err := jsonutil.ReadAllLimit(resp.Body, ytDefaults.MaxPageBodyBytes)
 	if err != nil {
 		return pageFetchResponse{}, fmt.Errorf("failed to read response body: %w", err)
 	}

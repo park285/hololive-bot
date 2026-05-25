@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/internal/ctxutil"
 	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/shared-go/pkg/runtime/loop"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 type PhotoSyncService struct {
@@ -80,7 +80,7 @@ func (ps *PhotoSyncService) waitBeforeInitialSync(ctx context.Context) bool {
 }
 
 func (ps *PhotoSyncService) runPeriodicSync(ctx context.Context) {
-	if err := loop.RunTickerLoop(ctx, ps.syncInterval, func(ctx context.Context) error {
+	if err := lifecycle.RunTickerLoop(ctx, ps.syncInterval, func(ctx context.Context) error {
 		ps.syncWithRetry(ctx, 3)
 		return nil
 	}); err != nil && ctx.Err() != nil {

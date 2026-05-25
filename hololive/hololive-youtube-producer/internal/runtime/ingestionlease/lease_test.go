@@ -25,47 +25,18 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
-
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func newTestCacheForLock(t *testing.T) *cache.Service {
 	t.Helper()
-	service, _ := newTestCacheForLockWithMini(t)
-	return service
-}
-
-func newTestCacheForLockWithMini(t *testing.T) (*cache.Service, *miniredis.Miniredis) {
-	t.Helper()
-
-	mini := miniredis.RunT(t)
-	port, err := strconv.Atoi(mini.Port())
-	if err != nil {
-		t.Fatalf("parse miniredis port: %v", err)
-	}
-	service, err := cache.NewCacheService(context.Background(), cache.Config{
-		Host:              mini.Host(),
-		Port:              port,
-		DB:                0,
-		DisableCache:      true,
-		ForceSingleClient: true,
-	}, sharedlogging.NewTestLogger())
-	if err != nil {
-		t.Fatalf("new cache service: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = service.Close()
-		mini.Close()
-	})
-	return service, mini
+	return testutil.NewTestCacheService(t, context.Background())
 }
 
 func TestAcquireExclusive(t *testing.T) {
@@ -172,7 +143,7 @@ func TestLeaseRenewOwnershipLost(t *testing.T) {
 }
 
 func TestLeaseRenewTransientFailure(t *testing.T) {
-	cache, mini := newTestCacheForLockWithMini(t)
+	cache, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := context.Background()
 
@@ -202,7 +173,7 @@ func TestLeaseRenewTransientFailure(t *testing.T) {
 }
 
 func TestLeaseRenewTransientExhausted(t *testing.T) {
-	cache, mini := newTestCacheForLockWithMini(t)
+	cache, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := context.Background()
 

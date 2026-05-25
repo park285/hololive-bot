@@ -64,7 +64,7 @@ func isCommunityShortsDeliveryAuditKind(kind domain.OutboxKind) bool {
 	}
 }
 
-func (d *Dispatcher) logCommunityShortsDeliveryAttemptStarted(
+func (d *SendEngine) logCommunityShortsDeliveryAttemptStarted(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	attemptStartedAt time.Time,
@@ -73,7 +73,7 @@ func (d *Dispatcher) logCommunityShortsDeliveryAttemptStarted(
 	d.auditLogger.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, deliveryMode)
 }
 
-func (d *Dispatcher) logCommunityShortsDeliveryResult(
+func (d *SendEngine) logCommunityShortsDeliveryResult(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sentAt time.Time,
@@ -140,7 +140,7 @@ func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (int, in
 	}
 }
 
-func (d *Dispatcher) logCommunityShortsDeliveryAudit(
+func (d *SendEngine) logCommunityShortsDeliveryAudit(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
@@ -211,21 +211,21 @@ func buildCommunityShortsDeliveryAuditEvent(
 	}
 }
 
-func (d *Dispatcher) prepareCommunityShortsDeliveryAuditEvents(
+func (d *SendEngine) prepareCommunityShortsDeliveryAuditEvents(
 	ctx context.Context,
 	events []domain.YouTubeNotificationDeliveryTelemetry,
 ) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {
 	return d.auditLogger.prepareCommunityShortsDeliveryAuditEvents(ctx, events)
 }
 
-func (d *Dispatcher) enqueueCommunityShortsDeliveryAuditEvents(
+func (d *SendEngine) enqueueCommunityShortsDeliveryAuditEvents(
 	ctx context.Context,
 	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
 ) bool {
 	return d.auditLogger.enqueueCommunityShortsDeliveryAuditEvents(ctx, preparedEvents)
 }
 
-func (d *Dispatcher) logCommunityShortsDeliveryAuditFallback(
+func (d *SendEngine) logCommunityShortsDeliveryAuditFallback(
 	ctx context.Context,
 	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
 	sendErr error,

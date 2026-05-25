@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/shared-go/pkg/json"
 	"github.com/park285/shared-go/pkg/jsonutil"
 
@@ -218,7 +217,7 @@ func (c *Client) readStreamsResponseBody(resp *http.Response) ([]byte, error) {
 		return nil, fmt.Errorf("validate response: %w", err)
 	}
 
-	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
+	body, err := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
 	}
@@ -272,7 +271,7 @@ func (c *Client) newStreamsRequest(ctx context.Context, userLogins []string) (*h
 		params.Add("user_login", login)
 	}
 
-	reqURL := constants.TwitchConfig.BaseURL + "/streams?" + params.Encode()
+	reqURL := c.baseURL + "/streams?" + params.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {

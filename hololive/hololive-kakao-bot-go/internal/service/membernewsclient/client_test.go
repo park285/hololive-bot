@@ -23,35 +23,16 @@ package membernewsclient_test
 import (
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	json "github.com/park285/shared-go/pkg/json"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/membernewsclient"
 )
 
 const testAPIKey = "test-api-key"
-
-// newTestServer: httptest 서버를 생성하고 요청 검증 핸들러를 반환합니다.
-func newTestServer(t *testing.T, statusCode int, responseBody any, assertFn func(r *http.Request)) *httptest.Server {
-	t.Helper()
-
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if assertFn != nil {
-			assertFn(r)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(statusCode)
-
-		if responseBody != nil {
-			_ = json.NewEncoder(w).Encode(responseBody)
-		}
-	}))
-}
 
 // sampleDigest: 테스트용 Digest 샘플 데이터.
 func sampleDigest() membernewscontracts.Digest {
@@ -154,7 +135,7 @@ func TestGenerateRoomDigest(t *testing.T) {
 				return
 			}
 
-			srv := newTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
+			srv := testutil.NewJSONTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %q, want POST", r.Method)
 				}
@@ -171,7 +152,6 @@ func TestGenerateRoomDigest(t *testing.T) {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
-			defer srv.Close()
 
 			c := membernewsclient.New(srv.URL, testAPIKey)
 			got, err := c.GenerateRoomDigest(t.Context(), tc.roomID, tc.period)
@@ -246,7 +226,7 @@ func TestSubscribeRoom(t *testing.T) {
 				return
 			}
 
-			srv := newTestServer(t, tc.statusCode, nil, func(r *http.Request) {
+			srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %q, want POST", r.Method)
 				}
@@ -259,7 +239,6 @@ func TestSubscribeRoom(t *testing.T) {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
-			defer srv.Close()
 
 			c := membernewsclient.New(srv.URL, testAPIKey)
 			err := c.SubscribeRoom(t.Context(), tc.roomID, tc.roomName)
@@ -321,7 +300,7 @@ func TestUnsubscribeRoom(t *testing.T) {
 				return
 			}
 
-			srv := newTestServer(t, tc.statusCode, nil, func(r *http.Request) {
+			srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
 				if r.Method != http.MethodDelete {
 					t.Errorf("method = %q, want DELETE", r.Method)
 				}
@@ -335,7 +314,6 @@ func TestUnsubscribeRoom(t *testing.T) {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
-			defer srv.Close()
 
 			c := membernewsclient.New(srv.URL, testAPIKey)
 			err := c.UnsubscribeRoom(t.Context(), tc.roomID)
@@ -410,7 +388,7 @@ func TestIsRoomSubscribed(t *testing.T) {
 				return
 			}
 
-			srv := newTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
+			srv := testutil.NewJSONTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
 				if r.Method != http.MethodGet {
 					t.Errorf("method = %q, want GET", r.Method)
 				}
@@ -424,7 +402,6 @@ func TestIsRoomSubscribed(t *testing.T) {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
-			defer srv.Close()
 
 			c := membernewsclient.New(srv.URL, testAPIKey)
 			got, err := c.IsRoomSubscribed(t.Context(), tc.roomID)
@@ -486,8 +463,7 @@ func TestIsNoSubscribedMembers_WrappedSentinel(t *testing.T) {
 	t.Parallel()
 
 	// GenerateRoomDigest가 반환하는 실제 sentinel 에러도 감지해야 합니다
-	srv := newTestServer(t, http.StatusNotFound, map[string]string{"error": "no_subscribed_members"}, nil)
-	defer srv.Close()
+	srv := testutil.NewJSONTestServer(t, http.StatusNotFound, map[string]string{"error": "no_subscribed_members"}, nil)
 
 	c := membernewsclient.New(srv.URL, testAPIKey)
 	_, err := c.GenerateRoomDigest(t.Context(), "room-1", membernewscontracts.PeriodWeekly)

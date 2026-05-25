@@ -24,17 +24,16 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 	json "github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -109,28 +108,11 @@ func (a *trackingAlarmAdvanceCRUD) callSnapshot() (calls, lastMinutes int) {
 	return a.calls, a.lastMinutes
 }
 
-func newTestValkeyClient(t *testing.T) (valkey.Client, *miniredis.Miniredis, string) {
+func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
 	t.Helper()
 
-	mini := miniredis.RunT(t)
-	host, portStr, err := net.SplitHostPort(mini.Addr())
-	require.NoError(t, err)
-
-	addr := net.JoinHostPort(host, portStr)
-
-	client, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress:       []string{addr},
-		DisableCache:      true,
-		ForceSingleClient: true,
-	})
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		client.Close()
-		mini.Close()
-	})
-
-	return client, mini, addr
+	client, mini := testutil.NewTestValkeyClient(t)
+	return client, mini.Addr()
 }
 
 func publishConfigUpdate(t *testing.T, client valkey.Client, updateType string, payload any) {
@@ -154,7 +136,7 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	client, _, addr := newTestValkeyClient(t)
+	client, addr := newTestValkeyClient(t)
 	publisher, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
 		DisableCache:      true,
@@ -224,7 +206,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	client, _, addr := newTestValkeyClient(t)
+	client, addr := newTestValkeyClient(t)
 	publisher, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
 		DisableCache:      true,
@@ -292,7 +274,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	client, _, addr := newTestValkeyClient(t)
+	client, addr := newTestValkeyClient(t)
 	publisher, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
 		DisableCache:      true,
@@ -354,7 +336,7 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	client, _, addr := newTestValkeyClient(t)
+	client, addr := newTestValkeyClient(t)
 	publisherClient, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
 		DisableCache:      true,

@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 )
 
@@ -72,7 +71,7 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Holodex: HolodexConfig{
-			BaseURL: sharedenv.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
+			BaseURL: sharedenv.String("HOLODEX_BASE_URL", DefaultHolodexOperationalConfig().BaseURL),
 			APIKey:  resolveHolodexAPIKey(),
 		},
 		CORS: CORSConfig{

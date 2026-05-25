@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/ctxutil"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
@@ -183,7 +182,7 @@ func (r *RateLimiter) nextDistributedWait(ctx context.Context, bucket string) (t
 }
 
 func distributedBucketFromURL(pageURL string) string {
-	base := constants.YouTubeProducerDistributedRateLimitConfig.BucketBase
+	base := ytDefaults.ProducerDistributedRateLimit.BucketBase
 	parsed, err := url.Parse(pageURL)
 	if err != nil {
 		return base + ":unknown"

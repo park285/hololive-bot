@@ -7,7 +7,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (d *Dispatcher) recordPerRoomFormatFailure(
+func (d *SendEngine) recordPerRoomFormatFailure(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
@@ -19,7 +19,7 @@ func (d *Dispatcher) recordPerRoomFormatFailure(
 	d.metricsRecorder.recordPerRoomFormatFailure(ctx, row, rows, outboxes, claimTokens, result, mu)
 }
 
-func (d *Dispatcher) recordPerRoomMissingMessage(
+func (d *SendEngine) recordPerRoomMissingMessage(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
 	claimTokens []deliveryClaimToken,
@@ -29,7 +29,7 @@ func (d *Dispatcher) recordPerRoomMissingMessage(
 	d.metricsRecorder.recordPerRoomMissingMessage(ctx, row, claimTokens, result, mu)
 }
 
-func (d *Dispatcher) recordPerRoomRequestBuildFailure(
+func (d *SendEngine) recordPerRoomRequestBuildFailure(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
@@ -43,7 +43,7 @@ func (d *Dispatcher) recordPerRoomRequestBuildFailure(
 	d.metricsRecorder.recordPerRoomRequestBuildFailure(ctx, row, outbox, rows, outboxes, claimTokens, err, result, mu)
 }
 
-func (d *Dispatcher) recordPerRoomSendFailure(
+func (d *SendEngine) recordPerRoomSendFailure(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
@@ -57,7 +57,7 @@ func (d *Dispatcher) recordPerRoomSendFailure(
 	d.metricsRecorder.recordPerRoomSendFailure(ctx, row, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
 }
 
-func (d *Dispatcher) recordPerRoomSuccess(
+func (d *SendEngine) recordPerRoomSuccess(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
@@ -70,7 +70,7 @@ func (d *Dispatcher) recordPerRoomSuccess(
 	d.metricsRecorder.recordPerRoomSuccess(ctx, row, rows, outboxes, sendReq, claimTokens, result, mu)
 }
 
-func (d *Dispatcher) recordDeliveryFailure(
+func (d *SendEngine) recordDeliveryFailure(
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 	reason string,
@@ -79,7 +79,7 @@ func (d *Dispatcher) recordDeliveryFailure(
 	d.metricsRecorder.recordDeliveryFailure(result, mu, reason, deliveryID, outboxID)
 }
 
-func (d *Dispatcher) recordGroupedRequestBuildFailure(
+func (d *SendEngine) recordGroupedRequestBuildFailure(
 	ctx context.Context,
 	group deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
@@ -92,7 +92,7 @@ func (d *Dispatcher) recordGroupedRequestBuildFailure(
 	d.metricsRecorder.recordGroupedRequestBuildFailure(ctx, group, validRows, validOutboxes, claimTokens, err, result, mu)
 }
 
-func (d *Dispatcher) recordGroupedSendFailure(
+func (d *SendEngine) recordGroupedSendFailure(
 	ctx context.Context,
 	group deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
@@ -106,7 +106,7 @@ func (d *Dispatcher) recordGroupedSendFailure(
 	d.metricsRecorder.recordGroupedSendFailure(ctx, group, validRows, validOutboxes, sendReq, claimTokens, sendErr, result, mu)
 }
 
-func (d *Dispatcher) recordGroupedSuccess(
+func (d *SendEngine) recordGroupedSuccess(
 	ctx context.Context,
 	group deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,

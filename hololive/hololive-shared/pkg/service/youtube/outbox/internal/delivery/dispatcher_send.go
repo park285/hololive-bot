@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 )
 
-func (d *Dispatcher) dispatchDeliveryRows(
+func (d *SendEngine) dispatchDeliveryRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
@@ -69,7 +69,7 @@ func (d *Dispatcher) dispatchDeliveryRows(
 	return result
 }
 
-func (d *Dispatcher) dispatchGroup(
+func (d *SendEngine) dispatchGroup(
 	ctx context.Context,
 	group deliveryGroup,
 	formattedMessages map[int64]string,
@@ -98,8 +98,8 @@ func (d *Dispatcher) dispatchGroup(
 		return
 	}
 
-	claimSelection := d.selectClaimedDeliveries(ctx, validRows, validOutboxes, reuseCache)
-	d.applyClaimSelection(result, mu, claimSelection)
+	claimSelection := d.claims.selectClaimedDeliveries(ctx, validRows, validOutboxes, reuseCache)
+	d.claims.applyClaimSelection(result, mu, claimSelection)
 	validRows = claimSelection.sendRows
 	validOutboxes = claimSelection.sendOutboxes
 	if len(validRows) == 0 {
@@ -109,7 +109,7 @@ func (d *Dispatcher) dispatchGroup(
 	d.dispatchClaimedGroup(ctx, group, validRows, validOutboxes, formattedMessages, formatFailures, claimSelection, result, mu)
 }
 
-func (d *Dispatcher) dispatchClaimedGroup(
+func (d *SendEngine) dispatchClaimedGroup(
 	ctx context.Context,
 	group deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
@@ -141,7 +141,7 @@ func (d *Dispatcher) dispatchClaimedGroup(
 	d.dispatchGroupedClaimedRows(ctx, group, validRows, validOutboxes, message, claimSelection.claimTokens, result, mu)
 }
 
-func (d *Dispatcher) dispatchDeliveryRow(
+func (d *SendEngine) dispatchDeliveryRow(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
@@ -157,8 +157,8 @@ func (d *Dispatcher) dispatchDeliveryRow(
 		return
 	}
 
-	claimSelection := d.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, reuseCache)
-	d.applyClaimSelection(result, mu, claimSelection)
+	claimSelection := d.claims.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, reuseCache)
+	d.claims.applyClaimSelection(result, mu, claimSelection)
 	if len(claimSelection.sendRows) == 0 {
 		return
 	}
@@ -169,7 +169,7 @@ func (d *Dispatcher) dispatchDeliveryRow(
 	d.dispatchClaimedDeliveryRow(ctx, claimSelection.sendRows[0], claimSelection.sendOutboxes[0], formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
 }
 
-func (d *Dispatcher) dispatchClaimedDeliveryRow(
+func (d *SendEngine) dispatchClaimedDeliveryRow(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
@@ -207,7 +207,7 @@ func (d *Dispatcher) dispatchClaimedDeliveryRow(
 	d.recordPerRoomSuccess(ctx, row, rows, outboxes, sendReq, claimTokens, result, mu)
 }
 
-func (d *Dispatcher) dispatchGroupedClaimedRows(
+func (d *SendEngine) dispatchGroupedClaimedRows(
 	ctx context.Context,
 	group deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,

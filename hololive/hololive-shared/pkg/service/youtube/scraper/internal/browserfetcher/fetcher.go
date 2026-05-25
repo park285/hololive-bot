@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/park285/shared-go/pkg/jsonutil"
 )
 
@@ -53,7 +54,7 @@ func New(endpoint string, timeout time.Duration) *Fetcher {
 		timeout = 20 * time.Second
 	}
 	return &Fetcher{
-		client:   &http.Client{Timeout: timeout},
+		client:   httputil.NewClient(timeout),
 		endpoint: strings.TrimSpace(endpoint),
 		timeout:  timeout,
 	}

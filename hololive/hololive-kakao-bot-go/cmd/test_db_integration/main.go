@@ -35,7 +35,7 @@ import (
 )
 
 func main() {
-	logger := sharedlogging.NewLoggerWithLevel("info")
+	logger := sharedlogging.NewLogger()
 
 	log.Println("=== PostgreSQL Member Data Integration Test ===")
 	log.Println()

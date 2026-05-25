@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,22 +62,13 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	originalBaseURL := sharedconstants.TwitchConfig.BaseURL
-	originalAuthURL := sharedconstants.TwitchConfig.AuthURL
-
-	sharedconstants.TwitchConfig.BaseURL = server.URL + "/helix"
-	sharedconstants.TwitchConfig.AuthURL = server.URL + "/oauth2/token"
-
-	t.Cleanup(func() {
-		sharedconstants.TwitchConfig.BaseURL = originalBaseURL
-		sharedconstants.TwitchConfig.AuthURL = originalAuthURL
-	})
-
 	checker, err := NewTwitchChecker(
 		cache,
 		twitch.NewClient(twitch.ClientConfig{
 			ClientID:     "client-id",
 			ClientSecret: "client-secret",
+			BaseURL:      server.URL + "/helix",
+			AuthURL:      server.URL + "/oauth2/token",
 		}, newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -141,22 +131,13 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 		}))
 		t.Cleanup(server.Close)
 
-		originalBaseURL := sharedconstants.TwitchConfig.BaseURL
-		originalAuthURL := sharedconstants.TwitchConfig.AuthURL
-
-		sharedconstants.TwitchConfig.BaseURL = server.URL + "/helix"
-		sharedconstants.TwitchConfig.AuthURL = server.URL + "/oauth2/token"
-
-		t.Cleanup(func() {
-			sharedconstants.TwitchConfig.BaseURL = originalBaseURL
-			sharedconstants.TwitchConfig.AuthURL = originalAuthURL
-		})
-
 		checker, err := NewTwitchChecker(
 			cache,
 			twitch.NewClient(twitch.ClientConfig{
 				ClientID:     "client-id",
 				ClientSecret: "client-secret",
+				BaseURL:      server.URL + "/helix",
+				AuthURL:      server.URL + "/oauth2/token",
 			}, newCheckerTestLogger()),
 			newCheckerTestLogger(),
 		)

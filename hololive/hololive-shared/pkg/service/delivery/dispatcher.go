@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/runtime/loop"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -121,7 +121,7 @@ func (d *Dispatcher) Start(ctx context.Context) {
 func (d *Dispatcher) run(ctx context.Context) {
 	d.processOnce(ctx)
 
-	_ = loop.RunTickerLoop(ctx, d.config.PollInterval, func(ctx context.Context) error {
+	_ = lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(ctx context.Context) error {
 		d.processOnce(ctx)
 		return nil
 	})

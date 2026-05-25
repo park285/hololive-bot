@@ -29,12 +29,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (d *Dispatcher) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
+func (d *ClaimManager) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
 	return d.fetchAndLockForPerRoom(ctx)
 }
 
 // fetchAndLockForPerRoom: delivery row가 아직 없는 outbox만 claim
-func (d *Dispatcher) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
+func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
 	if d == nil || d.db == nil {
 		return nil, nil
 	}
@@ -80,7 +80,7 @@ func (d *Dispatcher) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTu
 	return items, nil
 }
 
-func (d *Dispatcher) fetchAndLockForPerRoomSQLite(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
+func (d *ClaimManager) fetchAndLockForPerRoomSQLite(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
 	now := time.Now()
 	lockExpiry := now.Add(-d.config.LockTimeout)
 
@@ -114,13 +114,13 @@ func (d *Dispatcher) fetchAndLockForPerRoomSQLite(ctx context.Context) ([]domain
 	return items, nil
 }
 
-func (d *Dispatcher) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) int {
+func (d *ClaimManager) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) int {
 	roomsByChannel := d.collectRoomsByChannel(ctx, outboxItems)
 	d.enqueueDeliveries(ctx, outboxItems, roomsByChannel)
 	return d.processPendingDeliveries(ctx)
 }
 
-func (d *Dispatcher) reconcileTerminalOutboxStatuses(ctx context.Context) {
+func (d *ClaimManager) reconcileTerminalOutboxStatuses(ctx context.Context) {
 	if d == nil || d.delivery == nil {
 		return
 	}
@@ -147,7 +147,7 @@ func (d *Dispatcher) reconcileTerminalOutboxStatuses(ctx context.Context) {
 		slog.Int("outbox_count", len(outboxIDs)))
 }
 
-func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) {
+func (d *ClaimManager) enqueueDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) {
 	startedAt := time.Now()
 	defer func() {
 		outboxEnqueueDuration.Observe(time.Since(startedAt).Seconds())
@@ -178,7 +178,7 @@ func (s *outboxEnqueueStats) add(next outboxEnqueueStats) {
 	s.totalTargetRooms += next.totalTargetRooms
 }
 
-func (d *Dispatcher) enqueueDelivery(
+func (d *ClaimManager) enqueueDelivery(
 	ctx context.Context,
 	item *domain.YouTubeNotificationOutbox,
 	roomsByChannel map[string]channelAlarmRoomTargets,
@@ -221,7 +221,7 @@ func deliveryRoomIDs(rooms map[string]bool) []string {
 	return roomIDs
 }
 
-func (d *Dispatcher) recordOutboxEnqueueStats(claimed int, stats outboxEnqueueStats) {
+func (d *ClaimManager) recordOutboxEnqueueStats(claimed int, stats outboxEnqueueStats) {
 	if claimed > 0 || stats.enqueuedOutboxes > 0 || stats.noSubscriberOutboxes > 0 || stats.subscriberLookupFailures > 0 || stats.enqueueFailures > 0 || stats.totalTargetRooms > 0 {
 		d.logger.Info("Outbox per-room enqueue completed",
 			slog.Int("outbox_claimed", claimed),
@@ -240,7 +240,7 @@ func (d *Dispatcher) recordOutboxEnqueueStats(claimed int, stats outboxEnqueueSt
 	outboxEnqueueTargetRoomsTotal.Add(float64(stats.totalTargetRooms))
 }
 
-func (d *Dispatcher) processPendingDeliveries(ctx context.Context) int {
+func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	rows, err := d.delivery.FetchAndLock(ctx, d.config.BatchSize, d.config.LockTimeout)
 	if err != nil {
 		d.logger.Error("Failed to fetch delivery rows", slog.Any("error", err))
@@ -276,7 +276,7 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) int {
 	return len(rows)
 }
 
-func (d *Dispatcher) markDispatchResult(ctx context.Context, result deliveryDispatchResult) {
+func (d *ClaimManager) markDispatchResult(ctx context.Context, result deliveryDispatchResult) {
 	if err := d.delivery.MarkSentBatch(ctx, result.successDeliveryIDs, result.successClaimTokens...); err != nil {
 		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
 		if recoverErr := d.recoverSuccessfulCommunityShortsSentState(ctx, result.successDeliveryIDs); recoverErr != nil {
@@ -290,7 +290,7 @@ func (d *Dispatcher) markDispatchResult(ctx context.Context, result deliveryDisp
 	}
 }
 
-func (d *Dispatcher) markFailedDispatchBucket(ctx context.Context, reason string, ids []int64) {
+func (d *ClaimManager) markFailedDispatchBucket(ctx context.Context, reason string, ids []int64) {
 	if deliveryFailureReasonIsPermanent(reason) {
 		d.markPermanentDispatchFailureBucket(ctx, reason, ids)
 		return
@@ -298,7 +298,7 @@ func (d *Dispatcher) markFailedDispatchBucket(ctx context.Context, reason string
 	d.markRetryDispatchFailureBucket(ctx, reason, ids)
 }
 
-func (d *Dispatcher) markPermanentDispatchFailureBucket(ctx context.Context, reason string, ids []int64) {
+func (d *ClaimManager) markPermanentDispatchFailureBucket(ctx context.Context, reason string, ids []int64) {
 	if err := d.delivery.MarkPermanentFailureBatch(ctx, ids, d.config.MaxRetries, reason); err != nil {
 		d.logger.Error("Failed to mark delivery rows as permanent failed",
 			slog.String("reason", reason),
@@ -306,7 +306,7 @@ func (d *Dispatcher) markPermanentDispatchFailureBucket(ctx context.Context, rea
 	}
 }
 
-func (d *Dispatcher) markRetryDispatchFailureBucket(ctx context.Context, reason string, ids []int64) {
+func (d *ClaimManager) markRetryDispatchFailureBucket(ctx context.Context, reason string, ids []int64) {
 	if err := d.delivery.MarkFailedRetryBatch(ctx, ids, d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
 		d.logger.Error("Failed to mark delivery rows as failed",
 			slog.String("reason", reason),
@@ -314,7 +314,7 @@ func (d *Dispatcher) markRetryDispatchFailureBucket(ctx context.Context, reason 
 	}
 }
 
-func (d *Dispatcher) reconcileTouchedOutboxes(ctx context.Context, touchedOutboxIDs []int64) int {
+func (d *ClaimManager) reconcileTouchedOutboxes(ctx context.Context, touchedOutboxIDs []int64) int {
 	if err := d.delivery.UpdateOutboxAggregateStatuses(ctx, touchedOutboxIDs); err != nil {
 		d.logger.Warn("Failed to update outbox aggregate statuses", slog.Any("error", err))
 		return 1
@@ -325,7 +325,7 @@ func (d *Dispatcher) reconcileTouchedOutboxes(ctx context.Context, touchedOutbox
 	return 0
 }
 
-func (d *Dispatcher) recordOutboxDispatchResult(
+func (d *ClaimManager) recordOutboxDispatchResult(
 	claimed int,
 	result deliveryDispatchResult,
 	touchedOutboxIDs []int64,
@@ -359,7 +359,7 @@ func collectDeliveryIDs(rows []domain.YouTubeNotificationDelivery) []int64 {
 	return deliveryIDs
 }
 
-func (d *Dispatcher) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (map[int64]domain.YouTubeNotificationOutbox, error) {
+func (d *ClaimManager) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (map[int64]domain.YouTubeNotificationOutbox, error) {
 	uniqueIDs := uniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return map[int64]domain.YouTubeNotificationOutbox{}, nil
@@ -379,7 +379,7 @@ func (d *Dispatcher) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (map
 	return result, nil
 }
 
-func (d *Dispatcher) releaseOutboxLock(ctx context.Context, id int64) {
+func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64) {
 	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
 		Where("id = ? AND status = ?", id, domain.OutboxStatusPending).
 		Update("locked_at", nil)
@@ -387,5 +387,25 @@ func (d *Dispatcher) releaseOutboxLock(ctx context.Context, id int64) {
 		d.logger.Warn("Failed to release outbox lock",
 			slog.Int64("id", id),
 			slog.Any("error", result.Error))
+	}
+}
+
+func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
+	if d == nil || d.db == nil {
+		return
+	}
+
+	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
+	result := d.db.WithContext(ctx).
+		Where("status IN (?, ?) AND COALESCE(sent_at, created_at) < ?", domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff).
+		Delete(&domain.YouTubeNotificationOutbox{})
+
+	if result.Error != nil {
+		d.logger.Warn("Failed to cleanup old outbox items", slog.Any("error", result.Error))
+		return
+	}
+
+	if result.RowsAffected > 0 {
+		d.logger.Info("Cleaned up old outbox items", slog.Int64("deleted", result.RowsAffected))
 	}
 }

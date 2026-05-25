@@ -15,6 +15,7 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -66,7 +67,7 @@ func newLenientAlarmCacheMock(
 ) (*cachemocks.Client, *cache.Service) {
 	t.Helper()
 
-	cacheClient := newTestCacheService(ctx, t)
+	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
 	cacheMock := cachemocks.NewLenientClient()
 
 	cacheMock.BuilderFunc = cacheClient.Builder

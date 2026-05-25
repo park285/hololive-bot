@@ -131,8 +131,8 @@ func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
 		{file: "hololive/hololive-shared/pkg/config/config.go", token: removedRoomEnv()},
 		{file: "hololive/hololive-shared/pkg/config/internal/settings/config_types.go", token: "Settlement" + "RoomID"},
 		{file: "hololive/hololive-kakao-bot-go/.env.example", token: removedRoomEnv()},
-		{file: "hololive/hololive-kakao-bot-go/internal/bot/internal/orchestration/orchcmd/command_normalizer_test.go", token: removedCommandValue("status")},
-		{file: "hololive/hololive-kakao-bot-go/internal/bot/internal/orchestration/bot_command_init_views_test.go", token: removedCommandToken("SettlementStatus")},
+		{file: "hololive/hololive-kakao-bot-go/internal/bot/orchestration/orchcmd/command_normalizer_test.go", token: removedCommandValue("status")},
+		{file: "hololive/hololive-kakao-bot-go/internal/bot/orchestration/bot_command_init_views_test.go", token: removedCommandToken("SettlementStatus")},
 	}
 	for _, check := range residueChecks {
 		t.Run(check.file, func(t *testing.T) {

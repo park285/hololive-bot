@@ -11,6 +11,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
 type fakeOutboxRepository struct {
@@ -84,7 +85,7 @@ func (r *fakeOutboxRepository) InsertBatch(ctx context.Context, input dispatchou
 func TestPublisherShadowModeWritesOutboxAfterValkeySuccess(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{}
-	publisher := NewPublisher(cacheClient, newTestLogger(),
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
 		WithPublishMode(PublishModeShadow),
 	)
@@ -123,7 +124,7 @@ func TestPublisherShadowModeHonorsFatalFlag(t *testing.T) {
 func TestPublisherPGFirstDoesNotPushLegacyQueue(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{}
-	publisher := NewPublisher(cacheClient, newTestLogger(),
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
 		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
@@ -154,7 +155,7 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 		ShadowedDuplicates:    0,
 		PromotedShadowedCount: 0,
 	}}
-	publisher := NewPublisher(cacheClient, newTestLogger(),
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
 		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
@@ -179,7 +180,7 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 	repository := &fakeOutboxRepository{
 		batchErrors: []error{nil, errors.New("pg unavailable")},
 	}
-	publisher := NewPublisher(cacheClient, newTestLogger(),
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
 		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
@@ -201,7 +202,7 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{}
-	publisher := NewPublisher(cacheClient, newTestLogger(),
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
 		WithPublishMode(PublishModePGFirst),
 	)

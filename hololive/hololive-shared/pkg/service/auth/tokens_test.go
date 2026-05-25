@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/testutil"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -108,14 +110,13 @@ func TestSha256Hex_EmptyString(t *testing.T) {
 }
 
 func TestCreateSession_Success(t *testing.T) {
-	cache, cleanup := newTestCache(t)
-	defer cleanup()
+	cache := testutil.NewTestCacheService(t, context.Background())
 
 	config := DefaultConfig()
 	config.SessionTTL = 30 * time.Minute
 	config.UserSessionsTTL = 2 * time.Hour
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), config)
+	service, err := NewService(context.Background(), newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
 	require.NoError(t, err)
 
 	session, err := service.createSession(context.Background(), "user-123")
@@ -128,14 +129,13 @@ func TestCreateSession_Success(t *testing.T) {
 }
 
 func TestCreateSession_StoresJSONSessionDataAndUserIndex(t *testing.T) {
-	cache, cleanup := newTestCache(t)
-	defer cleanup()
+	cache := testutil.NewTestCacheService(t, context.Background())
 
 	config := DefaultConfig()
 	config.SessionTTL = 30 * time.Minute
 	config.UserSessionsTTL = 2 * time.Hour
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), config)
+	service, err := NewService(context.Background(), newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
 	require.NoError(t, err)
 
 	session, err := service.createSession(context.Background(), "user-123")
@@ -156,7 +156,7 @@ func TestCreateSession_StoresJSONSessionDataAndUserIndex(t *testing.T) {
 
 func TestCreateSession_NoCacheService(t *testing.T) {
 	db := newTestDB(t)
-	service, err := NewService(context.Background(), db, nil, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
 	_, err = service.createSession(context.Background(), "user-123")
@@ -165,10 +165,9 @@ func TestCreateSession_NoCacheService(t *testing.T) {
 }
 
 func TestCreateSession_EmptyUserID(t *testing.T) {
-	cache, cleanup := newTestCache(t)
-	defer cleanup()
+	cache := testutil.NewTestCacheService(t, context.Background())
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
 	_, err = service.createSession(context.Background(), "")
@@ -177,10 +176,9 @@ func TestCreateSession_EmptyUserID(t *testing.T) {
 }
 
 func TestCreateSession_UniqueSessions(t *testing.T) {
-	cache, cleanup := newTestCache(t)
-	defer cleanup()
+	cache := testutil.NewTestCacheService(t, context.Background())
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, newTestLogger(), DefaultConfig())
+	service, err := NewService(context.Background(), newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
 	s1, err := service.createSession(context.Background(), "user-123")

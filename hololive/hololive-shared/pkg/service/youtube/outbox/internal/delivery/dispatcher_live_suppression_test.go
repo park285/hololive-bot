@@ -35,8 +35,7 @@ func TestFilterLiveCatchupSuppressedRoomsSkipsRecentUpcomingRooms(t *testing.T) 
 		return nil
 	}
 	dispatcher := &Dispatcher{
-		cache:  cache,
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		grouper: newOutboxGrouper(nil, cache, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{}),
 	}
 
 	filtered := dispatcher.filterLiveCatchupSuppressedRooms(context.Background(), item, map[string]bool{

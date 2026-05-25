@@ -24,17 +24,14 @@ import (
 	"context"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type Runner interface {
 	Check(ctx context.Context) ([]*domain.AlarmNotification, error)
 }
 
-type SendResult struct {
-	Sent    int
-	Skipped int
-	Failed  int
-}
+type SendResult = delivery.SendResult
 
 type Sender interface {
 	Send(ctx context.Context, notifications []*domain.AlarmNotification) (SendResult, error)

@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 )
 
 // 이 테스트는 -tags=integration 플래그로만 실행됩니다.
@@ -37,10 +37,10 @@ func TestScraperLiveIntegration(t *testing.T) {
 
 	service := &Service{
 		httpClient: &http.Client{
-			Timeout: constants.OfficialScheduleConfig.Timeout,
+			Timeout: config.DefaultOfficialScheduleConfig().Timeout,
 		},
 		logger:        logger,
-		baseURL:       constants.OfficialScheduleConfig.BaseURL,
+		baseURL:       config.DefaultOfficialScheduleConfig().BaseURL,
 		memberNameMap: make(map[string]string),
 	}
 

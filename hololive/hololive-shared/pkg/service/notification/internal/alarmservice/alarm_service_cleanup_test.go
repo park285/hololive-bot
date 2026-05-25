@@ -7,6 +7,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -18,7 +19,7 @@ func newAlarmCleanupCacheMock(
 ) *cachemocks.Client {
 	t.Helper()
 
-	cache := newTestCacheService(t.Context(), t)
+	cache := sharedtestutil.NewTestCacheService(t, t.Context())
 	client := cachemocks.NewLenientClient()
 
 	client.BuilderFunc = cache.Builder
@@ -76,7 +77,7 @@ func TestClearChannelSubscribersPipeline_ReturnsErrorOnScardParseFailure(t *test
 func TestCleanupChannelRegistryIfEmpty_ReturnsErrorWhenRemovingRegistryEntryFails(t *testing.T) {
 	t.Parallel()
 
-	cache := newTestCacheService(t.Context(), t)
+	cache := sharedtestutil.NewTestCacheService(t, t.Context())
 	as := &AlarmService{
 		cache: &cachemocks.Client{
 			BuilderFunc: cache.Builder,

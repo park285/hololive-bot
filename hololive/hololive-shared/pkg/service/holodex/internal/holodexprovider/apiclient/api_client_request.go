@@ -74,7 +74,7 @@ func (c *APIClient) finishHolodexRequestAttempt(body []byte, err error) ([]byte,
 }
 
 func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) ([]byte, bool, error) {
-	attemptCtx, cancel := context.WithTimeout(ctx, constants.APIConfig.PerAttemptTimeout)
+	attemptCtx, cancel := context.WithTimeout(ctx, c.perAttemptTimeout)
 	defer cancel()
 
 	reqURL := c.buildRequestURL(path, params)
@@ -91,7 +91,7 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 		return nil, true, fmt.Errorf("HTTP request failed: %w", err)
 	}
 
-	body, readErr := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
+	body, readErr := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
 	_ = resp.Body.Close()
 	if readErr != nil {
 		return nil, false, fmt.Errorf("failed to read response: %w", readErr)

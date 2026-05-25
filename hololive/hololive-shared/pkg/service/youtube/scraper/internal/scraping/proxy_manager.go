@@ -33,8 +33,11 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/proxy"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/park285/shared-go/pkg/httputil"
 )
+
+var ytDefaults = config.DefaultYouTubeOperationalConfig()
 
 type ProxyConfig struct {
 	Enabled bool
@@ -72,7 +75,7 @@ func (c *Client) initDirectHTTPClient() {
 	if err != nil {
 		slog.Error("Failed to create direct scraper client, using fallback default transport",
 			"error", err)
-		directClient = &http.Client{Timeout: constants.YouTubeConfig.ScraperHTTPTimeout}
+		directClient = httputil.NewClient(ytDefaults.ScraperHTTPTimeout)
 	}
 	c.directHTTPClient = directClient
 	c.directTransport = directTransport
@@ -149,7 +152,7 @@ func (c *Client) currentHTTPClient() *http.Client {
 	if c.directHTTPClient != nil {
 		return c.directHTTPClient
 	}
-	return &http.Client{Timeout: constants.YouTubeConfig.ScraperHTTPTimeout}
+	return httputil.NewClient(ytDefaults.ScraperHTTPTimeout)
 }
 
 func (c *Client) closeIdleConnections() {
@@ -215,7 +218,7 @@ func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, e
 		baseTransport.DialContext = newDirectDialContext()
 		return &http.Client{
 			Transport: instrumentScraperTransport(baseTransport),
-			Timeout:   constants.YouTubeConfig.ScraperHTTPTimeout,
+			Timeout:   ytDefaults.ScraperHTTPTimeout,
 		}, baseTransport, nil
 	}
 
@@ -230,7 +233,7 @@ func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, e
 	auth := newProxyAuth(parsedURL)
 
 	forwardDialer := &net.Dialer{
-		Timeout:   constants.YouTubeConfig.ScraperDialTimeout,
+		Timeout:   ytDefaults.ScraperDialTimeout,
 		KeepAlive: 30 * time.Second,
 	}
 
@@ -249,7 +252,7 @@ func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, e
 
 	return &http.Client{
 		Transport: instrumentScraperTransport(transport),
-		Timeout:   constants.YouTubeConfig.ScraperHTTPTimeout,
+		Timeout:   ytDefaults.ScraperHTTPTimeout,
 	}, transport, nil
 }
 
@@ -282,15 +285,15 @@ func newScraperTransport(forceHTTP2 bool) *http.Transport {
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   10,
 		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   constants.YouTubeConfig.ScraperDialTimeout,
-		ResponseHeaderTimeout: constants.YouTubeConfig.ScraperHeaderTimeout,
+		TLSHandshakeTimeout:   ytDefaults.ScraperDialTimeout,
+		ResponseHeaderTimeout: ytDefaults.ScraperHeaderTimeout,
 		ExpectContinueTimeout: time.Second,
 	}
 }
 
 func newDirectDialContext() func(ctx context.Context, network, addr string) (net.Conn, error) {
 	dialer := &net.Dialer{
-		Timeout:   constants.YouTubeConfig.ScraperDialTimeout,
+		Timeout:   ytDefaults.ScraperDialTimeout,
 		KeepAlive: 30 * time.Second,
 	}
 	return dialer.DialContext

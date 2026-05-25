@@ -104,7 +104,7 @@ func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string)
 		}
 	}
 
-	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
+	body, err := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
 	if err != nil {
 		c.handleRequestFailure()
 		return nil, fmt.Errorf("%s: %w", readErrorPrefix, err)

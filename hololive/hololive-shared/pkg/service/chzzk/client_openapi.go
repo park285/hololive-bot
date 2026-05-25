@@ -30,7 +30,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	json "github.com/park285/shared-go/pkg/json"
 	"golang.org/x/sync/errgroup"
 )
@@ -132,7 +131,7 @@ func (c *Client) GetLivesByChannelIDs(ctx context.Context, channelIDs []string) 
 		return []LiveData{}, nil
 	}
 
-	if len(targets) <= constants.ChzzkConfig.BatchLookupThreshold {
+	if len(targets) <= c.batchLookupThreshold {
 		return c.getLivesByStatusChecks(ctx, targets)
 	}
 
@@ -166,7 +165,7 @@ func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string
 		g       errgroup.Group
 		liveMap = make(map[string]LiveData, len(channelIDs))
 	)
-	g.SetLimit(constants.ChzzkConfig.MaxConcurrentStatusChecks)
+	g.SetLimit(c.maxConcurrentStatusChecks)
 
 	for _, channelID := range channelIDs {
 		g.Go(func() error {
@@ -216,7 +215,7 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 	next := ""
 
 	for {
-		resp, err := c.GetLives(ctx, constants.ChzzkConfig.MaxLivesPageSize, next)
+		resp, err := c.GetLives(ctx, c.maxLivesPageSize, next)
 		if err != nil {
 			return nil, fmt.Errorf("get lives page: %w", err)
 		}

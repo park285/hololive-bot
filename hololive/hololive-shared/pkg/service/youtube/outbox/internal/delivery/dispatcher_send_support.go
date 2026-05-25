@@ -60,7 +60,7 @@ func partitionGroupedDeliveries(
 	return validRows, validOutboxes, invalidRows
 }
 
-func (d *Dispatcher) dispatchRowsIndividually(
+func (d *SendEngine) dispatchRowsIndividually(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
@@ -75,7 +75,7 @@ func (d *Dispatcher) dispatchRowsIndividually(
 	}
 }
 
-func (d *Dispatcher) formatGroupedMessage(
+func (d *SendEngine) formatGroupedMessage(
 	ctx context.Context,
 	group deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
@@ -100,7 +100,7 @@ func (d *Dispatcher) formatGroupedMessage(
 	return message, true
 }
 
-func (d *Dispatcher) dispatchClaimedRowsIndividually(
+func (d *SendEngine) dispatchClaimedRowsIndividually(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
@@ -126,7 +126,7 @@ func singleDeliveryBatch(
 	return []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}
 }
 
-func (d *Dispatcher) releaseDeliveryClaimsWithWarning(
+func (d *ClaimManager) releaseDeliveryClaimsWithWarning(
 	ctx context.Context,
 	claims []deliveryClaimToken,
 	message string,
@@ -138,7 +138,7 @@ func (d *Dispatcher) releaseDeliveryClaimsWithWarning(
 }
 
 // preFormatMessages: outbox_id별로 메시지를 1회 포맷하여 캐싱
-func (d *Dispatcher) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]string, failures map[int64]bool) {
+func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]string, failures map[int64]bool) {
 	messages = make(map[int64]string, len(outboxByID))
 	failures = make(map[int64]bool)
 	for id := range outboxByID {
@@ -156,7 +156,7 @@ func (d *Dispatcher) preFormatMessages(ctx context.Context, outboxByID map[int64
 	return
 }
 
-func (d *Dispatcher) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) error {
+func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) error {
 	if err := validateDeliverySendRequest(req); err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (d *Dispatcher) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 	return nil
 }
 
-func (d *Dispatcher) deliveryParallelism() int {
+func (d *SendEngine) deliveryParallelism() int {
 	if d.config.DeliveryParallelism > 0 {
 		return d.config.DeliveryParallelism
 	}

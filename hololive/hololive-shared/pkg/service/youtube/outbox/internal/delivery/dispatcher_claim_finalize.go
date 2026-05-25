@@ -13,7 +13,7 @@ import (
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-func (d *Dispatcher) finalizeClaimSuccess(
+func (d *ClaimManager) finalizeClaimSuccess(
 	ctx context.Context,
 	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
@@ -38,7 +38,7 @@ func (d *Dispatcher) finalizeClaimSuccess(
 	}, nil
 }
 
-func (d *Dispatcher) finalizeClaimMiss(
+func (d *ClaimManager) finalizeClaimMiss(
 	ctx context.Context,
 	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
@@ -55,7 +55,7 @@ func (d *Dispatcher) finalizeClaimMiss(
 	return deliveryClaimDecisionRetryLater, nil, nil
 }
 
-func (d *Dispatcher) reloadAlarmStateClaimStatus(
+func (d *ClaimManager) reloadAlarmStateClaimStatus(
 	ctx context.Context,
 	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,
@@ -75,7 +75,7 @@ func (d *Dispatcher) reloadAlarmStateClaimStatus(
 	return state, alreadyCompleted, nil
 }
 
-func (d *Dispatcher) loadClaimTrackingRow(
+func (d *ClaimManager) loadClaimTrackingRow(
 	ctx context.Context,
 	repository *trackingrepo.GormRepository,
 	outbox domain.YouTubeNotificationOutbox,

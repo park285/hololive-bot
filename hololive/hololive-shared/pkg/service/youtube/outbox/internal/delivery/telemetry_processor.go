@@ -9,7 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
-	"github.com/park285/shared-go/pkg/runtime/loop"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 func buildDeliveryAuditLogAttrsWithClassification(row domain.YouTubeNotificationDeliveryTelemetry, classification PostLatencyClassificationResult) []any {
@@ -73,10 +73,28 @@ func newTelemetryProcessor(telemetry *DeliveryTelemetryRepository, logger *slog.
 
 func (tp *TelemetryProcessor) telemetryLoop(ctx context.Context) {
 	tp.processDeliveryTelemetry(ctx)
-	_ = loop.RunTickerLoop(ctx, tp.config.TelemetryPollInterval, func(ctx context.Context) error {
+	_ = lifecycle.RunTickerLoop(ctx, tp.config.TelemetryPollInterval, func(ctx context.Context) error {
 		tp.processDeliveryTelemetry(ctx)
 		return nil
 	})
+}
+
+func (tp *TelemetryProcessor) cleanup(ctx context.Context) {
+	if tp == nil || tp.telemetry == nil || tp.config.TelemetryRetention <= 0 {
+		return
+	}
+
+	deleted, err := tp.telemetry.DeleteLoggedBefore(ctx, time.Now().UTC().Add(-tp.config.TelemetryRetention))
+	if err != nil {
+		tp.logger.Warn("Failed to cleanup old delivery telemetry", slog.Any("error", err))
+		return
+	}
+
+	if deleted > 0 {
+		tp.logger.Info("Cleaned up old delivery telemetry",
+			slog.Int64("deleted", deleted),
+			slog.Duration("retention", tp.config.TelemetryRetention))
+	}
 }
 
 func (tp *TelemetryProcessor) processDeliveryTelemetry(ctx context.Context) {
