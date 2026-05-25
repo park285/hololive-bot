@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 GO_WORKSPACE_MODULES=(
-    shared-go
+    ../shared-go
     hololive/hololive-shared
     hololive/hololive-kakao-bot-go
     hololive/hololive-admin-api
@@ -24,7 +24,7 @@ go_workspace_module_dirs() {
 
     printf '%s\n' "${root_dir}"
     for module in "${GO_WORKSPACE_MODULES[@]}"; do
-        if [[ "${module}" == "shared-go" ]]; then
+        if [[ "${module}" == "../shared-go" ]]; then
             printf '%s\n' "${shared_go_dir}"
         else
             printf '%s/%s\n' "${root_dir}" "${module}"

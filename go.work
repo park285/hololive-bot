@@ -3,6 +3,7 @@ go 1.26.3
 toolchain go1.26.3
 
 use (
+	../shared-go
 	./
 	./hololive/hololive-admin-api
 	./hololive/hololive-alarm-worker
@@ -10,5 +11,4 @@ use (
 	./hololive/hololive-llm-sched
 	./hololive/hololive-shared
 	./hololive/hololive-youtube-producer
-	../shared-go
 )
