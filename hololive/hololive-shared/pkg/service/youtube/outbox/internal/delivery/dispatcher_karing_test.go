@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -164,6 +165,42 @@ func TestDispatcherSerializesKaringSends(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&sender.maxActive); got != 1 {
 		t.Fatalf("max active Karing sends = %d, want 1", got)
+	}
+}
+
+func TestSendEngineKaringMutexWaitUsesDeliverySendTimeout(t *testing.T) {
+	sender := &youtubeOutboxKaringTestSender{}
+	engine := newSendEngine(sender, &MessageFormatter{}, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+		DeliverySendTimeout: 20 * time.Millisecond,
+	}, nil, newAuditLogger(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{}, nil), nil)
+	engine.karingMu.Lock()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- engine.sendYouTubeOutboxKaring(context.Background(), sender, "room-timeout", domain.YouTubeOutboxDispatchPayload{
+			OutboxIDs:  []int64{1},
+			Kind:       domain.OutboxKindNewVideo,
+			AlarmType:  domain.AlarmTypeVideo,
+			ChannelID:  "UC_timeout",
+			MemberName: "member",
+			Items: []domain.YouTubeOutboxItem{{
+				OutboxID:  1,
+				ContentID: "video:timeout",
+				Payload:   `{"video_id":"timeout","title":"timeout"}`,
+			}},
+		})
+	}()
+
+	select {
+	case err := <-done:
+		engine.karingMu.Unlock()
+		if err == nil || !strings.Contains(err.Error(), "timed out") {
+			t.Fatalf("sendYouTubeOutboxKaring() error = %v, want timeout", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		engine.karingMu.Unlock()
+		err := <-done
+		t.Fatalf("sendYouTubeOutboxKaring() waited for mutex without timing out, later error = %v", err)
 	}
 }
 

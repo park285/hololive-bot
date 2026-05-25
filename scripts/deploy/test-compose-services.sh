@@ -74,7 +74,7 @@ while IFS= read -r path; do
     [[ -n "${path}" ]] || continue
     [[ -e "${ROOT_DIR}/${path}" ]] || fail "osaka active-active files list path exists: ${path}"
     case "${path}" in
-        hololive/hololive-youtube-producer/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum) ;;
+        hololive/hololive-youtube-producer/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
         go.sum|*/go.sum) fail "osaka active-active files list excludes unapproved go.sum path: ${path}" ;;
     esac
     case "${path}" in
