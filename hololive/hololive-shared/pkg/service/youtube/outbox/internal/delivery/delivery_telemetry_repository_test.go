@@ -488,7 +488,7 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 		TelemetryFlushBatch:    10,
 	})
 
-	dispatcher.processDeliveryTelemetry(ctx)
+	dispatcher.telemetry.processDeliveryTelemetry(ctx)
 
 	var rows []sqliteTelemetryBufferModel
 	require.NoError(t, db.Find(&rows).Error)

@@ -73,7 +73,7 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 				},
 			}
 
-			result := dispatcher.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+			result := dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
 			if !deliveryFailureReasonIsPermanent(tt.reason) {
 				t.Fatalf("deliveryFailureReasonIsPermanent(%q) = false, want true", tt.reason)
@@ -227,7 +227,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 		DeliveryParallelism: 1,
 	})
 
-	processed := dispatcher.processPendingDeliveries(ctx)
+	processed := dispatcher.claim.processPendingDeliveries(ctx)
 	if processed != 1 {
 		t.Fatalf("processed = %d, want 1", processed)
 	}

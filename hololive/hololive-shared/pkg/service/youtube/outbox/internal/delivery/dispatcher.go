@@ -208,11 +208,11 @@ func (d *Dispatcher) Start(ctx context.Context) {
 		defer d.started.Store(false)
 		d.run(ctx)
 	}()
-	if d.claimManager().delivery != nil {
+	if d.claim != nil && d.claim.delivery != nil {
 		go d.aggregateSyncLoop(ctx)
 	}
 	if d.telemetry != nil {
-		go d.telemetryLoop(ctx)
+		go d.telemetry.telemetryLoop(ctx)
 	}
 	if d.config.CleanupEnabled {
 		go d.cleanupLoop(ctx)
@@ -228,7 +228,7 @@ func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
 }
 
 func (d *Dispatcher) aggregateSyncOnce(ctx context.Context) {
-	d.claimManager().reconcileTerminalOutboxStatuses(ctx)
+	d.claim.reconcileTerminalOutboxStatuses(ctx)
 	if d.onAggregateSync != nil {
 		d.onAggregateSync()
 	}
@@ -241,7 +241,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("batch_size", d.config.BatchSize),
 		slog.Duration("delivery_send_timeout", d.config.DeliverySendTimeout),
 		slog.Int("delivery_parallelism", d.config.DeliveryParallelism),
-		slog.Int("subscriber_lookup_parallelism", d.subscriberLookupParallelism()))
+		slog.Int("subscriber_lookup_parallelism", d.grouper.subscriberLookupParallelism()))
 
 	d.processOnce(ctx)
 	_ = lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(context.Context) error {
@@ -273,7 +273,7 @@ func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
 }
 
 func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (bool, bool) {
-	outboxItems, err := d.claimManager().claimOutboxBatch(ctx)
+	outboxItems, err := d.claim.claimOutboxBatch(ctx)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
 		return false, false
@@ -285,13 +285,13 @@ func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (bool
 
 func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, round int) int {
 	if len(outboxItems) == 0 {
-		return d.claimManager().processPendingDeliveries(ctx)
+		return d.claim.processPendingDeliveries(ctx)
 	}
 
 	d.logger.Debug("Processing outbox batch",
 		slog.Int("count", len(outboxItems)),
 		slog.Int("round", round+1))
-	return d.claimManager().processPerRoomBatch(ctx, outboxItems)
+	return d.claim.processPerRoomBatch(ctx, outboxItems)
 }
 
 // cleanupLoop: 오래된 완료 알림 정리 루프
@@ -311,8 +311,10 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 		return
 	}
 
-	d.claimManager().cleanupOutbox(ctx)
-	d.telemetry.cleanup(ctx)
+	d.claim.cleanupOutbox(ctx)
+	if d.telemetry != nil {
+		d.telemetry.cleanup(ctx)
+	}
 }
 
 func (d *Dispatcher) ProcessOnceForTest(ctx context.Context) {

@@ -49,7 +49,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t
 		DeliveryParallelism: 1,
 	})
 
-	dispatcher.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{
+	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{
 		item.ChannelID: {
 			domain.AlarmTypeShorts: {},
 		},

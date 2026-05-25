@@ -138,7 +138,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 		DeliveryParallelism: 2,
 	})
 
-	dispatcher.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{})
+	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{})
 
 	var updated domain.YouTubeNotificationOutbox
 	require.NoError(t, db.First(&updated, item.ID).Error)
@@ -182,7 +182,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 		DeliveryParallelism: 2,
 	})
 
-	dispatcher.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{
+	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{
 		item.ChannelID: {
 			domain.AlarmTypeLive: {},
 		},
@@ -237,7 +237,7 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 		DeliveryParallelism: 2,
 	})
 
-	dispatcher.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{shortsItem, communityItem}, map[string]channelAlarmRoomTargets{
+	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{shortsItem, communityItem}, map[string]channelAlarmRoomTargets{
 		shortsItem.ChannelID: {
 			domain.AlarmTypeShorts:    {"room-shorts": true},
 			domain.AlarmTypeCommunity: {"room-community": true},
@@ -302,7 +302,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 		DeliveryParallelism: 1,
 	})
 
-	result := dispatcher.dispatchDeliveryRows(ctx, []domain.YouTubeNotificationDelivery{delivery}, map[int64]domain.YouTubeNotificationOutbox{
+	result := dispatcher.send.dispatchDeliveryRows(ctx, []domain.YouTubeNotificationDelivery{delivery}, map[int64]domain.YouTubeNotificationOutbox{
 		item.ID: item,
 	})
 	require.Equal(t, []int64{delivery.ID}, result.successDeliveryIDs)

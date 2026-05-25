@@ -269,7 +269,7 @@ func TestBuildGroupedTemplateData(t *testing.T) {
 func TestGroupOutboxItems(t *testing.T) {
 	t.Parallel()
 
-	d := &Dispatcher{}
+	grouper := newOutboxGrouper(nil, nil, nil, Config{})
 	items := []domain.YouTubeNotificationOutbox{
 		{ID: 1, ChannelID: "ch1", Kind: domain.OutboxKindNewVideo},
 		{ID: 2, ChannelID: "ch1", Kind: domain.OutboxKindNewVideo},
@@ -283,7 +283,7 @@ func TestGroupOutboxItems(t *testing.T) {
 		},
 	}
 
-	groups := d.groupOutboxItems(items, roomsByChannel)
+	groups := grouper.groupOutboxItems(items, roomsByChannel)
 	if len(groups) != 4 {
 		t.Fatalf("groupOutboxItems count = %d, want 4", len(groups))
 	}

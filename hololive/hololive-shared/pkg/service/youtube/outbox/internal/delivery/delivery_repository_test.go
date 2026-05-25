@@ -150,7 +150,7 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 		},
 	}
 
-	result := dispatcher.dispatchDeliveryRows(ctx, rows, outboxByID)
+	result := dispatcher.send.dispatchDeliveryRows(ctx, rows, outboxByID)
 
 	if !reflect.DeepEqual(result.successDeliveryIDs, []int64{1}) {
 		t.Fatalf("successDeliveryIDs = %#v, want []int64{1}", result.successDeliveryIDs)
@@ -195,7 +195,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 	require.NoError(t, db.Create(&row).Error)
 
 	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	err = repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: staleLockedAt}}, 3, time.Minute, "stale failure")
+	err = repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: &staleLockedAt}}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery
@@ -228,7 +228,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnoth
 	require.NoError(t, db.Create(&row).Error)
 
 	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	err = repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: staleLockedAt}}, 3, time.Minute, "stale failure")
+	err = repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: &staleLockedAt}}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery
