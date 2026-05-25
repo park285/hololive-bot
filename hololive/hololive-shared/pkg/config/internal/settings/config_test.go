@@ -1410,6 +1410,10 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 							"dedup_ttl_ms": 120000,
 							"dedup_timeout_ms": 300
 						},
+						"bot_pool": {
+							"workers": 15,
+							"queue_size": 200
+						},
 						"validation": {
 							"min_queue_per_endpoint_multiplier": 4,
 							"require_receive_capacity_for_endpoint_burst": true
@@ -1443,8 +1447,8 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 	if config.Webhook.DedupTTL != 2*time.Minute || config.Webhook.DedupTimeout != 300*time.Millisecond {
 		t.Fatalf("Webhook dedup = (%v,%v), want (2m,300ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
 	}
-	if config.WorkerPool.Workers != 20 || config.WorkerPool.QueueSize != 640 {
-		t.Fatalf("WorkerPool = (%d,%d), want (20,640)", config.WorkerPool.Workers, config.WorkerPool.QueueSize)
+	if config.WorkerPool.Workers != 15 || config.WorkerPool.QueueSize != 200 {
+		t.Fatalf("WorkerPool = (%d,%d), want (15,200)", config.WorkerPool.Workers, config.WorkerPool.QueueSize)
 	}
 	if config.WorkerProfile.Version != workerconfig.CurrentVersion {
 		t.Fatalf("WorkerProfile.Version = %d, want %d", config.WorkerProfile.Version, workerconfig.CurrentVersion)
