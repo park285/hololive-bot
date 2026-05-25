@@ -6,13 +6,20 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REPO_CANONICAL_ROOT="$(cd "$(git -C "${ROOT_DIR}" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
 resolve_shared_go_dir() {
-  local candidate="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/shared-go}"
+  local candidate="${SHARED_GO_WORKSPACE_PATH:-}"
+  if [[ -z "${candidate}" ]]; then
+    if [[ -d "${ROOT_DIR}/shared-go" ]]; then
+      candidate="${ROOT_DIR}/shared-go"
+    elif [[ -d "${ROOT_DIR}/../shared-go" ]]; then
+      candidate="${ROOT_DIR}/../shared-go"
+    fi
+  fi
   if [[ ! -d "${candidate}" ]]; then
     echo "error: active shared-go dir not found" >&2
     exit 1
   fi
 
-  printf '%s\n' "${candidate}"
+  printf '%s\n' "$(cd "${candidate}" && pwd)"
 }
 
 SHARED_GO_DIR="$(resolve_shared_go_dir)"

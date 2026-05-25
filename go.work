@@ -10,5 +10,5 @@ use (
 	./hololive/hololive-llm-sched
 	./hololive/hololive-shared
 	./hololive/hololive-youtube-producer
-	./shared-go
+	../shared-go
 )

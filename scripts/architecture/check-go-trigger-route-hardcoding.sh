@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if [[ -d "${SHARED_GO_DIR}" ]]; then SHARED_GO_DIR="${SHARED_GO_DIR}"; else SHARED_GO_DIR="${ROOT_DIR}/../shared-go"; fi
 
 tmp_hits="$(mktemp)"
 cleanup() {
@@ -10,7 +11,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-grep -R -n --include='*.go' '"/internal/trigger/' "${ROOT_DIR}/hololive" "${ROOT_DIR}/shared-go" 2>/dev/null \
+grep -R -n --include='*.go' '"/internal/trigger/' "${ROOT_DIR}/hololive" "${SHARED_GO_DIR}" 2>/dev/null \
   | grep -v 'hololive-shared/pkg/contracts/trigger/routes_test.go' \
   > "${tmp_hits}" || true
 

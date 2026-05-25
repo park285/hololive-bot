@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if [[ -d "${SHARED_GO_DIR}" ]]; then SHARED_GO_DIR="${SHARED_GO_DIR}"; else SHARED_GO_DIR="${ROOT_DIR}/../shared-go"; fi
 ERROR_DOC="${ROOT_DIR}/docs/current/ERROR_CONTRACT.md"
 
 echo "[CHECK] error contract coverage"
@@ -59,22 +60,22 @@ if ! grep -Fq 'RespondError' "${ROOT_DIR}/hololive/hololive-shared/pkg/server/in
   echo "[FAIL] RespondError helper missing from shared server response"
   missing=1
 fi
-if ! grep -Fq 'CheckStatus' "${ROOT_DIR}/shared-go/pkg/httputil/response.go"; then
+if ! grep -Fq 'CheckStatus' "${SHARED_GO_DIR}/pkg/httputil/response.go"; then
   echo "[FAIL] CheckStatus helper missing from shared httputil response"
   missing=1
 fi
-if ! grep -Fq 'type APIError struct' "${ROOT_DIR}/shared-go/pkg/httputil/response.go"; then
+if ! grep -Fq 'type APIError struct' "${SHARED_GO_DIR}/pkg/httputil/response.go"; then
   echo "[FAIL] typed APIError missing from shared httputil response"
   missing=1
 fi
-if ! grep -Fq 'IsStatus' "${ROOT_DIR}/shared-go/pkg/httputil/response.go"; then
+if ! grep -Fq 'IsStatus' "${SHARED_GO_DIR}/pkg/httputil/response.go"; then
   echo "[FAIL] IsStatus helper missing from shared httputil response"
   missing=1
 fi
 
 status_parse_hits="$(
   rg -n 'strings\.Contains\(.*status [0-9]{3}|status 404|status 409' \
-    "${ROOT_DIR}/hololive" "${ROOT_DIR}/shared-go" \
+    "${ROOT_DIR}/hololive" "${SHARED_GO_DIR}" \
     -g '*.go' -g '!**/*_test.go' || true
 )"
 if [[ -n "${status_parse_hits}" ]]; then
