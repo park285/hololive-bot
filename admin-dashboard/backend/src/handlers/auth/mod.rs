@@ -12,15 +12,15 @@ use axum::http::HeaderMap;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-pub use heartbeat::{HeartbeatRequest, HeartbeatResponse, handle_heartbeat};
 #[doc(hidden)]
 pub use heartbeat::__path_handle_heartbeat;
-pub use login::handle_login;
+pub use heartbeat::{HeartbeatRequest, HeartbeatResponse, handle_heartbeat};
 #[doc(hidden)]
 pub use login::__path_handle_login;
-pub use session::{handle_logout, handle_session_status};
+pub use login::handle_login;
 #[doc(hidden)]
 pub use session::{__path_handle_logout, __path_handle_session_status};
+pub use session::{handle_logout, handle_session_status};
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {

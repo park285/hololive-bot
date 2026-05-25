@@ -120,7 +120,6 @@ mod tests {
     use std::time::Duration;
 
     use axum::Json;
-    use axum::body::to_bytes;
     use axum::extract::{ConnectInfo, State};
     use axum::http::{StatusCode, header};
     use axum::response::IntoResponse;
