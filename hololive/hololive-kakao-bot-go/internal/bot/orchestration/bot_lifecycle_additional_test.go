@@ -140,8 +140,7 @@ func TestBotLifecycleShutdownBranches(t *testing.T) {
 		},
 	}
 
-	pool, err := workerpool.New(workerpool.DefaultConfig())
-	require.NoError(t, err)
+	pool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 10, QueueSize: 100})
 
 	holodex := &lifecycleTestHolodex{}
 	postgres := &lifecycleTestPostgres{}

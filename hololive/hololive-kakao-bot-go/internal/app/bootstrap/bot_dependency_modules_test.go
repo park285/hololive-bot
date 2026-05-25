@@ -166,14 +166,11 @@ func TestProvideBotDependenciesAcceptsDisabledYouTubeStack(t *testing.T) {
 func TestProvideAlarmWorkerPoolUsesDispatchCapacity(t *testing.T) {
 	t.Parallel()
 
-	pool, err := ProvideAlarmWorkerPool()
-	if err != nil {
-		t.Fatalf("ProvideAlarmWorkerPool() error = %v", err)
-	}
-	t.Cleanup(pool.Shutdown)
+	pool := ProvideAlarmWorkerPool()
+	t.Cleanup(pool.StopAndWait)
 
-	if pool.Cap() != 10 {
-		t.Fatalf("Cap() = %d, want 10", pool.Cap())
+	if pool.Workers() != 10 {
+		t.Fatalf("Workers() = %d, want 10", pool.Workers())
 	}
 }
 

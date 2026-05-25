@@ -59,14 +59,13 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 		repository := appbootstrap.ProvideAlarmRepository(&dbmocks.Client{}, logger)
 		require.NotNil(t, repository)
 
-		pool, err := appbootstrap.ProvideAlarmWorkerPool()
-		require.NoError(t, err)
+		pool := appbootstrap.ProvideAlarmWorkerPool()
 		require.NotNil(t, pool)
 
 		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 		defer cancel()
 
-		require.NoError(t, pool.ShutdownWait(ctx))
+		require.NoError(t, pool.StopAndWaitContext(ctx))
 	})
 
 	t.Run("alarm service", func(t *testing.T) {

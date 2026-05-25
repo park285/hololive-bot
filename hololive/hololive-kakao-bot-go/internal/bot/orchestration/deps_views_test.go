@@ -66,7 +66,8 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	postgresService := &database.PostgresService{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
-	workerPool := &workerpool.Pool{}
+	workerPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
+	t.Cleanup(workerPool.StopAndWait)
 	externalBuilder := orchcmd.CommandBuilder(func(_ *command.Dependencies) command.Command {
 		return command.NewHelpCommand(nil)
 	})

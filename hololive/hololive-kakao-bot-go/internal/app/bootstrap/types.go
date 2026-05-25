@@ -68,7 +68,7 @@ type CoreIntegrationServices struct {
 	MajorEventRepository command.MajorEventRepository
 	MemberNewsService    command.MemberNewsService
 	CommandBuilders      []bot.CommandBuilder
-	WorkerPool           *workerpool.Pool
+	WorkerPool           *workerpool.QueuedPool
 }
 
 type BotIrisClient interface {
@@ -112,7 +112,7 @@ type BotSupportModule struct {
 	ActivityLogger *activity.Logger
 	Settings       settings.ReadWriter
 	ACL            *acl.Service
-	WorkerPool     *workerpool.Pool
+	WorkerPool     *workerpool.QueuedPool
 }
 
 type BotFeatureModule struct {

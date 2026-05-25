@@ -77,7 +77,7 @@ type Bot struct {
 	stopCh               chan struct{}
 	doneCh               chan struct{}
 	selfSender           string
-	workerPool           *workerpool.Pool
+	workerPool           *workerpool.QueuedPool
 	ingress              *ingress.MessageIngress
 	commandExecutor      *orchcmd.CommandRouter
 	transport            *transport.CommandTransport

@@ -36,7 +36,7 @@ func BuildBotDependencyModules(
 	majorEventRepository command.MajorEventRepository,
 	memberNewsService command.MemberNewsService,
 	commandBuilders []bot.CommandBuilder,
-	workerPool *workerpool.Pool,
+	workerPool *workerpool.QueuedPool,
 	logger *slog.Logger,
 ) BotDependencyModules {
 	return BotDependencyModules{
@@ -105,7 +105,7 @@ func buildBotSupportModule(
 	activityLogger *activity.Logger,
 	settingsService settings.ReadWriter,
 	aclService *acl.Service,
-	workerPool *workerpool.Pool,
+	workerPool *workerpool.QueuedPool,
 ) BotSupportModule {
 	return BotSupportModule{
 		ActivityLogger: activityLogger,

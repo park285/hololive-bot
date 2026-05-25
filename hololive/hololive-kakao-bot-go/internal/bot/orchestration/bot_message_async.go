@@ -56,12 +56,11 @@ func (b *Bot) executeCommandAsync(
 		return
 	}
 
-	submitErr := b.workerPool.Submit(task)
-	if submitErr == nil {
+	if b.workerPool.SubmitWait(task) {
 		return
 	}
 
-	b.handleAsyncCommandSubmitError(cancel, submitErr, commandType, chatID)
+	b.handleAsyncCommandSubmitError(cancel, commandType, chatID)
 }
 
 func (b *Bot) asyncCommandTask(
@@ -114,14 +113,12 @@ func (b *Bot) handleAsyncCommandError(ctx context.Context, err error, commandTyp
 
 func (b *Bot) handleAsyncCommandSubmitError(
 	cancel context.CancelFunc,
-	submitErr error,
 	commandType string,
 	chatID string,
 ) {
 	attrs := []slog.Attr{
 		slog.String("command", commandType),
 	}
-	attrs = append(attrs, sharedlog.ErrorAttrs(submitErr)...)
 	sharedlog.Warn(context.Background(), b.logger, EventBotCommandAsyncRejected, "async command rejected by worker pool", attrs...)
 
 	cancel()

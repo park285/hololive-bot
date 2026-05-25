@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -130,6 +131,46 @@ func (c *RuntimeIrisClient) GetNativeCoreDiagnostics(ctx context.Context) (*iris
 		return nil, err
 	}
 	return client.GetNativeCoreDiagnostics(ctx)
+}
+
+func (c *RuntimeIrisClient) GetRuntimeDiagnostics(ctx context.Context) (json.RawMessage, error) {
+	client, err := c.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetRuntimeDiagnostics(ctx)
+}
+
+func (c *RuntimeIrisClient) GetChatroomFields(ctx context.Context, chatID int64) (json.RawMessage, error) {
+	client, err := c.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetChatroomFields(ctx, chatID)
+}
+
+func (c *RuntimeIrisClient) OpenChatroom(ctx context.Context, chatID int64) (json.RawMessage, error) {
+	client, err := c.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.OpenChatroom(ctx, chatID)
+}
+
+func (c *RuntimeIrisClient) GetTextPingDiagnostics(ctx context.Context, chatID int64) (json.RawMessage, error) {
+	client, err := c.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetTextPingDiagnostics(ctx, chatID)
+}
+
+func (c *RuntimeIrisClient) WarmTextPing(ctx context.Context, chatID int64) (*iris.TextPingWarmResponse, error) {
+	client, err := c.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.WarmTextPing(ctx, chatID)
 }
 
 func (c *RuntimeIrisClient) SendKaring(ctx context.Context, req iris.KaringSendRequest) (*iris.KaringDryRunResponse, error) {
