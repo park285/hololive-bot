@@ -16,14 +16,6 @@ type liveUpcomingSuppressionData struct {
 	NotifiedAt string `json:"notified_at"`
 }
 
-func (d *Dispatcher) filterLiveCatchupSuppressedRooms(
-	ctx context.Context,
-	item domain.YouTubeNotificationOutbox,
-	rooms map[string]bool,
-) map[string]bool {
-	return d.outboxGrouper().filterLiveCatchupSuppressedRooms(ctx, item, rooms)
-}
-
 func (g *OutboxGrouper) filterLiveCatchupSuppressedRooms(
 	ctx context.Context,
 	item domain.YouTubeNotificationOutbox,

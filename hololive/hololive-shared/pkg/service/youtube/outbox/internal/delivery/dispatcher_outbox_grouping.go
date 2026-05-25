@@ -88,10 +88,6 @@ func appendOutboxItemGroup(groups []*outboxItemGroup, index map[string]int, room
 	return groups
 }
 
-func (d *Dispatcher) groupOutboxItems(items []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) []*outboxItemGroup {
-	return d.outboxGrouper().groupOutboxItems(items, roomsByChannel)
-}
-
 func (g *OutboxGrouper) groupOutboxItems(items []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) []*outboxItemGroup {
 	if len(items) == 0 {
 		return nil
@@ -130,10 +126,6 @@ func channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []cha
 	}
 
 	return entries
-}
-
-func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
-	return d.outboxGrouper().collectRoomsByChannel(ctx, items)
 }
 
 func (g *OutboxGrouper) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
@@ -198,18 +190,4 @@ func mergeSubscriberLookupResults(result map[string]channelAlarmRoomTargets, res
 		}
 		alarmTargets[results[i].alarmType] = results[i].rooms
 	}
-}
-
-func (d *Dispatcher) subscriberLookupParallelism() int {
-	return d.outboxGrouper().subscriberLookupParallelism()
-}
-
-func (d *Dispatcher) outboxGrouper() *OutboxGrouper {
-	if d == nil {
-		return newOutboxGrouper(nil, nil, nil, Config{})
-	}
-	if d.grouper != nil {
-		return d.grouper
-	}
-	return newOutboxGrouper(nil, nil, d.logger, d.config)
 }

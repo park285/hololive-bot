@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -81,12 +82,12 @@ func (c *ClaimManager) statusUpdater() *StatusUpdater {
 	return newStatusUpdater(c.db, c.logger, c.config)
 }
 
-func (c *ClaimManager) markSent(ctx context.Context, id int64) {
-	c.statusUpdater().markSent(ctx, id)
+func (c *ClaimManager) markSent(ctx context.Context, id int64, lockedAt *time.Time) {
+	c.statusUpdater().markSentIfLocked(ctx, id, lockedAt)
 }
 
-func (c *ClaimManager) markFailed(ctx context.Context, id int64, errMsg string) {
-	c.statusUpdater().markFailed(ctx, id, errMsg)
+func (c *ClaimManager) markFailed(ctx context.Context, id int64, lockedAt *time.Time, errMsg string) {
+	c.statusUpdater().markFailedIfLocked(ctx, id, lockedAt, errMsg)
 }
 
 func (c *ClaimManager) outboxGrouper() *OutboxGrouper {

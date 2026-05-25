@@ -12,10 +12,13 @@ import (
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64) {
-	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ? AND status = ?", id, domain.OutboxStatusPending).
-		Update("locked_at", nil)
+func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64, lockedAt *time.Time) {
+	query := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
+		Where("id = ? AND status = ?", id, domain.OutboxStatusPending)
+	if lockedAt != nil {
+		query = query.Where("locked_at = ?", *lockedAt)
+	}
+	result := query.Update("locked_at", nil)
 	if result.Error != nil {
 		d.logger.Warn("Failed to release outbox lock",
 			slog.Int64("id", id),
