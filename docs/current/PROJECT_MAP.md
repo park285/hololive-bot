@@ -12,7 +12,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | `hololive-llm-sched` | Go 1.26.3 | `hololive/hololive-llm-sched/` | LLM scheduler (major event + member news + delivery) | 30003 |
 | `hololive-youtube-producer` | Go 1.26.3 | `hololive/hololive-youtube-producer/` | YouTube producer AP runtime: primary/backfill polling, outbox production, active-active coordination, readiness, and Holodex photo sync on Osaka | 30005 |
 | `hololive-shared` | Go 1.26.3 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
-| `shared-go` | Go 1.26.3 | `shared-go/` | Shared Go utilities | - |
+| `shared-go` | Go 1.26.3 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
 | `docker-compose.prod.yml` | YAML | `docker-compose.prod.yml` | Production docker compose stack | - |
 
 ## Runtime Operations Inventory

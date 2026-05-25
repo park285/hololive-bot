@@ -7,13 +7,20 @@ REPO_CANONICAL_ROOT="$(cd "$(git -C "${ROOT_DIR}" rev-parse --path-format=absolu
 ALLOWLIST_FILE="${1:-${ROOT_DIR}/docs/architecture/shared-go-package-allowlist.txt}"
 
 resolve_shared_go_pkg_dir() {
-  local candidate="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/shared-go}"
+  local candidate="${SHARED_GO_WORKSPACE_PATH:-}"
+  if [[ -z "${candidate}" ]]; then
+    if [[ -d "${ROOT_DIR}/shared-go" ]]; then
+      candidate="${ROOT_DIR}/shared-go"
+    elif [[ -d "${ROOT_DIR}/../shared-go" ]]; then
+      candidate="${ROOT_DIR}/../shared-go"
+    fi
+  fi
   if [[ ! -d "${candidate}/pkg" ]]; then
     echo "error: active shared-go pkg dir not found" >&2
     exit 1
   fi
 
-  printf '%s\n' "${candidate}/pkg"
+  printf '%s\n' "$(cd "${candidate}/pkg" && pwd)"
 }
 
 SHARED_GO_PKG_DIR="$(resolve_shared_go_pkg_dir)"

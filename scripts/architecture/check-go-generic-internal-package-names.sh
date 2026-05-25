@@ -3,9 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if [[ -d "${SHARED_GO_DIR}" ]]; then SHARED_GO_DIR="${SHARED_GO_DIR}"; else SHARED_GO_DIR="${ROOT_DIR}/../shared-go"; fi
 
 mapfile -t generic_dirs < <(
-    find "${ROOT_DIR}/hololive" "${ROOT_DIR}/shared-go" \
+    find "${ROOT_DIR}/hololive" "${SHARED_GO_DIR}" \
         -type d \( -name core -o -name servicecore \) \
         | sed "s#^${ROOT_DIR}/##" \
         | sort
@@ -13,7 +14,7 @@ mapfile -t generic_dirs < <(
 
 mapfile -t generic_packages < <(
     rg -n '^\s*package (core|core_test|servicecore|servicecore_test)$' \
-        "${ROOT_DIR}/hololive" "${ROOT_DIR}/shared-go" \
+        "${ROOT_DIR}/hololive" "${SHARED_GO_DIR}" \
         --glob '*.go' \
         | sed "s#^${ROOT_DIR}/##" \
         | sort
@@ -21,7 +22,7 @@ mapfile -t generic_packages < <(
 
 mapfile -t generic_import_aliases < <(
     rg -n 'import\s+core\s+"' \
-        "${ROOT_DIR}/hololive" "${ROOT_DIR}/shared-go" \
+        "${ROOT_DIR}/hololive" "${SHARED_GO_DIR}" \
         --glob '*.go' \
         | sed "s#^${ROOT_DIR}/##" \
         | sort

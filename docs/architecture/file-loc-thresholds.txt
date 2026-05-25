@@ -41,4 +41,4 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 hololive/hololive-llm-sched/internal/service/majorevent/scraper/link_checker.go:440
 hololive/hololive-llm-sched/internal/llm/openai_client.go:430
 hololive/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/community_shorts_alarm_sent_history_dataset_render.go:420
-shared-go/pkg/logging/logging.go:215
+../shared-go/pkg/logging/logging.go:215

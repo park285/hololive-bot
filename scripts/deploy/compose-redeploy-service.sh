@@ -14,13 +14,20 @@ COMPOSE_FILE_PATHS=("${COMPOSE_FILE}")
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 
 resolve_shared_go_workspace_path() {
-    local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/shared-go}"
+    local candidate="${SHARED_GO_WORKSPACE_PATH:-}"
+    if [ -z "$candidate" ]; then
+        if [ -d "${REPO_CANONICAL_ROOT}/shared-go" ]; then
+            candidate="${REPO_CANONICAL_ROOT}/shared-go"
+        elif [ -d "${REPO_CANONICAL_ROOT}/../shared-go" ]; then
+            candidate="${REPO_CANONICAL_ROOT}/../shared-go"
+        fi
+    fi
     if [ ! -d "$candidate" ]; then
-        echo "[ERROR] Active shared-go workspace not found: $candidate" >&2
+        echo "[ERROR] Active shared-go workspace not found" >&2
         exit 1
     fi
 
-    printf '%s\n' "$candidate"
+    printf '%s\n' "$(cd "$candidate" && pwd)"
 }
 
 if ! SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"; then

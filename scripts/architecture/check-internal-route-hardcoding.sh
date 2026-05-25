@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if [[ -d "${SHARED_GO_DIR}" ]]; then SHARED_GO_DIR="${SHARED_GO_DIR}"; else SHARED_GO_DIR="${ROOT_DIR}/../shared-go"; fi
 
 echo "[CHECK] internal route hardcoding"
 
@@ -17,7 +18,7 @@ check_route() {
   local route="$2"
   local allowed_regex="$3"
 
-  grep -R -n --include='*.go' "\"${route}" "${ROOT_DIR}/hololive" "${ROOT_DIR}/shared-go" 2>/dev/null \
+  grep -R -n --include='*.go' "\"${route}" "${ROOT_DIR}/hololive" "${SHARED_GO_DIR}" 2>/dev/null \
     | grep -Ev "${allowed_regex}" \
     >> "${tmp_hits}" || true
 

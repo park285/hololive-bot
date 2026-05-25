@@ -154,4 +154,4 @@ require (
 
 replace github.com/kapu/hololive-shared => ../hololive-shared
 
-replace github.com/park285/shared-go => ../../shared-go
+replace github.com/park285/shared-go => ../../../shared-go

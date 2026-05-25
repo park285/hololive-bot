@@ -34,7 +34,7 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
-replace github.com/park285/shared-go => ../../shared-go
+replace github.com/park285/shared-go => ../../../shared-go
 
 require (
 	github.com/gin-contrib/gzip v1.2.6
