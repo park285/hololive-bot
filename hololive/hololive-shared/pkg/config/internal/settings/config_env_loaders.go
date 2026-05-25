@@ -188,8 +188,8 @@ func loadScraperActiveActiveConfig() ScraperActiveActiveConfig {
 
 func loadWorkerPoolConfig() WorkerPoolConfig {
 	return WorkerPoolConfig{
-		Workers:   sharedenv.Int("BOT_WORKER_POOL_SIZE", 10),
-		QueueSize: sharedenv.Int("BOT_WORKER_POOL_QUEUE_SIZE", 100),
+		Workers:   sharedenv.Int("BOT_WORKER_COUNT", 10),
+		QueueSize: sharedenv.Int("BOT_QUEUE_SIZE", 100),
 	}
 }
 
