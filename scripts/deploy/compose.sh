@@ -6,6 +6,28 @@ cd "${ROOT_DIR}"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 
+resolve_shared_go_workspace_path() {
+    local candidate="${SHARED_GO_WORKSPACE_PATH:-}"
+    if [[ -z "${candidate}" ]]; then
+        if [[ -d "${ROOT_DIR}/../shared-go" ]]; then
+            candidate="${ROOT_DIR}/../shared-go"
+        elif [[ -d "${ROOT_DIR}/shared-go" ]]; then
+            candidate="${ROOT_DIR}/shared-go"
+        fi
+    fi
+    if [[ ! -d "${candidate}" ]]; then
+        echo "[ERROR] Active shared-go workspace not found" >&2
+        exit 1
+    fi
+
+    printf '%s\n' "$(cd "${candidate}" && pwd)"
+}
+
+if ! SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"; then
+    exit 1
+fi
+export SHARED_GO_WORKSPACE_PATH
+
 compose_args=("$@")
 compose_files=()
 compose_invokes_up=false
