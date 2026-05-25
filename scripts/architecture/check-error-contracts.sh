@@ -15,7 +15,7 @@ required_files=(
   docs/current/contracts/alarm.md
   hololive/hololive-shared/pkg/server/internal/httpserver/response.go
   hololive/hololive-shared/pkg/contracts/common/errors.go
-  shared-go/pkg/httputil/response.go
+  ../shared-go/pkg/httputil/response.go
   hololive/hololive-shared/pkg/contracts/trigger/errors.go
 )
 
