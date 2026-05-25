@@ -22,6 +22,9 @@ func BuildBotWebhookHandler(
 		iris.WithQueueSize(appConfig.Webhook.QueueSize),
 		iris.WithEnqueueTimeout(appConfig.Webhook.EnqueueTimeout),
 		iris.WithHandlerTimeout(appConfig.Webhook.HandlerTimeout),
+		iris.WithMaxBodyBytes(appConfig.Webhook.MaxBodyBytes),
+		iris.WithDedupTTL(appConfig.Webhook.DedupTTL),
+		iris.WithDedupTimeout(appConfig.Webhook.DedupTimeout),
 		iris.WithRequireHTTP2(appConfig.Webhook.RequireHTTP2),
 	)
 }

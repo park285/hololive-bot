@@ -21,12 +21,15 @@
 package settings
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/park285/shared-go/pkg/workerconfig"
 )
 
 func setRequiredLoadEnv(t *testing.T) {
@@ -36,10 +39,67 @@ func setRequiredLoadEnv(t *testing.T) {
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
-	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
+	server := newIrisRuntimeDiagnosticsServer(t, loadTestWorkerProfileDiagnosticsJSON())
+	t.Setenv("IRIS_BASE_URL", server.URL)
+	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
+}
+
+func newIrisRuntimeDiagnosticsServer(t *testing.T, body string) *httptest.Server {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/diagnostics/runtime" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func loadTestWorkerProfileDiagnosticsJSON() string {
+	return `{
+		"state": "running",
+		"workers": {
+			"webhook": {
+				"webhookPipeline": {
+					"profileEnabled": true,
+					"workerProfile": {
+						"version": 1,
+						"profile_id": "hololive-test",
+						"delivery": {
+							"lane_workers": 32,
+							"lane_queue_capacity": 128,
+							"max_global_in_flight": 32,
+							"max_per_endpoint_in_flight": 8,
+							"max_drain_per_tick": 128,
+							"max_attempts": 6,
+							"request_timeout_ms": 30000,
+							"lane_idle_timeout_ms": 750
+						},
+						"receive": {
+							"workers": 16,
+							"queue_size": 1000,
+							"enqueue_timeout_ms": 50,
+							"handler_timeout_ms": 30000,
+							"max_body_bytes": 65536,
+							"dedup_ttl_ms": 60000,
+							"dedup_timeout_ms": 200
+						},
+						"validation": {
+							"min_queue_per_endpoint_multiplier": 4,
+							"require_receive_capacity_for_endpoint_burst": true
+						}
+					}
+				}
+			}
+		}
+	}`
 }
 
 func assertScraperPoll(t *testing.T, got, want ScraperPoll) {
@@ -1307,7 +1367,6 @@ func TestLoad_InvalidNumericStillUsesDefault(t *testing.T) {
 func TestLoad_InvalidCoreNumeric(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SERVER_PORT", "invalid")
-	t.Setenv("WEBHOOK_WORKER_COUNT", "NaN")
 
 	config, err := Load()
 	if err != nil {
@@ -1318,6 +1377,80 @@ func TestLoad_InvalidCoreNumeric(t *testing.T) {
 	}
 	if config.Webhook.WorkerCount != 16 {
 		t.Fatalf("Webhook.WorkerCount = %d, want %d", config.Webhook.WorkerCount, 16)
+	}
+}
+
+func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
+	setRequiredLoadEnv(t)
+	server := newIrisRuntimeDiagnosticsServer(t, `{
+		"state": "running",
+		"workers": {
+			"webhook": {
+				"webhookPipeline": {
+					"profileEnabled": true,
+					"workerProfile": {
+						"version": 1,
+						"profile_id": "hololive-custom-test",
+						"delivery": {
+							"lane_workers": 32,
+							"lane_queue_capacity": 128,
+							"max_global_in_flight": 32,
+							"max_per_endpoint_in_flight": 8,
+							"max_drain_per_tick": 128,
+							"max_attempts": 6,
+							"request_timeout_ms": 30000,
+							"lane_idle_timeout_ms": 750
+						},
+						"receive": {
+							"workers": 20,
+							"queue_size": 640,
+							"enqueue_timeout_ms": 80,
+							"handler_timeout_ms": 36000,
+							"max_body_bytes": 262144,
+							"dedup_ttl_ms": 120000,
+							"dedup_timeout_ms": 300
+						},
+						"validation": {
+							"min_queue_per_endpoint_multiplier": 4,
+							"require_receive_capacity_for_endpoint_burst": true
+						}
+					}
+				}
+			}
+		}
+	}`)
+	t.Setenv("IRIS_BASE_URL", server.URL)
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if config.Webhook.WorkerCount != 20 {
+		t.Fatalf("Webhook.WorkerCount = %d, want 20", config.Webhook.WorkerCount)
+	}
+	if config.Webhook.QueueSize != 640 {
+		t.Fatalf("Webhook.QueueSize = %d, want 640", config.Webhook.QueueSize)
+	}
+	if config.Webhook.EnqueueTimeout != 80*time.Millisecond {
+		t.Fatalf("Webhook.EnqueueTimeout = %v, want 80ms", config.Webhook.EnqueueTimeout)
+	}
+	if config.Webhook.HandlerTimeout != 36*time.Second {
+		t.Fatalf("Webhook.HandlerTimeout = %v, want 36s", config.Webhook.HandlerTimeout)
+	}
+	if config.Webhook.MaxBodyBytes != 262144 {
+		t.Fatalf("Webhook.MaxBodyBytes = %d, want 262144", config.Webhook.MaxBodyBytes)
+	}
+	if config.Webhook.DedupTTL != 2*time.Minute || config.Webhook.DedupTimeout != 300*time.Millisecond {
+		t.Fatalf("Webhook dedup = (%v,%v), want (2m,300ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
+	}
+	if config.WorkerPool.Workers != 20 || config.WorkerPool.QueueSize != 640 {
+		t.Fatalf("WorkerPool = (%d,%d), want (20,640)", config.WorkerPool.Workers, config.WorkerPool.QueueSize)
+	}
+	if config.WorkerProfile.Version != workerconfig.CurrentVersion {
+		t.Fatalf("WorkerProfile.Version = %d, want %d", config.WorkerProfile.Version, workerconfig.CurrentVersion)
+	}
+	if config.WorkerProfile.Hash == "" {
+		t.Fatal("WorkerProfile.Hash is empty")
 	}
 }
 

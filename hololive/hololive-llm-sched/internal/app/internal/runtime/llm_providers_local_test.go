@@ -22,6 +22,8 @@ package runtime
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -306,7 +308,8 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
-	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
+	t.Setenv("IRIS_BASE_URL", newWorkerProfileDisabledIrisServer(t).URL)
+	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
@@ -336,6 +339,26 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	if !strings.Contains(logOutput, "new-model") {
 		t.Error("expected log with new model name")
 	}
+}
+
+func newWorkerProfileDisabledIrisServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/diagnostics/runtime" {
+			http.NotFound(w, r)
+
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		_, _ = w.Write([]byte(`{"workers":{"webhook":{"webhookPipeline":{"profileEnabled":false}}}}`))
+	}))
+
+	t.Cleanup(server.Close)
+
+	return server
 }
 
 func TestProvideMemberNewsReviewerClient_ConsensusDisabled(t *testing.T) {

@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
+	"github.com/park285/shared-go/pkg/workerconfig"
 )
 
 func loadAppEnvironment() string {
@@ -186,19 +187,22 @@ func loadScraperActiveActiveConfig() ScraperActiveActiveConfig {
 	}
 }
 
-func loadWorkerPoolConfig() WorkerPoolConfig {
+func loadWorkerPoolConfig(profile workerconfig.IrisBotWebhookWorkerProfile) WorkerPoolConfig {
 	return WorkerPoolConfig{
-		Workers:   sharedenv.Int("BOT_WORKER_COUNT", 10),
-		QueueSize: sharedenv.Int("BOT_QUEUE_SIZE", 100),
+		Workers:   profile.Receive.Workers,
+		QueueSize: profile.Receive.QueueSize,
 	}
 }
 
-func loadWebhookConfig() WebhookConfig {
+func loadWebhookConfig(profile workerconfig.IrisBotWebhookWorkerProfile) WebhookConfig {
 	return WebhookConfig{
-		WorkerCount:    sharedenv.Int("WEBHOOK_WORKER_COUNT", 16),
-		QueueSize:      sharedenv.Int("WEBHOOK_QUEUE_SIZE", 1000),
-		EnqueueTimeout: time.Duration(sharedenv.Int("WEBHOOK_ENQUEUE_TIMEOUT_MS", 50)) * time.Millisecond,
-		HandlerTimeout: time.Duration(sharedenv.Int("WEBHOOK_HANDLER_TIMEOUT_SECONDS", 30)) * time.Second,
+		WorkerCount:    profile.Receive.Workers,
+		QueueSize:      profile.Receive.QueueSize,
+		EnqueueTimeout: profile.Receive.EnqueueTimeout,
+		HandlerTimeout: profile.Receive.HandlerTimeout,
+		MaxBodyBytes:   profile.Receive.MaxBodyBytes,
+		DedupTTL:       profile.Receive.DedupTTL,
+		DedupTimeout:   profile.Receive.DedupTimeout,
 		RequireHTTP2:   sharedenv.Bool("WEBHOOK_REQUIRE_HTTP2", false),
 	}
 }
