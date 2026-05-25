@@ -2,6 +2,8 @@
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(cd "$REPO_ROOT/.." && pwd)}"
+REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-hololive-bot}"
 SSH_KEY="${SSH_KEY:-$REPO_ROOT/KR.key}"
 OSAKA_HOST="${OSAKA_HOST:-kapu-iris-osaka-1}"
 FILES_FROM="${FILES_FROM:-$REPO_ROOT/scripts/deploy/osaka-active-active-rsync-files.txt}"
@@ -70,13 +72,31 @@ remote() {
   "${SSH_OSAKA[@]}" "$@"
 }
 
+build_rsync_files_from() {
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    case "$path" in
+      ../shared-go/*)
+        printf 'shared-go/%s\n' "${path#../shared-go/}"
+        ;;
+      ../*)
+        echo "files-from list contains unsupported parent path: $path" >&2
+        exit 1
+        ;;
+      *)
+        printf '%s/%s\n' "$REMOTE_REPO_DIR" "$path"
+        ;;
+    esac
+  done < "$FILES_FROM" > "$rsync_files_from"
+}
+
 rsync_preview() {
   rsync -ani \
-    --files-from="$FILES_FROM" \
+    --files-from="$rsync_files_from" \
     --exclude-from="$EXCLUDES" \
-    ./ \
+    "$WORKSPACE_ROOT"/ \
     -e "$RSYNC_RSH" \
-    "ubuntu@$OSAKA_HOST:~/hololive-bot/"
+    "ubuntu@$OSAKA_HOST:~/"
 }
 
 validate_preview() {
@@ -91,9 +111,11 @@ validate_preview() {
   fi
 }
 
+rsync_files_from="$(mktemp)"
 preview_file="$(mktemp)"
-trap 'rm -f "$preview_file"' EXIT
+trap 'rm -f "$preview_file" "$rsync_files_from"' EXIT
 
+build_rsync_files_from
 rsync_preview | tee "$preview_file"
 validate_preview "$preview_file"
 
@@ -118,12 +140,12 @@ echo backup_dir='$backup_dir'"
 
 rsync -ai \
   --backup \
-  --backup-dir="$backup_dir/rsync-overwritten" \
-  --files-from="$FILES_FROM" \
+  --backup-dir="$REMOTE_REPO_DIR/$backup_dir/rsync-overwritten" \
+  --files-from="$rsync_files_from" \
   --exclude-from="$EXCLUDES" \
-  ./ \
+  "$WORKSPACE_ROOT"/ \
   -e "$RSYNC_RSH" \
-  "ubuntu@$OSAKA_HOST:~/hololive-bot/"
+  "ubuntu@$OSAKA_HOST:~/"
 
 change_started_at="$(
   remote 'date -u +%Y-%m-%dT%H:%M:%SZ'

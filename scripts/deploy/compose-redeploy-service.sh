@@ -16,10 +16,10 @@ CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 resolve_shared_go_workspace_path() {
     local candidate="${SHARED_GO_WORKSPACE_PATH:-}"
     if [ -z "$candidate" ]; then
-        if [ -d "${REPO_CANONICAL_ROOT}/shared-go" ]; then
-            candidate="${REPO_CANONICAL_ROOT}/shared-go"
-        elif [ -d "${REPO_CANONICAL_ROOT}/../shared-go" ]; then
+        if [ -d "${REPO_CANONICAL_ROOT}/../shared-go" ]; then
             candidate="${REPO_CANONICAL_ROOT}/../shared-go"
+        elif [ -d "${REPO_CANONICAL_ROOT}/shared-go" ]; then
+            candidate="${REPO_CANONICAL_ROOT}/shared-go"
         fi
     fi
     if [ ! -d "$candidate" ]; then
