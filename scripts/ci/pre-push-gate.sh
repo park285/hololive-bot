@@ -59,8 +59,7 @@ if echo "$changed_files" | grep -q '^admin-dashboard/backend/'; then
   cargo clippy --manifest-path admin-dashboard/backend/Cargo.toml -- -D warnings
   cargo test --manifest-path admin-dashboard/backend/Cargo.toml
   if command -v cargo-deny >/dev/null 2>&1; then
-    cargo deny check --manifest-path admin-dashboard/backend/Cargo.toml \
-      --config admin-dashboard/backend/deny.toml
+    (cd admin-dashboard/backend && cargo deny check --config deny.toml)
   else
     echo "[pre-push] cargo-deny 미설치 — 라이선스/보안 감사 스킵 (cargo install cargo-deny)" >&2
   fi

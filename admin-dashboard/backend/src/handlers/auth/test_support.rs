@@ -329,9 +329,7 @@ where
 
 fn resp_to_string(value: &RespValue) -> Option<String> {
     match value {
-        RespValue::Bulk(Some(bytes)) => {
-            Some(String::from_utf8(bytes.clone()).expect("utf8 bulk"))
-        }
+        RespValue::Bulk(Some(bytes)) => Some(String::from_utf8(bytes.clone()).expect("utf8 bulk")),
         RespValue::Simple(text) => Some(text.clone()),
         RespValue::Integer(number) => Some(number.to_string()),
         RespValue::Bulk(None) | RespValue::Array(_) => None,
@@ -428,8 +426,7 @@ pub fn test_state_with_session_config(
         StatusCollector::new(vec![], env!("CARGO_PKG_VERSION")).expect("status collector init");
     let (stats_tx, _) = tokio::sync::broadcast::channel::<SystemStats>(16);
     let holo_api = Arc::new(
-        HoloApiClient::new(&config.holo_admin_api_url, None)
-            .expect("holo api client init failed"),
+        HoloApiClient::new(&config.holo_admin_api_url, None).expect("holo api client init failed"),
     );
 
     Arc::new(AppState {

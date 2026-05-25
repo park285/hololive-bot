@@ -191,4 +191,3 @@ pub async fn handle_heartbeat(
     })
     .into_response())
 }
-

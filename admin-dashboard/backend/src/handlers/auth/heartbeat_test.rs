@@ -157,8 +157,7 @@ async fn test_stale_rotated_heartbeat_reissues_replacement_cookie_without_cleari
     fake_valkey.insert_session(&replacement);
     fake_valkey.insert_session(&stale_marker);
 
-    let response =
-        call_heartbeat(Arc::clone(&state), &stale_marker.id, r#"{"idle":false}"#).await;
+    let response = call_heartbeat(Arc::clone(&state), &stale_marker.id, r#"{"idle":false}"#).await;
 
     assert_eq!(response.status(), StatusCode::OK);
     let set_cookie_headers: Vec<_> = response
