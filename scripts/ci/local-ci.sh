@@ -229,6 +229,19 @@ check_go_fix() {
         return 1
     fi
 
+    local shared_go_dir
+    shared_go_dir="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/../shared-go}"
+    if grep -q '../shared-go' "${ROOT_DIR}/go.work"; then
+        if [[ ! -d "${shared_go_dir}" ]]; then
+            echo "active shared-go workspace not found: ${shared_go_dir}" >&2
+            return 1
+        fi
+        mkdir -p "${tmp_dir}/shared-go"
+        if ! tar "${tar_excludes[@]}" -C "${shared_go_dir}" -cf - . | tar -C "${tmp_dir}/shared-go" -xf -; then
+            return 1
+        fi
+    fi
+
     if grep -q '../iris-client-go' "${ROOT_DIR}/go.work"; then
         if [[ ! -d "${iris_client_go_dir}" ]]; then
             echo "active iris-client-go workspace not found: ${iris_client_go_dir}" >&2
