@@ -56,7 +56,7 @@ func TestDispatcherUsesKaringForSupportedYouTubeOutboxKind(t *testing.T) {
 		102: {ID: 102, ChannelID: "UCshorts", Kind: domain.OutboxKindNewShort, ContentID: "shorts:b", Payload: `{"video_id":"b","title":"short b"}`},
 	}
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
 	if len(result.successDeliveryIDs) != 2 {
 		t.Fatalf("successDeliveryIDs = %#v, want 2 ids", result.successDeliveryIDs)
@@ -92,7 +92,7 @@ func TestDispatcherFallsBackToTextForUnsupportedKaringKind(t *testing.T) {
 		201: {ID: 201, ChannelID: "UCmilestone", Kind: domain.OutboxKindMilestone, ContentID: "milestone:1", Payload: `{"milestone":"100만"}`},
 	}
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
 	if len(result.successDeliveryIDs) != 1 {
 		t.Fatalf("successDeliveryIDs = %#v, want one id", result.successDeliveryIDs)
@@ -118,7 +118,7 @@ func TestDispatcherKaringFailureDoesNotFallBackToDuplicateText(t *testing.T) {
 		301: {ID: 301, ChannelID: "UCcommunity", Kind: domain.OutboxKindCommunityPost, ContentID: "post:1", Payload: `{"post_id":"1","content_text":"hello"}`},
 	}
 
-	result := dispatcher.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
 	if len(result.successDeliveryIDs) != 0 {
 		t.Fatalf("successDeliveryIDs = %#v, want none", result.successDeliveryIDs)
@@ -148,7 +148,7 @@ func TestDispatcherSerializesKaringSends(t *testing.T) {
 
 	done := make(chan deliveryDispatchResult, 1)
 	go func() {
-		done <- dispatcher.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+		done <- dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 	}()
 
 	sender.awaitEntered(t)
@@ -180,7 +180,7 @@ func TestSendEngineKaringMutexWaitUsesDeliverySendTimeout(t *testing.T) {
 		done <- engine.sendYouTubeOutboxKaring(context.Background(), sender, "room-timeout", domain.YouTubeOutboxDispatchPayload{
 			OutboxIDs:  []int64{1},
 			Kind:       domain.OutboxKindNewVideo,
-			AlarmType:  domain.AlarmTypeVideo,
+			AlarmType:  domain.AlarmTypeLive,
 			ChannelID:  "UC_timeout",
 			MemberName: "member",
 			Items: []domain.YouTubeOutboxItem{{

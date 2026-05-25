@@ -185,18 +185,18 @@ func (d *ClaimManager) enqueueDelivery(
 ) outboxEnqueueStats {
 	rooms, ok := roomsForItem(roomsByChannel, *item)
 	if !ok {
-		d.markFailed(ctx, item.ID, "subscriber lookup failed")
+		d.markFailed(ctx, item.ID, item.LockedAt, "subscriber lookup failed")
 		return outboxEnqueueStats{subscriberLookupFailures: 1}
 	}
 
 	if len(rooms) == 0 {
-		d.markSent(ctx, item.ID)
+		d.markSent(ctx, item.ID, item.LockedAt)
 		return outboxEnqueueStats{noSubscriberOutboxes: 1}
 	}
 
 	rooms = d.filterLiveCatchupSuppressedRooms(ctx, *item, rooms)
 	if len(rooms) == 0 {
-		d.markSent(ctx, item.ID)
+		d.markSent(ctx, item.ID, item.LockedAt)
 		return outboxEnqueueStats{noSubscriberOutboxes: 1}
 	}
 
@@ -205,11 +205,11 @@ func (d *ClaimManager) enqueueDelivery(
 		d.logger.Warn("Failed to enqueue room deliveries",
 			slog.Int64("outbox_id", item.ID),
 			slog.Any("error", err))
-		d.markFailed(ctx, item.ID, fmt.Sprintf("enqueue delivery rows: %v", err))
+		d.markFailed(ctx, item.ID, item.LockedAt, fmt.Sprintf("enqueue delivery rows: %v", err))
 		return outboxEnqueueStats{enqueueFailures: 1}
 	}
 
-	d.releaseOutboxLock(ctx, item.ID)
+	d.releaseOutboxLock(ctx, item.ID, item.LockedAt)
 	return outboxEnqueueStats{enqueuedOutboxes: 1, totalTargetRooms: len(roomIDs)}
 }
 
@@ -262,12 +262,12 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	if err != nil {
 		d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
 		outboxDeliveryProcessedTotal.WithLabelValues("failed").Add(float64(len(rows)))
-		_ = d.delivery.MarkFailedRetryBatch(ctx, collectDeliveryIDs(rows), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows")
+		_ = d.delivery.MarkFailedRetryBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, collectDeliveryIDs(rows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows")
 		return len(rows)
 	}
 
 	result := d.dispatchDeliveryRows(ctx, rows, outboxByID)
-	d.markDispatchResult(ctx, result)
+	d.markDispatchResult(ctx, rows, result)
 
 	touchedOutboxIDs := uniqueInt64s(result.touchedOutboxIDs)
 	aggregateFailures := d.reconcileTouchedOutboxes(ctx, touchedOutboxIDs)
@@ -276,8 +276,8 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	return len(rows)
 }
 
-func (d *ClaimManager) markDispatchResult(ctx context.Context, result deliveryDispatchResult) {
-	if err := d.delivery.MarkSentBatch(ctx, result.successDeliveryIDs, result.successClaimTokens...); err != nil {
+func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result deliveryDispatchResult) {
+	if err := d.delivery.MarkSentBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, result.successDeliveryIDs), result.successClaimTokens...); err != nil {
 		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
 		if recoverErr := d.recoverSuccessfulCommunityShortsSentState(ctx, result.successDeliveryIDs); recoverErr != nil {
 			d.logger.Warn("Failed to persist community/shorts sent-state recovery after mark-sent error",
@@ -286,28 +286,28 @@ func (d *ClaimManager) markDispatchResult(ctx context.Context, result deliveryDi
 		}
 	}
 	for reason, ids := range result.failureBuckets {
-		d.markFailedDispatchBucket(ctx, reason, ids)
+		d.markFailedDispatchBucket(ctx, rows, reason, ids)
 	}
 }
 
-func (d *ClaimManager) markFailedDispatchBucket(ctx context.Context, reason string, ids []int64) {
+func (d *ClaimManager) markFailedDispatchBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, reason string, ids []int64) {
 	if deliveryFailureReasonIsPermanent(reason) {
-		d.markPermanentDispatchFailureBucket(ctx, reason, ids)
+		d.markPermanentDispatchFailureBucket(ctx, rows, reason, ids)
 		return
 	}
-	d.markRetryDispatchFailureBucket(ctx, reason, ids)
+	d.markRetryDispatchFailureBucket(ctx, rows, reason, ids)
 }
 
-func (d *ClaimManager) markPermanentDispatchFailureBucket(ctx context.Context, reason string, ids []int64) {
-	if err := d.delivery.MarkPermanentFailureBatch(ctx, ids, d.config.MaxRetries, reason); err != nil {
+func (d *ClaimManager) markPermanentDispatchFailureBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, reason string, ids []int64) {
+	if err := d.delivery.MarkPermanentFailureBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, ids), d.config.MaxRetries, reason); err != nil {
 		d.logger.Error("Failed to mark delivery rows as permanent failed",
 			slog.String("reason", reason),
 			slog.Any("error", err))
 	}
 }
 
-func (d *ClaimManager) markRetryDispatchFailureBucket(ctx context.Context, reason string, ids []int64) {
-	if err := d.delivery.MarkFailedRetryBatch(ctx, ids, d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
+func (d *ClaimManager) markRetryDispatchFailureBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, reason string, ids []int64) {
+	if err := d.delivery.MarkFailedRetryBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, ids), d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
 		d.logger.Error("Failed to mark delivery rows as failed",
 			slog.String("reason", reason),
 			slog.Any("error", err))
