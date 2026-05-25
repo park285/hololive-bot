@@ -57,7 +57,7 @@ func buildBotDependencyModules(
 	majorEventRepository command.MajorEventRepository,
 	memberNewsService command.MemberNewsService,
 	commandBuilders []bot.CommandBuilder,
-	workerPool *workerpool.Pool,
+	workerPool *workerpool.QueuedPool,
 	logger *slog.Logger,
 ) appbootstrap.BotDependencyModules {
 	return appbootstrap.BuildBotDependencyModules(

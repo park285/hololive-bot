@@ -106,7 +106,8 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	aclService := &acl.Service{}
 	majorEventRepository := &stubMajorEventRepository{}
 	memberNewsService := &stubMemberNewsService{}
-	workerPool := &workerpool.Pool{}
+	workerPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
+	t.Cleanup(workerPool.StopAndWait)
 	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command { return nil })
 
 	deps := appbootstrap.ProvideBotDependencies(appbootstrap.BotDependencyModules{

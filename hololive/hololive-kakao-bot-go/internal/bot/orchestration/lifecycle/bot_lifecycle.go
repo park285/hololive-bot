@@ -41,7 +41,7 @@ type BotLifecycle struct {
 	stopCh      chan struct{}
 	doneCh      chan struct{}
 	doneOnce    sync.Once
-	workerPool  *workerpool.Pool
+	workerPool  *workerpool.QueuedPool
 	holodex     Stoppable
 	postgres    database.Client
 }
@@ -53,7 +53,7 @@ func NewBotLifecycle(
 	irisBaseURL string,
 	stopCh chan struct{},
 	doneCh chan struct{},
-	workerPool *workerpool.Pool,
+	workerPool *workerpool.QueuedPool,
 	holodex Stoppable,
 	postgres database.Client,
 ) *BotLifecycle {
@@ -126,7 +126,7 @@ func (l *BotLifecycle) Shutdown(ctx context.Context) error {
 
 func (l *BotLifecycle) shutdownWorkerPool(ctx context.Context) {
 	if l.workerPool != nil {
-		if err := l.workerPool.ShutdownWait(ctx); err != nil {
+		if err := l.workerPool.StopAndWaitContext(ctx); err != nil {
 			l.logWarn("Worker pool shutdown error", slog.Any("error", err))
 		}
 	}

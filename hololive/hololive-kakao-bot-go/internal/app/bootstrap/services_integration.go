@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -35,10 +34,7 @@ func InitCoreIntegrationServices(
 
 	majorEventRepository, memberNewsService := ResolveLLMSchedulerClients(appConfig, logger)
 
-	workerPool, err := ProvideAlarmWorkerPool()
-	if err != nil {
-		return nil, fmt.Errorf("provide alarm worker pool: %w", err)
-	}
+	workerPool := ProvideAlarmWorkerPool()
 
 	return &CoreIntegrationServices{
 		ACLService:           aclService,

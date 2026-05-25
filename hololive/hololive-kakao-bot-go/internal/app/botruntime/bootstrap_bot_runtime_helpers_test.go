@@ -74,7 +74,6 @@ func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 			GetClientFunc: func() valkey.Client { return nil },
 		},
 	}
-
 	handler, err := appbootstrap.BuildBotWebhookHandler(appConfig, stubWebhookMessageHandler{}, deps, nil)
 	require.NoError(t, err)
 	require.NotNil(t, handler)

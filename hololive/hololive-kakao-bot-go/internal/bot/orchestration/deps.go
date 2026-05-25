@@ -70,7 +70,7 @@ type Dependencies struct {
 	MajorEventRepository   command.MajorEventRepository
 	MemberNews             command.MemberNewsService
 	CommandBuilders        []orchcmd.CommandBuilder
-	WorkerPool             *workerpool.Pool
+	WorkerPool             *workerpool.QueuedPool
 }
 
 type coreDependencies struct {
@@ -109,7 +109,7 @@ type supportDependencies struct {
 	activity   *activity.Logger
 	settings   settings.ReadWriter
 	acl        *acl.Service
-	workerPool *workerpool.Pool
+	workerPool *workerpool.QueuedPool
 }
 
 type featureDependencies struct {

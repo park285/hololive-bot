@@ -49,18 +49,13 @@ func ProvideAlarmRepository(postgres database.Client, logger *slog.Logger) *alar
 	return alarm.NewRepository(postgres, logger)
 }
 
-func ProvideAlarmWorkerPool() (*workerpool.Pool, error) {
-	config := workerpool.DefaultConfig()
-
+func ProvideAlarmWorkerPool() *workerpool.QueuedPool {
 	const alarmWorkerPoolSize = 10
-	config.Size = alarmWorkerPoolSize
-
-	pool, err := workerpool.New(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create alarm worker pool: %w", err)
-	}
-
-	return pool, nil
+	const alarmWorkerQueueSize = 100
+	return workerpool.NewQueued(workerpool.QueuedConfig{
+		Workers:   alarmWorkerPoolSize,
+		QueueSize: alarmWorkerQueueSize,
+	})
 }
 
 func ProvideMatcher(

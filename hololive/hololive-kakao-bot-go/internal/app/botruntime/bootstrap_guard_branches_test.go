@@ -162,6 +162,13 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 	assert.Equal(t, int64(appConfig.Webhook.HandlerTimeout), options.FieldByName("HandlerTimeout").Int())
 	assert.Equal(t, appConfig.Webhook.RequireHTTP2, options.FieldByName("RequireHTTP2").Bool())
 
+	taskPoolField := reflect.ValueOf(handler).Elem().FieldByName("taskPool")
+	require.True(t, taskPoolField.IsValid(), "reflect: field 'taskPool' not found on Handler")
+	require.False(t, taskPoolField.IsNil(), "taskPool must not be nil")
+	ownsPoolField := reflect.ValueOf(handler).Elem().FieldByName("ownsPool")
+	require.True(t, ownsPoolField.IsValid(), "reflect: field 'ownsPool' not found on Handler")
+	assert.True(t, ownsPoolField.Bool())
+
 	dedupField := reflect.ValueOf(handler).Elem().FieldByName("dedup")
 	require.True(t, dedupField.IsValid(), "reflect: field 'dedup' not found on Handler")
 	require.False(t, dedupField.IsNil(), "dedup must not be nil")
@@ -210,7 +217,8 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	activityLogger := &activity.Logger{}
 	settingsService := &settings.Service{}
 	aclService := &acl.Service{}
-	workerPool := &workerpool.Pool{}
+	workerPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
+	t.Cleanup(workerPool.StopAndWait)
 	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command { return nil })
 
 	modules := buildBotDependencyModules(

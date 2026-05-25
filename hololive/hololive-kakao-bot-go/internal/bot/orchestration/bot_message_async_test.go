@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,29 +45,26 @@ func TestExecuteCommandAsync_RunsSynchronouslyWhenWorkerPoolMissing(t *testing.T
 	}
 }
 
-func TestExecuteCommandAsync_RejectsWorkerPoolBackpressureWithoutLaunchingTask(t *testing.T) {
+func TestExecuteCommandAsync_BlocksOnWorkerPoolBackpressureUntilCapacityAvailable(t *testing.T) {
 	t.Parallel()
 
-	pool, err := workerpool.New(workerpool.Config{
-		Size:           1,
-		ExpiryDuration: time.Second,
-		Nonblocking:    true,
-	})
-	require.NoError(t, err)
-
+	pool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
 	blocker := make(chan struct{})
+	var unblockOnce sync.Once
+	unblock := func() {
+		unblockOnce.Do(func() {
+			close(blocker)
+		})
+	}
 
-	require.NoError(t, pool.Submit(func() {
+	require.True(t, pool.SubmitWait(func() {
 		<-blocker
 	}))
-	require.Eventually(t, func() bool {
-		return pool.Running() == 1
-	}, time.Second, 10*time.Millisecond)
+	require.True(t, pool.SubmitWait(func() {}))
 
 	t.Cleanup(func() {
-		close(blocker)
-		pool.Wait()
-		pool.Shutdown()
+		unblock()
+		pool.StopAndWait()
 	})
 
 	var executed atomic.Int32
@@ -89,16 +87,32 @@ func TestExecuteCommandAsync_RejectsWorkerPoolBackpressureWithoutLaunchingTask(t
 		formatter:       adapter.NewResponseFormatter("!", nil),
 	}
 
-	b.executeCommandAsync(t.Context(), &domain.CommandContext{Room: "room-1"}, domain.CommandHelp, nil, "help", "room-1")
+	returned := make(chan struct{})
+	go func() {
+		b.executeCommandAsync(t.Context(), &domain.CommandContext{Room: "room-1"}, domain.CommandHelp, nil, "help", "room-1")
+		close(returned)
+	}()
 
 	select {
+	case <-returned:
+		t.Fatal("expected SubmitWait to block while the worker queue is full")
+	case <-time.After(50 * time.Millisecond):
+	}
+	assert.Zero(t, executed.Load(), "expected queued task not to run while SubmitWait is blocked")
+	select {
 	case msg := <-msgCh:
-		assert.Equal(t, "room-1", msg.room)
-		assert.Contains(t, msg.message, "잠시 후 다시 시도")
-	case <-time.After(time.Second):
-		t.Fatal("expected backpressure message to be sent")
+		t.Fatalf("unexpected backpressure message: %#v", msg)
+	default:
 	}
 
-	time.Sleep(50 * time.Millisecond)
-	assert.Zero(t, executed.Load(), "expected rejected task to be dropped")
+	unblock()
+
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		t.Fatal("expected SubmitWait to return after capacity becomes available")
+	}
+	require.Eventually(t, func() bool {
+		return executed.Load() == 1
+	}, time.Second, 10*time.Millisecond)
 }
