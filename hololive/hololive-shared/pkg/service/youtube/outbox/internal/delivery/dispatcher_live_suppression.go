@@ -66,15 +66,6 @@ func liveStreamPayloadForSuppression(item domain.YouTubeNotificationOutbox) (vid
 	return payload, payload.VideoID != "" && payload.Title != "" && scheduledAt != nil && !scheduledAt.IsZero()
 }
 
-func (d *Dispatcher) wasLiveCatchupRecentlyCoveredByUpcoming(
-	ctx context.Context,
-	roomID string,
-	channelID string,
-	payload videoPayload,
-) bool {
-	return d.outboxGrouper().wasLiveCatchupRecentlyCoveredByUpcoming(ctx, roomID, channelID, payload)
-}
-
 func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 	ctx context.Context,
 	roomID string,

@@ -147,10 +147,6 @@ func (g *OutboxGrouper) collectRoomsByChannel(ctx context.Context, items []domai
 	return result
 }
 
-func (d *Dispatcher) lookupSubscriberRooms(ctx context.Context, entries []channelAlarmEntry) []subscriberLookupResult {
-	return d.outboxGrouper().lookupSubscriberRooms(ctx, entries)
-}
-
 func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []channelAlarmEntry) []subscriberLookupResult {
 	results := make([]subscriberLookupResult, len(entries))
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -170,10 +166,6 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 	}
 	_ = eg.Wait()
 	return results
-}
-
-func (d *Dispatcher) resolveSubscriberRooms(ctx context.Context, entry channelAlarmEntry) (map[string]bool, bool) {
-	return d.outboxGrouper().resolveSubscriberRooms(ctx, entry)
 }
 
 func (g *OutboxGrouper) resolveSubscriberRooms(ctx context.Context, entry channelAlarmEntry) (map[string]bool, bool) {

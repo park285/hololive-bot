@@ -30,20 +30,8 @@ func (d *Dispatcher) sendEngine() *SendEngine {
 	return newSendEngine(nil, nil, d.logger, d.config, d.claimManager(), d.audit, d.metrics)
 }
 
-func (d *Dispatcher) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
-	return d.claimManager().claimOutboxBatch(ctx)
-}
-
-func (d *Dispatcher) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) int {
-	return d.claimManager().processPerRoomBatch(ctx, outboxItems)
-}
-
 func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) {
 	d.claimManager().enqueueDeliveries(ctx, outboxItems, roomsByChannel)
-}
-
-func (d *Dispatcher) reconcileTerminalOutboxStatuses(ctx context.Context) {
-	d.claimManager().reconcileTerminalOutboxStatuses(ctx)
 }
 
 func (d *Dispatcher) processPendingDeliveries(ctx context.Context) int {

@@ -1,7 +1,6 @@
 package delivery
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -73,17 +72,6 @@ func (d *SendEngine) logCommunityShortsDeliveryAttemptStarted(
 	d.auditLogger.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, deliveryMode)
 }
 
-func (d *SendEngine) logCommunityShortsDeliveryResult(
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sentAt time.Time,
-	deliveryMode string,
-	sendResult string,
-	failureReason string,
-) {
-	d.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, deliveryMode, sendResult, failureReason)
-}
-
 type communityShortsDeliveryResultSummary struct {
 	alarmCount  int
 	channelID   string
@@ -138,19 +126,6 @@ func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (int, in
 	default:
 		return 0, 0, 0, 0
 	}
-}
-
-func (d *SendEngine) logCommunityShortsDeliveryAudit(
-	ctx context.Context,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sentAt time.Time,
-	deliveryMode string,
-	sendResult string,
-	failureReason string,
-	sendErr error,
-) {
-	d.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, sentAt, deliveryMode, sendResult, failureReason, sendErr)
 }
 
 func buildCommunityShortsDeliveryAuditEvents(
@@ -209,26 +184,4 @@ func buildCommunityShortsDeliveryAuditEvent(
 		EventAt:           attemptFinishedAt,
 		NextAttemptAt:     time.Now().UTC(),
 	}
-}
-
-func (d *SendEngine) prepareCommunityShortsDeliveryAuditEvents(
-	ctx context.Context,
-	events []domain.YouTubeNotificationDeliveryTelemetry,
-) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {
-	return d.auditLogger.prepareCommunityShortsDeliveryAuditEvents(ctx, events)
-}
-
-func (d *SendEngine) enqueueCommunityShortsDeliveryAuditEvents(
-	ctx context.Context,
-	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
-) bool {
-	return d.auditLogger.enqueueCommunityShortsDeliveryAuditEvents(ctx, preparedEvents)
-}
-
-func (d *SendEngine) logCommunityShortsDeliveryAuditFallback(
-	ctx context.Context,
-	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
-	sendErr error,
-) {
-	d.auditLogger.logCommunityShortsDeliveryAuditFallback(ctx, preparedEvents, sendErr)
 }

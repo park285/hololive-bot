@@ -11,14 +11,6 @@ func (d *ClaimManager) logFinalizedCommunityShortsOutboxResults(ctx context.Cont
 	return d.auditLogger.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs)
 }
 
-func (d *ClaimManager) loadFinalizedCommunityShortsTimelines(
-	ctx context.Context,
-	outboxIDs []int64,
-	resultCount int,
-) (map[int64]PostDeliveryTimeline, error) {
-	return d.auditLogger.loadFinalizedCommunityShortsTimelines(ctx, outboxIDs, resultCount)
-}
-
 func appendLatencyClassificationLogAttr(attrs []any, classification PostLatencyClassificationResult) []any {
 	if classification.Status == "" {
 		return attrs

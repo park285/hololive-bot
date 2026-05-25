@@ -20,14 +20,6 @@ func (as *AlarmService) resolveCacheMemberName(ctx context.Context, channelID, f
 	return as.cacheState.ResolveCacheMemberName(ctx, channelID, fallback)
 }
 
-func (as *AlarmService) resolveMemberDataName(ctx context.Context, channelID string) string {
-	return as.cacheState.ResolveMemberDataName(ctx, channelID)
-}
-
-func firstMemberName(candidates ...string) string {
-	return alarmcache.FirstMemberName(candidates...)
-}
-
 func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
 	return as.cacheState.GetChannelSubscribersByType(ctx, channelID, alarmType)
 }
