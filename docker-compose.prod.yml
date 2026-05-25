@@ -337,7 +337,7 @@ services:
       SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
     ports:
       - "127.0.0.1:30006:30006"
-    volumes: *go-basic-volumes
+    volumes: *go-volumes
     extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-384m
