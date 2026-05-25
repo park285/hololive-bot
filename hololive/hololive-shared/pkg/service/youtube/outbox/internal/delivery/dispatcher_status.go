@@ -21,40 +21,8 @@
 package delivery
 
 import (
-	"context"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-func (d *Dispatcher) markSent(ctx context.Context, id int64) {
-	d.statusUpdater().markSent(ctx, id)
-}
-
-func (d *Dispatcher) markSentBatch(ctx context.Context, ids []int64) {
-	d.statusUpdater().markSentBatch(ctx, ids)
-}
-
-func (d *Dispatcher) markFailed(ctx context.Context, id int64, errMsg string) {
-	d.statusUpdater().markFailed(ctx, id, errMsg)
-}
-
-func (d *Dispatcher) markFailedPermanently(ctx context.Context, id int64, attemptCount int, errMsg string) {
-	d.statusUpdater().markFailedPermanently(ctx, id, attemptCount, errMsg)
-}
-
-func (d *Dispatcher) scheduleFailedRetry(ctx context.Context, id int64, attemptCount int, errMsg string) {
-	d.statusUpdater().scheduleFailedRetry(ctx, id, attemptCount, errMsg)
-}
-
-func (d *Dispatcher) statusUpdater() *StatusUpdater {
-	if d == nil {
-		return newStatusUpdater(nil, nil, Config{})
-	}
-	if d.status != nil {
-		return d.status
-	}
-	return newStatusUpdater(nil, d.logger, d.config)
-}
 
 func collectOutboxIDs(items []domain.YouTubeNotificationOutbox) []int64 {
 	if len(items) == 0 {

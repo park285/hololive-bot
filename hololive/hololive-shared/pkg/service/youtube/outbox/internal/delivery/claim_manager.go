@@ -85,20 +85,8 @@ func (c *ClaimManager) markSent(ctx context.Context, id int64) {
 	c.statusUpdater().markSent(ctx, id)
 }
 
-func (c *ClaimManager) markSentBatch(ctx context.Context, ids []int64) {
-	c.statusUpdater().markSentBatch(ctx, ids)
-}
-
 func (c *ClaimManager) markFailed(ctx context.Context, id int64, errMsg string) {
 	c.statusUpdater().markFailed(ctx, id, errMsg)
-}
-
-func (c *ClaimManager) markFailedPermanently(ctx context.Context, id int64, attemptCount int, errMsg string) {
-	c.statusUpdater().markFailedPermanently(ctx, id, attemptCount, errMsg)
-}
-
-func (c *ClaimManager) scheduleFailedRetry(ctx context.Context, id int64, attemptCount int, errMsg string) {
-	c.statusUpdater().scheduleFailedRetry(ctx, id, attemptCount, errMsg)
 }
 
 func (c *ClaimManager) outboxGrouper() *OutboxGrouper {
