@@ -73,28 +73,32 @@ func (d *SendEngine) sendYouTubeOutboxKaring(
 	roomID string,
 	payload domain.YouTubeOutboxDispatchPayload,
 ) error {
-	sendCtx := ctx
-	cancel := func() {}
-	if d.config.DeliverySendTimeout > 0 {
-		sendCtx, cancel = context.WithTimeoutCause(ctx, d.config.DeliverySendTimeout, errDeliverySendTimeout)
-	}
+	sendCtx, cancel := d.karingSendContext(ctx)
 	defer cancel()
 
 	if err := d.karingMu.LockContext(sendCtx); err != nil {
-		if errors.Is(context.Cause(sendCtx), errDeliverySendTimeout) {
-			return fmt.Errorf("wait for youtube outbox karing send slot timed out after %s: %w", d.config.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
-		}
-		return fmt.Errorf("wait for youtube outbox karing send slot: %w", err)
+		return d.wrapKaringTimeoutError(sendCtx, "wait for youtube outbox karing send slot", err)
 	}
 	defer d.karingMu.Unlock()
 
 	if err := sender.SendYouTubeOutboxKaring(sendCtx, roomID, payload); err != nil {
-		if errors.Is(context.Cause(sendCtx), errDeliverySendTimeout) {
-			return fmt.Errorf("send youtube outbox karing timed out after %s: %w", d.config.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
-		}
-		return fmt.Errorf("send youtube outbox karing: %w", err)
+		return d.wrapKaringTimeoutError(sendCtx, "send youtube outbox karing", err)
 	}
 	return nil
+}
+
+func (d *SendEngine) karingSendContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if d.config.DeliverySendTimeout > 0 {
+		return context.WithTimeoutCause(ctx, d.config.DeliverySendTimeout, errDeliverySendTimeout)
+	}
+	return ctx, func() {}
+}
+
+func (d *SendEngine) wrapKaringTimeoutError(ctx context.Context, action string, err error) error {
+	if errors.Is(context.Cause(ctx), errDeliverySendTimeout) {
+		return fmt.Errorf("%s timed out after %s: %w", action, d.config.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
+	}
+	return fmt.Errorf("%s: %w", action, err)
 }
 
 func (d *SendEngine) buildYouTubeOutboxKaringPayload(
