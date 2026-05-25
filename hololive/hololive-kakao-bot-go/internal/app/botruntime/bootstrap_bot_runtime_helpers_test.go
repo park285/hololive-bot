@@ -32,6 +32,7 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -74,7 +75,9 @@ func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 			GetClientFunc: func() valkey.Client { return nil },
 		},
 	}
-	handler, err := appbootstrap.BuildBotWebhookHandler(appConfig, stubWebhookMessageHandler{}, deps, nil)
+	pool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
+	t.Cleanup(pool.StopAndWait)
+	handler, err := appbootstrap.BuildBotWebhookHandler(appConfig, stubWebhookMessageHandler{}, deps, pool, nil)
 	require.NoError(t, err)
 	require.NotNil(t, handler)
 	t.Cleanup(func() {

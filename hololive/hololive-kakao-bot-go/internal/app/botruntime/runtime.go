@@ -48,6 +48,7 @@ type BotRuntime struct {
 	H3Server   *http3.Server
 
 	webhookHandlerCloser interface{ Close() error }
+	webhookPool          interface{ StopAndWait() }
 	lifecycle.Managed
 }
 

@@ -27,6 +27,7 @@ import (
 	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/quic-go/quic-go/http3"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
@@ -41,7 +42,12 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 
-	webhookHandler, err := appbootstrap.BuildBotWebhookHandler(appConfig, botBot, runtimeViews.webhook, logger)
+	webhookPool := workerpool.NewQueued(workerpool.QueuedConfig{
+		Workers:   appConfig.Webhook.WorkerCount,
+		QueueSize: appConfig.Webhook.QueueSize,
+	})
+
+	webhookHandler, err := appbootstrap.BuildBotWebhookHandler(appConfig, botBot, runtimeViews.webhook, webhookPool, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
 	}
@@ -73,6 +79,7 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 		HTTPServer:           botServer,
 		H3Server:             h3Server,
 		webhookHandlerCloser: webhookHandler,
+		webhookPool:          webhookPool,
 	}, nil
 }
 

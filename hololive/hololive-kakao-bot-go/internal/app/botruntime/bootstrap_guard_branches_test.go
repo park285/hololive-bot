@@ -145,10 +145,14 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 		},
 	}
 
+	webhookPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
+	t.Cleanup(webhookPool.StopAndWait)
+
 	handler, err := appbootstrap.BuildBotWebhookHandler(
 		appConfig,
 		stubWebhookMessageHandler{},
 		botWebhookRuntimeDependencies{Cache: &cache.Service{}},
+		webhookPool,
 		testBootstrapGuardLogger(),
 	)
 	require.NoError(t, err)
@@ -167,7 +171,7 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 	require.False(t, taskPoolField.IsNil(), "taskPool must not be nil")
 	ownsPoolField := reflect.ValueOf(handler).Elem().FieldByName("ownsPool")
 	require.True(t, ownsPoolField.IsValid(), "reflect: field 'ownsPool' not found on Handler")
-	assert.True(t, ownsPoolField.Bool())
+	assert.False(t, ownsPoolField.Bool())
 
 	dedupField := reflect.ValueOf(handler).Elem().FieldByName("dedup")
 	require.True(t, dedupField.IsValid(), "reflect: field 'dedup' not found on Handler")

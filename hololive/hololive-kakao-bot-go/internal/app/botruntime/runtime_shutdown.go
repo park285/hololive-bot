@@ -27,20 +27,26 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 )
 
+func (r *BotRuntime) closeWebhook() error {
+	if r.webhookHandlerCloser == nil {
+		return nil
+	}
+	err := r.webhookHandlerCloser.Close()
+	if r.webhookPool != nil {
+		r.webhookPool.StopAndWait()
+	}
+	return err
+}
+
 func (r *BotRuntime) Shutdown(ctx context.Context) {
 	if r == nil {
 		return
 	}
 
 	appruntime.Shutdown(ctx, appruntime.ShutdownHooks{
-		Logger:             r.Logger,
-		ShutdownHTTPServer: r.ShutdownHTTPServer,
-		WebhookHandlerClose: func() error {
-			if r.webhookHandlerCloser == nil {
-				return nil
-			}
-			return r.webhookHandlerCloser.Close()
-		},
+		Logger:                r.Logger,
+		ShutdownHTTPServer:    r.ShutdownHTTPServer,
+		WebhookHandlerClose:   r.closeWebhook,
 		ShutdownAlarmServices: notification.CloseAllAlarmServices,
 		ShutdownBot: func(ctx context.Context) error {
 			if r.Bot == nil {
