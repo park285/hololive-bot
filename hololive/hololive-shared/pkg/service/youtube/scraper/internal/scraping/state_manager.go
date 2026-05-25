@@ -26,8 +26,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 type stateStore interface {
@@ -196,8 +194,8 @@ func (c *Client) initStateManagers() {
 	if c == nil {
 		return
 	}
-	c.communityMissing = newCacheState(c.stateStore, constants.YouTubeConfig.CommunityMissingTTL, "community missing")
-	c.videoRSSBackoff = newCacheState(c.stateStore, constants.YouTubeConfig.VideoRSSBackoffTTL, "video rss backoff")
+	c.communityMissing = newCacheState(c.stateStore, ytDefaults.CommunityMissingTTL, "community missing")
+	c.videoRSSBackoff = newCacheState(c.stateStore, ytDefaults.VideoRSSBackoffTTL, "video rss backoff")
 	if c.channelHealthDisabled {
 		c.channelHealth = nil
 		return

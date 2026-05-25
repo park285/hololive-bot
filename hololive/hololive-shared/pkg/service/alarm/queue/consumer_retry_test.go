@@ -30,11 +30,12 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
 func TestScheduleRetryAddsToSortedSet(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	nextVisibleAt := time.Now().UTC().Add(-1 * time.Second).Truncate(time.Millisecond)
 	envelope := domain.AlarmQueueEnvelope{
@@ -67,7 +68,7 @@ func TestScheduleRetryAddsToSortedSet(t *testing.T) {
 
 func TestScheduleRetryDLQOnMaxAttempts(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{

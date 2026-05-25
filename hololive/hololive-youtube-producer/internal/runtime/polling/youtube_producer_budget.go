@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -40,7 +40,7 @@ func summarizeYouTubeProducerBudget(registrations []providers.ChannelPollerRegis
 	}
 	combinedRPM := pollerRPM + resolverRPM
 	combinedRetryAmplifiedRPM := pollerRetryAmplifiedRPM + resolverRetryAmplifiedRPM
-	budgetRPM := 60.0 / constants.YouTubeProducerRateLimitConfig.RequestInterval.Seconds()
+	budgetRPM := 60.0 / config.DefaultYouTubeOperationalConfig().ProducerRequestInterval.Seconds()
 
 	return youtubeProducerBudgetSummary{
 		PollerRPM:                 pollerRPM,

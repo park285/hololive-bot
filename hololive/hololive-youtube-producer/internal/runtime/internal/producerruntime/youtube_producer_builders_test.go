@@ -24,14 +24,12 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"net"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 	"unsafe"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -49,6 +47,7 @@ import (
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
@@ -346,24 +345,8 @@ func extractScraperStateStorePointer(t *testing.T, client *scraper.Client) uintp
 func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
 	t.Helper()
 
-	mini := miniredis.RunT(t)
-	host, portStr, err := net.SplitHostPort(mini.Addr())
-	require.NoError(t, err)
-	addr := net.JoinHostPort(host, portStr)
-
-	client, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress:       []string{addr},
-		DisableCache:      true,
-		ForceSingleClient: true,
-	})
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		client.Close()
-		mini.Close()
-	})
-
-	return client, addr
+	client, mini := testutil.NewTestValkeyClient(t)
+	return client, mini.Addr()
 }
 
 func TestBuildSharedYouTubeProducerClient_UsesConfiguredFetcherEngine(t *testing.T) {

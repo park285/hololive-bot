@@ -28,7 +28,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/shared-go/pkg/runtime/loop"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 var errJobClaimRenewLoopStopped = errors.New("job claim renew loop stopped")
@@ -231,7 +231,7 @@ func runJobClaimRenewLoop(
 		cancelLoop()
 	}()
 
-	_ = loop.RunTickerLoop(loopCtx, interval, func(context.Context) error {
+	_ = lifecycle.RunTickerLoop(loopCtx, interval, func(context.Context) error {
 		if !renewJobClaim(pollCtx, pollCancel, claim, pollerName, ttl, errCh, metrics) {
 			return errJobClaimRenewLoopStopped
 		}

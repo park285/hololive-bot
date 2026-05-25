@@ -25,7 +25,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -68,7 +67,7 @@ func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []stri
 		return nil, err
 	}
 
-	ys.cache.SetStreams(ctx, cacheKey, allStreams, constants.YouTubeConfig.CacheExpiration)
+	ys.cache.SetStreams(ctx, cacheKey, allStreams, ytDefaults.CacheExpiration)
 	ys.logger.Info("Upcoming streams fetch completed (scraper+API)",
 		slog.Int("channels", len(channelIDs)),
 		slog.Int("streams", len(allStreams)),
@@ -79,14 +78,14 @@ func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []stri
 }
 
 func (ys *serviceImpl) limitUpcomingChannelIDs(channelIDs []string) []string {
-	if len(channelIDs) <= constants.YouTubeConfig.MaxChannelsPerCall {
+	if len(channelIDs) <= ytDefaults.MaxChannelsPerCall {
 		return channelIDs
 	}
 
 	ys.logger.Warn("Too many channels requested, limiting to max",
 		slog.Int("requested", len(channelIDs)),
-		slog.Int("limited", constants.YouTubeConfig.MaxChannelsPerCall))
-	return channelIDs[:constants.YouTubeConfig.MaxChannelsPerCall]
+		slog.Int("limited", ytDefaults.MaxChannelsPerCall))
+	return channelIDs[:ytDefaults.MaxChannelsPerCall]
 }
 
 func (ys *serviceImpl) getCachedUpcomingStreams(ctx context.Context, cacheKey string) ([]*domain.Stream, bool) {

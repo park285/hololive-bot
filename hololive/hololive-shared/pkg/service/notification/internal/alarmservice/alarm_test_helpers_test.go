@@ -28,7 +28,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
@@ -67,19 +66,11 @@ func (m *mockMemberDataProvider) FindMembersByAlias(_ string) []*domain.Member {
 	return []*domain.Member{}
 }
 
-// newTestCacheService: 테스트용 miniredis 기반 캐시 서비스 생성.
-func newTestCacheService(ctx context.Context, t *testing.T) *cache.Service {
-	t.Helper()
-
-	return sharedtestutil.NewTestCacheService(t, ctx)
-}
-
-// newTestAlarmService: 테스트용 AlarmService 인스턴스 생성 (miniredis 기반).
 func newTestAlarmService(t *testing.T) *AlarmService {
 	t.Helper()
 
 	ctx := t.Context()
-	cacheClient := newTestCacheService(ctx, t)
+	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	service := &AlarmService{

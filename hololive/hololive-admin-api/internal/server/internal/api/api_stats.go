@@ -33,7 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/park285/shared-go/pkg/runtime/loop"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 var systemStatsStreamInterval = 5 * time.Second
@@ -131,7 +131,7 @@ func (h *StatsHandler) streamSystemStats(ctx context.Context, conn *websocket.Co
 		return
 	}
 
-	_ = loop.RunTickerLoop(ctx, systemStatsStreamInterval, func(ctx context.Context) error {
+	_ = lifecycle.RunTickerLoop(ctx, systemStatsStreamInterval, func(ctx context.Context) error {
 		if !h.writeSystemStats(ctx, conn, "failed to collect system stats", "failed to write system stats") {
 			return errSystemStatsStreamStopped
 		}

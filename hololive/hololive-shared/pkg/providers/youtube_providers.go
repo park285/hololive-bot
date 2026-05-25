@@ -25,7 +25,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -129,7 +129,7 @@ func ProvideScraperScheduler(
 		slog.Float64("expected_total_rpm", totalRPM),
 		slog.Float64("expected_total_retry_amplified_rpm_max", totalRetryAmplifiedRPM))
 
-	budgetRPM := 60.0 / constants.YouTubeProducerRateLimitConfig.RequestInterval.Seconds()
+	budgetRPM := 60.0 / config.DefaultYouTubeOperationalConfig().ProducerRequestInterval.Seconds()
 	if totalRPM > budgetRPM {
 		log.Warn("scraper_poll_budget_exceeds_rate_limit",
 			slog.Float64("expected_total_rpm", totalRPM),

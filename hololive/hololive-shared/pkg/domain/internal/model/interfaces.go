@@ -50,20 +50,32 @@ type AlarmListView struct {
 	NextStream *NextStreamInfo
 }
 
-type AlarmCRUD interface {
+type AlarmRepository interface {
 	AddAlarm(ctx context.Context, req AddAlarmRequest) (bool, error)
 	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes AlarmTypes) (bool, error)
 	GetRoomAlarms(ctx context.Context, roomID string) ([]string, error)
 	GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*Alarm, error)
 	ListRoomAlarmsView(ctx context.Context, roomID string) ([]AlarmListView, error)
 	ClearRoomAlarms(ctx context.Context, roomID string) (int, error)
+	GetAllAlarmKeys(ctx context.Context) ([]*AlarmEntry, error)
+}
+
+type AlarmCache interface {
+	WarmCacheFromDB(ctx context.Context) error
+	SetRoomName(ctx context.Context, roomID, roomName string) error
+	SetUserName(ctx context.Context, userID, userName string) error
+}
+
+type AlarmStateManager interface {
 	GetNextStreamInfo(ctx context.Context, channelID string) (*NextStreamInfo, error)
 	UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int
 	GetTargetMinutes() []int
-	SetRoomName(ctx context.Context, roomID, roomName string) error
-	SetUserName(ctx context.Context, userID, userName string) error
-	GetAllAlarmKeys(ctx context.Context) ([]*AlarmEntry, error)
-	WarmCacheFromDB(ctx context.Context) error
+}
+
+type AlarmCRUD interface {
+	AlarmRepository
+	AlarmCache
+	AlarmStateManager
 }
 
 type AlarmDispatchState interface {

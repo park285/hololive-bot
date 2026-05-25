@@ -89,6 +89,10 @@ func appendOutboxItemGroup(groups []*outboxItemGroup, index map[string]int, room
 }
 
 func (d *Dispatcher) groupOutboxItems(items []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) []*outboxItemGroup {
+	return d.outboxGrouper().groupOutboxItems(items, roomsByChannel)
+}
+
+func (g *OutboxGrouper) groupOutboxItems(items []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) []*outboxItemGroup {
 	if len(items) == 0 {
 		return nil
 	}
@@ -129,24 +133,32 @@ func channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []cha
 }
 
 func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
+	return d.outboxGrouper().collectRoomsByChannel(ctx, items)
+}
+
+func (g *OutboxGrouper) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
 	result := make(map[string]channelAlarmRoomTargets)
 	entries := channelAlarmEntriesForItems(items)
 	if len(entries) == 0 {
 		return result
 	}
 
-	mergeSubscriberLookupResults(result, d.lookupSubscriberRooms(ctx, entries))
+	mergeSubscriberLookupResults(result, g.lookupSubscriberRooms(ctx, entries))
 	return result
 }
 
 func (d *Dispatcher) lookupSubscriberRooms(ctx context.Context, entries []channelAlarmEntry) []subscriberLookupResult {
+	return d.outboxGrouper().lookupSubscriberRooms(ctx, entries)
+}
+
+func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []channelAlarmEntry) []subscriberLookupResult {
 	results := make([]subscriberLookupResult, len(entries))
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(d.subscriberLookupParallelism())
+	eg.SetLimit(g.subscriberLookupParallelism())
 	for idx := range entries {
 		eg.Go(func() error {
 			e := entries[idx]
-			rooms, ok := d.resolveSubscriberRooms(egCtx, e)
+			rooms, ok := g.resolveSubscriberRooms(egCtx, e)
 			results[idx] = subscriberLookupResult{
 				channelID: e.channelID,
 				alarmType: e.alarmType,
@@ -161,9 +173,13 @@ func (d *Dispatcher) lookupSubscriberRooms(ctx context.Context, entries []channe
 }
 
 func (d *Dispatcher) resolveSubscriberRooms(ctx context.Context, entry channelAlarmEntry) (map[string]bool, bool) {
-	members, err := sharedalarm.ResolveChannelSubscribersByType(ctx, d.cache, d.db, entry.channelID, entry.alarmType)
+	return d.outboxGrouper().resolveSubscriberRooms(ctx, entry)
+}
+
+func (g *OutboxGrouper) resolveSubscriberRooms(ctx context.Context, entry channelAlarmEntry) (map[string]bool, bool) {
+	members, err := sharedalarm.ResolveChannelSubscribersByType(ctx, g.cache, g.db, entry.channelID, entry.alarmType)
 	if err != nil {
-		d.logger.Warn("Failed to get subscribers for channel",
+		g.logger.Warn("Failed to get subscribers for channel",
 			slog.String("channel_id", entry.channelID),
 			slog.String("alarm_type", string(entry.alarmType)),
 			slog.Any("error", err))
@@ -193,8 +209,15 @@ func mergeSubscriberLookupResults(result map[string]channelAlarmRoomTargets, res
 }
 
 func (d *Dispatcher) subscriberLookupParallelism() int {
-	if d.config.SubscriberLookupParallelism <= 0 {
-		return DefaultConfig().SubscriberLookupParallelism
+	return d.outboxGrouper().subscriberLookupParallelism()
+}
+
+func (d *Dispatcher) outboxGrouper() *OutboxGrouper {
+	if d == nil {
+		return newOutboxGrouper(nil, nil, nil, Config{})
 	}
-	return d.config.SubscriberLookupParallelism
+	if d.grouper != nil {
+		return d.grouper
+	}
+	return newOutboxGrouper(nil, nil, d.logger, d.config)
 }

@@ -8,41 +8,41 @@ import (
 )
 
 func (d *Dispatcher) telemetryLoop(ctx context.Context) {
-	d.telemetryProcessor.telemetryLoop(ctx)
+	d.telemetry.telemetryLoop(ctx)
 }
 
 func (d *Dispatcher) processDeliveryTelemetry(ctx context.Context) {
-	d.telemetryProcessor.processDeliveryTelemetry(ctx)
+	d.telemetry.processDeliveryTelemetry(ctx)
 }
 
 func (d *Dispatcher) backfillDeliveryTelemetry(ctx context.Context) {
-	d.telemetryProcessor.backfillDeliveryTelemetry(ctx)
+	d.telemetry.backfillDeliveryTelemetry(ctx)
 }
 
 func (d *Dispatcher) deliveryTelemetryBackfillSince() time.Time {
-	return d.telemetryProcessor.deliveryTelemetryBackfillSince()
+	return d.telemetry.deliveryTelemetryBackfillSince()
 }
 
 func (d *Dispatcher) fetchDeliveryTelemetryRows(ctx context.Context) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {
-	return d.telemetryProcessor.fetchDeliveryTelemetryRows(ctx)
+	return d.telemetry.fetchDeliveryTelemetryRows(ctx)
 }
 
 func (d *Dispatcher) loadDeliveryTelemetryClassificationsForRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDeliveryTelemetry,
 ) map[int64]PostLatencyClassificationResult {
-	return d.telemetryProcessor.loadDeliveryTelemetryClassificationsForRows(ctx, rows)
+	return d.telemetry.loadDeliveryTelemetryClassificationsForRows(ctx, rows)
 }
 
 func (d *Dispatcher) emitDeliveryTelemetryRows(
 	rows []domain.YouTubeNotificationDeliveryTelemetry,
 	classificationsByOutboxID map[int64]PostLatencyClassificationResult,
 ) ([]int64, []int64) {
-	return d.telemetryProcessor.emitDeliveryTelemetryRows(rows, classificationsByOutboxID)
+	return d.telemetry.emitDeliveryTelemetryRows(rows, classificationsByOutboxID)
 }
 
 func (d *Dispatcher) markDeliveryTelemetryResults(ctx context.Context, loggedIDs, failedIDs []int64) {
-	d.telemetryProcessor.markDeliveryTelemetryResults(ctx, loggedIDs, failedIDs)
+	d.telemetry.markDeliveryTelemetryResults(ctx, loggedIDs, failedIDs)
 }
 
 func buildDeliveryAuditLogAttrs(row domain.YouTubeNotificationDeliveryTelemetry) []any {

@@ -27,6 +27,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"log/slog"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -41,7 +43,7 @@ func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {
 
 	registerMajorEventInternalRoutes(nil, "", nil)
 
-	engine, err := buildHealthOnlyRouter(context.Background(), newTestLogger(), "")
+	engine, err := buildHealthOnlyRouter(context.Background(), slog.New(slog.DiscardHandler), "")
 	require.NoError(t, err)
 
 	registerMajorEventInternalRoutes(engine, "", nil)
@@ -146,7 +148,7 @@ func assertErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, want strin
 func newMajorEventRouter(t *testing.T, apiKey string, repository *majorevent.Repository) *http.ServeMux {
 	t.Helper()
 
-	engine, err := buildHealthOnlyRouter(context.Background(), newTestLogger(), "")
+	engine, err := buildHealthOnlyRouter(context.Background(), slog.New(slog.DiscardHandler), "")
 	require.NoError(t, err)
 
 	registerMajorEventInternalRoutes(engine, apiKey, repository)

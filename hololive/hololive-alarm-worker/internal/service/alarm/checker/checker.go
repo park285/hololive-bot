@@ -5,6 +5,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/chzzk"
 	checknotifier "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/twitch"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type ChzzkChecker = chzzk.ChzzkChecker
@@ -13,7 +14,7 @@ type PersistedYouTubeLiveSession = checking.PersistedYouTubeLiveSession
 type PgYouTubeLiveSessionSource = checking.PgYouTubeLiveSessionSource
 type PgYouTubeLiveSessionSourceOptions = checking.PgYouTubeLiveSessionSourceOptions
 type Runner = checking.Runner
-type SendResult = checking.SendResult
+type SendResult = delivery.SendResult
 type Sender = checking.Sender
 type TwitchChecker = twitch.TwitchChecker
 type YouTubeChecker = checking.YouTubeChecker

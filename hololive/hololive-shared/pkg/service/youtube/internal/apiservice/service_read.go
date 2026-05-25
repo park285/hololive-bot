@@ -28,7 +28,6 @@ import (
 
 	"google.golang.org/api/youtube/v3"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -47,7 +46,7 @@ func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, ma
 		slog.String("channel", channelID),
 		slog.Any("scraper_error", err))
 
-	if quotaErr := ys.checkQuota(constants.YouTubeConfig.SearchQuotaCost); quotaErr != nil {
+	if quotaErr := ys.checkQuota(ytDefaults.SearchQuotaCost); quotaErr != nil {
 		return nil, quotaErr
 	}
 
@@ -64,7 +63,7 @@ func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, ma
 
 	videoIDs := recentAPIResponseVideoIDs(response.Items)
 
-	ys.consumeQuota(constants.YouTubeConfig.SearchQuotaCost)
+	ys.consumeQuota(ytDefaults.SearchQuotaCost)
 
 	ys.logger.Debug("Recent videos fetched via API",
 		slog.String("channel", channelID),

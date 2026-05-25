@@ -26,6 +26,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -431,7 +432,7 @@ func TestAlarmServiceClose(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	cache := newTestCacheService(ctx, t)
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
 
 	service, err := NewAlarmService(cache, nil, nil, nil, nil, nil, nil, []int{5, 3, 1})
 	require.NoError(t, err)

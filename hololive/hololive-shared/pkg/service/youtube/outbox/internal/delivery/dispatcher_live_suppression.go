@@ -21,7 +21,15 @@ func (d *Dispatcher) filterLiveCatchupSuppressedRooms(
 	item domain.YouTubeNotificationOutbox,
 	rooms map[string]bool,
 ) map[string]bool {
-	if !shouldFilterLiveCatchupSuppression(d, item, rooms) {
+	return d.outboxGrouper().filterLiveCatchupSuppressedRooms(ctx, item, rooms)
+}
+
+func (g *OutboxGrouper) filterLiveCatchupSuppressedRooms(
+	ctx context.Context,
+	item domain.YouTubeNotificationOutbox,
+	rooms map[string]bool,
+) map[string]bool {
+	if !shouldFilterLiveCatchupSuppression(g, item, rooms) {
 		return rooms
 	}
 	payload, ok := liveStreamPayloadForSuppression(item)
@@ -34,7 +42,7 @@ func (d *Dispatcher) filterLiveCatchupSuppressedRooms(
 		if !selected {
 			continue
 		}
-		suppressed := d.wasLiveCatchupRecentlyCoveredByUpcoming(ctx, roomID, item.ChannelID, payload)
+		suppressed := g.wasLiveCatchupRecentlyCoveredByUpcoming(ctx, roomID, item.ChannelID, payload)
 		if !suppressed {
 			filtered[roomID] = true
 		}
@@ -42,9 +50,9 @@ func (d *Dispatcher) filterLiveCatchupSuppressedRooms(
 	return filtered
 }
 
-func shouldFilterLiveCatchupSuppression(d *Dispatcher, item domain.YouTubeNotificationOutbox, rooms map[string]bool) bool {
-	return d != nil &&
-		d.cache != nil &&
+func shouldFilterLiveCatchupSuppression(g *OutboxGrouper, item domain.YouTubeNotificationOutbox, rooms map[string]bool) bool {
+	return g != nil &&
+		g.cache != nil &&
 		item.Kind == domain.OutboxKindLiveStream &&
 		len(rooms) > 0
 }
@@ -64,14 +72,23 @@ func (d *Dispatcher) wasLiveCatchupRecentlyCoveredByUpcoming(
 	channelID string,
 	payload videoPayload,
 ) bool {
+	return d.outboxGrouper().wasLiveCatchupRecentlyCoveredByUpcoming(ctx, roomID, channelID, payload)
+}
+
+func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
+	ctx context.Context,
+	roomID string,
+	channelID string,
+	payload videoPayload,
+) bool {
 	scheduledAt := liveSuppressionScheduledAt(payload)
 	if scheduledAt == nil || scheduledAt.IsZero() {
 		return false
 	}
 	key := keys.BuildUpcomingEventKey(roomID, channelID, payload.VideoID, payload.Title, scheduledAt.UTC())
 	var data liveUpcomingSuppressionData
-	if err := d.cache.Get(ctx, key, &data); err != nil {
-		d.logger.Warn("Failed to read live catchup upcoming suppression marker",
+	if err := g.cache.Get(ctx, key, &data); err != nil {
+		g.logger.Warn("Failed to read live catchup upcoming suppression marker",
 			slog.String("room_id", roomID),
 			slog.String("channel_id", channelID),
 			slog.String("video_id", payload.VideoID),

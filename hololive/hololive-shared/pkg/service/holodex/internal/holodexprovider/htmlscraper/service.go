@@ -12,7 +12,7 @@ import (
 	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/fallback"
@@ -79,12 +79,12 @@ func NewServiceWithYouTubeProducer(
 		slog.Int("name_mappings", len(nameMap)))
 
 	return &Service{
-		httpClient:      httputil.NewExternalAPIClient(constants.OfficialScheduleConfig.Timeout),
+		httpClient:      httputil.NewExternalAPIClient(config.DefaultOfficialScheduleConfig().Timeout),
 		cache:           cacheClient,
 		membersData:     membersData,
 		memberNameMap:   nameMap,
 		logger:          logger,
-		baseURL:         constants.OfficialScheduleConfig.BaseURL,
+		baseURL:         config.DefaultOfficialScheduleConfig().BaseURL,
 		youtubeProducer: youtubeProducer,
 	}
 }
@@ -116,7 +116,7 @@ func (s *Service) FetchChannel(ctx context.Context, channelID string) ([]*domain
 
 func (s *Service) finishYouTubeChannelSchedule(ctx context.Context, cacheKey string, channelID string, streams []*domain.Stream, policy fallback.Policy) {
 	fallback.ObserveExecution("holodex", "channel_schedule", policy.Trigger, "skipped")
-	s.cache.SetStreams(ctx, cacheKey, streams, constants.OfficialScheduleConfig.CacheExpiry)
+	s.cache.SetStreams(ctx, cacheKey, streams, config.DefaultOfficialScheduleConfig().CacheExpiry)
 	s.logger.Info("YouTube producer channel schedule resolved",
 		slog.String("channel", channelID),
 		slog.Int("streams", len(streams)))
@@ -146,7 +146,7 @@ func (s *Service) fetchOfficialChannelSchedule(ctx context.Context, cacheKey str
 		}
 	}
 
-	s.cache.SetStreams(ctx, cacheKey, channelStreams, constants.OfficialScheduleConfig.CacheExpiry)
+	s.cache.SetStreams(ctx, cacheKey, channelStreams, config.DefaultOfficialScheduleConfig().CacheExpiry)
 	outcome := "miss"
 	reason := classifyOfficialScheduleFallbackReason(nil, len(channelStreams))
 	if len(channelStreams) > 0 {

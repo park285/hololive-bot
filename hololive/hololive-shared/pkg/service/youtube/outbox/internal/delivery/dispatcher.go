@@ -23,7 +23,6 @@ package delivery
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,7 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/shared-go/pkg/runtime/loop"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 const defaultTelemetryRetention = 24 * time.Hour
@@ -81,21 +80,16 @@ func DefaultConfig() Config {
 }
 
 type Dispatcher struct {
-	db        *gorm.DB
-	cache     cache.Client
-	sender    delivery.MessageSender
-	renderer  *template.Renderer
+	claim     *ClaimManager
+	send      *SendEngine
+	telemetry *TelemetryProcessor
+	audit     *AuditLogger
+	metrics   *MetricsRecorder
+	grouper   *OutboxGrouper
+	status    *StatusUpdater
 	logger    *slog.Logger
 	config    Config
-	delivery  *DeliveryRepository
-	telemetry *DeliveryTelemetryRepository
-	formatter *MessageFormatter
-	karingMu  sync.Mutex
 	started   atomic.Bool
-
-	telemetryProcessor *TelemetryProcessor
-	auditLogger        *AuditLogger
-	metricsRecorder    *MetricsRecorder
 
 	onProcessOnce   func()
 	onAggregateSync func()
@@ -118,25 +112,30 @@ func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.Messag
 	deliveryRepo := NewDeliveryRepository(db, logger)
 	tp := newTelemetryProcessor(telemetryRepository, logger, config)
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, config, tp)
+	grouper := newOutboxGrouper(db, cacheClient, logger, config)
+	status := newStatusUpdater(db, logger, config)
+	formatter := &MessageFormatter{
+		renderer: renderer,
+		cache:    cacheClient,
+		logger:   logger,
+	}
+	claimManager := newClaimManager(db, logger, config, deliveryRepo, nil, status, grouper, al)
+	metricsRecorder := newMetricsRecorder(logger, al, claimManager)
+	sendEngine := newSendEngine(sender, formatter, logger, config, claimManager, al, metricsRecorder)
+	claimManager.setExecutor(sendEngine)
+	claimManager.setMetricsRecorder(metricsRecorder)
 
 	d := &Dispatcher{
-		db:        db,
-		cache:     cacheClient,
-		sender:    sender,
-		renderer:  renderer,
+		claim:     claimManager,
+		send:      sendEngine,
+		telemetry: tp,
+		audit:     al,
+		metrics:   metricsRecorder,
+		grouper:   grouper,
+		status:    status,
 		logger:    logger,
 		config:    config,
-		delivery:  deliveryRepo,
-		telemetry: telemetryRepository,
-		formatter: &MessageFormatter{
-			renderer: renderer,
-			cache:    cacheClient,
-			logger:   logger,
-		},
-		telemetryProcessor: tp,
-		auditLogger:        al,
 	}
-	d.metricsRecorder = newMetricsRecorder(logger, al, d)
 	return d
 }
 
@@ -209,7 +208,7 @@ func (d *Dispatcher) Start(ctx context.Context) {
 		defer d.started.Store(false)
 		d.run(ctx)
 	}()
-	if d.delivery != nil {
+	if d.claimManager().delivery != nil {
 		go d.aggregateSyncLoop(ctx)
 	}
 	if d.telemetry != nil {
@@ -222,14 +221,14 @@ func (d *Dispatcher) Start(ctx context.Context) {
 
 func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
 	d.aggregateSyncOnce(ctx)
-	_ = loop.RunTickerLoop(ctx, d.config.AggregateSyncInterval, func(context.Context) error {
+	_ = lifecycle.RunTickerLoop(ctx, d.config.AggregateSyncInterval, func(context.Context) error {
 		d.aggregateSyncOnce(ctx)
 		return nil
 	})
 }
 
 func (d *Dispatcher) aggregateSyncOnce(ctx context.Context) {
-	d.reconcileTerminalOutboxStatuses(ctx)
+	d.claimManager().reconcileTerminalOutboxStatuses(ctx)
 	if d.onAggregateSync != nil {
 		d.onAggregateSync()
 	}
@@ -245,7 +244,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("subscriber_lookup_parallelism", d.subscriberLookupParallelism()))
 
 	d.processOnce(ctx)
-	_ = loop.RunTickerLoop(ctx, d.config.PollInterval, func(context.Context) error {
+	_ = lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(context.Context) error {
 		d.processOnce(ctx)
 		return nil
 	})
@@ -274,7 +273,7 @@ func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
 }
 
 func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (bool, bool) {
-	outboxItems, err := d.claimOutboxBatch(ctx)
+	outboxItems, err := d.claimManager().claimOutboxBatch(ctx)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
 		return false, false
@@ -286,18 +285,18 @@ func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (bool
 
 func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, round int) int {
 	if len(outboxItems) == 0 {
-		return d.processPendingDeliveries(ctx)
+		return d.claimManager().processPendingDeliveries(ctx)
 	}
 
 	d.logger.Debug("Processing outbox batch",
 		slog.Int("count", len(outboxItems)),
 		slog.Int("round", round+1))
-	return d.processPerRoomBatch(ctx, outboxItems)
+	return d.claimManager().processPerRoomBatch(ctx, outboxItems)
 }
 
 // cleanupLoop: 오래된 완료 알림 정리 루프
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
-	_ = loop.RunTickerLoop(ctx, outboxCleanupLoopInterval, func(context.Context) error {
+	_ = lifecycle.RunTickerLoop(ctx, outboxCleanupLoopInterval, func(context.Context) error {
 		d.cleanup(ctx)
 		if d.onCleanup != nil {
 			d.onCleanup()
@@ -308,42 +307,12 @@ func (d *Dispatcher) cleanupLoop(ctx context.Context) {
 
 // cleanup: 오래된 완료 알림 삭제
 func (d *Dispatcher) cleanup(ctx context.Context) {
-	if d == nil || d.db == nil {
+	if d == nil {
 		return
 	}
 
-	now := time.Now().UTC()
-	outboxCutoff := now.Add(-d.config.CleanupAfter)
-
-	result := d.db.WithContext(ctx).
-		Where("status IN (?, ?) AND COALESCE(sent_at, created_at) < ?", domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff).
-		Delete(&domain.YouTubeNotificationOutbox{})
-
-	if result.Error != nil {
-		d.logger.Warn("Failed to cleanup old outbox items", slog.Any("error", result.Error))
-		return
-	}
-
-	if result.RowsAffected > 0 {
-		d.logger.Info("Cleaned up old outbox items", slog.Int64("deleted", result.RowsAffected))
-	}
-
-	if d.telemetry == nil || d.config.TelemetryRetention <= 0 {
-		return
-	}
-
-	telemetryCutoff := now.Add(-d.config.TelemetryRetention)
-	deletedTelemetry, err := d.telemetry.DeleteLoggedBefore(ctx, telemetryCutoff)
-	if err != nil {
-		d.logger.Warn("Failed to cleanup old delivery telemetry", slog.Any("error", err))
-		return
-	}
-
-	if deletedTelemetry > 0 {
-		d.logger.Info("Cleaned up old delivery telemetry",
-			slog.Int64("deleted", deletedTelemetry),
-			slog.Duration("retention", d.config.TelemetryRetention))
-	}
+	d.claimManager().cleanupOutbox(ctx)
+	d.telemetry.cleanup(ctx)
 }
 
 func (d *Dispatcher) ProcessOnceForTest(ctx context.Context) {

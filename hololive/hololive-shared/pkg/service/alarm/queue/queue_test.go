@@ -22,11 +22,8 @@ package queue
 
 import (
 	"context"
-	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -40,42 +37,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 	json "github.com/park285/shared-go/pkg/json"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
-func newTestLogger() *slog.Logger {
-	return sharedlogging.NewTestLogger()
-}
-
 func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	t.Helper()
 
-	mini := miniredis.RunT(t)
-	host, rawPort, err := net.SplitHostPort(mini.Addr())
-	require.NoError(t, err)
-
-	port, err := strconv.Atoi(rawPort)
-	require.NoError(t, err)
-
-	service, err := cache.NewCacheService(
-		context.Background(),
-		cache.Config{
-			Host:              host,
-			Port:              port,
-			DisableCache:      true,
-			ForceSingleClient: true,
-		},
-		newTestLogger(),
-	)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		require.NoError(t, service.Close())
-		mini.Close()
-	})
-
-	return service, mini
+	return testutil.NewTestCacheServiceWithMini(t, context.Background())
 }
 
 func queueItemsOrEmpty(t *testing.T, mini *miniredis.Miniredis) []string {
@@ -128,7 +98,7 @@ func unwrapSingleRetryMember(t *testing.T, retrySet map[string]float64) (string,
 
 func TestPublisherPublishEnqueuesJSONEnvelopeWithVersion(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	publisher := NewPublisher(cacheClient, newTestLogger())
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger())
 
 	notification := &domain.AlarmNotification{
 		AlarmType:    domain.AlarmTypeLive,
@@ -155,7 +125,7 @@ func TestPublisherPublishEnqueuesJSONEnvelopeWithVersion(t *testing.T) {
 
 func TestPublisherPublishLPushOrderNewestFirst(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	publisher := NewPublisher(cacheClient, newTestLogger())
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger())
 
 	_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"}, nil)
 	require.NoError(t, err)
@@ -177,7 +147,7 @@ func TestPublisherPublishLPushOrderNewestFirst(t *testing.T) {
 func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 	t.Parallel()
 
-	publisher := NewPublisher(cachemocks.NewStrictClient(), newTestLogger())
+	publisher := NewPublisher(cachemocks.NewStrictClient(), sharedlogging.NewTestLogger())
 
 	for _, alarmType := range []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts} {
 		t.Run(string(alarmType), func(t *testing.T) {
@@ -195,7 +165,7 @@ func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 func TestPublisherPublishDispatchBatchAcceptsYouTubeOutboxContentEnvelope(t *testing.T) {
 	t.Parallel()
 
-	publisher := NewPublisher(cachemocks.NewStrictClient(), newTestLogger(), WithPublishMode(PublishModePGFirst), WithWakeupEnabled(false), WithOutbox(&fakeOutboxRepository{}))
+	publisher := NewPublisher(cachemocks.NewStrictClient(), sharedlogging.NewTestLogger(), WithPublishMode(PublishModePGFirst), WithWakeupEnabled(false), WithOutbox(&fakeOutboxRepository{}))
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeShorts,
@@ -231,7 +201,7 @@ func TestPublisherPublishValkeyBatch_ReturnsErrorOnResponseCountMismatch(t *test
 			return nil
 		},
 	}
-	publisher := NewPublisher(client, newTestLogger())
+	publisher := NewPublisher(client, sharedlogging.NewTestLogger())
 
 	result, err := publisher.PublishBatch(context.Background(), []*domain.AlarmNotification{
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-mismatch"},
@@ -261,7 +231,7 @@ func TestParseEnvelopeSupportsV0AndV1(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			envelope, ok := parseEnvelope(string(raw), newTestLogger())
+			envelope, ok := parseEnvelope(string(raw), sharedlogging.NewTestLogger())
 			assert.True(t, ok)
 			assert.Equal(t, tc.version, envelope.Version)
 		})
@@ -278,13 +248,13 @@ func TestParseEnvelopeSkipsUnsupportedVersion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, ok := parseEnvelope(string(raw), newTestLogger())
+	_, ok := parseEnvelope(string(raw), sharedlogging.NewTestLogger())
 	assert.False(t, ok)
 }
 
 func TestQueueConsumerRejectsUnsupportedEnvelopeVersion(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 	raw := readAlarmQueueFixture(t, "envelope_unsupported_version.json")
 
 	require.NoError(t, cacheClient.DoMulti(context.Background(),
@@ -302,13 +272,13 @@ func TestQueueConsumerRejectsUnsupportedEnvelopeVersion(t *testing.T) {
 }
 
 func TestParseEnvelopeSkipsInvalidJSON(t *testing.T) {
-	_, ok := parseEnvelope("{invalid-json}", newTestLogger())
+	_, ok := parseEnvelope("{invalid-json}", sharedlogging.NewTestLogger())
 	assert.False(t, ok)
 }
 
 func TestQueueConsumerMovesInvalidJSONToDLQ(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	require.NoError(t, cacheClient.DoMulti(context.Background(),
 		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element("{invalid-json}").Build(),
@@ -326,7 +296,7 @@ func TestQueueConsumerMovesInvalidJSONToDLQ(t *testing.T) {
 
 func TestConsumerDrainBatch_InvalidPayloadMovesRawPayloadToDLQ(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	require.NoError(t, cacheClient.DoMulti(context.Background(),
 		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element("{invalid-json}").Build(),
@@ -344,7 +314,7 @@ func TestConsumerDrainBatch_InvalidPayloadMovesRawPayloadToDLQ(t *testing.T) {
 
 func TestAlarmQueueDerivesRetryAndDLQKeys(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithQueueKey("alarm:test:queue"))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithQueueKey("alarm:test:queue"))
 
 	assert.Equal(t, "alarm:test:queue", consumer.queueKey)
 	assert.Equal(t, "alarm:test:retry", consumer.retryQueueKey)
@@ -353,7 +323,7 @@ func TestAlarmQueueDerivesRetryAndDLQKeys(t *testing.T) {
 
 func TestQueueConsumerPreservesInvalidDelayedRetryMemberToDLQ(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	invalidMember := retryMemberPrefix + "broken-wrapper"
 	results := cacheClient.DoMulti(context.Background(),
@@ -385,7 +355,7 @@ func TestQueueConsumerPreservesInvalidDelayedRetryMemberToDLQ(t *testing.T) {
 
 func TestQueueConsumerAcceptsLegacyVersionZero(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	raw, err := json.Marshal(domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
@@ -417,7 +387,7 @@ func TestReleaseClaimKeysFiltersByPrefix(t *testing.T) {
 			return int64(len(keys)), nil
 		},
 	}
-	consumer := NewConsumer(client, newTestLogger())
+	consumer := NewConsumer(client, sharedlogging.NewTestLogger())
 
 	err := consumer.ReleaseClaimKeys(context.Background(), []string{
 		" notified:claim:room-1 ",
@@ -442,7 +412,7 @@ func TestReleaseClaimKeysNoPrefixSkipsDel(t *testing.T) {
 			return 0, nil
 		},
 	}
-	consumer := NewConsumer(client, newTestLogger())
+	consumer := NewConsumer(client, sharedlogging.NewTestLogger())
 
 	err := consumer.ReleaseClaimKeys(context.Background(), []string{"invalid:key", "  "})
 	require.NoError(t, err)
@@ -451,8 +421,8 @@ func TestReleaseClaimKeysNoPrefixSkipsDel(t *testing.T) {
 
 func TestConsumerDrainBatch_UsesBatchedDrain(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	publisher := NewPublisher(cacheClient, newTestLogger())
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger())
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	for _, roomID := range []string{"room-1", "room-2", "room-3"} {
 		_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: roomID}, nil)
@@ -469,8 +439,8 @@ func TestConsumerDrainBatch_UsesBatchedDrain(t *testing.T) {
 
 func TestConsumerRequeue_PreservesEnvelopeOrderAfterExistingBacklog(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	publisher := NewPublisher(cacheClient, newTestLogger())
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger())
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	retryA := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
@@ -514,7 +484,7 @@ func TestConsumerQueueKeyAlignmentUsesCustomNamespaceForRetryAndDLQ(t *testing.T
 	customQueueKey := "alarm:test:queue"
 	customRetryKey := "alarm:test:retry"
 	customDLQKey := "alarm:test:dlq"
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithQueueKey(customQueueKey), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithQueueKey(customQueueKey), WithMaxBatch(5))
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	retryB := domain.AlarmQueueEnvelope{
@@ -590,7 +560,7 @@ func TestConsumerQueueKeyAlignmentUsesCustomNamespaceForRetryAndDLQ(t *testing.T
 
 func TestConsumerScheduleRetryStoresDelayedEnvelope(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	nextVisibleAt := time.Now().UTC().Add(30 * time.Second).Truncate(time.Millisecond)
 	envelope := domain.AlarmQueueEnvelope{
@@ -621,7 +591,7 @@ func TestConsumerScheduleRetryStoresDelayedEnvelope(t *testing.T) {
 
 func TestQueueConsumerRoundTripsRetryMetadata(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	nextVisibleAt := time.Now().UTC().Add(-1 * time.Second).Truncate(time.Millisecond)
 	envelope := domain.AlarmQueueEnvelope{
@@ -654,7 +624,7 @@ func TestQueueConsumerRoundTripsRetryMetadata(t *testing.T) {
 
 func TestConsumerDrainBatch_PreservesDeterministicSameTimestampRetryOrdering(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	nextVisibleAt := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
 	retryB := domain.AlarmQueueEnvelope{
@@ -699,7 +669,7 @@ func TestConsumerDrainBatch_PreservesDeterministicSameTimestampRetryOrdering(t *
 
 func TestConsumerDrainBatch_PreservesSameTimestampOrderingAcrossSeparateScheduleRetryCalls(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	nextVisibleAt := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
 	firstA := domain.AlarmQueueEnvelope{
@@ -761,7 +731,7 @@ func TestConsumerDrainBatch_PreservesSameTimestampOrderingAcrossSeparateSchedule
 
 func TestConsumerScheduleRetry_PreservesDuplicateIdenticalEnvelopes(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	nextVisibleAt := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
 	envelope := domain.AlarmQueueEnvelope{
@@ -837,8 +807,8 @@ func TestResolveRetryVisibleAt_Errors(t *testing.T) {
 
 func TestConsumerDrainBatch_ReturnsDueDelayedRetriesBeforeActiveQueueItems(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	publisher := NewPublisher(cacheClient, newTestLogger())
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger())
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	dueAt := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
 	futureAt := time.Now().UTC().Add(2 * time.Minute).Truncate(time.Millisecond)
@@ -896,8 +866,8 @@ func TestConsumerDrainBatch_ReturnsDueDelayedRetriesBeforeActiveQueueItems(t *te
 
 func TestConsumerDrainBatch_DoesNotReturnDelayedRetryBeforeNextVisibleAt(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	publisher := NewPublisher(cacheClient, newTestLogger())
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger())
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	futureAt := time.Now().UTC().Add(2 * time.Minute).Truncate(time.Millisecond)
 	future := domain.AlarmQueueEnvelope{
@@ -938,7 +908,7 @@ func TestConsumerDrainBatch_DoesNotReturnDelayedRetryBeforeNextVisibleAt(t *test
 
 func TestConsumerMoveToDLQ_PreservesSerializedEnvelope(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
@@ -966,7 +936,7 @@ func TestConsumerMoveToDLQ_PreservesSerializedEnvelope(t *testing.T) {
 
 func TestConsumerMoveToDLQ_PreservesOriginalLegacyRawPayload(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	legacyRaw := "{\n" +
 		"  \"notification\": {\n" +
@@ -1001,7 +971,7 @@ func TestConsumerMoveToDLQ_PreservesOriginalLegacyRawPayload(t *testing.T) {
 
 func TestConsumerMoveToDLQ_UsesCurrentStateWhenDirectEnvelopeWasMutated(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	legacyRaw := "{\n" +
 		"  \"notification\": {\n" +
@@ -1049,7 +1019,7 @@ func TestConsumerMoveToDLQ_UsesCurrentStateWhenDirectEnvelopeWasMutated(t *testi
 
 func TestConsumerMoveToDLQ_PreservesLegacyRawPayloadAcrossRetryRoundTrip(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	legacyRaw := "{\n" +
 		"  \"notification\": {\n" +
@@ -1115,8 +1085,8 @@ func TestConsumerMoveToDLQ_PreservesLegacyRawPayloadAcrossRetryRoundTrip(t *test
 
 func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	publisher := NewPublisher(cacheClient, newTestLogger())
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger())
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	claimKey := "notified:claim:blocked-community"
 	require.NoError(t, mini.Set(claimKey, "1"))
@@ -1157,7 +1127,7 @@ func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T
 
 func TestConsumerRequeue_DropsContentAlarmTypesAndReleasesClaims(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	claimKey := "notified:claim:blocked-shorts"
 	require.NoError(t, mini.Set(claimKey, "1"))

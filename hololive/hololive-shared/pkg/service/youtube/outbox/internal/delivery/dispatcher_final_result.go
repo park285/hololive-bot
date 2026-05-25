@@ -7,11 +7,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 )
 
-func (d *Dispatcher) logFinalizedCommunityShortsOutboxResults(ctx context.Context, outboxIDs []int64) error {
+func (d *ClaimManager) logFinalizedCommunityShortsOutboxResults(ctx context.Context, outboxIDs []int64) error {
 	return d.auditLogger.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs)
 }
 
-func (d *Dispatcher) loadFinalizedCommunityShortsTimelines(
+func (d *ClaimManager) loadFinalizedCommunityShortsTimelines(
 	ctx context.Context,
 	outboxIDs []int64,
 	resultCount int,

@@ -23,8 +23,6 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,6 +40,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
 type fakePostgresClient struct {
@@ -59,10 +58,6 @@ type fakeSender struct{}
 
 func (fakeSender) SendMessage(context.Context, string, string) error { return nil }
 
-func newTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
 func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 	t.Parallel()
 
@@ -70,7 +65,7 @@ func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 	require.NoError(t, err)
 
 	var postgres database.Client = &fakePostgresClient{db: db}
-	logger := newTestLogger()
+	logger := sharedlogging.NewTestLogger()
 
 	module := BuildDeliveryModule(nil, postgres, logger)
 	require.NotNil(t, module)
@@ -127,7 +122,7 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 
 	registerMemberNewsInternalRoutes(nil, "", nil)
 
-	service := membernewssvc.NewService(nil, nil, nil, nil, newTestLogger())
+	service := membernewssvc.NewService(nil, nil, nil, nil, sharedlogging.NewTestLogger())
 
 	t.Run("auth middleware", func(t *testing.T) {
 		router := newMemberNewsRouter(t, "secret", service)
@@ -231,7 +226,7 @@ func newMemberNewsRouter(t *testing.T, apiKey string, service *membernewssvc.Ser
 	t.Helper()
 
 	// gin.Engine는 http.Handler를 구현하므로 테스트 편의를 위해 mux에 연결합니다.
-	engine, err := buildHealthOnlyRouter(context.Background(), newTestLogger(), "")
+	engine, err := buildHealthOnlyRouter(context.Background(), sharedlogging.NewTestLogger(), "")
 	require.NoError(t, err)
 	registerMemberNewsInternalRoutes(engine, apiKey, service)
 

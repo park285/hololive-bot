@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 )
 
 func TestInitializeFetchProfilesRuntimeProvidesDefaultLoggerAndHTTPClient(t *testing.T) {
@@ -21,11 +21,11 @@ func TestInitializeFetchProfilesRuntimeProvidesDefaultLoggerAndHTTPClient(t *tes
 	if runtime.HTTPClient == nil {
 		t.Fatal("InitializeFetchProfilesRuntime() http client = nil")
 	}
-	if runtime.HTTPClient.Timeout != constants.OfficialProfileConfig.RequestTimeout {
+	if runtime.HTTPClient.Timeout != config.DefaultOfficialProfileConfig().RequestTimeout {
 		t.Fatalf(
 			"InitializeFetchProfilesRuntime() timeout = %v, want %v",
 			runtime.HTTPClient.Timeout,
-			constants.OfficialProfileConfig.RequestTimeout,
+			config.DefaultOfficialProfileConfig().RequestTimeout,
 		)
 	}
 	if runtime.HTTPClient.Transport == nil {

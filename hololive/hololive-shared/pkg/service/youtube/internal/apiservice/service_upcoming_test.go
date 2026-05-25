@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/api/youtube/v3"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -79,8 +79,8 @@ func TestCompleteUpcomingAPIFallback_QuotaBlockedReturnsPartialResults(t *testin
 		SetStreamsFunc: func(_ context.Context, key string, streams []*domain.Stream, ttl time.Duration) {
 			cachedKey = key
 			cachedStreams = streams
-			if ttl != constants.YouTubeConfig.CacheExpiration {
-				t.Fatalf("SetStreams() ttl = %v, want %v", ttl, constants.YouTubeConfig.CacheExpiration)
+			if ttl != config.DefaultYouTubeOperationalConfig().CacheExpiration {
+				t.Fatalf("SetStreams() ttl = %v, want %v", ttl, config.DefaultYouTubeOperationalConfig().CacheExpiration)
 			}
 		},
 	}
@@ -88,7 +88,7 @@ func TestCompleteUpcomingAPIFallback_QuotaBlockedReturnsPartialResults(t *testin
 	service := &serviceImpl{
 		cache:         cacheClient,
 		logger:        testUpcomingLogger(),
-		quotaUsed:     constants.YouTubeConfig.DailyQuotaLimit,
+		quotaUsed:     config.DefaultYouTubeOperationalConfig().DailyQuotaLimit,
 		quotaReset:    time.Now().Add(time.Hour),
 		channelToName: make(map[string]string),
 	}
@@ -118,7 +118,7 @@ func TestCompleteUpcomingAPIFallback_QuotaBlockedWithoutPartialResultsReturnsErr
 	service := &serviceImpl{
 		cache:         &cachemocks.Client{},
 		logger:        testUpcomingLogger(),
-		quotaUsed:     constants.YouTubeConfig.DailyQuotaLimit,
+		quotaUsed:     config.DefaultYouTubeOperationalConfig().DailyQuotaLimit,
 		quotaReset:    time.Now().Add(time.Hour),
 		channelToName: make(map[string]string),
 	}

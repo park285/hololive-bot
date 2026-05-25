@@ -12,7 +12,6 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/youtube/v3"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -25,7 +24,7 @@ func (ys *serviceImpl) completeUpcomingAPIFallback(ctx context.Context, cacheKey
 		return allStreams, nil
 	}
 
-	estimatedCost := len(scrapeResult.failedIDs) * constants.YouTubeConfig.SearchQuotaCost
+	estimatedCost := len(scrapeResult.failedIDs) * ytDefaults.SearchQuotaCost
 	quotaErr := ys.checkQuota(estimatedCost)
 	secondary, err := ys.runUpcomingAPIFallback(ctx, scrapeResult, estimatedCost, quotaErr, &allStreams)
 	if err != nil {
@@ -94,7 +93,7 @@ func (ys *serviceImpl) handleUpcomingFallbackBlocked(
 		slog.Int("scraped_count", len(allStreams)),
 		slog.Any("error", quotaErr))
 	if len(allStreams) > 0 {
-		ys.cache.SetStreams(ctx, cacheKey, allStreams, constants.YouTubeConfig.CacheExpiration)
+		ys.cache.SetStreams(ctx, cacheKey, allStreams, ytDefaults.CacheExpiration)
 		return true, allStreams, nil
 	}
 	return true, nil, fmt.Errorf("get upcoming streams: api fallback blocked after scraper failures: %w", quotaErr)
@@ -107,7 +106,7 @@ func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []st
 	var mu sync.Mutex
 
 	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(constants.YouTubeConfig.MaxConcurrentRequests)
+	g.SetLimit(ytDefaults.MaxConcurrentRequests)
 
 	var costMu sync.Mutex
 
@@ -143,7 +142,7 @@ func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []st
 			mu.Unlock()
 
 			costMu.Lock()
-			result.quotaCost += constants.YouTubeConfig.SearchQuotaCost
+			result.quotaCost += ytDefaults.SearchQuotaCost
 			costMu.Unlock()
 
 			return nil
@@ -199,7 +198,7 @@ func (ys *serviceImpl) fetchChannelUpcomingSearch(ctx context.Context, channelID
 		ChannelId(channelID).
 		Type("video").
 		EventType("upcoming").
-		MaxResults(int64(constants.YouTubeConfig.SearchMaxResults)).
+		MaxResults(int64(ytDefaults.SearchMaxResults)).
 		Order("date")
 
 	var response *youtube.SearchListResponse
@@ -211,8 +210,8 @@ func (ys *serviceImpl) fetchChannelUpcomingSearch(ctx context.Context, channelID
 			if errors.As(reqErr, &apiErr) && apiErr.Code == 403 {
 				return &QuotaExceededError{
 					Used:      ys.quotaUsed,
-					Limit:     constants.YouTubeConfig.DailyQuotaLimit,
-					Requested: constants.YouTubeConfig.SearchQuotaCost,
+					Limit:     ytDefaults.DailyQuotaLimit,
+					Requested: ytDefaults.SearchQuotaCost,
 					ResetTime: ys.quotaReset,
 				}
 			}

@@ -12,7 +12,7 @@ import (
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-func (d *Dispatcher) releaseDeliveryClaims(ctx context.Context, claims []deliveryClaimToken) error {
+func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []deliveryClaimToken) error {
 	if d == nil || d.db == nil || len(claims) == 0 {
 		return nil
 	}
@@ -26,7 +26,7 @@ func (d *Dispatcher) releaseDeliveryClaims(ctx context.Context, claims []deliver
 	return nil
 }
 
-func (d *Dispatcher) deliveryClaimTimeout() time.Duration {
+func (d *ClaimManager) deliveryClaimTimeout() time.Duration {
 	claimTimeout := maxCommunityShortsClaimHold
 	if d != nil && d.config.LockTimeout > 0 && d.config.LockTimeout < claimTimeout {
 		claimTimeout = d.config.LockTimeout
@@ -37,7 +37,7 @@ func (d *Dispatcher) deliveryClaimTimeout() time.Duration {
 	return claimTimeout
 }
 
-func (d *Dispatcher) logClaimIssue(
+func (d *ClaimManager) logClaimIssue(
 	message string,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,

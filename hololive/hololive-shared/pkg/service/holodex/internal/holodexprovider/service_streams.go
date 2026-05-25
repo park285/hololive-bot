@@ -191,12 +191,12 @@ func streamTargetOrgs(org string) []string {
 	return targets
 }
 
-func holodexOrgFetchParallelism(org string) int {
+func holodexOrgFetchParallelism(org string, orgAllParallelism int) int {
 	if org != constants.HolodexAPIParams.OrgAll {
 		return 1
 	}
-	if constants.HolodexConcurrencyConfig.OrgAllParallelism > 1 {
-		return constants.HolodexConcurrencyConfig.OrgAllParallelism
+	if orgAllParallelism > 1 {
+		return orgAllParallelism
 	}
 	return 1
 }

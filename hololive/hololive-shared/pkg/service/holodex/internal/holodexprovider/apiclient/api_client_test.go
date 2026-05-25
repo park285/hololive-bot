@@ -35,19 +35,20 @@ import (
 	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/time/rate"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
 func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing.T) {
 	t.Parallel()
 
-	client := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", "test-key", slog.Default(), nil)
+	holodexCfg := config.DefaultHolodexOperationalConfig()
+	client := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", "test-key", slog.Default(), nil, holodexCfg)
 	if client == nil {
 		t.Fatal("NewHolodexAPIClient() returned nil")
 	}
 
-	expected := httputil.NewExternalAPIClient(constants.APIConfig.HolodexTimeout)
+	expected := httputil.NewExternalAPIClient(holodexCfg.Timeout)
 	if client.httpClient.Timeout != expected.Timeout {
 		t.Fatalf("Timeout = %s, want %s", client.httpClient.Timeout, expected.Timeout)
 	}
@@ -191,18 +192,25 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 }
 
 func TestPerAttemptTimeout(t *testing.T) {
-	// 테스트용 PerAttemptTimeout 설정 (짧게)
-	origTimeout := constants.APIConfig.PerAttemptTimeout
-	constants.APIConfig.PerAttemptTimeout = 200 * time.Millisecond
-	t.Cleanup(func() { constants.APIConfig.PerAttemptTimeout = origTimeout })
-
-	client, server := newTestClientWithHandler(func(w http.ResponseWriter, _ *http.Request) {
-		// 서버가 per-attempt timeout보다 오래 걸림
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(500 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{}`))
-	}, "test-key")
+	}))
 	defer server.Close()
+
+	holodexCfg := config.DefaultHolodexOperationalConfig()
+	holodexCfg.PerAttemptTimeout = 200 * time.Millisecond
+
+	client := &APIClient{
+		httpClient:        server.Client(),
+		baseURL:           server.URL,
+		apiKey:            "test-key",
+		logger:            slog.Default(),
+		rateLimiter:       rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
+		semaphore:         make(chan struct{}, 5),
+		perAttemptTimeout: holodexCfg.PerAttemptTimeout,
+	}
 
 	start := time.Now()
 	_, err := client.DoRequest(context.Background(), http.MethodGet, "/test", nil)
@@ -220,17 +228,23 @@ func TestPerAttemptTimeout(t *testing.T) {
 }
 
 func TestTimeoutMaxRetries(t *testing.T) {
-	origTimeout := constants.APIConfig.PerAttemptTimeout
-	constants.APIConfig.PerAttemptTimeout = 100 * time.Millisecond
-	t.Cleanup(func() { constants.APIConfig.PerAttemptTimeout = origTimeout })
-
 	requestCount := 0
-	client, server := newTestClientWithHandler(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requestCount++
 		time.Sleep(300 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
-	}, "test-key")
+	}))
 	defer server.Close()
+
+	client := &APIClient{
+		httpClient:        server.Client(),
+		baseURL:           server.URL,
+		apiKey:            "test-key",
+		logger:            slog.Default(),
+		rateLimiter:       rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
+		semaphore:         make(chan struct{}, 5),
+		perAttemptTimeout: 100 * time.Millisecond,
+	}
 
 	start := time.Now()
 	_, err := client.DoRequest(context.Background(), http.MethodGet, "/test", nil)
@@ -283,6 +297,10 @@ func TestWaitForRateLimiter_DistributedDeniedThenAllowed(t *testing.T) {
 				{Allowed: true, Current: 9, Limit: 10},
 			},
 		},
+		distributedRLCfg: config.DistributedRateLimitConfig{
+			Enabled:    true,
+			BucketBase: "holodex:api",
+		},
 	}
 
 	err := client.waitForRateLimiter(context.Background(), "/videos")
@@ -298,6 +316,10 @@ func TestWaitForRateLimiter_DistributedDeniedWithoutRetryAfter(t *testing.T) {
 			decisions: []ratelimit.Decision{
 				{Allowed: false, RetryAfter: 0, Current: 10, Limit: 10},
 			},
+		},
+		distributedRLCfg: config.DistributedRateLimitConfig{
+			Enabled:    true,
+			BucketBase: "holodex:api",
 		},
 	}
 
@@ -387,23 +409,33 @@ func TestProcessHolodexResponse_RateLimitedExhaustionReturnsKeyRotationError(t *
 }
 
 func TestDistributedRateLimitBucket(t *testing.T) {
-	got := distributedRateLimitBucket("/users/live")
-	want := constants.HolodexDistributedRateLimitConfig.BucketBase + ":users:live"
+	holodexCfg := config.DefaultHolodexOperationalConfig()
+	client := &APIClient{
+		distributedRLCfg: holodexCfg.DistributedRateLimit,
+	}
+	got := client.distributedRateLimitBucket("/users/live")
+	want := holodexCfg.DistributedRateLimit.BucketBase + ":users:live"
 	if got != want {
 		t.Fatalf("bucket mismatch: got %q want %q", got, want)
 	}
 }
 
 func TestParentContextCancel(t *testing.T) {
-	origTimeout := constants.APIConfig.PerAttemptTimeout
-	constants.APIConfig.PerAttemptTimeout = 5 * time.Second
-	t.Cleanup(func() { constants.APIConfig.PerAttemptTimeout = origTimeout })
-
-	client, server := newTestClientWithHandler(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(2 * time.Second)
 		w.WriteHeader(http.StatusOK)
-	}, "test-key")
+	}))
 	defer server.Close()
+
+	client := &APIClient{
+		httpClient:        server.Client(),
+		baseURL:           server.URL,
+		apiKey:            "test-key",
+		logger:            slog.Default(),
+		rateLimiter:       rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
+		semaphore:         make(chan struct{}, 5),
+		perAttemptTimeout: 5 * time.Second,
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()

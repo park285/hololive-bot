@@ -36,6 +36,13 @@ type TwitchConfig = settings.TwitchConfig
 type ValkeyConfig = settings.ValkeyConfig
 type WebhookConfig = settings.WebhookConfig
 type YouTubeConfig = settings.YouTubeConfig
+type DistributedRateLimitConfig = settings.DistributedRateLimitConfig
+type HolodexTransportConfig = settings.HolodexTransportConfig
+type HolodexConcurrencyConfig = settings.HolodexConcurrencyConfig
+type OfficialScheduleConfig = settings.OfficialScheduleConfig
+type OfficialProfileConfig = settings.OfficialProfileConfig
+
+const DefaultMaxResponseBodyBytes = settings.DefaultMaxResponseBodyBytes
 
 const (
 	ScraperFetcherEngineNetHTTP         = settings.ScraperFetcherEngineNetHTTP
@@ -61,3 +68,9 @@ var DefaultScraperPollTieringConfig = settings.DefaultScraperPollTieringConfig
 var DefaultScraperBackfillConfig = settings.DefaultScraperBackfillConfig
 var DefaultScraperBrowserDiagnosticConfig = settings.DefaultScraperBrowserDiagnosticConfig
 var DefaultScraperActiveActiveConfig = settings.DefaultScraperActiveActiveConfig
+var DefaultHolodexOperationalConfig = settings.DefaultHolodexOperationalConfig
+var DefaultYouTubeOperationalConfig = settings.DefaultYouTubeOperationalConfig
+var DefaultTwitchOperationalConfig = settings.DefaultTwitchOperationalConfig
+var DefaultChzzkOperationalConfig = settings.DefaultChzzkOperationalConfig
+var DefaultOfficialScheduleConfig = settings.DefaultOfficialScheduleConfig
+var DefaultOfficialProfileConfig = settings.DefaultOfficialProfileConfig

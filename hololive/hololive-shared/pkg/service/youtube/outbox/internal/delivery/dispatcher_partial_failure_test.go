@@ -307,8 +307,8 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	})
 	require.Equal(t, []int64{delivery.ID}, result.successDeliveryIDs)
 	require.Equal(t, []int64{item.ID}, result.touchedOutboxIDs)
-	require.NoError(t, dispatcher.delivery.MarkSentBatch(ctx, result.successDeliveryIDs))
-	require.NoError(t, dispatcher.delivery.UpdateOutboxAggregateStatuses(ctx, result.touchedOutboxIDs))
+	require.NoError(t, dispatcher.claim.delivery.MarkSentBatch(ctx, result.successDeliveryIDs))
+	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.touchedOutboxIDs))
 
 	var updatedDelivery sqliteDeliveryModel
 	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)

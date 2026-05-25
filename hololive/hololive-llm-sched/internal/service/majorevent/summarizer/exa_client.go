@@ -36,7 +36,7 @@ import (
 
 	"github.com/kapu/hololive-llm-sched/internal/model"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 )
 
 type ExaMCPClient struct {
@@ -119,7 +119,7 @@ func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]model.Search
 		return nil, fmt.Errorf("exa request: %w", checkErr)
 	}
 
-	respBody, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
+	respBody, err := jsonutil.ReadAllLimit(resp.Body, config.DefaultMaxResponseBodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read exa response: %w", err)
 	}

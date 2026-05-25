@@ -23,13 +23,11 @@ package retry
 
 import (
 	"context"
-	crand "crypto/rand"
 	"fmt"
-	"math"
-	"math/big"
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/ctxutil"
+	"github.com/park285/shared-go/pkg/backoff"
 )
 
 type RetryOptions struct {
@@ -47,25 +45,8 @@ type RetryOptions struct {
 	Sleep func(ctx context.Context, d time.Duration) bool
 }
 
-// attempt는 0부터 시작합니다 (첫 번째 재시도 = attempt 0).
-// 계산식: base * 2^attempt + random(0, jitter)
 func ComputeBackoffDelay(attempt int, base, jitter time.Duration) time.Duration {
-	delay := base * time.Duration(math.Pow(2, float64(attempt)))
-	if jitter > 0 {
-		delay += randomJitter(jitter)
-	}
-	return delay
-}
-
-func randomJitter(maxDuration time.Duration) time.Duration {
-	if maxDuration <= 0 {
-		return 0
-	}
-	n, err := crand.Int(crand.Reader, big.NewInt(int64(maxDuration)))
-	if err != nil {
-		return 0
-	}
-	return time.Duration(n.Int64())
+	return backoff.ComputeExponentialBackoff(attempt, base, 0, jitter)
 }
 
 // fn이 nil 에러를 반환하면 즉시 성공으로 종료됩니다.

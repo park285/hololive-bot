@@ -33,7 +33,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/apperrors"
@@ -794,8 +794,8 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 
 	client.openAPIBaseURL = server.URL
 
-	channelIDs := make([]string, 0, constants.ChzzkConfig.BatchLookupThreshold+1)
-	for i := range constants.ChzzkConfig.BatchLookupThreshold + 1 {
+	channelIDs := make([]string, 0, config.DefaultChzzkOperationalConfig().BatchLookupThreshold+1)
+	for i := range config.DefaultChzzkOperationalConfig().BatchLookupThreshold + 1 {
 		channelIDs = append(channelIDs, fmt.Sprintf("target-%d", i+1))
 	}
 
@@ -818,9 +818,9 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 }
 
 func TestGetLivesByChannelIDs_PageScanReturnsDeterministicTargetOrder(t *testing.T) {
-	channelIDs := make([]string, 0, constants.ChzzkConfig.BatchLookupThreshold+2)
+	channelIDs := make([]string, 0, config.DefaultChzzkOperationalConfig().BatchLookupThreshold+2)
 	channelIDs = append(channelIDs, "target-2", "target-1")
-	for i := 0; i < constants.ChzzkConfig.BatchLookupThreshold; i++ {
+	for i := 0; i < config.DefaultChzzkOperationalConfig().BatchLookupThreshold; i++ {
 		channelIDs = append(channelIDs, fmt.Sprintf("filler-%d", i))
 	}
 

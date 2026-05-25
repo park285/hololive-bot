@@ -31,11 +31,12 @@ import (
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	json "github.com/park285/shared-go/pkg/json"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
 func TestNewConsumerDefaultValues(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger())
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger())
 
 	assert.Equal(t, contractsalarm.DispatchQueueKey, consumer.queueKey)
 	assert.Equal(t, contractsalarm.DispatchRetryQueueKey, consumer.retryQueueKey)
@@ -46,7 +47,7 @@ func TestNewConsumerDefaultValues(t *testing.T) {
 
 func TestNewConsumerAppliesOptions(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(),
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(),
 		WithQueueKey("alarm:custom:queue"),
 		WithMaxBatch(10),
 	)
@@ -59,7 +60,7 @@ func TestNewConsumerAppliesOptions(t *testing.T) {
 
 func TestDrainBatchReturnsEmptyOnTimeout(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(),
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(),
 		WithMaxBatch(5),
 	)
 	// miniredis BRPOP with no items returns nil immediately
@@ -72,7 +73,7 @@ func TestDrainBatchReturnsEmptyOnTimeout(t *testing.T) {
 
 func TestDrainBatchReturnsSingleItem(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
@@ -100,7 +101,7 @@ func TestDrainBatchReturnsSingleItem(t *testing.T) {
 
 func TestDrainBatchDrainsMultipleUpToLimit(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(3))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(3))
 
 	for i := range 5 {
 		roomID := "room-" + string(rune('a'+i))

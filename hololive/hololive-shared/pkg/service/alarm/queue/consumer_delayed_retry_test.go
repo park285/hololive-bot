@@ -30,11 +30,12 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
 func TestDrainDelayedRetriesReturnsReadyItems(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	pastAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Millisecond)
 	ready := domain.AlarmQueueEnvelope{
@@ -68,7 +69,7 @@ func TestDrainDelayedRetriesReturnsReadyItems(t *testing.T) {
 
 func TestDrainDelayedRetriesSkipsFutureItems(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	futureAt := time.Now().UTC().Add(5 * time.Minute).Truncate(time.Millisecond)
 	notReady := domain.AlarmQueueEnvelope{
@@ -101,8 +102,8 @@ func TestDrainDelayedRetriesSkipsFutureItems(t *testing.T) {
 
 func TestDrainBatchPrioritizesDelayedRetries(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
-	publisher := NewPublisher(cacheClient, newTestLogger())
-	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger())
+	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
 	pastAt := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
 	retryEnv := domain.AlarmQueueEnvelope{

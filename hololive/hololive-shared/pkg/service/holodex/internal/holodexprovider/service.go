@@ -9,6 +9,7 @@ import (
 
 	"github.com/park285/shared-go/pkg/httputil"
 
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -32,28 +33,33 @@ type Service struct {
 	mapper       *streammapping.StreamMapper
 	filter       *streammapping.StreamFilter
 	retry        *retryScheduler
+	concurrency  config.HolodexConcurrencyConfig
 }
 
 func NewHolodexService(baseURL string, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
+	return NewHolodexServiceWithConfig(config.DefaultHolodexOperationalConfig(), baseURL, apiKey, cacheClient, scraperService, logger)
+}
+
+func NewHolodexServiceWithConfig(holodexCfg config.HolodexConfig, baseURL string, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, fmt.Errorf("holodex api key is required")
 	}
 	logger.Info("Holodex API key configured")
 	httpClient := httputil.NewProfiledClient(httputil.TransportProfile{
-		Timeout:             constants.APIConfig.HolodexTimeout,
-		MaxConnsPerHost:     constants.HolodexTransportConfig.MaxConnsPerHost,
-		MaxIdleConnsPerHost: constants.HolodexTransportConfig.MaxIdleConnsPerHost,
-		IdleConnTimeout:     constants.HolodexTransportConfig.IdleConnTimeout,
+		Timeout:             holodexCfg.Timeout,
+		MaxConnsPerHost:     holodexCfg.Transport.MaxConnsPerHost,
+		MaxIdleConnsPerHost: holodexCfg.Transport.MaxIdleConnsPerHost,
+		IdleConnTimeout:     holodexCfg.Transport.IdleConnTimeout,
 	})
 	var distributedLimiter *ratelimit.SlidingWindowLimiter
-	if constants.HolodexDistributedRateLimitConfig.Enabled {
+	if holodexCfg.DistributedRateLimit.Enabled {
 		var err error
-		distributedLimiter, err = ratelimit.NewSlidingWindowLimiter(cacheClient, constants.HolodexDistributedRateLimitConfig.KeyPrefix, logger)
+		distributedLimiter, err = ratelimit.NewSlidingWindowLimiter(cacheClient, holodexCfg.DistributedRateLimit.KeyPrefix, logger)
 		if err != nil {
 			return nil, fmt.Errorf("initialize holodex distributed rate limiter: %w", err)
 		}
 	}
-	requester := apiclient.NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter)
+	requester := apiclient.NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter, holodexCfg)
 	service := &Service{
 		requester:    requester,
 		scraper:      scraperService,
@@ -61,6 +67,7 @@ func NewHolodexService(baseURL string, apiKey string, cacheClient cache.Client, 
 		cacheManager: NewCacheManager(cacheClient, logger),
 		mapper:       streammapping.NewStreamMapper(logger),
 		filter:       streammapping.NewStreamFilter(logger),
+		concurrency:  holodexCfg.Concurrency,
 	}
 	service.retry = newRetryScheduler(constants.RetrySchedulerConfig.Delay, constants.RetrySchedulerConfig.Timeout, constants.RetrySchedulerConfig.MaxSize, logger)
 	return service, nil

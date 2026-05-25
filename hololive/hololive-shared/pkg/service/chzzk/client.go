@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/park285/shared-go/pkg/httputil"
 )
 
@@ -45,42 +46,76 @@ const (
 )
 
 type Client struct {
-	httpClient       *http.Client
-	baseURL          string
-	openAPIBaseURL   string
-	clientID         string
-	clientSecret     string
-	logger           *slog.Logger
-	circuitOpenUntil *time.Time
-	circuitMu        sync.RWMutex
-	failureCount     int
+	httpClient                *http.Client
+	baseURL                   string
+	openAPIBaseURL            string
+	clientID                  string
+	clientSecret              string
+	maxLivesPageSize          int
+	batchLookupThreshold      int
+	maxConcurrentStatusChecks int
+	maxResponseBodyBytes      int64
+	logger                    *slog.Logger
+	circuitOpenUntil          *time.Time
+	circuitMu                 sync.RWMutex
+	failureCount              int
 }
 
 type ClientConfig struct {
-	HTTPClient   *http.Client
-	BaseURL      string
-	ClientID     string
-	ClientSecret string
-	Logger       *slog.Logger
+	HTTPClient                *http.Client
+	BaseURL                   string
+	ClientID                  string
+	ClientSecret              string
+	MaxLivesPageSize          int
+	BatchLookupThreshold      int
+	MaxConcurrentStatusChecks int
+	MaxResponseBodyBytes      int64
+	Logger                    *slog.Logger
 }
 
 func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Client {
+	d := config.DefaultChzzkOperationalConfig()
 	return &Client{
-		httpClient:     defaultHTTPClient(httpClient),
-		baseURL:        defaultBaseURL(baseURL),
-		openAPIBaseURL: OpenAPIBaseURL,
-		logger:         defaultClientLogger(logger),
+		httpClient:                defaultHTTPClient(httpClient),
+		baseURL:                   defaultBaseURL(baseURL),
+		openAPIBaseURL:            OpenAPIBaseURL,
+		maxLivesPageSize:          d.MaxLivesPageSize,
+		batchLookupThreshold:      d.BatchLookupThreshold,
+		maxConcurrentStatusChecks: d.MaxConcurrentStatusChecks,
+		maxResponseBodyBytes:      config.DefaultMaxResponseBodyBytes,
+		logger:                    defaultClientLogger(logger),
 	}
 }
 
-func NewClientWithConfig(config ClientConfig) *Client {
+func NewClientWithConfig(cfg ClientConfig) *Client {
+	d := config.DefaultChzzkOperationalConfig()
+	mlps := cfg.MaxLivesPageSize
+	if mlps == 0 {
+		mlps = d.MaxLivesPageSize
+	}
+	blt := cfg.BatchLookupThreshold
+	if blt == 0 {
+		blt = d.BatchLookupThreshold
+	}
+	mcsc := cfg.MaxConcurrentStatusChecks
+	if mcsc == 0 {
+		mcsc = d.MaxConcurrentStatusChecks
+	}
+	maxBody := cfg.MaxResponseBodyBytes
+	if maxBody == 0 {
+		maxBody = config.DefaultMaxResponseBodyBytes
+	}
 	return &Client{
-		httpClient:     defaultHTTPClient(config.HTTPClient),
-		baseURL:        defaultBaseURL(config.BaseURL),
-		openAPIBaseURL: OpenAPIBaseURL,
-		clientID:       config.ClientID,
-		clientSecret:   config.ClientSecret,
-		logger:         defaultClientLogger(config.Logger),
+		httpClient:                defaultHTTPClient(cfg.HTTPClient),
+		baseURL:                   defaultBaseURL(cfg.BaseURL),
+		openAPIBaseURL:            OpenAPIBaseURL,
+		clientID:                  cfg.ClientID,
+		clientSecret:              cfg.ClientSecret,
+		maxLivesPageSize:          mlps,
+		batchLookupThreshold:      blt,
+		maxConcurrentStatusChecks: mcsc,
+		maxResponseBodyBytes:      maxBody,
+		logger:                    defaultClientLogger(cfg.Logger),
 	}
 }
 

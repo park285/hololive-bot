@@ -43,7 +43,7 @@ import (
 	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/time/rate"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
@@ -53,16 +53,19 @@ type Requester interface {
 }
 
 type APIClient struct {
-	httpClient       *http.Client
-	baseURL          string
-	apiKey           string
-	logger           *slog.Logger
-	failureCount     int
-	circuitOpenUntil *time.Time
-	circuitMu        sync.RWMutex
-	rateLimiter      *rate.Limiter // Rate limiter: 초당 10 요청
-	semaphore        chan struct{} // Semaphore: 동시 API 요청 수 제한
-	distributed      distributedRateLimiter
+	httpClient           *http.Client
+	baseURL              string
+	apiKey               string
+	logger               *slog.Logger
+	failureCount         int
+	circuitOpenUntil     *time.Time
+	circuitMu            sync.RWMutex
+	rateLimiter          *rate.Limiter
+	semaphore            chan struct{}
+	distributed          distributedRateLimiter
+	perAttemptTimeout    time.Duration
+	maxResponseBodyBytes int64
+	distributedRLCfg     config.DistributedRateLimitConfig
 }
 
 type holodexRequestRetryState struct {
@@ -84,18 +87,23 @@ func NewHolodexAPIClient(
 	apiKey string,
 	logger *slog.Logger,
 	distributed distributedRateLimiter,
+	holodexCfg config.HolodexConfig,
 ) *APIClient {
 	if httpClient == nil {
-		httpClient = httputil.NewExternalAPIClient(constants.APIConfig.HolodexTimeout)
+		httpClient = httputil.NewExternalAPIClient(holodexCfg.Timeout)
 	}
+	maxBody := config.DefaultMaxResponseBodyBytes
 	return &APIClient{
-		httpClient:  httpClient,
-		baseURL:     baseURL,
-		apiKey:      apiKey,
-		logger:      logger,
-		rateLimiter: rate.NewLimiter(rate.Every(100*time.Millisecond), 1), // 초당 10 요청
-		semaphore:   make(chan struct{}, constants.HolodexConcurrencyConfig.MaxConcurrentRequests),
-		distributed: distributed,
+		httpClient:           httpClient,
+		baseURL:              baseURL,
+		apiKey:               apiKey,
+		logger:               logger,
+		rateLimiter:          rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
+		semaphore:            make(chan struct{}, holodexCfg.Concurrency.MaxConcurrentRequests),
+		distributed:          distributed,
+		perAttemptTimeout:    holodexCfg.PerAttemptTimeout,
+		maxResponseBodyBytes: maxBody,
+		distributedRLCfg:     holodexCfg.DistributedRateLimit,
 	}
 }
 

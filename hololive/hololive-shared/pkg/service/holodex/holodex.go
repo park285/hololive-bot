@@ -41,6 +41,8 @@ var NewKeyRotationError = apiclient.NewKeyRotationError
 
 var NewHolodexService = holodexprovider.NewHolodexService
 
+var NewHolodexServiceWithConfig = holodexprovider.NewHolodexServiceWithConfig
+
 var NewScraperService = holodexprovider.NewScraperService
 
 var NewScraperServiceWithYouTubeProducer = holodexprovider.NewScraperServiceWithYouTubeProducer

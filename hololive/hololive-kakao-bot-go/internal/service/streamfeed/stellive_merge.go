@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"golang.org/x/sync/errgroup"
 )
@@ -50,7 +50,7 @@ func (s *Service) mergeStelliveUpcomingStreams(ctx context.Context, org string, 
 		g  errgroup.Group
 	)
 
-	g.SetLimit(constants.ChzzkConfig.MaxConcurrentStatusChecks)
+	g.SetLimit(config.DefaultChzzkOperationalConfig().MaxConcurrentStatusChecks)
 	for _, member := range members {
 		g.Go(func() error {
 			streams := s.fetchStelliveUpcomingStreams(ctx, member, hours)

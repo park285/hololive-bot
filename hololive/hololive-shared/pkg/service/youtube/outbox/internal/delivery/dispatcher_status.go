@@ -22,102 +22,38 @@ package delivery
 
 import (
 	"context"
-	"log/slog"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// markSent: 발송 완료 처리
 func (d *Dispatcher) markSent(ctx context.Context, id int64) {
-	d.markSentBatch(ctx, []int64{id})
+	d.statusUpdater().markSent(ctx, id)
 }
-
-const markSentBatchChunkSize = 500
 
 func (d *Dispatcher) markSentBatch(ctx context.Context, ids []int64) {
-	uniqueIDs := uniqueInt64s(ids)
-	if len(uniqueIDs) == 0 {
-		return
-	}
-
-	now := canonicalSentAtNow()
-	for start := 0; start < len(uniqueIDs); start += markSentBatchChunkSize {
-		end := min(start+markSentBatchChunkSize, len(uniqueIDs))
-		chunk := uniqueIDs[start:end]
-
-		result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-			Where("id IN ? AND status = ?", chunk, domain.OutboxStatusPending).
-			Updates(map[string]any{
-				"status":    domain.OutboxStatusSent,
-				"sent_at":   now,
-				"locked_at": nil,
-				"error":     "",
-			})
-		if result.Error != nil {
-			d.logger.Error("Failed to mark outbox items as sent",
-				slog.Int("batch_size", len(chunk)),
-				slog.Any("error", result.Error))
-		}
-	}
+	d.statusUpdater().markSentBatch(ctx, ids)
 }
 
-// markFailed: 발송 실패 처리 (retry 지원)
 func (d *Dispatcher) markFailed(ctx context.Context, id int64, errMsg string) {
-	var item domain.YouTubeNotificationOutbox
-	if err := d.db.WithContext(ctx).First(&item, id).Error; err != nil {
-		d.logger.Warn("Failed to fetch outbox item for retry", slog.Int64("id", id), slog.Any("error", err))
-		return
-	}
-
-	newAttemptCount := item.AttemptCount + 1
-	if newAttemptCount >= d.config.MaxRetries {
-		d.markFailedPermanently(ctx, id, newAttemptCount, errMsg)
-		return
-	}
-
-	d.scheduleFailedRetry(ctx, id, newAttemptCount, errMsg)
+	d.statusUpdater().markFailed(ctx, id, errMsg)
 }
 
 func (d *Dispatcher) markFailedPermanently(ctx context.Context, id int64, attemptCount int, errMsg string) {
-	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ?", id).
-		Updates(map[string]any{
-			"status":        domain.OutboxStatusFailed,
-			"locked_at":     nil,
-			"attempt_count": attemptCount,
-			"error":         truncateString(errMsg, 500),
-		})
-	if result.Error != nil {
-		d.logger.Error("Failed to mark outbox item as permanently failed",
-			slog.Int64("id", id),
-			slog.Any("error", result.Error))
-	}
-	d.logger.Warn("Outbox item permanently failed after max retries",
-		slog.Int64("id", id),
-		slog.Int("attempts", attemptCount))
+	d.statusUpdater().markFailedPermanently(ctx, id, attemptCount, errMsg)
 }
 
 func (d *Dispatcher) scheduleFailedRetry(ctx context.Context, id int64, attemptCount int, errMsg string) {
-	nextAttempt := time.Now().Add(d.config.RetryBackoff * time.Duration(attemptCount))
-	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ?", id).
-		Updates(map[string]any{
-			"locked_at":       nil,
-			"attempt_count":   attemptCount,
-			"next_attempt_at": nextAttempt,
-			"error":           truncateString(errMsg, 500),
-		})
-	if result.Error != nil {
-		d.logger.Error("Failed to schedule outbox item for retry",
-			slog.Int64("id", id),
-			slog.Any("error", result.Error))
-	}
+	d.statusUpdater().scheduleFailedRetry(ctx, id, attemptCount, errMsg)
+}
 
-	d.logger.Info("Outbox item scheduled for retry",
-		slog.Int64("id", id),
-		slog.Int("attempt", attemptCount),
-		slog.Time("next_attempt", nextAttempt))
+func (d *Dispatcher) statusUpdater() *StatusUpdater {
+	if d == nil {
+		return newStatusUpdater(nil, nil, Config{})
+	}
+	if d.status != nil {
+		return d.status
+	}
+	return newStatusUpdater(nil, d.logger, d.config)
 }
 
 func collectOutboxIDs(items []domain.YouTubeNotificationOutbox) []int64 {

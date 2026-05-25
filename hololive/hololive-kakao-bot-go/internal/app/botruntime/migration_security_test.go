@@ -54,7 +54,7 @@ func readMigrationSQL(t *testing.T, relativePath string) string {
 		t.Fatal("runtime.Caller failed")
 	}
 
-	path := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "..", relativePath)
+	path := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", relativePath)
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read migration %s: %v", relativePath, err)
