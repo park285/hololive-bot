@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-if [[ -d "${SHARED_GO_DIR}" ]]; then SHARED_GO_DIR="${SHARED_GO_DIR}"; else SHARED_GO_DIR="${ROOT_DIR}/../shared-go"; fi
+if [[ -d "${ROOT_DIR}/shared-go" ]]; then SHARED_GO_DIR="${ROOT_DIR}/shared-go"; else SHARED_GO_DIR="${ROOT_DIR}/../shared-go"; fi
 
 tmp_hits="$(mktemp)"
 cleanup() {
