@@ -189,8 +189,8 @@ func loadScraperActiveActiveConfig() ScraperActiveActiveConfig {
 
 func loadWorkerPoolConfig(profile workerconfig.IrisBotWebhookWorkerProfile) WorkerPoolConfig {
 	return WorkerPoolConfig{
-		Workers:   profile.Receive.Workers,
-		QueueSize: profile.Receive.QueueSize,
+		Workers:   profile.BotPool.Workers,
+		QueueSize: profile.BotPool.QueueSize,
 	}
 }
 
