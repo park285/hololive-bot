@@ -766,4 +766,4 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/stringutil/stringutil.go
 ../shared-go/pkg/telemetry/doc.go
 ../shared-go/pkg/telemetry/telemetry.go
-../shared-go/pkg/workerpool/pool.go
+../shared-go/pkg/workerpool/queued_pool.go
