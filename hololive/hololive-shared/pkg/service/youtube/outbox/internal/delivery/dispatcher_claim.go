@@ -378,34 +378,3 @@ func (d *ClaimManager) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (m
 	}
 	return result, nil
 }
-
-func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64) {
-	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ? AND status = ?", id, domain.OutboxStatusPending).
-		Update("locked_at", nil)
-	if result.Error != nil {
-		d.logger.Warn("Failed to release outbox lock",
-			slog.Int64("id", id),
-			slog.Any("error", result.Error))
-	}
-}
-
-func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
-	if d == nil || d.db == nil {
-		return
-	}
-
-	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
-	result := d.db.WithContext(ctx).
-		Where("status IN (?, ?) AND COALESCE(sent_at, created_at) < ?", domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff).
-		Delete(&domain.YouTubeNotificationOutbox{})
-
-	if result.Error != nil {
-		d.logger.Warn("Failed to cleanup old outbox items", slog.Any("error", result.Error))
-		return
-	}
-
-	if result.RowsAffected > 0 {
-		d.logger.Info("Cleaned up old outbox items", slog.Int64("deleted", result.RowsAffected))
-	}
-}
