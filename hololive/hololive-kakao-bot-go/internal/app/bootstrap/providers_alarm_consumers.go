@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -49,12 +50,10 @@ func ProvideAlarmRepository(postgres database.Client, logger *slog.Logger) *alar
 	return alarm.NewRepository(postgres, logger)
 }
 
-func ProvideAlarmWorkerPool() *workerpool.QueuedPool {
-	const alarmWorkerPoolSize = 10
-	const alarmWorkerQueueSize = 100
+func ProvideAlarmWorkerPool(cfg config.WorkerPoolConfig) *workerpool.QueuedPool {
 	return workerpool.NewQueued(workerpool.QueuedConfig{
-		Workers:   alarmWorkerPoolSize,
-		QueueSize: alarmWorkerQueueSize,
+		Workers:   cfg.Workers,
+		QueueSize: cfg.QueueSize,
 	})
 }
 

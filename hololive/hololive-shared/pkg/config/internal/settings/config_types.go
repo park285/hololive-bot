@@ -66,3 +66,8 @@ type WebhookConfig struct {
 	HandlerTimeout time.Duration
 	RequireHTTP2   bool
 }
+
+type WorkerPoolConfig struct {
+	Workers   int
+	QueueSize int
+}

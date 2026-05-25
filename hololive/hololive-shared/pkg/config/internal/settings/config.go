@@ -46,6 +46,7 @@ type Config struct {
 	Environment          string
 	Scraper              ScraperConfig
 	Webhook              WebhookConfig
+	WorkerPool           WorkerPoolConfig
 	CORS                 CORSConfig
 	Cliproxy             CliproxyConfig
 	LLM                  LLMConfig
@@ -109,6 +110,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Environment:          loadAppEnvironment(),
 		Scraper:              loadScraperConfig(),
 		Webhook:              loadWebhookConfig(),
+		WorkerPool:           loadWorkerPoolConfig(),
 		Chzzk:                loadChzzkConfig(),
 		Twitch:               loadTwitchConfig(),
 		Cliproxy:             loadCliproxyConfig(),

@@ -35,6 +35,7 @@ type ServicesConfig = settings.ServicesConfig
 type TwitchConfig = settings.TwitchConfig
 type ValkeyConfig = settings.ValkeyConfig
 type WebhookConfig = settings.WebhookConfig
+type WorkerPoolConfig = settings.WorkerPoolConfig
 type YouTubeConfig = settings.YouTubeConfig
 type DistributedRateLimitConfig = settings.DistributedRateLimitConfig
 type HolodexTransportConfig = settings.HolodexTransportConfig
