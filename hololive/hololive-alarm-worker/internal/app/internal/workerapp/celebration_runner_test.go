@@ -71,6 +71,42 @@ func TestBuildCelebrationEnvelopesBirthday(t *testing.T) {
 	assert.Equal(t, "room-2", envelopes[1].Notification.RoomID)
 }
 
+func TestBuildCelebrationEnvelopesBirthdayOrdinalFromDebut(t *testing.T) {
+	t.Parallel()
+
+	birthday := time.Date(2024, 5, 29, 0, 0, 0, 0, time.UTC)
+	debut := time.Date(2024, 11, 9, 0, 0, 0, 0, time.UTC)
+	members := []*domain.Member{{
+		ChannelID:       "UC9LSiN9hXI55svYEBrrK-tw",
+		ShortKoreanName: "리오나",
+		Birthday:        &birthday,
+		DebutDate:       &debut,
+	}}
+
+	envelopes := buildCelebrationEnvelopes(members, nil, []string{"room-1"}, "2026-05-29", 2026)
+
+	require.Len(t, envelopes, 1)
+	assert.Equal(t, 2, envelopes[0].Celebration.Ordinal)
+}
+
+func TestBuildCelebrationEnvelopesBirthdayOrdinalLeapDay(t *testing.T) {
+	t.Parallel()
+
+	birthday := time.Date(2020, 2, 29, 0, 0, 0, 0, time.UTC)
+	debut := time.Date(2021, 8, 23, 0, 0, 0, 0, time.UTC)
+	members := []*domain.Member{{
+		ChannelID: "UCgmPnx-EEeOrZSg5Tiw7ZRQ",
+		Name:      "Hakos Baelz",
+		Birthday:  &birthday,
+		DebutDate: &debut,
+	}}
+
+	envelopes := buildCelebrationEnvelopes(members, nil, []string{"room-1"}, "2028-02-29", 2028)
+
+	require.Len(t, envelopes, 1)
+	assert.Equal(t, 2, envelopes[0].Celebration.Ordinal)
+}
+
 func TestBuildCelebrationEnvelopesAnniversary(t *testing.T) {
 	t.Parallel()
 

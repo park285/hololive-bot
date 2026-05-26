@@ -24,6 +24,23 @@ func TestRenderCelebrationMessageBirthday(t *testing.T) {
 	assert.Equal(t, "🎂 시라카미 후부키 생일 축하합니다!\n🔗 https://youtube.com/channel/UCdn5BQ06XqgXoAxIhbqw5Rg", msg)
 }
 
+func TestRenderCelebrationMessageBirthdayOrdinal(t *testing.T) {
+	t.Parallel()
+
+	envelope := domain.AlarmQueueEnvelope{
+		Celebration: &domain.CelebrationDispatchPayload{
+			Kind:       domain.CelebrationKindBirthday,
+			MemberName: "리오나",
+			ChannelID:  "UC9LSiN9hXI55svYEBrrK-tw",
+			Ordinal:    2,
+		},
+	}
+
+	msg, err := renderCelebrationMessage(envelope)
+	require.NoError(t, err)
+	assert.Equal(t, "🎂 리오나 2번째 생일 축하합니다!\n🔗 https://youtube.com/channel/UC9LSiN9hXI55svYEBrrK-tw", msg)
+}
+
 func TestRenderCelebrationMessageAnniversary(t *testing.T) {
 	t.Parallel()
 

@@ -147,6 +147,7 @@ func buildCelebrationEnvelopes(
 					MemberName: displayName,
 					ChannelID:  m.ChannelID,
 					Photo:      m.Photo,
+					Ordinal:    birthdayCelebrationOrdinal(m.Birthday, m.DebutDate, currentYear),
 					Date:       dateStr,
 				},
 			})
@@ -183,6 +184,56 @@ func buildCelebrationEnvelopes(
 	}
 
 	return envelopes
+}
+
+func birthdayCelebrationOrdinal(birthday, debutDate *time.Time, currentYear int) int {
+	if birthday == nil || debutDate == nil || currentYear <= 0 {
+		return 0
+	}
+
+	firstYear := debutDate.Year()
+	if birthdayMonthDayBeforeDebut(birthday, debutDate) {
+		firstYear++
+	}
+	if birthday.Month() == time.February && birthday.Day() == 29 {
+		firstYear = nextLeapYear(firstYear)
+		if currentYear < firstYear {
+			return 0
+		}
+		return countLeapYears(firstYear, currentYear)
+	}
+	if currentYear < firstYear {
+		return 0
+	}
+	return currentYear - firstYear + 1
+}
+
+func birthdayMonthDayBeforeDebut(birthday, debutDate *time.Time) bool {
+	if birthday.Month() != debutDate.Month() {
+		return birthday.Month() < debutDate.Month()
+	}
+	return birthday.Day() < debutDate.Day()
+}
+
+func nextLeapYear(year int) int {
+	for !isLeapYear(year) {
+		year++
+	}
+	return year
+}
+
+func countLeapYears(startYear, endYear int) int {
+	count := 0
+	for year := startYear; year <= endYear; year++ {
+		if isLeapYear(year) {
+			count++
+		}
+	}
+	return count
+}
+
+func isLeapYear(year int) bool {
+	return year%400 == 0 || (year%4 == 0 && year%100 != 0)
 }
 
 func resolveCelebrationMemberName(m *domain.Member) string {

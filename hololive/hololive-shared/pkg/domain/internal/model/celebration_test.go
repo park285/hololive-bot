@@ -92,6 +92,7 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 			MemberName: "Test Member",
 			ChannelID:  "UC_test",
 			Photo:      "https://example.com/photo.jpg",
+			Ordinal:    2,
 			Date:       "2026-05-26",
 		},
 		ClaimKeys:  []string{},
@@ -133,6 +134,9 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 	}
 	if decoded.Celebration.MemberName != "Test Member" {
 		t.Fatalf("MemberName = %q, want %q", decoded.Celebration.MemberName, "Test Member")
+	}
+	if decoded.Celebration.Ordinal != 2 {
+		t.Fatalf("Ordinal = %d, want 2", decoded.Celebration.Ordinal)
 	}
 }
 
