@@ -41,6 +41,7 @@ use utoipa::OpenApi;
         crate::holo::handlers::get_milestones,
         crate::holo::handlers::get_near_milestones,
         crate::holo::handlers::get_milestone_stats,
+        crate::holo::handlers::get_calendar,
     ),
     components(schemas(
         crate::handlers::auth::LoginRequest,
@@ -92,6 +93,9 @@ use utoipa::OpenApi;
         crate::holo::types::NearMilestonesResponse,
         crate::holo::types::MilestoneStats,
         crate::holo::types::MilestoneStatsResponse,
+        crate::holo::types::CalendarMember,
+        crate::holo::types::CalendarEntry,
+        crate::holo::types::CalendarResponse,
     )),
     tags(
         (name = "auth", description = "Authentication endpoints"),

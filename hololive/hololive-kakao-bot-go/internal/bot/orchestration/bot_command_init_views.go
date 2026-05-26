@@ -38,22 +38,24 @@ import (
 )
 
 type commandInitView struct {
-	holodex              domain.StreamProvider
-	chzzk                *chzzk.Client
-	cache                cache.Client
-	alarm                domain.AlarmCRUD
-	matcher              *matcher.Matcher
-	officialProfiles     *member.ProfileService
-	statsRepository      stats.StatsCommandRepository
-	memberNews           command.MemberNewsService
-	membersData          member.DataProvider
-	formatter            *adapter.ResponseFormatter
-	sendMessage          func(ctx context.Context, room, message string) error
-	sendImage            func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
-	sendError            func(ctx context.Context, room, message string) error
-	logger               *slog.Logger
-	majorEventRepository command.MajorEventRepository
-	commandBuilders      []orchcmd.CommandBuilder
+	holodex               domain.StreamProvider
+	chzzk                 *chzzk.Client
+	cache                 cache.Client
+	alarm                 domain.AlarmCRUD
+	matcher               *matcher.Matcher
+	officialProfiles      *member.ProfileService
+	statsRepository       stats.StatsCommandRepository
+	memberNews            command.MemberNewsService
+	membersData           member.DataProvider
+	formatter             *adapter.ResponseFormatter
+	sendMessage           func(ctx context.Context, room, message string) error
+	sendImage             func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
+	sendError             func(ctx context.Context, room, message string) error
+	logger                *slog.Logger
+	majorEventRepository  command.MajorEventRepository
+	memberRepository      command.CelebrationCalendarFinder
+	calendarImageRenderer command.CalendarImageRenderer
+	commandBuilders       []orchcmd.CommandBuilder
 }
 
 func (b *Bot) commandInitView() commandInitView {
@@ -62,22 +64,24 @@ func (b *Bot) commandInitView() commandInitView {
 	}
 
 	return commandInitView{
-		holodex:              b.holodex,
-		chzzk:                b.chzzk,
-		cache:                b.cache,
-		alarm:                b.alarm,
-		matcher:              b.matcher,
-		officialProfiles:     b.officialProfiles,
-		statsRepository:      b.statsRepository,
-		memberNews:           b.memberNews,
-		membersData:          b.membersData,
-		formatter:            b.formatter,
-		sendMessage:          b.sendMessage,
-		sendImage:            b.sendImage,
-		sendError:            b.sendError,
-		logger:               b.logger,
-		majorEventRepository: b.majorEventRepository,
-		commandBuilders:      orchcmd.CloneCommandBuilders(b.commandBuilders),
+		holodex:               b.holodex,
+		chzzk:                 b.chzzk,
+		cache:                 b.cache,
+		alarm:                 b.alarm,
+		matcher:               b.matcher,
+		officialProfiles:      b.officialProfiles,
+		statsRepository:       b.statsRepository,
+		memberNews:            b.memberNews,
+		membersData:           b.membersData,
+		formatter:             b.formatter,
+		sendMessage:           b.sendMessage,
+		sendImage:             b.sendImage,
+		sendError:             b.sendError,
+		logger:                b.logger,
+		majorEventRepository:  b.majorEventRepository,
+		memberRepository:      b.memberRepository,
+		calendarImageRenderer: b.calendarImageRenderer,
+		commandBuilders:       orchcmd.CloneCommandBuilders(b.commandBuilders),
 	}
 }
 
@@ -114,6 +118,11 @@ func (v commandInitView) buildCommands(deps *command.Dependencies) []command.Com
 		command.NewMemberInfoCommand(deps),
 		command.NewSubscriberCommand(deps),
 		command.NewStatsCommand(deps),
+	}
+
+	if v.memberRepository != nil {
+		v.logInfo("Calendar command enabled")
+		commands = append(commands, command.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer))
 	}
 
 	if v.majorEventRepository != nil {

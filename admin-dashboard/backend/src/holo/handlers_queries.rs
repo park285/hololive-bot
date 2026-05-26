@@ -9,10 +9,10 @@ use crate::state::AppState;
 
 use super::helpers::get_typed;
 use super::types::{
-    AlarmsResponse, ChannelStatsQuery, ChannelStatsResponse, MembersResponse,
-    MilestoneStatsResponse, MilestonesQuery, MilestonesResponse, NearMilestonesQuery,
-    NearMilestonesResponse, RoomsResponse, SettingsResponse, StatsResponse, StreamsQuery,
-    StreamsResponse, YouTubeCommunityShortsOpsResponse,
+    AlarmsResponse, CalendarQuery, CalendarResponse, ChannelStatsQuery, ChannelStatsResponse,
+    MembersResponse, MilestoneStatsResponse, MilestonesQuery, MilestonesResponse,
+    NearMilestonesQuery, NearMilestonesResponse, RoomsResponse, SettingsResponse, StatsResponse,
+    StreamsQuery, StreamsResponse, YouTubeCommunityShortsOpsResponse,
 };
 
 pub(crate) const MAX_CHANNEL_STATS_LIMIT: usize = 500;
@@ -297,4 +297,36 @@ pub async fn get_milestone_stats(
     State(state): State<Arc<AppState>>,
 ) -> Result<(StatusCode, Json<MilestoneStatsResponse>), AppError> {
     get_typed(&state, "/api/holo/milestones/stats", None).await
+}
+
+#[utoipa::path(
+    get,
+    path = "/admin/api/holo/members/calendar",
+    params(CalendarQuery),
+    operation_id = "holoGetCalendar",
+    responses(
+        (status = 200, body = CalendarResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
+    tag = "holo"
+)]
+pub async fn get_calendar(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<CalendarQuery>,
+) -> Result<(StatusCode, Json<CalendarResponse>), AppError> {
+    let mut params = Vec::new();
+    if let Some(month) = query.month {
+        params.push(("month", month.to_string()));
+    }
+    if let Some(year) = query.year {
+        params.push(("year", year.to_string()));
+    }
+    let query = if params.is_empty() {
+        None
+    } else {
+        Some(params)
+    };
+    get_typed(&state, "/api/holo/members/calendar", query).await
 }

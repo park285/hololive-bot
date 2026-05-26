@@ -24,8 +24,13 @@ type SubscriberCommand = handlers.SubscriberCommand
 type SubscriberGraphCommand = handlers.SubscriberGraphCommand
 type UpcomingCommand = handlers.UpcomingCommand
 
+type CalendarCommand = handlers.CalendarCommand
+type CalendarImageRenderer = handlers.CalendarImageRenderer
+type CelebrationCalendarFinder = handlers.CelebrationCalendarFinder
+
 var ErrUnknownCommand = handlers.ErrUnknownCommand
 
+var NewCalendarCommand = handlers.NewCalendarCommand
 var FindActiveMemberOrError = handlers.FindActiveMemberOrError
 var FindMemberOrError = handlers.FindMemberOrError
 var NewAlarmCommand = handlers.NewAlarmCommand

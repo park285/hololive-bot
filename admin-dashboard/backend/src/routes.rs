@@ -85,6 +85,10 @@ fn build_holo_query_routes() -> Router<Arc<AppState>> {
             "/admin/api/holo/milestones/stats",
             get(crate::holo::handlers::get_milestone_stats),
         )
+        .route(
+            "/admin/api/holo/members/calendar",
+            get(crate::holo::handlers::get_calendar),
+        )
 }
 
 fn build_holo_mutation_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {

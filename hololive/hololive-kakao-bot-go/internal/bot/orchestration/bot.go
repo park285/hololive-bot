@@ -40,6 +40,7 @@ import (
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
+	"github.com/kapu/hololive-kakao-bot-go/internal/render"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
@@ -52,36 +53,38 @@ type streamRuntime interface {
 }
 
 type Bot struct {
-	botSelfUser          string
-	irisBaseURL          string
-	notification         config.NotificationConfig
-	logger               *slog.Logger
-	irisClient           irisClient
-	messageAdapter       *adapter.MessageAdapter
-	formatter            *adapter.ResponseFormatter
-	cache                cache.Client
-	postgres             database.Client
-	holodex              streamRuntime
-	chzzk                *chzzk.Client
-	twitch               *twitch.Client
-	officialProfiles     *member.ProfileService
-	alarm                domain.AlarmCRUD
-	matcher              *matcher.Matcher
-	commandRegistry      *command.Registry
-	statsRepository      stats.StatsCommandRepository
-	acl                  *acl.Service
-	majorEventRepository command.MajorEventRepository
-	memberNews           command.MemberNewsService
-	commandBuilders      []orchcmd.CommandBuilder
-	membersData          member.DataProvider
-	stopCh               chan struct{}
-	doneCh               chan struct{}
-	selfSender           string
-	workerPool           *workerpool.QueuedPool
-	ingress              *ingress.MessageIngress
-	commandExecutor      *orchcmd.CommandRouter
-	transport            *transport.CommandTransport
-	lifecycle            *lifecycle.BotLifecycle
+	botSelfUser           string
+	irisBaseURL           string
+	notification          config.NotificationConfig
+	logger                *slog.Logger
+	irisClient            irisClient
+	messageAdapter        *adapter.MessageAdapter
+	formatter             *adapter.ResponseFormatter
+	cache                 cache.Client
+	postgres              database.Client
+	holodex               streamRuntime
+	chzzk                 *chzzk.Client
+	twitch                *twitch.Client
+	officialProfiles      *member.ProfileService
+	alarm                 domain.AlarmCRUD
+	matcher               *matcher.Matcher
+	commandRegistry       *command.Registry
+	statsRepository       stats.StatsCommandRepository
+	acl                   *acl.Service
+	majorEventRepository  command.MajorEventRepository
+	memberNews            command.MemberNewsService
+	commandBuilders       []orchcmd.CommandBuilder
+	membersData           member.DataProvider
+	memberRepository      *member.Repository
+	calendarImageRenderer command.CalendarImageRenderer
+	stopCh                chan struct{}
+	doneCh                chan struct{}
+	selfSender            string
+	workerPool            *workerpool.QueuedPool
+	ingress               *ingress.MessageIngress
+	commandExecutor       *orchcmd.CommandRouter
+	transport             *transport.CommandTransport
+	lifecycle             *lifecycle.BotLifecycle
 }
 
 func NewBot(deps *Dependencies) (*Bot, error) {
@@ -98,31 +101,33 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	feature := deps.featureDeps()
 
 	bot := &Bot{
-		botSelfUser:          core.botSelfUser,
-		irisBaseURL:          core.irisBaseURL,
-		notification:         core.notification,
-		logger:               core.logger,
-		irisClient:           messaging.client,
-		messageAdapter:       messaging.messageAdapter,
-		formatter:            messaging.formatter,
-		cache:                data.cache,
-		postgres:             data.postgres,
-		holodex:              holodexRuntime,
-		chzzk:                stream.chzzk,
-		twitch:               stream.twitch,
-		officialProfiles:     stream.profiles,
-		alarm:                stream.alarm,
-		matcher:              stream.matcher,
-		statsRepository:      stream.youTubeStatsRepository,
-		acl:                  support.acl,
-		majorEventRepository: feature.majorEventRepository,
-		memberNews:           feature.memberNews,
-		commandBuilders:      feature.commandBuilders,
-		membersData:          stream.membersData,
-		workerPool:           support.workerPool,
-		stopCh:               make(chan struct{}),
-		doneCh:               make(chan struct{}),
-		selfSender:           stringutil.Normalize(core.botSelfUser),
+		botSelfUser:           core.botSelfUser,
+		irisBaseURL:           core.irisBaseURL,
+		notification:          core.notification,
+		logger:                core.logger,
+		irisClient:            messaging.client,
+		messageAdapter:        messaging.messageAdapter,
+		formatter:             messaging.formatter,
+		cache:                 data.cache,
+		postgres:              data.postgres,
+		holodex:               holodexRuntime,
+		chzzk:                 stream.chzzk,
+		twitch:                stream.twitch,
+		officialProfiles:      stream.profiles,
+		alarm:                 stream.alarm,
+		matcher:               stream.matcher,
+		statsRepository:       stream.youTubeStatsRepository,
+		acl:                   support.acl,
+		majorEventRepository:  feature.majorEventRepository,
+		memberNews:            feature.memberNews,
+		commandBuilders:       feature.commandBuilders,
+		membersData:           stream.membersData,
+		memberRepository:      data.memberRepository,
+		calendarImageRenderer: render.NewCalendarCardRenderer(),
+		workerPool:            support.workerPool,
+		stopCh:                make(chan struct{}),
+		doneCh:                make(chan struct{}),
+		selfSender:            stringutil.Normalize(core.botSelfUser),
 	}
 
 	bot.transport = transport.NewCommandTransport(bot.irisClient, bot.formatter)

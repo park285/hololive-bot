@@ -238,6 +238,8 @@ const (
 	MsgMemberNewsStatusOn              = "🔔 뉴스 알림 상태: ON\n- 자동 발송: 매주 월요일 09:00 KST\n- 해제: !뉴스알림 끄기"
 	MsgMemberNewsStatusOff             = "🔕 뉴스 알림 상태: OFF\n- 설정: !뉴스알림 켜기"
 
+	ErrCalendarQueryFailed = "기념일 달력 조회 중 오류가 발생했습니다."
+
 	// Subscriber Graph 관련.
 	ErrGraphNeedMemberName = "❌ 멤버 이름을 입력해주세요.\n예) !구독자그래프 페코라"
 	ErrGraphQueryFailed    = "구독자 그래프 조회 중 오류가 발생했습니다."

@@ -1,4 +1,5 @@
 mod alarms;
+mod calendar;
 mod common;
 mod members;
 mod milestones;
@@ -11,6 +12,7 @@ mod youtube_ops;
 pub use self::alarms::{
     Alarm, AlarmsResponse, DeleteAlarmRequest, RoomNameUpdateRequest, UserNameUpdateRequest,
 };
+pub use self::calendar::{CalendarEntry, CalendarMember, CalendarQuery, CalendarResponse};
 pub use self::common::StatusOnlyResponse;
 pub use self::members::{
     AddAliasRequest, AddMemberRequest, Aliases, Member, MembersResponse, RemoveAliasRequest,

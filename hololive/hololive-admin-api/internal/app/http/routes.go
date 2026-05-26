@@ -33,6 +33,7 @@ func registerAlarmRoutes(holoAPI *gin.RouterGroup, handler *server.AlarmHandler)
 
 func registerMemberRoutes(holoAPI *gin.RouterGroup, handler *server.MemberHandler) {
 	holoAPI.GET("/members", handler.GetMembers)
+	holoAPI.GET("/members/calendar", handler.GetCalendar)
 	holoAPI.POST("/members", handler.AddMember)
 	holoAPI.POST("/members/:id/aliases", handler.AddAlias)
 	holoAPI.DELETE("/members/:id/aliases", handler.RemoveAlias)
