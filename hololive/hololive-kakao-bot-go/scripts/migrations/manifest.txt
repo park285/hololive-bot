@@ -56,3 +56,4 @@
 056 060_add_alarm_dispatch_events_live_stream_index.sql
 057 061_add_youtube_live_first_seen_guardrail.sql
 058 062_add_member_short_korean_name.sql
+059 063_add_member_celebration_dates.sql

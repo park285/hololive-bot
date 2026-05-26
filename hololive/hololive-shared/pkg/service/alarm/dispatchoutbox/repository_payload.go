@@ -15,6 +15,7 @@ type eventPayloadEnvelope struct {
 	Notification  eventPayloadNotification             `json:"notification"`
 	SourceKind    domain.AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
 	YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
+	Celebration   *domain.CelebrationDispatchPayload   `json:"celebration,omitempty"`
 	Version       uint8                                `json:"version"`
 }
 
@@ -94,6 +95,7 @@ func marshalEventPayload(envelope domain.AlarmQueueEnvelope) ([]byte, error) {
 		},
 		SourceKind:    envelope.SourceKind,
 		YouTubeOutbox: envelope.YouTubeOutbox,
+		Celebration:   envelope.Celebration,
 		Version:       envelope.Version,
 	}
 	raw, err := json.Marshal(payload)

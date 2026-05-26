@@ -49,6 +49,7 @@ type AlarmWorkerRuntime struct {
 
 	Scheduler          runtimeAlarmScheduler
 	NotificationEgress runtimeAlarmScheduler
+	CelebrationRunner  runtimeAlarmScheduler
 	ConfigSubscriber   *configsub.Subscriber
 	ServerAddr         string
 	HTTPServer         *http.Server

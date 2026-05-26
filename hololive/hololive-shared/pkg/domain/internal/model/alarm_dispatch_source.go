@@ -8,7 +8,10 @@ import (
 
 type AlarmDispatchSourceKind string
 
-const AlarmDispatchSourceKindYouTubeOutbox AlarmDispatchSourceKind = "youtube_outbox"
+const (
+	AlarmDispatchSourceKindYouTubeOutbox AlarmDispatchSourceKind = "youtube_outbox"
+	AlarmDispatchSourceKindCelebration   AlarmDispatchSourceKind = "celebration"
+)
 
 type YouTubeOutboxDispatchPayload struct {
 	OutboxIDs          []int64             `json:"outbox_ids"`
@@ -117,6 +120,8 @@ func (e AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
 	switch e.SourceKind {
 	case AlarmDispatchSourceKindYouTubeOutbox:
 		return e.validateYouTubeOutboxDispatch()
+	case AlarmDispatchSourceKindCelebration:
+		return e.validateCelebrationDispatch()
 	case "":
 		alarmType := e.Notification.AlarmType
 		if alarmType == "" {
@@ -126,6 +131,23 @@ func (e AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
 	default:
 		return fmt.Errorf("canonical alarm dispatch: unsupported source kind %q", e.SourceKind)
 	}
+}
+
+func (e AlarmQueueEnvelope) validateCelebrationDispatch() error {
+	if e.Notification.RoomID == "" {
+		return fmt.Errorf("canonical alarm dispatch: celebration room id is empty")
+	}
+	at := e.Notification.AlarmType
+	if at != AlarmTypeBirthday && at != AlarmTypeAnniversary {
+		return fmt.Errorf("canonical alarm dispatch: celebration alarm type %q is not birthday or anniversary", at)
+	}
+	if e.Celebration == nil {
+		return fmt.Errorf("canonical alarm dispatch: celebration payload is nil")
+	}
+	if e.Celebration.Date == "" {
+		return fmt.Errorf("canonical alarm dispatch: celebration date is empty")
+	}
+	return nil
 }
 
 func (e AlarmQueueEnvelope) validateYouTubeOutboxDispatch() error {

@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/park285/shared-go/pkg/json"
@@ -47,6 +48,8 @@ type memberRow struct {
 	suborg          *string
 	syncSource      string
 	twitchUserID    *string
+	birthday        *time.Time
+	debutDate       *time.Time
 }
 
 type memberRowScanner interface {
@@ -117,7 +120,7 @@ func scanMemberPhotoQueryRow(scanner memberRowScanner) (memberRow, error) {
 }
 
 func (r *Repository) parseMemberRow(row memberRow) (*domain.Member, error) {
-	return r.scanMember(
+	member, err := r.scanMember(
 		row.id,
 		row.slug,
 		row.channelID,
@@ -134,10 +137,20 @@ func (r *Repository) parseMemberRow(row memberRow) (*domain.Member, error) {
 		row.syncSource,
 		row.twitchUserID,
 	)
+	if err != nil {
+		return nil, err
+	}
+	if row.birthday != nil {
+		member.Birthday = row.birthday
+	}
+	if row.debutDate != nil {
+		member.DebutDate = row.debutDate
+	}
+	return member, nil
 }
 
 func (r *Repository) parseMemberPhotoRow(row memberRow) (*domain.Member, error) {
-	return r.scanMemberWithPhoto(
+	member, err := r.scanMemberWithPhoto(
 		row.id,
 		row.channelID,
 		row.englishName,
@@ -152,6 +165,16 @@ func (r *Repository) parseMemberPhotoRow(row memberRow) (*domain.Member, error) 
 		row.syncSource,
 		row.twitchUserID,
 	)
+	if err != nil {
+		return nil, err
+	}
+	if row.birthday != nil {
+		member.Birthday = row.birthday
+	}
+	if row.debutDate != nil {
+		member.DebutDate = row.debutDate
+	}
+	return member, nil
 }
 
 func (r *Repository) querySingleMember(ctx context.Context, query string, args ...any) (*domain.Member, error) {

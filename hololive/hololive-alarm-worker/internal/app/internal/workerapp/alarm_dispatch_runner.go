@@ -75,6 +75,9 @@ func (r alarmDispatchRunner) dispatchGroups(ctx context.Context, groups []alarmD
 }
 
 func (r alarmDispatchRunner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
+	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindCelebration {
+		return r.dispatchMessageGroup(ctx, group)
+	}
 	if !r.karingEnabled {
 		return r.dispatchMessageGroup(ctx, group)
 	}
@@ -181,6 +184,9 @@ func (r alarmDispatchRunner) preserveAfterPersistenceFailure(
 }
 
 func renderAlarmDispatchGroup(ctx context.Context, group alarmDispatchGroup) (string, error) {
+	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindCelebration {
+		return renderCelebrationMessage(group.envelopes[0])
+	}
 	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
 		return renderAlarmDispatchYouTubeOutbox(ctx, group.envelopes[0])
 	}

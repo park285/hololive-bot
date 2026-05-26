@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -22,6 +23,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -82,12 +84,20 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		return nil, fmt.Errorf("build alarm worker runtime: router: %w", err)
 	}
 
+	publishConfig, err := loadAlarmDispatchPublishConfig()
+	if err != nil {
+		infra.Cleanup()
+		return nil, fmt.Errorf("build alarm worker runtime: celebration publish config: %w", err)
+	}
+	celebRunner := buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger)
+
 	addr := fmt.Sprintf(":%d", appConfig.Server.Port)
 	return &AlarmWorkerRuntime{
 		Config:             appConfig,
 		Logger:             logger,
 		Scheduler:          scheduler,
 		NotificationEgress: notificationEgress,
+		CelebrationRunner:  celebRunner,
 		ConfigSubscriber:   BuildAlarmWorkerConfigSubscriber(infra.Cache, foundation.AlarmCRUD, logger),
 		ServerAddr:         addr,
 		HTTPServer:         sharedserver.NewH2CServer(addr, router, "hololive-alarm-worker.http"),
@@ -292,4 +302,42 @@ func alarmDispatchModeRequiresPGConsumer(publishMode queue.PublishMode, consumer
 
 func alarmDispatchModeRequiresPGPublisher(publishMode queue.PublishMode, consumerMode string) bool {
 	return publishMode != queue.PublishModePGFirst && consumerMode == "pg"
+}
+
+func buildCelebrationRunnerScheduler(
+	infra *sharedmodules.InfraModule,
+	foundation *alarmFoundation,
+	publishConfig queue.PublishConfig,
+	logger *slog.Logger,
+) runtimeAlarmScheduler {
+	if !parseBoolEnv("CELEBRATION_RUNNER_ENABLED", false) {
+		if logger != nil {
+			logger.Info("Celebration runner disabled")
+		}
+		return nil
+	}
+	if infra == nil || infra.Postgres == nil {
+		return nil
+	}
+
+	memberRepo := member.NewMemberRepository(infra.Postgres, logger)
+	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
+	publisher := queue.NewPublisher(
+		infra.Cache,
+		logger,
+		queue.WithOutbox(foundation.Outbox),
+		queue.WithPublishMode(publishConfig.Mode),
+		queue.WithShadowFatal(publishConfig.ShadowFatal),
+		queue.WithWakeupEnabled(publishConfig.WakeupEnabled),
+		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
+	)
+
+	return &celebrationRunner{
+		memberRepo:   memberRepo,
+		alarmRepo:    alarmRepo,
+		publisher:    publisher,
+		logger:       logger,
+		checkHourKST: parseNonNegativeIntEnv("CELEBRATION_CHECK_HOUR_KST", 0),
+		runInterval:  parsePositiveDurationMSEnv("CELEBRATION_RUN_INTERVAL_MS", time.Hour),
+	}
 }

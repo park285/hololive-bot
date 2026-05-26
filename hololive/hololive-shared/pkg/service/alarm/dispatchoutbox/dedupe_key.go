@@ -72,6 +72,9 @@ func buildLegacyDedupeKey(input DedupeInput) string {
 }
 
 func BuildEventKey(input DedupeInput) string {
+	if input.SourceKind == domain.AlarmDispatchSourceKindCelebration {
+		return fmt.Sprintf("celebration:%s", input.SourceIdentity)
+	}
 	if input.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
 		return fmt.Sprintf("youtube-outbox:%s:%s", input.SourceOutboxKind, input.SourceIdentity)
 	}
@@ -135,6 +138,13 @@ func EnvelopeDedupeInput(envelope domain.AlarmQueueEnvelope) DedupeInput {
 		StartScheduled:              scheduled,
 		MinutesUntil:                notification.MinutesUntil,
 		ScheduleChangePreviousStart: notification.ScheduleChangePreviousStart,
+	}
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
+		input.SourceKind = envelope.SourceKind
+		input.SourceIdentity = envelope.Celebration.Identity()
+		input.ChannelID = envelope.Celebration.ChannelID
+		input.AlarmType = notification.AlarmType
+		input.Category = string(envelope.SourceKind)
 	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		input.SourceKind = envelope.SourceKind
