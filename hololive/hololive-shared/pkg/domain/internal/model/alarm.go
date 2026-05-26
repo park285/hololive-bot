@@ -33,9 +33,11 @@ import (
 type AlarmType string
 
 const (
-	AlarmTypeLive      AlarmType = "LIVE"
-	AlarmTypeCommunity AlarmType = "COMMUNITY"
-	AlarmTypeShorts    AlarmType = "SHORTS"
+	AlarmTypeLive        AlarmType = "LIVE"
+	AlarmTypeCommunity   AlarmType = "COMMUNITY"
+	AlarmTypeShorts      AlarmType = "SHORTS"
+	AlarmTypeBirthday    AlarmType = "BIRTHDAY"
+	AlarmTypeAnniversary AlarmType = "ANNIVERSARY"
 )
 
 var AllAlarmTypes = []AlarmType{AlarmTypeLive, AlarmTypeCommunity, AlarmTypeShorts}
@@ -44,7 +46,8 @@ var DefaultAlarmTypes = AllAlarmTypes
 
 func (t AlarmType) IsValid() bool {
 	switch t {
-	case AlarmTypeLive, AlarmTypeCommunity, AlarmTypeShorts:
+	case AlarmTypeLive, AlarmTypeCommunity, AlarmTypeShorts,
+		AlarmTypeBirthday, AlarmTypeAnniversary:
 		return true
 	default:
 		return false
@@ -63,6 +66,10 @@ func (t AlarmType) DisplayName() string {
 		return "커뮤니티"
 	case AlarmTypeShorts:
 		return "쇼츠"
+	case AlarmTypeBirthday:
+		return "생일"
+	case AlarmTypeAnniversary:
+		return "주년"
 	default:
 		return string(t)
 	}
@@ -209,6 +216,7 @@ type AlarmQueueEnvelope struct {
 	Notification      AlarmNotification             `json:"notification"`
 	SourceKind        AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
 	YouTubeOutbox     *YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
+	Celebration       *CelebrationDispatchPayload   `json:"celebration,omitempty"`
 	ClaimKeys         []string                      `json:"claim_keys"`
 	EnqueuedAt        string                        `json:"enqueued_at"`
 	Version           uint8                         `json:"version"`
@@ -241,6 +249,7 @@ type alarmQueueEnvelopeWire struct {
 	Notification     alarmQueueEnvelopeNotificationWire `json:"notification"`
 	SourceKind       AlarmDispatchSourceKind            `json:"source_kind,omitempty"`
 	YouTubeOutbox    *YouTubeOutboxDispatchPayload      `json:"youtube_outbox,omitempty"`
+	Celebration      *CelebrationDispatchPayload        `json:"celebration,omitempty"`
 	ClaimKeys        []string                           `json:"claim_keys"`
 	EnqueuedAt       string                             `json:"enqueued_at"`
 	Version          uint8                              `json:"version"`
@@ -263,6 +272,7 @@ func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
 		},
 		SourceKind:    e.SourceKind,
 		YouTubeOutbox: e.YouTubeOutbox,
+		Celebration:   e.Celebration,
 		ClaimKeys:     e.ClaimKeys,
 		EnqueuedAt:    e.EnqueuedAt,
 		Version:       e.Version,
@@ -317,6 +327,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		},
 		SourceKind:    wire.SourceKind,
 		YouTubeOutbox: wire.YouTubeOutbox,
+		Celebration:   wire.Celebration,
 		ClaimKeys:     wire.ClaimKeys,
 		EnqueuedAt:    wire.EnqueuedAt,
 		Version:       wire.Version,

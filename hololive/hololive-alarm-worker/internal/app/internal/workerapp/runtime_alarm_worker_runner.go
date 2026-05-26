@@ -69,6 +69,11 @@ func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) erro
 			return r.NotificationEgress.Start(egCtx)
 		})
 	}
+	if r.CelebrationRunner != nil {
+		eg.Go(func() error {
+			return r.CelebrationRunner.Start(egCtx)
+		})
+	}
 	return eg.Wait()
 }
 

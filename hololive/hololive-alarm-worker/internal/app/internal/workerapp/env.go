@@ -34,6 +34,18 @@ func parsePositiveIntEnv(key string, def int) int {
 	return value
 }
 
+func parseNonNegativeIntEnv(key string, def int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		return def
+	}
+	return value
+}
+
 func parsePositiveDurationMSEnv(key string, def time.Duration) time.Duration {
 	raw := strings.TrimSpace(os.Getenv(key))
 	if raw == "" {

@@ -59,6 +59,13 @@ func appendAlarmDispatchEnvelope(group *alarmDispatchGroup, envelope domain.Alar
 }
 
 func alarmDispatchGroupKey(envelope domain.AlarmQueueEnvelope) string {
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
+		return fmt.Sprintf("%s|celebration|%s|%s",
+			envelope.Notification.RoomID,
+			envelope.Celebration.Kind,
+			envelope.Celebration.ChannelID,
+		)
+	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		return fmt.Sprintf("%s|source|%s|%s|%s|%s",
 			envelope.Notification.RoomID,
@@ -76,6 +83,9 @@ func alarmDispatchGroupKey(envelope domain.AlarmQueueEnvelope) string {
 }
 
 func alarmDispatchKaringGroupKey(envelope domain.AlarmQueueEnvelope) string {
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
+		return alarmDispatchGroupKey(envelope)
+	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		return alarmDispatchGroupKey(envelope)
 	}
