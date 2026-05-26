@@ -107,6 +107,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/holodex
+github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/notification
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/twitch

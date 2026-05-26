@@ -111,7 +111,13 @@ func BuildEventKey(input DedupeInput) string {
 }
 
 func EnvelopeDedupeInput(envelope domain.AlarmQueueEnvelope) DedupeInput {
-	notification := envelope.Notification
+	input := envelopeNotificationDedupeInput(envelope.Notification)
+	applyCelebrationDedupeSource(&input, envelope)
+	applyYouTubeOutboxDedupeSource(&input, envelope)
+	return input
+}
+
+func envelopeNotificationDedupeInput(notification domain.AlarmNotification) DedupeInput {
 	channelID := ""
 	streamID := ""
 	title := ""
@@ -129,7 +135,7 @@ func EnvelopeDedupeInput(envelope domain.AlarmQueueEnvelope) DedupeInput {
 			scheduled = *notification.Stream.StartScheduled
 		}
 	}
-	input := DedupeInput{
+	return DedupeInput{
 		RoomID:                      notification.RoomID,
 		ChannelID:                   channelID,
 		AlarmType:                   notification.AlarmType,
@@ -139,13 +145,19 @@ func EnvelopeDedupeInput(envelope domain.AlarmQueueEnvelope) DedupeInput {
 		MinutesUntil:                notification.MinutesUntil,
 		ScheduleChangePreviousStart: notification.ScheduleChangePreviousStart,
 	}
+}
+
+func applyCelebrationDedupeSource(input *DedupeInput, envelope domain.AlarmQueueEnvelope) {
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		input.SourceKind = envelope.SourceKind
 		input.SourceIdentity = envelope.Celebration.Identity()
 		input.ChannelID = envelope.Celebration.ChannelID
-		input.AlarmType = notification.AlarmType
+		input.AlarmType = envelope.Notification.AlarmType
 		input.Category = string(envelope.SourceKind)
 	}
+}
+
+func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope domain.AlarmQueueEnvelope) {
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		input.SourceKind = envelope.SourceKind
 		input.SourceIdentity = envelope.YouTubeOutbox.Identity()
@@ -154,7 +166,6 @@ func EnvelopeDedupeInput(envelope domain.AlarmQueueEnvelope) DedupeInput {
 		input.AlarmType = envelope.YouTubeOutbox.AlarmType
 		input.Category = string(envelope.SourceKind)
 	}
-	return input
 }
 
 func BuildDedupeKeyFromEnvelope(envelope domain.AlarmQueueEnvelope) string {

@@ -44,6 +44,14 @@ var AllAlarmTypes = []AlarmType{AlarmTypeLive, AlarmTypeCommunity, AlarmTypeShor
 
 var DefaultAlarmTypes = AllAlarmTypes
 
+var alarmTypeDisplayNames = map[AlarmType]string{
+	AlarmTypeLive:        "방송",
+	AlarmTypeCommunity:   "커뮤니티",
+	AlarmTypeShorts:      "쇼츠",
+	AlarmTypeBirthday:    "생일",
+	AlarmTypeAnniversary: "주년",
+}
+
 func (t AlarmType) IsValid() bool {
 	switch t {
 	case AlarmTypeLive, AlarmTypeCommunity, AlarmTypeShorts,
@@ -59,20 +67,10 @@ func (t AlarmType) String() string {
 }
 
 func (t AlarmType) DisplayName() string {
-	switch t {
-	case AlarmTypeLive:
-		return "방송"
-	case AlarmTypeCommunity:
-		return "커뮤니티"
-	case AlarmTypeShorts:
-		return "쇼츠"
-	case AlarmTypeBirthday:
-		return "생일"
-	case AlarmTypeAnniversary:
-		return "주년"
-	default:
-		return string(t)
+	if displayName, ok := alarmTypeDisplayNames[t]; ok {
+		return displayName
 	}
+	return string(t)
 }
 
 type AlarmTypes []AlarmType

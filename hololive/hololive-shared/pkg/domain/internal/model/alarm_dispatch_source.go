@@ -13,6 +13,11 @@ const (
 	AlarmDispatchSourceKindCelebration   AlarmDispatchSourceKind = "celebration"
 )
 
+var canonicalDispatchValidators = map[AlarmDispatchSourceKind]func(AlarmQueueEnvelope) error{
+	AlarmDispatchSourceKindYouTubeOutbox: AlarmQueueEnvelope.validateYouTubeOutboxDispatch,
+	AlarmDispatchSourceKindCelebration:   AlarmQueueEnvelope.validateCelebrationDispatch,
+}
+
 type YouTubeOutboxDispatchPayload struct {
 	OutboxIDs          []int64             `json:"outbox_ids"`
 	Kind               OutboxKind          `json:"kind"`
@@ -117,20 +122,22 @@ func (e AlarmQueueEnvelope) HasYouTubeOutboxSource() bool {
 }
 
 func (e AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
-	switch e.SourceKind {
-	case AlarmDispatchSourceKindYouTubeOutbox:
-		return e.validateYouTubeOutboxDispatch()
-	case AlarmDispatchSourceKindCelebration:
-		return e.validateCelebrationDispatch()
-	case "":
-		alarmType := e.Notification.AlarmType
-		if alarmType == "" {
-			alarmType = AlarmTypeLive
-		}
-		return validateLegacyRouteAlarmType(alarmType)
-	default:
+	if e.SourceKind == "" {
+		return e.validateLegacyDispatch()
+	}
+	validate, ok := canonicalDispatchValidators[e.SourceKind]
+	if !ok {
 		return fmt.Errorf("canonical alarm dispatch: unsupported source kind %q", e.SourceKind)
 	}
+	return validate(e)
+}
+
+func (e AlarmQueueEnvelope) validateLegacyDispatch() error {
+	alarmType := e.Notification.AlarmType
+	if alarmType == "" {
+		alarmType = AlarmTypeLive
+	}
+	return validateLegacyRouteAlarmType(alarmType)
 }
 
 func (e AlarmQueueEnvelope) validateCelebrationDispatch() error {

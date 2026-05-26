@@ -48,37 +48,27 @@ func (r *celebrationRunner) Start(ctx context.Context) error {
 
 func (r *celebrationRunner) RunOnce(ctx context.Context) error {
 	now := util.NowKST()
-	if r.checkHourKST >= 0 && now.Hour() != r.checkHourKST {
+	if !r.shouldRunAt(now) {
 		return nil
 	}
 	month, day, year := int(now.Month()), now.Day(), now.Year()
 	dateStr := now.Format("2006-01-02")
 
-	birthdayMembers, err := r.memberRepo.FindMembersWithBirthdayOn(ctx, month, day)
+	candidates, err := r.findCelebrationCandidates(ctx, month, day, year)
 	if err != nil {
-		return fmt.Errorf("celebration runner: find birthday members: %w", err)
+		return err
 	}
-
-	anniversaryMembers, err := r.memberRepo.FindMembersWithAnniversaryOn(ctx, month, day, year)
-	if err != nil {
-		return fmt.Errorf("celebration runner: find anniversary members: %w", err)
-	}
-
-	anniversaryMembers = filterValidAnniversaryMembers(anniversaryMembers, year)
 
 	allRooms, err := r.alarmRepo.GetAllDistinctRoomIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("celebration runner: get all rooms: %w", err)
 	}
 
-	if len(birthdayMembers) == 0 && len(anniversaryMembers) == 0 {
-		return nil
-	}
-	if len(allRooms) == 0 {
+	if candidates.empty() || len(allRooms) == 0 {
 		return nil
 	}
 
-	envelopes := buildCelebrationEnvelopes(birthdayMembers, anniversaryMembers, allRooms, dateStr, year)
+	envelopes := buildCelebrationEnvelopes(candidates.birthdays, candidates.anniversaries, allRooms, dateStr, year)
 	if len(envelopes) == 0 {
 		return nil
 	}
@@ -90,8 +80,8 @@ func (r *celebrationRunner) RunOnce(ctx context.Context) error {
 
 	if r.logger != nil {
 		r.logger.Info("Celebration runner published",
-			slog.Int("birthday_members", len(birthdayMembers)),
-			slog.Int("anniversary_members", len(anniversaryMembers)),
+			slog.Int("birthday_members", len(candidates.birthdays)),
+			slog.Int("anniversary_members", len(candidates.anniversaries)),
 			slog.Int("rooms", len(allRooms)),
 			slog.Int("envelopes", len(envelopes)),
 			slog.Int("inserted_events", result.InsertedEvents),
@@ -101,6 +91,36 @@ func (r *celebrationRunner) RunOnce(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (r *celebrationRunner) shouldRunAt(now time.Time) bool {
+	return r.checkHourKST < 0 || now.Hour() == r.checkHourKST
+}
+
+type celebrationCandidates struct {
+	birthdays     []*domain.Member
+	anniversaries []*domain.Member
+}
+
+func (c celebrationCandidates) empty() bool {
+	return len(c.birthdays) == 0 && len(c.anniversaries) == 0
+}
+
+func (r *celebrationRunner) findCelebrationCandidates(ctx context.Context, month, day, year int) (celebrationCandidates, error) {
+	birthdayMembers, err := r.memberRepo.FindMembersWithBirthdayOn(ctx, month, day)
+	if err != nil {
+		return celebrationCandidates{}, fmt.Errorf("celebration runner: find birthday members: %w", err)
+	}
+
+	anniversaryMembers, err := r.memberRepo.FindMembersWithAnniversaryOn(ctx, month, day, year)
+	if err != nil {
+		return celebrationCandidates{}, fmt.Errorf("celebration runner: find anniversary members: %w", err)
+	}
+
+	return celebrationCandidates{
+		birthdays:     birthdayMembers,
+		anniversaries: filterValidAnniversaryMembers(anniversaryMembers, year),
+	}, nil
 }
 
 func (r *celebrationRunner) effectiveInterval() time.Duration {
@@ -131,7 +151,17 @@ func buildCelebrationEnvelopes(
 	currentYear int,
 ) []domain.AlarmQueueEnvelope {
 	envelopes := make([]domain.AlarmQueueEnvelope, 0, (len(birthdayMembers)+len(anniversaryMembers))*len(allRooms))
+	envelopes = appendBirthdayCelebrationEnvelopes(envelopes, birthdayMembers, allRooms, dateStr, currentYear)
+	return appendAnniversaryCelebrationEnvelopes(envelopes, anniversaryMembers, allRooms, dateStr, currentYear)
+}
 
+func appendBirthdayCelebrationEnvelopes(
+	envelopes []domain.AlarmQueueEnvelope,
+	birthdayMembers []*domain.Member,
+	allRooms []string,
+	dateStr string,
+	currentYear int,
+) []domain.AlarmQueueEnvelope {
 	for _, m := range birthdayMembers {
 		displayName := resolveCelebrationMemberName(m)
 		for _, roomID := range allRooms {
@@ -153,7 +183,16 @@ func buildCelebrationEnvelopes(
 			})
 		}
 	}
+	return envelopes
+}
 
+func appendAnniversaryCelebrationEnvelopes(
+	envelopes []domain.AlarmQueueEnvelope,
+	anniversaryMembers []*domain.Member,
+	allRooms []string,
+	dateStr string,
+	currentYear int,
+) []domain.AlarmQueueEnvelope {
 	for _, m := range anniversaryMembers {
 		if m.DebutDate == nil {
 			continue
@@ -182,12 +221,11 @@ func buildCelebrationEnvelopes(
 			})
 		}
 	}
-
 	return envelopes
 }
 
 func birthdayCelebrationOrdinal(birthday, debutDate *time.Time, currentYear int) int {
-	if birthday == nil || debutDate == nil || currentYear <= 0 {
+	if missingBirthdayOrdinalInput(birthday, debutDate, currentYear) {
 		return 0
 	}
 
@@ -195,12 +233,8 @@ func birthdayCelebrationOrdinal(birthday, debutDate *time.Time, currentYear int)
 	if birthdayMonthDayBeforeDebut(birthday, debutDate) {
 		firstYear++
 	}
-	if birthday.Month() == time.February && birthday.Day() == 29 {
-		firstYear = nextLeapYear(firstYear)
-		if currentYear < firstYear {
-			return 0
-		}
-		return countLeapYears(firstYear, currentYear)
+	if isLeapDay(birthday) {
+		return leapDayBirthdayOrdinal(firstYear, currentYear)
 	}
 	if currentYear < firstYear {
 		return 0
@@ -208,11 +242,27 @@ func birthdayCelebrationOrdinal(birthday, debutDate *time.Time, currentYear int)
 	return currentYear - firstYear + 1
 }
 
+func missingBirthdayOrdinalInput(birthday, debutDate *time.Time, currentYear int) bool {
+	return birthday == nil || debutDate == nil || currentYear <= 0
+}
+
 func birthdayMonthDayBeforeDebut(birthday, debutDate *time.Time) bool {
 	if birthday.Month() != debutDate.Month() {
 		return birthday.Month() < debutDate.Month()
 	}
 	return birthday.Day() < debutDate.Day()
+}
+
+func isLeapDay(date *time.Time) bool {
+	return date.Month() == time.February && date.Day() == 29
+}
+
+func leapDayBirthdayOrdinal(firstYear, currentYear int) int {
+	firstYear = nextLeapYear(firstYear)
+	if currentYear < firstYear {
+		return 0
+	}
+	return countLeapYears(firstYear, currentYear)
 }
 
 func nextLeapYear(year int) int {
