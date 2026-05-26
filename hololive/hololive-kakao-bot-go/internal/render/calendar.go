@@ -69,10 +69,7 @@ func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []do
 	}
 
 	grouped := groupEntriesByDay(entries)
-	height := calculateCanvasHeight(grouped)
-	if height > maxCanvasH {
-		height = maxCanvasH
-	}
+	height := min(calculateCanvasHeight(grouped), maxCanvasH)
 
 	img := image.NewRGBA(image.Rect(0, 0, canvasWidth, height))
 	fillRect(img, img.Bounds(), colWhite)
@@ -233,8 +230,8 @@ func fetchMemberPhotos(entries []domain.CalendarEntry) map[string]image.Image {
 }
 
 func thumbnailURL(original string, size int) string {
-	if idx := strings.Index(original, "=s"); idx != -1 {
-		return fmt.Sprintf("%s=s%d-c-k-c0x00ffffff-no-rj", original[:idx], size)
+	if before, _, ok := strings.Cut(original, "=s"); ok {
+		return fmt.Sprintf("%s=s%d-c-k-c0x00ffffff-no-rj", before, size)
 	}
 	return original
 }
