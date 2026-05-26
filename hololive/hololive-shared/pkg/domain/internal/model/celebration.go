@@ -14,6 +14,7 @@ type CelebrationDispatchPayload struct {
 	MemberName string          `json:"member_name"`
 	ChannelID  string          `json:"channel_id"`
 	Photo      string          `json:"photo,omitempty"`
+	Ordinal    int             `json:"ordinal,omitempty"`
 	Years      int             `json:"years,omitempty"`
 	Date       string          `json:"date"`
 }

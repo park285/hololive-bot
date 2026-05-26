@@ -14,6 +14,9 @@ func renderCelebrationMessage(envelope domain.AlarmQueueEnvelope) (string, error
 	switch p.Kind {
 	case domain.CelebrationKindBirthday:
 		msg := fmt.Sprintf("🎂 %s 생일 축하합니다!", p.MemberName)
+		if p.Ordinal > 0 {
+			msg = fmt.Sprintf("🎂 %s %d번째 생일 축하합니다!", p.MemberName, p.Ordinal)
+		}
 		if p.ChannelID != "" {
 			msg += "\n🔗 " + youtubeChannelURL(p.ChannelID)
 		}
