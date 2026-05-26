@@ -100,16 +100,24 @@ func drawCircularImage(dst *image.RGBA, src image.Image, cx, cy, r int, bgCol co
 			if dist > fr+0.5 {
 				continue
 			}
-			sfx := (float64(dx+r) + 0.5) * srcW / diameter
-			sfy := (float64(dy+r) + 0.5) * srcH / diameter
-			c := bilinearSample(src, bounds, sfx, sfy)
-			if dist > fr-0.5 {
-				a := fr + 0.5 - dist
-				c = blendRGBA(c, bgCol, a)
-			}
+			c := sampleCircularPixel(src, bounds, srcW, srcH, diameter, dx, dy, r)
+			c = applyEdgeBlend(c, bgCol, dist, fr)
 			dst.Set(cx+dx, cy+dy, c)
 		}
 	}
+}
+
+func sampleCircularPixel(src image.Image, bounds image.Rectangle, srcW, srcH, diameter float64, dx, dy, r int) color.RGBA {
+	sfx := (float64(dx+r) + 0.5) * srcW / diameter
+	sfy := (float64(dy+r) + 0.5) * srcH / diameter
+	return bilinearSample(src, bounds, sfx, sfy)
+}
+
+func applyEdgeBlend(c, bgCol color.RGBA, dist, fr float64) color.RGBA {
+	if dist > fr-0.5 {
+		return blendRGBA(c, bgCol, fr+0.5-dist)
+	}
+	return c
 }
 
 func bilinearSample(src image.Image, bounds image.Rectangle, fx, fy float64) color.RGBA {

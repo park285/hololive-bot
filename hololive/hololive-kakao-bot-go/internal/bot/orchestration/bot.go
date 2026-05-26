@@ -93,12 +93,8 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		return nil, err
 	}
 
-	core := deps.coreDeps()
-	messaging := deps.messagingDeps()
-	data := deps.dataDeps()
-	stream := deps.streamDeps()
-	support := deps.supportDeps()
-	feature := deps.featureDeps()
+	core, messaging, data := deps.coreDeps(), deps.messagingDeps(), deps.dataDeps()
+	stream, support, feature := deps.streamDeps(), deps.supportDeps(), deps.featureDeps()
 
 	bot := &Bot{
 		botSelfUser:           core.botSelfUser,

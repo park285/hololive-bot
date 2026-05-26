@@ -121,10 +121,8 @@ func (v commandInitView) buildCommands(deps *command.Dependencies) []command.Com
 	}
 
 	if v.memberRepository != nil {
-		v.logInfo("Calendar command enabled")
 		commands = append(commands, command.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer))
 	}
-
 	if v.majorEventRepository != nil {
 		v.logInfo("MajorEvent command enabled")
 
