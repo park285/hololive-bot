@@ -22,3 +22,10 @@ type CelebrationDispatchPayload struct {
 func (p *CelebrationDispatchPayload) Identity() string {
 	return fmt.Sprintf("%s:%s:%s", p.Kind, p.ChannelID, p.Date)
 }
+
+type CalendarEntry struct {
+	Kind    CelebrationKind `json:"kind"`
+	Member  *Member         `json:"member"`
+	Day     int             `json:"day"`
+	Ordinal int             `json:"ordinal,omitempty"`
+}

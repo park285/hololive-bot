@@ -10,3 +10,6 @@ type MajorEventRepository = handlercore.MajorEventRepository
 type Dependencies = handlercore.Dependencies
 
 type NormalizeFunc = handlercore.NormalizeFunc
+
+type CelebrationCalendarFinder = handlercore.CelebrationCalendarFinder
+type CalendarImageRenderer = handlercore.CalendarImageRenderer

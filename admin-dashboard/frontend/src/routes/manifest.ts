@@ -4,6 +4,7 @@ import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import Radio from "lucide-react/dist/esm/icons/radio";
 import Settings from "lucide-react/dist/esm/icons/settings";
+import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
 import Trophy from "lucide-react/dist/esm/icons/trophy";
 import Users from "lucide-react/dist/esm/icons/users";
 import { prefetchRoute, ROUTE_DEFINITIONS } from "@/routes/route-definitions";
@@ -45,6 +46,12 @@ const ROUTE_METADATA: Record<
 		id: "milestones",
 		label: "마일스톤",
 		icon: Trophy,
+		group: "홀로라이브 봇",
+	},
+	calendar: {
+		id: "calendar",
+		label: "기념일 달력",
+		icon: CalendarDays,
 		group: "홀로라이브 봇",
 	},
 	alarms: {

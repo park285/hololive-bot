@@ -45,5 +45,6 @@ func defaultCommandParsers(ma *MessageAdapter) []CommandParser {
 		commandParserFunc(ma.tryMemberNewsSubscriptionCommand),
 		commandParserFunc(ma.tryMemberNewsCommand),
 		commandParserFunc(ma.tryMajorEventCommand),
+		commandParserFunc(ma.tryCelebrationCalendarCommand),
 	}
 }

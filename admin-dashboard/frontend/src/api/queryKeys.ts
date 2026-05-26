@@ -33,6 +33,11 @@ export const queryKeys = {
 		containers: ["docker-containers"] as const,
 	},
 
+	calendar: {
+		monthly: (month: number, year: number) =>
+			["calendar", month, year] as const,
+	},
+
 	milestones: {
 		all: ["milestones"] as const,
 		near: ["milestones", "near"] as const,

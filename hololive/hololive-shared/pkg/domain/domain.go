@@ -15,6 +15,7 @@ type AlarmDispatchSourceKind = model.AlarmDispatchSourceKind
 type YouTubeOutboxDispatchPayload = model.YouTubeOutboxDispatchPayload
 type CelebrationKind = model.CelebrationKind
 type CelebrationDispatchPayload = model.CelebrationDispatchPayload
+type CalendarEntry = model.CalendarEntry
 type YouTubeOutboxItem = model.YouTubeOutboxItem
 type Channel = model.Channel
 type CommandType = model.CommandType
@@ -108,6 +109,7 @@ const (
 	CommandMemberNews                              = model.CommandMemberNews
 	CommandMemberNewsSubscription                  = model.CommandMemberNewsSubscription
 	CommandMajorEvent                              = model.CommandMajorEvent
+	CommandCalendar                                = model.CommandCalendar
 	CommandUnknown                                 = model.CommandUnknown
 	MemberIntentUnknown                            = model.MemberIntentUnknown
 	MemberIntentMemberInfo                         = model.MemberIntentMemberInfo

@@ -16,6 +16,7 @@ import {
   AddRoomRequest,
   AggregatedStatus,
   AlarmsResponse,
+  CalendarResponse,
   ChannelStatsResponse,
   DeleteAlarmRequest,
   DockerActionResponse,
@@ -239,6 +240,29 @@ export class Admin<
       method: "POST",
       body: data,
       type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetCalendar
+   * @request GET:/admin/api/holo/members/calendar
+   */
+  holoGetCalendar = (
+    query?: {
+      /** @format int32 */
+      month?: number | null;
+      /** @format int32 */
+      year?: number | null;
+    },
+    params: RequestParams = {},
+  ) =>
+    this.request<CalendarResponse, ErrorResponse>({
+      path: `/admin/api/holo/members/calendar`,
+      method: "GET",
+      query: query,
       format: "json",
       ...params,
     });

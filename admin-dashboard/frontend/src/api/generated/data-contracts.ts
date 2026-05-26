@@ -54,6 +54,37 @@ export interface Aliases {
   ko: string[];
 }
 
+export interface CalendarEntry {
+  /** @format int32 */
+  day: number;
+  kind: string;
+  member: CalendarMember;
+  /** @format int32 */
+  ordinal?: number | null;
+}
+
+export interface CalendarMember {
+  channelId: string;
+  /** @format int64 */
+  id: number;
+  isGraduated?: boolean;
+  name: string;
+  nameKo?: string | null;
+  org?: string | null;
+  photo?: string | null;
+  shortKoreanName?: string | null;
+  suborg?: string | null;
+}
+
+export interface CalendarResponse {
+  entries: CalendarEntry[];
+  /** @format int32 */
+  month: number;
+  status: string;
+  /** @format int32 */
+  year: number;
+}
+
 export interface ChannelStat {
   ChannelID: string;
   ChannelTitle: string;

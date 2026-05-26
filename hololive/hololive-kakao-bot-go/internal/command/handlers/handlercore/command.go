@@ -64,6 +64,14 @@ type MajorEventRepository interface {
 	Unsubscribe(ctx context.Context, roomID string) error
 }
 
+type CelebrationCalendarFinder interface {
+	FindMembersWithCelebrationsInMonth(ctx context.Context, month, referenceYear int) ([]domain.CalendarEntry, error)
+}
+
+type CalendarImageRenderer interface {
+	RenderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error)
+}
+
 type Dependencies struct {
 	Holodex          domain.StreamProvider
 	Chzzk            *chzzk.Client

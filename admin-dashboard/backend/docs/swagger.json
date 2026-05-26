@@ -501,6 +501,82 @@
         }
       }
     },
+    "/admin/api/holo/members/calendar": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetCalendar",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/api/holo/members/{id}/aliases": {
       "post": {
         "tags": [
@@ -1990,6 +2066,114 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "CalendarEntry": {
+        "type": "object",
+        "required": [
+          "kind",
+          "member",
+          "day"
+        ],
+        "properties": {
+          "day": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "member": {
+            "$ref": "#/components/schemas/CalendarMember"
+          },
+          "ordinal": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "CalendarMember": {
+        "type": "object",
+        "required": [
+          "id",
+          "channelId",
+          "name"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isGraduated": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nameKo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "org": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "photo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shortKoreanName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "suborg": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CalendarResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "month",
+          "year",
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarEntry"
+            }
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

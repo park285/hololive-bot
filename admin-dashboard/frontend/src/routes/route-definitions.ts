@@ -45,6 +45,15 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
 			})),
 	},
 	{
+		id: "calendar",
+		path: "calendar",
+		absolutePath: "/dashboard/calendar",
+		load: () =>
+			import("@/features/calendar/pages/CalendarPage").then((module) => ({
+				default: module.CalendarPage,
+			})),
+	},
+	{
 		id: "alarms",
 		path: "alarms",
 		absolutePath: "/dashboard/alarms",

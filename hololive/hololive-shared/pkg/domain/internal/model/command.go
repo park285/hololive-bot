@@ -38,6 +38,7 @@ const (
 	CommandMemberNews             CommandType = "member_news"
 	CommandMemberNewsSubscription CommandType = "news_subscription"
 	CommandMajorEvent             CommandType = "major_event"
+	CommandCalendar               CommandType = "calendar"
 	CommandUnknown                CommandType = "unknown"
 )
 
@@ -52,6 +53,7 @@ func (c CommandType) IsValid() bool {
 		CommandMemberInfo, CommandStats, CommandSubscriber,
 		CommandMemberNews, CommandMemberNewsSubscription,
 		CommandMajorEvent,
+		CommandCalendar,
 		CommandUnknown:
 		return true
 	default:
