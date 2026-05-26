@@ -70,15 +70,7 @@ func (r *Repository) collectCalendarEntriesFromRows(rows pgx.Rows, referenceYear
 			continue
 		}
 
-		entry := domain.CalendarEntry{
-			Kind:   domain.CelebrationKind(kindStr),
-			Member: member,
-			Day:    day,
-		}
-		if entry.Kind == domain.CelebrationKindAnniversary && member.DebutDate != nil {
-			entry.Ordinal = referenceYear - member.DebutDate.Year()
-		}
-		entries = append(entries, entry)
+		entries = append(entries, buildCalendarEntry(kindStr, member, day, referenceYear))
 	}
 	if err := rows.Err(); err != nil {
 		rowErrs = append(rowErrs, fmt.Errorf("calendar rows iteration: %w", err))
@@ -87,6 +79,14 @@ func (r *Repository) collectCalendarEntriesFromRows(rows pgx.Rows, referenceYear
 		return entries, errors.Join(rowErrs...)
 	}
 	return entries, nil
+}
+
+func buildCalendarEntry(kindStr string, member *domain.Member, day, referenceYear int) domain.CalendarEntry {
+	entry := domain.CalendarEntry{Kind: domain.CelebrationKind(kindStr), Member: member, Day: day}
+	if entry.Kind == domain.CelebrationKindAnniversary && member.DebutDate != nil {
+		entry.Ordinal = referenceYear - member.DebutDate.Year()
+	}
+	return entry
 }
 
 func scanCelebrationMemberRow(scanner memberRowScanner) (memberRow, error) {

@@ -17,25 +17,9 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 		return
 	}
 
-	now := util.NowKST()
-	month := int(now.Month())
-	year := now.Year()
-
-	if monthStr := c.Query("month"); monthStr != "" {
-		m, err := strconv.Atoi(monthStr)
-		if err != nil || m < 1 || m > 12 {
-			sharedserver.RespondError(c, http.StatusBadRequest, "Invalid month parameter (1-12)", nil)
-			return
-		}
-		month = m
-	}
-	if yearStr := c.Query("year"); yearStr != "" {
-		y, err := strconv.Atoi(yearStr)
-		if err != nil || y < 2000 || y > 2100 {
-			sharedserver.RespondError(c, http.StatusBadRequest, "Invalid year parameter", nil)
-			return
-		}
-		year = y
+	month, year, ok := parseCalendarParams(c)
+	if !ok {
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
@@ -52,9 +36,30 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"month":   month,
-		"year":    year,
-		"entries": entries,
+		"status": "ok", "month": month, "year": year, "entries": entries,
 	})
+}
+
+func parseCalendarParams(c *gin.Context) (month, year int, ok bool) {
+	now := util.NowKST()
+	month = int(now.Month())
+	year = now.Year()
+
+	if monthStr := c.Query("month"); monthStr != "" {
+		m, err := strconv.Atoi(monthStr)
+		if err != nil || m < 1 || m > 12 {
+			sharedserver.RespondError(c, http.StatusBadRequest, "Invalid month parameter (1-12)", nil)
+			return 0, 0, false
+		}
+		month = m
+	}
+	if yearStr := c.Query("year"); yearStr != "" {
+		y, err := strconv.Atoi(yearStr)
+		if err != nil || y < 2000 || y > 2100 {
+			sharedserver.RespondError(c, http.StatusBadRequest, "Invalid year parameter", nil)
+			return 0, 0, false
+		}
+		year = y
+	}
+	return month, year, true
 }
