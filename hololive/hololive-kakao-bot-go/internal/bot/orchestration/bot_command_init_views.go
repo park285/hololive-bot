@@ -138,19 +138,21 @@ func (v commandInitView) buildCommands(deps *command.Dependencies) []command.Com
 		)
 	}
 
-	if len(v.commandBuilders) > 0 {
-		v.logInfo("External command builders enabled", slog.Int("count", len(v.commandBuilders)))
+	commands = v.appendExternalCommands(commands, deps)
+	return compactCommands(commands)
+}
 
-		for _, builder := range v.commandBuilders {
-			if builder == nil {
-				continue
-			}
-
+func (v commandInitView) appendExternalCommands(commands []command.Command, deps *command.Dependencies) []command.Command {
+	if len(v.commandBuilders) == 0 {
+		return commands
+	}
+	v.logInfo("External command builders enabled", slog.Int("count", len(v.commandBuilders)))
+	for _, builder := range v.commandBuilders {
+		if builder != nil {
 			commands = append(commands, builder(deps))
 		}
 	}
-
-	return compactCommands(commands)
+	return commands
 }
 
 func compactCommands(commands []command.Command) []command.Command {
