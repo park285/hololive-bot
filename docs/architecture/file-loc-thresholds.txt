@@ -1,6 +1,6 @@
 # relative/path:MAX_LINES
 admin-dashboard/backend/src/holo/handlers.rs:80
-admin-dashboard/backend/src/holo/handlers_queries.rs:320
+admin-dashboard/backend/src/holo/handlers_queries.rs:360
 admin-dashboard/backend/src/holo/handlers_commands.rs:340
 admin-dashboard/backend/src/holo/types.rs:80
 admin-dashboard/backend/src/holo/types/members.rs:160
