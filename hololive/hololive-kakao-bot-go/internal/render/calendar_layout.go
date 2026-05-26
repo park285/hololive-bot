@@ -40,7 +40,6 @@ var (
 	colAmber600   = color.RGBA{R: 217, G: 119, B: 6, A: 255}
 	colEmerald50  = color.RGBA{R: 236, G: 253, B: 245, A: 255}
 	colEmerald600 = color.RGBA{R: 5, G: 150, B: 105, A: 255}
-	colSky400     = color.RGBA{R: 56, G: 189, B: 248, A: 255}
 )
 
 func drawText(img *image.RGBA, face font.Face, x, y int, col color.Color, text string) {
