@@ -99,11 +99,10 @@ func drawCalendarHeader(img *image.RGBA, f calendarFonts, month, year int, entri
 }
 
 func drawCalendarBody(img *image.RGBA, f calendarFonts, month int, grouped []dayGroup, photos map[string]image.Image) {
-	sf := float64(scaleFactor)
 	y := headerH + separatorH + paddingY
 
 	if len(grouped) == 0 {
-		drawText(img, f.name, paddingX, y+int(24*sf), colSlate500, "등록된 기념일이 없습니다.")
+		drawText(img, f.name, paddingX, y+int(24*float64(scaleFactor)), colSlate500, "등록된 기념일이 없습니다.")
 		return
 	}
 
@@ -111,19 +110,24 @@ func drawCalendarBody(img *image.RGBA, f calendarFonts, month int, grouped []day
 		if y >= maxCanvasH-paddingY {
 			break
 		}
-		drawText(img, f.date, paddingX, y+int(18*sf), colSlate500, fmt.Sprintf("%d월 %d일", month, group.day))
-		fillRect(img, image.Rect(paddingX, y+dateHeaderH-separatorH, canvasWidth-paddingX, y+dateHeaderH), colSlate200)
-		y += dateHeaderH
-
-		for _, entry := range group.entries {
-			if y >= maxCanvasH-paddingY {
-				break
-			}
-			drawEntryRow(img, f, paddingX+entryIndent, y, entry, photos)
-			y += entryRowH
-		}
-		y += dateSectGap
+		y = drawDayGroup(img, f, month, group, y, photos)
 	}
+}
+
+func drawDayGroup(img *image.RGBA, f calendarFonts, month int, group dayGroup, y int, photos map[string]image.Image) int {
+	sf := float64(scaleFactor)
+	drawText(img, f.date, paddingX, y+int(18*sf), colSlate500, fmt.Sprintf("%d월 %d일", month, group.day))
+	fillRect(img, image.Rect(paddingX, y+dateHeaderH-separatorH, canvasWidth-paddingX, y+dateHeaderH), colSlate200)
+	y += dateHeaderH
+
+	for _, entry := range group.entries {
+		if y >= maxCanvasH-paddingY {
+			break
+		}
+		drawEntryRow(img, f, paddingX+entryIndent, y, entry, photos)
+		y += entryRowH
+	}
+	return y + dateSectGap
 }
 
 type entryStyle struct {

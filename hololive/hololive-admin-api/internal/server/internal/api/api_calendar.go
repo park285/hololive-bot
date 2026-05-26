@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -45,21 +46,29 @@ func parseCalendarParams(c *gin.Context) (month, year int, ok bool) {
 	month = int(now.Month())
 	year = now.Year()
 
-	if monthStr := c.Query("month"); monthStr != "" {
-		m, err := strconv.Atoi(monthStr)
-		if err != nil || m < 1 || m > 12 {
-			sharedserver.RespondError(c, http.StatusBadRequest, "Invalid month parameter (1-12)", nil)
-			return 0, 0, false
-		}
+	if m, err := parseIntQuery(c, "month", 1, 12); err != nil {
+		sharedserver.RespondError(c, http.StatusBadRequest, "Invalid month parameter (1-12)", nil)
+		return 0, 0, false
+	} else if m > 0 {
 		month = m
 	}
-	if yearStr := c.Query("year"); yearStr != "" {
-		y, err := strconv.Atoi(yearStr)
-		if err != nil || y < 2000 || y > 2100 {
-			sharedserver.RespondError(c, http.StatusBadRequest, "Invalid year parameter", nil)
-			return 0, 0, false
-		}
+	if y, err := parseIntQuery(c, "year", 2000, 2100); err != nil {
+		sharedserver.RespondError(c, http.StatusBadRequest, "Invalid year parameter", nil)
+		return 0, 0, false
+	} else if y > 0 {
 		year = y
 	}
 	return month, year, true
+}
+
+func parseIntQuery(c *gin.Context, key string, min, max int) (int, error) {
+	s := c.Query(key)
+	if s == "" {
+		return 0, nil
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil || v < min || v > max {
+		return 0, fmt.Errorf("invalid %s", key)
+	}
+	return v, nil
 }
