@@ -695,7 +695,7 @@ func TestBackoffState_CounterDecayOnExpiry(t *testing.T) {
 	assert.InDelta(t, 10*time.Minute, cd, float64(5*time.Second))
 
 	// 만료 시뮬레이션
-	bs.transientCooldown = time.Now().Add(-1 * time.Second)
+	bs.SetTransientCooldownForTest(time.Now().Add(-1 * time.Second))
 	assert.Equal(t, time.Duration(0), bs.TransientCooldownRemaining())
 
 	// 만료 후 첫 에러는 30초로 시작해야 함 (카운터 리셋 검증)
@@ -945,9 +945,7 @@ func TestFetchPage_ConcurrentTransientErrors_NoAmplification(t *testing.T) {
 	}
 	wg.Wait()
 
-	client.backoffState.mu.Lock()
-	actualErrors := client.backoffState.transientErrors
-	client.backoffState.mu.Unlock()
+	actualErrors := client.backoffState.TransientErrors()
 
 	assert.Equal(t, 2, actualErrors,
 		"transientErrors should equal fetchPage call count (2), not total HTTP attempts")
@@ -975,9 +973,7 @@ func TestFetchPage_ContextCancel_NoTransientRecord(t *testing.T) {
 	_, err := client.fetchPage(ctx, server.URL)
 	require.Error(t, err)
 
-	client.backoffState.mu.Lock()
-	actualErrors := client.backoffState.transientErrors
-	client.backoffState.mu.Unlock()
+	actualErrors := client.backoffState.TransientErrors()
 
 	assert.Equal(t, 0, actualErrors,
 		"transientErrors should not be recorded when context is cancelled")
