@@ -43,7 +43,9 @@ var (
 )
 
 func drawText(img *image.RGBA, face font.Face, x, y int, col color.Color, text string) {
-	defer func() { recover() }()
+	defer func() {
+		_ = recover()
+	}()
 	d := &font.Drawer{
 		Dst:  img,
 		Src:  image.NewUniform(col),
@@ -54,7 +56,9 @@ func drawText(img *image.RGBA, face font.Face, x, y int, col color.Color, text s
 }
 
 func measureText(face font.Face, text string) int {
-	defer func() { recover() }()
+	defer func() {
+		_ = recover()
+	}()
 	d := &font.Drawer{Face: face}
 	return d.MeasureString(text).Ceil()
 }

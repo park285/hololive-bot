@@ -200,9 +200,10 @@ func firstRune(s string) string {
 
 func countByKind(entries []domain.CalendarEntry) (birthday, anniversary int) {
 	for _, e := range entries {
-		if e.Kind == domain.CelebrationKindBirthday {
+		switch e.Kind {
+		case domain.CelebrationKindBirthday:
 			birthday++
-		} else if e.Kind == domain.CelebrationKindAnniversary {
+		case domain.CelebrationKindAnniversary:
 			anniversary++
 		}
 	}
@@ -250,7 +251,10 @@ func fetchImage(url string) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
 	if err != nil {
 		return nil, err

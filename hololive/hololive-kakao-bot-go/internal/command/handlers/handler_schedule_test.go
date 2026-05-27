@@ -90,7 +90,7 @@ func TestScheduleCommand_Execute_GoldenPath(t *testing.T) {
 
 	deps := &Dependencies{
 		Holodex: holodex,
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
@@ -186,7 +186,7 @@ func TestScheduleCommand_Execute_QueryError(t *testing.T) {
 
 	deps := &Dependencies{
 		Holodex: holodex,
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
@@ -219,7 +219,7 @@ func TestScheduleCommand_Execute_MemberNotFound(t *testing.T) {
 
 	deps := &Dependencies{
 		Holodex: &scheduleStreamProviderStub{},
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
@@ -258,7 +258,7 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 
 	deps := &Dependencies{
 		Holodex: holodex,
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {

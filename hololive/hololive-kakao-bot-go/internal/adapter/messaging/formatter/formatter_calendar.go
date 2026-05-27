@@ -14,7 +14,7 @@ func (f *ResponseFormatter) CelebrationCalendar(_ context.Context, month, year i
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("📅 %d년 %d월 기념일 (%d건)\n", year, month, len(entries)))
+	fmt.Fprintf(&b, "📅 %d년 %d월 기념일 (%d건)\n", year, month, len(entries))
 	b.WriteString("━━━━━━━━━━━━━━━━\n")
 
 	currentDay := 0
@@ -24,7 +24,7 @@ func (f *ResponseFormatter) CelebrationCalendar(_ context.Context, month, year i
 				b.WriteString("\n")
 			}
 			currentDay = e.Day
-			b.WriteString(fmt.Sprintf("\n📌 %d월 %d일\n", month, e.Day))
+			fmt.Fprintf(&b, "\n📌 %d월 %d일\n", month, e.Day)
 		}
 		formatCalendarEntry(&b, e)
 	}
@@ -34,10 +34,11 @@ func (f *ResponseFormatter) CelebrationCalendar(_ context.Context, month, year i
 
 func formatCalendarEntry(b *strings.Builder, e domain.CalendarEntry) {
 	name := calendarMemberDisplayName(e.Member)
-	if e.Kind == domain.CelebrationKindBirthday {
-		b.WriteString(fmt.Sprintf("  🎂 %s 생일\n", name))
-	} else if e.Kind == domain.CelebrationKindAnniversary {
-		b.WriteString(fmt.Sprintf("  🎉 %s 데뷔 %d주년\n", name, e.Ordinal))
+	switch e.Kind {
+	case domain.CelebrationKindBirthday:
+		fmt.Fprintf(b, "  🎂 %s 생일\n", name)
+	case domain.CelebrationKindAnniversary:
+		fmt.Fprintf(b, "  🎉 %s 데뷔 %d주년\n", name, e.Ordinal)
 	}
 }
 

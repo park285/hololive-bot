@@ -300,7 +300,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	alarm := &alarmAddRecorder{}
 	deps := &Dependencies{
 		Alarm: alarm,
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
@@ -343,7 +343,7 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	sendErrorCalled := false
 	deps := &Dependencies{
 		Alarm: alarm,
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {

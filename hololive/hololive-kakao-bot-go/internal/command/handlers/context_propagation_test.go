@@ -311,7 +311,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 			Logger:       newCommandTestLogger(),
 		}),
 		MembersData: provider,
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply reqCtx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply reqCtx.
 		Matcher:   matcher.NewMatcher(nil, provider, nil, nil, nil, newCommandTestLogger()),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
