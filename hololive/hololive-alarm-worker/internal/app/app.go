@@ -1,6 +1,6 @@
 package app
 
-import workerapp "github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp"
+import workerapp "github.com/kapu/hololive-alarm-worker/internal/app/workerapp"
 
 type AlarmWorkerRuntime = workerapp.AlarmWorkerRuntime
 
