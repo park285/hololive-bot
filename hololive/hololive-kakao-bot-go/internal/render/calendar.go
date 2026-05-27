@@ -211,9 +211,15 @@ func countByKind(entries []domain.CalendarEntry) (birthday, anniversary int) {
 
 var photoClient = &http.Client{Timeout: 5 * time.Second}
 
+const photoFetchBudget = 15 * time.Second
+
 func fetchMemberPhotos(entries []domain.CalendarEntry) map[string]image.Image {
+	deadline := time.Now().Add(photoFetchBudget)
 	photos := make(map[string]image.Image)
 	for _, e := range entries {
+		if time.Now().After(deadline) {
+			break
+		}
 		if e.Member == nil || e.Member.Photo == "" {
 			continue
 		}
