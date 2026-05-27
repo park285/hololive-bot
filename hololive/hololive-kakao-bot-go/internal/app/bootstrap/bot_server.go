@@ -48,7 +48,7 @@ func BuildBotHTTP3Server(
 		return nil, fmt.Errorf("build bot h3 server: provide bot router: %w", err)
 	}
 
-	cert, err := tls.LoadX509KeyPair(appConfig.Server.H3CertFile, appConfig.Server.H3KeyFile)
+	certReloader, err := newReloadingTLSCertificate(appConfig.Server.H3CertFile, appConfig.Server.H3KeyFile, logger)
 	if err != nil {
 		return nil, fmt.Errorf("load h3 certificate: %w", err)
 	}
@@ -63,8 +63,8 @@ func BuildBotHTTP3Server(
 		Addr:    appConfig.Server.H3Addr,
 		Handler: botRouter,
 		TLSConfig: http3.ConfigureTLSConfig(&tls.Config{
-			MinVersion:   tls.VersionTLS13,
-			Certificates: []tls.Certificate{cert},
+			MinVersion:     tls.VersionTLS13,
+			GetCertificate: certReloader.GetCertificate,
 		}),
 		QUICConfig:     quicConfig,
 		MaxHeaderBytes: http.DefaultMaxHeaderBytes,
