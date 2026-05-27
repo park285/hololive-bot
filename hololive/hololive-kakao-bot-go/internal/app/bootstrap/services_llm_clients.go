@@ -5,9 +5,9 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/client/majorevent"
+	"github.com/kapu/hololive-kakao-bot-go/internal/client/membernews"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/majoreventclient"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/membernewsclient"
 )
 
 func ResolveLLMSchedulerClients(
@@ -22,6 +22,6 @@ func ResolveLLMSchedulerClients(
 		return nil, nil
 	}
 
-	return majoreventclient.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey),
-		membernewsclient.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey)
+	return majorevent.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey),
+		membernews.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey)
 }

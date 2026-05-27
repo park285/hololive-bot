@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package membernewsclient_test
+package membernews_test
 
 import (
 	"errors"
@@ -29,7 +29,7 @@ import (
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/membernewsclient"
+	"github.com/kapu/hololive-kakao-bot-go/internal/client/membernews"
 )
 
 const testAPIKey = "test-api-key"
@@ -121,7 +121,7 @@ func TestGenerateRoomDigest(t *testing.T) {
 			t.Parallel()
 
 			if tc.roomID == "" {
-				c := membernewsclient.New("http://localhost:0", testAPIKey)
+				c := membernews.New("http://localhost:0", testAPIKey)
 
 				got, err := c.GenerateRoomDigest(t.Context(), tc.roomID, tc.period)
 				if (err != nil) != tc.wantErr {
@@ -153,7 +153,7 @@ func TestGenerateRoomDigest(t *testing.T) {
 				}
 			})
 
-			c := membernewsclient.New(srv.URL, testAPIKey)
+			c := membernews.New(srv.URL, testAPIKey)
 			got, err := c.GenerateRoomDigest(t.Context(), tc.roomID, tc.period)
 
 			if (err != nil) != tc.wantErr {
@@ -216,7 +216,7 @@ func TestSubscribeRoom(t *testing.T) {
 			t.Parallel()
 
 			if tc.roomID == "" {
-				c := membernewsclient.New("http://localhost:0", testAPIKey)
+				c := membernews.New("http://localhost:0", testAPIKey)
 
 				err := c.SubscribeRoom(t.Context(), tc.roomID, tc.roomName)
 				if (err != nil) != tc.wantErr {
@@ -240,7 +240,7 @@ func TestSubscribeRoom(t *testing.T) {
 				}
 			})
 
-			c := membernewsclient.New(srv.URL, testAPIKey)
+			c := membernews.New(srv.URL, testAPIKey)
 			err := c.SubscribeRoom(t.Context(), tc.roomID, tc.roomName)
 
 			if (err != nil) != tc.wantErr {
@@ -290,7 +290,7 @@ func TestUnsubscribeRoom(t *testing.T) {
 			t.Parallel()
 
 			if tc.roomID == "" {
-				c := membernewsclient.New("http://localhost:0", testAPIKey)
+				c := membernews.New("http://localhost:0", testAPIKey)
 
 				err := c.UnsubscribeRoom(t.Context(), tc.roomID)
 				if (err != nil) != tc.wantErr {
@@ -315,7 +315,7 @@ func TestUnsubscribeRoom(t *testing.T) {
 				}
 			})
 
-			c := membernewsclient.New(srv.URL, testAPIKey)
+			c := membernews.New(srv.URL, testAPIKey)
 			err := c.UnsubscribeRoom(t.Context(), tc.roomID)
 
 			if (err != nil) != tc.wantErr {
@@ -374,7 +374,7 @@ func TestIsRoomSubscribed(t *testing.T) {
 			t.Parallel()
 
 			if tc.roomID == "" {
-				c := membernewsclient.New("http://localhost:0", testAPIKey)
+				c := membernews.New("http://localhost:0", testAPIKey)
 
 				got, err := c.IsRoomSubscribed(t.Context(), tc.roomID)
 				if (err != nil) != tc.wantErr {
@@ -403,7 +403,7 @@ func TestIsRoomSubscribed(t *testing.T) {
 				}
 			})
 
-			c := membernewsclient.New(srv.URL, testAPIKey)
+			c := membernews.New(srv.URL, testAPIKey)
 			got, err := c.IsRoomSubscribed(t.Context(), tc.roomID)
 
 			if (err != nil) != tc.wantErr {
@@ -451,7 +451,7 @@ func TestIsNoSubscribedMembers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := membernewsclient.IsNoSubscribedMembers(tc.err)
+			got := membernews.IsNoSubscribedMembers(tc.err)
 			if got != tc.want {
 				t.Errorf("IsNoSubscribedMembers(%v) = %v, want %v", tc.err, got, tc.want)
 			}
@@ -465,10 +465,10 @@ func TestIsNoSubscribedMembers_WrappedSentinel(t *testing.T) {
 	// GenerateRoomDigest가 반환하는 실제 sentinel 에러도 감지해야 합니다
 	srv := testutil.NewJSONTestServer(t, http.StatusNotFound, map[string]string{"error": "no_subscribed_members"}, nil)
 
-	c := membernewsclient.New(srv.URL, testAPIKey)
+	c := membernews.New(srv.URL, testAPIKey)
 	_, err := c.GenerateRoomDigest(t.Context(), "room-1", membernewscontracts.PeriodWeekly)
 
-	if !membernewsclient.IsNoSubscribedMembers(err) {
+	if !membernews.IsNoSubscribedMembers(err) {
 		t.Errorf("GenerateRoomDigest()가 반환한 에러에서 IsNoSubscribedMembers() = false, want true; err = %v", err)
 	}
 }

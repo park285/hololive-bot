@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package majoreventclient_test
+package majorevent_test
 
 import (
 	"net/http"
@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/testutil"
 	json "github.com/park285/shared-go/pkg/json"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/majoreventclient"
+	"github.com/kapu/hololive-kakao-bot-go/internal/client/majorevent"
 )
 
 const testAPIKey = "test-api-key"
@@ -80,7 +80,7 @@ func TestNew(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			c := majoreventclient.New(tc.inputURL, tc.inputAPIKey)
+			c := majorevent.New(tc.inputURL, tc.inputAPIKey)
 			if c == nil {
 				t.Fatal("New() returned nil")
 			}
@@ -99,7 +99,7 @@ func TestNew(t *testing.T) {
 
 			// 실제로 URL 주입 검증은 New() 결과 클라이언트로 직접 요청 수행 불가이므로
 			// 대신 재생성 후 검증
-			freshClient := majoreventclient.New(tc.inputURL, tc.inputAPIKey)
+			freshClient := majorevent.New(tc.inputURL, tc.inputAPIKey)
 			if freshClient == nil {
 				t.Fatal("재생성된 New() returned nil")
 			}
@@ -123,7 +123,7 @@ func TestNew_URLTrimming(t *testing.T) {
 	defer srv.Close()
 
 	// 후행 슬래시 포함 URL로 클라이언트 생성
-	c := majoreventclient.New(srv.URL+"/", testAPIKey)
+	c := majorevent.New(srv.URL+"/", testAPIKey)
 
 	_, _ = c.IsSubscribed(t.Context(), "room-1")
 
@@ -196,7 +196,7 @@ func TestIsSubscribed(t *testing.T) {
 
 			// 빈 roomID는 서버 없이도 검증
 			if tc.roomID == "" {
-				c := majoreventclient.New("http://localhost:0", testAPIKey)
+				c := majorevent.New("http://localhost:0", testAPIKey)
 
 				got, err := c.IsSubscribed(t.Context(), tc.roomID)
 				if (err != nil) != tc.wantErr {
@@ -225,7 +225,7 @@ func TestIsSubscribed(t *testing.T) {
 				}
 			})
 
-			c := majoreventclient.New(srv.URL, testAPIKey)
+			c := majorevent.New(srv.URL, testAPIKey)
 			got, err := c.IsSubscribed(t.Context(), tc.roomID)
 
 			if (err != nil) != tc.wantErr {
@@ -291,7 +291,7 @@ func TestSubscribe(t *testing.T) {
 			t.Parallel()
 
 			if tc.roomID == "" {
-				c := majoreventclient.New("http://localhost:0", testAPIKey)
+				c := majorevent.New("http://localhost:0", testAPIKey)
 
 				err := c.Subscribe(t.Context(), tc.roomID, tc.roomName)
 				if (err != nil) != tc.wantErr {
@@ -319,7 +319,7 @@ func TestSubscribe(t *testing.T) {
 				}
 			})
 
-			c := majoreventclient.New(srv.URL, testAPIKey)
+			c := majorevent.New(srv.URL, testAPIKey)
 			err := c.Subscribe(t.Context(), tc.roomID, tc.roomName)
 
 			if (err != nil) != tc.wantErr {
@@ -369,7 +369,7 @@ func TestUnsubscribe(t *testing.T) {
 			t.Parallel()
 
 			if tc.roomID == "" {
-				c := majoreventclient.New("http://localhost:0", testAPIKey)
+				c := majorevent.New("http://localhost:0", testAPIKey)
 
 				err := c.Unsubscribe(t.Context(), tc.roomID)
 				if (err != nil) != tc.wantErr {
@@ -394,7 +394,7 @@ func TestUnsubscribe(t *testing.T) {
 				}
 			})
 
-			c := majoreventclient.New(srv.URL, testAPIKey)
+			c := majorevent.New(srv.URL, testAPIKey)
 			err := c.Unsubscribe(t.Context(), tc.roomID)
 
 			if (err != nil) != tc.wantErr {
