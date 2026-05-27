@@ -200,14 +200,18 @@ func firstRune(s string) string {
 
 func countByKind(entries []domain.CalendarEntry) (birthday, anniversary int) {
 	for _, e := range entries {
-		switch e.Kind {
-		case domain.CelebrationKindBirthday:
-			birthday++
-		case domain.CelebrationKindAnniversary:
-			anniversary++
-		}
+		addKindCount(e.Kind, &birthday, &anniversary)
 	}
 	return
+}
+
+func addKindCount(kind domain.CelebrationKind, birthday, anniversary *int) {
+	switch kind {
+	case domain.CelebrationKindBirthday:
+		(*birthday)++
+	case domain.CelebrationKindAnniversary:
+		(*anniversary)++
+	}
 }
 
 var photoClient = &http.Client{Timeout: 5 * time.Second}
