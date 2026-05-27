@@ -47,7 +47,7 @@ go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts rou
 - 운영 채널 SSOT: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
 - baseline 수집: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
 - typed key SSOT: `hololive/hololive-shared/pkg/service/alarm/keys/keys.go`
-- legacy 차단: `hololive/hololive-shared/pkg/domain/internal/model/alarm.go`
+- legacy 차단: `hololive/hololive-shared/pkg/domain/alarm.go`
 - 신규 경로 fan-out: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher.go`
 - cutover 라우팅 정책: `hololive/hololive-youtube-producer/internal/communityshorts/route_policy.go`
 - 운영 런타임 owner: `hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/bootstrap_youtube_producer.go`
