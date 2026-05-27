@@ -85,6 +85,8 @@ const (
 	ErrGraphNeedMemberName = messaging.ErrGraphNeedMemberName
 	ErrGraphQueryFailed    = messaging.ErrGraphQueryFailed
 	MsgNoGraphData         = messaging.MsgNoGraphData
+
+	ErrCalendarQueryFailed = messaging.ErrCalendarQueryFailed
 )
 
 var DefaultEmoji = messaging.DefaultEmoji
