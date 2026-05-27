@@ -7,8 +7,6 @@ import (
 var (
 	parseChannelStatsFromInitialData   = parser.ParseChannelStatsFromInitialData
 	parseChannelSnippetFromInitialData = parser.ParseChannelSnippetFromInitialData
-	parseChannelHandle                 = parser.ParseChannelHandle
-	parseThumbnailSources              = parser.ParseThumbnailSources
 	parseShortNumber                   = parser.ParseShortNumber
 	parseViewCount                     = parser.ParseViewCount
 	parseVideoCount                    = parser.ParseVideoCount

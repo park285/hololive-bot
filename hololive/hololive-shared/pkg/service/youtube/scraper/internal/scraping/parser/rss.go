@@ -100,11 +100,7 @@ func rssEntryThumbnails(entry rssEntry) []Thumbnail {
 		if strings.TrimSpace(thumb.URL) == "" {
 			continue
 		}
-		convertedThumbs = append(convertedThumbs, Thumbnail{
-			URL:    thumb.URL,
-			Width:  thumb.Width,
-			Height: thumb.Height,
-		})
+		convertedThumbs = append(convertedThumbs, Thumbnail(thumb))
 	}
 	return convertedThumbs
 }

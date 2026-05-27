@@ -21,10 +21,7 @@ func CollectShorts(
 		appConfig,
 		logger,
 		now,
-		CommunityCollectOptions{
-			ObservationRuntimeName:      options.ObservationRuntimeName,
-			ObservationBigBangCutoverAt: options.ObservationBigBangCutoverAt,
-		},
+		CommunityCollectOptions(options),
 		shortsDefinition,
 		func(rows []trackingrepo.ObservationAlarmSentHistoryRow, comparison trackingrepo.ObservationPostComparisonResult, query variantQuery, generatedAt time.Time) ShortsReport {
 			return BuildShorts(rows, comparison, ShortsQuery(query), generatedAt)
