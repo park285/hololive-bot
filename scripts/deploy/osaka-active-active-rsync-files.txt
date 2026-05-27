@@ -519,8 +519,13 @@ hololive/hololive-shared/pkg/service/youtube/oauth.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/audit_logger.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/claim_manager.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/community_shorts_alarm_timing.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics/channel_summary.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics/helpers.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics/latency_period.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics/types.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_channel_post_summaries.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_final_result.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_format_aliases.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_latency_period_rollups.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_logs.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_observation_context.go
@@ -560,6 +565,8 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_send_support.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_status.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_telemetry.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format/formatter.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format/payload.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/message_format.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/metrics.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/metrics_recorder.go
@@ -569,6 +576,9 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/sent_at.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/status_updater.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry_post_id.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry_processor.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline/build.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline/identity.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline/types.go
 hololive/hololive-shared/pkg/service/youtube/outbox/doc.go
 hololive/hololive-shared/pkg/service/youtube/outbox/outbox.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/channel_stats_poller.go
@@ -615,6 +625,8 @@ hololive/hololive-shared/pkg/service/youtube/scraper/internal/browserfetcher/fet
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/initialdata/extractor.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/initialdata/scorer.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/alerts.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/backoff/backoff.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/backoff/testing.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/backoff_state.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/browser_diagnostic.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/browser_snapshot_fetcher.go
@@ -631,9 +643,17 @@ hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/failure.g
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/fetcher.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/goscrapy_fetcher.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser_error.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser/error.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser/published_at.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser/rss.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser/stats.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser/types.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser/upcoming.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser/videos.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/playlists.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/proxy_dial_fallback.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/proxy_manager.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/ratelimiter/ratelimiter.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/rate_limiter.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/recent_videos_parser.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/shorts.go
@@ -767,4 +787,5 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/stringutil/stringutil.go
 ../shared-go/pkg/telemetry/doc.go
 ../shared-go/pkg/telemetry/telemetry.go
+../shared-go/pkg/workerconfig/worker_profile.go
 ../shared-go/pkg/workerpool/queued_pool.go
