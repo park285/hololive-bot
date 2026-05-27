@@ -220,19 +220,22 @@ func fetchMemberPhotos(entries []domain.CalendarEntry) map[string]image.Image {
 		if time.Now().After(deadline) {
 			break
 		}
-		if e.Member == nil || e.Member.Photo == "" {
-			continue
-		}
-		key := e.Member.Photo
-		if _, ok := photos[key]; ok {
-			continue
-		}
-		url := thumbnailURL(e.Member.Photo, 256)
-		if img, err := fetchImage(url); err == nil {
-			photos[key] = img
-		}
+		fetchMemberPhoto(e, photos)
 	}
 	return photos
+}
+
+func fetchMemberPhoto(e domain.CalendarEntry, photos map[string]image.Image) {
+	if e.Member == nil || e.Member.Photo == "" {
+		return
+	}
+	if _, ok := photos[e.Member.Photo]; ok {
+		return
+	}
+	url := thumbnailURL(e.Member.Photo, 256)
+	if img, err := fetchImage(url); err == nil {
+		photos[e.Member.Photo] = img
+	}
 }
 
 func thumbnailURL(original string, size int) string {
