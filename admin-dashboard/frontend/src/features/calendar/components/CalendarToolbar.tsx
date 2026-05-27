@@ -21,6 +21,7 @@ export const CalendarToolbar = ({
 			<button
 				type="button"
 				onClick={onPrevious}
+				aria-label="이전 월"
 				className="rounded-md p-2 hover:bg-slate-100"
 			>
 				<ChevronLeft className="h-5 w-5" />
@@ -31,6 +32,7 @@ export const CalendarToolbar = ({
 			<button
 				type="button"
 				onClick={onNext}
+				aria-label="다음 월"
 				className="rounded-md p-2 hover:bg-slate-100"
 			>
 				<ChevronRight className="h-5 w-5" />
