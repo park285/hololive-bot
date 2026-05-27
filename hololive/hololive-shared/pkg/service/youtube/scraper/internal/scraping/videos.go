@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package scraping
 
 import (
@@ -26,6 +6,16 @@ import (
 	"log/slog"
 
 	"github.com/tidwall/gjson"
+
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser"
+)
+
+var (
+	parseLockupVideoViewModel = parser.ParseLockupVideoViewModel
+	pickLockupMetadataTexts   = parser.PickLockupMetadataTexts
+	collectLockupTexts        = parser.CollectLockupTexts
+	pickViewCountAndPublished = parser.PickViewCountAndPublished
+	fallbackPickMetadata      = parser.FallbackPickMetadata
 )
 
 func (c *Client) GetUpcomingEvents(ctx context.Context, channelID string) ([]*UpcomingEvent, error) {
@@ -235,7 +225,6 @@ func (c *Client) parsePopularGridVideos(popularItems []gjson.Result, channelID s
 	return videos
 }
 
-// parseVideoCommon: videoRenderer/gridVideoRenderer 공통 파싱 로직
 func (c *Client) parseVideoCommon(video gjson.Result, channelID, durationPath, channelTitlePath, channelHandlePath string) *Video {
 	videoID := video.Get("videoId").String()
 	if videoID == "" {
@@ -273,7 +262,6 @@ func (c *Client) parseVideoCommon(video gjson.Result, channelID, durationPath, c
 	}
 }
 
-// parseVideoRenderer: videoRenderer JSON을 Video 구조체로 변환
 func (c *Client) parseVideoRenderer(video gjson.Result, channelID string) *Video {
 	return c.parseVideoCommon(
 		video,
@@ -284,7 +272,6 @@ func (c *Client) parseVideoRenderer(video gjson.Result, channelID string) *Video
 	)
 }
 
-// parseGridVideoRenderer: gridVideoRenderer JSON을 Video 구조체로 변환
 func (c *Client) parseGridVideoRenderer(video gjson.Result, channelID string) *Video {
 	return c.parseVideoCommon(
 		video,
@@ -293,96 +280,4 @@ func (c *Client) parseGridVideoRenderer(video gjson.Result, channelID string) *V
 		"shortBylineText.runs.0.text",
 		"shortBylineText.runs.0.navigationEndpoint.browseEndpoint.canonicalBaseUrl",
 	)
-}
-
-func parseLockupVideoViewModel(lockup gjson.Result, channelID string) *Video {
-	if lockup.Get("contentType").String() != "LOCKUP_CONTENT_TYPE_VIDEO" {
-		return nil
-	}
-
-	videoID := lockup.Get("contentId").String()
-	if videoID == "" {
-		videoID = lockup.Get("rendererContext.commandContext.onTap.innertubeCommand.watchEndpoint.videoId").String()
-	}
-	if videoID == "" {
-		return nil
-	}
-
-	var thumbnails []Thumbnail
-	lockup.Get("contentImage.thumbnailViewModel.image.sources").ForEach(func(_, t gjson.Result) bool {
-		thumbnails = append(thumbnails, Thumbnail{
-			URL:    t.Get("url").String(),
-			Width:  int(t.Get("width").Int()),
-			Height: int(t.Get("height").Int()),
-		})
-		return true
-	})
-
-	metadataParts := lockup.Get("metadata.lockupMetadataViewModel.metadata.contentMetadataViewModel.metadataRows.0.metadataParts")
-	viewCount, publishedText := pickLockupMetadataTexts(metadataParts)
-
-	return &Video{
-		VideoID:       videoID,
-		Title:         lockup.Get("metadata.lockupMetadataViewModel.title.content").String(),
-		Thumbnail:     thumbnails,
-		ViewCount:     viewCount,
-		PublishedText: publishedText,
-		Duration:      lockup.Get("contentImage.thumbnailViewModel.overlays.0.thumbnailBottomOverlayViewModel.badges.0.thumbnailBadgeViewModel.text").String(),
-		ChannelID:     channelID,
-	}
-}
-
-// pickLockupMetadataTexts: lockup metadataParts 항목의 순서 의존성을 없앤다.
-// parseViewCount > 0인 항목을 viewCount로 식별하고, 나머지 첫 번째 항목을 published 텍스트로 사용.
-// 모든 항목에서 viewCount를 식별하지 못하면 기존 동작(0=viewCount, 1=published)으로 폴백.
-func pickLockupMetadataTexts(parts gjson.Result) (int64, string) {
-	texts := collectLockupTexts(parts)
-	if viewCount, published, ok := pickViewCountAndPublished(texts); ok {
-		return viewCount, published
-	}
-	return fallbackPickMetadata(texts)
-}
-
-func collectLockupTexts(parts gjson.Result) []string {
-	var texts []string
-	parts.ForEach(func(_, part gjson.Result) bool {
-		text := part.Get("text.content").String()
-		if text != "" {
-			texts = append(texts, text)
-		}
-		return true
-	})
-	return texts
-}
-
-func pickViewCountAndPublished(texts []string) (int64, string, bool) {
-	for i, t := range texts {
-		parsed := parseViewCount(t)
-		if parsed <= 0 {
-			continue
-		}
-		return parsed, firstOtherText(texts, i), true
-	}
-	return 0, "", false
-}
-
-func firstOtherText(texts []string, excludeIdx int) string {
-	for i, t := range texts {
-		if i == excludeIdx {
-			continue
-		}
-		return t
-	}
-	return ""
-}
-
-func fallbackPickMetadata(texts []string) (int64, string) {
-	var viewText, publishedText string
-	if len(texts) > 0 {
-		viewText = texts[0]
-	}
-	if len(texts) > 1 {
-		publishedText = texts[1]
-	}
-	return parseViewCount(viewText), publishedText
 }
