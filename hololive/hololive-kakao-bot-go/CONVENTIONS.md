@@ -218,8 +218,8 @@ TruncateString(s, maxRunes)
 
 현재 사용 위치:
 
-- `internal/service/majoreventclient`
-- `internal/service/membernewsclient`
+- `internal/client/majorevent`
+- `internal/client/membernews`
 
 ## `shared-go/pkg/runtime/*`
 
@@ -309,8 +309,8 @@ TruncateString(s, maxRunes)
 
 ### Major event / member news
 
-- major event internal API client → `internal/service/majoreventclient`
-- member news internal API client → `internal/service/membernewsclient`
+- major event internal API client → `internal/client/majorevent`
+- member news internal API client → `internal/client/membernews`
 
 규칙:
 
