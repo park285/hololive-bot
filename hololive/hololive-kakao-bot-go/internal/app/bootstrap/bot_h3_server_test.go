@@ -43,8 +43,8 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	if server.TLSConfig.MinVersion != tls.VersionTLS13 {
 		t.Fatalf("MinVersion = %x, want %x", server.TLSConfig.MinVersion, tls.VersionTLS13)
 	}
-	if len(server.TLSConfig.Certificates) != 1 {
-		t.Fatalf("Certificates len = %d, want 1", len(server.TLSConfig.Certificates))
+	if server.TLSConfig.GetCertificate == nil {
+		t.Fatal("GetCertificate = nil")
 	}
 	if server.QUICConfig == nil {
 		t.Fatal("QUICConfig = nil")
@@ -57,7 +57,126 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	}
 }
 
+func TestBuildBotHTTP3ServerReloadsCertificateFiles(t *testing.T) {
+	t.Parallel()
+
+	certFile, keyFile := writeLocalhostCertificate(t)
+	appConfig := &config.Config{
+		Server: config.ServerConfig{
+			H3Addr:     "127.0.0.1:0",
+			H3CertFile: certFile,
+			H3KeyFile:  keyFile,
+		},
+	}
+
+	server, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
+	}
+
+	if server.TLSConfig.GetCertificate == nil {
+		t.Fatal("GetCertificate = nil")
+	}
+
+	first, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatalf("first GetCertificate() error = %v", err)
+	}
+
+	firstSerial := certificateSerial(t, first)
+
+	overwriteLocalhostCertificate(t, certFile, keyFile)
+
+	second, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatalf("second GetCertificate() error = %v", err)
+	}
+
+	secondSerial := certificateSerial(t, second)
+
+	if secondSerial == firstSerial {
+		t.Fatalf("certificate serial did not reload: %s", secondSerial)
+	}
+}
+
+func TestBuildBotHTTP3ServerKeepsPreviousCertificateWhenReloadFails(t *testing.T) {
+	t.Parallel()
+
+	certFile, keyFile := writeLocalhostCertificate(t)
+	appConfig := &config.Config{
+		Server: config.ServerConfig{
+			H3Addr:     "127.0.0.1:0",
+			H3CertFile: certFile,
+			H3KeyFile:  keyFile,
+		},
+	}
+
+	server, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
+	}
+
+	if server.TLSConfig.GetCertificate == nil {
+		t.Fatal("GetCertificate = nil")
+	}
+
+	first, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatalf("first GetCertificate() error = %v", err)
+	}
+
+	firstSerial := certificateSerial(t, first)
+
+	writeErr := os.WriteFile(keyFile, []byte("not a private key"), 0o600)
+	if writeErr != nil {
+		t.Fatalf("write invalid key: %v", writeErr)
+	}
+
+	second, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatalf("second GetCertificate() error = %v", err)
+	}
+
+	secondSerial := certificateSerial(t, second)
+
+	if secondSerial != firstSerial {
+		t.Fatalf("certificate serial = %s, want previous %s", secondSerial, firstSerial)
+	}
+}
+
 func writeLocalhostCertificate(t *testing.T) (string, string) {
+	t.Helper()
+
+	certPEM, keyPEM := generateLocalhostCertificate(t)
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "localhost.crt")
+	keyFile := filepath.Join(dir, "localhost.key")
+
+	if err := os.WriteFile(certFile, certPEM, 0o600); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+
+	if err := os.WriteFile(keyFile, keyPEM, 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+
+	return certFile, keyFile
+}
+
+func overwriteLocalhostCertificate(t *testing.T, certFile, keyFile string) {
+	t.Helper()
+
+	certPEM, keyPEM := generateLocalhostCertificate(t)
+	if err := os.WriteFile(certFile, certPEM, 0o600); err != nil {
+		t.Fatalf("write replacement cert: %v", err)
+	}
+
+	if err := os.WriteFile(keyFile, keyPEM, 0o600); err != nil {
+		t.Fatalf("write replacement key: %v", err)
+	}
+}
+
+func generateLocalhostCertificate(t *testing.T) ([]byte, []byte) {
 	t.Helper()
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -86,16 +205,21 @@ func writeLocalhostCertificate(t *testing.T) (string, string) {
 		t.Fatalf("create cert: %v", err)
 	}
 
-	dir := t.TempDir()
-	certFile := filepath.Join(dir, "localhost.crt")
-	keyFile := filepath.Join(dir, "localhost.key")
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}),
+		pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+}
 
-	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}), 0o600); err != nil {
-		t.Fatalf("write cert: %v", err)
-	}
-	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), 0o600); err != nil {
-		t.Fatalf("write key: %v", err)
+func certificateSerial(t *testing.T, cert *tls.Certificate) string {
+	t.Helper()
+
+	if cert == nil || len(cert.Certificate) == 0 {
+		t.Fatal("certificate chain is empty")
 	}
 
-	return certFile, keyFile
+	parsed, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		t.Fatalf("parse certificate: %v", err)
+	}
+
+	return parsed.SerialNumber.String()
 }
