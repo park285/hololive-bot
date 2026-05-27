@@ -114,11 +114,8 @@ func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.Messag
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, config, tp)
 	grouper := newOutboxGrouper(db, cacheClient, logger, config)
 	status := newStatusUpdater(db, logger, config)
-	formatter := &MessageFormatter{
-		renderer: renderer,
-		cache:    cacheClient,
-		logger:   logger,
-	}
+	formatter := NewMessageFormatter(renderer, cacheClient, logger)
+
 	claimManager := newClaimManager(db, logger, config, deliveryRepo, nil, status, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al, claimManager)
 	sendEngine := newSendEngine(sender, formatter, logger, config, claimManager, al, metricsRecorder)
