@@ -61,14 +61,6 @@ func (mf *MessageFormatter) formatVideoMessage(memberName, payload string, kind 
 	return mf.inner().FormatVideoMessage(memberName, payload, kind)
 }
 
-func (mf *MessageFormatter) formatCommunityMessage(memberName, payload string) (string, error) {
-	return mf.inner().FormatCommunityMessage(memberName, payload)
-}
-
-func (mf *MessageFormatter) formatMilestoneMessage(memberName, payload string) (string, error) {
-	return mf.inner().FormatMilestoneMessage(memberName, payload)
-}
-
 func (mf *MessageFormatter) getMemberName(ctx context.Context, channelID string) (string, error) {
 	return mf.inner().GetMemberName(ctx, channelID)
 }
@@ -79,10 +71,6 @@ func (mf *MessageFormatter) formatGroupedMessage(ctx context.Context, memberName
 
 func (mf *MessageFormatter) getGroupedTemplateKeyAndHeader(memberName string, kind domain.OutboxKind, count int) (domain.TemplateKey, string) {
 	return mf.inner().GetGroupedTemplateKeyAndHeader(memberName, kind, count)
-}
-
-func (mf *MessageFormatter) applySeeMorePadding(msg string, kind domain.OutboxKind, data format.TemplateData) string {
-	return mf.inner().ApplySeeMorePadding(msg, kind, data)
 }
 
 func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payload domain.YouTubeOutboxDispatchPayload) (string, error) {
