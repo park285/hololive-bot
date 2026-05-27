@@ -7,9 +7,8 @@ import (
 )
 
 var (
-	parseVideosFromInitialDataWithoutTabs = parser.ParseVideosFromInitialDataWithoutTabs
-	findVideosTabContent                  = parser.FindVideosTabContent
-	collectVideoRenderers                 = parser.CollectVideoRenderers
+	findVideosTabContent  = parser.FindVideosTabContent
+	collectVideoRenderers = parser.CollectVideoRenderers
 )
 
 const maxVideoRendererFallbackNodes = parser.MaxVideoRendererFallbackNodes

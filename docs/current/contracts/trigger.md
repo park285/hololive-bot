@@ -74,7 +74,7 @@ gin.H{"status": "member news weekly digest sent"}
 
 - Route constants: `hololive/hololive-shared/pkg/contracts/trigger/routes_test.go`
 - Provider/router tests: `hololive/hololive-llm-sched/internal/app/*trigger*_test.go`
-- Consumer tests: `hololive/hololive-admin-api/internal/service/trigger/client_test.go`
+- Consumer tests: `hololive/hololive-admin-api/internal/client/trigger/client_test.go`
 
 ## Known gaps
 
