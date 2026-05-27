@@ -1,4 +1,4 @@
-package membernewsclient
+package membernews
 
 import (
 	"context"

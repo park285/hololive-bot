@@ -1,4 +1,4 @@
-package majoreventclient
+package majorevent
 
 import (
 	"time"

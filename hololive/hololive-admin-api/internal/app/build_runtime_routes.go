@@ -18,9 +18,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 
 	apphttp "github.com/kapu/hololive-admin-api/internal/app/http"
+	triggerclient "github.com/kapu/hololive-admin-api/internal/client/trigger"
 	"github.com/kapu/hololive-admin-api/internal/server"
 	"github.com/kapu/hololive-admin-api/internal/service/system"
-	triggerclient "github.com/kapu/hololive-admin-api/internal/service/trigger"
 )
 
 func buildAdminHandler(
