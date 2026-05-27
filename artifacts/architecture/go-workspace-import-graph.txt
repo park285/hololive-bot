@@ -370,7 +370,6 @@ github.com/kapu/hololive-kakao-bot-go/internal/bot/orchestration/transport -> gi
 github.com/kapu/hololive-kakao-bot-go/internal/bot/orchestration/transport -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-kakao-bot-go/internal/command -> github.com/kapu/hololive-kakao-bot-go/internal/command/handlers
 github.com/kapu/hololive-kakao-bot-go/internal/command/handlers -> github.com/kapu/hololive-kakao-bot-go/internal/adapter
-github.com/kapu/hololive-kakao-bot-go/internal/command/handlers -> github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging
 github.com/kapu/hololive-kakao-bot-go/internal/command/handlers -> github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging/formatter
 github.com/kapu/hololive-kakao-bot-go/internal/command/handlers -> github.com/kapu/hololive-kakao-bot-go/internal/command/handlers/handlercore
 github.com/kapu/hololive-kakao-bot-go/internal/command/handlers -> github.com/kapu/hololive-kakao-bot-go/internal/command/handlers/info
