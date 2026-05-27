@@ -7,29 +7,10 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics"
 )
 
-type PostSendCount struct {
-	OutboxKind            domain.OutboxKind `gorm:"column:outbox_kind"`
-	AlarmType             domain.AlarmType  `gorm:"column:alarm_type"`
-	ChannelID             string            `gorm:"column:channel_id"`
-	PostID                string            `gorm:"column:post_id"`
-	ContentID             string            `gorm:"column:content_id"`
-	ActualPublishedAt     *time.Time        `gorm:"column:actual_published_at"`
-	DetectedAt            *time.Time        `gorm:"column:detected_at"`
-	AlarmSentAt           *time.Time        `gorm:"column:alarm_sent_at"`
-	AlarmLatencyMillis    *int64            `gorm:"column:alarm_latency_millis"`
-	AlarmLatencyExceeded  *bool             `gorm:"-"`
-	FirstEventAt          *time.Time        `gorm:"column:first_event_at"`
-	LastEventAt           *time.Time        `gorm:"column:last_event_at"`
-	FirstSuccessAt        *time.Time        `gorm:"column:first_success_at"`
-	LastSuccessAt         *time.Time        `gorm:"column:last_success_at"`
-	OutboxCount           int64             `gorm:"column:outbox_count"`
-	SuccessSendCount      int64             `gorm:"column:success_send_count"`
-	SuccessRoomCount      int64             `gorm:"column:success_room_count"`
-	DuplicateSuccessCount int64             `gorm:"column:duplicate_success_count"`
-	FailedAttemptCount    int64             `gorm:"column:failed_attempt_count"`
-}
+type PostSendCount = analytics.PostSendCount
 
 type postSendCountScanRow struct {
 	OutboxKind            domain.OutboxKind `gorm:"column:outbox_kind"`

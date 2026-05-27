@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
 func (d *ClaimManager) logFinalizedCommunityShortsOutboxResults(ctx context.Context, outboxIDs []int64) error {
@@ -21,7 +22,7 @@ func appendLatencyClassificationLogAttr(attrs []any, classification PostLatencyC
 		slog.Int64("threshold_millis", classification.ThresholdMillis),
 		slog.String("delay_source", string(classification.DelaySource)),
 		slog.String("internal_delay_cause", string(classification.InternalDelayCause)),
-		slog.String("reason_code", string(classifyPostLatencyReasonCode(classification))),
+		slog.String("reason_code", string(timeline.ClassifyPostLatencyReasonCode(classification))),
 		slog.Any("evidence", classification.Evidence),
 	))
 }
