@@ -3,8 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/api/queryKeys";
 import { calendarApi } from "../api";
 
+function nowKST(): Date {
+	return new Date(
+		new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }),
+	);
+}
+
 export function useCalendarPage() {
-	const now = new Date();
+	const now = nowKST();
 	const [month, setMonth] = useState(now.getMonth() + 1);
 	const [year, setYear] = useState(now.getFullYear());
 
@@ -32,7 +38,7 @@ export function useCalendarPage() {
 	};
 
 	const goToToday = () => {
-		const today = new Date();
+		const today = nowKST();
 		setMonth(today.getMonth() + 1);
 		setYear(today.getFullYear());
 	};
