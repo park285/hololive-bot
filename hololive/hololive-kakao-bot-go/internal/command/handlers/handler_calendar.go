@@ -9,7 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
 type CalendarCommand struct {
@@ -53,7 +53,7 @@ func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 			slog.Int("month", month), slog.Int("year", year),
 			slog.Any("error", err),
 		)
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrCalendarQueryFailed)
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrCalendarQueryFailed)
 	}
 
 	if c.imageRenderer != nil {
