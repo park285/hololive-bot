@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
@@ -26,7 +27,7 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	entries, err := h.repository.FindMembersWithCelebrationsInMonth(ctx, month, year)
+	result, err := h.repository.FindMembersWithCelebrationsInMonth(ctx, month, year)
 	if err != nil {
 		h.safeLogger().Error("Failed to get calendar entries",
 			slog.Int("month", month), slog.Int("year", year),
@@ -36,6 +37,10 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 		return
 	}
 
+	entries := result
+	if entries == nil {
+		entries = []domain.CalendarEntry{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ok", "month": month, "year": year, "entries": entries,
 	})
