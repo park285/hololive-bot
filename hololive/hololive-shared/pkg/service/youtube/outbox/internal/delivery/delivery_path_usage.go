@@ -7,25 +7,10 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics"
 )
 
-type PostDeliveryPathUsage struct {
-	OutboxKind         domain.OutboxKind `gorm:"column:outbox_kind"`
-	AlarmType          domain.AlarmType  `gorm:"column:alarm_type"`
-	ChannelID          string            `gorm:"column:channel_id"`
-	PostID             string            `gorm:"column:post_id"`
-	ContentID          string            `gorm:"column:content_id"`
-	DeliveryPath       string            `gorm:"column:delivery_path"`
-	ActualPublishedAt  *time.Time        `gorm:"column:actual_published_at"`
-	DetectedAt         *time.Time        `gorm:"column:detected_at"`
-	FirstEventAt       *time.Time        `gorm:"column:first_event_at"`
-	LastEventAt        *time.Time        `gorm:"column:last_event_at"`
-	FirstSuccessAt     *time.Time        `gorm:"column:first_success_at"`
-	LastSuccessAt      *time.Time        `gorm:"column:last_success_at"`
-	SuccessSendCount   int64             `gorm:"column:success_send_count"`
-	SuccessRoomCount   int64             `gorm:"column:success_room_count"`
-	FailedAttemptCount int64             `gorm:"column:failed_attempt_count"`
-}
+type PostDeliveryPathUsage = analytics.PostDeliveryPathUsage
 
 type postDeliveryPathUsageScanRow struct {
 	OutboxKind         domain.OutboxKind `gorm:"column:outbox_kind"`

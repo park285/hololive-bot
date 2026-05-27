@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
 func (r *DeliveryTelemetryRepository) PersistPostLatencyClassificationsByOutboxIDs(ctx context.Context, outboxIDs []int64) error {
@@ -37,7 +38,7 @@ func (r *DeliveryTelemetryRepository) PersistPostLatencyClassificationsByIdentit
 		return fmt.Errorf("persist post latency classifications by identities: db is nil")
 	}
 
-	normalized, err := normalizePostTrackingIdentities(identities)
+	normalized, err := timeline.NormalizePostTrackingIdentities(identities)
 	if err != nil {
 		return fmt.Errorf("persist post latency classifications by identities: %w", err)
 	}
@@ -85,7 +86,7 @@ func markPostLatencyClassificationRowSeen(row PostDeliveryTimeline, seen map[str
 		return "", false
 	}
 
-	key := postTrackingIdentityKey(row.OutboxKind, contentID)
+	key := timeline.PostTrackingIdentityKey(row.OutboxKind, contentID)
 	if _, ok := seen[key]; ok {
 		return "", false
 	}

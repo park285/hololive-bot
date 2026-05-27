@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
 func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesSince(ctx context.Context, since time.Time) ([]PostDeliveryTimeline, error) {
@@ -150,7 +151,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByTrackingIdentit
 		return nil, fmt.Errorf("list post delivery timelines by tracking identities: db is nil")
 	}
 
-	normalized, err := normalizePostTrackingIdentities(identities)
+	normalized, err := timeline.NormalizePostTrackingIdentities(identities)
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by tracking identities: %w", err)
 	}
