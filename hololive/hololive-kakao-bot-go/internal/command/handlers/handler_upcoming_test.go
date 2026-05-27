@@ -188,7 +188,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_GoldenPath(t *testing.T) {
 
 	deps := &Dependencies{
 		Holodex: holodex,
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
@@ -228,7 +228,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_NoStreams(t *testing.T) {
 
 	deps := &Dependencies{
 		Holodex: holodex,
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
@@ -266,7 +266,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 
 	deps := &Dependencies{
 		Holodex: holodex,
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
@@ -299,7 +299,7 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 
 	deps := &Dependencies{
 		Holodex: &upcomingStreamProviderStub{},
-		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
