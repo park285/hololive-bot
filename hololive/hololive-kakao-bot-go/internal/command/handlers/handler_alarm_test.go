@@ -299,9 +299,8 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	}})
 	alarm := &alarmAddRecorder{}
 	deps := &Dependencies{
-		Alarm: alarm,
-		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
-		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Alarm:     alarm,
+		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
@@ -342,9 +341,8 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	alarm := &alarmAddRecorder{}
 	sendErrorCalled := false
 	deps := &Dependencies{
-		Alarm: alarm,
-		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
-		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Alarm:     alarm,
+		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil

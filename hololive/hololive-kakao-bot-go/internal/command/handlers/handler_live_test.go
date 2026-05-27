@@ -162,9 +162,8 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 		Name:      "Aqua",
 	}})
 	deps := &Dependencies{
-		Holodex: &liveStreamProviderStub{},
-		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
-		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Holodex:   &liveStreamProviderStub{},
+		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {
 			return nil

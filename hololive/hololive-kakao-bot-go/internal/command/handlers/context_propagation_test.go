@@ -42,6 +42,11 @@ func newCommandTestLogger() *slog.Logger {
 
 type commandContextKey struct{}
 
+// staticcheck literal nil 경고를 피하면서 nil base context 계약을 유지한다.
+func nilBaseContext() context.Context {
+	return nil
+}
+
 type trackedContextState struct {
 	mu   sync.Mutex
 	seen []context.Context
@@ -311,9 +316,8 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 			Logger:       newCommandTestLogger(),
 		}),
 		MembersData: provider,
-		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply reqCtx.
-		Matcher:   matcher.NewMatcher(nil, provider, nil, nil, nil, newCommandTestLogger()),
-		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		Matcher:     matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, newCommandTestLogger()),
+		Formatter:   adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
 		},

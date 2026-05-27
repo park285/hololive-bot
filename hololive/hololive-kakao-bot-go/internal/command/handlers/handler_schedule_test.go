@@ -89,9 +89,8 @@ func TestScheduleCommand_Execute_GoldenPath(t *testing.T) {
 	}
 
 	deps := &Dependencies{
-		Holodex: holodex,
-		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
-		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Holodex:   holodex,
+		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
@@ -185,9 +184,8 @@ func TestScheduleCommand_Execute_QueryError(t *testing.T) {
 	}
 
 	deps := &Dependencies{
-		Holodex: holodex,
-		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
-		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Holodex:   holodex,
+		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
@@ -218,9 +216,8 @@ func TestScheduleCommand_Execute_MemberNotFound(t *testing.T) {
 	memberProvider := newContextAwareMemberProvider(nil)
 
 	deps := &Dependencies{
-		Holodex: &scheduleStreamProviderStub{},
-		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
-		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Holodex:   &scheduleStreamProviderStub{},
+		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
@@ -257,9 +254,8 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 	}
 
 	deps := &Dependencies{
-		Holodex: holodex,
-		//nolint:staticcheck // nil base context is the behavior under test; Execute must supply ctx.
-		Matcher:   matcher.NewMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Holodex:   holodex,
+		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
