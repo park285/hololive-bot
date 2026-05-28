@@ -70,6 +70,10 @@ expect_fail "osaka log target rejects removed dispatcher" compose_service_resolv
 
 OSAKA_ACTIVE_ACTIVE_FILES="${ROOT_DIR}/scripts/deploy/osaka-active-active-rsync-files.txt"
 [[ -r "${OSAKA_ACTIVE_ACTIVE_FILES}" ]] || fail "osaka active-active files list is readable"
+grep -qx 'scripts/deploy/osaka-iris-h3-trust-preflight.sh' "${OSAKA_ACTIVE_ACTIVE_FILES}" || fail "osaka active-active syncs Iris H3 trust preflight"
+pass "osaka active-active syncs Iris H3 trust preflight"
+grep -q 'osaka-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/osaka-active-active-deploy.sh" || fail "osaka active-active deploy runs Iris H3 trust preflight"
+pass "osaka active-active deploy runs Iris H3 trust preflight"
 while IFS= read -r path; do
     [[ -n "${path}" ]] || continue
     [[ -e "${ROOT_DIR}/${path}" ]] || fail "osaka active-active files list path exists: ${path}"

@@ -119,6 +119,8 @@ build_rsync_files_from
 rsync_preview | tee "$preview_file"
 validate_preview "$preview_file"
 
+"$REPO_ROOT/scripts/deploy/osaka-iris-h3-trust-preflight.sh"
+
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "[DRY-RUN] No remote files or containers changed."
   exit 0
