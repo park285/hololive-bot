@@ -343,6 +343,7 @@ fi
 echo
 
 run_step "Architecture gates" ./scripts/architecture/ci-boundary-gate.sh
+run_step "Sensitive log scan" ./scripts/refactor/grep-sensitive-logs.sh
 if [[ "${RUN_ADMIN_TOUCH_GUARDRAIL}" == "true" ]]; then
     run_step "Refactor admin-dashboard guardrail" ./scripts/refactor/validate-no-admin-touch.sh
     run_step "Refactor admin-dashboard guardrail tests" ./scripts/refactor/test-validate-no-admin-touch.sh
