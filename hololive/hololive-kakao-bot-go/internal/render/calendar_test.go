@@ -53,10 +53,11 @@ func TestCalendarCardRenderer_RenderCalendarImage_WithEntries(t *testing.T) {
 	}
 
 	bounds := img.Bounds()
-	if bounds.Dx() != canvasWidth {
-		t.Errorf("width = %d, want %d", bounds.Dx(), canvasWidth)
+	if bounds.Dx() != calendarOutputWidth {
+		t.Errorf("width = %d, want %d", bounds.Dx(), calendarOutputWidth)
 	}
-	if bounds.Dy() <= headerH {
+	outputHeaderH := newCalendarMetrics(1).headerH * calendarOutputWidth / canvasWidth
+	if bounds.Dy() <= outputHeaderH {
 		t.Error("height should be larger than header for entries")
 	}
 }
@@ -77,13 +78,11 @@ func TestCalendarCardRenderer_RenderCalendarImage_UsesTransportFriendlyCanvas(t 
 		t.Fatalf("png.Decode() error = %v", decErr)
 	}
 
-	if got, want := img.Bounds().Dx(), 1800; got < want {
-		t.Fatalf("width = %d, want at least %d", got, want)
-	}
-	// 확대 시 아바타·텍스트 화질을 위해 폭 상한을 3200까지 완화.
-	// 카카오 인라인 표시·전송 35MB 한도와의 균형선.
-	if got, want := img.Bounds().Dx(), 3200; got > want {
-		t.Fatalf("width = %d, want at most %d", got, want)
+	// 최종 출력은 카카오 표시폭에 맞춘 calendarOutputWidth로 고정한다.
+	// 내부는 고해상도(canvasWidth)로 그린 뒤 이 폭으로 SSAA 다운스케일하므로,
+	// 카카오가 인라인 표시 시 추가 다운스케일/재압축을 거의 하지 않는다.
+	if got, want := img.Bounds().Dx(), calendarOutputWidth; got != want {
+		t.Fatalf("output width = %d, want %d (kakao display width)", got, want)
 	}
 }
 
@@ -91,7 +90,7 @@ func TestDrawCircularImageAvoidsLegacySoftBilinearDownsample(t *testing.T) {
 	t.Parallel()
 
 	src := detailedAvatarSource()
-	r := avatarSize / 2
+	r := newCalendarMetrics(1).avatarSize / 2
 	size := r*2 + 8
 	got := image.NewRGBA(image.Rect(0, 0, size, size))
 	legacy := image.NewRGBA(image.Rect(0, 0, size, size))

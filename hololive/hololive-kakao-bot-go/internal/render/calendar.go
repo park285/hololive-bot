@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/sync/singleflight"
 
@@ -41,8 +42,7 @@ type calendarFonts struct {
 	title, name, date, badge, stat, avatar font.Face
 }
 
-func loadCalendarFonts() (calendarFonts, error) {
-	sf := float64(scaleFactor)
+func loadCalendarFonts(sf float64) (calendarFonts, error) {
 	var f calendarFonts
 	var err error
 	if f.title, err = fonts.CaptionFaceSized(30 * sf); err != nil {
@@ -99,68 +99,95 @@ func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []do
 	fontMu.Lock()
 	defer fontMu.Unlock()
 
-	f, err := loadCalendarFonts()
+	grouped := groupEntriesByDay(entries)
+
+	// 자연 높이(compact=1)가 출력 비율(1024x1536)에 대응하는 내부 높이를 넘으면
+	// compact<1로 행·아바타·폰트를 비례 축소해 1024x1536 안에 담는다.
+	naturalH := calculateCanvasHeight(newCalendarMetrics(1), grouped)
+	targetInnerH := canvasWidth * calendarOutputHeight / calendarOutputWidth
+	compact := 1.0
+	if naturalH > targetInnerH {
+		compact = float64(targetInnerH) / float64(naturalH)
+	}
+	m := newCalendarMetrics(compact)
+
+	f, err := loadCalendarFonts(m.sf)
 	if err != nil {
 		return nil, err
 	}
+	m.fonts = f
 
-	grouped := groupEntriesByDay(entries)
-	height := min(calculateCanvasHeight(grouped), maxCanvasH)
+	height := min(calculateCanvasHeight(m, grouped), maxCanvasH)
 
 	img := image.NewRGBA(image.Rect(0, 0, canvasWidth, height))
 	fillRect(img, img.Bounds(), colWhite)
 
-	drawCalendarHeader(img, f, month, year, entries)
-	drawCalendarBody(img, f, month, grouped, photos)
+	drawCalendarHeader(img, m, month, year, entries)
+	drawCalendarBody(img, m, month, grouped, photos)
+
+	out := downscaleToOutputWidth(img)
 
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	if err := png.Encode(&buf, out); err != nil {
 		return nil, fmt.Errorf("encode calendar png: %w", err)
 	}
 	return buf.Bytes(), nil
 }
 
-func drawCalendarHeader(img *image.RGBA, f calendarFonts, month, year int, entries []domain.CalendarEntry) {
-	sf := float64(scaleFactor)
-	drawText(img, f.title, paddingX, int(42*sf), colSlate800, fmt.Sprintf("%d년 %d월 기념일", year, month))
+// 고해상도 캔버스를 카카오 표시폭(calendarOutputWidth)으로 다운스케일한다.
+// 큰 캔버스→작은 출력 = 슈퍼샘플링(SSAA)이라 텍스트·아바타가 선명해지고,
+// 카카오가 인라인 표시 시 추가 다운스케일/재압축을 거의 하지 않아 화질 손실이 작다.
+func downscaleToOutputWidth(src *image.RGBA) image.Image {
+	b := src.Bounds()
+	if b.Dx() <= calendarOutputWidth {
+		return src
+	}
+	nw := calendarOutputWidth
+	nh := b.Dy() * nw / b.Dx()
+	dst := image.NewRGBA(image.Rect(0, 0, nw, nh))
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, b, xdraw.Src, nil)
+	return dst
+}
+
+func drawCalendarHeader(img *image.RGBA, m calendarMetrics, month, year int, entries []domain.CalendarEntry) {
+	drawText(img, m.fonts.title, paddingX, int(42*m.sf), colSlate800, fmt.Sprintf("%d년 %d월 기념일", year, month))
 
 	bc, ac := countByKind(entries)
 	statText := fmt.Sprintf("총 %d건 · 생일 %d · 데뷔주년 %d", len(entries), bc, ac)
-	drawText(img, f.stat, paddingX, int(68*sf), colSlate500, statText)
+	drawText(img, m.fonts.stat, paddingX, int(68*m.sf), colSlate500, statText)
 
-	fillRect(img, image.Rect(paddingX, headerH, canvasWidth-paddingX, headerH+separatorH), colSlate200)
+	fillRect(img, image.Rect(paddingX, m.headerH, canvasWidth-paddingX, m.headerH+separatorH), colSlate200)
 }
 
-func drawCalendarBody(img *image.RGBA, f calendarFonts, month int, grouped []dayGroup, photos map[string]image.Image) {
-	y := headerH + separatorH + paddingY
+func drawCalendarBody(img *image.RGBA, m calendarMetrics, month int, grouped []dayGroup, photos map[string]image.Image) {
+	y := m.headerH + separatorH + m.paddingY
 
 	if len(grouped) == 0 {
-		drawText(img, f.name, paddingX, y+int(24*float64(scaleFactor)), colSlate500, "등록된 기념일이 없습니다.")
+		drawText(img, m.fonts.name, paddingX, y+int(24*m.sf), colSlate500, "등록된 기념일이 없습니다.")
 		return
 	}
 
 	for _, group := range grouped {
-		if y >= maxCanvasH-paddingY {
+		if y >= maxCanvasH-m.paddingY {
 			break
 		}
-		y = drawDayGroup(img, f, month, group, y, photos)
+		y = drawDayGroup(img, m, month, group, y, photos)
 	}
 }
 
-func drawDayGroup(img *image.RGBA, f calendarFonts, month int, group dayGroup, y int, photos map[string]image.Image) int {
-	sf := float64(scaleFactor)
-	drawText(img, f.date, paddingX, y+int(22*sf), colSlate500, fmt.Sprintf("%d월 %d일", month, group.day))
-	fillRect(img, image.Rect(paddingX, y+dateHeaderH-separatorH, canvasWidth-paddingX, y+dateHeaderH), colSlate200)
-	y += dateHeaderH
+func drawDayGroup(img *image.RGBA, m calendarMetrics, month int, group dayGroup, y int, photos map[string]image.Image) int {
+	drawText(img, m.fonts.date, paddingX, y+int(22*m.sf), colSlate500, fmt.Sprintf("%d월 %d일", month, group.day))
+	fillRect(img, image.Rect(paddingX, y+m.dateHeaderH-separatorH, canvasWidth-paddingX, y+m.dateHeaderH), colSlate200)
+	y += m.dateHeaderH
 
 	for _, entry := range group.entries {
-		if y >= maxCanvasH-paddingY {
+		if y >= maxCanvasH-m.paddingY {
 			break
 		}
-		drawEntryRow(img, f, paddingX+entryIndent, y, entry, photos)
-		y += entryRowH
+		drawEntryRow(img, m, paddingX+entryIndent, y, entry, photos)
+		y += m.entryRowH
 	}
-	return y + dateSectGap
+	return y + m.dateSectGap
 }
 
 type entryStyle struct {
@@ -179,26 +206,26 @@ func resolveEntryStyle(entry domain.CalendarEntry) entryStyle {
 	}
 }
 
-func drawEntryRow(img *image.RGBA, f calendarFonts, x, y int, entry domain.CalendarEntry, photos map[string]image.Image) {
+func drawEntryRow(img *image.RGBA, m calendarMetrics, x, y int, entry domain.CalendarEntry, photos map[string]image.Image) {
 	name := entryDisplayName(entry.Member)
 	style := resolveEntryStyle(entry)
 
-	drawEntryAvatar(img, f.avatar, x, y, entry, style.accent, name, photos)
+	drawEntryAvatar(img, m, x, y, entry, style.accent, name, photos)
 
-	nameX := x + avatarSize + avatarGap
-	drawText(img, f.name, nameX, y+entryRowH/2+int(8*float64(scaleFactor)), colSlate800, name)
+	nameX := x + m.avatarSize + m.avatarGap
+	drawText(img, m.fonts.name, nameX, y+m.entryRowH/2+int(8*m.sf), colSlate800, name)
 
 	if style.badgeText != "" {
-		drawEntryBadge(img, f.badge, y, style)
+		drawEntryBadge(img, m, y, style)
 	}
 }
 
-func drawEntryAvatar(img *image.RGBA, avatarFace font.Face, x, y int, entry domain.CalendarEntry, accent color.RGBA, name string, photos map[string]image.Image) {
-	cx := x + avatarSize/2
-	cy := y + entryRowH/2
-	r := avatarSize / 2
+func drawEntryAvatar(img *image.RGBA, m calendarMetrics, x, y int, entry domain.CalendarEntry, accent color.RGBA, name string, photos map[string]image.Image) {
+	cx := x + m.avatarSize/2
+	cy := y + m.entryRowH/2
+	r := m.avatarSize / 2
 
-	fillCircle(img, cx, cy, r+scaleFactor+1, colSlate200)
+	fillCircle(img, cx, cy, r+int(m.sf)+1, colSlate200)
 
 	if entry.Member != nil && entry.Member.Photo != "" {
 		if photo, ok := photos[entry.Member.Photo]; ok {
@@ -210,17 +237,17 @@ func drawEntryAvatar(img *image.RGBA, avatarFace font.Face, x, y int, entry doma
 	fillCircle(img, cx, cy, r, accent)
 	initial := firstRune(name)
 	if initial != "" {
-		iw := measureText(avatarFace, initial)
-		drawText(img, avatarFace, cx-iw/2, cy+int(12*float64(scaleFactor)), colWhite, initial)
+		iw := measureText(m.fonts.avatar, initial)
+		drawText(img, m.fonts.avatar, cx-iw/2, cy+int(12*m.sf), colWhite, initial)
 	}
 }
 
-func drawEntryBadge(img *image.RGBA, badgeFace font.Face, y int, s entryStyle) {
-	bw := measureText(badgeFace, s.badgeText)
-	bx := canvasWidth - paddingX - bw - badgePadX*2
-	by := y + (entryRowH-badgeH)/2
-	fillRoundedRect(img, image.Rect(bx, by, bx+bw+badgePadX*2, by+badgeH), badgeRadius, s.badgeBg)
-	drawText(img, badgeFace, bx+badgePadX, by+badgeH-badgePadY-int(2*float64(scaleFactor)), s.accent, s.badgeText)
+func drawEntryBadge(img *image.RGBA, m calendarMetrics, y int, s entryStyle) {
+	bw := measureText(m.fonts.badge, s.badgeText)
+	bx := canvasWidth - paddingX - bw - m.badgePadX*2
+	by := y + (m.entryRowH-m.badgeH)/2
+	fillRoundedRect(img, image.Rect(bx, by, bx+bw+m.badgePadX*2, by+m.badgeH), m.badgeRadius, s.badgeBg)
+	drawText(img, m.fonts.badge, bx+m.badgePadX, by+m.badgeH-m.badgePadY-int(2*m.sf), s.accent, s.badgeText)
 }
 
 func firstRune(s string) string {
@@ -338,15 +365,15 @@ func groupEntriesByDay(entries []domain.CalendarEntry) []dayGroup {
 	return groups
 }
 
-func calculateCanvasHeight(groups []dayGroup) int {
-	h := headerH + separatorH + paddingY
+func calculateCanvasHeight(m calendarMetrics, groups []dayGroup) int {
+	h := m.headerH + separatorH + m.paddingY
 	if len(groups) == 0 {
-		return h + 60*scaleFactor + paddingY
+		return h + int(60*m.sf) + m.paddingY
 	}
 	for _, g := range groups {
-		h += dateHeaderH + len(g.entries)*entryRowH + dateSectGap
+		h += m.dateHeaderH + len(g.entries)*m.entryRowH + m.dateSectGap
 	}
-	return h + paddingY
+	return h + m.paddingY
 }
 
 func entryDisplayName(m *domain.Member) string {

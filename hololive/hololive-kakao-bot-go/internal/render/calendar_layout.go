@@ -15,22 +15,45 @@ const (
 	scaleFactor     = 5
 	canvasWidth     = 620 * scaleFactor
 	maxCanvasPixels = 48_000_000
-	maxCanvasH      = min(4000*scaleFactor, maxCanvasPixels/canvasWidth)
-	paddingX        = 28 * scaleFactor
-	paddingY        = 20 * scaleFactor
-	headerH         = 82 * scaleFactor
-	dateSectGap     = 12 * scaleFactor
-	dateHeaderH     = 34 * scaleFactor
-	entryRowH       = 104 * scaleFactor
-	entryIndent     = 20 * scaleFactor
-	separatorH      = 1 * scaleFactor
-	avatarSize      = 90 * scaleFactor
-	avatarGap       = 18 * scaleFactor
-	badgePadX       = 12 * scaleFactor
-	badgePadY       = 5 * scaleFactor
-	badgeH          = 32 * scaleFactor
-	badgeRadius     = 9 * scaleFactor
+	// 최종 출력 크기(카카오 인라인 표시 근사). 내부는 canvasWidth(고해상도)로 그린 뒤
+	// calendarOutputWidth로 다운스케일해 전송한다 = SSAA + 카카오 재압축 손실 최소화.
+	// 항목이 많으면 compact<1로 비례 축소해 출력이 1024x1536 비율 안에 들어오게 한다.
+	calendarOutputWidth  = 1024
+	calendarOutputHeight = 1536
+	maxCanvasH           = min(4000*scaleFactor, maxCanvasPixels/canvasWidth)
+	// 가로 고정 치수(compact 영향 없음)
+	paddingX    = 28 * scaleFactor
+	entryIndent = 20 * scaleFactor
+	separatorH  = 1 * scaleFactor
 )
+
+// calendarMetrics는 compact 비율이 반영된 수직 밀도·아바타·배지·폰트 치수다.
+// 자연 높이가 1024x1536 비율을 넘으면 compact<1로 전체를 비례 축소한다.
+type calendarMetrics struct {
+	sf                                                     float64
+	paddingY, headerH, dateSectGap, dateHeaderH, entryRowH int
+	avatarSize, avatarGap                                  int
+	badgePadX, badgePadY, badgeH, badgeRadius              int
+	fonts                                                  calendarFonts
+}
+
+func newCalendarMetrics(compact float64) calendarMetrics {
+	sf := float64(scaleFactor) * compact
+	return calendarMetrics{
+		sf:          sf,
+		paddingY:    int(20 * sf),
+		headerH:     int(82 * sf),
+		dateSectGap: int(12 * sf),
+		dateHeaderH: int(34 * sf),
+		entryRowH:   int(104 * sf),
+		avatarSize:  int(90 * sf),
+		avatarGap:   int(18 * sf),
+		badgePadX:   int(12 * sf),
+		badgePadY:   int(5 * sf),
+		badgeH:      int(32 * sf),
+		badgeRadius: int(9 * sf),
+	}
+}
 
 var (
 	colWhite      = color.RGBA{R: 255, G: 255, B: 255, A: 255}
