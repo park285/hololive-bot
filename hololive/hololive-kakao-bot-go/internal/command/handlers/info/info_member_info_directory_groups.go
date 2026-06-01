@@ -38,6 +38,14 @@ var memberDirectoryPreferredOrder = []string{
 	"홀로라이브 5기생",
 	"홀로라이브 게이머즈",
 	"홀로라이브 인도네시아",
+	"mekPark",
+}
+
+// orgDirectoryGroups는 공식 프로필(유닛 데이터)이 없는 비-홀로라이브 소속을 org 값
+// 기준 그룹으로 묶어 표시하기 위한 매핑이다. 여기에 등재되지 않은 org는 기존 동작대로
+// "기타" 그룹으로 폴백한다(Stellive/VSPO 등은 의도적으로 제외).
+var orgDirectoryGroups = map[string]string{
+	"mekPark": "mekPark",
 }
 
 var memberDirectoryGroupAliases = map[string]string{
