@@ -1,0 +1,103 @@
+package render
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
+	"io"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+const calendarImageCacheLimit = 24
+
+type calendarCacheKey struct {
+	month       int
+	year        int
+	entriesHash string
+}
+
+func (key calendarCacheKey) string() string {
+	return fmt.Sprintf("%04d-%02d-%s", key.year, key.month, key.entriesHash)
+}
+
+func (r *CalendarCardRenderer) cachedImage(key calendarCacheKey) ([]byte, bool) {
+	if r == nil {
+		return nil, false
+	}
+
+	r.cacheMu.Lock()
+	defer r.cacheMu.Unlock()
+
+	data, ok := r.cache[key]
+	if !ok {
+		return nil, false
+	}
+	return bytes.Clone(data), true
+}
+
+func (r *CalendarCardRenderer) storeCachedImage(key calendarCacheKey, data []byte) {
+	if r == nil {
+		return
+	}
+
+	r.cacheMu.Lock()
+	defer r.cacheMu.Unlock()
+
+	if r.cache == nil {
+		r.cache = make(map[calendarCacheKey][]byte)
+	}
+	if _, ok := r.cache[key]; !ok {
+		r.cacheOrder = append(r.cacheOrder, key)
+	}
+	r.cache[key] = bytes.Clone(data)
+	for len(r.cacheOrder) > calendarImageCacheLimit {
+		oldest := r.cacheOrder[0]
+		r.cacheOrder = r.cacheOrder[1:]
+		delete(r.cache, oldest)
+	}
+}
+
+func newCalendarCacheKey(month, year int, entries []domain.CalendarEntry) calendarCacheKey {
+	hash := sha256.New()
+	writeCacheInt(hash, year)
+	writeCacheInt(hash, month)
+	writeCacheInt(hash, len(entries))
+	for _, entry := range entries {
+		writeCacheInt(hash, entry.Day)
+		writeCacheString(hash, string(entry.Kind))
+		writeCacheInt(hash, entry.Ordinal)
+		writeMemberCacheHash(hash, entry.Member)
+	}
+	return calendarCacheKey{
+		month:       month,
+		year:        year,
+		entriesHash: hex.EncodeToString(hash.Sum(nil)),
+	}
+}
+
+func writeMemberCacheHash(w io.Writer, member *domain.Member) {
+	if member == nil {
+		writeCacheString(w, "<nil>")
+		return
+	}
+	writeCacheInt(w, member.ID)
+	writeCacheString(w, member.ChannelID)
+	writeCacheString(w, member.Name)
+	writeCacheString(w, member.NameKo)
+	writeCacheString(w, member.ShortKoreanName)
+	writeCacheString(w, member.Photo)
+}
+
+func writeCacheInt(w io.Writer, value int) {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], uint64(value))
+	_, _ = w.Write(buf[:])
+}
+
+func writeCacheString(w io.Writer, value string) {
+	writeCacheInt(w, len(value))
+	_, _ = io.WriteString(w, value)
+}

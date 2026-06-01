@@ -2,8 +2,18 @@ package render
 
 import (
 	"bytes"
+	"errors"
+	"image"
+	"image/color"
 	"image/png"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -48,6 +58,258 @@ func TestCalendarCardRenderer_RenderCalendarImage_WithEntries(t *testing.T) {
 	}
 	if bounds.Dy() <= headerH {
 		t.Error("height should be larger than header for entries")
+	}
+}
+
+func TestCalendarCardRenderer_RenderCalendarImage_UsesTransportFriendlyCanvas(t *testing.T) {
+	t.Parallel()
+
+	r := NewCalendarCardRenderer()
+	data, err := r.RenderCalendarImage(6, 2026, []domain.CalendarEntry{
+		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "페코라"}, Day: 15},
+	})
+	if err != nil {
+		t.Fatalf("RenderCalendarImage() error = %v", err)
+	}
+
+	img, decErr := png.Decode(bytes.NewReader(data))
+	if decErr != nil {
+		t.Fatalf("png.Decode() error = %v", decErr)
+	}
+
+	if got, want := img.Bounds().Dx(), 1800; got < want {
+		t.Fatalf("width = %d, want at least %d", got, want)
+	}
+	// 확대 시 아바타 화질을 위해 폭 상한을 QHD급(2560)으로 완화.
+	// 카카오 인라인 표시·전송 35MB 한도와의 균형선.
+	if got, want := img.Bounds().Dx(), 2560; got > want {
+		t.Fatalf("width = %d, want at most %d", got, want)
+	}
+}
+
+func TestDrawCircularImageAvoidsLegacySoftBilinearDownsample(t *testing.T) {
+	t.Parallel()
+
+	src := detailedAvatarSource()
+	r := avatarSize / 2
+	size := r*2 + 8
+	got := image.NewRGBA(image.Rect(0, 0, size, size))
+	legacy := image.NewRGBA(image.Rect(0, 0, size, size))
+	cx, cy := size/2, size/2
+
+	drawCircularImage(got, src, cx, cy, r, colWhite)
+	drawLegacyBilinearCircularImage(legacy, src, cx, cy, r, colWhite)
+
+	if bytes.Equal(got.Pix, legacy.Pix) {
+		t.Fatal("avatar renderer still matches legacy bilinear downsample")
+	}
+	if gotEnergy, legacyEnergy := avatarEdgeEnergy(got), avatarEdgeEnergy(legacy); gotEnergy <= legacyEnergy {
+		t.Fatalf("avatar edge energy = %.2f, want more than legacy %.2f", gotEnergy, legacyEnergy)
+	}
+}
+
+func TestCalendarCardRenderer_RenderCalendarImage_ReusesMonthlyCache(t *testing.T) {
+	var requests atomic.Int32
+	server := newPNGServer(t, &requests)
+	defer server.Close()
+
+	r := NewCalendarCardRenderer()
+	entries := []domain.CalendarEntry{
+		{
+			Kind:   domain.CelebrationKindBirthday,
+			Member: &domain.Member{ShortKoreanName: "페코라", Photo: server.URL + "/avatar=s88-c"},
+			Day:    15,
+		},
+	}
+
+	first, err := r.RenderCalendarImage(6, 2026, entries)
+	if err != nil {
+		t.Fatalf("first RenderCalendarImage() error = %v", err)
+	}
+	first[0] = 0
+
+	second, err := r.RenderCalendarImage(6, 2026, entries)
+	if err != nil {
+		t.Fatalf("second RenderCalendarImage() error = %v", err)
+	}
+
+	assertValidPNG(t, second)
+	if got, want := requests.Load(), int32(1); got != want {
+		t.Fatalf("photo requests = %d, want %d", got, want)
+	}
+}
+
+func TestCalendarCardRenderer_RenderCalendarImage_CoalescesConcurrentMonthlyCacheMisses(t *testing.T) {
+	var requests atomic.Int32
+	pngData := tinyPNG(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		time.Sleep(25 * time.Millisecond)
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pngData)
+	}))
+	defer server.Close()
+
+	r := NewCalendarCardRenderer()
+	entries := []domain.CalendarEntry{
+		{
+			Kind:   domain.CelebrationKindBirthday,
+			Member: &domain.Member{ShortKoreanName: "페코라", Photo: server.URL + "/avatar=s88-c"},
+			Day:    15,
+		},
+	}
+
+	const workers = 5
+	start := make(chan struct{})
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for range workers {
+		go func() {
+			defer wg.Done()
+			<-start
+			data, err := r.RenderCalendarImage(6, 2026, entries)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if !bytes.HasPrefix(data, []byte{0x89, 'P', 'N', 'G'}) {
+				errs <- errors.New("rendered data is not a valid PNG")
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("RenderCalendarImage() error = %v", err)
+		}
+	}
+	if got, want := requests.Load(), int32(1); got != want {
+		t.Fatalf("photo requests = %d, want %d", got, want)
+	}
+}
+
+func TestCalendarCardRenderer_RenderCalendarImage_RefreshesCacheWhenEntriesChange(t *testing.T) {
+	var requests atomic.Int32
+	server := newPNGServer(t, &requests)
+	defer server.Close()
+
+	r := NewCalendarCardRenderer()
+	entries := []domain.CalendarEntry{
+		{
+			Kind:   domain.CelebrationKindBirthday,
+			Member: &domain.Member{ShortKoreanName: "페코라", Photo: server.URL + "/avatar=s88-c"},
+			Day:    15,
+		},
+	}
+	changedEntries := []domain.CalendarEntry{
+		{
+			Kind:   domain.CelebrationKindBirthday,
+			Member: &domain.Member{ShortKoreanName: "미코", Photo: server.URL + "/avatar=s88-c"},
+			Day:    15,
+		},
+	}
+
+	if _, err := r.RenderCalendarImage(6, 2026, entries); err != nil {
+		t.Fatalf("first RenderCalendarImage() error = %v", err)
+	}
+	if _, err := r.RenderCalendarImage(6, 2026, changedEntries); err != nil {
+		t.Fatalf("changed RenderCalendarImage() error = %v", err)
+	}
+
+	if got, want := requests.Load(), int32(2); got != want {
+		t.Fatalf("photo requests = %d, want %d", got, want)
+	}
+}
+
+func TestFetchMemberPhotoRequestsHighResolutionThumbnail(t *testing.T) {
+	var requestedPath string
+	pngData := tinyPNG(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pngData)
+	}))
+	defer server.Close()
+
+	photos := make(map[string]image.Image)
+	photoURL := server.URL + "/avatar=s88-c"
+	fetchMemberPhoto(domain.CalendarEntry{
+		Member: &domain.Member{Photo: photoURL},
+	}, photos)
+
+	if _, ok := photos[photoURL]; !ok {
+		t.Fatal("photo was not stored")
+	}
+	if !strings.Contains(requestedPath, "=s1024-") {
+		t.Fatalf("requested path = %q, want high resolution thumbnail", requestedPath)
+	}
+}
+
+func TestFetchImageAcceptsLargeThumbnailPayload(t *testing.T) {
+	pngData := largePNG(t)
+	if got, want := len(pngData), 512*1024; got <= want {
+		t.Fatalf("test PNG size = %d, want larger than %d", got, want)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pngData)
+	}))
+	defer server.Close()
+
+	img, err := fetchImage(server.URL)
+	if err != nil {
+		t.Fatalf("fetchImage() error = %v", err)
+	}
+	if img.Bounds().Dx() == 0 || img.Bounds().Dy() == 0 {
+		t.Fatalf("image bounds = %v, want non-empty image", img.Bounds())
+	}
+}
+
+func TestCalendarCacheKeyDistinguishesDelimiterCharacters(t *testing.T) {
+	left := []domain.CalendarEntry{
+		{
+			Kind: domain.CelebrationKindBirthday,
+			Day:  1,
+			Member: &domain.Member{
+				ID:              7,
+				ChannelID:       "chan|alpha",
+				Name:            "name",
+				NameKo:          "ko",
+				ShortKoreanName: "short",
+				Photo:           "photo",
+			},
+		},
+	}
+	right := []domain.CalendarEntry{
+		{
+			Kind: domain.CelebrationKindBirthday,
+			Day:  1,
+			Member: &domain.Member{
+				ID:              7,
+				ChannelID:       "chan",
+				Name:            "alpha|name",
+				NameKo:          "ko",
+				ShortKoreanName: "short",
+				Photo:           "photo",
+			},
+		},
+	}
+
+	leftKey := newCalendarCacheKey(6, 2026, left)
+	rightKey := newCalendarCacheKey(6, 2026, right)
+	if leftKey == rightKey {
+		t.Fatal("cache keys should differ for delimiter-containing fields")
+	}
+}
+
+func TestCalendarCanvasPixelBudget(t *testing.T) {
+	if got, want := canvasWidth*maxCanvasH, 32_000_000; got > want {
+		t.Fatalf("canvas pixel budget = %d, want at most %d", got, want)
 	}
 }
 
@@ -146,4 +408,145 @@ func assertValidPNG(t *testing.T, data []byte) {
 	if !bytes.HasPrefix(data, []byte{0x89, 'P', 'N', 'G'}) {
 		t.Fatal("data is not a valid PNG")
 	}
+}
+
+func newPNGServer(t *testing.T, requests *atomic.Int32) *httptest.Server {
+	t.Helper()
+
+	pngData := tinyPNG(t)
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pngData)
+	}))
+}
+
+func tinyPNG(t *testing.T) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatalf("png.Encode() error = %v", err)
+	}
+	return buf.Bytes()
+}
+
+func largePNG(t *testing.T) []byte {
+	t.Helper()
+
+	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	for y := range 512 {
+		for x := range 512 {
+			offset := img.PixOffset(x, y)
+			img.Pix[offset] = uint8(x)
+			img.Pix[offset+1] = uint8(y)
+			img.Pix[offset+2] = uint8(x ^ y)
+			img.Pix[offset+3] = 255
+		}
+	}
+
+	var buf bytes.Buffer
+	encoder := png.Encoder{CompressionLevel: png.NoCompression}
+	if err := encoder.Encode(&buf, img); err != nil {
+		t.Fatalf("png.Encode() error = %v", err)
+	}
+	return buf.Bytes()
+}
+
+func detailedAvatarSource() image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	for y := range 512 {
+		for x := range 512 {
+			base := uint8(96 + (x+y)%72)
+			if (x/10+y/14)%2 == 0 {
+				base = uint8(min(255, int(base)+80))
+			}
+			if x > 156 && x < 196 && y > 150 && y < 196 {
+				base = 20
+			}
+			if x > 316 && x < 356 && y > 150 && y < 196 {
+				base = 20
+			}
+			if y > 315 && y < 330 && x > 190 && x < 322 {
+				base = 240
+			}
+			img.SetRGBA(x, y, imageColor(base, uint8(max(0, int(base)-26)), uint8(min(255, int(base)+18))))
+		}
+	}
+	return img
+}
+
+func imageColor(r, g, b uint8) color.RGBA {
+	return color.RGBA{R: r, G: g, B: b, A: 255}
+}
+
+func drawLegacyBilinearCircularImage(dst *image.RGBA, src image.Image, cx, cy, r int, bgCol color.RGBA) {
+	bounds := src.Bounds()
+	srcW := float64(bounds.Dx())
+	srcH := float64(bounds.Dy())
+	diameter := float64(r * 2)
+	fr := float64(r)
+
+	for dy := -r; dy < r; dy++ {
+		for dx := -r; dx < r; dx++ {
+			dist := math.Sqrt(float64(dx*dx + dy*dy))
+			if dist > fr+0.5 {
+				continue
+			}
+			sfx := (float64(dx+r) + 0.5) * srcW / diameter
+			sfy := (float64(dy+r) + 0.5) * srcH / diameter
+			c := legacyBilinearSample(src, bounds, sfx, sfy)
+			c = applyEdgeBlend(c, bgCol, dist, fr)
+			dst.Set(cx+dx, cy+dy, c)
+		}
+	}
+}
+
+func legacyBilinearSample(src image.Image, bounds image.Rectangle, fx, fy float64) color.RGBA {
+	x0 := clampI(int(math.Floor(fx)), 0, bounds.Dx()-1) + bounds.Min.X
+	y0 := clampI(int(math.Floor(fy)), 0, bounds.Dy()-1) + bounds.Min.Y
+	x1 := clampI(int(math.Floor(fx))+1, 0, bounds.Dx()-1) + bounds.Min.X
+	y1 := clampI(int(math.Floor(fy))+1, 0, bounds.Dy()-1) + bounds.Min.Y
+	xf := fx - math.Floor(fx)
+	yf := fy - math.Floor(fy)
+
+	r00, g00, b00, _ := src.At(x0, y0).RGBA()
+	r10, g10, b10, _ := src.At(x1, y0).RGBA()
+	r01, g01, b01, _ := src.At(x0, y1).RGBA()
+	r11, g11, b11, _ := src.At(x1, y1).RGBA()
+
+	lerp := func(a, b, c, d uint32) uint8 {
+		top := float64(a)*(1-xf) + float64(b)*xf
+		bot := float64(c)*(1-xf) + float64(d)*xf
+		return uint8((top*(1-yf) + bot*yf) / 256)
+	}
+	return color.RGBA{R: lerp(r00, r10, r01, r11), G: lerp(g00, g10, g01, g11), B: lerp(b00, b10, b01, b11), A: 255}
+}
+
+func avatarEdgeEnergy(img *image.RGBA) float64 {
+	bounds := img.Bounds()
+	var total float64
+	var count int
+	for y := bounds.Min.Y + 1; y < bounds.Max.Y-1; y++ {
+		for x := bounds.Min.X + 1; x < bounds.Max.X-1; x++ {
+			c := img.RGBAAt(x, y)
+			if c.A == 0 {
+				continue
+			}
+			right := img.RGBAAt(x+1, y)
+			down := img.RGBAAt(x, y+1)
+			total += luminanceDelta(c, right) + luminanceDelta(c, down)
+			count += 2
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return total / float64(count)
+}
+
+func luminanceDelta(a, b color.RGBA) float64 {
+	la := 0.2126*float64(a.R) + 0.7152*float64(a.G) + 0.0722*float64(a.B)
+	lb := 0.2126*float64(b.R) + 0.7152*float64(b.G) + 0.0722*float64(b.B)
+	return math.Abs(la - lb)
 }

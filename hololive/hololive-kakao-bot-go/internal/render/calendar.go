@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -15,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/image/font"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/assets/fonts"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -22,10 +24,17 @@ import (
 
 var fontMu sync.Mutex
 
-type CalendarCardRenderer struct{}
+type CalendarCardRenderer struct {
+	cacheMu    sync.Mutex
+	cache      map[calendarCacheKey][]byte
+	cacheOrder []calendarCacheKey
+	rendering  singleflight.Group
+}
 
 func NewCalendarCardRenderer() *CalendarCardRenderer {
-	return &CalendarCardRenderer{}
+	return &CalendarCardRenderer{
+		cache: make(map[calendarCacheKey][]byte),
+	}
 }
 
 type calendarFonts struct {
@@ -36,28 +45,55 @@ func loadCalendarFonts() (calendarFonts, error) {
 	sf := float64(scaleFactor)
 	var f calendarFonts
 	var err error
-	if f.title, err = fonts.CaptionFaceSized(24 * sf); err != nil {
+	if f.title, err = fonts.CaptionFaceSized(30 * sf); err != nil {
 		return f, fmt.Errorf("load title font: %w", err)
 	}
-	if f.name, err = fonts.CaptionFaceSized(16 * sf); err != nil {
+	if f.name, err = fonts.CaptionFaceSized(22 * sf); err != nil {
 		return f, fmt.Errorf("load name font: %w", err)
 	}
-	if f.date, err = fonts.CaptionFaceSized(13 * sf); err != nil {
+	if f.date, err = fonts.CaptionFaceSized(16 * sf); err != nil {
 		return f, fmt.Errorf("load date font: %w", err)
 	}
-	if f.badge, err = fonts.CaptionFaceSized(12 * sf); err != nil {
+	if f.badge, err = fonts.CaptionFaceSized(15 * sf); err != nil {
 		return f, fmt.Errorf("load badge font: %w", err)
 	}
-	if f.stat, err = fonts.CaptionFaceSized(11 * sf); err != nil {
+	if f.stat, err = fonts.CaptionFaceSized(14 * sf); err != nil {
 		return f, fmt.Errorf("load stat font: %w", err)
 	}
-	if f.avatar, err = fonts.CaptionFaceSized(16 * sf); err != nil {
+	if f.avatar, err = fonts.CaptionFaceSized(34 * sf); err != nil {
 		return f, fmt.Errorf("load avatar font: %w", err)
 	}
 	return f, nil
 }
 
 func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error) {
+	cacheKey := newCalendarCacheKey(month, year, entries)
+	if data, ok := r.cachedImage(cacheKey); ok {
+		return data, nil
+	}
+
+	data, err, _ := r.rendering.Do(cacheKey.string(), func() (any, error) {
+		if data, ok := r.cachedImage(cacheKey); ok {
+			return data, nil
+		}
+		data, err := r.renderCalendarImage(month, year, entries)
+		if err != nil {
+			return nil, err
+		}
+		r.storeCachedImage(cacheKey, data)
+		return data, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	rendered, ok := data.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("calendar render cache returned %T", data)
+	}
+	return bytes.Clone(rendered), nil
+}
+
+func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error) {
 	photos := fetchMemberPhotos(entries)
 
 	fontMu.Lock()
@@ -86,11 +122,11 @@ func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []do
 
 func drawCalendarHeader(img *image.RGBA, f calendarFonts, month, year int, entries []domain.CalendarEntry) {
 	sf := float64(scaleFactor)
-	drawText(img, f.title, paddingX, int(34*sf), colSlate800, fmt.Sprintf("%d년 %d월 기념일", year, month))
+	drawText(img, f.title, paddingX, int(42*sf), colSlate800, fmt.Sprintf("%d년 %d월 기념일", year, month))
 
 	bc, ac := countByKind(entries)
 	statText := fmt.Sprintf("총 %d건 · 생일 %d · 데뷔주년 %d", len(entries), bc, ac)
-	drawText(img, f.stat, paddingX, int(58*sf), colSlate500, statText)
+	drawText(img, f.stat, paddingX, int(68*sf), colSlate500, statText)
 
 	fillRect(img, image.Rect(paddingX, headerH, canvasWidth-paddingX, headerH+separatorH), colSlate200)
 }
@@ -113,7 +149,7 @@ func drawCalendarBody(img *image.RGBA, f calendarFonts, month int, grouped []day
 
 func drawDayGroup(img *image.RGBA, f calendarFonts, month int, group dayGroup, y int, photos map[string]image.Image) int {
 	sf := float64(scaleFactor)
-	drawText(img, f.date, paddingX, y+int(18*sf), colSlate500, fmt.Sprintf("%d월 %d일", month, group.day))
+	drawText(img, f.date, paddingX, y+int(22*sf), colSlate500, fmt.Sprintf("%d월 %d일", month, group.day))
 	fillRect(img, image.Rect(paddingX, y+dateHeaderH-separatorH, canvasWidth-paddingX, y+dateHeaderH), colSlate200)
 	y += dateHeaderH
 
@@ -150,7 +186,7 @@ func drawEntryRow(img *image.RGBA, f calendarFonts, x, y int, entry domain.Calen
 	drawEntryAvatar(img, f.avatar, x, y, entry, style.accent, name, photos)
 
 	nameX := x + avatarSize + avatarGap
-	drawText(img, f.name, nameX, y+entryRowH/2+int(6*float64(scaleFactor)), colSlate800, name)
+	drawText(img, f.name, nameX, y+entryRowH/2+int(8*float64(scaleFactor)), colSlate800, name)
 
 	if style.badgeText != "" {
 		drawEntryBadge(img, f.badge, y, style)
@@ -175,7 +211,7 @@ func drawEntryAvatar(img *image.RGBA, avatarFace font.Face, x, y int, entry doma
 	initial := firstRune(name)
 	if initial != "" {
 		iw := measureText(avatarFace, initial)
-		drawText(img, avatarFace, cx-iw/2, cy+int(6*float64(scaleFactor)), colWhite, initial)
+		drawText(img, avatarFace, cx-iw/2, cy+int(12*float64(scaleFactor)), colWhite, initial)
 	}
 }
 
@@ -216,7 +252,11 @@ func addKindCount(kind domain.CelebrationKind, birthday, anniversary *int) {
 
 var photoClient = &http.Client{Timeout: 5 * time.Second}
 
-const photoFetchBudget = 15 * time.Second
+const (
+	photoFetchBudget           = 15 * time.Second
+	calendarPhotoThumbnailSize = 1024
+	calendarPhotoMaxBytes      = 2 << 20
+)
 
 func fetchMemberPhotos(entries []domain.CalendarEntry) map[string]image.Image {
 	deadline := time.Now().Add(photoFetchBudget)
@@ -237,7 +277,7 @@ func fetchMemberPhoto(e domain.CalendarEntry, photos map[string]image.Image) {
 	if _, ok := photos[e.Member.Photo]; ok {
 		return
 	}
-	url := thumbnailURL(e.Member.Photo, 256)
+	url := thumbnailURL(e.Member.Photo, calendarPhotoThumbnailSize)
 	if img, err := fetchImage(url); err == nil {
 		photos[e.Member.Photo] = img
 	}
@@ -259,9 +299,12 @@ func fetchImage(url string) (image.Image, error) {
 		_ = resp.Body.Close()
 	}()
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, calendarPhotoMaxBytes+1))
 	if err != nil {
 		return nil, err
+	}
+	if len(data) > calendarPhotoMaxBytes {
+		return nil, errors.New("image exceeds calendar photo byte limit")
 	}
 	if img, err := png.Decode(bytes.NewReader(data)); err == nil {
 		return img, nil

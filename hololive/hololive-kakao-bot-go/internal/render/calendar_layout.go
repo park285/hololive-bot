@@ -3,31 +3,33 @@ package render
 import (
 	"image"
 	"image/color"
-	"image/draw"
+	stddraw "image/draw"
 	"math"
 
+	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
 
 const (
-	scaleFactor = 2
-	canvasWidth = 620 * scaleFactor
-	maxCanvasH  = 4000 * scaleFactor
-	paddingX    = 28 * scaleFactor
-	paddingY    = 20 * scaleFactor
-	headerH     = 70 * scaleFactor
-	dateSectGap = 12 * scaleFactor
-	dateHeaderH = 28 * scaleFactor
-	entryRowH   = 58 * scaleFactor
-	entryIndent = 20 * scaleFactor
-	separatorH  = 1 * scaleFactor
-	avatarSize  = 44 * scaleFactor
-	avatarGap   = 14 * scaleFactor
-	badgePadX   = 10 * scaleFactor
-	badgePadY   = 4 * scaleFactor
-	badgeH      = 24 * scaleFactor
-	badgeRadius = 7 * scaleFactor
+	scaleFactor     = 4
+	canvasWidth     = 620 * scaleFactor
+	maxCanvasPixels = 32_000_000
+	maxCanvasH      = min(4000*scaleFactor, maxCanvasPixels/canvasWidth)
+	paddingX        = 28 * scaleFactor
+	paddingY        = 20 * scaleFactor
+	headerH         = 82 * scaleFactor
+	dateSectGap     = 12 * scaleFactor
+	dateHeaderH     = 34 * scaleFactor
+	entryRowH       = 104 * scaleFactor
+	entryIndent     = 20 * scaleFactor
+	separatorH      = 1 * scaleFactor
+	avatarSize      = 90 * scaleFactor
+	avatarGap       = 18 * scaleFactor
+	badgePadX       = 12 * scaleFactor
+	badgePadY       = 5 * scaleFactor
+	badgeH          = 32 * scaleFactor
+	badgeRadius     = 9 * scaleFactor
 )
 
 var (
@@ -64,13 +66,13 @@ func measureText(face font.Face, text string) int {
 }
 
 func fillRect(img *image.RGBA, rect image.Rectangle, col color.Color) {
-	draw.Draw(img, rect, image.NewUniform(col), image.Point{}, draw.Src)
+	stddraw.Draw(img, rect, image.NewUniform(col), image.Point{}, stddraw.Src)
 }
 
 func fillRoundedRect(img *image.RGBA, rect image.Rectangle, radius int, col color.Color) {
 	u := image.NewUniform(col)
-	draw.Draw(img, image.Rect(rect.Min.X+radius, rect.Min.Y, rect.Max.X-radius, rect.Max.Y), u, image.Point{}, draw.Src)
-	draw.Draw(img, image.Rect(rect.Min.X, rect.Min.Y+radius, rect.Max.X, rect.Max.Y-radius), u, image.Point{}, draw.Src)
+	stddraw.Draw(img, image.Rect(rect.Min.X+radius, rect.Min.Y, rect.Max.X-radius, rect.Max.Y), u, image.Point{}, stddraw.Src)
+	stddraw.Draw(img, image.Rect(rect.Min.X, rect.Min.Y+radius, rect.Max.X, rect.Max.Y-radius), u, image.Point{}, stddraw.Src)
 	for _, c := range [][2]int{
 		{rect.Min.X + radius, rect.Min.Y + radius},
 		{rect.Max.X - radius - 1, rect.Min.Y + radius},
@@ -82,19 +84,29 @@ func fillRoundedRect(img *image.RGBA, rect image.Rectangle, radius int, col colo
 }
 
 func fillCircle(img *image.RGBA, cx, cy, r int, col color.Color) {
-	u := image.NewUniform(col)
-	r2 := r * r
-	for dy := -r; dy <= r; dy++ {
-		dx := int(math.Sqrt(float64(r2 - dy*dy)))
-		draw.Draw(img, image.Rect(cx-dx, cy+dy, cx+dx+1, cy+dy+1), u, image.Point{}, draw.Src)
+	c := color.RGBAModel.Convert(col).(color.RGBA)
+	fcx, fcy, fr := float64(cx)+0.5, float64(cy)+0.5, float64(r)
+	for y := cy - r - 1; y <= cy+r+1; y++ {
+		for x := cx - r - 1; x <= cx+r+1; x++ {
+			cov := fr + 0.5 - math.Hypot(float64(x)+0.5-fcx, float64(y)+0.5-fcy)
+			blendCoveragePixel(img, x, y, c, cov)
+		}
 	}
 }
 
+func blendCoveragePixel(img *image.RGBA, x, y int, c color.RGBA, cov float64) {
+	if cov <= 0 {
+		return
+	}
+	if cov >= 1 {
+		img.SetRGBA(x, y, c)
+		return
+	}
+	img.SetRGBA(x, y, blendRGBA(c, img.RGBAAt(x, y), cov))
+}
+
 func drawCircularImage(dst *image.RGBA, src image.Image, cx, cy, r int, bgCol color.RGBA) {
-	bounds := src.Bounds()
-	srcW := float64(bounds.Dx())
-	srcH := float64(bounds.Dy())
-	diameter := float64(r * 2)
+	avatar := sharpenAvatar(resizeAvatarSource(src, r*2))
 	fr := float64(r)
 
 	for dy := -r; dy < r; dy++ {
@@ -103,17 +115,48 @@ func drawCircularImage(dst *image.RGBA, src image.Image, cx, cy, r int, bgCol co
 			if dist > fr+0.5 {
 				continue
 			}
-			c := sampleCircularPixel(src, bounds, srcW, srcH, diameter, dx, dy, r)
+			c := avatar.RGBAAt(dx+r, dy+r)
 			c = applyEdgeBlend(c, bgCol, dist, fr)
 			dst.Set(cx+dx, cy+dy, c)
 		}
 	}
 }
 
-func sampleCircularPixel(src image.Image, bounds image.Rectangle, srcW, srcH, diameter float64, dx, dy, r int) color.RGBA {
-	sfx := (float64(dx+r) + 0.5) * srcW / diameter
-	sfy := (float64(dy+r) + 0.5) * srcH / diameter
-	return bilinearSample(src, bounds, sfx, sfy)
+func resizeAvatarSource(src image.Image, size int) *image.RGBA {
+	bounds := src.Bounds()
+	side := min(bounds.Dx(), bounds.Dy())
+	cropMinX := bounds.Min.X + (bounds.Dx()-side)/2
+	cropMinY := bounds.Min.Y + (bounds.Dy()-side)/2
+	srcRect := image.Rect(cropMinX, cropMinY, cropMinX+side, cropMinY+side)
+	dst := image.NewRGBA(image.Rect(0, 0, size, size))
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, srcRect, xdraw.Src, nil)
+	return dst
+}
+
+func sharpenAvatar(src *image.RGBA) *image.RGBA {
+	bounds := src.Bounds()
+	if bounds.Dx() < 3 || bounds.Dy() < 3 {
+		return src
+	}
+
+	dst := image.NewRGBA(bounds)
+	copy(dst.Pix, src.Pix)
+	for y := bounds.Min.Y + 1; y < bounds.Max.Y-1; y++ {
+		for x := bounds.Min.X + 1; x < bounds.Max.X-1; x++ {
+			center := src.RGBAAt(x, y)
+			left := src.RGBAAt(x-1, y)
+			right := src.RGBAAt(x+1, y)
+			up := src.RGBAAt(x, y-1)
+			down := src.RGBAAt(x, y+1)
+			dst.SetRGBA(x, y, color.RGBA{
+				R: sharpenChannel(center.R, left.R, right.R, up.R, down.R),
+				G: sharpenChannel(center.G, left.G, right.G, up.G, down.G),
+				B: sharpenChannel(center.B, left.B, right.B, up.B, down.B),
+				A: center.A,
+			})
+		}
+	}
+	return dst
 }
 
 func applyEdgeBlend(c, bgCol color.RGBA, dist, fr float64) color.RGBA {
@@ -123,25 +166,12 @@ func applyEdgeBlend(c, bgCol color.RGBA, dist, fr float64) color.RGBA {
 	return c
 }
 
-func bilinearSample(src image.Image, bounds image.Rectangle, fx, fy float64) color.RGBA {
-	x0 := clampI(int(math.Floor(fx)), 0, bounds.Dx()-1) + bounds.Min.X
-	y0 := clampI(int(math.Floor(fy)), 0, bounds.Dy()-1) + bounds.Min.Y
-	x1 := clampI(int(math.Floor(fx))+1, 0, bounds.Dx()-1) + bounds.Min.X
-	y1 := clampI(int(math.Floor(fy))+1, 0, bounds.Dy()-1) + bounds.Min.Y
-	xf := fx - math.Floor(fx)
-	yf := fy - math.Floor(fy)
+const avatarSharpenAmount = 0.32
 
-	r00, g00, b00, _ := src.At(x0, y0).RGBA()
-	r10, g10, b10, _ := src.At(x1, y0).RGBA()
-	r01, g01, b01, _ := src.At(x0, y1).RGBA()
-	r11, g11, b11, _ := src.At(x1, y1).RGBA()
-
-	lerp := func(a, b, c, d uint32) uint8 {
-		top := float64(a)*(1-xf) + float64(b)*xf
-		bot := float64(c)*(1-xf) + float64(d)*xf
-		return uint8((top*(1-yf) + bot*yf) / 256)
-	}
-	return color.RGBA{R: lerp(r00, r10, r01, r11), G: lerp(g00, g10, g01, g11), B: lerp(b00, b10, b01, b11), A: 255}
+func sharpenChannel(center, left, right, up, down uint8) uint8 {
+	neighborAvg := float64(int(left)+int(right)+int(up)+int(down)) / 4
+	value := float64(center) + avatarSharpenAmount*(float64(center)-neighborAvg)
+	return uint8(clampI(int(math.Round(value)), 0, 255))
 }
 
 func blendRGBA(fg, bg color.RGBA, a float64) color.RGBA {
