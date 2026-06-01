@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	scaleFactor     = 4
+	scaleFactor     = 5
 	canvasWidth     = 620 * scaleFactor
-	maxCanvasPixels = 32_000_000
+	maxCanvasPixels = 48_000_000
 	maxCanvasH      = min(4000*scaleFactor, maxCanvasPixels/canvasWidth)
 	paddingX        = 28 * scaleFactor
 	paddingY        = 20 * scaleFactor

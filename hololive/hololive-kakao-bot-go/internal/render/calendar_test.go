@@ -80,9 +80,9 @@ func TestCalendarCardRenderer_RenderCalendarImage_UsesTransportFriendlyCanvas(t 
 	if got, want := img.Bounds().Dx(), 1800; got < want {
 		t.Fatalf("width = %d, want at least %d", got, want)
 	}
-	// 확대 시 아바타 화질을 위해 폭 상한을 QHD급(2560)으로 완화.
+	// 확대 시 아바타·텍스트 화질을 위해 폭 상한을 3200까지 완화.
 	// 카카오 인라인 표시·전송 35MB 한도와의 균형선.
-	if got, want := img.Bounds().Dx(), 2560; got > want {
+	if got, want := img.Bounds().Dx(), 3200; got > want {
 		t.Fatalf("width = %d, want at most %d", got, want)
 	}
 }
@@ -308,7 +308,7 @@ func TestCalendarCacheKeyDistinguishesDelimiterCharacters(t *testing.T) {
 }
 
 func TestCalendarCanvasPixelBudget(t *testing.T) {
-	if got, want := canvasWidth*maxCanvasH, 32_000_000; got > want {
+	if got, want := canvasWidth*maxCanvasH, maxCanvasPixels; got > want {
 		t.Fatalf("canvas pixel budget = %d, want at most %d", got, want)
 	}
 }
