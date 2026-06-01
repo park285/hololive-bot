@@ -41,15 +41,30 @@ func (c *MemberInfoCommand) memberGroups(ctx context.Context, member *domain.Mem
 			slog.Any("error", err),
 		)
 
-		return nil
+		return orgFallbackGroups(member)
 	}
 
 	rawValues := ExtractUnitValues(profile, translated)
 	if len(rawValues) == 0 {
-		return nil
+		return orgFallbackGroups(member)
 	}
 
 	return normalizedMemberGroups(rawValues)
+}
+
+// orgFallbackGroups는 공식 프로필(유닛 데이터)이 없는 멤버를 org 값 기준 그룹으로
+// 분류한다. mekPark처럼 홀로라이브 정규 소속이 아니어서 official_profiles가 없는
+// 경우에 쓰이며, 매핑되지 않은 org는 nil을 반환해 "기타" 그룹으로 폴백된다.
+func orgFallbackGroups(member *domain.Member) []string {
+	if member == nil {
+		return nil
+	}
+
+	if group, ok := orgDirectoryGroups[member.Org]; ok {
+		return []string{group}
+	}
+
+	return nil
 }
 
 func normalizedMemberGroups(rawValues []string) []string {
