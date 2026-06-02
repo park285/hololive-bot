@@ -6,10 +6,9 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
@@ -39,25 +38,20 @@ func (s *upcomingStreamProviderStub) GetChannel(_ context.Context, _ string) (*d
 func setupUpcomingTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
+	pool := dbtest.NewPool(t)
+	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
+		t.Fatalf("clear templates: %v", err)
 	}
-
-	if err := db.AutoMigrate(&domain.NotificationTemplate{}); err != nil {
-		t.Fatalf("migrate template table: %v", err)
-	}
-
-	if err := db.Create([]domain.NotificationTemplate{
-		{
-			TemplateKey: domain.TemplateKeyCmdUpcomingStreams,
-			Body:        "예정 목록 ({{.Hours}}시간)\n{{range .Streams}}{{.ChannelName}}|{{.Title}}\n{{end}}",
-		},
-	}).Error; err != nil {
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO notification_templates(template_key, channel_id, body)
+		VALUES ($1, NULL, $2)
+		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+	`, domain.TemplateKeyCmdUpcomingStreams, "예정 목록 ({{.Hours}}시간)\n{{range .Streams}}{{.ChannelName}}|{{.Title}}\n{{end}}"); err != nil {
 		t.Fatalf("seed upcoming template: %v", err)
 	}
 
-	return serviceTemplate.NewRenderer(db, slog.New(slog.DiscardHandler))
+	return serviceTemplate.NewRenderer(pool, slog.New(slog.DiscardHandler))
 }
 
 func TestUpcomingCommand_Name(t *testing.T) {

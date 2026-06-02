@@ -25,10 +25,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-	"gorm.io/gorm"
 )
 
 func TestFormatMajorEventDates(t *testing.T) {
@@ -152,13 +151,9 @@ https://hololive.hololivepro.com/events/supernova-reboot/`
 func setupMajorEventRenderer(t *testing.T) *serviceTemplate.Renderer {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to open sqlite db: %v", err)
-	}
-
-	if err := db.AutoMigrate(&domain.NotificationTemplate{}); err != nil {
-		t.Fatalf("failed to migrate notification_templates: %v", err)
+	pool := dbtest.NewPool(t)
+	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
+		t.Fatalf("clear templates: %v", err)
 	}
 
 	body := `📅 이번 달 행사 요약 ({{.Count}}개)
@@ -184,12 +179,14 @@ func setupMajorEventRenderer(t *testing.T) *serviceTemplate.Renderer {
 {{- end}}
 {{- end}}`
 
-	if err := db.Create(&domain.NotificationTemplate{
-		TemplateKey: domain.TemplateKeyCmdMajorEventMonthlySummary,
-		Body:        body,
-	}).Error; err != nil {
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO notification_templates(template_key, channel_id, body)
+		VALUES ($1, NULL, $2)
+		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+	`, domain.TemplateKeyCmdMajorEventMonthlySummary, body); err != nil {
 		t.Fatalf("failed to insert template: %v", err)
 	}
 
-	return serviceTemplate.NewRenderer(db, slog.Default())
+	return serviceTemplate.NewRenderer(pool, slog.Default())
 }

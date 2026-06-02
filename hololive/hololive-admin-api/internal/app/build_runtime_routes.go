@@ -61,9 +61,9 @@ func buildAdminHandler(
 }
 
 func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.Logger) *template.AdminService {
-	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
+	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
 	return template.NewAdminService(
-		repository.NewTemplateRepository(infra.Postgres.GetGormDB(), logger),
+		repository.NewTemplateRepository(infra.Postgres.GetPool(), logger),
 		templateRenderer,
 		logger,
 	)

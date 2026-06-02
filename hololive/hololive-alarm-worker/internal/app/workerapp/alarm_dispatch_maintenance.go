@@ -2,13 +2,16 @@ package workerapp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	"gorm.io/gorm"
 )
 
 const (
@@ -55,8 +58,15 @@ type alarmDispatchMaintenanceRunner struct {
 	logger           *slog.Logger
 }
 
-type alarmDispatchMaintenanceGormStore struct {
-	db *gorm.DB
+type alarmDispatchMaintenanceQuerier interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+type alarmDispatchMaintenancePgxStore struct {
+	db       alarmDispatchMaintenanceQuerier
+	beginner *pgxpool.Pool
 }
 
 func buildAlarmDispatchMaintenanceRunner(
@@ -66,12 +76,12 @@ func buildAlarmDispatchMaintenanceRunner(
 	if infra == nil || infra.Postgres == nil {
 		return nil
 	}
-	db := infra.Postgres.GetGormDB()
-	if db == nil {
+	pool := infra.Postgres.GetPool()
+	if pool == nil {
 		return nil
 	}
 	return alarmDispatchMaintenanceRunner{
-		store:            alarmDispatchMaintenanceGormStore{db: db},
+		store:            alarmDispatchMaintenancePgxStore{db: pool, beginner: pool},
 		retentionEnabled: parseBoolEnv("ALARM_DISPATCH_RETENTION_ENABLED", true),
 		interval:         parsePositiveDurationMSEnv("ALARM_DISPATCH_RETENTION_INTERVAL_MS", time.Hour),
 		queryTimeout:     parsePositiveDurationMSEnv("ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS", 30*time.Second),
@@ -219,24 +229,50 @@ func alarmDispatchTerminalTimestampColumn(status dispatchoutbox.Status) (string,
 	return column, ok
 }
 
-func (s alarmDispatchMaintenanceGormStore) WithAdvisoryLock(
+func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 	ctx context.Context,
 	key int64,
 	fn func(context.Context, alarmDispatchMaintenanceDataStore) error,
 ) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var locked bool
-		if err := tx.Raw("SELECT pg_try_advisory_xact_lock(?)", key).Scan(&locked).Error; err != nil {
-			return fmt.Errorf("acquire alarm dispatch retention transaction lock: %w", err)
+	if s.beginner == nil {
+		return fmt.Errorf("alarm dispatch maintenance pgx pool is nil")
+	}
+
+	tx, err := s.beginner.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin alarm dispatch retention transaction: %w", err)
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback(ctx)
+			panic(p)
 		}
-		if !locked {
-			return nil
+	}()
+
+	var locked bool
+	if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", key).Scan(&locked); err != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			return fmt.Errorf("acquire alarm dispatch retention transaction lock and rollback failed: %w", errors.Join(err, rollbackErr))
 		}
-		return fn(ctx, alarmDispatchMaintenanceGormStore{db: tx})
-	})
+		return fmt.Errorf("acquire alarm dispatch retention transaction lock: %w", err)
+	}
+	if locked && fn != nil {
+		err = fn(ctx, alarmDispatchMaintenancePgxStore{db: tx})
+	}
+	if err != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			return fmt.Errorf("alarm dispatch retention transaction failed and rollback failed: %w", errors.Join(err, rollbackErr))
+		}
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit alarm dispatch retention transaction: %w", err)
+	}
+	return nil
 }
 
-func (s alarmDispatchMaintenanceGormStore) BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error) {
+func (s alarmDispatchMaintenancePgxStore) BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error) {
 	snapshot := alarmDispatchBacklogSnapshot{RowsByStatus: map[dispatchoutbox.Status]int64{}}
 	if err := s.loadBacklogRows(ctx, snapshot.RowsByStatus); err != nil {
 		return snapshot, err
@@ -247,12 +283,12 @@ func (s alarmDispatchMaintenanceGormStore) BacklogSnapshot(ctx context.Context) 
 	return snapshot, nil
 }
 
-func (s alarmDispatchMaintenanceGormStore) loadBacklogRows(ctx context.Context, out map[dispatchoutbox.Status]int64) error {
-	rows, err := s.db.WithContext(ctx).Raw(`
+func (s alarmDispatchMaintenancePgxStore) loadBacklogRows(ctx context.Context, out map[dispatchoutbox.Status]int64) error {
+	rows, err := s.db.Query(ctx, `
 SELECT status, COUNT(*) AS rows
 FROM alarm_dispatch_deliveries
 WHERE status IN ('pending', 'retry', 'leased', 'sending')
-GROUP BY status`).Rows()
+GROUP BY status`)
 	if err != nil {
 		return err
 	}
@@ -268,15 +304,14 @@ GROUP BY status`).Rows()
 	return rows.Err()
 }
 
-func (s alarmDispatchMaintenanceGormStore) loadOldestAges(ctx context.Context, snapshot *alarmDispatchBacklogSnapshot) error {
-	return s.db.WithContext(ctx).Raw(`
+func (s alarmDispatchMaintenancePgxStore) loadOldestAges(ctx context.Context, snapshot *alarmDispatchBacklogSnapshot) error {
+	return s.db.QueryRow(ctx, `
 SELECT
   COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - next_attempt_at))) FILTER (WHERE status = 'pending'), 0),
   COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - next_attempt_at))) FILTER (WHERE status = 'retry'), 0),
   COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - sending_started_at))) FILTER (WHERE status = 'sending'), 0)
 FROM alarm_dispatch_deliveries
 WHERE status IN ('pending', 'retry', 'sending')`).
-		Row().
 		Scan(
 			&snapshot.OldestPendingAgeSeconds,
 			&snapshot.OldestRetryAgeSeconds,
@@ -284,7 +319,7 @@ WHERE status IN ('pending', 'retry', 'sending')`).
 		)
 }
 
-func (s alarmDispatchMaintenanceGormStore) DeleteTerminal(
+func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 	ctx context.Context,
 	status dispatchoutbox.Status,
 	retentionDays int,
@@ -298,32 +333,38 @@ func (s alarmDispatchMaintenanceGormStore) DeleteTerminal(
 WITH picked AS (
     SELECT id
     FROM alarm_dispatch_deliveries
-    WHERE status = ?
-      AND %s < NOW() - (?::int * INTERVAL '1 day')
+    WHERE status = $1
+      AND %s < NOW() - ($2::int * INTERVAL '1 day')
     ORDER BY %s ASC, id ASC
-    LIMIT ?
+    LIMIT $3
 )
 DELETE FROM alarm_dispatch_deliveries d
 USING picked
 WHERE d.id = picked.id`, column, column)
-	result := s.db.WithContext(ctx).Exec(query, string(status), retentionDays, clampAlarmDispatchRetentionLimit(limit))
-	return result.RowsAffected, result.Error
+	tag, err := s.db.Exec(ctx, query, string(status), retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
-func (s alarmDispatchMaintenanceGormStore) DeleteOrphanEvents(ctx context.Context, retentionDays int, limit int) (int64, error) {
-	result := s.db.WithContext(ctx).Exec(`
+func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context, retentionDays int, limit int) (int64, error) {
+	tag, err := s.db.Exec(ctx, `
 WITH picked AS (
     SELECT e.id
     FROM alarm_dispatch_events e
-    WHERE e.created_at < NOW() - (?::int * INTERVAL '1 day')
+    WHERE e.created_at < NOW() - ($1::int * INTERVAL '1 day')
       AND NOT EXISTS (
           SELECT 1 FROM alarm_dispatch_deliveries d WHERE d.event_id = e.id
       )
     ORDER BY e.created_at ASC, e.id ASC
-    LIMIT ?
+    LIMIT $2
 )
 DELETE FROM alarm_dispatch_events e
 USING picked
 WHERE e.id = picked.id`, retentionDays, clampAlarmDispatchRetentionLimit(limit))
-	return result.RowsAffected, result.Error
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }

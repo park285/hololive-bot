@@ -22,17 +22,16 @@ package botruntime
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
@@ -41,14 +40,11 @@ import (
 func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 	t.Parallel()
 
-	dsn := fmt.Sprintf("file:app_acl_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&acl.Settings{}, &acl.Room{}))
+	pool := dbtest.NewPool(t)
 
 	logger := slog.New(slog.DiscardHandler)
 	dbClient := &dbmocks.Client{
-		GetGormDBFunc: func() *gorm.DB { return db },
+		GetPoolFunc: func() *pgxpool.Pool { return pool },
 	}
 	cache := &cachemocks.Client{
 		SetFunc: func(context.Context, string, any, time.Duration) error { return nil },

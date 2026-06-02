@@ -28,11 +28,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	membernewssvc "github.com/kapu/hololive-llm-sched/internal/service/membernews"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
@@ -43,12 +41,9 @@ import (
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
-type fakePostgresClient struct {
-	db *gorm.DB
-}
+type fakePostgresClient struct{}
 
 func (f *fakePostgresClient) GetPool() *pgxpool.Pool { return nil }
-func (f *fakePostgresClient) GetGormDB() *gorm.DB    { return f.db }
 func (f *fakePostgresClient) Ping(context.Context) error {
 	return nil
 }
@@ -61,10 +56,7 @@ func (fakeSender) SendMessage(context.Context, string, string) error { return ni
 func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 	t.Parallel()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-
-	var postgres database.Client = &fakePostgresClient{db: db}
+	var postgres database.Client = &fakePostgresClient{}
 	logger := sharedlogging.NewTestLogger()
 
 	module := BuildDeliveryModule(nil, postgres, logger)

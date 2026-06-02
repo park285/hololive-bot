@@ -26,12 +26,10 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
@@ -39,21 +37,18 @@ import (
 func setupFormatterRenderer(t *testing.T, key domain.TemplateKey, body string) *template.Renderer {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
-	})
+	pool := dbtest.NewPool(t)
+	_, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`)
+	require.NoError(t, err)
+	_, err = pool.Exec(t.Context(), `
+		INSERT INTO notification_templates(template_key, channel_id, body)
+		VALUES ($1, NULL, $2)
+		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+	`, key, body)
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&domain.NotificationTemplate{})
-	require.NoError(t, err)
-
-	err = db.Create(&domain.NotificationTemplate{
-		TemplateKey: key,
-		Body:        body,
-	}).Error
-	require.NoError(t, err)
-
-	return template.NewRenderer(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func TestNewLLMSchedulerFormatter_Defaults(t *testing.T) {

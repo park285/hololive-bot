@@ -36,7 +36,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 		}
 	}()
 
-	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
+	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
 	messageAdapter := adapter.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
 	formatter := adapter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer)
 

@@ -51,7 +51,7 @@ func BuildTemplateAdminService(
 	logger *slog.Logger,
 ) *template.AdminService {
 	return template.NewAdminService(
-		repository.NewTemplateRepository(infra.Postgres.GetGormDB(), logger),
+		repository.NewTemplateRepository(infra.Postgres.GetPool(), logger),
 		templateRenderer,
 		logger,
 	)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
@@ -16,8 +16,7 @@ import (
 
 type OpsSession struct {
 	Postgres            database.Client
-	DB                  *gorm.DB
-	TrackingRepository  *trackingrepo.GormRepository
+	TrackingRepository  *trackingrepo.PgxRepository
 	TelemetryRepository *outbox.DeliveryTelemetryRepository
 }
 
@@ -35,16 +34,15 @@ func OpenOpsSession(
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}
 
-	session := NewOpsSession(databaseResources.Service.GetGormDB())
+	session := NewOpsSession(databaseResources.Service.GetPool())
 	session.Postgres = databaseResources.Service
 	return session, cleanupDB, nil
 }
 
-func NewOpsSession(db *gorm.DB) *OpsSession {
+func NewOpsSession(pool *pgxpool.Pool) *OpsSession {
 	return &OpsSession{
 		Postgres:            nil,
-		DB:                  db,
-		TrackingRepository:  trackingrepo.NewRepository(db),
-		TelemetryRepository: outbox.NewDeliveryTelemetryRepository(db),
+		TrackingRepository:  trackingrepo.NewRepository(pool),
+		TelemetryRepository: outbox.NewDeliveryTelemetryRepository(pool),
 	}
 }

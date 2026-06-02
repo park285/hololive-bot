@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -125,7 +124,7 @@ func TestBuildYouTubeProducerYouTubeComponents_FailsWhenCombinedBudgetExceedsRat
 				MaxResolvePerRun: 1,
 			},
 		},
-		&databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }},
+		&databasemocks.Client{},
 		scraper.NewClient(),
 		func(poller.NotificationRouteRequest) bool { return true },
 		testLogger(),
@@ -147,9 +146,7 @@ func TestBuildYouTubeProducerYouTubeComponents_FailsWhenCombinedBudgetExceedsRat
 				MaxResolvePerRun: 1,
 			},
 		},
-		&databasemocks.Client{
-			GetGormDBFunc: func() *gorm.DB { return nil },
-		},
+		&databasemocks.Client{},
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
 		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
@@ -169,9 +166,7 @@ func TestBuildYouTubeProducerYouTubeComponents_AllowsBudgetSafeDefaultPollConfig
 
 	scheduler, registrations, err := polling.BuildComponents(
 		config.ScraperConfig{},
-		&databasemocks.Client{
-			GetGormDBFunc: func() *gorm.DB { return nil },
-		},
+		&databasemocks.Client{},
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
 		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
@@ -196,7 +191,7 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalKeepsReco
 		config.ScraperConfig{
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
-		&databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }},
+		&databasemocks.Client{},
 		scraper.NewClient(),
 		func(poller.NotificationRouteRequest) bool { return true },
 		logger,
@@ -214,9 +209,7 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalKeepsReco
 			},
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
-		&databasemocks.Client{
-			GetGormDBFunc: func() *gorm.DB { return nil },
-		},
+		&databasemocks.Client{},
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
 		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),

@@ -21,7 +21,6 @@ require (
 	cloud.google.com/go/auth v0.20.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
-	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Noooste/azuretls-client v1.13.2 // indirect
 	github.com/Noooste/fhttp v1.0.15 // indirect
 	github.com/Noooste/go-socks4 v0.0.2 // indirect
@@ -58,6 +57,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/gaukas/clienthellod v0.4.2 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
+	github.com/georgysavva/scany/v2 v2.1.4 // indirect
 	github.com/gin-contrib/gzip v1.2.6 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -66,7 +66,6 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.2 // indirect
-	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
@@ -80,8 +79,6 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.9.2 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
@@ -146,10 +143,6 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorm.io/datatypes v1.2.7 // indirect
-	gorm.io/driver/mysql v1.6.0 // indirect
-	gorm.io/driver/postgres v1.6.0 // indirect
-	gorm.io/gorm v1.31.1 // indirect
 )
 
 replace github.com/kapu/hololive-shared => ../hololive-shared

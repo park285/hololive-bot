@@ -10,7 +10,6 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 type backfillTestPoller struct {
@@ -125,7 +124,7 @@ func TestBudgetRejectsAggressiveBackfillInterval(t *testing.T) {
 }
 
 func buildBackfillTestRegistrations(backfill config.ScraperBackfillConfig, notificationChannelIDs []string) []providers.ChannelPollerRegistration {
-	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }}
+	postgres := &databasemocks.Client{}
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		postgres,
 		config.ScraperConfig{

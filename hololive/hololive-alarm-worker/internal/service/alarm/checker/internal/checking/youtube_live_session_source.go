@@ -5,10 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"gorm.io/gorm"
 )
 
 const (
@@ -23,7 +24,7 @@ type PgYouTubeLiveSessionSourceOptions struct {
 }
 
 type PgYouTubeLiveSessionSource struct {
-	db                *gorm.DB
+	pool              *pgxpool.Pool
 	liveRecentWindow  time.Duration
 	upcomingLookahead time.Duration
 }
@@ -39,15 +40,15 @@ func NewPgYouTubeLiveSessionSourceWithOptions(
 	if postgres == nil {
 		return nil
 	}
-	db := postgres.GetGormDB()
-	if db == nil {
+	pool := postgres.GetPool()
+	if pool == nil {
 		return nil
 	}
-	return newPgYouTubeLiveSessionSource(db, options)
+	return newPgYouTubeLiveSessionSource(pool, options)
 }
 
 func newPgYouTubeLiveSessionSource(
-	db *gorm.DB,
+	pool *pgxpool.Pool,
 	options PgYouTubeLiveSessionSourceOptions,
 ) *PgYouTubeLiveSessionSource {
 	if options.LiveRecentWindow <= 0 {
@@ -57,7 +58,7 @@ func newPgYouTubeLiveSessionSource(
 		options.UpcomingLookahead = defaultPersistedUpcomingSessionLookahead
 	}
 	return &PgYouTubeLiveSessionSource{
-		db:                db,
+		pool:              pool,
 		liveRecentWindow:  options.LiveRecentWindow,
 		upcomingLookahead: options.UpcomingLookahead,
 	}
@@ -68,7 +69,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentSessions(
 	channelIDs []string,
 	now time.Time,
 ) ([]PersistedYouTubeLiveSession, error) {
-	if s == nil || s.db == nil || len(channelIDs) == 0 {
+	if s == nil || s.pool == nil || len(channelIDs) == 0 {
 		return nil, nil
 	}
 
@@ -81,23 +82,17 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentSessions(
 	upcomingUntil := now.UTC().Add(s.effectiveUpcomingLookahead())
 
 	var rows []domain.YouTubeLiveSession
-	err := s.db.WithContext(ctx).
-		Where(
-			`channel_id IN ? AND (
-				(status = ? AND last_seen_at >= ?)
-				OR (status = ? AND scheduled_start_time >= ? AND scheduled_start_time <= ? AND last_seen_at >= ?)
-			)`,
-			uniqueChannelIDs,
-			domain.LiveStatusLive,
-			liveSince,
-			domain.LiveStatusUpcoming,
-			now.UTC(),
-			upcomingUntil,
-			liveSince,
-		).
-		Order("last_seen_at DESC").
-		Find(&rows).Error
-	if err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, `
+		SELECT video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at,
+		       live_first_seen_at, last_seen_at
+		FROM youtube_live_sessions
+		WHERE channel_id = ANY($1)
+		  AND (
+		      (status = $2 AND last_seen_at >= $3)
+		      OR (status = $4 AND scheduled_start_time >= $5 AND scheduled_start_time <= $6 AND last_seen_at >= $7)
+		  )
+		ORDER BY last_seen_at DESC
+	`, uniqueChannelIDs, domain.LiveStatusLive, liveSince, domain.LiveStatusUpcoming, now.UTC(), upcomingUntil, liveSince); err != nil {
 		return nil, err
 	}
 
@@ -121,7 +116,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 	channelIDs []string,
 	now time.Time,
 ) ([]string, error) {
-	if s == nil || s.db == nil || len(channelIDs) == 0 {
+	if s == nil || s.pool == nil || len(channelIDs) == 0 {
 		return nil, nil
 	}
 
@@ -133,18 +128,14 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 	liveSince := now.UTC().Add(-s.effectiveLiveRecentWindow())
 
 	var rows []string
-	err := s.db.WithContext(ctx).
-		Model(&domain.YouTubeLiveSession{}).
-		Distinct("channel_id").
-		Where(
-			"channel_id IN ? AND status = ? AND last_seen_at >= ?",
-			uniqueChannelIDs,
-			domain.LiveStatusLive,
-			liveSince,
-		).
-		Order("channel_id").
-		Pluck("channel_id", &rows).Error
-	if err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, `
+		SELECT DISTINCT channel_id
+		FROM youtube_live_sessions
+		WHERE channel_id = ANY($1)
+		  AND status = $2
+		  AND last_seen_at >= $3
+		ORDER BY channel_id
+	`, uniqueChannelIDs, domain.LiveStatusLive, liveSince); err != nil {
 		return nil, err
 	}
 	return UniqueStrings(rows), nil
@@ -170,7 +161,7 @@ func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 	since time.Time,
 ) (map[string]struct{}, error) {
 	result := make(map[string]struct{})
-	if s == nil || s.db == nil || len(streamIDs) == 0 {
+	if s == nil || s.pool == nil || len(streamIDs) == 0 {
 		return result, nil
 	}
 
@@ -180,12 +171,13 @@ func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 	}
 
 	var rows []string
-	err := s.db.WithContext(ctx).
-		Table("alarm_dispatch_events").
-		Distinct("stream_id").
-		Where("alarm_type = ? AND stream_id IN ? AND created_at >= ?", persistedAlarmDispatchEventLiveType, streamIDs, since.UTC()).
-		Pluck("stream_id", &rows).Error
-	if err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, `
+		SELECT DISTINCT stream_id
+		FROM alarm_dispatch_events
+		WHERE alarm_type = $1::alarm_type
+		  AND stream_id = ANY($2)
+		  AND created_at >= $3
+	`, persistedAlarmDispatchEventLiveType, streamIDs, since.UTC()); err != nil {
 		return nil, err
 	}
 	for _, row := range rows {
@@ -217,7 +209,7 @@ func (s *PgYouTubeLiveSessionSource) RecentlySentLiveStreamRooms(
 }
 
 func (s *PgYouTubeLiveSessionSource) normalizedStreamIDs(streamIDs []string) ([]string, bool) {
-	if s == nil || s.db == nil || len(streamIDs) == 0 {
+	if s == nil || s.pool == nil || len(streamIDs) == 0 {
 		return nil, false
 	}
 	streamIDs = UniqueStrings(streamIDs)
@@ -235,19 +227,15 @@ func (s *PgYouTubeLiveSessionSource) queryRecentlySentLiveStreamRooms(
 	since time.Time,
 ) ([]sentLiveStreamRoomRow, error) {
 	var rows []sentLiveStreamRoomRow
-	err := s.db.WithContext(ctx).
-		Table("alarm_dispatch_events AS e").
-		Select("e.stream_id, d.room_id").
-		Joins("JOIN alarm_dispatch_deliveries AS d ON d.event_id = e.id").
-		Where(
-			"e.alarm_type = ? AND e.stream_id IN ? AND d.status = ? AND d.sent_at >= ?",
-			persistedAlarmDispatchEventLiveType,
-			streamIDs,
-			string(dispatchoutbox.StatusSent),
-			since.UTC(),
-		).
-		Scan(&rows).Error
-	if err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, `
+		SELECT e.stream_id, d.room_id
+		FROM alarm_dispatch_events AS e
+		JOIN alarm_dispatch_deliveries AS d ON d.event_id = e.id
+		WHERE e.alarm_type = $1::alarm_type
+		  AND e.stream_id = ANY($2)
+		  AND d.status = $3
+		  AND d.sent_at >= $4
+	`, persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), since.UTC()); err != nil {
 		return nil, err
 	}
 	return rows, nil

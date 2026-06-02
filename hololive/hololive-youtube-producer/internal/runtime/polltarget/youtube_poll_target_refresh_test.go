@@ -8,13 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -138,9 +137,7 @@ func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged
 
 func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeVideo{}))
+	pool := dbtest.NewPool(t)
 
 	cache := cachemocks.NewStrictClient()
 	cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
@@ -169,7 +166,7 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		},
 		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
 	}
-	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, appConfig, scraper.NewRateLimiter(time.Second), cache, nil, []string{"UC_TIER"}, []string{"UC_TIER"})
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
@@ -184,18 +181,33 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		[]communityShortsOperationalChannel{{ChannelID: "UC_TIER", Enabled: true}},
 		func(context.Context) ([]string, error) { return []string{"UC_TIER"}, nil },
 		newYouTubePollTargetTestLogger(),
-	).withTieringDB(db)
+	).withTieringDB(pool)
 	refresher.timeNow = func() time.Time { return now }
 
 	refresher.refresh(context.Background())
 	require.Equal(t, time.Hour, schedulerJobInterval(t, scheduler, "UC_TIER:videos"))
 
 	activeAt := now.Add(-2 * time.Hour)
-	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_TIER", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
+	seedPollTargetVideo(t, pool, "active-video", "UC_TIER", activeAt, activeAt)
 	now = now.Add(youtubePollTargetTieringRefreshInterval + time.Second)
 
 	refresher.refresh(context.Background())
 	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_TIER:videos"))
+}
+
+func seedPollTargetVideo(t *testing.T, pool *pgxpool.Pool, videoID, channelID string, publishedAt, firstSeenAt time.Time) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_videos(video_id, channel_id, title, published_at, first_seen_at, last_seen_at)
+		VALUES ($1, $2, $3, $4, $5, $5)
+		ON CONFLICT (video_id) DO UPDATE
+		SET channel_id = EXCLUDED.channel_id,
+		    published_at = EXCLUDED.published_at,
+		    first_seen_at = EXCLUDED.first_seen_at,
+		    last_seen_at = EXCLUDED.last_seen_at
+	`, videoID, channelID, videoID, publishedAt, firstSeenAt)
+	require.NoError(t, err)
 }
 
 func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T) {

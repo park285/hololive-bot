@@ -210,7 +210,7 @@ func buildPollTargetRefresher(
 			return polltarget.LoadAlarmChannelIDs(ctx, infra.postgresService)
 		},
 		logger,
-	).WithTieringDB(infra.postgresService.GetGormDB()).WithOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
+	).WithTieringDB(infra.postgresService.GetPool()).WithOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
 		return communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepository)
 	})
 	if appConfig != nil && appConfig.Scraper.ActiveActive.Enabled {
@@ -244,7 +244,7 @@ func buildIngestionRuntimeObservationWindowWriter(
 	infra *youtubeProducerInfrastructure,
 ) communityShortsObservationWindowWriter {
 	if runtimeName == youtubeProducerRuntimeName && policy.Enabled() {
-		return trackingrepo.NewRepository(infra.postgresService.GetGormDB())
+		return trackingrepo.NewRepository(infra.postgresService.GetPool())
 	}
 	return nil
 }
