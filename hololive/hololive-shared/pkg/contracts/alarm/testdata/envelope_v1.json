@@ -1,4 +1,5 @@
 {
+  "dispatch_outbox_id": 42,
   "notification": {
     "alarm_type": "LIVE",
     "room_id": "room-1",
@@ -9,6 +10,22 @@
       "user-1",
       "user-2"
     ]
+  },
+  "source_kind": "youtube_outbox",
+  "youtube_outbox": {
+    "outbox_ids": [42],
+    "kind": "NEW_VIDEO",
+    "alarm_type": "LIVE",
+    "channel_id": "UC_fixture",
+    "member_name": "Fixture Member",
+    "items": [
+      {
+        "outbox_id": 42,
+        "content_id": "video:fixture-001",
+        "payload": "{\"video_id\":\"fixture-001\",\"title\":\"Fixture Stream\"}"
+      }
+    ],
+    "render_template_key": "OUTBOX_VIDEO"
   },
   "claim_keys": [
     "notified:claim:room-1",

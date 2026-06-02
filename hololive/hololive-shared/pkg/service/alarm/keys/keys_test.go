@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -18,7 +17,7 @@ func TestIsRoomAlarmKeySeparatesRoomKeysFromReservedNamespaces(t *testing.T) {
 	}{
 		{name: "room", key: "alarm:room-1", want: true},
 		{name: "registry", key: AlarmRegistryKey, want: false},
-		{name: "dispatch queue", key: contractsalarm.DispatchQueueKey, want: false},
+		{name: "dispatch queue", key: DispatchQueueKey, want: false},
 		{name: "channel subscriber", key: ChannelSubscribersKeyPrefix + "UC_TEST", want: false},
 		{name: "empty suffix", key: AlarmKeyPrefix, want: false},
 		{name: "other namespace", key: "notified:stream-1", want: false},

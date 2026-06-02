@@ -106,7 +106,6 @@ hololive/hololive-shared/pkg/constants/network.go
 hololive/hololive-shared/pkg/contracts/alarm/contracts.go
 hololive/hololive-shared/pkg/contracts/common/constants.go
 hololive/hololive-shared/pkg/contracts/common/errors.go
-hololive/hololive-shared/pkg/contracts/delivery/contracts.go
 hololive/hololive-shared/pkg/contracts/majorevent/routes.go
 hololive/hololive-shared/pkg/contracts/membernews/routes.go
 hololive/hololive-shared/pkg/contracts/membernews/types.go

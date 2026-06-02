@@ -33,10 +33,7 @@ import (
 
 const DefaultChannel = contractssettings.PubSubChannelV1
 
-type ConfigUpdate struct {
-	Type    string          `json:"type"`    // contracts/settings UpdateType* 상수 사용
-	Payload json.RawMessage `json:"payload"` // 타입별 페이로드 (JSON)
-}
+type ConfigUpdate = contractssettings.ConfigUpdateV1
 
 type Subscriber struct {
 	client  valkey.Client

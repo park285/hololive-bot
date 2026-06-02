@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
@@ -321,12 +322,12 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 
 	runtime := map[string]any{}
 	if req.MemberNewsWeeklyRunNow != nil && *req.MemberNewsWeeklyRunNow {
-		runtime["membernews_weekly_run_now"] = h.ApplyMemberNewsWeeklyRunNow(ctx).AsMap()
+		runtime[contractssettings.UpdateTypeMemberNewsRunNow] = h.ApplyMemberNewsWeeklyRunNow(ctx).AsMap()
 	}
 
 	h.logActivity("llm_settings_update", "LLM settings updated", map[string]any{
-		"membernews_weekly_run_now": req.MemberNewsWeeklyRunNow,
-		"runtime":                   runtime,
+		contractssettings.UpdateTypeMemberNewsRunNow: req.MemberNewsWeeklyRunNow,
+		"runtime": runtime,
 	})
 
 	c.JSON(200, gin.H{

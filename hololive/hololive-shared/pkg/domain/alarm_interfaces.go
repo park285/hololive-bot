@@ -26,7 +26,6 @@ import (
 )
 
 type AddAlarmRequest struct {
-	Ctx        context.Context
 	RoomID     string
 	UserID     string
 	ChannelID  string
