@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/shared-go/pkg/httputil"
 
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
@@ -147,8 +148,10 @@ func TestClient_GetStreams_CoreBranches(t *testing.T) {
 
 	t.Run("circuit open", func(t *testing.T) {
 		circuitClient := newTestClient("id", "secret")
-		circuitClient.circuitOpen.Store(true)
-		circuitClient.circuitOpenedAt.Store(time.Now())
+		// threshold 횟수만큼 실패를 기록하여 circuit을 엽니다
+		for range constants.CircuitBreakerConfig.FailureThreshold {
+			circuitClient.recordFailure()
+		}
 
 		_, err := circuitClient.GetStreams(t.Context(), []string{"user1"})
 
@@ -484,7 +487,19 @@ func TestClient_GetStreams_RequestError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if c.failureCount.Load() != 1 {
-		t.Fatalf("failureCount=%d want=1", c.failureCount.Load())
+	// threshold - 1 회 추가 실패 후에도 circuit이 열리지 않으면 실패가 기록된 것입니다
+	for range constants.CircuitBreakerConfig.FailureThreshold - 2 {
+		c.recordFailure()
+	}
+	if c.IsCircuitOpen() {
+		t.Fatalf("circuit should not be open after %d total failures (threshold=%d)",
+			constants.CircuitBreakerConfig.FailureThreshold-1,
+			constants.CircuitBreakerConfig.FailureThreshold)
+	}
+	c.recordFailure()
+	if !c.IsCircuitOpen() {
+		t.Fatalf("circuit should be open after %d total failures (threshold=%d)",
+			constants.CircuitBreakerConfig.FailureThreshold,
+			constants.CircuitBreakerConfig.FailureThreshold)
 	}
 }

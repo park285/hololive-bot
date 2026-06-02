@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body []byte, reqURL string, attempt, maxAttempts int) ([]byte, bool, error) {
@@ -59,14 +57,13 @@ func holodexClientError(status int, reqURL string) error {
 }
 
 func (c *APIClient) handleServerError(_ context.Context, status, attempt, maxAttempts int) ([]byte, bool, error) {
-	count := c.incrementFailureCount()
+	c.openCircuit()
 	c.logger.Warn("Server error",
 		slog.Int("status", status),
-		slog.Int("failure_count", count),
 	)
 
-	if count >= constants.CircuitBreakerConfig.FailureThreshold {
-		c.openCircuit()
+	// circuit이 열렸으면 추가 재시도 없이 즉시 중단합니다.
+	if c.IsCircuitOpen() {
 		return nil, true, NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
 	}
 

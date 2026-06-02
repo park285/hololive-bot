@@ -13,13 +13,6 @@ import (
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-func minInt(left, right int) int {
-	if left < right {
-		return left
-	}
-	return right
-}
-
 func (r *PendingPublishedAtResolver) resolverInterval() time.Duration {
 	if r == nil || r.interval <= 0 {
 		return 15 * time.Second

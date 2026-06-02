@@ -30,13 +30,14 @@ import (
 	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 var (
 	ErrNoSubscribedMembers = errors.New("no subscribed members")
 )
 
-var KST = time.FixedZone("KST", 9*60*60)
+var KST = util.KSTZone
 
 type Period string
 

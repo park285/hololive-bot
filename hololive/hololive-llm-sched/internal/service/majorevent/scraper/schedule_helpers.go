@@ -22,9 +22,11 @@ package scraper
 
 import (
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-var kstLocation = time.FixedZone("KST", 9*60*60)
+var kstLocation = util.KSTZone
 
 func calculateNextRunAtHour(now time.Time, hourKST int) time.Time {
 	targetHour := min(max(hourKST, 0), 23)

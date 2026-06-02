@@ -33,6 +33,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/park285/shared-go/pkg/json"
 	"github.com/park285/shared-go/pkg/jsonutil"
@@ -65,9 +66,7 @@ type Client struct {
 	tokenExpiry atomic.Value // time.Time
 	tokenMu     sync.Mutex
 
-	circuitOpen     atomic.Bool
-	circuitOpenedAt atomic.Value // time.Time
-	failureCount    atomic.Int32
+	breaker *util.Breaker
 }
 
 func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
@@ -112,9 +111,12 @@ func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
 		tokenRefreshSkew:     tokenRefreshSkew,
 		maxResponseBodyBytes: maxBody,
 		logger:               logger,
+		breaker: util.NewBreaker(
+			constants.CircuitBreakerConfig.FailureThreshold,
+			constants.CircuitBreakerConfig.ResetTimeout,
+		),
 	}
 	c.tokenExpiry.Store(time.Time{})
-	c.circuitOpenedAt.Store(time.Time{})
 
 	return c
 }
@@ -202,36 +204,23 @@ func (c *Client) invalidateToken() {
 }
 
 func (c *Client) isCircuitOpen() bool {
-	if !c.circuitOpen.Load() {
-		return false
-	}
-
-	openedAt, _ := c.circuitOpenedAt.Load().(time.Time)
-	if time.Since(openedAt) > constants.CircuitBreakerConfig.ResetTimeout {
-		c.circuitOpen.Store(false)
-		c.failureCount.Store(0)
-		c.logger.Info("Twitch circuit breaker reset")
-
-		return false
-	}
-
-	return true
+	return !c.breaker.Allow()
 }
 
 func (c *Client) recordFailure() {
-	count := c.failureCount.Add(1)
-	if count >= int32(constants.CircuitBreakerConfig.FailureThreshold) {
-		c.circuitOpen.Store(true)
-		c.circuitOpenedAt.Store(time.Now())
+	if opened := c.breaker.RecordFailure(); opened {
 		c.logger.Warn("Twitch circuit breaker opened",
-			slog.Int("failure_count", int(count)))
+			slog.Int("failure_count", int(c.breaker.Failures())),
+		)
 	}
 }
 
 func (c *Client) recordSuccess() {
-	c.failureCount.Store(0)
+	c.breaker.RecordSuccess()
 }
 
+// IsCircuitOpen은 circuit open 여부를 반환합니다. Allow() 기반이므로
+// resetTimeout 경과 시 reset side-effect가 발생합니다(원본 동작 보존).
 func (c *Client) IsCircuitOpen() bool {
-	return c.isCircuitOpen()
+	return !c.breaker.Allow()
 }

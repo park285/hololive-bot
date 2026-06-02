@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/shared-go/pkg/json"
 )
 
 const alarmDispatchKaringMaxItemsPerRequest = 4
 
-var alarmDispatchKaringDisplayLocation = time.FixedZone("KST", 9*60*60)
+var alarmDispatchKaringDisplayLocation = util.KSTZone
 
 var alarmDispatchKaringTemplateIDByItemCount = map[int]int64{
 	1: 133266,

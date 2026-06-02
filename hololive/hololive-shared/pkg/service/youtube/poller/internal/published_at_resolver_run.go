@@ -148,7 +148,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPage(
 		time.Now(),
 		detectedBefore,
 		cursor,
-		minInt(batchSize, run.maxResolvePerRun-processed),
+		min(batchSize, run.maxResolvePerRun-processed),
 	)
 	if err != nil {
 		return publishedAtResolverPageResult{}, fmt.Errorf("run pending published_at resolver: list candidates: %w", err)

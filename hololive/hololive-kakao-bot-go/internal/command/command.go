@@ -21,7 +21,6 @@ type Registry = handlers.Registry
 type ScheduleCommand = handlers.ScheduleCommand
 type StatsCommand = handlers.StatsCommand
 type SubscriberCommand = handlers.SubscriberCommand
-type SubscriberGraphCommand = handlers.SubscriberGraphCommand
 type UpcomingCommand = handlers.UpcomingCommand
 
 type CalendarCommand = handlers.CalendarCommand
@@ -46,5 +45,4 @@ var NewRegistry = handlers.NewRegistry
 var NewScheduleCommand = handlers.NewScheduleCommand
 var NewStatsCommand = handlers.NewStatsCommand
 var NewSubscriberCommand = handlers.NewSubscriberCommand
-var NewSubscriberGraphCommand = handlers.NewSubscriberGraphCommand
 var NewUpcomingCommand = handlers.NewUpcomingCommand
