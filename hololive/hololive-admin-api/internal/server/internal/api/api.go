@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-admin-api/internal/service/system"
@@ -60,7 +59,6 @@ type Handler struct {
 	alarm                      domain.AlarmCRUD
 	holodex                    *holodex.Service
 	youtube                    youtube.Service
-	scraperProxyToggler        *poller.Scheduler
 	statsRepository            stats.StatsDashboardRepository
 	communityShortsOps         YouTubeCommunityShortsOpsRepository
 	activity                   *activity.Logger
@@ -126,7 +124,6 @@ func NewHandler(
 	alarm domain.AlarmCRUD,
 	holodexService *holodex.Service,
 	youtubeService youtube.Service,
-	scraperProxyToggler *poller.Scheduler,
 	statsRepository stats.StatsDashboardRepository,
 	communityShortsOps YouTubeCommunityShortsOpsRepository,
 	activityLogger *activity.Logger,
@@ -153,7 +150,6 @@ func NewHandler(
 		alarm:                      alarm,
 		holodex:                    holodexService,
 		youtube:                    youtubeService,
-		scraperProxyToggler:        scraperProxyToggler,
 		statsRepository:            statsRepository,
 		communityShortsOps:         communityShortsOps,
 		activity:                   activityLogger,

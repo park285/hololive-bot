@@ -45,7 +45,6 @@ func buildAdminHandler(
 		alarmMode.AlarmCRUD,
 		foundation.HolodexService,
 		ytStack.GetService(),
-		nil,
 		ytStack.GetStatsRepository(),
 		communityShortsOpsRepository,
 		activity.NewActivityLogger("", logger),
