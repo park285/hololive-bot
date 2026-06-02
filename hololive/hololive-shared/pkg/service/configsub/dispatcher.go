@@ -32,7 +32,6 @@ import (
 type ApplyHandlers struct {
 	ScraperProxy        func(contractssettings.ScraperProxyPayloadV1)
 	AlarmAdvanceMinutes func(contractssettings.AlarmAdvanceMinutesPayloadV1)
-	MemberNewsWeeklyNow func()
 	Unknown             func(updateType string)
 }
 
@@ -52,8 +51,6 @@ func dispatchConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update Co
 		applyScraperProxyUpdate(logger, handlers, update)
 	case contractssettings.UpdateTypeAlarmAdvanceMinutes:
 		applyAlarmAdvanceMinutesUpdate(logger, handlers, update)
-	case contractssettings.UpdateTypeMemberNewsRunNow:
-		applyMemberNewsRunNowUpdate(logger, handlers, update)
 	default:
 		applyUnknownConfigUpdate(logger, handlers, update)
 	}
@@ -83,14 +80,6 @@ func applyAlarmAdvanceMinutesUpdate(logger *slog.Logger, handlers ApplyHandlers,
 		return
 	}
 	handlers.AlarmAdvanceMinutes(payload)
-}
-
-func applyMemberNewsRunNowUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
-	if handlers.MemberNewsWeeklyNow == nil {
-		logConfigUpdateHandlerMissing(logger, update.Type)
-		return
-	}
-	handlers.MemberNewsWeeklyNow()
 }
 
 func applyUnknownConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
