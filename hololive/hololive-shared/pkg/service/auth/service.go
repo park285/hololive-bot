@@ -76,12 +76,6 @@ func NewService(ctx context.Context, db *pgxpool.Pool, cacheClient cache.Client,
 		config:      config,
 	}
 
-	if config.AutoPrepareSchema {
-		if err := service.createTablesIfNotExist(ctx); err != nil {
-			return nil, err
-		}
-	}
-
 	return service, nil
 }
 

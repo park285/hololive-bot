@@ -215,7 +215,7 @@ func buildLLMSchedulerComponents(
 
 	templateRenderer := template.NewRenderer(postgresService.GetPool(), logger)
 	formatter := newLLMSchedulerFormatter(schedulerConfig.Bot.Prefix, templateRenderer, logger)
-	majorEventRepository := buildMajorEventRepository(ctx, postgresService, logger, schedulerConfig.Postgres.AutoPrepareSchema)
+	majorEventRepository := buildMajorEventRepository(postgresService, logger)
 	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, logger)
 
 	deliveryModule := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
@@ -223,14 +223,12 @@ func buildLLMSchedulerComponents(
 	summarizer := buildMajorEventSummarizer(schedulerConfig, cacheService, logger)
 
 	majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler := buildMajorEventComponents(
-		ctx,
 		majorEventRepository,
 		formatter,
 		summarizer,
 		deliveryModule.Locker,
 		deliveryModule.Repository,
 		logger,
-		schedulerConfig.Postgres.AutoPrepareSchema,
 	)
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, logger)
 
@@ -276,18 +274,10 @@ func newLLMSchedulerRuntime(
 }
 
 func buildMajorEventRepository(
-	ctx context.Context,
 	postgresService database.Client,
 	logger *slog.Logger,
-	autoPrepareSchema bool,
 ) *majorevent.Repository {
-	repository := majorevent.NewRepository(postgresService, logger)
-	if autoPrepareSchema {
-		if createErr := repository.CreateTable(ctx); createErr != nil {
-			logger.Error("Failed to create major_event_subscriptions table", slog.String("error", createErr.Error()))
-		}
-	}
-	return repository
+	return majorevent.NewRepository(postgresService, logger)
 }
 
 func buildLLMSchedulerDeliveryModule(

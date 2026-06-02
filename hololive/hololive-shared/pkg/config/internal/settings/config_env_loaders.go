@@ -51,18 +51,17 @@ func loadPostgresConfig() PostgresConfig {
 	}
 
 	return PostgresConfig{
-		Host:              sharedenv.String("POSTGRES_HOST", constants.DatabaseDefaults.Host),
-		Port:              sharedenv.Int("POSTGRES_PORT", constants.DatabaseDefaults.Port),
-		SocketPath:        sharedenv.String("POSTGRES_SOCKET_PATH", ""),
-		User:              sharedenv.String("POSTGRES_USER", constants.DatabaseDefaults.User),
-		Password:          password,
-		Database:          sharedenv.String("POSTGRES_DB", constants.DatabaseDefaults.Database),
-		SSLMode:           sharedenv.String("POSTGRES_SSLMODE", "require"),
-		QueryExecMode:     sharedenv.String("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
-		PoolMinConns:      sharedenv.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns),
-		PoolMaxConns:      sharedenv.Int("POSTGRES_POOL_MAX_CONNS", constants.DatabaseConfig.MaxOpenConns),
-		PoolMaxIdleConns:  sharedenv.Int("POSTGRES_POOL_MAX_IDLE_CONNS", constants.DatabaseConfig.MaxIdleConns),
-		AutoPrepareSchema: sharedenv.Bool("POSTGRES_AUTO_PREPARE_SCHEMA", true),
+		Host:             sharedenv.String("POSTGRES_HOST", constants.DatabaseDefaults.Host),
+		Port:             sharedenv.Int("POSTGRES_PORT", constants.DatabaseDefaults.Port),
+		SocketPath:       sharedenv.String("POSTGRES_SOCKET_PATH", ""),
+		User:             sharedenv.String("POSTGRES_USER", constants.DatabaseDefaults.User),
+		Password:         password,
+		Database:         sharedenv.String("POSTGRES_DB", constants.DatabaseDefaults.Database),
+		SSLMode:          sharedenv.String("POSTGRES_SSLMODE", "require"),
+		QueryExecMode:    sharedenv.String("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
+		PoolMinConns:     sharedenv.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns),
+		PoolMaxConns:     sharedenv.Int("POSTGRES_POOL_MAX_CONNS", constants.DatabaseConfig.MaxOpenConns),
+		PoolMaxIdleConns: sharedenv.Int("POSTGRES_POOL_MAX_IDLE_CONNS", constants.DatabaseConfig.MaxIdleConns),
 	}
 }
 
