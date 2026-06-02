@@ -28,6 +28,7 @@ import (
 	json "github.com/park285/shared-go/pkg/json"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestAlarmQueueContractConstants(t *testing.T) {
@@ -105,24 +106,49 @@ func TestAlarmHTTPRouteContractsEscapePathParams(t *testing.T) {
 func TestAlarmQueueEnvelopeContract(t *testing.T) {
 	t.Parallel()
 
-	env := contractsalarm.AlarmQueueEnvelope{
-		Version: contractsalarm.QueueEnvelopeVersionV1,
-		Retry: &contractsalarm.AlarmQueueRetryMetadata{
+	env := domain.AlarmQueueEnvelope{
+		DispatchOutboxID: 99,
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-contract",
+		},
+		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
+		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
+			OutboxIDs: []int64{99},
+			Kind:      domain.OutboxKindNewVideo,
+			AlarmType: domain.AlarmTypeLive,
+			ChannelID: "UC_contract",
+			Items: []domain.YouTubeOutboxItem{{
+				OutboxID:  99,
+				ContentID: "video:contract",
+				Payload:   `{"video_id":"contract"}`,
+			}},
+		},
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		ClaimKeys:  []string{"notified:claim:room-contract"},
+		EnqueuedAt: "2026-02-25T13:00:00Z",
+		Retry: &domain.AlarmQueueRetryMetadata{
 			Attempt:       3,
 			RetryAfterMS:  2500,
 			NextVisibleAt: "2026-02-25T13:00:02.500Z",
 			LastError:     "dispatcher unavailable",
 		},
-		SourcePayload: "{\"version\":1}",
 	}
+
 	if env.Version != 1 {
 		t.Fatalf("version = %d, want 1", env.Version)
 	}
 	if env.Retry == nil || env.Retry.Attempt != 3 {
 		t.Fatalf("retry metadata = %+v", env.Retry)
 	}
-	if env.SourcePayload == "" {
-		t.Fatal("source payload should be set")
+	if env.DispatchOutboxID != 99 {
+		t.Fatalf("dispatch_outbox_id = %d, want 99", env.DispatchOutboxID)
+	}
+	if env.SourceKind != domain.AlarmDispatchSourceKindYouTubeOutbox {
+		t.Fatalf("source_kind = %q, want %q", env.SourceKind, domain.AlarmDispatchSourceKindYouTubeOutbox)
+	}
+	if env.YouTubeOutbox == nil {
+		t.Fatal("youtube_outbox should be set")
 	}
 }
 
@@ -131,7 +157,7 @@ func TestAlarmQueueEnvelopeV1FixtureRoundTrip(t *testing.T) {
 
 	raw := readAlarmContractFixture(t, "envelope_v1.json")
 
-	var envelope contractsalarm.AlarmQueueEnvelope
+	var envelope domain.AlarmQueueEnvelope
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
@@ -145,16 +171,47 @@ func TestAlarmQueueEnvelopeV1FixtureRoundTrip(t *testing.T) {
 		t.Fatalf("retry metadata = %+v, want attempt 2", envelope.Retry)
 	}
 
+	if envelope.DispatchOutboxID != 42 {
+		t.Fatalf("dispatch_outbox_id = %d, want 42", envelope.DispatchOutboxID)
+	}
+	if envelope.SourceKind != domain.AlarmDispatchSourceKindYouTubeOutbox {
+		t.Fatalf("source_kind = %q, want %q", envelope.SourceKind, domain.AlarmDispatchSourceKindYouTubeOutbox)
+	}
+	if envelope.YouTubeOutbox == nil {
+		t.Fatal("youtube_outbox should be non-nil")
+	}
+	if envelope.YouTubeOutbox.ChannelID != "UC_fixture" {
+		t.Fatalf("youtube_outbox.channel_id = %q, want UC_fixture", envelope.YouTubeOutbox.ChannelID)
+	}
+	if envelope.SourcePayload() != `{"version":1}` {
+		t.Fatalf("source_payload = %q, want {\"version\":1}", envelope.SourcePayload())
+	}
+	if err := envelope.ValidateCanonicalDispatch(); err != nil {
+		t.Fatalf("ValidateCanonicalDispatch: %v", err)
+	}
+
 	encoded, err := json.Marshal(envelope)
 	if err != nil {
 		t.Fatalf("marshal fixture: %v", err)
 	}
-	var roundTrip contractsalarm.AlarmQueueEnvelope
+	var roundTrip domain.AlarmQueueEnvelope
 	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
 		t.Fatalf("unmarshal round trip: %v", err)
 	}
 	if roundTrip.Notification.RoomID != envelope.Notification.RoomID {
 		t.Fatalf("roundTrip room_id = %q, want %q", roundTrip.Notification.RoomID, envelope.Notification.RoomID)
+	}
+	if roundTrip.DispatchOutboxID != envelope.DispatchOutboxID {
+		t.Fatalf("roundTrip dispatch_outbox_id = %d, want %d", roundTrip.DispatchOutboxID, envelope.DispatchOutboxID)
+	}
+	if roundTrip.SourceKind != envelope.SourceKind {
+		t.Fatalf("roundTrip source_kind = %q, want %q", roundTrip.SourceKind, envelope.SourceKind)
+	}
+	if roundTrip.YouTubeOutbox == nil || roundTrip.YouTubeOutbox.ChannelID != envelope.YouTubeOutbox.ChannelID {
+		t.Fatalf("roundTrip youtube_outbox mismatch")
+	}
+	if roundTrip.SourcePayload() != envelope.SourcePayload() {
+		t.Fatalf("roundTrip source_payload = %q, want %q", roundTrip.SourcePayload(), envelope.SourcePayload())
 	}
 }
 
@@ -163,7 +220,7 @@ func TestAlarmQueueRetryMetadataRoundTrip(t *testing.T) {
 
 	raw := readAlarmContractFixture(t, "envelope_v1.json")
 
-	var envelope contractsalarm.AlarmQueueEnvelope
+	var envelope domain.AlarmQueueEnvelope
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
@@ -171,7 +228,7 @@ func TestAlarmQueueRetryMetadataRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal retry metadata: %v", err)
 	}
-	var retry contractsalarm.AlarmQueueRetryMetadata
+	var retry domain.AlarmQueueRetryMetadata
 	if err := json.Unmarshal(encoded, &retry); err != nil {
 		t.Fatalf("unmarshal retry metadata: %v", err)
 	}
@@ -180,6 +237,45 @@ func TestAlarmQueueRetryMetadataRoundTrip(t *testing.T) {
 	}
 	if retry.LastError != "temporary upstream error" {
 		t.Fatalf("last_error = %q, want temporary upstream error", retry.LastError)
+	}
+	if retry.Attempt != 2 {
+		t.Fatalf("attempt = %d, want 2", retry.Attempt)
+	}
+	if retry.NextVisibleAt != "2026-02-25T13:00:30Z" {
+		t.Fatalf("next_visible_at = %q, want 2026-02-25T13:00:30Z", retry.NextVisibleAt)
+	}
+}
+
+// version-0(legacy)는 domain unmarshal 레이어에서 거부되지 않고 파싱된다.
+// consumer 수용 분기(parseEnvelope의 case 0)는 queue 패키지 테스트가 담당한다.
+func TestAlarmQueueEnvelopeVersionZeroParsesAtDomainLayer(t *testing.T) {
+	t.Parallel()
+
+	versionZeroJSON := `{
+		"notification": {
+			"room_id": "room-legacy",
+			"channel": null,
+			"stream": null,
+			"minutes_until": 10,
+			"users": ["user-a"]
+		},
+		"claim_keys": ["notified:claim:room-legacy"],
+		"enqueued_at": "2026-02-25T13:00:00Z",
+		"version": 0
+	}`
+
+	var env domain.AlarmQueueEnvelope
+	if err := json.Unmarshal([]byte(versionZeroJSON), &env); err != nil {
+		t.Fatalf("unmarshal version-0 envelope: %v", err)
+	}
+	if env.Version != 0 {
+		t.Fatalf("Version = %d, want 0", env.Version)
+	}
+	if env.Notification.RoomID != "room-legacy" {
+		t.Fatalf("RoomID = %q, want room-legacy", env.Notification.RoomID)
+	}
+	if len(env.ClaimKeys) != 1 {
+		t.Fatalf("ClaimKeys len = %d, want 1", len(env.ClaimKeys))
 	}
 }
 

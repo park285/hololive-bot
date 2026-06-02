@@ -29,32 +29,35 @@ import (
 	"strings"
 	"time"
 
-	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 // Valkey 키 접두사 (Go alarm_types.go, Rust keys.rs 1:1 대응)
 const (
-	AlarmKeyPrefix                     = "alarm:"
-	AlarmRegistryKey                   = "alarm:registry"
-	AlarmChannelRegistryKey            = "alarm:channel_registry"
-	AlarmChannelRegistryVersionKey     = "alarm:channel_registry:version"
-	AlarmSubscriberCacheEmptyKey       = "alarm:subscriber_cache_empty"
-	ChzzkChannelMapKey                 = "alarm:chzzk_channels"
-	ChzzkChannelMapEmptyKey            = "alarm:chzzk_channels_empty"
-	TwitchLoginMapKey                  = "alarm:twitch_logins"
-	TwitchLoginMapEmptyKey             = "alarm:twitch_logins_empty"
-	TwitchChannelLoginMapKey           = "alarm:twitch_channel_logins"
-	TwitchChannelLoginMapEmptyKey      = "alarm:twitch_channel_logins_empty"
-	NextStreamKeyPrefix                = "alarm:next_stream:"
-	ChannelSubscribersKeyPrefix        = "alarm:channel_subscribers:"
-	ChannelSubscribersCommunityPrefix  = "alarm:channel_subscribers:COMMUNITY:"
-	ChannelSubscribersShortsPrefix     = "alarm:channel_subscribers:SHORTS:"
-	ChannelSubscribersEmptyKeyPrefix   = "alarm:channel_subscribers_empty:"
-	MemberNameKey                      = "alarm:member_names"
-	RoomNamesCacheKey                  = "alarm:room_names"
-	UserNamesCacheKey                  = "alarm:user_names"
+	AlarmKeyPrefix                    = "alarm:"
+	AlarmRegistryKey                  = "alarm:registry"
+	AlarmChannelRegistryKey           = "alarm:channel_registry"
+	AlarmChannelRegistryVersionKey    = "alarm:channel_registry:version"
+	AlarmSubscriberCacheEmptyKey      = "alarm:subscriber_cache_empty"
+	ChzzkChannelMapKey                = "alarm:chzzk_channels"
+	ChzzkChannelMapEmptyKey           = "alarm:chzzk_channels_empty"
+	TwitchLoginMapKey                 = "alarm:twitch_logins"
+	TwitchLoginMapEmptyKey            = "alarm:twitch_logins_empty"
+	TwitchChannelLoginMapKey          = "alarm:twitch_channel_logins"
+	TwitchChannelLoginMapEmptyKey     = "alarm:twitch_channel_logins_empty"
+	NextStreamKeyPrefix               = "alarm:next_stream:"
+	ChannelSubscribersKeyPrefix       = "alarm:channel_subscribers:"
+	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
+	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"
+	ChannelSubscribersEmptyKeyPrefix  = "alarm:channel_subscribers_empty:"
+	MemberNameKey                     = "alarm:member_names"
+	RoomNamesCacheKey                 = "alarm:room_names"
+	UserNamesCacheKey                 = "alarm:user_names"
+	DispatchQueueKey                  = "alarm:dispatch:queue"
+	DispatchRetryQueueKey             = "alarm:dispatch:retry"
+	DispatchDLQKey                    = "alarm:dispatch:dlq"
+
 	NotifiedKeyPrefix                  = "notified:"
 	NotifyClaimKeyPrefix               = "notified:claim:"
 	NotifyLogicalClaimKeyPrefix        = "notified:claim:event:"
@@ -80,9 +83,9 @@ func IsReservedAlarmKey(key string) bool {
 		MemberNameKey,
 		RoomNamesCacheKey,
 		UserNamesCacheKey,
-		contractsalarm.DispatchQueueKey,
-		contractsalarm.DispatchRetryQueueKey,
-		contractsalarm.DispatchDLQKey,
+		DispatchQueueKey,
+		DispatchRetryQueueKey,
+		DispatchDLQKey,
 		ChzzkChannelMapKey,
 		ChzzkChannelMapEmptyKey,
 		TwitchLoginMapKey,

@@ -23,7 +23,7 @@ package alarm
 import (
 	"net/url"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
+	keyspkg "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 const (
@@ -50,12 +50,12 @@ const (
 )
 
 const (
-	DispatchQueueKey      = "alarm:dispatch:queue"
-	DispatchRetryQueueKey = "alarm:dispatch:retry"
-	DispatchDLQKey        = "alarm:dispatch:dlq"
+	DispatchQueueKey      = keyspkg.DispatchQueueKey
+	DispatchRetryQueueKey = keyspkg.DispatchRetryQueueKey
+	DispatchDLQKey        = keyspkg.DispatchDLQKey
 
-	NotifyClaimKeyPrefix        = "notified:claim:"
-	NotifyLogicalClaimKeyPrefix = "notified:claim:event:"
+	NotifyClaimKeyPrefix        = keyspkg.NotifyClaimKeyPrefix
+	NotifyLogicalClaimKeyPrefix = keyspkg.NotifyLogicalClaimKeyPrefix
 
 	QueueEnvelopeVersionV1 uint8 = 1
 )
@@ -70,20 +70,4 @@ func RoomAlarmsViewPath(roomID string) string {
 
 func NextStreamPath(channelID string) string {
 	return BasePath + "/next-stream/" + url.PathEscape(channelID)
-}
-
-type AlarmQueueEnvelope struct {
-	Notification  domain.AlarmNotification `json:"notification"`
-	ClaimKeys     []string                 `json:"claim_keys"`
-	EnqueuedAt    string                   `json:"enqueued_at"`
-	Version       uint8                    `json:"version"`
-	Retry         *AlarmQueueRetryMetadata `json:"retry,omitempty"`
-	SourcePayload string                   `json:"source_payload,omitempty"`
-}
-
-type AlarmQueueRetryMetadata struct {
-	Attempt       int    `json:"attempt,omitempty"`
-	RetryAfterMS  int64  `json:"retry_after_ms,omitempty"`
-	NextVisibleAt string `json:"next_visible_at,omitempty"`
-	LastError     string `json:"last_error,omitempty"`
 }

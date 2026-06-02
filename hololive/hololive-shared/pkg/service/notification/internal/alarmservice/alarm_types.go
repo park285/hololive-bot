@@ -28,6 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -55,11 +56,11 @@ const (
 	MemberNameKey                  = sharedalarmkeys.MemberNameKey
 	RoomNamesCacheKey              = sharedalarmkeys.RoomNamesCacheKey
 	UserNamesCacheKey              = sharedalarmkeys.UserNamesCacheKey
-	NotifiedKeyPrefix              = "notified:"
-	NotifyClaimKeyPrefix           = "notified:claim:"
-	NotifyLogicalClaimKeyPrefix    = "notified:claim:event:"
-	UpcomingEventKeyPrefix         = "notified:upcoming:event:"
-	ScheduleTransitionKeyPrefix    = "notified:schedule:transition:"
+	NotifiedKeyPrefix              = sharedalarmkeys.NotifiedKeyPrefix
+	NotifyClaimKeyPrefix           = sharedalarmkeys.NotifyClaimKeyPrefix
+	NotifyLogicalClaimKeyPrefix    = sharedalarmkeys.NotifyLogicalClaimKeyPrefix
+	UpcomingEventKeyPrefix         = sharedalarmkeys.UpcomingEventKeyPrefix
+	ScheduleTransitionKeyPrefix    = sharedalarmkeys.ScheduleTransitionKeyPrefix
 	NextStreamKeyPrefix            = sharedalarmkeys.NextStreamKeyPrefix
 
 	// 타입별 구독자 키 접두사 (COMMUNITY, SHORTS용).
@@ -71,15 +72,9 @@ const (
 	IntegratedNotifiedKeyPrefix = sharedalarmkeys.IntegratedNotifiedKeyPrefix
 )
 
-// 스케줄 변경 시 StartScheduled 불일치 → SentAt 맵 리셋.
-type NotifiedData struct {
-	StartScheduled string       `json:"start_scheduled"`
-	SentAt         map[int]bool `json:"sent_at"`
-}
+type NotifiedData = dedup.NotifiedData
 
-type UpcomingEventNotifiedData struct {
-	NotifiedAt string `json:"notified_at"`
-}
+type UpcomingEventNotifiedData = dedup.UpcomingEventNotifiedData
 
 type alarmWriter interface {
 	Add(ctx context.Context, alarm *domain.Alarm) error

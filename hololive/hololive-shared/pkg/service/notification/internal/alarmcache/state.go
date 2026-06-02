@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
@@ -15,21 +16,16 @@ const (
 	UserNamesCacheKey   = sharedalarmkeys.UserNamesCacheKey
 	NextStreamKeyPrefix = sharedalarmkeys.NextStreamKeyPrefix
 
-	NotifiedKeyPrefix           = "notified:"
-	NotifyClaimKeyPrefix        = "notified:claim:"
-	NotifyLogicalClaimKeyPrefix = "notified:claim:event:"
-	UpcomingEventKeyPrefix      = "notified:upcoming:event:"
-	ScheduleTransitionKeyPrefix = "notified:schedule:transition:"
+	NotifiedKeyPrefix           = sharedalarmkeys.NotifiedKeyPrefix
+	NotifyClaimKeyPrefix        = sharedalarmkeys.NotifyClaimKeyPrefix
+	NotifyLogicalClaimKeyPrefix = sharedalarmkeys.NotifyLogicalClaimKeyPrefix
+	UpcomingEventKeyPrefix      = sharedalarmkeys.UpcomingEventKeyPrefix
+	ScheduleTransitionKeyPrefix = sharedalarmkeys.ScheduleTransitionKeyPrefix
 )
 
-type NotifiedData struct {
-	StartScheduled string       `json:"start_scheduled"`
-	SentAt         map[int]bool `json:"sent_at"`
-}
+type NotifiedData = dedup.NotifiedData
 
-type UpcomingEventNotifiedData struct {
-	NotifiedAt string `json:"notified_at"`
-}
+type UpcomingEventNotifiedData = dedup.UpcomingEventNotifiedData
 
 type MemberDataFunc func() domain.MemberDataProvider
 
