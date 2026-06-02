@@ -175,6 +175,7 @@ func (r *DeliveryTelemetryRepository) listPostDeliveryTimelines(
 	identities []PostTrackingIdentity,
 ) ([]PostDeliveryTimeline, error) {
 	var scanned []postDeliveryTimelineScanRow
+	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
 	query := `
 		SELECT ` + postDeliveryTimelineSelect() + `
 		FROM youtube_content_alarm_tracking AS track
@@ -187,8 +188,8 @@ func (r *DeliveryTelemetryRepository) listPostDeliveryTimelines(
 	} else {
 		query += " LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id"
 	}
-	query += " WHERE track.kind = ANY(?)"
-	args = append(args, []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort})
+	query += " WHERE " + deliveryInClause("track.kind", len(postKinds))
+	args = appendDeliveryOutboxKindArgs(args, postKinds...)
 	if windowStart != nil {
 		query += " AND COALESCE(track.actual_published_at, track.detected_at) >= ?"
 		args = append(args, windowStart.UTC())
@@ -202,8 +203,8 @@ func (r *DeliveryTelemetryRepository) listPostDeliveryTimelines(
 		args = append(args, detectedBefore.UTC())
 	}
 	if len(outboxIDs) > 0 {
-		query += " AND o.id = ANY(?)"
-		args = append(args, outboxIDs)
+		query += " AND " + deliveryInClause("o.id", len(outboxIDs))
+		args = appendDeliveryInt64Args(args, outboxIDs)
 	}
 	if len(identities) > 0 {
 		clause, identityArgs := postTrackingIdentityWhere(identities)

@@ -54,6 +54,8 @@ func (r *DeliveryTelemetryRepository) loadBackfillCandidates(
 	since time.Time,
 ) ([]deliveryTelemetryBackfillCandidate, error) {
 	var candidates []deliveryTelemetryBackfillCandidate
+	postKinds := []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}
+	retryStatuses := []domain.OutboxStatus{domain.OutboxStatusPending, domain.OutboxStatusFailed}
 	query := `
 		SELECT ` + strings.Join([]string{
 		"d.id AS delivery_id",
@@ -72,17 +74,15 @@ func (r *DeliveryTelemetryRepository) loadBackfillCandidates(
 	}, ", ") + `
 		FROM youtube_notification_delivery AS d
 		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
-		WHERE o.kind = ANY(?)
+		WHERE ` + deliveryInClause("o.kind", len(postKinds)) + `
 		  AND (
 			(d.status = ? AND d.sent_at IS NOT NULL)
-			OR (d.status = ANY(?) AND d.attempt_count > 0 AND COALESCE(d.error, '') <> '')
+			OR (` + deliveryInClause("d.status", len(retryStatuses)) + ` AND d.attempt_count > 0 AND COALESCE(d.error, '') <> '')
 		  )
 	`
-	args := []any{
-		[]domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost},
-		domain.OutboxStatusSent,
-		[]domain.OutboxStatus{domain.OutboxStatusPending, domain.OutboxStatusFailed},
-	}
+	args := appendDeliveryOutboxKindArgs(nil, postKinds...)
+	args = append(args, domain.OutboxStatusSent)
+	args = appendDeliveryOutboxStatusArgs(args, retryStatuses...)
 	if !since.IsZero() {
 		query += " AND COALESCE(d.sent_at, d.locked_at, d.created_at) >= ?"
 		args = append(args, since.UTC())

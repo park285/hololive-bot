@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -43,6 +44,16 @@ func newDeliveryTestDB(t *testing.T) *deliveryTestDB {
 		}
 	}
 	return &deliveryTestDB{Pool: pool}
+}
+
+func newDeliveryExecModePool(t *testing.T, db *deliveryTestDB) *pgxpool.Pool {
+	t.Helper()
+	cfg := db.Pool.Config()
+	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	return pool
 }
 
 func (db *deliveryTestDB) clone() *deliveryTestDB {

@@ -339,8 +339,8 @@ func (d *ClaimManager) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (m
 	if err := selectDeliverySQL(ctx, d.db, &rows, "load outbox rows by ids", `
 			SELECT id, kind, channel_id, content_id, payload::text AS payload, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, COALESCE(error, '') AS error
 		FROM youtube_notification_outbox
-		WHERE id = ANY(?)
-	`, uniqueIDs); err != nil {
+		WHERE `+deliveryInClause("id", len(uniqueIDs))+`
+	`, appendDeliveryInt64Args(nil, uniqueIDs)...); err != nil {
 		return nil, fmt.Errorf("load outbox rows by ids: %w", err)
 	}
 

@@ -23,14 +23,16 @@ func (r *DeliveryTelemetryRepository) ListCommunityShortsDeliveryLogsSince(
 	}
 
 	normalizedLimit := normalizeCommunityShortsDeliveryLogLimit(limit)
+	alarmTypes := []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts}
 	query := `
 		SELECT ` + deliveryTelemetrySelectColumns() + `
 		FROM youtube_notification_delivery_telemetry
-		WHERE alarm_type = ANY(?)
+		WHERE ` + deliveryInClause("alarm_type", len(alarmTypes)) + `
 		  AND COALESCE(actual_published_at, detected_at, event_at) >= ?
 		ORDER BY COALESCE(actual_published_at, detected_at, event_at) DESC, event_at ASC, id ASC
 	`
-	args := []any{[]domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts}, since.UTC()}
+	args := appendDeliveryAlarmTypeArgs(nil, alarmTypes...)
+	args = append(args, since.UTC())
 	if normalizedLimit > 0 {
 		query += " LIMIT ?"
 		args = append(args, normalizedLimit)

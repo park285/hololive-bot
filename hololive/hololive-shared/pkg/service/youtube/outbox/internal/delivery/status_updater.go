@@ -56,11 +56,14 @@ func (u *StatusUpdater) markSentBatch(ctx context.Context, ids []int64) {
 		end := min(start+markSentBatchChunkSize, len(uniqueIDs))
 		chunk := uniqueIDs[start:end]
 
-		_, err := u.db.Exec(ctx, `
+		args := []any{domain.OutboxStatusSent, now}
+		args = appendDeliveryInt64Args(args, chunk)
+		args = append(args, domain.OutboxStatusPending)
+		_, err := execDeliverySQL(ctx, u.db, "mark outbox items sent", `
 			UPDATE youtube_notification_outbox
-			SET status = $1, sent_at = $2, locked_at = NULL, error = ''
-			WHERE id = ANY($3) AND status = $4
-		`, domain.OutboxStatusSent, now, chunk, domain.OutboxStatusPending)
+			SET status = ?, sent_at = ?, locked_at = NULL, error = ''
+			WHERE `+deliveryInClause("id", len(chunk))+` AND status = ?
+		`, args...)
 		if err != nil {
 			u.logger.Error("Failed to mark outbox items as sent",
 				slog.Int("batch_size", len(chunk)),

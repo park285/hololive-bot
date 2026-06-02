@@ -190,7 +190,7 @@ func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliver
 }
 
 func (r *DeliveryTelemetryRepository) queryTelemetryRows(ctx context.Context, action string, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
-	rows, err := r.db.Query(ctx, query, args...)
+	rows, err := r.db.Query(ctx, postgresPlaceholders(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", action, err)
 	}
@@ -232,23 +232,28 @@ func (r *DeliveryTelemetryRepository) FetchAndLockPending(ctx context.Context, b
 	}
 	slices.Sort(candidateIDs)
 
-	if _, err := r.db.Exec(ctx, `
+	lockArgs := []any{now}
+	lockArgs = appendDeliveryInt64Args(lockArgs, candidateIDs)
+	lockArgs = append(lockArgs, lockExpiry)
+	if _, err := execDeliverySQL(ctx, r.db, "lock delivery telemetry rows", `
 		UPDATE youtube_notification_delivery_telemetry
-		SET locked_at = $1
-		WHERE id = ANY($2)
+		SET locked_at = ?
+		WHERE `+deliveryInClause("id", len(candidateIDs))+`
 		  AND logged_at IS NULL
-		  AND (locked_at IS NULL OR locked_at < $3)
-	`, now, candidateIDs, lockExpiry); err != nil {
-		return nil, fmt.Errorf("lock delivery telemetry rows: %w", err)
+		  AND (locked_at IS NULL OR locked_at < ?)
+	`, lockArgs...); err != nil {
+		return nil, err
 	}
 
+	reloadArgs := appendDeliveryInt64Args(nil, candidateIDs)
+	reloadArgs = append(reloadArgs, now)
 	locked, err := r.queryTelemetryRows(ctx, "reload locked delivery telemetry rows", `
 		SELECT `+deliveryTelemetrySelectColumns()+`
 		FROM youtube_notification_delivery_telemetry
-		WHERE id = ANY($1)
-		  AND locked_at = $2
+		WHERE `+deliveryInClause("id", len(candidateIDs))+`
+		  AND locked_at = ?
 		ORDER BY event_at ASC
-	`, candidateIDs, now)
+	`, reloadArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -266,12 +271,14 @@ func (r *DeliveryTelemetryRepository) MarkLoggedBatch(ctx context.Context, ids [
 	}
 
 	now := time.Now().UTC()
-	if _, err := r.db.Exec(ctx, `
+	args := []any{now}
+	args = appendDeliveryInt64Args(args, uniqueIDs)
+	if _, err := execDeliverySQL(ctx, r.db, "mark delivery telemetry logged", `
 		UPDATE youtube_notification_delivery_telemetry
-		SET logged_at = $1, locked_at = NULL, error = ''
-		WHERE id = ANY($2)
-	`, now, uniqueIDs); err != nil {
-		return fmt.Errorf("mark delivery telemetry logged: %w", err)
+		SET logged_at = ?, locked_at = NULL, error = ''
+		WHERE `+deliveryInClause("id", len(uniqueIDs))+`
+	`, args...); err != nil {
+		return err
 	}
 
 	return nil
@@ -284,12 +291,14 @@ func (r *DeliveryTelemetryRepository) MarkRetryBatch(ctx context.Context, ids []
 	}
 
 	nextAttemptAt := time.Now().UTC().Add(backoff)
-	if _, err := r.db.Exec(ctx, `
+	args := []any{nextAttemptAt, truncateString(errMsg, 500)}
+	args = appendDeliveryInt64Args(args, uniqueIDs)
+	if _, err := execDeliverySQL(ctx, r.db, "mark delivery telemetry retry", `
 		UPDATE youtube_notification_delivery_telemetry
-		SET locked_at = NULL, next_attempt_at = $1, error = $2
-		WHERE id = ANY($3)
-	`, nextAttemptAt, truncateString(errMsg, 500), uniqueIDs); err != nil {
-		return fmt.Errorf("mark delivery telemetry retry: %w", err)
+		SET locked_at = NULL, next_attempt_at = ?, error = ?
+		WHERE `+deliveryInClause("id", len(uniqueIDs))+`
+	`, args...); err != nil {
+		return err
 	}
 
 	return nil

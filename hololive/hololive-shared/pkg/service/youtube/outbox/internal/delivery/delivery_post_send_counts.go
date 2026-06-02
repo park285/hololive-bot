@@ -197,6 +197,7 @@ func (r *DeliveryTelemetryRepository) listPostSendCounts(
 	detectedBefore *time.Time,
 ) ([]PostSendCount, error) {
 	var scanned []postSendCountScanRow
+	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
 	query := `
 		SELECT ` + strings.Join([]string{
 		"track.kind AS outbox_kind",
@@ -222,10 +223,12 @@ func (r *DeliveryTelemetryRepository) listPostSendCounts(
 		FROM youtube_content_alarm_tracking AS track
 		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
 		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?
-		WHERE track.kind = ANY(?)
+		WHERE ` + deliveryInClause("track.kind", len(postKinds)) + `
 		  AND COALESCE(track.actual_published_at, track.detected_at) >= ?
 	`
-	args := []any{windowStart.UTC(), []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}, windowStart.UTC()}
+	args := []any{windowStart.UTC()}
+	args = appendDeliveryOutboxKindArgs(args, postKinds...)
+	args = append(args, windowStart.UTC())
 	if windowEnd != nil {
 		query += " AND COALESCE(track.actual_published_at, track.detected_at) < ?"
 		args = append(args, windowEnd.UTC())
