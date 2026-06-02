@@ -27,6 +27,11 @@ var (
 )
 
 func init() {
+	registerRecoveryMetrics()
+	registerPGDispatchMetrics()
+}
+
+func registerRecoveryMetrics() {
 	alarmDispatchRecoveryLastSuccessTimestamp = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "alarm_dispatch_recovery_last_success_timestamp_seconds",
@@ -47,6 +52,9 @@ func init() {
 		},
 		[]string{"type"},
 	)
+}
+
+func registerPGDispatchMetrics() {
 	alarmDispatchPGClaimedTotal = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "alarm_dispatch_pg_claimed_total",

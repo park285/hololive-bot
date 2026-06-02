@@ -66,15 +66,7 @@ func NewService(ctx context.Context, db *gorm.DB, cacheClient cache.Client, logg
 	if db == nil {
 		return nil, fmt.Errorf("db must not be nil")
 	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-	if config.SessionTTL <= 0 {
-		config = DefaultConfig()
-	}
-	if config.BcryptCost < bcrypt.MinCost || config.BcryptCost > bcrypt.MaxCost {
-		config.BcryptCost = DefaultBcryptCost
-	}
+	logger, config = normalizeServiceConfig(logger, config)
 
 	service := &Service{
 		db:          db,
@@ -90,6 +82,21 @@ func NewService(ctx context.Context, db *gorm.DB, cacheClient cache.Client, logg
 	}
 
 	return service, nil
+}
+
+// normalizeServiceConfig는 logger·SessionTTL·BcryptCost를 안전한 기본값으로 보정한다.
+func normalizeServiceConfig(logger *slog.Logger, config Config) (*slog.Logger, Config) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if config.SessionTTL <= 0 {
+		config = DefaultConfig()
+	}
+	if config.BcryptCost < bcrypt.MinCost || config.BcryptCost > bcrypt.MaxCost {
+		config.BcryptCost = DefaultBcryptCost
+	}
+
+	return logger, config
 }
 
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (*User, error) {
