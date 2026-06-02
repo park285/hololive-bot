@@ -26,10 +26,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/httputil"
 )
 
@@ -56,9 +57,7 @@ type Client struct {
 	maxConcurrentStatusChecks int
 	maxResponseBodyBytes      int64
 	logger                    *slog.Logger
-	circuitOpenUntil          *time.Time
-	circuitMu                 sync.RWMutex
-	failureCount              int
+	breaker                   *util.Breaker
 }
 
 type ClientConfig struct {
@@ -75,6 +74,7 @@ type ClientConfig struct {
 
 func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Client {
 	d := config.DefaultChzzkOperationalConfig()
+	l := defaultClientLogger(logger)
 	return &Client{
 		httpClient:                defaultHTTPClient(httpClient),
 		baseURL:                   defaultBaseURL(baseURL),
@@ -83,7 +83,11 @@ func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Cl
 		batchLookupThreshold:      d.BatchLookupThreshold,
 		maxConcurrentStatusChecks: d.MaxConcurrentStatusChecks,
 		maxResponseBodyBytes:      config.DefaultMaxResponseBodyBytes,
-		logger:                    defaultClientLogger(logger),
+		logger:                    l,
+		breaker: util.NewBreaker(
+			constants.CircuitBreakerConfig.FailureThreshold,
+			constants.CircuitBreakerConfig.ResetTimeout,
+		),
 	}
 }
 
@@ -105,6 +109,7 @@ func NewClientWithConfig(cfg ClientConfig) *Client {
 	if maxBody == 0 {
 		maxBody = config.DefaultMaxResponseBodyBytes
 	}
+	l := defaultClientLogger(cfg.Logger)
 	return &Client{
 		httpClient:                defaultHTTPClient(cfg.HTTPClient),
 		baseURL:                   defaultBaseURL(cfg.BaseURL),
@@ -115,7 +120,11 @@ func NewClientWithConfig(cfg ClientConfig) *Client {
 		batchLookupThreshold:      blt,
 		maxConcurrentStatusChecks: mcsc,
 		maxResponseBodyBytes:      maxBody,
-		logger:                    defaultClientLogger(cfg.Logger),
+		logger:                    l,
+		breaker: util.NewBreaker(
+			constants.CircuitBreakerConfig.FailureThreshold,
+			constants.CircuitBreakerConfig.ResetTimeout,
+		),
 	}
 }
 

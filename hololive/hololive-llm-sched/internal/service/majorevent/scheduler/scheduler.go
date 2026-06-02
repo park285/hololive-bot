@@ -33,10 +33,10 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-// kst: 한국 표준시 (UTC+9)
-var kst = time.FixedZone("KST", 9*60*60)
+var kst = util.KSTZone
 
 // 월요일 발송 기준: 발송 당일(월)부터 일요일까지의 이벤트를 대상으로 합니다.
 func GetWeekRange(now time.Time) (start, end time.Time) {

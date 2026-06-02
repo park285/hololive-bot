@@ -36,7 +36,9 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing.T) {
@@ -86,6 +88,19 @@ func TestHolodexAPIClientSingleKey(t *testing.T) {
 		if got != "k1" {
 			t.Fatalf("expected key 'k1', got '%s'", got)
 		}
+	}
+}
+
+func newHolodexTestClient(apiKey string) *APIClient {
+	return &APIClient{
+		httpClient: &http.Client{},
+		baseURL:    "https://holodex.net/api/v2",
+		apiKey:     apiKey,
+		logger:     slog.Default(),
+		breaker: util.NewBreaker(
+			constants.CircuitBreakerConfig.FailureThreshold,
+			constants.CircuitBreakerConfig.ResetTimeout,
+		),
 	}
 }
 
@@ -146,48 +161,129 @@ func TestAPIClientWithMockServer_Success(t *testing.T) {
 }
 
 func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
-	client := &APIClient{
-		httpClient:  &http.Client{},
-		baseURL:     "https://holodex.net/api/v2",
-		apiKey:      "k1",
-		logger:      slog.Default(),
-		rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
-		semaphore:   make(chan struct{}, 2),
-	}
+	client := newHolodexTestClient("k1")
 
 	// 초기 상태: 서킷 닫힘
 	if client.IsCircuitOpen() {
 		t.Fatal("expected circuit to be closed initially")
 	}
 
-	// 서킷 열기
-	client.openCircuit()
+	// threshold 횟수만큼 실패 → 서킷 열기
+	for range constants.CircuitBreakerConfig.FailureThreshold {
+		client.openCircuit()
+	}
 
 	// 서킷 열린 상태 확인
 	if !client.IsCircuitOpen() {
 		t.Fatal("expected circuit to be open after openCircuit()")
 	}
 
-	// 서킷 리셋
-	client.resetCircuit()
+	// openedAt을 과거로 설정하여 reset 트리거
+	client.forceOpenedAtForTest(time.Now().Add(-constants.CircuitBreakerConfig.ResetTimeout - time.Second))
+
 	if client.IsCircuitOpen() {
-		t.Fatal("expected circuit to be closed after resetCircuit()")
+		t.Fatal("expected circuit to be closed after timeout")
 	}
 }
 
 func TestAPIClient_FailureCountIncrement(t *testing.T) {
-	client := &APIClient{
-		httpClient: &http.Client{},
-		baseURL:    "https://holodex.net/api/v2",
-		apiKey:     "k1",
-		logger:     slog.Default(),
+	client := newHolodexTestClient("k1")
+
+	// threshold 횟수(3회) 미만에서는 circuit이 열리지 않아야 함
+	for i := 1; i < constants.CircuitBreakerConfig.FailureThreshold; i++ {
+		client.openCircuit()
+		if client.IsCircuitOpen() {
+			t.Errorf("circuit opened after %d failures (threshold=%d)", i, constants.CircuitBreakerConfig.FailureThreshold)
+		}
 	}
 
-	for i := 1; i <= 5; i++ {
-		count := client.incrementFailureCount()
-		if count != i {
-			t.Errorf("expected failure count %d, got %d", i, count)
-		}
+	// threshold 도달 시 circuit이 열려야 함
+	client.openCircuit()
+	if !client.IsCircuitOpen() {
+		t.Errorf("circuit should be open after %d failures", constants.CircuitBreakerConfig.FailureThreshold)
+	}
+}
+
+func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
+	// M1: threshold 도달 시 handleServerError가 추가 재시도 없이 즉시 중단해야 합니다.
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := &APIClient{
+		httpClient:        server.Client(),
+		baseURL:           server.URL,
+		apiKey:            "test-key",
+		logger:            slog.Default(),
+		rateLimiter:       rate.NewLimiter(rate.Inf, 1),
+		semaphore:         make(chan struct{}, 5),
+		perAttemptTimeout: 5 * time.Second,
+		breaker: util.NewBreaker(
+			constants.CircuitBreakerConfig.FailureThreshold,
+			constants.CircuitBreakerConfig.ResetTimeout,
+		),
+	}
+
+	_, err := client.DoRequest(context.Background(), http.MethodGet, "/test", nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	// threshold(3)회 요청 후 circuit이 열려 즉시 중단해야 합니다.
+	// maxAttempts = 1 + RetryConfig.MaxAttempts(3) = 4이지만
+	// threshold(3) 도달 시 4번째 시도 전에 중단해야 합니다.
+	if requestCount != constants.CircuitBreakerConfig.FailureThreshold {
+		t.Errorf("expected exactly %d requests (threshold), got %d",
+			constants.CircuitBreakerConfig.FailureThreshold, requestCount)
+	}
+
+	if !client.IsCircuitOpen() {
+		t.Error("circuit should be open after threshold failures")
+	}
+}
+
+func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
+	// M3: timeout 경과 후 reset → 단 1회 실패로는 즉시 재open 없음
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := &APIClient{
+		httpClient:        server.Client(),
+		baseURL:           server.URL,
+		apiKey:            "test-key",
+		logger:            slog.Default(),
+		rateLimiter:       rate.NewLimiter(rate.Inf, 1),
+		semaphore:         make(chan struct{}, 5),
+		perAttemptTimeout: 5 * time.Second,
+		breaker: util.NewBreaker(
+			constants.CircuitBreakerConfig.FailureThreshold,
+			10*time.Millisecond,
+		),
+	}
+
+	// threshold 도달 → circuit open
+	for range constants.CircuitBreakerConfig.FailureThreshold {
+		client.openCircuit()
+	}
+	if !client.IsCircuitOpen() {
+		t.Fatal("should be open after threshold")
+	}
+
+	// timeout 경과 → reset
+	time.Sleep(20 * time.Millisecond)
+	if !client.breaker.Allow() {
+		t.Fatal("should allow after timeout")
+	}
+
+	// 1회 실패 — threshold 미달이므로 즉시 재open 금지
+	client.openCircuit()
+	if client.IsCircuitOpen() {
+		t.Fatalf("single failure after reset must not re-open (threshold=%d)", constants.CircuitBreakerConfig.FailureThreshold)
 	}
 }
 

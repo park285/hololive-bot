@@ -20,6 +20,6 @@
 
 package summarizer
 
-import "time"
+import "github.com/kapu/hololive-shared/pkg/util"
 
-var kst = time.FixedZone("KST", 9*60*60)
+var kst = util.KSTZone

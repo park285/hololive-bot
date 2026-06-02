@@ -33,15 +33,13 @@ import (
 var ErrUnknownCommand = errors.New("unknown command")
 
 type Registry struct {
-	mu        sync.RWMutex
-	handlers  map[string]Command
-	aliasKeys map[string]string
+	mu       sync.RWMutex
+	handlers map[string]Command
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		handlers:  make(map[string]Command),
-		aliasKeys: make(map[string]string),
+		handlers: make(map[string]Command),
 	}
 }
 

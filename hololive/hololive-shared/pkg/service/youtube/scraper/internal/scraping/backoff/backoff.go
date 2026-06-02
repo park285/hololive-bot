@@ -173,7 +173,7 @@ func resolveCooldown(base, suggested, minValue, maxValue time.Duration) time.Dur
 		return base
 	}
 
-	return maxDuration(base, clampCooldown(suggested, minValue, maxValue))
+	return max(base, clampCooldown(suggested, minValue, maxValue))
 }
 
 func laterDeadline(current, candidate time.Time) time.Time {
@@ -181,13 +181,6 @@ func laterDeadline(current, candidate time.Time) time.Time {
 		return current
 	}
 	return candidate
-}
-
-func maxDuration(a, b time.Duration) time.Duration {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func (b *BackoffState) RecordSuccess() {

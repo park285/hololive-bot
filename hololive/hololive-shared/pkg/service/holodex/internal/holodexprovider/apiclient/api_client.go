@@ -37,14 +37,15 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/time/rate"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type Requester interface {
@@ -57,9 +58,7 @@ type APIClient struct {
 	baseURL              string
 	apiKey               string
 	logger               *slog.Logger
-	failureCount         int
-	circuitOpenUntil     *time.Time
-	circuitMu            sync.RWMutex
+	breaker              *util.Breaker
 	rateLimiter          *rate.Limiter
 	semaphore            chan struct{}
 	distributed          distributedRateLimiter
@@ -94,10 +93,14 @@ func NewHolodexAPIClient(
 	}
 	maxBody := config.DefaultMaxResponseBodyBytes
 	return &APIClient{
-		httpClient:           httpClient,
-		baseURL:              baseURL,
-		apiKey:               apiKey,
-		logger:               logger,
+		httpClient: httpClient,
+		baseURL:    baseURL,
+		apiKey:     apiKey,
+		logger:     logger,
+		breaker: util.NewBreaker(
+			constants.CircuitBreakerConfig.FailureThreshold,
+			constants.CircuitBreakerConfig.ResetTimeout,
+		),
 		rateLimiter:          rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
 		semaphore:            make(chan struct{}, holodexCfg.Concurrency.MaxConcurrentRequests),
 		distributed:          distributed,

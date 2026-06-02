@@ -25,6 +25,10 @@ import (
 	"time"
 )
 
+// KSTZone은 KST(UTC+9) 고정 오프셋 Location입니다.
+// time.LoadLocation 기반 kstLocation과 달리 tzdata 없이 동작합니다.
+var KSTZone = time.FixedZone("KST", 9*60*60)
+
 var kstLocation *time.Location
 
 func init() {

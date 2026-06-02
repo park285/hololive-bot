@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/shared-go/pkg/jsonutil"
@@ -33,19 +32,9 @@ import (
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
+// IsCircuitOpen은 read-only 상태 조회입니다. side-effect가 없습니다.
 func (c *Client) IsCircuitOpen() bool {
-	c.circuitMu.RLock()
-	defer c.circuitMu.RUnlock()
-
-	if c.circuitOpenUntil == nil {
-		return false
-	}
-
-	if time.Now().After(*c.circuitOpenUntil) {
-		return false
-	}
-
-	return true
+	return c.breaker.IsOpen()
 }
 
 func (c *Client) newRequest(ctx context.Context, method, targetURL string) (*http.Request, error) {
@@ -72,11 +61,11 @@ func (c *Client) executeRequest(
 	}
 
 	if err := handleBody(body); err != nil {
-		c.handleRequestFailure()
+		c.recordFailure()
 		return err
 	}
 
-	c.resetCircuit()
+	c.breaker.RecordSuccess()
 
 	return nil
 }
@@ -84,7 +73,7 @@ func (c *Client) executeRequest(
 func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string) ([]byte, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		c.handleRequestFailure()
+		c.recordFailure()
 
 		return nil, &apperrors.APIError{
 			Operation:  op,
@@ -106,81 +95,42 @@ func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string)
 
 	body, err := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
 	if err != nil {
-		c.handleRequestFailure()
+		c.recordFailure()
 		return nil, fmt.Errorf("%s: %w", readErrorPrefix, err)
 	}
 
 	return body, nil
 }
 
+// rejectIfCircuitOpen은 Allow() 기반으로 동작합니다.
+// timeout 경과 시 reset(open=false, failures=0) side-effect가 발생하므로
+// 자동 reset 후 첫 요청이 통과하고, failures=0부터 재카운트가 시작됩니다.
 func (c *Client) rejectIfCircuitOpen() error {
-	if !c.IsCircuitOpen() {
+	if c.breaker.Allow() {
 		return nil
 	}
 
-	c.circuitMu.RLock()
-
-	var remainingMs int64
-
-	if c.circuitOpenUntil != nil {
-		remainingMs = time.Until(*c.circuitOpenUntil).Milliseconds()
-	}
-
-	c.circuitMu.RUnlock()
+	remainingMs := c.breaker.RetryAfter().Milliseconds()
 
 	c.logger.Warn("Circuit breaker is open", slog.Int64("retry_after_ms", remainingMs))
 
 	return apperrors.CircuitOpenError{RetryAfterMs: remainingMs}
 }
 
-func (c *Client) handleRequestFailure() {
-	count := c.incrementFailureCount()
-	if count >= constants.CircuitBreakerConfig.FailureThreshold {
-		c.openCircuit()
-	}
-}
-
 func (c *Client) handleStatusCodeError(statusCode int) {
 	if statusCode >= 500 || statusCode == http.StatusTooManyRequests {
-		count := c.incrementFailureCount()
+		c.recordFailure()
 		c.logger.Warn("Server error or rate limit",
 			slog.Int("status", statusCode),
-			slog.Int("failure_count", count),
+			slog.Int("failure_count", int(c.breaker.Failures())),
 		)
-
-		if count >= constants.CircuitBreakerConfig.FailureThreshold {
-			c.openCircuit()
-		}
 	}
 }
 
-func (c *Client) openCircuit() {
-	c.circuitMu.Lock()
-	defer c.circuitMu.Unlock()
-
-	resetTime := time.Now().Add(constants.CircuitBreakerConfig.ResetTimeout)
-
-	c.circuitOpenUntil = &resetTime
-	c.failureCount = 0
-
-	c.logger.Error("Chzzk circuit breaker opened",
-		slog.Duration("reset_timeout", constants.CircuitBreakerConfig.ResetTimeout),
-	)
-}
-
-func (c *Client) resetCircuit() {
-	c.circuitMu.Lock()
-	defer c.circuitMu.Unlock()
-
-	c.failureCount = 0
-	c.circuitOpenUntil = nil
-}
-
-func (c *Client) incrementFailureCount() int {
-	c.circuitMu.Lock()
-	defer c.circuitMu.Unlock()
-
-	c.failureCount++
-
-	return c.failureCount
+func (c *Client) recordFailure() {
+	if opened := c.breaker.RecordFailure(); opened {
+		c.logger.Error("Chzzk circuit breaker opened",
+			slog.Duration("reset_timeout", constants.CircuitBreakerConfig.ResetTimeout),
+		)
+	}
 }

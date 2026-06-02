@@ -5,8 +5,6 @@ import (
 	stdErrors "errors"
 	"log/slog"
 	"net"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func (state *holodexRequestRetryState) recordAttemptError(logger *slog.Logger, path string, err error) bool {
@@ -46,9 +44,9 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 		errorType = "timeout"
 	}
 
-	count := c.incrementFailureCount()
-	if count >= constants.CircuitBreakerConfig.FailureThreshold {
-		c.openCircuit()
+	c.openCircuit()
+
+	if c.IsCircuitOpen() {
 		return false
 	}
 

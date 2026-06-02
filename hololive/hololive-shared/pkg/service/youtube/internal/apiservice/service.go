@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 var ytDefaults = config.DefaultYouTubeOperationalConfig()
@@ -118,13 +119,11 @@ func (ys *serviceImpl) ScraperProxyEnabled() bool {
 // getNextQuotaReset: YouTube API quota 리셋 시간 계산
 // YouTube quota는 PST 자정에 리셋됨 = KST 17:00 (UTC+9)
 func getNextQuotaReset() time.Time {
-	// KST = UTC+9 고정 오프셋 사용 (시간대 파일 불필요)
-	kst := time.FixedZone("KST", 9*60*60)
-	now := time.Now().In(kst)
+	now := time.Now().In(util.KSTZone)
 
 	// KST 17:00 = PST 자정
 	resetHour := 17
-	next := time.Date(now.Year(), now.Month(), now.Day(), resetHour, 0, 0, 0, kst)
+	next := time.Date(now.Year(), now.Month(), now.Day(), resetHour, 0, 0, 0, util.KSTZone)
 
 	// 이미 오늘 17시가 지났으면 내일 17시
 	if now.After(next) {

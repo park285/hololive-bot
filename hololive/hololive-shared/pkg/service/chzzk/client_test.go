@@ -416,13 +416,9 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 		t.Error("Circuit should be open after 3 failures")
 	}
 
-	// Step 3: 30초 대기를 시뮬레이션 (강제로 circuitOpenUntil 조작)
+	// Step 3: 30초 대기를 시뮬레이션 (openedAt을 resetTimeout 이전으로 강제 설정)
 	// 프로덕션에서는 30초 후 자동 리셋되지만, 테스트에서는 시간 조작
-	past := time.Now().Add(-1 * time.Second) // 과거 시점으로 설정
-
-	client.circuitMu.Lock()
-	client.circuitOpenUntil = &past
-	client.circuitMu.Unlock()
+	client.breaker.SetOpenedAtForTest(time.Now().Add(-31 * time.Second))
 
 	// Step 4: Circuit이 자동으로 닫혀야 함
 	if client.IsCircuitOpen() {
@@ -922,6 +918,45 @@ func TestGetLives_HTTPError_Normalized(t *testing.T) {
 
 	if got := err.Error(); got != "api error operation=chzzk_get_lives status=502" {
 		t.Fatalf("unexpected error string: %q", got)
+	}
+}
+
+func TestCircuitBreaker_AfterReset_ThresholdRequiredToReopen(t *testing.T) {
+	// M3: timeout 경과 후 reset → failures=0 → 단 1회 실패로 즉시 재open 금지
+	callCount := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	client := NewClient(http.DefaultClient, server.URL, logger)
+
+	ctx := t.Context()
+
+	// threshold 도달 → circuit open
+	for range 3 {
+		_, _ = client.GetLiveStatus(ctx, "test-channel")
+	}
+	if !client.IsCircuitOpen() {
+		t.Fatal("circuit should be open after threshold failures")
+	}
+
+	// openedAt을 resetTimeout 이전으로 강제 설정하여 timeout 경과 시뮬레이션
+	client.breaker.SetOpenedAtForTest(time.Now().Add(-31 * time.Second))
+
+	// timeout 경과 확인: Allow()가 reset을 수행
+	if client.IsCircuitOpen() {
+		t.Fatal("circuit should report closed after timeout (IsOpen check)")
+	}
+
+	// 1회 실패 후 즉시 재open 금지
+	_, _ = client.GetLiveStatus(ctx, "test-channel")
+
+	if client.IsCircuitOpen() {
+		t.Fatal("single failure after reset must not re-open circuit (threshold=3)")
 	}
 }
 

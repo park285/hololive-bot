@@ -23,7 +23,6 @@ package formatter
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -68,108 +67,4 @@ func (f *ResponseFormatter) FormatSubscriberCount(memberName string, subscribers
 		msging.DefaultEmoji.Stats,
 		formattedSubs,
 	)
-}
-
-func (f *ResponseFormatter) FormatSubscriberGraph(
-	memberName string,
-	days int,
-	current, change7d, change30d int64,
-	sampleCount int,
-	updatedAt time.Time,
-	pointValues []int64,
-) string {
-	var builder strings.Builder
-
-	fmt.Fprintf(&builder, "%s %s 구독자 추이 (%d일)\n\n", msging.DefaultEmoji.Stats, memberName, days)
-	fmt.Fprintf(&builder, "현재: %s명\n", util.FormatKoreanNumber(current))
-
-	writeSubscriberGraphChange(&builder, "7일", change7d)
-	writeSubscriberGraphChange(&builder, "30일", change30d)
-
-	if len(pointValues) >= 2 {
-		builder.WriteString("\n추이: ")
-		builder.WriteString(generateSparkline(pointValues, 25))
-		builder.WriteString("\n")
-	}
-
-	fmt.Fprintf(&builder, "\n샘플: %d개 | 업데이트: %s",
-		sampleCount,
-		updatedAt.Format("01-02 15:04"))
-
-	return builder.String()
-}
-
-func writeSubscriberGraphChange(builder *strings.Builder, label string, value int64) {
-	if value == 0 {
-		return
-	}
-
-	sign := "+"
-
-	if value < 0 {
-		sign = ""
-	}
-
-	fmt.Fprintf(builder, "%s: %s%s명\n", label, sign, util.FormatKoreanNumber(value))
-}
-
-func generateSparkline(values []int64, width int) string {
-	if len(values) == 0 {
-		return ""
-	}
-
-	values = downsampleSparklineValues(values, width)
-
-	minVal, maxVal := sparklineMinMax(values)
-	sparkChars := []rune(" ▁▂▃▄▅▆▇█")
-	rangeVal := maxVal - minVal
-	if rangeVal == 0 {
-		rangeVal = 1
-	}
-
-	var result strings.Builder
-
-	for _, value := range values {
-		result.WriteRune(sparkChars[sparklineCharIndex(value, minVal, rangeVal, len(sparkChars))])
-	}
-
-	return result.String()
-}
-
-func sparklineMinMax(values []int64) (int64, int64) {
-	minVal, maxVal := values[0], values[0]
-	for _, value := range values {
-		minVal = min(minVal, value)
-		maxVal = max(maxVal, value)
-	}
-	return minVal, maxVal
-}
-
-func sparklineCharIndex(value, minVal, rangeVal int64, charCount int) int {
-	normalized := float64(value-minVal) / float64(rangeVal)
-	idx := int(normalized * float64(charCount-1))
-	if idx >= charCount {
-		return charCount - 1
-	}
-	return idx
-}
-
-func downsampleSparklineValues(values []int64, width int) []int64 {
-	if len(values) <= width || width <= 0 {
-		return values
-	}
-
-	step := float64(len(values)) / float64(width)
-
-	sampled := make([]int64, width)
-	for i := range width {
-		idx := int(float64(i) * step)
-		if idx >= len(values) {
-			idx = len(values) - 1
-		}
-
-		sampled[i] = values[idx]
-	}
-
-	return sampled
 }

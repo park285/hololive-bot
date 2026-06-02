@@ -262,39 +262,6 @@ func TestShouldSuppressSchedulePrompt(t *testing.T) {
 	}
 }
 
-func TestGraphPointValues(t *testing.T) {
-	t.Run("nil points", func(t *testing.T) {
-		got := graphPointValues(nil)
-		if got != nil {
-			t.Fatalf("expected nil, got %v", got)
-		}
-	})
-
-	t.Run("empty points", func(t *testing.T) {
-		got := graphPointValues([]stats.SubscriberGraphPoint{})
-		if got != nil {
-			t.Fatalf("expected nil, got %v", got)
-		}
-	})
-
-	t.Run("maps subscriber values", func(t *testing.T) {
-		points := []stats.SubscriberGraphPoint{
-			{Subscribers: 100},
-			{Subscribers: 200},
-			{Subscribers: 350},
-		}
-		got := graphPointValues(points)
-
-		if len(got) != 3 {
-			t.Fatalf("expected length 3, got %d", len(got))
-		}
-
-		if got[0] != 100 || got[1] != 200 || got[2] != 350 {
-			t.Fatalf("unexpected values: %v", got)
-		}
-	})
-}
-
 func TestValidateMemberLookupDependencies(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -459,60 +426,6 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 		}
 
 		cmd := NewScheduleCommand(deps)
-		if err := cmd.ensureDeps(); err != nil {
-			t.Fatalf("expected nil error, got %v", err)
-		}
-
-		if deps.Logger == nil {
-			t.Fatal("expected logger to be initialized")
-		}
-	})
-}
-
-func TestSubscriberGraphCommandEnsureDeps(t *testing.T) {
-	t.Run("base dependency error", func(t *testing.T) {
-		cmd := NewSubscriberGraphCommand(&Dependencies{})
-
-		err := cmd.ensureDeps()
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-
-		if err.Error() != "failed to ensure base dependencies: message callbacks not configured" {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("service dependency error", func(t *testing.T) {
-		deps := &Dependencies{
-			SendMessage: func(_ context.Context, _, _ string) error { return nil },
-			SendError:   func(_ context.Context, _, _ string) error { return nil },
-		}
-		cmd := NewSubscriberGraphCommand(deps)
-
-		err := cmd.ensureDeps()
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-
-		if err.Error() != "subscriber graph command services not configured" {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("success", func(t *testing.T) {
-		deps := &Dependencies{
-			Matcher:         &matcher.Matcher{},
-			StatsRepository: &stubCoverageStatsRepository{},
-			SendMessage: func(_ context.Context, _, _ string) error {
-				return nil
-			},
-			SendError: func(_ context.Context, _, _ string) error {
-				return nil
-			},
-		}
-
-		cmd := NewSubscriberGraphCommand(deps)
 		if err := cmd.ensureDeps(); err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
