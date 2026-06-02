@@ -158,16 +158,7 @@ func (r *GormBatchRepository) persistLatencyClassificationsAfterCommit(
 		return
 	}
 
-	identities := make([]LatencyClassificationIdentity, 0, len(trackingRows))
-	for i := range trackingRows {
-		if trackingRows[i] == nil {
-			continue
-		}
-		identities = append(identities, LatencyClassificationIdentity{
-			Kind:      trackingRows[i].Kind,
-			ContentID: trackingRows[i].ContentID,
-		})
-	}
+	identities := buildLatencyClassificationIdentities(trackingRows)
 	if len(identities) == 0 {
 		return
 	}
@@ -178,4 +169,21 @@ func (r *GormBatchRepository) persistLatencyClassificationsAfterCommit(
 			slog.Any("error", err),
 		)
 	}
+}
+
+func buildLatencyClassificationIdentities(
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+) []LatencyClassificationIdentity {
+	identities := make([]LatencyClassificationIdentity, 0, len(trackingRows))
+	for i := range trackingRows {
+		if trackingRows[i] == nil {
+			continue
+		}
+		identities = append(identities, LatencyClassificationIdentity{
+			Kind:      trackingRows[i].Kind,
+			ContentID: trackingRows[i].ContentID,
+		})
+	}
+
+	return identities
 }

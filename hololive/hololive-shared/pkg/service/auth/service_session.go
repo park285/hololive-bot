@@ -81,21 +81,9 @@ func (s *Service) claimSessionForRotation(ctx context.Context, token string) (st
 	sessionHash := sha256Hex(token)
 	key := sessionKeyPrefix + sessionHash
 
-	rawPayload, hit, err := s.cacheClient.GetString(ctx, key)
+	rawPayload, data, err := s.loadValidSessionPayload(ctx, key, sessionHash)
 	if err != nil {
-		return "", newError(CodeInternal, "failed to read session", err)
-	}
-	if !hit {
-		return "", newError(CodeUnauthorized, "invalid session", nil)
-	}
-
-	var data sessionData
-	if err := json.Unmarshal([]byte(rawPayload), &data); err != nil {
-		return "", newError(CodeInternal, "failed to decode session", err)
-	}
-	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
-		s.deleteExpiredSession(ctx, key, sessionHash, data.UserID)
-		return "", newError(CodeUnauthorized, "invalid session", nil)
+		return "", err
 	}
 
 	deleted, err := s.cacheClient.CompareAndDelete(ctx, key, rawPayload)
@@ -109,6 +97,29 @@ func (s *Service) claimSessionForRotation(ctx context.Context, token string) (st
 
 	s.removeSessionIndex(ctx, data.UserID, sessionHash)
 	return data.UserID, nil
+}
+
+// loadValidSessionPayload는 세션 키의 raw payload와 디코드된 데이터를 읽고 유효성을 검증한다.
+// CAS 회전을 위해 저장된 정확한 raw 문자열을 그대로 반환한다(re-marshal 불일치 방지).
+func (s *Service) loadValidSessionPayload(ctx context.Context, key, sessionHash string) (string, sessionData, error) {
+	rawPayload, hit, err := s.cacheClient.GetString(ctx, key)
+	if err != nil {
+		return "", sessionData{}, newError(CodeInternal, "failed to read session", err)
+	}
+	if !hit {
+		return "", sessionData{}, newError(CodeUnauthorized, "invalid session", nil)
+	}
+
+	var data sessionData
+	if err := json.Unmarshal([]byte(rawPayload), &data); err != nil {
+		return "", sessionData{}, newError(CodeInternal, "failed to decode session", err)
+	}
+	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
+		s.deleteExpiredSession(ctx, key, sessionHash, data.UserID)
+		return "", sessionData{}, newError(CodeUnauthorized, "invalid session", nil)
+	}
+
+	return rawPayload, data, nil
 }
 
 // removeSessionIndex는 user 세션 인덱스에서 hash를 제거한다(best-effort).
