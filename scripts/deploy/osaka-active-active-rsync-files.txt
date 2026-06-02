@@ -565,6 +565,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_send_support.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_status.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_telemetry.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_testhooks.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format/formatter.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format/payload.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/message_format.go
@@ -705,7 +706,7 @@ hololive/hololive-shared/pkg/templateview/helpers.go
 hololive/hololive-shared/pkg/templateview/major_event.go
 hololive/hololive-shared/pkg/templateview/member_news.go
 hololive/hololive-shared/pkg/testutil/cache.go
-hololive/hololive-shared/pkg/util/circuitbreaker.go
+hololive/hololive-shared/pkg/util/breaker.go
 hololive/hololive-shared/pkg/util/kakao.go
 hololive/hololive-shared/pkg/util/math.go
 hololive/hololive-shared/pkg/util/string.go

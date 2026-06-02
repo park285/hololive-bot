@@ -33,6 +33,7 @@ github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shar
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
+github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/shared-go/pkg/runtime/bootstrap
 github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/shared-go/pkg/runtime/lifecycle
@@ -638,7 +639,9 @@ github.com/kapu/hololive-shared/pkg/service/alarm/dedup -> github.com/kapu/holol
 github.com/kapu/hololive-shared/pkg/service/alarm/dedup -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/alarm/dedup -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/alarm/dedup -> github.com/park285/shared-go/pkg/logging
+github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/contracts/alarm
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/alarm/keys -> github.com/kapu/hololive-shared/pkg/domain
