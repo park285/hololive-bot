@@ -32,7 +32,7 @@ func buildPendingPublishedAtResolver(
 	}
 
 	resolver := poller.NewPendingPublishedAtResolverWithControls(
-		postgresService.GetGormDB(),
+		postgresService.GetPool(),
 		scraperClient,
 		routeDecider,
 		resolverConfig.Interval,

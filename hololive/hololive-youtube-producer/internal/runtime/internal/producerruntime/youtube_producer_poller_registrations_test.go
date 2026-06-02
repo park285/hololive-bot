@@ -29,7 +29,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
@@ -40,8 +42,6 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 type fakeTestPoller struct {
@@ -58,11 +58,7 @@ func newPollerRegistrationTestLogger() *slog.Logger {
 func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testing.T) {
 	t.Parallel()
 
-	postgres := &databasemocks.Client{
-		GetGormDBFunc: func() *gorm.DB {
-			return nil
-		},
-	}
+	postgres := &databasemocks.Client{}
 
 	registrations := polling.BuildRegistrations(
 		postgres,
@@ -142,11 +138,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 func TestBuildYouTubeProducerChannelPollerRegistrations_AllExplicit(t *testing.T) {
 	t.Parallel()
 
-	postgres := &databasemocks.Client{
-		GetGormDBFunc: func() *gorm.DB {
-			return nil
-		},
-	}
+	postgres := &databasemocks.Client{}
 
 	registrations := polling.BuildRegistrations(
 		postgres,
@@ -178,16 +170,14 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_AllExplicit(t *testing.T
 
 func TestClassifyYouTubePollTargetsByActivity(t *testing.T) {
 	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeVideo{}, &domain.YouTubeCommunityPost{}))
+	pool := dbtest.NewPool(t)
 	activeAt := now.Add(-2 * time.Hour)
 	warmAt := now.Add(-72 * time.Hour)
-	require.NoError(t, db.Create(&domain.YouTubeLiveSession{VideoID: "active-live", ChannelID: "UC_LIVE", Status: domain.LiveStatusLive, LastSeenAt: activeAt}).Error)
-	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_ACTIVE", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
-	require.NoError(t, db.Create(&domain.YouTubeCommunityPost{PostID: "warm-post", ChannelID: "UC_WARM", PublishedAt: &warmAt, FirstSeenAt: warmAt}).Error)
+	seedPollTargetLiveSession(t, pool, "active-live", "UC_LIVE", domain.LiveStatusLive, activeAt)
+	seedPollTargetVideo(t, pool, "active-video", "UC_ACTIVE", activeAt, activeAt)
+	seedPollTargetCommunityPost(t, pool, "warm-post", "UC_WARM", warmAt, warmAt)
 
-	targets, err := polltarget.ClassifyByActivity(context.Background(), db, polltarget.Targets{
+	targets, err := polltarget.ClassifyByActivity(context.Background(), pool, polltarget.Targets{
 		NotificationChannelIDs: []string{"UC_LIVE", "UC_ACTIVE", "UC_WARM", "UC_COLD"},
 		StatsChannelIDs:        []string{"UC_STATS"},
 	}, now)
@@ -201,13 +191,11 @@ func TestClassifyYouTubePollTargetsByActivity(t *testing.T) {
 
 func TestBuildYouTubeProducerChannelPollerRegistrations_TieredTargetsReduceRPM(t *testing.T) {
 	now := time.Now().UTC()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeVideo{}, &domain.YouTubeCommunityPost{}))
+	pool := dbtest.NewPool(t)
 	activeAt := now.Add(-2 * time.Hour)
 	warmAt := now.Add(-72 * time.Hour)
-	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_ACTIVE", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
-	require.NoError(t, db.Create(&domain.YouTubeCommunityPost{PostID: "warm-post", ChannelID: "UC_WARM", PublishedAt: &warmAt, FirstSeenAt: warmAt}).Error)
+	seedPollTargetVideo(t, pool, "active-video", "UC_ACTIVE", activeAt, activeAt)
+	seedPollTargetCommunityPost(t, pool, "warm-post", "UC_WARM", warmAt, warmAt)
 	notificationIDs := []string{"UC_ACTIVE", "UC_WARM", "UC_COLD"}
 	statsIDs := []string{"UC_STATS"}
 	appConfig := config.ScraperConfig{Poll: config.ScraperPoll{
@@ -219,8 +207,8 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieredTargetsReduceRPM(t
 	}, PollTiering: config.ScraperPollTieringConfig{Enabled: true}}
 	flatConfig := appConfig
 	flatConfig.PollTiering.Enabled = false
-	nilDB := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }}
-	activityDB := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	nilDB := &databasemocks.Client{}
+	activityDB := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 
 	flat := polling.BuildRegistrations(nilDB, flatConfig, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
 	tiered := polling.BuildRegistrations(activityDB, appConfig, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
@@ -230,13 +218,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieredTargetsReduceRPM(t
 }
 
 func TestBuildYouTubeProducerChannelPollerRegistrations_TieringDisabledByDefault(t *testing.T) {
-	now := time.Now().UTC()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeVideo{}))
-	activeAt := now.Add(-2 * time.Hour)
-	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_ACTIVE", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
-
 	appConfig := config.ScraperConfig{Poll: config.ScraperPoll{
 		Videos:    10 * time.Minute,
 		Shorts:    10 * time.Minute,
@@ -244,7 +225,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieringDisabledByDefault
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	}}
-	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	postgres := &databasemocks.Client{}
 	registrations := polling.BuildRegistrations(postgres, appConfig, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE", "UC_COLD"}, []string{"UC_STATS"})
 
 	require.False(t, polltarget.HasTieredNotificationRegistration(registrations))
@@ -252,11 +233,9 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieringDisabledByDefault
 
 func TestBuildYouTubeProducerChannelPollerRegistrations_TieringEnabledWithAllActiveTargets(t *testing.T) {
 	now := time.Now().UTC()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeVideo{}))
+	pool := dbtest.NewPool(t)
 	activeAt := now.Add(-2 * time.Hour)
-	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_ACTIVE", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
+	seedPollTargetVideo(t, pool, "active-video", "UC_ACTIVE", activeAt, activeAt)
 
 	appConfig := config.ScraperConfig{
 		Poll: config.ScraperPoll{
@@ -268,7 +247,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieringEnabledWithAllAct
 		},
 		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
 	}
-	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 	registrations := polling.BuildRegistrations(postgres, appConfig, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE"}, []string{"UC_STATS"})
 
 	require.True(t, polltarget.HasTieredNotificationRegistration(registrations))
@@ -276,13 +255,11 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieringEnabledWithAllAct
 
 func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 	now := time.Now().UTC()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeVideo{}, &domain.YouTubeCommunityPost{}))
+	pool := dbtest.NewPool(t)
 	activeAt := now.Add(-2 * time.Hour)
 	warmAt := now.Add(-72 * time.Hour)
-	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_ACTIVE", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
-	require.NoError(t, db.Create(&domain.YouTubeCommunityPost{PostID: "warm-post", ChannelID: "UC_WARM", PublishedAt: &warmAt, FirstSeenAt: warmAt}).Error)
+	seedPollTargetVideo(t, pool, "active-video", "UC_ACTIVE", activeAt, activeAt)
+	seedPollTargetCommunityPost(t, pool, "warm-post", "UC_WARM", warmAt, warmAt)
 	notificationIDs := []string{"UC_ACTIVE", "UC_WARM", "UC_COLD"}
 	statsIDs := []string{"UC_STATS"}
 	appConfig := config.ScraperConfig{Poll: config.ScraperPoll{
@@ -292,14 +269,14 @@ func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	}, PollTiering: config.ScraperPollTieringConfig{Enabled: true}}
-	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 	registrations := polling.BuildRegistrations(postgres, appConfig, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		newPollerRegistrationTestLogger(),
 		providers.WithChannelPollerRegistrations(registrations),
 	)
-	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, db)
+	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, pool)
 
 	syncer.Sync(polltarget.Targets{NotificationChannelIDs: notificationIDs, StatsChannelIDs: statsIDs})
 
@@ -313,11 +290,9 @@ func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 
 func TestTieredPollerRefreshRemovesEmptyNotificationTargets(t *testing.T) {
 	now := time.Now().UTC()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeVideo{}, &domain.YouTubeCommunityPost{}))
+	pool := dbtest.NewPool(t)
 	activeAt := now.Add(-2 * time.Hour)
-	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_ACTIVE", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
+	seedPollTargetVideo(t, pool, "active-video", "UC_ACTIVE", activeAt, activeAt)
 	notificationIDs := []string{"UC_ACTIVE", "UC_COLD"}
 	statsIDs := []string{"UC_STATS"}
 	appConfig := config.ScraperConfig{Poll: config.ScraperPoll{
@@ -327,19 +302,63 @@ func TestTieredPollerRefreshRemovesEmptyNotificationTargets(t *testing.T) {
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	}, PollTiering: config.ScraperPollTieringConfig{Enabled: true}}
-	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 	registrations := polling.BuildRegistrations(postgres, appConfig, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		newPollerRegistrationTestLogger(),
 		providers.WithChannelPollerRegistrations(registrations),
 	)
-	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, db)
+	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, pool)
 
 	syncer.Sync(polltarget.Targets{NotificationChannelIDs: nil, StatsChannelIDs: statsIDs})
 
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_ACTIVE:videos")
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_COLD:videos")
+}
+
+func seedPollTargetLiveSession(t *testing.T, pool *pgxpool.Pool, videoID, channelID string, status domain.LiveStatus, lastSeenAt time.Time) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, last_seen_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (video_id) DO UPDATE
+		SET channel_id = EXCLUDED.channel_id,
+		    status = EXCLUDED.status,
+		    last_seen_at = EXCLUDED.last_seen_at
+	`, videoID, channelID, status, videoID, lastSeenAt)
+	require.NoError(t, err)
+}
+
+func seedPollTargetVideo(t *testing.T, pool *pgxpool.Pool, videoID, channelID string, publishedAt, firstSeenAt time.Time) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_videos(video_id, channel_id, title, published_at, first_seen_at, last_seen_at)
+		VALUES ($1, $2, $3, $4, $5, $5)
+		ON CONFLICT (video_id) DO UPDATE
+		SET channel_id = EXCLUDED.channel_id,
+		    published_at = EXCLUDED.published_at,
+		    first_seen_at = EXCLUDED.first_seen_at,
+		    last_seen_at = EXCLUDED.last_seen_at
+	`, videoID, channelID, videoID, publishedAt, firstSeenAt)
+	require.NoError(t, err)
+}
+
+func seedPollTargetCommunityPost(t *testing.T, pool *pgxpool.Pool, postID, channelID string, publishedAt, firstSeenAt time.Time) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_community_posts(post_id, channel_id, content_text, published_at, first_seen_at, last_seen_at)
+		VALUES ($1, $2, $3, $4, $5, $5)
+		ON CONFLICT (post_id) DO UPDATE
+		SET channel_id = EXCLUDED.channel_id,
+		    published_at = EXCLUDED.published_at,
+		    first_seen_at = EXCLUDED.first_seen_at,
+		    last_seen_at = EXCLUDED.last_seen_at
+	`, postID, channelID, postID, publishedAt, firstSeenAt)
+	require.NoError(t, err)
 }
 
 func schedulerJobInterval(t *testing.T, scheduler any, key string) time.Duration {
@@ -370,11 +389,7 @@ func TestValidateExplicitPollerRegistrations_ReturnsErrorOnActiveNonExplicitRegi
 func TestBuildYouTubeProducerYouTubeComponents_GraduatedMembersFiltered(t *testing.T) {
 	t.Parallel()
 
-	postgres := &databasemocks.Client{
-		GetGormDBFunc: func() *gorm.DB {
-			return nil
-		},
-	}
+	postgres := &databasemocks.Client{}
 
 	operationalChannels := mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
 		members: []*domain.Member{
@@ -421,11 +436,7 @@ func TestBuildYouTubeProducerYouTubeComponents_GraduatedMembersFiltered(t *testi
 func TestBuildYouTubeProducerChannelPollerRegistrations_RouteAwareWorstCaseRequestUnits(t *testing.T) {
 	t.Parallel()
 
-	postgres := &databasemocks.Client{
-		GetGormDBFunc: func() *gorm.DB {
-			return nil
-		},
-	}
+	postgres := &databasemocks.Client{}
 
 	registrations := polling.BuildRegistrations(
 		postgres,

@@ -224,7 +224,7 @@ func buildLLMSchedulerComponents(
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, memberCache, logger)
 	memberDataProvider := memberServiceAdapter
 
-	templateRenderer := template.NewRenderer(postgresService.GetGormDB(), logger)
+	templateRenderer := template.NewRenderer(postgresService.GetPool(), logger)
 	formatter := newLLMSchedulerFormatter(schedulerConfig.Bot.Prefix, templateRenderer, logger)
 	majorEventRepository := buildMajorEventRepository(ctx, postgresService, logger, schedulerConfig.Postgres.AutoPrepareSchema)
 	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, logger)

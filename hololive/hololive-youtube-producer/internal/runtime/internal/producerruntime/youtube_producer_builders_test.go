@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
@@ -686,7 +685,7 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersPublishedAtResolverAsGlo
 				Live:      5 * time.Minute,
 			},
 		},
-		&databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }},
+		&databasemocks.Client{},
 		scraper.NewClient(),
 		func(poller.NotificationRouteRequest) bool { return true },
 		testLogger(),
@@ -704,7 +703,7 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersPublishedAtResolverAsGlo
 			},
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
-		&databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }},
+		&databasemocks.Client{},
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS"},
 		scraper.NewClient(),

@@ -64,7 +64,7 @@ func buildDeliveryOutboxDispatcher(
 		return nil
 	}
 	dispatcher := delivery.NewDispatcher(
-		delivery.NewOutboxRepository(infra.Postgres.GetGormDB(), logger),
+		delivery.NewOutboxRepository(infra.Postgres, logger),
 		sender,
 		logger,
 		delivery.DefaultDispatcherConfig(),
@@ -145,10 +145,10 @@ func buildYouTubeOutboxDispatcher(
 	}
 
 	dispatcher := youtubeoutbox.NewDispatcher(
-		infra.Postgres.GetGormDB(),
+		infra.Postgres.GetPool(),
 		infra.Cache,
 		sender,
-		template.NewRenderer(infra.Postgres.GetGormDB(), logger),
+		template.NewRenderer(infra.Postgres.GetPool(), logger),
 		logger,
 		youtubeoutbox.DefaultConfig(),
 	)

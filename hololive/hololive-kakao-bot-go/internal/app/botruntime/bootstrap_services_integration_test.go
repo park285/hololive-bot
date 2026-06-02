@@ -2,36 +2,31 @@ package botruntime
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
 )
 
 func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 	t.Parallel()
 
-	dsn := fmt.Sprintf("file:app_core_integration_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&acl.Settings{}, &acl.Room{}))
+	pool := dbtest.NewPool(t)
 
 	logger := slog.New(slog.DiscardHandler)
 	infra := &sharedmodules.InfraModule{
 		Postgres: &dbmocks.Client{
-			GetGormDBFunc: func() *gorm.DB { return db },
+			GetPoolFunc: func() *pgxpool.Pool { return pool },
 		},
 		Cache: &cachemocks.Client{
 			SetFunc:  func(context.Context, string, any, time.Duration) error { return nil },
@@ -51,15 +46,12 @@ func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 	t.Parallel()
 
-	dsn := fmt.Sprintf("file:app_core_integration_chain_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&acl.Settings{}, &acl.Room{}))
+	pool := dbtest.NewPool(t)
 
 	logger := slog.New(slog.DiscardHandler)
 	infra := &sharedmodules.InfraModule{
 		Postgres: &dbmocks.Client{
-			GetGormDBFunc: func() *gorm.DB { return db },
+			GetPoolFunc: func() *pgxpool.Pool { return pool },
 		},
 		Cache: &cachemocks.Client{
 			SetFunc:  func(context.Context, string, any, time.Duration) error { return nil },

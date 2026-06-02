@@ -5,8 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type youtubePollTier string
@@ -25,17 +24,17 @@ type youtubeTieredPollTargets struct {
 	StatsChannelIDs              []string
 }
 
-func classifyYouTubePollTargetsByActivity(ctx context.Context, db *gorm.DB, targets youtubePollTargets, now time.Time) (youtubeTieredPollTargets, error) {
+func classifyYouTubePollTargetsByActivity(ctx context.Context, pool *pgxpool.Pool, targets youtubePollTargets, now time.Time) (youtubeTieredPollTargets, error) {
 	out := youtubeTieredPollTargets{
 		NotificationChannelIDs: targets.NotificationChannelIDs,
 		StatsChannelIDs:        targets.StatsChannelIDs,
 	}
-	if db == nil || len(targets.NotificationChannelIDs) == 0 {
+	if pool == nil || len(targets.NotificationChannelIDs) == 0 {
 		out.ActiveNotificationChannelIDs = targets.NotificationChannelIDs
 		return out, nil
 	}
 
-	lastActivity, err := loadYouTubeChannelLastActivity(ctx, db, targets.NotificationChannelIDs)
+	lastActivity, err := loadYouTubeChannelLastActivity(ctx, pool, targets.NotificationChannelIDs)
 	if err != nil {
 		return youtubeTieredPollTargets{}, err
 	}
@@ -74,88 +73,98 @@ func classifyYouTubePollTier(channelID string, lastActivity map[string]time.Time
 	}
 }
 
-func loadYouTubeChannelLastActivity(ctx context.Context, db *gorm.DB, channelIDs []string) (map[string]time.Time, error) {
+func loadYouTubeChannelLastActivity(ctx context.Context, pool *pgxpool.Pool, channelIDs []string) (map[string]time.Time, error) {
 	lastActivity := make(map[string]time.Time, len(channelIDs))
-	loaders := []func(context.Context, *gorm.DB, []string, map[string]time.Time) error{
+	loaders := []func(context.Context, *pgxpool.Pool, []string, map[string]time.Time) error{
 		loadYouTubeContentAlarmTrackingActivity,
 		loadYouTubeLiveSessionActivity,
 		loadYouTubeVideoActivity,
 		loadYouTubeCommunityPostActivity,
 	}
 	for _, load := range loaders {
-		if err := load(ctx, db, channelIDs, lastActivity); err != nil {
+		if err := load(ctx, pool, channelIDs, lastActivity); err != nil {
 			return nil, err
 		}
 	}
 	return lastActivity, nil
 }
 
-func loadYouTubeContentAlarmTrackingActivity(ctx context.Context, db *gorm.DB, channelIDs []string, lastActivity map[string]time.Time) error {
-	if !db.Migrator().HasTable(&domain.YouTubeContentAlarmTracking{}) {
-		return nil
-	}
-	var rows []domain.YouTubeContentAlarmTracking
-	err := db.WithContext(ctx).
-		Where("channel_id IN ?", channelIDs).
-		Find(&rows).Error
-	if err != nil {
-		return err
-	}
-	for _, row := range rows {
-		mergeChannelActivity(lastActivity, row.ChannelID, latestTimePtr(row.ActualPublishedAt, row.DetectedAt, row.CreatedAt))
-	}
-	return nil
+func loadYouTubeContentAlarmTrackingActivity(ctx context.Context, pool *pgxpool.Pool, channelIDs []string, lastActivity map[string]time.Time) error {
+	return loadYouTubeActivityRows(ctx, pool, "youtube_content_alarm_tracking", channelIDs, lastActivity, `
+		SELECT channel_id,
+		       MAX(GREATEST(COALESCE(actual_published_at, '-infinity'::timestamptz), detected_at, created_at)) AS activity_at
+		FROM youtube_content_alarm_tracking
+		WHERE channel_id = ANY($1)
+		GROUP BY channel_id
+	`)
 }
 
-func loadYouTubeLiveSessionActivity(ctx context.Context, db *gorm.DB, channelIDs []string, lastActivity map[string]time.Time) error {
-	if !db.Migrator().HasTable(&domain.YouTubeLiveSession{}) {
-		return nil
-	}
-	var rows []domain.YouTubeLiveSession
-	err := db.WithContext(ctx).
-		Where("channel_id IN ?", channelIDs).
-		Find(&rows).Error
-	if err != nil {
-		return err
-	}
-	for _, row := range rows {
-		mergeChannelActivity(lastActivity, row.ChannelID, latestTimePtr(row.LastSeenAt, row.ScheduledStartTime, row.StartedAt, row.EndedAt))
-	}
-	return nil
+func loadYouTubeLiveSessionActivity(ctx context.Context, pool *pgxpool.Pool, channelIDs []string, lastActivity map[string]time.Time) error {
+	return loadYouTubeActivityRows(ctx, pool, "youtube_live_sessions", channelIDs, lastActivity, `
+		SELECT channel_id,
+		       MAX(GREATEST(
+		           last_seen_at,
+		           COALESCE(scheduled_start_time, '-infinity'::timestamptz),
+		           COALESCE(started_at, '-infinity'::timestamptz),
+		           COALESCE(ended_at, '-infinity'::timestamptz)
+		       )) AS activity_at
+		FROM youtube_live_sessions
+		WHERE channel_id = ANY($1)
+		GROUP BY channel_id
+	`)
 }
 
-func loadYouTubeVideoActivity(ctx context.Context, db *gorm.DB, channelIDs []string, lastActivity map[string]time.Time) error {
-	if !db.Migrator().HasTable(&domain.YouTubeVideo{}) {
-		return nil
-	}
-	var rows []domain.YouTubeVideo
-	err := db.WithContext(ctx).
-		Where("channel_id IN ?", channelIDs).
-		Find(&rows).Error
-	if err != nil {
-		return err
-	}
-	for _, row := range rows {
-		mergeChannelActivity(lastActivity, row.ChannelID, latestTimePtr(row.PublishedAt, row.FirstSeenAt))
-	}
-	return nil
+func loadYouTubeVideoActivity(ctx context.Context, pool *pgxpool.Pool, channelIDs []string, lastActivity map[string]time.Time) error {
+	return loadYouTubeActivityRows(ctx, pool, "youtube_videos", channelIDs, lastActivity, `
+		SELECT channel_id,
+		       MAX(GREATEST(COALESCE(published_at, '-infinity'::timestamptz), first_seen_at)) AS activity_at
+		FROM youtube_videos
+		WHERE channel_id = ANY($1)
+		GROUP BY channel_id
+	`)
 }
 
-func loadYouTubeCommunityPostActivity(ctx context.Context, db *gorm.DB, channelIDs []string, lastActivity map[string]time.Time) error {
-	if !db.Migrator().HasTable(&domain.YouTubeCommunityPost{}) {
-		return nil
-	}
-	var rows []domain.YouTubeCommunityPost
-	err := db.WithContext(ctx).
-		Where("channel_id IN ?", channelIDs).
-		Find(&rows).Error
+func loadYouTubeCommunityPostActivity(ctx context.Context, pool *pgxpool.Pool, channelIDs []string, lastActivity map[string]time.Time) error {
+	return loadYouTubeActivityRows(ctx, pool, "youtube_community_posts", channelIDs, lastActivity, `
+		SELECT channel_id,
+		       MAX(GREATEST(COALESCE(published_at, '-infinity'::timestamptz), first_seen_at)) AS activity_at
+		FROM youtube_community_posts
+		WHERE channel_id = ANY($1)
+		GROUP BY channel_id
+	`)
+}
+
+func loadYouTubeActivityRows(ctx context.Context, pool *pgxpool.Pool, tableName string, channelIDs []string, lastActivity map[string]time.Time, query string) error {
+	exists, err := tableExists(ctx, pool, tableName)
 	if err != nil {
 		return err
 	}
-	for _, row := range rows {
-		mergeChannelActivity(lastActivity, row.ChannelID, latestTimePtr(row.PublishedAt, row.FirstSeenAt))
+	if !exists {
+		return nil
 	}
-	return nil
+	rows, err := pool.Query(ctx, query, channelIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var channelID string
+		var activityAt time.Time
+		if err := rows.Scan(&channelID, &activityAt); err != nil {
+			return err
+		}
+		mergeChannelActivity(lastActivity, channelID, activityAt)
+	}
+	return rows.Err()
+}
+
+func tableExists(ctx context.Context, pool *pgxpool.Pool, tableName string) (bool, error) {
+	var exists bool
+	if err := pool.QueryRow(ctx, `SELECT to_regclass($1) IS NOT NULL`, tableName).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
 }
 
 func mergeChannelActivity(lastActivity map[string]time.Time, channelID string, activityAt time.Time) {

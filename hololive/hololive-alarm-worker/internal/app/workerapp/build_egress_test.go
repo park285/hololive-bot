@@ -11,7 +11,6 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 type youtubeOutboxKaringCapableSender interface {
@@ -21,10 +20,6 @@ type youtubeOutboxKaringCapableSender interface {
 type workerappEgressTestPostgres struct{}
 
 func (workerappEgressTestPostgres) GetPool() *pgxpool.Pool {
-	return nil
-}
-
-func (workerappEgressTestPostgres) GetGormDB() *gorm.DB {
 	return nil
 }
 

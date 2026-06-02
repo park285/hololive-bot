@@ -25,34 +25,35 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func setupFormatterTestRenderer(t *testing.T, templates map[domain.TemplateKey]string) *serviceTemplate.Renderer {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	pool := dbtest.NewPool(t)
+	_, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`)
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.NotificationTemplate{}))
 
 	for key, body := range templates {
-		err := db.Create(&domain.NotificationTemplate{
-			TemplateKey: key,
-			Body:        body,
-		}).Error
+		_, err := pool.Exec(t.Context(), `
+			INSERT INTO notification_templates(template_key, channel_id, body)
+			VALUES ($1, NULL, $2)
+			ON CONFLICT (template_key) WHERE channel_id IS NULL
+			DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+		`, key, body)
 		require.NoError(t, err)
 	}
 
 	logger := slog.New(slog.DiscardHandler)
 
-	return serviceTemplate.NewRenderer(db, logger)
+	return serviceTemplate.NewRenderer(pool, logger)
 }
 
 func TestSplitTemplateInstruction(t *testing.T) {

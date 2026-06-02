@@ -5,11 +5,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"gorm.io/gorm"
 )
 
 type Targets = youtubePollTargets
@@ -45,7 +45,7 @@ func NewRefresher(
 func NewSchedulerSyncer(
 	scheduler *poller.Scheduler,
 	registrations []providers.ChannelPollerRegistration,
-	tieringDB *gorm.DB,
+	tieringDB *pgxpool.Pool,
 ) *SchedulerSyncer {
 	return &youTubePollSchedulerSyncer{
 		scheduler:     scheduler,
@@ -54,8 +54,8 @@ func NewSchedulerSyncer(
 	}
 }
 
-func (r *Refresher) WithTieringDB(db *gorm.DB) *Refresher {
-	return r.withTieringDB(db)
+func (r *Refresher) WithTieringDB(pool *pgxpool.Pool) *Refresher {
+	return r.withTieringDB(pool)
 }
 
 func (r *Refresher) WithOperationalChannelLoader(
@@ -68,8 +68,8 @@ func (r *Refresher) WithInitialJitter(jitter time.Duration) *Refresher {
 	return r.withInitialJitter(jitter)
 }
 
-func ClassifyByActivity(ctx context.Context, db *gorm.DB, targets Targets, now time.Time) (TieredTargets, error) {
-	return classifyYouTubePollTargetsByActivity(ctx, db, targets, now)
+func ClassifyByActivity(ctx context.Context, pool *pgxpool.Pool, targets Targets, now time.Time) (TieredTargets, error) {
+	return classifyYouTubePollTargetsByActivity(ctx, pool, targets, now)
 }
 
 func ResolveFromRegistrations(registrations []providers.ChannelPollerRegistration) Targets {

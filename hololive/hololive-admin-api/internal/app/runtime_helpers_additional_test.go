@@ -213,7 +213,7 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 
 	repository := buildAdminAPICommunityShortsOpsRepository(infra)
 	if repository != nil {
-		t.Fatal("buildAdminAPICommunityShortsOpsRepository() returned repository for nil gorm DB")
+		t.Fatal("buildAdminAPICommunityShortsOpsRepository() returned repository for nil pgx pool")
 	}
 }
 

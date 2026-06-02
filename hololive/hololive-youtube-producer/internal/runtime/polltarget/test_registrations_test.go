@@ -36,7 +36,7 @@ func buildYouTubeProducerChannelPollerRegistrations(
 	if scraperConfig.PollTiering.Enabled {
 		targets := Targets{NotificationChannelIDs: notificationChannelIDs, StatsChannelIDs: statsChannelIDs}
 		if postgres != nil {
-			if tiered, err := ClassifyByActivity(context.Background(), postgres.GetGormDB(), targets, time.Now()); err == nil {
+			if tiered, err := ClassifyByActivity(context.Background(), postgres.GetPool(), targets, time.Now()); err == nil {
 				return buildTestTieredRegistrations(pollers, poll, tiered)
 			}
 		}

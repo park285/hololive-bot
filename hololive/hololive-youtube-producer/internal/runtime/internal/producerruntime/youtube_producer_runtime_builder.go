@@ -75,7 +75,7 @@ func initYouTubeProducerInfrastructure(ctx context.Context, appConfig *config.Co
 		}
 	}()
 
-	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
+	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
 
 	youTube, err := buildYouTubeProducerResources(ctx, appConfig, logger, infra)
 	if err != nil {

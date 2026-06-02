@@ -4,15 +4,15 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"gorm.io/gorm"
 )
 
 type youTubePollSchedulerSyncer struct {
 	scheduler     *poller.Scheduler
 	registrations []providers.ChannelPollerRegistration
-	tieringDB     *gorm.DB
+	tieringDB     *pgxpool.Pool
 }
 
 func (s *youTubePollSchedulerSyncer) Sync(targets youtubePollTargets) {

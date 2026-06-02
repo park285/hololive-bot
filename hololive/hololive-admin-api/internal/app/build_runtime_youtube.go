@@ -32,8 +32,8 @@ func buildAdminAPIYouTubeStack(
 }
 
 func buildAdminAPICommunityShortsOpsRepository(infra *sharedmodules.InfraModule) server.YouTubeCommunityShortsOpsRepository {
-	if infra.Postgres == nil || infra.Postgres.GetGormDB() == nil {
+	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
 		return nil
 	}
-	return outbox.NewDeliveryTelemetryRepository(infra.Postgres.GetGormDB())
+	return outbox.NewDeliveryTelemetryRepository(infra.Postgres.GetPool())
 }

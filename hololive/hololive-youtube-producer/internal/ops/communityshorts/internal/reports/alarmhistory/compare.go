@@ -14,7 +14,7 @@ import (
 
 func buildObservationAlarmSentHistoryComparison(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	windowRuntimeName string,
 	windowBigBangCutoverAt time.Time,
 	windowStart time.Time,
@@ -66,7 +66,7 @@ func filterBaselinesByKind(
 
 func listSentHistoryRowsWithinWindow(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	kind domain.OutboxKind,
 	windowStart time.Time,
 	windowEnd time.Time,

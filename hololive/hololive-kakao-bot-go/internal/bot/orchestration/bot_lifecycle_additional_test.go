@@ -33,7 +33,6 @@ import (
 	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 type lifecycleTestPostgres struct {
@@ -42,7 +41,6 @@ type lifecycleTestPostgres struct {
 }
 
 func (p *lifecycleTestPostgres) GetPool() *pgxpool.Pool { return nil }
-func (p *lifecycleTestPostgres) GetGormDB() *gorm.DB    { return nil }
 func (p *lifecycleTestPostgres) Ping(context.Context) error {
 	return nil
 }

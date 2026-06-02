@@ -27,10 +27,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
@@ -380,29 +379,26 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 func setupAlarmCommandTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
+	pool := dbtest.NewPool(t)
+	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
+		t.Fatalf("clear templates: %v", err)
 	}
-
-	if err := db.AutoMigrate(&domain.NotificationTemplate{}); err != nil {
-		t.Fatalf("migrate template table: %v", err)
+	templates := map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdAlarmList:  "알람 목록\n{{range .Alarms}}{{.MemberName}}\n{{end}}",
+		domain.TemplateKeyCmdAlarmAdded: "알람 추가\n{{.MemberName}}",
 	}
-
-	if err := db.Create([]domain.NotificationTemplate{
-		{
-			TemplateKey: domain.TemplateKeyCmdAlarmList,
-			Body:        "알람 목록\n{{range .Alarms}}{{.MemberName}}\n{{end}}",
-		},
-		{
-			TemplateKey: domain.TemplateKeyCmdAlarmAdded,
-			Body:        "알람 추가\n{{.MemberName}}",
-		},
-	}).Error; err != nil {
-		t.Fatalf("seed alarm list template: %v", err)
+	for key, body := range templates {
+		if _, err := pool.Exec(t.Context(), `
+			INSERT INTO notification_templates(template_key, channel_id, body)
+			VALUES ($1, NULL, $2)
+			ON CONFLICT (template_key) WHERE channel_id IS NULL
+			DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+		`, key, body); err != nil {
+			t.Fatalf("seed alarm template: %v", err)
+		}
 	}
 
 	logger := slog.New(slog.DiscardHandler)
 
-	return serviceTemplate.NewRenderer(db, logger)
+	return serviceTemplate.NewRenderer(pool, logger)
 }

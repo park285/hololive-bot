@@ -23,11 +23,12 @@ package bootstrap
 import (
 	"context"
 	"log/slog"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -35,9 +36,6 @@ import (
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 type bootstrapTestContextKey struct{}
@@ -132,16 +130,10 @@ func TestProvideBotDependenciesMapsOptionalYouTubeStack(t *testing.T) {
 func newACLPostgresMock(t *testing.T) *databasemocks.Client {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "acl.db")), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&acl.Settings{}, &acl.Room{}))
+	pool := dbtest.NewPool(t)
 
 	return &databasemocks.Client{
-		GetGormDBFunc: func() *gorm.DB {
-			return db
-		},
+		GetPoolFunc: func() *pgxpool.Pool { return pool },
 	}
 }
 

@@ -39,7 +39,7 @@ func BuildDeliveryModule(
 	logger *slog.Logger,
 ) *DeliveryModule {
 	locker := delivery.NewLocker(cacheClient, logger)
-	repository := delivery.NewOutboxRepository(postgres.GetGormDB(), logger)
+	repository := delivery.NewOutboxRepository(postgres, logger)
 
 	return &DeliveryModule{
 		Locker:     locker,

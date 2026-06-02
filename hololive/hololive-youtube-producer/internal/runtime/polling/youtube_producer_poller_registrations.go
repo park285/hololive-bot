@@ -24,6 +24,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -32,7 +33,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/publishedat"
-	"gorm.io/gorm"
 )
 
 const defaultChannelPollerMaxResults = 10
@@ -70,12 +70,12 @@ func buildYouTubeProducerChannelPollerRegistrationsWithClient(
 	resolverConfig := publishedat.EffectiveConfig(scraperConfig)
 	inlineResolveMissingPublishedAt := routeDecider != nil && !resolverConfig.Enabled
 	communityKeywords := []string{}
-	db := postgres.GetGormDB()
+	pool := postgres.GetPool()
 	maxResults := defaultChannelPollerMaxResults
 	tieringEnabled := scraperConfig.PollTiering.Enabled
-	pollers := newYouTubeProducerPollerSet(scraperClient, liveStatusProvider, db, maxResults, communityKeywords, routeDecider, inlineResolveMissingPublishedAt)
+	pollers := newYouTubeProducerPollerSet(scraperClient, liveStatusProvider, pool, maxResults, communityKeywords, routeDecider, inlineResolveMissingPublishedAt)
 
-	if registrations, ok := tryBuildTieredChannelPollerRegistrations(tieringEnabled, db, pollers, poll, polltarget.Targets{
+	if registrations, ok := tryBuildTieredChannelPollerRegistrations(tieringEnabled, pool, pollers, poll, polltarget.Targets{
 		NotificationChannelIDs: notificationChannelIDs,
 		StatsChannelIDs:        statsChannelIDs,
 	}, inlineResolveMissingPublishedAt, maxResults); ok {
@@ -130,7 +130,7 @@ func (p namedBackfillPoller) ProxyEnabled() bool {
 func newYouTubeProducerPollerSet(
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
-	db *gorm.DB,
+	db any,
 	maxResults int,
 	communityKeywords []string,
 	routeDecider poller.NotificationRouteDecider,
@@ -219,7 +219,7 @@ func buildFlatYouTubeProducerChannelPollerRegistrations(
 
 func tryBuildTieredChannelPollerRegistrations(
 	enabled bool,
-	db *gorm.DB,
+	pool *pgxpool.Pool,
 	pollers youTubeProducerPollerSet,
 	poll config.ScraperPoll,
 	targets polltarget.Targets,
@@ -229,7 +229,7 @@ func tryBuildTieredChannelPollerRegistrations(
 	if !enabled {
 		return nil, false
 	}
-	tieredTargets, tierErr := polltarget.ClassifyByActivity(context.Background(), db, targets, time.Now())
+	tieredTargets, tierErr := polltarget.ClassifyByActivity(context.Background(), pool, targets, time.Now())
 	if tierErr != nil {
 		return nil, false
 	}

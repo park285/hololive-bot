@@ -1,47 +1,23 @@
 package checking
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/jackc/pgx/v5/pgconn"
 	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
-
-type testAlarmDispatchEvent struct {
-	ID        int64  `gorm:"primaryKey"`
-	AlarmType string `gorm:"size:20"`
-	StreamID  string
-	CreatedAt time.Time
-}
-
-func (testAlarmDispatchEvent) TableName() string {
-	return "alarm_dispatch_events"
-}
-
-type testAlarmDispatchDelivery struct {
-	ID        int64 `gorm:"primaryKey"`
-	EventID   int64
-	RoomID    string
-	Status    string
-	SentAt    *time.Time
-	CreatedAt time.Time
-}
-
-func (testAlarmDispatchDelivery) TableName() string {
-	return "alarm_dispatch_deliveries"
-}
 
 func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testing.T) {
 	t.Parallel()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &testAlarmDispatchEvent{}, &testAlarmDispatchDelivery{}))
+	pool := dbtest.NewPool(t)
 
 	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	liveStart := now.Add(-30 * time.Minute)
@@ -50,7 +26,7 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	oldSeen := now.Add(-(defaultPersistedLiveSessionRecentWindow + time.Second))
 	recentSeen := now.Add(-time.Minute)
 
-	require.NoError(t, db.Create([]domain.YouTubeLiveSession{
+	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{
 		{
 			VideoID:         "live-included",
 			ChannelID:       "ch-1",
@@ -81,9 +57,9 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 			StartedAt:  &liveStart,
 			LastSeenAt: recentSeen,
 		},
-	}).Error)
+	})
 
-	source := &PgYouTubeLiveSessionSource{db: db}
+	source := &PgYouTubeLiveSessionSource{pool: pool}
 	sessions, err := source.LoadRecentSessions(t.Context(), []string{"ch-1"}, now)
 	require.NoError(t, err)
 
@@ -97,12 +73,12 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.Link)
 	assert.Equal(t, "https://youtube.com/watch?v=live-included", *sessionsByID(sessions)["live-included"].Stream.Link)
 
-	require.NoError(t, db.Create([]testAlarmDispatchEvent{
+	insertAlarmDispatchEvents(t, pool, []testAlarmDispatchEvent{
 		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: "live-included", CreatedAt: now.Add(-time.Hour)},
 		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: "upcoming-included", CreatedAt: now.Add(-time.Hour)},
 		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: "old-dispatch", CreatedAt: now.Add(-25 * time.Hour)},
 		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", CreatedAt: now.Add(-time.Hour)},
-	}).Error)
+	})
 
 	dispatched, err := source.RecentlyDispatchedStreamIDs(t.Context(), []string{"live-included", "upcoming-included", "old-dispatch"}, now.Add(-24*time.Hour))
 	require.NoError(t, err)
@@ -112,13 +88,13 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 
 	sentAt := now.Add(-30 * time.Minute)
 	oldSentAt := now.Add(-25 * time.Hour)
-	require.NoError(t, db.Create([]testAlarmDispatchDelivery{
+	insertAlarmDispatchDeliveries(t, pool, []testAlarmDispatchDelivery{
 		{EventID: 1, RoomID: "room-1", Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
 		{EventID: 1, RoomID: "room-2", Status: "retry", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
 		{EventID: 2, RoomID: "room-3", Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
 		{EventID: 3, RoomID: "room-4", Status: "sent", SentAt: &oldSentAt, CreatedAt: now.Add(-25 * time.Hour)},
 		{EventID: 4, RoomID: "room-5", Status: "pending", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
-	}).Error)
+	})
 
 	sentRooms, err := source.RecentlySentLiveStreamRooms(t.Context(), []string{"live-included", "upcoming-included", "old-dispatch", "pending-live"}, now.Add(-24*time.Hour))
 	require.NoError(t, err)
@@ -132,22 +108,20 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 func TestPgYouTubeLiveSessionSourceLoadRecentLiveChannelIDs(t *testing.T) {
 	t.Parallel()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}))
+	pool := dbtest.NewPool(t)
 
 	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	recentSeen := now.Add(-time.Minute)
 	oldSeen := now.Add(-20 * time.Minute)
 
-	require.NoError(t, db.Create([]domain.YouTubeLiveSession{
+	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{
 		{VideoID: "live-recent", ChannelID: "ch-1", Status: domain.LiveStatusLive, LastSeenAt: recentSeen},
 		{VideoID: "live-old", ChannelID: "ch-2", Status: domain.LiveStatusLive, LastSeenAt: oldSeen},
 		{VideoID: "ended-recent", ChannelID: "ch-3", Status: domain.LiveStatusEnded, LastSeenAt: recentSeen},
 		{VideoID: "outside-request", ChannelID: "ch-4", Status: domain.LiveStatusLive, LastSeenAt: recentSeen},
-	}).Error)
+	})
 
-	source := &PgYouTubeLiveSessionSource{db: db}
+	source := &PgYouTubeLiveSessionSource{pool: pool}
 	channels, err := source.LoadRecentLiveChannelIDs(t.Context(), []string{"ch-1", "ch-2", "ch-3"}, now)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ch-1"}, channels)
@@ -156,27 +130,112 @@ func TestPgYouTubeLiveSessionSourceLoadRecentLiveChannelIDs(t *testing.T) {
 func TestPgYouTubeLiveSessionSourceLiveRecentWindowIndependentFromCatchupWindow(t *testing.T) {
 	t.Parallel()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}))
+	pool := dbtest.NewPool(t)
 
 	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	start := now.Add(-30 * time.Minute)
 	lastSeenOutsideCatchup := now.Add(-(sharedconstants.LiveCatchupWindow + time.Minute))
 
-	require.NoError(t, db.Create(domain.YouTubeLiveSession{
-		VideoID:    "live-window-independent",
+	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{{
+		VideoID:    "live-window-indep",
 		ChannelID:  "ch-1",
 		Status:     domain.LiveStatusLive,
 		StartedAt:  &start,
 		LastSeenAt: lastSeenOutsideCatchup,
-	}).Error)
+	}})
 
-	source := &PgYouTubeLiveSessionSource{db: db}
+	source := &PgYouTubeLiveSessionSource{pool: pool}
 	sessions, err := source.LoadRecentSessions(t.Context(), []string{"ch-1"}, now)
 	require.NoError(t, err)
 	require.Len(t, sessions, 1)
-	assert.Equal(t, "live-window-independent", sessions[0].Stream.ID)
+	assert.Equal(t, "live-window-indep", sessions[0].Stream.ID)
+}
+
+type testAlarmDispatchEvent struct {
+	ID        int64
+	AlarmType string
+	StreamID  string
+	CreatedAt time.Time
+}
+
+type testAlarmDispatchDelivery struct {
+	EventID   int64
+	RoomID    string
+	Status    string
+	SentAt    *time.Time
+	CreatedAt time.Time
+}
+
+type liveSessionPool interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.YouTubeLiveSession) {
+	t.Helper()
+
+	for _, session := range sessions {
+		_, err := pool.Exec(t.Context(), `
+			INSERT INTO youtube_live_sessions(
+				video_id, channel_id, status, title, scheduled_start_time,
+				started_at, ended_at, live_first_seen_at, last_seen_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`,
+			session.VideoID,
+			session.ChannelID,
+			session.Status,
+			session.Title,
+			session.ScheduledStartTime,
+			session.StartedAt,
+			session.EndedAt,
+			session.LiveFirstSeenAt,
+			session.LastSeenAt,
+		)
+		require.NoError(t, err)
+	}
+}
+
+func insertAlarmDispatchEvents(t *testing.T, pool liveSessionPool, events []testAlarmDispatchEvent) {
+	t.Helper()
+
+	for _, event := range events {
+		_, err := pool.Exec(t.Context(), `
+			INSERT INTO alarm_dispatch_events(
+				id, event_key, payload_hash, alarm_type, channel_id, stream_id, payload, created_at, updated_at
+			)
+			VALUES ($1, $2, $3, $4::alarm_type, $5, $6, '{}'::jsonb, $7, $7)
+		`,
+			event.ID,
+			"event-"+event.StreamID,
+			"0000000000000000000000000000000000000000000000000000000000000001",
+			event.AlarmType,
+			"channel-"+event.StreamID,
+			event.StreamID,
+			event.CreatedAt,
+		)
+		require.NoError(t, err)
+	}
+}
+
+func insertAlarmDispatchDeliveries(t *testing.T, pool liveSessionPool, deliveries []testAlarmDispatchDelivery) {
+	t.Helper()
+
+	for index, delivery := range deliveries {
+		_, err := pool.Exec(t.Context(), `
+			INSERT INTO alarm_dispatch_deliveries(
+				event_id, room_id, dedupe_key, status, sent_at, created_at, updated_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $6)
+		`,
+			delivery.EventID,
+			delivery.RoomID,
+			fmt.Sprintf("dedupe-%d-%s", index, delivery.RoomID),
+			delivery.Status,
+			delivery.SentAt,
+			delivery.CreatedAt,
+		)
+		require.NoError(t, err)
+	}
 }
 
 func sessionsByID(sessions []PersistedYouTubeLiveSession) map[string]PersistedYouTubeLiveSession {

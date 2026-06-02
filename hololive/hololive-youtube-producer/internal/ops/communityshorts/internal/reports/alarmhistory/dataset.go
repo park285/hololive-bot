@@ -286,7 +286,7 @@ func buildDatasetSummary(
 
 func buildDatasetComparison(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	baselines []domain.YouTubeCommunityShortsObservationPostBaseline,
 	communityRows []trackingrepo.CommunityAlarmSentHistoryRow,
 	shortsRows []trackingrepo.ShortsAlarmSentHistoryRow,
