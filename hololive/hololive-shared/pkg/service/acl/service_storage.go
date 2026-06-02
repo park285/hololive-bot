@@ -22,25 +22,23 @@ package acl
 
 import (
 	"context"
-	stdErrors "errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/park285/shared-go/pkg/stringutil"
-	"gorm.io/gorm"
 )
 
 func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, defaultMode ACLMode, defaultRooms []string) error {
-	isFirstInit, loadErr := s.loadEnabledSetting(defaultEnabled)
+	isFirstInit, loadErr := s.loadEnabledSetting(ctx, defaultEnabled)
 	if loadErr != nil {
 		return fmt.Errorf("load enabled setting: %w", loadErr)
 	}
 
-	if loadErr = s.loadModeSetting(defaultMode); loadErr != nil {
+	if loadErr = s.loadModeSetting(ctx, defaultMode); loadErr != nil {
 		return fmt.Errorf("load mode setting: %w", loadErr)
 	}
 
-	rooms, loadErr := s.loadRoomsFromDatabase()
+	rooms, loadErr := s.loadRoomsFromDatabase(ctx)
 	if loadErr != nil {
 		return fmt.Errorf("load rooms: %w", loadErr)
 	}
@@ -51,7 +49,7 @@ func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, def
 	s.mu.Unlock()
 
 	if isFirstInit && len(rooms) == 0 {
-		if initErr := s.initializeDefaultRooms(defaultRooms); initErr != nil {
+		if initErr := s.initializeDefaultRooms(ctx, defaultRooms); initErr != nil {
 			return fmt.Errorf("initialize default rooms: %w", initErr)
 		}
 	}
@@ -79,51 +77,48 @@ func (s *Service) syncLoadedACLToValkey(ctx context.Context) {
 	}
 }
 
-func (s *Service) loadEnabledSetting(defaultEnabled bool) (bool, error) {
-	var settings Settings
+func (s *Service) loadEnabledSetting(ctx context.Context, defaultEnabled bool) (bool, error) {
+	value, found, err := s.store.GetSetting(ctx, dbKeyEnabled)
+	if err != nil {
+		return false, fmt.Errorf("failed to load ACL enabled setting: %w", err)
+	}
 
-	result := s.db.Where("key = ?", dbKeyEnabled).First(&settings)
-	isFirstInit := stdErrors.Is(result.Error, gorm.ErrRecordNotFound)
+	isFirstInit := !found
 
 	switch {
 	case isFirstInit:
 		s.enabled = defaultEnabled
-		if err := s.db.Create(&Settings{Key: dbKeyEnabled, Value: fmt.Sprintf("%t", defaultEnabled)}).Error; err != nil {
+		if err := s.store.CreateSetting(ctx, dbKeyEnabled, fmt.Sprintf("%t", defaultEnabled)); err != nil {
 			return false, fmt.Errorf("failed to initialize ACL enabled setting: %w", err)
 		}
-	case result.Error != nil:
-		return false, fmt.Errorf("failed to load ACL enabled setting: %w", result.Error)
 	default:
-		s.enabled = settings.Value == "true"
+		s.enabled = value == "true"
 	}
 
 	return isFirstInit, nil
 }
 
-func (s *Service) loadModeSetting(defaultMode ACLMode) error {
-	var modeSetting Settings
-
-	modeResult := s.db.Where("key = ?", dbKeyMode).First(&modeSetting)
-	modeFirstInit := stdErrors.Is(modeResult.Error, gorm.ErrRecordNotFound)
-
-	switch {
-	case modeFirstInit:
-		return s.initializeModeSetting(defaultMode)
-	case modeResult.Error != nil:
-		return fmt.Errorf("failed to load ACL mode setting: %w", modeResult.Error)
-	default:
-		return s.applyModeSetting(modeSetting.Value)
+func (s *Service) loadModeSetting(ctx context.Context, defaultMode ACLMode) error {
+	value, found, err := s.store.GetSetting(ctx, dbKeyMode)
+	if err != nil {
+		return fmt.Errorf("failed to load ACL mode setting: %w", err)
 	}
+
+	if !found {
+		return s.initializeModeSetting(ctx, defaultMode)
+	}
+
+	return s.applyModeSetting(value)
 }
 
-func (s *Service) initializeModeSetting(defaultMode ACLMode) error {
+func (s *Service) initializeModeSetting(ctx context.Context, defaultMode ACLMode) error {
 	normalizedMode, err := normalizeACLModeStrict(defaultMode)
 	if err != nil {
 		return err
 	}
 
 	s.mode = normalizedMode
-	if err := s.db.Create(&Settings{Key: dbKeyMode, Value: string(normalizedMode)}).Error; err != nil {
+	if err := s.store.CreateSetting(ctx, dbKeyMode, string(normalizedMode)); err != nil {
 		return fmt.Errorf("failed to initialize ACL mode setting: %w", err)
 	}
 
@@ -140,9 +135,9 @@ func (s *Service) applyModeSetting(value string) error {
 	return nil
 }
 
-func (s *Service) loadRoomsFromDatabase() ([]Room, error) {
-	var rooms []Room
-	if err := s.db.Find(&rooms).Error; err != nil {
+func (s *Service) loadRoomsFromDatabase(ctx context.Context) ([]Room, error) {
+	rooms, err := s.store.ListRooms(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("failed to load ACL rooms: %w", err)
 	}
 
@@ -170,7 +165,7 @@ func (s *Service) populateRoomsFromRecords(rooms []Room) {
 	}
 }
 
-func (s *Service) initializeDefaultRooms(defaultRooms []string) error {
+func (s *Service) initializeDefaultRooms(ctx context.Context, defaultRooms []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -178,7 +173,7 @@ func (s *Service) initializeDefaultRooms(defaultRooms []string) error {
 	listType := string(s.mode)
 
 	for _, room := range normalizeRoomList(defaultRooms) {
-		if err := s.db.Create(&Room{RoomID: room, ListType: listType}).Error; err != nil {
+		if err := s.store.CreateRoom(ctx, room, listType); err != nil {
 			return fmt.Errorf("failed to initialize ACL room %q: %w", room, err)
 		}
 

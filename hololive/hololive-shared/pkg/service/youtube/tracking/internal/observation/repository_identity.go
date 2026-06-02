@@ -38,14 +38,27 @@ func (r *identityRepository) findByIdentityRecords(
 	candidates []string,
 ) ([]domain.YouTubeContentAlarmTracking, error) {
 	var records []domain.YouTubeContentAlarmTracking
-	query := r.db.WithContext(ctx).Where("kind = ?", normalizedKind)
+	query := `
+		SELECT kind, content_id, canonical_content_id, channel_id, actual_published_at, detected_at,
+		       alarm_sent_at, alarm_latency_millis, alarm_latency_exceeded, delivery_status,
+		       COALESCE(latency_classification_status, '') AS latency_classification_status,
+		       COALESCE(delay_source, '') AS delay_source,
+		       COALESCE(internal_delay_cause, '') AS internal_delay_cause,
+		       created_at, updated_at
+		FROM youtube_content_alarm_tracking
+		WHERE kind = ?
+		  AND `
+	args := []any{normalizedKind}
 	if len(candidates) == 1 {
-		query = query.Where("(canonical_content_id = ? OR content_id = ?)", preferredContentID, candidates[0])
+		query += "(canonical_content_id = ? OR content_id = ?)"
+		args = append(args, preferredContentID, candidates[0])
 	} else {
-		query = query.Where("(canonical_content_id = ? OR content_id IN ?)", preferredContentID, candidates)
+		query += "(canonical_content_id = ? OR content_id IN (" + inPlaceholders(len(candidates)) + "))"
+		args = append(args, preferredContentID)
+		args = append(args, anyArgs(candidates)...)
 	}
-	if err := query.Find(&records).Error; err != nil {
-		return nil, fmt.Errorf("find tracking by identity: query row: %w", err)
+	if err := selectSQL(ctx, r.db, &records, "find tracking by identity: query row", query, args...); err != nil {
+		return nil, err
 	}
 
 	return records, nil
@@ -102,12 +115,12 @@ func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.
 		        WHEN EXCLUDED.alarm_sent_at < youtube_content_alarm_tracking.alarm_sent_at THEN EXCLUDED.alarm_sent_at
 		        ELSE youtube_content_alarm_tracking.alarm_sent_at
 		    END`
-	latencyMillisExpr := buildLatencyMillisExpr(r.db, finalActualPublishedExpr, finalAlarmSentExpr)
+	latencyMillisExpr := buildLatencyMillisExpr(finalActualPublishedExpr, finalAlarmSentExpr)
 	latencyExceededExpr := buildLatencyExceededExpr(latencyMillisExpr)
 	deliveryStatusExpr := buildDeliveryStatusExpr(finalAlarmSentExpr)
 	query, args := buildTrackingUpsertQuery(normalized, now, latencyMillisExpr, latencyExceededExpr, deliveryStatusExpr)
-	if err := r.db.WithContext(ctx).Exec(query, args...).Error; err != nil {
-		return fmt.Errorf("upsert tracking batch: exec query: %w", err)
+	if _, err := execSQL(ctx, r.db, "upsert tracking batch: exec query", query, args...); err != nil {
+		return err
 	}
 
 	return nil

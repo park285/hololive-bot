@@ -27,61 +27,70 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5"
 )
 
 func (r *Repository) UpdatePhoto(ctx context.Context, channelID string, photoURL string) error {
 	now := time.Now()
-	result := r.gormDB.WithContext(ctx).
-		Model(&Model{}).
-		Where("channel_id = ?", channelID).
-		Updates(map[string]any{
-			"photo":            photoURL,
-			"photo_updated_at": now,
-		})
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to update photo: %w", result.Error)
+	if _, err := r.pool.Exec(ctx, `
+		UPDATE members
+		SET photo = $2, photo_updated_at = $3
+		WHERE channel_id = $1
+	`, channelID, photoURL, now); err != nil {
+		return fmt.Errorf("failed to update photo: %w", err)
 	}
 
 	return nil
 }
 
 func (r *Repository) GetPhotoByChannelID(ctx context.Context, channelID string) (string, error) {
-	var member Model
-	err := r.gormDB.WithContext(ctx).
-		Select("photo").
-		Where("channel_id = ?", channelID).
-		First(&member).Error
+	var photo *string
+	err := r.pool.QueryRow(ctx, `
+		SELECT photo
+		FROM members
+		WHERE channel_id = $1
+		LIMIT 1
+	`, channelID).Scan(&photo)
 
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
 		return "", fmt.Errorf("failed to get photo: %w", err)
 	}
 
-	if member.Photo == nil {
+	if photo == nil {
 		return "", nil
 	}
 
-	return *member.Photo, nil
+	return *photo, nil
 }
 
 // staleThreshold: 이 기간보다 오래된 photo는 재동기화 대상
 func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThreshold time.Duration) ([]string, error) {
 	staleTime := time.Now().Add(-staleThreshold)
 
-	var channelIDs []string
-	err := r.gormDB.WithContext(ctx).
-		Model(&Model{}).
-		Select("channel_id").
-		Where("channel_id IS NOT NULL").
-		Where("photo IS NULL OR photo_updated_at IS NULL OR photo_updated_at < ?", staleTime).
-		Pluck("channel_id", &channelIDs).Error
-
+	rows, err := r.pool.Query(ctx, `
+		SELECT channel_id
+		FROM members
+		WHERE channel_id IS NOT NULL
+		  AND (photo IS NULL OR photo_updated_at IS NULL OR photo_updated_at < $1)
+	`, staleTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get members needing photo sync: %w", err)
+	}
+	defer rows.Close()
+
+	var channelIDs []string
+	for rows.Next() {
+		var channelID string
+		if err := rows.Scan(&channelID); err != nil {
+			return nil, fmt.Errorf("failed to scan channel id needing photo sync: %w", err)
+		}
+		channelIDs = append(channelIDs, channelID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("photo sync rows iteration error: %w", err)
 	}
 
 	return channelIDs, nil

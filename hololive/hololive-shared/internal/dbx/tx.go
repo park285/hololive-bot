@@ -22,41 +22,75 @@ package dbx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// 수동 Begin/Commit 대신 이 헬퍼 사용 권장
-func InTx(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
-	if db == nil {
-		return fmt.Errorf("db is nil")
+type Querier interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+type Tx interface {
+	Querier
+	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
+}
+
+func InPgxTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) error) error {
+	if pool == nil {
+		return fmt.Errorf("pgx pool is nil")
 	}
 	if fn == nil {
 		return nil
 	}
-	if err := db.WithContext(ctx).Transaction(fn); err != nil {
-		return fmt.Errorf("transaction failed: %w", err)
+
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin pgx transaction: %w", err)
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback(ctx)
+			panic(p)
+		}
+	}()
+
+	if err := fn(tx); err != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(err, rollbackErr))
+		}
+		return fmt.Errorf("pgx transaction failed: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit pgx transaction: %w", err)
 	}
 	return nil
 }
 
-func InTxWithResult[T any](ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) (T, error)) (T, error) {
+func InPgxTxWithResult[T any](ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) (T, error)) (T, error) {
 	var result T
-	if db == nil {
-		return result, fmt.Errorf("db is nil")
+	if pool == nil {
+		return result, fmt.Errorf("pgx pool is nil")
 	}
 	if fn == nil {
 		return result, nil
 	}
 
-	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := InPgxTx(ctx, pool, func(tx Tx) error {
 		var txErr error
 		result, txErr = fn(tx)
 		return txErr
 	})
 	if err != nil {
-		return result, fmt.Errorf("transaction failed: %w", err)
+		return result, err
 	}
 	return result, nil
 }

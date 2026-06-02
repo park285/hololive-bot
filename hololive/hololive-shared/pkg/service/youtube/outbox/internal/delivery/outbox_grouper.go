@@ -3,19 +3,18 @@ package delivery
 import (
 	"log/slog"
 
-	"gorm.io/gorm"
-
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 type OutboxGrouper struct {
-	db     *gorm.DB
+	db     dbx.Querier
 	cache  cache.Client
 	logger *slog.Logger
 	config Config
 }
 
-func newOutboxGrouper(db *gorm.DB, cacheClient cache.Client, logger *slog.Logger, config Config) *OutboxGrouper {
+func newOutboxGrouper(db dbx.Querier, cacheClient cache.Client, logger *slog.Logger, config Config) *OutboxGrouper {
 	if logger == nil {
 		logger = slog.Default()
 	}

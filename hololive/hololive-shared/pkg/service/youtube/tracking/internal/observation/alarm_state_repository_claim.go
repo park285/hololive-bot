@@ -38,7 +38,7 @@ func (r *alarmStateRepository) insertAlarmStateClaim(
 	normalizedRecord *domain.YouTubeCommunityShortsAlarmState,
 ) (bool, error) {
 	now := yttimestamp.Normalize(time.Now())
-	result := r.db.WithContext(ctx).Exec(`
+	rowsAffected, err := execSQL(ctx, r.db, "try claim alarm state: exec query", `
         INSERT INTO youtube_community_shorts_alarm_states
             (kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -68,10 +68,10 @@ func (r *alarmStateRepository) insertAlarmStateClaim(
 		now,
 		now,
 	)
-	if result.Error != nil {
-		return false, fmt.Errorf("try claim alarm state: exec query: %w", result.Error)
+	if err != nil {
+		return false, err
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return false, nil
 	}
 	return true, nil
@@ -109,19 +109,18 @@ func (r *alarmStateRepository) ReleaseAlarmStateClaim(ctx context.Context, kind 
 	}
 
 	updatedAt := yttimestamp.Normalize(time.Now())
-	result := r.db.WithContext(ctx).
-		Model(&domain.YouTubeCommunityShortsAlarmState{}).
-		Where("kind = ? AND post_id = ?", normalizedKind, normalizedPostID).
-		Where("alarm_sent_at IS NULL").
-		Where("authorized_at = ?", normalizeDatabaseTimestamp(authorizedAt)).
-		Updates(map[string]any{
-			"authorized_at":   nil,
-			"delivery_status": domain.YouTubeCommunityShortsAlarmStateStatusDetected,
-			"updated_at":      updatedAt,
-		})
-	if result.Error != nil {
-		return false, fmt.Errorf("release alarm state claim: update row: %w", result.Error)
+	rowsAffected, err := execSQL(ctx, r.db, "release alarm state claim: update row", `
+		UPDATE youtube_community_shorts_alarm_states
+		SET authorized_at = NULL,
+		    delivery_status = ?,
+		    updated_at = ?
+		WHERE kind = ? AND post_id = ?
+		  AND alarm_sent_at IS NULL
+		  AND authorized_at = ?
+	`, domain.YouTubeCommunityShortsAlarmStateStatusDetected, updatedAt, normalizedKind, normalizedPostID, normalizeDatabaseTimestamp(authorizedAt))
+	if err != nil {
+		return false, err
 	}
 
-	return result.RowsAffected > 0, nil
+	return rowsAffected > 0, nil
 }

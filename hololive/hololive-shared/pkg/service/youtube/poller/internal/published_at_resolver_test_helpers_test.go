@@ -7,16 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func seedPendingShortResolution(t *testing.T, db *gorm.DB, channelID, videoID string, detectedAt time.Time) {
+func seedPendingShortResolution(t *testing.T, db *batchTestDB, channelID, videoID string, detectedAt time.Time) {
 	t.Helper()
 
 	require.NoError(t, db.Create(&domain.YouTubeVideo{
@@ -52,7 +50,7 @@ func seedPendingShortResolution(t *testing.T, db *gorm.DB, channelID, videoID st
 	}).Error)
 }
 
-func seedResolvedShortDispatchGap(t *testing.T, db *gorm.DB, channelID, videoID string, detectedAt time.Time, publishedAt time.Time, authorizedAt *time.Time) {
+func seedResolvedShortDispatchGap(t *testing.T, db *batchTestDB, channelID, videoID string, detectedAt time.Time, publishedAt time.Time, authorizedAt *time.Time) {
 	t.Helper()
 
 	postID := "short:" + videoID
@@ -96,7 +94,7 @@ func seedResolvedShortDispatchGap(t *testing.T, db *gorm.DB, channelID, videoID 
 	}).Error)
 }
 
-func seedPendingCommunityResolution(t *testing.T, db *gorm.DB, channelID, postID string, detectedAt time.Time) {
+func seedPendingCommunityResolution(t *testing.T, db *batchTestDB, channelID, postID string, detectedAt time.Time) {
 	t.Helper()
 
 	require.NoError(t, db.Create(&domain.YouTubeCommunityPost{
@@ -133,7 +131,7 @@ func seedPendingCommunityResolution(t *testing.T, db *gorm.DB, channelID, postID
 
 func assertShortMetadataBackfilledWithoutEnqueue(
 	t *testing.T,
-	db *gorm.DB,
+	db *batchTestDB,
 	videoID string,
 	detectedAt time.Time,
 	publishedAt time.Time,
@@ -156,7 +154,7 @@ func assertShortMetadataBackfilledWithoutEnqueue(
 		assert.Nil(t, tracking.AlarmSentAt)
 	} else {
 		require.NotNil(t, tracking.AlarmSentAt)
-		assert.Equal(t, *alarmSentAt, tracking.AlarmSentAt.UTC())
+		assertPersistedTimeEqual(t, *alarmSentAt, tracking.AlarmSentAt.UTC())
 	}
 
 	var sourcePost domain.YouTubeCommunityShortsSourcePost
@@ -172,19 +170,19 @@ func assertShortMetadataBackfilledWithoutEnqueue(
 		assert.Nil(t, alarmState.AuthorizedAt)
 	} else {
 		require.NotNil(t, alarmState.AuthorizedAt)
-		assert.Equal(t, *authorizedAt, alarmState.AuthorizedAt.UTC())
+		assertPersistedTimeEqual(t, *authorizedAt, alarmState.AuthorizedAt.UTC())
 	}
 	if alarmSentAt == nil {
 		assert.Nil(t, alarmState.AlarmSentAt)
 	} else {
 		require.NotNil(t, alarmState.AlarmSentAt)
-		assert.Equal(t, *alarmSentAt, alarmState.AlarmSentAt.UTC())
+		assertPersistedTimeEqual(t, *alarmSentAt, alarmState.AlarmSentAt.UTC())
 	}
 }
 
 func assertCommunityMetadataBackfilledWithoutEnqueue(
 	t *testing.T,
-	db *gorm.DB,
+	db *batchTestDB,
 	postID string,
 	detectedAt time.Time,
 	publishedAt time.Time,
@@ -207,7 +205,7 @@ func assertCommunityMetadataBackfilledWithoutEnqueue(
 		assert.Nil(t, tracking.AlarmSentAt)
 	} else {
 		require.NotNil(t, tracking.AlarmSentAt)
-		assert.Equal(t, alarmSentAt.UTC(), tracking.AlarmSentAt.UTC())
+		assertPersistedTimeEqual(t, *alarmSentAt, tracking.AlarmSentAt.UTC())
 	}
 
 	var sourcePost domain.YouTubeCommunityShortsSourcePost
@@ -223,14 +221,20 @@ func assertCommunityMetadataBackfilledWithoutEnqueue(
 		assert.Nil(t, alarmState.AuthorizedAt)
 	} else {
 		require.NotNil(t, alarmState.AuthorizedAt)
-		assert.Equal(t, authorizedAt.UTC(), alarmState.AuthorizedAt.UTC())
+		assertPersistedTimeEqual(t, *authorizedAt, alarmState.AuthorizedAt.UTC())
 	}
 	if alarmSentAt == nil {
 		assert.Nil(t, alarmState.AlarmSentAt)
 	} else {
 		require.NotNil(t, alarmState.AlarmSentAt)
-		assert.Equal(t, alarmSentAt.UTC(), alarmState.AlarmSentAt.UTC())
+		assertPersistedTimeEqual(t, *alarmSentAt, alarmState.AlarmSentAt.UTC())
 	}
+}
+
+func assertPersistedTimeEqual(t *testing.T, expected time.Time, actual time.Time) {
+	t.Helper()
+
+	assert.Equal(t, expected.UTC().Truncate(time.Microsecond), actual.UTC().Truncate(time.Microsecond))
 }
 
 func newShortPublishedAtResolverTestClient(t *testing.T, publishedAt time.Time, resolveCalls *int) *scraper.Client {
@@ -346,7 +350,7 @@ func newShortPublishedAtResolverErrorClient(t *testing.T) *scraper.Client {
 	)
 }
 
-func assertResolvedShortState(t *testing.T, db *gorm.DB, channelID, videoID string, detectedAt, publishedAt time.Time) {
+func assertResolvedShortState(t *testing.T, db *batchTestDB, channelID, videoID string, detectedAt, publishedAt time.Time) {
 	t.Helper()
 
 	var video domain.YouTubeVideo

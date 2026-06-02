@@ -10,15 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
+	"github.com/stretchr/testify/require"
 )
 
 type duplicatePollTestSender struct {
@@ -48,7 +46,7 @@ func (s *duplicatePollTestSender) count() int {
 }
 
 func TestCommunityPollerDuplicatePollDispatchesExactlyOnce(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -111,7 +109,7 @@ func TestCommunityPollerDuplicatePollDispatchesExactlyOnce(t *testing.T) {
 }
 
 func TestShortsPollerDuplicatePollEnqueuesExactlyOnceWithInlineFallback(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -179,7 +177,7 @@ func TestShortsPollerDuplicatePollEnqueuesExactlyOnceWithInlineFallback(t *testi
 	require.EqualValues(t, 1, videoCount)
 }
 
-func newDuplicatePollTestDispatcher(db *gorm.DB, cache *cachemocks.Client, sender *duplicatePollTestSender) *outbox.Dispatcher {
+func newDuplicatePollTestDispatcher(db *pollerBatchTestDB, cache *cachemocks.Client, sender *duplicatePollTestSender) *outbox.Dispatcher {
 	return outbox.NewDispatcher(
 		db,
 		cache,
@@ -217,7 +215,7 @@ func newDuplicatePollTestCache(channelID string, alarmType domain.AlarmType) *ca
 	return client
 }
 
-func rewindDuplicatePollWatermark(t *testing.T, db *gorm.DB, channelID string, watermarkType domain.WatermarkType, lastContentID string) {
+func rewindDuplicatePollWatermark(t *testing.T, db *pollerBatchTestDB, channelID string, watermarkType domain.WatermarkType, lastContentID string) {
 	t.Helper()
 
 	result := db.Model(&domain.YouTubeContentWatermark{}).
@@ -230,21 +228,22 @@ func rewindDuplicatePollWatermark(t *testing.T, db *gorm.DB, channelID string, w
 	require.EqualValues(t, 1, result.RowsAffected)
 }
 
-func requireDuplicatePollSingleSentState(t *testing.T, db *gorm.DB, kind domain.OutboxKind, canonicalPostID string) {
+func requireDuplicatePollSingleSentState(t *testing.T, db *pollerBatchTestDB, kind domain.OutboxKind, canonicalPostID string) {
 	t.Helper()
 
 	var outboxRows []domain.YouTubeNotificationOutbox
 	require.NoError(t, db.Where("kind = ?", kind).Order("id ASC").Find(&outboxRows).Error)
 	require.Len(t, outboxRows, 1)
 	require.Equal(t, canonicalPostID, outboxRows[0].ContentID)
-	require.Equal(t, domain.OutboxStatusSent, outboxRows[0].Status)
-	require.NotNil(t, outboxRows[0].SentAt)
 
 	var deliveryRows []domain.YouTubeNotificationDelivery
 	require.NoError(t, db.Where("outbox_id = ?", outboxRows[0].ID).Order("id ASC").Find(&deliveryRows).Error)
 	require.Len(t, deliveryRows, 1)
 	require.Equal(t, domain.OutboxStatusSent, deliveryRows[0].Status)
 	require.NotNil(t, deliveryRows[0].SentAt)
+
+	require.Equal(t, domain.OutboxStatusSent, outboxRows[0].Status)
+	require.NotNil(t, outboxRows[0].SentAt)
 
 	var trackingRow domain.YouTubeContentAlarmTracking
 	require.NoError(t, db.Where("kind = ? AND content_id = ?", kind, canonicalPostID).First(&trackingRow).Error)
@@ -260,7 +259,7 @@ func requireDuplicatePollSingleSentState(t *testing.T, db *gorm.DB, kind domain.
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, stateRow.DeliveryStatus)
 }
 
-func requireDuplicatePollSingleEnqueuedState(t *testing.T, db *gorm.DB, kind domain.OutboxKind, canonicalPostID string) {
+func requireDuplicatePollSingleEnqueuedState(t *testing.T, db *pollerBatchTestDB, kind domain.OutboxKind, canonicalPostID string) {
 	t.Helper()
 
 	var outboxRows []domain.YouTubeNotificationOutbox

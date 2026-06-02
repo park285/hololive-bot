@@ -26,7 +26,6 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -52,7 +51,7 @@ type PostgresConfig struct {
 	PoolMaxIdleConns int
 }
 
-// hololive-shared/internal/dbx.Client를 사용하여 pgxpool + GORM 듀얼 구조를 제공한다.
+// hololive-shared/internal/dbx.Client를 사용하여 pgxpool 기반 PostgreSQL 연결을 제공한다.
 func NewPostgresService(ctx context.Context, config PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
 	dbxConfig := dbx.Config{
 		Host:          config.Host,
@@ -104,10 +103,6 @@ func NewPostgresService(ctx context.Context, config PostgresConfig, logger *slog
 
 func (ps *PostgresService) GetPool() *pgxpool.Pool {
 	return ps.client.Pool()
-}
-
-func (ps *PostgresService) GetGormDB() *gorm.DB {
-	return ps.client.Gorm()
 }
 
 func (ps *PostgresService) Close() error {

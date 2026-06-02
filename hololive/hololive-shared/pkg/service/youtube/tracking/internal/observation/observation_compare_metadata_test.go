@@ -14,22 +14,18 @@ func TestRepositoryEnrichObservationPostComparisonInputsLoadsTitleHintsAndPublis
 	repository := NewRepository(newTrackingTestDB(t))
 	ctx := context.Background()
 
-	require.NoError(t, repository.db.AutoMigrate(&domain.YouTubeCommunityPost{}, &domain.YouTubeVideo{}))
-
 	communityPublishedAt := time.Date(2026, 4, 10, 1, 5, 0, 0, time.UTC)
 	shortPublishedAt := time.Date(2026, 4, 10, 2, 10, 0, 0, time.UTC)
-	require.NoError(t, repository.db.Create(&domain.YouTubeCommunityPost{
-		PostID:      "UgkxMeta123",
-		ChannelID:   "UC_COMMUNITY",
-		ContentText: " hello   world\nsecond line ",
-		PublishedAt: &communityPublishedAt,
-	}).Error)
-	require.NoError(t, repository.db.Create(&domain.YouTubeVideo{
-		VideoID:     "AbC123xyZ89",
-		ChannelID:   "UC_SHORT",
-		Title:       "  Test   Short   Title  ",
-		PublishedAt: &shortPublishedAt,
-	}).Error)
+	_, err := execSQL(ctx, repository.db, "insert community post metadata", `
+		INSERT INTO youtube_community_posts (post_id, channel_id, content_text, published_at)
+		VALUES (?, ?, ?, ?)
+	`, "UgkxMeta123", "UC_COMMUNITY", " hello   world\nsecond line ", communityPublishedAt)
+	require.NoError(t, err)
+	_, err = execSQL(ctx, repository.db, "insert short metadata", `
+		INSERT INTO youtube_videos (video_id, channel_id, title, published_at)
+		VALUES (?, ?, ?, ?)
+	`, "AbC123xyZ89", "UC_SHORT", "  Test   Short   Title  ", shortPublishedAt)
+	require.NoError(t, err)
 
 	inputs, err := repository.EnrichObservationPostComparisonInputs(ctx, []ObservationPostComparisonInput{
 		{

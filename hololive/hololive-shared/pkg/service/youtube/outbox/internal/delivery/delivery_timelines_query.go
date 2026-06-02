@@ -108,18 +108,18 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByFinalizedObserv
 	}
 
 	var scanned []postDeliveryTimelineScanRow
-	query := r.db.WithContext(ctx).
-		Table("youtube_community_shorts_observation_post_baselines AS base").
-		Select(finalizedObservationTimelineSelect()).
-		Joins("LEFT JOIN youtube_content_alarm_tracking track ON track.kind = base.kind AND track.canonical_content_id = base.post_id").
-		Joins("LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id").
-		Joins("LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id").
-		Where("base.runtime_name = ?", normalizedRuntimeName).
-		Where("base.bigbang_cutover_at = ?", bigBangCutoverAt.UTC()).
-		Group(finalizedObservationTimelineGroup()).
-		Order("COALESCE(track.alarm_sent_at, MAX(COALESCE(t.attempt_finished_at, t.event_at)), track.actual_published_at, base.actual_published_at, track.detected_at, base.detected_at) DESC").
-		Order("base.post_id ASC")
-	if err := query.Scan(&scanned).Error; err != nil {
+	if err := selectDeliverySQL(ctx, r.db, &scanned, "list post delivery timelines by finalized observation window: scan rows", `
+		SELECT `+finalizedObservationTimelineSelect()+`
+		FROM youtube_community_shorts_observation_post_baselines AS base
+		LEFT JOIN youtube_content_alarm_tracking track ON track.kind = base.kind AND track.canonical_content_id = base.post_id
+		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
+		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id
+		WHERE base.runtime_name = ?
+		  AND base.bigbang_cutover_at = ?
+		GROUP BY `+finalizedObservationTimelineGroup()+`
+		ORDER BY COALESCE(track.alarm_sent_at, MAX(COALESCE(t.attempt_finished_at, t.event_at)), track.actual_published_at, base.actual_published_at, track.detected_at, base.detected_at) DESC,
+		         base.post_id ASC
+	`, normalizedRuntimeName, bigBangCutoverAt.UTC()); err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by finalized observation window: scan rows: %w", err)
 	}
 
@@ -175,36 +175,47 @@ func (r *DeliveryTelemetryRepository) listPostDeliveryTimelines(
 	identities []PostTrackingIdentity,
 ) ([]PostDeliveryTimeline, error) {
 	var scanned []postDeliveryTimelineScanRow
-	query := r.db.WithContext(ctx).
-		Table("youtube_content_alarm_tracking AS track").
-		Select(postDeliveryTimelineSelect()).
-		Joins("LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id")
+	query := `
+		SELECT ` + postDeliveryTimelineSelect() + `
+		FROM youtube_content_alarm_tracking AS track
+		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
+	`
+	args := make([]any, 0)
 	if windowStart != nil {
-		query = query.Joins("LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?", windowStart.UTC())
+		query += " LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?"
+		args = append(args, windowStart.UTC())
 	} else {
-		query = query.Joins("LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id")
+		query += " LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id"
 	}
-	query = query.Where("track.kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort})
+	query += " WHERE track.kind = ANY(?)"
+	args = append(args, []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort})
 	if windowStart != nil {
-		query = query.Where("COALESCE(track.actual_published_at, track.detected_at) >= ?", windowStart.UTC())
+		query += " AND COALESCE(track.actual_published_at, track.detected_at) >= ?"
+		args = append(args, windowStart.UTC())
 	}
 	if windowEnd != nil {
-		query = query.Where("COALESCE(track.actual_published_at, track.detected_at) < ?", windowEnd.UTC())
+		query += " AND COALESCE(track.actual_published_at, track.detected_at) < ?"
+		args = append(args, windowEnd.UTC())
 	}
 	if detectedBefore != nil {
-		query = query.Where("track.detected_at < ?", detectedBefore.UTC())
+		query += " AND track.detected_at < ?"
+		args = append(args, detectedBefore.UTC())
 	}
 	if len(outboxIDs) > 0 {
-		query = query.Where("o.id IN ?", outboxIDs)
+		query += " AND o.id = ANY(?)"
+		args = append(args, outboxIDs)
 	}
 	if len(identities) > 0 {
-		clause, args := postTrackingIdentityWhere(identities)
-		query = query.Where(clause, args...)
+		clause, identityArgs := postTrackingIdentityWhere(identities)
+		query += " AND (" + clause + ")"
+		args = append(args, identityArgs...)
 	}
-	query = query.Group(postDeliveryTimelineGroup()).
-		Order("COALESCE(track.alarm_sent_at, MAX(COALESCE(t.attempt_finished_at, t.event_at)), track.actual_published_at, track.detected_at) DESC").
-		Order("track.content_id ASC")
-	if err := query.Scan(&scanned).Error; err != nil {
+	query += `
+		GROUP BY ` + postDeliveryTimelineGroup() + `
+		ORDER BY COALESCE(track.alarm_sent_at, MAX(COALESCE(t.attempt_finished_at, t.event_at)), track.actual_published_at, track.detected_at) DESC,
+		         track.content_id ASC
+	`
+	if err := selectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("scan rows: %w", err)
 	}
 
@@ -254,9 +265,9 @@ func postDeliveryTimelineAttemptSelect() string {
 		"COALESCE(MAX(t.attempt_ordinal), 0) AS max_attempt_ordinal",
 		"track.alarm_latency_millis AS alarm_latency_millis",
 		"track.alarm_latency_exceeded AS alarm_latency_exceeded",
-		"track.latency_classification_status AS latency_classification_status",
-		"track.delay_source AS delay_source",
-		"track.internal_delay_cause AS internal_delay_cause",
+		"COALESCE(track.latency_classification_status, '') AS latency_classification_status",
+		"COALESCE(track.delay_source, '') AS delay_source",
+		"COALESCE(track.internal_delay_cause, '') AS internal_delay_cause",
 	}, ", ")
 }
 

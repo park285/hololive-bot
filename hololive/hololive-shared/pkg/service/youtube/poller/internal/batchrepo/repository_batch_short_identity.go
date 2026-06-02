@@ -26,12 +26,10 @@ import (
 	"sort"
 	"strings"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (r *GormBatchRepository) resolveShortPersistedContentIDs(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking) error {
+func (r *PgxBatchRepository) resolveShortPersistedContentIDs(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking) error {
 	canonicalIDs, aliases := collectShortIdentityAliases(notifications, trackingRows)
 	if len(canonicalIDs) == 0 {
 		return nil
@@ -46,7 +44,7 @@ func (r *GormBatchRepository) resolveShortPersistedContentIDs(ctx context.Contex
 }
 
 type shortIdentityRow struct {
-	ContentID string `gorm:"column:content_id"`
+	ContentID string `db:"content_id"`
 }
 
 func collectShortIdentityAliases(
@@ -118,15 +116,15 @@ func addShortIdentityAliases(
 
 func loadResolvedShortContentIDs(
 	ctx context.Context,
-	tx *gorm.DB,
+	tx batchDB,
 	aliases []string,
 	canonicalIDs []string,
 ) (map[string]string, error) {
 	resolvedByCanonical := make(map[string]string, len(canonicalIDs))
-	if err := mergeResolvedShortContentIDs(ctx, tx, &domain.YouTubeNotificationOutbox{}, aliases, resolvedByCanonical, "load existing short outbox identities"); err != nil {
+	if err := mergeResolvedShortContentIDs(ctx, tx, "youtube_notification_outbox", aliases, resolvedByCanonical, "load existing short outbox identities"); err != nil {
 		return nil, err
 	}
-	if err := mergeResolvedShortContentIDs(ctx, tx, &domain.YouTubeContentAlarmTracking{}, aliases, resolvedByCanonical, "load existing short tracking identities"); err != nil {
+	if err := mergeResolvedShortContentIDs(ctx, tx, "youtube_content_alarm_tracking", aliases, resolvedByCanonical, "load existing short tracking identities"); err != nil {
 		return nil, err
 	}
 	return resolvedByCanonical, nil
@@ -134,18 +132,24 @@ func loadResolvedShortContentIDs(
 
 func mergeResolvedShortContentIDs(
 	ctx context.Context,
-	tx *gorm.DB,
-	model any,
+	tx batchDB,
+	table string,
 	aliases []string,
 	resolvedByCanonical map[string]string,
 	action string,
 ) error {
+	if len(aliases) == 0 {
+		return nil
+	}
+
 	var rows []shortIdentityRow
-	if err := tx.WithContext(ctx).
-		Model(model).
-		Select("content_id").
-		Where("kind = ? AND content_id IN ?", domain.OutboxKindNewShort, aliases).
-		Find(&rows).Error; err != nil {
+	args := []any{domain.OutboxKindNewShort}
+	args = append(args, anyArgs(aliases)...)
+	if err := selectSQL(ctx, tx, &rows, action, `
+		SELECT content_id
+		FROM `+table+`
+		WHERE kind = ?
+		  AND content_id IN (`+inPlaceholders(len(aliases))+`)`, args...); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}
 	for i := range rows {

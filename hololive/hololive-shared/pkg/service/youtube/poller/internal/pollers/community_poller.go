@@ -28,8 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 
@@ -41,7 +39,7 @@ import (
 
 type CommunityPoller struct {
 	client                           *scraper.Client
-	db                               *gorm.DB
+	db                               pollerDB
 	repository                       batchrepo.BatchRepository
 	maxResults                       int
 	keywords                         []string
@@ -50,7 +48,7 @@ type CommunityPoller struct {
 	metrics                          *polling.Metrics
 }
 
-func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, keywords []string, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *CommunityPoller {
+func NewCommunityPoller(scraperClient *scraper.Client, db any, maxResults int, keywords []string, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *CommunityPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
@@ -58,10 +56,11 @@ func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults i
 	if len(inlinePublishedAtFallbackEnabled) > 0 {
 		inlineFallbackEnabled = inlinePublishedAtFallbackEnabled[0]
 	}
+	querier := normalizePollerDB(db)
 	return &CommunityPoller{
 		client:                           scraperClient,
-		db:                               db,
-		repository:                       batchrepo.NewGormBatchRepositoryWithPersister(db, newDeliveryTelemetryLatencyPersisterAdapter(db)),
+		db:                               querier,
+		repository:                       batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
 		maxResults:                       maxResults,
 		keywords:                         keywords,
 		routeDecider:                     routeDecider,
@@ -117,7 +116,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 		return err
 	}
 	newPosts := collectNewCommunityPosts(posts, watermark, isInitialized)
-	detectedAt := yttimestamp.Normalize(time.Now())
+	detectedAt := yttimestamp.Normalize(time.Now()).Truncate(time.Microsecond)
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt, p.ensureMetrics())
 	batch := p.buildCommunityBatch(ctx, channelID, newPosts, isInitialized, detectedAt)
 
@@ -289,23 +288,6 @@ func optionalTimestampAttr(key string, value *time.Time) slog.Attr {
 		return slog.Any(key, nil)
 	}
 	return slog.String(key, yttimestamp.Format(*value))
-}
-
-func loadContentWatermark(
-	ctx context.Context,
-	db *gorm.DB,
-	channelID string,
-	watermarkType domain.WatermarkType,
-) (domain.YouTubeContentWatermark, bool, error) {
-	var watermark domain.YouTubeContentWatermark
-	err := db.WithContext(ctx).Where(
-		"channel_id = ? AND watermark_type = ?",
-		channelID, watermarkType,
-	).First(&watermark).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return domain.YouTubeContentWatermark{}, false, fmt.Errorf("load %s watermark: %w", watermarkType, err)
-	}
-	return watermark, err == nil && watermark.Initialized, nil
 }
 
 func selectLastWatermarkContentID(kind domain.OutboxKind, latestID, existingID string, keepExisting bool) string {

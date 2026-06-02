@@ -5,20 +5,18 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 type pendingResolutionRow struct {
-	PriorityBucket        int               `gorm:"column:priority_bucket"`
-	Kind                  domain.OutboxKind `gorm:"column:kind"`
-	PostID                string            `gorm:"column:post_id"`
-	ContentID             string            `gorm:"column:content_id"`
-	ChannelID             string            `gorm:"column:channel_id"`
-	DetectedAt            time.Time         `gorm:"column:detected_at"`
-	PublishedAtRetryAfter *time.Time        `gorm:"column:published_at_retry_after"`
+	PriorityBucket        int               `db:"priority_bucket"`
+	Kind                  domain.OutboxKind `db:"kind"`
+	PostID                string            `db:"post_id"`
+	ContentID             string            `db:"content_id"`
+	ChannelID             string            `db:"channel_id"`
+	DetectedAt            time.Time         `db:"detected_at"`
+	PublishedAtRetryAfter *time.Time        `db:"published_at_retry_after"`
 }
 
 func (r *alarmStateRepository) ListPendingPublishedAtResolutions(
@@ -76,15 +74,12 @@ func (r *alarmStateRepository) MarkPublishedAtRetryAfter(
 		return fmt.Errorf("mark published_at retry after: %w", err)
 	}
 
-	result := r.db.WithContext(ctx).
-		Model(&domain.YouTubeCommunityShortsAlarmState{}).
-		Where("kind = ? AND post_id = ?", normalizedKind, normalizedPostID).
-		Updates(map[string]any{
-			"published_at_retry_after": yttimestamp.Normalize(retryAfter),
-			"updated_at":               yttimestamp.Normalize(time.Now()),
-		})
-	if result.Error != nil {
-		return fmt.Errorf("mark published_at retry after: %w", result.Error)
+	if _, err := execSQL(ctx, r.db, "mark published_at retry after", `
+		UPDATE youtube_community_shorts_alarm_states
+		SET published_at_retry_after = ?, updated_at = ?
+		WHERE kind = ? AND post_id = ?
+	`, yttimestamp.Normalize(retryAfter), yttimestamp.Normalize(time.Now()), normalizedKind, normalizedPostID); err != nil {
+		return err
 	}
 
 	return nil
@@ -107,15 +102,12 @@ func (r *alarmStateRepository) ClearPublishedAtRetryAfter(
 		return fmt.Errorf("clear published_at retry after: %w", err)
 	}
 
-	result := r.db.WithContext(ctx).
-		Model(&domain.YouTubeCommunityShortsAlarmState{}).
-		Where("kind = ? AND post_id = ?", normalizedKind, normalizedPostID).
-		Updates(map[string]any{
-			"published_at_retry_after": nil,
-			"updated_at":               yttimestamp.Normalize(time.Now()),
-		})
-	if result.Error != nil {
-		return fmt.Errorf("clear published_at retry after: %w", result.Error)
+	if _, err := execSQL(ctx, r.db, "clear published_at retry after", `
+		UPDATE youtube_community_shorts_alarm_states
+		SET published_at_retry_after = NULL, updated_at = ?
+		WHERE kind = ? AND post_id = ?
+	`, yttimestamp.Normalize(time.Now()), normalizedKind, normalizedPostID); err != nil {
+		return err
 	}
 
 	return nil
@@ -132,25 +124,37 @@ func (r *alarmStateRepository) FindAlarmStateByPostID(ctx context.Context, kind 
 	}
 
 	var row domain.YouTubeCommunityShortsAlarmState
-	result := r.db.WithContext(ctx).
-		Where("kind = ? AND post_id = ?", normalizedKind, normalizedPostID).
-		Limit(1).
-		Find(&row)
-	if result.Error != nil {
-		return nil, fmt.Errorf("find alarm state by post id: query row: %w", result.Error)
+	found, err := getSQL(ctx, r.db, &row, "find alarm state by post id: query row", `
+		SELECT kind, post_id, content_id, channel_id, actual_published_at, detected_at,
+		       published_at_retry_after, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at
+		FROM youtube_community_shorts_alarm_states
+		WHERE kind = ? AND post_id = ?
+		LIMIT 1
+	`, normalizedKind, normalizedPostID)
+	if err != nil {
+		return nil, err
 	}
-	if result.RowsAffected == 0 {
+	if !found {
 		return nil, nil
 	}
 
 	return &row, nil
 }
 
-func hasPublishedAtRetryAfterColumn(db *gorm.DB) bool {
-	if db == nil || db.Migrator() == nil {
+func hasPublishedAtRetryAfterColumn(db trackingDB) bool {
+	if db == nil {
 		return false
 	}
-	return db.Migrator().HasColumn(&domain.YouTubeCommunityShortsAlarmState{}, "published_at_retry_after")
+	var exists bool
+	err := db.QueryRow(context.Background(), `
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_name = 'youtube_community_shorts_alarm_states'
+			  AND column_name = 'published_at_retry_after'
+		)
+	`).Scan(&exists)
+	return err == nil && exists
 }
 
 func (r *alarmStateRepository) requirePublishedAtRetryAfterColumn(action string) error {

@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 )
@@ -24,7 +22,7 @@ type ClaimResolver interface {
 }
 
 type ClaimManager struct {
-	db          *gorm.DB
+	db          deliveryDB
 	config      Config
 	logger      *slog.Logger
 	delivery    *DeliveryRepository
@@ -36,7 +34,7 @@ type ClaimManager struct {
 }
 
 func newClaimManager(
-	db *gorm.DB,
+	db deliveryDB,
 	logger *slog.Logger,
 	config Config,
 	deliveryRepo *DeliveryRepository,

@@ -23,15 +23,14 @@
 // # 개요
 //
 // dbx는 PostgreSQL 연결을 위한 공통 모듈입니다.
-// pgxpool + GORM 듀얼 구조를 지원하며, 다음 기능을 제공합니다:
+// pgxpool 기반 PostgreSQL 연결을 지원하며, 다음 기능을 제공합니다:
 //
 //   - DSN 생성 (UDS/TCP 자동 전환)
 //   - 커넥션 풀 설정
 //   - Exponential backoff 재시도
 //   - Ping/Close 헬퍼
-//   - 트랜잭션 헬퍼
+//   - pgx 트랜잭션 헬퍼
 //   - PostgreSQL 에러 판별
-//   - AutoMigrate 래퍼
 //
 // # 사용 예시
 //
@@ -51,10 +50,6 @@
 //	}
 //	defer client.Close()
 //
-//	// GORM 사용
-//	db := client.Gorm()
-//	db.First(&user, 1)
-//
 //	// pgxpool 사용 (raw SQL)
 //	pool := client.Pool()
 //	pool.QueryRow(ctx, "SELECT 1")
@@ -65,8 +60,9 @@
 //
 // 트랜잭션 헬퍼:
 //
-//	err := dbx.InTx(ctx, client.Gorm(), func(tx *gorm.DB) error {
-//		return tx.Create(&user).Error
+//	err := dbx.InPgxTx(ctx, client.Pool(), func(tx dbx.Tx) error {
+//		_, err := tx.Exec(ctx, "INSERT INTO users (name) VALUES ($1)", user.Name)
+//		return err
 //	})
 //
 // 에러 판별:

@@ -24,7 +24,7 @@ import (
 )
 
 func TestCommunityPollerPollPersistsPublishedAtAndDetectedAt(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -119,7 +119,7 @@ func TestCommunityPollerPollPersistsPublishedAtAndDetectedAt(t *testing.T) {
 }
 
 func TestCommunityPollerPollTreatsCanonicalWatermarkAsSameUpstreamPostID(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -172,7 +172,7 @@ func TestCommunityPollerPollTreatsCanonicalWatermarkAsSameUpstreamPostID(t *test
 }
 
 func TestCommunityPollerPollKeepsCanonicalIDStableAcrossRescrapes(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -240,7 +240,7 @@ func TestCommunityPollerPollKeepsCanonicalIDStableAcrossRescrapes(t *testing.T) 
 }
 
 func TestCommunityPollerPollDeduplicatesCollectedPostsByCanonicalPostID(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -331,7 +331,7 @@ func findLogEntryByMessage(t *testing.T, logBuffer *bytes.Buffer, message string
 }
 
 func TestCommunityPoller_MissingPublishedAtWithNilRouteDeciderEnqueuesImmediately(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -412,7 +412,7 @@ func TestCommunityPoller_MissingPublishedAtWithNilRouteDeciderEnqueuesImmediatel
 }
 
 func TestCommunityPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -489,7 +489,7 @@ func TestCommunityPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) 
 }
 
 func TestCommunityPoller_InlineFallbackResolvesPublishedAtAndEnqueues(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -561,7 +561,7 @@ func TestCommunityPoller_InlineFallbackResolvesPublishedAtAndEnqueues(t *testing
 }
 
 func TestCommunityPoller_InlineFallbackNotFoundSkipsNotification(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -642,7 +642,7 @@ func TestCommunityPoller_InlineFallbackNotFoundSkipsNotification(t *testing.T) {
 }
 
 func TestCommunityPoller_InlineFallbackResolveErrorWarnsAndSkipsNotification(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},

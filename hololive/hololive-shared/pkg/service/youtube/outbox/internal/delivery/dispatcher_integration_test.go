@@ -23,17 +23,11 @@ package delivery_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -117,7 +111,7 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "test123",
@@ -191,7 +185,7 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "retry123",
@@ -260,7 +254,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "nosub123",
@@ -325,7 +319,7 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 		RetryBackoff: 50 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_success_video",
@@ -397,7 +391,7 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		RetryBackoff: 30 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_retry_video",
@@ -473,7 +467,7 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 		RetryBackoff: 50 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_no_sub_video",
@@ -540,7 +534,7 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 		RetryBackoff: 30 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_terminal_fail_video",
@@ -671,8 +665,8 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			}
 
 			dispatchers := []*outbox.Dispatcher{
-				outbox.NewDispatcher(dbPrimary, cacheService, sender, nil, testLogger, config),
-				outbox.NewDispatcher(dbSecondary, cacheService, sender, nil, testLogger, config),
+				outbox.NewDispatcher(dbPrimary.Pool, cacheService, sender, nil, testLogger, config),
+				outbox.NewDispatcher(dbSecondary.Pool, cacheService, sender, nil, testLogger, config),
 			}
 
 			contentID := "test_" + tc.contentPrefix + "_" + time.Now().UTC().Format("150405000000000")
@@ -767,7 +761,7 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 		CleanupEnabled: false,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
 
 	oldFailed := &domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
@@ -818,37 +812,13 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 	}
 }
 
-func setupTestDB(t *testing.T) *gorm.DB {
+func setupTestDB(t *testing.T) *deliveryTestDB {
 	t.Helper()
 
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		defaultPassword := os.Getenv("TEST_DATABASE_PASSWORD")
-		if defaultPassword == "" {
-			defaultPassword = strings.Join([]string{"twentyq", "password"}, "_")
-		}
-		dsn = fmt.Sprintf(
-			"host=localhost port=5432 user=twentyq_app password=%s dbname=hololive sslmode=disable",
-			defaultPassword,
-		)
-	}
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		t.Fatalf("Failed to connect to test database: %v", err)
-	}
-	if err := db.AutoMigrate(&domain.YouTubeNotificationDelivery{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	); err != nil {
-		t.Fatalf("Failed to migrate youtube_notification_delivery table: %v", err)
-	}
-
-	return db
+	return newDeliveryIntegrationTestDB(t)
 }
 
-func cleanupOutbox(t *testing.T, db *gorm.DB) {
+func cleanupOutbox(t *testing.T, db *deliveryTestDB) {
 	t.Helper()
 	db.Exec(`
 		DELETE FROM youtube_notification_delivery
@@ -918,7 +888,7 @@ func setupMemberName(t *testing.T, cacheService *cache.Service, channelID, name 
 	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", channelID, name))
 }
 
-func fetchDeliveryRows(t *testing.T, db *gorm.DB, outboxID int64) []domain.YouTubeNotificationDelivery {
+func fetchDeliveryRows(t *testing.T, db *deliveryTestDB, outboxID int64) []domain.YouTubeNotificationDelivery {
 	t.Helper()
 	var rows []domain.YouTubeNotificationDelivery
 	if err := db.Where("outbox_id = ?", outboxID).Order("room_id ASC").Find(&rows).Error; err != nil {

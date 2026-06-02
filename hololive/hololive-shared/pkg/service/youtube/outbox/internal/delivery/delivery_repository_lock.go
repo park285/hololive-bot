@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
-
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -25,8 +24,8 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 	}
 
 	sentAt := canonicalSentAtNow()
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		updatedIDs, err := updateSentDeliveryRowsIfLocked(tx, uniqueTokens, sentAt)
+	if err := inDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
+		updatedIDs, err := updateSentDeliveryRowsIfLocked(ctx, tx, uniqueTokens, sentAt)
 		if err != nil {
 			return err
 		}
@@ -42,24 +41,23 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 	return nil
 }
 
-func updateSentDeliveryRowsIfLocked(tx *gorm.DB, tokens []deliveryLockToken, sentAt time.Time) ([]int64, error) {
+func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens []deliveryLockToken, sentAt time.Time) ([]int64, error) {
 	updatedIDs := make([]int64, 0, len(tokens))
 	for i := range tokens {
 		if tokens[i].id == 0 || tokens[i].lockedAt == nil {
 			continue
 		}
-		result := tx.Model(&domain.YouTubeNotificationDelivery{}).
-			Where("id = ? AND status = ? AND locked_at = ?", tokens[i].id, domain.OutboxStatusPending, *tokens[i].lockedAt).
-			Updates(map[string]any{
-				"status":    domain.OutboxStatusSent,
-				"sent_at":   sentAt,
-				"locked_at": nil,
-				"error":     "",
-			})
-		if result.Error != nil {
-			return nil, fmt.Errorf("update delivery row %d: %w", tokens[i].id, result.Error)
+		tag, err := tx.Exec(ctx, `
+			UPDATE youtube_notification_delivery
+			SET status = $1, sent_at = $2, locked_at = NULL, error = ''
+			WHERE id = $3 AND status = $4
+			  AND locked_at BETWEEN $5::timestamptz - INTERVAL '1 millisecond'
+			                    AND $5::timestamptz + INTERVAL '1 millisecond'
+		`, domain.OutboxStatusSent, sentAt, tokens[i].id, domain.OutboxStatusPending, *tokens[i].lockedAt)
+		if err != nil {
+			return nil, fmt.Errorf("update delivery row %d: %w", tokens[i].id, err)
 		}
-		if result.RowsAffected > 0 {
+		if tag.RowsAffected() > 0 {
 			updatedIDs = append(updatedIDs, tokens[i].id)
 		}
 	}
@@ -79,15 +77,15 @@ func (r *DeliveryRepository) MarkFailedRetryBatchIfLocked(ctx context.Context, t
 		if uniqueTokens[i].id == 0 || uniqueTokens[i].lockedAt == nil {
 			continue
 		}
-		err := r.db.WithContext(ctx).Exec(`
+		_, err := r.db.Exec(ctx, `
 			UPDATE youtube_notification_delivery
 			SET attempt_count = attempt_count + 1,
-			    error = ?,
-			    status = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE ? END,
-			    next_attempt_at = CASE WHEN attempt_count + 1 >= ? THEN next_attempt_at ELSE ? END,
+			    error = $1,
+			    status = CASE WHEN attempt_count + 1 >= $2 THEN $3 ELSE $4 END,
+			    next_attempt_at = CASE WHEN attempt_count + 1 >= $5 THEN next_attempt_at ELSE $6 END,
 			    locked_at = NULL
-			WHERE id = ? AND status = ? AND locked_at = ?
-		`, truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt).Error
+			WHERE id = $7 AND status = $8 AND locked_at = $9
+		`, truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt)
 		if err != nil {
 			return fmt.Errorf("mark delivery row %d failed batch: %w", uniqueTokens[i].id, err)
 		}
@@ -106,14 +104,14 @@ func (r *DeliveryRepository) MarkPermanentFailureBatchIfLocked(ctx context.Conte
 		if uniqueTokens[i].id == 0 || uniqueTokens[i].lockedAt == nil {
 			continue
 		}
-		err := r.db.WithContext(ctx).Exec(`
+		_, err := r.db.Exec(ctx, `
 			UPDATE youtube_notification_delivery
-			SET attempt_count = CASE WHEN attempt_count >= ? THEN attempt_count ELSE ? END,
-			    error = ?,
-			    status = ?,
+			SET attempt_count = CASE WHEN attempt_count >= $1 THEN attempt_count ELSE $2 END,
+			    error = $3,
+			    status = $4,
 			    locked_at = NULL
-			WHERE id = ? AND status = ? AND locked_at = ?
-		`, maxRetries, maxRetries, truncateString(errMsg, 500), domain.OutboxStatusFailed, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt).Error
+			WHERE id = $5 AND status = $6 AND locked_at = $7
+		`, maxRetries, maxRetries, truncateString(errMsg, 500), domain.OutboxStatusFailed, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt)
 		if err != nil {
 			return fmt.Errorf("mark delivery row %d permanent failed batch: %w", uniqueTokens[i].id, err)
 		}

@@ -23,18 +23,21 @@ func (r *DeliveryTelemetryRepository) ListCommunityShortsDeliveryLogsSince(
 	}
 
 	normalizedLimit := normalizeCommunityShortsDeliveryLogLimit(limit)
-	query := r.db.WithContext(ctx).
-		Where("alarm_type IN ?", []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts}).
-		Where("COALESCE(actual_published_at, detected_at, event_at) >= ?", since.UTC()).
-		Order("COALESCE(actual_published_at, detected_at, event_at) DESC").
-		Order("event_at ASC").
-		Order("id ASC")
+	query := `
+		SELECT ` + deliveryTelemetrySelectColumns() + `
+		FROM youtube_notification_delivery_telemetry
+		WHERE alarm_type = ANY(?)
+		  AND COALESCE(actual_published_at, detected_at, event_at) >= ?
+		ORDER BY COALESCE(actual_published_at, detected_at, event_at) DESC, event_at ASC, id ASC
+	`
+	args := []any{[]domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts}, since.UTC()}
 	if normalizedLimit > 0 {
-		query = query.Limit(normalizedLimit)
+		query += " LIMIT ?"
+		args = append(args, normalizedLimit)
 	}
 
-	var rows []domain.YouTubeNotificationDeliveryTelemetry
-	if err := query.Find(&rows).Error; err != nil {
+	rows, err := r.queryTelemetryRows(ctx, "list community shorts delivery logs since: query rows", postgresPlaceholders(query), args...)
+	if err != nil {
 		return nil, fmt.Errorf("list community shorts delivery logs since: query rows: %w", err)
 	}
 

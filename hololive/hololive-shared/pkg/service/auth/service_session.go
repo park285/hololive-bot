@@ -27,8 +27,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/park285/shared-go/pkg/json"
-	"gorm.io/gorm"
 )
 
 func (s *Service) Logout(ctx context.Context, token string) error {
@@ -150,9 +150,9 @@ func (s *Service) Me(ctx context.Context, token string) (*User, error) {
 		return nil, err
 	}
 
-	var user userModel
-	if err := s.db.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
-		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+	user, err := s.findUserByID(ctx, userID)
+	if err != nil {
+		if stdErrors.Is(err, pgx.ErrNoRows) {
 			return nil, newError(CodeUnauthorized, "user not found", nil)
 		}
 		return nil, newError(CodeInternal, "failed to query user", err)

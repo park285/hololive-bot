@@ -52,8 +52,7 @@ func bothPagesTransport(req *http.Request) (*http.Response, error) {
 }
 
 func TestChannelStatsPollerSavesSnapshot(t *testing.T) {
-	db := newBatchTestDB(t)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeChannelStatsSnapshot{}, &domain.YouTubeChannelProfile{}))
+	db := newPollerBatchTestDB(t)
 
 	client := newChannelStatsTestClient(t, shortsPollerRoundTripFunc(bothPagesTransport))
 
@@ -69,8 +68,7 @@ func TestChannelStatsPollerSavesSnapshot(t *testing.T) {
 }
 
 func TestChannelStatsPollerUpdatesStaleProfile(t *testing.T) {
-	db := newBatchTestDB(t)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeChannelStatsSnapshot{}, &domain.YouTubeChannelProfile{}))
+	db := newPollerBatchTestDB(t)
 
 	// 프로필 행이 없는 상태 → needsUpdate = true → snippet 호출 → 프로필 생성
 	client := newChannelStatsTestClient(t, shortsPollerRoundTripFunc(bothPagesTransport))
@@ -80,13 +78,12 @@ func TestChannelStatsPollerUpdatesStaleProfile(t *testing.T) {
 
 	// 프로필이 생성되었는지 확인 (avatar 컬럼 JSON 텍스트가 있음)
 	var avatarJSON string
-	require.NoError(t, db.Raw("SELECT avatar FROM youtube_channel_profiles WHERE channel_id = ?", "UC_STALE").Scan(&avatarJSON).Error)
+	require.NoError(t, db.QueryRow(context.Background(), "SELECT avatar::text FROM youtube_channel_profiles WHERE channel_id = $1", "UC_STALE").Scan(&avatarJSON))
 	require.Contains(t, avatarJSON, "https://img.test/avatar.jpg")
 }
 
 func TestChannelStatsPollerSkipsFreshProfile(t *testing.T) {
-	db := newBatchTestDB(t)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeChannelStatsSnapshot{}, &domain.YouTubeChannelProfile{}))
+	db := newPollerBatchTestDB(t)
 
 	snippetCallCount := 0
 	client := newChannelStatsTestClient(t, shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -101,11 +98,13 @@ func TestChannelStatsPollerSkipsFreshProfile(t *testing.T) {
 
 	// 현재 시각 기준 fresh 프로필을 직접 INSERT (avatar/banner는 NULL → scan 없이 updated_at만 읽어도 됨)
 	// updateProfileIfStale은 profile.UpdatedAt만 비교하므로 avatar가 NULL이어도 동작한다.
-	freshTime := time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339Nano)
-	require.NoError(t, db.Exec(
-		"INSERT INTO youtube_channel_profiles (channel_id, updated_at) VALUES (?, ?)",
+	freshTime := time.Now().Add(-1 * time.Hour).UTC()
+	_, err := db.Exec(
+		context.Background(),
+		"INSERT INTO youtube_channel_profiles (channel_id, updated_at) VALUES ($1, $2)",
 		"UC_FRESH", freshTime,
-	).Error)
+	)
+	require.NoError(t, err)
 
 	poller := NewChannelStatsPoller(client, db)
 	require.NoError(t, poller.Poll(context.Background(), "UC_FRESH"))
@@ -115,8 +114,7 @@ func TestChannelStatsPollerSkipsFreshProfile(t *testing.T) {
 }
 
 func TestChannelStatsPollerHandlesScraperError(t *testing.T) {
-	db := newBatchTestDB(t)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeChannelStatsSnapshot{}, &domain.YouTubeChannelProfile{}))
+	db := newPollerBatchTestDB(t)
 
 	scraperErr := errors.New("network unavailable")
 	client := newChannelStatsTestClient(t, shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -133,16 +131,14 @@ func TestChannelStatsPollerHandlesScraperError(t *testing.T) {
 }
 
 func TestChannelStatsPollerName(t *testing.T) {
-	db := newBatchTestDB(t)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeChannelStatsSnapshot{}, &domain.YouTubeChannelProfile{}))
+	db := newPollerBatchTestDB(t)
 	client := newChannelStatsTestClient(t, shortsPollerRoundTripFunc(bothPagesTransport))
 	poller := NewChannelStatsPoller(client, db)
 	require.Equal(t, "channel_stats", poller.Name())
 }
 
 func TestChannelStatsPollerProxyAccessors(t *testing.T) {
-	db := newBatchTestDB(t)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeChannelStatsSnapshot{}, &domain.YouTubeChannelProfile{}))
+	db := newPollerBatchTestDB(t)
 	client := newChannelStatsTestClient(t, shortsPollerRoundTripFunc(bothPagesTransport))
 	poller := NewChannelStatsPoller(client, db)
 	require.False(t, poller.ProxyEnabled())

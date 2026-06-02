@@ -26,23 +26,22 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-func loadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db *gorm.DB, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken) ([]trackingrepo.AlarmSentMark, error) {
+func loadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken) ([]trackingrepo.AlarmSentMark, error) {
 	status := domain.OutboxStatusPending
 	return loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, &status)
 }
 
-func loadAlarmSentMarksForDeliveryIDs(ctx context.Context, db *gorm.DB, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken) ([]trackingrepo.AlarmSentMark, error) {
+func loadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken) ([]trackingrepo.AlarmSentMark, error) {
 	return loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, nil)
 }
 
-func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db *gorm.DB, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken, status *domain.OutboxStatus) ([]trackingrepo.AlarmSentMark, error) {
+func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken, status *domain.OutboxStatus) ([]trackingrepo.AlarmSentMark, error) {
 	uniqueIDs := uniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil, nil
@@ -54,16 +53,19 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db *gorm.DB
 	}
 
 	var targets []deliveryAlarmSentTarget
-	query := db.WithContext(ctx).
-		Table("youtube_notification_delivery AS d").
-		Select("o.kind AS kind, o.content_id AS content_id").
-		Joins("JOIN youtube_notification_outbox o ON o.id = d.outbox_id").
-		Where("d.id IN ?", uniqueIDs).
-		Where("o.kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort})
+	args := []any{uniqueIDs, []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}}
+	statusClause := ""
 	if status != nil {
-		query = query.Where("d.status = ?", *status)
+		statusClause = " AND d.status = ?"
+		args = append(args, *status)
 	}
-	if err := query.Scan(&targets).Error; err != nil {
+	if err := selectDeliverySQL(ctx, db, &targets, "query delivery alarm sent targets", `
+		SELECT o.kind AS kind, o.content_id AS content_id
+		FROM youtube_notification_delivery AS d
+		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
+		WHERE d.id = ANY(?)
+		  AND o.kind = ANY(?)
+		`+statusClause, args...); err != nil {
 		return nil, fmt.Errorf("query delivery alarm sent targets: %w", err)
 	}
 

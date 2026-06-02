@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/pkg/json"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -35,9 +34,9 @@ import (
 )
 
 type failedNotificationOutboxRow struct {
-	ID        int64             `gorm:"column:id"`
-	Kind      domain.OutboxKind `gorm:"column:kind"`
-	ContentID string            `gorm:"column:content_id"`
+	ID        int64             `db:"id"`
+	Kind      domain.OutboxKind `db:"kind"`
+	ContentID string            `db:"content_id"`
 }
 
 type completedNotificationIdentityCandidate struct {
@@ -46,19 +45,20 @@ type completedNotificationIdentityCandidate struct {
 	identityKey  string
 }
 
-func loadFailedNotificationOutboxRows(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) ([]failedNotificationOutboxRow, error) {
+func loadFailedNotificationOutboxRows(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox) ([]failedNotificationOutboxRow, error) {
 	clauses, args := failedNotificationOutboxQueryArgs(notifications)
 	if len(clauses) == 0 {
 		return nil, nil
 	}
 
 	var rows []failedNotificationOutboxRow
-	if err := tx.WithContext(ctx).
-		Model(&domain.YouTubeNotificationOutbox{}).
-		Select("id, kind, content_id").
-		Where("status = ?", domain.OutboxStatusFailed).
-		Where(strings.Join(clauses, " OR "), args...).
-		Find(&rows).Error; err != nil {
+	queryArgs := []any{domain.OutboxStatusFailed}
+	queryArgs = append(queryArgs, args...)
+	if err := selectSQL(ctx, tx, &rows, "query failed outbox rows", `
+		SELECT id, kind, content_id
+		FROM youtube_notification_outbox
+		WHERE status = ?
+		  AND (`+strings.Join(clauses, " OR ")+`)`, queryArgs...); err != nil {
 		return nil, fmt.Errorf("query failed outbox rows: %w", err)
 	}
 	return rows, nil
@@ -88,7 +88,7 @@ func failedNotificationOutboxQueryArgs(notifications []*domain.YouTubeNotificati
 	return clauses, args
 }
 
-func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) (map[string]time.Time, error) {
+func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox) (map[string]time.Time, error) {
 	completed := make(map[string]time.Time)
 	if len(notifications) == 0 || tx == nil {
 		return completed, nil
@@ -107,7 +107,7 @@ func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx *gorm.DB,
 
 func recordCompletedNotificationSentAtByCandidate(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	completed map[string]time.Time,
 	candidate completedNotificationIdentityCandidate,
 ) error {
@@ -190,7 +190,7 @@ func partitionFailedNotificationOutboxRows(rows []failedNotificationOutboxRow, c
 	return completed, reactivations
 }
 
-func finalizeCompletedFailedNotificationRows(ctx context.Context, tx *gorm.DB, rows []failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) error {
+func finalizeCompletedFailedNotificationRows(ctx context.Context, tx batchDB, rows []failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) error {
 	for i := range rows {
 		if err := finalizeCompletedFailedNotificationRow(ctx, tx, rows[i], completedSentAtByIdentity); err != nil {
 			return err
@@ -200,7 +200,7 @@ func finalizeCompletedFailedNotificationRows(ctx context.Context, tx *gorm.DB, r
 	return nil
 }
 
-func finalizeCompletedFailedNotificationRow(ctx context.Context, tx *gorm.DB, row failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) error {
+func finalizeCompletedFailedNotificationRow(ctx context.Context, tx batchDB, row failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) error {
 	sentAt, ok := completedSentAtForFailedNotification(row, completedSentAtByIdentity)
 	if !ok {
 		return nil
@@ -220,37 +220,42 @@ func completedSentAtForFailedNotification(row failedNotificationOutboxRow, compl
 	return yttimestamp.Normalize(sentAt), true
 }
 
-func updateCompletedFailedNotificationOutboxRow(ctx context.Context, tx *gorm.DB, id int64, sentAt time.Time) error {
-	if err := tx.WithContext(ctx).
-		Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ? AND status = ?", id, domain.OutboxStatusFailed).
-		Updates(completedFailedNotificationUpdates(sentAt)).Error; err != nil {
+func updateCompletedFailedNotificationOutboxRow(ctx context.Context, tx batchDB, id int64, sentAt time.Time) error {
+	if _, err := execSQL(ctx, tx, fmt.Sprintf("update completed outbox row %d", id), `
+		UPDATE youtube_notification_outbox
+		SET status = ?,
+		    locked_at = NULL,
+		    sent_at = CASE WHEN sent_at IS NULL OR sent_at > ? THEN ? ELSE sent_at END,
+		    error = ''
+		WHERE id = ? AND status = ?`,
+		domain.OutboxStatusSent,
+		sentAt,
+		sentAt,
+		id,
+		domain.OutboxStatusFailed,
+	); err != nil {
 		return fmt.Errorf("update completed outbox row %d: %w", id, err)
 	}
 	return nil
 }
 
-func updateCompletedFailedNotificationDeliveryRows(ctx context.Context, tx *gorm.DB, outboxID int64, sentAt time.Time) error {
-	if err := tx.WithContext(ctx).
-		Model(&domain.YouTubeNotificationDelivery{}).
-		Where("outbox_id = ? AND status = ?", outboxID, domain.OutboxStatusFailed).
-		Updates(completedFailedNotificationUpdates(sentAt)).Error; err != nil {
+func updateCompletedFailedNotificationDeliveryRows(ctx context.Context, tx batchDB, outboxID int64, sentAt time.Time) error {
+	if _, err := execSQL(ctx, tx, fmt.Sprintf("update completed delivery rows for outbox %d", outboxID), `
+		UPDATE youtube_notification_delivery
+		SET status = ?,
+		    locked_at = NULL,
+		    sent_at = CASE WHEN sent_at IS NULL OR sent_at > ? THEN ? ELSE sent_at END,
+		    error = ''
+		WHERE outbox_id = ? AND status = ?`,
+		domain.OutboxStatusSent,
+		sentAt,
+		sentAt,
+		outboxID,
+		domain.OutboxStatusFailed,
+	); err != nil {
 		return fmt.Errorf("update completed delivery rows for outbox %d: %w", outboxID, err)
 	}
 	return nil
-}
-
-func completedFailedNotificationUpdates(sentAt time.Time) map[string]any {
-	return map[string]any{
-		"status":    domain.OutboxStatusSent,
-		"locked_at": nil,
-		"sent_at": gorm.Expr(
-			"CASE WHEN sent_at IS NULL OR sent_at > ? THEN ? ELSE sent_at END",
-			sentAt,
-			sentAt,
-		),
-		"error": "",
-	}
 }
 
 func filterCompletedNotifications(notifications []*domain.YouTubeNotificationOutbox, completedSentAtByIdentity map[string]time.Time) []*domain.YouTubeNotificationOutbox {
@@ -343,24 +348,27 @@ func selectEarlierSentAt(current time.Time, candidate time.Time) time.Time {
 	return current
 }
 
-func rearmFailedDeliveryRows(ctx context.Context, tx *gorm.DB, outboxIDs []int64, nextAttemptAt time.Time) error {
+func rearmFailedDeliveryRows(ctx context.Context, tx batchDB, outboxIDs []int64, nextAttemptAt time.Time) error {
 	if len(outboxIDs) == 0 {
 		return nil
 	}
 
-	result := tx.WithContext(ctx).
-		Model(&domain.YouTubeNotificationDelivery{}).
-		Where("outbox_id IN ? AND status = ?", outboxIDs, domain.OutboxStatusFailed).
-		Updates(map[string]any{
-			"status":          domain.OutboxStatusPending,
-			"attempt_count":   0,
-			"next_attempt_at": nextAttemptAt,
-			"locked_at":       nil,
-			"sent_at":         nil,
-			"error":           "",
-		})
-	if result.Error != nil {
-		return fmt.Errorf("update delivery rows: %w", result.Error)
+	args := []any{domain.OutboxStatusPending, nextAttemptAt}
+	args = append(args, anyArgs(outboxIDs)...)
+	args = append(args, domain.OutboxStatusFailed)
+	if _, err := execSQL(ctx, tx, "update delivery rows", `
+		UPDATE youtube_notification_delivery
+		SET status = ?,
+		    attempt_count = 0,
+		    next_attempt_at = ?,
+		    locked_at = NULL,
+		    sent_at = NULL,
+		    error = ''
+		WHERE outbox_id IN (`+inPlaceholders(len(outboxIDs))+`)
+		  AND status = ?`,
+		args...,
+	); err != nil {
+		return fmt.Errorf("update delivery rows: %w", err)
 	}
 	return nil
 }

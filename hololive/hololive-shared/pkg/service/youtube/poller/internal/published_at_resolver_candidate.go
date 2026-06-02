@@ -15,7 +15,7 @@ import (
 func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	runDeadline time.Time,
 	resolveTimeout time.Duration,
@@ -59,7 +59,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 func (r *PendingPublishedAtResolver) processClaimedPendingPublishedAtCandidate(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	resolveTimeout time.Duration,
 	failureBackoffTTL time.Duration,
@@ -243,7 +243,7 @@ func checkPendingPublishedAtCandidateBudget(
 
 func (r *PendingPublishedAtResolver) handlePendingPublishedAtResolveError(
 	ctx context.Context,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	result publishedAtResolverCandidateResult,
 	err error,
@@ -280,7 +280,7 @@ func (r *PendingPublishedAtResolver) handlePendingPublishedAtResolveError(
 
 func (r *PendingPublishedAtResolver) handleEmptyPendingPublishedAt(
 	ctx context.Context,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	failureBackoffTTL time.Duration,
 ) {
@@ -298,7 +298,7 @@ func (r *PendingPublishedAtResolver) handleEmptyPendingPublishedAt(
 
 func (r *PendingPublishedAtResolver) handlePendingPublishedAtFinalizeError(
 	ctx context.Context,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	err error,
 	failureBackoffTTL time.Duration,

@@ -50,30 +50,30 @@ const (
 )
 
 type MajorEvent struct {
-	ID         int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	ExternalID string `json:"external_id" gorm:"uniqueIndex;size:500;not null"` // RSS guid/link (중복 방지)
+	ID         int    `json:"id" db:"id"`
+	ExternalID string `json:"external_id" db:"external_id"` // RSS guid/link (중복 방지)
 
-	Type MajorEventType `json:"type" gorm:"size:20;default:'event';index"` // event 또는 news
+	Type MajorEventType `json:"type" db:"type"` // event 또는 news
 
-	Title       string   `json:"title" gorm:"size:500;not null"`
-	Link        string   `json:"link" gorm:"size:1000;not null"`
-	Description string   `json:"description" gorm:"type:text"`
-	Members     []string `json:"members" gorm:"type:text[];serializer:json"` // PostgreSQL text[] 또는 JSON
+	Title       string   `json:"title" db:"title"`
+	Link        string   `json:"link" db:"link"`
+	Description string   `json:"description" db:"description"`
+	Members     []string `json:"members" db:"members"` // PostgreSQL text[] 또는 JSON
 
-	PubDate        *time.Time  `json:"pub_date" gorm:"type:timestamptz"`        // RSS 발행일
-	EventStartDate *time.Time  `json:"event_start_date" gorm:"type:date;index"` // 행사 시작일
-	EventEndDate   *time.Time  `json:"event_end_date" gorm:"type:date"`         // 행사 종료일 (멀티데이)
-	EventDates     []time.Time `json:"-" gorm:"-"`                              // 파싱 시 임시 저장 (DB 미저장)
+	PubDate        *time.Time  `json:"pub_date" db:"pub_date"`                 // RSS 발행일
+	EventStartDate *time.Time  `json:"event_start_date" db:"event_start_date"` // 행사 시작일
+	EventEndDate   *time.Time  `json:"event_end_date" db:"event_end_date"`     // 행사 종료일 (멀티데이)
+	EventDates     []time.Time `json:"-" db:"-"`                               // 파싱 시 임시 저장 (DB 미저장)
 
-	Status        MajorEventStatus     `json:"status" gorm:"size:50;default:'active';index"`
-	LinkStatus    MajorEventLinkStatus `json:"link_status" gorm:"size:20;default:'unchecked';index"`
-	LinkCheckedAt *time.Time           `json:"link_checked_at" gorm:"type:timestamptz"`
-	NotifiedAt    *time.Time           `json:"notified_at" gorm:"type:timestamptz"` // 알림 발송 시각
-	NotifiedWeek  string               `json:"notified_week" gorm:"size:10;index"`  // 알림 발송 주차 (YYYY-WW)
-	NotifiedMonth string               `json:"notified_month" gorm:"size:10;index"` // 월간 알림 발송 월 (YYYY-MM)
+	Status        MajorEventStatus     `json:"status" db:"status"`
+	LinkStatus    MajorEventLinkStatus `json:"link_status" db:"link_status"`
+	LinkCheckedAt *time.Time           `json:"link_checked_at" db:"link_checked_at"`
+	NotifiedAt    *time.Time           `json:"notified_at" db:"notified_at"`       // 알림 발송 시각
+	NotifiedWeek  string               `json:"notified_week" db:"notified_week"`   // 알림 발송 주차 (YYYY-WW)
+	NotifiedMonth string               `json:"notified_month" db:"notified_month"` // 월간 알림 발송 월 (YYYY-MM)
 
-	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 func (MajorEvent) TableName() string {
@@ -147,10 +147,10 @@ func (e *MajorEvent) MarkAsNotified(weekKey string, at time.Time) {
 }
 
 type EventRoomSubscription struct {
-	ID        int       `json:"id" gorm:"primaryKey;autoIncrement"`
-	RoomID    string    `json:"room_id" gorm:"uniqueIndex;not null"` // 카카오톡 방 ID (고유)
-	RoomName  string    `json:"room_name"`                           // 방 이름 (표시용)
-	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
+	ID        int       `json:"id" db:"id"`
+	RoomID    string    `json:"room_id" db:"room_id"` // 카카오톡 방 ID (고유)
+	RoomName  string    `json:"room_name"`            // 방 이름 (표시용)
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
 func (EventRoomSubscription) TableName() string {

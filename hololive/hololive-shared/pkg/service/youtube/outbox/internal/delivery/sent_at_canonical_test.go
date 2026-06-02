@@ -7,9 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -21,11 +19,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	nextAttemptAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
 	item := domain.YouTubeNotificationOutbox{
@@ -40,7 +34,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t
 	}
 	require.NoError(t, db.Create(&item).Error)
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -55,12 +49,12 @@ func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t
 		},
 	})
 
-	var updated sqliteOutboxModel
+	var updated deliveryTestOutboxModel
 	require.NoError(t, db.First(&updated, item.ID).Error)
 	require.Equal(t, string(domain.OutboxStatusSent), updated.Status)
 	require.NotNil(t, updated.SentAt)
-	require.Equal(t, yttimestamp.Canonical.Location, updated.SentAt.Location())
-	require.Equal(t, "2026-04-10T01:11:12.123Z", updated.SentAt.Format(yttimestamp.Canonical.Layout))
+	require.Equal(t, yttimestamp.Canonical.Location, updated.SentAt.UTC().Location())
+	require.Equal(t, "2026-04-10T01:11:12.123Z", updated.SentAt.UTC().Format(yttimestamp.Canonical.Layout))
 }
 
 func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp(t *testing.T) {
@@ -68,11 +62,7 @@ func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}, &sqliteTrackingModel{}, &sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	nextAttemptAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
 	item := domain.YouTubeNotificationOutbox{
@@ -85,7 +75,7 @@ func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp
 		NextAttemptAt: nextAttemptAt,
 	}
 	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&sqliteTrackingModel{
+	require.NoError(t, db.Create(&deliveryTestTrackingModel{
 		Kind:           string(item.Kind),
 		ContentID:      item.ContentID,
 		ChannelID:      item.ChannelID,
@@ -102,31 +92,31 @@ func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}))
 	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{item.ID}))
 
-	var updatedDelivery sqliteDeliveryModel
+	var updatedDelivery deliveryTestDeliveryModel
 	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)
 	require.Equal(t, string(domain.OutboxStatusSent), updatedDelivery.Status)
 	require.NotNil(t, updatedDelivery.SentAt)
-	require.Equal(t, yttimestamp.Canonical.Location, updatedDelivery.SentAt.Location())
-	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedDelivery.SentAt.Format(yttimestamp.Canonical.Layout))
+	require.Equal(t, yttimestamp.Canonical.Location, updatedDelivery.SentAt.UTC().Location())
+	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedDelivery.SentAt.UTC().Format(yttimestamp.Canonical.Layout))
 
-	var updatedOutbox sqliteOutboxModel
+	var updatedOutbox deliveryTestOutboxModel
 	require.NoError(t, db.First(&updatedOutbox, item.ID).Error)
 	require.Equal(t, string(domain.OutboxStatusSent), updatedOutbox.Status)
 	require.NotNil(t, updatedOutbox.SentAt)
-	require.Equal(t, yttimestamp.Canonical.Location, updatedOutbox.SentAt.Location())
-	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedOutbox.SentAt.Format(yttimestamp.Canonical.Layout))
+	require.Equal(t, yttimestamp.Canonical.Location, updatedOutbox.SentAt.UTC().Location())
+	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedOutbox.SentAt.UTC().Format(yttimestamp.Canonical.Layout))
 
 	var payload struct {
 		PublishedAt *time.Time `json:"published_at,omitempty"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(updatedOutbox.Payload), &payload))
 	require.NotNil(t, payload.PublishedAt)
-	require.Equal(t, yttimestamp.Canonical.Location, payload.PublishedAt.Location())
-	require.Equal(t, "2026-04-10T01:10:00Z", payload.PublishedAt.Format(yttimestamp.Canonical.Layout))
+	require.Equal(t, yttimestamp.Canonical.Location, payload.PublishedAt.UTC().Location())
+	require.Equal(t, "2026-04-10T01:10:00Z", payload.PublishedAt.UTC().Format(yttimestamp.Canonical.Layout))
 }
 
 func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonicalTimestamp(t *testing.T) {
@@ -134,11 +124,7 @@ func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonical
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}, &sqliteTrackingModel{}, &sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	detectedAt := time.Date(2026, 4, 10, 1, 10, 0, 0, time.UTC)
 	item := domain.YouTubeNotificationOutbox{
@@ -151,7 +137,7 @@ func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonical
 		NextAttemptAt: detectedAt,
 	}
 	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&sqliteTrackingModel{
+	require.NoError(t, db.Create(&deliveryTestTrackingModel{
 		Kind:              string(item.Kind),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
@@ -169,14 +155,14 @@ func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonical
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}))
 
-	var updatedTracking sqliteTrackingModel
+	var updatedTracking deliveryTestTrackingModel
 	require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&updatedTracking).Error)
 	require.NotNil(t, updatedTracking.AlarmSentAt)
-	require.Equal(t, yttimestamp.Canonical.Location, updatedTracking.AlarmSentAt.Location())
-	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedTracking.AlarmSentAt.Format(yttimestamp.Canonical.Layout))
+	require.Equal(t, yttimestamp.Canonical.Location, updatedTracking.AlarmSentAt.UTC().Location())
+	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedTracking.AlarmSentAt.UTC().Format(yttimestamp.Canonical.Layout))
 	require.NotNil(t, updatedTracking.AlarmLatencyMillis)
 	require.Equal(t, int64((2*time.Minute+12*time.Second+123*time.Millisecond)/time.Millisecond), *updatedTracking.AlarmLatencyMillis)
 	require.NotNil(t, updatedTracking.AlarmLatencyExceeded)
@@ -192,11 +178,7 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}, &sqliteTrackingModel{}, &sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	detectedAt := time.Date(2026, 4, 10, 1, 10, 0, 0, time.UTC)
 	authorizedAt := time.Date(2026, 4, 10, 1, 10, 30, 0, time.UTC)
@@ -210,7 +192,7 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 		NextAttemptAt: detectedAt,
 	}
 	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&sqliteTrackingModel{
+	require.NoError(t, db.Create(&deliveryTestTrackingModel{
 		Kind:               string(item.Kind),
 		ContentID:          item.ContentID,
 		CanonicalContentID: "community:post-claimed",
@@ -239,14 +221,14 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}, deliveryClaimToken{kind: item.Kind, postID: "community:post-claimed", authorizedAt: authorizedAt}))
 
 	var updatedState domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&updatedState, "kind = ? AND post_id = ?", item.Kind, "community:post-claimed").Error)
 	require.Nil(t, updatedState.AuthorizedAt)
 	require.NotNil(t, updatedState.AlarmSentAt)
-	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedState.AlarmSentAt.Format(yttimestamp.Canonical.Layout))
+	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedState.AlarmSentAt.UTC().Format(yttimestamp.Canonical.Layout))
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, updatedState.DeliveryStatus)
 }
 
@@ -255,11 +237,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}, &sqliteTrackingModel{}, &sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	detectedAt := time.Date(2026, 4, 10, 1, 10, 0, 0, time.UTC)
 	authorizedAt := time.Date(2026, 4, 10, 1, 10, 30, 0, time.UTC)
@@ -274,7 +252,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 		NextAttemptAt: detectedAt,
 	}
 	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&sqliteTrackingModel{
+	require.NoError(t, db.Create(&deliveryTestTrackingModel{
 		Kind:               string(item.Kind),
 		ContentID:          item.ContentID,
 		CanonicalContentID: "short:short-claimed",
@@ -303,16 +281,16 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	err = repository.MarkSentBatch(ctx, []int64{delivery.ID}, deliveryClaimToken{kind: item.Kind, postID: "short:short-claimed", authorizedAt: otherAuthorizedAt})
+	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	err := repository.MarkSentBatch(ctx, []int64{delivery.ID}, deliveryClaimToken{kind: item.Kind, postID: "short:short-claimed", authorizedAt: otherAuthorizedAt})
 	require.ErrorContains(t, err, "claim authorization mismatch")
 
-	var updatedDelivery sqliteDeliveryModel
+	var updatedDelivery deliveryTestDeliveryModel
 	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)
 	require.Equal(t, string(domain.OutboxStatusPending), updatedDelivery.Status)
 	require.Nil(t, updatedDelivery.SentAt)
 
-	var updatedTracking sqliteTrackingModel
+	var updatedTracking deliveryTestTrackingModel
 	require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&updatedTracking).Error)
 	require.Nil(t, updatedTracking.AlarmSentAt)
 	require.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusPending), updatedTracking.DeliveryStatus)
@@ -327,11 +305,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 
 func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateExecution(t *testing.T) {
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}, &sqliteTrackingModel{}, &sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	currentNow := time.Date(2026, 4, 10, 10, 11, 12, 123000000, time.FixedZone("KST", 9*60*60))
 	original := sentAtNow
@@ -353,7 +327,7 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 		NextAttemptAt: detectedAt,
 	}
 	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&sqliteTrackingModel{
+	require.NoError(t, db.Create(&deliveryTestTrackingModel{
 		Kind:              string(item.Kind),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
@@ -378,7 +352,7 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 	require.NoError(t, db.Create(&firstDelivery).Error)
 	require.NoError(t, db.Create(&secondDelivery).Error)
 
-	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{firstDelivery.ID}))
 
 	firstExpected := yttimestamp.Normalize(currentNow)
@@ -388,18 +362,18 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 	currentNow = currentNow.Add(40 * time.Second)
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{secondDelivery.ID}))
 
-	var updatedTracking sqliteTrackingModel
+	var updatedTracking deliveryTestTrackingModel
 	require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&updatedTracking).Error)
 	require.NotNil(t, updatedTracking.AlarmSentAt)
 	require.Equal(t, firstExpected, updatedTracking.AlarmSentAt.UTC())
 	require.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), updatedTracking.DeliveryStatus)
 
-	var updatedFirstDelivery sqliteDeliveryModel
+	var updatedFirstDelivery deliveryTestDeliveryModel
 	require.NoError(t, db.First(&updatedFirstDelivery, firstDelivery.ID).Error)
 	require.NotNil(t, updatedFirstDelivery.SentAt)
 	require.Equal(t, firstExpected, updatedFirstDelivery.SentAt.UTC())
 
-	var updatedSecondDelivery sqliteDeliveryModel
+	var updatedSecondDelivery deliveryTestDeliveryModel
 	require.NoError(t, db.First(&updatedSecondDelivery, secondDelivery.ID).Error)
 	require.NotNil(t, updatedSecondDelivery.SentAt)
 	require.True(t, updatedSecondDelivery.SentAt.UTC().After(firstExpected))
@@ -417,17 +391,17 @@ func withFixedSentAtNow(t *testing.T, fixed time.Time) {
 	})
 }
 
-type sqliteTrackingModel struct {
-	Kind                        string `gorm:"primaryKey"`
-	ContentID                   string `gorm:"primaryKey"`
+type deliveryTestTrackingModel struct {
+	Kind                        string `db:"kind"`
+	ContentID                   string `db:"content_id"`
 	CanonicalContentID          string
-	ChannelID                   string `gorm:"type:text;not null"`
+	ChannelID                   string `db:"channel_id"`
 	ActualPublishedAt           *time.Time
-	DetectedAt                  time.Time `gorm:"not null"`
+	DetectedAt                  time.Time `db:"detected_at"`
 	AlarmSentAt                 *time.Time
 	AlarmLatencyMillis          *int64
 	AlarmLatencyExceeded        *bool
-	DeliveryStatus              string `gorm:"type:text;not null;default:'PENDING'"`
+	DeliveryStatus              string `db:"delivery_status"`
 	LatencyClassificationStatus string
 	DelaySource                 string
 	InternalDelayCause          string
@@ -435,6 +409,6 @@ type sqliteTrackingModel struct {
 	UpdatedAt                   time.Time
 }
 
-func (sqliteTrackingModel) TableName() string {
+func (deliveryTestTrackingModel) TableName() string {
 	return "youtube_content_alarm_tracking"
 }

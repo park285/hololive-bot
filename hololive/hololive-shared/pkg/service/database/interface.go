@@ -24,7 +24,6 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"gorm.io/gorm"
 )
 
 // Client defines the behavior that *PostgresService provides.
@@ -32,7 +31,6 @@ import (
 // Goal: allow service consumers to depend on interfaces rather than concrete implementations.
 type Client interface {
 	GetPool() *pgxpool.Pool
-	GetGormDB() *gorm.DB
 	Ping(ctx context.Context) error
 	Close() error
 }

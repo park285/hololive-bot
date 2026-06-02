@@ -6,9 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -165,14 +163,7 @@ func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPo
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&sqliteTelemetryOutboxModel{},
-		&sqliteTelemetryBufferModel{},
-		&sqliteTelemetryTrackingModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	withinPublishedAt := now.Add(-45 * time.Minute)
@@ -196,7 +187,7 @@ func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPo
 	oldPublishedAt := now.Add(-30 * time.Hour)
 	oldDetectedAt := now.Add(-30*time.Hour + time.Minute)
 
-	require.NoError(t, db.Create([]sqliteTelemetryTrackingModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
 		{
 			Kind:                 string(domain.OutboxKindCommunityPost),
 			ContentID:            "community-within",
@@ -250,7 +241,7 @@ func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPo
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	summaries, err := repository.ListPostLatencyPeriodSummaries(ctx, []PostLatencyPeriod{
 		{Label: "last_hour", StartAt: now.Add(-time.Hour), EndAt: now},
 		{Label: "last_day", StartAt: now.Add(-24 * time.Hour), EndAt: now},

@@ -10,10 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
-	"gorm.io/gorm"
 )
 
 type sentinelFailureSender struct {
@@ -124,18 +122,12 @@ func TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED(t *testing.T
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&sqliteDeliveryModel{}); err != nil {
-		t.Fatalf("auto migrate: %v", err)
-	}
+	db := newDeliveryTestDB(t)
 
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	nextAttemptAt := now.Add(30 * time.Minute)
 	lockedAt := now
-	row := sqliteDeliveryModel{
+	row := deliveryTestDeliveryModel{
 		OutboxID:      1,
 		RoomID:        "room-permanent",
 		Status:        string(domain.OutboxStatusPending),
@@ -148,12 +140,12 @@ func TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED(t *testing.T
 		t.Fatalf("create delivery row: %v", err)
 	}
 
-	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := repository.MarkPermanentFailureBatch(ctx, []int64{row.ID}, 3, "auth"); err != nil {
 		t.Fatalf("MarkPermanentFailureBatch() error = %v", err)
 	}
 
-	var updated sqliteDeliveryModel
+	var updated deliveryTestDeliveryModel
 	if err := db.First(&updated, row.ID).Error; err != nil {
 		t.Fatalf("load updated delivery row: %v", err)
 	}
@@ -178,13 +170,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}); err != nil {
-		t.Fatalf("auto migrate: %v", err)
-	}
+	db := newDeliveryTestDB(t)
 	cache, mini := newDispatcherTestCache(t)
 	defer mini.Close()
 	defer func() {
@@ -194,7 +180,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	}()
 
 	now := time.Now()
-	outbox := sqliteOutboxModel{
+	outbox := deliveryTestOutboxModel{
 		Kind:          string(domain.OutboxKindNewVideo),
 		ChannelID:     "UC_auth_failed",
 		ContentID:     "video-auth-failed",
@@ -207,7 +193,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	if err := db.Create(&outbox).Error; err != nil {
 		t.Fatalf("create outbox row: %v", err)
 	}
-	delivery := sqliteDeliveryModel{
+	delivery := deliveryTestDeliveryModel{
 		OutboxID:      outbox.ID,
 		RoomID:        "room-auth-failed",
 		Status:        string(domain.OutboxStatusPending),
@@ -219,7 +205,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 		t.Fatalf("create delivery row: %v", err)
 	}
 
-	dispatcher := NewDispatcher(db, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		MaxRetries:          3,
@@ -232,7 +218,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 		t.Fatalf("processed = %d, want 1", processed)
 	}
 
-	var updatedDelivery sqliteDeliveryModel
+	var updatedDelivery deliveryTestDeliveryModel
 	if err := db.First(&updatedDelivery, delivery.ID).Error; err != nil {
 		t.Fatalf("load updated delivery row: %v", err)
 	}
@@ -246,7 +232,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 		t.Fatalf("delivery locked_at = %v, want nil", updatedDelivery.LockedAt)
 	}
 
-	var updatedOutbox sqliteOutboxModel
+	var updatedOutbox deliveryTestOutboxModel
 	if err := db.First(&updatedOutbox, outbox.ID).Error; err != nil {
 		t.Fatalf("load updated outbox row: %v", err)
 	}

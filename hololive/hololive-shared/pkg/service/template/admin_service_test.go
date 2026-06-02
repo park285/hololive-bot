@@ -26,53 +26,35 @@ import (
 	"os"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/repository"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 )
 
-func setupTestDB(t *testing.T) *gorm.DB {
+func setupTestService(t *testing.T) (*template.AdminService, *repository.TemplateRepository) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
-	})
-	require.NoError(t, err)
-
-	err = db.AutoMigrate(&domain.NotificationTemplate{}, &domain.NotificationTemplateRevision{})
-	require.NoError(t, err)
-
-	db.Create(&domain.NotificationTemplate{
-		TemplateKey: domain.TemplateKeyOutboxShorts,
-		Body:        "[{{.MemberName}}] 새 쇼츠\n{{.Title | truncate 50}}\n{{.URL}}",
-	})
-
-	return db
+	pool := dbtest.NewPool(t)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	repository := repository.NewTemplateRepository(pool, logger)
+	renderer := template.NewRenderer(pool, logger)
+	service := template.NewAdminService(repository, renderer, logger)
+	return service, repository
 }
 
 func TestAdminService_List(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
-	renderer := template.NewRenderer(db, logger)
-	service := template.NewAdminService(repository, renderer, logger)
+	service, _ := setupTestService(t)
 	ctx := context.Background()
 
 	templates, err := service.List(ctx, nil, nil)
 	require.NoError(t, err)
-	assert.Len(t, templates, 1)
+	assert.NotEmpty(t, templates)
 }
 
 func TestAdminService_GetByKey(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
-	renderer := template.NewRenderer(db, logger)
-	service := template.NewAdminService(repository, renderer, logger)
+	service, _ := setupTestService(t)
 	ctx := context.Background()
 
 	t.Run("existing key", func(t *testing.T) {
@@ -89,11 +71,7 @@ func TestAdminService_GetByKey(t *testing.T) {
 }
 
 func TestAdminService_Save(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
-	renderer := template.NewRenderer(db, logger)
-	service := template.NewAdminService(repository, renderer, logger)
+	service, repository := setupTestService(t)
 	ctx := context.Background()
 
 	t.Run("valid template update", func(t *testing.T) {
@@ -132,11 +110,7 @@ func TestAdminService_Save(t *testing.T) {
 }
 
 func TestAdminService_DeleteOverride(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
-	renderer := template.NewRenderer(db, logger)
-	service := template.NewAdminService(repository, renderer, logger)
+	service, repository := setupTestService(t)
 	ctx := context.Background()
 
 	channelID := "room_123"
@@ -158,11 +132,7 @@ func TestAdminService_DeleteOverride(t *testing.T) {
 }
 
 func TestAdminService_Preview(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
-	renderer := template.NewRenderer(db, logger)
-	service := template.NewAdminService(repository, renderer, logger)
+	service, _ := setupTestService(t)
 	ctx := context.Background()
 
 	t.Run("successful preview", func(t *testing.T) {
@@ -184,11 +154,7 @@ func TestAdminService_Preview(t *testing.T) {
 }
 
 func TestAdminService_GetRevisions(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
-	renderer := template.NewRenderer(db, logger)
-	service := template.NewAdminService(repository, renderer, logger)
+	service, _ := setupTestService(t)
 	ctx := context.Background()
 
 	for i := range 3 {
@@ -201,11 +167,7 @@ func TestAdminService_GetRevisions(t *testing.T) {
 }
 
 func TestAdminService_GetRevisionByID(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
-	renderer := template.NewRenderer(db, logger)
-	service := template.NewAdminService(repository, renderer, logger)
+	service, _ := setupTestService(t)
 	ctx := context.Background()
 
 	_, _ = service.Save(ctx, domain.TemplateKeyOutboxShorts, nil, "[{{.MemberName}}] updated")

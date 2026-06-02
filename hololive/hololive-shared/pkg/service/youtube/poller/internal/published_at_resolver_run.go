@@ -63,7 +63,7 @@ type publishedAtResolverPageStep struct {
 func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPages(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	detectedBefore time.Time,
 	batchSize int,
 	run publishedAtResolverRun,
@@ -88,7 +88,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPages(
 func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPageStep(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	detectedBefore time.Time,
 	batchSize int,
 	run publishedAtResolverRun,
@@ -136,7 +136,7 @@ func (r *PendingPublishedAtResolver) finishPendingPublishedAtResolutionPage(
 func (r *PendingPublishedAtResolver) processPendingPublishedAtResolutionPage(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	detectedBefore time.Time,
 	batchSize int,
 	run publishedAtResolverRun,
@@ -211,7 +211,7 @@ func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGaps(
 func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGap(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	gap resolvedPublishedAtDispatchGap,
 	retryAfter func() time.Time,
 ) {
@@ -233,7 +233,7 @@ func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGap(
 }
 
 func (r *PendingPublishedAtResolver) reportResolvedPublishedAtDispatchGapRecoveryFailure(
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	ctx context.Context,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
@@ -255,7 +255,7 @@ func (r *PendingPublishedAtResolver) reportResolvedPublishedAtDispatchGapRecover
 func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidates(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	candidates []trackingrepo.PublishedAtResolutionCandidate,
 	runDeadline time.Time,
 	resolveTimeout time.Duration,

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"golang.org/x/sync/singleflight"
-	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -65,7 +65,7 @@ func LookupChannelSubscribersByType(
 func ResolveChannelSubscribersByType(
 	ctx context.Context,
 	cacheClient cache.Client,
-	db *gorm.DB,
+	db dbx.Querier,
 	channelID string,
 	alarmType domain.AlarmType,
 ) ([]string, error) {
@@ -117,7 +117,7 @@ func resolveChannelSubscribersFromCache(
 func resolveChannelSubscribersFromDB(
 	ctx context.Context,
 	cacheClient cache.Client,
-	db *gorm.DB,
+	db dbx.Querier,
 	channelID string,
 	alarmType domain.AlarmType,
 ) ([]string, error) {
@@ -155,7 +155,7 @@ func warmChannelSubscriberCache(ctx context.Context, cacheClient cache.Client, a
 	_ = cacheClient.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType))
 }
 
-func loadChannelSubscriberAlarms(ctx context.Context, db *gorm.DB, channelID string) ([]*domain.Alarm, error) {
+func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string) ([]*domain.Alarm, error) {
 	if db == nil {
 		return nil, errors.New("load channel subscriber alarms: database is nil")
 	}
@@ -168,21 +168,31 @@ func loadChannelSubscriberAlarms(ctx context.Context, db *gorm.DB, channelID str
 	return waitForChannelSubscriberAlarms(ctx, resultCh)
 }
 
-func queryChannelSubscriberAlarms(ctx context.Context, db *gorm.DB, channelID string) ([]*domain.Alarm, error) {
+func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string) ([]*domain.Alarm, error) {
 	queryCtx, cancel := withoutCancelPreserveDeadline(ctx, channelSubscriberLoadTimeout)
 	defer cancel()
 
-	var records []domain.Alarm
-	if err := db.WithContext(queryCtx).
-		Where("channel_id = ?", channelID).
-		Order("created_at ASC").
-		Find(&records).Error; err != nil {
+	rows, err := db.Query(queryCtx, `
+		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at
+		FROM alarms
+		WHERE channel_id = $1
+		ORDER BY created_at ASC
+	`, channelID)
+	if err != nil {
 		return nil, fmt.Errorf("load channel subscriber alarms: %w", err)
 	}
+	defer rows.Close()
 
-	alarms := make([]*domain.Alarm, 0, len(records))
-	for i := range records {
-		alarms = append(alarms, &records[i])
+	alarms := make([]*domain.Alarm, 0)
+	for rows.Next() {
+		alarmRecord, err := scanAlarmRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("load channel subscriber alarms: %w", err)
+		}
+		alarms = append(alarms, alarmRecord)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("load channel subscriber alarms: %w", rowsErr)
 	}
 
 	return alarms, nil

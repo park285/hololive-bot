@@ -23,8 +23,7 @@ package pollers
 import (
 	"context"
 
-	"gorm.io/gorm"
-
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 )
@@ -32,10 +31,10 @@ import (
 // deliveryTelemetryLatencyPersisterAdapter는 outbox.DeliveryTelemetryRepository를
 // batchrepo.PostLatencyClassificationPersister 인터페이스에 맞게 연결하는 composition-root 어댑터입니다.
 type deliveryTelemetryLatencyPersisterAdapter struct {
-	db *gorm.DB
+	db dbx.Querier
 }
 
-func newDeliveryTelemetryLatencyPersisterAdapter(db *gorm.DB) batchrepo.PostLatencyClassificationPersister {
+func newDeliveryTelemetryLatencyPersisterAdapter(db dbx.Querier) batchrepo.PostLatencyClassificationPersister {
 	return &deliveryTelemetryLatencyPersisterAdapter{db: db}
 }
 

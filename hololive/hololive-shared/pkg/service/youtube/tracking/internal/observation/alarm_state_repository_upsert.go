@@ -37,8 +37,8 @@ func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, record
             END`
 	deliveryStatusExpr := buildAlarmStateDeliveryStatusExpr(finalAuthorizedExpr, finalAlarmSentExpr)
 	query, args := buildAlarmStateUpsertQuery(normalized, now, finalAuthorizedExpr, finalAlarmSentExpr, deliveryStatusExpr)
-	if err := r.db.WithContext(ctx).Exec(query, args...).Error; err != nil {
-		return fmt.Errorf("upsert alarm state batch: exec query: %w", err)
+	if _, err := execSQL(ctx, r.db, "upsert alarm state batch: exec query", query, args...); err != nil {
+		return err
 	}
 
 	return nil

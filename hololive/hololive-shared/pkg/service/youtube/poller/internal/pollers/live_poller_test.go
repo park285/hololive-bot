@@ -3,12 +3,10 @@ package pollers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -29,8 +27,7 @@ func (p *fakeLiveStatusProvider) GetChannelsLiveStatus(_ context.Context, channe
 
 func TestLivePollerNeverEnqueuesLiveStreamOutbox(t *testing.T) {
 	t.Run("baseline 이후 live 전환", func(t *testing.T) {
-		db := newBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
-		require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeLiveViewerSample{}))
+		db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
 
 		provider := &fakeLiveStatusProvider{}
 		poller := NewLivePollerWithStatusProvider(provider, nil, db)
@@ -73,8 +70,7 @@ func TestLivePollerNeverEnqueuesLiveStreamOutbox(t *testing.T) {
 	})
 
 	t.Run("baseline 중 이미 live", func(t *testing.T) {
-		db := newBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
-		require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeLiveViewerSample{}))
+		db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
 
 		startedAt := time.Date(2026, 5, 13, 9, 30, 0, 0, time.UTC)
 		provider := &fakeLiveStatusProvider{
@@ -97,8 +93,7 @@ func TestLivePollerNeverEnqueuesLiveStreamOutbox(t *testing.T) {
 	})
 
 	t.Run("persisted upcoming to live", func(t *testing.T) {
-		db := newBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
-		require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeLiveViewerSample{}))
+		db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
 
 		scheduledAt := time.Date(2026, 5, 13, 9, 0, 0, 0, time.UTC)
 		require.NoError(t, db.Create(&domain.YouTubeLiveSession{
@@ -131,32 +126,18 @@ func TestLivePollerNeverEnqueuesLiveStreamOutbox(t *testing.T) {
 }
 
 func TestLivePollerSaveLiveSessionPreservesExistingLiveFirstSeenAtOnConflict(t *testing.T) {
-	db := newBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeLiveViewerSample{}))
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
 
 	firstSeenAt := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	laterSeenAt := firstSeenAt.Add(45 * time.Second)
-	require.NoError(t, db.Exec(fmt.Sprintf(`
-CREATE TRIGGER insert_racing_live_session
-BEFORE INSERT ON youtube_live_sessions
-WHEN NEW.video_id = 'race-live'
-BEGIN
-	INSERT OR IGNORE INTO youtube_live_sessions (
-		video_id,
-		channel_id,
-		status,
-		title,
-		live_first_seen_at,
-		last_seen_at
-	) VALUES (
-		'race-live',
-		'UC_LIVE',
-		'LIVE',
-		'Racing Live',
-		'%s',
-		'%s'
-	);
-END;`, firstSeenAt.Format(time.RFC3339Nano), firstSeenAt.Format(time.RFC3339Nano))).Error)
+	require.NoError(t, db.Create(&domain.YouTubeLiveSession{
+		VideoID:         "race-live",
+		ChannelID:       "UC_LIVE",
+		Status:          domain.LiveStatusLive,
+		Title:           "Racing Live",
+		LiveFirstSeenAt: &firstSeenAt,
+		LastSeenAt:      firstSeenAt,
+	}).Error)
 
 	poller := NewLivePollerWithStatusProvider(nil, nil, db)
 	stream := &domain.Stream{
@@ -174,7 +155,7 @@ END;`, firstSeenAt.Format(time.RFC3339Nano), firstSeenAt.Format(time.RFC3339Nano
 	require.Equal(t, firstSeenAt, session.LiveFirstSeenAt.UTC())
 }
 
-func requireLiveOutboxEmpty(t *testing.T, db *gorm.DB) {
+func requireLiveOutboxEmpty(t *testing.T, db *pollerBatchTestDB) {
 	t.Helper()
 
 	var outboxes []domain.YouTubeNotificationOutbox
@@ -183,8 +164,7 @@ func requireLiveOutboxEmpty(t *testing.T, db *gorm.DB) {
 }
 
 func TestLivePollerPollPropagatesLiveStatusProviderError(t *testing.T) {
-	db := newBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeLiveViewerSample{}))
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
 
 	providerErr := errors.New("holodex unavailable")
 	poller := NewLivePollerWithStatusProvider(&fakeLiveStatusProvider{err: providerErr}, nil, db)

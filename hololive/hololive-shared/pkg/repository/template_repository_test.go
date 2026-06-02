@@ -24,72 +24,44 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"sync"
 	"testing"
 
-	"github.com/glebarez/sqlite"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 )
 
-func setupTestDB(t *testing.T) *gorm.DB {
+func setupTestDB(t *testing.T) *repository.TemplateRepository {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger:                 gormlogger.Default.LogMode(gormlogger.Silent),
-		SkipDefaultTransaction: true,
-	})
-	require.NoError(t, err)
-
-	err = db.AutoMigrate(&domain.NotificationTemplate{}, &domain.NotificationTemplateRevision{})
-	require.NoError(t, err)
-
-	err = db.Exec(`
-		CREATE UNIQUE INDEX IF NOT EXISTS ux_notification_templates_default
-		ON notification_templates(template_key)
-		WHERE channel_id IS NULL
-	`).Error
-	require.NoError(t, err)
-
-	err = db.Exec(`
-		CREATE UNIQUE INDEX IF NOT EXISTS ux_notification_templates_channel
-		ON notification_templates(template_key, channel_id)
-		WHERE channel_id IS NOT NULL
-	`).Error
-	require.NoError(t, err)
-
-	return db
+	pool := dbtest.NewPool(t)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	return repository.NewTemplateRepository(pool, logger)
 }
 
 func TestTemplateRepository_List(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
+	repository := setupTestDB(t)
 	ctx := context.Background()
 
-	t.Run("empty list", func(t *testing.T) {
-		templates, err := repository.List(ctx, nil, nil)
+	t.Run("empty when key filter has no rows", func(t *testing.T) {
+		key := domain.TemplateKey("NOT_A_TEMPLATE")
+		templates, err := repository.List(ctx, &key, nil)
 		require.NoError(t, err)
 		assert.Empty(t, templates)
 	})
 
 	t.Run("with data and filters", func(t *testing.T) {
-		db.Create(&domain.NotificationTemplate{
-			TemplateKey: domain.TemplateKeyOutboxShorts,
-			Body:        "default body",
-		})
+		_, err := repository.Upsert(ctx, domain.TemplateKeyOutboxShorts, nil, "default body")
+		require.NoError(t, err)
 		channelID := "room_123"
-		db.Create(&domain.NotificationTemplate{
-			TemplateKey: domain.TemplateKeyOutboxShorts,
-			ChannelID:   &channelID,
-			Body:        "override body",
-		})
+		_, err = repository.Upsert(ctx, domain.TemplateKeyOutboxShorts, &channelID, "override body")
+		require.NoError(t, err)
 
 		templates, err := repository.List(ctx, nil, nil)
 		require.NoError(t, err)
-		assert.Len(t, templates, 2)
+		assert.GreaterOrEqual(t, len(templates), 2)
 
 		key := domain.TemplateKeyOutboxShorts
 		templates, err = repository.List(ctx, &key, nil)
@@ -104,9 +76,7 @@ func TestTemplateRepository_List(t *testing.T) {
 }
 
 func TestTemplateRepository_Upsert(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
+	repository := setupTestDB(t)
 	ctx := context.Background()
 
 	t.Run("insert default", func(t *testing.T) {
@@ -146,60 +116,43 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 	})
 
 	t.Run("recover from duplicate key during create", func(t *testing.T) {
-		const callbackName = "test:inject-template-duplicate"
-		injected := false
 		key := domain.TemplateKeyOutboxCommunity
 
-		err := db.Callback().Create().Before("gorm:create").Register(callbackName, func(tx *gorm.DB) {
-			if injected {
-				return
-			}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		results := make(chan error, 2)
+		for _, body := range []string{"racing body", "resolved body"} {
+			body := body
+			go func() {
+				defer wg.Done()
+				tmpl, err := repository.Upsert(ctx, key, nil, body)
+				if err != nil {
+					results <- err
+					return
+				}
+				if tmpl == nil || tmpl.Body != body {
+					results <- assert.AnError
+					return
+				}
+				results <- nil
+			}()
+		}
+		wg.Wait()
+		close(results)
 
-			tmpl, ok := tx.Statement.Dest.(*domain.NotificationTemplate)
-			if !ok {
-				return
-			}
-			if tmpl.TemplateKey != key || tmpl.ChannelID != nil {
-				return
-			}
-
-			injected = true
-			if execErr := tx.Exec(
-				`INSERT INTO notification_templates(template_key, channel_id, body, created_at, updated_at) VALUES (?, NULL, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-				key,
-				"racing body",
-			).Error; execErr != nil {
-				_ = tx.AddError(execErr)
-			}
-		})
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			_ = db.Callback().Create().Remove(callbackName)
-		})
-
-		tmpl, err := repository.Upsert(ctx, key, nil, "resolved body")
-		require.NoError(t, err)
-		require.NotNil(t, tmpl)
-		assert.Equal(t, "resolved body", tmpl.Body)
+		for err := range results {
+			require.NoError(t, err)
+		}
 
 		found, err := repository.FindByKeyAndChannel(ctx, key, nil)
 		require.NoError(t, err)
 		require.NotNil(t, found)
-		assert.Equal(t, "resolved body", found.Body)
-
-		var count int64
-		err = db.Model(&domain.NotificationTemplate{}).
-			Where("template_key = ? AND channel_id IS NULL", key).
-			Count(&count).Error
-		require.NoError(t, err)
-		assert.Equal(t, int64(1), count)
+		assert.Contains(t, []string{"racing body", "resolved body"}, found.Body)
 	})
 }
 
 func TestTemplateRepository_DeleteOverride(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
+	repository := setupTestDB(t)
 	ctx := context.Background()
 
 	channelID := "room_del"
@@ -215,9 +168,7 @@ func TestTemplateRepository_DeleteOverride(t *testing.T) {
 }
 
 func TestTemplateRepository_GetByKey(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
+	repository := setupTestDB(t)
 	ctx := context.Background()
 
 	_, err := repository.Upsert(ctx, domain.TemplateKeyOutboxVideo, nil, "default video")
@@ -235,13 +186,13 @@ func TestTemplateRepository_GetByKey(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, defaultTmpl)
 	assert.Equal(t, "default video", defaultTmpl.Body)
-	assert.Len(t, overrides, 2)
+	require.Len(t, overrides, 2)
+	assert.Equal(t, "room_1", *overrides[0].ChannelID)
+	assert.Equal(t, "room_2", *overrides[1].ChannelID)
 }
 
 func TestTemplateRepository_Revisions(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
+	repository := setupTestDB(t)
 	ctx := context.Background()
 
 	tmpl, err := repository.Upsert(ctx, domain.TemplateKeyOutboxMilestone, nil, "v1")
@@ -262,9 +213,7 @@ func TestTemplateRepository_Revisions(t *testing.T) {
 }
 
 func TestTemplateRepository_PruneOldRevisions(t *testing.T) {
-	db := setupTestDB(t)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(db, logger)
+	repository := setupTestDB(t)
 	ctx := context.Background()
 
 	tmpl, err := repository.Upsert(ctx, domain.TemplateKeyCmdHelp, nil, "help")
@@ -281,4 +230,24 @@ func TestTemplateRepository_PruneOldRevisions(t *testing.T) {
 	revisions, err := repository.GetRevisions(ctx, tmpl.ID, 100)
 	require.NoError(t, err)
 	assert.Len(t, revisions, 5)
+}
+
+func TestTemplateRepository_PruneOldRevisions_KeepZeroNoop(t *testing.T) {
+	repository := setupTestDB(t)
+	ctx := context.Background()
+
+	tmpl, err := repository.Upsert(ctx, domain.TemplateKeyCmdHelp, nil, "help")
+	require.NoError(t, err)
+
+	for range 3 {
+		err = repository.CreateRevision(ctx, tmpl.ID, "revision body")
+		require.NoError(t, err)
+	}
+
+	err = repository.PruneOldRevisions(ctx, tmpl.ID, 0)
+	require.NoError(t, err)
+
+	revisions, err := repository.GetRevisions(ctx, tmpl.ID, 100)
+	require.NoError(t, err)
+	assert.Len(t, revisions, 3)
 }

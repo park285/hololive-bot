@@ -32,8 +32,8 @@ func (r *sourcePostRepository) UpsertSourcePostsBatch(ctx context.Context, recor
 	}
 
 	query, args := buildSourcePostsBatchUpsert(normalized, yttimestamp.Normalize(time.Now()))
-	if err := r.db.WithContext(ctx).Exec(query, args...).Error; err != nil {
-		return fmt.Errorf("upsert source posts batch: exec query: %w", err)
+	if _, err := execSQL(ctx, r.db, "upsert source posts batch: exec query", query, args...); err != nil {
+		return err
 	}
 
 	return nil
@@ -109,14 +109,15 @@ func (r *sourcePostRepository) ListSourcePostsDetectedWithinWindow(
 	}
 
 	var rows []domain.YouTubeCommunityShortsSourcePost
-	if err := r.db.WithContext(ctx).
-		Where("kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
-		Where("detected_at >= ?", startUTC).
-		Where("detected_at < ?", endUTC).
-		Order("detected_at DESC").
-		Order("post_id ASC").
-		Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list source posts within detected window: query rows: %w", err)
+	if err := selectSQL(ctx, r.db, &rows, "list source posts within detected window: query rows", `
+		SELECT kind, post_id, channel_id, actual_published_at, detected_at, created_at, updated_at
+		FROM youtube_community_shorts_source_posts
+		WHERE kind IN (?, ?)
+		  AND detected_at >= ?
+		  AND detected_at < ?
+		ORDER BY detected_at DESC, post_id ASC
+	`, domain.OutboxKindCommunityPost, domain.OutboxKindNewShort, startUTC, endUTC); err != nil {
+		return nil, err
 	}
 
 	return rows, nil
@@ -152,16 +153,16 @@ func (r *sourcePostRepository) ListSourcePostsWithinObservationWindow(
 	}
 
 	var rows []domain.YouTubeCommunityShortsSourcePost
-	if err := r.db.WithContext(ctx).
-		Where("kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
-		Where("COALESCE(actual_published_at, detected_at) >= ?", startUTC).
-		Where("COALESCE(actual_published_at, detected_at) < ?", endUTC).
-		Where("detected_at < ?", detectedBeforeUTC).
-		Order("COALESCE(actual_published_at, detected_at) DESC").
-		Order("detected_at DESC").
-		Order("post_id ASC").
-		Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list source posts within observation window: query rows: %w", err)
+	if err := selectSQL(ctx, r.db, &rows, "list source posts within observation window: query rows", `
+		SELECT kind, post_id, channel_id, actual_published_at, detected_at, created_at, updated_at
+		FROM youtube_community_shorts_source_posts
+		WHERE kind IN (?, ?)
+		  AND COALESCE(actual_published_at, detected_at) >= ?
+		  AND COALESCE(actual_published_at, detected_at) < ?
+		  AND detected_at < ?
+		ORDER BY COALESCE(actual_published_at, detected_at) DESC, detected_at DESC, post_id ASC
+	`, domain.OutboxKindCommunityPost, domain.OutboxKindNewShort, startUTC, endUTC, detectedBeforeUTC); err != nil {
+		return nil, err
 	}
 
 	return rows, nil

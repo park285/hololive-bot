@@ -28,9 +28,9 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
+	"github.com/georgysavva/scany/v2/pgxscan"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
@@ -38,7 +38,7 @@ import (
 type LivePoller struct {
 	client             *scraper.Client
 	liveStatusProvider LiveStatusProvider
-	db                 *gorm.DB
+	db                 pollerDB
 	baselineMu         sync.Mutex
 	baselinedChannels  map[string]struct{}
 }
@@ -47,15 +47,15 @@ type LiveStatusProvider interface {
 	GetChannelsLiveStatus(ctx context.Context, channelIDs []string) ([]*domain.Stream, error)
 }
 
-func NewLivePoller(scraperClient *scraper.Client, db *gorm.DB) *LivePoller {
+func NewLivePoller(scraperClient *scraper.Client, db any) *LivePoller {
 	return NewLivePollerWithStatusProvider(nil, scraperClient, db)
 }
 
-func NewLivePollerWithStatusProvider(provider LiveStatusProvider, scraperClient *scraper.Client, db *gorm.DB) *LivePoller {
+func NewLivePollerWithStatusProvider(provider LiveStatusProvider, scraperClient *scraper.Client, db any) *LivePoller {
 	return &LivePoller{
 		client:             scraperClient,
 		liveStatusProvider: provider,
-		db:                 db,
+		db:                 normalizePollerDB(db),
 		baselinedChannels:  make(map[string]struct{}),
 	}
 }
@@ -161,24 +161,35 @@ func liveStatusFromStream(stream *domain.Stream) (domain.LiveStatus, bool) {
 }
 
 func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, baselinePoll bool) error {
-	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return inPollerTx(ctx, p.db, func(tx dbx.Querier) error {
 		existing, _, err := loadExistingLiveSession(ctx, tx, stream.ID)
 		if err != nil {
 			return err
 		}
 
 		session := buildLiveSession(channelID, stream, status, now, existing)
-		if err := tx.WithContext(ctx).Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "video_id"}},
-			DoUpdates: clause.Assignments(map[string]any{
-				"status":               gorm.Expr("excluded.status"),
-				"title":                gorm.Expr("excluded.title"),
-				"scheduled_start_time": gorm.Expr("excluded.scheduled_start_time"),
-				"started_at":           gorm.Expr("excluded.started_at"),
-				"live_first_seen_at":   gorm.Expr("COALESCE(youtube_live_sessions.live_first_seen_at, excluded.live_first_seen_at)"),
-				"last_seen_at":         gorm.Expr("excluded.last_seen_at"),
-			}),
-		}).Create(session).Error; err != nil {
+		session.LastSeenAt = now.UTC().Truncate(time.Microsecond)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO youtube_live_sessions
+				(video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (video_id) DO UPDATE SET
+				status = excluded.status,
+				title = excluded.title,
+				scheduled_start_time = excluded.scheduled_start_time,
+				started_at = excluded.started_at,
+				live_first_seen_at = COALESCE(youtube_live_sessions.live_first_seen_at, excluded.live_first_seen_at),
+				last_seen_at = excluded.last_seen_at`,
+			session.VideoID,
+			session.ChannelID,
+			session.Status,
+			session.Title,
+			session.ScheduledStartTime,
+			session.StartedAt,
+			session.EndedAt,
+			session.LiveFirstSeenAt,
+			session.LastSeenAt,
+		); err != nil {
 			return fmt.Errorf("save live session: %w", err)
 		}
 
@@ -186,16 +197,55 @@ func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stre
 	})
 }
 
-func loadExistingLiveSession(ctx context.Context, tx *gorm.DB, videoID string) (domain.YouTubeLiveSession, bool, error) {
+func loadExistingLiveSession(ctx context.Context, tx dbx.Querier, videoID string) (domain.YouTubeLiveSession, bool, error) {
 	var existing domain.YouTubeLiveSession
-	err := tx.WithContext(ctx).Where("video_id = ?", videoID).First(&existing).Error
+	err := pgxscan.Get(ctx, tx, &existing, liveSessionSelectSQL+`
+		WHERE video_id = $1`,
+		videoID,
+	)
 	if err == nil {
+		normalizeLiveSessionTimes(&existing)
 		return existing, true, nil
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if pgxscan.NotFound(err) {
 		return domain.YouTubeLiveSession{}, false, nil
 	}
 	return domain.YouTubeLiveSession{}, false, fmt.Errorf("load existing live session: %w", err)
+}
+
+const liveSessionSelectSQL = `
+	SELECT video_id,
+		channel_id,
+		status,
+		title,
+		scheduled_start_time,
+		started_at,
+		ended_at,
+		live_first_seen_at,
+		last_seen_at
+	FROM youtube_live_sessions`
+
+func normalizeLiveSessionTimes(session *domain.YouTubeLiveSession) {
+	if session == nil {
+		return
+	}
+	session.LastSeenAt = session.LastSeenAt.UTC()
+	if session.ScheduledStartTime != nil {
+		value := session.ScheduledStartTime.UTC()
+		session.ScheduledStartTime = &value
+	}
+	if session.StartedAt != nil {
+		value := session.StartedAt.UTC()
+		session.StartedAt = &value
+	}
+	if session.EndedAt != nil {
+		value := session.EndedAt.UTC()
+		session.EndedAt = &value
+	}
+	if session.LiveFirstSeenAt != nil {
+		value := session.LiveFirstSeenAt.UTC()
+		session.LiveFirstSeenAt = &value
+	}
 }
 
 func buildLiveSession(channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, existing domain.YouTubeLiveSession) *domain.YouTubeLiveSession {
@@ -258,14 +308,28 @@ func (p *LivePoller) saveLiveViewerSample(ctx context.Context, channelID string,
 
 	sample := &domain.YouTubeLiveViewerSample{
 		VideoID:           stream.ID,
-		CapturedAt:        now,
+		CapturedAt:        now.UTC().Truncate(time.Microsecond),
 		ChannelID:         firstNonEmpty(stream.ChannelID, channelID),
 		ConcurrentViewers: *stream.ViewerCount,
 	}
 
-	p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		DoNothing: true,
-	}).Create(sample)
+	if p.db == nil {
+		slog.Warn("Live viewer sample skipped because db is nil", "video_id", stream.ID)
+		return
+	}
+	if _, err := p.db.Exec(ctx, `
+		INSERT INTO youtube_live_viewer_samples
+			(video_id, captured_at, channel_id, concurrent_viewers)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT DO NOTHING`,
+		sample.VideoID,
+		sample.CapturedAt,
+		sample.ChannelID,
+		sample.ConcurrentViewers,
+	); err != nil {
+		slog.Warn("Failed to save live viewer sample", "video_id", stream.ID, "error", err)
+		return
+	}
 
 	slog.Debug("Live viewer sample saved",
 		"video_id", stream.ID,
@@ -276,18 +340,32 @@ func (p *LivePoller) markEndedSessions(ctx context.Context, channelID string, cu
 	activeIDs := activeLiveStreamIDs(currentStreams)
 
 	var liveSessions []domain.YouTubeLiveSession
-	p.db.WithContext(ctx).Where(
-		"channel_id = ? AND status = ?",
-		channelID, domain.LiveStatusLive,
-	).Find(&liveSessions)
+	if p.db == nil {
+		return
+	}
+	if err := pgxscan.Select(ctx, p.db, &liveSessions, liveSessionSelectSQL+`
+		WHERE channel_id = $1 AND status = $2`,
+		channelID,
+		domain.LiveStatusLive,
+	); err != nil {
+		slog.Warn("Failed to load live sessions for end marking", "channel_id", channelID, "error", err)
+		return
+	}
 
-	now := time.Now()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	for _, session := range liveSessions {
 		if !activeIDs[session.VideoID] {
-			p.db.WithContext(ctx).Model(&session).Updates(map[string]any{
-				"status":   domain.LiveStatusEnded,
-				"ended_at": now,
-			})
+			if _, err := p.db.Exec(ctx, `
+				UPDATE youtube_live_sessions
+				SET status = $1, ended_at = $2, last_seen_at = $2
+				WHERE video_id = $3`,
+				domain.LiveStatusEnded,
+				now,
+				session.VideoID,
+			); err != nil {
+				slog.Warn("Failed to mark live session ended", "video_id", session.VideoID, "error", err)
+				continue
+			}
 
 			p.finalizeStreamStats(ctx, session.VideoID, channelID)
 		}
@@ -312,23 +390,40 @@ func isActiveLiveStream(stream *domain.Stream) bool {
 func (p *LivePoller) finalizeStreamStats(ctx context.Context, videoID, channelID string) {
 	// 샘플 데이터 집계
 	var result struct {
-		MaxViewers int
-		AvgViewers int
-		Count      int
+		MaxViewers int `db:"max_viewers"`
+		AvgViewers int `db:"avg_viewers"`
+		Count      int `db:"count"`
 	}
 
-	p.db.WithContext(ctx).Model(&domain.YouTubeLiveViewerSample{}).
-		Select("MAX(concurrent_viewers) as max_viewers, AVG(concurrent_viewers) as avg_viewers, COUNT(*) as count").
-		Where("video_id = ?", videoID).
-		Scan(&result)
+	if p.db == nil {
+		return
+	}
+	if err := pgxscan.Get(ctx, p.db, &result, `
+		SELECT
+			COALESCE(MAX(concurrent_viewers), 0)::int AS max_viewers,
+			COALESCE(AVG(concurrent_viewers), 0)::int AS avg_viewers,
+			COUNT(*)::int AS count
+		FROM youtube_live_viewer_samples
+		WHERE video_id = $1`,
+		videoID,
+	); err != nil {
+		slog.Warn("Failed to aggregate live stream stats", "video_id", videoID, "error", err)
+		return
+	}
 
 	if result.Count == 0 {
 		return
 	}
 
 	// 스트림 통계 저장
-	var session domain.YouTubeLiveSession
-	p.db.WithContext(ctx).Where("video_id = ?", videoID).First(&session)
+	session, found, err := loadExistingLiveSession(ctx, p.db, videoID)
+	if err != nil {
+		slog.Warn("Failed to load live session for stream stats", "video_id", videoID, "error", err)
+		return
+	}
+	if !found {
+		return
+	}
 
 	stats := &domain.YouTubeStreamStats{
 		VideoID:              videoID,
@@ -339,11 +434,30 @@ func (p *LivePoller) finalizeStreamStats(ctx context.Context, videoID, channelID
 		AvgConcurrentViewers: result.AvgViewers,
 		SampleCount:          result.Count,
 	}
+	stats.UpdatedAt = time.Now().UTC().Truncate(time.Microsecond)
 
-	p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "video_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"ended_at", "max_concurrent_viewers", "avg_concurrent_viewers", "sample_count", "updated_at"}),
-	}).Create(stats)
+	if _, err := p.db.Exec(ctx, `
+		INSERT INTO youtube_stream_stats
+			(video_id, channel_id, started_at, ended_at, max_concurrent_viewers, avg_concurrent_viewers, sample_count, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (video_id) DO UPDATE SET
+			ended_at = excluded.ended_at,
+			max_concurrent_viewers = excluded.max_concurrent_viewers,
+			avg_concurrent_viewers = excluded.avg_concurrent_viewers,
+			sample_count = excluded.sample_count,
+			updated_at = excluded.updated_at`,
+		stats.VideoID,
+		stats.ChannelID,
+		stats.StartedAt,
+		stats.EndedAt,
+		stats.MaxConcurrentViewers,
+		stats.AvgConcurrentViewers,
+		stats.SampleCount,
+		stats.UpdatedAt,
+	); err != nil {
+		slog.Warn("Failed to save live stream stats", "video_id", videoID, "error", err)
+		return
+	}
 
 	slog.Info("Stream stats finalized",
 		"video_id", videoID,

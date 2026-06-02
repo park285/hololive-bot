@@ -28,8 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 
@@ -41,7 +39,7 @@ import (
 
 type ShortsPoller struct {
 	client                           *scraper.Client
-	db                               *gorm.DB
+	db                               pollerDB
 	repository                       batchrepo.BatchRepository
 	maxResults                       int
 	routeDecider                     polling.NotificationRouteDecider
@@ -49,7 +47,7 @@ type ShortsPoller struct {
 	metrics                          *polling.Metrics
 }
 
-func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *ShortsPoller {
+func NewShortsPoller(scraperClient *scraper.Client, db any, maxResults int, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *ShortsPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
@@ -57,10 +55,11 @@ func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int,
 	if len(inlinePublishedAtFallbackEnabled) > 0 {
 		inlineFallbackEnabled = inlinePublishedAtFallbackEnabled[0]
 	}
+	querier := normalizePollerDB(db)
 	return &ShortsPoller{
 		client:                           scraperClient,
-		db:                               db,
-		repository:                       batchrepo.NewGormBatchRepositoryWithPersister(db, newDeliveryTelemetryLatencyPersisterAdapter(db)),
+		db:                               querier,
+		repository:                       batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
 		maxResults:                       maxResults,
 		routeDecider:                     routeDecider,
 		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,
@@ -119,7 +118,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		p.client.EnrichShortsPublishedAtFromRSS(ctx, channelID, newShorts)
 	}
 
-	detectedAt := yttimestamp.Normalize(time.Now())
+	detectedAt := yttimestamp.Normalize(time.Now()).Truncate(time.Microsecond)
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt, p.ensureMetrics())
 	batch := p.buildShortBatch(ctx, channelID, newShorts, isInitialized, detectedAt)
 

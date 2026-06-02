@@ -26,8 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -94,27 +92,29 @@ type Dispatcher struct {
 	testHooks dispatcherTestHooks
 }
 
-func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, config Config) *Dispatcher {
+func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, config Config) *Dispatcher {
 	initOutboxMetrics()
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	config = normalizeDispatcherConfig(config)
+	querier := asQuerier(db)
+	deliveryDB := asDeliveryDB(db)
 
 	var telemetryRepository *DeliveryTelemetryRepository
-	if db != nil {
-		telemetryRepository = NewDeliveryTelemetryRepository(db)
+	if querier != nil {
+		telemetryRepository = NewDeliveryTelemetryRepository(querier)
 	}
 
-	deliveryRepo := NewDeliveryRepository(db, logger)
+	deliveryRepo := NewDeliveryRepository(deliveryDB, logger)
 	tp := newTelemetryProcessor(telemetryRepository, logger, config)
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, config, tp)
-	grouper := newOutboxGrouper(db, cacheClient, logger, config)
-	status := newStatusUpdater(db, logger, config)
+	grouper := newOutboxGrouper(querier, cacheClient, logger, config)
+	status := newStatusUpdater(querier, logger, config)
 	formatter := newMessageFormatter(renderer, cacheClient, logger)
 
-	claimManager := newClaimManager(db, logger, config, deliveryRepo, nil, status, grouper, al)
+	claimManager := newClaimManager(deliveryDB, logger, config, deliveryRepo, nil, status, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al, claimManager)
 	sendEngine := newSendEngine(sender, formatter, logger, config, claimManager, al, metricsRecorder)
 	claimManager.setExecutor(sendEngine)

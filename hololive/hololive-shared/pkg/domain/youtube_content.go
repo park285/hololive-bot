@@ -27,15 +27,15 @@ import (
 )
 
 type YouTubeChannelStatsSnapshot struct {
-	ChannelID       string    `gorm:"primaryKey;size:50" json:"channel_id"`
-	CapturedAt      time.Time `gorm:"primaryKey" json:"captured_at"`
+	ChannelID       string    `db:"channel_id" json:"channel_id"`
+	CapturedAt      time.Time `db:"captured_at" json:"captured_at"`
 	SubscriberCount int64     `json:"subscriber_count"`
 	ViewCount       int64     `json:"view_count"`
 	VideoCount      int64     `json:"video_count"`
 	JoinedDate      int64     `json:"joined_date,omitempty"` // Unix timestamp
-	Description     string    `gorm:"type:text" json:"description,omitempty"`
-	Country         string    `gorm:"size:50" json:"country,omitempty"`
-	Handle          string    `gorm:"size:100" json:"handle,omitempty"`
+	Description     string    `db:"description" json:"description,omitempty"`
+	Country         string    `db:"country" json:"country,omitempty"`
+	Handle          string    `db:"handle" json:"handle,omitempty"`
 }
 
 func (YouTubeChannelStatsSnapshot) TableName() string {
@@ -43,10 +43,10 @@ func (YouTubeChannelStatsSnapshot) TableName() string {
 }
 
 type YouTubeChannelProfile struct {
-	ChannelID string         `gorm:"primaryKey;size:50" json:"channel_id"`
-	Avatar    ThumbnailsJSON `gorm:"type:jsonb" json:"avatar,omitempty"`
-	Banner    ThumbnailsJSON `gorm:"type:jsonb" json:"banner,omitempty"`
-	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	ChannelID string         `db:"channel_id" json:"channel_id"`
+	Avatar    ThumbnailsJSON `db:"avatar" json:"avatar,omitempty"`
+	Banner    ThumbnailsJSON `db:"banner" json:"banner,omitempty"`
+	UpdatedAt time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 func (YouTubeChannelProfile) TableName() string {
@@ -54,18 +54,18 @@ func (YouTubeChannelProfile) TableName() string {
 }
 
 type YouTubeVideo struct {
-	VideoID       string         `gorm:"primaryKey;size:20" json:"video_id"`
-	ChannelID     string         `gorm:"size:50;index:idx_yv_channel_first_seen" json:"channel_id"`
-	Title         string         `gorm:"size:500" json:"title"`
-	Thumbnail     ThumbnailsJSON `gorm:"type:jsonb" json:"thumbnail,omitempty"`
-	Duration      string         `gorm:"size:20" json:"duration,omitempty"`
-	PublishedText string         `gorm:"size:100" json:"published_text,omitempty"`
+	VideoID       string         `db:"video_id" json:"video_id"`
+	ChannelID     string         `db:"channel_id" json:"channel_id"`
+	Title         string         `db:"title" json:"title"`
+	Thumbnail     ThumbnailsJSON `db:"thumbnail" json:"thumbnail,omitempty"`
+	Duration      string         `db:"duration" json:"duration,omitempty"`
+	PublishedText string         `db:"published_text" json:"published_text,omitempty"`
 	PublishedAt   *time.Time     `json:"published_at,omitempty"`
-	IsShort       bool           `gorm:"default:false;index:idx_yv_channel_is_short" json:"is_short"`
-	IsLiveReplay  bool           `gorm:"default:false" json:"is_live_replay"`
+	IsShort       bool           `db:"is_short" json:"is_short"`
+	IsLiveReplay  bool           `db:"is_live_replay" json:"is_live_replay"`
 	ViewCount     int64          `json:"view_count,omitempty"`
-	FirstSeenAt   time.Time      `gorm:"autoCreateTime;index:idx_yv_channel_first_seen" json:"first_seen_at"`
-	LastSeenAt    time.Time      `gorm:"autoUpdateTime" json:"last_seen_at"`
+	FirstSeenAt   time.Time      `db:"first_seen_at" json:"first_seen_at"`
+	LastSeenAt    time.Time      `db:"last_seen_at" json:"last_seen_at"`
 }
 
 func (YouTubeVideo) TableName() string {
@@ -73,19 +73,19 @@ func (YouTubeVideo) TableName() string {
 }
 
 type YouTubeCommunityPost struct {
-	PostID        string         `gorm:"primaryKey;size:50" json:"post_id"`
-	ChannelID     string         `gorm:"size:50;index:idx_ycp_channel_first_seen" json:"channel_id"`
-	AuthorName    string         `gorm:"size:200" json:"author_name,omitempty"`
-	AuthorPhoto   ThumbnailsJSON `gorm:"type:jsonb" json:"author_photo,omitempty"`
-	ContentText   string         `gorm:"type:text" json:"content_text,omitempty"`
-	PublishedText string         `gorm:"size:100" json:"published_text,omitempty"`
+	PostID        string         `db:"post_id" json:"post_id"`
+	ChannelID     string         `db:"channel_id" json:"channel_id"`
+	AuthorName    string         `db:"author_name" json:"author_name,omitempty"`
+	AuthorPhoto   ThumbnailsJSON `db:"author_photo" json:"author_photo,omitempty"`
+	ContentText   string         `db:"content_text" json:"content_text,omitempty"`
+	PublishedText string         `db:"published_text" json:"published_text,omitempty"`
 	PublishedAt   *time.Time     `json:"published_at,omitempty"`
 	LikeCount     int64          `json:"like_count,omitempty"`
 	CommentCount  int64          `json:"comment_count,omitempty"`
-	Images        ThumbnailsJSON `gorm:"type:jsonb" json:"images,omitempty"`
-	AttachedVideo string         `gorm:"size:20" json:"attached_video,omitempty"`
-	FirstSeenAt   time.Time      `gorm:"autoCreateTime;index:idx_ycp_channel_first_seen" json:"first_seen_at"`
-	LastSeenAt    time.Time      `gorm:"autoUpdateTime" json:"last_seen_at"`
+	Images        ThumbnailsJSON `db:"images" json:"images,omitempty"`
+	AttachedVideo string         `db:"attached_video" json:"attached_video,omitempty"`
+	FirstSeenAt   time.Time      `db:"first_seen_at" json:"first_seen_at"`
+	LastSeenAt    time.Time      `db:"last_seen_at" json:"last_seen_at"`
 }
 
 func (YouTubeCommunityPost) TableName() string {
@@ -94,21 +94,21 @@ func (YouTubeCommunityPost) TableName() string {
 
 // 동일 콘텐츠에 대해 실제 게시 시각, 최초 감지 시각, 최초 성공 발송 시각과 저장된 지연 분류값을 보존한다.
 type YouTubeContentAlarmTracking struct {
-	Kind                        OutboxKind                        `gorm:"primaryKey;size:20;uniqueIndex:idx_ycat_kind_canonical_content,priority:1" json:"kind"`
-	ContentID                   string                            `gorm:"primaryKey;size:50" json:"content_id"`
-	CanonicalContentID          string                            `gorm:"size:50;not null;uniqueIndex:idx_ycat_kind_canonical_content,priority:2" json:"canonical_content_id"`
-	ChannelID                   string                            `gorm:"size:50;not null;index:idx_ycat_channel_detected" json:"channel_id"`
+	Kind                        OutboxKind                        `db:"kind" json:"kind"`
+	ContentID                   string                            `db:"content_id" json:"content_id"`
+	CanonicalContentID          string                            `db:"canonical_content_id" json:"canonical_content_id"`
+	ChannelID                   string                            `db:"channel_id" json:"channel_id"`
 	ActualPublishedAt           *time.Time                        `json:"actual_published_at,omitempty"`
-	DetectedAt                  time.Time                         `gorm:"not null;index:idx_ycat_detected_at;index:idx_ycat_channel_detected" json:"detected_at"`
-	AlarmSentAt                 *time.Time                        `gorm:"index:idx_ycat_alarm_sent_at" json:"alarm_sent_at,omitempty"`
+	DetectedAt                  time.Time                         `db:"detected_at" json:"detected_at"`
+	AlarmSentAt                 *time.Time                        `db:"alarm_sent_at" json:"alarm_sent_at,omitempty"`
 	AlarmLatencyMillis          *int64                            `json:"alarm_latency_millis,omitempty"`
 	AlarmLatencyExceeded        *bool                             `json:"alarm_latency_exceeded,omitempty"`
-	DeliveryStatus              YouTubeContentAlarmDeliveryStatus `gorm:"size:20;not null;default:'PENDING';index:idx_ycat_delivery_status" json:"delivery_status"`
-	LatencyClassificationStatus string                            `gorm:"size:40" json:"latency_classification_status,omitempty"`
-	DelaySource                 string                            `gorm:"size:40" json:"delay_source,omitempty"`
-	InternalDelayCause          string                            `gorm:"size:40" json:"internal_delay_cause,omitempty"`
-	CreatedAt                   time.Time                         `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt                   time.Time                         `gorm:"autoUpdateTime" json:"updated_at"`
+	DeliveryStatus              YouTubeContentAlarmDeliveryStatus `db:"delivery_status" json:"delivery_status"`
+	LatencyClassificationStatus string                            `db:"latency_classification_status" json:"latency_classification_status,omitempty"`
+	DelaySource                 string                            `db:"delay_source" json:"delay_source,omitempty"`
+	InternalDelayCause          string                            `db:"internal_delay_cause" json:"internal_delay_cause,omitempty"`
+	CreatedAt                   time.Time                         `db:"created_at" json:"created_at"`
+	UpdatedAt                   time.Time                         `db:"updated_at" json:"updated_at"`
 }
 
 func (YouTubeContentAlarmTracking) TableName() string {
@@ -131,13 +131,13 @@ func ResolveYouTubeContentAlarmDeliveryStatus(alarmSentAt *time.Time) YouTubeCon
 
 // 감지된 게시물의 채널 정보와 canonical post identifier를 관찰용 원본 집합으로 보존한다.
 type YouTubeCommunityShortsSourcePost struct {
-	Kind              OutboxKind `gorm:"primaryKey;size:20" json:"kind"`
-	PostID            string     `gorm:"primaryKey;size:50" json:"post_id"`
-	ChannelID         string     `gorm:"size:50;not null;index:idx_ycssp_channel_detected" json:"channel_id"`
+	Kind              OutboxKind `db:"kind" json:"kind"`
+	PostID            string     `db:"post_id" json:"post_id"`
+	ChannelID         string     `db:"channel_id" json:"channel_id"`
 	ActualPublishedAt *time.Time `json:"actual_published_at,omitempty"`
-	DetectedAt        time.Time  `gorm:"not null;index:idx_ycssp_detected_at;index:idx_ycssp_channel_detected" json:"detected_at"`
-	CreatedAt         time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt         time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	DetectedAt        time.Time  `db:"detected_at" json:"detected_at"`
+	CreatedAt         time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt         time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 func (YouTubeCommunityShortsSourcePost) TableName() string {
@@ -146,18 +146,18 @@ func (YouTubeCommunityShortsSourcePost) TableName() string {
 
 // canonical post identifier를 루트 키로 사용해 게시물당 하나의 상태 레코드만 유지한다.
 type YouTubeCommunityShortsAlarmState struct {
-	Kind                  OutboxKind                             `gorm:"primaryKey;size:20;uniqueIndex:idx_ycsas_kind_content,priority:1" json:"kind"`
-	PostID                string                                 `gorm:"primaryKey;size:50" json:"post_id"`
-	ContentID             string                                 `gorm:"size:50;not null;uniqueIndex:idx_ycsas_kind_content,priority:2" json:"content_id"`
-	ChannelID             string                                 `gorm:"size:50;not null;index:idx_ycsas_channel_detected" json:"channel_id"`
+	Kind                  OutboxKind                             `db:"kind" json:"kind"`
+	PostID                string                                 `db:"post_id" json:"post_id"`
+	ContentID             string                                 `db:"content_id" json:"content_id"`
+	ChannelID             string                                 `db:"channel_id" json:"channel_id"`
 	ActualPublishedAt     *time.Time                             `json:"actual_published_at,omitempty"`
-	DetectedAt            time.Time                              `gorm:"not null;index:idx_ycsas_detected_at;index:idx_ycsas_channel_detected" json:"detected_at"`
-	PublishedAtRetryAfter *time.Time                             `gorm:"index:idx_ycsas_published_at_retry_after" json:"published_at_retry_after,omitempty"`
-	AuthorizedAt          *time.Time                             `gorm:"index:idx_ycsas_authorized_at" json:"authorized_at,omitempty"`
-	AlarmSentAt           *time.Time                             `gorm:"index:idx_ycsas_alarm_sent_at" json:"alarm_sent_at,omitempty"`
-	DeliveryStatus        YouTubeCommunityShortsAlarmStateStatus `gorm:"size:20;not null;default:'DETECTED';index:idx_ycsas_delivery_status" json:"delivery_status"`
-	CreatedAt             time.Time                              `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt             time.Time                              `gorm:"autoUpdateTime" json:"updated_at"`
+	DetectedAt            time.Time                              `db:"detected_at" json:"detected_at"`
+	PublishedAtRetryAfter *time.Time                             `db:"published_at_retry_after" json:"published_at_retry_after,omitempty"`
+	AuthorizedAt          *time.Time                             `db:"authorized_at" json:"authorized_at,omitempty"`
+	AlarmSentAt           *time.Time                             `db:"alarm_sent_at" json:"alarm_sent_at,omitempty"`
+	DeliveryStatus        YouTubeCommunityShortsAlarmStateStatus `db:"delivery_status" json:"delivery_status"`
+	CreatedAt             time.Time                              `db:"created_at" json:"created_at"`
+	UpdatedAt             time.Time                              `db:"updated_at" json:"updated_at"`
 }
 
 func (YouTubeCommunityShortsAlarmState) TableName() string {
@@ -184,16 +184,16 @@ func ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt *time.Time, alar
 
 // 동일 observation key에 대해 dedup 완료된 게시물 집합을 이후 검증에서 재사용한다.
 type YouTubeCommunityShortsObservationPostBaseline struct {
-	RuntimeName       string     `gorm:"primaryKey;size:50" json:"runtime_name"`
-	BigBangCutoverAt  time.Time  `gorm:"column:bigbang_cutover_at;primaryKey" json:"bigbang_cutover_at"`
-	Kind              OutboxKind `gorm:"primaryKey;size:20" json:"kind"`
-	PostID            string     `gorm:"primaryKey;size:50" json:"post_id"`
-	ChannelID         string     `gorm:"size:50;not null;index:idx_ycsopb_channel_detected" json:"channel_id"`
+	RuntimeName       string     `db:"runtime_name" json:"runtime_name"`
+	BigBangCutoverAt  time.Time  `db:"bigbang_cutover_at" json:"bigbang_cutover_at"`
+	Kind              OutboxKind `db:"kind" json:"kind"`
+	PostID            string     `db:"post_id" json:"post_id"`
+	ChannelID         string     `db:"channel_id" json:"channel_id"`
 	ActualPublishedAt *time.Time `json:"actual_published_at,omitempty"`
-	DetectedAt        time.Time  `gorm:"not null;index:idx_ycsopb_channel_detected" json:"detected_at"`
-	FinalizedAt       time.Time  `gorm:"not null" json:"finalized_at"`
-	CreatedAt         time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt         time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	DetectedAt        time.Time  `db:"detected_at" json:"detected_at"`
+	FinalizedAt       time.Time  `db:"finalized_at" json:"finalized_at"`
+	CreatedAt         time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt         time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 func (YouTubeCommunityShortsObservationPostBaseline) TableName() string {
@@ -202,18 +202,18 @@ func (YouTubeCommunityShortsObservationPostBaseline) TableName() string {
 
 // 동일 cutover/runtime 조합에 대해 최초 감지된 배포 완료 시각과 관찰 창을 보존한다.
 type YouTubeCommunityShortsObservationWindow struct {
-	RuntimeName             string     `gorm:"primaryKey;size:50" json:"runtime_name"`
-	BigBangCutoverAt        time.Time  `gorm:"column:bigbang_cutover_at;primaryKey" json:"bigbang_cutover_at"`
-	AppVersion              string     `gorm:"size:100;not null" json:"app_version"`
-	TargetChannelCount      int        `gorm:"not null" json:"target_channel_count"`
-	DeploymentCompletedAt   time.Time  `gorm:"not null;index:idx_ycsow_deploy_completed" json:"deployment_completed_at"`
-	ObservationStartedAt    time.Time  `gorm:"not null;index:idx_ycsow_window_start" json:"observation_started_at"`
-	ObservationEndedAt      time.Time  `gorm:"not null;index:idx_ycsow_window_end" json:"observation_ended_at"`
-	ClosedAt                *time.Time `gorm:"column:closed_at;index:idx_ycsow_closed_at" json:"closed_at,omitempty"`
-	FinalizedPostBaselineAt *time.Time `gorm:"column:finalized_post_baseline_at;index:idx_ycsow_finalized_post_baseline_at" json:"finalized_post_baseline_at,omitempty"`
-	FinalizedPostCount      int        `gorm:"not null;default:0" json:"finalized_post_count"`
-	CreatedAt               time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt               time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	RuntimeName             string     `db:"runtime_name" json:"runtime_name"`
+	BigBangCutoverAt        time.Time  `db:"bigbang_cutover_at" json:"bigbang_cutover_at"`
+	AppVersion              string     `db:"app_version" json:"app_version"`
+	TargetChannelCount      int        `db:"target_channel_count" json:"target_channel_count"`
+	DeploymentCompletedAt   time.Time  `db:"deployment_completed_at" json:"deployment_completed_at"`
+	ObservationStartedAt    time.Time  `db:"observation_started_at" json:"observation_started_at"`
+	ObservationEndedAt      time.Time  `db:"observation_ended_at" json:"observation_ended_at"`
+	ClosedAt                *time.Time `db:"closed_at" json:"closed_at,omitempty"`
+	FinalizedPostBaselineAt *time.Time `db:"finalized_post_baseline_at" json:"finalized_post_baseline_at,omitempty"`
+	FinalizedPostCount      int        `db:"finalized_post_count" json:"finalized_post_count"`
+	CreatedAt               time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt               time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 func (YouTubeCommunityShortsObservationWindow) TableName() string {
@@ -229,11 +229,11 @@ const (
 )
 
 type YouTubeContentWatermark struct {
-	ChannelID     string        `gorm:"primaryKey;size:50" json:"channel_id"`
-	WatermarkType WatermarkType `gorm:"primaryKey;size:20" json:"watermark_type"`
-	Initialized   bool          `gorm:"default:false" json:"initialized"`
-	LastContentID string        `gorm:"size:50" json:"last_content_id,omitempty"`
-	UpdatedAt     time.Time     `gorm:"autoUpdateTime" json:"updated_at"`
+	ChannelID     string        `db:"channel_id" json:"channel_id"`
+	WatermarkType WatermarkType `db:"watermark_type" json:"watermark_type"`
+	Initialized   bool          `db:"initialized" json:"initialized"`
+	LastContentID string        `db:"last_content_id" json:"last_content_id,omitempty"`
+	UpdatedAt     time.Time     `db:"updated_at" json:"updated_at"`
 }
 
 func (YouTubeContentWatermark) TableName() string {
@@ -287,18 +287,18 @@ const (
 )
 
 type YouTubeNotificationOutbox struct {
-	ID            int64        `gorm:"primaryKey;autoIncrement" json:"id"`
-	Kind          OutboxKind   `gorm:"size:20;not null" json:"kind"`
-	ChannelID     string       `gorm:"size:50;not null" json:"channel_id"`
-	ContentID     string       `gorm:"size:50;not null;uniqueIndex:idx_yno_kind_content" json:"content_id"`
-	Payload       string       `gorm:"type:jsonb;not null" json:"payload"`
-	Status        OutboxStatus `gorm:"size:20;not null;default:'PENDING';index:idx_yno_status_created" json:"status"`
-	AttemptCount  int          `gorm:"not null;default:0" json:"attempt_count"`
-	NextAttemptAt time.Time    `gorm:"not null;default:NOW()" json:"next_attempt_at"`
-	CreatedAt     time.Time    `gorm:"autoCreateTime;index:idx_yno_status_created" json:"created_at"`
+	ID            int64        `db:"id" json:"id"`
+	Kind          OutboxKind   `db:"kind" json:"kind"`
+	ChannelID     string       `db:"channel_id" json:"channel_id"`
+	ContentID     string       `db:"content_id" json:"content_id"`
+	Payload       string       `db:"payload" json:"payload"`
+	Status        OutboxStatus `db:"status" json:"status"`
+	AttemptCount  int          `db:"attempt_count" json:"attempt_count"`
+	NextAttemptAt time.Time    `db:"next_attempt_at" json:"next_attempt_at"`
+	CreatedAt     time.Time    `db:"created_at" json:"created_at"`
 	LockedAt      *time.Time   `json:"locked_at,omitempty"`
 	SentAt        *time.Time   `json:"sent_at,omitempty"`
-	Error         string       `gorm:"type:text" json:"error,omitempty"`
+	Error         string       `db:"error" json:"error,omitempty"`
 }
 
 func (YouTubeNotificationOutbox) TableName() string {
@@ -334,15 +334,15 @@ const (
 )
 
 type YouTubeLiveSession struct {
-	VideoID            string     `gorm:"primaryKey;size:20" json:"video_id"`
-	ChannelID          string     `gorm:"size:50;index:idx_yls_channel_last_seen" json:"channel_id"`
-	Status             LiveStatus `gorm:"size:20;not null;index:idx_yls_status_last_seen" json:"status"`
-	Title              string     `gorm:"size:500" json:"title,omitempty"`
+	VideoID            string     `db:"video_id" json:"video_id"`
+	ChannelID          string     `db:"channel_id" json:"channel_id"`
+	Status             LiveStatus `db:"status" json:"status"`
+	Title              string     `db:"title" json:"title,omitempty"`
 	ScheduledStartTime *time.Time `json:"scheduled_start_time,omitempty"`
 	StartedAt          *time.Time `json:"started_at,omitempty"`
 	EndedAt            *time.Time `json:"ended_at,omitempty"`
-	LiveFirstSeenAt    *time.Time `gorm:"column:live_first_seen_at" json:"live_first_seen_at,omitempty"`
-	LastSeenAt         time.Time  `gorm:"autoUpdateTime;index:idx_yls_status_last_seen,idx_yls_channel_last_seen" json:"last_seen_at"`
+	LiveFirstSeenAt    *time.Time `db:"live_first_seen_at" json:"live_first_seen_at,omitempty"`
+	LastSeenAt         time.Time  `db:"last_seen_at" json:"last_seen_at"`
 }
 
 func (YouTubeLiveSession) TableName() string {
@@ -350,9 +350,9 @@ func (YouTubeLiveSession) TableName() string {
 }
 
 type YouTubeLiveViewerSample struct {
-	VideoID           string    `gorm:"primaryKey;size:20" json:"video_id"`
-	CapturedAt        time.Time `gorm:"primaryKey" json:"captured_at"`
-	ChannelID         string    `gorm:"size:50;index:idx_ylvs_channel_time" json:"channel_id"`
+	VideoID           string    `db:"video_id" json:"video_id"`
+	CapturedAt        time.Time `db:"captured_at" json:"captured_at"`
+	ChannelID         string    `db:"channel_id" json:"channel_id"`
 	ConcurrentViewers int       `json:"concurrent_viewers"`
 }
 
@@ -361,14 +361,14 @@ func (YouTubeLiveViewerSample) TableName() string {
 }
 
 type YouTubeStreamStats struct {
-	VideoID              string     `gorm:"primaryKey;size:20" json:"video_id"`
-	ChannelID            string     `gorm:"size:50;index:idx_yss_channel_ended" json:"channel_id"`
+	VideoID              string     `db:"video_id" json:"video_id"`
+	ChannelID            string     `db:"channel_id" json:"channel_id"`
 	StartedAt            *time.Time `json:"started_at,omitempty"`
-	EndedAt              *time.Time `gorm:"index:idx_yss_channel_ended" json:"ended_at,omitempty"`
+	EndedAt              *time.Time `db:"ended_at" json:"ended_at,omitempty"`
 	MaxConcurrentViewers int        `json:"max_concurrent_viewers,omitempty"`
 	AvgConcurrentViewers int        `json:"avg_concurrent_viewers,omitempty"`
-	SampleCount          int        `gorm:"default:0" json:"sample_count"`
-	UpdatedAt            time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	SampleCount          int        `db:"sample_count" json:"sample_count"`
+	UpdatedAt            time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 func (YouTubeStreamStats) TableName() string {

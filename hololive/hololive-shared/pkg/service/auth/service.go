@@ -28,9 +28,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/stringutil"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
@@ -53,13 +54,13 @@ type Session struct {
 }
 
 type Service struct {
-	db          *gorm.DB
+	db          *pgxpool.Pool
 	cacheClient cache.Client
 	logger      *slog.Logger
 	config      Config
 }
 
-func NewService(ctx context.Context, db *gorm.DB, cacheClient cache.Client, logger *slog.Logger, config Config) (*Service, error) {
+func NewService(ctx context.Context, db *pgxpool.Pool, cacheClient cache.Client, logger *slog.Logger, config Config) (*Service, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("ctx must not be nil")
 	}
@@ -122,7 +123,10 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 		UpdatedAt:    now,
 	}
 
-	if err := s.db.WithContext(ctx).Create(model).Error; err != nil {
+	if _, err := s.db.Exec(ctx, `
+		INSERT INTO auth_users (id, email, password_hash, display_name, avatar_url, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, model.ID, model.Email, model.PasswordHash, model.DisplayName, model.AvatarURL, model.CreatedAt, model.UpdatedAt); err != nil {
 		if isDuplicateKeyError(err) {
 			return nil, newError(CodeEmailExists, "email already exists", err)
 		}
@@ -196,16 +200,49 @@ func (s *Service) validateAccountLock(ctx context.Context, email string) error {
 }
 
 func (s *Service) findLoginUser(ctx context.Context, email string) (userModel, error) {
-	var user userModel
-	err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	user, err := s.findUserByEmail(ctx, email)
 	if err == nil {
 		return user, nil
 	}
-	if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+	if stdErrors.Is(err, pgx.ErrNoRows) {
 		s.onLoginFailed(ctx, email)
 		return user, newError(CodeInvalidCredentials, "invalid credentials", nil)
 	}
 	return user, newError(CodeInternal, "failed to query user", err)
+}
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanUser(row rowScanner) (userModel, error) {
+	var user userModel
+	err := row.Scan(
+		&user.ID,
+		&user.Email,
+		&user.PasswordHash,
+		&user.DisplayName,
+		&user.AvatarURL,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	return user, err
+}
+
+func (s *Service) findUserByEmail(ctx context.Context, email string) (userModel, error) {
+	return scanUser(s.db.QueryRow(ctx, `
+		SELECT id, email, password_hash, display_name, avatar_url, created_at, updated_at
+		FROM auth_users
+		WHERE email = $1
+	`, email))
+}
+
+func (s *Service) findUserByID(ctx context.Context, id string) (userModel, error) {
+	return scanUser(s.db.QueryRow(ctx, `
+		SELECT id, email, password_hash, display_name, avatar_url, created_at, updated_at
+		FROM auth_users
+		WHERE id = $1
+	`, id))
 }
 
 func (s *Service) validateLoginPassword(ctx context.Context, email, passwordHash, password string) error {

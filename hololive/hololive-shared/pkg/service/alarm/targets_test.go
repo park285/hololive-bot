@@ -3,18 +3,19 @@ package alarm
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -314,8 +315,8 @@ func TestLoadChannelSubscriberAlarms_QueryContextPreservesParentDeadline(t *test
 
 	deadlines := make(chan time.Time, 1)
 	hasDeadline := make(chan bool, 1)
-	registerAlarmQueryTxHook(t, db, func(tx *gorm.DB) {
-		capturedDeadline, ok := tx.Statement.Context.Deadline()
+	registerAlarmQueryTxHook(t, db, func(ctx context.Context) {
+		capturedDeadline, ok := ctx.Deadline()
 		hasDeadline <- ok
 		if ok {
 			deadlines <- capturedDeadline
@@ -336,8 +337,8 @@ func TestLoadChannelSubscriberAlarms_QueryContextAppliesFallbackTimeoutWithoutPa
 
 	deadlines := make(chan time.Time, 1)
 	hasDeadline := make(chan bool, 1)
-	registerAlarmQueryTxHook(t, db, func(tx *gorm.DB) {
-		capturedDeadline, ok := tx.Statement.Context.Deadline()
+	registerAlarmQueryTxHook(t, db, func(ctx context.Context) {
+		capturedDeadline, ok := ctx.Deadline()
 		hasDeadline <- ok
 		if ok {
 			deadlines <- capturedDeadline
@@ -367,7 +368,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharesDeadlineBoundQuery(t *tes
 	var queryCount atomic.Int32
 	queryStarted := make(chan struct{})
 	releaseQuery := make(chan struct{})
-	registerAlarmQueryTxHook(t, db, func(tx *gorm.DB) {
+	registerAlarmQueryTxHook(t, db, func(ctx context.Context) {
 		queryCount.Add(1)
 		select {
 		case <-queryStarted:
@@ -376,7 +377,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharesDeadlineBoundQuery(t *tes
 		}
 
 		select {
-		case <-tx.Statement.Context.Done():
+		case <-ctx.Done():
 		case <-releaseQuery:
 		}
 	})
@@ -472,56 +473,79 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 	assert.Greater(t, after-before, float64(0))
 }
 
-func newAlarmTargetLookupTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
+type alarmTargetLookupTestDB struct {
+	*pgxpool.Pool
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite db: %v", err)
-	}
-	if err := db.AutoMigrate(&domain.Alarm{}); err != nil {
-		t.Fatalf("migrate alarms: %v", err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("db.DB(): %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-
-	return db
+	mu      sync.Mutex
+	onQuery func(context.Context)
 }
 
-func requireAlarmRecord(t *testing.T, db *gorm.DB, alarmRecord domain.Alarm) {
+func (db *alarmTargetLookupTestDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	db.mu.Lock()
+	onQuery := db.onQuery
+	db.mu.Unlock()
+	if onQuery != nil {
+		onQuery(ctx)
+	}
+	return db.Pool.Query(ctx, sql, args...)
+}
+
+func (db *alarmTargetLookupTestDB) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
+	return db.Pool.Exec(ctx, sql, arguments...)
+}
+
+func (db *alarmTargetLookupTestDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return db.Pool.QueryRow(ctx, sql, args...)
+}
+
+func newAlarmTargetLookupTestDB(t *testing.T) *alarmTargetLookupTestDB {
 	t.Helper()
 
-	if err := db.Create(&alarmRecord).Error; err != nil {
+	return &alarmTargetLookupTestDB{Pool: dbtest.NewPool(t)}
+}
+
+func requireAlarmRecord(t *testing.T, db *alarmTargetLookupTestDB, alarmRecord domain.Alarm) {
+	t.Helper()
+
+	alarmTypesValue, err := alarmRecord.AlarmTypes.Value()
+	if err != nil {
+		t.Fatalf("encode alarm types: %v", err)
+	}
+	if _, err := db.Exec(t.Context(), `
+		INSERT INTO alarms (room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::alarm_type[])
+	`,
+		alarmRecord.RoomID,
+		alarmRecord.UserID,
+		alarmRecord.ChannelID,
+		alarmRecord.MemberName,
+		alarmRecord.RoomName,
+		alarmRecord.UserName,
+		alarmTypesValue,
+	); err != nil {
 		t.Fatalf("create alarm record: %v", err)
 	}
 }
 
-func registerAlarmQueryHook(t *testing.T, db *gorm.DB, onQuery func()) {
+func registerAlarmQueryHook(t *testing.T, db *alarmTargetLookupTestDB, onQuery func()) {
 	t.Helper()
 
-	registerAlarmQueryTxHook(t, db, func(_ *gorm.DB) {
+	registerAlarmQueryTxHook(t, db, func(_ context.Context) {
 		onQuery()
 	})
 }
 
-func registerAlarmQueryTxHook(t *testing.T, db *gorm.DB, onQuery func(tx *gorm.DB)) {
+func registerAlarmQueryTxHook(t *testing.T, db *alarmTargetLookupTestDB, onQuery func(ctx context.Context)) {
 	t.Helper()
 
-	callbackName := fmt.Sprintf("test:alarm-query-hook:%s", t.Name())
-	if err := db.Callback().Query().Before("gorm:query").Register(callbackName, func(tx *gorm.DB) {
-		onQuery(tx)
-	}); err != nil {
-		t.Fatalf("register query hook: %v", err)
-	}
+	db.mu.Lock()
+	db.onQuery = onQuery
+	db.mu.Unlock()
 
 	t.Cleanup(func() {
-		if err := db.Callback().Query().Remove(callbackName); err != nil {
-			t.Fatalf("remove query hook: %v", err)
-		}
+		db.mu.Lock()
+		db.onQuery = nil
+		db.mu.Unlock()
 	})
 }
 

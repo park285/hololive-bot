@@ -67,7 +67,7 @@ func (r *PendingPublishedAtResolver) resolverFailureBackoffTTL() time.Duration {
 }
 
 func (r *PendingPublishedAtResolver) markPublishedAtRetryAfter(
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	ctx context.Context,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	retryAfter time.Time,
@@ -98,7 +98,7 @@ func (r *PendingPublishedAtResolver) markPublishedAtRetryAfter(
 }
 
 func (r *PendingPublishedAtResolver) markPublishedAtRetryAfterWithReporting(
-	tracking *trackingrepo.GormRepository,
+	tracking *trackingrepo.PgxRepository,
 	ctx context.Context,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	retryAfter time.Time,

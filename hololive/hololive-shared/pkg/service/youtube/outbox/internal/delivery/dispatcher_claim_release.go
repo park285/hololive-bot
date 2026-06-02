@@ -13,16 +13,20 @@ import (
 )
 
 func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64, lockedAt *time.Time) {
-	query := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ? AND status = ?", id, domain.OutboxStatusPending)
+	query := `
+		UPDATE youtube_notification_outbox
+		SET locked_at = NULL
+		WHERE id = ? AND status = ?
+	`
+	args := []any{id, domain.OutboxStatusPending}
 	if lockedAt != nil {
-		query = query.Where("locked_at = ?", *lockedAt)
+		query += " AND locked_at = ?"
+		args = append(args, *lockedAt)
 	}
-	result := query.Update("locked_at", nil)
-	if result.Error != nil {
+	if _, err := execDeliverySQL(ctx, d.db, "release outbox lock", query, args...); err != nil {
 		d.logger.Warn("Failed to release outbox lock",
 			slog.Int64("id", id),
-			slog.Any("error", result.Error))
+			slog.Any("error", err))
 	}
 }
 
@@ -32,17 +36,17 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 
 	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
-	result := d.db.WithContext(ctx).
-		Where("status IN (?, ?) AND COALESCE(sent_at, created_at) < ?", domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff).
-		Delete(&domain.YouTubeNotificationOutbox{})
-
-	if result.Error != nil {
-		d.logger.Warn("Failed to cleanup old outbox items", slog.Any("error", result.Error))
+	deleted, err := execDeliverySQL(ctx, d.db, "cleanup old outbox items", `
+		DELETE FROM youtube_notification_outbox
+		WHERE status IN (?, ?) AND COALESCE(sent_at, created_at) < ?
+	`, domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff)
+	if err != nil {
+		d.logger.Warn("Failed to cleanup old outbox items", slog.Any("error", err))
 		return
 	}
 
-	if result.RowsAffected > 0 {
-		d.logger.Info("Cleaned up old outbox items", slog.Int64("deleted", result.RowsAffected))
+	if deleted > 0 {
+		d.logger.Info("Cleaned up old outbox items", slog.Int64("deleted", deleted))
 	}
 }
 

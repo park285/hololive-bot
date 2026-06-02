@@ -34,11 +34,17 @@ import (
 
 type PhotoSyncService struct {
 	holodex          *Service
-	memberRepository *member.Repository
+	memberRepository photoSyncMemberRepository
 	logger           *slog.Logger
 
 	syncInterval   time.Duration // 동기화 주기 (기본: 24시간)
 	staleThreshold time.Duration // 이 기간 이상 지난 photo는 재동기화 (기본: 24시간)
+}
+
+type photoSyncMemberRepository interface {
+	GetAllChannelIDs(ctx context.Context) ([]string, error)
+	GetMembersNeedingPhotoSync(ctx context.Context, staleThreshold time.Duration) ([]string, error)
+	UpdatePhoto(ctx context.Context, channelID string, photoURL string) error
 }
 
 func NewPhotoSyncService(

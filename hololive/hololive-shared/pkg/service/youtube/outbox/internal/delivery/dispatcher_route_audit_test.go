@@ -11,9 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
@@ -142,11 +140,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}, &sqliteTrackingModel{}, &sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	cache, cacheStore := newRouteAuditCacheClient()
 	alarms := []*domain.Alarm{
@@ -168,9 +162,9 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	items := buildRouteAuditOutboxItems(expectedTargets)
 	require.NoError(t, db.Create(&items).Error)
 
-	trackingRows := make([]sqliteTrackingModel, 0, len(items))
+	trackingRows := make([]deliveryTestTrackingModel, 0, len(items))
 	for _, item := range items {
-		trackingRows = append(trackingRows, sqliteTrackingModel{
+		trackingRows = append(trackingRows, deliveryTestTrackingModel{
 			Kind:       string(item.Kind),
 			ContentID:  item.ContentID,
 			ChannelID:  item.ChannelID,
@@ -180,7 +174,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	require.NoError(t, db.Create(&trackingRows).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -211,7 +205,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	require.ElementsMatch(t, expectedRouteAuditLookupKeys(expectedTargets), cacheStore.lookupKeys())
 	require.NotContains(t, cacheStore.lookupKeys(), sharedalarmkeys.BuildChannelSubscriberKey("UC_LIVE_ONLY", domain.AlarmTypeLive))
 
-	var deliveries []sqliteDeliveryModel
+	var deliveries []deliveryTestDeliveryModel
 	require.NoError(t, db.Order("outbox_id ASC, room_id ASC").Find(&deliveries).Error)
 	require.Len(t, deliveries, totalRouteAuditDeliveries(expectedTargets))
 

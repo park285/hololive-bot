@@ -26,8 +26,7 @@ import (
 	"log/slog"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
+	"github.com/georgysavva/scany/v2/pgxscan"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
@@ -36,14 +35,14 @@ import (
 
 type ChannelStatsPoller struct {
 	client          *scraper.Client
-	db              *gorm.DB
+	db              pollerDB
 	profileCacheTTL time.Duration
 }
 
-func NewChannelStatsPoller(scraperClient *scraper.Client, db *gorm.DB) *ChannelStatsPoller {
+func NewChannelStatsPoller(scraperClient *scraper.Client, db any) *ChannelStatsPoller {
 	return &ChannelStatsPoller{
 		client:          scraperClient,
-		db:              db,
+		db:              normalizePollerDB(db),
 		profileCacheTTL: 24 * time.Hour,
 	}
 }
@@ -74,7 +73,7 @@ func (p *ChannelStatsPoller) Poll(ctx context.Context, channelID string) error {
 
 	snapshot := &domain.YouTubeChannelStatsSnapshot{
 		ChannelID:       channelID,
-		CapturedAt:      time.Now(),
+		CapturedAt:      time.Now().UTC().Truncate(time.Microsecond),
 		SubscriberCount: stats.SubscriberCount,
 		ViewCount:       stats.ViewCount,
 		VideoCount:      stats.VideoCount,
@@ -84,7 +83,23 @@ func (p *ChannelStatsPoller) Poll(ctx context.Context, channelID string) error {
 		Handle:          stats.Handle,
 	}
 
-	if err := p.db.WithContext(ctx).Create(snapshot).Error; err != nil {
+	if p.db == nil {
+		return fmt.Errorf("failed to save channel stats snapshot: db is nil")
+	}
+	if _, err := p.db.Exec(ctx, `
+		INSERT INTO youtube_channel_stats_snapshots
+			(channel_id, captured_at, subscriber_count, view_count, video_count, joined_date, description, country, handle)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		snapshot.ChannelID,
+		snapshot.CapturedAt,
+		snapshot.SubscriberCount,
+		snapshot.ViewCount,
+		snapshot.VideoCount,
+		snapshot.JoinedDate,
+		snapshot.Description,
+		snapshot.Country,
+		snapshot.Handle,
+	); err != nil {
 		return fmt.Errorf("failed to save channel stats snapshot: %w", err)
 	}
 
@@ -98,10 +113,28 @@ func (p *ChannelStatsPoller) Poll(ctx context.Context, channelID string) error {
 }
 
 func (p *ChannelStatsPoller) updateProfileIfStale(ctx context.Context, channelID string) {
-	var profile domain.YouTubeChannelProfile
-	err := p.db.WithContext(ctx).Where("channel_id = ?", channelID).First(&profile).Error
+	if p.db == nil {
+		return
+	}
 
-	needsUpdate := err != nil || time.Since(profile.UpdatedAt) > p.profileCacheTTL
+	var profile struct {
+		ChannelID string    `db:"channel_id"`
+		UpdatedAt time.Time `db:"updated_at"`
+	}
+	err := pgxscan.Get(ctx, p.db, &profile, `
+		SELECT channel_id, updated_at
+		FROM youtube_channel_profiles
+		WHERE channel_id = $1`,
+		channelID,
+	)
+	needsUpdate := true
+	if err == nil {
+		needsUpdate = time.Since(profile.UpdatedAt) > p.profileCacheTTL
+	} else if !pgxscan.NotFound(err) {
+		slog.Warn("Failed to load channel profile freshness",
+			"channel_id", channelID,
+			"error", err)
+	}
 
 	if !needsUpdate {
 		return
@@ -123,11 +156,26 @@ func (p *ChannelStatsPoller) updateProfileIfStale(ctx context.Context, channelID
 		Avatar:    avatars,
 		Banner:    banners,
 	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "channel_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"avatar", "banner", "updated_at"}),
-	}).Create(newProfile)
+	if _, err := p.db.Exec(ctx, `
+		INSERT INTO youtube_channel_profiles
+			(channel_id, avatar, banner, updated_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (channel_id) DO UPDATE SET
+			avatar = excluded.avatar,
+			banner = excluded.banner,
+			updated_at = excluded.updated_at`,
+		newProfile.ChannelID,
+		newProfile.Avatar,
+		newProfile.Banner,
+		now,
+	); err != nil {
+		slog.Warn("Failed to update channel profile",
+			"channel_id", channelID,
+			"error", err)
+		return
+	}
 
 	slog.Debug("Channel profile updated",
 		"channel_id", channelID,

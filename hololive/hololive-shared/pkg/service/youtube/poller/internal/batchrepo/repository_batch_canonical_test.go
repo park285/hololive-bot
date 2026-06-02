@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestGormBatchRepositoryPersistCommunityPostsRejectsPublishedAtStorageRuleMismatch(t *testing.T) {
+func TestPgxBatchRepositoryPersistCommunityPostsRejectsPublishedAtStorageRuleMismatch(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
@@ -52,7 +52,7 @@ func TestGormBatchRepositoryPersistCommunityPostsRejectsPublishedAtStorageRuleMi
 	require.Zero(t, outboxCount)
 }
 
-func TestGormBatchRepositoryPersistVideosCollectsSourcePostsWithoutTrackingRows(t *testing.T) {
+func TestPgxBatchRepositoryPersistVideosCollectsSourcePostsWithoutTrackingRows(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeContentWatermark{},
@@ -78,7 +78,7 @@ func TestGormBatchRepositoryPersistVideosCollectsSourcePostsWithoutTrackingRows(
 	require.False(t, sourcePost.DetectedAt.IsZero())
 }
 
-func TestGormBatchRepositoryPersistVideosRejectsShortCanonicalPostIDMismatch(t *testing.T) {
+func TestPgxBatchRepositoryPersistVideosRejectsShortCanonicalPostIDMismatch(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -104,7 +104,7 @@ func TestGormBatchRepositoryPersistVideosRejectsShortCanonicalPostIDMismatch(t *
 	require.ErrorContains(t, err, "payload canonical_post_id mismatch")
 }
 
-func TestGormBatchRepositoryPersistVideosReusesLegacyRawShortIdentity(t *testing.T) {
+func TestPgxBatchRepositoryPersistVideosReusesLegacyRawShortIdentity(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -174,7 +174,7 @@ func TestGormBatchRepositoryPersistVideosReusesLegacyRawShortIdentity(t *testing
 	require.Equal(t, "short:short-1", watermark.LastContentID)
 }
 
-func TestGormBatchRepositoryPersistCommunityPostsRejectsCanonicalPostIDMismatch(t *testing.T) {
+func TestPgxBatchRepositoryPersistCommunityPostsRejectsCanonicalPostIDMismatch(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
@@ -208,7 +208,7 @@ func TestGormBatchRepositoryPersistCommunityPostsRejectsCanonicalPostIDMismatch(
 	require.ErrorContains(t, err, "payload canonical_post_id mismatch")
 }
 
-func TestGormBatchRepositoryPersistCommunityPostsBackfillsPublishedAt(t *testing.T) {
+func TestPgxBatchRepositoryPersistCommunityPostsBackfillsPublishedAt(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
@@ -259,7 +259,7 @@ func TestGormBatchRepositoryPersistCommunityPostsBackfillsPublishedAt(t *testing
 	require.EqualValues(t, 3, post.CommentCount)
 }
 
-func TestGormBatchRepositoryPersistCommunityPostsReactivatesFailedOutboxAndFailedDeliveries(t *testing.T) {
+func TestPgxBatchRepositoryPersistCommunityPostsReactivatesFailedOutboxAndFailedDeliveries(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
@@ -342,7 +342,7 @@ func TestGormBatchRepositoryPersistCommunityPostsReactivatesFailedOutboxAndFaile
 	require.Empty(t, outboxRows[0].Error)
 	require.Nil(t, outboxRows[0].LockedAt)
 	require.Nil(t, outboxRows[0].SentAt)
-	require.Contains(t, outboxRows[0].Payload, `"canonical_post_id":"community:post-1"`)
+	require.Contains(t, outboxRows[0].Payload, `"canonical_post_id": "community:post-1"`)
 
 	var deliveryRows []domain.YouTubeNotificationDelivery
 	require.NoError(t, db.Order("room_id ASC").Find(&deliveryRows).Error)
@@ -363,7 +363,7 @@ func TestGormBatchRepositoryPersistCommunityPostsReactivatesFailedOutboxAndFaile
 	require.Equal(t, sentAt, deliveryRows[1].SentAt.UTC())
 }
 
-func TestGormBatchRepositoryPersistCommunityPostsFinalizesFailedOutboxWhenTrackingAlreadySent(t *testing.T) {
+func TestPgxBatchRepositoryPersistCommunityPostsFinalizesFailedOutboxWhenTrackingAlreadySent(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
@@ -455,7 +455,7 @@ func TestGormBatchRepositoryPersistCommunityPostsFinalizesFailedOutboxWhenTracki
 	require.Equal(t, 3, deliveryRows[0].AttemptCount)
 }
 
-func TestGormBatchRepositoryPersistVideosFinalizesFailedOutboxWhenAlarmStateAlreadySent(t *testing.T) {
+func TestPgxBatchRepositoryPersistVideosFinalizesFailedOutboxWhenAlarmStateAlreadySent(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},

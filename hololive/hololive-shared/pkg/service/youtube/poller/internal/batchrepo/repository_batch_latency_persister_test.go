@@ -21,14 +21,14 @@ func (s *spyLatencyPersister) PersistPostLatencyClassificationsByIdentities(ctx 
 	return nil
 }
 
-func TestGormBatchRepositoryPersistVideosCallsLatencyPersister(t *testing.T) {
+func TestPgxBatchRepositoryPersistVideosCallsLatencyPersister(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
 	spy := &spyLatencyPersister{}
-	repository := NewGormBatchRepositoryWithPersister(db, spy)
+	repository := NewPgxBatchRepositoryWithPersister(db, spy)
 	ctx := context.Background()
 
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
@@ -73,14 +73,14 @@ func TestGormBatchRepositoryPersistVideosCallsLatencyPersister(t *testing.T) {
 	require.Equal(t, "short:video-latency-1", spy.identities[0].ContentID)
 }
 
-func TestGormBatchRepositoryPersistCommunityPostsCallsLatencyPersister(t *testing.T) {
+func TestPgxBatchRepositoryPersistCommunityPostsCallsLatencyPersister(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
 	)
 	spy := &spyLatencyPersister{}
-	repository := NewGormBatchRepositoryWithPersister(db, spy)
+	repository := NewPgxBatchRepositoryWithPersister(db, spy)
 	ctx := context.Background()
 
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)

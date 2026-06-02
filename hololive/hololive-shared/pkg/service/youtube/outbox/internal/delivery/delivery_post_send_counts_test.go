@@ -5,24 +5,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type sqliteTelemetryTrackingModel struct {
-	Kind                        string `gorm:"primaryKey"`
-	ContentID                   string `gorm:"primaryKey"`
+type deliveryTelemetryTestTrackingModel struct {
+	Kind                        string `db:"kind"`
+	ContentID                   string `db:"content_id"`
 	CanonicalContentID          string
-	ChannelID                   string `gorm:"type:text;not null"`
+	ChannelID                   string `db:"channel_id"`
 	ActualPublishedAt           *time.Time
-	DetectedAt                  time.Time `gorm:"not null"`
+	DetectedAt                  time.Time `db:"detected_at"`
 	AlarmSentAt                 *time.Time
 	AlarmLatencyMillis          *int64
 	AlarmLatencyExceeded        *bool
-	DeliveryStatus              string `gorm:"type:text;not null;default:'PENDING'"`
+	DeliveryStatus              string `db:"delivery_status"`
 	LatencyClassificationStatus string
 	DelaySource                 string
 	InternalDelayCause          string
@@ -30,7 +28,7 @@ type sqliteTelemetryTrackingModel struct {
 	UpdatedAt                   time.Time
 }
 
-func (sqliteTelemetryTrackingModel) TableName() string {
+func (deliveryTelemetryTestTrackingModel) TableName() string {
 	return "youtube_content_alarm_tracking"
 }
 
@@ -38,14 +36,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&sqliteTelemetryOutboxModel{},
-		&sqliteTelemetryBufferModel{},
-		&sqliteTelemetryTrackingModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
@@ -67,7 +58,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 	nonTargetPublishedAt := now.Add(-40 * time.Minute)
 	nonTargetDetectedAt := now.Add(-35 * time.Minute)
 
-	communityOutbox := sqliteTelemetryOutboxModel{
+	communityOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_community",
 		ContentID:     "post-community",
@@ -77,7 +68,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-2 * time.Hour),
 	}
-	shortOutbox := sqliteTelemetryOutboxModel{
+	shortOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindNewShort),
 		ChannelID:     "UC_short",
 		ContentID:     "short-video",
@@ -87,7 +78,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-75 * time.Minute),
 	}
-	oldOutbox := sqliteTelemetryOutboxModel{
+	oldOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_old",
 		ContentID:     "post-old-window",
@@ -97,7 +88,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-25 * time.Hour),
 	}
-	nonTargetOutbox := sqliteTelemetryOutboxModel{
+	nonTargetOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindNewVideo),
 		ChannelID:     "UC_video",
 		ContentID:     "video-ignored",
@@ -112,7 +103,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 	require.NoError(t, db.Create(&oldOutbox).Error)
 	require.NoError(t, db.Create(&nonTargetOutbox).Error)
 
-	require.NoError(t, db.Create([]sqliteTelemetryTrackingModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
 		{
 			Kind:                 string(domain.OutboxKindCommunityPost),
 			ContentID:            communityOutbox.ContentID,
@@ -173,7 +164,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 	oldRecentSuccessAt := now.Add(-30 * time.Minute)
 	nonTargetSuccessAt := now.Add(-20 * time.Minute)
 
-	rows := []sqliteTelemetryBufferModel{
+	rows := []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     1001,
 			AttemptOrdinal: 1,
@@ -290,7 +281,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 	}
 	require.NoError(t, db.Create(&rows).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	summaries, err := repository.ListPostSendCountsSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, summaries, 3)
@@ -392,14 +383,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&sqliteTelemetryOutboxModel{},
-		&sqliteTelemetryBufferModel{},
-		&sqliteTelemetryTrackingModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	windowStart := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
 	windowEnd := windowStart.Add(45 * time.Minute)
@@ -410,7 +394,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 	outsideDetectedAt := outsidePublishedAt.Add(2 * time.Minute)
 	outsideEventAt := outsideDetectedAt.Add(1 * time.Minute)
 
-	insideOutbox := sqliteTelemetryOutboxModel{
+	insideOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_inside",
 		ContentID:     "post-inside-window",
@@ -420,7 +404,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 		NextAttemptAt: insideEventAt,
 		CreatedAt:     insideDetectedAt,
 	}
-	outsideOutbox := sqliteTelemetryOutboxModel{
+	outsideOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindNewShort),
 		ChannelID:     "UC_outside",
 		ContentID:     "post-outside-window",
@@ -433,7 +417,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 	require.NoError(t, db.Create(&insideOutbox).Error)
 	require.NoError(t, db.Create(&outsideOutbox).Error)
 
-	require.NoError(t, db.Create([]sqliteTelemetryTrackingModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
 		{
 			Kind:              string(domain.OutboxKindCommunityPost),
 			ContentID:         insideOutbox.ContentID,
@@ -454,7 +438,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 		},
 	}).Error)
 
-	require.NoError(t, db.Create([]sqliteTelemetryBufferModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     9001,
 			AttemptOrdinal: 1,
@@ -489,7 +473,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	rows, err := repository.ListPostSendCountsWithinPublishedWindow(ctx, windowStart, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -501,19 +485,12 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&sqliteTelemetryOutboxModel{},
-		&sqliteTelemetryBufferModel{},
-		&sqliteTelemetryTrackingModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	windowStart := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
 	windowEnd := windowStart.Add(24 * time.Hour)
 
-	timelyOutbox := sqliteTelemetryOutboxModel{
+	timelyOutbox := deliveryTelemetryTestOutboxModel{
 		ID:            9101,
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC-timely",
@@ -524,7 +501,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 		NextAttemptAt: windowStart,
 		CreatedAt:     windowStart.Add(3 * time.Minute),
 	}
-	lateOutbox := sqliteTelemetryOutboxModel{
+	lateOutbox := deliveryTelemetryTestOutboxModel{
 		ID:            9102,
 		Kind:          string(domain.OutboxKindNewShort),
 		ChannelID:     "UC-late",
@@ -535,13 +512,13 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 		NextAttemptAt: windowStart,
 		CreatedAt:     windowStart.Add(10 * time.Minute),
 	}
-	require.NoError(t, db.Create([]sqliteTelemetryOutboxModel{timelyOutbox, lateOutbox}).Error)
+	require.NoError(t, db.Create([]deliveryTelemetryTestOutboxModel{timelyOutbox, lateOutbox}).Error)
 
 	timelyPublishedAt := windowStart.Add(2 * time.Minute)
 	timelyDetectedAt := timelyPublishedAt.Add(30 * time.Second)
 	latePublishedAt := windowStart.Add(5 * time.Minute)
 	lateDetectedAt := windowEnd.Add(time.Minute)
-	require.NoError(t, db.Create([]sqliteTelemetryTrackingModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
 		{
 			Kind:              string(domain.OutboxKindCommunityPost),
 			ContentID:         timelyOutbox.ContentID,
@@ -562,7 +539,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 		},
 	}).Error)
 
-	require.NoError(t, db.Create([]sqliteTelemetryBufferModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     9101,
 			AttemptOrdinal: 1,
@@ -597,7 +574,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	rows, err := repository.ListPostSendCountsWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -608,15 +585,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&sqliteTelemetryOutboxModel{},
-		&sqliteTelemetryBufferModel{},
-		&sqliteTelemetryTrackingModel{},
-		&sqliteTelemetryObservationBaselineModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	finalizedAt := time.Date(2026, 4, 11, 1, 0, 0, 0, time.UTC)
@@ -626,7 +595,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 	latePublishedAt := time.Date(2026, 4, 11, 2, 0, 0, 0, time.UTC)
 	lateDetectedAt := latePublishedAt.Add(30 * time.Second)
 
-	timelyOutbox := sqliteTelemetryOutboxModel{
+	timelyOutbox := deliveryTelemetryTestOutboxModel{
 		ID:            9201,
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_COMMUNITY",
@@ -637,7 +606,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 		NextAttemptAt: timelyDetectedAt,
 		CreatedAt:     timelyDetectedAt,
 	}
-	lateOutbox := sqliteTelemetryOutboxModel{
+	lateOutbox := deliveryTelemetryTestOutboxModel{
 		ID:            9202,
 		Kind:          string(domain.OutboxKindNewShort),
 		ChannelID:     "UC_LATE",
@@ -648,9 +617,9 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 		NextAttemptAt: lateDetectedAt,
 		CreatedAt:     lateDetectedAt,
 	}
-	require.NoError(t, db.Create([]sqliteTelemetryOutboxModel{timelyOutbox, lateOutbox}).Error)
+	require.NoError(t, db.Create([]deliveryTelemetryTestOutboxModel{timelyOutbox, lateOutbox}).Error)
 
-	require.NoError(t, db.Create([]sqliteTelemetryTrackingModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
 		{
 			Kind:               string(domain.OutboxKindCommunityPost),
 			ContentID:          timelyOutbox.ContentID,
@@ -672,7 +641,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 			UpdatedAt:          lateDetectedAt,
 		},
 	}).Error)
-	finalizedRows := []sqliteTelemetryObservationBaselineModel{
+	finalizedRows := []deliveryTelemetryTestObservationBaselineModel{
 		{
 			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
@@ -695,7 +664,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 	}
 	require.NoError(t, db.Create(&finalizedRows).Error)
 
-	require.NoError(t, db.Create([]sqliteTelemetryBufferModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     9201,
 			AttemptOrdinal: 1,
@@ -730,7 +699,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	rows, err := repository.ListPostSendCountsByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)

@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestGormBatchRepositoryPersistCommunityPostsConflictWithSentOutboxBackfillsTrackingSentState(t *testing.T) {
+func TestPgxBatchRepositoryPersistCommunityPostsConflictWithSentOutboxBackfillsTrackingSentState(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
@@ -72,7 +72,7 @@ func TestGormBatchRepositoryPersistCommunityPostsConflictWithSentOutboxBackfills
 	require.Equal(t, domain.YouTubeContentAlarmDeliveryStatusSent, trackingRow.DeliveryStatus)
 }
 
-func TestGormBatchRepositoryPersistCommunityPostsConflictWithSentDeliveryBackfillsTrackingSentState(t *testing.T) {
+func TestPgxBatchRepositoryPersistCommunityPostsConflictWithSentDeliveryBackfillsTrackingSentState(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
@@ -144,7 +144,7 @@ func TestGormBatchRepositoryPersistCommunityPostsConflictWithSentDeliveryBackfil
 	require.Equal(t, domain.YouTubeContentAlarmDeliveryStatusSent, trackingRow.DeliveryStatus)
 }
 
-func TestGormBatchRepositoryPersistVideosConflictWithSentOutboxBackfillsTrackingSentState(t *testing.T) {
+func TestPgxBatchRepositoryPersistVideosConflictWithSentOutboxBackfillsTrackingSentState(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -207,7 +207,7 @@ func TestGormBatchRepositoryPersistVideosConflictWithSentOutboxBackfillsTracking
 	require.Equal(t, domain.YouTubeContentAlarmDeliveryStatusSent, trackingRow.DeliveryStatus)
 }
 
-func TestGormBatchRepositoryPersistVideosDoesNotReactivateFailedOutboxForNonTargetKinds(t *testing.T) {
+func TestPgxBatchRepositoryPersistVideosDoesNotReactivateFailedOutboxForNonTargetKinds(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -258,10 +258,10 @@ func TestGormBatchRepositoryPersistVideosDoesNotReactivateFailedOutboxForNonTarg
 	require.Equal(t, 3, outboxRows[0].AttemptCount)
 	require.Equal(t, nextAttemptAt, outboxRows[0].NextAttemptAt.UTC())
 	require.Equal(t, "video failed", outboxRows[0].Error)
-	require.Contains(t, outboxRows[0].Payload, `"version":"old"`)
+	require.Contains(t, outboxRows[0].Payload, `"version": "old"`)
 }
 
-func TestGormBatchRepositoryPersistVideosRollsBackOnNotificationError(t *testing.T) {
+func TestPgxBatchRepositoryPersistVideosRollsBackOnNotificationError(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeContentWatermark{},
@@ -297,7 +297,7 @@ func TestGormBatchRepositoryPersistVideosRollsBackOnNotificationError(t *testing
 	require.Zero(t, watermarkCount)
 }
 
-func TestGormBatchRepositoryPersistVideosRejectsBlankNotificationContentID(t *testing.T) {
+func TestPgxBatchRepositoryPersistVideosRejectsBlankNotificationContentID(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},

@@ -72,12 +72,12 @@ const (
 )
 
 type NotificationTemplate struct {
-	ID          int64       `gorm:"primaryKey;autoIncrement" json:"id"`
-	TemplateKey TemplateKey `gorm:"column:template_key;size:50;not null" json:"template_key"`
-	ChannelID   *string     `gorm:"column:channel_id;size:64" json:"channel_id,omitempty"`
-	Body        string      `gorm:"type:text;not null" json:"body"`
-	CreatedAt   time.Time   `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time   `gorm:"autoUpdateTime" json:"updated_at"`
+	ID          int64       `db:"id" json:"id"`
+	TemplateKey TemplateKey `db:"template_key" json:"template_key"`
+	ChannelID   *string     `db:"channel_id" json:"channel_id,omitempty"`
+	Body        string      `db:"body" json:"body"`
+	CreatedAt   time.Time   `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time   `db:"updated_at" json:"updated_at"`
 }
 
 func (NotificationTemplate) TableName() string {
@@ -85,10 +85,10 @@ func (NotificationTemplate) TableName() string {
 }
 
 type NotificationTemplateRevision struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	TemplateID int64     `gorm:"column:template_id;not null;index:idx_template_revisions_template_created,priority:1" json:"template_id"`
-	Body       string    `gorm:"type:text;not null" json:"body"`
-	CreatedAt  time.Time `gorm:"autoCreateTime;index:idx_template_revisions_template_created,priority:2,sort:desc" json:"created_at"`
+	ID         int64     `db:"id" json:"id"`
+	TemplateID int64     `db:"template_id" json:"template_id"`
+	Body       string    `db:"body" json:"body"`
+	CreatedAt  time.Time `db:"created_at" json:"created_at"`
 }
 
 func (NotificationTemplateRevision) TableName() string {

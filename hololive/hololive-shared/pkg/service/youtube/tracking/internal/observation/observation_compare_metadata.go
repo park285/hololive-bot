@@ -17,15 +17,15 @@ type observationComparisonMetadata struct {
 }
 
 type observationCommunityPostMetadataRow struct {
-	PostID      string     `gorm:"column:post_id"`
-	ContentText string     `gorm:"column:content_text"`
-	PublishedAt *time.Time `gorm:"column:published_at"`
+	PostID      string     `db:"post_id"`
+	ContentText string     `db:"content_text"`
+	PublishedAt *time.Time `db:"published_at"`
 }
 
 type observationShortMetadataRow struct {
-	VideoID     string     `gorm:"column:video_id"`
-	Title       string     `gorm:"column:title"`
-	PublishedAt *time.Time `gorm:"column:published_at"`
+	VideoID     string     `db:"video_id"`
+	Title       string     `db:"title"`
+	PublishedAt *time.Time `db:"published_at"`
 }
 
 func (r *compareMetadataRepository) EnrichObservationPostComparisonInputs(
@@ -154,12 +154,13 @@ func (r *compareMetadataRepository) loadObservationCommunityPostMetadata(
 	}
 
 	var rows []observationCommunityPostMetadataRow
-	if err := r.db.WithContext(ctx).
-		Table((domain.YouTubeCommunityPost{}).TableName()).
-		Select("post_id, content_text, published_at").
-		Where("post_id IN ?", rawIDs).
-		Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("load observation community metadata: query rows: %w", err)
+	query := `
+		SELECT post_id, content_text, published_at
+		FROM youtube_community_posts
+		WHERE post_id IN (` + inPlaceholders(len(rawIDs)) + `)
+	`
+	if err := selectSQL(ctx, r.db, &rows, "load observation community metadata: query rows", query, anyArgs(rawIDs)...); err != nil {
+		return nil, err
 	}
 
 	for i := range rows {
@@ -187,12 +188,13 @@ func (r *compareMetadataRepository) loadObservationShortMetadata(
 	}
 
 	var rows []observationShortMetadataRow
-	if err := r.db.WithContext(ctx).
-		Table((domain.YouTubeVideo{}).TableName()).
-		Select("video_id, title, published_at").
-		Where("video_id IN ?", rawIDs).
-		Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("load observation short metadata: query rows: %w", err)
+	query := `
+		SELECT video_id, title, published_at
+		FROM youtube_videos
+		WHERE video_id IN (` + inPlaceholders(len(rawIDs)) + `)
+	`
+	if err := selectSQL(ctx, r.db, &rows, "load observation short metadata: query rows", query, anyArgs(rawIDs)...); err != nil {
+		return nil, err
 	}
 
 	for i := range rows {

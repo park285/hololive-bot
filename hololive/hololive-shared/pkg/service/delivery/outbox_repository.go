@@ -22,15 +22,18 @@ package delivery
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/json"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 // outboxPayload: outbox에 저장되는 메시지 payload
@@ -39,7 +42,7 @@ type outboxPayload struct {
 }
 
 type OutboxRepository struct {
-	db     *gorm.DB
+	pool   *pgxpool.Pool
 	logger *slog.Logger
 }
 
@@ -50,8 +53,18 @@ type OutboxItem struct {
 	Message   string
 }
 
-func NewOutboxRepository(db *gorm.DB, logger *slog.Logger) *OutboxRepository {
-	return &OutboxRepository{db: db, logger: logger}
+func NewOutboxRepository(postgres database.Client, logger *slog.Logger) *OutboxRepository {
+	if postgres == nil {
+		return NewOutboxRepositoryFromPool(nil, logger)
+	}
+	return NewOutboxRepositoryFromPool(postgres.GetPool(), logger)
+}
+
+func NewOutboxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *OutboxRepository {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &OutboxRepository{pool: pool, logger: logger}
 }
 
 func (r *OutboxRepository) Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
@@ -69,16 +82,20 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 	if len(items) == 0 {
 		return nil
 	}
+	if err := r.ensurePool(); err != nil {
+		return err
+	}
 
 	valueExprs := make([]string, 0, len(items))
 	args := make([]any, 0, len(items)*5)
-	for _, item := range items {
+	for i, item := range items {
 		payload, err := json.Marshal(outboxPayload{Message: item.Message})
 		if err != nil {
 			return fmt.Errorf("enqueue batch: marshal payload: %w", err)
 		}
 		contentID := item.PeriodKey + ":" + item.RoomID
-		valueExprs = append(valueExprs, "(?, ?, ?, ?, ?, 'PENDING', 0, NOW())")
+		base := i*5 + 1
+		valueExprs = append(valueExprs, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, 'PENDING', 0, NOW())", base, base+1, base+2, base+3, base+4))
 		args = append(args, item.Kind, item.PeriodKey, item.RoomID, contentID, string(payload))
 	}
 
@@ -88,31 +105,38 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 		SET payload = EXCLUDED.payload, status = 'PENDING', attempt_count = 0, next_attempt_at = NOW(), error = NULL
 		WHERE notification_delivery_outbox.status = 'FAILED'`
 
-	result := r.db.WithContext(ctx).Exec(sql, args...)
-	if result.Error != nil {
-		return fmt.Errorf("enqueue batch: %w", result.Error)
+	if _, err := r.pool.Exec(ctx, sql, args...); err != nil {
+		return fmt.Errorf("enqueue batch: %w", err)
 	}
 	return nil
 }
 
 func (r *OutboxRepository) FetchAndLock(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+	if err := r.ensurePool(); err != nil {
+		return nil, err
+	}
 	lockExpiry := time.Now().Add(-lockTimeout)
 	now := time.Now()
 
-	var items []domain.NotificationDeliveryOutbox
 	sql := `WITH claim AS (
         SELECT id FROM notification_delivery_outbox
         WHERE status = 'PENDING'
-          AND (locked_at IS NULL OR locked_at < ?)
-          AND next_attempt_at <= ?
-        ORDER BY created_at ASC LIMIT ?
+          AND (locked_at IS NULL OR locked_at < $1)
+          AND next_attempt_at <= $2
+        ORDER BY created_at ASC LIMIT $3
         FOR UPDATE SKIP LOCKED
     )
-    UPDATE notification_delivery_outbox o SET locked_at = ?
+    UPDATE notification_delivery_outbox o SET locked_at = $4
     FROM claim WHERE o.id = claim.id
     RETURNING o.*`
 
-	err := r.db.WithContext(ctx).Raw(sql, lockExpiry, now, batchSize, now).Scan(&items).Error
+	rows, err := r.pool.Query(ctx, sql, lockExpiry, now, batchSize, now)
+	if err != nil {
+		return nil, fmt.Errorf("fetch and lock: %w", err)
+	}
+	defer rows.Close()
+
+	items, err := pgx.CollectRows(rows, scanNotificationDeliveryOutbox)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock: %w", err)
 	}
@@ -120,45 +144,52 @@ func (r *OutboxRepository) FetchAndLock(ctx context.Context, batchSize int, lock
 }
 
 func (r *OutboxRepository) MarkSent(ctx context.Context, id int64) error {
-	return r.db.WithContext(ctx).Model(&domain.NotificationDeliveryOutbox{}).
-		Where("id = ?", id).
-		Updates(map[string]any{
-			"status":  domain.DeliveryStatusSent,
-			"sent_at": time.Now(),
-			"error":   nil,
-		}).Error
+	if err := r.ensurePool(); err != nil {
+		return err
+	}
+	_, err := r.pool.Exec(ctx,
+		`UPDATE notification_delivery_outbox
+		 SET status = $1, sent_at = $2, error = NULL
+		 WHERE id = $3`,
+		domain.DeliveryStatusSent, time.Now(), id,
+	)
+	return err
 }
 
 func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error {
+	if err := r.ensurePool(); err != nil {
+		return err
+	}
 	now := time.Now()
 	sql := `UPDATE notification_delivery_outbox
             SET attempt_count = attempt_count + 1,
-                error = ?,
-                status = CASE WHEN attempt_count + 1 >= ? THEN 'FAILED' ELSE 'PENDING' END,
-                next_attempt_at = CASE WHEN attempt_count + 1 >= ? THEN next_attempt_at ELSE ? END,
+                error = $1,
+                status = CASE WHEN attempt_count + 1 >= $2 THEN 'FAILED' ELSE 'PENDING' END,
+                next_attempt_at = CASE WHEN attempt_count + 1 >= $3 THEN next_attempt_at ELSE $4 END,
                 locked_at = NULL
-            WHERE id = ?`
+            WHERE id = $5`
 
-	return r.db.WithContext(ctx).Exec(sql, errMsg, maxRetries, maxRetries, now.Add(backoff), id).Error
+	_, err := r.pool.Exec(ctx, sql, errMsg, maxRetries, maxRetries, now.Add(backoff), id)
+	return err
 }
 
 func (r *OutboxRepository) MarkSentBatch(ctx context.Context, ids []int64) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	if err := r.ensurePool(); err != nil {
+		return err
+	}
 
 	now := time.Now()
-	result := r.db.WithContext(ctx).
-		Model(&domain.NotificationDeliveryOutbox{}).
-		Where("id IN ? AND status = ?", ids, domain.DeliveryStatusPending).
-		Updates(map[string]any{
-			"status":    domain.DeliveryStatusSent,
-			"sent_at":   now,
-			"locked_at": nil,
-			"error":     nil,
-		})
-	if result.Error != nil {
-		return fmt.Errorf("mark sent batch: %w", result.Error)
+	_, err := r.pool.Exec(ctx,
+		`UPDATE notification_delivery_outbox
+		 SET status = $1, sent_at = $2, locked_at = NULL, error = NULL
+		 WHERE id = ANY($3) AND status = $4`,
+		domain.DeliveryStatusSent, now, ids, domain.DeliveryStatusPending,
+	)
+	if err != nil {
+		return fmt.Errorf("mark sent batch: %w", err)
 	}
 	return nil
 }
@@ -167,33 +198,86 @@ func (r *OutboxRepository) MarkFailedBatch(ctx context.Context, ids []int64, rea
 	if len(ids) == 0 {
 		return nil
 	}
+	if err := r.ensurePool(); err != nil {
+		return err
+	}
 
-	result := r.db.WithContext(ctx).
-		Model(&domain.NotificationDeliveryOutbox{}).
-		Where("id IN ?", ids).
-		Updates(map[string]any{
-			"status":    domain.DeliveryStatusFailed,
-			"error":     reason,
-			"locked_at": nil,
-		})
-	if result.Error != nil {
-		return fmt.Errorf("mark failed batch: %w", result.Error)
+	_, err := r.pool.Exec(ctx,
+		`UPDATE notification_delivery_outbox
+		 SET status = $1, error = $2, locked_at = NULL
+		 WHERE id = ANY($3)`,
+		domain.DeliveryStatusFailed, reason, ids,
+	)
+	if err != nil {
+		return fmt.Errorf("mark failed batch: %w", err)
 	}
 	return nil
 }
 
 // FAILED 항목은 sent_at이 NULL이므로 created_at을 fallback으로 사용
 func (r *OutboxRepository) Cleanup(ctx context.Context, olderThan time.Duration) (int64, error) {
+	if err := r.ensurePool(); err != nil {
+		return 0, err
+	}
 	cutoff := time.Now().Add(-olderThan)
-	result := r.db.WithContext(ctx).
-		Where("status IN (?, ?) AND COALESCE(sent_at, created_at) < ?", domain.DeliveryStatusSent, domain.DeliveryStatusFailed, cutoff).
-		Delete(&domain.NotificationDeliveryOutbox{})
-	return result.RowsAffected, result.Error
+	tag, err := r.pool.Exec(ctx,
+		`DELETE FROM notification_delivery_outbox
+		 WHERE status IN ($1, $2) AND COALESCE(sent_at, created_at) < $3`,
+		domain.DeliveryStatusSent, domain.DeliveryStatusFailed, cutoff,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 func (r *OutboxRepository) CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error) {
+	if err := r.ensurePool(); err != nil {
+		return 0, err
+	}
 	var count int64
-	err := r.db.WithContext(ctx).Model(&domain.NotificationDeliveryOutbox{}).
-		Where("status = ?", status).Count(&count).Error
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM notification_delivery_outbox WHERE status = $1`, status).Scan(&count)
 	return count, err
+}
+
+func (r *OutboxRepository) ensurePool() error {
+	if r == nil || r.pool == nil {
+		return fmt.Errorf("notification delivery outbox repository: postgres pool is required")
+	}
+	return nil
+}
+
+func scanNotificationDeliveryOutbox(row pgx.CollectableRow) (domain.NotificationDeliveryOutbox, error) {
+	var item domain.NotificationDeliveryOutbox
+	var kind string
+	var status string
+	var payload []byte
+	var lockedAt sql.NullTime
+	var sentAt sql.NullTime
+	var errText sql.NullString
+	err := row.Scan(
+		&item.ID,
+		&kind,
+		&item.PeriodKey,
+		&item.RoomID,
+		&item.ContentID,
+		&payload,
+		&status,
+		&item.AttemptCount,
+		&item.NextAttemptAt,
+		&item.CreatedAt,
+		&lockedAt,
+		&sentAt,
+		&errText,
+	)
+	if err != nil {
+		return domain.NotificationDeliveryOutbox{}, err
+	}
+	item.Kind = domain.DeliveryOutboxKind(kind)
+	item.Payload = string(payload)
+	item.Status = domain.DeliveryOutboxStatus(status)
+	item.LockedAt = lockedAt
+	item.SentAt = sentAt
+	item.Error = errText
+	return item, nil
 }

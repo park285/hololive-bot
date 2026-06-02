@@ -6,9 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -28,12 +25,14 @@ func (r *baselineRepository) ListCommunityShortsObservationPostBaselines(
 	}
 
 	var rows []domain.YouTubeCommunityShortsObservationPostBaseline
-	if err := r.db.WithContext(ctx).
-		Where("runtime_name = ? AND bigbang_cutover_at = ?", normalizedRuntimeName, normalizedCutoverAt).
-		Order("detected_at DESC").
-		Order("post_id ASC").
-		Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list community shorts observation post baselines: query rows: %w", err)
+	if err := selectSQL(ctx, r.db, &rows, "list community shorts observation post baselines: query rows", `
+		SELECT runtime_name, bigbang_cutover_at, kind, post_id, channel_id,
+		       actual_published_at, detected_at, finalized_at, created_at, updated_at
+		FROM youtube_community_shorts_observation_post_baselines
+		WHERE runtime_name = ? AND bigbang_cutover_at = ?
+		ORDER BY detected_at DESC, post_id ASC
+	`, normalizedRuntimeName, normalizedCutoverAt); err != nil {
+		return nil, err
 	}
 
 	return rows, nil
@@ -55,7 +54,7 @@ func (r *baselineRepository) ensureCommunityShortsObservationPostBaselines(
 		return nil
 	}
 
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := inPgxTx(ctx, r.db, func(tx trackingDB) error {
 		txRepo := NewRepository(tx)
 		return ensureCommunityShortsObservationPostBaselinesInTx(ctx, txRepo, normalizedWindow)
 	}); err != nil {
@@ -84,7 +83,7 @@ func normalizePendingCommunityShortsObservationPostBaselineWindow(
 
 func ensureCommunityShortsObservationPostBaselinesInTx(
 	ctx context.Context,
-	txRepo *GormRepository,
+	txRepo *PgxRepository,
 	normalizedWindow *domain.YouTubeCommunityShortsObservationWindow,
 ) error {
 	normalizedCurrentWindow, shouldBuild, err := reloadPendingCommunityShortsObservationPostBaselineWindow(ctx, txRepo, normalizedWindow)
@@ -125,7 +124,7 @@ func ensureCommunityShortsObservationPostBaselinesInTx(
 
 func reloadPendingCommunityShortsObservationPostBaselineWindow(
 	ctx context.Context,
-	txRepo *GormRepository,
+	txRepo *PgxRepository,
 	normalizedWindow *domain.YouTubeCommunityShortsObservationWindow,
 ) (*domain.YouTubeCommunityShortsObservationWindow, bool, error) {
 	currentWindow, err := txRepo.FindCommunityShortsObservationWindow(ctx, normalizedWindow.RuntimeName, normalizedWindow.BigBangCutoverAt)
@@ -203,31 +202,61 @@ func (r *baselineRepository) upsertCommunityShortsObservationPostBaselines(
 		normalized = append(normalized, normalizedRow)
 	}
 
-	tableName := normalized[0].TableName()
-	updates := clause.Assignments(map[string]any{
-		"channel_id": gorm.Expr("excluded.channel_id"),
-		"actual_published_at": gorm.Expr(
-			"CASE WHEN excluded.actual_published_at IS NULL THEN " + tableName + ".actual_published_at ELSE excluded.actual_published_at END",
-		),
-		"detected_at": gorm.Expr(
-			"CASE WHEN excluded.detected_at < " + tableName + ".detected_at THEN excluded.detected_at ELSE " + tableName + ".detected_at END",
-		),
-		"finalized_at": gorm.Expr(
-			"CASE WHEN excluded.finalized_at < " + tableName + ".finalized_at THEN excluded.finalized_at ELSE " + tableName + ".finalized_at END",
-		),
-		"updated_at": yttimestamp.Normalize(time.Now()),
-	})
-
-	if err := r.db.WithContext(ctx).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "runtime_name"}, {Name: "bigbang_cutover_at"}, {Name: "kind"}, {Name: "post_id"}},
-			DoUpdates: updates,
-		}).
-		Create(normalized).Error; err != nil {
-		return fmt.Errorf("upsert community shorts observation post baselines: upsert rows: %w", err)
+	query, args := buildObservationPostBaselineUpsert(normalized, yttimestamp.Normalize(time.Now()))
+	if _, err := execSQL(ctx, r.db, "upsert community shorts observation post baselines: upsert rows", query, args...); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func buildObservationPostBaselineUpsert(
+	normalized []*domain.YouTubeCommunityShortsObservationPostBaseline,
+	now time.Time,
+) (string, []any) {
+	args := make([]any, 0, len(normalized)*10)
+	var sb strings.Builder
+	sb.WriteString(`
+		INSERT INTO youtube_community_shorts_observation_post_baselines
+			(runtime_name, bigbang_cutover_at, kind, post_id, channel_id, actual_published_at, detected_at, finalized_at, created_at, updated_at)
+		VALUES
+	`)
+	for i, row := range normalized {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		args = append(args,
+			row.RuntimeName,
+			row.BigBangCutoverAt,
+			row.Kind,
+			row.PostID,
+			row.ChannelID,
+			row.ActualPublishedAt,
+			row.DetectedAt,
+			row.FinalizedAt,
+			now,
+			now,
+		)
+	}
+	sb.WriteString(`
+		ON CONFLICT (runtime_name, bigbang_cutover_at, kind, post_id) DO UPDATE
+		SET channel_id = EXCLUDED.channel_id,
+		    actual_published_at = CASE
+		        WHEN EXCLUDED.actual_published_at IS NULL THEN youtube_community_shorts_observation_post_baselines.actual_published_at
+		        ELSE EXCLUDED.actual_published_at
+		    END,
+		    detected_at = CASE
+		        WHEN EXCLUDED.detected_at < youtube_community_shorts_observation_post_baselines.detected_at THEN EXCLUDED.detected_at
+		        ELSE youtube_community_shorts_observation_post_baselines.detected_at
+		    END,
+		    finalized_at = CASE
+		        WHEN EXCLUDED.finalized_at < youtube_community_shorts_observation_post_baselines.finalized_at THEN EXCLUDED.finalized_at
+		        ELSE youtube_community_shorts_observation_post_baselines.finalized_at
+		    END,
+		    updated_at = EXCLUDED.updated_at
+	`)
+	return sb.String(), args
 }
 
 func (r *baselineRepository) markCommunityShortsObservationPostBaselineFinalized(
@@ -300,20 +329,19 @@ func (r *baselineRepository) updateCommunityShortsObservationPostBaselineFinaliz
 	finalizedAt time.Time,
 	finalizedCount int,
 ) (bool, error) {
-	result := r.db.WithContext(ctx).
-		Model(&domain.YouTubeCommunityShortsObservationWindow{}).
-		Where("runtime_name = ? AND bigbang_cutover_at = ?", normalizedRuntimeName, normalizedCutoverAt).
-		Where("closed_at = ?", finalizedAt).
-		Where("finalized_post_baseline_at IS NULL").
-		Updates(map[string]any{
-			"finalized_post_baseline_at": finalizedAt,
-			"finalized_post_count":       finalizedCount,
-			"updated_at":                 finalizedAt,
-		})
-	if result.Error != nil {
-		return false, fmt.Errorf("mark community shorts observation post baseline finalized: update window: %w", result.Error)
+	rowsAffected, err := execSQL(ctx, r.db, "mark community shorts observation post baseline finalized: update window", `
+		UPDATE youtube_community_shorts_observation_windows
+		SET finalized_post_baseline_at = ?,
+		    finalized_post_count = ?,
+		    updated_at = ?
+		WHERE runtime_name = ? AND bigbang_cutover_at = ?
+		  AND closed_at = ?
+		  AND finalized_post_baseline_at IS NULL
+	`, finalizedAt, finalizedCount, finalizedAt, normalizedRuntimeName, normalizedCutoverAt, finalizedAt)
+	if err != nil {
+		return false, err
 	}
-	return result.RowsAffected > 0, nil
+	return rowsAffected > 0, nil
 }
 
 func (r *baselineRepository) verifyCommunityShortsObservationPostBaselineFinalized(
