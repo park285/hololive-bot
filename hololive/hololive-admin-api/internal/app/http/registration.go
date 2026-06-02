@@ -22,6 +22,7 @@ package apphttp
 
 import (
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -55,6 +56,7 @@ func registerAPIRoutes(
 	logger *slog.Logger,
 	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
+	adminAllowedIPs []*net.IPNet,
 ) {
 	domains := domainHandlers
 
@@ -64,7 +66,9 @@ func registerAPIRoutes(
 
 	// Session 기반 인증 API. Login/password reset은 외부 진입점이고,
 	// register는 관리자 계정 생성면이므로 API key로 보호한다.
+	// admin-api는 Tailscale 직결이므로 RemoteAddr 기준 ip_allowlist로 추가 차단한다.
 	authAPI := router.Group("/api/auth")
+	authAPI.Use(middleware.AdminIPAllowMiddleware(adminAllowedIPs, logger))
 	authAPI.POST("/login", authHandler.Login)
 	authAPI.POST("/logout", authHandler.Logout)
 	authAPI.POST("/refresh", authHandler.Refresh)

@@ -48,6 +48,16 @@ type failingCacheClient struct {
 	failDelMany   error
 	failSRemKey   string
 	failSRemErr   error
+	// casKeyConflict가 지정되면 해당 키의 CompareAndDelete가 (false, nil)을 반환해
+	// 동시 회전(다른 요청이 먼저 claim)을 시뮬레이션한다.
+	casKeyConflict string
+}
+
+func (c *failingCacheClient) CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error) {
+	if c.casKeyConflict != "" && key == c.casKeyConflict {
+		return false, nil
+	}
+	return c.Client.CompareAndDelete(ctx, key, expectedValue)
 }
 
 func (c *failingCacheClient) SAdd(ctx context.Context, key string, members []string) (int64, error) {
@@ -424,7 +434,9 @@ func TestCreateSession_RollsBackSessionWhenIndexExpireFails(t *testing.T) {
 	}
 }
 
-func TestRefresh_RollsBackNewSessionWhenOldInvalidationFails(t *testing.T) {
+// CAS 회전에서 old session claim이 실패하면(동시 회전) 새 세션을 만들지 않고
+// CodeUnauthorized를 반환해야 한다. old session 키는 다른 요청이 소유하므로 건드리지 않는다.
+func TestRefresh_RejectsWhenSessionAlreadyClaimed(t *testing.T) {
 	db := newTestDB(t)
 	baseCache := testutil.NewTestCacheService(t, context.Background())
 
@@ -438,37 +450,29 @@ func TestRefresh_RollsBackNewSessionWhenOldInvalidationFails(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, user, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, _, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
 	oldKey := sessionKeyPrefix + sha256Hex(session.Token)
 	service.cacheClient = &failingCacheClient{
-		Client:      baseCache,
-		failDelKeys: map[string]error{oldKey: stdErrors.New("delete old session failed")},
+		Client:         baseCache,
+		casKeyConflict: oldKey,
 	}
 
 	_, err = service.Refresh(context.Background(), session.Token)
 	if err == nil {
-		t.Fatalf("expected refresh error")
+		t.Fatalf("expected refresh to be rejected when session already claimed")
 	}
-	assertAuthCode(t, err, CodeInternal)
+	assertAuthCode(t, err, CodeUnauthorized)
 
 	sessionKeys, err := baseCache.ScanKeys(context.Background(), sessionKeyPrefix+"*", 10)
 	if err != nil {
 		t.Fatalf("scan session keys: %v", err)
 	}
 	if len(sessionKeys) != 1 || sessionKeys[0] != oldKey {
-		t.Fatalf("expected only old session key to remain, got=%v", sessionKeys)
-	}
-
-	members, err := baseCache.SMembers(context.Background(), userSessionsKeyPrefix+user.ID)
-	if err != nil {
-		t.Fatalf("read user sessions index: %v", err)
-	}
-	if len(members) != 0 {
-		t.Fatalf("expected no indexed sessions after rollback, got=%v", members)
+		t.Fatalf("expected only old session key to remain (no new session), got=%v", sessionKeys)
 	}
 }
 

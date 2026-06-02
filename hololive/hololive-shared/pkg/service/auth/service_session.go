@@ -55,42 +55,75 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return nil
 }
 
+// Refresh는 세션을 원자적으로 회전한다. 기존 토큰을 compare-and-delete로 먼저 claim한 뒤
+// 새 세션을 발급하므로, 동일 토큰에 대한 동시/연속 refresh는 정확히 한 번만 성공한다(replay 차단).
 func (s *Service) Refresh(ctx context.Context, token string) (*Session, error) {
 	if s.cacheClient == nil {
 		return nil, newError(CodeInternal, "cache service not configured", nil)
 	}
 
-	sessionHash, data, err := s.refreshSessionData(ctx, token)
+	userID, err := s.claimSessionForRotation(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 
-	newSession, err := s.createSession(ctx, data.UserID)
+	newSession, err := s.createSession(ctx, userID)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := s.invalidatePreviousRefreshSession(ctx, data.UserID, sessionHash, newSession.Token); err != nil {
 		return nil, err
 	}
 
 	return newSession, nil
 }
 
-func (s *Service) refreshSessionData(ctx context.Context, token string) (string, sessionData, error) {
+// claimSessionForRotation은 기존 세션 키를 저장된 값과 비교해 원자적으로 삭제한다.
+// 삭제에 성공한 호출자만 회전 권한을 갖는다. 이미 소비/만료/회전된 토큰은 CodeUnauthorized.
+func (s *Service) claimSessionForRotation(ctx context.Context, token string) (string, error) {
 	sessionHash := sha256Hex(token)
 	key := sessionKeyPrefix + sessionHash
 
+	rawPayload, hit, err := s.cacheClient.GetString(ctx, key)
+	if err != nil {
+		return "", newError(CodeInternal, "failed to read session", err)
+	}
+	if !hit {
+		return "", newError(CodeUnauthorized, "invalid session", nil)
+	}
+
 	var data sessionData
-	if err := s.cacheClient.Get(ctx, key, &data); err != nil {
-		return "", data, newError(CodeInternal, "failed to read session", err)
+	if err := json.Unmarshal([]byte(rawPayload), &data); err != nil {
+		return "", newError(CodeInternal, "failed to decode session", err)
 	}
 	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
 		s.deleteExpiredSession(ctx, key, sessionHash, data.UserID)
-		return "", data, newError(CodeUnauthorized, "invalid session", nil)
+		return "", newError(CodeUnauthorized, "invalid session", nil)
 	}
 
-	return sessionHash, data, nil
+	deleted, err := s.cacheClient.CompareAndDelete(ctx, key, rawPayload)
+	if err != nil {
+		return "", newError(CodeInternal, "failed to claim session for rotation", err)
+	}
+	if !deleted {
+		// 다른 요청이 같은 토큰을 먼저 회전/소비했다 (동시 refresh replay).
+		return "", newError(CodeUnauthorized, "invalid session", nil)
+	}
+
+	s.removeSessionIndex(ctx, data.UserID, sessionHash)
+	return data.UserID, nil
+}
+
+// removeSessionIndex는 user 세션 인덱스에서 hash를 제거한다(best-effort).
+// 세션 키는 이미 원자적으로 삭제됐으므로 인덱스 정리 실패는 회전을 막지 않는다.
+func (s *Service) removeSessionIndex(ctx context.Context, userID, sessionHash string) {
+	if userID == "" {
+		return
+	}
+	if _, err := s.cacheClient.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash}); err != nil && s.logger != nil {
+		s.logger.Warn(
+			"Failed to remove previous session from user index during refresh",
+			slog.String("user_id", userID),
+			slog.Any("error", err),
+		)
+	}
 }
 
 func (s *Service) deleteExpiredSession(ctx context.Context, key, sessionHash, userID string) {
@@ -98,32 +131,6 @@ func (s *Service) deleteExpiredSession(ctx context.Context, key, sessionHash, us
 	if userID != "" {
 		_, _ = s.cacheClient.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash})
 	}
-}
-
-func (s *Service) invalidatePreviousRefreshSession(ctx context.Context, userID, sessionHash, newToken string) error {
-	invalidation := s.deleteSessionByHash(ctx, userID, sessionHash)
-	if invalidation.keyErr != nil {
-		return s.refreshInvalidationError(userID, newToken, invalidation.keyErr)
-	}
-
-	if invalidation.indexErr != nil && s.logger != nil {
-		s.logger.Warn(
-			"Failed to remove previous session from user index during refresh",
-			slog.String("user_id", userID),
-			slog.Any("error", invalidation.indexErr),
-		)
-	}
-
-	return nil
-}
-
-func (s *Service) refreshInvalidationError(userID, newToken string, invalidationErr error) error {
-	err := invalidationErr
-	rollbackErr := s.deleteSessionByHash(context.Background(), userID, sha256Hex(newToken))
-	if rollbackErr.Err() != nil {
-		err = stdErrors.Join(err, fmt.Errorf("rollback new session: %w", rollbackErr.Err()))
-	}
-	return newError(CodeInternal, "failed to invalidate previous session during refresh", err)
 }
 
 func (s *Service) Me(ctx context.Context, token string) (*User, error) {
@@ -168,34 +175,6 @@ func (s *Service) validateSession(ctx context.Context, token string) (string, er
 		return "", newError(CodeUnauthorized, "invalid session", nil)
 	}
 	return data.UserID, nil
-}
-
-type sessionInvalidationResult struct {
-	keyErr   error
-	indexErr error
-}
-
-func (r sessionInvalidationResult) Err() error {
-	return stdErrors.Join(r.keyErr, r.indexErr)
-}
-
-func (s *Service) deleteSessionByHash(ctx context.Context, userID, sessionHash string) sessionInvalidationResult {
-	if s.cacheClient == nil {
-		return sessionInvalidationResult{
-			keyErr: newError(CodeInternal, "cache service not configured", nil),
-		}
-	}
-
-	key := sessionKeyPrefix + sessionHash
-	result := sessionInvalidationResult{}
-	if err := s.cacheClient.Del(ctx, key); err != nil {
-		result.keyErr = fmt.Errorf("delete session key: %w", err)
-	}
-	if _, err := s.cacheClient.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash}); err != nil {
-		result.indexErr = fmt.Errorf("remove session index: %w", err)
-	}
-
-	return result
 }
 
 func (s *Service) createSession(ctx context.Context, userID string) (*Session, error) {

@@ -23,6 +23,7 @@ package apphttp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -68,7 +69,12 @@ func ProvideAPIRouter(
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), appConfig.Server.APIKey)
 	}
 
-	registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers, authHandler)
+	adminAllowedIPs, err := middleware.NewIPAllowList(appConfig.Server.AdminAllowedIPs)
+	if err != nil {
+		return nil, fmt.Errorf("parse admin allowed IPs: %w", err)
+	}
+
+	registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers, authHandler, adminAllowedIPs)
 
 	logger.Info("api_key_auth_enabled")
 
@@ -140,6 +146,10 @@ func newAPIRouter(ctx context.Context, appConfig *config.Config, logger *slog.Lo
 		APIKey:       appConfig.Server.APIKey,
 		EnableGzip:   true,
 		SkipLogPaths: []string{"/metrics"},
+		// admin-api는 Tailscale 직결(reverse-proxy 없음)이라 신뢰 가능한 클라이언트 IP는
+		// TCP RemoteAddr 뿐이다. CF-Connecting-IP/X-Forwarded-For 위조로 ip_allowlist를
+		// 우회하지 못하도록 RemoteAddr만 신뢰한다.
+		TrustRemoteAddrOnly: true,
 		PreRouteUse: []gin.HandlerFunc{
 			corsOriginGuard(appConfig.CORS.AllowedOrigins, appConfig.CORS.Enforce, logger),
 			cors.New(newAPICORSConfig(appConfig, appConfig.CORS.Enforce)),
