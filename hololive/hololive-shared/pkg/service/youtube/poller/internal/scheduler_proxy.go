@@ -21,8 +21,6 @@
 // Package poller: YouTube 채널 데이터 폴링 및 스케줄링
 package polling
 
-import "log/slog"
-
 // 반환값은 토글 적용을 시도한 폴러 수입니다.
 func (s *Scheduler) SetProxyEnabled(enabled bool) int {
 	pollers := s.collectProxyTogglePollers()
@@ -33,7 +31,7 @@ func (s *Scheduler) SetProxyEnabled(enabled bool) int {
 		}
 	}
 
-	slog.Info("Scheduler proxy toggle applied",
+	s.logger.Info("Scheduler proxy toggle applied",
 		"enabled", enabled,
 		"pollers", len(pollers),
 		"applied", applied)

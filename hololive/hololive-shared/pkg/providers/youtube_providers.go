@@ -96,7 +96,7 @@ func ProvideScraperScheduler(
 ) *poller.Scheduler {
 	log := schedulerLogger(logger)
 	resolvedOpts := resolveScraperSchedulerOptions(opts...)
-	scheduler := newScraperScheduler(resolvedOpts)
+	scheduler := newScraperScheduler(resolvedOpts, log)
 	channelPollerRegistrations := resolvedOpts.channelPollerRegistrations
 	if len(channelPollerRegistrations) == 0 {
 		log.Warn("Scraper scheduler initialized without poller registrations")
@@ -142,9 +142,10 @@ func ProvideScraperScheduler(
 	return scheduler
 }
 
-func newScraperScheduler(opts scraperSchedulerOptions) *poller.Scheduler {
+func newScraperScheduler(opts scraperSchedulerOptions, logger *slog.Logger) *poller.Scheduler {
 	schedulerConfig := poller.DefaultSchedulerConfig()
 	schedulerConfig.RequestInterval = 0
+	schedulerConfig.Logger = logger
 	if opts.workerCount > 0 {
 		schedulerConfig.WorkerCount = opts.workerCount
 	}

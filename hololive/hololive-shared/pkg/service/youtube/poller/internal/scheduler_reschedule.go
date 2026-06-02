@@ -25,7 +25,6 @@ import (
 	"container/heap"
 	"context"
 	"errors"
-	"log/slog"
 	"time"
 )
 
@@ -104,7 +103,7 @@ func (s *Scheduler) updateJobNextRunAfterFailure(job *Job, pollErr error, now ti
 		job.NextRunAt = nextErrorRetryAt(now, job.Interval, job.consecutiveFailures, s.errorBackoffMin, s.errorBackoffMax)
 	}
 
-	slog.Debug("Poll job rescheduled after failure",
+	s.logger.Debug("Poll job rescheduled after failure",
 		"poller", job.Poller.Name(),
 		"channel_id", job.ChannelID,
 		"consecutive_failures", job.consecutiveFailures,

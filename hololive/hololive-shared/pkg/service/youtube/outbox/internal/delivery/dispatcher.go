@@ -91,9 +91,7 @@ type Dispatcher struct {
 	config    Config
 	started   atomic.Bool
 
-	onProcessOnce   func()
-	onAggregateSync func()
-	onCleanup       func()
+	testHooks dispatcherTestHooks
 }
 
 func NewDispatcher(db *gorm.DB, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, config Config) *Dispatcher {
@@ -226,9 +224,7 @@ func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
 
 func (d *Dispatcher) aggregateSyncOnce(ctx context.Context) {
 	d.claim.reconcileTerminalOutboxStatuses(ctx)
-	if d.onAggregateSync != nil {
-		d.onAggregateSync()
-	}
+	d.testHooks.fireAggregateSync()
 }
 
 // run: 메인 폴링 루프
@@ -251,9 +247,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 // processOnce: 한 번의 폴링 사이클
 func (d *Dispatcher) processOnce(ctx context.Context) {
 	d.processAvailable(ctx, 4)
-	if d.onProcessOnce != nil {
-		d.onProcessOnce()
-	}
+	d.testHooks.fireProcessOnce()
 }
 
 func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
@@ -295,9 +289,7 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
 	_ = lifecycle.RunTickerLoop(ctx, outboxCleanupLoopInterval, func(context.Context) error {
 		d.cleanup(ctx)
-		if d.onCleanup != nil {
-			d.onCleanup()
-		}
+		d.testHooks.fireCleanup()
 		return nil
 	})
 }
@@ -314,14 +306,9 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 	}
 }
 
+// ProcessOnceForTest는 outbox 패키지 외부의 통합 테스트(poller/internal/pollers 등)에서
+// 한 번의 폴링 사이클을 동기 실행하기 위한 test-support 진입점이다. 외부 test 패키지가
+// 의존하므로 _test.go로 격리할 수 없어 production 빌드에 노출된다. 부수효과는 없다.
 func (d *Dispatcher) ProcessOnceForTest(ctx context.Context) {
 	d.processOnce(ctx)
-}
-
-func (d *Dispatcher) CleanupForTest(ctx context.Context) {
-	d.cleanup(ctx)
-}
-
-func (d *Dispatcher) AggregateSyncForTest(ctx context.Context) {
-	d.aggregateSyncOnce(ctx)
 }

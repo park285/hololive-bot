@@ -31,7 +31,7 @@ import (
 
 func (s *Scheduler) Register(channelID string, poller Poller, priority Priority, interval time.Duration) {
 	if err := s.RegisterChecked(channelID, poller, priority, interval); err != nil {
-		slog.Warn("Skip invalid scheduler registration",
+		s.logger.Warn("Skip invalid scheduler registration",
 			slog.String("channel_id", channelID),
 			slog.Any("error", err),
 		)
