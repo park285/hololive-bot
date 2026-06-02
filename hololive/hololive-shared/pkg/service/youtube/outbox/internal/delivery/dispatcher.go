@@ -45,6 +45,9 @@ type Config struct {
 	RetryBackoff                time.Duration // 재시도 간격
 	CleanupAfter                time.Duration // 완료된 알림 정리 기간
 	CleanupEnabled              bool          // 정리 활성화 여부
+	ReviveEnabled               bool          // stale-failed revival sweep 활성화 여부
+	ReviveInterval              time.Duration // revival sweep 주기
+	ReviveFreshnessWindow       time.Duration // 되살릴 FAILED 알람의 최대 콘텐츠 신선도(created_at 기준)
 	DeliveryParallelism         int           // room/delivery send 제한 병렬성
 	DeliverySendTimeout         time.Duration // room 단위 메시지 발송 1회 최대 시간
 	SubscriberLookupParallelism int           // 채널별 구독자 조회 제한 병렬성
@@ -65,6 +68,9 @@ func DefaultConfig() Config {
 		RetryBackoff:                1 * time.Minute,
 		CleanupAfter:                7 * 24 * time.Hour, // 7일
 		CleanupEnabled:              true,
+		ReviveEnabled:               true,
+		ReviveInterval:              5 * time.Minute,
+		ReviveFreshnessWindow:       60 * time.Minute,
 		DeliveryParallelism:         4,
 		DeliverySendTimeout:         10 * time.Second,
 		SubscriberLookupParallelism: 16,
@@ -155,6 +161,12 @@ func normalizeDispatcherCoreConfig(config Config, defaults Config) Config {
 	if config.AggregateSyncInterval <= 0 {
 		config.AggregateSyncInterval = defaults.AggregateSyncInterval
 	}
+	if config.ReviveInterval <= 0 {
+		config.ReviveInterval = defaults.ReviveInterval
+	}
+	if config.ReviveFreshnessWindow <= 0 {
+		config.ReviveFreshnessWindow = defaults.ReviveFreshnessWindow
+	}
 	return config
 }
 
@@ -211,6 +223,9 @@ func (d *Dispatcher) Start(ctx context.Context) {
 	}
 	if d.config.CleanupEnabled {
 		go d.cleanupLoop(ctx)
+	}
+	if d.config.ReviveEnabled && d.claim != nil && d.claim.db != nil {
+		go d.reviveLoop(ctx)
 	}
 }
 
@@ -283,6 +298,31 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 		slog.Int("count", len(outboxItems)),
 		slog.Int("round", round+1))
 	return d.claim.processPerRoomBatch(ctx, outboxItems)
+}
+
+// reviveLoop: 전송 실패로 영구 FAILED된 미발송 알람을 주기적으로 PENDING으로 되살리는 루프.
+func (d *Dispatcher) reviveLoop(ctx context.Context) {
+	_ = lifecycle.RunTickerLoop(ctx, d.config.ReviveInterval, func(context.Context) error {
+		d.reviveOnce(ctx)
+		d.testHooks.fireRevive()
+		return nil
+	})
+}
+
+func (d *Dispatcher) reviveOnce(ctx context.Context) {
+	if d == nil || d.claim == nil {
+		return
+	}
+	revived, err := d.claim.reviveStaleFailedOutbox(ctx, d.config.ReviveFreshnessWindow, d.config.BatchSize)
+	if err != nil {
+		d.logger.Warn("Failed to revive stale failed outbox items", slog.Any("error", err))
+		return
+	}
+	if revived > 0 {
+		d.logger.Info("Revived stale failed outbox items for redelivery",
+			slog.Int64("revived", revived),
+			slog.Duration("freshness_window", d.config.ReviveFreshnessWindow))
+	}
 }
 
 // cleanupLoop: 오래된 완료 알림 정리 루프

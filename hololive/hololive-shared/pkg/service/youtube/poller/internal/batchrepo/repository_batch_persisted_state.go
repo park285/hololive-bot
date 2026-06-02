@@ -217,6 +217,14 @@ func updateIdentitySentAtMin(sentAtByIdentity map[string]time.Time, identityKey 
 	sentAtByIdentity[identityKey] = candidate
 }
 
+// isCommunityShortsOutboxKind는 poll-persist 단계의 community/shorts 전용 처리(ON CONFLICT 재발견
+// rearm·sent-state 백필·alarm-state 빌드)를 게이팅한다. community/shorts만 대상인 이유는 이들만
+// watermark를 보류(keepExistingWatermark)해 published_at 지연 갱신 시 같은 (kind,content_id)가
+// 재폴링에서 재등장하기 때문이다 — videos_poller는 watermark를 무조건 전진시켜 video/live는 재등장 자체가 없다.
+//
+// 주의: 이 게이트는 "poll 재발견 시 되살리기"만 담당한다. 전송 실패로 한 번도 발송 못 한 채 영구 FAILED된
+// 알람(kind 무관)의 복구는 dispatcher의 stale-failed revival sweep(outbox/internal/delivery의
+// reviveStaleFailedOutbox)이 맡는다 — 그 경로는 sent_at IS NULL + 콘텐츠 freshness로 중복·스팸을 가드한다.
 func isCommunityShortsOutboxKind(kind domain.OutboxKind) bool {
 	switch kind {
 	case domain.OutboxKindCommunityPost, domain.OutboxKindNewShort:
