@@ -26,10 +26,20 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/llm"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
+// ProvideLLMCostTracker는 6개 provider가 공유할 월 토큰 cost tracker를 만든다. ceiling<=0 또는 cache
+// 미가용이면 true-nil interface를 반환해 관측을 비활성한다(typed-nil interface 함정 회피).
+func ProvideLLMCostTracker(cacheClient cache.Client, monthlyCeiling int64, logger *slog.Logger) llm.CostTracker {
+	if tracker := llm.NewValkeyCostCeiling(cacheClient, monthlyCeiling, logger); tracker != nil {
+		return tracker
+	}
+	return nil
+}
+
 // ProvideMajorEventLLMClient - MajorEvent 전용 LLM 클라이언트 생성 (비활성 시 nil)
-func ProvideMajorEventLLMClient(cliproxy config.CliproxyConfig, logger *slog.Logger) llm.Client {
+func ProvideMajorEventLLMClient(cliproxy config.CliproxyConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	if !cliproxy.Enabled || cliproxy.APIKey == "" {
 		logger.Info("Cliproxy LLM disabled; event summaries will use template fallback")
 		return nil
@@ -44,6 +54,7 @@ func ProvideMajorEventLLMClient(cliproxy config.CliproxyConfig, logger *slog.Log
 	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, cliproxy.Model, logger,
 		llm.WithWebSearch(true),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+		llm.WithCostTracker(tracker),
 	)
 	logger.Info("Cliproxy LLM enabled for event summaries (responses + web_search, chat fallback)",
 		slog.String("model", cliproxy.Model),
@@ -51,7 +62,7 @@ func ProvideMajorEventLLMClient(cliproxy config.CliproxyConfig, logger *slog.Log
 	return client
 }
 
-func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
+func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	if !cliproxy.Enabled || cliproxy.APIKey == "" {
 		logger.Info("Member news LLM disabled")
 		return nil
@@ -75,6 +86,7 @@ func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig config
 		llm.WithWebSearch(false), // 수집 완료된 데이터 요약이므로 web search 불필요
 		llm.WithChatCompletions(),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+		llm.WithCostTracker(tracker),
 	}
 	if llmConfig.MemberNewsTemperature > 0 {
 		opts = append(opts, llm.WithTemperature(llmConfig.MemberNewsTemperature))
@@ -91,7 +103,7 @@ func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig config
 }
 
 // consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
-func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
+func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	if !llmConfig.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
 	}
@@ -114,12 +126,13 @@ func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig c
 		llm.WithWebSearch(false),
 		llm.WithChatCompletions(),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+		llm.WithCostTracker(tracker),
 	)
 	logger.Info("Consensus reviewer LLM enabled", slog.String("model", model))
 	return client
 }
 
-func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
+func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	if !llmConfig.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
 	}
@@ -137,10 +150,11 @@ func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmConfig c
 		llm.WithSchemaName("event_summary_review"),
 		llm.WithWebSearch(false),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+		llm.WithCostTracker(tracker),
 	)
 }
 
-func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
+func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	if !llmConfig.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
 	}
@@ -158,11 +172,12 @@ func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfi
 		llm.WithSchemaName("event_summary"),
 		llm.WithWebSearch(false),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+		llm.WithCostTracker(tracker),
 	)
 }
 
 // consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
-func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, logger *slog.Logger) llm.Client {
+func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	if !llmConfig.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
 	}
@@ -184,6 +199,7 @@ func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfi
 		llm.WithWebSearch(false),
 		llm.WithChatCompletions(),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+		llm.WithCostTracker(tracker),
 	}
 	if llmConfig.MemberNewsTemperature > 0 {
 		opts = append(opts, llm.WithTemperature(llmConfig.MemberNewsTemperature))

@@ -35,7 +35,7 @@ func TestProvideMajorEventLLMClient_Disabled(t *testing.T) {
 	var buf bytes.Buffer
 	logger := logging.NewTestLoggerWithOutput(&buf)
 
-	client := ProvideMajorEventLLMClient(config.CliproxyConfig{Enabled: false, APIKey: "key"}, logger)
+	client := ProvideMajorEventLLMClient(config.CliproxyConfig{Enabled: false, APIKey: "key"}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when disabled")
 	}
@@ -48,7 +48,7 @@ func TestProvideMajorEventLLMClient_NoAPIKey(t *testing.T) {
 	var buf bytes.Buffer
 	logger := logging.NewTestLoggerWithOutput(&buf)
 
-	client := ProvideMajorEventLLMClient(config.CliproxyConfig{Enabled: true, APIKey: ""}, logger)
+	client := ProvideMajorEventLLMClient(config.CliproxyConfig{Enabled: true, APIKey: ""}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when API key missing")
 	}
@@ -63,7 +63,7 @@ func TestProvideMajorEventLLMClient_EmptyBaseURL(t *testing.T) {
 		APIKey:  "key",
 		BaseURL: "",
 		Model:   "gpt-test",
-	}, logger)
+	}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when baseURL empty")
 	}
@@ -81,7 +81,7 @@ func TestProvideMajorEventLLMClient_EmptyModel(t *testing.T) {
 		APIKey:  "key",
 		BaseURL: "https://example.com/v1",
 		Model:   "",
-	}, logger)
+	}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when model empty")
 	}
@@ -96,7 +96,7 @@ func TestProvideMajorEventLLMClient_Success(t *testing.T) {
 		APIKey:  "key",
 		BaseURL: "https://example.com/v1",
 		Model:   "gpt-test",
-	}, logger)
+	}, nil, logger)
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
@@ -109,7 +109,7 @@ func TestProvideMemberNewsLLMClient_Disabled(t *testing.T) {
 	var buf bytes.Buffer
 	logger := logging.NewTestLoggerWithOutput(&buf)
 
-	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: false}, config.LLMConfig{}, logger)
+	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: false}, config.LLMConfig{}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when disabled")
 	}
@@ -122,7 +122,7 @@ func TestProvideMemberNewsLLMClient_NoAPIKey(t *testing.T) {
 	var buf bytes.Buffer
 	logger := logging.NewTestLoggerWithOutput(&buf)
 
-	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: true, APIKey: ""}, config.LLMConfig{}, logger)
+	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: true, APIKey: ""}, config.LLMConfig{}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when API key missing")
 	}
@@ -144,7 +144,7 @@ func TestProvideMemberNewsLLMClient_EmptyBaseURL(t *testing.T) {
 		config.LLMConfig{
 			MemberNewsModel: "test-model",
 		},
-		logger,
+		nil, logger,
 	)
 	if client != nil {
 		t.Fatal("expected nil when baseURL empty")
@@ -168,7 +168,7 @@ func TestProvideMemberNewsLLMClient_ModelFallback(t *testing.T) {
 		config.LLMConfig{
 			MemberNewsModel: "", // 빈값 → Cliproxy.Model fallback
 		},
-		logger,
+		nil, logger,
 	)
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -192,7 +192,7 @@ func TestProvideMemberNewsLLMClient_DeprecatedModel(t *testing.T) {
 		config.LLMConfig{
 			MemberNewsModel: "old-model",
 		},
-		logger,
+		nil, logger,
 	)
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -213,7 +213,7 @@ func TestProvideMemberNewsLLMClient_NewModel_NoDeprecationWarn(t *testing.T) {
 		config.LLMConfig{
 			MemberNewsModel: "new-model",
 		},
-		logger,
+		nil, logger,
 	)
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -241,7 +241,7 @@ func TestProvideMemberNewsLLMClient_TemperatureZero_LogShowsNotApplied(t *testin
 			MemberNewsModel:       "test-model",
 			MemberNewsTemperature: 0,
 		},
-		logger,
+		nil, logger,
 	)
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -265,7 +265,7 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 			APIKey:  sensitiveKey,
 			BaseURL: sensitiveURL,
 			Model:   "", // 빈값 → error 경로
-		}, logger)
+		}, nil, logger)
 		logOutput := buf.String()
 		if strings.Contains(logOutput, sensitiveURL) {
 			t.Error("error log must not contain raw baseURL")
@@ -289,7 +289,7 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 			config.LLMConfig{
 				MemberNewsModel: "", // 빈값 + Cliproxy.Model 빈값 → error 경로
 			},
-			logger,
+			nil, logger,
 		)
 		logOutput := buf.String()
 		if strings.Contains(logOutput, sensitiveURL) {
@@ -330,7 +330,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := logging.NewTestLoggerWithOutput(&buf)
-	client := ProvideMemberNewsLLMClient(appConfig.Cliproxy, appConfig.LLM, logger)
+	client := ProvideMemberNewsLLMClient(appConfig.Cliproxy, appConfig.LLM, nil, logger)
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
@@ -368,7 +368,7 @@ func TestProvideMemberNewsReviewerClient_ConsensusDisabled(t *testing.T) {
 	client := ProvideMemberNewsReviewerClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "m"},
 		config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: false}},
-		logger,
+		nil, logger,
 	)
 	if client != nil {
 		t.Fatal("expected nil when consensus disabled")
@@ -382,7 +382,7 @@ func TestProvideMemberNewsReviewerClient_Enabled(t *testing.T) {
 	client := ProvideMemberNewsReviewerClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "default"},
 		config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, ReviewerModel: "gpt-4.1-mini"}},
-		logger,
+		nil, logger,
 	)
 	if client == nil {
 		t.Fatal("expected non-nil reviewer client")
@@ -399,7 +399,7 @@ func TestProvideMemberNewsReviewerClient_ModelFallback(t *testing.T) {
 	client := ProvideMemberNewsReviewerClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "cliproxy-default"},
 		config.LLMConfig{MemberNewsModel: "news-model", MemberNews: config.ConsensusLLMConfig{Enabled: true, ReviewerModel: ""}},
-		logger,
+		nil, logger,
 	)
 	if client == nil {
 		t.Fatal("expected non-nil reviewer client with model fallback")
@@ -416,7 +416,7 @@ func TestProvideMemberNewsAdjudicatorClient_ConsensusDisabled(t *testing.T) {
 	client := ProvideMemberNewsAdjudicatorClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "m"},
 		config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: false}},
-		logger,
+		nil, logger,
 	)
 	if client != nil {
 		t.Fatal("expected nil when consensus disabled")
@@ -430,7 +430,7 @@ func TestProvideMemberNewsAdjudicatorClient_Enabled(t *testing.T) {
 	client := ProvideMemberNewsAdjudicatorClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "default"},
 		config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: "gpt-4.1"}},
-		logger,
+		nil, logger,
 	)
 	if client == nil {
 		t.Fatal("expected non-nil adjudicator client")
@@ -448,7 +448,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 		client := ProvideMemberNewsAdjudicatorClient(
 			config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "cliproxy-default"},
 			config.LLMConfig{MemberNewsModel: "news-model", MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
-			logger,
+			nil, logger,
 		)
 		if client == nil {
 			t.Fatal("expected non-nil adjudicator client with MemberNewsModel fallback")
@@ -465,7 +465,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 		client := ProvideMemberNewsAdjudicatorClient(
 			config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "cliproxy-default"},
 			config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
-			logger,
+			nil, logger,
 		)
 		if client == nil {
 			t.Fatal("expected non-nil adjudicator client with Cliproxy.Model fallback")
@@ -482,7 +482,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 		client := ProvideMemberNewsAdjudicatorClient(
 			config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: ""},
 			config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
-			logger,
+			nil, logger,
 		)
 		if client != nil {
 			t.Fatal("expected nil when all models empty")

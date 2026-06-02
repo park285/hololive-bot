@@ -18,38 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package settings
+package llm
 
-type CliproxyConfig struct {
-	BaseURL         string
-	APIKey          string
-	Model           string
-	Enabled         bool
-	ReasoningEffort string
-}
+import "context"
 
-type ConsensusLLMConfig struct {
-	Enabled           bool
-	Confidence        float64
-	ReviewerModel     string
-	AdjudicatorModel  string
-	ReviewTimeout     int
-	AdjudicateTimeout int
-}
-
-type LLMConfig struct {
-	MemberNewsModel       string
-	MemberNewsTemperature float64
-
-	// MonthlyTokenCeiling: 월 누적 토큰 임계(0=비활성). 초과 시 경고 로깅만(차단 없음).
-	MonthlyTokenCeiling int64
-
-	MemberNews ConsensusLLMConfig
-	MajorEvent ConsensusLLMConfig
-}
-
-type ExaConfig struct {
-	Endpoint string
-	APIKey   string
-	Enabled  bool
+// CostTracker는 LLM provider 응답의 토큰 사용량을 누적 관측한다. 구현체(ValkeyCostCeiling)는
+// 월 단위 토큰 카운터를 공유 저장소에 누적하고 임계 초과 시 경고만 남긴다(호출은 차단하지 않음).
+// RecordUsage는 LLM 응답 경로에서 호출되므로 절대 에러를 전파하거나 패닉하지 않아야 한다.
+type CostTracker interface {
+	RecordUsage(ctx context.Context, provider, model string, tokens int64)
 }

@@ -257,6 +257,7 @@ func loadLLMConfig() LLMConfig {
 	return LLMConfig{
 		MemberNewsModel:       sharedenv.String("MEMBER_NEWS_LLM_MODEL", ""),
 		MemberNewsTemperature: sharedenv.Float("MEMBER_NEWS_TEMPERATURE", 0),
+		MonthlyTokenCeiling:   int64(sharedenv.Int("LLM_MONTHLY_TOKEN_CEILING", 0)),
 		MemberNews:            loadConsensusLLMConfig("MEMBER_NEWS"),
 		MajorEvent:            loadConsensusLLMConfig("MAJOREVENT"),
 	}
