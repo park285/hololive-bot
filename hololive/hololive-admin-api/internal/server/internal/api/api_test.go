@@ -9,7 +9,7 @@ func TestNewAPIHandler_AllFieldsAssigned(t *testing.T) {
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
-		nil, nil, nil,
+		nil, nil,
 		newDiscardLogger(),
 	)
 
@@ -35,7 +35,7 @@ func TestNewAPIHandler_MemberIndexLoaderNilWhenRepoNil(t *testing.T) {
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
-		nil, nil, nil,
+		nil, nil,
 		newDiscardLogger(),
 	)
 

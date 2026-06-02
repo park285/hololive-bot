@@ -82,7 +82,7 @@ func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
 func TestNewHandler_BasicInitialization(t *testing.T) {
 	h := NewHandler(
 		nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil,
 		slog.New(slog.DiscardHandler),
 	)
@@ -104,7 +104,7 @@ func TestNewHandler_BasicInitialization(t *testing.T) {
 
 	repoBacked := NewHandler(
 		&member.Repository{}, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil,
 		nil,
 	)
