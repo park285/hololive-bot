@@ -21,7 +21,6 @@
 package runtime
 
 import (
-	"context"
 	"log/slog"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
@@ -35,14 +34,12 @@ import (
 )
 
 func buildMajorEventComponents(
-	ctx context.Context,
 	majorEventRepository *majorevent.Repository,
 	formatter mescheduler.Formatter,
 	summarizer *mesummarizer.EventSummarizer,
 	locker delivery.NotificationLocker,
 	outboxRepository *delivery.OutboxRepository,
 	logger *slog.Logger,
-	autoPrepareSchema bool,
 ) (*mescheduler.Scheduler, *mescheduler.MonthlyScheduler, *mescraper.RuntimeScheduler) {
 	majorEventScheduler := mescheduler.NewScheduler(
 		majorEventRepository,
@@ -61,12 +58,6 @@ func buildMajorEventComponents(
 		outboxRepository,
 		logger,
 	)
-
-	if autoPrepareSchema {
-		if err := majorEventRepository.CreateEventsTable(ctx); err != nil {
-			logger.Error("Failed to create major_events table", slog.String("error", err.Error()))
-		}
-	}
 
 	majorEventScraperScheduler, err := mescraper.NewRuntimeScheduler(majorEventRepository, logger)
 	if err != nil {

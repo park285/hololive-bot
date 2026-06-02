@@ -139,26 +139,6 @@ func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoo
 	return r.scanSubscriptions(rows)
 }
 
-func (r *Repository) applyEventSchemaMigrations(ctx context.Context) error {
-	migrations := []struct {
-		name string
-		run  func(context.Context) error
-	}{
-		{name: "migrate type column", run: r.migrateTypeColumn},
-		{name: "migrate notified_month column", run: r.migrateNotifiedMonthColumn},
-		{name: "migrate link check columns", run: r.migrateLinkCheckColumns},
-		{name: "create indexes", run: r.createIndexes},
-	}
-
-	for _, migration := range migrations {
-		if err := migration.run(ctx); err != nil {
-			return fmt.Errorf("%s: %w", migration.name, err)
-		}
-	}
-
-	return nil
-}
-
 func (r *Repository) scanSubscriptions(rows pgx.Rows) ([]*domain.EventRoomSubscription, error) {
 	var subscriptions []*domain.EventRoomSubscription
 

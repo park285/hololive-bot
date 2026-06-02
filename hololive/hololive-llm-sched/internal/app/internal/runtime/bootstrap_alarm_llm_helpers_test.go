@@ -129,14 +129,12 @@ func TestBuildMemberNewsComponents(t *testing.T) {
 
 func TestBuildMajorEventComponents_NilRepositoryReturnsNilScraper(t *testing.T) {
 	weekly, monthly, scraper := buildMajorEventComponents(
-		context.Background(),
 		nil,
 		nil,
 		nil,
 		nil,
 		nil,
 		testRuntimeLogger(),
-		false,
 	)
 
 	require.NotNil(t, weekly)

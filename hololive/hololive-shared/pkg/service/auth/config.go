@@ -38,8 +38,6 @@ type Config struct {
 	// BcryptCost: 비밀번호 해시 비용 인자. 안전 기본값은 12.
 	// bcrypt 허용 범위(MinCost~MaxCost) 밖이면 NewService가 DefaultBcryptCost로 보정한다.
 	BcryptCost int
-
-	AutoPrepareSchema bool
 }
 
 // DefaultBcryptCost: bcrypt.DefaultCost(10)보다 강화된 운영 기본값.
@@ -57,6 +55,5 @@ func DefaultConfig() Config {
 		LoginLockDuration:                      15 * time.Minute,
 		UserSessionsTTL:                        sessionTTL + (24 * time.Hour),
 		BcryptCost:                             DefaultBcryptCost,
-		AutoPrepareSchema:                      true,
 	}
 }
