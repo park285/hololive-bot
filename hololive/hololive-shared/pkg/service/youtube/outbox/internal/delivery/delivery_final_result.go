@@ -32,15 +32,23 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 		return nil, nil
 	}
 
+	postKinds := []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}
+	terminalStatuses := []domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusFailed}
 	var outboxes []domain.YouTubeNotificationOutbox
 	if err := selectDeliverySQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", `
 			SELECT id, kind, channel_id, content_id, payload::text AS payload, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, COALESCE(error, '') AS error
 		FROM youtube_notification_outbox
-		WHERE id = ANY(?)
-		  AND kind = ANY(?)
-		  AND status = ANY(?)
+		WHERE `+deliveryInClause("id", len(uniqueIDs))+`
+		  AND `+deliveryInClause("kind", len(postKinds))+`
+		  AND `+deliveryInClause("status", len(terminalStatuses))+`
 		ORDER BY id ASC
-	`, uniqueIDs, []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}, []domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusFailed}); err != nil {
+	`, appendDeliveryOutboxStatusArgs(
+		appendDeliveryOutboxKindArgs(
+			appendDeliveryInt64Args(nil, uniqueIDs),
+			postKinds...,
+		),
+		terminalStatuses...,
+	)...); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts outboxes: %w", err)
 	}
 	if len(outboxes) == 0 {
@@ -52,9 +60,9 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 	if err := selectDeliverySQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", `
 		SELECT id, outbox_id, room_id, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, error
 		FROM youtube_notification_delivery
-		WHERE outbox_id = ANY(?)
+		WHERE `+deliveryInClause("outbox_id", len(outboxResultIDs))+`
 		ORDER BY outbox_id ASC, id ASC
-	`, outboxResultIDs); err != nil {
+	`, appendDeliveryInt64Args(nil, outboxResultIDs)...); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts deliveries: %w", err)
 	}
 

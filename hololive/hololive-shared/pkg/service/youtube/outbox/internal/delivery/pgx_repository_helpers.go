@@ -58,6 +58,55 @@ func getDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action string
 	return false, fmt.Errorf("%s: %w", action, err)
 }
 
+func deliveryInClause(column string, count int) string {
+	if count <= 0 {
+		return "FALSE"
+	}
+	return column + " IN (" + inDeliveryPlaceholders(count) + ")"
+}
+
+func inDeliveryPlaceholders(count int) string {
+	if count <= 0 {
+		return "NULL"
+	}
+	return strings.TrimSuffix(strings.Repeat("?, ", count), ", ")
+}
+
+func appendDeliveryInt64Args(args []any, values []int64) []any {
+	for _, value := range values {
+		args = append(args, value)
+	}
+	return args
+}
+
+func appendDeliveryStringArgs(args []any, values []string) []any {
+	for _, value := range values {
+		args = append(args, value)
+	}
+	return args
+}
+
+func appendDeliveryOutboxKindArgs(args []any, values ...domain.OutboxKind) []any {
+	for _, value := range values {
+		args = append(args, string(value))
+	}
+	return args
+}
+
+func appendDeliveryOutboxStatusArgs(args []any, values ...domain.OutboxStatus) []any {
+	for _, value := range values {
+		args = append(args, string(value))
+	}
+	return args
+}
+
+func appendDeliveryAlarmTypeArgs(args []any, values ...domain.AlarmType) []any {
+	for _, value := range values {
+		args = append(args, string(value))
+	}
+	return args
+}
+
 func inDeliveryTx(ctx context.Context, db deliveryDB, fn func(tx dbx.Querier) error) error {
 	if db == nil {
 		return fmt.Errorf("db is nil")

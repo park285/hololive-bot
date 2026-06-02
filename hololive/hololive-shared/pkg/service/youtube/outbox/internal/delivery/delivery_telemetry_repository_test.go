@@ -221,6 +221,40 @@ func TestDeliveryTelemetryRepository_BackfillAndFlush(t *testing.T) {
 	require.Equal(t, "post-backfill", saved.PostID)
 }
 
+func TestDeliveryTelemetryRepository_BackfillFromDelivery_ExecModeEncodesEnumFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := newDeliveryTestDB(t)
+
+	sentAt := time.Now().UTC().Add(-30 * time.Second).Truncate(time.Microsecond)
+	outbox := deliveryTelemetryTestOutboxModel{
+		Kind:          string(domain.OutboxKindCommunityPost),
+		ChannelID:     "UC_backfill_exec",
+		ContentID:     "post-backfill-exec",
+		Payload:       `{"post_id":"post-backfill-exec","content_text":"hello"}`,
+		Status:        string(domain.OutboxStatusSent),
+		AttemptCount:  0,
+		NextAttemptAt: sentAt,
+		SentAt:        &sentAt,
+	}
+	require.NoError(t, db.Create(&outbox).Error)
+	require.NoError(t, db.Create(&deliveryTelemetryTestDeliveryModel{
+		OutboxID:      outbox.ID,
+		RoomID:        "room-backfill-exec",
+		Status:        string(domain.OutboxStatusSent),
+		AttemptCount:  0,
+		NextAttemptAt: sentAt,
+		CreatedAt:     sentAt,
+		SentAt:        &sentAt,
+	}).Error)
+
+	repository := NewDeliveryTelemetryRepository(newDeliveryExecModePool(t, db))
+	inserted, err := repository.BackfillFromDelivery(ctx, 10, time.Time{})
+	require.NoError(t, err)
+	require.Equal(t, 1, inserted)
+}
+
 func TestDeliveryTelemetryRepository_EnqueueDedupesByDeliveryAttempt(t *testing.T) {
 	t.Parallel()
 

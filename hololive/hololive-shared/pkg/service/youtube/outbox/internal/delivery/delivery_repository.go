@@ -178,13 +178,15 @@ func markSentBatchTx(
 }
 
 func updateSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int64, sentAt time.Time) error {
-	_, err := tx.Exec(ctx, `
+	args := []any{domain.OutboxStatusSent, sentAt}
+	args = appendDeliveryInt64Args(args, uniqueIDs)
+	args = append(args, domain.OutboxStatusPending)
+	if _, err := execDeliverySQL(ctx, tx, "update delivery rows", `
 		UPDATE youtube_notification_delivery
-		SET status = $1, sent_at = $2, locked_at = NULL, error = ''
-		WHERE id = ANY($3) AND status = $4
-	`, domain.OutboxStatusSent, sentAt, uniqueIDs, domain.OutboxStatusPending)
-	if err != nil {
-		return fmt.Errorf("update delivery rows: %w", err)
+		SET status = ?, sent_at = ?, locked_at = NULL, error = ''
+		WHERE `+deliveryInClause("id", len(uniqueIDs))+` AND status = ?
+	`, args...); err != nil {
+		return err
 	}
 	return nil
 }
@@ -247,17 +249,18 @@ func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int
 	now := time.Now()
 	nextAttempt := now.Add(backoff)
 
-	_, err := r.db.Exec(ctx, `
+	args := []any{truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt}
+	args = appendDeliveryInt64Args(args, uniqueIDs)
+	if _, err := execDeliverySQL(ctx, r.db, "mark delivery rows failed batch", `
 		UPDATE youtube_notification_delivery
 		SET attempt_count = attempt_count + 1,
-		    error = $1,
-		    status = CASE WHEN attempt_count + 1 >= $2 THEN $3 ELSE $4 END,
-		    next_attempt_at = CASE WHEN attempt_count + 1 >= $5 THEN next_attempt_at ELSE $6 END,
+		    error = ?,
+		    status = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE ? END,
+		    next_attempt_at = CASE WHEN attempt_count + 1 >= ? THEN next_attempt_at ELSE ? END,
 		    locked_at = NULL
-		WHERE id = ANY($7)
-	`, truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, uniqueIDs)
-	if err != nil {
-		return fmt.Errorf("mark delivery rows failed batch: %w", err)
+		WHERE `+deliveryInClause("id", len(uniqueIDs))+`
+	`, args...); err != nil {
+		return err
 	}
 
 	return nil
@@ -269,16 +272,18 @@ func (r *DeliveryRepository) MarkPermanentFailureBatch(ctx context.Context, ids 
 		return nil
 	}
 
-	_, err := r.db.Exec(ctx, `
+	args := []any{maxRetries, maxRetries, truncateString(errMsg, 500), domain.OutboxStatusFailed}
+	args = appendDeliveryInt64Args(args, uniqueIDs)
+	args = append(args, domain.OutboxStatusPending)
+	if _, err := execDeliverySQL(ctx, r.db, "mark delivery rows permanent failed batch", `
 		UPDATE youtube_notification_delivery
-		SET attempt_count = CASE WHEN attempt_count >= $1 THEN attempt_count ELSE $2 END,
-		    error = $3,
-		    status = $4,
+		SET attempt_count = CASE WHEN attempt_count >= ? THEN attempt_count ELSE ? END,
+		    error = ?,
+		    status = ?,
 		    locked_at = NULL
-		WHERE id = ANY($5) AND status = $6
-	`, maxRetries, maxRetries, truncateString(errMsg, 500), domain.OutboxStatusFailed, uniqueIDs, domain.OutboxStatusPending)
-	if err != nil {
-		return fmt.Errorf("mark delivery rows permanent failed batch: %w", err)
+		WHERE `+deliveryInClause("id", len(uniqueIDs))+` AND status = ?
+	`, args...); err != nil {
+		return err
 	}
 
 	return nil
@@ -298,9 +303,9 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, 
 	if err := selectDeliverySQL(ctx, r.db, &counts, "count delivery statuses", `
 		SELECT outbox_id, status, COUNT(*) AS count
 		FROM youtube_notification_delivery
-		WHERE outbox_id = ANY(?)
+		WHERE `+deliveryInClause("outbox_id", len(uniqueIDs))+`
 		GROUP BY outbox_id, status
-	`, uniqueIDs); err != nil {
+	`, appendDeliveryInt64Args(nil, uniqueIDs)...); err != nil {
 		return fmt.Errorf("update outbox aggregate statuses: count delivery statuses: %w", err)
 	}
 
@@ -328,16 +333,21 @@ func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outbox
 		errorText = "per-room delivery failed"
 	}
 
-	_, err := r.db.Exec(ctx, `
+	args := []any{
+		status,
+		status, domain.OutboxStatusSent, sentAt,
+		status, domain.OutboxStatusFailed, errorText,
+	}
+	args = appendDeliveryInt64Args(args, uniqueIDs)
+	if _, err := execDeliverySQL(ctx, r.db, "update outbox aggregate statuses: apply update", `
 		UPDATE youtube_notification_outbox
-		SET status = $1::text,
+		SET status = ?::text,
 		    locked_at = NULL,
-		    sent_at = CASE WHEN $1::text = $2::text THEN $3 ELSE sent_at END,
-		    error = CASE WHEN $1::text = $4::text THEN $5 ELSE '' END
-		WHERE id = ANY($6)
-	`, status, domain.OutboxStatusSent, sentAt, domain.OutboxStatusFailed, errorText, uniqueIDs)
-	if err != nil {
-		return fmt.Errorf("update outbox aggregate statuses: apply update: %w", err)
+		    sent_at = CASE WHEN ?::text = ?::text THEN ? ELSE sent_at END,
+		    error = CASE WHEN ?::text = ?::text THEN ? ELSE '' END
+		WHERE `+deliveryInClause("id", len(uniqueIDs))+`
+	`, args...); err != nil {
+		return err
 	}
 
 	return nil

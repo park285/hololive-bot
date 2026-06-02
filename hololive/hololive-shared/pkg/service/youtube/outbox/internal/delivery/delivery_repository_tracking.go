@@ -52,8 +52,10 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 		return nil, err
 	}
 
+	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
 	var targets []deliveryAlarmSentTarget
-	args := []any{uniqueIDs, []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}}
+	args := appendDeliveryInt64Args(nil, uniqueIDs)
+	args = appendDeliveryOutboxKindArgs(args, postKinds...)
 	statusClause := ""
 	if status != nil {
 		statusClause = " AND d.status = ?"
@@ -63,8 +65,8 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 		SELECT o.kind AS kind, o.content_id AS content_id
 		FROM youtube_notification_delivery AS d
 		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
-		WHERE d.id = ANY(?)
-		  AND o.kind = ANY(?)
+		WHERE `+deliveryInClause("d.id", len(uniqueIDs))+`
+		  AND `+deliveryInClause("o.kind", len(postKinds))+`
 		`+statusClause, args...); err != nil {
 		return nil, fmt.Errorf("query delivery alarm sent targets: %w", err)
 	}

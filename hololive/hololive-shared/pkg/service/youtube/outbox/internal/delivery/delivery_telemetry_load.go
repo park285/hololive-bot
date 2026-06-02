@@ -46,9 +46,9 @@ func (r *DeliveryTelemetryRepository) loadTrackingSnapshots(
 			created_at,
 			updated_at
 		FROM youtube_content_alarm_tracking
-		WHERE kind = ANY(?)
-		  AND content_id = ANY(?)
-	`, kinds, contentIDs); err != nil {
+		WHERE `+deliveryInClause("kind", len(kinds))+`
+		  AND `+deliveryInClause("content_id", len(contentIDs))+`
+	`, appendDeliveryStringArgs(appendDeliveryOutboxKindArgs(nil, kinds...), contentIDs)...); err != nil {
 		return nil, fmt.Errorf("enrich delivery telemetry context: load tracking rows: %w", err)
 	}
 
