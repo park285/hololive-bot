@@ -48,10 +48,12 @@ expect_eq "$(compose_service_resolve_redeploy_target llm)" "llm-scheduler" "rede
 expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" "redeploy alias postgres"
 expect_eq "$(compose_service_resolve_redeploy_target admin)" "admin-dashboard" "redeploy alias admin"
 expect_eq "$(compose_service_resolve_redeploy_target all)" "" "redeploy all sentinel"
+expect_eq "$(compose_service_resolve_redeploy_target youtube-producer-c)" "youtube-producer-c" "redeploy target youtube-producer-c (main-ap)"
 expect_fail "redeploy target rejects removed dispatcher" compose_service_resolve_redeploy_target dispatcher-go
 
 expect_eq "$(compose_service_resolve_log_target bot)" "hololive-bot" "log alias bot"
 expect_eq "$(compose_service_resolve_log_target youtube-producer)" "youtube-producer" "log target youtube-producer"
+expect_eq "$(compose_service_resolve_log_target youtube-producer-c)" "youtube-producer-c" "log target youtube-producer-c (main-ap)"
 expect_fail "log target rejects removed producer shorthand" compose_service_resolve_log_target producer
 expect_eq "$(compose_service_resolve_log_target llm)" "llm-scheduler" "log alias llm"
 expect_fail "log target rejects removed dispatcher" compose_service_resolve_log_target dispatcher-go

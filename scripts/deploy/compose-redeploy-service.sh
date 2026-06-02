@@ -10,7 +10,12 @@ cd "$ROOT_DIR"
 REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
-COMPOSE_FILE_PATHS=("${COMPOSE_FILE}")
+# COMPOSE_FILE 은 docker compose 관례대로 ':' 로 구분된 다중 경로를 허용한다(예: prod:main-ap overlay).
+IFS=':' read -r -a COMPOSE_FILE_PATHS <<< "${COMPOSE_FILE}"
+COMPOSE_FILE_ARGS=()
+for _compose_file in "${COMPOSE_FILE_PATHS[@]}"; do
+    [ -n "${_compose_file}" ] && COMPOSE_FILE_ARGS+=("-f" "${_compose_file}")
+done
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 
 resolve_shared_go_workspace_path() {
@@ -88,6 +93,16 @@ if [ "$TARGET" = "youtube-producer" ] && [[ ",${COMPOSE_FILE}," != *"docker-comp
     echo "[ERROR] youtube-producer is Osaka-owned. Refusing central redeploy without ALLOW_CENTRAL_YOUTUBE_PRODUCER=true."
     exit 1
 fi
+if [ "$TARGET" = "youtube-producer-c" ]; then
+    if [[ ",${COMPOSE_FILE}," != *"docker-compose.main-ap.yml"* ]]; then
+        echo "[ERROR] youtube-producer-c requires docker-compose.main-ap.yml in COMPOSE_FILE (e.g. COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml)."
+        exit 1
+    fi
+    if [[ ",${COMPOSE_PROFILES:-}," != *",main-ap,"* ]]; then
+        echo "[ERROR] youtube-producer-c requires COMPOSE_PROFILES=main-ap."
+        exit 1
+    fi
+fi
 if [ -z "$TARGET" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]; then
     echo "[ERROR] COMPOSE_PROFILES=oracle would include youtube-producer, which is Osaka-owned. Refusing central all-service deploy."
     exit 1
@@ -111,14 +126,14 @@ echo "[INFO] COMPOSE_ENV_FILE=$COMPOSE_ENV_FILE"
 
 if [ -n "$TARGET" ]; then
     echo "[UP] $TARGET"
-    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build "$TARGET"
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" up -d --build "$TARGET"
     removed_runtime_cleanup_standalone_dispatcher
     echo "[PS] $TARGET"
-    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps "$TARGET"
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" ps "$TARGET"
 else
     echo "[UP] all services"
-    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" up -d --build
     removed_runtime_cleanup_standalone_dispatcher
     echo "[PS] all services"
-    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" ps
 fi
