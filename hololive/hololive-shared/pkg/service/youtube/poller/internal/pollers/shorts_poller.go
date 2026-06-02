@@ -60,7 +60,7 @@ func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int,
 	return &ShortsPoller{
 		client:                           scraperClient,
 		db:                               db,
-		repository:                       batchrepo.NewBatchRepository(db),
+		repository:                       batchrepo.NewGormBatchRepositoryWithPersister(db, newDeliveryTelemetryLatencyPersisterAdapter(db)),
 		maxResults:                       maxResults,
 		routeDecider:                     routeDecider,
 		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,

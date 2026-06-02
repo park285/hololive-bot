@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -52,8 +53,32 @@ const (
 func newPublishedAtResolverRepository(db *gorm.DB) *publishedAtResolverRepository {
 	return &publishedAtResolverRepository{
 		db:              db,
-		batchRepository: batchrepo.NewGormBatchRepository(db),
+		batchRepository: batchrepo.NewGormBatchRepositoryWithPersister(db, newPublishedAtResolverLatencyPersisterAdapter(db)),
 	}
+}
+
+// newPublishedAtResolverLatencyPersisterAdapter는 published_at_resolver 계층을 위한
+// outbox 어댑터를 생성합니다.
+func newPublishedAtResolverLatencyPersisterAdapter(db *gorm.DB) batchrepo.PostLatencyClassificationPersister {
+	return &publishedAtResolverLatencyPersisterAdapter{db: db}
+}
+
+type publishedAtResolverLatencyPersisterAdapter struct {
+	db *gorm.DB
+}
+
+func (a *publishedAtResolverLatencyPersisterAdapter) PersistPostLatencyClassificationsByIdentities(
+	ctx context.Context,
+	identities []batchrepo.LatencyClassificationIdentity,
+) error {
+	outboxIdentities := make([]outbox.PostTrackingIdentity, 0, len(identities))
+	for i := range identities {
+		outboxIdentities = append(outboxIdentities, outbox.PostTrackingIdentity{
+			Kind:      identities[i].Kind,
+			ContentID: identities[i].ContentID,
+		})
+	}
+	return outbox.NewDeliveryTelemetryRepository(a.db).PersistPostLatencyClassificationsByIdentities(ctx, outboxIdentities)
 }
 
 func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(

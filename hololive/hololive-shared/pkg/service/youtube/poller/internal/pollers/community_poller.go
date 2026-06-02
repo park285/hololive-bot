@@ -61,7 +61,7 @@ func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults i
 	return &CommunityPoller{
 		client:                           scraperClient,
 		db:                               db,
-		repository:                       batchrepo.NewBatchRepository(db),
+		repository:                       batchrepo.NewGormBatchRepositoryWithPersister(db, newDeliveryTelemetryLatencyPersisterAdapter(db)),
 		maxResults:                       maxResults,
 		keywords:                         keywords,
 		routeDecider:                     routeDecider,
