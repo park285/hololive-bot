@@ -33,6 +33,7 @@ compose_service_resolve_redeploy_target() {
         hololive-alarm-worker|alarm-worker) printf '%s\n' "hololive-alarm-worker" ;;
         llm-scheduler|llm) printf '%s\n' "llm-scheduler" ;;
         youtube-producer) printf '%s\n' "youtube-producer" ;;
+        youtube-producer-c) printf '%s\n' "youtube-producer-c" ;;
         holo-postgres|postgres) printf '%s\n' "holo-postgres" ;;
         valkey-cache|valkey) printf '%s\n' "valkey-cache" ;;
         hololive-db-migrate|migrate) printf '%s\n' "hololive-db-migrate" ;;
@@ -51,6 +52,7 @@ compose_service_redeploy_usage_lines() {
         "  hololive-alarm-worker | alarm-worker" \
         "  llm-scheduler | llm" \
         "  youtube-producer" \
+        "  youtube-producer-c (main-ap; COMPOSE_FILE 에 docker-compose.main-ap.yml + COMPOSE_PROFILES=main-ap 필요)" \
         "  holo-postgres | postgres" \
         "  valkey-cache | valkey" \
         "  hololive-db-migrate | migrate" \
@@ -66,13 +68,14 @@ compose_service_resolve_log_target() {
     case "${key}" in
         bot|hololive-bot) printf '%s\n' "hololive-bot" ;;
         youtube-producer) printf '%s\n' "youtube-producer" ;;
+        youtube-producer-c) printf '%s\n' "youtube-producer-c" ;;
         llm|llm-scheduler) printf '%s\n' "llm-scheduler" ;;
         *) return 1 ;;
     esac
 }
 
 compose_service_log_targets_text() {
-    printf '%s\n' "bot hololive-bot youtube-producer llm llm-scheduler"
+    printf '%s\n' "bot hololive-bot youtube-producer youtube-producer-c llm llm-scheduler"
 }
 
 compose_service_resolve_osaka_log_targets() {
