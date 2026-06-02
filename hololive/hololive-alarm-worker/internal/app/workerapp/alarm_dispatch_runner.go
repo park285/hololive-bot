@@ -2,6 +2,7 @@ package workerapp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -24,6 +25,12 @@ type alarmDispatchConsumer interface {
 
 type alarmDispatchQuarantineConsumer interface {
 	Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error
+}
+
+// alarmDispatchSendingRetryConsumer는 post-send retryable failure(502/503)에서
+// row가 이미 'sending' 상태일 때 retry로 전환하는 경로를 지원한다.
+type alarmDispatchSendingRetryConsumer interface {
+	ScheduleSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 }
 
 type alarmDispatchIdleWaiter interface {
@@ -143,7 +150,7 @@ func (r alarmDispatchRunner) persistPreSendFailure(ctx context.Context, envelope
 
 func (r alarmDispatchRunner) persistPostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	if isAlarmDispatchRetryablePostSendFailure(cause) {
-		return r.persistPreSendFailure(ctx, envelopes, cause)
+		return r.persistSendingRetry(ctx, envelopes, cause)
 	}
 	if !r.postSendQuarantine {
 		return r.persistPreSendFailure(ctx, envelopes, cause)
@@ -160,13 +167,37 @@ func (r alarmDispatchRunner) persistPostSendingFailure(ctx context.Context, enve
 	return nil
 }
 
+// persistSendingRetry는 post-send retryable failure에서 row가 'sending' 상태임을 알고
+// ScheduleSendingRetry(status IN ('leased','sending'))를 사용한다. consumer가
+// alarmDispatchSendingRetryConsumer를 구현하지 않으면 기존 persistPreSendFailure로
+// 폴백하여 backward-compatibility를 유지한다.
+func (r alarmDispatchRunner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	consumer, ok := r.consumer.(alarmDispatchSendingRetryConsumer)
+	if !ok {
+		return r.persistPreSendFailure(ctx, envelopes, cause)
+	}
+	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
+	if err := consumer.ScheduleSendingRetry(ctx, retryEnvelopes); err != nil {
+		return r.preserveAfterPersistenceFailure(ctx, retryEnvelopes, fmt.Errorf("schedule alarm dispatch sending retry: %w", err))
+	}
+	if err := r.consumer.MoveToDLQ(ctx, dlqEnvelopes); err != nil {
+		return r.preserveAfterPersistenceFailure(ctx, dlqEnvelopes, fmt.Errorf("move alarm dispatch dlq: %w", err))
+	}
+	if err := r.consumer.ReleaseClaimKeys(ctx, claimKeysForAlarmDispatchEnvelopes(dlqEnvelopes)); err != nil {
+		return fmt.Errorf("release alarm dispatch dlq claim keys: %w", err)
+	}
+	return nil
+}
+
 func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
 	if cause == nil {
 		return false
 	}
-	message := cause.Error()
-	return strings.Contains(message, "/karing/content-list returned 502") ||
-		strings.Contains(message, "/karing/content-list returned 503")
+	var httpErr *iris.HTTPError
+	if errors.As(cause, &httpErr) {
+		return httpErr.StatusCode == 502 || httpErr.StatusCode == 503
+	}
+	return false
 }
 
 func (r alarmDispatchRunner) preserveAfterPersistenceFailure(

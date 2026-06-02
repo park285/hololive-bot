@@ -510,7 +510,9 @@ func TestAlarmDispatchRunnerQuarantinesPGSendFailureAfterMarkSending(t *testing.
 }
 
 func TestAlarmDispatchRunnerRetriesKaringBadGatewayAfterMarkSending(t *testing.T) {
-	karingErr := errors.New(`iris send karing content list: send iris karing content list: post /karing/content-list: iris /karing/content-list returned 502: {"message":"karing send failed"}`)
+	// alarmDispatchRunnerTestConsumer는 alarmDispatchSendingRetryConsumer를 구현하지 않으므로
+	// persistSendingRetry가 persistPreSendFailure로 폴백하여 ScheduleRetry를 호출한다.
+	karingErr := fmt.Errorf("iris send karing content list: %w", &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"})
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
 	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
@@ -523,7 +525,7 @@ func TestAlarmDispatchRunnerRetriesKaringBadGatewayAfterMarkSending(t *testing.T
 	require.Len(t, consumer.scheduledRetry, 1)
 	require.NotNil(t, consumer.scheduledRetry[0].Retry)
 	assert.Equal(t, 1, consumer.scheduledRetry[0].Retry.Attempt)
-	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, "/karing/content-list returned 502")
+	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, "returned 502")
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.markDispatched)

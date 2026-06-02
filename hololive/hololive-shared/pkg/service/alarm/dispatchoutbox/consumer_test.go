@@ -376,6 +376,10 @@ func (r *consumerTestRepository) ScheduleRetry(context.Context, []RetryUpdate, s
 	return nil
 }
 
+func (r *consumerTestRepository) ScheduleSendingRetry(context.Context, []RetryUpdate, string) error {
+	return nil
+}
+
 func (r *consumerTestRepository) MoveToDLQ(context.Context, []TerminalUpdate, string) error {
 	return nil
 }

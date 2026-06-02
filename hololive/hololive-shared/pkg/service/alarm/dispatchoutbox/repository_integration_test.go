@@ -626,6 +626,192 @@ func TestPgxRepositoryJSONBRecordsetParam_QuarantineSendingPath(t *testing.T) {
 	require.NotNil(t, quarantinedAt)
 }
 
+func TestPgxRepositoryScheduleSendingRetry_TransitionsSendingToRetry(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	workerID := "worker-sending-retry"
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-sending-retry",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-sr", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		ClaimKeys: []string{"claim-sr"},
+		Version:   1,
+	}
+
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
+	require.NoError(t, err)
+
+	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+
+	id := claimed[0].ID
+	// leased → sending
+	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+
+	var statusAfterSending string
+	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM alarm_dispatch_deliveries WHERE id=$1", id).Scan(&statusAfterSending))
+	require.Equal(t, string(StatusSending), statusAfterSending, "row must be 'sending' before ScheduleSendingRetry")
+
+	nextAttemptAt := time.Now().UTC().Add(5 * time.Second)
+	require.NoError(t, repository.ScheduleSendingRetry(ctx, []RetryUpdate{
+		{
+			ID:            id,
+			AttemptCount:  1,
+			NextAttemptAt: nextAttemptAt,
+			Error:         "502 bad gateway",
+		},
+	}, workerID))
+
+	var finalStatus string
+	var attemptCount int
+	var lastError string
+	var lockedBy *string
+	err = pool.QueryRow(ctx, `
+		SELECT status, attempt_count, last_error, locked_by
+		FROM alarm_dispatch_deliveries WHERE id=$1`, id,
+	).Scan(&finalStatus, &attemptCount, &lastError, &lockedBy)
+	require.NoError(t, err)
+	require.Equal(t, string(StatusRetry), finalStatus, "row must transition sending → retry")
+	require.Equal(t, 1, attemptCount)
+	require.Equal(t, "502 bad gateway", lastError)
+	require.Nil(t, lockedBy, "locked_by must be cleared after retry transition")
+}
+
+func TestPgxRepositoryScheduleSendingRetry_DoesNotTouchTerminalRows(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	workerID := "worker-sending-retry-terminal"
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	sent := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-sent",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-sent", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		Version: 1,
+	}
+	quarantined := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-quarantined",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-quarantined", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		Version: 1,
+	}
+
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{sent, quarantined}, Status: StatusPending})
+	require.NoError(t, err)
+
+	claimed, err := repository.ClaimDue(ctx, workerID, 2, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claimed, 2)
+
+	var sentID, quarantinedID int64
+	for _, r := range claimed {
+		switch r.RoomID {
+		case "room-sent":
+			sentID = r.ID
+		case "room-quarantined":
+			quarantinedID = r.ID
+		}
+	}
+
+	require.NoError(t, repository.MarkSending(ctx, []int64{sentID, quarantinedID}, workerID, time.Minute))
+	require.NoError(t, repository.MarkSent(ctx, []int64{sentID}, workerID))
+	require.NoError(t, repository.Quarantine(ctx, []TerminalUpdate{{ID: quarantinedID, Error: "hard fail"}}, workerID))
+
+	nextAttemptAt := time.Now().UTC().Add(5 * time.Second)
+	// ScheduleSendingRetry는 status IN ('leased','sending')만 건드려야 함
+	// sent/quarantined row에 대한 update는 0 rows 이지만 expectRowsAffected 로 오류 반환
+	err = repository.ScheduleSendingRetry(ctx, []RetryUpdate{
+		{ID: sentID, AttemptCount: 1, NextAttemptAt: nextAttemptAt, Error: "ignored"},
+		{ID: quarantinedID, AttemptCount: 1, NextAttemptAt: nextAttemptAt, Error: "ignored"},
+	}, workerID)
+	// 0 rows affected — terminal rows는 건드리지 않으므로 expectRowsAffected 에러 발생 예상
+	require.Error(t, err, "ScheduleSendingRetry must return error when no rows match (terminal rows protected)")
+
+	var sentStatus, quarantinedStatus string
+	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM alarm_dispatch_deliveries WHERE id=$1", sentID).Scan(&sentStatus))
+	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM alarm_dispatch_deliveries WHERE id=$1", quarantinedID).Scan(&quarantinedStatus))
+	require.Equal(t, string(StatusSent), sentStatus, "sent row must remain sent")
+	require.Equal(t, string(StatusQuarantined), quarantinedStatus, "quarantined row must remain quarantined")
+}
+
+// TestPgxRepositoryScheduleSendingRetry_ExpiredLeaseStillTransitions는
+// lock_expires_at이 과거인 'sending' row에 대해서도 소유 worker의 ScheduleSendingRetry가
+// 성공적으로 retry로 전환해야 함을 검증한다.
+// 만료돼도 locked_by=$workerID이 소유권을 보장하므로 double-send 위험이 없다.
+func TestPgxRepositoryScheduleSendingRetry_ExpiredLeaseStillTransitions(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	workerID := "worker-expired-lease"
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-expired",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-expired", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		ClaimKeys: []string{"claim-expired"},
+		Version:   1,
+	}
+
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
+	require.NoError(t, err)
+
+	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+
+	id := claimed[0].ID
+	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+
+	// lock_expires_at을 과거로 강제 설정 — lease 만료 시뮬레이션
+	_, err = pool.Exec(ctx, `
+		UPDATE alarm_dispatch_deliveries
+		SET lock_expires_at = NOW() - INTERVAL '10 seconds'
+		WHERE id = $1`, id)
+	require.NoError(t, err)
+
+	var statusBeforeRetry string
+	var expiresAt interface{}
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT status, lock_expires_at < NOW()
+		FROM alarm_dispatch_deliveries WHERE id=$1`, id,
+	).Scan(&statusBeforeRetry, &expiresAt))
+	require.Equal(t, string(StatusSending), statusBeforeRetry, "row must be 'sending' with expired lease")
+
+	nextAttemptAt := time.Now().UTC().Add(5 * time.Second)
+	err = repository.ScheduleSendingRetry(ctx, []RetryUpdate{
+		{
+			ID:            id,
+			AttemptCount:  1,
+			NextAttemptAt: nextAttemptAt,
+			Error:         "502 expired lease retry",
+		},
+	}, workerID)
+	require.NoError(t, err, "ScheduleSendingRetry must succeed for 'sending' row with expired lease owned by same worker")
+
+	var finalStatus string
+	var lockedBy *string
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT status, locked_by FROM alarm_dispatch_deliveries WHERE id=$1`, id,
+	).Scan(&finalStatus, &lockedBy))
+	require.Equal(t, string(StatusRetry), finalStatus, "row must transition sending → retry even with expired lease")
+	require.Nil(t, lockedBy, "locked_by must be cleared after retry transition")
+}
+
 func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
