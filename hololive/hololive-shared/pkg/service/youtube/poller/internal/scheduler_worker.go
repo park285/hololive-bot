@@ -107,7 +107,7 @@ func (s *Scheduler) claimJobRun(ctx context.Context, job *Job) jobClaimDecision 
 	status, claim, err := s.jobClaimer.TryClaim(ctx, job.Poller.Name(), job.ChannelID, leaseTTL, job.Interval)
 	if err != nil {
 		s.metrics.ObserveJobClaim(job.Poller.Name(), string(JobClaimUnavailable))
-		slog.Warn("job_claim",
+		s.logger.Warn("job_claim",
 			slog.String("poller", job.Poller.Name()),
 			slog.String("result", string(JobClaimUnavailable)),
 			slog.Any("error", err),
@@ -115,7 +115,7 @@ func (s *Scheduler) claimJobRun(ctx context.Context, job *Job) jobClaimDecision 
 		return jobClaimDecision{err: fmt.Errorf("claim poll job: %w", err)}
 	}
 	s.metrics.ObserveJobClaim(job.Poller.Name(), string(status.Result))
-	slog.Debug("job_claim",
+	s.logger.Debug("job_claim",
 		slog.String("poller", job.Poller.Name()),
 		slog.String("result", string(status.Result)),
 		slog.Duration("retry_after", status.RetryAfter),
@@ -147,7 +147,7 @@ func acquiredJobClaimDecision(claim JobClaim) jobClaimDecision {
 
 func (s *Scheduler) waitForJobRunSlot(ctx context.Context, job *Job, decision jobClaimDecision) error {
 	if err := s.rateLimiter.Wait(ctx); err != nil {
-		logRateLimiterWaitError(err)
+		logRateLimiterWaitError(s.logger, err)
 		if decision.claimed {
 			s.releaseJobClaim(ctx, job, decision.claim)
 		}
@@ -157,12 +157,12 @@ func (s *Scheduler) waitForJobRunSlot(ctx context.Context, job *Job, decision jo
 	return nil
 }
 
-func logRateLimiterWaitError(err error) {
+func logRateLimiterWaitError(logger *slog.Logger, err error) {
 	if errors.Is(err, context.Canceled) {
-		slog.Debug("Rate limiter wait canceled", "error", err)
+		logger.Debug("Rate limiter wait canceled", "error", err)
 		return
 	}
-	slog.Warn("Rate limiter wait failed", "error", err)
+	logger.Warn("Rate limiter wait failed", "error", err)
 }
 
 func (s *Scheduler) pollContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -202,8 +202,9 @@ func (s *Scheduler) startJobClaimRenewLoop(ctx context.Context, pollerName strin
 	}
 
 	metrics := s.metrics
+	logger := s.logger
 	go func() {
-		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, pollerName, ttl, interval, errCh, metrics)
+		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, pollerName, ttl, interval, errCh, metrics, logger)
 	}()
 
 	cancel := func() {
@@ -223,6 +224,7 @@ func runJobClaimRenewLoop(
 	interval time.Duration,
 	errCh chan<- error,
 	metrics *Metrics,
+	logger *slog.Logger,
 ) {
 	loopCtx, cancelLoop := context.WithCancel(renewCtx)
 	stopPollCancel := context.AfterFunc(pollCtx, cancelLoop)
@@ -232,7 +234,7 @@ func runJobClaimRenewLoop(
 	}()
 
 	_ = lifecycle.RunTickerLoop(loopCtx, interval, func(context.Context) error {
-		if !renewJobClaim(pollCtx, pollCancel, claim, pollerName, ttl, errCh, metrics) {
+		if !renewJobClaim(pollCtx, pollCancel, claim, pollerName, ttl, errCh, metrics, logger) {
 			return errJobClaimRenewLoopStopped
 		}
 		return nil
@@ -247,11 +249,12 @@ func renewJobClaim(
 	ttl time.Duration,
 	errCh chan<- error,
 	metrics *Metrics,
+	logger *slog.Logger,
 ) bool {
 	renewed, err := claim.Renew(ctx, ttl)
 	metrics.ObserveJobLeaseRenew(pollerName, boolResult(renewed, err))
 	if err != nil {
-		slog.Warn("job_lease_lost",
+		logger.Warn("job_lease_lost",
 			slog.String("poller", pollerName),
 			slog.String("result", "error"),
 			slog.Any("error", err),
@@ -261,7 +264,7 @@ func renewJobClaim(
 		return false
 	}
 	if !renewed {
-		slog.Warn("job_lease_lost",
+		logger.Warn("job_lease_lost",
 			slog.String("poller", pollerName),
 			slog.String("result", "lost"),
 		)
@@ -288,7 +291,7 @@ func (s *Scheduler) finishJobClaim(ctx context.Context, job *Job, claim JobClaim
 	if pollErr == nil {
 		completed, err := claim.MarkCompleted(ctx, job.Interval)
 		s.metrics.ObserveJobMarkCompleted(job.Poller.Name(), boolResult(completed, err))
-		slog.Debug("job_mark_completed",
+		s.logger.Debug("job_mark_completed",
 			slog.String("poller", job.Poller.Name()),
 			slog.String("result", boolResult(completed, err)),
 		)
@@ -309,14 +312,14 @@ func (s *Scheduler) releaseJobClaim(ctx context.Context, job *Job, claim JobClai
 	released, err := claim.Release(ctx)
 	s.metrics.ObserveJobRelease(job.Poller.Name(), boolResult(released, err))
 	if err != nil {
-		slog.Warn("Poll job claim release failed",
+		s.logger.Warn("Poll job claim release failed",
 			"poller", job.Poller.Name(),
 			"channel_id", job.ChannelID,
 			"error", err)
 		return
 	}
 	if !released {
-		slog.Warn("Poll job claim release skipped after ownership loss",
+		s.logger.Warn("Poll job claim release skipped after ownership loss",
 			"poller", job.Poller.Name(),
 			"channel_id", job.ChannelID)
 	}
@@ -324,7 +327,7 @@ func (s *Scheduler) releaseJobClaim(ctx context.Context, job *Job, claim JobClai
 
 func (s *Scheduler) logPollResult(job *Job, workerID int, pollCtx context.Context, elapsed time.Duration, err error) string {
 	if err == nil {
-		slog.Debug("Poll succeeded",
+		s.logger.Debug("Poll succeeded",
 			"poller", job.Poller.Name(),
 			"channel_id", job.ChannelID,
 			"worker_id", workerID,
@@ -332,7 +335,7 @@ func (s *Scheduler) logPollResult(job *Job, workerID int, pollCtx context.Contex
 		return "success"
 	}
 	if errors.Is(err, context.Canceled) {
-		slog.Debug("Poll canceled",
+		s.logger.Debug("Poll canceled",
 			"poller", job.Poller.Name(),
 			"channel_id", job.ChannelID,
 			"worker_id", workerID,
@@ -343,7 +346,7 @@ func (s *Scheduler) logPollResult(job *Job, workerID int, pollCtx context.Contex
 		s.logPollTimeout(job, workerID, elapsed, err)
 		return "timeout"
 	}
-	slog.Warn("Poll failed",
+	s.logger.Warn("Poll failed",
 		"poller", job.Poller.Name(),
 		"channel_id", job.ChannelID,
 		"worker_id", workerID,
@@ -353,7 +356,7 @@ func (s *Scheduler) logPollResult(job *Job, workerID int, pollCtx context.Contex
 }
 
 func (s *Scheduler) logPollTimeout(job *Job, workerID int, elapsed time.Duration, err error) {
-	slog.Warn("Poll timed out",
+	s.logger.Warn("Poll timed out",
 		"poller", job.Poller.Name(),
 		"channel_id", job.ChannelID,
 		"worker_id", workerID,

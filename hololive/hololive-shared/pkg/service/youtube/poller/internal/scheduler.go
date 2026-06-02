@@ -23,6 +23,7 @@ package polling
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -98,6 +99,7 @@ type Scheduler struct {
 	errorBackoffMax time.Duration
 	jobClaimer      JobClaimer
 	metrics         *Metrics
+	logger          *slog.Logger
 	stopCh          chan struct{}
 	stopCancel      context.CancelFunc
 	wakeCh          chan struct{}
@@ -121,6 +123,7 @@ type SchedulerConfig struct {
 	ErrorBackoffMax time.Duration // 실패 후 최대 재시도 지연 (기본: 5분)
 	JobClaimer      JobClaimer
 	Metrics         *Metrics
+	Logger          *slog.Logger // nil이면 slog.Default()로 폴백
 }
 
 func DefaultSchedulerConfig() SchedulerConfig {
@@ -165,6 +168,11 @@ func NewScheduler(config SchedulerConfig) *Scheduler {
 		metrics = NewMetrics()
 	}
 
+	logger := config.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &Scheduler{
 		jobs:            make(jobHeap, 0),
 		jobMap:          make(map[string]*Job),
@@ -175,6 +183,7 @@ func NewScheduler(config SchedulerConfig) *Scheduler {
 		errorBackoffMax: config.ErrorBackoffMax,
 		jobClaimer:      config.JobClaimer,
 		metrics:         metrics,
+		logger:          logger,
 		stopCh:          make(chan struct{}),
 		wakeCh:          make(chan struct{}, 1),
 	}

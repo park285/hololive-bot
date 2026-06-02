@@ -111,7 +111,7 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 		CleanupEnabled:      false,
 	})
 	dispatcher.telemetry = nil
-	dispatcher.onProcessOnce = probe.tick
+	dispatcher.setOnProcessOnce(probe.tick)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -152,7 +152,7 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 		DeliveryParallelism:   1,
 		CleanupEnabled:        false,
 	})
-	dispatcher.onAggregateSync = probe.tick
+	dispatcher.setOnAggregateSync(probe.tick)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -197,7 +197,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 		CleanupEnabled: true,
 	})
 	dispatcher.telemetry = nil
-	dispatcher.onCleanup = probe.tick
+	dispatcher.setOnCleanup(probe.tick)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

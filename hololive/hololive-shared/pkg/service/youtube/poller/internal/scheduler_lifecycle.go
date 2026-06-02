@@ -24,7 +24,6 @@ package polling
 import (
 	"container/heap"
 	"context"
-	"log/slog"
 	"time"
 )
 
@@ -52,7 +51,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	errorBackoffMax := s.errorBackoffMax
 	s.mu.Unlock()
 
-	slog.Info("Scheduler starting",
+	s.logger.Info("Scheduler starting",
 		"worker_count", workerCount,
 		"job_count", jobCount,
 		"poll_timeout", pollTimeout,
@@ -92,7 +91,7 @@ func (s *Scheduler) Stop() {
 		close(stopCh)
 	}
 	s.wg.Wait()
-	slog.Info("Scheduler stopped")
+	s.logger.Info("Scheduler stopped")
 }
 
 func (s *Scheduler) NudgeAllJobs() {
