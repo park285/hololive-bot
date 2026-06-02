@@ -144,11 +144,9 @@ func TestBreaker_ConcurrentRecordFailure(t *testing.T) {
 	var wg sync.WaitGroup
 
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			b.RecordFailure()
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -160,11 +158,9 @@ func TestBreaker_ConcurrentRecordFailure(t *testing.T) {
 
 	// 50회 더 실패 → threshold 도달
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			b.RecordFailure()
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -186,15 +182,13 @@ func TestBreaker_RecordFailure_ConcurrentTransitionOpensOnce(t *testing.T) {
 	openedCount := 0
 
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if b.RecordFailure() {
 				mu.Lock()
 				openedCount++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 
