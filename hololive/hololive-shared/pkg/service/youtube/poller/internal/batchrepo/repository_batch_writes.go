@@ -240,6 +240,10 @@ func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Contex
 		appendNotificationInsertArgs(&sb, &args, i, notification, now)
 	}
 
+	// ON CONFLICT 재무장: 같은 (kind,content_id)가 재폴링에서 재등장할 때 FAILED 행을 PENDING으로
+	// 되살린다. kind IN 절이 community/shorts로 좁혀진 것은 정책이 아니라 도달성 때문 — 이들만 watermark를
+	// 보류해 재등장하고(isCommunityShortsOutboxKind 주석 참고), video/live는 watermark 무조건 전진으로
+	// 여기서 재충돌 자체가 없다. video/live의 미발송 FAILED 복구는 dispatcher의 revival sweep이 담당한다.
 	sb.WriteString(`
 		ON CONFLICT (kind, content_id) DO UPDATE
 		SET channel_id = EXCLUDED.channel_id,

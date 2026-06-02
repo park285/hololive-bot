@@ -8,6 +8,7 @@ type dispatcherTestHooks struct {
 	onProcessOnce   func()
 	onAggregateSync func()
 	onCleanup       func()
+	onRevive        func()
 }
 
 func (h *dispatcherTestHooks) fireProcessOnce() {
@@ -25,5 +26,11 @@ func (h *dispatcherTestHooks) fireAggregateSync() {
 func (h *dispatcherTestHooks) fireCleanup() {
 	if h.onCleanup != nil {
 		h.onCleanup()
+	}
+}
+
+func (h *dispatcherTestHooks) fireRevive() {
+	if h.onRevive != nil {
+		h.onRevive()
 	}
 }

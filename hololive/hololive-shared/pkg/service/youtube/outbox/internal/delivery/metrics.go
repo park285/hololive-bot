@@ -39,6 +39,9 @@ var (
 	outboxDispatchDuration        prometheus.Histogram
 	outboxDispatchBatchSize       prometheus.Histogram
 	outboxDispatchTouchedOutboxes prometheus.Histogram
+
+	outboxRevivedTotal      prometheus.Counter
+	outboxReviveErrorsTotal prometheus.Counter
 )
 
 func initOutboxMetrics() {
@@ -112,4 +115,35 @@ func initOutboxDispatchMetrics() {
 			Buckets: []float64{1, 2, 5, 10, 20, 50, 100, 200},
 		},
 	)
+
+	outboxRevivedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_revived_total",
+			Help: "Total fresh never-sent FAILED YouTube outbox rows revived for redelivery.",
+		},
+	)
+
+	outboxReviveErrorsTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_revive_errors_total",
+			Help: "Total stale-failed revival sweep transaction errors.",
+		},
+	)
+}
+
+// observeOutboxRevived는 stale-failed revival sweep이 되살린 outbox 행 수를 누적한다.
+// 메트릭 미초기화(NewDispatcher 미경유 단위 테스트 등) 시 no-op.
+func observeOutboxRevived(n int64) {
+	if outboxRevivedTotal == nil || n <= 0 {
+		return
+	}
+	outboxRevivedTotal.Add(float64(n))
+}
+
+// observeOutboxReviveError는 revival sweep 트랜잭션 실패를 누적한다(지속 실패 관측용). 미초기화 시 no-op.
+func observeOutboxReviveError() {
+	if outboxReviveErrorsTotal == nil {
+		return
+	}
+	outboxReviveErrorsTotal.Inc()
 }
