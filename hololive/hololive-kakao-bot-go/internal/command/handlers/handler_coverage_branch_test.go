@@ -23,10 +23,8 @@ package handlers
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
@@ -47,16 +45,6 @@ func (s *stubCoverageStreamProvider) GetChannelSchedule(_ context.Context, _ str
 }
 
 func (s *stubCoverageStreamProvider) GetChannel(_ context.Context, _ string) (*domain.Channel, error) {
-	return nil, nil
-}
-
-type stubCoverageStatsRepository struct{}
-
-func (s *stubCoverageStatsRepository) GetTopGainers(_ context.Context, _ time.Time, _ int) ([]domain.RankEntry, error) {
-	return nil, nil
-}
-
-func (s *stubCoverageStatsRepository) GetSubscriberGraph(_ context.Context, _ string, _ int) (*stats.SubscriberGraphData, error) {
 	return nil, nil
 }
 
