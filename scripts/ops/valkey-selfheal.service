@@ -1,0 +1,24 @@
+# valkey-selfheal.service — 설치 템플릿. /etc/systemd/system/ 에 복사 후 경로·User·권한을 조정한다.
+#
+# 권한 주의:
+#   - codex(2차 자율복구)는 kapu 사용자 설정(~/.codex, ~/.local/bin/codex)을 쓴다 → User=kapu 권장.
+#   - recreate tier 는 /run/hololive-bot/env(600 root)를 읽으므로 kapu 로는 실패한다(restart+codex 로 보완).
+#     완전한 결정론 recreate 까지 원하면 env 를 kapu 가 읽도록 권한을 조정하거나, root 로 실행하되 codex 설정을 root 에 둔다.
+#   - 설치 전 STATE/JOURNAL 디렉토리 생성: mkdir -p ~/.local/state
+#
+# 활성화: sudo systemctl enable --now valkey-selfheal.timer
+[Unit]
+Description=valkey-cache crash loop self-heal (single pass)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+User=kapu
+# systemd User 환경엔 ~/.local/bin 이 없어 codex 를 못 찾는다 → PATH 명시.
+Environment=PATH=/home/kapu/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=SELFHEAL_STATE=%h/.local/state/valkey-selfheal.state
+Environment=SELFHEAL_JOURNAL=%h/.local/state/valkey-selfheal.jsonl
+# 자율복구(codex) 활성: --apply. 감지/저널만 원하면 --dry-run 으로 시작해 거동을 먼저 관찰할 것.
+ExecStart=/home/kapu/work/iris-stack/hololive-bot/scripts/ops/valkey-selfheal.sh --apply
+TimeoutStartSec=360
