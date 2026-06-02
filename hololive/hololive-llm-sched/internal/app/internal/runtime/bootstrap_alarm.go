@@ -49,9 +49,10 @@ func initMemberNewsService(
 	logger *slog.Logger,
 ) *membernews.Service {
 	repository := membernews.NewRepository(postgres, cacheClient, logger)
-	llmClient := ProvideMemberNewsLLMClient(cliproxy, llmConfig, logger)
-	reviewer := ProvideMemberNewsReviewerClient(cliproxy, llmConfig, logger)
-	adjudicator := ProvideMemberNewsAdjudicatorClient(cliproxy, llmConfig, logger)
+	costTracker := ProvideLLMCostTracker(cacheClient, llmConfig.MonthlyTokenCeiling, logger)
+	llmClient := ProvideMemberNewsLLMClient(cliproxy, llmConfig, costTracker, logger)
+	reviewer := ProvideMemberNewsReviewerClient(cliproxy, llmConfig, costTracker, logger)
+	adjudicator := ProvideMemberNewsAdjudicatorClient(cliproxy, llmConfig, costTracker, logger)
 
 	searcher := provideExaSearcher(exaConfig, logger)
 

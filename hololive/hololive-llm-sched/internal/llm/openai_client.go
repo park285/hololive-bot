@@ -54,6 +54,7 @@ type OpenAIClient struct {
 	webSearch       bool
 	chatCompletions bool // true=Chat Completions API (cliproxy 호환)
 	logger          *slog.Logger
+	costTracker     CostTracker
 }
 
 func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
@@ -101,7 +102,17 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		webSearch:       webSearch,
 		chatCompletions: o.ChatCompletions,
 		logger:          logger,
+		costTracker:     o.CostTracker,
 	}
+}
+
+// recordUsage는 provider 응답의 토큰 사용량을 cost tracker에 누적한다. tracker 미주입·토큰 0이면 no-op.
+// LLM 응답 경로에서 호출되므로 에러를 전파하지 않는다.
+func (c *OpenAIClient) recordUsage(ctx context.Context, tokens int64) {
+	if c == nil || c.costTracker == nil || tokens <= 0 {
+		return
+	}
+	c.costTracker.RecordUsage(ctx, "openai", c.model, tokens)
 }
 
 // chatCompletions=true이면 Chat Completions API, 아니면 Responses API를 사용합니다.
@@ -257,6 +268,7 @@ func (c *OpenAIClient) generateJSONResponses(ctx context.Context, systemPrompt, 
 		return "", fmt.Errorf("openai responses API: %w", err)
 	}
 
+	c.recordUsage(ctx, resp.Usage.TotalTokens)
 	return extractResponsesOutputText(resp)
 }
 
@@ -298,6 +310,8 @@ Do not include any text before or after the JSON. Only output the JSON object.`,
 	if err != nil {
 		return "", fmt.Errorf("openai chat completions API: %w", err)
 	}
+
+	c.recordUsage(ctx, completion.Usage.TotalTokens)
 
 	if len(completion.Choices) == 0 {
 		return "", fmt.Errorf("openai: chat completions 응답에 choices 없음")

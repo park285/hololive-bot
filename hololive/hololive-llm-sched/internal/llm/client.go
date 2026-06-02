@@ -32,6 +32,7 @@ type Options struct {
 	WebSearch       *bool  // nil=기본값(true), false=비활성화
 	ChatCompletions bool   // true=Chat Completions API 사용 (cliproxy 호환)
 	ReasoningEffort string // reasoning 모델용 사고 깊이 (high, xhigh 등)
+	CostTracker     CostTracker
 }
 
 type Option func(*Options)
@@ -68,6 +69,15 @@ func WithReasoningEffort(effort string) Option {
 	return func(o *Options) {
 		if effort != "" {
 			o.ReasoningEffort = effort
+		}
+	}
+}
+
+// WithCostTracker는 토큰 사용량 관측기를 주입한다. nil이면 관측 비활성(no-op).
+func WithCostTracker(tracker CostTracker) Option {
+	return func(o *Options) {
+		if tracker != nil {
+			o.CostTracker = tracker
 		}
 	}
 }
