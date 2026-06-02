@@ -47,7 +47,7 @@ func NewVideosPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int)
 	return &VideosPoller{
 		client:     scraperClient,
 		db:         db,
-		repository: batchrepo.NewBatchRepository(db),
+		repository: batchrepo.NewGormBatchRepositoryWithPersister(db, newDeliveryTelemetryLatencyPersisterAdapter(db)),
 		maxResults: maxResults,
 	}
 }

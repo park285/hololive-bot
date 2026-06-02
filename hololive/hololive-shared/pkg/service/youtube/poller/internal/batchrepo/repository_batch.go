@@ -28,7 +28,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -40,7 +39,8 @@ type BatchRepository interface {
 }
 
 type GormBatchRepository struct {
-	DB *gorm.DB
+	DB               *gorm.DB
+	latencyPersister PostLatencyClassificationPersister
 }
 
 func NewBatchRepository(db *gorm.DB) BatchRepository {
@@ -49,6 +49,10 @@ func NewBatchRepository(db *gorm.DB) BatchRepository {
 
 func NewGormBatchRepository(db *gorm.DB) *GormBatchRepository {
 	return &GormBatchRepository{DB: db}
+}
+
+func NewGormBatchRepositoryWithPersister(db *gorm.DB, persister PostLatencyClassificationPersister) *GormBatchRepository {
+	return &GormBatchRepository{DB: db, latencyPersister: persister}
 }
 
 func (r *GormBatchRepository) PersistVideos(ctx context.Context, videos []*domain.YouTubeVideo, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking, watermark *domain.YouTubeContentWatermark) error {
@@ -150,16 +154,16 @@ func (r *GormBatchRepository) persistLatencyClassificationsAfterCommit(
 	ctx context.Context,
 	trackingRows []*domain.YouTubeContentAlarmTracking,
 ) {
-	if r == nil || r.DB == nil || len(trackingRows) == 0 {
+	if r == nil || r.DB == nil || r.latencyPersister == nil || len(trackingRows) == 0 {
 		return
 	}
 
-	identities := make([]outbox.PostTrackingIdentity, 0, len(trackingRows))
+	identities := make([]LatencyClassificationIdentity, 0, len(trackingRows))
 	for i := range trackingRows {
 		if trackingRows[i] == nil {
 			continue
 		}
-		identities = append(identities, outbox.PostTrackingIdentity{
+		identities = append(identities, LatencyClassificationIdentity{
 			Kind:      trackingRows[i].Kind,
 			ContentID: trackingRows[i].ContentID,
 		})
@@ -168,7 +172,7 @@ func (r *GormBatchRepository) persistLatencyClassificationsAfterCommit(
 		return
 	}
 
-	if err := outbox.NewDeliveryTelemetryRepository(r.DB).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+	if err := r.latencyPersister.PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
 		slog.Default().Warn("Failed to persist post latency classifications after detection commit",
 			slog.Int("tracking_rows", len(identities)),
 			slog.Any("error", err),
