@@ -1,0 +1,13 @@
+# valkey-selfheal.timer — 30초 주기 평가. /etc/systemd/system/ 에 .service 와 함께 복사.
+# 활성화: sudo systemctl daemon-reload && sudo systemctl enable --now valkey-selfheal.timer
+# 거동 확인: journalctl -u valkey-selfheal.service -f  또는  tail -f ~/.local/state/valkey-selfheal.jsonl
+[Unit]
+Description=Run valkey-selfheal every 30s
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
