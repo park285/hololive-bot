@@ -77,19 +77,6 @@ func TestNewApplyFn_AlarmAdvanceMinutes(t *testing.T) {
 	assert.Equal(t, contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 15}, got)
 }
 
-func TestNewApplyFn_MemberNewsWeeklyRunNow(t *testing.T) {
-	called := false
-	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
-		MemberNewsWeeklyNow: func() {
-			called = true
-		},
-	})
-
-	applyFn(ConfigUpdate{Type: contractssettings.UpdateTypeMemberNewsRunNow})
-
-	assert.True(t, called)
-}
-
 func TestNewApplyFn_DecodeErrorDoesNotInvokeHandler(t *testing.T) {
 	called := false
 	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{

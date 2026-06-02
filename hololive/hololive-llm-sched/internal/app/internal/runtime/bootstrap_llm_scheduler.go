@@ -40,7 +40,6 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/shared-go/pkg/runtime/httpserver"
@@ -57,24 +56,14 @@ type LLMSchedulerRuntime struct {
 	MemberNewsScheduler        *mnscheduler.Scheduler
 	MemberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler
 
-	configSubscriber *configsub.Subscriber
-	httpServer       *http.Server
+	httpServer *http.Server
 	lifecycle.Managed
-}
-
-type memberNewsWeeklyDigestSender interface {
-	SendWeeklyDigest(ctx context.Context) error
 }
 
 func (r *LLMSchedulerRuntime) Run() {
 	if err := lifecycle.Run(lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
 		Start: func(ctx context.Context, errCh chan<- error) {
-			if r.configSubscriber != nil {
-				go r.configSubscriber.Run(ctx)
-				r.Logger.Info("LLM scheduler config subscriber started")
-			}
-
 			r.startSchedulers(ctx)
 			r.startHTTPServer(errCh)
 		},
@@ -250,8 +239,6 @@ func buildLLMSchedulerComponents(
 	if err != nil {
 		return nil, err
 	}
-	configSubscriber := buildLLMSchedulerConfigSubscriber(ctx, cacheService, memberNewsScheduler, logger)
-
 	return newLLMSchedulerRuntime(
 		schedulerConfig,
 		logger,
@@ -261,7 +248,6 @@ func buildLLMSchedulerComponents(
 		majorEventScraperScheduler,
 		memberNewsScheduler,
 		memberNewsMonthlyScheduler,
-		configSubscriber,
 		httpServer,
 	), nil
 }
@@ -275,7 +261,6 @@ func newLLMSchedulerRuntime(
 	majorEventScraperScheduler *mescraper.RuntimeScheduler,
 	memberNewsScheduler *mnscheduler.Scheduler,
 	memberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler,
-	configSubscriber *configsub.Subscriber,
 	httpServer *http.Server,
 ) *LLMSchedulerRuntime {
 	return &LLMSchedulerRuntime{
@@ -286,7 +271,6 @@ func newLLMSchedulerRuntime(
 		MajorEventScraperScheduler: majorEventScraperScheduler,
 		MemberNewsScheduler:        memberNewsScheduler,
 		MemberNewsMonthlyScheduler: memberNewsMonthlyScheduler,
-		configSubscriber:           configSubscriber,
 		httpServer:                 httpServer,
 	}
 }
@@ -339,35 +323,4 @@ func buildLLMSchedulerHTTPServer(
 
 	addr := fmt.Sprintf(":%d", port)
 	return sharedserver.NewH2CServer(addr, router, "hololive-llm-sched.http"), nil
-}
-
-func buildLLMSchedulerConfigSubscriber(
-	ctx context.Context,
-	cacheService cache.Client,
-	memberNewsScheduler memberNewsWeeklyDigestSender,
-	logger *slog.Logger,
-) *configsub.Subscriber {
-	return configsub.New(
-		cacheService.GetClient(),
-		newLLMSchedulerConfigApplyFn(ctx, memberNewsScheduler, logger),
-		logger,
-	)
-}
-
-func newLLMSchedulerConfigApplyFn(
-	ctx context.Context,
-	memberNewsScheduler memberNewsWeeklyDigestSender,
-	logger *slog.Logger,
-) func(configsub.ConfigUpdate) {
-	executor := newMemberNewsRunNowExecutor(ctx, memberNewsScheduler, constants.RequestTimeout.BotAlarmCheck, logger)
-
-	return configsub.NewApplyFn(logger, configsub.ApplyHandlers{
-		//nolint:contextcheck // handler signature is func(); executor captures and propagates parent ctx.
-		MemberNewsWeeklyNow: func() {
-			executor.Trigger()
-		},
-		Unknown: func(updateType string) {
-			logger.Debug("Ignoring config update type for llm scheduler", slog.String("type", updateType))
-		},
-	})
 }
