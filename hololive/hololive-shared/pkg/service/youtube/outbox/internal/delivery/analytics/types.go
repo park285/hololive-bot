@@ -7,25 +7,25 @@ import (
 )
 
 type PostSendCount struct {
-	OutboxKind            domain.OutboxKind `gorm:"column:outbox_kind"`
-	AlarmType             domain.AlarmType  `gorm:"column:alarm_type"`
-	ChannelID             string            `gorm:"column:channel_id"`
-	PostID                string            `gorm:"column:post_id"`
-	ContentID             string            `gorm:"column:content_id"`
-	ActualPublishedAt     *time.Time        `gorm:"column:actual_published_at"`
-	DetectedAt            *time.Time        `gorm:"column:detected_at"`
-	AlarmSentAt           *time.Time        `gorm:"column:alarm_sent_at"`
-	AlarmLatencyMillis    *int64            `gorm:"column:alarm_latency_millis"`
-	AlarmLatencyExceeded  *bool             `gorm:"-"`
-	FirstEventAt          *time.Time        `gorm:"column:first_event_at"`
-	LastEventAt           *time.Time        `gorm:"column:last_event_at"`
-	FirstSuccessAt        *time.Time        `gorm:"column:first_success_at"`
-	LastSuccessAt         *time.Time        `gorm:"column:last_success_at"`
-	OutboxCount           int64             `gorm:"column:outbox_count"`
-	SuccessSendCount      int64             `gorm:"column:success_send_count"`
-	SuccessRoomCount      int64             `gorm:"column:success_room_count"`
-	DuplicateSuccessCount int64             `gorm:"column:duplicate_success_count"`
-	FailedAttemptCount    int64             `gorm:"column:failed_attempt_count"`
+	OutboxKind            domain.OutboxKind `db:"outbox_kind"`
+	AlarmType             domain.AlarmType  `db:"alarm_type"`
+	ChannelID             string            `db:"channel_id"`
+	PostID                string            `db:"post_id"`
+	ContentID             string            `db:"content_id"`
+	ActualPublishedAt     *time.Time        `db:"actual_published_at"`
+	DetectedAt            *time.Time        `db:"detected_at"`
+	AlarmSentAt           *time.Time        `db:"alarm_sent_at"`
+	AlarmLatencyMillis    *int64            `db:"alarm_latency_millis"`
+	AlarmLatencyExceeded  *bool             `db:"-"`
+	FirstEventAt          *time.Time        `db:"first_event_at"`
+	LastEventAt           *time.Time        `db:"last_event_at"`
+	FirstSuccessAt        *time.Time        `db:"first_success_at"`
+	LastSuccessAt         *time.Time        `db:"last_success_at"`
+	OutboxCount           int64             `db:"outbox_count"`
+	SuccessSendCount      int64             `db:"success_send_count"`
+	SuccessRoomCount      int64             `db:"success_room_count"`
+	DuplicateSuccessCount int64             `db:"duplicate_success_count"`
+	FailedAttemptCount    int64             `db:"failed_attempt_count"`
 }
 
 type ChannelPostDeliverySummary struct {
@@ -42,21 +42,21 @@ type ChannelPostDeliverySummary struct {
 }
 
 type PostDeliveryPathUsage struct {
-	OutboxKind         domain.OutboxKind `gorm:"column:outbox_kind"`
-	AlarmType          domain.AlarmType  `gorm:"column:alarm_type"`
-	ChannelID          string            `gorm:"column:channel_id"`
-	PostID             string            `gorm:"column:post_id"`
-	ContentID          string            `gorm:"column:content_id"`
-	DeliveryPath       string            `gorm:"column:delivery_path"`
-	ActualPublishedAt  *time.Time        `gorm:"column:actual_published_at"`
-	DetectedAt         *time.Time        `gorm:"column:detected_at"`
-	FirstEventAt       *time.Time        `gorm:"column:first_event_at"`
-	LastEventAt        *time.Time        `gorm:"column:last_event_at"`
-	FirstSuccessAt     *time.Time        `gorm:"column:first_success_at"`
-	LastSuccessAt      *time.Time        `gorm:"column:last_success_at"`
-	SuccessSendCount   int64             `gorm:"column:success_send_count"`
-	SuccessRoomCount   int64             `gorm:"column:success_room_count"`
-	FailedAttemptCount int64             `gorm:"column:failed_attempt_count"`
+	OutboxKind         domain.OutboxKind `db:"outbox_kind"`
+	AlarmType          domain.AlarmType  `db:"alarm_type"`
+	ChannelID          string            `db:"channel_id"`
+	PostID             string            `db:"post_id"`
+	ContentID          string            `db:"content_id"`
+	DeliveryPath       string            `db:"delivery_path"`
+	ActualPublishedAt  *time.Time        `db:"actual_published_at"`
+	DetectedAt         *time.Time        `db:"detected_at"`
+	FirstEventAt       *time.Time        `db:"first_event_at"`
+	LastEventAt        *time.Time        `db:"last_event_at"`
+	FirstSuccessAt     *time.Time        `db:"first_success_at"`
+	LastSuccessAt      *time.Time        `db:"last_success_at"`
+	SuccessSendCount   int64             `db:"success_send_count"`
+	SuccessRoomCount   int64             `db:"success_room_count"`
+	FailedAttemptCount int64             `db:"failed_attempt_count"`
 }
 
 type PostLatencyPeriod struct {

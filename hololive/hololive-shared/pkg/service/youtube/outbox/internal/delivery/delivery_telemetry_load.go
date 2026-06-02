@@ -29,10 +29,26 @@ func (r *DeliveryTelemetryRepository) loadTrackingSnapshots(
 	}
 
 	var trackingRows []domain.YouTubeContentAlarmTracking
-	if err := r.db.WithContext(ctx).
-		Where("kind IN ?", kinds).
-		Where("content_id IN ?", contentIDs).
-		Find(&trackingRows).Error; err != nil {
+	if err := selectDeliverySQL(ctx, r.db, &trackingRows, "enrich delivery telemetry context: load tracking rows", `
+		SELECT kind,
+			content_id,
+			COALESCE(canonical_content_id, '') AS canonical_content_id,
+			channel_id,
+			actual_published_at,
+			detected_at,
+			alarm_sent_at,
+			alarm_latency_millis,
+			alarm_latency_exceeded,
+			delivery_status,
+			COALESCE(latency_classification_status, '') AS latency_classification_status,
+			COALESCE(delay_source, '') AS delay_source,
+			COALESCE(internal_delay_cause, '') AS internal_delay_cause,
+			created_at,
+			updated_at
+		FROM youtube_content_alarm_tracking
+		WHERE kind = ANY(?)
+		  AND content_id = ANY(?)
+	`, kinds, contentIDs); err != nil {
 		return nil, fmt.Errorf("enrich delivery telemetry context: load tracking rows: %w", err)
 	}
 
@@ -54,7 +70,8 @@ func (r *DeliveryTelemetryRepository) loadObservationWindows(
 	ctx context.Context,
 	trackingByIdentity map[deliveryTelemetryIdentity]deliveryTelemetryTrackingSnapshot,
 ) ([]domain.YouTubeCommunityShortsObservationWindow, error) {
-	if !r.db.Migrator().HasTable(&domain.YouTubeCommunityShortsObservationWindow{}) {
+	var tableExists bool
+	if err := r.db.QueryRow(ctx, `SELECT to_regclass('youtube_community_shorts_observation_windows') IS NOT NULL`).Scan(&tableExists); err != nil || !tableExists {
 		return nil, nil
 	}
 
@@ -101,12 +118,13 @@ func (r *DeliveryTelemetryRepository) queryObservationWindows(
 	latest time.Time,
 ) ([]domain.YouTubeCommunityShortsObservationWindow, error) {
 	var windows []domain.YouTubeCommunityShortsObservationWindow
-	if err := r.db.WithContext(ctx).
-		Where("observation_ended_at > ?", earliest).
-		Where("observation_started_at <= ?", latest).
-		Order("observation_started_at DESC").
-		Order("bigbang_cutover_at DESC").
-		Find(&windows).Error; err != nil {
+	if err := selectDeliverySQL(ctx, r.db, &windows, "enrich delivery telemetry context: load observation windows", `
+		SELECT *
+		FROM youtube_community_shorts_observation_windows
+		WHERE observation_ended_at > ?
+		  AND observation_started_at <= ?
+		ORDER BY observation_started_at DESC, bigbang_cutover_at DESC
+	`, earliest, latest); err != nil {
 		if isMissingObservationWindowTableError(err) {
 			return nil, nil
 		}

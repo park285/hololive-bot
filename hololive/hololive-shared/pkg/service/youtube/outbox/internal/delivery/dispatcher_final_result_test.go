@@ -9,9 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -32,18 +30,18 @@ func (s *finalResultTestSender) SendMessage(_ context.Context, roomID, _ string)
 }
 
 type finalResultOutboxModel struct {
-	ID            int64     `gorm:"primaryKey;autoIncrement"`
-	Kind          string    `gorm:"type:text;not null"`
-	ChannelID     string    `gorm:"type:text;not null"`
-	ContentID     string    `gorm:"type:text;not null"`
-	Payload       string    `gorm:"type:text;not null"`
-	Status        string    `gorm:"type:text;not null"`
-	AttemptCount  int       `gorm:"not null"`
-	NextAttemptAt time.Time `gorm:"not null"`
+	ID            int64     `db:"id"`
+	Kind          string    `db:"kind"`
+	ChannelID     string    `db:"channel_id"`
+	ContentID     string    `db:"content_id"`
+	Payload       string    `db:"payload"`
+	Status        string    `db:"status"`
+	AttemptCount  int       `db:"attempt_count"`
+	NextAttemptAt time.Time `db:"next_attempt_at"`
 	CreatedAt     time.Time
 	LockedAt      *time.Time
 	SentAt        *time.Time
-	Error         string `gorm:"type:text"`
+	Error         string `db:"error"`
 }
 
 func (finalResultOutboxModel) TableName() string {
@@ -51,16 +49,16 @@ func (finalResultOutboxModel) TableName() string {
 }
 
 type finalResultDeliveryModel struct {
-	ID            int64     `gorm:"primaryKey;autoIncrement"`
-	OutboxID      int64     `gorm:"not null;index:idx_ynd_outbox_room,unique"`
-	RoomID        string    `gorm:"type:text;not null;index:idx_ynd_outbox_room,unique"`
-	Status        string    `gorm:"type:text;not null"`
-	AttemptCount  int       `gorm:"not null"`
-	NextAttemptAt time.Time `gorm:"not null"`
+	ID            int64     `db:"id"`
+	OutboxID      int64     `db:"outbox_id"`
+	RoomID        string    `db:"room_id"`
+	Status        string    `db:"status"`
+	AttemptCount  int       `db:"attempt_count"`
+	NextAttemptAt time.Time `db:"next_attempt_at"`
 	CreatedAt     time.Time
 	LockedAt      *time.Time
 	SentAt        *time.Time
-	Error         string `gorm:"type:text"`
+	Error         string `db:"error"`
 }
 
 func (finalResultDeliveryModel) TableName() string {
@@ -68,16 +66,16 @@ func (finalResultDeliveryModel) TableName() string {
 }
 
 type finalResultTrackingModel struct {
-	Kind                        string `gorm:"primaryKey;type:text"`
-	ContentID                   string `gorm:"primaryKey;type:text"`
+	Kind                        string `db:"kind"`
+	ContentID                   string `db:"content_id"`
 	CanonicalContentID          string
-	ChannelID                   string `gorm:"type:text;not null"`
+	ChannelID                   string `db:"channel_id"`
 	ActualPublishedAt           *time.Time
-	DetectedAt                  time.Time `gorm:"not null"`
+	DetectedAt                  time.Time `db:"detected_at"`
 	AlarmSentAt                 *time.Time
 	AlarmLatencyMillis          *int64
 	AlarmLatencyExceeded        *bool
-	DeliveryStatus              string `gorm:"type:text;not null;default:'PENDING'"`
+	DeliveryStatus              string `db:"delivery_status"`
 	LatencyClassificationStatus string
 	DelaySource                 string
 	InternalDelayCause          string
@@ -90,37 +88,37 @@ func (finalResultTrackingModel) TableName() string {
 }
 
 type finalResultTelemetryBufferModel struct {
-	ID                          int64      `gorm:"primaryKey;autoIncrement"`
-	DeliveryID                  int64      `gorm:"not null;uniqueIndex:idx_ydt_delivery_attempt"`
-	AttemptOrdinal              int        `gorm:"not null;uniqueIndex:idx_ydt_delivery_attempt"`
-	OutboxID                    int64      `gorm:"not null"`
-	ChannelID                   string     `gorm:"type:text;not null"`
-	ContentID                   string     `gorm:"type:text;not null"`
-	PostID                      string     `gorm:"type:text;not null"`
-	RoomID                      string     `gorm:"type:text;not null"`
-	AlarmType                   string     `gorm:"type:text;not null"`
-	ActualPublishedAt           *time.Time `gorm:"column:actual_published_at"`
-	AlarmSentAt                 *time.Time `gorm:"column:alarm_sent_at"`
-	AlarmLatencyMillis          *int64     `gorm:"column:alarm_latency_millis"`
-	DetectedAt                  *time.Time `gorm:"column:detected_at"`
-	ObservationStatus           string     `gorm:"column:observation_status;type:text;not null"`
-	ObservationRuntimeName      string     `gorm:"column:observation_runtime_name;type:text"`
-	ObservationBigBangCutoverAt *time.Time `gorm:"column:observation_bigbang_cutover_at"`
-	ObservationStartedAt        *time.Time `gorm:"column:observation_started_at"`
-	ObservationEndedAt          *time.Time `gorm:"column:observation_ended_at"`
-	DedupeKey                   string     `gorm:"type:text;not null"`
-	DeliveryPath                string     `gorm:"type:text;not null"`
-	DeliveryMode                string     `gorm:"type:text;not null"`
-	SendResult                  string     `gorm:"type:text;not null"`
-	FailureReason               string     `gorm:"type:text"`
+	ID                          int64      `db:"id"`
+	DeliveryID                  int64      `db:"delivery_id"`
+	AttemptOrdinal              int        `db:"attempt_ordinal"`
+	OutboxID                    int64      `db:"outbox_id"`
+	ChannelID                   string     `db:"channel_id"`
+	ContentID                   string     `db:"content_id"`
+	PostID                      string     `db:"post_id"`
+	RoomID                      string     `db:"room_id"`
+	AlarmType                   string     `db:"alarm_type"`
+	ActualPublishedAt           *time.Time `db:"actual_published_at"`
+	AlarmSentAt                 *time.Time `db:"alarm_sent_at"`
+	AlarmLatencyMillis          *int64     `db:"alarm_latency_millis"`
+	DetectedAt                  *time.Time `db:"detected_at"`
+	ObservationStatus           string     `db:"observation_status"`
+	ObservationRuntimeName      string     `db:"observation_runtime_name"`
+	ObservationBigBangCutoverAt *time.Time `db:"observation_bigbang_cutover_at"`
+	ObservationStartedAt        *time.Time `db:"observation_started_at"`
+	ObservationEndedAt          *time.Time `db:"observation_ended_at"`
+	DedupeKey                   string     `db:"dedupe_key"`
+	DeliveryPath                string     `db:"delivery_path"`
+	DeliveryMode                string     `db:"delivery_mode"`
+	SendResult                  string     `db:"send_result"`
+	FailureReason               string     `db:"failure_reason"`
 	AttemptStartedAt            *time.Time
 	AttemptFinishedAt           *time.Time
-	EventAt                     time.Time `gorm:"not null"`
-	NextAttemptAt               time.Time `gorm:"not null"`
+	EventAt                     time.Time `db:"event_at"`
+	NextAttemptAt               time.Time `db:"next_attempt_at"`
 	CreatedAt                   time.Time
 	LockedAt                    *time.Time
 	LoggedAt                    *time.Time
-	Error                       string `gorm:"type:text"`
+	Error                       string `db:"error"`
 }
 
 func (finalResultTelemetryBufferModel) TableName() string {
@@ -131,18 +129,9 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&finalResultOutboxModel{},
-		&finalResultDeliveryModel{},
-		&finalResultTrackingModel{},
-		&finalResultTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsObservationWindow{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	actualPublishedAt := now.Add(-190 * time.Second)
 	detectedAt := now.Add(-150 * time.Second)
 	item := finalResultOutboxModel{
@@ -206,18 +195,9 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&finalResultOutboxModel{},
-		&finalResultDeliveryModel{},
-		&finalResultTrackingModel{},
-		&finalResultTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsObservationWindow{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	actualPublishedAt := now.Add(-190 * time.Second)
 	detectedAt := now.Add(-150 * time.Second)
 	item := finalResultOutboxModel{
@@ -280,18 +260,9 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCod
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&finalResultOutboxModel{},
-		&finalResultDeliveryModel{},
-		&finalResultTrackingModel{},
-		&finalResultTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsObservationWindow{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	actualPublishedAt := now.Add(-210 * time.Second)
 	detectedAt := now.Add(-15 * time.Second)
 	item := finalResultOutboxModel{
@@ -340,18 +311,9 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&finalResultOutboxModel{},
-		&finalResultDeliveryModel{},
-		&finalResultTrackingModel{},
-		&finalResultTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsObservationWindow{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	actualPublishedAt := now.Add(-200 * time.Second)
 	detectedAt := now.Add(-160 * time.Second)
 	item := finalResultOutboxModel{
@@ -408,13 +370,13 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogObjectStringField(t, classification, "reason_code", string(PostLatencyReasonCodeJobFailure))
 }
 
-func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *gorm.DB, sender *finalResultTestSender, config Config) (*Dispatcher, *bytes.Buffer) {
+func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *deliveryTestDB, sender *finalResultTestSender, config Config) (*Dispatcher, *bytes.Buffer) {
 	t.Helper()
 
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	cache := cachemocks.NewLenientClient()
-	return NewDispatcher(db, cache, sender, nil, logger, config), logBuffer
+	return NewDispatcher(db.Pool, cache, sender, nil, logger, config), logBuffer
 }
 
 func findAuditLogEntryByTelemetrySource(t *testing.T, logBuffer *bytes.Buffer, source string) map[string]any {

@@ -26,10 +26,7 @@ import (
 )
 
 func (s *Service) createTablesIfNotExist(ctx context.Context) error {
-	db := s.db.WithContext(ctx)
-
-	// auth_users 테이블
-	if err := db.Exec(`
+	if _, err := s.db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS auth_users (
 			id TEXT PRIMARY KEY,
 			email TEXT UNIQUE NOT NULL,
@@ -39,12 +36,11 @@ func (s *Service) createTablesIfNotExist(ctx context.Context) error {
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error; err != nil {
+	`); err != nil {
 		return fmt.Errorf("failed to create auth_users table: %w", err)
 	}
 
-	// auth_password_reset_tokens 테이블
-	if err := db.Exec(`
+	if _, err := s.db.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS auth_password_reset_tokens (
 			token_hash TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,
@@ -52,7 +48,7 @@ func (s *Service) createTablesIfNotExist(ctx context.Context) error {
 			used_at TIMESTAMP,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error; err != nil {
+	`); err != nil {
 		return fmt.Errorf("failed to create auth_password_reset_tokens table: %w", err)
 	}
 

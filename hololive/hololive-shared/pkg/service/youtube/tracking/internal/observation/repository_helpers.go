@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
@@ -170,19 +168,11 @@ func canonicalTrackingIdentity(kind domain.OutboxKind, contentID string) string 
 	return canonicalContentID
 }
 
-func buildLatencyMillisExpr(db *gorm.DB, startExpr string, endExpr string) string {
-	switch dialectName(db) {
-	case "sqlite":
-		return fmt.Sprintf(`CASE
-		        WHEN (%s) IS NULL OR (%s) IS NULL THEN NULL
-		        ELSE CAST(ROUND((julianday((%s)) - julianday((%s))) * 86400000.0) AS INTEGER)
-		    END`, startExpr, endExpr, endExpr, startExpr)
-	default:
-		return fmt.Sprintf(`CASE
+func buildLatencyMillisExpr(startExpr string, endExpr string) string {
+	return fmt.Sprintf(`CASE
 		        WHEN (%s) IS NULL OR (%s) IS NULL THEN NULL
 		        ELSE CAST(ROUND(EXTRACT(EPOCH FROM (((%s)) - ((%s)))) * 1000) AS BIGINT)
 		    END`, startExpr, endExpr, endExpr, startExpr)
-	}
 }
 
 func buildLatencyExceededExpr(latencyMillisExpr string) string {
@@ -191,11 +181,4 @@ func buildLatencyExceededExpr(latencyMillisExpr string) string {
 		        WHEN (%s) > %d THEN TRUE
 		        ELSE FALSE
 		    END`, latencyMillisExpr, latencyMillisExpr, alarmLatencyExceededThresholdMillis)
-}
-
-func dialectName(db *gorm.DB) string {
-	if db == nil || db.Dialector == nil {
-		return ""
-	}
-	return db.Name()
 }

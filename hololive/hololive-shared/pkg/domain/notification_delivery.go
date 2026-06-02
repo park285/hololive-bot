@@ -43,19 +43,19 @@ const (
 )
 
 type NotificationDeliveryOutbox struct {
-	ID            int64                `gorm:"primaryKey;autoIncrement"`
-	Kind          DeliveryOutboxKind   `gorm:"column:kind;type:varchar(30);not null"`
-	PeriodKey     string               `gorm:"column:period_key;type:varchar(20);not null"`
-	RoomID        string               `gorm:"column:room_id;type:varchar(100);not null"`
-	ContentID     string               `gorm:"column:content_id;type:varchar(200);not null"`
-	Payload       string               `gorm:"column:payload;type:jsonb;not null;default:'{}'"`
-	Status        DeliveryOutboxStatus `gorm:"column:status;type:varchar(20);not null;default:'PENDING'"`
-	AttemptCount  int                  `gorm:"column:attempt_count;not null;default:0"`
-	NextAttemptAt time.Time            `gorm:"column:next_attempt_at;not null;default:now()"`
-	CreatedAt     time.Time            `gorm:"column:created_at;not null;default:now()"`
-	LockedAt      sql.NullTime         `gorm:"column:locked_at"`
-	SentAt        sql.NullTime         `gorm:"column:sent_at"`
-	Error         sql.NullString       `gorm:"column:error"`
+	ID            int64                `db:"id"`
+	Kind          DeliveryOutboxKind   `db:"kind"`
+	PeriodKey     string               `db:"period_key"`
+	RoomID        string               `db:"room_id"`
+	ContentID     string               `db:"content_id"`
+	Payload       string               `db:"payload"`
+	Status        DeliveryOutboxStatus `db:"status"`
+	AttemptCount  int                  `db:"attempt_count"`
+	NextAttemptAt time.Time            `db:"next_attempt_at"`
+	CreatedAt     time.Time            `db:"created_at"`
+	LockedAt      sql.NullTime         `db:"locked_at"`
+	SentAt        sql.NullTime         `db:"sent_at"`
+	Error         sql.NullString       `db:"error"`
 }
 
 func (NotificationDeliveryOutbox) TableName() string {

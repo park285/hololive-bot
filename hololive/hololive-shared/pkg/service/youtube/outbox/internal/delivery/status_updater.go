@@ -5,13 +5,12 @@ import (
 	"log/slog"
 	"time"
 
-	"gorm.io/gorm"
-
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type StatusUpdater struct {
-	db     *gorm.DB
+	db     dbx.Querier
 	logger *slog.Logger
 	config Config
 }
@@ -21,12 +20,12 @@ type outboxLockToken struct {
 	lockedAt *time.Time
 }
 
-func newStatusUpdater(db *gorm.DB, logger *slog.Logger, config Config) *StatusUpdater {
+func newStatusUpdater(db any, logger *slog.Logger, config Config) *StatusUpdater {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &StatusUpdater{
-		db:     db,
+		db:     asQuerier(db),
 		logger: logger,
 		config: config,
 	}
@@ -48,7 +47,7 @@ const markSentBatchChunkSize = 500
 
 func (u *StatusUpdater) markSentBatch(ctx context.Context, ids []int64) {
 	uniqueIDs := uniqueInt64s(ids)
-	if len(uniqueIDs) == 0 {
+	if u == nil || u.db == nil || len(uniqueIDs) == 0 {
 		return
 	}
 
@@ -57,24 +56,21 @@ func (u *StatusUpdater) markSentBatch(ctx context.Context, ids []int64) {
 		end := min(start+markSentBatchChunkSize, len(uniqueIDs))
 		chunk := uniqueIDs[start:end]
 
-		result := u.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-			Where("id IN ? AND status = ?", chunk, domain.OutboxStatusPending).
-			Updates(map[string]any{
-				"status":    domain.OutboxStatusSent,
-				"sent_at":   now,
-				"locked_at": nil,
-				"error":     "",
-			})
-		if result.Error != nil {
+		_, err := u.db.Exec(ctx, `
+			UPDATE youtube_notification_outbox
+			SET status = $1, sent_at = $2, locked_at = NULL, error = ''
+			WHERE id = ANY($3) AND status = $4
+		`, domain.OutboxStatusSent, now, chunk, domain.OutboxStatusPending)
+		if err != nil {
 			u.logger.Error("Failed to mark outbox items as sent",
 				slog.Int("batch_size", len(chunk)),
-				slog.Any("error", result.Error))
+				slog.Any("error", err))
 		}
 	}
 }
 
 func (u *StatusUpdater) markSentBatchIfLocked(ctx context.Context, tokens []outboxLockToken) {
-	if len(tokens) == 0 {
+	if u == nil || u.db == nil || len(tokens) == 0 {
 		return
 	}
 
@@ -83,25 +79,27 @@ func (u *StatusUpdater) markSentBatchIfLocked(ctx context.Context, tokens []outb
 		if tokens[i].id == 0 || tokens[i].lockedAt == nil {
 			continue
 		}
-		result := u.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-			Where("id = ? AND status = ? AND locked_at = ?", tokens[i].id, domain.OutboxStatusPending, *tokens[i].lockedAt).
-			Updates(map[string]any{
-				"status":    domain.OutboxStatusSent,
-				"sent_at":   now,
-				"locked_at": nil,
-				"error":     "",
-			})
-		if result.Error != nil {
+		_, err := u.db.Exec(ctx, `
+			UPDATE youtube_notification_outbox
+			SET status = $1, sent_at = $2, locked_at = NULL, error = ''
+			WHERE id = $3 AND status = $4 AND locked_at = $5
+		`, domain.OutboxStatusSent, now, tokens[i].id, domain.OutboxStatusPending, *tokens[i].lockedAt)
+		if err != nil {
 			u.logger.Error("Failed to mark outbox item as sent",
 				slog.Int64("id", tokens[i].id),
-				slog.Any("error", result.Error))
+				slog.Any("error", err))
 		}
 	}
 }
 
 func (u *StatusUpdater) markFailed(ctx context.Context, id int64, errMsg string) {
 	var item domain.YouTubeNotificationOutbox
-	if err := u.db.WithContext(ctx).First(&item, id).Error; err != nil {
+	found, err := getDeliverySQL(ctx, u.db, &item, "fetch outbox item for retry", `
+			SELECT id, kind, channel_id, content_id, payload::text AS payload, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, COALESCE(error, '') AS error
+		FROM youtube_notification_outbox
+		WHERE id = ?
+	`, id)
+	if err != nil || !found {
 		u.logger.Warn("Failed to fetch outbox item for retry", slog.Int64("id", id), slog.Any("error", err))
 		return
 	}
@@ -122,12 +120,13 @@ func (u *StatusUpdater) markFailedIfLocked(ctx context.Context, id int64, locked
 	}
 
 	var item domain.YouTubeNotificationOutbox
-	if err := u.db.WithContext(ctx).
-		Where("id = ? AND status = ? AND locked_at = ?", id, domain.OutboxStatusPending, *lockedAt).
-		First(&item).Error; err != nil {
-		if err != gorm.ErrRecordNotFound {
-			u.logger.Warn("Failed to fetch locked outbox item for retry", slog.Int64("id", id), slog.Any("error", err))
-		}
+	found, err := getDeliverySQL(ctx, u.db, &item, "fetch locked outbox item for retry", `
+			SELECT id, kind, channel_id, content_id, payload::text AS payload, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, COALESCE(error, '') AS error
+		FROM youtube_notification_outbox
+		WHERE id = ? AND status = ? AND locked_at = ?
+	`, id, domain.OutboxStatusPending, *lockedAt)
+	if err != nil || !found {
+		u.logger.Warn("Failed to fetch locked outbox item for retry", slog.Int64("id", id), slog.Any("error", err))
 		return
 	}
 
@@ -141,18 +140,15 @@ func (u *StatusUpdater) markFailedIfLocked(ctx context.Context, id int64, locked
 }
 
 func (u *StatusUpdater) markFailedPermanently(ctx context.Context, id int64, attemptCount int, errMsg string) {
-	result := u.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ?", id).
-		Updates(map[string]any{
-			"status":        domain.OutboxStatusFailed,
-			"locked_at":     nil,
-			"attempt_count": attemptCount,
-			"error":         truncateString(errMsg, 500),
-		})
-	if result.Error != nil {
+	_, err := u.db.Exec(ctx, `
+		UPDATE youtube_notification_outbox
+		SET status = $1, locked_at = NULL, attempt_count = $2, error = $3
+		WHERE id = $4
+	`, domain.OutboxStatusFailed, attemptCount, truncateString(errMsg, 500), id)
+	if err != nil {
 		u.logger.Error("Failed to mark outbox item as permanently failed",
 			slog.Int64("id", id),
-			slog.Any("error", result.Error))
+			slog.Any("error", err))
 	}
 	u.logger.Warn("Outbox item permanently failed after max retries",
 		slog.Int64("id", id),
@@ -165,20 +161,17 @@ func (u *StatusUpdater) markFailedPermanentlyIfLocked(ctx context.Context, token
 		return
 	}
 
-	result := u.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ? AND status = ? AND locked_at = ?", token.id, domain.OutboxStatusPending, *token.lockedAt).
-		Updates(map[string]any{
-			"status":        domain.OutboxStatusFailed,
-			"locked_at":     nil,
-			"attempt_count": attemptCount,
-			"error":         truncateString(errMsg, 500),
-		})
-	if result.Error != nil {
+	tag, err := u.db.Exec(ctx, `
+		UPDATE youtube_notification_outbox
+		SET status = $1, locked_at = NULL, attempt_count = $2, error = $3
+		WHERE id = $4 AND status = $5 AND locked_at = $6
+	`, domain.OutboxStatusFailed, attemptCount, truncateString(errMsg, 500), token.id, domain.OutboxStatusPending, *token.lockedAt)
+	if err != nil {
 		u.logger.Error("Failed to mark outbox item as permanently failed",
 			slog.Int64("id", token.id),
-			slog.Any("error", result.Error))
+			slog.Any("error", err))
 	}
-	if result.RowsAffected > 0 {
+	if tag.RowsAffected() > 0 {
 		u.logger.Warn("Outbox item permanently failed after max retries",
 			slog.Int64("id", token.id),
 			slog.Int("attempts", attemptCount))
@@ -187,18 +180,15 @@ func (u *StatusUpdater) markFailedPermanentlyIfLocked(ctx context.Context, token
 
 func (u *StatusUpdater) scheduleFailedRetry(ctx context.Context, id int64, attemptCount int, errMsg string) {
 	nextAttempt := time.Now().Add(u.config.RetryBackoff * time.Duration(attemptCount))
-	result := u.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ?", id).
-		Updates(map[string]any{
-			"locked_at":       nil,
-			"attempt_count":   attemptCount,
-			"next_attempt_at": nextAttempt,
-			"error":           truncateString(errMsg, 500),
-		})
-	if result.Error != nil {
+	_, err := u.db.Exec(ctx, `
+		UPDATE youtube_notification_outbox
+		SET locked_at = NULL, attempt_count = $1, next_attempt_at = $2, error = $3
+		WHERE id = $4
+	`, attemptCount, nextAttempt, truncateString(errMsg, 500), id)
+	if err != nil {
 		u.logger.Error("Failed to schedule outbox item for retry",
 			slog.Int64("id", id),
-			slog.Any("error", result.Error))
+			slog.Any("error", err))
 	}
 
 	u.logger.Info("Outbox item scheduled for retry",
@@ -214,20 +204,17 @@ func (u *StatusUpdater) scheduleFailedRetryIfLocked(ctx context.Context, token o
 	}
 
 	nextAttempt := time.Now().Add(u.config.RetryBackoff * time.Duration(attemptCount))
-	result := u.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ? AND status = ? AND locked_at = ?", token.id, domain.OutboxStatusPending, *token.lockedAt).
-		Updates(map[string]any{
-			"locked_at":       nil,
-			"attempt_count":   attemptCount,
-			"next_attempt_at": nextAttempt,
-			"error":           truncateString(errMsg, 500),
-		})
-	if result.Error != nil {
+	tag, err := u.db.Exec(ctx, `
+		UPDATE youtube_notification_outbox
+		SET locked_at = NULL, attempt_count = $1, next_attempt_at = $2, error = $3
+		WHERE id = $4 AND status = $5 AND locked_at = $6
+	`, attemptCount, nextAttempt, truncateString(errMsg, 500), token.id, domain.OutboxStatusPending, *token.lockedAt)
+	if err != nil {
 		u.logger.Error("Failed to schedule outbox item for retry",
 			slog.Int64("id", token.id),
-			slog.Any("error", result.Error))
+			slog.Any("error", err))
 	}
-	if result.RowsAffected > 0 {
+	if tag.RowsAffected() > 0 {
 		u.logger.Info("Outbox item scheduled for retry",
 			slog.Int64("id", token.id),
 			slog.Int("attempt", attemptCount),

@@ -299,7 +299,7 @@ func TestPendingPublishedAtResolver_SurfacesRetryAfterWriteFailures(t *testing.T
 	)
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	seedPendingShortResolution(t, db, "channel-write-fail", "short-write-fail", detectedAt)
-	require.NoError(t, db.Exec(`
+	require.NoError(t, db.ExecTest(`
 		CREATE TRIGGER fail_retry_after_update
 		BEFORE UPDATE OF published_at_retry_after ON youtube_community_shorts_alarm_states
 		BEGIN

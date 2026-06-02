@@ -1,13 +1,10 @@
 package delivery
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -87,33 +84,33 @@ func TestSeedCommunityShortsRecoveryInputFixtureCreatesSentAndPendingPosts(t *te
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			db := newRecoveryInputFixtureDB(t, fmt.Sprintf("recovery_input_fixture_%s", tc.name))
+			db := newRecoveryInputFixtureDB(t, "recovery_input_fixture_"+tc.name)
 			fixture := seedCommunityShortsRecoveryInputFixture(t, db, tc.spec)
 
-			var outboxes []sqliteOutboxModel
+			var outboxes []deliveryTestOutboxModel
 			require.NoError(t, db.Order("content_id ASC").Find(&outboxes).Error)
 			require.Len(t, outboxes, 2)
 			require.Equal(t, tc.spec.sentContentID, fixture.sentOutbox.ContentID)
 			require.Equal(t, tc.spec.pendingContentID, fixture.pendingOutbox.ContentID)
 
-			var deliveries []sqliteDeliveryModel
+			var deliveries []deliveryTestDeliveryModel
 			require.NoError(t, db.Order("id ASC").Find(&deliveries).Error)
 			require.Len(t, deliveries, 2)
 			require.Equal(t, tc.spec.roomID, fixture.sentDelivery.RoomID)
 			require.Equal(t, tc.spec.roomID, fixture.pendingDelivery.RoomID)
 
-			var trackingRows []sqliteTrackingModel
+			var trackingRows []deliveryTestTrackingModel
 			require.NoError(t, db.Find(&trackingRows).Error)
 			require.Len(t, trackingRows, 2)
 
-			var sentTracking sqliteTrackingModel
+			var sentTracking deliveryTestTrackingModel
 			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).First(&sentTracking).Error)
 			require.Equal(t, fixture.sentPostID, sentTracking.CanonicalContentID)
 			require.NotNil(t, sentTracking.AlarmSentAt)
 			require.Equal(t, tc.spec.alreadySentAt, sentTracking.AlarmSentAt.UTC())
 			require.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), sentTracking.DeliveryStatus)
 
-			var pendingTracking sqliteTrackingModel
+			var pendingTracking deliveryTestTrackingModel
 			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).First(&pendingTracking).Error)
 			require.Equal(t, fixture.pendingPostID, pendingTracking.CanonicalContentID)
 			require.Nil(t, pendingTracking.AlarmSentAt)
@@ -138,30 +135,15 @@ func TestSeedCommunityShortsRecoveryInputFixtureCreatesSentAndPendingPosts(t *te
 	}
 }
 
-func newRecoveryInputFixtureDB(t *testing.T, dsnPrefix string) *gorm.DB {
+func newRecoveryInputFixtureDB(t *testing.T, _ string) *deliveryTestDB {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:%s_%d?mode=memory&cache=shared", dsnPrefix, time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-
-	require.NoError(t, db.AutoMigrate(
-		&sqliteOutboxModel{},
-		&sqliteDeliveryModel{},
-		&sqliteTrackingModel{},
-		&sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	return db
 }
 
-func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *gorm.DB, spec recoveryInputFixtureSpec) recoveryInputFixture {
+func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, spec recoveryInputFixtureSpec) recoveryInputFixture {
 	t.Helper()
 
 	sentItem := domain.YouTubeNotificationOutbox{
@@ -190,7 +172,7 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *gorm.DB, spec rec
 	sentPostID := canonicalDeliveryPostID(spec.kind, sentItem.ContentID)
 	pendingPostID := canonicalDeliveryPostID(spec.kind, pendingItem.ContentID)
 
-	require.NoError(t, db.Create(&sqliteTrackingModel{
+	require.NoError(t, db.Create(&deliveryTestTrackingModel{
 		Kind:               string(sentItem.Kind),
 		ContentID:          sentItem.ContentID,
 		CanonicalContentID: sentPostID,
@@ -200,7 +182,7 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *gorm.DB, spec rec
 		AlarmSentAt:        new(spec.alreadySentAt),
 		DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusSent),
 	}).Error)
-	require.NoError(t, db.Create(&sqliteTrackingModel{
+	require.NoError(t, db.Create(&deliveryTestTrackingModel{
 		Kind:               string(pendingItem.Kind),
 		ContentID:          pendingItem.ContentID,
 		CanonicalContentID: pendingPostID,

@@ -38,19 +38,23 @@ func (r *alarmStateRepository) loadPendingPublishedAtResolutionRows(
 	}
 
 	var rows []pendingResolutionRow
-	query := r.db.WithContext(ctx).
-		Model(&domain.YouTubeCommunityShortsAlarmState{}).
-		Where("kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
-		Where("actual_published_at IS NULL").
-		Where("detected_at < ?", yttimestamp.Normalize(detectedBefore)).
-		Select(`CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END AS priority_bucket,
-			kind, post_id, content_id, channel_id, detected_at, published_at_retry_after`).
-		Where("(published_at_retry_after IS NULL OR published_at_retry_after <= ?)", yttimestamp.Normalize(referenceNow))
+	query := `
+		SELECT CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END AS priority_bucket,
+		       kind, post_id, content_id, channel_id, detected_at, published_at_retry_after
+		FROM youtube_community_shorts_alarm_states
+		WHERE kind IN (?, ?)
+		  AND actual_published_at IS NULL
+		  AND detected_at < ?
+		  AND (published_at_retry_after IS NULL OR published_at_retry_after <= ?)
+	`
+	args := []any{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort, yttimestamp.Normalize(detectedBefore), yttimestamp.Normalize(referenceNow)}
 	if cursor != nil {
-		query = query.Where(
-			`(CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END > ?)
+		query += `
+		  AND ((CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END > ?)
 			OR (CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END = ? AND detected_at > ?)
-			OR (CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END = ? AND detected_at = ? AND post_id > ?)`,
+			OR (CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END = ? AND detected_at = ? AND post_id > ?))
+		`
+		args = append(args,
 			cursor.PriorityBucket,
 			cursor.PriorityBucket,
 			yttimestamp.Normalize(cursor.DetectedAt),
@@ -59,13 +63,13 @@ func (r *alarmStateRepository) loadPendingPublishedAtResolutionRows(
 			strings.TrimSpace(cursor.PostID),
 		)
 	}
-	if err := query.
-		Order("priority_bucket ASC").
-		Order("detected_at ASC").
-		Order("post_id ASC").
-		Limit(limit).
-		Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list pending published_at resolutions page: query rows: %w", err)
+	query += `
+		ORDER BY priority_bucket ASC, detected_at ASC, post_id ASC
+		LIMIT ?
+	`
+	args = append(args, limit)
+	if err := selectSQL(ctx, r.db, &rows, "list pending published_at resolutions page: query rows", query, args...); err != nil {
+		return nil, err
 	}
 
 	return rows, nil

@@ -26,13 +26,11 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-func (r *GormBatchRepository) batchUpsertVideos(ctx context.Context, tx *gorm.DB, videos []*domain.YouTubeVideo) error {
+func (r *PgxBatchRepository) batchUpsertVideos(ctx context.Context, tx batchDB, videos []*domain.YouTubeVideo) error {
 	if len(videos) == 0 {
 		return nil
 	}
@@ -48,7 +46,7 @@ func (r *GormBatchRepository) batchUpsertVideos(ctx context.Context, tx *gorm.DB
 	return nil
 }
 
-func (r *GormBatchRepository) upsertVideosChunk(ctx context.Context, tx *gorm.DB, videos []*domain.YouTubeVideo) error {
+func (r *PgxBatchRepository) upsertVideosChunk(ctx context.Context, tx batchDB, videos []*domain.YouTubeVideo) error {
 	now := time.Now()
 	args := make([]any, 0, len(videos)*12)
 	var sb strings.Builder
@@ -88,14 +86,14 @@ func (r *GormBatchRepository) upsertVideosChunk(ctx context.Context, tx *gorm.DB
 		    view_count = EXCLUDED.view_count
 	`)
 
-	if err := tx.WithContext(ctx).Exec(sb.String(), args...).Error; err != nil {
+	if _, err := execSQL(ctx, tx, fmt.Sprintf("exec video upsert chunk (%d rows)", len(videos)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec video upsert chunk (%d rows): %w", len(videos), err)
 	}
 
 	return nil
 }
 
-func (r *GormBatchRepository) batchUpsertCommunityPosts(ctx context.Context, tx *gorm.DB, posts []*domain.YouTubeCommunityPost) error {
+func (r *PgxBatchRepository) batchUpsertCommunityPosts(ctx context.Context, tx batchDB, posts []*domain.YouTubeCommunityPost) error {
 	if len(posts) == 0 {
 		return nil
 	}
@@ -111,7 +109,7 @@ func (r *GormBatchRepository) batchUpsertCommunityPosts(ctx context.Context, tx 
 	return nil
 }
 
-func (r *GormBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx *gorm.DB, posts []*domain.YouTubeCommunityPost) error {
+func (r *PgxBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx batchDB, posts []*domain.YouTubeCommunityPost) error {
 	now := time.Now()
 	args := make([]any, 0, len(posts)*13)
 	var sb strings.Builder
@@ -153,14 +151,14 @@ func (r *GormBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx 
 		    comment_count = EXCLUDED.comment_count
 	`)
 
-	if err := tx.WithContext(ctx).Exec(sb.String(), args...).Error; err != nil {
+	if _, err := execSQL(ctx, tx, fmt.Sprintf("exec community post upsert chunk (%d rows)", len(posts)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec community post upsert chunk (%d rows): %w", len(posts), err)
 	}
 
 	return nil
 }
 
-func (r *GormBatchRepository) BatchInsertNotifications(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) error {
+func (r *PgxBatchRepository) BatchInsertNotifications(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox) error {
 	if len(notifications) == 0 {
 		return nil
 	}
@@ -176,7 +174,7 @@ func (r *GormBatchRepository) BatchInsertNotifications(ctx context.Context, tx *
 	return nil
 }
 
-func (r *GormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) error {
+func (r *PgxBatchRepository) insertNotificationsChunk(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox) error {
 	completedSentAtByIdentity, reactivationRows, err := prepareNotificationInsertChunk(ctx, tx, notifications)
 	if err != nil {
 		return err
@@ -224,7 +222,7 @@ func notificationChunksByKind(notifications []*domain.YouTubeNotificationOutbox)
 	return chunks
 }
 
-func (r *GormBatchRepository) insertNotificationsSameKindChunk(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox, now time.Time) error {
+func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox, now time.Time) error {
 	if len(notifications) == 0 {
 		return nil
 	}
@@ -256,20 +254,20 @@ func (r *GormBatchRepository) insertNotificationsSameKindChunk(ctx context.Conte
 		  AND youtube_notification_outbox.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 	`)
 
-	result := tx.WithContext(ctx).Exec(sb.String(), args...)
-	if result.Error != nil {
+	rowsAffected, err := execSQL(ctx, tx, fmt.Sprintf("exec notification insert chunk (%d rows)", len(notifications)), sb.String(), args...)
+	if err != nil {
 		observeOutboxInsert(kind, "error", int64(len(notifications)))
-		return fmt.Errorf("exec notification insert chunk (%d rows): %w", len(notifications), result.Error)
+		return fmt.Errorf("exec notification insert chunk (%d rows): %w", len(notifications), err)
 	}
-	observeOutboxInsert(kind, "success", result.RowsAffected)
-	observeOutboxInsert(kind, "conflict", int64(len(notifications))-result.RowsAffected)
+	observeOutboxInsert(kind, "success", rowsAffected)
+	observeOutboxInsert(kind, "conflict", int64(len(notifications))-rowsAffected)
 
 	return nil
 }
 
 func prepareNotificationInsertChunk(
 	ctx context.Context,
-	tx *gorm.DB,
+	tx batchDB,
 	notifications []*domain.YouTubeNotificationOutbox,
 ) (map[string]time.Time, []failedNotificationOutboxRow, error) {
 	if err := validateNotificationDedupeKeys(notifications); err != nil {
@@ -339,13 +337,13 @@ func appendNotificationInsertArgs(
 	)
 }
 
-func (r *GormBatchRepository) upsertWatermark(ctx context.Context, tx *gorm.DB, watermark *domain.YouTubeContentWatermark) error {
+func (r *PgxBatchRepository) upsertWatermark(ctx context.Context, tx batchDB, watermark *domain.YouTubeContentWatermark) error {
 	if watermark == nil {
 		return nil
 	}
 
 	now := time.Now()
-	if err := tx.WithContext(ctx).Exec(`
+	if _, err := execSQL(ctx, tx, "exec watermark upsert", `
 		INSERT INTO youtube_content_watermarks
 			(channel_id, watermark_type, initialized, last_content_id, updated_at)
 		VALUES (?, ?, ?, ?, ?)
@@ -359,7 +357,7 @@ func (r *GormBatchRepository) upsertWatermark(ctx context.Context, tx *gorm.DB, 
 		watermark.Initialized,
 		watermark.LastContentID,
 		now,
-	).Error; err != nil {
+	); err != nil {
 		return fmt.Errorf("exec watermark upsert: %w", err)
 	}
 

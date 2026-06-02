@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//go:build integration
-
 package delivery
 
 import (
@@ -27,65 +25,26 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"testing"
 	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func setupTestDB(t *testing.T) *gorm.DB {
+func setupTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL not set, skipping integration test")
-	}
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: gormlogger.Discard,
-	})
-	if err != nil {
-		t.Fatalf("failed to connect to test DB: %v", err)
-	}
-
-	// 테이블 + 인덱스 생성 (AutoMigrate는 UNIQUE INDEX를 생성하지 않음)
-	if err := db.AutoMigrate(&domain.NotificationDeliveryOutbox{}); err != nil {
-		t.Fatalf("failed to migrate: %v", err)
-	}
-	for _, ddl := range []string{
-		"CREATE UNIQUE INDEX IF NOT EXISTS idx_ndo_kind_content ON notification_delivery_outbox(kind, content_id)",
-		"CREATE INDEX IF NOT EXISTS idx_ndo_pending_next ON notification_delivery_outbox(next_attempt_at, created_at) WHERE status = 'PENDING'",
-		"CREATE INDEX IF NOT EXISTS idx_ndo_sent_cleanup ON notification_delivery_outbox(COALESCE(sent_at, created_at)) WHERE status IN ('SENT', 'FAILED')",
-	} {
-		if err := db.Exec(ddl).Error; err != nil {
-			t.Fatalf("failed to create index: %v", err)
-		}
-	}
-
-	// 테스트 전 데이터 클리어
-	db.Exec("DELETE FROM notification_delivery_outbox")
-
-	t.Cleanup(func() {
-		db.Exec("DELETE FROM notification_delivery_outbox")
-		sqlDB, _ := db.DB()
-		if sqlDB != nil {
-			sqlDB.Close()
-		}
-	})
-
-	return db
+	return dbtest.NewPool(t)
 }
 
 func testRepository(t *testing.T) *OutboxRepository {
 	t.Helper()
 	db := setupTestDB(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewOutboxRepository(db, logger)
+	return NewOutboxRepositoryFromPool(db, logger)
 }
 
 func buildOutboxBatchItems(count int) []OutboxItem {
@@ -143,8 +102,9 @@ func TestEnqueue_FailedRetry(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	// 수동으로 FAILED 상태로 변경
-	repository.db.Exec("UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE content_id = ?", "2026-W08:room1")
+	if _, err := repository.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE content_id = $1", "2026-W08:room1"); err != nil {
+		t.Fatalf("set failed status: %v", err)
+	}
 
 	// 재 Enqueue → FAILED이므로 갱신
 	if err := repository.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", "retry-msg"); err != nil {
@@ -360,9 +320,10 @@ func TestCleanup(t *testing.T) {
 		t.Fatalf("mark sent: %v", err)
 	}
 
-	// sent_at을 과거로 변경
-	repository.db.Exec("UPDATE notification_delivery_outbox SET sent_at = ? WHERE id = ?",
-		time.Now().Add(-10*24*time.Hour), items[0].ID)
+	if _, err := repository.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET sent_at = $1 WHERE id = $2",
+		time.Now().Add(-10*24*time.Hour), items[0].ID); err != nil {
+		t.Fatalf("backdate sent_at: %v", err)
+	}
 
 	cleaned, err := repository.Cleanup(ctx, 7*24*time.Hour)
 	if err != nil {
@@ -381,11 +342,13 @@ func TestCleanup_FailedItems(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	// FAILED 상태로 변경 (sent_at은 NULL 유지) + created_at을 과거로
-	repository.db.Exec(
-		"UPDATE notification_delivery_outbox SET status = 'FAILED', created_at = ? WHERE content_id = ?",
+	_, err := repository.pool.Exec(ctx,
+		"UPDATE notification_delivery_outbox SET status = 'FAILED', created_at = $1 WHERE content_id = $2",
 		time.Now().Add(-10*24*time.Hour), "2026-W08:room-fail",
 	)
+	if err != nil {
+		t.Fatalf("set old failed status: %v", err)
+	}
 
 	failed, _ := repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
 	if failed != 1 {

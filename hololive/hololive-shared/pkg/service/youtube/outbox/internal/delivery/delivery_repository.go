@@ -24,36 +24,47 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
+	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 type DeliveryRepository struct {
-	db     *gorm.DB
+	db     deliveryDB
 	logger *slog.Logger
 }
 
 type deliveryStatusCount struct {
-	OutboxID int64
-	Status   domain.OutboxStatus
-	Count    int64
+	OutboxID int64               `db:"outbox_id"`
+	Status   domain.OutboxStatus `db:"status"`
+	Count    int64               `db:"count"`
 }
 
 type deliveryAlarmSentTarget struct {
-	Kind      domain.OutboxKind `gorm:"column:kind"`
-	ContentID string            `gorm:"column:content_id"`
+	Kind      domain.OutboxKind `db:"kind"`
+	ContentID string            `db:"content_id"`
 }
 
-func NewDeliveryRepository(db *gorm.DB, logger *slog.Logger) *DeliveryRepository {
+func NewDeliveryRepository(db any, logger *slog.Logger) *DeliveryRepository {
 	return &DeliveryRepository{
-		db:     db,
+		db:     asDeliveryDB(db),
 		logger: logger,
 	}
+}
+
+func asDeliveryDB(db any) deliveryDB {
+	if isNilDB(db) {
+		return nil
+	}
+	if typed, ok := db.(deliveryDB); ok {
+		return typed
+	}
+	return nil
 }
 
 func (r *DeliveryRepository) EnqueueBatch(ctx context.Context, outboxID int64, roomIDs []string) error {
@@ -74,12 +85,20 @@ func (r *DeliveryRepository) EnqueueBatch(ctx context.Context, outboxID int64, r
 		})
 	}
 
-	result := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "outbox_id"}, {Name: "room_id"}},
-		DoNothing: true,
-	}).Create(&rows)
-	if result.Error != nil {
-		return fmt.Errorf("enqueue delivery batch: create rows: %w", result.Error)
+	valueExprs := make([]string, 0, len(rows))
+	args := make([]any, 0, len(rows)*5)
+	for i := range rows {
+		base := i*5 + 1
+		valueExprs = append(valueExprs, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", base, base+1, base+2, base+3, base+4))
+		args = append(args, rows[i].OutboxID, rows[i].RoomID, rows[i].Status, rows[i].AttemptCount, rows[i].NextAttemptAt)
+	}
+
+	if _, err := r.db.Exec(ctx, `
+		INSERT INTO youtube_notification_delivery (outbox_id, room_id, status, attempt_count, next_attempt_at)
+		VALUES `+strings.Join(valueExprs, ", ")+`
+		ON CONFLICT (outbox_id, room_id) DO NOTHING
+	`, args...); err != nil {
+		return fmt.Errorf("enqueue delivery batch: create rows: %w", err)
 	}
 
 	return nil
@@ -89,69 +108,36 @@ func (r *DeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lo
 	if r == nil || r.db == nil || batchSize <= 0 {
 		return nil, nil
 	}
-	if r.db.Dialector != nil && r.db.Name() == "sqlite" {
-		return r.fetchAndLockSQLite(ctx, batchSize, lockTimeout)
-	}
 
 	lockExpiry := time.Now().Add(-lockTimeout)
 	now := time.Now()
 
-	var rows []domain.YouTubeNotificationDelivery
-	err := r.db.WithContext(ctx).Raw(`
+	pgxRows, err := r.db.Query(ctx, `
 		WITH claim AS (
 			SELECT id
 			FROM youtube_notification_delivery
-			WHERE status = ?
-			  AND (locked_at IS NULL OR locked_at < ?)
-			  AND next_attempt_at <= ?
+			WHERE status = $1
+			  AND (locked_at IS NULL OR locked_at < $2)
+			  AND next_attempt_at <= $3
 			ORDER BY created_at ASC
-			LIMIT ?
+			LIMIT $4
 			FOR UPDATE SKIP LOCKED
 		)
 		UPDATE youtube_notification_delivery d
-		SET locked_at = ?
+		SET locked_at = $5
 		FROM claim
 		WHERE d.id = claim.id
 		RETURNING d.id, d.outbox_id, d.room_id, d.status, d.attempt_count,
-		          d.next_attempt_at, d.created_at, d.locked_at, d.sent_at, d.error
-	`, domain.OutboxStatusPending, lockExpiry, now, batchSize, now).Scan(&rows).Error
+		          d.next_attempt_at, d.created_at, d.locked_at, d.sent_at, COALESCE(d.error, '') AS error
+	`, domain.OutboxStatusPending, lockExpiry, now, batchSize, now)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock delivery rows: %w", err)
 	}
-
-	return rows, nil
-}
-
-func (r *DeliveryRepository) fetchAndLockSQLite(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.YouTubeNotificationDelivery, error) {
-	lockExpiry := time.Now().Add(-lockTimeout)
-	now := time.Now()
-
-	var rows []domain.YouTubeNotificationDelivery
-	if err := r.db.WithContext(ctx).
-		Where("status = ?", domain.OutboxStatusPending).
-		Where("(locked_at IS NULL OR locked_at < ?) AND next_attempt_at <= ?", lockExpiry, now).
-		Order("created_at ASC").
-		Limit(batchSize).
-		Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("fetch and lock delivery rows (sqlite): %w", err)
+	defer pgxRows.Close()
+	rows, err := pgx.CollectRows(pgxRows, scanDeliveryRow)
+	if err != nil {
+		return nil, fmt.Errorf("fetch and lock delivery rows: %w", err)
 	}
-	if len(rows) == 0 {
-		return nil, nil
-	}
-
-	ids := collectDeliveryIDs(rows)
-	if err := r.db.WithContext(ctx).
-		Model(&domain.YouTubeNotificationDelivery{}).
-		Where("id IN ?", ids).
-		Update("locked_at", now).Error; err != nil {
-		return nil, fmt.Errorf("lock delivery rows (sqlite): %w", err)
-	}
-
-	for i := range rows {
-		lockedAt := now
-		rows[i].LockedAt = &lockedAt
-	}
-
 	return rows, nil
 }
 
@@ -165,7 +151,7 @@ func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, cla
 	}
 
 	sentAt := canonicalSentAtNow()
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := inDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
 		return markSentBatchTx(ctx, tx, uniqueIDs, sentAt, claimTokens)
 	}); err != nil {
 		return fmt.Errorf("mark delivery rows sent transaction: %w", err)
@@ -176,7 +162,7 @@ func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, cla
 
 func markSentBatchTx(
 	ctx context.Context,
-	tx *gorm.DB,
+	tx dbx.Querier,
 	uniqueIDs []int64,
 	sentAt time.Time,
 	claimTokens []deliveryClaimToken,
@@ -185,30 +171,27 @@ func markSentBatchTx(
 	if err != nil {
 		return fmt.Errorf("load tracking marks: %w", err)
 	}
-	if err := updateSentDeliveryRows(tx, uniqueIDs, sentAt); err != nil {
+	if err := updateSentDeliveryRows(ctx, tx, uniqueIDs, sentAt); err != nil {
 		return err
 	}
 	return persistSentDeliveryTracking(ctx, tx, trackingMarks)
 }
 
-func updateSentDeliveryRows(tx *gorm.DB, uniqueIDs []int64, sentAt time.Time) error {
-	result := tx.Model(&domain.YouTubeNotificationDelivery{}).
-		Where("id IN ? AND status = ?", uniqueIDs, domain.OutboxStatusPending).
-		Updates(map[string]any{
-			"status":    domain.OutboxStatusSent,
-			"sent_at":   sentAt,
-			"locked_at": nil,
-			"error":     "",
-		})
-	if result.Error != nil {
-		return fmt.Errorf("update delivery rows: %w", result.Error)
+func updateSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int64, sentAt time.Time) error {
+	_, err := tx.Exec(ctx, `
+		UPDATE youtube_notification_delivery
+		SET status = $1, sent_at = $2, locked_at = NULL, error = ''
+		WHERE id = ANY($3) AND status = $4
+	`, domain.OutboxStatusSent, sentAt, uniqueIDs, domain.OutboxStatusPending)
+	if err != nil {
+		return fmt.Errorf("update delivery rows: %w", err)
 	}
 	return nil
 }
 
 func persistSentDeliveryTracking(
 	ctx context.Context,
-	tx *gorm.DB,
+	tx dbx.Querier,
 	trackingMarks []trackingrepo.AlarmSentMark,
 ) error {
 	if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {
@@ -219,7 +202,7 @@ func persistSentDeliveryTracking(
 
 func persistSentDeliveryLatencyClassifications(
 	ctx context.Context,
-	tx *gorm.DB,
+	tx dbx.Querier,
 	trackingMarks []trackingrepo.AlarmSentMark,
 ) error {
 	if len(trackingMarks) == 0 {
@@ -239,15 +222,15 @@ func (r *DeliveryRepository) MarkFailed(ctx context.Context, id int64, maxRetrie
 	now := time.Now()
 	nextAttempt := now.Add(backoff)
 
-	err := r.db.WithContext(ctx).Exec(`
+	_, err := r.db.Exec(ctx, `
 		UPDATE youtube_notification_delivery
 		SET attempt_count = attempt_count + 1,
-		    error = ?,
-		    status = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE ? END,
-		    next_attempt_at = CASE WHEN attempt_count + 1 >= ? THEN next_attempt_at ELSE ? END,
+		    error = $1,
+		    status = CASE WHEN attempt_count + 1 >= $2 THEN $3 ELSE $4 END,
+		    next_attempt_at = CASE WHEN attempt_count + 1 >= $5 THEN next_attempt_at ELSE $6 END,
 		    locked_at = NULL
-		WHERE id = ?
-	`, truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, id).Error
+		WHERE id = $7
+	`, truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, id)
 	if err != nil {
 		return fmt.Errorf("mark delivery row failed: %w", err)
 	}
@@ -264,15 +247,15 @@ func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int
 	now := time.Now()
 	nextAttempt := now.Add(backoff)
 
-	err := r.db.WithContext(ctx).Exec(`
+	_, err := r.db.Exec(ctx, `
 		UPDATE youtube_notification_delivery
 		SET attempt_count = attempt_count + 1,
-		    error = ?,
-		    status = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE ? END,
-		    next_attempt_at = CASE WHEN attempt_count + 1 >= ? THEN next_attempt_at ELSE ? END,
+		    error = $1,
+		    status = CASE WHEN attempt_count + 1 >= $2 THEN $3 ELSE $4 END,
+		    next_attempt_at = CASE WHEN attempt_count + 1 >= $5 THEN next_attempt_at ELSE $6 END,
 		    locked_at = NULL
-		WHERE id IN ?
-	`, truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, uniqueIDs).Error
+		WHERE id = ANY($7)
+	`, truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, uniqueIDs)
 	if err != nil {
 		return fmt.Errorf("mark delivery rows failed batch: %w", err)
 	}
@@ -286,14 +269,14 @@ func (r *DeliveryRepository) MarkPermanentFailureBatch(ctx context.Context, ids 
 		return nil
 	}
 
-	err := r.db.WithContext(ctx).Exec(`
+	_, err := r.db.Exec(ctx, `
 		UPDATE youtube_notification_delivery
-		SET attempt_count = CASE WHEN attempt_count >= ? THEN attempt_count ELSE ? END,
-		    error = ?,
-		    status = ?,
+		SET attempt_count = CASE WHEN attempt_count >= $1 THEN attempt_count ELSE $2 END,
+		    error = $3,
+		    status = $4,
 		    locked_at = NULL
-		WHERE id IN ? AND status = ?
-	`, maxRetries, maxRetries, truncateString(errMsg, 500), domain.OutboxStatusFailed, uniqueIDs, domain.OutboxStatusPending).Error
+		WHERE id = ANY($5) AND status = $6
+	`, maxRetries, maxRetries, truncateString(errMsg, 500), domain.OutboxStatusFailed, uniqueIDs, domain.OutboxStatusPending)
 	if err != nil {
 		return fmt.Errorf("mark delivery rows permanent failed batch: %w", err)
 	}
@@ -312,12 +295,12 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, 
 	}
 
 	var counts []deliveryStatusCount
-	if err := r.db.WithContext(ctx).
-		Model(&domain.YouTubeNotificationDelivery{}).
-		Select("outbox_id, status, COUNT(*) AS count").
-		Where("outbox_id IN ?", uniqueIDs).
-		Group("outbox_id, status").
-		Scan(&counts).Error; err != nil {
+	if err := selectDeliverySQL(ctx, r.db, &counts, "count delivery statuses", `
+		SELECT outbox_id, status, COUNT(*) AS count
+		FROM youtube_notification_delivery
+		WHERE outbox_id = ANY(?)
+		GROUP BY outbox_id, status
+	`, uniqueIDs); err != nil {
 		return fmt.Errorf("update outbox aggregate statuses: count delivery statuses: %w", err)
 	}
 
@@ -337,24 +320,24 @@ func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outbox
 		return nil
 	}
 
-	updates := map[string]any{
-		"status":    status,
-		"locked_at": nil,
-	}
 	sentAt := canonicalSentAtNow()
+	errorText := ""
 	switch status {
 	case domain.OutboxStatusSent:
-		updates["sent_at"] = sentAt
-		updates["error"] = ""
 	case domain.OutboxStatusFailed:
-		updates["error"] = "per-room delivery failed"
+		errorText = "per-room delivery failed"
 	}
 
-	result := r.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id IN ?", uniqueIDs).
-		Updates(updates)
-	if result.Error != nil {
-		return fmt.Errorf("update outbox aggregate statuses: apply update: %w", result.Error)
+	_, err := r.db.Exec(ctx, `
+		UPDATE youtube_notification_outbox
+		SET status = $1::text,
+		    locked_at = NULL,
+		    sent_at = CASE WHEN $1::text = $2::text THEN $3 ELSE sent_at END,
+		    error = CASE WHEN $1::text = $4::text THEN $5 ELSE '' END
+		WHERE id = ANY($6)
+	`, status, domain.OutboxStatusSent, sentAt, domain.OutboxStatusFailed, errorText, uniqueIDs)
+	if err != nil {
+		return fmt.Errorf("update outbox aggregate statuses: apply update: %w", err)
 	}
 
 	return nil
@@ -366,7 +349,7 @@ func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Co
 	}
 
 	var outboxIDs []int64
-	if err := r.db.WithContext(ctx).Raw(`
+	if err := selectDeliverySQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", `
 		SELECT d.outbox_id
 		FROM youtube_notification_delivery d
 		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
@@ -375,7 +358,7 @@ func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Co
 		HAVING SUM(CASE WHEN d.status = ? THEN 1 ELSE 0 END) = 0
 		ORDER BY d.outbox_id ASC
 		LIMIT ?
-	`, domain.OutboxStatusPending, domain.OutboxStatusPending, batchSize).Scan(&outboxIDs).Error; err != nil {
+	`, domain.OutboxStatusPending, domain.OutboxStatusPending, batchSize); err != nil {
 		return nil, fmt.Errorf("find pending outbox ids for aggregate sync: %w", err)
 	}
 

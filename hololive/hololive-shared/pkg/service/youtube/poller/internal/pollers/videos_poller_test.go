@@ -43,7 +43,7 @@ func videosPageTransport(html string) shortsPollerRoundTripFunc {
 }
 
 func TestVideosPollerInitializesWatermark(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -61,7 +61,7 @@ func TestVideosPollerInitializesWatermark(t *testing.T) {
 }
 
 func TestVideosPollerDoesNotNotifyOnFirstPoll(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -78,7 +78,7 @@ func TestVideosPollerDoesNotNotifyOnFirstPoll(t *testing.T) {
 }
 
 func TestVideosPollerNotifiesOnNewVideoAfterBaseline(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -107,7 +107,7 @@ func TestVideosPollerNotifiesOnNewVideoAfterBaseline(t *testing.T) {
 }
 
 func TestVideosPollerHandlesEmptyVideoList(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -124,7 +124,7 @@ func TestVideosPollerHandlesEmptyVideoList(t *testing.T) {
 }
 
 func TestVideosPollerHandlesScraperError(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -145,7 +145,7 @@ func TestVideosPollerHandlesScraperError(t *testing.T) {
 }
 
 func TestVideosPollerSkipsLiveReplayVideos(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -178,7 +178,7 @@ func TestVideosPollerSkipsLiveReplayVideos(t *testing.T) {
 }
 
 func TestVideosPollerName(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -189,7 +189,7 @@ func TestVideosPollerName(t *testing.T) {
 }
 
 func TestVideosPollerDefaultMaxResults(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},

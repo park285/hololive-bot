@@ -25,7 +25,6 @@ import (
 	"fmt"
 
 	"github.com/park285/shared-go/pkg/json"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -35,25 +34,24 @@ func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType strin
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}
 
-	path := fmt.Sprintf("{%s}", aliasType)
-	result := r.gormDB.WithContext(ctx).
-		Model(&Model{}).
-		Where("id = ?", memberID).
-		Update("aliases", gorm.Expr(`
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE members
+		SET aliases =
 			jsonb_set(
-				COALESCE(aliases::jsonb, '{}'::jsonb),
-				CAST(? AS text[]),
+				COALESCE(aliases, '{}'::jsonb),
+				ARRAY[$2]::text[],
 				CASE
-					WHEN jsonb_exists(COALESCE(aliases::jsonb -> ?, '[]'::jsonb), CAST(? AS text)) THEN COALESCE(aliases::jsonb -> ?, '[]'::jsonb)
-					ELSE COALESCE(aliases::jsonb -> ?, '[]'::jsonb) || jsonb_build_array(?)
+					WHEN jsonb_exists(COALESCE(aliases -> $2, '[]'::jsonb), $3) THEN COALESCE(aliases -> $2, '[]'::jsonb)
+					ELSE COALESCE(aliases -> $2, '[]'::jsonb) || jsonb_build_array($3::text)
 				END,
 				true
 			)
-		`, path, aliasType, alias, aliasType, aliasType, alias))
-	if result.Error != nil {
-		return fmt.Errorf("failed to add alias: %w", result.Error)
+		WHERE id = $1
+	`, memberID, aliasType, alias)
+	if err != nil {
+		return fmt.Errorf("failed to add alias: %w", err)
 	}
-	if result.RowsAffected == 0 {
+	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
 
@@ -65,29 +63,28 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType st
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}
 
-	path := fmt.Sprintf("{%s}", aliasType)
-	result := r.gormDB.WithContext(ctx).
-		Model(&Model{}).
-		Where("id = ?", memberID).
-		Update("aliases", gorm.Expr(`
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE members
+		SET aliases =
 			jsonb_set(
-				COALESCE(aliases::jsonb, '{}'::jsonb),
-				CAST(? AS text[]),
+				COALESCE(aliases, '{}'::jsonb),
+				ARRAY[$2]::text[],
 				COALESCE(
 					(
 						SELECT jsonb_agg(elem)
-						FROM jsonb_array_elements(COALESCE(aliases::jsonb -> ?, '[]'::jsonb)) AS elem
-						WHERE elem <> to_jsonb(CAST(? AS text))
+						FROM jsonb_array_elements(COALESCE(aliases -> $2, '[]'::jsonb)) AS elem
+						WHERE elem <> to_jsonb($3::text)
 					),
 					'[]'::jsonb
 				),
 				true
 			)
-		`, path, aliasType, alias))
-	if result.Error != nil {
-		return fmt.Errorf("failed to remove alias: %w", result.Error)
+		WHERE id = $1
+	`, memberID, aliasType, alias)
+	if err != nil {
+		return fmt.Errorf("failed to remove alias: %w", err)
 	}
-	if result.RowsAffected == 0 {
+	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
 
@@ -95,42 +92,45 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType st
 }
 
 func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduated bool) error {
-	result := r.gormDB.WithContext(ctx).
-		Model(&Model{}).
-		Where("id = ?", memberID).
-		Update("is_graduated", isGraduated)
-	if result.Error != nil {
-		return fmt.Errorf("failed to update graduation status: %w", result.Error)
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE members
+		SET is_graduated = $2
+		WHERE id = $1
+	`, memberID, isGraduated)
+	if err != nil {
+		return fmt.Errorf("failed to update graduation status: %w", err)
 	}
-	if result.RowsAffected == 0 {
+	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
 	return nil
 }
 
 func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelID string) error {
-	result := r.gormDB.WithContext(ctx).
-		Model(&Model{}).
-		Where("id = ?", memberID).
-		Update("channel_id", channelID)
-	if result.Error != nil {
-		return fmt.Errorf("failed to update channel ID: %w", result.Error)
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE members
+		SET channel_id = $2
+		WHERE id = $1
+	`, memberID, channelID)
+	if err != nil {
+		return fmt.Errorf("failed to update channel ID: %w", err)
 	}
-	if result.RowsAffected == 0 {
+	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
 	return nil
 }
 
 func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name string) error {
-	result := r.gormDB.WithContext(ctx).
-		Model(&Model{}).
-		Where("id = ?", memberID).
-		Update("english_name", name)
-	if result.Error != nil {
-		return fmt.Errorf("failed to update member name: %w", result.Error)
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE members
+		SET english_name = $2
+		WHERE id = $1
+	`, memberID, name)
+	if err != nil {
+		return fmt.Errorf("failed to update member name: %w", err)
 	}
-	if result.RowsAffected == 0 {
+	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
 	return nil
@@ -167,21 +167,14 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	org := "Hololive" // 기존 API 호환을 위한 기본값
 	syncSource := "manual"
 
-	m := Model{
-		Slug:         slug,
-		ChannelID:    chIDPtr,
-		EnglishName:  member.Name,
-		JapaneseName: nameJaPtr,
-		KoreanName:   nameKoPtr,
-		Status:       "active",
-		IsGraduated:  member.IsGraduated,
-		Aliases:      aliasesJSON,
-		Org:          org,
-		Suborg:       nil,
-		SyncSource:   syncSource,
-	}
-
-	if err := r.gormDB.WithContext(ctx).Create(&m).Error; err != nil {
+	_, err = r.pool.Exec(ctx, `
+		INSERT INTO members (
+			slug, channel_id, english_name, japanese_name, korean_name,
+			status, is_graduated, aliases, org, suborg, sync_source
+		)
+		VALUES ($1, $2, $3, $4, $5, 'active', $6, $7::jsonb, $8, NULL, $9)
+	`, slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, member.IsGraduated, string(aliasesJSON), org, syncSource)
+	if err != nil {
 		return fmt.Errorf("failed to create member: %w", err)
 	}
 

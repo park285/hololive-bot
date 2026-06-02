@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
-	"gorm.io/gorm"
 )
 
 const (
@@ -178,7 +178,7 @@ func (d *ClaimManager) recoverSuccessfulCommunityShortsSentState(ctx context.Con
 	}
 
 	sentAt := canonicalSentAtNow()
-	if err := d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := inDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
 		return recoverSuccessfulCommunityShortsSentStateTx(ctx, tx, uniqueIDs, sentAt)
 	}); err != nil {
 		return fmt.Errorf("recover successful community/shorts sent state transaction: %w", err)
@@ -189,7 +189,7 @@ func (d *ClaimManager) recoverSuccessfulCommunityShortsSentState(ctx context.Con
 
 func recoverSuccessfulCommunityShortsSentStateTx(
 	ctx context.Context,
-	tx *gorm.DB,
+	tx dbx.Querier,
 	uniqueIDs []int64,
 	sentAt time.Time,
 ) error {

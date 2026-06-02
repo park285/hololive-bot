@@ -5,45 +5,43 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type observationTestBufferModel struct {
-	ID                          int64  `gorm:"primaryKey;autoIncrement"`
-	DeliveryID                  int64  `gorm:"not null;uniqueIndex:idx_obs_delivery_attempt"`
-	AttemptOrdinal              int    `gorm:"not null;uniqueIndex:idx_obs_delivery_attempt"`
-	OutboxID                    int64  `gorm:"not null"`
-	ChannelID                   string `gorm:"type:text;not null"`
-	ContentID                   string `gorm:"type:text;not null"`
-	PostID                      string `gorm:"type:text;not null"`
-	RoomID                      string `gorm:"type:text;not null"`
-	AlarmType                   string `gorm:"type:text;not null"`
+	ID                          int64  `db:"id"`
+	DeliveryID                  int64  `db:"delivery_id"`
+	AttemptOrdinal              int    `db:"attempt_ordinal"`
+	OutboxID                    int64  `db:"outbox_id"`
+	ChannelID                   string `db:"channel_id"`
+	ContentID                   string `db:"content_id"`
+	PostID                      string `db:"post_id"`
+	RoomID                      string `db:"room_id"`
+	AlarmType                   string `db:"alarm_type"`
 	ActualPublishedAt           *time.Time
 	AlarmSentAt                 *time.Time
 	AlarmLatencyMillis          *int64
 	DetectedAt                  *time.Time
-	ObservationStatus           string     `gorm:"type:text;not null"`
-	ObservationRuntimeName      string     `gorm:"type:text"`
-	ObservationBigBangCutoverAt *time.Time `gorm:"column:observation_bigbang_cutover_at"`
+	ObservationStatus           string     `db:"observation_status"`
+	ObservationRuntimeName      string     `db:"observation_runtime_name"`
+	ObservationBigBangCutoverAt *time.Time `db:"observation_bigbang_cutover_at"`
 	ObservationStartedAt        *time.Time
 	ObservationEndedAt          *time.Time
-	DedupeKey                   string `gorm:"type:text;not null"`
-	DeliveryPath                string `gorm:"type:text;not null"`
-	DeliveryMode                string `gorm:"type:text;not null"`
-	SendResult                  string `gorm:"type:text;not null"`
-	FailureReason               string `gorm:"type:text"`
+	DedupeKey                   string `db:"dedupe_key"`
+	DeliveryPath                string `db:"delivery_path"`
+	DeliveryMode                string `db:"delivery_mode"`
+	SendResult                  string `db:"send_result"`
+	FailureReason               string `db:"failure_reason"`
 	AttemptStartedAt            *time.Time
 	AttemptFinishedAt           *time.Time
-	EventAt                     time.Time `gorm:"not null"`
-	NextAttemptAt               time.Time `gorm:"not null"`
+	EventAt                     time.Time `db:"event_at"`
+	NextAttemptAt               time.Time `db:"next_attempt_at"`
 	CreatedAt                   time.Time
 	LockedAt                    *time.Time
 	LoggedAt                    *time.Time
-	Error                       string `gorm:"type:text"`
+	Error                       string `db:"error"`
 }
 
 func (observationTestBufferModel) TableName() string {
@@ -51,16 +49,16 @@ func (observationTestBufferModel) TableName() string {
 }
 
 type observationTestTrackingModel struct {
-	Kind                        domain.OutboxKind `gorm:"primaryKey"`
-	ContentID                   string            `gorm:"primaryKey"`
+	Kind                        domain.OutboxKind `db:"kind"`
+	ContentID                   string            `db:"content_id"`
 	CanonicalContentID          string
-	ChannelID                   string `gorm:"type:text;not null"`
+	ChannelID                   string `db:"channel_id"`
 	ActualPublishedAt           *time.Time
-	DetectedAt                  time.Time `gorm:"not null"`
+	DetectedAt                  time.Time `db:"detected_at"`
 	AlarmSentAt                 *time.Time
 	AlarmLatencyMillis          *int64
 	AlarmLatencyExceeded        *bool
-	DeliveryStatus              string `gorm:"type:text;not null;default:'PENDING'"`
+	DeliveryStatus              string `db:"delivery_status"`
 	LatencyClassificationStatus string
 	DelaySource                 string
 	InternalDelayCause          string
@@ -73,16 +71,16 @@ func (observationTestTrackingModel) TableName() string {
 }
 
 type observationTestWindowModel struct {
-	RuntimeName             string     `gorm:"primaryKey;type:text"`
-	BigBangCutoverAt        time.Time  `gorm:"primaryKey;column:bigbang_cutover_at"`
-	AppVersion              string     `gorm:"type:text;not null"`
-	TargetChannelCount      int        `gorm:"not null"`
-	DeploymentCompletedAt   time.Time  `gorm:"not null"`
-	ObservationStartedAt    time.Time  `gorm:"not null"`
-	ObservationEndedAt      time.Time  `gorm:"not null"`
-	ClosedAt                *time.Time `gorm:"column:closed_at"`
-	FinalizedPostBaselineAt *time.Time `gorm:"column:finalized_post_baseline_at"`
-	FinalizedPostCount      int        `gorm:"not null;default:0"`
+	RuntimeName             string     `db:"runtime_name"`
+	BigBangCutoverAt        time.Time  `db:"bigbang_cutover_at"`
+	AppVersion              string     `db:"app_version"`
+	TargetChannelCount      int        `db:"target_channel_count"`
+	DeploymentCompletedAt   time.Time  `db:"deployment_completed_at"`
+	ObservationStartedAt    time.Time  `db:"observation_started_at"`
+	ObservationEndedAt      time.Time  `db:"observation_ended_at"`
+	ClosedAt                *time.Time `db:"closed_at"`
+	FinalizedPostBaselineAt *time.Time `db:"finalized_post_baseline_at"`
+	FinalizedPostCount      int        `db:"finalized_post_count"`
 	CreatedAt               time.Time
 	UpdatedAt               time.Time
 }
@@ -95,11 +93,7 @@ func TestDeliveryTelemetryRepository_EnqueueEnrichesObservationWindowContext(t *
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&observationTestBufferModel{}, &observationTestTrackingModel{}, &observationTestWindowModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
@@ -108,7 +102,7 @@ func TestDeliveryTelemetryRepository_EnqueueEnrichesObservationWindowContext(t *
 	seedObservationWindow(t, db, cutoverAt, observationStartedAt)
 	seedTrackingRow(t, db, domain.OutboxKindNewShort, "short-inside", "UC_inside", &actualPublishedAt, detectedAt)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     101,
 		AttemptOrdinal: 1,
@@ -148,11 +142,7 @@ func TestDeliveryTelemetryRepository_EnqueueMarksLateDetectionsOutsideObservatio
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&observationTestBufferModel{}, &observationTestTrackingModel{}, &observationTestWindowModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
@@ -161,7 +151,7 @@ func TestDeliveryTelemetryRepository_EnqueueMarksLateDetectionsOutsideObservatio
 	seedObservationWindow(t, db, cutoverAt, observationStartedAt)
 	seedTrackingRow(t, db, domain.OutboxKindNewShort, "short-late-detect", "UC_late", &actualPublishedAt, detectedAt)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     111,
 		AttemptOrdinal: 1,
@@ -190,11 +180,7 @@ func TestDeliveryTelemetryRepository_ListByObservationWindowReturnsMatchedOnly(t
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&observationTestBufferModel{}, &observationTestTrackingModel{}, &observationTestWindowModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
@@ -208,7 +194,7 @@ func TestDeliveryTelemetryRepository_ListByObservationWindowReturnsMatchedOnly(t
 	outsideDetectedAt := outsidePublishedAt.Add(20 * time.Second)
 	seedTrackingRow(t, db, domain.OutboxKindNewShort, "short-outside", "UC_outside", &outsidePublishedAt, outsideDetectedAt)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
 		{
 			DeliveryID:     201,
@@ -252,16 +238,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&sqliteTelemetryOutboxModel{},
-		&observationTestBufferModel{},
-		&observationTestTrackingModel{},
-		&observationTestWindowModel{},
-		&sqliteTelemetryObservationBaselineModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
@@ -301,7 +278,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 			DetectedAt:         lateDetectedAt,
 		},
 	}).Error)
-	require.NoError(t, db.Create([]sqliteTelemetryOutboxModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestOutboxModel{
 		{
 			ID:            401,
 			Kind:          string(domain.OutboxKindCommunityPost),
@@ -325,7 +302,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 			CreatedAt:     lateDetectedAt,
 		},
 	}).Error)
-	require.NoError(t, db.Create([]sqliteTelemetryObservationBaselineModel{{
+	require.NoError(t, db.Create([]deliveryTelemetryTestObservationBaselineModel{{
 		RuntimeName:       "youtube-producer",
 		BigBangCutoverAt:  cutoverAt,
 		Kind:              string(domain.OutboxKindCommunityPost),
@@ -370,7 +347,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	rows, err := repository.ListByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -378,7 +355,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 	require.Equal(t, "post-inside", rows[0].ContentID)
 }
 
-func seedObservationWindow(t *testing.T, db *gorm.DB, cutoverAt, observationStartedAt time.Time) {
+func seedObservationWindow(t *testing.T, db *deliveryTestDB, cutoverAt, observationStartedAt time.Time) {
 	t.Helper()
 	require.NoError(t, db.Create(&observationTestWindowModel{
 		RuntimeName:           "youtube-producer",
@@ -393,7 +370,7 @@ func seedObservationWindow(t *testing.T, db *gorm.DB, cutoverAt, observationStar
 
 func seedTrackingRow(
 	t *testing.T,
-	db *gorm.DB,
+	db *deliveryTestDB,
 	kind domain.OutboxKind,
 	contentID string,
 	channelID string,

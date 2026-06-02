@@ -35,13 +35,14 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type Renderer struct {
-	db      *gorm.DB
+	pool    *pgxpool.Pool
 	logger  *slog.Logger
 	cache   map[cacheKey]*template.Template
 	cacheMu sync.RWMutex
@@ -52,9 +53,9 @@ type cacheKey struct {
 	channelID   string
 }
 
-func NewRenderer(db *gorm.DB, logger *slog.Logger) *Renderer {
+func NewRenderer(pool *pgxpool.Pool, logger *slog.Logger) *Renderer {
 	return &Renderer{
-		db:     db,
+		pool:   pool,
 		logger: logger,
 		cache:  make(map[cacheKey]*template.Template),
 	}
@@ -104,31 +105,34 @@ func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, chan
 var ErrTemplateNotFound = errors.New("template not found in database")
 
 func (r *Renderer) loadTemplateBody(ctx context.Context, key domain.TemplateKey, channelID string) (string, error) {
-	var tmpl domain.NotificationTemplate
+	var body string
 
 	if channelID != "" {
-		err := r.db.WithContext(ctx).
-			Where("template_key = ? AND channel_id = ?", key, channelID).
-			First(&tmpl).Error
+		err := r.pool.QueryRow(ctx,
+			`SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id = $2`,
+			key,
+			channelID,
+		).Scan(&body)
 		if err == nil {
-			return tmpl.Body, nil
+			return body, nil
 		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
+		if !errors.Is(err, pgx.ErrNoRows) {
 			return "", fmt.Errorf("query channel template: %w", err)
 		}
 	}
 
-	err := r.db.WithContext(ctx).
-		Where("template_key = ? AND channel_id IS NULL", key).
-		First(&tmpl).Error
+	err := r.pool.QueryRow(ctx,
+		`SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id IS NULL`,
+		key,
+	).Scan(&body)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return "", fmt.Errorf("%w: %s", ErrTemplateNotFound, key)
 		}
 		return "", fmt.Errorf("query default template: %w", err)
 	}
 
-	return tmpl.Body, nil
+	return body, nil
 }
 
 func (r *Renderer) InvalidateCache(key domain.TemplateKey, channelID string) {

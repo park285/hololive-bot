@@ -25,7 +25,6 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
@@ -34,10 +33,9 @@ import (
 //
 // Rationale: keep test dependencies minimal (no mockgen) while allowing interface-based injection.
 type Client struct {
-	GetPoolFunc   func() *pgxpool.Pool
-	GetGormDBFunc func() *gorm.DB
-	PingFunc      func(ctx context.Context) error
-	CloseFunc     func() error
+	GetPoolFunc func() *pgxpool.Pool
+	PingFunc    func(ctx context.Context) error
+	CloseFunc   func() error
 }
 
 var _ database.Client = (*Client)(nil)
@@ -45,13 +43,6 @@ var _ database.Client = (*Client)(nil)
 func (c *Client) GetPool() *pgxpool.Pool {
 	if c.GetPoolFunc != nil {
 		return c.GetPoolFunc()
-	}
-	return nil
-}
-
-func (c *Client) GetGormDB() *gorm.DB {
-	if c.GetGormDBFunc != nil {
-		return c.GetGormDBFunc()
 	}
 	return nil
 }

@@ -2,15 +2,10 @@ package observation
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -162,8 +157,7 @@ func TestRepositoryUpsertDedupesByCanonicalContentIdentity(t *testing.T) {
 		DetectedAt: laterDetectedAt,
 	}))
 
-	var rows []domain.YouTubeContentAlarmTracking
-	require.NoError(t, db.Order("content_id ASC").Find(&rows).Error)
+	rows := selectTrackingRowsForTest(t, db)
 	require.Len(t, rows, 1)
 	require.Equal(t, "short-1", rows[0].ContentID)
 	require.Equal(t, "short:short-1", rows[0].CanonicalContentID)
@@ -219,7 +213,7 @@ func TestPendingPublishedAtResolver_KeysetPaginationStableWithSameDetectedAt(t *
 	ctx := context.Background()
 	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
 
-	rows := []*domain.YouTubeCommunityShortsAlarmState{
+	rows := []domain.YouTubeCommunityShortsAlarmState{
 		{
 			Kind:           domain.OutboxKindNewShort,
 			PostID:         "short:short-a",
@@ -245,7 +239,7 @@ func TestPendingPublishedAtResolver_KeysetPaginationStableWithSameDetectedAt(t *
 			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusDetected,
 		},
 	}
-	require.NoError(t, db.Create(&rows).Error)
+	insertAlarmStatesForTest(t, db, rows)
 
 	firstPage, cursor, err := repository.ListPendingPublishedAtResolutionsPage(ctx, detectedAt.Add(time.Minute), detectedAt.Add(time.Minute), nil, 2)
 	require.NoError(t, err)
@@ -434,37 +428,17 @@ func TestMarkAndClearPublishedAtRetryAfter(t *testing.T) {
 func TestListPendingPublishedAtResolutionsPage_LegacySchemaWithoutRetryAfterColumnReturnsError(t *testing.T) {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:%s_legacy?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(`
-		CREATE TABLE youtube_community_shorts_alarm_states (
-			kind TEXT NOT NULL,
-			post_id TEXT NOT NULL,
-			content_id TEXT NOT NULL,
-			channel_id TEXT NOT NULL,
-			actual_published_at DATETIME,
-			detected_at DATETIME NOT NULL,
-			authorized_at DATETIME,
-			alarm_sent_at DATETIME,
-			delivery_status TEXT NOT NULL DEFAULT 'DETECTED',
-			created_at DATETIME NOT NULL,
-			updated_at DATETIME NOT NULL,
-			PRIMARY KEY (kind, post_id)
-		)
-	`).Error)
-
+	db := newLegacyAlarmStateTestDB(t)
 	repository := NewRepository(db)
 	ctx := context.Background()
 	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
 	now := detectedAt.Add(time.Minute)
-	require.NoError(t, db.Exec(`
+	_, err := execSQL(ctx, db, "insert legacy alarm state", `
 		INSERT INTO youtube_community_shorts_alarm_states
 			(kind, post_id, content_id, channel_id, detected_at, delivery_status, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, domain.OutboxKindNewShort, "short:legacy", "short:legacy", "UC_SHORT", detectedAt, domain.YouTubeCommunityShortsAlarmStateStatusDetected, now, now).Error)
+	`, domain.OutboxKindNewShort, "short:legacy", "short:legacy", "UC_SHORT", detectedAt, domain.YouTubeCommunityShortsAlarmStateStatusDetected, now, now)
+	require.NoError(t, err)
 
 	candidates, _, err := repository.ListPendingPublishedAtResolutionsPage(ctx, now, detectedAt.Add(2*time.Minute), nil, 10)
 	require.ErrorContains(t, err, "published_at_retry_after")
@@ -474,36 +448,16 @@ func TestListPendingPublishedAtResolutionsPage_LegacySchemaWithoutRetryAfterColu
 func TestMarkAndClearPublishedAtRetryAfter_WithoutRetryAfterColumnReturnsError(t *testing.T) {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:%s_legacy_mark?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(`
-		CREATE TABLE youtube_community_shorts_alarm_states (
-			kind TEXT NOT NULL,
-			post_id TEXT NOT NULL,
-			content_id TEXT NOT NULL,
-			channel_id TEXT NOT NULL,
-			actual_published_at DATETIME,
-			detected_at DATETIME NOT NULL,
-			authorized_at DATETIME,
-			alarm_sent_at DATETIME,
-			delivery_status TEXT NOT NULL DEFAULT 'DETECTED',
-			created_at DATETIME NOT NULL,
-			updated_at DATETIME NOT NULL,
-			PRIMARY KEY (kind, post_id)
-		)
-	`).Error)
-
+	db := newLegacyAlarmStateTestDB(t)
 	repository := NewRepository(db)
 	ctx := context.Background()
 	now := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
-	require.NoError(t, db.Exec(`
+	_, err := execSQL(ctx, db, "insert legacy alarm state", `
 		INSERT INTO youtube_community_shorts_alarm_states
 			(kind, post_id, content_id, channel_id, detected_at, delivery_status, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, domain.OutboxKindNewShort, "short:legacy", "short:legacy", "UC_SHORT", now, domain.YouTubeCommunityShortsAlarmStateStatusDetected, now, now).Error)
+	`, domain.OutboxKindNewShort, "short:legacy", "short:legacy", "UC_SHORT", now, domain.YouTubeCommunityShortsAlarmStateStatusDetected, now, now)
+	require.NoError(t, err)
 
 	require.ErrorContains(t, repository.MarkPublishedAtRetryAfter(ctx, domain.OutboxKindNewShort, "short:legacy", now.Add(time.Minute)), "published_at_retry_after")
 	require.ErrorContains(t, repository.ClearPublishedAtRetryAfter(ctx, domain.OutboxKindNewShort, "short:legacy"), "published_at_retry_after")

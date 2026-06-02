@@ -24,8 +24,6 @@ import (
 	"context"
 	"fmt"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 
@@ -35,19 +33,20 @@ import (
 
 type VideosPoller struct {
 	client     *scraper.Client
-	db         *gorm.DB
+	db         pollerDB
 	repository batchrepo.BatchRepository
 	maxResults int
 }
 
-func NewVideosPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int) *VideosPoller {
+func NewVideosPoller(scraperClient *scraper.Client, db any, maxResults int) *VideosPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
+	querier := normalizePollerDB(db)
 	return &VideosPoller{
 		client:     scraperClient,
-		db:         db,
-		repository: batchrepo.NewGormBatchRepositoryWithPersister(db, newDeliveryTelemetryLatencyPersisterAdapter(db)),
+		db:         querier,
+		repository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
 		maxResults: maxResults,
 	}
 }
@@ -80,7 +79,10 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 		return nil
 	}
 
-	watermark, isInitialized := p.videoWatermark(ctx, channelID)
+	watermark, isInitialized, err := loadContentWatermark(ctx, p.db, channelID, domain.WatermarkTypeVideo)
+	if err != nil {
+		return err
+	}
 	newVideos := videosAfterWatermark(videos, watermark.LastContentID, isInitialized)
 	dbVideos, notifications := buildVideoPollResults(channelID, newVideos, isInitialized)
 
@@ -89,17 +91,6 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 	}
 
 	return nil
-}
-
-func (p *VideosPoller) videoWatermark(ctx context.Context, channelID string) (domain.YouTubeContentWatermark, bool) {
-	var watermark domain.YouTubeContentWatermark
-	err := p.db.WithContext(ctx).Where(
-		"channel_id = ? AND watermark_type = ?",
-		channelID, domain.WatermarkTypeVideo,
-	).First(&watermark).Error
-
-	isInitialized := err == nil && watermark.Initialized
-	return watermark, isInitialized
 }
 
 func videosAfterWatermark(videos []*scraper.Video, lastSeenID string, isInitialized bool) []*scraper.Video {

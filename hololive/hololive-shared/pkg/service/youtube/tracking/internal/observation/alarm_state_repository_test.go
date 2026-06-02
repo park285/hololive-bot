@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -74,10 +73,11 @@ func TestMarkPublishedAtRetryAfterUpdatesColumn(t *testing.T) {
 	require.NoError(t, repository.MarkPublishedAtRetryAfter(ctx, domain.OutboxKindNewShort, "retry-after", retryAfter))
 
 	var row domain.YouTubeCommunityShortsAlarmState
-	require.NoError(t, db.
-		Select("published_at_retry_after").
-		Where("kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:retry-after").
-		Take(&row).Error)
+	require.NoError(t, db.QueryRow(ctx, `
+		SELECT published_at_retry_after
+		FROM youtube_community_shorts_alarm_states
+		WHERE kind = $1 AND post_id = $2
+	`, domain.OutboxKindNewShort, "short:retry-after").Scan(&row.PublishedAtRetryAfter))
 	require.NotNil(t, row.PublishedAtRetryAfter)
 	require.Equal(t, retryAfter, row.PublishedAtRetryAfter.UTC())
 }
@@ -102,11 +102,11 @@ func TestClearPublishedAtRetryAfterNullifiesColumn(t *testing.T) {
 	require.NoError(t, repository.ClearPublishedAtRetryAfter(ctx, domain.OutboxKindNewShort, "retry-clear"))
 
 	var retryAfterColumn sql.NullTime
-	require.NoError(t, db.
-		Model(&domain.YouTubeCommunityShortsAlarmState{}).
-		Select("published_at_retry_after").
-		Where("kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:retry-clear").
-		Scan(&retryAfterColumn).Error)
+	require.NoError(t, db.QueryRow(ctx, `
+		SELECT published_at_retry_after
+		FROM youtube_community_shorts_alarm_states
+		WHERE kind = $1 AND post_id = $2
+	`, domain.OutboxKindNewShort, "short:retry-clear").Scan(&retryAfterColumn))
 	require.False(t, retryAfterColumn.Valid)
 }
 
@@ -184,7 +184,7 @@ func TestListPendingPublishedAtResolutionsPageReturnsReadyCandidates(t *testing.
 			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusDetected,
 		},
 	}
-	require.NoError(t, db.Create(&rows).Error)
+	insertAlarmStatesForTest(t, db, rows)
 
 	candidates, cursor, err := repository.ListPendingPublishedAtResolutionsPage(ctx, referenceNow, detectedBefore, nil, 10)
 
@@ -259,7 +259,7 @@ func TestListPendingPublishedAtResolutionsPageCursorPagination(t *testing.T) {
 			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
 		},
 	}
-	require.NoError(t, db.Create(&rows).Error)
+	insertAlarmStatesForTest(t, db, rows)
 
 	firstPage, cursor, err := repository.ListPendingPublishedAtResolutionsPage(ctx, referenceNow, referenceNow.Add(time.Minute), nil, 2)
 	require.NoError(t, err)
@@ -291,14 +291,14 @@ func TestListPendingPublishedAtResolutionsReturnsReadyCandidates(t *testing.T) {
 	ctx := context.Background()
 	detectedAt := time.Now().UTC().Add(-10 * time.Minute)
 
-	require.NoError(t, db.Create(&domain.YouTubeCommunityShortsAlarmState{
+	insertAlarmStatesForTest(t, db, []domain.YouTubeCommunityShortsAlarmState{{
 		Kind:           domain.OutboxKindCommunityPost,
 		PostID:         "community:list-wrapper",
 		ContentID:      "list-wrapper",
 		ChannelID:      "UC_WRAPPER",
 		DetectedAt:     detectedAt,
 		DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusDetected,
-	}).Error)
+	}})
 
 	candidates, err := repository.ListPendingPublishedAtResolutions(ctx, detectedAt.Add(time.Minute), 1)
 
@@ -489,16 +489,9 @@ func TestAlarmStateRepositoryNilDBReturnsError(t *testing.T) {
 	require.Nil(t, cursor)
 }
 
-func newAlarmStateRepositoryTestDB(t *testing.T) *gorm.DB {
+func newAlarmStateRepositoryTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeCommunityShortsAlarmState{}))
-	return db
+	return newTrackingTestDB(t)
 }
 
 func publishedAtResolutionPostIDs(candidates []PublishedAtResolutionCandidate) []string {

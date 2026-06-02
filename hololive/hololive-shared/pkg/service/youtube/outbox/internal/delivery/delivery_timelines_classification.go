@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
@@ -102,15 +101,15 @@ func (r *DeliveryTelemetryRepository) updatePostLatencyClassification(
 	updatedAt time.Time,
 ) error {
 	status, delaySource, internalDelayCause := normalizedPostLatencyClassificationPersistenceValues(row)
-	return r.db.WithContext(ctx).
-		Model(&domain.YouTubeContentAlarmTracking{}).
-		Where("kind = ? AND content_id = ?", row.OutboxKind, contentID).
-		Updates(map[string]any{
-			"latency_classification_status": string(status),
-			"delay_source":                  string(delaySource),
-			"internal_delay_cause":          string(internalDelayCause),
-			"updated_at":                    updatedAt,
-		}).Error
+	_, err := r.db.Exec(ctx, `
+		UPDATE youtube_content_alarm_tracking
+		SET latency_classification_status = $1,
+		    delay_source = $2,
+		    internal_delay_cause = $3,
+		    updated_at = $4
+		WHERE kind = $5 AND content_id = $6
+	`, string(status), string(delaySource), string(internalDelayCause), updatedAt, row.OutboxKind, contentID)
+	return err
 }
 
 func normalizedPostLatencyClassificationPersistenceValues(

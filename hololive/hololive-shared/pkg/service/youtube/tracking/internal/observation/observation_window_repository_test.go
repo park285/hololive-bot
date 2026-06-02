@@ -2,15 +2,11 @@ package observation
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -357,14 +353,7 @@ func TestObservationWindowRepositoryFindClosedFinalizesObservationPostBaselinesB
 	require.Equal(t, observationEndedAt, includedRow.FinalizedAt.UTC())
 }
 
-func newObservationWindowTestDB(t *testing.T) *gorm.DB {
+func newObservationWindowTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeCommunityShortsObservationWindow{}, &domain.YouTubeCommunityShortsSourcePost{}, &domain.YouTubeCommunityShortsObservationPostBaseline{}))
-	return db
+	return newTrackingTestDB(t)
 }

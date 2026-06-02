@@ -23,15 +23,14 @@ package auth
 import (
 	"context"
 	stdErrors "errors"
-	"fmt"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormLogger "gorm.io/gorm/logger"
+	"golang.org/x/crypto/bcrypt"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
@@ -95,26 +94,10 @@ func (c *failingCacheClient) SRem(ctx context.Context, key string, members []str
 	return c.Client.SRem(ctx, key, members)
 }
 
-func newTestDB(t *testing.T) *gorm.DB {
+func newTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	dbName := strings.NewReplacer("/", "_", " ", "_", ":", "_").Replace(t.Name())
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", dbName)
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
-	})
-	if err != nil {
-		t.Fatalf("failed to open sqlite db: %v", err)
-	}
-
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("failed to get sql db: %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = sqlDB.Close() })
-
-	return db
+	return dbtest.NewPool(t)
 }
 
 func assertAuthCode(t *testing.T, err error, want ErrorCode) {
@@ -284,6 +267,55 @@ func TestLogin_AccountLocked(t *testing.T) {
 	assertAuthCode(t, err, CodeAccountLocked)
 }
 
+func TestLogin_UnknownEmailRecordsFailureAndLocksAccount(t *testing.T) {
+	db := newTestDB(t)
+	cacheClient := testutil.NewTestCacheService(t, context.Background())
+
+	config := DefaultConfig()
+	config.LoginRateLimitPerMinute = 1000
+	config.LoginFailLimit = 1
+	config.LoginFailWindow = 10 * time.Minute
+	config.LoginLockDuration = 10 * time.Minute
+
+	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	_, _, err = service.Login(context.Background(), "missing@example.com", "Password1", "127.0.0.1")
+	if err == nil {
+		t.Fatalf("expected invalid credentials for unknown email")
+	}
+	assertAuthCode(t, err, CodeInvalidCredentials)
+
+	_, _, err = service.Login(context.Background(), "missing@example.com", "Password1", "127.0.0.1")
+	if err == nil {
+		t.Fatalf("expected account locked after unknown-email failure hook")
+	}
+	assertAuthCode(t, err, CodeAccountLocked)
+}
+
+func TestMe_ReturnsUnauthorizedWhenSessionUserIsMissing(t *testing.T) {
+	db := newTestDB(t)
+	cacheClient := testutil.NewTestCacheService(t, context.Background())
+
+	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	session, err := service.createSession(context.Background(), "missing-user")
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	_, err = service.Me(context.Background(), session.Token)
+	if err == nil {
+		t.Fatalf("expected unauthorized for missing user")
+	}
+	assertAuthCode(t, err, CodeUnauthorized)
+}
+
 func TestPasswordReset_RevokesSessions(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t, context.Background())
@@ -336,6 +368,24 @@ func TestPasswordReset_RevokesSessions(t *testing.T) {
 	}
 }
 
+func TestPasswordResetRequest_UnknownEmailReturnsEmptyToken(t *testing.T) {
+	db := newTestDB(t)
+	cacheClient := testutil.NewTestCacheService(t, context.Background())
+
+	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	token, err := service.RequestPasswordReset(context.Background(), "missing@example.com", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("request password reset for unknown email should not fail: %v", err)
+	}
+	if token != "" {
+		t.Fatalf("expected empty token for unknown email, got %q", token)
+	}
+}
+
 func TestPasswordResetRequest_RateLimited(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t, context.Background())
@@ -368,6 +418,75 @@ func TestPasswordResetRequest_RateLimited(t *testing.T) {
 		t.Fatalf("expected rate limited error")
 	}
 	assertAuthCode(t, err, CodeRateLimited)
+}
+
+func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	cacheClient := testutil.NewTestCacheService(t, ctx)
+
+	config := DefaultConfig()
+	config.BcryptCost = bcrypt.MinCost
+
+	service, err := NewService(ctx, db, cacheClient, sharedlogging.NewTestLogger(), config)
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	if _, err := service.Register(ctx, "user@example.com", "Password1", "User"); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	resetToken, err := service.RequestPasswordReset(ctx, "user@example.com", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("request password reset: %v", err)
+	}
+
+	reset, err := service.findValidPasswordResetToken(ctx, sha256Hex(resetToken), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("find reset token: %v", err)
+	}
+
+	oldHash := storedPasswordHash(t, service, "user@example.com")
+	if _, err := db.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION auth_reset_token_sleep()
+		RETURNS trigger AS $$
+		BEGIN
+			PERFORM pg_sleep(0.2);
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql
+	`); err != nil {
+		t.Fatalf("create sleep function: %v", err)
+	}
+	if _, err := db.Exec(ctx, `
+		CREATE TRIGGER auth_reset_token_sleep_before_update
+		BEFORE UPDATE ON auth_password_reset_tokens
+		FOR EACH ROW EXECUTE FUNCTION auth_reset_token_sleep()
+	`); err != nil {
+		t.Fatalf("create sleep trigger: %v", err)
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+
+	err = service.applyPasswordReset(timeoutCtx, reset, "new-hash", time.Now().UTC())
+	if err == nil {
+		t.Fatalf("expected applyPasswordReset to fail")
+	}
+	assertAuthCode(t, err, CodeInternal)
+
+	if got := storedPasswordHash(t, service, "user@example.com"); got != oldHash {
+		t.Fatalf("password hash should roll back, got=%q want=%q", got, oldHash)
+	}
+
+	var usedAt *time.Time
+	if err := db.QueryRow(ctx, `SELECT used_at FROM auth_password_reset_tokens WHERE token_hash = $1`, reset.TokenHash).Scan(&usedAt); err != nil {
+		t.Fatalf("load token used_at: %v", err)
+	}
+	if usedAt != nil {
+		t.Fatalf("token used_at should remain null after rollback")
+	}
 }
 
 func TestCreateSession_RollsBackSessionWhenIndexAddFails(t *testing.T) {

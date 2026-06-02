@@ -26,8 +26,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
+
+	"github.com/kapu/hololive-shared/internal/dbx"
 )
 
 func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP string) (string, error) {
@@ -47,9 +49,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 		return "", nil
 	}
 
-	_ = s.db.WithContext(ctx).
-		Where("user_id = ? AND used_at IS NULL", user.ID).
-		Delete(&passwordResetTokenModel{}).Error
+	_, _ = s.db.Exec(ctx, `DELETE FROM auth_password_reset_tokens WHERE user_id = $1 AND used_at IS NULL`, user.ID)
 
 	rawToken, err := generateToken(resetTokenPrefix, 32)
 	if err != nil {
@@ -65,7 +65,10 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 		CreatedAt: now,
 	}
 
-	if err := s.db.WithContext(ctx).Create(model).Error; err != nil {
+	if _, err := s.db.Exec(ctx, `
+		INSERT INTO auth_password_reset_tokens (token_hash, user_id, expires_at, used_at, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`, model.TokenHash, model.UserID, model.ExpiresAt, model.UsedAt, model.CreatedAt); err != nil {
 		return "", newError(CodeInternal, "failed to create reset token", err)
 	}
 
@@ -87,12 +90,11 @@ func (s *Service) checkPasswordResetRequestRateLimit(ctx context.Context, client
 }
 
 func (s *Service) findPasswordResetUser(ctx context.Context, email string) (userModel, bool, error) {
-	var user userModel
-	err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	user, err := s.findUserByEmail(ctx, email)
 	if err == nil {
 		return user, true, nil
 	}
-	if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+	if stdErrors.Is(err, pgx.ErrNoRows) {
 		return userModel{}, false, nil
 	}
 	return userModel{}, false, newError(CodeInternal, "failed to query user", err)
@@ -122,17 +124,30 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 }
 
 func (s *Service) findValidPasswordResetToken(ctx context.Context, tokenHash string, now time.Time) (passwordResetTokenModel, error) {
-	var reset passwordResetTokenModel
-	err := s.db.WithContext(ctx).
-		Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenHash, now).
-		First(&reset).Error
+	reset, err := scanPasswordResetToken(s.db.QueryRow(ctx, `
+		SELECT token_hash, user_id, expires_at, used_at, created_at
+		FROM auth_password_reset_tokens
+		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
+	`, tokenHash, now))
 	if err == nil {
 		return reset, nil
 	}
-	if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+	if stdErrors.Is(err, pgx.ErrNoRows) {
 		return passwordResetTokenModel{}, newError(CodeInvalidInput, "invalid reset token", nil)
 	}
 	return passwordResetTokenModel{}, newError(CodeInternal, "failed to query reset token", err)
+}
+
+func scanPasswordResetToken(row rowScanner) (passwordResetTokenModel, error) {
+	var reset passwordResetTokenModel
+	err := row.Scan(
+		&reset.TokenHash,
+		&reset.UserID,
+		&reset.ExpiresAt,
+		&reset.UsedAt,
+		&reset.CreatedAt,
+	)
+	return reset, err
 }
 
 func (s *Service) applyPasswordReset(
@@ -141,28 +156,31 @@ func (s *Service) applyPasswordReset(
 	passwordHash string,
 	now time.Time,
 ) error {
-	tx := s.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return newError(CodeInternal, "failed to begin transaction", tx.Error)
-	}
+	err := dbx.InPgxTx(ctx, s.db, func(tx dbx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			UPDATE auth_users
+			SET password_hash = $1, updated_at = $2
+			WHERE id = $3
+		`, passwordHash, now, reset.UserID); err != nil {
+			return newError(CodeInternal, "failed to update password", err)
+		}
 
-	if err := tx.Model(&userModel{}).
-		Where("id = ?", reset.UserID).
-		Update("password_hash", passwordHash).Error; err != nil {
-		tx.Rollback()
-		return newError(CodeInternal, "failed to update password", err)
-	}
+		if _, err := tx.Exec(ctx, `
+			UPDATE auth_password_reset_tokens
+			SET used_at = $1
+			WHERE token_hash = $2
+		`, now, reset.TokenHash); err != nil {
+			return newError(CodeInternal, "failed to mark token used", err)
+		}
 
-	usedAt := now
-	if err := tx.Model(&passwordResetTokenModel{}).
-		Where("token_hash = ?", reset.TokenHash).
-		Update("used_at", &usedAt).Error; err != nil {
-		tx.Rollback()
-		return newError(CodeInternal, "failed to mark token used", err)
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return newError(CodeInternal, "failed to commit transaction", err)
+		return nil
+	})
+	if err != nil {
+		var authErr *Error
+		if stdErrors.As(err, &authErr) {
+			return authErr
+		}
+		return newError(CodeInternal, "failed to apply password reset transaction", err)
 	}
 	return nil
 }

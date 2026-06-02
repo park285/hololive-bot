@@ -10,74 +10,73 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestGormBatchRepositoryInsertNotificationsChunkPostgresDeduplicatesSameBatchIdentity(t *testing.T) {
+func TestPgxBatchRepositoryInsertNotificationsChunkPostgresDeduplicatesSameBatchIdentity(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	require.NoError(t, err)
-
 	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
 	schema := fmt.Sprintf("polling_batch_test_%d", time.Now().UnixNano())
-	require.NoError(t, db.WithContext(ctx).Exec("CREATE SCHEMA "+quotePostgresIdentifier(schema)).Error)
+	_, err = pool.Exec(ctx, "CREATE SCHEMA "+quotePostgresIdentifier(schema))
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, db.WithContext(context.Background()).Exec("DROP SCHEMA IF EXISTS "+quotePostgresIdentifier(schema)+" CASCADE").Error)
+		_, err := pool.Exec(context.Background(), "DROP SCHEMA IF EXISTS "+quotePostgresIdentifier(schema)+" CASCADE")
+		require.NoError(t, err)
 	})
 
-	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec("SET LOCAL search_path TO " + quotePostgresIdentifier(schema)).Error; err != nil {
-			return err
-		}
-		if err := createPostgresNotificationOutboxTable(tx); err != nil {
-			return err
-		}
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
 
-		repository := &GormBatchRepository{DB: tx}
-		if err := repository.insertNotificationsChunk(ctx, tx, []*domain.YouTubeNotificationOutbox{
-			{
-				Kind:      domain.OutboxKindNewVideo,
-				ChannelID: "channel-1",
-				ContentID: "video-1",
-				Payload:   `{"video_id":"video-1","kind":"first"}`,
-				Status:    domain.OutboxStatusPending,
-			},
-			{
-				Kind:      domain.OutboxKindNewVideo,
-				ChannelID: "channel-1",
-				ContentID: "video-1",
-				Payload:   `{"video_id":"video-1","kind":"duplicate"}`,
-				Status:    domain.OutboxStatusPending,
-			},
-		}); err != nil {
-			return err
-		}
+	_, err = tx.Exec(ctx, "SET LOCAL search_path TO "+quotePostgresIdentifier(schema))
+	require.NoError(t, err)
+	require.NoError(t, createPostgresNotificationOutboxTable(ctx, tx))
 
-		var outboxCount int64
-		if err := tx.Model(&domain.YouTubeNotificationOutbox{}).
-			Where("kind = ? AND content_id = ?", domain.OutboxKindNewVideo, "video-1").
-			Count(&outboxCount).Error; err != nil {
-			return err
-		}
-		require.EqualValues(t, 1, outboxCount)
-		return nil
+	repository := &PgxBatchRepository{DB: pool}
+	err = repository.insertNotificationsChunk(ctx, tx, []*domain.YouTubeNotificationOutbox{
+		{
+			Kind:      domain.OutboxKindNewVideo,
+			ChannelID: "channel-1",
+			ContentID: "video-1",
+			Payload:   `{"video_id":"video-1","kind":"first"}`,
+			Status:    domain.OutboxStatusPending,
+		},
+		{
+			Kind:      domain.OutboxKindNewVideo,
+			ChannelID: "channel-1",
+			ContentID: "video-1",
+			Payload:   `{"video_id":"video-1","kind":"duplicate"}`,
+			Status:    domain.OutboxStatusPending,
+		},
 	})
 	require.NoError(t, err)
+
+	var outboxCount int64
+	err = tx.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM youtube_notification_outbox
+		WHERE kind = $1 AND content_id = $2`,
+		domain.OutboxKindNewVideo,
+		"video-1",
+	).Scan(&outboxCount)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, outboxCount)
+	require.NoError(t, tx.Commit(ctx))
 }
 
-func createPostgresNotificationOutboxTable(tx *gorm.DB) error {
-	return tx.Exec(`
+func createPostgresNotificationOutboxTable(ctx context.Context, tx batchDB) error {
+	_, err := tx.Exec(ctx, `
 		CREATE TABLE youtube_notification_outbox (
 			id BIGSERIAL PRIMARY KEY,
 			kind TEXT NOT NULL,
@@ -93,7 +92,8 @@ func createPostgresNotificationOutboxTable(tx *gorm.DB) error {
 			error TEXT,
 			UNIQUE(kind, content_id)
 		)
-	`).Error
+	`)
+	return err
 }
 
 func quotePostgresIdentifier(identifier string) string {

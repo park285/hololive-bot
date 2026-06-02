@@ -107,14 +107,15 @@ func (r *DeliveryTelemetryRepository) ListByObservationWindow(
 		return nil, fmt.Errorf("list delivery telemetry by observation window: big-bang cutover at is empty")
 	}
 
-	var rows []domain.YouTubeNotificationDeliveryTelemetry
-	if err := r.db.WithContext(ctx).
-		Where("observation_status = ?", deliveryTelemetryObservationStatusMatched).
-		Where("observation_runtime_name = ?", normalizedRuntimeName).
-		Where("observation_bigbang_cutover_at = ?", bigBangCutoverAt.UTC()).
-		Order("event_at ASC").
-		Order("id ASC").
-		Find(&rows).Error; err != nil {
+	rows, err := r.queryTelemetryRows(ctx, "list delivery telemetry by observation window: query rows", `
+		SELECT `+deliveryTelemetrySelectColumns()+`
+		FROM youtube_notification_delivery_telemetry
+		WHERE observation_status = $1
+		  AND observation_runtime_name = $2
+		  AND observation_bigbang_cutover_at = $3
+		ORDER BY event_at ASC, id ASC
+	`, deliveryTelemetryObservationStatusMatched, normalizedRuntimeName, bigBangCutoverAt.UTC())
+	if err != nil {
 		return nil, fmt.Errorf("list delivery telemetry by observation window: query rows: %w", err)
 	}
 
@@ -138,15 +139,19 @@ func (r *DeliveryTelemetryRepository) ListByFinalizedObservationWindow(
 		return nil, fmt.Errorf("list delivery telemetry by finalized observation window: big-bang cutover at is empty")
 	}
 
-	var rows []domain.YouTubeNotificationDeliveryTelemetry
-	if err := r.db.WithContext(ctx).
-		Table("youtube_notification_delivery_telemetry AS t").
-		Joins("LEFT JOIN youtube_notification_outbox o ON o.id = t.outbox_id").
-		Joins("LEFT JOIN youtube_content_alarm_tracking track ON track.kind = o.kind AND track.content_id = o.content_id").
-		Joins("INNER JOIN youtube_community_shorts_observation_post_baselines base ON base.runtime_name = ? AND base.bigbang_cutover_at = ? AND base.kind = track.kind AND base.post_id = track.canonical_content_id", normalizedRuntimeName, bigBangCutoverAt.UTC()).
-		Order("t.event_at ASC").
-		Order("t.id ASC").
-		Find(&rows).Error; err != nil {
+	rows, err := r.queryTelemetryRows(ctx, "list delivery telemetry by finalized observation window: query rows", `
+		SELECT `+deliveryTelemetrySelectColumnsWithAlias("t")+`
+		FROM youtube_notification_delivery_telemetry AS t
+		LEFT JOIN youtube_notification_outbox o ON o.id = t.outbox_id
+		LEFT JOIN youtube_content_alarm_tracking track ON track.kind = o.kind AND track.content_id = o.content_id
+		INNER JOIN youtube_community_shorts_observation_post_baselines base
+			ON base.runtime_name = $1
+			AND base.bigbang_cutover_at = $2
+			AND base.kind = track.kind
+			AND base.post_id = track.canonical_content_id
+		ORDER BY t.event_at ASC, t.id ASC
+	`, normalizedRuntimeName, bigBangCutoverAt.UTC())
+	if err != nil {
 		return nil, fmt.Errorf("list delivery telemetry by finalized observation window: query rows: %w", err)
 	}
 

@@ -73,7 +73,7 @@ func TestProcessOnce_RetrySkipsAlreadySentCommunityShortsPostAndResendsOnlyPendi
 			fixture := seedCommunityShortsRecoveryInputFixture(t, db, tc.spec)
 
 			sender := &testSender{failRoom: map[string]bool{}}
-			dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			dispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,
@@ -84,39 +84,39 @@ func TestProcessOnce_RetrySkipsAlreadySentCommunityShortsPostAndResendsOnlyPendi
 
 			dispatcher.ProcessOnceForTest(ctx)
 
-			var updatedSentDelivery sqliteDeliveryModel
+			var updatedSentDelivery deliveryTestDeliveryModel
 			require.NoError(t, db.First(&updatedSentDelivery, fixture.sentDelivery.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), updatedSentDelivery.Status)
 			assert.Equal(t, 1, updatedSentDelivery.AttemptCount)
 			require.NotNil(t, updatedSentDelivery.SentAt)
 			assert.Equal(t, fixedSentAt, updatedSentDelivery.SentAt.UTC())
 
-			var updatedPendingDelivery sqliteDeliveryModel
+			var updatedPendingDelivery deliveryTestDeliveryModel
 			require.NoError(t, db.First(&updatedPendingDelivery, fixture.pendingDelivery.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), updatedPendingDelivery.Status)
 			assert.Equal(t, 1, updatedPendingDelivery.AttemptCount)
 			require.NotNil(t, updatedPendingDelivery.SentAt)
 			assert.Equal(t, fixedSentAt, updatedPendingDelivery.SentAt.UTC())
 
-			var updatedSentOutbox sqliteOutboxModel
+			var updatedSentOutbox deliveryTestOutboxModel
 			require.NoError(t, db.First(&updatedSentOutbox, fixture.sentOutbox.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), updatedSentOutbox.Status)
 			require.NotNil(t, updatedSentOutbox.SentAt)
 			assert.Equal(t, fixedSentAt, updatedSentOutbox.SentAt.UTC())
 
-			var updatedPendingOutbox sqliteOutboxModel
+			var updatedPendingOutbox deliveryTestOutboxModel
 			require.NoError(t, db.First(&updatedPendingOutbox, fixture.pendingOutbox.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), updatedPendingOutbox.Status)
 			require.NotNil(t, updatedPendingOutbox.SentAt)
 			assert.Equal(t, fixedSentAt, updatedPendingOutbox.SentAt.UTC())
 
-			var updatedSentTracking sqliteTrackingModel
+			var updatedSentTracking deliveryTestTrackingModel
 			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).First(&updatedSentTracking).Error)
 			require.NotNil(t, updatedSentTracking.AlarmSentAt)
 			assert.Equal(t, tc.spec.alreadySentAt, updatedSentTracking.AlarmSentAt.UTC())
 			assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), updatedSentTracking.DeliveryStatus)
 
-			var updatedPendingTracking sqliteTrackingModel
+			var updatedPendingTracking deliveryTestTrackingModel
 			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).First(&updatedPendingTracking).Error)
 			require.NotNil(t, updatedPendingTracking.AlarmSentAt)
 			assert.Equal(t, fixedSentAt, updatedPendingTracking.AlarmSentAt.UTC())

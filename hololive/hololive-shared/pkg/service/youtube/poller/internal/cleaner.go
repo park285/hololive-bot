@@ -22,11 +22,11 @@ package polling
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
-	"gorm.io/gorm"
-
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -43,54 +43,70 @@ func DefaultViewerSampleCleanerConfig() ViewerSampleCleanerConfig {
 }
 
 type ViewerSampleCleaner struct {
-	db     *gorm.DB
+	db     dbx.Querier
 	config ViewerSampleCleanerConfig
 }
 
-func NewViewerSampleCleaner(db *gorm.DB, config ViewerSampleCleanerConfig) *ViewerSampleCleaner {
+func NewViewerSampleCleaner(db any, config ViewerSampleCleanerConfig) *ViewerSampleCleaner {
+	querier, _ := db.(dbx.Querier)
 	return &ViewerSampleCleaner{
-		db:     db,
+		db:     querier,
 		config: config,
 	}
 }
 
 func (c *ViewerSampleCleaner) Cleanup(ctx context.Context) (int64, error) {
+	if c.db == nil {
+		return 0, fmt.Errorf("viewer sample cleaner db is nil")
+	}
 	cutoff := time.Now().AddDate(0, 0, -c.config.RetentionDays)
 
-	result := c.db.WithContext(ctx).
-		Where("video_id IN (SELECT video_id FROM youtube_live_sessions WHERE status = ? AND ended_at < ?)",
-			domain.LiveStatusEnded, cutoff).
-		Delete(&domain.YouTubeLiveViewerSample{})
-
-	if result.Error != nil {
-		return 0, result.Error
+	tag, err := c.db.Exec(ctx, `
+		DELETE FROM youtube_live_viewer_samples
+		WHERE video_id IN (
+			SELECT video_id
+			FROM youtube_live_sessions
+			WHERE status = $1 AND ended_at < $2
+		)`,
+		domain.LiveStatusEnded,
+		cutoff,
+	)
+	if err != nil {
+		return 0, err
 	}
+	rowsAffected := tag.RowsAffected()
 
-	if result.RowsAffected > 0 {
+	if rowsAffected > 0 {
 		slog.Info("Cleaned up old viewer samples",
-			"deleted", result.RowsAffected,
+			"deleted", rowsAffected,
 			"retention_days", c.config.RetentionDays)
 	}
 
-	return result.RowsAffected, nil
+	return rowsAffected, nil
 }
 
 func (c *ViewerSampleCleaner) CleanupOldSessions(ctx context.Context, retentionDays int) (int64, error) {
+	if c.db == nil {
+		return 0, fmt.Errorf("viewer sample cleaner db is nil")
+	}
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 
-	result := c.db.WithContext(ctx).
-		Where("status = ? AND ended_at < ?", domain.LiveStatusEnded, cutoff).
-		Delete(&domain.YouTubeLiveSession{})
-
-	if result.Error != nil {
-		return 0, result.Error
+	tag, err := c.db.Exec(ctx, `
+		DELETE FROM youtube_live_sessions
+		WHERE status = $1 AND ended_at < $2`,
+		domain.LiveStatusEnded,
+		cutoff,
+	)
+	if err != nil {
+		return 0, err
 	}
+	rowsAffected := tag.RowsAffected()
 
-	if result.RowsAffected > 0 {
+	if rowsAffected > 0 {
 		slog.Info("Cleaned up old live sessions",
-			"deleted", result.RowsAffected,
+			"deleted", rowsAffected,
 			"retention_days", retentionDays)
 	}
 
-	return result.RowsAffected, nil
+	return rowsAffected, nil
 }

@@ -22,7 +22,6 @@ package dbx
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -31,10 +30,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 )
 
 var queryExecModes = map[string]pgx.QueryExecMode{
@@ -49,17 +44,14 @@ type Client struct {
 	config Config
 	opt    OpenOptions
 
-	mu     sync.RWMutex
-	pool   *pgxpool.Pool
-	sqlDB  *sql.DB
-	gormDB *gorm.DB
+	mu   sync.RWMutex
+	pool *pgxpool.Pool
 }
 
 type OpenOptions struct {
-	Logger     *slog.Logger         // slog 로거 (nil이면 기본 로거 사용)
-	Pool       PoolConfig           // 커넥션 풀 설정
-	Retry      RetryConfig          // 재시도 설정
-	GormLogger gormlogger.Interface // GORM 로거 (nil이면 Silent)
+	Logger *slog.Logger // slog 로거 (nil이면 기본 로거 사용)
+	Pool   PoolConfig   // 커넥션 풀 설정
+	Retry  RetryConfig  // 재시도 설정
 
 	// DNSFallback: config.Host DNS 조회 실패 시 127.0.0.1로 1회 재시도
 	// host가 "postgres"인 경우에만 동작 (Docker 환경에서 로컬 실행 시 fallback)
@@ -68,10 +60,9 @@ type OpenOptions struct {
 
 func DefaultOpenOptions() OpenOptions {
 	return OpenOptions{
-		Logger:     slog.Default(),
-		Pool:       DefaultPoolConfig(),
-		Retry:      DefaultRetryConfig(),
-		GormLogger: gormlogger.Default.LogMode(gormlogger.Silent),
+		Logger: slog.Default(),
+		Pool:   DefaultPoolConfig(),
+		Retry:  DefaultRetryConfig(),
 	}
 }
 
@@ -89,18 +80,6 @@ func (c *Client) Pool() *pgxpool.Pool {
 	return c.pool
 }
 
-func (c *Client) SQL() *sql.DB {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.sqlDB
-}
-
-func (c *Client) Gorm() *gorm.DB {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.gormDB
-}
-
 func (c *Client) Ping(ctx context.Context) error {
 	c.mu.RLock()
 	pool := c.pool
@@ -115,22 +94,9 @@ func (c *Client) Ping(ctx context.Context) error {
 	return nil
 }
 
-// stdlib.OpenDBFromPool로 생성된 *sql.DB는 Close() 시 내부 pgxpool도 함께 닫음
-// 따라서 sqlDB.Close()만 호출 (Double Close 방지)
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	if c.sqlDB != nil {
-		err := c.sqlDB.Close()
-		c.sqlDB = nil
-		c.gormDB = nil
-		c.pool = nil
-		if err != nil {
-			return fmt.Errorf("failed to close database connection: %w", err)
-		}
-		return nil
-	}
 
 	if c.pool != nil {
 		c.pool.Close()
@@ -144,9 +110,6 @@ func (c *Client) Close() error {
 func NewLazy(config Config, opt OpenOptions) *Client {
 	if opt.Logger == nil {
 		opt.Logger = slog.Default()
-	}
-	if opt.GormLogger == nil {
-		opt.GormLogger = gormlogger.Default.LogMode(gormlogger.Silent)
 	}
 	return &Client{
 		config: config,
@@ -192,10 +155,6 @@ func (c *Client) Connect(ctx context.Context) error {
 	)
 
 	c.pool = client.pool
-	c.sqlDB = client.sqlDB
-	c.gormDB = client.gormDB
-
-	opt.Logger.Info("postgres_gorm_connected")
 	return nil
 }
 
@@ -264,26 +223,8 @@ func (c *Client) tryConnect(ctx context.Context, config Config, pool PoolConfig,
 		return nil, fmt.Errorf("postgres ping failed: %w", pingErr)
 	}
 
-	sqlDB := stdlib.OpenDBFromPool(pgxPool)
-	sqlDB.SetMaxOpenConns(pool.MaxConns)
-	sqlDB.SetMaxIdleConns(pool.MaxIdleConns)
-	sqlDB.SetConnMaxLifetime(pool.ConnMaxLifetime)
-	sqlDB.SetConnMaxIdleTime(pool.ConnMaxIdleTime)
-
-	gormDB, err := gorm.Open(postgres.New(postgres.Config{
-		Conn: sqlDB,
-	}), &gorm.Config{
-		Logger: c.opt.GormLogger,
-	})
-	if err != nil {
-		pgxPool.Close()
-		return nil, fmt.Errorf("initialize GORM: %w", err)
-	}
-
 	return &Client{
-		pool:   pgxPool,
-		sqlDB:  sqlDB,
-		gormDB: gormDB,
+		pool: pgxPool,
 	}, nil
 }
 

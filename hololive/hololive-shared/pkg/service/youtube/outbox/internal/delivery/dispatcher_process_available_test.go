@@ -7,9 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -20,9 +18,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
+	db := newDeliveryTestDB(t)
 
 	cache := cachemocks.NewLenientClient()
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
@@ -33,7 +29,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -63,7 +59,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	sender.mu.Unlock()
 
 	var sentCount int64
-	require.NoError(t, db.Model(&sqliteOutboxModel{}).
+	require.NoError(t, db.Model(&deliveryTestOutboxModel{}).
 		Where("status = ?", string(domain.OutboxStatusSent)).
 		Count(&sentCount).Error)
 	require.EqualValues(t, 3, sentCount)
@@ -73,12 +69,10 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
+	db := newDeliveryTestDB(t)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -95,6 +89,6 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 	sender.mu.Unlock()
 
 	var deliveryCount int64
-	require.NoError(t, db.Model(&sqliteDeliveryModel{}).Count(&deliveryCount).Error)
+	require.NoError(t, db.Model(&deliveryTestDeliveryModel{}).Count(&deliveryCount).Error)
 	require.Zero(t, deliveryCount)
 }

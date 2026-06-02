@@ -5,9 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -16,11 +14,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
@@ -38,7 +32,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 	liveDetectedAt := now.Add(-14 * time.Minute)
 	liveEventAt := now.Add(-13 * time.Minute)
 
-	require.NoError(t, db.Create([]sqliteTelemetryBufferModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:        101,
 			AttemptOrdinal:    1,
@@ -129,7 +123,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	rows, err := repository.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 0)
 	require.NoError(t, err)
 	require.Len(t, rows, 3)
@@ -156,20 +150,16 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Respec
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
 
-	rows := []sqliteTelemetryBufferModel{}
+	rows := []deliveryTelemetryTestBufferModel{}
 	for i := range 3 {
 		publishedAt := now.Add(time.Duration(-(i + 1)) * time.Hour)
 		eventAt := publishedAt.Add(time.Minute)
-		rows = append(rows, sqliteTelemetryBufferModel{
+		rows = append(rows, deliveryTelemetryTestBufferModel{
 			DeliveryID:        int64(200 + i),
 			AttemptOrdinal:    1,
 			OutboxID:          int64(300 + i),
@@ -189,7 +179,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Respec
 	}
 	require.NoError(t, db.Create(&rows).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	limited, err := repository.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 2)
 	require.NoError(t, err)
 	require.Len(t, limited, 2)

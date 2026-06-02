@@ -26,25 +26,23 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 type persistedOutboxSentStateRow struct {
-	ID        int64             `gorm:"column:id"`
-	Kind      domain.OutboxKind `gorm:"column:kind"`
-	ContentID string            `gorm:"column:content_id"`
-	SentAt    *time.Time        `gorm:"column:sent_at"`
+	ID        int64             `db:"id"`
+	Kind      domain.OutboxKind `db:"kind"`
+	ContentID string            `db:"content_id"`
+	SentAt    *time.Time        `db:"sent_at"`
 }
 
 type persistedDeliverySentStateRow struct {
-	OutboxID int64      `gorm:"column:outbox_id"`
-	SentAt   *time.Time `gorm:"column:sent_at"`
+	OutboxID int64      `db:"outbox_id"`
+	SentAt   *time.Time `db:"sent_at"`
 }
 
-func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx *gorm.DB, trackingRows []*domain.YouTubeContentAlarmTracking) error {
+func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx batchDB, trackingRows []*domain.YouTubeContentAlarmTracking) error {
 	if len(trackingRows) == 0 || tx == nil {
 		return nil
 	}
@@ -99,16 +97,15 @@ func collectTrackingIdentityClauses(trackingRows []*domain.YouTubeContentAlarmTr
 
 func loadPersistedOutboxSentState(
 	ctx context.Context,
-	tx *gorm.DB,
+	tx batchDB,
 	clauses []string,
 	args []any,
 ) ([]persistedOutboxSentStateRow, error) {
 	var outboxRows []persistedOutboxSentStateRow
-	if err := tx.WithContext(ctx).
-		Model(&domain.YouTubeNotificationOutbox{}).
-		Select("id, kind, content_id, sent_at").
-		Where(strings.Join(clauses, " OR "), args...).
-		Find(&outboxRows).Error; err != nil {
+	if err := selectSQL(ctx, tx, &outboxRows, "query outbox rows", `
+		SELECT id, kind, content_id, sent_at
+		FROM youtube_notification_outbox
+		WHERE `+strings.Join(clauses, " OR "), args...); err != nil {
 		return nil, fmt.Errorf("query outbox rows: %w", err)
 	}
 	return outboxRows, nil
@@ -137,7 +134,7 @@ func buildPersistedSentStateMaps(
 
 func mergePersistedDeliverySentState(
 	ctx context.Context,
-	tx *gorm.DB,
+	tx batchDB,
 	outboxIDs []int64,
 	identityByOutboxID map[int64]string,
 	sentAtByIdentity map[string]time.Time,
@@ -147,11 +144,14 @@ func mergePersistedDeliverySentState(
 	}
 
 	var deliveryRows []persistedDeliverySentStateRow
-	if err := tx.WithContext(ctx).
-		Model(&domain.YouTubeNotificationDelivery{}).
-		Select("outbox_id, sent_at").
-		Where("outbox_id IN ? AND status = ? AND sent_at IS NOT NULL", outboxIDs, domain.OutboxStatusSent).
-		Scan(&deliveryRows).Error; err != nil {
+	args := anyArgs(outboxIDs)
+	args = append(args, domain.OutboxStatusSent)
+	if err := selectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", `
+		SELECT outbox_id, sent_at
+		FROM youtube_notification_delivery
+		WHERE outbox_id IN (`+inPlaceholders(len(outboxIDs))+`)
+		  AND status = ?
+		  AND sent_at IS NOT NULL`, args...); err != nil {
 		return fmt.Errorf("query sent delivery rows: %w", err)
 	}
 	for i := range deliveryRows {

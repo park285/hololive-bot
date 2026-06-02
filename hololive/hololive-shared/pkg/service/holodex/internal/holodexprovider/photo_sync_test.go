@@ -9,30 +9,28 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/glebarez/sqlite"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"gorm.io/gorm"
 )
 
-type photoSyncTestDBClient struct {
-	db *gorm.DB
+type photoSyncTestMemberRepository struct {
+	queryCount atomic.Int32
+	reached    chan struct{}
+	closeOnce  sync.Once
 }
 
-func (c photoSyncTestDBClient) GetPool() *pgxpool.Pool {
-	return nil
+func (r *photoSyncTestMemberRepository) GetAllChannelIDs(context.Context) ([]string, error) {
+	return nil, nil
 }
 
-func (c photoSyncTestDBClient) GetGormDB() *gorm.DB {
-	return c.db
+func (r *photoSyncTestMemberRepository) GetMembersNeedingPhotoSync(context.Context, time.Duration) ([]string, error) {
+	if r.queryCount.Add(1) >= 2 {
+		r.closeOnce.Do(func() {
+			close(r.reached)
+		})
+	}
+	return nil, nil
 }
 
-func (c photoSyncTestDBClient) Ping(context.Context) error {
-	return nil
-}
-
-func (c photoSyncTestDBClient) Close() error {
+func (r *photoSyncTestMemberRepository) UpdatePhoto(context.Context, string, string) error {
 	return nil
 }
 
@@ -58,32 +56,11 @@ func TestPhotoSyncRunPeriodicSyncLogsStoppedWhenContextCanceled(t *testing.T) {
 func TestPhotoSyncRunPeriodicSyncCallsSyncOnPeriodicTick(t *testing.T) {
 	t.Parallel()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&member.Model{}); err != nil {
-		t.Fatalf("migrate members: %v", err)
-	}
-
-	var queryCount atomic.Int32
-	var closeReached sync.Once
 	reached := make(chan struct{})
-	if err := db.Callback().Query().After("gorm:query").Register("photo_sync_periodic_tick", func(tx *gorm.DB) {
-		if tx.Statement.Table != "members" {
-			return
-		}
-		if queryCount.Add(1) >= 2 {
-			closeReached.Do(func() {
-				close(reached)
-			})
-		}
-	}); err != nil {
-		t.Fatalf("register query callback: %v", err)
-	}
+	repository := &photoSyncTestMemberRepository{reached: reached}
 
 	ps := &PhotoSyncService{
-		memberRepository: member.NewMemberRepository(photoSyncTestDBClient{db: db}, slog.Default()),
+		memberRepository: repository,
 		logger:           slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		syncInterval:     10 * time.Millisecond,
 		staleThreshold:   time.Hour,
@@ -100,7 +77,7 @@ func TestPhotoSyncRunPeriodicSyncCallsSyncOnPeriodicTick(t *testing.T) {
 	case <-reached:
 	case <-time.After(500 * time.Millisecond):
 		cancel()
-		t.Fatalf("photo sync periodic query count = %d, want at least 2", queryCount.Load())
+		t.Fatalf("photo sync periodic query count = %d, want at least 2", repository.queryCount.Load())
 	}
 
 	cancel()

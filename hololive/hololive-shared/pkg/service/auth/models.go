@@ -24,29 +24,23 @@ import (
 	"time"
 )
 
-// userModel: auth_users 테이블 매핑 (password_hash는 절대 API로 노출하지 않음)
 type userModel struct {
-	ID           string  `gorm:"primaryKey;column:id"`
-	Email        string  `gorm:"uniqueIndex;column:email"`
-	PasswordHash string  `gorm:"column:password_hash"`
-	DisplayName  string  `gorm:"column:display_name"`
-	AvatarURL    *string `gorm:"column:avatar_url"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID           string    `db:"id"`
+	Email        string    `db:"email"`
+	PasswordHash string    `db:"password_hash"`
+	DisplayName  string    `db:"display_name"`
+	AvatarURL    *string   `db:"avatar_url"`
+	CreatedAt    time.Time `db:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"`
 }
 
-func (userModel) TableName() string { return "auth_users" }
-
-// passwordResetTokenModel: 비밀번호 재설정 토큰 테이블 매핑
 type passwordResetTokenModel struct {
-	TokenHash string     `gorm:"primaryKey;column:token_hash"`
-	UserID    string     `gorm:"column:user_id"`
-	ExpiresAt time.Time  `gorm:"column:expires_at"`
-	UsedAt    *time.Time `gorm:"column:used_at"`
-	CreatedAt time.Time
+	TokenHash string     `db:"token_hash"`
+	UserID    string     `db:"user_id"`
+	ExpiresAt time.Time  `db:"expires_at"`
+	UsedAt    *time.Time `db:"used_at"`
+	CreatedAt time.Time  `db:"created_at"`
 }
-
-func (passwordResetTokenModel) TableName() string { return "auth_password_reset_tokens" }
 
 type User struct {
 	ID          string

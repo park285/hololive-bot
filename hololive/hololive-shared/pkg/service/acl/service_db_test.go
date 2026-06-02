@@ -24,22 +24,20 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 type aclCacheCallCounter struct {
@@ -49,28 +47,12 @@ type aclCacheCallCounter struct {
 	sremCalls int
 }
 
-type aclLoadFromDatabaseInitCreateErrorCase struct {
-	name    string
-	setupDB func(t *testing.T, db *gorm.DB)
-	wantErr string
-}
-
-var aclSQLiteDBCounter atomic.Uint64
-
-func newACLServiceWithSQLite(t *testing.T) (*gorm.DB, *cachemocks.Client, *aclCacheCallCounter) {
+// newACLServiceWithPgx는 격리된 PG pool과 miniredis 기반 cache mock을 준비한다.
+// 실제 prod migration이 적용된 PG에서 동작하는 통합 테스트용 픽스처다.
+func newACLServiceWithPgx(t *testing.T) (*pgxpool.Pool, *cachemocks.Client, *aclCacheCallCounter) {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:acl_%d_%d?mode=memory&cache=shared", time.Now().UnixNano(), aclSQLiteDBCounter.Add(1))
-
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-
-	migrateErr := db.AutoMigrate(&Settings{}, &Room{})
-	if migrateErr != nil {
-		t.Fatalf("auto migrate: %v", migrateErr)
-	}
+	pool := dbtest.NewPool(t)
 
 	mini, err := miniredis.Run()
 	if err != nil {
@@ -126,7 +108,7 @@ func newACLServiceWithSQLite(t *testing.T) (*gorm.DB, *cachemocks.Client, *aclCa
 		BFunc:         cacheClient.B,
 	}
 
-	return db, cacheMock, counter
+	return pool, cacheMock, counter
 }
 
 type aclRoomSetCacheState struct {
@@ -234,22 +216,22 @@ func TestSettingsAndRoom_TableName(t *testing.T) {
 }
 
 func TestNewACLService_FirstInitUsesDefaults(t *testing.T) {
-	db, cacheMock, calls := newACLServiceWithSQLite(t)
-	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, []string{"room-a", "room-b"})
+	pool, cacheMock, calls := newACLServiceWithPgx(t)
+	service := newACLServiceFromPool(t, pool, cacheMock, true, ACLModeWhitelist, []string{"room-a", "room-b"})
 
 	assertACLStatus(t, service, true, ACLModeWhitelist, 2, []string{"room-a", "room-b"})
-	assertACLSettingValue(t, db, dbKeyEnabled, "true")
-	assertACLSettingValue(t, db, dbKeyMode, "whitelist")
-	assertACLRoomCount(t, db, "room-a", listTypeWhitelist, 1)
-	assertACLRoomCount(t, db, "room-b", listTypeWhitelist, 1)
+	assertACLSettingValue(t, pool, dbKeyEnabled, "true")
+	assertACLSettingValue(t, pool, dbKeyMode, "whitelist")
+	assertACLRoomCount(t, pool, "room-a", listTypeWhitelist, 1)
+	assertACLRoomCount(t, pool, "room-b", listTypeWhitelist, 1)
 	assertACLCacheSyncTriggered(t, calls)
 }
 
 func TestNewACLService_FirstInitBlacklistMode(t *testing.T) {
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
+	pool, cacheMock, _ := newACLServiceWithPgx(t)
 	logger := slog.New(slog.DiscardHandler)
 
-	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	dbClient := &dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 
 	service, err := NewACLService(
 		t.Context(),
@@ -278,44 +260,40 @@ func TestNewACLService_FirstInitBlacklistMode(t *testing.T) {
 	}
 
 	// DB에 mode=blacklist로 저장되었는지 확인
-	var modeSetting Settings
-	if err := db.Where("key = ?", dbKeyMode).First(&modeSetting).Error; err != nil {
-		t.Fatalf("query mode setting: %v", err)
-	}
-
-	if modeSetting.Value != "blacklist" {
-		t.Fatalf("mode setting value=%q want=blacklist", modeSetting.Value)
-	}
+	assertACLSettingValue(t, pool, dbKeyMode, "blacklist")
 
 	// list_type이 blacklist인지 확인
-	var dbRooms []Room
-	if err := db.Find(&dbRooms).Error; err != nil {
+	ctx := t.Context()
+	rows, err := pool.Query(ctx, "SELECT room_id, list_type FROM acl_rooms")
+	if err != nil {
 		t.Fatalf("query rooms: %v", err)
 	}
+	defer rows.Close()
 
-	for _, r := range dbRooms {
-		if r.ListType != listTypeBlacklist {
-			t.Fatalf("room %q list_type=%q, want=blacklist", r.RoomID, r.ListType)
+	for rows.Next() {
+		var roomID, listType string
+		if err := rows.Scan(&roomID, &listType); err != nil {
+			t.Fatalf("scan room: %v", err)
 		}
+
+		if listType != listTypeBlacklist {
+			t.Fatalf("room %q list_type=%q, want=blacklist", roomID, listType)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate rooms: %v", err)
 	}
 }
 
 func TestNewACLService_ExistingDBStateWins(t *testing.T) {
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
+	pool, cacheMock, _ := newACLServiceWithPgx(t)
 	// 기존 DB에 데이터가 있으면 기본값 대신 DB 값을 사용해야 한다
-	if err := db.Create(&Settings{Key: dbKeyEnabled, Value: "false"}).Error; err != nil {
-		t.Fatalf("seed settings: %v", err)
-	}
+	mustCreateACLSetting(t, pool, dbKeyEnabled, "false")
+	mustCreateACLSetting(t, pool, dbKeyMode, "blacklist")
+	mustCreateACLRoom(t, pool, "existing-room", listTypeBlacklist)
 
-	if err := db.Create(&Settings{Key: dbKeyMode, Value: "blacklist"}).Error; err != nil {
-		t.Fatalf("seed mode: %v", err)
-	}
-
-	if err := db.Create(&Room{RoomID: "existing-room", ListType: listTypeBlacklist}).Error; err != nil {
-		t.Fatalf("seed room: %v", err)
-	}
-
-	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	dbClient := &dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 
 	service, err := NewACLService(
 		t.Context(),
@@ -345,22 +323,22 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 }
 
 func TestACLService_SetEnabledAddRemoveRoom(t *testing.T) {
-	db, cacheMock, calls := newACLServiceWithSQLite(t)
-	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	pool, cacheMock, calls := newACLServiceWithPgx(t)
+	service := newACLServiceFromPool(t, pool, cacheMock, false, ACLModeWhitelist, nil)
 
 	baselineSet := calls.setCalls
 	baselineSAdd := calls.saddCalls
 	baselineSRem := calls.sremCalls
 
-	assertACLSetEnabled(t, service, db, true)
+	assertACLSetEnabled(t, service, pool, true)
 	assertACLAddRoomLifecycle(t, service)
-	assertACLRoomRemovedFromDB(t, db, "room-x")
+	assertACLRoomRemovedFromDB(t, pool, "room-x")
 	assertACLCacheCountersAdvanced(t, calls, baselineSet, baselineSAdd, baselineSRem)
 }
 
-func newACLServiceFromDB(
+func newACLServiceFromPool(
 	t *testing.T,
-	db *gorm.DB,
+	pool *pgxpool.Pool,
 	cacheMock *cachemocks.Client,
 	defaultEnabled bool,
 	defaultMode ACLMode,
@@ -368,7 +346,7 @@ func newACLServiceFromDB(
 ) *Service {
 	t.Helper()
 
-	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	dbClient := &dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 
 	service, err := NewACLService(
 		t.Context(),
@@ -386,7 +364,23 @@ func newACLServiceFromDB(
 	return service
 }
 
-func assertACLSetEnabled(t *testing.T, service *Service, db *gorm.DB, enabled bool) {
+// newACLServiceFromFakeStore는 fake store를 주입한 Service를 직접 구성한다.
+// DB fault-injection이 필요한 테스트에 쓴다.
+func newACLServiceFromFakeStore(t *testing.T, store aclStore, cacheClient *cachemocks.Client, enabled bool, mode ACLMode) *Service {
+	t.Helper()
+
+	return &Service{
+		store:          store,
+		cache:          cacheClient,
+		logger:         slog.New(slog.DiscardHandler),
+		enabled:        enabled,
+		mode:           mode,
+		whitelistRooms: make(map[string]struct{}),
+		blacklistRooms: make(map[string]struct{}),
+	}
+}
+
+func assertACLSetEnabled(t *testing.T, service *Service, pool *pgxpool.Pool, enabled bool) {
 	t.Helper()
 
 	if err := service.SetEnabled(t.Context(), enabled); err != nil {
@@ -398,15 +392,7 @@ func assertACLSetEnabled(t *testing.T, service *Service, db *gorm.DB, enabled bo
 		t.Fatalf("enabled=%v want=%v", gotEnabled, enabled)
 	}
 
-	var setting Settings
-	if err := db.Where("key = ?", dbKeyEnabled).First(&setting).Error; err != nil {
-		t.Fatalf("query enabled setting: %v", err)
-	}
-
-	wantValue := strconv.FormatBool(enabled)
-	if setting.Value != wantValue {
-		t.Fatalf("enabled setting should be %q, got %q", wantValue, setting.Value)
-	}
+	assertACLSettingValue(t, pool, dbKeyEnabled, strconv.FormatBool(enabled))
 }
 
 func assertACLAddRoomLifecycle(t *testing.T, service *Service) {
@@ -446,11 +432,11 @@ func assertRemoveRoomResult(t *testing.T, service *Service, room string, wantRem
 	}
 }
 
-func assertACLRoomRemovedFromDB(t *testing.T, db *gorm.DB, roomID string) {
+func assertACLRoomRemovedFromDB(t *testing.T, pool *pgxpool.Pool, roomID string) {
 	t.Helper()
 
 	var count int64
-	if err := db.Model(&Room{}).Where("room_id = ?", roomID).Count(&count).Error; err != nil {
+	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM acl_rooms WHERE room_id = $1", roomID).Scan(&count); err != nil {
 		t.Fatalf("count %s: %v", roomID, err)
 	}
 
@@ -459,11 +445,11 @@ func assertACLRoomRemovedFromDB(t *testing.T, db *gorm.DB, roomID string) {
 	}
 }
 
-func assertACLRoomCount(t *testing.T, db *gorm.DB, roomID, listType string, wantCount int64) {
+func assertACLRoomCount(t *testing.T, pool *pgxpool.Pool, roomID, listType string, wantCount int64) {
 	t.Helper()
 
 	var count int64
-	if err := db.Model(&Room{}).Where("room_id = ? AND list_type = ?", roomID, listType).Count(&count).Error; err != nil {
+	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM acl_rooms WHERE room_id = $1 AND list_type = $2", roomID, listType).Scan(&count); err != nil {
 		t.Fatalf("count %s/%s: %v", roomID, listType, err)
 	}
 
@@ -472,31 +458,31 @@ func assertACLRoomCount(t *testing.T, db *gorm.DB, roomID, listType string, want
 	}
 }
 
-func assertACLSettingValue(t *testing.T, db *gorm.DB, key, wantValue string) {
+func assertACLSettingValue(t *testing.T, pool *pgxpool.Pool, key, wantValue string) {
 	t.Helper()
 
-	var setting Settings
-	if err := db.Where("key = ?", key).First(&setting).Error; err != nil {
+	var value string
+	if err := pool.QueryRow(t.Context(), "SELECT value FROM acl_settings WHERE key = $1", key).Scan(&value); err != nil {
 		t.Fatalf("query setting %s: %v", key, err)
 	}
 
-	if setting.Value != wantValue {
-		t.Fatalf("setting %s value=%q want=%q", key, setting.Value, wantValue)
+	if value != wantValue {
+		t.Fatalf("setting %s value=%q want=%q", key, value, wantValue)
 	}
 }
 
-func mustCreateACLSetting(t *testing.T, db *gorm.DB, key, value string) {
+func mustCreateACLSetting(t *testing.T, pool *pgxpool.Pool, key, value string) {
 	t.Helper()
 
-	if err := db.Create(&Settings{Key: key, Value: value}).Error; err != nil {
+	if _, err := pool.Exec(t.Context(), "INSERT INTO acl_settings (key, value) VALUES ($1, $2)", key, value); err != nil {
 		t.Fatalf("seed setting %s: %v", key, err)
 	}
 }
 
-func mustCreateACLRoom(t *testing.T, db *gorm.DB, roomID, listType string) {
+func mustCreateACLRoom(t *testing.T, pool *pgxpool.Pool, roomID, listType string) {
 	t.Helper()
 
-	if err := db.Create(&Room{RoomID: roomID, ListType: listType}).Error; err != nil {
+	if _, err := pool.Exec(t.Context(), "INSERT INTO acl_rooms (room_id, list_type) VALUES ($1, $2)", roomID, listType); err != nil {
 		t.Fatalf("seed room %s: %v", roomID, err)
 	}
 }
@@ -534,8 +520,8 @@ func assertACLSetMode(t *testing.T, service *Service, mode ACLMode) {
 }
 
 func TestACLService_SetMode(t *testing.T) {
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, []string{"wl-room"})
+	pool, cacheMock, _ := newACLServiceWithPgx(t)
+	service := newACLServiceFromPool(t, pool, cacheMock, true, ACLModeWhitelist, []string{"wl-room"})
 
 	assertACLStatus(t, service, true, ACLModeWhitelist, 1, []string{"wl-room"})
 	assertACLSetMode(t, service, ACLModeBlacklist)
@@ -543,12 +529,12 @@ func TestACLService_SetMode(t *testing.T) {
 	assertACLStatus(t, service, true, ACLModeBlacklist, 1, []string{"bl-room"})
 	assertACLSetMode(t, service, ACLModeWhitelist)
 	assertACLStatus(t, service, true, ACLModeWhitelist, 1, []string{"wl-room"})
-	assertACLSettingValue(t, db, dbKeyMode, "whitelist")
+	assertACLSettingValue(t, pool, dbKeyMode, "whitelist")
 }
 
 func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, nil)
+	pool, cacheMock, _ := newACLServiceWithPgx(t)
+	service := newACLServiceFromPool(t, pool, cacheMock, true, ACLModeWhitelist, nil)
 
 	// 화이트리스트 모드에서 방 추가
 	if added, addErr := service.AddRoom(t.Context(), "shared-room"); addErr != nil || !added {
@@ -563,13 +549,13 @@ func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 	}
 
 	// DB에 두 개의 레코드가 있어야 함 (같은 room_id, 다른 list_type)
-	var dbRooms []Room
-	if err := db.Where("room_id = ?", "shared-room").Find(&dbRooms).Error; err != nil {
+	var roomCount int64
+	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM acl_rooms WHERE room_id = $1", "shared-room").Scan(&roomCount); err != nil {
 		t.Fatalf("query rooms: %v", err)
 	}
 
-	if len(dbRooms) != 2 {
-		t.Fatalf("expected 2 rooms with same ID but different list_type, got %d", len(dbRooms))
+	if roomCount != 2 {
+		t.Fatalf("expected 2 rooms with same ID but different list_type, got %d", roomCount)
 	}
 
 	// 블랙리스트에서 제거해도 화이트리스트는 유지
@@ -643,28 +629,29 @@ func assertNewACLServiceKeepsLoadedStateOnCacheSyncFailure(
 ) {
 	t.Helper()
 
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	mustCreateACLSetting(t, db, dbKeyEnabled, "false")
-	mustCreateACLSetting(t, db, dbKeyMode, "blacklist")
-	mustCreateACLRoom(t, db, "blocked-room", listTypeBlacklist)
+	// fake store에 DB 상태를 미리 채워 "기존 DB 상태가 defaults를 이긴다"를 재현한다.
+	store := newFakeACLStore()
+	store.settings[dbKeyEnabled] = "false"
+	store.settings[dbKeyMode] = "blacklist"
+	store.rooms[roomKey{roomID: "blocked-room", listType: listTypeBlacklist}] = struct{}{}
+
+	cacheMock := newACLRoomSetStatefulCacheForLoad()
 	setupCache(cacheMock)
 
 	var logBuf bytes.Buffer
 
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
-	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
 
-	service, err := NewACLService(
-		t.Context(),
-		dbClient,
-		cacheMock,
-		logger,
-		true,
-		ACLModeWhitelist,
-		[]string{"default-room"},
-	)
-	if err != nil {
-		t.Fatalf("NewACLService error: %v", err)
+	service := &Service{
+		store:          store,
+		cache:          cacheMock,
+		logger:         logger,
+		whitelistRooms: make(map[string]struct{}),
+		blacklistRooms: make(map[string]struct{}),
+	}
+
+	if err := service.loadFromDatabase(t.Context(), true, ACLModeWhitelist, []string{"default-room"}); err != nil {
+		t.Fatalf("loadFromDatabase error: %v", err)
 	}
 
 	enabled, mode, rooms := service.GetACLStatus()
@@ -685,20 +672,33 @@ func assertNewACLServiceKeepsLoadedStateOnCacheSyncFailure(
 	}
 }
 
+// newACLRoomSetStatefulCacheForLoad는 loadFromDatabase의 Valkey sync 경로(Set/Del/SAdd)를
+// 충족하는 최소 cache mock을 만든다. setupCache가 특정 키만 실패시키도록 덮어쓴다.
+func newACLRoomSetStatefulCacheForLoad() *cachemocks.Client {
+	return &cachemocks.Client{
+		SetFunc:  func(context.Context, string, any, time.Duration) error { return nil },
+		DelFunc:  func(context.Context, string) error { return nil },
+		SAddFunc: func(_ context.Context, _ string, members []string) (int64, error) { return int64(len(members)), nil },
+	}
+}
+
 func TestACLService_SetEnabledRollsBackStateOnCacheSyncError(t *testing.T) {
 	t.Parallel()
 
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
+	store := newFakeACLStore()
+	store.settings[dbKeyEnabled] = "false"
 
-	cacheMock.SetFunc = func(_ context.Context, key string, _ any, _ time.Duration) error {
-		if key == aclSettingsKey {
-			return errors.New("set failed")
-		}
+	cacheMock := &cachemocks.Client{
+		SetFunc: func(_ context.Context, key string, _ any, _ time.Duration) error {
+			if key == aclSettingsKey {
+				return errors.New("set failed")
+			}
 
-		return nil
+			return nil
+		},
 	}
 
-	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
 
 	err := service.SetEnabled(t.Context(), true)
 	if err == nil {
@@ -714,23 +714,28 @@ func TestACLService_SetEnabledRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatal("expected in-memory enabled=false after rollback")
 	}
 
-	assertACLSettingValue(t, db, dbKeyEnabled, "false")
+	if v, _ := store.settingValue(dbKeyEnabled); v != "false" {
+		t.Fatalf("enabled setting value=%q want=false", v)
+	}
 }
 
 func TestACLService_SetModeRollsBackStateOnCacheSyncError(t *testing.T) {
 	t.Parallel()
 
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
+	store := newFakeACLStore()
+	store.settings[dbKeyMode] = "whitelist"
 
-	cacheMock.SetFunc = func(_ context.Context, key string, _ any, _ time.Duration) error {
-		if key == aclModeKey {
-			return errors.New("set failed")
-		}
+	cacheMock := &cachemocks.Client{
+		SetFunc: func(_ context.Context, key string, _ any, _ time.Duration) error {
+			if key == aclModeKey {
+				return errors.New("set failed")
+			}
 
-		return nil
+			return nil
+		},
 	}
 
-	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
 
 	err := service.SetMode(t.Context(), ACLModeBlacklist)
 	if err == nil {
@@ -746,23 +751,27 @@ func TestACLService_SetModeRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected in-memory mode=whitelist after rollback, got %s", mode)
 	}
 
-	assertACLSettingValue(t, db, dbKeyMode, "whitelist")
+	if v, _ := store.settingValue(dbKeyMode); v != "whitelist" {
+		t.Fatalf("mode setting value=%q want=whitelist", v)
+	}
 }
 
 func TestACLService_AddRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 	t.Parallel()
 
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
+	store := newFakeACLStore()
 
-	cacheMock.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
-		if key == aclWhitelistRoomsKey && len(members) == 1 && members[0] == "room-x" {
-			return 0, errors.New("sadd failed")
-		}
+	cacheMock := &cachemocks.Client{
+		SAddFunc: func(_ context.Context, key string, members []string) (int64, error) {
+			if key == aclWhitelistRoomsKey && len(members) == 1 && members[0] == "room-x" {
+				return 0, errors.New("sadd failed")
+			}
 
-		return 1, nil
+			return 1, nil
+		},
 	}
 
-	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
 
 	added, err := service.AddRoom(t.Context(), "room-x")
 	if added {
@@ -782,24 +791,30 @@ func TestACLService_AddRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
 
-	assertACLRoomCount(t, db, "room-x", listTypeWhitelist, 0)
+	count, _ := store.CountRooms(t.Context(), "room-x", listTypeWhitelist)
+	if count != 0 {
+		t.Fatalf("expected room rollback in store, count=%d", count)
+	}
 }
 
 func TestACLService_RemoveRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 	t.Parallel()
 
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	mustCreateACLRoom(t, db, "room-x", listTypeWhitelist)
+	store := newFakeACLStore()
+	store.rooms[roomKey{roomID: "room-x", listType: listTypeWhitelist}] = struct{}{}
 
-	cacheMock.SRemFunc = func(_ context.Context, key string, members []string) (int64, error) {
-		if key == aclWhitelistRoomsKey && len(members) == 1 && members[0] == "room-x" {
-			return 0, errors.New("srem failed")
-		}
+	cacheMock := &cachemocks.Client{
+		SRemFunc: func(_ context.Context, key string, members []string) (int64, error) {
+			if key == aclWhitelistRoomsKey && len(members) == 1 && members[0] == "room-x" {
+				return 0, errors.New("srem failed")
+			}
 
-		return 1, nil
+			return 1, nil
+		},
 	}
 
-	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
+	service.whitelistRooms["room-x"] = struct{}{}
 
 	removed, err := service.RemoveRoom(t.Context(), "room-x")
 	if removed {
@@ -819,7 +834,10 @@ func TestACLService_RemoveRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
 
-	assertACLRoomCount(t, db, "room-x", listTypeWhitelist, 1)
+	count, _ := store.CountRooms(t.Context(), "room-x", listTypeWhitelist)
+	if count != 1 {
+		t.Fatalf("expected room restored in store, count=%d", count)
+	}
 }
 
 func TestACLService_SyncRoomsToValkeyAtomicSuccess(t *testing.T) {
@@ -937,16 +955,20 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnSwapFailure(t *testing.
 }
 
 func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	service := newACLServiceFromDB(t, db, cacheMock, false, ACLModeWhitelist, nil)
+	t.Parallel()
 
-	if err := db.Callback().Update().Before("gorm:update").Register("acl_fail_enabled_update", func(tx *gorm.DB) {
-		if tx.Statement.Table == (Settings{}).TableName() {
-			_ = tx.AddError(errors.New("forced update failure"))
+	store := newFakeACLStore()
+	store.settings[dbKeyEnabled] = "false"
+	store.upsertHook = func(key, _ string) error {
+		if key == dbKeyEnabled {
+			return errors.New("forced update failure")
 		}
-	}); err != nil {
-		t.Fatalf("register update callback: %v", err)
+
+		return nil
 	}
+
+	cacheMock := newACLRoomSetStatefulCacheForLoad()
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
 
 	err := service.SetEnabled(t.Context(), true)
 	if err == nil {
@@ -962,27 +984,26 @@ func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatal("expected in-memory enabled=false after DB failure")
 	}
 
-	var setting Settings
-	if err := db.Where("key = ?", dbKeyEnabled).First(&setting).Error; err != nil {
-		t.Fatalf("query enabled setting: %v", err)
-	}
-
-	if setting.Value != "false" {
-		t.Fatalf("enabled setting value=%q want=false", setting.Value)
+	if v, _ := store.settingValue(dbKeyEnabled); v != "false" {
+		t.Fatalf("enabled setting value=%q want=false", v)
 	}
 }
 
 func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, nil)
+	t.Parallel()
 
-	if err := db.Callback().Update().Before("gorm:update").Register("acl_fail_mode_update", func(tx *gorm.DB) {
-		if tx.Statement.Table == (Settings{}).TableName() {
-			_ = tx.AddError(errors.New("forced update failure"))
+	store := newFakeACLStore()
+	store.settings[dbKeyMode] = "whitelist"
+	store.upsertHook = func(key, _ string) error {
+		if key == dbKeyMode {
+			return errors.New("forced update failure")
 		}
-	}); err != nil {
-		t.Fatalf("register update callback: %v", err)
+
+		return nil
 	}
+
+	cacheMock := newACLRoomSetStatefulCacheForLoad()
+	service := newACLServiceFromFakeStore(t, store, cacheMock, true, ACLModeWhitelist)
 
 	err := service.SetMode(t.Context(), ACLModeBlacklist)
 	if err == nil {
@@ -998,39 +1019,34 @@ func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatalf("expected in-memory mode=whitelist after DB failure, got %s", mode)
 	}
 
-	var setting Settings
-	if err := db.Where("key = ?", dbKeyMode).First(&setting).Error; err != nil {
-		t.Fatalf("query mode setting: %v", err)
-	}
-
-	if setting.Value != "whitelist" {
-		t.Fatalf("mode setting value=%q want=whitelist", setting.Value)
+	if v, _ := store.settingValue(dbKeyMode); v != "whitelist" {
+		t.Fatalf("mode setting value=%q want=whitelist", v)
 	}
 }
 
+// TestACLService_AddRoom_UsesCapturedModeForValkeySync는 CreateRoom 직후 mode가
+// 블랙리스트로 바뀌어도, AddRoom이 캡처한 화이트리스트 mode 키로 Valkey sync함을 검증한다.
+// (create-after 시점에서 mode를 바꾸던 동작을 fake store afterCreateRoom으로 재현.)
 func TestACLService_AddRoom_UsesCapturedModeForValkeySync(t *testing.T) {
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, nil)
+	t.Parallel()
 
-	origSAdd := cacheMock.SAddFunc
+	store := newFakeACLStore()
 
 	var gotKey string
 
-	cacheMock.SAddFunc = func(ctx context.Context, key string, members []string) (int64, error) {
-		gotKey = key
-		return origSAdd(ctx, key, members)
+	cacheMock := &cachemocks.Client{
+		SAddFunc: func(_ context.Context, key string, members []string) (int64, error) {
+			gotKey = key
+			return int64(len(members)), nil
+		},
 	}
 
-	if err := db.Callback().Create().After("gorm:create").Register("acl_switch_mode_after_add_room", func(tx *gorm.DB) {
-		if tx.Statement.Table != (Room{}).TableName() {
-			return
-		}
+	service := newACLServiceFromFakeStore(t, store, cacheMock, true, ACLModeWhitelist)
 
+	store.afterCreateRoom = func(string, string) {
 		service.mu.Lock()
 		service.mode = ACLModeBlacklist
 		service.mu.Unlock()
-	}); err != nil {
-		t.Fatalf("register create callback: %v", err)
 	}
 
 	added, err := service.AddRoom(t.Context(), "room-x")
@@ -1047,29 +1063,30 @@ func TestACLService_AddRoom_UsesCapturedModeForValkeySync(t *testing.T) {
 	}
 }
 
+// TestACLService_RemoveRoom_UsesCapturedModeForValkeySync는 DeleteRoom 직후 mode가
+// 바뀌어도 RemoveRoom이 캡처한 mode 키로 Valkey sync함을 검증한다.
 func TestACLService_RemoveRoom_UsesCapturedModeForValkeySync(t *testing.T) {
-	db, cacheMock, _ := newACLServiceWithSQLite(t)
-	service := newACLServiceFromDB(t, db, cacheMock, true, ACLModeWhitelist, []string{"room-x"})
+	t.Parallel()
 
-	origSRem := cacheMock.SRemFunc
+	store := newFakeACLStore()
+	store.rooms[roomKey{roomID: "room-x", listType: listTypeWhitelist}] = struct{}{}
 
 	var gotKey string
 
-	cacheMock.SRemFunc = func(ctx context.Context, key string, members []string) (int64, error) {
-		gotKey = key
-		return origSRem(ctx, key, members)
+	cacheMock := &cachemocks.Client{
+		SRemFunc: func(_ context.Context, key string, members []string) (int64, error) {
+			gotKey = key
+			return int64(len(members)), nil
+		},
 	}
 
-	if err := db.Callback().Delete().After("gorm:delete").Register("acl_switch_mode_after_remove_room", func(tx *gorm.DB) {
-		if tx.Statement.Table != (Room{}).TableName() {
-			return
-		}
+	service := newACLServiceFromFakeStore(t, store, cacheMock, true, ACLModeWhitelist)
+	service.whitelistRooms["room-x"] = struct{}{}
 
+	store.afterDeleteRoom = func(string, string) {
 		service.mu.Lock()
 		service.mode = ACLModeBlacklist
 		service.mu.Unlock()
-	}); err != nil {
-		t.Fatalf("register delete callback: %v", err)
 	}
 
 	removed, err := service.RemoveRoom(t.Context(), "room-x")
@@ -1087,93 +1104,70 @@ func TestACLService_RemoveRoom_UsesCapturedModeForValkeySync(t *testing.T) {
 }
 
 func TestACLService_LoadFromDatabase_ReturnsInitCreateError(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range aclLoadFromDatabaseInitCreateErrorTests() {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runACLLoadFromDatabaseInitCreateErrorCase(t, tc)
 		})
 	}
 }
 
+type aclLoadFromDatabaseInitCreateErrorCase struct {
+	name      string
+	setupHook func(store *fakeACLStore)
+	wantErr   string
+}
+
 func aclLoadFromDatabaseInitCreateErrorTests() []aclLoadFromDatabaseInitCreateErrorCase {
 	return []aclLoadFromDatabaseInitCreateErrorCase{
 		{
-			name:    "enabled setting create failure",
-			setupDB: setupACLInitEnabledCreateFailure,
+			name: "enabled setting create failure",
+			setupHook: func(store *fakeACLStore) {
+				store.createSettingHook = func(key, _ string) error {
+					if key == dbKeyEnabled {
+						return errors.New("forced enabled create failure")
+					}
+
+					return nil
+				}
+			},
 			wantErr: "failed to initialize ACL enabled setting",
 		},
 		{
-			name:    "mode setting create failure",
-			setupDB: setupACLInitModeCreateFailure,
+			name: "mode setting create failure",
+			setupHook: func(store *fakeACLStore) {
+				store.createSettingHook = func(key, _ string) error {
+					if key == dbKeyMode {
+						return errors.New("forced mode create failure")
+					}
+
+					return nil
+				}
+			},
 			wantErr: "failed to initialize ACL mode setting",
 		},
 		{
-			name:    "room create failure",
-			setupDB: setupACLInitRoomCreateFailure,
+			name: "room create failure",
+			setupHook: func(store *fakeACLStore) {
+				store.createRoomHook = func(string, string) error {
+					return errors.New("forced room create failure")
+				}
+			},
 			wantErr: "failed to initialize ACL room",
 		},
-	}
-}
-
-func setupACLInitEnabledCreateFailure(t *testing.T, db *gorm.DB) {
-	t.Helper()
-
-	createCalls := 0
-
-	if err := db.Callback().Create().Before("gorm:create").Register("acl_fail_init_enabled_create", func(tx *gorm.DB) {
-		if tx.Statement.Table != (Settings{}).TableName() {
-			return
-		}
-
-		if createCalls == 0 {
-			_ = tx.AddError(errors.New("forced enabled create failure"))
-		}
-
-		createCalls++
-	}); err != nil {
-		t.Fatalf("register create callback: %v", err)
-	}
-}
-
-func setupACLInitModeCreateFailure(t *testing.T, db *gorm.DB) {
-	t.Helper()
-
-	createCalls := 0
-
-	if err := db.Callback().Create().Before("gorm:create").Register("acl_fail_init_mode_create", func(tx *gorm.DB) {
-		if tx.Statement.Table != (Settings{}).TableName() {
-			return
-		}
-
-		if createCalls == 1 {
-			_ = tx.AddError(errors.New("forced mode create failure"))
-		}
-
-		createCalls++
-	}); err != nil {
-		t.Fatalf("register create callback: %v", err)
-	}
-}
-
-func setupACLInitRoomCreateFailure(t *testing.T, db *gorm.DB) {
-	t.Helper()
-
-	if err := db.Callback().Create().Before("gorm:create").Register("acl_fail_init_room_create", func(tx *gorm.DB) {
-		if tx.Statement.Table == (Room{}).TableName() {
-			_ = tx.AddError(errors.New("forced room create failure"))
-		}
-	}); err != nil {
-		t.Fatalf("register create callback: %v", err)
 	}
 }
 
 func runACLLoadFromDatabaseInitCreateErrorCase(t *testing.T, tc aclLoadFromDatabaseInitCreateErrorCase) {
 	t.Helper()
 
-	db, _, _ := newACLServiceWithSQLite(t)
-	tc.setupDB(t, db)
+	store := newFakeACLStore()
+	tc.setupHook(store)
 
 	service := &Service{
-		db: db,
+		store: store,
 		cache: &cachemocks.Client{
 			SetFunc:  func(context.Context, string, any, time.Duration) error { return nil },
 			DelFunc:  func(context.Context, string) error { return nil },

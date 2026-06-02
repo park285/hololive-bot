@@ -25,28 +25,26 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"gorm.io/datatypes"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 type Model struct {
-	ID             int            `gorm:"primaryKey;column:id"`
-	Slug           string         `gorm:"column:slug"`
-	ChannelID      *string        `gorm:"column:channel_id"`
-	EnglishName    string         `gorm:"column:english_name"`
-	JapaneseName   *string        `gorm:"column:japanese_name"`
-	KoreanName     *string        `gorm:"column:korean_name"`
-	Status         string         `gorm:"column:status"`
-	IsGraduated    bool           `gorm:"column:is_graduated"`
-	Aliases        datatypes.JSON `gorm:"column:aliases;type:jsonb"`
-	Photo          *string        `gorm:"column:photo"`
-	PhotoUpdatedAt *time.Time     `gorm:"column:photo_updated_at"`
-	Org            string         `gorm:"column:org"`
-	Suborg         *string        `gorm:"column:suborg"`
-	SyncSource     string         `gorm:"column:sync_source"`
-	TwitchUserID   *string        `gorm:"column:twitch_user_id"`
+	ID             int        `db:"id"`
+	Slug           string     `db:"slug"`
+	ChannelID      *string    `db:"channel_id"`
+	EnglishName    string     `db:"english_name"`
+	JapaneseName   *string    `db:"japanese_name"`
+	KoreanName     *string    `db:"korean_name"`
+	Status         string     `db:"status"`
+	IsGraduated    bool       `db:"is_graduated"`
+	Aliases        []byte     `db:"aliases"`
+	Photo          *string    `db:"photo"`
+	PhotoUpdatedAt *time.Time `db:"photo_updated_at"`
+	Org            string     `db:"org"`
+	Suborg         *string    `db:"suborg"`
+	SyncSource     string     `db:"sync_source"`
+	TwitchUserID   *string    `db:"twitch_user_id"`
 }
 
 func (Model) TableName() string {
@@ -55,14 +53,12 @@ func (Model) TableName() string {
 
 type Repository struct {
 	pool   *pgxpool.Pool
-	gormDB *gorm.DB
 	logger *slog.Logger
 }
 
 func NewMemberRepository(postgres database.Client, logger *slog.Logger) *Repository {
 	return &Repository{
 		pool:   postgres.GetPool(),
-		gormDB: postgres.GetGormDB(),
 		logger: logger,
 	}
 }

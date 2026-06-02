@@ -2,7 +2,6 @@ package delivery
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"sync"
@@ -10,9 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -44,14 +41,7 @@ func (p *dispatcherTickProbe) tick() {
 func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	t.Parallel()
 
-	dsn := fmt.Sprintf("file:dispatcher_start_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
+	db := newDeliveryTestDB(t)
 
 	cache := cachemocks.NewLenientClient()
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
@@ -62,7 +52,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -99,9 +89,8 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 
 	probe := newDispatcherTickProbe(2)
 	db := openDispatcherStartTestDB(t, "dispatcher_run_tick")
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
 
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        10 * time.Millisecond,
@@ -140,9 +129,8 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 
 	probe := newDispatcherTickProbe(2)
 	db := openDispatcherStartTestDB(t, "dispatcher_aggregate_tick")
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
 
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:             10,
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
@@ -185,9 +173,8 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 
 	probe := newDispatcherTickProbe(1)
 	db := openDispatcherStartTestDB(t, "dispatcher_cleanup_tick")
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}))
 
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:      10,
 		LockTimeout:    time.Minute,
 		PollInterval:   time.Hour,
@@ -221,15 +208,10 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	}
 }
 
-func openDispatcherStartTestDB(t *testing.T, name string) *gorm.DB {
+func openDispatcherStartTestDB(t *testing.T, name string) *deliveryTestDB {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:%s_%d?mode=memory&cache=shared", name, time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
+	_ = name
+	db := newDeliveryTestDB(t)
 	return db
 }

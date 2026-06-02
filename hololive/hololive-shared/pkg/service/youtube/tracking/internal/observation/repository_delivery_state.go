@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -26,7 +24,7 @@ func (r *deliveryStateRepository) MarkAlarmSentBatch(ctx context.Context, marks 
 		return fmt.Errorf("mark alarm sent batch: %w", err)
 	}
 
-	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := inPgxTx(ctx, r.db, func(tx trackingDB) error {
 		txRepo := NewRepository(tx)
 		return txRepo.delivery.applyAlarmSentMarks(ctx, normalized)
 	}); err != nil {
@@ -58,19 +56,18 @@ func (r *deliveryStateRepository) applyAlarmSentMark(ctx context.Context, mark A
 		latencyMillis, latencyExceeded = calculateLatencyResult(trackingRow.ActualPublishedAt, &mark.AlarmSentAt)
 	}
 
-	result := r.db.WithContext(ctx).
-		Model(&domain.YouTubeContentAlarmTracking{}).
-		Where("kind = ? AND content_id = ?", mark.Kind, targetContentID).
-		Where("alarm_sent_at IS NULL OR alarm_sent_at > ?", mark.AlarmSentAt).
-		Updates(map[string]any{
-			"alarm_sent_at":          mark.AlarmSentAt,
-			"alarm_latency_millis":   nullableInt64Value(latencyMillis),
-			"alarm_latency_exceeded": nullableBoolValue(latencyExceeded),
-			"delivery_status":        domain.YouTubeContentAlarmDeliveryStatusSent,
-			"updated_at":             updatedAt,
-		})
-	if result.Error != nil {
-		return result.Error
+	if _, err := execSQL(ctx, r.db, "update tracking alarm sent row", `
+		UPDATE youtube_content_alarm_tracking
+		SET alarm_sent_at = ?,
+		    alarm_latency_millis = ?,
+		    alarm_latency_exceeded = ?,
+		    delivery_status = ?,
+		    updated_at = ?
+		WHERE kind = ? AND content_id = ?
+		  AND (alarm_sent_at IS NULL OR alarm_sent_at > ?)
+	`, mark.AlarmSentAt, nullableInt64Value(latencyMillis), nullableBoolValue(latencyExceeded),
+		domain.YouTubeContentAlarmDeliveryStatusSent, updatedAt, mark.Kind, targetContentID, mark.AlarmSentAt); err != nil {
+		return err
 	}
 
 	if !isCommunityShortsAlarmStateKind(mark.Kind) {
@@ -115,21 +112,20 @@ func (r *deliveryStateRepository) finalizeClaimedAlarmState(ctx context.Context,
 		return false, nil
 	}
 
-	result := r.db.WithContext(ctx).
-		Model(&domain.YouTubeCommunityShortsAlarmState{}).
-		Where("kind = ? AND post_id = ?", mark.Kind, postID).
-		Where("authorized_at = ?", *mark.AuthorizedAt).
-		Where("alarm_sent_at IS NULL").
-		Updates(map[string]any{
-			"authorized_at":   nil,
-			"alarm_sent_at":   mark.AlarmSentAt,
-			"delivery_status": domain.YouTubeCommunityShortsAlarmStateStatusSent,
-			"updated_at":      updatedAt,
-		})
-	if result.Error != nil {
-		return false, fmt.Errorf("finalize claimed alarm state: update row: %w", result.Error)
+	rowsAffected, err := execSQL(ctx, r.db, "finalize claimed alarm state: update row", `
+		UPDATE youtube_community_shorts_alarm_states
+		SET authorized_at = NULL,
+		    alarm_sent_at = ?,
+		    delivery_status = ?,
+		    updated_at = ?
+		WHERE kind = ? AND post_id = ?
+		  AND authorized_at = ?
+		  AND alarm_sent_at IS NULL
+	`, mark.AlarmSentAt, domain.YouTubeCommunityShortsAlarmStateStatusSent, updatedAt, mark.Kind, postID, *mark.AuthorizedAt)
+	if err != nil {
+		return false, err
 	}
-	return result.RowsAffected > 0, nil
+	return rowsAffected > 0, nil
 }
 
 func (r *deliveryStateRepository) applyExistingAlarmStateSentMark(ctx context.Context, mark AlarmSentMark, postID string, stateRow *domain.YouTubeCommunityShortsAlarmState, updatedAt time.Time) error {
@@ -178,22 +174,20 @@ func (r *deliveryStateRepository) updateAlarmStateSentRow(ctx context.Context, k
 		return err
 	}
 
-	result := r.db.WithContext(ctx).
-		Model(&domain.YouTubeCommunityShortsAlarmState{}).
-		Where("kind = ? AND post_id = ?", normalizedKind, normalizedPostID).
-		Where("alarm_sent_at IS NULL OR alarm_sent_at > ? OR authorized_at IS NOT NULL", alarmSentAt).
-		Updates(map[string]any{
-			"authorized_at": nil,
-			"alarm_sent_at": gorm.Expr(
-				"CASE WHEN alarm_sent_at IS NULL OR alarm_sent_at > ? THEN ? ELSE alarm_sent_at END",
-				alarmSentAt,
-				alarmSentAt,
-			),
-			"delivery_status": domain.YouTubeCommunityShortsAlarmStateStatusSent,
-			"updated_at":      updatedAt,
-		})
-	if result.Error != nil {
-		return result.Error
+	if _, err := execSQL(ctx, r.db, "update alarm state sent row", `
+		UPDATE youtube_community_shorts_alarm_states
+		SET authorized_at = NULL,
+		    alarm_sent_at = CASE
+		        WHEN alarm_sent_at IS NULL OR alarm_sent_at > ? THEN ?
+		        ELSE alarm_sent_at
+		    END,
+		    delivery_status = ?,
+		    updated_at = ?
+		WHERE kind = ? AND post_id = ?
+		  AND (alarm_sent_at IS NULL OR alarm_sent_at > ? OR authorized_at IS NOT NULL)
+	`, alarmSentAt, alarmSentAt, domain.YouTubeCommunityShortsAlarmStateStatusSent,
+		updatedAt, normalizedKind, normalizedPostID, alarmSentAt); err != nil {
+		return err
 	}
 
 	return nil

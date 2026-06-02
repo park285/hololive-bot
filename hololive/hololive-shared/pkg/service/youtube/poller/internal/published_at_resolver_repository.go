@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/georgysavva/scany/v2/pgxscan"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 
@@ -17,8 +18,8 @@ import (
 )
 
 type publishedAtResolverRepository struct {
-	db              *gorm.DB
-	batchRepository *batchrepo.GormBatchRepository
+	db              publishedAtResolverDB
+	batchRepository *batchrepo.PgxBatchRepository
 }
 
 type publishedAtFinalizeResult struct {
@@ -37,12 +38,12 @@ type resolvedPublishedAtDispatchGap struct {
 }
 
 type resolvedPublishedAtDispatchGapRow struct {
-	Kind              domain.OutboxKind `gorm:"column:kind"`
-	PostID            string            `gorm:"column:post_id"`
-	ContentID         string            `gorm:"column:content_id"`
-	ChannelID         string            `gorm:"column:channel_id"`
-	DetectedAt        time.Time         `gorm:"column:detected_at"`
-	ActualPublishedAt time.Time         `gorm:"column:actual_published_at"`
+	Kind              domain.OutboxKind `db:"kind"`
+	PostID            string            `db:"post_id"`
+	ContentID         string            `db:"content_id"`
+	ChannelID         string            `db:"channel_id"`
+	DetectedAt        time.Time         `db:"detected_at"`
+	ActualPublishedAt time.Time         `db:"actual_published_at"`
 }
 
 const (
@@ -50,21 +51,22 @@ const (
 	resolvedPublishedAtDispatchGapRecoverFor = time.Hour
 )
 
-func newPublishedAtResolverRepository(db *gorm.DB) *publishedAtResolverRepository {
+func newPublishedAtResolverRepository(db any) *publishedAtResolverRepository {
+	querier := normalizePublishedAtResolverDB(db)
 	return &publishedAtResolverRepository{
-		db:              db,
-		batchRepository: batchrepo.NewGormBatchRepositoryWithPersister(db, newPublishedAtResolverLatencyPersisterAdapter(db)),
+		db:              querier,
+		batchRepository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newPublishedAtResolverLatencyPersisterAdapter(querier)),
 	}
 }
 
 // newPublishedAtResolverLatencyPersisterAdapter는 published_at_resolver 계층을 위한
 // outbox 어댑터를 생성합니다.
-func newPublishedAtResolverLatencyPersisterAdapter(db *gorm.DB) batchrepo.PostLatencyClassificationPersister {
+func newPublishedAtResolverLatencyPersisterAdapter(db dbx.Querier) batchrepo.PostLatencyClassificationPersister {
 	return &publishedAtResolverLatencyPersisterAdapter{db: db}
 }
 
 type publishedAtResolverLatencyPersisterAdapter struct {
-	db *gorm.DB
+	db dbx.Querier
 }
 
 func (a *publishedAtResolverLatencyPersisterAdapter) PersistPostLatencyClassificationsByIdentities(
@@ -96,9 +98,9 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 
 	normalizedPublishedAt := yttimestamp.Normalize(publishedAt)
 	result := publishedAtFinalizeResult{}
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := inPublishedAtResolverTx(ctx, r.db, func(tx dbx.Querier) error {
 		txRepository := trackingrepo.NewRepository(tx)
-		eligibility, err := r.loadFinalizeEligibility(ctx, txRepository, candidate)
+		eligibility, err := r.loadFinalizeEligibility(ctx, tx, txRepository, candidate)
 		if err != nil {
 			return err
 		}
@@ -127,8 +129,8 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 
 func (r *publishedAtResolverRepository) finalizeCandidateState(
 	ctx context.Context,
-	tx *gorm.DB,
-	txRepository *trackingrepo.GormRepository,
+	tx dbx.Querier,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider NotificationRouteDecider,
@@ -146,12 +148,13 @@ func (r *publishedAtResolverRepository) finalizeCandidateState(
 
 func (r *publishedAtResolverRepository) loadFinalizeEligibility(
 	ctx context.Context,
-	txRepository *trackingrepo.GormRepository,
+	tx dbx.Querier,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 ) (publishedAtFinalizeEligibility, error) {
 	eligibility := publishedAtFinalizeEligibility{enqueuable: true}
 
-	stateEligibility, resolved, err := r.loadFinalizeAlarmStateEligibility(ctx, txRepository, candidate)
+	stateEligibility, resolved, err := r.loadFinalizeAlarmStateEligibility(ctx, tx, txRepository, candidate)
 	if err != nil {
 		return publishedAtFinalizeEligibility{}, err
 	}
@@ -172,7 +175,8 @@ func (r *publishedAtResolverRepository) loadFinalizeEligibility(
 
 func (r *publishedAtResolverRepository) loadFinalizeAlarmStateEligibility(
 	ctx context.Context,
-	txRepository *trackingrepo.GormRepository,
+	tx dbx.Querier,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 ) (publishedAtFinalizeEligibility, bool, error) {
 	stateRow, err := txRepository.FindAlarmStateByPostID(ctx, candidate.Kind, candidate.PostID)
@@ -189,7 +193,7 @@ func (r *publishedAtResolverRepository) loadFinalizeAlarmStateEligibility(
 		return publishedAtFinalizeEligibility{}, false, nil
 	}
 
-	return r.resolveFinalizeAlarmStateClaimEligibility(ctx, txRepository, candidate, *stateRow.AuthorizedAt)
+	return r.resolveFinalizeAlarmStateClaimEligibility(ctx, tx, txRepository, candidate, *stateRow.AuthorizedAt)
 }
 
 func isPublishedAtAlarmStateSent(stateRow *domain.YouTubeCommunityShortsAlarmState) bool {
@@ -202,7 +206,8 @@ func isPublishedAtAlarmStateClaimed(stateRow *domain.YouTubeCommunityShortsAlarm
 
 func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibility(
 	ctx context.Context,
-	txRepository *trackingrepo.GormRepository,
+	tx dbx.Querier,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	authorizedAt time.Time,
 ) (publishedAtFinalizeEligibility, bool, error) {
@@ -210,7 +215,7 @@ func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibilit
 		return publishedAtFinalizeEligibility{reason: "already_claimed"}, true, nil
 	}
 
-	exists, err := r.outboxExistsForCandidate(ctx, txRepository, candidate)
+	exists, err := r.outboxExistsForCandidate(ctx, tx, txRepository, candidate)
 	if err != nil {
 		return publishedAtFinalizeEligibility{}, false, err
 	}
@@ -231,7 +236,7 @@ func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibilit
 
 func loadFinalizeTrackingEligibility(
 	ctx context.Context,
-	txRepository *trackingrepo.GormRepository,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 ) (publishedAtFinalizeEligibility, bool, error) {
 	trackingRow, err := txRepository.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
@@ -259,7 +264,8 @@ func isPublishedAtClaimFresh(authorizedAt time.Time) bool {
 
 func (r *publishedAtResolverRepository) outboxExistsForCandidate(
 	ctx context.Context,
-	txRepository *trackingrepo.GormRepository,
+	tx dbx.Querier,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 ) (bool, error) {
 	trackingRow, err := txRepository.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
@@ -270,15 +276,17 @@ func (r *publishedAtResolverRepository) outboxExistsForCandidate(
 		return true, nil
 	}
 
-	var count int64
-	if err := r.db.WithContext(ctx).
-		Model(&domain.YouTubeNotificationOutbox{}).
-		Where("kind = ? AND content_id = ?", candidate.Kind, candidate.ContentID).
-		Count(&count).Error; err != nil {
+	var exists bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM youtube_notification_outbox
+			WHERE kind = $1 AND content_id = $2
+		)`, candidate.Kind, candidate.ContentID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("load outbox row: %w", err)
 	}
 
-	return count > 0, nil
+	return exists, nil
 }
 
 func selectPublishedAtFinalizeReason(primary string, fallback string) string {
@@ -296,27 +304,33 @@ func (r *publishedAtResolverRepository) ListResolvedPublishedAtDispatchGaps(ctx 
 		return nil, err
 	}
 
-	var rows []resolvedPublishedAtDispatchGapRow
-	if err := r.db.WithContext(ctx).
-		Table("youtube_community_shorts_alarm_states AS s").
-		Select("s.kind, s.post_id, s.content_id, s.channel_id, s.detected_at, s.actual_published_at").
-		Joins("LEFT JOIN youtube_content_alarm_tracking AS t ON t.kind = s.kind AND t.canonical_content_id = s.post_id").
-		Where("s.kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
-		Where("s.actual_published_at IS NOT NULL").
-		Where("s.alarm_sent_at IS NULL").
-		Where("t.alarm_sent_at IS NULL").
-		Where("s.detected_at < ?", yttimestamp.Normalize(detectedBefore)).
-		Where("s.actual_published_at >= ?", yttimestamp.Normalize(referenceNow).Add(-resolvedPublishedAtDispatchGapRecoverFor)).
-		Where("s.published_at_retry_after IS NULL OR s.published_at_retry_after <= ?", yttimestamp.Normalize(referenceNow)).
-		Where(`NOT EXISTS (
+	rows := make([]resolvedPublishedAtDispatchGapRow, 0)
+	normalizedReferenceNow := yttimestamp.Normalize(referenceNow)
+	if err := pgxscan.Select(ctx, r.db, &rows, `
+		SELECT s.kind, s.post_id, s.content_id, s.channel_id, s.detected_at, s.actual_published_at
+		FROM youtube_community_shorts_alarm_states AS s
+		LEFT JOIN youtube_content_alarm_tracking AS t ON t.kind = s.kind AND t.canonical_content_id = s.post_id
+		WHERE s.kind IN ($1, $2)
+			AND s.actual_published_at IS NOT NULL
+			AND s.alarm_sent_at IS NULL
+			AND t.alarm_sent_at IS NULL
+			AND s.detected_at < $3
+			AND s.actual_published_at >= $4
+			AND (s.published_at_retry_after IS NULL OR s.published_at_retry_after <= $5)
+			AND NOT EXISTS (
 			SELECT 1
 			FROM youtube_notification_outbox AS o
 			WHERE o.kind = s.kind AND (o.content_id = s.content_id OR o.content_id = s.post_id)
-		)`).
-		Order("s.detected_at ASC").
-		Order("s.post_id ASC").
-		Limit(limit).
-		Find(&rows).Error; err != nil {
+		)
+		ORDER BY s.detected_at ASC, s.post_id ASC
+		LIMIT $6`,
+		domain.OutboxKindCommunityPost,
+		domain.OutboxKindNewShort,
+		yttimestamp.Normalize(detectedBefore),
+		normalizedReferenceNow.Add(-resolvedPublishedAtDispatchGapRecoverFor),
+		normalizedReferenceNow,
+		limit,
+	); err != nil {
 		return nil, fmt.Errorf("list resolved published_at dispatch gaps: query rows: %w", err)
 	}
 

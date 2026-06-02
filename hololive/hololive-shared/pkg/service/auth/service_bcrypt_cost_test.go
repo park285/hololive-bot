@@ -13,13 +13,15 @@ import (
 func storedPasswordHash(t *testing.T, service *Service, email string) string {
 	t.Helper()
 
-	var user userModel
-	if err := service.db.WithContext(context.Background()).
-		Where("email = ?", normalizeEmail(email)).
-		First(&user).Error; err != nil {
+	var passwordHash string
+	if err := service.db.QueryRow(
+		context.Background(),
+		`SELECT password_hash FROM auth_users WHERE email = $1`,
+		normalizeEmail(email),
+	).Scan(&passwordHash); err != nil {
 		t.Fatalf("load user: %v", err)
 	}
-	return user.PasswordHash
+	return passwordHash
 }
 
 // DefaultConfig의 BcryptCost는 안전 기본값(>=12)이어야 한다.

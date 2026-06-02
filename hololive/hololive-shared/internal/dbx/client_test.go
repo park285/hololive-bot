@@ -47,12 +47,6 @@ func TestNewLazy(t *testing.T) {
 	if client.Pool() != nil {
 		t.Error("Pool() should be nil before Connect()")
 	}
-	if client.SQL() != nil {
-		t.Error("SQL() should be nil before Connect()")
-	}
-	if client.Gorm() != nil {
-		t.Error("Gorm() should be nil before Connect()")
-	}
 }
 
 func TestNewLazy_NilLogger(t *testing.T) {

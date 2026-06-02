@@ -7,18 +7,28 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
+	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type DeliveryTelemetryRepository struct {
-	db *gorm.DB
+	db dbx.Querier
 }
 
-func NewDeliveryTelemetryRepository(db *gorm.DB) *DeliveryTelemetryRepository {
-	return &DeliveryTelemetryRepository{db: db}
+func NewDeliveryTelemetryRepository(db any) *DeliveryTelemetryRepository {
+	return &DeliveryTelemetryRepository{db: asQuerier(db)}
+}
+
+func asQuerier(db any) dbx.Querier {
+	if isNilDB(db) {
+		return nil
+	}
+	if typed, ok := db.(dbx.Querier); ok {
+		return typed
+	}
+	return nil
 }
 
 func cloneUTCTimePtr(value *time.Time) *time.Time {
@@ -123,14 +133,73 @@ func (r *DeliveryTelemetryRepository) enqueuePrepared(
 		return fmt.Errorf("enqueue delivery telemetry: db is nil")
 	}
 
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "delivery_id"}, {Name: "attempt_ordinal"}},
-		DoNothing: true,
-	}).Create(&rows).Error; err != nil {
-		return fmt.Errorf("enqueue delivery telemetry: %w", err)
+	for i := range rows {
+		if _, err := r.db.Exec(ctx, `
+			INSERT INTO youtube_notification_delivery_telemetry (
+				delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type,
+				actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at,
+				observation_status, observation_runtime_name, observation_bigbang_cutover_at, observation_started_at, observation_ended_at,
+				dedupe_key, delivery_path, delivery_mode, send_result, failure_reason,
+				attempt_started_at, attempt_finished_at, event_at, next_attempt_at, locked_at, logged_at, error
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8,
+				$9, $10, $11, $12,
+				$13, $14, $15, $16, $17,
+				$18, $19, $20, $21, $22,
+				$23, $24, $25, $26, $27, $28, $29
+			)
+			ON CONFLICT (delivery_id, attempt_ordinal) DO NOTHING
+		`, rows[i].DeliveryID, rows[i].AttemptOrdinal, rows[i].OutboxID, rows[i].ChannelID, rows[i].ContentID, rows[i].PostID, rows[i].RoomID, rows[i].AlarmType,
+			rows[i].ActualPublishedAt, rows[i].AlarmSentAt, rows[i].AlarmLatencyMillis, rows[i].DetectedAt,
+			rows[i].ObservationStatus, rows[i].ObservationRuntimeName, rows[i].ObservationBigBangCutoverAt, rows[i].ObservationStartedAt, rows[i].ObservationEndedAt,
+			rows[i].DedupeKey, rows[i].DeliveryPath, rows[i].DeliveryMode, rows[i].SendResult, rows[i].FailureReason,
+			rows[i].AttemptStartedAt, rows[i].AttemptFinishedAt, rows[i].EventAt, rows[i].NextAttemptAt, rows[i].LockedAt, rows[i].LoggedAt, rows[i].Error); err != nil {
+			return fmt.Errorf("enqueue delivery telemetry: %w", err)
+		}
 	}
 
 	return nil
+}
+
+func deliveryTelemetrySelectColumns() string {
+	return `id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type,
+		actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at,
+		observation_status, observation_runtime_name, observation_bigbang_cutover_at, observation_started_at, observation_ended_at,
+		dedupe_key, delivery_path, delivery_mode, send_result, failure_reason,
+		attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error`
+}
+
+func deliveryTelemetrySelectColumnsWithAlias(alias string) string {
+	columns := strings.Split(deliveryTelemetrySelectColumns(), ",")
+	for i := range columns {
+		columns[i] = alias + "." + strings.TrimSpace(columns[i])
+	}
+	return strings.Join(columns, ", ")
+}
+
+func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliveryTelemetry, error) {
+	var item domain.YouTubeNotificationDeliveryTelemetry
+	err := row.Scan(
+		&item.ID, &item.DeliveryID, &item.AttemptOrdinal, &item.OutboxID, &item.ChannelID, &item.ContentID, &item.PostID, &item.RoomID, &item.AlarmType,
+		&item.ActualPublishedAt, &item.AlarmSentAt, &item.AlarmLatencyMillis, &item.DetectedAt,
+		&item.ObservationStatus, &item.ObservationRuntimeName, &item.ObservationBigBangCutoverAt, &item.ObservationStartedAt, &item.ObservationEndedAt,
+		&item.DedupeKey, &item.DeliveryPath, &item.DeliveryMode, &item.SendResult, &item.FailureReason,
+		&item.AttemptStartedAt, &item.AttemptFinishedAt, &item.EventAt, &item.NextAttemptAt, &item.CreatedAt, &item.LockedAt, &item.LoggedAt, &item.Error,
+	)
+	return item, err
+}
+
+func (r *DeliveryTelemetryRepository) queryTelemetryRows(ctx context.Context, action string, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", action, err)
+	}
+	defer rows.Close()
+	items, err := pgx.CollectRows(rows, scanTelemetryRow)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", action, err)
+	}
+	return items, nil
 }
 
 func (r *DeliveryTelemetryRepository) FetchAndLockPending(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
@@ -141,15 +210,17 @@ func (r *DeliveryTelemetryRepository) FetchAndLockPending(ctx context.Context, b
 	now := time.Now().UTC()
 	lockExpiry := now.Add(-lockTimeout)
 
-	var candidates []domain.YouTubeNotificationDeliveryTelemetry
-	if err := r.db.WithContext(ctx).
-		Where("logged_at IS NULL").
-		Where("next_attempt_at <= ?", now).
-		Where("locked_at IS NULL OR locked_at < ?", lockExpiry).
-		Order("event_at ASC").
-		Limit(batchSize).
-		Find(&candidates).Error; err != nil {
-		return nil, fmt.Errorf("fetch pending delivery telemetry: %w", err)
+	candidates, err := r.queryTelemetryRows(ctx, "fetch pending delivery telemetry", `
+		SELECT `+deliveryTelemetrySelectColumns()+`
+		FROM youtube_notification_delivery_telemetry
+		WHERE logged_at IS NULL
+		  AND next_attempt_at <= $1
+		  AND (locked_at IS NULL OR locked_at < $2)
+		ORDER BY event_at ASC
+		LIMIT $3
+	`, now, lockExpiry, batchSize)
+	if err != nil {
+		return nil, err
 	}
 	if len(candidates) == 0 {
 		return nil, nil
@@ -161,22 +232,25 @@ func (r *DeliveryTelemetryRepository) FetchAndLockPending(ctx context.Context, b
 	}
 	slices.Sort(candidateIDs)
 
-	if err := r.db.WithContext(ctx).
-		Model(&domain.YouTubeNotificationDeliveryTelemetry{}).
-		Where("id IN ?", candidateIDs).
-		Where("logged_at IS NULL").
-		Where("locked_at IS NULL OR locked_at < ?", lockExpiry).
-		Updates(map[string]any{"locked_at": now}).Error; err != nil {
+	if _, err := r.db.Exec(ctx, `
+		UPDATE youtube_notification_delivery_telemetry
+		SET locked_at = $1
+		WHERE id = ANY($2)
+		  AND logged_at IS NULL
+		  AND (locked_at IS NULL OR locked_at < $3)
+	`, now, candidateIDs, lockExpiry); err != nil {
 		return nil, fmt.Errorf("lock delivery telemetry rows: %w", err)
 	}
 
-	var locked []domain.YouTubeNotificationDeliveryTelemetry
-	if err := r.db.WithContext(ctx).
-		Where("id IN ?", candidateIDs).
-		Where("locked_at = ?", now).
-		Order("event_at ASC").
-		Find(&locked).Error; err != nil {
-		return nil, fmt.Errorf("reload locked delivery telemetry rows: %w", err)
+	locked, err := r.queryTelemetryRows(ctx, "reload locked delivery telemetry rows", `
+		SELECT `+deliveryTelemetrySelectColumns()+`
+		FROM youtube_notification_delivery_telemetry
+		WHERE id = ANY($1)
+		  AND locked_at = $2
+		ORDER BY event_at ASC
+	`, candidateIDs, now)
+	if err != nil {
+		return nil, err
 	}
 	if err := r.refreshLockedRows(ctx, locked); err != nil {
 		return nil, err
@@ -192,14 +266,11 @@ func (r *DeliveryTelemetryRepository) MarkLoggedBatch(ctx context.Context, ids [
 	}
 
 	now := time.Now().UTC()
-	if err := r.db.WithContext(ctx).
-		Model(&domain.YouTubeNotificationDeliveryTelemetry{}).
-		Where("id IN ?", uniqueIDs).
-		Updates(map[string]any{
-			"logged_at": now,
-			"locked_at": nil,
-			"error":     "",
-		}).Error; err != nil {
+	if _, err := r.db.Exec(ctx, `
+		UPDATE youtube_notification_delivery_telemetry
+		SET logged_at = $1, locked_at = NULL, error = ''
+		WHERE id = ANY($2)
+	`, now, uniqueIDs); err != nil {
 		return fmt.Errorf("mark delivery telemetry logged: %w", err)
 	}
 
@@ -213,14 +284,11 @@ func (r *DeliveryTelemetryRepository) MarkRetryBatch(ctx context.Context, ids []
 	}
 
 	nextAttemptAt := time.Now().UTC().Add(backoff)
-	if err := r.db.WithContext(ctx).
-		Model(&domain.YouTubeNotificationDeliveryTelemetry{}).
-		Where("id IN ?", uniqueIDs).
-		Updates(map[string]any{
-			"locked_at":       nil,
-			"next_attempt_at": nextAttemptAt,
-			"error":           truncateString(errMsg, 500),
-		}).Error; err != nil {
+	if _, err := r.db.Exec(ctx, `
+		UPDATE youtube_notification_delivery_telemetry
+		SET locked_at = NULL, next_attempt_at = $1, error = $2
+		WHERE id = ANY($3)
+	`, nextAttemptAt, truncateString(errMsg, 500), uniqueIDs); err != nil {
 		return fmt.Errorf("mark delivery telemetry retry: %w", err)
 	}
 
@@ -246,20 +314,21 @@ func (r *DeliveryTelemetryRepository) refreshLockedRows(
 			continue
 		}
 
-		if err := r.db.WithContext(ctx).
-			Model(&domain.YouTubeNotificationDeliveryTelemetry{}).
-			Where("id = ?", enriched[i].ID).
-			Updates(map[string]any{
-				"actual_published_at":            enriched[i].ActualPublishedAt,
-				"alarm_sent_at":                  enriched[i].AlarmSentAt,
-				"alarm_latency_millis":           enriched[i].AlarmLatencyMillis,
-				"detected_at":                    enriched[i].DetectedAt,
-				"observation_status":             normalizeDeliveryTelemetryObservationStatus(enriched[i].ObservationStatus),
-				"observation_runtime_name":       strings.TrimSpace(enriched[i].ObservationRuntimeName),
-				"observation_bigbang_cutover_at": enriched[i].ObservationBigBangCutoverAt,
-				"observation_started_at":         enriched[i].ObservationStartedAt,
-				"observation_ended_at":           enriched[i].ObservationEndedAt,
-			}).Error; err != nil {
+		if _, err := r.db.Exec(ctx, `
+			UPDATE youtube_notification_delivery_telemetry
+			SET actual_published_at = $1,
+			    alarm_sent_at = $2,
+			    alarm_latency_millis = $3,
+			    detected_at = $4,
+			    observation_status = $5,
+			    observation_runtime_name = $6,
+			    observation_bigbang_cutover_at = $7,
+			    observation_started_at = $8,
+			    observation_ended_at = $9
+			WHERE id = $10
+		`, enriched[i].ActualPublishedAt, enriched[i].AlarmSentAt, enriched[i].AlarmLatencyMillis, enriched[i].DetectedAt,
+			normalizeDeliveryTelemetryObservationStatus(enriched[i].ObservationStatus), strings.TrimSpace(enriched[i].ObservationRuntimeName),
+			enriched[i].ObservationBigBangCutoverAt, enriched[i].ObservationStartedAt, enriched[i].ObservationEndedAt, enriched[i].ID); err != nil {
 			return fmt.Errorf("refresh locked delivery telemetry rows: update row %d: %w", enriched[i].ID, err)
 		}
 		rows[i] = enriched[i]
@@ -273,15 +342,14 @@ func (r *DeliveryTelemetryRepository) DeleteLoggedBefore(ctx context.Context, cu
 		return 0, nil
 	}
 
-	result := r.db.WithContext(ctx).
-		Where("logged_at IS NOT NULL").
-		Where("event_at < ?", cutoff.UTC()).
-		Delete(&domain.YouTubeNotificationDeliveryTelemetry{})
-	if result.Error != nil {
-		return 0, fmt.Errorf("delete delivery telemetry before cutoff: %w", result.Error)
+	tag, err := r.db.Exec(ctx, `
+		DELETE FROM youtube_notification_delivery_telemetry
+		WHERE logged_at IS NOT NULL AND event_at < $1
+	`, cutoff.UTC())
+	if err != nil {
+		return 0, fmt.Errorf("delete delivery telemetry before cutoff: %w", err)
 	}
-
-	return result.RowsAffected, nil
+	return tag.RowsAffected(), nil
 }
 
 func collectTelemetryOutboxIDs(rows []domain.YouTubeNotificationDeliveryTelemetry) []int64 {

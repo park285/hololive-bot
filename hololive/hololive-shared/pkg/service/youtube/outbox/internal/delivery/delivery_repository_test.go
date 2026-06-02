@@ -29,10 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func TestUniqueStrings(t *testing.T) {
@@ -178,9 +176,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteDeliveryModel{}))
+	db := newDeliveryTestDB(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	currentLockedAt := staleLockedAt.Add(time.Minute)
@@ -194,8 +190,8 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 	}
 	require.NoError(t, db.Create(&row).Error)
 
-	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	err = repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: &staleLockedAt}}, 3, time.Minute, "stale failure")
+	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	err := repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: &staleLockedAt}}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery
@@ -211,9 +207,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnoth
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteDeliveryModel{}))
+	db := newDeliveryTestDB(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	sentAt := time.Now().UTC()
@@ -227,8 +221,8 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnoth
 	}
 	require.NoError(t, db.Create(&row).Error)
 
-	repository := NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	err = repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: &staleLockedAt}}, 3, time.Minute, "stale failure")
+	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	err := repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: &staleLockedAt}}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery

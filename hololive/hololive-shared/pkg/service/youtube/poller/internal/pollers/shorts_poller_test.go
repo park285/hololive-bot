@@ -23,7 +23,7 @@ import (
 )
 
 func TestShortsPollerPollPersistsPublishedAtFromScrapeAndDetectedAt(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -131,7 +131,7 @@ func TestShortsPollerPollPersistsPublishedAtFromScrapeAndDetectedAt(t *testing.T
 }
 
 func TestShortsPollerPollDeduplicatesCollectedShortsByCanonicalPostID(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -211,7 +211,7 @@ func TestShortsPollerPollDeduplicatesCollectedShortsByCanonicalPostID(t *testing
 }
 
 func TestShortsPoller_RoutedAsyncResolverSkipsRSSPublishedAtLookup(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -271,7 +271,7 @@ func TestShortsPoller_RoutedAsyncResolverSkipsRSSPublishedAtLookup(t *testing.T)
 }
 
 func TestShortsPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -357,7 +357,7 @@ func TestShortsPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) {
 }
 
 func TestShortsPollerPollWithoutRoutingNeedSkipsRSSLookup(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -406,7 +406,7 @@ func TestShortsPollerPollWithoutRoutingNeedSkipsRSSLookup(t *testing.T) {
 }
 
 func TestShortsPoller_InlineFallbackResolvesPublishedAtAndEnqueues(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -483,7 +483,7 @@ func TestShortsPoller_InlineFallbackResolvesPublishedAtAndEnqueues(t *testing.T)
 }
 
 func TestShortsPoller_InlineFallbackNotFoundSkipsNotification(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -569,7 +569,7 @@ func TestShortsPoller_InlineFallbackNotFoundSkipsNotification(t *testing.T) {
 }
 
 func TestShortsPoller_InlineFallbackResolveErrorWarnsAndSkipsNotification(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},
@@ -646,7 +646,7 @@ func TestShortsPoller_InlineFallbackResolveErrorWarnsAndSkipsNotification(t *tes
 }
 
 func TestShortsPoller_MissingPublishedAtWithNilRouteDeciderEnqueuesImmediately(t *testing.T) {
-	db := newBatchTestDB(t,
+	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
 		&domain.YouTubeContentWatermark{},

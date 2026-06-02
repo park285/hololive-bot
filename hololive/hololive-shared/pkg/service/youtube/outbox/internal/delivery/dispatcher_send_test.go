@@ -13,9 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -1093,20 +1091,20 @@ func newLoggedTestDispatcherForSend(t *testing.T, sender *testSender, renderer *
 func newGroupedTemplateRenderer(t *testing.T, key domain.TemplateKey, body string) *template.Renderer {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
+	pool := dbtest.NewPool(t)
+	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
+		t.Fatalf("clear templates: %v", err)
 	}
-	if err := db.AutoMigrate(&domain.NotificationTemplate{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	); err != nil {
-		t.Fatalf("migrate notification templates: %v", err)
-	}
-	if err := db.Create(&domain.NotificationTemplate{TemplateKey: key, Body: body}).Error; err != nil {
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO notification_templates(template_key, channel_id, body)
+		VALUES ($1, NULL, $2)
+		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+	`, key, body); err != nil {
 		t.Fatalf("seed grouped template: %v", err)
 	}
 
-	return template.NewRenderer(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func findLogEntryByMessage(t *testing.T, logBuffer *safeBuffer, message string) map[string]any {

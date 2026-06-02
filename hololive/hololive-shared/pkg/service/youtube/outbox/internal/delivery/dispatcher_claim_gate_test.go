@@ -4,18 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	"io"
 	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -49,7 +47,7 @@ func (s *claimGateTestSender) allMessages() []string {
 	return cloned
 }
 
-func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, config Config) (*Dispatcher, *gorm.DB) {
+func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, config Config) (*Dispatcher, *deliveryTestDB) {
 	t.Helper()
 
 	if config.BatchSize <= 0 {
@@ -71,15 +69,10 @@ func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, confi
 		config.DeliveryParallelism = 2
 	}
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&domain.YouTubeCommunityShortsAlarmState{},
-		&domain.YouTubeContentAlarmTracking{},
-	))
+	db := newDeliveryTestDB(t)
 
 	dispatcher := NewDispatcher(
-		db,
+		db.Pool,
 		cachemocks.NewLenientClient(),
 		sender,
 		nil,
@@ -90,7 +83,7 @@ func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, confi
 	return dispatcher, db
 }
 
-func newClaimGateTestDispatcherWithDB(t *testing.T, db *gorm.DB, sender *claimGateTestSender, config Config) *Dispatcher {
+func newClaimGateTestDispatcherWithDB(t *testing.T, db *deliveryTestDB, sender *claimGateTestSender, config Config) *Dispatcher {
 	t.Helper()
 
 	if config.BatchSize <= 0 {
@@ -113,7 +106,7 @@ func newClaimGateTestDispatcherWithDB(t *testing.T, db *gorm.DB, sender *claimGa
 	}
 
 	dispatcher := NewDispatcher(
-		db,
+		db.Pool,
 		cachemocks.NewLenientClient(),
 		sender,
 		nil,
@@ -124,19 +117,12 @@ func newClaimGateTestDispatcherWithDB(t *testing.T, db *gorm.DB, sender *claimGa
 	return dispatcher
 }
 
-func newSharedClaimGateTestDB(t *testing.T, maxOpenConns int) *gorm.DB {
+func newSharedClaimGateTestDB(t *testing.T, maxOpenConns int) *deliveryTestDB {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:claim_gate_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
+	_ = maxOpenConns
+	db := newDeliveryTestDB(t)
 
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(maxOpenConns)
-	sqlDB.SetMaxIdleConns(maxOpenConns)
-
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeCommunityShortsAlarmState{}, &domain.YouTubeContentAlarmTracking{}))
 	return db
 }
 

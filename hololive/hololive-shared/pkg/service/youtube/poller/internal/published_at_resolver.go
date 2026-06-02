@@ -6,13 +6,11 @@ import (
 	"log/slog"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 type PendingPublishedAtResolver struct {
-	db                *gorm.DB
+	db                publishedAtResolverDB
 	client            *scraper.Client
 	routeDecider      NotificationRouteDecider
 	interval          time.Duration
@@ -35,7 +33,7 @@ type publishedAtResolverCandidateResult struct {
 }
 
 func NewPendingPublishedAtResolver(
-	db *gorm.DB,
+	db any,
 	client *scraper.Client,
 	routeDecider NotificationRouteDecider,
 	interval time.Duration,
@@ -58,7 +56,7 @@ func NewPendingPublishedAtResolver(
 }
 
 func NewPendingPublishedAtResolverWithControls(
-	db *gorm.DB,
+	db any,
 	client *scraper.Client,
 	routeDecider NotificationRouteDecider,
 	interval time.Duration,
@@ -96,7 +94,7 @@ func NewPendingPublishedAtResolverWithControls(
 	}
 
 	return &PendingPublishedAtResolver{
-		db:                db,
+		db:                normalizePublishedAtResolverDB(db),
 		client:            client,
 		routeDecider:      routeDecider,
 		interval:          interval,

@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/park285/shared-go/pkg/stringutil"
-	"gorm.io/gorm"
 )
 
 type ACLMode string
@@ -109,9 +108,9 @@ const (
 )
 
 type Settings struct {
-	ID    uint   `gorm:"primaryKey"`
-	Key   string `gorm:"uniqueIndex;size:64"`
-	Value string `gorm:"type:text"`
+	ID    uint   `db:"id"`
+	Key   string `db:"key"`
+	Value string `db:"value"`
 }
 
 func (Settings) TableName() string {
@@ -119,9 +118,9 @@ func (Settings) TableName() string {
 }
 
 type Room struct {
-	ID       uint   `gorm:"primaryKey"`
-	RoomID   string `gorm:"uniqueIndex:idx_room_list;size:64"`
-	ListType string `gorm:"uniqueIndex:idx_room_list;size:16;default:whitelist"`
+	ID       uint   `db:"id"`
+	RoomID   string `db:"room_id"`
+	ListType string `db:"list_type"`
 }
 
 func (Room) TableName() string {
@@ -130,7 +129,7 @@ func (Room) TableName() string {
 
 // PostgreSQL을 영구 저장소로 사용하고, 성능을 위해 인메모리 및 Valkey 캐시를 활용한다.
 type Service struct {
-	db     *gorm.DB
+	store  aclStore
 	cache  cache.Client
 	logger *slog.Logger
 
@@ -152,7 +151,7 @@ func (s *Service) IsReady() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.db != nil && s.cache != nil && s.logger != nil &&
+	return s.store != nil && s.cache != nil && s.logger != nil &&
 		s.whitelistRooms != nil && s.blacklistRooms != nil
 }
 
@@ -170,7 +169,7 @@ func NewACLService(
 		logger = slog.Default()
 	}
 
-	db, err := aclDatabase(postgres)
+	store, err := aclStoreFromClient(postgres)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +184,7 @@ func NewACLService(
 	normalizedRooms := normalizeRoomList(defaultRooms)
 
 	service := &Service{
-		db:             db,
+		store:          store,
 		cache:          cacheClient,
 		logger:         logger,
 		enabled:        defaultEnabled,
@@ -213,15 +212,15 @@ func NewACLService(
 	return service, nil
 }
 
-func aclDatabase(postgres database.Client) (*gorm.DB, error) {
+func aclStoreFromClient(postgres database.Client) (aclStore, error) {
 	if postgres == nil {
 		return nil, fmt.Errorf("postgres service is nil")
 	}
-	db := postgres.GetGormDB()
-	if db == nil {
-		return nil, fmt.Errorf("gorm db is nil")
+	pool := postgres.GetPool()
+	if pool == nil {
+		return nil, fmt.Errorf("postgres pool is nil")
 	}
-	return db, nil
+	return newPgxACLStore(pool), nil
 }
 
 func (s *Service) addDefaultRooms(rooms []string) {

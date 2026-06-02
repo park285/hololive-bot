@@ -15,7 +15,7 @@ import (
 
 func (d *ClaimManager) finalizeClaimSuccess(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 	claimAt time.Time,
@@ -40,7 +40,7 @@ func (d *ClaimManager) finalizeClaimSuccess(
 
 func (d *ClaimManager) finalizeClaimMiss(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 ) (deliveryClaimDecision, *deliveryClaimToken, error) {
@@ -57,7 +57,7 @@ func (d *ClaimManager) finalizeClaimMiss(
 
 func (d *ClaimManager) reloadAlarmStateClaimStatus(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 	action string,
@@ -77,7 +77,7 @@ func (d *ClaimManager) reloadAlarmStateClaimStatus(
 
 func (d *ClaimManager) loadClaimTrackingRow(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 ) (*domain.YouTubeContentAlarmTracking, error) {

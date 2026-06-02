@@ -19,7 +19,7 @@
 // SOFTWARE.
 
 // Package dbx: PostgreSQL 연결 공통 모듈
-// pgxpool + GORM 듀얼 지원, DSN 생성(UDS/TCP), Retry, Ping/Close 헬퍼 제공
+// pgxpool 지원, DSN 생성(UDS/TCP), Retry, Ping/Close 헬퍼 제공
 package dbx
 
 import (
@@ -92,7 +92,7 @@ func normalizeQueryExecMode(mode string) string {
 type PoolConfig struct {
 	MinConns        int           // 최소 연결 수 (pgxpool용, 기본: 5)
 	MaxConns        int           // 최대 연결 수 (기본: 20)
-	MaxIdleConns    int           // 최대 유휴 연결 수 (database/sql용, 0이면 MinConns로 fallback)
+	MaxIdleConns    int           // 최대 유휴 연결 수 (pgxpool용, 0이면 MinConns로 fallback)
 	ConnMaxLifetime time.Duration // 연결 최대 수명 (기본: 1시간)
 	ConnMaxIdleTime time.Duration // 유휴 연결 최대 시간 (기본: 30분)
 }

@@ -53,7 +53,7 @@ func (d *ClaimManager) tryClaimDelivery(
 }
 
 func shouldSkipDeliveryClaim(d *ClaimManager, outbox domain.YouTubeNotificationOutbox) bool {
-	return d == nil || d.db == nil || !isCommunityShortsDeliveryAuditKind(outbox.Kind)
+	return d == nil || isNilDB(d.db) || !isCommunityShortsDeliveryAuditKind(outbox.Kind)
 }
 
 func resolveDeliveryClaimTime(row domain.YouTubeNotificationDelivery, outbox domain.YouTubeNotificationOutbox) time.Time {
@@ -88,7 +88,7 @@ func deliveryClaimIdentityForOutbox(outbox domain.YouTubeNotificationOutbox) (st
 
 func (d *ClaimManager) isCommunityShortsDeliveryAlreadyCompleted(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 ) (bool, error) {
@@ -113,7 +113,7 @@ func communityShortsTrackingRowMarkedSent(row *domain.YouTubeContentAlarmTrackin
 
 func (d *ClaimManager) buildAlarmStateClaimRecord(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
@@ -148,7 +148,7 @@ func (d *ClaimManager) buildAlarmStateClaimRecord(
 
 func (d *ClaimManager) refreshStaleAlarmStateClaim(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 	state *domain.YouTubeCommunityShortsAlarmState,
@@ -186,7 +186,7 @@ func isStaleAlarmStateClaim(
 
 func (d *ClaimManager) acquireAlarmStateClaim(
 	ctx context.Context,
-	repository *trackingrepo.GormRepository,
+	repository *trackingrepo.PgxRepository,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,

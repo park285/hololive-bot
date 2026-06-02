@@ -8,26 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func openTelemetryLoopTestDB(t *testing.T) *gorm.DB {
+func openTelemetryLoopTestDB(t *testing.T) *deliveryTestDB {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:dispatcher_telemetry_loop_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-
-	return db
+	return newDeliveryTestDB(t)
 }
 
 func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
@@ -35,9 +24,8 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 
 	ctx := context.Background()
 	db := openTelemetryLoopTestDB(t)
-	require.NoError(t, db.AutoMigrate(&sqliteTelemetryOutboxModel{}, &sqliteTelemetryDeliveryModel{}, &sqliteTelemetryBufferModel{}, &sqliteTelemetryObservationTrackingModel{}))
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     701,
 		AttemptOrdinal: 1,
@@ -54,7 +42,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 		NextAttemptAt:  time.Now().UTC(),
 	}}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          50 * time.Millisecond,
 		TelemetryPollInterval: 20 * time.Millisecond,
@@ -62,7 +50,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 
 	dispatcher.ProcessOnceForTest(ctx)
 
-	var rows []sqliteTelemetryBufferModel
+	var rows []deliveryTelemetryTestBufferModel
 	require.NoError(t, db.Find(&rows).Error)
 	require.Len(t, rows, 1)
 	require.Nil(t, rows[0].LoggedAt)
@@ -74,9 +62,8 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 	ctx := t.Context()
 
 	db := openTelemetryLoopTestDB(t)
-	require.NoError(t, db.AutoMigrate(&sqliteTelemetryOutboxModel{}, &sqliteTelemetryDeliveryModel{}, &sqliteTelemetryBufferModel{}, &sqliteTelemetryObservationTrackingModel{}))
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     702,
 		AttemptOrdinal: 1,
@@ -93,7 +80,7 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 		NextAttemptAt:  time.Now().UTC(),
 	}}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          10 * time.Millisecond,
 		TelemetryPollInterval: 10 * time.Millisecond,
@@ -102,7 +89,7 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 	dispatcher.Start(ctx)
 
 	require.Eventually(t, func() bool {
-		var rows []sqliteTelemetryBufferModel
+		var rows []deliveryTelemetryTestBufferModel
 		if err := db.Find(&rows).Error; err != nil || len(rows) != 1 {
 			return false
 		}
@@ -117,14 +104,13 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 	defer cancel()
 
 	db := openTelemetryLoopTestDB(t)
-	require.NoError(t, db.AutoMigrate(&sqliteTelemetryOutboxModel{}, &sqliteTelemetryDeliveryModel{}, &sqliteTelemetryBufferModel{}, &sqliteTelemetryObservationTrackingModel{}))
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
 		telemetryLoopTestRow(703, 803, "short-loop-immediate", "room-loop-immediate"),
 	}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
 		TelemetryPollInterval: 20 * time.Millisecond,
@@ -163,9 +149,8 @@ func TestDispatcherTelemetryLoop_StopsOnContextCancelBeforeNextTick(t *testing.T
 	ctx, cancel := context.WithCancel(t.Context())
 
 	db := openTelemetryLoopTestDB(t)
-	require.NoError(t, db.AutoMigrate(&sqliteTelemetryOutboxModel{}, &sqliteTelemetryDeliveryModel{}, &sqliteTelemetryBufferModel{}, &sqliteTelemetryObservationTrackingModel{}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
 		TelemetryPollInterval: time.Hour,
@@ -204,10 +189,10 @@ func telemetryLoopTestRow(deliveryID, outboxID int64, contentID, roomID string) 
 	}
 }
 
-func telemetryLoopRowLogged(t *testing.T, db *gorm.DB, deliveryID int64) bool {
+func telemetryLoopRowLogged(t *testing.T, db *deliveryTestDB, deliveryID int64) bool {
 	t.Helper()
 
-	var row sqliteTelemetryBufferModel
+	var row deliveryTelemetryTestBufferModel
 	err := db.Where("delivery_id = ?", deliveryID).First(&row).Error
 	if err != nil {
 		return false

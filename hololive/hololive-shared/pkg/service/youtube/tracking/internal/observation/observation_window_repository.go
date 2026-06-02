@@ -2,13 +2,9 @@ package observation
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
-
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -34,13 +30,19 @@ func (r *windowRepository) FindCommunityShortsObservationWindow(
 	}
 
 	var record domain.YouTubeCommunityShortsObservationWindow
-	if err := r.db.WithContext(ctx).
-		Where("runtime_name = ? AND bigbang_cutover_at = ?", normalizedRuntimeName, yttimestamp.Normalize(bigBangCutoverAt)).
-		First(&record).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("find community shorts observation window: query row: %w", err)
+	found, err := getSQL(ctx, r.db, &record, "find community shorts observation window: query row", `
+		SELECT runtime_name, bigbang_cutover_at, app_version, target_channel_count,
+		       deployment_completed_at, observation_started_at, observation_ended_at,
+		       closed_at, finalized_post_baseline_at, finalized_post_count, created_at, updated_at
+		FROM youtube_community_shorts_observation_windows
+		WHERE runtime_name = ? AND bigbang_cutover_at = ?
+		LIMIT 1
+	`, normalizedRuntimeName, yttimestamp.Normalize(bigBangCutoverAt))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
 	}
 
 	return &record, nil
@@ -162,33 +164,41 @@ func (r *windowRepository) EnsureCommunityShortsObservationWindow(
 		return fmt.Errorf("ensure community shorts observation window: %w", err)
 	}
 
-	tableName := normalizedWindow.TableName()
-	updates := clause.Assignments(map[string]any{
-		"app_version": gorm.Expr(
-			"CASE WHEN " + tableName + ".app_version = '' THEN excluded.app_version ELSE " + tableName + ".app_version END",
-		),
-		"target_channel_count": gorm.Expr(
-			"CASE WHEN excluded.target_channel_count > " + tableName + ".target_channel_count THEN excluded.target_channel_count ELSE " + tableName + ".target_channel_count END",
-		),
-		"deployment_completed_at": gorm.Expr(
-			"CASE WHEN excluded.deployment_completed_at < " + tableName + ".deployment_completed_at THEN excluded.deployment_completed_at ELSE " + tableName + ".deployment_completed_at END",
-		),
-		"observation_started_at": gorm.Expr(
-			"CASE WHEN excluded.observation_started_at < " + tableName + ".observation_started_at THEN excluded.observation_started_at ELSE " + tableName + ".observation_started_at END",
-		),
-		"observation_ended_at": gorm.Expr(
-			"CASE WHEN excluded.observation_started_at < " + tableName + ".observation_started_at THEN excluded.observation_ended_at ELSE " + tableName + ".observation_ended_at END",
-		),
-		"updated_at": yttimestamp.Normalize(time.Now()),
-	})
-
-	if err := r.db.WithContext(ctx).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "runtime_name"}, {Name: "bigbang_cutover_at"}},
-			DoUpdates: updates,
-		}).
-		Create(normalizedWindow).Error; err != nil {
-		return fmt.Errorf("ensure community shorts observation window: upsert row: %w", err)
+	now := yttimestamp.Normalize(time.Now())
+	if _, err := execSQL(ctx, r.db, "ensure community shorts observation window: upsert row", `
+		INSERT INTO youtube_community_shorts_observation_windows
+			(runtime_name, bigbang_cutover_at, app_version, target_channel_count, deployment_completed_at,
+			 observation_started_at, observation_ended_at, closed_at, finalized_post_baseline_at,
+			 finalized_post_count, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (runtime_name, bigbang_cutover_at) DO UPDATE
+		SET app_version = CASE
+		        WHEN youtube_community_shorts_observation_windows.app_version = '' THEN EXCLUDED.app_version
+		        ELSE youtube_community_shorts_observation_windows.app_version
+		    END,
+		    target_channel_count = CASE
+		        WHEN EXCLUDED.target_channel_count > youtube_community_shorts_observation_windows.target_channel_count THEN EXCLUDED.target_channel_count
+		        ELSE youtube_community_shorts_observation_windows.target_channel_count
+		    END,
+		    deployment_completed_at = CASE
+		        WHEN EXCLUDED.deployment_completed_at < youtube_community_shorts_observation_windows.deployment_completed_at THEN EXCLUDED.deployment_completed_at
+		        ELSE youtube_community_shorts_observation_windows.deployment_completed_at
+		    END,
+		    observation_started_at = CASE
+		        WHEN EXCLUDED.observation_started_at < youtube_community_shorts_observation_windows.observation_started_at THEN EXCLUDED.observation_started_at
+		        ELSE youtube_community_shorts_observation_windows.observation_started_at
+		    END,
+		    observation_ended_at = CASE
+		        WHEN EXCLUDED.observation_started_at < youtube_community_shorts_observation_windows.observation_started_at THEN EXCLUDED.observation_ended_at
+		        ELSE youtube_community_shorts_observation_windows.observation_ended_at
+		    END,
+		    updated_at = EXCLUDED.updated_at
+	`, normalizedWindow.RuntimeName, normalizedWindow.BigBangCutoverAt, normalizedWindow.AppVersion,
+		normalizedWindow.TargetChannelCount, normalizedWindow.DeploymentCompletedAt,
+		normalizedWindow.ObservationStartedAt, normalizedWindow.ObservationEndedAt,
+		normalizedWindow.ClosedAt, normalizedWindow.FinalizedPostBaselineAt,
+		normalizedWindow.FinalizedPostCount, now, now); err != nil {
+		return err
 	}
 
 	return nil
@@ -219,16 +229,14 @@ func (r *windowRepository) closeCommunityShortsObservationWindow(
 		return fmt.Errorf("close community shorts observation window: closed at is empty")
 	}
 
-	if err := r.db.WithContext(ctx).
-		Model(&domain.YouTubeCommunityShortsObservationWindow{}).
-		Where("runtime_name = ? AND bigbang_cutover_at = ?", normalizedRuntimeName, normalizedCutoverAt).
-		Where("closed_at IS NULL").
-		Where("observation_ended_at <= ?", normalizedClosedAt).
-		Updates(map[string]any{
-			"closed_at":  normalizedClosedAt,
-			"updated_at": normalizedClosedAt,
-		}).Error; err != nil {
-		return fmt.Errorf("close community shorts observation window: update row: %w", err)
+	if _, err := execSQL(ctx, r.db, "close community shorts observation window: update row", `
+		UPDATE youtube_community_shorts_observation_windows
+		SET closed_at = ?, updated_at = ?
+		WHERE runtime_name = ? AND bigbang_cutover_at = ?
+		  AND closed_at IS NULL
+		  AND observation_ended_at <= ?
+	`, normalizedClosedAt, normalizedClosedAt, normalizedRuntimeName, normalizedCutoverAt, normalizedClosedAt); err != nil {
+		return err
 	}
 
 	return nil

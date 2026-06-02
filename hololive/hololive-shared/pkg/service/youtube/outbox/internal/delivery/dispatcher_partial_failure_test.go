@@ -31,10 +31,8 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -48,39 +46,39 @@ type testSender struct {
 	clientRequestIDs []string
 }
 
-type sqliteOutboxModel struct {
-	ID            int64     `gorm:"primaryKey;autoIncrement"`
-	Kind          string    `gorm:"type:text;not null"`
-	ChannelID     string    `gorm:"type:text;not null"`
-	ContentID     string    `gorm:"type:text;not null"`
-	Payload       string    `gorm:"type:text;not null"`
-	Status        string    `gorm:"type:text;not null"`
-	AttemptCount  int       `gorm:"not null"`
-	NextAttemptAt time.Time `gorm:"not null"`
+type deliveryTestOutboxModel struct {
+	ID            int64     `db:"id"`
+	Kind          string    `db:"kind"`
+	ChannelID     string    `db:"channel_id"`
+	ContentID     string    `db:"content_id"`
+	Payload       string    `db:"payload"`
+	Status        string    `db:"status"`
+	AttemptCount  int       `db:"attempt_count"`
+	NextAttemptAt time.Time `db:"next_attempt_at"`
 	CreatedAt     time.Time
 	LockedAt      *time.Time
 	SentAt        *time.Time
-	Error         string `gorm:"type:text"`
+	Error         string `db:"error"`
 }
 
-func (sqliteOutboxModel) TableName() string {
+func (deliveryTestOutboxModel) TableName() string {
 	return "youtube_notification_outbox"
 }
 
-type sqliteDeliveryModel struct {
-	ID            int64     `gorm:"primaryKey;autoIncrement"`
-	OutboxID      int64     `gorm:"not null;index:idx_ynd_outbox_room,unique"`
-	RoomID        string    `gorm:"type:text;not null;index:idx_ynd_outbox_room,unique"`
-	Status        string    `gorm:"type:text;not null"`
-	AttemptCount  int       `gorm:"not null"`
-	NextAttemptAt time.Time `gorm:"not null"`
+type deliveryTestDeliveryModel struct {
+	ID            int64     `db:"id"`
+	OutboxID      int64     `db:"outbox_id"`
+	RoomID        string    `db:"room_id"`
+	Status        string    `db:"status"`
+	AttemptCount  int       `db:"attempt_count"`
+	NextAttemptAt time.Time `db:"next_attempt_at"`
 	CreatedAt     time.Time
 	LockedAt      *time.Time
 	SentAt        *time.Time
-	Error         string `gorm:"type:text"`
+	Error         string `db:"error"`
 }
 
-func (sqliteDeliveryModel) TableName() string {
+func (deliveryTestDeliveryModel) TableName() string {
 	return "youtube_notification_delivery"
 }
 
@@ -109,11 +107,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	now := time.Now()
 	item := domain.YouTubeNotificationOutbox{
@@ -129,7 +123,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 	require.NoError(t, db.Create(&item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -153,11 +147,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	now := time.Now()
 	item := domain.YouTubeNotificationOutbox{
@@ -173,7 +163,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 	require.NoError(t, db.Create(&item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -197,11 +187,7 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	now := time.Now()
 	shortsItem := domain.YouTubeNotificationOutbox{
@@ -228,7 +214,7 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 	require.NoError(t, db.Create(&communityItem).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -244,7 +230,7 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 		},
 	})
 
-	var rows []sqliteDeliveryModel
+	var rows []deliveryTestDeliveryModel
 	require.NoError(t, db.Order("outbox_id ASC, room_id ASC").Find(&rows).Error)
 	require.Len(t, rows, 2)
 	assert.Equal(t, shortsItem.ID, rows[0].OutboxID)
@@ -257,11 +243,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}, &sqliteDeliveryModel{}, &sqliteTrackingModel{}, &sqliteTelemetryBufferModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	cacheClient := cachemocks.NewLenientClient()
 
@@ -276,7 +258,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 		NextAttemptAt: now,
 	}
 	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&sqliteTrackingModel{
+	require.NoError(t, db.Create(&deliveryTestTrackingModel{
 		Kind:       string(item.Kind),
 		ContentID:  item.ContentID,
 		ChannelID:  item.ChannelID,
@@ -293,7 +275,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	require.NoError(t, db.Create(&delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cacheClient, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db.Pool, cacheClient, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -310,12 +292,12 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	require.NoError(t, dispatcher.claim.delivery.MarkSentBatch(ctx, result.successDeliveryIDs))
 	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.touchedOutboxIDs))
 
-	var updatedDelivery sqliteDeliveryModel
+	var updatedDelivery deliveryTestDeliveryModel
 	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedDelivery.Status)
 	require.NotNil(t, updatedDelivery.SentAt)
 
-	var updatedOutbox sqliteOutboxModel
+	var updatedOutbox deliveryTestOutboxModel
 	require.NoError(t, db.First(&updatedOutbox, item.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedOutbox.Status)
 	require.NotNil(t, updatedOutbox.SentAt)

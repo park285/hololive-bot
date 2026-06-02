@@ -54,35 +54,42 @@ func (r *DeliveryTelemetryRepository) loadBackfillCandidates(
 	since time.Time,
 ) ([]deliveryTelemetryBackfillCandidate, error) {
 	var candidates []deliveryTelemetryBackfillCandidate
-	query := r.db.WithContext(ctx).
-		Table("youtube_notification_delivery AS d").
-		Select(strings.Join([]string{
-			"d.id AS delivery_id",
-			"d.outbox_id AS outbox_id",
-			"d.room_id AS room_id",
-			"d.status AS status",
-			"d.attempt_count AS attempt_count",
-			"d.error AS delivery_error",
-			"d.sent_at AS delivery_sent_at",
-			"d.locked_at AS delivery_locked_at",
-			"d.created_at AS delivery_created_at",
-			"o.kind AS kind",
-			"o.channel_id AS channel_id",
-			"o.content_id AS content_id",
-			"o.payload AS payload",
-		}, ", ")).
-		Joins("JOIN youtube_notification_outbox o ON o.id = d.outbox_id").
-		Where("o.kind IN ?", []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}).
-		Where(`
+	query := `
+		SELECT ` + strings.Join([]string{
+		"d.id AS delivery_id",
+		"d.outbox_id AS outbox_id",
+		"d.room_id AS room_id",
+		"d.status AS status",
+		"d.attempt_count AS attempt_count",
+		"d.error AS delivery_error",
+		"d.sent_at AS delivery_sent_at",
+		"d.locked_at AS delivery_locked_at",
+		"d.created_at AS delivery_created_at",
+		"o.kind AS kind",
+		"o.channel_id AS channel_id",
+		"o.content_id AS content_id",
+		"o.payload::text AS payload",
+	}, ", ") + `
+		FROM youtube_notification_delivery AS d
+		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
+		WHERE o.kind = ANY(?)
+		  AND (
 			(d.status = ? AND d.sent_at IS NOT NULL)
-			OR (d.status IN (?, ?) AND d.attempt_count > 0 AND COALESCE(d.error, '') <> '')
-		`, domain.OutboxStatusSent, domain.OutboxStatusPending, domain.OutboxStatusFailed)
-	if !since.IsZero() {
-		query = query.Where("COALESCE(d.sent_at, d.locked_at, d.created_at) >= ?", since.UTC())
+			OR (d.status = ANY(?) AND d.attempt_count > 0 AND COALESCE(d.error, '') <> '')
+		  )
+	`
+	args := []any{
+		[]domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost},
+		domain.OutboxStatusSent,
+		[]domain.OutboxStatus{domain.OutboxStatusPending, domain.OutboxStatusFailed},
 	}
-	query = query.Order("COALESCE(d.sent_at, d.locked_at, d.created_at) ASC").
-		Limit(limit)
-	if err := query.Scan(&candidates).Error; err != nil {
+	if !since.IsZero() {
+		query += " AND COALESCE(d.sent_at, d.locked_at, d.created_at) >= ?"
+		args = append(args, since.UTC())
+	}
+	query += " ORDER BY COALESCE(d.sent_at, d.locked_at, d.created_at) ASC LIMIT ?"
+	args = append(args, limit)
+	if err := selectDeliverySQL(ctx, r.db, &candidates, "backfill delivery telemetry candidates", query, args...); err != nil {
 		return nil, fmt.Errorf("backfill delivery telemetry candidates: %w", err)
 	}
 

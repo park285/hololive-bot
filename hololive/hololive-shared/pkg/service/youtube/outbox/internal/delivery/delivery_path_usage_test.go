@@ -5,9 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -16,14 +14,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&sqliteTelemetryOutboxModel{},
-		&sqliteTelemetryBufferModel{},
-		&sqliteTelemetryTrackingModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
@@ -34,7 +25,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 	zeroPublishedAt := now.Add(-70 * time.Minute)
 	zeroDetectedAt := now.Add(-65 * time.Minute)
 
-	communityOutbox := sqliteTelemetryOutboxModel{
+	communityOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_route_community",
 		ContentID:     "post-route-community",
@@ -44,7 +35,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-2 * time.Hour),
 	}
-	shortOutbox := sqliteTelemetryOutboxModel{
+	shortOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindNewShort),
 		ChannelID:     "UC_route_short",
 		ContentID:     "short-route",
@@ -57,7 +48,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 	require.NoError(t, db.Create(&communityOutbox).Error)
 	require.NoError(t, db.Create(&shortOutbox).Error)
 
-	require.NoError(t, db.Create([]sqliteTelemetryTrackingModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
 		{
 			Kind:              string(domain.OutboxKindCommunityPost),
 			ContentID:         communityOutbox.ContentID,
@@ -91,7 +82,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 	legacyTraceAt := now.Add(-105 * time.Minute)
 	shortSuccessAt := now.Add(-45 * time.Minute)
 
-	require.NoError(t, db.Create([]sqliteTelemetryBufferModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     1001,
 			AttemptOrdinal: 1,
@@ -143,7 +134,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	rows, err := repository.ListPostDeliveryPathUsageSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, rows, 4)

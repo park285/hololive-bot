@@ -8,9 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -19,9 +17,7 @@ func TestStatusUpdaterMarkSentBatchUpdatesPendingRowsOnly(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}))
+	db := newDeliveryTestDB(t)
 
 	lockedAt := time.Now().UTC().Add(-time.Minute)
 	pending := domain.YouTubeNotificationOutbox{
@@ -49,7 +45,7 @@ func TestStatusUpdaterMarkSentBatchUpdatesPendingRowsOnly(t *testing.T) {
 	require.NoError(t, db.Create(&pending).Error)
 	require.NoError(t, db.Create(&failed).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markSentBatch(ctx, []int64{pending.ID, pending.ID, failed.ID})
 
 	var gotPending domain.YouTubeNotificationOutbox
@@ -71,9 +67,7 @@ func TestStatusUpdaterMarkFailedSchedulesRetryBeforeMaxRetries(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}))
+	db := newDeliveryTestDB(t)
 
 	lockedAt := time.Now().UTC().Add(-time.Minute)
 	item := domain.YouTubeNotificationOutbox{
@@ -88,7 +82,7 @@ func TestStatusUpdaterMarkFailedSchedulesRetryBeforeMaxRetries(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	before := time.Now().UTC()
 	updater.markFailed(ctx, item.ID, "temporary failure")
 
@@ -106,9 +100,7 @@ func TestStatusUpdaterMarkFailedMarksPermanentAtMaxRetriesAndTruncatesReason(t *
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}))
+	db := newDeliveryTestDB(t)
 
 	lockedAt := time.Now().UTC().Add(-time.Minute)
 	item := domain.YouTubeNotificationOutbox{
@@ -123,7 +115,7 @@ func TestStatusUpdaterMarkFailedMarksPermanentAtMaxRetriesAndTruncatesReason(t *
 	}
 	require.NoError(t, db.Create(&item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markFailed(ctx, item.ID, strings.Repeat("가", 600))
 
 	var got domain.YouTubeNotificationOutbox
@@ -139,9 +131,7 @@ func TestStatusUpdaterMarkSentIfLockedSkipsRowsRelockedByAnotherWorker(t *testin
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}))
+	db := newDeliveryTestDB(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	currentLockedAt := staleLockedAt.Add(time.Minute)
@@ -157,7 +147,7 @@ func TestStatusUpdaterMarkSentIfLockedSkipsRowsRelockedByAnotherWorker(t *testin
 	}
 	require.NoError(t, db.Create(&item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markSentIfLocked(ctx, item.ID, &staleLockedAt)
 
 	var got domain.YouTubeNotificationOutbox
@@ -172,9 +162,7 @@ func TestStatusUpdaterMarkFailedIfLockedSkipsRowsCompletedByAnotherWorker(t *tes
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}))
+	db := newDeliveryTestDB(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	sentAt := time.Now().UTC()
@@ -190,7 +178,7 @@ func TestStatusUpdaterMarkFailedIfLockedSkipsRowsCompletedByAnotherWorker(t *tes
 	}
 	require.NoError(t, db.Create(&item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markFailedIfLocked(ctx, item.ID, &staleLockedAt, "stale failure")
 
 	var got domain.YouTubeNotificationOutbox

@@ -253,7 +253,7 @@ func TestRepositoryListCommunityAlarmSentHistoriesByFinalizedObservationWindow(t
 		},
 	}))
 
-	require.NoError(t, repository.db.Create([]domain.YouTubeCommunityShortsObservationPostBaseline{
+	insertObservationBaselinesForTest(t, repository.db, []domain.YouTubeCommunityShortsObservationPostBaseline{
 		{
 			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
@@ -293,7 +293,7 @@ func TestRepositoryListCommunityAlarmSentHistoriesByFinalizedObservationWindow(t
 			DetectedAt:        shortDetectedAt,
 			FinalizedAt:       finalizedAt,
 		},
-	}).Error)
+	})
 
 	rows, err := repository.ListCommunityAlarmSentHistoriesByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
@@ -400,7 +400,7 @@ func TestRepositoryListShortsAlarmSentHistoriesByFinalizedObservationWindow(t *t
 		},
 	}))
 
-	require.NoError(t, repository.db.Create([]domain.YouTubeCommunityShortsObservationPostBaseline{
+	insertObservationBaselinesForTest(t, repository.db, []domain.YouTubeCommunityShortsObservationPostBaseline{
 		{
 			RuntimeName:       "youtube-producer",
 			BigBangCutoverAt:  cutoverAt,
@@ -440,7 +440,7 @@ func TestRepositoryListShortsAlarmSentHistoriesByFinalizedObservationWindow(t *t
 			DetectedAt:       pendingShortDetectedAt,
 			FinalizedAt:      finalizedAt,
 		},
-	}).Error)
+	})
 
 	rows, err := repository.ListShortsAlarmSentHistoriesByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
@@ -523,8 +523,7 @@ func TestRepositoryUpsertKeepsSingleTrackingRowForRepeatedSaves(t *testing.T) {
 				AlarmSentAt: &earliestAlarmSentAt,
 			}))
 
-			var rows []domain.YouTubeContentAlarmTracking
-			require.NoError(t, db.Order("content_id ASC").Find(&rows).Error)
+			rows := selectTrackingRowsForTest(t, db)
 			require.Len(t, rows, 1)
 			require.Equal(t, tc.kind, rows[0].Kind)
 			require.Equal(t, tc.canonicalID, rows[0].CanonicalContentID)
@@ -571,11 +570,7 @@ func TestRepositoryUpsertKeepsSingleTrackingRowForConcurrentSaves(t *testing.T) 
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			db := newTrackingTestDB(t)
-			sqlDB, err := db.DB()
-			require.NoError(t, err)
-			sqlDB.SetMaxOpenConns(1)
-			sqlDB.SetMaxIdleConns(1)
+			db := newTrackingTestDBWithMaxOpenConns(t, 1)
 
 			repository := NewRepository(db)
 			ctx := context.Background()
@@ -646,8 +641,7 @@ func TestRepositoryUpsertKeepsSingleTrackingRowForConcurrentSaves(t *testing.T) 
 				require.NoError(t, err)
 			}
 
-			var rows []domain.YouTubeContentAlarmTracking
-			require.NoError(t, db.Order("content_id ASC").Find(&rows).Error)
+			rows := selectTrackingRowsForTest(t, db)
 			require.Len(t, rows, 1)
 			require.Equal(t, tc.kind, rows[0].Kind)
 			require.Equal(t, tc.canonicalID, rows[0].CanonicalContentID)

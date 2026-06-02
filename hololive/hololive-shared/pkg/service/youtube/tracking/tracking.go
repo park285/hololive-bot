@@ -6,7 +6,7 @@ type AlarmSentMark = observation.AlarmSentMark
 
 type CommunityAlarmSentHistoryRow = observation.CommunityAlarmSentHistoryRow
 
-type GormRepository = observation.GormRepository
+type PgxRepository = observation.PgxRepository
 
 type ObservationAlarmSentHistoryRow = observation.ObservationAlarmSentHistoryRow
 

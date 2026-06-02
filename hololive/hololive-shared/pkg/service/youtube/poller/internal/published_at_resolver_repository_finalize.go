@@ -5,16 +5,15 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
-
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 func (r *publishedAtResolverRepository) completeFinalizePublishedAt(
 	ctx context.Context,
-	tx *gorm.DB,
-	txRepository *trackingrepo.GormRepository,
+	tx dbx.Querier,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	notification *domain.YouTubeNotificationOutbox,
 	result *publishedAtFinalizeResult,
@@ -38,8 +37,8 @@ func (r *publishedAtResolverRepository) completeFinalizePublishedAt(
 
 func (r *publishedAtResolverRepository) finalizeShort(
 	ctx context.Context,
-	tx *gorm.DB,
-	txRepository *trackingrepo.GormRepository,
+	tx dbx.Querier,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider NotificationRouteDecider,
@@ -82,8 +81,8 @@ func (r *publishedAtResolverRepository) finalizeShort(
 
 func (r *publishedAtResolverRepository) finalizeCommunity(
 	ctx context.Context,
-	tx *gorm.DB,
-	txRepository *trackingrepo.GormRepository,
+	tx dbx.Querier,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider NotificationRouteDecider,
@@ -146,29 +145,35 @@ func resolveCommunityFinalizePostID(candidate trackingrepo.PublishedAtResolution
 	return postID, nil
 }
 
-func updateShortPublishedAt(ctx context.Context, tx *gorm.DB, videoID string, publishedAt time.Time) error {
-	result := tx.WithContext(ctx).
-		Model(&domain.YouTubeVideo{}).
-		Where("video_id = ?", videoID).
-		Update("published_at", publishedAt)
-	if result.Error != nil {
-		return fmt.Errorf("update short published_at: %w", result.Error)
+func updateShortPublishedAt(ctx context.Context, tx dbx.Querier, videoID string, publishedAt time.Time) error {
+	tag, err := tx.Exec(ctx, `
+		UPDATE youtube_videos
+		SET published_at = $1
+		WHERE video_id = $2`,
+		publishedAt,
+		videoID,
+	)
+	if err != nil {
+		return fmt.Errorf("update short published_at: %w", err)
 	}
-	if result.RowsAffected == 0 {
+	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("update short published_at: video %s not found", videoID)
 	}
 	return nil
 }
 
-func updateCommunityPublishedAt(ctx context.Context, tx *gorm.DB, postID string, publishedAt time.Time) error {
-	result := tx.WithContext(ctx).
-		Model(&domain.YouTubeCommunityPost{}).
-		Where("post_id = ?", postID).
-		Update("published_at", publishedAt)
-	if result.Error != nil {
-		return fmt.Errorf("update community published_at: %w", result.Error)
+func updateCommunityPublishedAt(ctx context.Context, tx dbx.Querier, postID string, publishedAt time.Time) error {
+	tag, err := tx.Exec(ctx, `
+		UPDATE youtube_community_posts
+		SET published_at = $1
+		WHERE post_id = $2`,
+		publishedAt,
+		postID,
+	)
+	if err != nil {
+		return fmt.Errorf("update community published_at: %w", err)
 	}
-	if result.RowsAffected == 0 {
+	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("update community published_at: post %s not found", postID)
 	}
 	return nil
@@ -176,7 +181,7 @@ func updateCommunityPublishedAt(ctx context.Context, tx *gorm.DB, postID string,
 
 func upsertResolvedPublishedAtState(
 	ctx context.Context,
-	txRepository *trackingrepo.GormRepository,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	scope string,
@@ -220,7 +225,7 @@ func upsertResolvedPublishedAtState(
 
 func maybeAuthorizePublishedAtNotification(
 	ctx context.Context,
-	txRepository *trackingrepo.GormRepository,
+	txRepository *trackingrepo.PgxRepository,
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	enqueueAllowed bool,

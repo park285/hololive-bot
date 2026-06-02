@@ -5,9 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -16,14 +14,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 	t.Parallel()
 
 	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&sqliteTelemetryOutboxModel{},
-		&sqliteTelemetryBufferModel{},
-		&sqliteTelemetryTrackingModel{},
-		&domain.YouTubeCommunityShortsAlarmState{},
-	))
+	db := newDeliveryTestDB(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
@@ -48,7 +39,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 	oldPublishedAt := now.Add(-30 * time.Hour)
 	oldDetectedAt := now.Add(-30*time.Hour + time.Minute)
 
-	communitySuccessOutbox := sqliteTelemetryOutboxModel{
+	communitySuccessOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_A",
 		ContentID:     "community-success",
@@ -58,7 +49,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-176 * time.Minute),
 	}
-	shortFailureOutbox := sqliteTelemetryOutboxModel{
+	shortFailureOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindNewShort),
 		ChannelID:     "UC_A",
 		ContentID:     "short-failure",
@@ -68,7 +59,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-116 * time.Minute),
 	}
-	recoveredOutbox := sqliteTelemetryOutboxModel{
+	recoveredOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_B",
 		ContentID:     "community-recovered",
@@ -78,7 +69,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-29 * time.Minute),
 	}
-	oldOutbox := sqliteTelemetryOutboxModel{
+	oldOutbox := deliveryTelemetryTestOutboxModel{
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_OLD",
 		ContentID:     "community-old",
@@ -93,7 +84,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 	require.NoError(t, db.Create(&recoveredOutbox).Error)
 	require.NoError(t, db.Create(&oldOutbox).Error)
 
-	require.NoError(t, db.Create([]sqliteTelemetryTrackingModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
 		{
 			Kind:                 string(domain.OutboxKindCommunityPost),
 			ContentID:            communitySuccessOutbox.ContentID,
@@ -152,7 +143,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 	recoveredSuccessAt := now.Add(-25 * time.Minute)
 	oldSuccessAt := now.Add(-29 * time.Hour)
 
-	require.NoError(t, db.Create([]sqliteTelemetryBufferModel{
+	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     1001,
 			AttemptOrdinal: 1,
@@ -237,7 +228,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db)
+	repository := NewDeliveryTelemetryRepository(db.Pool)
 	summaries, err := repository.ListChannelPostDeliverySummariesSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, summaries, 2)

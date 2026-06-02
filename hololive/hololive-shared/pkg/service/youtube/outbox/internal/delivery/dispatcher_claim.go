@@ -26,6 +26,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -38,77 +40,45 @@ func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.You
 	if d == nil || d.db == nil {
 		return nil, nil
 	}
-	if d.db.Dialector != nil && d.db.Name() == "sqlite" {
-		return d.fetchAndLockForPerRoomSQLite(ctx)
-	}
 
-	var items []domain.YouTubeNotificationOutbox
 	now := time.Now()
 	lockExpiry := now.Add(-d.config.LockTimeout)
 
-	if err := d.db.WithContext(ctx).Raw(`
+	rows, err := d.db.Query(ctx, `
 		WITH claim AS (
 			SELECT o.id
 			FROM youtube_notification_outbox o
-			WHERE o.status = ?
-			  AND (o.locked_at IS NULL OR o.locked_at < ?)
-			  AND o.next_attempt_at <= ?
+			WHERE o.status = $1
+			  AND (o.locked_at IS NULL OR o.locked_at < $2)
+			  AND o.next_attempt_at <= $3
 			  AND NOT EXISTS (
 				SELECT 1 FROM youtube_notification_delivery d
 				WHERE d.outbox_id = o.id
 			  )
 			ORDER BY o.created_at ASC
-			LIMIT ?
+			LIMIT $4
 			FOR UPDATE SKIP LOCKED
 		),
 		updated AS (
 			UPDATE youtube_notification_outbox o
-			SET locked_at = ?
+			SET locked_at = $5
 			FROM claim
 			WHERE o.id = claim.id
-			RETURNING o.id, o.kind, o.channel_id, o.content_id, o.payload, o.status,
-			          o.attempt_count, o.next_attempt_at, o.created_at, o.locked_at, o.sent_at, o.error
-		)
-		SELECT id, kind, channel_id, content_id, payload, status,
+				RETURNING o.id, o.kind, o.channel_id, o.content_id, o.payload::text AS payload, o.status,
+				          o.attempt_count, o.next_attempt_at, o.created_at, o.locked_at, o.sent_at, COALESCE(o.error, '') AS error
+			)
+			SELECT id, kind, channel_id, content_id, payload, status,
 		       attempt_count, next_attempt_at, created_at, locked_at, sent_at, error
 		FROM updated
 		ORDER BY created_at ASC
-	`, domain.OutboxStatusPending, lockExpiry, now, d.config.BatchSize, now).Scan(&items).Error; err != nil {
+	`, domain.OutboxStatusPending, lockExpiry, now, d.config.BatchSize, now)
+	if err != nil {
 		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)
 	}
-
-	return items, nil
-}
-
-func (d *ClaimManager) fetchAndLockForPerRoomSQLite(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
-	now := time.Now()
-	lockExpiry := now.Add(-d.config.LockTimeout)
-
-	var items []domain.YouTubeNotificationOutbox
-	if err := d.db.WithContext(ctx).
-		Where("status = ?", domain.OutboxStatusPending).
-		Where("(locked_at IS NULL OR locked_at < ?) AND next_attempt_at <= ?", lockExpiry, now).
-		Where("NOT EXISTS (SELECT 1 FROM youtube_notification_delivery d WHERE d.outbox_id = youtube_notification_outbox.id)").
-		Order("created_at ASC").
-		Limit(d.config.BatchSize).
-		Find(&items).Error; err != nil {
-		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode (sqlite): %w", err)
-	}
-	if len(items) == 0 {
-		return nil, nil
-	}
-
-	ids := collectOutboxIDs(items)
-	if err := d.db.WithContext(ctx).
-		Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id IN ?", ids).
-		Update("locked_at", now).Error; err != nil {
-		return nil, fmt.Errorf("lock outbox items for per-room mode (sqlite): %w", err)
-	}
-
-	for i := range items {
-		lockedAt := now
-		items[i].LockedAt = &lockedAt
+	defer rows.Close()
+	items, err := pgx.CollectRows(rows, scanOutboxRow)
+	if err != nil {
+		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)
 	}
 
 	return items, nil
@@ -366,9 +336,11 @@ func (d *ClaimManager) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (m
 	}
 
 	var rows []domain.YouTubeNotificationOutbox
-	if err := d.db.WithContext(ctx).
-		Where("id IN ?", uniqueIDs).
-		Find(&rows).Error; err != nil {
+	if err := selectDeliverySQL(ctx, d.db, &rows, "load outbox rows by ids", `
+			SELECT id, kind, channel_id, content_id, payload::text AS payload, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, COALESCE(error, '') AS error
+		FROM youtube_notification_outbox
+		WHERE id = ANY(?)
+	`, uniqueIDs); err != nil {
 		return nil, fmt.Errorf("load outbox rows by ids: %w", err)
 	}
 

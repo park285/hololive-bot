@@ -36,9 +36,8 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 		return nil
 	}
 
-	result := s.db.Where("key = ?", dbKeyEnabled).Assign(Settings{Value: fmt.Sprintf("%t", enabled)}).FirstOrCreate(&Settings{Key: dbKeyEnabled})
-	if result.Error != nil {
-		return fmt.Errorf("failed to save ACL enabled setting: %w", result.Error)
+	if err := s.store.UpsertSetting(ctx, dbKeyEnabled, fmt.Sprintf("%t", enabled)); err != nil {
+		return fmt.Errorf("failed to save ACL enabled setting: %w", err)
 	}
 
 	s.mu.Lock()
@@ -46,7 +45,7 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	s.mu.Unlock()
 
 	if err := s.syncSettingsToValkey(ctx); err != nil {
-		rollbackErr := s.rollbackEnabledState(current)
+		rollbackErr := s.rollbackEnabledState(ctx, current)
 		return stdErrors.Join(
 			fmt.Errorf("sync acl settings to cache: %w", err),
 			wrapACLRollbackError("rollback acl enabled", rollbackErr),
@@ -75,9 +74,8 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 		return nil
 	}
 
-	result := s.db.Where("key = ?", dbKeyMode).Assign(Settings{Value: string(normalizedMode)}).FirstOrCreate(&Settings{Key: dbKeyMode})
-	if result.Error != nil {
-		return fmt.Errorf("failed to save ACL mode setting: %w", result.Error)
+	if err := s.store.UpsertSetting(ctx, dbKeyMode, string(normalizedMode)); err != nil {
+		return fmt.Errorf("failed to save ACL mode setting: %w", err)
 	}
 
 	s.mu.Lock()
@@ -85,7 +83,7 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	s.mu.Unlock()
 
 	if err := s.syncModeToValkey(ctx); err != nil {
-		rollbackErr := s.rollbackModeState(current)
+		rollbackErr := s.rollbackModeState(ctx, current)
 		return stdErrors.Join(
 			fmt.Errorf("sync acl mode to cache: %w", err),
 			wrapACLRollbackError("rollback acl mode", rollbackErr),
@@ -119,17 +117,16 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	targetRooms[room] = struct{}{}
 	s.mu.Unlock()
 
-	result := s.db.Create(&Room{RoomID: room, ListType: listType})
-	if result.Error != nil {
+	if err := s.store.CreateRoom(ctx, room, listType); err != nil {
 		s.mu.Lock()
 		delete(s.roomsMapForMode(mode), room)
 		s.mu.Unlock()
 
-		return false, fmt.Errorf("failed to add room to database: %w", result.Error)
+		return false, fmt.Errorf("failed to add room to database: %w", err)
 	}
 
 	if _, err := s.cache.SAdd(ctx, s.valkeyKeyForMode(mode), []string{room}); err != nil {
-		rollbackErr := s.rollbackAddedRoom(mode, room, listType)
+		rollbackErr := s.rollbackAddedRoom(ctx, mode, room, listType)
 		return false, stdErrors.Join(
 			fmt.Errorf("sync acl room add to cache: %w", err),
 			wrapACLRollbackError("rollback acl room add", rollbackErr),
@@ -164,17 +161,16 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	delete(targetRooms, room)
 	s.mu.Unlock()
 
-	result := s.db.Where("room_id = ? AND list_type = ?", room, listType).Delete(&Room{})
-	if result.Error != nil {
+	if err := s.store.DeleteRoom(ctx, room, listType); err != nil {
 		s.mu.Lock()
 		s.roomsMapForMode(mode)[room] = struct{}{}
 		s.mu.Unlock()
 
-		return false, fmt.Errorf("failed to remove room from database: %w", result.Error)
+		return false, fmt.Errorf("failed to remove room from database: %w", err)
 	}
 
 	if _, err := s.cache.SRem(ctx, s.valkeyKeyForMode(mode), []string{room}); err != nil {
-		rollbackErr := s.rollbackRemovedRoom(mode, room, listType)
+		rollbackErr := s.rollbackRemovedRoom(ctx, mode, room, listType)
 		return false, stdErrors.Join(
 			fmt.Errorf("sync acl room removal to cache: %w", err),
 			wrapACLRollbackError("rollback acl room removal", rollbackErr),
@@ -197,10 +193,9 @@ func (s *Service) valkeyKeyForMode(mode ACLMode) string {
 	return aclWhitelistRoomsKey
 }
 
-func (s *Service) rollbackEnabledState(enabled bool) error {
-	result := s.db.Where("key = ?", dbKeyEnabled).Assign(Settings{Value: fmt.Sprintf("%t", enabled)}).FirstOrCreate(&Settings{Key: dbKeyEnabled})
-	if result.Error != nil {
-		return fmt.Errorf("restore enabled setting: %w", result.Error)
+func (s *Service) rollbackEnabledState(ctx context.Context, enabled bool) error {
+	if err := s.store.UpsertSetting(ctx, dbKeyEnabled, fmt.Sprintf("%t", enabled)); err != nil {
+		return fmt.Errorf("restore enabled setting: %w", err)
 	}
 
 	s.mu.Lock()
@@ -210,10 +205,9 @@ func (s *Service) rollbackEnabledState(enabled bool) error {
 	return nil
 }
 
-func (s *Service) rollbackModeState(mode ACLMode) error {
-	result := s.db.Where("key = ?", dbKeyMode).Assign(Settings{Value: string(mode)}).FirstOrCreate(&Settings{Key: dbKeyMode})
-	if result.Error != nil {
-		return fmt.Errorf("restore mode setting: %w", result.Error)
+func (s *Service) rollbackModeState(ctx context.Context, mode ACLMode) error {
+	if err := s.store.UpsertSetting(ctx, dbKeyMode, string(mode)); err != nil {
+		return fmt.Errorf("restore mode setting: %w", err)
 	}
 
 	s.mu.Lock()
@@ -223,10 +217,9 @@ func (s *Service) rollbackModeState(mode ACLMode) error {
 	return nil
 }
 
-func (s *Service) rollbackAddedRoom(mode ACLMode, room, listType string) error {
-	result := s.db.Where("room_id = ? AND list_type = ?", room, listType).Delete(&Room{})
-	if result.Error != nil {
-		return fmt.Errorf("delete added room from database: %w", result.Error)
+func (s *Service) rollbackAddedRoom(ctx context.Context, mode ACLMode, room, listType string) error {
+	if err := s.store.DeleteRoom(ctx, room, listType); err != nil {
+		return fmt.Errorf("delete added room from database: %w", err)
 	}
 
 	s.mu.Lock()
@@ -236,10 +229,9 @@ func (s *Service) rollbackAddedRoom(mode ACLMode, room, listType string) error {
 	return nil
 }
 
-func (s *Service) rollbackRemovedRoom(mode ACLMode, room, listType string) error {
-	result := s.db.Create(&Room{RoomID: room, ListType: listType})
-	if result.Error != nil {
-		return fmt.Errorf("recreate removed room in database: %w", result.Error)
+func (s *Service) rollbackRemovedRoom(ctx context.Context, mode ACLMode, room, listType string) error {
+	if err := s.store.CreateRoom(ctx, room, listType); err != nil {
+		return fmt.Errorf("recreate removed room in database: %w", err)
 	}
 
 	s.mu.Lock()

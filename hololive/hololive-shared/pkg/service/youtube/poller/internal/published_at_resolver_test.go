@@ -58,8 +58,8 @@ func TestPendingPublishedAtResolver_EnqueuesOnceAfterResolution(t *testing.T) {
 	require.Len(t, outboxRows, 1)
 	assert.Equal(t, domain.OutboxKindNewShort, outboxRows[0].Kind)
 	assert.Equal(t, "short:short-1", outboxRows[0].ContentID)
-	assert.Contains(t, outboxRows[0].Payload, `"canonical_post_id":"short:short-1"`)
-	assert.Contains(t, outboxRows[0].Payload, `"published_at":"2026-04-10T01:11:12Z"`)
+	assert.Contains(t, outboxRows[0].Payload, `"canonical_post_id": "short:short-1"`)
+	assert.Contains(t, outboxRows[0].Payload, `"published_at": "2026-04-10T01:11:12Z"`)
 }
 
 func TestPendingPublishedAtResolver_SkipsCandidateWhenPeerOwned(t *testing.T) {
@@ -350,7 +350,7 @@ func TestPendingPublishedAtResolver_ReEnqueuesResolvedShortDispatchGapWithoutRes
 	require.Len(t, outboxRows, 1)
 	assert.Equal(t, domain.OutboxKindNewShort, outboxRows[0].Kind)
 	assert.Equal(t, "short:short-gap", outboxRows[0].ContentID)
-	assert.Contains(t, outboxRows[0].Payload, `"published_at":"`+publishedAt.Format(time.RFC3339)+`"`)
+	assert.Contains(t, outboxRows[0].Payload, `"published_at": "`+publishedAt.Format(time.RFC3339)+`"`)
 
 	var alarmState domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-gap").Error)
@@ -443,7 +443,7 @@ func TestPendingPublishedAtResolver_UpdatesTrackingSourceStateAtomically(t *test
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	seedPendingShortResolution(t, db, "channel-1", "short-atomic", detectedAt)
-	require.NoError(t, db.Exec(`
+	require.NoError(t, db.ExecTest(`
 		CREATE TRIGGER fail_outbox_insert
 		BEFORE INSERT ON youtube_notification_outbox
 		BEGIN
@@ -497,7 +497,7 @@ func TestPendingPublishedAtResolver_FinalizeFailureSetsRetryAfter(t *testing.T) 
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	seedPendingShortResolution(t, db, "channel-1", "short-finalize-backoff", detectedAt)
-	require.NoError(t, db.Exec(`
+	require.NoError(t, db.ExecTest(`
 		CREATE TRIGGER fail_outbox_insert_for_retry_after
 		BEFORE INSERT ON youtube_notification_outbox
 		BEGIN
@@ -539,7 +539,7 @@ func TestPendingPublishedAtResolver_FinalizeFailureDoesNotClearRetryAfter(t *tes
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
 		Where("kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-finalize-keep-retry").
 		Update("published_at_retry_after", retryAfter).Error)
-	require.NoError(t, db.Exec(`
+	require.NoError(t, db.ExecTest(`
 		CREATE TRIGGER fail_outbox_insert_keep_retry_after
 		BEFORE INSERT ON youtube_notification_outbox
 		BEGIN
