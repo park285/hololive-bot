@@ -70,13 +70,14 @@ func loadServerConfig() ServerConfig {
 	port := sharedenv.Int("SERVER_PORT", 30001)
 
 	return ServerConfig{
-		Port:           port,
-		APIKey:         sharedenv.String("API_SECRET_KEY", ""),
-		HTTPTransports: parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
-		H2CAddr:        sharedenv.String("HOLOLIVE_H2C_ADDR", fmt.Sprintf(":%d", port)),
-		H3Addr:         sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
-		H3CertFile:     strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
-		H3KeyFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
+		Port:            port,
+		APIKey:          sharedenv.String("API_SECRET_KEY", ""),
+		HTTPTransports:  parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
+		H2CAddr:         sharedenv.String("HOLOLIVE_H2C_ADDR", fmt.Sprintf(":%d", port)),
+		H3Addr:          sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
+		H3CertFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
+		H3KeyFile:       strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
+		AdminAllowedIPs: parseCommaSeparated(sharedenv.String("ADMIN_ALLOWED_IPS", "")),
 	}
 }
 

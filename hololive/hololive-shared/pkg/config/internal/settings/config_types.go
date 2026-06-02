@@ -30,6 +30,11 @@ type ServerConfig struct {
 	H3Addr         string
 	H3CertFile     string
 	H3KeyFile      string
+
+	// AdminAllowedIPs: admin-api /api/auth/* 접근을 허용할 CIDR 목록.
+	// admin-api는 Tailscale 직결(reverse-proxy 없음)이라 RemoteAddr 기준으로 판단한다.
+	// 예: ADMIN_ALLOWED_IPS="100.100.1.0/24". 비어 있으면 전체 허용(개발 편의).
+	AdminAllowedIPs []string
 }
 
 type LoggingConfig struct {

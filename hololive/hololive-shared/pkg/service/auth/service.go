@@ -72,6 +72,9 @@ func NewService(ctx context.Context, db *gorm.DB, cacheClient cache.Client, logg
 	if config.SessionTTL <= 0 {
 		config = DefaultConfig()
 	}
+	if config.BcryptCost < bcrypt.MinCost || config.BcryptCost > bcrypt.MaxCost {
+		config.BcryptCost = DefaultBcryptCost
+	}
 
 	service := &Service{
 		db:          db,
@@ -97,7 +100,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 		return nil, newError(CodeInvalidInput, "invalid email/password/displayName", nil)
 	}
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), s.config.BcryptCost)
 	if err != nil {
 		return nil, newError(CodeInternal, "password hash failed", err)
 	}

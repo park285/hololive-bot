@@ -109,7 +109,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 		return err
 	}
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), s.config.BcryptCost)
 	if err != nil {
 		return newError(CodeInternal, "password hash failed", err)
 	}
