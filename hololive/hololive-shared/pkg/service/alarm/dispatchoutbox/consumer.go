@@ -261,6 +261,23 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 	return nil
 }
 
+func (c *Consumer) ScheduleSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	updates := make([]RetryUpdate, 0, len(envelopes))
+	now := time.Now().UTC()
+	for _, envelope := range envelopes {
+		update, ok := retryUpdateFromEnvelope(envelope, now)
+		if !ok {
+			continue
+		}
+		updates = append(updates, update)
+	}
+	if err := c.repository.ScheduleSendingRetry(ctx, updates, c.workerID); err != nil {
+		return err
+	}
+	observePGRetryScheduled(len(updates))
+	return nil
+}
+
 func retryUpdateFromEnvelope(envelope domain.AlarmQueueEnvelope, now time.Time) (RetryUpdate, bool) {
 	if envelope.DispatchOutboxID <= 0 {
 		return RetryUpdate{}, false

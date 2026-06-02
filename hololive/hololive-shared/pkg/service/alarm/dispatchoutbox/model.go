@@ -124,6 +124,7 @@ type Repository interface {
 	MarkSending(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error
 	MarkSent(ctx context.Context, ids []int64, workerID string) error
 	ScheduleRetry(ctx context.Context, updates []RetryUpdate, workerID string) error
+	ScheduleSendingRetry(ctx context.Context, updates []RetryUpdate, workerID string) error
 	MoveToDLQ(ctx context.Context, updates []TerminalUpdate, workerID string) error
 	Quarantine(ctx context.Context, updates []TerminalUpdate, workerID string) error
 	ReleaseLeased(ctx context.Context, ids []int64, workerID string) error

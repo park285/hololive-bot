@@ -22,6 +22,7 @@ var (
 	alarmDispatchPGQuarantinedTotal           prometheus.Counter
 	alarmDispatchPGDLQTotal                   prometheus.Counter
 	alarmDispatchPGRetryScheduledTotal        prometheus.Counter
+	alarmDispatchPGTransitionPartialTotal     prometheus.Counter
 )
 
 func init() {
@@ -81,6 +82,12 @@ func init() {
 			Help: "Total PG dispatch rows scheduled for retry.",
 		},
 	)
+	alarmDispatchPGTransitionPartialTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_pg_transition_partial_total",
+			Help: "Total PG dispatch mark-sending/mark-sent operations where RowsAffected < expected (concurrent worker overlap or quarantine preemption).",
+		},
+	)
 }
 
 func observeRecoveryRows(recoveryType string, rows int) {
@@ -127,4 +134,8 @@ func observePGRetryScheduled(rows int) {
 	if rows > 0 {
 		alarmDispatchPGRetryScheduledTotal.Add(float64(rows))
 	}
+}
+
+func observePGTransitionPartial() {
+	alarmDispatchPGTransitionPartialTotal.Inc()
 }

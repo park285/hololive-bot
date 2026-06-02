@@ -12,6 +12,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
+var _ Repository = (*PgxRepository)(nil)
+
 type PgxRepository struct {
 	pool   *pgxpool.Pool
 	now    func() time.Time
