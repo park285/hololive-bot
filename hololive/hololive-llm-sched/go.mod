@@ -9,7 +9,7 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go/v3 v3.37.0
-	github.com/park285/shared-go v1.5.0
+	github.com/park285/shared-go v1.5.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
