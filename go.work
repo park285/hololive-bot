@@ -1,5 +1,7 @@
 go 1.26.2
 
+toolchain go1.26.4
+
 use (
 	../iris-client-go
 	../shared-go

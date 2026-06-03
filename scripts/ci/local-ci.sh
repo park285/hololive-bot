@@ -129,14 +129,16 @@ check_go_toolchain() {
 }
 
 ensure_go_mod_toolchains() {
-    # go.mod/go.work에 정확한 patch toolchain을 고정하지 않는다(1.26.x 자동 추종).
-    # GOTOOLCHAIN=auto + go directive가 설치된 1.26.x를 사용하므로 잔존 pin만 제거한다.
+    # go.mod/go.work의 toolchain을 go1.26.4로 고정한다(1.26.4 하한 명시).
+    # GOTOOLCHAIN=auto가 더 새로운 1.26.x patch가 설치되면 그것을 선택하므로
+    # 버전 하강 없이 최신 추종은 그대로 유지된다.
     local module
+    local pin="${GO_TOOLCHAIN_PIN:-go1.26.4}"
 
-    go work edit -toolchain=none
-    go mod edit -toolchain=none
+    go work edit -toolchain="${pin}"
+    go mod edit -toolchain="${pin}"
     for module in "${GO_MODULES[@]}"; do
-        (cd "${module}" && go mod edit -toolchain=none)
+        (cd "${module}" && go mod edit -toolchain="${pin}")
     done
 }
 
