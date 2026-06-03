@@ -63,6 +63,7 @@ while IFS= read -r file; do
   rel="${file#${ROOT_DIR}/}"
 
   case "${rel}" in
+    .tmp/*|\
     .worktrees/*|\
     artifacts/*|\
     logs/*|\
@@ -99,7 +100,8 @@ done < <(
     -o -path "${ROOT_DIR}/.codex" \
     -o -path "${ROOT_DIR}/.claude" \
     -o -path "${ROOT_DIR}/.serena" \
-    -o -path "${ROOT_DIR}/.gemini" \) -prune -o \
+    -o -path "${ROOT_DIR}/.gemini" \
+    -o -path "${ROOT_DIR}/.tmp" \) -prune -o \
     -type f \( -name '*.go' -o -name '*.rs' -o -name '*.ts' -o -name '*.tsx' -o -name '*.sh' \) \
     ! -name '*_test.go' \
     ! -name '*.test.ts' \
