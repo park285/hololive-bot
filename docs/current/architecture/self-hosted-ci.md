@@ -16,7 +16,7 @@ executes attacker-modifiable repository scripts.
 - `bash`, `git`, `python3`, `unzip`, `strings`, `sudo`, `rg`, and Docker.
 - Permission for the runner user to access Docker for workflow service
   containers.
-- Go 1.26.3, or permission for `actions/setup-go` to install it.
+- Go 1.26, or permission for `actions/setup-go` to install it.
 - Rust toolchains, or permission for `dtolnay/rust-toolchain` to install them.
 - Node.js 22, or permission for `actions/setup-node` to install it.
 

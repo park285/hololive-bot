@@ -2,8 +2,6 @@ module github.com/kapu/hololive-shared
 
 go 1.26.2
 
-toolchain go1.26.3
-
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/alicebob/miniredis/v2 v2.38.0

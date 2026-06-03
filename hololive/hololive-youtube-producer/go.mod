@@ -2,8 +2,6 @@ module github.com/kapu/hololive-youtube-producer
 
 go 1.26.2
 
-toolchain go1.26.3
-
 require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.9.2

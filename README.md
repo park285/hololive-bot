@@ -6,7 +6,7 @@
 
 ## Architecture
 
-현재 운영 기준은 Go runtime 6개를 단일 호스트 Docker Compose로 실행하는 구조입니다.
+현재 운영 기준은 Go runtime 5개를 단일 호스트 Docker Compose로 실행하는 구조입니다. (`youtube-producer`는 Osaka/메인 호스트에서 3-way active-active로 확장 운영됩니다.)
 
 > 운영 기준: 2026-03-07 k8s/k3s 배포에서 단일 호스트 Docker Compose 기준으로 롤백했습니다. 현재 배포, 로그 조회, 장애 대응 절차의 기준은 Compose 문서와 `docs/current` 문서군입니다.
 
@@ -36,7 +36,7 @@ Shared libraries:
 
 ### Prerequisites
 
-- Go 1.26.3
+- Go 1.26
 - PostgreSQL
 - Valkey
 - Docker Compose for production-like local checks

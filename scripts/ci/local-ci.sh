@@ -114,22 +114,29 @@ run_step() {
 }
 
 check_go_toolchain() {
-    local required="${GO_REQUIRED_VERSION:-go1.26.3}"
+    # 1.26.x patch는 자동 추종한다: minor family만 강제하고 정확한 patch는 고정하지 않는다.
+    # 새 patch(예: go1.26.5)가 설치되면 파일 수정 없이 그대로 통과한다.
+    local family="${GO_TOOLCHAIN_FAMILY:-go1.26.}"
     local actual
     actual="$(go env GOVERSION)"
-    if [[ "${actual}" != "${required}" ]]; then
-        echo "expected ${required}, got ${actual}" >&2
-        exit 1
-    fi
+    case "${actual}" in
+        "${family}"*) ;;
+        *)
+            echo "expected ${family}x toolchain, got ${actual}" >&2
+            exit 1
+            ;;
+    esac
 }
 
 ensure_go_mod_toolchains() {
-    local required="${GO_REQUIRED_VERSION:-go1.26.3}"
+    # go.mod/go.work에 정확한 patch toolchain을 고정하지 않는다(1.26.x 자동 추종).
+    # GOTOOLCHAIN=auto + go directive가 설치된 1.26.x를 사용하므로 잔존 pin만 제거한다.
     local module
 
-    go mod edit -toolchain="${required}"
+    go work edit -toolchain=none
+    go mod edit -toolchain=none
     for module in "${GO_MODULES[@]}"; do
-        (cd "${module}" && go mod edit -toolchain="${required}")
+        (cd "${module}" && go mod edit -toolchain=none)
     done
 }
 
