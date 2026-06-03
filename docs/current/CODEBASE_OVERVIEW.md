@@ -22,7 +22,8 @@
 ├── docs/current/                   # current architecture, service, contract, runbook docs
 ├── scripts/                        # architecture, deploy, log, runtime, CI helpers
 ├── docker-compose.prod.yml         # production compose baseline
-└── docker-compose.osaka.yml        # Osaka split-host/active-active overrides
+├── docker-compose.osaka.yml        # Osaka split-host APs (youtube-producer-a/-b)
+└── docker-compose.main-ap.yml      # main-host active-active AP (youtube-producer-c, profile main-ap)
 ```
 
 `go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The five production runtime binaries are implemented in Go 1.26.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
@@ -106,7 +107,8 @@ Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS
 The production baseline is Docker Compose, not Kubernetes. The main files are:
 
 - `docker-compose.prod.yml`: production service shape;
-- `docker-compose.osaka.yml`: Osaka split-host and active-active overrides;
+- `docker-compose.osaka.yml`: Osaka split-host active-active APs (`youtube-producer-a`/`-b`);
+- `docker-compose.main-ap.yml`: main-host active-active AP (`youtube-producer-c`, profile `main-ap`);
 - `scripts/deploy/`: deployment and compose validation helpers;
 - `scripts/logs/`: status and smoke-check helpers;
 - `docs/current/runbooks/`: service-specific runbooks;
@@ -116,11 +118,12 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 
 ## Active-Active YouTube Producer Notes
 
-The Osaka `youtube-producer` active-active path runs multiple AP containers while preserving a producer-only contract. The important invariants are:
+The `youtube-producer` active-active path runs three AP containers — `youtube-producer-a`/`-b` on the Osaka host (`docker-compose.osaka.yml`) and `youtube-producer-c` on the main host (`docker-compose.main-ap.yml`, profile `main-ap`) — while preserving a producer-only contract. All three share the main Valkey lease backend (`production` namespace): Osaka a/b connect over TCP, c over the local Valkey unix socket. The important invariants are:
 
-- per-channel polling uses Valkey-backed `JobRunGuard`;
+- per-channel polling uses Valkey-backed `JobRunGuard` keyed by `(namespace, poller, channel)`, distributing jobs N-way;
 - successful polls mark a cooldown instead of simply releasing the lease;
 - peer-owned and already-completed jobs skip polling;
+- photo sync runs on AP-A and AP-C behind a global singleton lease with TTL failover; AP-B never runs it;
 - Valkey unavailable in active-active mode is fail-closed;
 - final notification delivery is still owned by `alarm-worker`.
 

@@ -2,14 +2,14 @@
 
 ## Role
 
-`youtube-producer`는 YouTube scraping/polling, outbox production, Osaka active-active AP runtime을 담당합니다. Osaka에서는 `youtube-producer-a`와 `youtube-producer-b`가 동시에 실행되며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다.
+`youtube-producer`는 YouTube scraping/polling, outbox production, 3-way active-active AP runtime을 담당합니다. Osaka 호스트에서 `youtube-producer-a`(30005)와 `youtube-producer-b`(30015)가, 메인 호스트에서 `youtube-producer-c`(30025, `docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. 셋은 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다.
 
 ## Normal status
 
 | Check | Expected |
 |---|---|
-| Health | `http://127.0.0.1:30005/health` and `http://127.0.0.1:30015/health` return success |
-| Ready | both `/ready` payloads show `mode=active-active` |
+| Health | `http://127.0.0.1:30005/health`, `:30015/health`, and `:30025/health` return success |
+| Ready | all three `/ready` payloads show `mode=active-active` |
 | Logs | no repeated poller, photo sync, outbox, DB, cache, or proxy errors |
 | Queue | produces outbox/tracking state; does not consume alarm dispatch queue |
 
@@ -27,7 +27,7 @@
 |---|---|---|
 | `SERVER_PORT` | HTTP health port | yes |
 | `YOUTUBE_INGESTION_ENABLED` | must be true for this service | yes |
-| `PHOTO_SYNC_ENABLED` | AP-A owned photo sync; active-active wraps the enabled AP in a Valkey singleton lease | yes |
+| `PHOTO_SYNC_ENABLED` | AP-A and AP-C run photo sync (`true`); a global Valkey singleton lease keeps only one active with TTL failover. AP-B is `false` | yes |
 | `SCRAPER_SCHEDULER_WORKER_COUNT` | per-AP worker cap; Osaka active-active defaults each AP to `2` | Osaka yes |
 | `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED` | enables per-job JobRunGuard and disables global runtime lease gate | Osaka yes |
 | `YOUTUBE_PRODUCER_INSTANCE_ID` | unique active-active owner token prefix per AP | Osaka yes |
@@ -42,14 +42,17 @@
 ## Logs
 
 ```bash
+# Osaka a/b
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.osaka.yml logs -f youtube-producer-a youtube-producer-b
+# 메인 호스트 c (main-ap profile)
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.main-ap.yml logs -f youtube-producer-c
 ```
 
 Expected startup and sync markers:
 - `Photo sync service started`
 - `Photo sync completed`
 
-Osaka policy: only `youtube-producer-a` has `PHOTO_SYNC_ENABLED=true`. `youtube-producer-b` is a scraping/polling failover peer only; AP-B failover does not include PhotoSync failover unless compose is deliberately changed and a live failover test is approved.
+Photo sync policy: `youtube-producer-a` and `youtube-producer-c` set `PHOTO_SYNC_ENABLED=true`; a global Valkey singleton lease lets only one of them own photo sync at a time, with TTL-based failover. `youtube-producer-b` is a scraping/polling failover peer only (`PHOTO_SYNC_ENABLED=false`) and does not participate in PhotoSync failover.
 
 ## Metrics
 
@@ -119,6 +122,12 @@ After rollout, the read-only completion check must pass:
 CHANGE_STARTED_AT=<change_started_at> ./scripts/deploy/osaka-active-active-completion-check.sh
 ```
 
+The Osaka wrapper covers `youtube-producer-a`/`youtube-producer-b` only. The main-host `youtube-producer-c` is redeployed separately on the main host, guarded by its `main-ap` profile:
+
+```bash
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+```
+
 ## Common failure modes
 
 ### 1. Polling stalls
@@ -150,6 +159,7 @@ Diagnosis:
 ```bash
 curl -fsS http://127.0.0.1:30005/ready
 curl -fsS http://127.0.0.1:30015/ready
+curl -fsS http://127.0.0.1:30025/ready
 ./scripts/logs/osaka-status.sh
 ```
 
@@ -178,7 +188,7 @@ curl http://127.0.0.1:30005/health
 
 Mitigation:
 - Check `PHOTO_SYNC_ENABLED=true`, PostgreSQL, Valkey, and Holodex/API errors.
-- Confirm the issue is on `youtube-producer-a`; `youtube-producer-b` intentionally does not run PhotoSync in the current Osaka policy.
+- Photo sync is owned by whichever of `youtube-producer-a`/`youtube-producer-c` currently holds the singleton lease; check the lease holder's logs. `youtube-producer-b` never runs PhotoSync.
 
 Rollback:
 - Roll back the previous `youtube-producer` image/config if the startup-owned photo sync path regresses.
