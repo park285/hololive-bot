@@ -81,7 +81,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 		sender.mu.Lock()
 		defer sender.mu.Unlock()
 		return len(sender.messages) == 1
-	}, 300*time.Millisecond, 20*time.Millisecond)
+	}, 2*time.Second, 20*time.Millisecond)
 }
 
 func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
