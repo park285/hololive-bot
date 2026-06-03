@@ -1,6 +1,6 @@
 # P1 Handoff: alarm-worker workerapp flatten
 
-## Status: COMPLETED ✅
+## Status: COMPLETED
 
 ## Context
 
