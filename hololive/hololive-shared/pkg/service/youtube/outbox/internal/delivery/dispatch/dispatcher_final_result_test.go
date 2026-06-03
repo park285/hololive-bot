@@ -87,44 +87,6 @@ func (finalResultTrackingModel) TableName() string {
 	return "youtube_content_alarm_tracking"
 }
 
-type finalResultTelemetryBufferModel struct {
-	ID                          int64      `db:"id"`
-	DeliveryID                  int64      `db:"delivery_id"`
-	AttemptOrdinal              int        `db:"attempt_ordinal"`
-	OutboxID                    int64      `db:"outbox_id"`
-	ChannelID                   string     `db:"channel_id"`
-	ContentID                   string     `db:"content_id"`
-	PostID                      string     `db:"post_id"`
-	RoomID                      string     `db:"room_id"`
-	AlarmType                   string     `db:"alarm_type"`
-	ActualPublishedAt           *time.Time `db:"actual_published_at"`
-	AlarmSentAt                 *time.Time `db:"alarm_sent_at"`
-	AlarmLatencyMillis          *int64     `db:"alarm_latency_millis"`
-	DetectedAt                  *time.Time `db:"detected_at"`
-	ObservationStatus           string     `db:"observation_status"`
-	ObservationRuntimeName      string     `db:"observation_runtime_name"`
-	ObservationBigBangCutoverAt *time.Time `db:"observation_bigbang_cutover_at"`
-	ObservationStartedAt        *time.Time `db:"observation_started_at"`
-	ObservationEndedAt          *time.Time `db:"observation_ended_at"`
-	DedupeKey                   string     `db:"dedupe_key"`
-	DeliveryPath                string     `db:"delivery_path"`
-	DeliveryMode                string     `db:"delivery_mode"`
-	SendResult                  string     `db:"send_result"`
-	FailureReason               string     `db:"failure_reason"`
-	AttemptStartedAt            *time.Time
-	AttemptFinishedAt           *time.Time
-	EventAt                     time.Time `db:"event_at"`
-	NextAttemptAt               time.Time `db:"next_attempt_at"`
-	CreatedAt                   time.Time
-	LockedAt                    *time.Time
-	LoggedAt                    *time.Time
-	Error                       string `db:"error"`
-}
-
-func (finalResultTelemetryBufferModel) TableName() string {
-	return "youtube_notification_delivery_telemetry"
-}
-
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testing.T) {
 	t.Parallel()
 

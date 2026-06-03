@@ -109,25 +109,6 @@ func (deliveryTelemetryTestObservationTrackingModel) TableName() string {
 	return "youtube_content_alarm_tracking"
 }
 
-type deliveryTelemetryTestObservationWindowModel struct {
-	RuntimeName             string     `db:"runtime_name"`
-	BigBangCutoverAt        time.Time  `db:"bigbang_cutover_at"`
-	AppVersion              string     `db:"app_version"`
-	TargetChannelCount      int        `db:"target_channel_count"`
-	DeploymentCompletedAt   time.Time  `db:"deployment_completed_at"`
-	ObservationStartedAt    time.Time  `db:"observation_started_at"`
-	ObservationEndedAt      time.Time  `db:"observation_ended_at"`
-	ClosedAt                *time.Time `db:"closed_at"`
-	FinalizedPostBaselineAt *time.Time `db:"finalized_post_baseline_at"`
-	FinalizedPostCount      int        `db:"finalized_post_count"`
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
-}
-
-func (deliveryTelemetryTestObservationWindowModel) TableName() string {
-	return "youtube_community_shorts_observation_windows"
-}
-
 type deliveryTelemetryTestObservationBaselineModel struct {
 	RuntimeName       string    `db:"runtime_name"`
 	BigBangCutoverAt  time.Time `db:"bigbang_cutover_at"`
