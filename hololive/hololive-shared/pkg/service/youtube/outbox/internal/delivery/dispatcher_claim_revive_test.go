@@ -32,12 +32,13 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 )
 
 // reviveTestClaimManager는 reviveStaleFailedOutbox만 행사하는 최소 ClaimManager를 만든다.
 func reviveTestClaimManager(db *deliveryTestDB) *ClaimManager {
 	return &ClaimManager{
-		db:     asDeliveryDB(db.Pool),
+		db:     store.AsDeliveryDB(db.Pool),
 		config: Config{MaxRetries: 3, LockTimeout: 5 * time.Minute},
 		logger: slog.Default(),
 	}

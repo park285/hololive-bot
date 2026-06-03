@@ -17,6 +17,7 @@ import (
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 )
 
 type routeAuditTarget struct {
@@ -253,7 +254,7 @@ func collectRouteAuditTargets(alarms []*domain.Alarm) map[routeAuditTarget][]str
 	}
 
 	for target, rooms := range targets {
-		targets[target] = uniqueStrings(rooms)
+		targets[target] = store.UniqueStrings(rooms)
 	}
 
 	return targets

@@ -12,6 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -173,7 +174,7 @@ func (d *ClaimManager) recoverSuccessfulCommunityShortsSentState(ctx context.Con
 		return nil
 	}
 
-	sentAt := canonicalSentAtNow()
+	sentAt := dispatchstate.CanonicalSentAtNow()
 	if err := deliverysql.InDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
 		return recoverSuccessfulCommunityShortsSentStateTx(ctx, tx, uniqueIDs, sentAt)
 	}); err != nil {
@@ -189,7 +190,7 @@ func recoverSuccessfulCommunityShortsSentStateTx(
 	uniqueIDs []int64,
 	sentAt time.Time,
 ) error {
-	marks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
+	marks, err := store.LoadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
 	if err != nil {
 		return fmt.Errorf("load sent-state recovery marks: %w", err)
 	}

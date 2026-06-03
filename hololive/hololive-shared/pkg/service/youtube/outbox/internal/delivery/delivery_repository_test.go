@@ -30,87 +30,9 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	"github.com/stretchr/testify/require"
 )
-
-func TestUniqueStrings(t *testing.T) {
-	t.Parallel()
-
-	in := []string{"room1", "room2", "room1", "room3", "room2"}
-	got := uniqueStrings(in)
-	want := []string{"room1", "room2", "room3"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("uniqueStrings() = %#v, want %#v", got, want)
-	}
-
-	if out := uniqueStrings(nil); out != nil {
-		t.Fatalf("uniqueStrings(nil) = %#v, want nil", out)
-	}
-}
-
-func TestResolveOutboxStatus(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		pending int64
-		sent    int64
-		failed  int64
-		want    domain.OutboxStatus
-	}{
-		{name: "pending has priority", pending: 1, sent: 10, failed: 10, want: domain.OutboxStatusPending},
-		{name: "failed when mixed sent and failed", pending: 0, sent: 1, failed: 9, want: domain.OutboxStatusFailed},
-		{name: "sent when only sent", pending: 0, sent: 1, failed: 0, want: domain.OutboxStatusSent},
-		{name: "failed when only failed", pending: 0, sent: 0, failed: 2, want: domain.OutboxStatusFailed},
-		{name: "empty fallback pending", pending: 0, sent: 0, failed: 0, want: domain.OutboxStatusPending},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := resolveOutboxStatus(tt.pending, tt.sent, tt.failed)
-			if got != tt.want {
-				t.Fatalf("resolveOutboxStatus() = %s, want %s", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestParseStatusCounts(t *testing.T) {
-	t.Parallel()
-
-	counts := []deliveryStatusCount{
-		{Status: domain.OutboxStatusPending, Count: 3},
-		{Status: domain.OutboxStatusSent, Count: 5},
-		{Status: domain.OutboxStatusFailed, Count: 1},
-	}
-
-	pending, sent, failed := parseStatusCounts(counts)
-	if pending != 3 || sent != 5 || failed != 1 {
-		t.Fatalf("parseStatusCounts() = (%d,%d,%d), want (3,5,1)", pending, sent, failed)
-	}
-}
-
-func TestGroupOutboxIDsByAggregateStatus(t *testing.T) {
-	t.Parallel()
-
-	grouped := groupOutboxIDsByAggregateStatus([]int64{1, 2, 3}, []deliveryStatusCount{
-		{OutboxID: 1, Status: domain.OutboxStatusSent, Count: 2},
-		{OutboxID: 2, Status: domain.OutboxStatusPending, Count: 1},
-		{OutboxID: 2, Status: domain.OutboxStatusSent, Count: 1},
-		{OutboxID: 3, Status: domain.OutboxStatusFailed, Count: 1},
-	})
-
-	if !reflect.DeepEqual(grouped[domain.OutboxStatusSent], []int64{1}) {
-		t.Fatalf("sent group = %#v, want [1]", grouped[domain.OutboxStatusSent])
-	}
-	if !reflect.DeepEqual(grouped[domain.OutboxStatusPending], []int64{2}) {
-		t.Fatalf("pending group = %#v, want [2]", grouped[domain.OutboxStatusPending])
-	}
-	if !reflect.DeepEqual(grouped[domain.OutboxStatusFailed], []int64{3}) {
-		t.Fatalf("failed group = %#v, want [3]", grouped[domain.OutboxStatusFailed])
-	}
-}
 
 func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 	t.Parallel()
@@ -190,8 +112,8 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 	}
 	require.NoError(t, db.Create(&row).Error)
 
-	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	err := repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: &staleLockedAt}}, 3, time.Minute, "stale failure")
+	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	err := repository.MarkFailedRetryBatchIfLocked(ctx, []store.LockToken{store.NewLockToken(row.ID, &staleLockedAt)}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery
@@ -221,8 +143,8 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnoth
 	}
 	require.NoError(t, db.Create(&row).Error)
 
-	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	err := repository.MarkFailedRetryBatchIfLocked(ctx, []deliveryLockToken{{id: row.ID, lockedAt: &staleLockedAt}}, 3, time.Minute, "stale failure")
+	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	err := repository.MarkFailedRetryBatchIfLocked(ctx, []store.LockToken{store.NewLockToken(row.ID, &staleLockedAt)}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery

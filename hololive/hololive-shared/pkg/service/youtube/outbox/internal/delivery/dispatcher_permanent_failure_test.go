@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	"github.com/park285/iris-client-go/iris"
 )
 
@@ -140,7 +141,7 @@ func TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED(t *testing.T
 		t.Fatalf("create delivery row: %v", err)
 	}
 
-	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := repository.MarkPermanentFailureBatch(ctx, []int64{row.ID}, 3, "auth"); err != nil {
 		t.Fatalf("MarkPermanentFailureBatch() error = %v", err)
 	}

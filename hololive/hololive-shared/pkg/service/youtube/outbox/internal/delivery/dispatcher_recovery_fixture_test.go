@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 )
 
 type recoveryInputFixtureSpec struct {
@@ -169,8 +170,8 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, s
 	require.NoError(t, db.Create(&sentItem).Error)
 	require.NoError(t, db.Create(&pendingItem).Error)
 
-	sentPostID := canonicalDeliveryPostID(spec.kind, sentItem.ContentID)
-	pendingPostID := canonicalDeliveryPostID(spec.kind, pendingItem.ContentID)
+	sentPostID := store.CanonicalDeliveryPostID(spec.kind, sentItem.ContentID)
+	pendingPostID := store.CanonicalDeliveryPostID(spec.kind, pendingItem.ContentID)
 
 	require.NoError(t, db.Create(&deliveryTestTrackingModel{
 		Kind:               string(sentItem.Kind),
