@@ -537,7 +537,6 @@ func normalizePollerTestTimeValue(value reflect.Value) {
 		return
 	}
 	for _, field := range value.Fields() {
-		field := field
 		if !field.CanSet() && field.Kind() != reflect.Pointer {
 			continue
 		}
