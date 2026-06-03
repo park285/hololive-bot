@@ -27,6 +27,10 @@ FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 ARG VERSION=dev
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+# GOAMD64/UPX opt-in: 기본은 현 동작(v1, 압축 없음). 배포 호스트가 AVX2(2013+)면
+# --build-arg GOAMD64=v3, 이미지 축소가 필요하면 --build-arg UPX_ENABLE=1 로 활성. 빼면 즉시 비활성.
+ARG GOAMD64=v1
+ARG UPX_ENABLE=
 RUN apk add --no-cache git
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
@@ -49,15 +53,21 @@ WORKDIR /workspace/hololive-bot/hololive/hololive-admin-api
 RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOAMD64=${GOAMD64} \
     go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/admin-api ./cmd/admin-api && \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOAMD64=${GOAMD64} \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ../hololive-youtube-producer/cmd/runtime/healthcheck && \
+    if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/admin-api /dist/bin/healthcheck; fi && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/ && \
     cp ../hololive-kakao-bot-go/config.example.json ../hololive-kakao-bot-go/official_japanese_names.json /dist/
 
 FROM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838
+
+ARG VERSION=dev
+LABEL org.opencontainers.image.title="hololive-admin-api" \
+      org.opencontainers.image.source="https://github.com/park285/hololive-bot" \
+      org.opencontainers.image.version="${VERSION}"
 
 ENV TZ=Asia/Seoul \
     USER=app \
