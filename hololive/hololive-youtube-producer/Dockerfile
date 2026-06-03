@@ -27,6 +27,11 @@ FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 ARG VERSION=dev
 ARG TARGETOS
 ARG TARGETARCH
+# GOAMD64/UPX는 opt-in: 기본은 현 동작과 동일(v1, 압축 없음).
+# 배포 호스트 CPU가 AVX2(Haswell 2013+)면 --build-arg GOAMD64=v3,
+# 이미지 축소가 필요하면 --build-arg UPX_ENABLE=1 로 켠다. 문제 시 인자만 빼면 즉시 비활성.
+ARG GOAMD64=v1
+ARG UPX_ENABLE=
 RUN apk add --no-cache git
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
@@ -50,14 +55,20 @@ WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-producer
 RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/youtube-producer ./cmd/runtime/youtube-producer && \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/runtime/healthcheck && \
+    if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/youtube-producer /dist/bin/healthcheck; fi && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 
 FROM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838
+
+ARG VERSION=dev
+LABEL org.opencontainers.image.title="hololive-youtube-producer" \
+      org.opencontainers.image.source="https://github.com/park285/hololive-bot" \
+      org.opencontainers.image.version="${VERSION}"
 
 ENV TZ=Asia/Seoul \
     USER=app \
