@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"database/sql/driver"

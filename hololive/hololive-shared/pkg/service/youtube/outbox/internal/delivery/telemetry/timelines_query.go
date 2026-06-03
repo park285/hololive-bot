@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
-func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesSince(ctx context.Context, since time.Time) ([]PostDeliveryTimeline, error) {
+func (r *Repository) ListPostDeliveryTimelinesSince(ctx context.Context, since time.Time) ([]PostDeliveryTimeline, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("list post delivery timelines since: db is nil")
 	}
@@ -27,7 +27,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesSince(ctx context
 	return rows, nil
 }
 
-func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesWithinPublishedWindow(
+func (r *Repository) ListPostDeliveryTimelinesWithinPublishedWindow(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd time.Time,
@@ -55,7 +55,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesWithinPublishedWi
 	return rows, nil
 }
 
-func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesWithinObservationWindow(
+func (r *Repository) ListPostDeliveryTimelinesWithinObservationWindow(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd time.Time,
@@ -91,7 +91,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesWithinObservation
 	return rows, nil
 }
 
-func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByFinalizedObservationWindow(
+func (r *Repository) ListPostDeliveryTimelinesByFinalizedObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,
@@ -127,7 +127,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByFinalizedObserv
 	return buildPostDeliveryTimelinesFromScanRows(scanned), nil
 }
 
-func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByOutboxIDs(ctx context.Context, outboxIDs []int64) ([]PostDeliveryTimeline, error) {
+func (r *Repository) ListPostDeliveryTimelinesByOutboxIDs(ctx context.Context, outboxIDs []int64) ([]PostDeliveryTimeline, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("list post delivery timelines by outbox ids: db is nil")
 	}
@@ -144,7 +144,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByOutboxIDs(ctx c
 	return rows, nil
 }
 
-func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByTrackingIdentities(
+func (r *Repository) ListPostDeliveryTimelinesByTrackingIdentities(
 	ctx context.Context,
 	identities []PostTrackingIdentity,
 ) ([]PostDeliveryTimeline, error) {
@@ -167,7 +167,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByTrackingIdentit
 	return rows, nil
 }
 
-func (r *DeliveryTelemetryRepository) listPostDeliveryTimelines(
+func (r *Repository) listPostDeliveryTimelines(
 	ctx context.Context,
 	windowStart *time.Time,
 	windowEnd *time.Time,

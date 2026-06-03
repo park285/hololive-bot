@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -18,6 +18,11 @@ const (
 	deliveryTelemetryObservationStatusWindowNotConfigured      = "observation_window_not_configured"
 )
 
+const (
+	ObservationStatusMatched       = deliveryTelemetryObservationStatusMatched
+	ObservationStatusOutsideWindow = deliveryTelemetryObservationStatusOutsideWindow
+)
+
 type deliveryTelemetryIdentity struct {
 	kind      domain.OutboxKind
 	contentID string
@@ -29,7 +34,7 @@ type deliveryTelemetryTrackingSnapshot struct {
 	alarmSentAt       *time.Time
 }
 
-func (r *DeliveryTelemetryRepository) enrichRows(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
+func (r *Repository) enrichRows(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -90,7 +95,7 @@ func applyDeliveryTelemetryObservationContexts(
 	}
 }
 
-func (r *DeliveryTelemetryRepository) ListByObservationWindow(
+func (r *Repository) ListByObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,
@@ -122,7 +127,7 @@ func (r *DeliveryTelemetryRepository) ListByObservationWindow(
 	return rows, nil
 }
 
-func (r *DeliveryTelemetryRepository) ListByFinalizedObservationWindow(
+func (r *Repository) ListByFinalizedObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,

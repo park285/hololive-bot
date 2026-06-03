@@ -1,10 +1,14 @@
-package delivery
+package telemetry
 
 import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+func NormalizeDeliveryTelemetryObservationStatus(status string) string {
+	return normalizeDeliveryTelemetryObservationStatus(status)
+}
 
 func normalizeDeliveryTelemetryObservationStatus(status string) string {
 	normalized := strings.TrimSpace(status)

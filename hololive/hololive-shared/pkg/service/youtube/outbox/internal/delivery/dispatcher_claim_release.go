@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -93,7 +94,7 @@ func (d *ClaimManager) logClaimIssue(
 		slog.Int64(logschema.FieldOutboxID, outbox.ID),
 		slog.String(logschema.FieldRoomID, row.RoomID),
 		slog.String(logschema.FieldChannelID, outbox.ChannelID),
-		slog.String(deliveryAuditPostIDLogField, resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload)),
+		slog.String(deliveryAuditPostIDLogField, telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload)),
 		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
 		slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
 	)

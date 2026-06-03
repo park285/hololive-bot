@@ -26,7 +26,7 @@ func newStatusUpdater(db any, logger *slog.Logger, config Config) *StatusUpdater
 		logger = slog.Default()
 	}
 	return &StatusUpdater{
-		db:     asQuerier(db),
+		db:     deliverysql.AsQuerier(db),
 		logger: logger,
 		config: config,
 	}

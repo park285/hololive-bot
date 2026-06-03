@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"testing"
@@ -49,7 +49,7 @@ func TestResolveTelemetryPostID_PrefersPayloadIdentity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, resolveTelemetryPostID(tt.kind, tt.contentID, tt.payload))
+			require.Equal(t, tt.want, ResolveTelemetryPostID(tt.kind, tt.contentID, tt.payload))
 		})
 	}
 }

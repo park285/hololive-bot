@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"strings"
@@ -6,13 +6,14 @@ import (
 	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format"
 )
 
 func normalizeTelemetryPostID(value string) string {
 	return strings.TrimSpace(value)
 }
 
-func resolveTelemetryPostID(kind domain.OutboxKind, contentID, payload string) string {
+func ResolveTelemetryPostID(kind domain.OutboxKind, contentID, payload string) string {
 	switch kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
 		return resolveVideoTelemetryPostID(contentID, payload)
@@ -24,7 +25,7 @@ func resolveTelemetryPostID(kind domain.OutboxKind, contentID, payload string) s
 }
 
 func resolveVideoTelemetryPostID(contentID, payload string) string {
-	var parsed videoPayload
+	var parsed format.VideoPayload
 	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
 		return normalizeTelemetryPostID(contentID)
 	}
@@ -33,7 +34,7 @@ func resolveVideoTelemetryPostID(contentID, payload string) string {
 }
 
 func resolveCommunityTelemetryPostID(contentID, payload string) string {
-	var parsed communityPayload
+	var parsed format.CommunityPayload
 	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
 		return normalizeTelemetryPostID(contentID)
 	}
@@ -51,7 +52,7 @@ func firstTelemetryPostID(values ...string) string {
 	return ""
 }
 
-func applyTelemetryPostID(row *domain.YouTubeNotificationDeliveryTelemetry) {
+func ApplyTelemetryPostID(row *domain.YouTubeNotificationDeliveryTelemetry) {
 	if row == nil {
 		return
 	}

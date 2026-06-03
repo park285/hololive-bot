@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"strings"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
 func applyDeliveryTelemetryObservationContext(
@@ -20,7 +21,7 @@ func applyDeliveryTelemetryObservationContext(
 	timing := communityShortsAlarmTimingForTelemetryRow(*row)
 	row.ActualPublishedAt = timing.ActualPublishedAt
 	row.AlarmSentAt = timing.AlarmSentAt
-	row.AlarmLatencyMillis = clonePostLatencyInt64(timing.AlarmLatencyMillis)
+	row.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(timing.AlarmLatencyMillis)
 	row.DetectedAt = nil
 	row.ObservationRuntimeName = ""
 	row.ObservationBigBangCutoverAt = nil
@@ -35,7 +36,7 @@ func applyDeliveryTelemetryObservationContext(
 	timing = alarmtiming.Build(snapshot.actualPublishedAt, snapshot.alarmSentAt)
 	row.ActualPublishedAt = cloneUTCTimePtr(timing.ActualPublishedAt)
 	row.AlarmSentAt = cloneUTCTimePtr(timing.AlarmSentAt)
-	row.AlarmLatencyMillis = clonePostLatencyInt64(timing.AlarmLatencyMillis)
+	row.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(timing.AlarmLatencyMillis)
 	row.DetectedAt = cloneUTCTimePtr(snapshot.detectedAt)
 
 	if timing.ActualPublishedAt == nil || timing.ActualPublishedAt.IsZero() {

@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -26,7 +26,7 @@ type deliveryTelemetryBackfillCandidate struct {
 	Payload           string
 }
 
-func (r *DeliveryTelemetryRepository) BackfillFromDelivery(ctx context.Context, limit int, since time.Time) (int, error) {
+func (r *Repository) BackfillFromDelivery(ctx context.Context, limit int, since time.Time) (int, error) {
 	if limit <= 0 {
 		return 0, nil
 	}
@@ -42,14 +42,14 @@ func (r *DeliveryTelemetryRepository) BackfillFromDelivery(ctx context.Context, 
 	if err := r.Enqueue(ctx, events); err != nil {
 		return 0, err
 	}
-	if err := r.PersistPostLatencyClassificationsByOutboxIDs(ctx, collectTelemetryOutboxIDs(events)); err != nil {
+	if err := r.PersistPostLatencyClassificationsByOutboxIDs(ctx, CollectTelemetryOutboxIDs(events)); err != nil {
 		return 0, fmt.Errorf("persist backfilled post latency classifications: %w", err)
 	}
 
 	return len(events), nil
 }
 
-func (r *DeliveryTelemetryRepository) loadBackfillCandidates(
+func (r *Repository) loadBackfillCandidates(
 	ctx context.Context,
 	limit int,
 	since time.Time,
@@ -119,7 +119,7 @@ func buildBackfillEvent(candidate deliveryTelemetryBackfillCandidate) (*domain.Y
 	eventAt := backfillCandidateEventAt(candidate)
 	dedupeKey, dedupeErr := domain.BuildYouTubeNotificationDedupeKey(candidate.Kind, candidate.ContentID)
 	if dedupeErr != nil {
-		dedupeKey = dedupeKeyLogValue(domain.YouTubeNotificationOutbox{Kind: candidate.Kind, ContentID: candidate.ContentID})
+		dedupeKey = DedupeKeyLogValue(domain.YouTubeNotificationOutbox{Kind: candidate.Kind, ContentID: candidate.ContentID})
 	}
 	attemptStartedAt := cloneUTCTimePtr(candidate.DeliveryLockedAt)
 	attemptFinishedAt := eventAt
@@ -130,11 +130,11 @@ func buildBackfillEvent(candidate deliveryTelemetryBackfillCandidate) (*domain.Y
 		OutboxID:          candidate.OutboxID,
 		ChannelID:         candidate.ChannelID,
 		ContentID:         candidate.ContentID,
-		PostID:            resolveTelemetryPostID(candidate.Kind, candidate.ContentID, candidate.Payload),
+		PostID:            ResolveTelemetryPostID(candidate.Kind, candidate.ContentID, candidate.Payload),
 		RoomID:            candidate.RoomID,
 		AlarmType:         candidate.Kind.ToAlarmType(),
 		DedupeKey:         dedupeKey,
-		DeliveryPath:      communityShortsDeliveryPath,
+		DeliveryPath:      CommunityShortsDeliveryPath,
 		DeliveryMode:      "recovered",
 		SendResult:        sendResult,
 		FailureReason:     deliverysql.TruncateString(failureReason, 100),
