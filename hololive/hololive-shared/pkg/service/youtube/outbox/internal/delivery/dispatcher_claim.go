@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 func (d *ClaimManager) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
@@ -76,7 +77,7 @@ func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.You
 		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)
 	}
 	defer rows.Close()
-	items, err := pgx.CollectRows(rows, scanOutboxRow)
+	items, err := pgx.CollectRows(rows, deliverysql.ScanOutboxRow)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)
 	}
@@ -239,7 +240,7 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	result := d.dispatchDeliveryRows(ctx, rows, outboxByID)
 	d.markDispatchResult(ctx, rows, result)
 
-	touchedOutboxIDs := uniqueInt64s(result.touchedOutboxIDs)
+	touchedOutboxIDs := deliverysql.UniqueInt64s(result.touchedOutboxIDs)
 	aggregateFailures := d.reconcileTouchedOutboxes(ctx, touchedOutboxIDs)
 	d.recordOutboxDispatchResult(len(rows), result, touchedOutboxIDs, aggregateFailures)
 
@@ -330,17 +331,17 @@ func collectDeliveryIDs(rows []domain.YouTubeNotificationDelivery) []int64 {
 }
 
 func (d *ClaimManager) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (map[int64]domain.YouTubeNotificationOutbox, error) {
-	uniqueIDs := uniqueInt64s(ids)
+	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return map[int64]domain.YouTubeNotificationOutbox{}, nil
 	}
 
 	var rows []domain.YouTubeNotificationOutbox
-	if err := selectDeliverySQL(ctx, d.db, &rows, "load outbox rows by ids", `
+	if err := deliverysql.SelectDeliverySQL(ctx, d.db, &rows, "load outbox rows by ids", `
 			SELECT id, kind, channel_id, content_id, payload::text AS payload, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, COALESCE(error, '') AS error
 		FROM youtube_notification_outbox
-		WHERE `+deliveryInClause("id", len(uniqueIDs))+`
-	`, appendDeliveryInt64Args(nil, uniqueIDs)...); err != nil {
+		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	`, deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)...); err != nil {
 		return nil, fmt.Errorf("load outbox rows by ids: %w", err)
 	}
 

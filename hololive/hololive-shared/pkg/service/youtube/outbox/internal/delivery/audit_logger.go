@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 type AuditLogger struct {
@@ -122,7 +123,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryResult(
 		}
 	}
 	if trimmedReason := strings.TrimSpace(failureReason); trimmedReason != "" {
-		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, truncateString(trimmedReason, 100)))
+		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, deliverysql.TruncateString(trimmedReason, 100)))
 	}
 
 	al.logger.Info(deliveryResultLogMessage, attrs...)

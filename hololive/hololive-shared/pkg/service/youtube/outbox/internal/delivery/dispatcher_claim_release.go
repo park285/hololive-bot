@@ -9,6 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -23,7 +24,7 @@ func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64, lockedAt
 		query += " AND locked_at = ?"
 		args = append(args, *lockedAt)
 	}
-	if _, err := execDeliverySQL(ctx, d.db, "release outbox lock", query, args...); err != nil {
+	if _, err := deliverysql.ExecDeliverySQL(ctx, d.db, "release outbox lock", query, args...); err != nil {
 		d.logger.Warn("Failed to release outbox lock",
 			slog.Int64("id", id),
 			slog.Any("error", err))
@@ -36,7 +37,7 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 
 	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
-	deleted, err := execDeliverySQL(ctx, d.db, "cleanup old outbox items", `
+	deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup old outbox items", `
 		DELETE FROM youtube_notification_outbox
 		WHERE status IN (?, ?) AND COALESCE(sent_at, created_at) < ?
 	`, domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff)

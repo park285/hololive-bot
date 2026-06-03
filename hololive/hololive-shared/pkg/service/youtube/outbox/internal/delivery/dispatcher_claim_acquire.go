@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
@@ -53,7 +54,7 @@ func (d *ClaimManager) tryClaimDelivery(
 }
 
 func shouldSkipDeliveryClaim(d *ClaimManager, outbox domain.YouTubeNotificationOutbox) bool {
-	return d == nil || isNilDB(d.db) || !isCommunityShortsDeliveryAuditKind(outbox.Kind)
+	return d == nil || deliverysql.IsNilDB(d.db) || !isCommunityShortsDeliveryAuditKind(outbox.Kind)
 }
 
 func resolveDeliveryClaimTime(row domain.YouTubeNotificationDelivery, outbox domain.YouTubeNotificationOutbox) time.Time {

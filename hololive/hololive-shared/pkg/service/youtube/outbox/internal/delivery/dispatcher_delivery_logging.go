@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 func dedupeKeyLogValue(outbox domain.YouTubeNotificationOutbox) string {
@@ -178,7 +179,7 @@ func buildCommunityShortsDeliveryAuditEvent(
 		DeliveryPath:      deliveryPath,
 		DeliveryMode:      deliveryMode,
 		SendResult:        sendResult,
-		FailureReason:     truncateString(strings.TrimSpace(failureReason), 100),
+		FailureReason:     deliverysql.TruncateString(strings.TrimSpace(failureReason), 100),
 		AttemptStartedAt:  deliveryAttemptStartedAt(row),
 		AttemptFinishedAt: &attemptFinishedAt,
 		EventAt:           attemptFinishedAt,

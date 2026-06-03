@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 func TestBuildTemplateData(t *testing.T) {
@@ -206,8 +207,8 @@ func TestTruncateString(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := truncateString(tt.in, tt.maxLen); got != tt.want {
-				t.Fatalf("truncateString(%q, %d) = %q, want %q", tt.in, tt.maxLen, got, tt.want)
+			if got := deliverysql.TruncateString(tt.in, tt.maxLen); got != tt.want {
+				t.Fatalf("deliverysql.TruncateString(%q, %d) = %q, want %q", tt.in, tt.maxLen, got, tt.want)
 			}
 		})
 	}
@@ -329,14 +330,14 @@ func TestUniqueInt64s(t *testing.T) {
 	t.Parallel()
 
 	in := []int64{1, 2, 1, 3, 2, 4, 4}
-	got := uniqueInt64s(in)
+	got := deliverysql.UniqueInt64s(in)
 	want := []int64{1, 2, 3, 4}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("uniqueInt64s() = %#v, want %#v", got, want)
+		t.Fatalf("deliverysql.UniqueInt64s() = %#v, want %#v", got, want)
 	}
 
-	if out := uniqueInt64s(nil); out != nil {
-		t.Fatalf("uniqueInt64s(nil) = %#v, want nil", out)
+	if out := deliverysql.UniqueInt64s(nil); out != nil {
+		t.Fatalf("deliverysql.UniqueInt64s(nil) = %#v, want nil", out)
 	}
 }
 

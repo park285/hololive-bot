@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 type PostSendCount = analytics.PostSendCount
@@ -131,7 +132,7 @@ func (r *DeliveryTelemetryRepository) ListPostSendCountsByFinalizedObservationWi
 	}
 
 	var scanned []postSendCountScanRow
-	if err := selectDeliverySQL(ctx, r.db, &scanned, "list post send counts by finalized observation window: scan rows", `
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "list post send counts by finalized observation window: scan rows", `
 		SELECT `+finalizedObservationPostSendCountsSelectSQL()+`
 		FROM youtube_community_shorts_observation_post_baselines AS base
 		LEFT JOIN youtube_content_alarm_tracking track ON track.kind = base.kind AND track.canonical_content_id = base.post_id
@@ -223,11 +224,11 @@ func (r *DeliveryTelemetryRepository) listPostSendCounts(
 		FROM youtube_content_alarm_tracking AS track
 		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
 		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?
-		WHERE ` + deliveryInClause("track.kind", len(postKinds)) + `
+		WHERE ` + deliverysql.DeliveryInClause("track.kind", len(postKinds)) + `
 		  AND COALESCE(track.actual_published_at, track.detected_at) >= ?
 	`
 	args := []any{windowStart.UTC()}
-	args = appendDeliveryOutboxKindArgs(args, postKinds...)
+	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
 	args = append(args, windowStart.UTC())
 	if windowEnd != nil {
 		query += " AND COALESCE(track.actual_published_at, track.detected_at) < ?"
@@ -251,7 +252,7 @@ func (r *DeliveryTelemetryRepository) listPostSendCounts(
 		ORDER BY COALESCE(MAX(CASE WHEN t.send_result = 'success' THEN t.event_at END), MAX(t.event_at), track.actual_published_at, track.detected_at) DESC,
 		         track.content_id ASC
 	`
-	if err := selectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("scan rows: %w", err)
 	}
 

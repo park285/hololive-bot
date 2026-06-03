@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
@@ -14,7 +15,7 @@ func (r *DeliveryTelemetryRepository) PersistPostLatencyClassificationsByOutboxI
 		return fmt.Errorf("persist post latency classifications by outbox ids: db is nil")
 	}
 
-	uniqueIDs := uniqueInt64s(outboxIDs)
+	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
 	if len(uniqueIDs) == 0 {
 		return nil
 	}

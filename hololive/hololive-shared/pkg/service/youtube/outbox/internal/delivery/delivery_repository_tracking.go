@@ -29,6 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -42,7 +43,7 @@ func loadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids [
 }
 
 func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken, status *domain.OutboxStatus) ([]trackingrepo.AlarmSentMark, error) {
-	uniqueIDs := uniqueInt64s(ids)
+	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil, nil
 	}
@@ -54,19 +55,19 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
 	var targets []deliveryAlarmSentTarget
-	args := appendDeliveryInt64Args(nil, uniqueIDs)
-	args = appendDeliveryOutboxKindArgs(args, postKinds...)
+	args := deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)
+	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
 	statusClause := ""
 	if status != nil {
 		statusClause = " AND d.status = ?"
 		args = append(args, *status)
 	}
-	if err := selectDeliverySQL(ctx, db, &targets, "query delivery alarm sent targets", `
+	if err := deliverysql.SelectDeliverySQL(ctx, db, &targets, "query delivery alarm sent targets", `
 		SELECT o.kind AS kind, o.content_id AS content_id
 		FROM youtube_notification_delivery AS d
 		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
-		WHERE `+deliveryInClause("d.id", len(uniqueIDs))+`
-		  AND `+deliveryInClause("o.kind", len(postKinds))+`
+		WHERE `+deliverysql.DeliveryInClause("d.id", len(uniqueIDs))+`
+		  AND `+deliverysql.DeliveryInClause("o.kind", len(postKinds))+`
 		`+statusClause, args...); err != nil {
 		return nil, fmt.Errorf("query delivery alarm sent targets: %w", err)
 	}

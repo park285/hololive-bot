@@ -1,4 +1,4 @@
-package delivery
+package deliverysql
 
 import (
 	"context"
@@ -14,12 +14,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type deliveryDB interface {
+type DeliveryDB interface {
 	dbx.Querier
 	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
 }
 
-func isNilDB(db any) bool {
+func IsNilDB(db any) bool {
 	if db == nil {
 		return true
 	}
@@ -32,23 +32,23 @@ func isNilDB(db any) bool {
 	}
 }
 
-func execDeliverySQL(ctx context.Context, db dbx.Querier, action string, query string, args ...any) (int64, error) {
-	tag, err := db.Exec(ctx, postgresPlaceholders(query), args...)
+func ExecDeliverySQL(ctx context.Context, db dbx.Querier, action string, query string, args ...any) (int64, error) {
+	tag, err := db.Exec(ctx, PostgresPlaceholders(query), args...)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", action, err)
 	}
 	return tag.RowsAffected(), nil
 }
 
-func selectDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action string, query string, args ...any) error {
-	if err := pgxscan.Select(ctx, db, dest, postgresPlaceholders(query), args...); err != nil {
+func SelectDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action string, query string, args ...any) error {
+	if err := pgxscan.Select(ctx, db, dest, PostgresPlaceholders(query), args...); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}
 	return nil
 }
 
-func getDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action string, query string, args ...any) (bool, error) {
-	err := pgxscan.Get(ctx, db, dest, postgresPlaceholders(query), args...)
+func GetDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action string, query string, args ...any) (bool, error) {
+	err := pgxscan.Get(ctx, db, dest, PostgresPlaceholders(query), args...)
 	if err == nil {
 		return true, nil
 	}
@@ -58,7 +58,7 @@ func getDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action string
 	return false, fmt.Errorf("%s: %w", action, err)
 }
 
-func deliveryInClause(column string, count int) string {
+func DeliveryInClause(column string, count int) string {
 	if count <= 0 {
 		return "FALSE"
 	}
@@ -72,42 +72,42 @@ func inDeliveryPlaceholders(count int) string {
 	return strings.TrimSuffix(strings.Repeat("?, ", count), ", ")
 }
 
-func appendDeliveryInt64Args(args []any, values []int64) []any {
+func AppendDeliveryInt64Args(args []any, values []int64) []any {
 	for _, value := range values {
 		args = append(args, value)
 	}
 	return args
 }
 
-func appendDeliveryStringArgs(args []any, values []string) []any {
+func AppendDeliveryStringArgs(args []any, values []string) []any {
 	for _, value := range values {
 		args = append(args, value)
 	}
 	return args
 }
 
-func appendDeliveryOutboxKindArgs(args []any, values ...domain.OutboxKind) []any {
+func AppendDeliveryOutboxKindArgs(args []any, values ...domain.OutboxKind) []any {
 	for _, value := range values {
 		args = append(args, string(value))
 	}
 	return args
 }
 
-func appendDeliveryOutboxStatusArgs(args []any, values ...domain.OutboxStatus) []any {
+func AppendDeliveryOutboxStatusArgs(args []any, values ...domain.OutboxStatus) []any {
 	for _, value := range values {
 		args = append(args, string(value))
 	}
 	return args
 }
 
-func appendDeliveryAlarmTypeArgs(args []any, values ...domain.AlarmType) []any {
+func AppendDeliveryAlarmTypeArgs(args []any, values ...domain.AlarmType) []any {
 	for _, value := range values {
 		args = append(args, string(value))
 	}
 	return args
 }
 
-func inDeliveryTx(ctx context.Context, db deliveryDB, fn func(tx dbx.Querier) error) error {
+func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) error) error {
 	if db == nil {
 		return fmt.Errorf("db is nil")
 	}
@@ -137,7 +137,7 @@ func inDeliveryTx(ctx context.Context, db deliveryDB, fn func(tx dbx.Querier) er
 	return nil
 }
 
-func postgresPlaceholders(query string) string {
+func PostgresPlaceholders(query string) string {
 	var out strings.Builder
 	index := 1
 	for i := 0; i < len(query); i++ {
@@ -151,7 +151,7 @@ func postgresPlaceholders(query string) string {
 	return out.String()
 }
 
-func scanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, error) {
+func ScanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, error) {
 	var item domain.YouTubeNotificationOutbox
 	err := row.Scan(
 		&item.ID,
@@ -170,7 +170,7 @@ func scanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, er
 	return item, err
 }
 
-func scanDeliveryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDelivery, error) {
+func ScanDeliveryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDelivery, error) {
 	var item domain.YouTubeNotificationDelivery
 	err := row.Scan(
 		&item.ID,

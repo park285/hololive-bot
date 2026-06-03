@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 func (r *DeliveryTelemetryRepository) loadTrackingSnapshots(
@@ -29,7 +30,7 @@ func (r *DeliveryTelemetryRepository) loadTrackingSnapshots(
 	}
 
 	var trackingRows []domain.YouTubeContentAlarmTracking
-	if err := selectDeliverySQL(ctx, r.db, &trackingRows, "enrich delivery telemetry context: load tracking rows", `
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &trackingRows, "enrich delivery telemetry context: load tracking rows", `
 		SELECT kind,
 			content_id,
 			COALESCE(canonical_content_id, '') AS canonical_content_id,
@@ -46,9 +47,9 @@ func (r *DeliveryTelemetryRepository) loadTrackingSnapshots(
 			created_at,
 			updated_at
 		FROM youtube_content_alarm_tracking
-		WHERE `+deliveryInClause("kind", len(kinds))+`
-		  AND `+deliveryInClause("content_id", len(contentIDs))+`
-	`, appendDeliveryStringArgs(appendDeliveryOutboxKindArgs(nil, kinds...), contentIDs)...); err != nil {
+		WHERE `+deliverysql.DeliveryInClause("kind", len(kinds))+`
+		  AND `+deliverysql.DeliveryInClause("content_id", len(contentIDs))+`
+	`, deliverysql.AppendDeliveryStringArgs(deliverysql.AppendDeliveryOutboxKindArgs(nil, kinds...), contentIDs)...); err != nil {
 		return nil, fmt.Errorf("enrich delivery telemetry context: load tracking rows: %w", err)
 	}
 
@@ -118,7 +119,7 @@ func (r *DeliveryTelemetryRepository) queryObservationWindows(
 	latest time.Time,
 ) ([]domain.YouTubeCommunityShortsObservationWindow, error) {
 	var windows []domain.YouTubeCommunityShortsObservationWindow
-	if err := selectDeliverySQL(ctx, r.db, &windows, "enrich delivery telemetry context: load observation windows", `
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &windows, "enrich delivery telemetry context: load observation windows", `
 		SELECT *
 		FROM youtube_community_shorts_observation_windows
 		WHERE observation_ended_at > ?
