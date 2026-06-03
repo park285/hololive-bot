@@ -225,7 +225,7 @@ go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts sho
 - manual non-Hololive member roster seed: `hololive/hololive-kakao-bot-go/scripts/migrations/016-add-multi-group-support.sql`, `017-add-stellive-chzzk-support.sql`, `018-add-twitch-user-id-and-vspo-members.sql`, `040_unify_indie_org.sql`
 - typed subscriber key: `hololive/hololive-shared/pkg/service/alarm/keys/keys.go`
 - canonical post ID 정규화: `hololive/hololive-shared/pkg/service/youtube/contentid/canonical.go`
-- send-count / observation 조인: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_post_send_counts.go`
+- send-count / observation 조인: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/post_send_counts.go`
 - sent-history dataset collection: `hololive/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/community_shorts_alarm_sent_history_dataset.go`
 - observation frozen baseline schema: `hololive/hololive-kakao-bot-go/scripts/migrations/054_create_youtube_community_shorts_observation_post_baselines.sql`
 - single-send state schema: `hololive/hololive-kakao-bot-go/scripts/migrations/055_create_youtube_community_shorts_alarm_states.sql`
