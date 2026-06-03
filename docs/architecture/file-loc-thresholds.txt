@@ -33,3 +33,6 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 hololive/hololive-llm-sched/internal/service/majorevent/scraper/link_checker.go:440
 hololive/hololive-llm-sched/internal/llm/openai_client.go:430
 ../shared-go/pkg/logging/logging.go:215
+hololive/hololive-shared/pkg/dbtest/migrations.go:420
+hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/live_poller.go:500
+hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/observation_post_baseline_repository.go:440
