@@ -20,7 +20,6 @@ type deliverySendRequest struct {
 }
 
 const (
-	communityShortsDeliveryPath        = "youtube_outbox_dispatcher"
 	deliveryDedupeKeyLogField          = logschema.FieldDedupeKey
 	deliveryAttemptStartedLogMessage   = logschema.CommunityShortsDeliveryAttemptMessage
 	deliveryAttemptStartedAtLogField   = logschema.FieldAttemptStartedAt

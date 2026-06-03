@@ -32,6 +32,16 @@ func IsNilDB(db any) bool {
 	}
 }
 
+func AsQuerier(db any) dbx.Querier {
+	if IsNilDB(db) {
+		return nil
+	}
+	if typed, ok := db.(dbx.Querier); ok {
+		return typed
+	}
+	return nil
+}
+
 func ExecDeliverySQL(ctx context.Context, db dbx.Querier, action string, query string, args ...any) (int64, error) {
 	tag, err := db.Exec(ctx, PostgresPlaceholders(query), args...)
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 )
 
 type AuditLogger struct {
@@ -48,13 +49,13 @@ func (al *AuditLogger) logCommunityShortsDeliveryAttemptStarted(
 	}
 
 	attemptStartedAt = attemptStartedAt.UTC()
-	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
+	deliveryPath := telemetry.NormalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
 	limitedRows := rows[:limit]
 	limitedOutboxes := outboxes[:limit]
 
 	for i := range limitedOutboxes {
 		outbox := limitedOutboxes[i]
-		if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
+		if !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind) {
 			continue
 		}
 
@@ -63,14 +64,14 @@ func (al *AuditLogger) logCommunityShortsDeliveryAttemptStarted(
 			slog.Int64(logschema.FieldOutboxID, outbox.ID),
 			slog.String(logschema.FieldRoomID, limitedRows[i].RoomID),
 			slog.String(logschema.FieldChannelID, outbox.ChannelID),
-			slog.String(deliveryAuditPostIDLogField, resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload)),
+			slog.String(deliveryAuditPostIDLogField, telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload)),
 			slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
 			slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
 			slog.Time(deliveryAttemptStartedAtLogField, attemptStartedAt),
 			slog.Int(logschema.FieldAttemptOrdinal, deliveryAttemptOrdinal(limitedRows[i])),
 			slog.String(deliveryAuditPathLogField, deliveryPath),
 			slog.String(deliveryAuditModeLogField, deliveryMode),
-			slog.String(deliveryDedupeKeyLogField, dedupeKeyLogValue(outbox)),
+			slog.String(deliveryDedupeKeyLogField, telemetry.DedupeKeyLogValue(outbox)),
 		)
 	}
 }
@@ -93,7 +94,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryResult(
 	}
 
 	sentAt = sentAt.UTC()
-	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
+	deliveryPath := telemetry.NormalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
 	summary := summarizeCommunityShortsDeliveryResult(rows[:limit], outboxes[:limit])
 	if summary.alarmCount == 0 {
 		return
@@ -145,7 +146,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryAudit(
 	}
 
 	sentAt = sentAt.UTC()
-	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
+	deliveryPath := telemetry.NormalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
 	events := buildCommunityShortsDeliveryAuditEvents(
 		rows[:limit],
 		outboxes[:limit],
@@ -175,7 +176,7 @@ func (al *AuditLogger) prepareCommunityShortsDeliveryAuditEvents(
 		return events, false
 	}
 
-	prepared, err := al.telemetry.prepareRows(ctx, events)
+	prepared, err := al.telemetry.PrepareRows(ctx, events)
 	if err != nil {
 		al.logger.Warn("Failed to enrich persistent delivery audit",
 			slog.Int("events", len(events)),
@@ -189,7 +190,7 @@ func (al *AuditLogger) enqueueCommunityShortsDeliveryAuditEvents(
 	ctx context.Context,
 	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
 ) bool {
-	enqueueErr := al.telemetry.enqueuePrepared(ctx, preparedEvents)
+	enqueueErr := al.telemetry.EnqueuePrepared(ctx, preparedEvents)
 	if enqueueErr != nil {
 		al.logger.Warn("Failed to enqueue persistent delivery audit",
 			slog.Int("events", len(preparedEvents)),
@@ -197,7 +198,7 @@ func (al *AuditLogger) enqueueCommunityShortsDeliveryAuditEvents(
 		return false
 	}
 
-	if err := al.telemetry.PersistPostLatencyClassificationsByOutboxIDs(ctx, collectTelemetryOutboxIDs(preparedEvents)); err != nil {
+	if err := al.telemetry.PersistPostLatencyClassificationsByOutboxIDs(ctx, telemetry.CollectTelemetryOutboxIDs(preparedEvents)); err != nil {
 		al.logger.Warn("Failed to persist post latency classifications",
 			slog.Int("events", len(preparedEvents)),
 			slog.Any("error", err))
@@ -315,14 +316,14 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
 	attrs := []any{
 		slog.Int64(logschema.FieldOutboxID, result.OutboxID),
 		slog.String(logschema.FieldChannelID, result.ChannelID),
-		slog.String(deliveryAuditPostIDLogField, resolveTelemetryPostID(result.Kind, result.ContentID, result.Payload)),
+		slog.String(deliveryAuditPostIDLogField, telemetry.ResolveTelemetryPostID(result.Kind, result.ContentID, result.Payload)),
 		slog.String(deliveryAuditContentIDLogField, result.ContentID),
 		slog.String(deliveryAuditAlarmTypeLogField, string(result.Kind.ToAlarmType())),
 		slog.Time(deliveryAuditSentAtLogField, eventAt),
 		slog.String(deliveryAuditSendResultLogField, sendResult),
-		slog.String(deliveryAuditPathLogField, normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)),
+		slog.String(deliveryAuditPathLogField, telemetry.NormalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)),
 		slog.String(deliveryAuditModeLogField, logschema.DeliveryModeFinalResult),
-		slog.String(deliveryDedupeKeyLogField, dedupeKeyLogValue(outbox)),
+		slog.String(deliveryDedupeKeyLogField, telemetry.DedupeKeyLogValue(outbox)),
 		slog.String(logschema.FieldTelemetrySource, logschema.TelemetrySourceOutboxFinalResult),
 		slog.Int(logschema.FieldTargetRoomCount, result.TargetRoomCount),
 		slog.Int(logschema.FieldSuccessfulRoomCount, result.SuccessfulRoomCount),

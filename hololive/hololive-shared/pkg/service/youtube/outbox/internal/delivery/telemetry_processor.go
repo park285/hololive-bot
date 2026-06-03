@@ -9,6 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -23,12 +24,12 @@ func buildDeliveryAuditLogAttrsWithClassification(row domain.YouTubeNotification
 		slog.String(deliveryAuditAlarmTypeLogField, string(row.AlarmType)),
 		slog.Time(deliveryAuditSentAtLogField, row.EventAt.UTC()),
 		slog.String(deliveryAuditSendResultLogField, row.SendResult),
-		slog.String(deliveryAuditPathLogField, normalizeCommunityShortsDeliveryPath(row.DeliveryPath)),
+		slog.String(deliveryAuditPathLogField, telemetry.NormalizeCommunityShortsDeliveryPath(row.DeliveryPath)),
 		slog.String(deliveryAuditModeLogField, row.DeliveryMode),
 		slog.String(deliveryDedupeKeyLogField, row.DedupeKey),
 		slog.Int(logschema.FieldAttemptOrdinal, row.AttemptOrdinal),
 	}
-	attrs = appendCommunityShortsAlarmTimingLogAttrs(attrs, communityShortsAlarmTimingForTelemetryRow(row))
+	attrs = appendCommunityShortsAlarmTimingLogAttrs(attrs, telemetry.CommunityShortsAlarmTimingForTelemetryRow(row))
 	attrs = appendDeliveryObservationLogAttrs(attrs, row)
 	if strings.TrimSpace(row.FailureReason) != "" {
 		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, row.FailureReason))
@@ -41,7 +42,7 @@ func appendDeliveryObservationLogAttrs(attrs []any, row domain.YouTubeNotificati
 	if row.DetectedAt != nil {
 		attrs = append(attrs, slog.Time(logschema.FieldDetectedAt, row.DetectedAt.UTC()))
 	}
-	attrs = append(attrs, slog.String(logschema.FieldObservationStatus, normalizeDeliveryTelemetryObservationStatus(row.ObservationStatus)))
+	attrs = append(attrs, slog.String(logschema.FieldObservationStatus, telemetry.NormalizeDeliveryTelemetryObservationStatus(row.ObservationStatus)))
 	if strings.TrimSpace(row.ObservationRuntimeName) != "" {
 		attrs = append(attrs, slog.String(logschema.FieldObservationRuntimeName, strings.TrimSpace(row.ObservationRuntimeName)))
 	}
@@ -181,7 +182,7 @@ func (tp *TelemetryProcessor) loadDeliveryTelemetryLatencyClassifications(
 		return nil, nil
 	}
 
-	timelines, err := tp.telemetry.ListPostDeliveryTimelinesByOutboxIDs(ctx, collectTelemetryOutboxIDs(rows))
+	timelines, err := tp.telemetry.ListPostDeliveryTimelinesByOutboxIDs(ctx, telemetry.CollectTelemetryOutboxIDs(rows))
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +204,7 @@ func (tp *TelemetryProcessor) emitDeliveryTelemetry(
 	if strings.TrimSpace(row.RoomID) == "" {
 		return fmt.Errorf("delivery telemetry room id is empty")
 	}
-	applyTelemetryPostID(&row)
+	telemetry.ApplyTelemetryPostID(&row)
 
 	attrs := buildDeliveryAuditLogAttrsWithClassification(row, classification)
 	attrs = append(attrs, slog.String(logschema.FieldTelemetrySource, logschema.TelemetrySourcePersistentBuffer))

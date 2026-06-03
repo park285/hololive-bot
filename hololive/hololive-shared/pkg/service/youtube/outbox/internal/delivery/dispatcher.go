@@ -30,6 +30,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -105,7 +106,7 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 	}
 
 	config = normalizeDispatcherConfig(config)
-	querier := asQuerier(db)
+	querier := deliverysql.AsQuerier(db)
 	deliveryDB := asDeliveryDB(db)
 
 	var telemetryRepository *DeliveryTelemetryRepository

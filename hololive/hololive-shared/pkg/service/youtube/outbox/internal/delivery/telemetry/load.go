@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
-func (r *DeliveryTelemetryRepository) loadTrackingSnapshots(
+func (r *Repository) loadTrackingSnapshots(
 	ctx context.Context,
 	identities map[deliveryTelemetryIdentity]struct{},
 ) (map[deliveryTelemetryIdentity]deliveryTelemetryTrackingSnapshot, error) {
@@ -67,7 +67,7 @@ func (r *DeliveryTelemetryRepository) loadTrackingSnapshots(
 	return snapshots, nil
 }
 
-func (r *DeliveryTelemetryRepository) loadObservationWindows(
+func (r *Repository) loadObservationWindows(
 	ctx context.Context,
 	trackingByIdentity map[deliveryTelemetryIdentity]deliveryTelemetryTrackingSnapshot,
 ) ([]domain.YouTubeCommunityShortsObservationWindow, error) {
@@ -113,7 +113,7 @@ func includePublishedAtInRange(actualPublishedAt *time.Time, earliest time.Time,
 	return earliest, latest
 }
 
-func (r *DeliveryTelemetryRepository) queryObservationWindows(
+func (r *Repository) queryObservationWindows(
 	ctx context.Context,
 	earliest time.Time,
 	latest time.Time,

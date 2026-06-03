@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
@@ -23,7 +24,7 @@ func (d *ClaimManager) tryClaimDelivery(
 
 	repository := trackingrepo.NewRepository(d.db)
 	claimAt := resolveDeliveryClaimTime(row, outbox)
-	postID := strings.TrimSpace(resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
+	postID := strings.TrimSpace(telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
 	if postID == "" {
 		return deliveryClaimDecisionRetryLater, nil, fmt.Errorf("resolve post id: empty")
 	}
@@ -54,7 +55,7 @@ func (d *ClaimManager) tryClaimDelivery(
 }
 
 func shouldSkipDeliveryClaim(d *ClaimManager, outbox domain.YouTubeNotificationOutbox) bool {
-	return d == nil || deliverysql.IsNilDB(d.db) || !isCommunityShortsDeliveryAuditKind(outbox.Kind)
+	return d == nil || deliverysql.IsNilDB(d.db) || !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind)
 }
 
 func resolveDeliveryClaimTime(row domain.YouTubeNotificationDelivery, outbox domain.YouTubeNotificationOutbox) time.Time {
@@ -75,11 +76,11 @@ func normalizeDeliveryClaimTime(value time.Time) time.Time {
 }
 
 func deliveryClaimIdentityForOutbox(outbox domain.YouTubeNotificationOutbox) (string, error) {
-	if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
+	if !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind) {
 		return "", nil
 	}
 
-	postID := strings.TrimSpace(resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
+	postID := strings.TrimSpace(telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
 	if postID == "" {
 		return "", fmt.Errorf("resolve post id: empty")
 	}

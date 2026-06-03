@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 const communityShortsDeliveryLogMaxLimit = 5000
 
-func (r *DeliveryTelemetryRepository) ListCommunityShortsDeliveryLogsSince(
+func (r *Repository) ListCommunityShortsDeliveryLogsSince(
 	ctx context.Context,
 	since time.Time,
 	limit int,

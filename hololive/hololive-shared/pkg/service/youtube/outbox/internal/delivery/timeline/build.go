@@ -327,6 +327,10 @@ func buildPostLatencyClassificationEvidence(row *PostDeliveryTimeline) []PostLat
 }
 
 func clonePostLatencyInt64(value *int64) *int64 {
+	return ClonePostLatencyInt64(value)
+}
+
+func ClonePostLatencyInt64(value *int64) *int64 {
 	if value == nil {
 		return nil
 	}

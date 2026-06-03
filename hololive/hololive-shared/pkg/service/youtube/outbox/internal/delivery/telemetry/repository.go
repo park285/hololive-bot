@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -12,24 +12,15 @@ import (
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
-type DeliveryTelemetryRepository struct {
+type Repository struct {
 	db dbx.Querier
 }
 
-func NewDeliveryTelemetryRepository(db any) *DeliveryTelemetryRepository {
-	return &DeliveryTelemetryRepository{db: asQuerier(db)}
-}
-
-func asQuerier(db any) dbx.Querier {
-	if deliverysql.IsNilDB(db) {
-		return nil
-	}
-	if typed, ok := db.(dbx.Querier); ok {
-		return typed
-	}
-	return nil
+func NewRepository(db any) *Repository {
+	return &Repository{db: deliverysql.AsQuerier(db)}
 }
 
 func cloneUTCTimePtr(value *time.Time) *time.Time {
@@ -41,15 +32,15 @@ func cloneUTCTimePtr(value *time.Time) *time.Time {
 	return &normalized
 }
 
-func (r *DeliveryTelemetryRepository) Enqueue(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
-	prepared, err := r.prepareRows(ctx, rows)
+func (r *Repository) Enqueue(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
+	prepared, err := r.PrepareRows(ctx, rows)
 	if err != nil {
 		return err
 	}
-	return r.enqueuePrepared(ctx, prepared)
+	return r.EnqueuePrepared(ctx, prepared)
 }
 
-func (r *DeliveryTelemetryRepository) prepareRows(
+func (r *Repository) PrepareRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDeliveryTelemetry,
 ) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
@@ -111,19 +102,19 @@ func applyDeliveryTelemetryTiming(row *domain.YouTubeNotificationDeliveryTelemet
 	timing := communityShortsAlarmTimingForTelemetryRow(*row)
 	row.ActualPublishedAt = timing.ActualPublishedAt
 	row.AlarmSentAt = timing.AlarmSentAt
-	row.AlarmLatencyMillis = clonePostLatencyInt64(timing.AlarmLatencyMillis)
+	row.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(timing.AlarmLatencyMillis)
 }
 
 func applyDeliveryTelemetryDefaults(row *domain.YouTubeNotificationDeliveryTelemetry, now time.Time) {
 	if row.NextAttemptAt.IsZero() {
 		row.NextAttemptAt = now
 	}
-	row.DeliveryPath = normalizeCommunityShortsDeliveryPath(row.DeliveryPath)
-	applyTelemetryPostID(row)
+	row.DeliveryPath = NormalizeCommunityShortsDeliveryPath(row.DeliveryPath)
+	ApplyTelemetryPostID(row)
 	row.ObservationStatus = normalizeDeliveryTelemetryObservationStatus(row.ObservationStatus)
 }
 
-func (r *DeliveryTelemetryRepository) enqueuePrepared(
+func (r *Repository) EnqueuePrepared(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDeliveryTelemetry,
 ) error {
@@ -190,7 +181,7 @@ func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliver
 	return item, err
 }
 
-func (r *DeliveryTelemetryRepository) queryTelemetryRows(ctx context.Context, action string, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
+func (r *Repository) queryTelemetryRows(ctx context.Context, action string, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
 	rows, err := r.db.Query(ctx, deliverysql.PostgresPlaceholders(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", action, err)
@@ -203,7 +194,7 @@ func (r *DeliveryTelemetryRepository) queryTelemetryRows(ctx context.Context, ac
 	return items, nil
 }
 
-func (r *DeliveryTelemetryRepository) FetchAndLockPending(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
+func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
 	if batchSize <= 0 {
 		return nil, nil
 	}
@@ -265,7 +256,7 @@ func (r *DeliveryTelemetryRepository) FetchAndLockPending(ctx context.Context, b
 	return locked, nil
 }
 
-func (r *DeliveryTelemetryRepository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
+func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
 	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil
@@ -285,7 +276,7 @@ func (r *DeliveryTelemetryRepository) MarkLoggedBatch(ctx context.Context, ids [
 	return nil
 }
 
-func (r *DeliveryTelemetryRepository) MarkRetryBatch(ctx context.Context, ids []int64, backoff time.Duration, errMsg string) error {
+func (r *Repository) MarkRetryBatch(ctx context.Context, ids []int64, backoff time.Duration, errMsg string) error {
 	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil
@@ -305,7 +296,7 @@ func (r *DeliveryTelemetryRepository) MarkRetryBatch(ctx context.Context, ids []
 	return nil
 }
 
-func (r *DeliveryTelemetryRepository) refreshLockedRows(
+func (r *Repository) refreshLockedRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDeliveryTelemetry,
 ) error {
@@ -347,7 +338,7 @@ func (r *DeliveryTelemetryRepository) refreshLockedRows(
 	return nil
 }
 
-func (r *DeliveryTelemetryRepository) DeleteLoggedBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+func (r *Repository) DeleteLoggedBefore(ctx context.Context, cutoff time.Time) (int64, error) {
 	if r == nil || r.db == nil || cutoff.IsZero() {
 		return 0, nil
 	}
@@ -362,7 +353,7 @@ func (r *DeliveryTelemetryRepository) DeleteLoggedBefore(ctx context.Context, cu
 	return tag.RowsAffected(), nil
 }
 
-func collectTelemetryOutboxIDs(rows []domain.YouTubeNotificationDeliveryTelemetry) []int64 {
+func CollectTelemetryOutboxIDs(rows []domain.YouTubeNotificationDeliveryTelemetry) []int64 {
 	outboxIDs := make([]int64, 0, len(rows))
 	for i := range rows {
 		if rows[i].OutboxID <= 0 {

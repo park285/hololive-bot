@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
-func (r *DeliveryTelemetryRepository) PersistPostLatencyClassificationsByOutboxIDs(ctx context.Context, outboxIDs []int64) error {
+func (r *Repository) PersistPostLatencyClassificationsByOutboxIDs(ctx context.Context, outboxIDs []int64) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("persist post latency classifications by outbox ids: db is nil")
 	}
@@ -30,7 +30,7 @@ func (r *DeliveryTelemetryRepository) PersistPostLatencyClassificationsByOutboxI
 	return nil
 }
 
-func (r *DeliveryTelemetryRepository) PersistPostLatencyClassificationsByIdentities(
+func (r *Repository) PersistPostLatencyClassificationsByIdentities(
 	ctx context.Context,
 	identities []PostTrackingIdentity,
 ) error {
@@ -56,7 +56,7 @@ func (r *DeliveryTelemetryRepository) PersistPostLatencyClassificationsByIdentit
 	return nil
 }
 
-func (r *DeliveryTelemetryRepository) persistPostLatencyClassifications(ctx context.Context, rows []PostDeliveryTimeline) error {
+func (r *Repository) persistPostLatencyClassifications(ctx context.Context, rows []PostDeliveryTimeline) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -77,7 +77,7 @@ func (r *DeliveryTelemetryRepository) persistPostLatencyClassifications(ctx cont
 }
 
 func markPostLatencyClassificationRowSeen(row PostDeliveryTimeline, seen map[string]struct{}) (string, bool) {
-	if !isCommunityShortsDeliveryAuditKind(row.OutboxKind) {
+	if !IsCommunityShortsDeliveryAuditKind(row.OutboxKind) {
 		return "", false
 	}
 
@@ -95,7 +95,7 @@ func markPostLatencyClassificationRowSeen(row PostDeliveryTimeline, seen map[str
 	return contentID, true
 }
 
-func (r *DeliveryTelemetryRepository) updatePostLatencyClassification(
+func (r *Repository) updatePostLatencyClassification(
 	ctx context.Context,
 	row PostDeliveryTimeline,
 	contentID string,

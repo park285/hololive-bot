@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -10,9 +10,7 @@ import (
 
 type ChannelPostDeliverySummary = analytics.ChannelPostDeliverySummary
 
-var BuildChannelPostDeliverySummaries = analytics.BuildChannelPostDeliverySummaries
-
-func (r *DeliveryTelemetryRepository) ListChannelPostDeliverySummariesSince(
+func (r *Repository) ListChannelPostDeliverySummariesSince(
 	ctx context.Context,
 	since time.Time,
 ) ([]ChannelPostDeliverySummary, error) {

@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -35,7 +35,7 @@ type postSendCountScanRow struct {
 	FailedAttemptCount    int64             `db:"failed_attempt_count"`
 }
 
-func (r *DeliveryTelemetryRepository) ListPostSendCountsSince(ctx context.Context, since time.Time) ([]PostSendCount, error) {
+func (r *Repository) ListPostSendCountsSince(ctx context.Context, since time.Time) ([]PostSendCount, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("list post send counts since: db is nil")
 	}
@@ -50,7 +50,7 @@ func (r *DeliveryTelemetryRepository) ListPostSendCountsSince(ctx context.Contex
 	return rows, nil
 }
 
-func (r *DeliveryTelemetryRepository) ListPostSendCountsWithinPublishedWindow(
+func (r *Repository) ListPostSendCountsWithinPublishedWindow(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd time.Time,
@@ -78,7 +78,7 @@ func (r *DeliveryTelemetryRepository) ListPostSendCountsWithinPublishedWindow(
 	return rows, nil
 }
 
-func (r *DeliveryTelemetryRepository) ListPostSendCountsWithinObservationWindow(
+func (r *Repository) ListPostSendCountsWithinObservationWindow(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd time.Time,
@@ -114,7 +114,7 @@ func (r *DeliveryTelemetryRepository) ListPostSendCountsWithinObservationWindow(
 	return rows, nil
 }
 
-func (r *DeliveryTelemetryRepository) ListPostSendCountsByFinalizedObservationWindow(
+func (r *Repository) ListPostSendCountsByFinalizedObservationWindow(
 	ctx context.Context,
 	runtimeName string,
 	bigBangCutoverAt time.Time,
@@ -191,7 +191,7 @@ func finalizedObservationPostSendCountsGroupSQL() string {
 	}, ", ")
 }
 
-func (r *DeliveryTelemetryRepository) listPostSendCounts(
+func (r *Repository) listPostSendCounts(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd *time.Time,

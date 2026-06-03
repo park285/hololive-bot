@@ -1,41 +1,21 @@
 package delivery
 
 import (
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 )
-
-func dedupeKeyLogValue(outbox domain.YouTubeNotificationOutbox) string {
-	dedupeKey, err := outbox.DedupeKey()
-	if err == nil {
-		return dedupeKey
-	}
-
-	return fmt.Sprintf("invalid:%s:%s",
-		strings.TrimSpace(string(outbox.Kind)),
-		strings.TrimSpace(outbox.ContentID),
-	)
-}
 
 func dedupeKeyLogAttrForOutboxes(outboxes []domain.YouTubeNotificationOutbox) slog.Attr {
 	dedupeKeys := make([]string, 0, len(outboxes))
 	for i := range outboxes {
-		dedupeKeys = append(dedupeKeys, dedupeKeyLogValue(outboxes[i]))
+		dedupeKeys = append(dedupeKeys, telemetry.DedupeKeyLogValue(outboxes[i]))
 	}
 	return dedupeKeyLogAttr(dedupeKeys)
-}
-
-func normalizeCommunityShortsDeliveryPath(path string) string {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return communityShortsDeliveryPath
-	}
-	return trimmed
 }
 
 func deliveryAttemptOrdinal(row domain.YouTubeNotificationDelivery) int {
@@ -53,15 +33,6 @@ func deliveryAttemptStartedAt(row domain.YouTubeNotificationDelivery) *time.Time
 
 	startedAt := row.LockedAt.UTC()
 	return &startedAt
-}
-
-func isCommunityShortsDeliveryAuditKind(kind domain.OutboxKind) bool {
-	switch kind {
-	case domain.OutboxKindNewShort, domain.OutboxKindCommunityPost:
-		return true
-	default:
-		return false
-	}
 }
 
 func (d *SendEngine) logCommunityShortsDeliveryAttemptStarted(
@@ -100,7 +71,7 @@ func collectCommunityShortsDeliveryResultSummary(
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
 ) {
-	if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
+	if !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind) {
 		return
 	}
 
@@ -140,7 +111,7 @@ func buildCommunityShortsDeliveryAuditEvents(
 ) []domain.YouTubeNotificationDeliveryTelemetry {
 	events := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, len(outboxes))
 	for i := range outboxes {
-		if !isCommunityShortsDeliveryAuditKind(outboxes[i].Kind) {
+		if !telemetry.IsCommunityShortsDeliveryAuditKind(outboxes[i].Kind) {
 			continue
 		}
 		events = append(events, buildCommunityShortsDeliveryAuditEvent(
@@ -172,10 +143,10 @@ func buildCommunityShortsDeliveryAuditEvent(
 		OutboxID:          outbox.ID,
 		ChannelID:         outbox.ChannelID,
 		ContentID:         strings.TrimSpace(outbox.ContentID),
-		PostID:            resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload),
+		PostID:            telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload),
 		RoomID:            row.RoomID,
 		AlarmType:         outbox.Kind.ToAlarmType(),
-		DedupeKey:         dedupeKeyLogValue(outbox),
+		DedupeKey:         telemetry.DedupeKeyLogValue(outbox),
 		DeliveryPath:      deliveryPath,
 		DeliveryMode:      deliveryMode,
 		SendResult:        sendResult,

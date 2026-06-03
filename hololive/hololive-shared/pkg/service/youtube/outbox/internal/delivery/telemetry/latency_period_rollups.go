@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -10,9 +10,7 @@ import (
 type PostLatencyPeriod = analytics.PostLatencyPeriod
 type PostLatencyPeriodSummary = analytics.PostLatencyPeriodSummary
 
-var BuildPostLatencyPeriodSummaries = analytics.BuildPostLatencyPeriodSummaries
-
-func (r *DeliveryTelemetryRepository) ListPostLatencyPeriodSummaries(ctx context.Context, periods []PostLatencyPeriod) ([]PostLatencyPeriodSummary, error) {
+func (r *Repository) ListPostLatencyPeriodSummaries(ctx context.Context, periods []PostLatencyPeriod) ([]PostLatencyPeriodSummary, error) {
 	normalizedPeriods, err := analytics.NormalizePostLatencyPeriods(periods)
 	if err != nil {
 		return nil, fmt.Errorf("list post latency period summaries: %w", err)

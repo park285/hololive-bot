@@ -1,4 +1,4 @@
-package delivery
+package telemetry
 
 import (
 	"context"
@@ -31,7 +31,7 @@ type postDeliveryPathUsageScanRow struct {
 	FailedAttemptCount int64             `db:"failed_attempt_count"`
 }
 
-func (r *DeliveryTelemetryRepository) ListPostDeliveryPathUsageSince(ctx context.Context, since time.Time) ([]PostDeliveryPathUsage, error) {
+func (r *Repository) ListPostDeliveryPathUsageSince(ctx context.Context, since time.Time) ([]PostDeliveryPathUsage, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("list post delivery path usage since: db is nil")
 	}
