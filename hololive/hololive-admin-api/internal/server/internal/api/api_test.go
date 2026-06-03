@@ -5,13 +5,9 @@ import (
 )
 
 func TestNewAPIHandler_AllFieldsAssigned(t *testing.T) {
-	h := NewHandler(
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil,
-		newDiscardLogger(),
-	)
+	h := NewHandler(HandlerDeps{
+		Common: CommonDeps{Logger: newDiscardLogger()},
+	})
 
 	if h == nil {
 		t.Fatal("NewHandler returned nil")
@@ -31,13 +27,9 @@ func TestNewAPIHandler_AllFieldsAssigned(t *testing.T) {
 }
 
 func TestNewAPIHandler_MemberIndexLoaderNilWhenRepoNil(t *testing.T) {
-	h := NewHandler(
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil,
-		newDiscardLogger(),
-	)
+	h := NewHandler(HandlerDeps{
+		Common: CommonDeps{Logger: newDiscardLogger()},
+	})
 
 	if h.memberIndexLoader != nil {
 		t.Fatal("memberIndexLoader should be nil when repository is nil")

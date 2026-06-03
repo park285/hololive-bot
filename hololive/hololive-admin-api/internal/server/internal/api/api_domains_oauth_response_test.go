@@ -80,12 +80,9 @@ func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
 }
 
 func TestNewHandler_BasicInitialization(t *testing.T) {
-	h := NewHandler(
-		nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil,
-		nil, nil,
-		slog.New(slog.DiscardHandler),
-	)
+	h := NewHandler(HandlerDeps{
+		Common: CommonDeps{Logger: slog.New(slog.DiscardHandler)},
+	})
 	if h == nil {
 		t.Fatal("NewHandler returned nil")
 	}
@@ -102,12 +99,9 @@ func TestNewHandler_BasicInitialization(t *testing.T) {
 		t.Fatal("ensureStreamState should return same streamState pointer")
 	}
 
-	repoBacked := NewHandler(
-		&member.Repository{}, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil,
-		nil, nil,
-		nil,
-	)
+	repoBacked := NewHandler(HandlerDeps{
+		Member: MemberDeps{Repository: &member.Repository{}},
+	})
 	if repoBacked.memberIndexLoader == nil {
 		t.Fatal("memberIndexLoader should be set when repository is provided")
 	}

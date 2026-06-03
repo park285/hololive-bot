@@ -116,51 +116,85 @@ func (h *Handler) HasCommunityShortsOpsRepository() bool {
 	return h != nil && h.communityShortsOps != nil
 }
 
-func NewHandler(
-	repository *member.Repository,
-	memberCache *member.Cache,
-	valkeyCache cache.Client,
-	profilesService *member.ProfileService,
-	alarm domain.AlarmCRUD,
-	holodexService *holodex.Service,
-	youtubeService youtube.Service,
-	statsRepository stats.StatsDashboardRepository,
-	communityShortsOps YouTubeCommunityShortsOpsRepository,
-	activityLogger *activity.Logger,
-	settingsService settings.ReadWriter,
-	settingsApplier sharedsettings.SettingsApplier,
-	aclService *acl.Service,
-	systemService *system.Collector,
-	templateAdmin *template.AdminService,
-	majorEventScheduler MajorEventScheduler,
-	majorEventMonthlyScheduler MajorEventMonthlyScheduler,
-	logger *slog.Logger,
-) *Handler {
+type CommonDeps struct {
+	Logger   *slog.Logger
+	Activity *activity.Logger
+}
+
+type MemberDeps struct {
+	Repository *member.Repository
+	Cache      *member.Cache
+	Profiles   *member.ProfileService
+}
+
+type StreamDeps struct {
+	Holodex         *holodex.Service
+	YouTube         youtube.Service
+	ValkeyCache     cache.Client
+	StatsRepository stats.StatsDashboardRepository
+}
+
+type StatsDeps struct {
+	Alarm       domain.AlarmCRUD
+	ACL         *acl.Service
+	SystemStats *system.Collector
+}
+
+type SettingsDeps struct {
+	Settings settings.ReadWriter
+	Applier  sharedsettings.SettingsApplier
+}
+
+type TemplateDeps struct {
+	Admin *template.AdminService
+}
+
+type MajorEventDeps struct {
+	Scheduler        MajorEventScheduler
+	MonthlyScheduler MajorEventMonthlyScheduler
+}
+
+type YouTubeOpsDeps struct {
+	CommunityShortsOps YouTubeCommunityShortsOpsRepository
+}
+
+type HandlerDeps struct {
+	Common     CommonDeps
+	Member     MemberDeps
+	Stream     StreamDeps
+	Stats      StatsDeps
+	Settings   SettingsDeps
+	Template   TemplateDeps
+	MajorEvent MajorEventDeps
+	YouTubeOps YouTubeOpsDeps
+}
+
+func NewHandler(deps HandlerDeps) *Handler {
 	var memberIndexLoader func(context.Context) ([]*domain.Member, error)
 
-	if repository != nil {
-		memberIndexLoader = repository.GetAllMembers
+	if deps.Member.Repository != nil {
+		memberIndexLoader = deps.Member.Repository.GetAllMembers
 	}
 
 	return (&Handler{
-		repository:                 repository,
-		memberCache:                memberCache,
-		valkeyCache:                valkeyCache,
-		profiles:                   profilesService,
-		alarm:                      alarm,
-		holodex:                    holodexService,
-		youtube:                    youtubeService,
-		statsRepository:            statsRepository,
-		communityShortsOps:         communityShortsOps,
-		activity:                   activityLogger,
-		settings:                   settingsService,
-		settingsApplier:            settingsApplier,
-		acl:                        aclService,
-		systemStats:                systemService,
-		templateAdmin:              templateAdmin,
-		majorEventScheduler:        majorEventScheduler,
-		majorEventMonthlyScheduler: majorEventMonthlyScheduler,
-		logger:                     logger,
+		repository:                 deps.Member.Repository,
+		memberCache:                deps.Member.Cache,
+		valkeyCache:                deps.Stream.ValkeyCache,
+		profiles:                   deps.Member.Profiles,
+		alarm:                      deps.Stats.Alarm,
+		holodex:                    deps.Stream.Holodex,
+		youtube:                    deps.Stream.YouTube,
+		statsRepository:            deps.Stream.StatsRepository,
+		communityShortsOps:         deps.YouTubeOps.CommunityShortsOps,
+		activity:                   deps.Common.Activity,
+		settings:                   deps.Settings.Settings,
+		settingsApplier:            deps.Settings.Applier,
+		acl:                        deps.Stats.ACL,
+		systemStats:                deps.Stats.SystemStats,
+		templateAdmin:              deps.Template.Admin,
+		majorEventScheduler:        deps.MajorEvent.Scheduler,
+		majorEventMonthlyScheduler: deps.MajorEvent.MonthlyScheduler,
+		logger:                     deps.Common.Logger,
 		startTime:                  time.Now(),
 		streamState:                newStreamState(),
 		memberIndexLoader:          memberIndexLoader,

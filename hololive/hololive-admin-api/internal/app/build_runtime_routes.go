@@ -37,26 +37,42 @@ func buildAdminHandler(
 	majorEventTriggerClient *triggerclient.Client,
 	logger *slog.Logger,
 ) *server.Handler {
-	return server.NewHandler(
-		infra.MemberRepository,
-		infra.MemberCache,
-		infra.Cache,
-		foundation.ProfileService,
-		alarmMode.AlarmCRUD,
-		foundation.HolodexService,
-		ytStack.GetService(),
-		ytStack.GetStatsRepository(),
-		communityShortsOpsRepository,
-		activity.NewActivityLogger("", logger),
-		sharedmodules.BuildSettingsService(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger),
-		settingsApplier,
-		aclService,
-		systemCollector,
-		templateAdmin,
-		majorEventTriggerClient,
-		majorEventTriggerClient,
-		logger,
-	)
+	return server.NewHandler(server.HandlerDeps{
+		Common: server.CommonDeps{
+			Logger:   logger,
+			Activity: activity.NewActivityLogger("", logger),
+		},
+		Member: server.MemberDeps{
+			Repository: infra.MemberRepository,
+			Cache:      infra.MemberCache,
+			Profiles:   foundation.ProfileService,
+		},
+		Stream: server.StreamDeps{
+			Holodex:         foundation.HolodexService,
+			YouTube:         ytStack.GetService(),
+			ValkeyCache:     infra.Cache,
+			StatsRepository: ytStack.GetStatsRepository(),
+		},
+		Stats: server.StatsDeps{
+			Alarm:       alarmMode.AlarmCRUD,
+			ACL:         aclService,
+			SystemStats: systemCollector,
+		},
+		Settings: server.SettingsDeps{
+			Settings: sharedmodules.BuildSettingsService(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger),
+			Applier:  settingsApplier,
+		},
+		Template: server.TemplateDeps{
+			Admin: templateAdmin,
+		},
+		MajorEvent: server.MajorEventDeps{
+			Scheduler:        majorEventTriggerClient,
+			MonthlyScheduler: majorEventTriggerClient,
+		},
+		YouTubeOps: server.YouTubeOpsDeps{
+			CommunityShortsOps: communityShortsOpsRepository,
+		},
+	})
 }
 
 func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.Logger) *template.AdminService {
