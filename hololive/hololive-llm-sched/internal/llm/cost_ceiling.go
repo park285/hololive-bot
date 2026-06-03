@@ -117,7 +117,7 @@ func (v *ValkeyCostCeiling) RecordUsage(ctx context.Context, provider, model str
 	if err != nil {
 		v.logger.WarnContext(ctx, "llm cost ceiling: failed to increment monthly token counter",
 			slog.String("provider", provider),
-			slog.String("error", err.Error()))
+			slog.String("error_type", llmErrorType(err)))
 		return
 	}
 

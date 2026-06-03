@@ -455,9 +455,3 @@ func deliveryTestSelectColumns(table string) string {
 		return "*"
 	}
 }
-
-func requireDeliveryTestDB(t *testing.T, db *deliveryTestDB) *deliveryTestDB {
-	t.Helper()
-	require.NotNil(t, db)
-	return db
-}
