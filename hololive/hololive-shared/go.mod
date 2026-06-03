@@ -2,6 +2,8 @@ module github.com/kapu/hololive-shared
 
 go 1.26.2
 
+toolchain go1.26.4
+
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/alicebob/miniredis/v2 v2.38.0
@@ -13,7 +15,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.1.3 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/park285/shared-go v1.5.1
+	github.com/park285/shared-go v1.5.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.19.0
@@ -33,7 +35,7 @@ replace github.com/park285/shared-go => ../../../shared-go
 require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v0.15.1
+	github.com/park285/iris-client-go v0.15.3
 	github.com/prometheus/client_model v0.6.2
 	github.com/tech-engine/goscrapy v0.27.17
 	github.com/testcontainers/testcontainers-go v0.42.0

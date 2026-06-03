@@ -2,13 +2,15 @@ module github.com/kapu/hololive-alarm-worker
 
 go 1.26.2
 
+toolchain go1.26.4
+
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.15.1
-	github.com/park285/shared-go v1.5.1
+	github.com/park285/iris-client-go v0.15.3
+	github.com/park285/shared-go v1.5.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.75
