@@ -104,7 +104,8 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 
 	appConfig := &config.Config{
 		Server: config.ServerConfig{
-			APIKey: "test-key",
+			APIKey:          "test-key",
+			AdminAllowedIPs: []string{"127.0.0.1"},
 		},
 		Environment: "production",
 		CORS: config.CORSConfig{

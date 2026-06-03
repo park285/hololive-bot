@@ -222,6 +222,31 @@ func TestNewAPIRouterCORSValidation(t *testing.T) {
 	}
 }
 
+func TestProvideAPIRouterRejectsEmptyAdminAllowedIPsOnlyInProduction(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	productionEmpty := testRouterConfig()
+	productionEmpty.Environment = "production"
+	productionEmpty.Server.AdminAllowedIPs = nil
+	if router, err := provideTestAPIRouter(t, productionEmpty); err == nil || router != nil || err.Error() != "ADMIN_ALLOWED_IPS must be configured in production" {
+		t.Fatalf("production empty allowlist router=%v error=%v, want production allowlist error", router, err)
+	}
+
+	productionAllowed := testRouterConfig()
+	productionAllowed.Environment = "production"
+	productionAllowed.Server.AdminAllowedIPs = []string{"100.100.1.0/24"}
+	if router, err := provideTestAPIRouter(t, productionAllowed); err != nil || router == nil {
+		t.Fatalf("production configured allowlist router=%v error=%v, want no error", router, err)
+	}
+
+	nonProductionEmpty := testRouterConfig()
+	nonProductionEmpty.Environment = "development"
+	nonProductionEmpty.Server.AdminAllowedIPs = nil
+	if router, err := provideTestAPIRouter(t, nonProductionEmpty); err != nil || router == nil {
+		t.Fatalf("non-production empty allowlist router=%v error=%v, want no error", router, err)
+	}
+}
+
 func TestAPIRateLimitNilCacheAndAbortResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -290,6 +315,21 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("wrong api key status = %d, want %d", rec.Code, http.StatusForbidden)
 	}
+}
+
+func provideTestAPIRouter(t *testing.T, cfg *config.Config) (*gin.Engine, error) {
+	t.Helper()
+
+	return ProvideAPIRouter(
+		t.Context(),
+		cfg,
+		slog.New(slog.DiscardHandler),
+		(&server.Handler{}).DomainHandlers(),
+		&server.AuthHandler{},
+		nil,
+		nil,
+		nil,
+	)
 }
 
 func testRouterConfig() *config.Config {
