@@ -73,6 +73,9 @@ func ProvideAPIRouter(
 	if err != nil {
 		return nil, fmt.Errorf("parse admin allowed IPs: %w", err)
 	}
+	if strings.EqualFold(strings.TrimSpace(appConfig.Environment), "production") && len(adminAllowedIPs) == 0 {
+		return nil, errors.New("ADMIN_ALLOWED_IPS must be configured in production")
+	}
 
 	registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers, authHandler, adminAllowedIPs)
 
