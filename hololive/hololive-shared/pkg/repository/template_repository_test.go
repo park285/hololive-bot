@@ -122,7 +122,6 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 		wg.Add(2)
 		results := make(chan error, 2)
 		for _, body := range []string{"racing body", "resolved body"} {
-			body := body
 			go func() {
 				defer wg.Done()
 				tmpl, err := repository.Upsert(ctx, key, nil, body)

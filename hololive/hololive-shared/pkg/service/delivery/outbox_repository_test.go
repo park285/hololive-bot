@@ -49,7 +49,7 @@ func testRepository(t *testing.T) *OutboxRepository {
 
 func buildOutboxBatchItems(count int) []OutboxItem {
 	items := make([]OutboxItem, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		items = append(items, OutboxItem{
 			Kind:      domain.DeliveryKindMemberNewsWeekly,
 			PeriodKey: "2026-W08",
@@ -151,7 +151,7 @@ func TestFetchAndLock(t *testing.T) {
 	repository := testRepository(t)
 	ctx := context.Background()
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
 			t.Fatalf("enqueue %d: %v", i, err)
 		}
@@ -373,7 +373,7 @@ func TestCountByStatus(t *testing.T) {
 	repository := testRepository(t)
 	ctx := context.Background()
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
 			t.Fatalf("enqueue %d: %v", i, err)
 		}
