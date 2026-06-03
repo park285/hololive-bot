@@ -67,6 +67,8 @@ x-db-service: &db-service
 
 x-go-build-base: &go-build-base
   context: .
+  provenance: mode=max
+  sbom: true
   additional_contexts:
     shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
     iris_client_go_workspace: ${IRIS_CLIENT_GO_WORKSPACE_PATH:-../iris-client-go}
@@ -490,6 +492,8 @@ services:
     build:
       context: .
       dockerfile: admin-dashboard/Dockerfile
+      provenance: mode=max
+      sbom: true
     container_name: admin-dashboard
     environment:
       PORT: "30190"
