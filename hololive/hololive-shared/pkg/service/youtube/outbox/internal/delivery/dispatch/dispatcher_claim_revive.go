@@ -69,52 +69,7 @@ func (d *ClaimManager) reviveStaleFailedOutbox(ctx context.Context, freshnessWin
 
 	var revived int64
 	err := deliverysql.InDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
-		var ids []int64
-		if err := deliverysql.SelectDeliverySQL(ctx, tx, &ids, "revive: select stale failed outbox", `
-			SELECT id
-			FROM youtube_notification_outbox
-			WHERE status = ?
-			  AND sent_at IS NULL
-			  AND kind NOT IN (?, ?)
-			  AND created_at >= ?
-			  AND (locked_at IS NULL OR locked_at < ?)
-			ORDER BY id
-			LIMIT ?
-			FOR UPDATE SKIP LOCKED
-		`, string(domain.OutboxStatusFailed), string(domain.OutboxKindCommunityPost), string(domain.OutboxKindNewShort), freshCutoff, lockCutoff, batchSize); err != nil {
-			return err
-		}
-		if len(ids) == 0 {
-			return nil
-		}
-
-		// per-room dedup: FAILED delivery 행만 재시도 대상으로 리셋, SENT 행은 불변.
-		deliveryArgs := []any{now}
-		deliveryArgs = deliverysql.AppendDeliveryInt64Args(deliveryArgs, ids)
-		deliveryArgs = append(deliveryArgs, string(domain.OutboxStatusFailed))
-		if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset failed delivery rows", `
-			UPDATE youtube_notification_delivery
-			SET status = 'PENDING', attempt_count = 0, next_attempt_at = ?, locked_at = NULL, sent_at = NULL, error = ''
-			WHERE `+deliverysql.DeliveryInClause("outbox_id", len(ids))+`
-			  AND status = ?
-		`, deliveryArgs...); err != nil {
-			return err
-		}
-
-		outboxArgs := []any{now}
-		outboxArgs = deliverysql.AppendDeliveryInt64Args(outboxArgs, ids)
-		outboxArgs = append(outboxArgs, string(domain.OutboxStatusFailed))
-		affected, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset outbox rows", `
-			UPDATE youtube_notification_outbox
-			SET status = 'PENDING', attempt_count = 0, next_attempt_at = ?, locked_at = NULL, error = ''
-			WHERE `+deliverysql.DeliveryInClause("id", len(ids))+`
-			  AND status = ?
-		`, outboxArgs...)
-		if err != nil {
-			return err
-		}
-		revived = affected
-		return nil
+		return reviveStaleFailedOutboxTx(ctx, tx, freshCutoff, lockCutoff, batchSize, now, &revived)
 	})
 	if err != nil {
 		observeOutboxReviveError()
@@ -125,4 +80,70 @@ func (d *ClaimManager) reviveStaleFailedOutbox(ctx context.Context, freshnessWin
 		observeOutboxRevived(revived)
 	}
 	return revived, nil
+}
+
+func reviveStaleFailedOutboxTx(ctx context.Context, tx dbx.Querier, freshCutoff, lockCutoff time.Time, batchSize int, now time.Time, revived *int64) error {
+	ids, err := selectStaleFailedOutboxIDs(ctx, tx, freshCutoff, lockCutoff, batchSize)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	if err := resetFailedDeliveryRows(ctx, tx, ids, now); err != nil {
+		return err
+	}
+
+	affected, err := resetFailedOutboxRows(ctx, tx, ids, now)
+	if err != nil {
+		return err
+	}
+	*revived = affected
+	return nil
+}
+
+func selectStaleFailedOutboxIDs(ctx context.Context, tx dbx.Querier, freshCutoff, lockCutoff time.Time, batchSize int) ([]int64, error) {
+	var ids []int64
+	if err := deliverysql.SelectDeliverySQL(ctx, tx, &ids, "revive: select stale failed outbox", `
+		SELECT id
+		FROM youtube_notification_outbox
+		WHERE status = ?
+		  AND sent_at IS NULL
+		  AND kind NOT IN (?, ?)
+		  AND created_at >= ?
+		  AND (locked_at IS NULL OR locked_at < ?)
+		ORDER BY id
+		LIMIT ?
+		FOR UPDATE SKIP LOCKED
+	`, string(domain.OutboxStatusFailed), string(domain.OutboxKindCommunityPost), string(domain.OutboxKindNewShort), freshCutoff, lockCutoff, batchSize); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// per-room dedup: FAILED delivery 행만 재시도 대상으로 리셋, SENT 행은 불변.
+func resetFailedDeliveryRows(ctx context.Context, tx dbx.Querier, ids []int64, now time.Time) error {
+	deliveryArgs := []any{now}
+	deliveryArgs = deliverysql.AppendDeliveryInt64Args(deliveryArgs, ids)
+	deliveryArgs = append(deliveryArgs, string(domain.OutboxStatusFailed))
+	_, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset failed delivery rows", `
+		UPDATE youtube_notification_delivery
+		SET status = 'PENDING', attempt_count = 0, next_attempt_at = ?, locked_at = NULL, sent_at = NULL, error = ''
+		WHERE `+deliverysql.DeliveryInClause("outbox_id", len(ids))+`
+		  AND status = ?
+	`, deliveryArgs...)
+	return err
+}
+
+func resetFailedOutboxRows(ctx context.Context, tx dbx.Querier, ids []int64, now time.Time) (int64, error) {
+	outboxArgs := []any{now}
+	outboxArgs = deliverysql.AppendDeliveryInt64Args(outboxArgs, ids)
+	outboxArgs = append(outboxArgs, string(domain.OutboxStatusFailed))
+	return deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset outbox rows", `
+		UPDATE youtube_notification_outbox
+		SET status = 'PENDING', attempt_count = 0, next_attempt_at = ?, locked_at = NULL, error = ''
+		WHERE `+deliverysql.DeliveryInClause("id", len(ids))+`
+		  AND status = ?
+	`, outboxArgs...)
 }

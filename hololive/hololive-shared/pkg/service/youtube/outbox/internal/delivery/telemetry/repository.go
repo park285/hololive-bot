@@ -224,16 +224,7 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 	}
 	slices.Sort(candidateIDs)
 
-	lockArgs := []any{now}
-	lockArgs = deliverysql.AppendDeliveryInt64Args(lockArgs, candidateIDs)
-	lockArgs = append(lockArgs, lockExpiry)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "lock delivery telemetry rows", `
-		UPDATE youtube_notification_delivery_telemetry
-		SET locked_at = ?
-		WHERE `+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
-		  AND logged_at IS NULL
-		  AND (locked_at IS NULL OR locked_at < ?)
-	`, lockArgs...); err != nil {
+	if err := r.lockPendingTelemetryRows(ctx, candidateIDs, now, lockExpiry); err != nil {
 		return nil, err
 	}
 
@@ -254,6 +245,22 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 	}
 
 	return locked, nil
+}
+
+func (r *Repository) lockPendingTelemetryRows(ctx context.Context, candidateIDs []int64, now, lockExpiry time.Time) error {
+	lockArgs := []any{now}
+	lockArgs = deliverysql.AppendDeliveryInt64Args(lockArgs, candidateIDs)
+	lockArgs = append(lockArgs, lockExpiry)
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "lock delivery telemetry rows", `
+		UPDATE youtube_notification_delivery_telemetry
+		SET locked_at = ?
+		WHERE `+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
+		  AND logged_at IS NULL
+		  AND (locked_at IS NULL OR locked_at < ?)
+	`, lockArgs...); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {

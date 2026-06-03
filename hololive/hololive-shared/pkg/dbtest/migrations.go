@@ -82,10 +82,7 @@ func WithMigrationFilter(filter MigrationFilter) ApplyOption {
 // 디렉터리 탐색 우선순위: WithMigrationsDir 옵션 → HOLOLIVE_MIGRATIONS_DIR env →
 // CWD에서 위로 build-all.sh 마커를 찾아 migrationsRelDir append.
 func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, opts ...ApplyOption) error {
-	options := &applyOptions{}
-	for _, opt := range opts {
-		opt(options)
-	}
+	options := buildApplyOptions(opts)
 
 	dir, err := resolveMigrationsDir(options.dir)
 	if err != nil {
@@ -98,25 +95,46 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, opts ...ApplyOptio
 	}
 
 	for _, filename := range entries {
-		if options.filter != nil && !options.filter(filename) {
+		if !options.shouldApply(filename) {
 			continue
 		}
 
-		path := filepath.Join(dir, filename)
-
-		sql, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return fmt.Errorf("apply migrations: read %s: %w", filename, readErr)
+		if err := applyMigrationFile(ctx, pool, filepath.Join(dir, filename), filename); err != nil {
+			return err
 		}
+	}
 
-		// 각 statement를 개별 Exec한다. pool.Exec에 멀티-statement 문자열을 넘기면
-		// simple query protocol이 암묵 트랜잭션 블록으로 감싸 CREATE INDEX CONCURRENTLY가
-		// "cannot run inside a transaction block"으로 실패한다(019/060/061). statement
-		// 단위로 보내면 각 statement가 autocommit으로 실행되어 CONCURRENTLY가 동작한다.
-		for _, stmt := range splitSQLStatements(string(sql)) {
-			if _, execErr := pool.Exec(ctx, stmt); execErr != nil {
-				return fmt.Errorf("apply migrations: exec %s: %w", filename, execErr)
-			}
+	return nil
+}
+
+func buildApplyOptions(opts []ApplyOption) *applyOptions {
+	options := &applyOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	return options
+}
+
+// shouldApply는 filter가 nil이거나 filter가 통과시킨 파일이면 true다.
+func (o *applyOptions) shouldApply(filename string) bool {
+	return o.filter == nil || o.filter(filename)
+}
+
+// applyMigrationFile은 단일 migration 파일을 읽어 statement 단위로 적용한다.
+//
+// 각 statement를 개별 Exec한다. pool.Exec에 멀티-statement 문자열을 넘기면
+// simple query protocol이 암묵 트랜잭션 블록으로 감싸 CREATE INDEX CONCURRENTLY가
+// "cannot run inside a transaction block"으로 실패한다(019/060/061). statement
+// 단위로 보내면 각 statement가 autocommit으로 실행되어 CONCURRENTLY가 동작한다.
+func applyMigrationFile(ctx context.Context, pool *pgxpool.Pool, path, filename string) error {
+	sql, readErr := os.ReadFile(path)
+	if readErr != nil {
+		return fmt.Errorf("apply migrations: read %s: %w", filename, readErr)
+	}
+
+	for _, stmt := range splitSQLStatements(string(sql)) {
+		if _, execErr := pool.Exec(ctx, stmt); execErr != nil {
+			return fmt.Errorf("apply migrations: exec %s: %w", filename, execErr)
 		}
 	}
 
@@ -143,82 +161,126 @@ func splitSQLStatements(sql string) []string {
 
 	runes := []rune(sql)
 	for i := 0; i < len(runes); {
-		c := runes[i]
-
-		switch {
-		case c == '-' && i+1 < len(runes) && runes[i+1] == '-':
-			// 라인 주석: 개행 전까지 보존하며 그대로 통과(세미콜론 무시).
-			for i < len(runes) && runes[i] != '\n' {
-				buf.WriteRune(runes[i])
-				i++
-			}
-
-		case c == '/' && i+1 < len(runes) && runes[i+1] == '*':
-			// 블록 주석: */ 까지 통과.
-			buf.WriteRune(runes[i])
-			buf.WriteRune(runes[i+1])
-			i += 2
-			for i < len(runes) {
-				if runes[i] == '*' && i+1 < len(runes) && runes[i+1] == '/' {
-					buf.WriteRune(runes[i])
-					buf.WriteRune(runes[i+1])
-					i += 2
-					break
-				}
-				buf.WriteRune(runes[i])
-				i++
-			}
-
-		case c == '\'' || c == '"':
-			// 인용 문자열/식별자: 닫는 동일 인용까지 통과. '' 또는 "" 이스케이프 처리.
-			quote := c
-			buf.WriteRune(runes[i])
-			i++
-			for i < len(runes) {
-				buf.WriteRune(runes[i])
-				if runes[i] == quote {
-					if i+1 < len(runes) && runes[i+1] == quote {
-						buf.WriteRune(runes[i+1])
-						i += 2
-						continue
-					}
-					i++
-					break
-				}
-				i++
-			}
-
-		case c == '$':
-			// dollar-quoting: $tag$ ... $tag$ (tag는 비거나 식별자).
-			if tag, ok := dollarTag(runes, i); ok {
-				buf.WriteString(tag)
-				i += len([]rune(tag))
-				for i < len(runes) {
-					if other, ok2 := dollarTag(runes, i); ok2 && other == tag {
-						buf.WriteString(other)
-						i += len([]rune(other))
-						break
-					}
-					buf.WriteRune(runes[i])
-					i++
-				}
-			} else {
-				buf.WriteRune(c)
-				i++
-			}
-
-		case c == ';':
+		next, isSeparator := scanSQLToken(&buf, runes, i)
+		if isSeparator {
 			flush()
-			i++
-
-		default:
-			buf.WriteRune(c)
-			i++
 		}
+		i = next
 	}
 
 	flush()
 	return statements
+}
+
+// scanSQLToken은 pos에서 시작하는 한 토큰을 buf에 기록하고 다음 인덱스를 반환한다.
+// top-level 세미콜론이면 isSeparator=true(이 경우 buf에는 아무것도 쓰지 않는다).
+// 라인/블록 주석, 인용 문자열, dollar-quote는 내부 세미콜론을 구분자로 보지 않는다.
+func scanSQLToken(buf *strings.Builder, runes []rune, pos int) (next int, isSeparator bool) {
+	if end, ok := scanComment(buf, runes, pos); ok {
+		return end, false
+	}
+
+	c := runes[pos]
+	switch c {
+	case '\'', '"':
+		return scanQuoted(buf, runes, pos), false
+	case '$':
+		return scanDollar(buf, runes, pos), false
+	case ';':
+		return pos + 1, true
+	default:
+		buf.WriteRune(c)
+		return pos + 1, false
+	}
+}
+
+// scanComment은 pos가 라인(--) 또는 블록(/* */) 주석의 시작이면 그 끝까지 buf에
+// 기록하고 (end, true)를 반환한다. 주석이 아니면 ok=false.
+func scanComment(buf *strings.Builder, runes []rune, pos int) (end int, ok bool) {
+	if isLineCommentStart(runes, pos) {
+		return scanLineComment(buf, runes, pos), true
+	}
+	if isBlockCommentStart(runes, pos) {
+		return scanBlockComment(buf, runes, pos), true
+	}
+	return pos, false
+}
+
+func isLineCommentStart(runes []rune, i int) bool {
+	return runes[i] == '-' && i+1 < len(runes) && runes[i+1] == '-'
+}
+
+func isBlockCommentStart(runes []rune, i int) bool {
+	return runes[i] == '/' && i+1 < len(runes) && runes[i+1] == '*'
+}
+
+// scanLineComment은 라인 주석을 개행 전까지 그대로 보존하며 통과한다(세미콜론 무시).
+func scanLineComment(buf *strings.Builder, runes []rune, i int) int {
+	for i < len(runes) && runes[i] != '\n' {
+		buf.WriteRune(runes[i])
+		i++
+	}
+	return i
+}
+
+// scanBlockComment은 블록 주석을 */ 까지 그대로 통과한다.
+func scanBlockComment(buf *strings.Builder, runes []rune, i int) int {
+	buf.WriteRune(runes[i])
+	buf.WriteRune(runes[i+1])
+	i += 2
+	for i < len(runes) {
+		if runes[i] == '*' && i+1 < len(runes) && runes[i+1] == '/' {
+			buf.WriteRune(runes[i])
+			buf.WriteRune(runes[i+1])
+			return i + 2
+		}
+		buf.WriteRune(runes[i])
+		i++
+	}
+	return i
+}
+
+// scanQuoted는 인용 문자열/식별자를 닫는 동일 인용까지 통과한다. ” 또는 "" 이스케이프를 처리한다.
+func scanQuoted(buf *strings.Builder, runes []rune, i int) int {
+	quote := runes[i]
+	buf.WriteRune(runes[i])
+	i++
+	for i < len(runes) {
+		buf.WriteRune(runes[i])
+		if runes[i] != quote {
+			i++
+			continue
+		}
+		if i+1 < len(runes) && runes[i+1] == quote {
+			buf.WriteRune(runes[i+1])
+			i += 2
+			continue
+		}
+		return i + 1
+	}
+	return i
+}
+
+// scanDollar는 dollar-quoting($tag$ ... $tag$, tag는 비거나 식별자)를 처리한다.
+// pos가 dollar-quote 태그가 아니면 '$' 한 글자만 통과시킨다.
+func scanDollar(buf *strings.Builder, runes []rune, i int) int {
+	tag, ok := dollarTag(runes, i)
+	if !ok {
+		buf.WriteRune(runes[i])
+		return i + 1
+	}
+
+	buf.WriteString(tag)
+	i += len([]rune(tag))
+	for i < len(runes) {
+		if other, ok2 := dollarTag(runes, i); ok2 && other == tag {
+			buf.WriteString(other)
+			return i + len([]rune(other))
+		}
+		buf.WriteRune(runes[i])
+		i++
+	}
+	return i
 }
 
 // dollarTag는 pos에서 시작하는 dollar-quote 태그($$ 또는 $tag$)를 인식해 그 문자열을 돌려준다.
@@ -228,19 +290,24 @@ func dollarTag(runes []rune, pos int) (string, bool) {
 		return "", false
 	}
 
-	j := pos + 1
-	for j < len(runes) {
+	for j := pos + 1; j < len(runes); j++ {
 		c := runes[j]
 		if c == '$' {
 			return string(runes[pos : j+1]), true
 		}
-		if !(c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+		if !isDollarTagRune(c) {
 			return "", false
 		}
-		j++
 	}
 
 	return "", false
+}
+
+func isDollarTagRune(c rune) bool {
+	isLower := c >= 'a' && c <= 'z'
+	isUpper := c >= 'A' && c <= 'Z'
+	isDigit := c >= '0' && c <= '9'
+	return c == '_' || isLower || isUpper || isDigit
 }
 
 // resolveMigrationsDir는 migration 디렉터리 절대 경로를 결정한다.
@@ -296,17 +363,15 @@ func readManifest(path string) ([]string, error) {
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		name, skip, parseErr := parseManifestLine(scanner.Text())
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		if skip {
 			continue
 		}
 
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			return nil, fmt.Errorf("malformed manifest line %q (want \"NNN filename.sql\")", line)
-		}
-
-		filenames = append(filenames, fields[len(fields)-1])
+		filenames = append(filenames, name)
 	}
 
 	if scanErr := scanner.Err(); scanErr != nil {
@@ -318,4 +383,20 @@ func readManifest(path string) ([]string, error) {
 	}
 
 	return filenames, nil
+}
+
+// parseManifestLine은 manifest 한 줄을 파싱한다. 빈 줄·'#' 주석은 skip=true,
+// "NNN filename.sql" 형식이면 마지막 필드(파일명)를 반환한다.
+func parseManifestLine(raw string) (name string, skip bool, err error) {
+	line := strings.TrimSpace(raw)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return "", true, nil
+	}
+
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return "", false, fmt.Errorf("malformed manifest line %q (want \"NNN filename.sql\")", line)
+	}
+
+	return fields[len(fields)-1], false, nil
 }

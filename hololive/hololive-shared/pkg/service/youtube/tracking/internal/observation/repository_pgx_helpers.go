@@ -89,11 +89,15 @@ func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) e
 			panic(p)
 		}
 	}()
-	if err := fn(tx); err != nil {
+	return finishPgxTx(ctx, tx, fn(tx))
+}
+
+func finishPgxTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
+	if fnErr != nil {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			return fmt.Errorf("transaction failed and rollback failed: %w", errors.Join(err, rollbackErr))
+			return fmt.Errorf("transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
-		return err
+		return fnErr
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)

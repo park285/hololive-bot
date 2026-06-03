@@ -62,11 +62,16 @@ func InPgxTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) error) erro
 		}
 	}()
 
-	if err := fn(tx); err != nil {
+	return finishPgxTx(ctx, tx, fn(tx))
+}
+
+// finishPgxTx는 fn 실행 결과에 따라 트랜잭션을 커밋하거나 롤백한다.
+func finishPgxTx(ctx context.Context, tx Tx, fnErr error) error {
+	if fnErr != nil {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(err, rollbackErr))
+			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
-		return fmt.Errorf("pgx transaction failed: %w", err)
+		return fmt.Errorf("pgx transaction failed: %w", fnErr)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

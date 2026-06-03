@@ -86,27 +86,9 @@ func NewPool(t testing.TB) *pgxpool.Pool {
 
 	dbName := fmt.Sprintf("test_%d_%d", time.Now().UnixNano(), dbSeq.Add(1))
 
-	// admin pool은 base DSN의 기본 데이터베이스에 연결해 격리 DB를 생성한다.
-	adminPool, err := poolForDatabase(ctx, baseDSN, "")
-	if err != nil {
-		t.Fatalf("dbtest: connect base for database setup: %v", err)
-	}
+	createIsolatedDatabase(t, ctx, baseDSN, dbName)
 
-	// 식별자는 내부 생성(time+seq)이라 인젝션 위험이 없으나 quote로 안전하게 감싼다.
-	if _, err := adminPool.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", quoteIdent(dbName))); err != nil {
-		adminPool.Close()
-		t.Fatalf("dbtest: create database %s: %v", dbName, err)
-	}
-	adminPool.Close()
-
-	pool, err := poolForDatabase(ctx, baseDSN, dbName)
-	if err != nil {
-		if dropErr := dropDatabase(baseDSN, dbName); dropErr != nil {
-			t.Errorf("dbtest: drop database %s after test pool failure: %v", dbName, dropErr)
-		}
-
-		t.Fatalf("dbtest: connect test database pool: %v", err)
-	}
+	pool := openTestPool(t, ctx, baseDSN, dbName)
 
 	t.Cleanup(func() {
 		if dropErr := dropDatabase(baseDSN, dbName); dropErr != nil {
@@ -117,6 +99,40 @@ func NewPool(t testing.TB) *pgxpool.Pool {
 
 	if err := ApplyMigrations(ctx, pool); err != nil {
 		t.Fatalf("dbtest: apply migrations to database %s: %v", dbName, err)
+	}
+
+	return pool
+}
+
+// createIsolatedDatabase는 base DSN의 기본 데이터베이스에 admin pool로 연결해
+// 격리 DB(dbName)를 생성한다. 식별자는 내부 생성(time+seq)이라 인젝션 위험이 없으나
+// quote로 안전하게 감싼다.
+func createIsolatedDatabase(t testing.TB, ctx context.Context, baseDSN, dbName string) {
+	t.Helper()
+
+	adminPool, err := poolForDatabase(ctx, baseDSN, "")
+	if err != nil {
+		t.Fatalf("dbtest: connect base for database setup: %v", err)
+	}
+	defer adminPool.Close()
+
+	if _, err := adminPool.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", quoteIdent(dbName))); err != nil {
+		t.Fatalf("dbtest: create database %s: %v", dbName, err)
+	}
+}
+
+// openTestPool은 격리 DB에 연결된 pool을 반환한다. 연결 실패 시 best-effort로
+// 해당 DB를 drop한 뒤 t.Fatalf로 종료한다.
+func openTestPool(t testing.TB, ctx context.Context, baseDSN, dbName string) *pgxpool.Pool {
+	t.Helper()
+
+	pool, err := poolForDatabase(ctx, baseDSN, dbName)
+	if err != nil {
+		if dropErr := dropDatabase(baseDSN, dbName); dropErr != nil {
+			t.Errorf("dbtest: drop database %s after test pool failure: %v", dbName, dropErr)
+		}
+
+		t.Fatalf("dbtest: connect test database pool: %v", err)
 	}
 
 	return pool

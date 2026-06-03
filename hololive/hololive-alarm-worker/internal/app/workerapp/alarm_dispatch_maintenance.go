@@ -243,33 +243,48 @@ func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 		return fmt.Errorf("begin alarm dispatch retention transaction: %w", err)
 	}
 
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
-			panic(p)
-		}
-	}()
+	defer rollbackAlarmDispatchTxOnPanic(ctx, tx)
 
-	var locked bool
-	if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", key).Scan(&locked); err != nil {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			return fmt.Errorf("acquire alarm dispatch retention transaction lock and rollback failed: %w", errors.Join(err, rollbackErr))
-		}
-		return fmt.Errorf("acquire alarm dispatch retention transaction lock: %w", err)
+	locked, err := acquireAlarmDispatchLock(ctx, tx, key)
+	if err != nil {
+		return err
 	}
 	if locked && fn != nil {
 		err = fn(ctx, alarmDispatchMaintenancePgxStore{db: tx})
 	}
 	if err != nil {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			return fmt.Errorf("alarm dispatch retention transaction failed and rollback failed: %w", errors.Join(err, rollbackErr))
-		}
-		return err
+		return rollbackAlarmDispatchTx(ctx, tx, err, "alarm dispatch retention transaction failed and rollback failed: %w")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit alarm dispatch retention transaction: %w", err)
 	}
 	return nil
+}
+
+func rollbackAlarmDispatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
+	if p := recover(); p != nil {
+		_ = tx.Rollback(ctx)
+		panic(p)
+	}
+}
+
+func acquireAlarmDispatchLock(ctx context.Context, tx pgx.Tx, key int64) (bool, error) {
+	var locked bool
+	err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", key).Scan(&locked)
+	if err == nil {
+		return locked, nil
+	}
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		return false, fmt.Errorf("acquire alarm dispatch retention transaction lock and rollback failed: %w", errors.Join(err, rollbackErr))
+	}
+	return false, fmt.Errorf("acquire alarm dispatch retention transaction lock: %w", err)
+}
+
+func rollbackAlarmDispatchTx(ctx context.Context, tx pgx.Tx, cause error, joinFmt string) error {
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		return fmt.Errorf(joinFmt, errors.Join(cause, rollbackErr))
+	}
+	return cause
 }
 
 func (s alarmDispatchMaintenancePgxStore) BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error) {

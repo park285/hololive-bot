@@ -354,22 +354,33 @@ func (p *LivePoller) markEndedSessions(ctx context.Context, channelID string, cu
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	for _, session := range liveSessions {
-		if !activeIDs[session.VideoID] {
-			if _, err := p.db.Exec(ctx, `
-				UPDATE youtube_live_sessions
-				SET status = $1, ended_at = $2, last_seen_at = $2
-				WHERE video_id = $3`,
-				domain.LiveStatusEnded,
-				now,
-				session.VideoID,
-			); err != nil {
-				slog.Warn("Failed to mark live session ended", "video_id", session.VideoID, "error", err)
-				continue
-			}
-
-			p.finalizeStreamStats(ctx, session.VideoID, channelID)
-		}
+		p.endStaleSession(ctx, channelID, session.VideoID, activeIDs, now)
 	}
+}
+
+func (p *LivePoller) endStaleSession(ctx context.Context, channelID, videoID string, activeIDs map[string]bool, now time.Time) {
+	if activeIDs[videoID] {
+		return
+	}
+	if !p.markSessionEnded(ctx, videoID, now) {
+		return
+	}
+	p.finalizeStreamStats(ctx, videoID, channelID)
+}
+
+func (p *LivePoller) markSessionEnded(ctx context.Context, videoID string, now time.Time) bool {
+	if _, err := p.db.Exec(ctx, `
+		UPDATE youtube_live_sessions
+		SET status = $1, ended_at = $2, last_seen_at = $2
+		WHERE video_id = $3`,
+		domain.LiveStatusEnded,
+		now,
+		videoID,
+	); err != nil {
+		slog.Warn("Failed to mark live session ended", "video_id", videoID, "error", err)
+		return false
+	}
+	return true
 }
 
 func activeLiveStreamIDs(currentStreams []*domain.Stream) map[string]bool {
@@ -386,18 +397,37 @@ func isActiveLiveStream(stream *domain.Stream) bool {
 	return stream != nil && (stream.Status == domain.StreamStatusLive || stream.Status == domain.StreamStatusUpcoming)
 }
 
+type liveViewerStatsResult struct {
+	MaxViewers int `db:"max_viewers"`
+	AvgViewers int `db:"avg_viewers"`
+	Count      int `db:"count"`
+}
+
 // finalizeStreamStats: 스트림 통계 집계
 func (p *LivePoller) finalizeStreamStats(ctx context.Context, videoID, channelID string) {
-	// 샘플 데이터 집계
-	var result struct {
-		MaxViewers int `db:"max_viewers"`
-		AvgViewers int `db:"avg_viewers"`
-		Count      int `db:"count"`
-	}
-
 	if p.db == nil {
 		return
 	}
+
+	result, ok := p.aggregateLiveViewerStats(ctx, videoID)
+	if !ok || result.Count == 0 {
+		return
+	}
+
+	session, found, err := loadExistingLiveSession(ctx, p.db, videoID)
+	if err != nil {
+		slog.Warn("Failed to load live session for stream stats", "video_id", videoID, "error", err)
+		return
+	}
+	if !found {
+		return
+	}
+
+	p.saveStreamStats(ctx, videoID, channelID, session, result)
+}
+
+func (p *LivePoller) aggregateLiveViewerStats(ctx context.Context, videoID string) (liveViewerStatsResult, bool) {
+	var result liveViewerStatsResult
 	if err := pgxscan.Get(ctx, p.db, &result, `
 		SELECT
 			COALESCE(MAX(concurrent_viewers), 0)::int AS max_viewers,
@@ -408,23 +438,12 @@ func (p *LivePoller) finalizeStreamStats(ctx context.Context, videoID, channelID
 		videoID,
 	); err != nil {
 		slog.Warn("Failed to aggregate live stream stats", "video_id", videoID, "error", err)
-		return
+		return liveViewerStatsResult{}, false
 	}
+	return result, true
+}
 
-	if result.Count == 0 {
-		return
-	}
-
-	// 스트림 통계 저장
-	session, found, err := loadExistingLiveSession(ctx, p.db, videoID)
-	if err != nil {
-		slog.Warn("Failed to load live session for stream stats", "video_id", videoID, "error", err)
-		return
-	}
-	if !found {
-		return
-	}
-
+func (p *LivePoller) saveStreamStats(ctx context.Context, videoID, channelID string, session domain.YouTubeLiveSession, result liveViewerStatsResult) {
 	stats := &domain.YouTubeStreamStats{
 		VideoID:              videoID,
 		ChannelID:            channelID,

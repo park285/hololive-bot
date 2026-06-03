@@ -116,27 +116,7 @@ func (p *ChannelStatsPoller) updateProfileIfStale(ctx context.Context, channelID
 	if p.db == nil {
 		return
 	}
-
-	var profile struct {
-		ChannelID string    `db:"channel_id"`
-		UpdatedAt time.Time `db:"updated_at"`
-	}
-	err := pgxscan.Get(ctx, p.db, &profile, `
-		SELECT channel_id, updated_at
-		FROM youtube_channel_profiles
-		WHERE channel_id = $1`,
-		channelID,
-	)
-	needsUpdate := true
-	if err == nil {
-		needsUpdate = time.Since(profile.UpdatedAt) > p.profileCacheTTL
-	} else if !pgxscan.NotFound(err) {
-		slog.Warn("Failed to load channel profile freshness",
-			"channel_id", channelID,
-			"error", err)
-	}
-
-	if !needsUpdate {
+	if !p.channelProfileNeedsUpdate(ctx, channelID) {
 		return
 	}
 
@@ -150,7 +130,32 @@ func (p *ChannelStatsPoller) updateProfileIfStale(ctx context.Context, channelID
 
 	avatars := polling.ConvertThumbnails(snippet.Avatar)
 	banners := polling.ConvertThumbnails(snippet.Banner)
+	p.upsertChannelProfile(ctx, channelID, avatars, banners)
+}
 
+func (p *ChannelStatsPoller) channelProfileNeedsUpdate(ctx context.Context, channelID string) bool {
+	var profile struct {
+		ChannelID string    `db:"channel_id"`
+		UpdatedAt time.Time `db:"updated_at"`
+	}
+	err := pgxscan.Get(ctx, p.db, &profile, `
+		SELECT channel_id, updated_at
+		FROM youtube_channel_profiles
+		WHERE channel_id = $1`,
+		channelID,
+	)
+	if err == nil {
+		return time.Since(profile.UpdatedAt) > p.profileCacheTTL
+	}
+	if !pgxscan.NotFound(err) {
+		slog.Warn("Failed to load channel profile freshness",
+			"channel_id", channelID,
+			"error", err)
+	}
+	return true
+}
+
+func (p *ChannelStatsPoller) upsertChannelProfile(ctx context.Context, channelID string, avatars, banners domain.ThumbnailsJSON) {
 	newProfile := &domain.YouTubeChannelProfile{
 		ChannelID: channelID,
 		Avatar:    avatars,
