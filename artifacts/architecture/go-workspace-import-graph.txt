@@ -871,6 +871,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/for
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store -> github.com/kapu/hololive-shared/internal/dbx
+github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store -> github.com/kapu/hololive-shared/pkg/service/youtube/contentid
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql
