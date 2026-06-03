@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 type claimGateTestSender struct {
@@ -181,8 +182,8 @@ func TestDispatchDeliveryRowsClaimsCommunityPostBeforeSending(t *testing.T) {
 	})
 
 	require.Equal(t, 1, sender.messageCount())
-	require.Equal(t, []int64{row.ID}, result.successDeliveryIDs)
-	require.Zero(t, result.failedDeliveries)
+	require.Equal(t, []int64{row.ID}, result.SuccessDeliveryIDs)
+	require.Zero(t, result.FailedDeliveries)
 
 	var state domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
@@ -215,9 +216,9 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaim(t *te
 	})
 
 	require.Zero(t, sender.messageCount())
-	require.Empty(t, result.successDeliveryIDs)
-	require.Equal(t, 1, result.failedDeliveries)
-	require.Equal(t, []int64{row.ID}, result.failureBuckets[deliveryFailureReasonPreSendClaim])
+	require.Empty(t, result.SuccessDeliveryIDs)
+	require.Equal(t, 1, result.FailedDeliveries)
+	require.Equal(t, []int64{row.ID}, result.FailureBuckets[deliveryFailureReasonPreSendClaim])
 
 	var state domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
@@ -252,8 +253,8 @@ func TestDispatchDeliveryRowsSkipsAlreadySentDuplicateWithoutSending(t *testing.
 	})
 
 	require.Zero(t, sender.messageCount())
-	require.Equal(t, []int64{row.ID}, result.successDeliveryIDs)
-	require.Zero(t, result.failedDeliveries)
+	require.Equal(t, []int64{row.ID}, result.SuccessDeliveryIDs)
+	require.Zero(t, result.FailedDeliveries)
 }
 
 func TestDispatchDeliveryRowsSkipsAlreadySentTrackingRowWithoutReclaim(t *testing.T) {
@@ -280,8 +281,8 @@ func TestDispatchDeliveryRowsSkipsAlreadySentTrackingRowWithoutReclaim(t *testin
 	})
 
 	require.Zero(t, sender.messageCount())
-	require.Equal(t, []int64{row.ID}, result.successDeliveryIDs)
-	require.Zero(t, result.failedDeliveries)
+	require.Equal(t, []int64{row.ID}, result.SuccessDeliveryIDs)
+	require.Zero(t, result.FailedDeliveries)
 
 	var stateCount int64
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
@@ -303,9 +304,9 @@ func TestDispatchDeliveryRowsReleasesClaimAfterSendFailure(t *testing.T) {
 	})
 
 	require.Zero(t, sender.messageCount())
-	require.Empty(t, result.successDeliveryIDs)
-	require.Equal(t, 1, result.failedDeliveries)
-	require.Equal(t, []int64{row.ID}, result.failureBuckets["send message"])
+	require.Empty(t, result.SuccessDeliveryIDs)
+	require.Equal(t, 1, result.FailedDeliveries)
+	require.Equal(t, []int64{row.ID}, result.FailureBuckets["send message"])
 
 	var state domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
@@ -338,8 +339,8 @@ func TestDispatchDeliveryRowsReclaimsStaleLegacyAuthorizationBeforeSending(t *te
 	})
 
 	require.Equal(t, 1, sender.messageCount())
-	require.Equal(t, []int64{row.ID}, result.successDeliveryIDs)
-	require.Zero(t, result.failedDeliveries)
+	require.Equal(t, []int64{row.ID}, result.SuccessDeliveryIDs)
+	require.Zero(t, result.FailedDeliveries)
 
 	var state domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
@@ -380,8 +381,8 @@ func TestDispatchDeliveryRowsGroupedSendFiltersOutAlreadySentDuplicate(t *testin
 	})
 
 	require.Equal(t, 1, sender.messageCount())
-	require.ElementsMatch(t, []int64{firstRow.ID, secondRow.ID}, result.successDeliveryIDs)
-	require.Zero(t, result.failedDeliveries)
+	require.ElementsMatch(t, []int64{firstRow.ID, secondRow.ID}, result.SuccessDeliveryIDs)
+	require.Zero(t, result.FailedDeliveries)
 	messages := sender.allMessages()
 	require.Len(t, messages, 1)
 	require.Contains(t, messages[0], "body-group-second")
@@ -409,7 +410,7 @@ func TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOnc
 				newClaimGateTestDispatcherWithDB(t, db, sender, Config{}),
 			}
 			row, outbox, postID := tc.fixture(now, "race")
-			results := make([]deliveryDispatchResult, len(dispatchers))
+			results := make([]dispatchstate.DispatchResult, len(dispatchers))
 
 			start := make(chan struct{})
 			var wg sync.WaitGroup
@@ -431,9 +432,9 @@ func TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOnc
 			totalFailures := 0
 			preSendClaimFailures := 0
 			for i := range results {
-				totalSuccesses += len(results[i].successDeliveryIDs)
-				totalFailures += results[i].failedDeliveries
-				preSendClaimFailures += len(results[i].failureBuckets[deliveryFailureReasonPreSendClaim])
+				totalSuccesses += len(results[i].SuccessDeliveryIDs)
+				totalFailures += results[i].FailedDeliveries
+				preSendClaimFailures += len(results[i].FailureBuckets[deliveryFailureReasonPreSendClaim])
 			}
 
 			require.Equal(t, 1, sender.messageCount())
@@ -510,7 +511,7 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 		claim.NewMemoryDecisionCache(),
 	)
 
-	result := &deliveryDispatchResult{failureBuckets: make(map[string][]int64)}
+	result := &dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
 	var mu sync.Mutex
 	dispatcher.send.dispatchClaimedRowsIndividually(
 		context.Background(),
@@ -528,8 +529,8 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 	)
 
 	require.Equal(t, 2, sender.messageCount())
-	require.ElementsMatch(t, []int64{firstRow.ID, secondRow.ID}, result.successDeliveryIDs)
-	require.Equal(t, []int64{duplicateRow.ID}, result.failureBuckets["send message"])
+	require.ElementsMatch(t, []int64{firstRow.ID, secondRow.ID}, result.SuccessDeliveryIDs)
+	require.Equal(t, []int64{duplicateRow.ID}, result.FailureBuckets["send message"])
 
 	var firstState domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&firstState, "kind = ? AND post_id = ?", firstOutbox.Kind, firstPostID).Error)

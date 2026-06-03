@@ -30,19 +30,20 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-func loadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken) ([]trackingrepo.AlarmSentMark, error) {
+func loadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]trackingrepo.AlarmSentMark, error) {
 	status := domain.OutboxStatusPending
 	return loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, &status)
 }
 
-func loadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken) ([]trackingrepo.AlarmSentMark, error) {
+func loadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]trackingrepo.AlarmSentMark, error) {
 	return loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, nil)
 }
 
-func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken, status *domain.OutboxStatus) ([]trackingrepo.AlarmSentMark, error) {
+func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken, status *domain.OutboxStatus) ([]trackingrepo.AlarmSentMark, error) {
 	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil, nil
@@ -90,7 +91,7 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 	return marks, nil
 }
 
-func collectClaimTokensByIdentity(claimTokens []deliveryClaimToken) (map[string]time.Time, error) {
+func collectClaimTokensByIdentity(claimTokens []dispatchstate.ClaimToken) (map[string]time.Time, error) {
 	if len(claimTokens) == 0 {
 		return map[string]time.Time{}, nil
 	}
@@ -109,15 +110,15 @@ func collectClaimTokensByIdentity(claimTokens []deliveryClaimToken) (map[string]
 	return collected, nil
 }
 
-func claimTokenIdentityAndAuthorizedAt(claimToken deliveryClaimToken, index int) (string, time.Time, error) {
-	postID := strings.TrimSpace(claimToken.postID)
+func claimTokenIdentityAndAuthorizedAt(claimToken dispatchstate.ClaimToken, index int) (string, time.Time, error) {
+	postID := strings.TrimSpace(claimToken.PostID)
 	if postID == "" {
 		return "", time.Time{}, fmt.Errorf("collect claim tokens: post id is empty at index %d", index)
 	}
-	if claimToken.authorizedAt.IsZero() {
+	if claimToken.AuthorizedAt.IsZero() {
 		return "", time.Time{}, fmt.Errorf("collect claim tokens: authorized_at is empty at index %d", index)
 	}
-	return deliveryClaimIdentityKey(claimToken.kind, postID), claimToken.authorizedAt.UTC(), nil
+	return deliveryClaimIdentityKey(claimToken.Kind, postID), claimToken.AuthorizedAt.UTC(), nil
 }
 
 func collectClaimTokenAuthorizedAt(collected map[string]time.Time, identity string, authorizedAt time.Time) error {

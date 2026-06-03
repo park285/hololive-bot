@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/park285/shared-go/pkg/json"
 )
@@ -222,7 +223,7 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 	require.NoError(t, db.Create(&delivery).Error)
 
 	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}, deliveryClaimToken{kind: item.Kind, postID: "community:post-claimed", authorizedAt: authorizedAt}))
+	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}, dispatchstate.ClaimToken{Kind: item.Kind, PostID: "community:post-claimed", AuthorizedAt: authorizedAt}))
 
 	var updatedState domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&updatedState, "kind = ? AND post_id = ?", item.Kind, "community:post-claimed").Error)
@@ -282,7 +283,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 	require.NoError(t, db.Create(&delivery).Error)
 
 	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	err := repository.MarkSentBatch(ctx, []int64{delivery.ID}, deliveryClaimToken{kind: item.Kind, postID: "short:short-claimed", authorizedAt: otherAuthorizedAt})
+	err := repository.MarkSentBatch(ctx, []int64{delivery.ID}, dispatchstate.ClaimToken{Kind: item.Kind, PostID: "short:short-claimed", AuthorizedAt: otherAuthorizedAt})
 	require.ErrorContains(t, err, "claim authorization mismatch")
 
 	var updatedDelivery deliveryTestDeliveryModel

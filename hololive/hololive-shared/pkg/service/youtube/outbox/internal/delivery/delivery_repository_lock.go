@@ -8,6 +8,7 @@ import (
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 type deliveryLockToken struct {
@@ -15,7 +16,7 @@ type deliveryLockToken struct {
 	lockedAt *time.Time
 }
 
-func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens []deliveryLockToken, claimTokens ...deliveryClaimToken) error {
+func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens []deliveryLockToken, claimTokens ...dispatchstate.ClaimToken) error {
 	uniqueTokens := uniqueDeliveryLockTokens(tokens)
 	if len(uniqueTokens) == 0 {
 		return nil

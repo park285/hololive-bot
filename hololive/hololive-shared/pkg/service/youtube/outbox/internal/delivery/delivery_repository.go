@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -142,7 +143,7 @@ func (r *DeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lo
 	return rows, nil
 }
 
-func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, claimTokens ...deliveryClaimToken) error {
+func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, claimTokens ...dispatchstate.ClaimToken) error {
 	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil
@@ -166,7 +167,7 @@ func markSentBatchTx(
 	tx dbx.Querier,
 	uniqueIDs []int64,
 	sentAt time.Time,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 ) error {
 	trackingMarks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, claimTokens)
 	if err != nil {

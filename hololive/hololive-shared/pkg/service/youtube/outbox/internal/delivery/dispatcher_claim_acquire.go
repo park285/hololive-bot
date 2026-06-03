@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
@@ -17,7 +18,7 @@ func (d *ClaimManager) tryClaimDelivery(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
-) (deliveryClaimDecision, *deliveryClaimToken, error) {
+) (deliveryClaimDecision, *dispatchstate.ClaimToken, error) {
 	if shouldSkipDeliveryClaim(d, outbox) {
 		return deliveryClaimDecisionProceed, nil, nil
 	}
@@ -194,7 +195,7 @@ func (d *ClaimManager) acquireAlarmStateClaim(
 	postID string,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	claimAt time.Time,
-) (deliveryClaimDecision, *deliveryClaimToken, error) {
+) (deliveryClaimDecision, *dispatchstate.ClaimToken, error) {
 	claimRecord, err := d.buildAlarmStateClaimRecord(ctx, repository, row, outbox, postID, state, claimAt)
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, err

@@ -13,6 +13,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 type youtubeOutboxKaringTestSender struct {
@@ -58,8 +59,8 @@ func TestDispatcherUsesKaringForSupportedYouTubeOutboxKind(t *testing.T) {
 
 	result := dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 2 {
-		t.Fatalf("successDeliveryIDs = %#v, want 2 ids", result.successDeliveryIDs)
+	if len(result.SuccessDeliveryIDs) != 2 {
+		t.Fatalf("successDeliveryIDs = %#v, want 2 ids", result.SuccessDeliveryIDs)
 	}
 	if len(sender.messages) != 0 {
 		t.Fatalf("text messages = %#v, want none", sender.messages)
@@ -94,8 +95,8 @@ func TestDispatcherFallsBackToTextForUnsupportedKaringKind(t *testing.T) {
 
 	result := dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 1 {
-		t.Fatalf("successDeliveryIDs = %#v, want one id", result.successDeliveryIDs)
+	if len(result.SuccessDeliveryIDs) != 1 {
+		t.Fatalf("successDeliveryIDs = %#v, want one id", result.SuccessDeliveryIDs)
 	}
 	if len(sender.payloads) != 0 {
 		t.Fatalf("karing payload count = %d, want 0", len(sender.payloads))
@@ -120,10 +121,10 @@ func TestDispatcherKaringFailureDoesNotFallBackToDuplicateText(t *testing.T) {
 
 	result := dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 0 {
-		t.Fatalf("successDeliveryIDs = %#v, want none", result.successDeliveryIDs)
+	if len(result.SuccessDeliveryIDs) != 0 {
+		t.Fatalf("successDeliveryIDs = %#v, want none", result.SuccessDeliveryIDs)
 	}
-	if got := result.failureBuckets["karing send"]; len(got) != 1 || got[0] != 31 {
+	if got := result.FailureBuckets["karing send"]; len(got) != 1 || got[0] != 31 {
 		t.Fatalf("karing send failure bucket = %#v, want [31]", got)
 	}
 	if len(sender.messages) != 0 {
@@ -146,7 +147,7 @@ func TestDispatcherSerializesKaringSends(t *testing.T) {
 		402: {ID: 402, ChannelID: "UCshort", Kind: domain.OutboxKindNewShort, ContentID: "short:1", Payload: `{"video_id":"s1","title":"short 1"}`},
 	}
 
-	done := make(chan deliveryDispatchResult, 1)
+	done := make(chan dispatchstate.DispatchResult, 1)
 	go func() {
 		done <- dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 	}()
@@ -160,8 +161,8 @@ func TestDispatcherSerializesKaringSends(t *testing.T) {
 	sender.releaseFirst()
 
 	result := <-done
-	if len(result.successDeliveryIDs) != 2 {
-		t.Fatalf("successDeliveryIDs = %#v, want 2 ids", result.successDeliveryIDs)
+	if len(result.SuccessDeliveryIDs) != 2 {
+		t.Fatalf("successDeliveryIDs = %#v, want 2 ids", result.SuccessDeliveryIDs)
 	}
 	if got := atomic.LoadInt32(&sender.maxActive); got != 1 {
 		t.Fatalf("max active Karing sends = %d, want 1", got)

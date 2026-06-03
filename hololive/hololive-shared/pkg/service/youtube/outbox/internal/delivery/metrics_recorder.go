@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 type MetricsRecorder struct {
@@ -16,7 +17,7 @@ type MetricsRecorder struct {
 }
 
 type claimReleaser interface {
-	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []deliveryClaimToken, message string, attrs ...any)
+	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []dispatchstate.ClaimToken, message string, attrs ...any)
 }
 
 func newMetricsRecorder(logger *slog.Logger, auditLogger *AuditLogger, cr claimReleaser) *MetricsRecorder {
@@ -32,8 +33,8 @@ func (mr *MetricsRecorder) recordPerRoomFormatFailure(
 	row domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release per-room delivery claims after format error",
@@ -49,8 +50,8 @@ func (mr *MetricsRecorder) recordPerRoomFormatFailure(
 func (mr *MetricsRecorder) recordPerRoomMissingMessage(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release per-room delivery claims after missing preformatted message",
@@ -66,9 +67,9 @@ func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 	outbox domain.YouTubeNotificationOutbox,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	err error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release per-room delivery claims after request build error",
@@ -93,9 +94,9 @@ func (mr *MetricsRecorder) recordPerRoomSendFailure(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	sendErr error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release per-room delivery claims after send failure",
@@ -121,8 +122,8 @@ func (mr *MetricsRecorder) recordPerRoomSuccess(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	sentAt := time.Now()
@@ -135,22 +136,22 @@ func (mr *MetricsRecorder) recordPerRoomSuccess(
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, "per_room", "success", "")
 
 	mu.Lock()
-	result.successDeliveryIDs = append(result.successDeliveryIDs, row.ID)
-	result.touchedOutboxIDs = append(result.touchedOutboxIDs, row.OutboxID)
-	result.successClaimTokens = append(result.successClaimTokens, claimTokens...)
+	result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, row.ID)
+	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, row.OutboxID)
+	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)
 	mu.Unlock()
 }
 
 func (mr *MetricsRecorder) recordDeliveryFailure(
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 	reason string,
 	deliveryID, outboxID int64,
 ) {
 	mu.Lock()
-	result.failedDeliveries++
-	result.failureBuckets[reason] = append(result.failureBuckets[reason], deliveryID)
-	result.touchedOutboxIDs = append(result.touchedOutboxIDs, outboxID)
+	result.FailedDeliveries++
+	result.FailureBuckets[reason] = append(result.FailureBuckets[reason], deliveryID)
+	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, outboxID)
 	mu.Unlock()
 }
 
@@ -159,9 +160,9 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 	group deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	err error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after request build error",
@@ -189,9 +190,9 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	sendErr error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after send failure",
@@ -219,8 +220,8 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	sentAt := time.Now()
@@ -235,10 +236,10 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 
 	mu.Lock()
 	for i := range validRows {
-		result.successDeliveryIDs = append(result.successDeliveryIDs, validRows[i].ID)
-		result.touchedOutboxIDs = append(result.touchedOutboxIDs, validRows[i].OutboxID)
+		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, validRows[i].ID)
+		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, validRows[i].OutboxID)
 	}
-	result.successClaimTokens = append(result.successClaimTokens, claimTokens...)
+	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)
 	mu.Unlock()
 }
 
@@ -249,10 +250,10 @@ func (mr *MetricsRecorder) recordKaringRequestBuildFailure(
 	kind domain.OutboxKind,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	mode string,
 	err error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release Karing delivery claims after request build error",
@@ -282,10 +283,10 @@ func (mr *MetricsRecorder) recordKaringSendFailure(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	mode string,
 	err error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release Karing delivery claims after send failure",
@@ -315,9 +316,9 @@ func (mr *MetricsRecorder) recordKaringSuccess(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	mode string,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	sentAt := time.Now()
@@ -333,9 +334,9 @@ func (mr *MetricsRecorder) recordKaringSuccess(
 
 	mu.Lock()
 	for i := range rows {
-		result.successDeliveryIDs = append(result.successDeliveryIDs, rows[i].ID)
-		result.touchedOutboxIDs = append(result.touchedOutboxIDs, rows[i].OutboxID)
+		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, rows[i].ID)
+		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, rows[i].OutboxID)
 	}
-	result.successClaimTokens = append(result.successClaimTokens, claimTokens...)
+	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)
 	mu.Unlock()
 }

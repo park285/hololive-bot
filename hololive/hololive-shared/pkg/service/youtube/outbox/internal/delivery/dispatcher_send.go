@@ -29,18 +29,19 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 func (d *SendEngine) dispatchDeliveryRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-) deliveryDispatchResult {
-	result := deliveryDispatchResult{
-		successDeliveryIDs: make([]int64, 0, len(rows)),
-		touchedOutboxIDs:   make([]int64, 0, len(rows)),
-		successClaimTokens: make([]deliveryClaimToken, 0, len(rows)),
-		failureBuckets:     make(map[string][]int64),
+) dispatchstate.DispatchResult {
+	result := dispatchstate.DispatchResult{
+		SuccessDeliveryIDs: make([]int64, 0, len(rows)),
+		TouchedOutboxIDs:   make([]int64, 0, len(rows)),
+		SuccessClaimTokens: make([]dispatchstate.ClaimToken, 0, len(rows)),
+		FailureBuckets:     make(map[string][]int64),
 	}
 	var mu sync.Mutex
 	reuseCache := claim.NewMemoryDecisionCache()
@@ -75,7 +76,7 @@ func (d *SendEngine) dispatchGroup(
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
 	reuseCache claim.DecisionCache,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	groupOutboxByID := make(map[int64]domain.YouTubeNotificationOutbox, len(group.outboxes))
@@ -117,7 +118,7 @@ func (d *SendEngine) dispatchClaimedGroup(
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
 	claimSelection deliveryClaimSelection,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	if len(validRows) == 1 {
@@ -148,7 +149,7 @@ func (d *SendEngine) dispatchDeliveryRow(
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
 	reuseCache claim.DecisionCache,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	outbox, ok := outboxByID[row.OutboxID]
@@ -175,8 +176,8 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 	outbox domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	rows, outboxes := singleDeliveryBatch(row, outbox)
@@ -213,8 +214,8 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	message string,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	sendReq, err := buildDeliverySendRequest(group.roomID, message, validOutboxes)
