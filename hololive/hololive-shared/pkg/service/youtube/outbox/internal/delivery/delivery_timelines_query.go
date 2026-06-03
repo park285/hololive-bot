@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
@@ -108,7 +109,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByFinalizedObserv
 	}
 
 	var scanned []postDeliveryTimelineScanRow
-	if err := selectDeliverySQL(ctx, r.db, &scanned, "list post delivery timelines by finalized observation window: scan rows", `
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "list post delivery timelines by finalized observation window: scan rows", `
 		SELECT `+finalizedObservationTimelineSelect()+`
 		FROM youtube_community_shorts_observation_post_baselines AS base
 		LEFT JOIN youtube_content_alarm_tracking track ON track.kind = base.kind AND track.canonical_content_id = base.post_id
@@ -131,7 +132,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryTimelinesByOutboxIDs(ctx c
 		return nil, fmt.Errorf("list post delivery timelines by outbox ids: db is nil")
 	}
 
-	uniqueIDs := uniqueInt64s(outboxIDs)
+	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
 	if len(uniqueIDs) == 0 {
 		return []PostDeliveryTimeline{}, nil
 	}
@@ -188,8 +189,8 @@ func (r *DeliveryTelemetryRepository) listPostDeliveryTimelines(
 	} else {
 		query += " LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id"
 	}
-	query += " WHERE " + deliveryInClause("track.kind", len(postKinds))
-	args = appendDeliveryOutboxKindArgs(args, postKinds...)
+	query += " WHERE " + deliverysql.DeliveryInClause("track.kind", len(postKinds))
+	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
 	if windowStart != nil {
 		query += " AND COALESCE(track.actual_published_at, track.detected_at) >= ?"
 		args = append(args, windowStart.UTC())
@@ -203,8 +204,8 @@ func (r *DeliveryTelemetryRepository) listPostDeliveryTimelines(
 		args = append(args, detectedBefore.UTC())
 	}
 	if len(outboxIDs) > 0 {
-		query += " AND " + deliveryInClause("o.id", len(outboxIDs))
-		args = appendDeliveryInt64Args(args, outboxIDs)
+		query += " AND " + deliverysql.DeliveryInClause("o.id", len(outboxIDs))
+		args = deliverysql.AppendDeliveryInt64Args(args, outboxIDs)
 	}
 	if len(identities) > 0 {
 		clause, identityArgs := postTrackingIdentityWhere(identities)
@@ -216,7 +217,7 @@ func (r *DeliveryTelemetryRepository) listPostDeliveryTimelines(
 		ORDER BY COALESCE(track.alarm_sent_at, MAX(COALESCE(t.attempt_finished_at, t.event_at)), track.actual_published_at, track.detected_at) DESC,
 		         track.content_id ASC
 	`
-	if err := selectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("scan rows: %w", err)
 	}
 

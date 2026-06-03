@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 const communityShortsDeliveryLogMaxLimit = 5000
@@ -27,18 +28,18 @@ func (r *DeliveryTelemetryRepository) ListCommunityShortsDeliveryLogsSince(
 	query := `
 		SELECT ` + deliveryTelemetrySelectColumns() + `
 		FROM youtube_notification_delivery_telemetry
-		WHERE ` + deliveryInClause("alarm_type", len(alarmTypes)) + `
+		WHERE ` + deliverysql.DeliveryInClause("alarm_type", len(alarmTypes)) + `
 		  AND COALESCE(actual_published_at, detected_at, event_at) >= ?
 		ORDER BY COALESCE(actual_published_at, detected_at, event_at) DESC, event_at ASC, id ASC
 	`
-	args := appendDeliveryAlarmTypeArgs(nil, alarmTypes...)
+	args := deliverysql.AppendDeliveryAlarmTypeArgs(nil, alarmTypes...)
 	args = append(args, since.UTC())
 	if normalizedLimit > 0 {
 		query += " LIMIT ?"
 		args = append(args, normalizedLimit)
 	}
 
-	rows, err := r.queryTelemetryRows(ctx, "list community shorts delivery logs since: query rows", postgresPlaceholders(query), args...)
+	rows, err := r.queryTelemetryRows(ctx, "list community shorts delivery logs since: query rows", deliverysql.PostgresPlaceholders(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("list community shorts delivery logs since: query rows: %w", err)
 	}

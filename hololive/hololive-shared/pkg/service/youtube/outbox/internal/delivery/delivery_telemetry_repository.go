@@ -11,6 +11,7 @@ import (
 
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 type DeliveryTelemetryRepository struct {
@@ -22,7 +23,7 @@ func NewDeliveryTelemetryRepository(db any) *DeliveryTelemetryRepository {
 }
 
 func asQuerier(db any) dbx.Querier {
-	if isNilDB(db) {
+	if deliverysql.IsNilDB(db) {
 		return nil
 	}
 	if typed, ok := db.(dbx.Querier); ok {
@@ -190,7 +191,7 @@ func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliver
 }
 
 func (r *DeliveryTelemetryRepository) queryTelemetryRows(ctx context.Context, action string, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
-	rows, err := r.db.Query(ctx, postgresPlaceholders(query), args...)
+	rows, err := r.db.Query(ctx, deliverysql.PostgresPlaceholders(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", action, err)
 	}
@@ -233,24 +234,24 @@ func (r *DeliveryTelemetryRepository) FetchAndLockPending(ctx context.Context, b
 	slices.Sort(candidateIDs)
 
 	lockArgs := []any{now}
-	lockArgs = appendDeliveryInt64Args(lockArgs, candidateIDs)
+	lockArgs = deliverysql.AppendDeliveryInt64Args(lockArgs, candidateIDs)
 	lockArgs = append(lockArgs, lockExpiry)
-	if _, err := execDeliverySQL(ctx, r.db, "lock delivery telemetry rows", `
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "lock delivery telemetry rows", `
 		UPDATE youtube_notification_delivery_telemetry
 		SET locked_at = ?
-		WHERE `+deliveryInClause("id", len(candidateIDs))+`
+		WHERE `+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
 		  AND logged_at IS NULL
 		  AND (locked_at IS NULL OR locked_at < ?)
 	`, lockArgs...); err != nil {
 		return nil, err
 	}
 
-	reloadArgs := appendDeliveryInt64Args(nil, candidateIDs)
+	reloadArgs := deliverysql.AppendDeliveryInt64Args(nil, candidateIDs)
 	reloadArgs = append(reloadArgs, now)
 	locked, err := r.queryTelemetryRows(ctx, "reload locked delivery telemetry rows", `
 		SELECT `+deliveryTelemetrySelectColumns()+`
 		FROM youtube_notification_delivery_telemetry
-		WHERE `+deliveryInClause("id", len(candidateIDs))+`
+		WHERE `+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
 		  AND locked_at = ?
 		ORDER BY event_at ASC
 	`, reloadArgs...)
@@ -265,18 +266,18 @@ func (r *DeliveryTelemetryRepository) FetchAndLockPending(ctx context.Context, b
 }
 
 func (r *DeliveryTelemetryRepository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
-	uniqueIDs := uniqueInt64s(ids)
+	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil
 	}
 
 	now := time.Now().UTC()
 	args := []any{now}
-	args = appendDeliveryInt64Args(args, uniqueIDs)
-	if _, err := execDeliverySQL(ctx, r.db, "mark delivery telemetry logged", `
+	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry logged", `
 		UPDATE youtube_notification_delivery_telemetry
 		SET logged_at = ?, locked_at = NULL, error = ''
-		WHERE `+deliveryInClause("id", len(uniqueIDs))+`
+		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return err
 	}
@@ -285,18 +286,18 @@ func (r *DeliveryTelemetryRepository) MarkLoggedBatch(ctx context.Context, ids [
 }
 
 func (r *DeliveryTelemetryRepository) MarkRetryBatch(ctx context.Context, ids []int64, backoff time.Duration, errMsg string) error {
-	uniqueIDs := uniqueInt64s(ids)
+	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil
 	}
 
 	nextAttemptAt := time.Now().UTC().Add(backoff)
-	args := []any{nextAttemptAt, truncateString(errMsg, 500)}
-	args = appendDeliveryInt64Args(args, uniqueIDs)
-	if _, err := execDeliverySQL(ctx, r.db, "mark delivery telemetry retry", `
+	args := []any{nextAttemptAt, deliverysql.TruncateString(errMsg, 500)}
+	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry retry", `
 		UPDATE youtube_notification_delivery_telemetry
 		SET locked_at = NULL, next_attempt_at = ?, error = ?
-		WHERE `+deliveryInClause("id", len(uniqueIDs))+`
+		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return err
 	}
@@ -369,5 +370,5 @@ func collectTelemetryOutboxIDs(rows []domain.YouTubeNotificationDeliveryTelemetr
 		}
 		outboxIDs = append(outboxIDs, rows[i].OutboxID)
 	}
-	return uniqueInt64s(outboxIDs)
+	return deliverysql.UniqueInt64s(outboxIDs)
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 type deliveryTestDB struct {
@@ -93,7 +94,7 @@ func (db *deliveryTestDB) Count(dest *int64) *deliveryTestDB {
 	if strings.TrimSpace(next.where) != "" {
 		query += " WHERE " + next.where
 	}
-	next.Error = next.QueryRow(context.Background(), postgresPlaceholders(query), args...).Scan(dest)
+	next.Error = next.QueryRow(context.Background(), deliverysql.PostgresPlaceholders(query), args...).Scan(dest)
 	return next
 }
 
@@ -115,7 +116,7 @@ func (db *deliveryTestDB) First(dest any, conds ...any) *deliveryTestDB {
 		query += " WHERE " + next.where
 	}
 	query += " LIMIT 1"
-	next.Error = pgxscan.Get(context.Background(), next.Pool, dest, postgresPlaceholders(query), args...)
+	next.Error = pgxscan.Get(context.Background(), next.Pool, dest, deliverysql.PostgresPlaceholders(query), args...)
 	return next
 }
 
@@ -130,7 +131,7 @@ func (db *deliveryTestDB) Find(dest any) *deliveryTestDB {
 	if strings.TrimSpace(next.order) != "" {
 		query += " ORDER BY " + next.order
 	}
-	next.Error = pgxscan.Select(context.Background(), next.Pool, dest, postgresPlaceholders(query), args...)
+	next.Error = pgxscan.Select(context.Background(), next.Pool, dest, deliverysql.PostgresPlaceholders(query), args...)
 	return next
 }
 
@@ -169,7 +170,7 @@ func (db *deliveryTestDB) Updates(values map[string]any) *deliveryTestDB {
 	}
 	args = append(args, next.args...)
 
-	tag, err := next.Pool.Exec(context.Background(), postgresPlaceholders(query), args...)
+	tag, err := next.Pool.Exec(context.Background(), deliverysql.PostgresPlaceholders(query), args...)
 	next.Error = err
 	next.RowsAffected = tag.RowsAffected()
 	return next
@@ -205,7 +206,7 @@ func (db *deliveryTestDB) Exec(query string, args ...any) *deliveryTestDB {
 	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(query)), "PRAGMA ") {
 		return next
 	}
-	tag, err := next.Pool.Exec(context.Background(), postgresPlaceholders(query), args...)
+	tag, err := next.Pool.Exec(context.Background(), deliverysql.PostgresPlaceholders(query), args...)
 	next.Error = err
 	next.RowsAffected = tag.RowsAffected()
 	return next

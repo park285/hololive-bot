@@ -7,6 +7,7 @@ import (
 
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 type deliveryLockToken struct {
@@ -24,7 +25,7 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 	}
 
 	sentAt := canonicalSentAtNow()
-	if err := inDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
+	if err := deliverysql.InDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
 		updatedIDs, err := updateSentDeliveryRowsIfLocked(ctx, tx, uniqueTokens, sentAt)
 		if err != nil {
 			return err
@@ -85,7 +86,7 @@ func (r *DeliveryRepository) MarkFailedRetryBatchIfLocked(ctx context.Context, t
 			    next_attempt_at = CASE WHEN attempt_count + 1 >= $5 THEN next_attempt_at ELSE $6 END,
 			    locked_at = NULL
 			WHERE id = $7 AND status = $8 AND locked_at = $9
-		`, truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt)
+		`, deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt)
 		if err != nil {
 			return fmt.Errorf("mark delivery row %d failed batch: %w", uniqueTokens[i].id, err)
 		}
@@ -111,7 +112,7 @@ func (r *DeliveryRepository) MarkPermanentFailureBatchIfLocked(ctx context.Conte
 			    status = $4,
 			    locked_at = NULL
 			WHERE id = $5 AND status = $6 AND locked_at = $7
-		`, maxRetries, maxRetries, truncateString(errMsg, 500), domain.OutboxStatusFailed, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt)
+		`, maxRetries, maxRetries, deliverysql.TruncateString(errMsg, 500), domain.OutboxStatusFailed, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt)
 		if err != nil {
 			return fmt.Errorf("mark delivery row %d permanent failed batch: %w", uniqueTokens[i].id, err)
 		}
@@ -140,7 +141,7 @@ func uniqueDeliveryLockTokens(tokens []deliveryLockToken) []deliveryLockToken {
 }
 
 func deliveryLockTokensForIDs(rows []domain.YouTubeNotificationDelivery, ids []int64) []deliveryLockToken {
-	uniqueIDs := uniqueInt64s(ids)
+	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil
 	}

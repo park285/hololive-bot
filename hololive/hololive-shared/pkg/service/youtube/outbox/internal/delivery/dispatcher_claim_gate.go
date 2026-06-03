@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -172,13 +173,13 @@ func (d *ClaimManager) applyClaimSelection(result *deliveryDispatchResult, mu *s
 }
 
 func (d *ClaimManager) recoverSuccessfulCommunityShortsSentState(ctx context.Context, deliveryIDs []int64) error {
-	uniqueIDs := uniqueInt64s(deliveryIDs)
+	uniqueIDs := deliverysql.UniqueInt64s(deliveryIDs)
 	if d == nil || d.db == nil || len(uniqueIDs) == 0 {
 		return nil
 	}
 
 	sentAt := canonicalSentAtNow()
-	if err := inDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
+	if err := deliverysql.InDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
 		return recoverSuccessfulCommunityShortsSentStateTx(ctx, tx, uniqueIDs, sentAt)
 	}); err != nil {
 		return fmt.Errorf("recover successful community/shorts sent state transaction: %w", err)

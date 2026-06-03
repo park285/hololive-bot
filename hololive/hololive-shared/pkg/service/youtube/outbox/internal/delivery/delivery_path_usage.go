@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 type PostDeliveryPathUsage = analytics.PostDeliveryPathUsage
@@ -61,7 +62,7 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryPathUsageSince(ctx context
 		FROM youtube_content_alarm_tracking AS track
 		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
 		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?
-		WHERE ` + deliveryInClause("track.kind", len(postKinds)) + `
+		WHERE ` + deliverysql.DeliveryInClause("track.kind", len(postKinds)) + `
 		  AND COALESCE(track.actual_published_at, track.detected_at) >= ?
 		GROUP BY ` + strings.Join([]string{
 		"track.kind",
@@ -74,9 +75,9 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryPathUsageSince(ctx context
 		ORDER BY track.channel_id ASC, track.content_id ASC, COALESCE(t.delivery_path, '') ASC
 	`
 	args := []any{since.UTC()}
-	args = appendDeliveryOutboxKindArgs(args, postKinds...)
+	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
 	args = append(args, since.UTC())
-	if err := selectDeliverySQL(ctx, r.db, &scanned, "list post delivery path usage since: scan rows", query, args...); err != nil {
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "list post delivery path usage since: scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("list post delivery path usage since: scan rows: %w", err)
 	}
 
