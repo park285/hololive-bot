@@ -288,8 +288,11 @@ func drainJobClaimRenewError(errCh <-chan error) error {
 }
 
 func (s *Scheduler) finishJobClaim(ctx context.Context, job *Job, claim JobClaim, pollErr error) error {
+	completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+
 	if pollErr == nil {
-		completed, err := claim.MarkCompleted(ctx, job.Interval)
+		completed, err := claim.MarkCompleted(completeCtx, job.Interval)
 		s.metrics.ObserveJobMarkCompleted(job.Poller.Name(), boolResult(completed, err))
 		s.logger.Debug("job_mark_completed",
 			slog.String("poller", job.Poller.Name()),
@@ -304,7 +307,7 @@ func (s *Scheduler) finishJobClaim(ctx context.Context, job *Job, claim JobClaim
 		return nil
 	}
 
-	s.releaseJobClaim(ctx, job, claim)
+	s.releaseJobClaim(completeCtx, job, claim)
 	return pollErr
 }
 
