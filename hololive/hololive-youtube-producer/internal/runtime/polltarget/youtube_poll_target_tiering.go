@@ -176,26 +176,3 @@ func mergeChannelActivity(lastActivity map[string]time.Time, channelID string, a
 		lastActivity[channelID] = activityAt
 	}
 }
-
-func latestTimePtr(values ...any) time.Time {
-	var latest time.Time
-	for _, value := range values {
-		candidate := timeCandidate(value)
-		if candidate.After(latest) {
-			latest = candidate
-		}
-	}
-	return latest
-}
-
-func timeCandidate(value any) time.Time {
-	switch typed := value.(type) {
-	case *time.Time:
-		if typed != nil {
-			return *typed
-		}
-	case time.Time:
-		return typed
-	}
-	return time.Time{}
-}
