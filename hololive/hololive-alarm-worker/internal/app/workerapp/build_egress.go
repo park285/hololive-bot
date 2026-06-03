@@ -99,6 +99,7 @@ func buildAlarmDispatchRunner(
 				dispatchoutbox.WithLease(lease),
 				dispatchoutbox.WithRecoveryInterval(parsePositiveDurationMSEnv("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", 30*time.Second)),
 				dispatchoutbox.WithRecoveryBatchSize(parsePositiveIntEnv("ALARM_DISPATCH_RECOVERY_BATCH_SIZE", 100)),
+				dispatchoutbox.WithClaimKeyReleaser(infra.Cache),
 			),
 			sender:             sender,
 			idleWaiter:         newAlarmDispatchWakeupWaiter(infra.Cache, logger),
