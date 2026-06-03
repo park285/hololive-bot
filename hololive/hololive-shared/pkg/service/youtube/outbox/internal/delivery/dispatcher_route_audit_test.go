@@ -196,11 +196,11 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	}
 
 	result := dispatcher.send.dispatchDeliveryRows(ctx, deliveryRows, outboxByID)
-	require.Zerof(t, result.failedDeliveries, "failure buckets: %+v", result.failureBuckets)
-	require.Emptyf(t, result.failureBuckets, "failure buckets: %+v", result.failureBuckets)
-	require.Len(t, result.successDeliveryIDs, totalRouteAuditDeliveries(expectedTargets))
-	require.NoError(t, dispatcher.claim.delivery.MarkSentBatch(ctx, result.successDeliveryIDs))
-	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.touchedOutboxIDs))
+	require.Zerof(t, result.FailedDeliveries, "failure buckets: %+v", result.FailureBuckets)
+	require.Emptyf(t, result.FailureBuckets, "failure buckets: %+v", result.FailureBuckets)
+	require.Len(t, result.SuccessDeliveryIDs, totalRouteAuditDeliveries(expectedTargets))
+	require.NoError(t, dispatcher.claim.delivery.MarkSentBatch(ctx, result.SuccessDeliveryIDs))
+	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.TouchedOutboxIDs))
 
 	require.ElementsMatch(t, expectedRouteAuditLookupKeys(expectedTargets), cacheStore.lookupKeys())
 	require.NotContains(t, cacheStore.lookupKeys(), sharedalarmkeys.BuildChannelSubscriberKey("UC_LIVE_ONLY", domain.AlarmTypeLive))

@@ -444,8 +444,8 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 2 {
-		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 2 {
+		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.SuccessDeliveryIDs))
 	}
 
 	sender.mu.Lock()
@@ -468,11 +468,11 @@ func TestDispatchDeliveryRows_OrphanRows(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, map[int64]domain.YouTubeNotificationOutbox{})
 
-	if result.failedDeliveries != 1 {
-		t.Fatalf("failedDeliveries = %d, want 1", result.failedDeliveries)
+	if result.FailedDeliveries != 1 {
+		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
-	if ids, ok := result.failureBuckets["outbox row not found"]; !ok || len(ids) != 1 || ids[0] != 101 {
-		t.Fatalf("unexpected failure buckets: %+v", result.failureBuckets)
+	if ids, ok := result.FailureBuckets["outbox row not found"]; !ok || len(ids) != 1 || ids[0] != 101 {
+		t.Fatalf("unexpected failure buckets: %+v", result.FailureBuckets)
 	}
 }
 
@@ -496,15 +496,15 @@ func TestDispatchDeliveryRows_PayloadValidationEjection(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	totalProcessed := len(result.successDeliveryIDs) + result.failedDeliveries
+	totalProcessed := len(result.SuccessDeliveryIDs) + result.FailedDeliveries
 	if totalProcessed != 3 {
 		t.Fatalf("total processed = %d, want 3", totalProcessed)
 	}
-	if result.failedDeliveries != 1 {
-		t.Fatalf("failedDeliveries = %d, want 1 (broken payload)", result.failedDeliveries)
+	if result.FailedDeliveries != 1 {
+		t.Fatalf("failedDeliveries = %d, want 1 (broken payload)", result.FailedDeliveries)
 	}
-	if len(result.successDeliveryIDs) != 2 {
-		t.Fatalf("successDeliveryIDs count = %d, want 2", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 2 {
+		t.Fatalf("successDeliveryIDs count = %d, want 2", len(result.SuccessDeliveryIDs))
 	}
 }
 
@@ -530,11 +530,11 @@ func TestDispatchDeliveryRows_MixedBatch(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 4 {
-		t.Fatalf("successDeliveryIDs = %d, want 4", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 4 {
+		t.Fatalf("successDeliveryIDs = %d, want 4", len(result.SuccessDeliveryIDs))
 	}
-	if len(result.touchedOutboxIDs) != 4 {
-		t.Fatalf("touchedOutboxIDs = %d, want 4", len(result.touchedOutboxIDs))
+	if len(result.TouchedOutboxIDs) != 4 {
+		t.Fatalf("touchedOutboxIDs = %d, want 4", len(result.TouchedOutboxIDs))
 	}
 }
 
@@ -556,11 +556,11 @@ func TestDispatchDeliveryRows_SendFailure(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if result.failedDeliveries != 2 {
-		t.Fatalf("failedDeliveries = %d, want 2", result.failedDeliveries)
+	if result.FailedDeliveries != 2 {
+		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
-	if len(result.successDeliveryIDs) != 0 {
-		t.Fatalf("successDeliveryIDs = %d, want 0", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 0 {
+		t.Fatalf("successDeliveryIDs = %d, want 0", len(result.SuccessDeliveryIDs))
 	}
 }
 
@@ -580,11 +580,11 @@ func TestDispatchDeliveryRows_EmptyDedupeKeyFailsWithoutSending(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if result.failedDeliveries != 1 {
-		t.Fatalf("failedDeliveries = %d, want 1", result.failedDeliveries)
+	if result.FailedDeliveries != 1 {
+		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
-	if ids, ok := result.failureBuckets["dedupe key"]; !ok || len(ids) != 1 || ids[0] != 101 {
-		t.Fatalf("unexpected failure buckets: %+v", result.failureBuckets)
+	if ids, ok := result.FailureBuckets["dedupe key"]; !ok || len(ids) != 1 || ids[0] != 101 {
+		t.Fatalf("unexpected failure buckets: %+v", result.FailureBuckets)
 	}
 
 	sender.mu.Lock()
@@ -607,8 +607,8 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsDedupeKey(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 1 {
-		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 1 {
+		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, "Sent per-room delivery")
@@ -633,8 +633,8 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsDedupeKey(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 2 {
-		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 2 {
+		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.SuccessDeliveryIDs))
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, "Sent grouped delivery")
@@ -662,8 +662,8 @@ func TestDispatchDeliveryRows_GroupedSendFailureLogsDedupeKey(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if result.failedDeliveries != 2 {
-		t.Fatalf("failedDeliveries = %d, want 2", result.failedDeliveries)
+	if result.FailedDeliveries != 2 {
+		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, "Failed to send grouped delivery")
@@ -686,8 +686,8 @@ func TestDispatchDeliveryRows_PerRoomBuildFailureLogsDedupeKey(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if result.failedDeliveries != 1 {
-		t.Fatalf("failedDeliveries = %d, want 1", result.failedDeliveries)
+	if result.FailedDeliveries != 1 {
+		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, "Failed to build per-room delivery request")
@@ -708,8 +708,8 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAttemptStarted(t 
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 1 {
-		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 1 {
+		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, deliveryAttemptStartedLogMessage)
@@ -747,8 +747,8 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAttemptStarted(t 
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if result.failedDeliveries != 2 {
-		t.Fatalf("failedDeliveries = %d, want 2", result.failedDeliveries)
+	if result.FailedDeliveries != 2 {
+		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
 
 	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAttemptStartedLogMessage)
@@ -803,8 +803,8 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsAttemptStarted(t *te
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 1 {
-		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 1 {
+		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
 	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAttemptStartedLogMessage)
@@ -831,8 +831,8 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsCommunityShortsResult(t *testing
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 2 {
-		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 2 {
+		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.SuccessDeliveryIDs))
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, deliveryResultLogMessage)
@@ -864,8 +864,8 @@ func TestDispatchDeliveryRows_PerRoomFailureLogsCommunityShortsResult(t *testing
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if result.failedDeliveries != 1 {
-		t.Fatalf("failedDeliveries = %d, want 1", result.failedDeliveries)
+	if result.FailedDeliveries != 1 {
+		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, deliveryResultLogMessage)
@@ -898,8 +898,8 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsResult(t *testing.T)
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 1 {
-		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 1 {
+		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
 	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryResultLogMessage)
@@ -921,8 +921,8 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAudit(t *testing.
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 1 {
-		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 1 {
+		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
 	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage)
@@ -960,8 +960,8 @@ func TestDispatchDeliveryRows_AuditUsesDetectionPostIDFieldSchema(t *testing.T) 
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 1 {
-		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 1 {
+		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, deliveryAuditLogMessage)
@@ -991,8 +991,8 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAudit(t *testing.
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if result.failedDeliveries != 2 {
-		t.Fatalf("failedDeliveries = %d, want 2", result.failedDeliveries)
+	if result.FailedDeliveries != 2 {
+		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
 
 	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage)
@@ -1036,8 +1036,8 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsAudit(t *testing.T) 
 
 	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
 
-	if len(result.successDeliveryIDs) != 1 {
-		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.successDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 1 {
+		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
 	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage)

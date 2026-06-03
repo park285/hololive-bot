@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
@@ -52,14 +53,14 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 }
 
-func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []deliveryClaimToken) error {
+func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error {
 	if d == nil || d.db == nil || len(claims) == 0 {
 		return nil
 	}
 
 	repository := trackingrepo.NewRepository(d.db)
 	for i := range claims {
-		if _, err := repository.ReleaseAlarmStateClaim(ctx, claims[i].kind, claims[i].postID, claims[i].authorizedAt); err != nil {
+		if _, err := repository.ReleaseAlarmStateClaim(ctx, claims[i].Kind, claims[i].PostID, claims[i].AuthorizedAt); err != nil {
 			return fmt.Errorf("release claim at index %d: %w", i, err)
 		}
 	}

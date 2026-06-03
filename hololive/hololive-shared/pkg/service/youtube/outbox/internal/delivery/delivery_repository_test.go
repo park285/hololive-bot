@@ -150,21 +150,21 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 
 	result := dispatcher.send.dispatchDeliveryRows(ctx, rows, outboxByID)
 
-	if !reflect.DeepEqual(result.successDeliveryIDs, []int64{1}) {
-		t.Fatalf("successDeliveryIDs = %#v, want []int64{1}", result.successDeliveryIDs)
+	if !reflect.DeepEqual(result.SuccessDeliveryIDs, []int64{1}) {
+		t.Fatalf("successDeliveryIDs = %#v, want []int64{1}", result.SuccessDeliveryIDs)
 	}
-	if result.failedDeliveries != 2 {
-		t.Fatalf("failedDeliveries = %d, want 2", result.failedDeliveries)
+	if result.FailedDeliveries != 2 {
+		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
-	if !reflect.DeepEqual(result.failureBuckets["send message"], []int64{2}) {
-		t.Fatalf("send message failures = %#v, want []int64{2}", result.failureBuckets["send message"])
+	if !reflect.DeepEqual(result.FailureBuckets["send message"], []int64{2}) {
+		t.Fatalf("send message failures = %#v, want []int64{2}", result.FailureBuckets["send message"])
 	}
-	if !reflect.DeepEqual(result.failureBuckets["outbox row not found"], []int64{3}) {
-		t.Fatalf("outbox row not found failures = %#v, want []int64{3}", result.failureBuckets["outbox row not found"])
+	if !reflect.DeepEqual(result.FailureBuckets["outbox row not found"], []int64{3}) {
+		t.Fatalf("outbox row not found failures = %#v, want []int64{3}", result.FailureBuckets["outbox row not found"])
 	}
 	wantTouched := []int64{100, 100, 999}
-	gotTouched := make([]int64, len(result.touchedOutboxIDs))
-	copy(gotTouched, result.touchedOutboxIDs)
+	gotTouched := make([]int64, len(result.TouchedOutboxIDs))
+	copy(gotTouched, result.TouchedOutboxIDs)
 	slices.Sort(gotTouched)
 	slices.Sort(wantTouched)
 	if !reflect.DeepEqual(gotTouched, wantTouched) {

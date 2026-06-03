@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 func (d *ClaimManager) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
@@ -240,23 +241,23 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	result := d.dispatchDeliveryRows(ctx, rows, outboxByID)
 	d.markDispatchResult(ctx, rows, result)
 
-	touchedOutboxIDs := deliverysql.UniqueInt64s(result.touchedOutboxIDs)
+	touchedOutboxIDs := deliverysql.UniqueInt64s(result.TouchedOutboxIDs)
 	aggregateFailures := d.reconcileTouchedOutboxes(ctx, touchedOutboxIDs)
 	d.recordOutboxDispatchResult(len(rows), result, touchedOutboxIDs, aggregateFailures)
 
 	return len(rows)
 }
 
-func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result deliveryDispatchResult) {
-	if err := d.delivery.MarkSentBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, result.successDeliveryIDs), result.successClaimTokens...); err != nil {
+func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result dispatchstate.DispatchResult) {
+	if err := d.delivery.MarkSentBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, result.SuccessDeliveryIDs), result.SuccessClaimTokens...); err != nil {
 		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
-		if recoverErr := d.recoverSuccessfulCommunityShortsSentState(ctx, result.successDeliveryIDs); recoverErr != nil {
+		if recoverErr := d.recoverSuccessfulCommunityShortsSentState(ctx, result.SuccessDeliveryIDs); recoverErr != nil {
 			d.logger.Warn("Failed to persist community/shorts sent-state recovery after mark-sent error",
 				slog.Any("error", recoverErr),
-				slog.Int("delivery_count", len(result.successDeliveryIDs)))
+				slog.Int("delivery_count", len(result.SuccessDeliveryIDs)))
 		}
 	}
-	for reason, ids := range result.failureBuckets {
+	for reason, ids := range result.FailureBuckets {
 		d.markFailedDispatchBucket(ctx, rows, reason, ids)
 	}
 }
@@ -298,18 +299,18 @@ func (d *ClaimManager) reconcileTouchedOutboxes(ctx context.Context, touchedOutb
 
 func (d *ClaimManager) recordOutboxDispatchResult(
 	claimed int,
-	result deliveryDispatchResult,
+	result dispatchstate.DispatchResult,
 	touchedOutboxIDs []int64,
 	aggregateFailures int,
 ) {
-	outboxDeliveryProcessedTotal.WithLabelValues("sent").Add(float64(len(result.successDeliveryIDs)))
-	outboxDeliveryProcessedTotal.WithLabelValues("failed").Add(float64(result.failedDeliveries))
+	outboxDeliveryProcessedTotal.WithLabelValues("sent").Add(float64(len(result.SuccessDeliveryIDs)))
+	outboxDeliveryProcessedTotal.WithLabelValues("failed").Add(float64(result.FailedDeliveries))
 	outboxDispatchTouchedOutboxes.Observe(float64(len(touchedOutboxIDs)))
 
 	d.logger.Info("Outbox per-room dispatch completed",
 		slog.Int("delivery_claimed", claimed),
-		slog.Int("delivery_sent", len(result.successDeliveryIDs)),
-		slog.Int("delivery_failed", result.failedDeliveries),
+		slog.Int("delivery_sent", len(result.SuccessDeliveryIDs)),
+		slog.Int("delivery_failed", result.FailedDeliveries),
 		slog.Int("outbox_touched", len(touchedOutboxIDs)),
 		slog.Int("aggregate_failures", aggregateFailures))
 }

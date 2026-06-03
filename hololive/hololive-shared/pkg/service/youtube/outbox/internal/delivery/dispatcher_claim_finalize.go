@@ -9,6 +9,7 @@ import (
 	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
@@ -19,7 +20,7 @@ func (d *ClaimManager) finalizeClaimSuccess(
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
 	claimAt time.Time,
-) (deliveryClaimDecision, *deliveryClaimToken, error) {
+) (deliveryClaimDecision, *dispatchstate.ClaimToken, error) {
 	state, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repository, outbox, postID, "reload alarm state after claim success")
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, err
@@ -31,10 +32,10 @@ func (d *ClaimManager) finalizeClaimSuccess(
 		return deliveryClaimDecisionRetryLater, nil, nil
 	}
 
-	return deliveryClaimDecisionProceed, &deliveryClaimToken{
-		kind:         outbox.Kind,
-		postID:       postID,
-		authorizedAt: claimAt,
+	return deliveryClaimDecisionProceed, &dispatchstate.ClaimToken{
+		Kind:         outbox.Kind,
+		PostID:       postID,
+		AuthorizedAt: claimAt,
 	}, nil
 }
 
@@ -43,7 +44,7 @@ func (d *ClaimManager) finalizeClaimMiss(
 	repository *trackingrepo.PgxRepository,
 	outbox domain.YouTubeNotificationOutbox,
 	postID string,
-) (deliveryClaimDecision, *deliveryClaimToken, error) {
+) (deliveryClaimDecision, *dispatchstate.ClaimToken, error) {
 	_, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repository, outbox, postID, "reload alarm state after claim miss")
 	if err != nil {
 		return deliveryClaimDecisionRetryLater, nil, err

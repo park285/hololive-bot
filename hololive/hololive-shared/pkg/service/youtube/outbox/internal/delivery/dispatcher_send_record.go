@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 func (d *SendEngine) recordPerRoomFormatFailure(
@@ -12,8 +13,8 @@ func (d *SendEngine) recordPerRoomFormatFailure(
 	row domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordPerRoomFormatFailure(ctx, row, rows, outboxes, claimTokens, result, mu)
@@ -22,8 +23,8 @@ func (d *SendEngine) recordPerRoomFormatFailure(
 func (d *SendEngine) recordPerRoomMissingMessage(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordPerRoomMissingMessage(ctx, row, claimTokens, result, mu)
@@ -35,9 +36,9 @@ func (d *SendEngine) recordPerRoomRequestBuildFailure(
 	outbox domain.YouTubeNotificationOutbox,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	err error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordPerRoomRequestBuildFailure(ctx, row, outbox, rows, outboxes, claimTokens, err, result, mu)
@@ -49,9 +50,9 @@ func (d *SendEngine) recordPerRoomSendFailure(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	sendErr error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordPerRoomSendFailure(ctx, row, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
@@ -63,15 +64,15 @@ func (d *SendEngine) recordPerRoomSuccess(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordPerRoomSuccess(ctx, row, rows, outboxes, sendReq, claimTokens, result, mu)
 }
 
 func (d *SendEngine) recordDeliveryFailure(
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 	reason string,
 	deliveryID, outboxID int64,
@@ -84,9 +85,9 @@ func (d *SendEngine) recordGroupedRequestBuildFailure(
 	group deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	err error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordGroupedRequestBuildFailure(ctx, group, validRows, validOutboxes, claimTokens, err, result, mu)
@@ -98,9 +99,9 @@ func (d *SendEngine) recordGroupedSendFailure(
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	sendErr error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordGroupedSendFailure(ctx, group, validRows, validOutboxes, sendReq, claimTokens, sendErr, result, mu)
@@ -112,8 +113,8 @@ func (d *SendEngine) recordGroupedSuccess(
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
-	result *deliveryDispatchResult,
+	claimTokens []dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordGroupedSuccess(ctx, group, validRows, validOutboxes, sendReq, claimTokens, result, mu)

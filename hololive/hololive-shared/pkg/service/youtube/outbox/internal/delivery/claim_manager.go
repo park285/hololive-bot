@@ -9,17 +9,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 type DeliveryExecutor interface {
-	dispatchDeliveryRows(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxByID map[int64]domain.YouTubeNotificationOutbox) deliveryDispatchResult
+	dispatchDeliveryRows(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxByID map[int64]domain.YouTubeNotificationOutbox) dispatchstate.DispatchResult
 }
 
 type ClaimResolver interface {
 	selectClaimedDeliveries(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, reuseCache claim.DecisionCache) deliveryClaimSelection
-	applyClaimSelection(result *deliveryDispatchResult, mu *sync.Mutex, selection deliveryClaimSelection)
-	releaseDeliveryClaims(ctx context.Context, claims []deliveryClaimToken) error
-	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []deliveryClaimToken, message string, attrs ...any)
+	applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection deliveryClaimSelection)
+	releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error
+	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []dispatchstate.ClaimToken, message string, attrs ...any)
 }
 
 type ClaimManager struct {
@@ -115,20 +116,20 @@ func (c *ClaimManager) dispatchDeliveryRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-) deliveryDispatchResult {
+) dispatchstate.DispatchResult {
 	if c == nil || c.executor == nil {
-		return deliveryDispatchResult{
-			successDeliveryIDs: make([]int64, 0, len(rows)),
-			touchedOutboxIDs:   make([]int64, 0, len(rows)),
-			successClaimTokens: make([]deliveryClaimToken, 0, len(rows)),
-			failureBuckets:     make(map[string][]int64),
+		return dispatchstate.DispatchResult{
+			SuccessDeliveryIDs: make([]int64, 0, len(rows)),
+			TouchedOutboxIDs:   make([]int64, 0, len(rows)),
+			SuccessClaimTokens: make([]dispatchstate.ClaimToken, 0, len(rows)),
+			FailureBuckets:     make(map[string][]int64),
 		}
 	}
 	return c.executor.dispatchDeliveryRows(ctx, rows, outboxByID)
 }
 
 func (c *ClaimManager) recordDeliveryFailure(
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 	reason string,
 	deliveryID, outboxID int64,
@@ -138,8 +139,8 @@ func (c *ClaimManager) recordDeliveryFailure(
 		return
 	}
 	mu.Lock()
-	result.failedDeliveries++
-	result.failureBuckets[reason] = append(result.failureBuckets[reason], deliveryID)
-	result.touchedOutboxIDs = append(result.touchedOutboxIDs, outboxID)
+	result.FailedDeliveries++
+	result.FailureBuckets[reason] = append(result.FailureBuckets[reason], deliveryID)
+	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, outboxID)
 	mu.Unlock()
 }

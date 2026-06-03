@@ -76,8 +76,8 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 			if !deliveryFailureReasonIsPermanent(tt.reason) {
 				t.Fatalf("deliveryFailureReasonIsPermanent(%q) = false, want true", tt.reason)
 			}
-			if !reflect.DeepEqual(result.failureBuckets[tt.reason], []int64{101}) {
-				t.Fatalf("failure bucket %q = %#v, want []int64{101}", tt.reason, result.failureBuckets[tt.reason])
+			if !reflect.DeepEqual(result.FailureBuckets[tt.reason], []int64{101}) {
+				t.Fatalf("failure bucket %q = %#v, want []int64{101}", tt.reason, result.FailureBuckets[tt.reason])
 			}
 		})
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -27,17 +28,11 @@ const (
 	deliveryClaimDecisionRetryLater
 )
 
-type deliveryClaimToken struct {
-	kind         domain.OutboxKind
-	postID       string
-	authorizedAt time.Time
-}
-
 type deliveryClaimSelection struct {
 	sendRows               []domain.YouTubeNotificationDelivery
 	sendOutboxes           []domain.YouTubeNotificationOutbox
-	claimTokens            []deliveryClaimToken
-	rowClaimTokens         [][]deliveryClaimToken
+	claimTokens            []dispatchstate.ClaimToken
+	rowClaimTokens         [][]dispatchstate.ClaimToken
 	alreadySentDeliveryIDs []int64
 	alreadySentOutboxIDs   []int64
 	retryDeliveryIDs       []int64
@@ -53,8 +48,8 @@ func (d *ClaimManager) selectClaimedDeliveries(
 	selection := deliveryClaimSelection{
 		sendRows:       make([]domain.YouTubeNotificationDelivery, 0, len(rows)),
 		sendOutboxes:   make([]domain.YouTubeNotificationOutbox, 0, len(outboxes)),
-		claimTokens:    make([]deliveryClaimToken, 0, len(outboxes)),
-		rowClaimTokens: make([][]deliveryClaimToken, 0, len(rows)),
+		claimTokens:    make([]dispatchstate.ClaimToken, 0, len(outboxes)),
+		rowClaimTokens: make([][]dispatchstate.ClaimToken, 0, len(rows)),
 	}
 	limit := min(len(outboxes), len(rows))
 
@@ -80,7 +75,7 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 
 	type claimResult struct {
 		decision   deliveryClaimDecision
-		claimToken *deliveryClaimToken
+		claimToken *dispatchstate.ClaimToken
 	}
 
 	result, err := reuseCache.ResolveClaim(ctx, claimIdentity, func(ctx context.Context) (claim.Decision, *claim.Token, error) {
@@ -90,7 +85,7 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 		}
 		var token *claim.Token
 		if claimToken != nil {
-			token = &claim.Token{AuthorizedAt: claimToken.authorizedAt}
+			token = &claim.Token{AuthorizedAt: claimToken.AuthorizedAt}
 		}
 		return claim.Decision{Value: claimResult{decision: decision, claimToken: claimToken}}, token, nil
 	})
@@ -120,7 +115,7 @@ func (d *ClaimManager) applyDeliveryClaimDecision(
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
 	decision deliveryClaimDecision,
-	claimToken *deliveryClaimToken,
+	claimToken *dispatchstate.ClaimToken,
 	reused bool,
 ) {
 	switch decision {
@@ -141,25 +136,25 @@ func appendProceedingDeliveryClaim(
 	selection *deliveryClaimSelection,
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
-	claimToken *deliveryClaimToken,
+	claimToken *dispatchstate.ClaimToken,
 	reused bool,
 ) {
-	rowClaimTokens := []deliveryClaimToken(nil)
+	rowClaimTokens := []dispatchstate.ClaimToken(nil)
 	if claimToken != nil && !reused {
 		token := *claimToken
 		selection.claimTokens = append(selection.claimTokens, token)
-		rowClaimTokens = []deliveryClaimToken{token}
+		rowClaimTokens = []dispatchstate.ClaimToken{token}
 	}
 	selection.sendRows = append(selection.sendRows, row)
 	selection.sendOutboxes = append(selection.sendOutboxes, outbox)
 	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
 }
 
-func (d *ClaimManager) applyClaimSelection(result *deliveryDispatchResult, mu *sync.Mutex, selection deliveryClaimSelection) {
+func (d *ClaimManager) applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection deliveryClaimSelection) {
 	if len(selection.alreadySentDeliveryIDs) > 0 {
 		mu.Lock()
-		result.successDeliveryIDs = append(result.successDeliveryIDs, selection.alreadySentDeliveryIDs...)
-		result.touchedOutboxIDs = append(result.touchedOutboxIDs, selection.alreadySentOutboxIDs...)
+		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, selection.alreadySentDeliveryIDs...)
+		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, selection.alreadySentOutboxIDs...)
 		mu.Unlock()
 	}
 

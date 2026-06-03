@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 type YouTubeOutboxKaringSender interface {
@@ -22,9 +23,9 @@ func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
 	kind domain.OutboxKind,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	mode string,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
 	sender, ok := d.sender.(YouTubeOutboxKaringSender)
@@ -148,10 +149,10 @@ func (d *SendEngine) recordKaringRequestBuildFailure(
 	kind domain.OutboxKind,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	mode string,
 	err error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordKaringRequestBuildFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu)
@@ -165,10 +166,10 @@ func (d *SendEngine) recordKaringSendFailure(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	mode string,
 	err error,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordKaringSendFailure(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu)
@@ -182,9 +183,9 @@ func (d *SendEngine) recordKaringSuccess(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []deliveryClaimToken,
+	claimTokens []dispatchstate.ClaimToken,
 	mode string,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	d.metricsRecorder.recordKaringSuccess(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, result, mu)

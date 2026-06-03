@@ -287,10 +287,10 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	result := dispatcher.send.dispatchDeliveryRows(ctx, []domain.YouTubeNotificationDelivery{delivery}, map[int64]domain.YouTubeNotificationOutbox{
 		item.ID: item,
 	})
-	require.Equal(t, []int64{delivery.ID}, result.successDeliveryIDs)
-	require.Equal(t, []int64{item.ID}, result.touchedOutboxIDs)
-	require.NoError(t, dispatcher.claim.delivery.MarkSentBatch(ctx, result.successDeliveryIDs))
-	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.touchedOutboxIDs))
+	require.Equal(t, []int64{delivery.ID}, result.SuccessDeliveryIDs)
+	require.Equal(t, []int64{item.ID}, result.TouchedOutboxIDs)
+	require.NoError(t, dispatcher.claim.delivery.MarkSentBatch(ctx, result.SuccessDeliveryIDs))
+	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.TouchedOutboxIDs))
 
 	var updatedDelivery deliveryTestDeliveryModel
 	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)

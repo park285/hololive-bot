@@ -30,15 +30,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
-
-type deliveryDispatchResult struct {
-	successDeliveryIDs []int64
-	touchedOutboxIDs   []int64
-	successClaimTokens []deliveryClaimToken
-	failedDeliveries   int
-	failureBuckets     map[string][]int64
-}
 
 func partitionGroupedDeliveries(
 	group deliveryGroup,
@@ -67,7 +60,7 @@ func (d *SendEngine) dispatchRowsIndividually(
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
 	reuseCache claim.DecisionCache,
-	result *deliveryDispatchResult,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	for i := range rows {
@@ -106,12 +99,12 @@ func (d *SendEngine) dispatchClaimedRowsIndividually(
 	outboxes []domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	rowClaimTokens [][]deliveryClaimToken,
-	result *deliveryDispatchResult,
+	rowClaimTokens [][]dispatchstate.ClaimToken,
+	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	for i := range rows {
-		var claims []deliveryClaimToken
+		var claims []dispatchstate.ClaimToken
 		if i < len(rowClaimTokens) {
 			claims = rowClaimTokens[i]
 		}
@@ -128,7 +121,7 @@ func singleDeliveryBatch(
 
 func (d *ClaimManager) releaseDeliveryClaimsWithWarning(
 	ctx context.Context,
-	claims []deliveryClaimToken,
+	claims []dispatchstate.ClaimToken,
 	message string,
 	attrs ...any,
 ) {
