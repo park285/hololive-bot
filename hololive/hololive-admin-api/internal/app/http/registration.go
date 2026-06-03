@@ -77,6 +77,7 @@ func registerAPIRoutes(
 	authAPI.POST("/password/reset", authHandler.ResetPassword)
 
 	authAdminAPI := router.Group("/api/auth")
+	authAdminAPI.Use(middleware.AdminIPAllowMiddleware(adminAllowedIPs, logger))
 	authAdminAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))
 	authAdminAPI.POST("/register", authHandler.Register)
 
