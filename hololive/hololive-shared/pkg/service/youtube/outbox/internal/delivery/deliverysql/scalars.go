@@ -16,7 +16,6 @@ func UniqueInt64s(ids []int64) []int64 {
 	return unique
 }
 
-// truncateString: 문자열 길이 제한
 func TruncateString(s string, maxLen int) string {
 	runes := []rune(s)
 	if len(runes) <= maxLen {
