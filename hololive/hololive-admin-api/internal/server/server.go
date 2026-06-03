@@ -3,6 +3,15 @@ package server
 import api "github.com/kapu/hololive-admin-api/internal/server/internal/api"
 
 type Handler = api.Handler
+type HandlerDeps = api.HandlerDeps
+type CommonDeps = api.CommonDeps
+type MemberDeps = api.MemberDeps
+type StreamDeps = api.StreamDeps
+type StatsDeps = api.StatsDeps
+type SettingsDeps = api.SettingsDeps
+type TemplateDeps = api.TemplateDeps
+type MajorEventDeps = api.MajorEventDeps
+type YouTubeOpsDeps = api.YouTubeOpsDeps
 type AlarmHandler = api.AlarmHandler
 type AuthHandler = api.AuthHandler
 type ConfigPublisher = api.ConfigPublisher
