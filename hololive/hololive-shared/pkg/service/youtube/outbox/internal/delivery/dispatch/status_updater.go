@@ -84,16 +84,20 @@ func (u *StatusUpdater) markSentBatchIfLocked(ctx context.Context, tokens []outb
 		if tokens[i].id == 0 || tokens[i].lockedAt == nil {
 			continue
 		}
-		_, err := u.db.Exec(ctx, `
-			UPDATE youtube_notification_outbox
-			SET status = $1, sent_at = $2, locked_at = NULL, error = ''
-			WHERE id = $3 AND status = $4 AND locked_at = $5
-		`, domain.OutboxStatusSent, now, tokens[i].id, domain.OutboxStatusPending, *tokens[i].lockedAt)
-		if err != nil {
-			u.logger.Error("Failed to mark outbox item as sent",
-				slog.Int64("id", tokens[i].id),
-				slog.Any("error", err))
-		}
+		u.markSentTokenIfLocked(ctx, tokens[i], now)
+	}
+}
+
+func (u *StatusUpdater) markSentTokenIfLocked(ctx context.Context, token outboxLockToken, now time.Time) {
+	_, err := u.db.Exec(ctx, `
+		UPDATE youtube_notification_outbox
+		SET status = $1, sent_at = $2, locked_at = NULL, error = ''
+		WHERE id = $3 AND status = $4 AND locked_at = $5
+	`, domain.OutboxStatusSent, now, token.id, domain.OutboxStatusPending, *token.lockedAt)
+	if err != nil {
+		u.logger.Error("Failed to mark outbox item as sent",
+			slog.Int64("id", token.id),
+			slog.Any("error", err))
 	}
 }
 

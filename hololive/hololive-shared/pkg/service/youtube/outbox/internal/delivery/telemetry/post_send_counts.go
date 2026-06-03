@@ -200,7 +200,34 @@ func (r *Repository) listPostSendCounts(
 	var scanned []postSendCountScanRow
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
 	query := `
-		SELECT ` + strings.Join([]string{
+		SELECT ` + postSendCountsSelectSQL() + `
+		FROM youtube_content_alarm_tracking AS track
+		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
+		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?
+		WHERE ` + deliverysql.DeliveryInClause("track.kind", len(postKinds)) + `
+		  AND COALESCE(track.actual_published_at, track.detected_at) >= ?
+	`
+	args := []any{windowStart.UTC()}
+	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
+	args = append(args, windowStart.UTC())
+	if windowEnd != nil {
+		query += " AND COALESCE(track.actual_published_at, track.detected_at) < ?"
+		args = append(args, windowEnd.UTC())
+	}
+	if detectedBefore != nil {
+		query += " AND track.detected_at < ?"
+		args = append(args, detectedBefore.UTC())
+	}
+	query += postSendCountsGroupOrderSQL()
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
+		return nil, fmt.Errorf("scan rows: %w", err)
+	}
+
+	return buildPostSendCountsFromScanRows(scanned), nil
+}
+
+func postSendCountsSelectSQL() string {
+	return strings.Join([]string{
 		"track.kind AS outbox_kind",
 		"CASE track.kind WHEN 'COMMUNITY_POST' THEN 'COMMUNITY' WHEN 'NEW_SHORT' THEN 'SHORTS' ELSE 'LIVE' END AS alarm_type",
 		"track.channel_id AS channel_id",
@@ -220,25 +247,11 @@ func (r *Repository) listPostSendCounts(
 		"COUNT(DISTINCT CASE WHEN t.send_result = 'success' THEN t.room_id END) AS success_room_count",
 		"COALESCE(SUM(CASE WHEN t.send_result = 'success' THEN 1 ELSE 0 END), 0) - COUNT(DISTINCT CASE WHEN t.send_result = 'success' THEN t.room_id END) AS duplicate_success_count",
 		"COALESCE(SUM(CASE WHEN t.send_result <> 'success' THEN 1 ELSE 0 END), 0) AS failed_attempt_count",
-	}, ", ") + `
-		FROM youtube_content_alarm_tracking AS track
-		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
-		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?
-		WHERE ` + deliverysql.DeliveryInClause("track.kind", len(postKinds)) + `
-		  AND COALESCE(track.actual_published_at, track.detected_at) >= ?
-	`
-	args := []any{windowStart.UTC()}
-	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
-	args = append(args, windowStart.UTC())
-	if windowEnd != nil {
-		query += " AND COALESCE(track.actual_published_at, track.detected_at) < ?"
-		args = append(args, windowEnd.UTC())
-	}
-	if detectedBefore != nil {
-		query += " AND track.detected_at < ?"
-		args = append(args, detectedBefore.UTC())
-	}
-	query += `
+	}, ", ")
+}
+
+func postSendCountsGroupOrderSQL() string {
+	return `
 		GROUP BY ` + strings.Join([]string{
 		"track.kind",
 		"track.channel_id",
@@ -252,11 +265,6 @@ func (r *Repository) listPostSendCounts(
 		ORDER BY COALESCE(MAX(CASE WHEN t.send_result = 'success' THEN t.event_at END), MAX(t.event_at), track.actual_published_at, track.detected_at) DESC,
 		         track.content_id ASC
 	`
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
-		return nil, fmt.Errorf("scan rows: %w", err)
-	}
-
-	return buildPostSendCountsFromScanRows(scanned), nil
 }
 
 func buildPostSendCountsFromScanRows(scanned []postSendCountScanRow) []PostSendCount {

@@ -121,16 +121,19 @@ func (v *ValkeyCostCeiling) RecordUsage(ctx context.Context, provider, model str
 		return
 	}
 
-	// 임계를 "이번 호출에서 넘어선" 순간에만 경고 — 초과 이후 매 호출 경고 스팸 방지.
 	if total > v.monthlyCeiling && total-tokens <= v.monthlyCeiling {
-		if llmCostCeilingExceed != nil {
-			llmCostCeilingExceed.Inc()
-		}
-		v.logger.WarnContext(ctx, "llm monthly token ceiling exceeded",
-			slog.String("provider", provider),
-			slog.String("model", model),
-			slog.Int64("month_tokens", total),
-			slog.Int64("ceiling", v.monthlyCeiling),
-			slog.String("month", key))
+		v.warnCeilingExceeded(ctx, provider, model, total, key)
 	}
+}
+
+func (v *ValkeyCostCeiling) warnCeilingExceeded(ctx context.Context, provider, model string, total int64, key string) {
+	if llmCostCeilingExceed != nil {
+		llmCostCeilingExceed.Inc()
+	}
+	v.logger.WarnContext(ctx, "llm monthly token ceiling exceeded",
+		slog.String("provider", provider),
+		slog.String("model", model),
+		slog.Int64("month_tokens", total),
+		slog.Int64("ceiling", v.monthlyCeiling),
+		slog.String("month", key))
 }

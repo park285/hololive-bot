@@ -85,11 +85,15 @@ func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) erro
 		}
 	}()
 
-	if err := fn(tx); err != nil {
+	return finishBatchTx(ctx, tx, fn(tx))
+}
+
+func finishBatchTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
+	if fnErr != nil {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(err, rollbackErr))
+			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
-		return fmt.Errorf("pgx transaction failed: %w", err)
+		return fmt.Errorf("pgx transaction failed: %w", fnErr)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

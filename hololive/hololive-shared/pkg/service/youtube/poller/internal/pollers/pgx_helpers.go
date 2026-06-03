@@ -88,11 +88,15 @@ func inPollerTx(ctx context.Context, db pollerDB, fn func(tx dbx.Querier) error)
 		}
 	}()
 
-	if err := fn(tx); err != nil {
+	return finishPollerTx(ctx, tx, fn(tx))
+}
+
+func finishPollerTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
+	if fnErr != nil {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(err, rollbackErr))
+			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
-		return fmt.Errorf("pgx transaction failed: %w", err)
+		return fmt.Errorf("pgx transaction failed: %w", fnErr)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

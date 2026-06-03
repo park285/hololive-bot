@@ -112,6 +112,10 @@ func (d *Dispatcher) Start(ctx context.Context) {
 		defer d.started.Store(false)
 		d.run(ctx)
 	}()
+	d.startBackgroundLoops(ctx)
+}
+
+func (d *Dispatcher) startBackgroundLoops(ctx context.Context) {
 	if d.claim != nil && d.claim.delivery != nil {
 		go d.aggregateSyncLoop(ctx)
 	}
