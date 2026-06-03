@@ -2,6 +2,8 @@ module github.com/kapu/hololive-kakao-bot-go
 
 go 1.26.2
 
+toolchain go1.26.4
+
 // Gin uses goccy/go-json instead of sonic with -tags=go_json.
 
 require (
@@ -9,8 +11,8 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.15.1
-	github.com/park285/shared-go v1.5.1
+	github.com/park285/iris-client-go v0.15.3
+	github.com/park285/shared-go v1.5.2
 	github.com/quic-go/quic-go v0.59.1
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.75

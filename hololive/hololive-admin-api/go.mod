@@ -2,14 +2,16 @@ module github.com/kapu/hololive-admin-api
 
 go 1.26.2
 
+toolchain go1.26.4
+
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.15.1
-	github.com/park285/shared-go v1.5.1
+	github.com/park285/iris-client-go v0.15.3
+	github.com/park285/shared-go v1.5.2
 	github.com/shirou/gopsutil/v4 v4.26.4
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.75
