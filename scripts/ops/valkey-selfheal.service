@@ -17,8 +17,9 @@ Type=oneshot
 User=kapu
 # systemd User 환경엔 ~/.local/bin 이 없어 codex 를 못 찾는다 → PATH 명시.
 Environment=PATH=/home/kapu/.local/bin:/usr/local/bin:/usr/bin:/bin
-Environment=SELFHEAL_STATE=%h/.local/state/valkey-selfheal.state
-Environment=SELFHEAL_JOURNAL=%h/.local/state/valkey-selfheal.jsonl
+# %h 는 system manager 에선 User= 와 무관하게 /root 로 풀린다(systemd 함정, man systemd.unit) → 절대경로 고정.
+Environment=SELFHEAL_STATE=/home/kapu/.local/state/valkey-selfheal.state
+Environment=SELFHEAL_JOURNAL=/home/kapu/.local/state/valkey-selfheal.jsonl
 # 자율복구(codex) 활성: --apply. 감지/저널만 원하면 --dry-run 으로 시작해 거동을 먼저 관찰할 것.
 ExecStart=/home/kapu/work/iris-stack/hololive-bot/scripts/ops/valkey-selfheal.sh --apply
 TimeoutStartSec=360
