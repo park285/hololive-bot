@@ -1,0 +1,85 @@
+=== Q1: ClaimDue (alarm_dispatch_deliveries) — ANALYZE in ROLLBACK ===
+BEGIN
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.13..8.16 rows=1 width=22) (actual time=0.018..0.025 rows=0.00 loops=1)
+   Output: id, next_attempt_at, ctid
+   Buffers: shared hit=1
+   ->  LockRows  (cost=0.13..8.16 rows=1 width=22) (actual time=0.014..0.019 rows=0.00 loops=1)
+         Output: id, next_attempt_at, ctid
+         Buffers: shared hit=1
+         ->  Index Scan using idx_alarm_dispatch_deliveries_due on public.alarm_dispatch_deliveries  (cost=0.13..8.15 rows=1 width=22) (actual time=0.012..0.013 rows=0.00 loops=1)
+               Output: id, next_attempt_at, ctid
+               Index Cond: (alarm_dispatch_deliveries.next_attempt_at <= now())
+               Filter: (alarm_dispatch_deliveries.status = ANY ('{pending,retry}'::text[]))
+               Index Searches: 1
+               Buffers: shared hit=1
+ Query Identifier: 4154423902378220680
+ Planning:
+   Buffers: shared hit=366
+ Planning Time: 0.687 ms
+ Execution Time: 0.059 ms
+(17 rows)
+
+ROLLBACK
+=== Q2: outbox claim (GENERIC_PLAN) ===
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=25.49..25.49 rows=1 width=16)
+   ->  Sort  (cost=25.49..25.49 rows=1 width=16)
+         Sort Key: o.created_at
+         ->  Hash Anti Join  (cost=4.37..25.48 rows=1 width=16)
+               Hash Cond: (o.id = d.outbox_id)
+               ->  Seq Scan on youtube_notification_outbox o  (cost=0.00..21.07 rows=10 width=16)
+                     Filter: (((locked_at IS NULL) OR (locked_at < $2)) AND (next_attempt_at <= $3) AND ((status)::text = $1))
+               ->  Hash  (cost=3.61..3.61 rows=61 width=8)
+                     ->  Seq Scan on youtube_notification_delivery d  (cost=0.00..3.61 rows=61 width=8)
+(9 rows)
+
+=== Q3: delivery claim (GENERIC_PLAN) ===
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=4.23..4.24 rows=1 width=16)
+   ->  Sort  (cost=4.23..4.26 rows=10 width=16)
+         Sort Key: created_at
+         ->  Seq Scan on youtube_notification_delivery  (cost=0.00..4.07 rows=10 width=16)
+               Filter: (((locked_at IS NULL) OR (locked_at < $2)) AND (next_attempt_at <= $3) AND ((status)::text = $1))
+(5 rows)
+
+=== Q4: members 조회 (ANALYZE) ===
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Sort  (cost=19.66..19.97 rows=126 width=400) (actual time=0.576..0.758 rows=126.00 loops=1)
+   Sort Key: english_name
+   Sort Method: quicksort  Memory: 70kB
+   Buffers: shared hit=17
+   ->  Seq Scan on members  (cost=0.00..15.26 rows=126 width=400) (actual time=0.007..0.264 rows=126.00 loops=1)
+         Buffers: shared hit=14
+ Planning:
+   Buffers: shared hit=285
+ Planning Time: 0.421 ms
+ Execution Time: 0.985 ms
+(10 rows)
+
+=== Q5: live-stream events (ANALYZE) ===
+                                                                                               QUERY PLAN                                                                                               
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.62..8.64 rows=1 width=16) (actual time=0.037..0.051 rows=1.00 loops=1)
+   Buffers: shared hit=4
+   InitPlan 1
+     ->  Limit  (cost=0.14..0.47 rows=1 width=19) (actual time=0.019..0.024 rows=1.00 loops=1)
+           Buffers: shared hit=2
+           ->  Index Scan Backward using alarm_dispatch_events_pkey on alarm_dispatch_events alarm_dispatch_events_1  (cost=0.14..49.36 rows=150 width=19) (actual time=0.016..0.017 rows=1.00 loops=1)
+                 Filter: (alarm_type = 'LIVE'::alarm_type)
+                 Index Searches: 1
+                 Buffers: shared hit=2
+   ->  Index Scan using idx_alarm_dispatch_events_live_stream_created on alarm_dispatch_events  (cost=0.14..8.16 rows=1 width=16) (actual time=0.033..0.037 rows=1.00 loops=1)
+         Index Cond: ((stream_id)::text = ((InitPlan 1).col1)::text)
+         Index Searches: 1
+         Buffers: shared hit=4
+ Planning:
+   Buffers: shared hit=90
+ Planning Time: 0.220 ms
+ Execution Time: 0.072 ms
+(17 rows)
+
