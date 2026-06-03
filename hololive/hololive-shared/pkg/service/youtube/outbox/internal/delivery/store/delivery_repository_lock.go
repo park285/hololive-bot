@@ -77,8 +77,7 @@ func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens 
 			UPDATE youtube_notification_delivery
 			SET status = $1, sent_at = $2, locked_at = NULL, error = ''
 			WHERE id = $3 AND status = $4
-			  AND locked_at BETWEEN $5::timestamptz - INTERVAL '1 millisecond'
-			                    AND $5::timestamptz + INTERVAL '1 millisecond'
+			  AND locked_at = $5
 		`, domain.OutboxStatusSent, sentAt, tokens[i].id, domain.OutboxStatusPending, *tokens[i].lockedAt)
 		if err != nil {
 			return nil, fmt.Errorf("update delivery row %d: %w", tokens[i].id, err)
