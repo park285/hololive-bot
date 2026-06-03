@@ -45,7 +45,7 @@ DETERMINISTIC=(
 case "${MODE}" in --dry-run|--apply) ;; *) echo "Usage: $0 [--dry-run|--apply]" >&2; exit 2 ;; esac
 
 journal() {
-  local detail="${2:-{}}"
+  local detail="${2:-}"; [ -n "${detail}" ] || detail='{}'   # ${2:-{}} 는 bash 가 trailing '}' 로 깨므로 분리
   local line; line=$(printf '{"ts":%s,"mode":"%s","event":"%s","detail":%s}' "${NOW}" "${MODE}" "$1" "${detail}")
   [ "${MODE}" = "--apply" ] && { printf '%s\n' "${line}" >>"${JOURNAL}" 2>/dev/null || true; }
   printf '[selfheal] %s\n' "${line}" >&2
