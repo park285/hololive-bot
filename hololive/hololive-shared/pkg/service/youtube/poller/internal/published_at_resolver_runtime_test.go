@@ -168,7 +168,15 @@ func TestPendingPublishedAtResolver_SkipsFreshCandidatesBeforeMinDetectedAge(t *
 		defer close(done)
 		resolver.Start(ctx)
 	}()
-	time.Sleep(50 * time.Millisecond)
+	// 고정 sleep 후 cancel하면 부하 시 RunOnce persist 도중 ctx가 취소돼 flaky하다.
+	// aged 후보의 published_at이 실제 커밋된 것을 확인한 뒤 cancel한다.
+	require.Eventually(t, func() bool {
+		var v domain.YouTubeVideo
+		if err := db.First(&v, "video_id = ?", "short-aged").Error; err != nil {
+			return false
+		}
+		return v.PublishedAt != nil
+	}, 2*time.Second, 10*time.Millisecond)
 	cancel()
 	<-done
 
