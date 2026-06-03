@@ -8,12 +8,12 @@
 
 | 작업 | 버전 | 상태 |
 |------|------|------|
-| 알람 타입 시스템 구현 | v2.0.21 | ✅ 배포됨 |
-| DB 마이그레이션 (alarm_types, notification_templates) | 010 | ✅ 완료 |
-| 기존 사용자 데이터 마이그레이션 (9개 레코드) | - | ✅ 완료 |
-| TemplateRenderer (DB 기반 템플릿) | - | ✅ 구현됨 |
-| **YouTube Poller 테이블 마이그레이션** | 011 | ✅ 완료 |
-| **Outbox Dispatcher 통합 테스트 파일 생성** | - | ✅ 완료 |
+| 알람 타입 시스템 구현 | v2.0.21 | 배포됨 |
+| DB 마이그레이션 (alarm_types, notification_templates) | 010 | 완료 |
+| 기존 사용자 데이터 마이그레이션 (9개 레코드) | - | 완료 |
+| TemplateRenderer (DB 기반 템플릿) | - | 구현됨 |
+| **YouTube Poller 테이블 마이그레이션** | 011 | 완료 |
+| **Outbox Dispatcher 통합 테스트 파일 생성** | - | 완료 |
 
 ### 생성된 테이블 (011 마이그레이션)
 
@@ -54,7 +54,7 @@
 
 ## 남은 작업 (우선순위순)
 
-### 1. 🟡 Outbox Dispatcher 통합 테스트 실행
+### 1. Outbox Dispatcher 통합 테스트 실행
 
 테스트 파일이 생성되었으나, Docker 환경 내에서 실행해야 합니다:
 
@@ -75,7 +75,7 @@ go test -v ./internal/service/youtube/outbox/...
 - `TestDispatcher_ProcessOnce_Retry` - 실패/재시도 경로
 - `TestDispatcher_NoSubscribers_MarkedAsSent` - 구독자 없음 처리
 
-### 2. 🟢 알람 목록에 타입 표시 (선택)
+### 2. 알람 목록에 타입 표시 (선택)
 
 현재 `!알람 목록`에서 구독 타입이 표시되지 않음.
 - `internal/command/alarm.go` → `handleList()`
@@ -124,7 +124,7 @@ User → !알람 추가 <멤버> [타입]
 └─────────────────┘                  └─────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│                     알림 발송 흐름 (✅ 완료)                       │
+│                     알림 발송 흐름 (완료)                       │
 └─────────────────────────────────────────────────────────────────┘
 
 YouTube API / Scraper
@@ -137,13 +137,13 @@ YouTube API / Scraper
          │
          ▼
 ┌─────────────────┐
-│  youtube_videos │ ← ✅ 테이블 생성 완료 (461+ 레코드)
+│  youtube_videos │ ← 테이블 생성 완료 (461+ 레코드)
 │  (DB Table)     │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────────────┐
-│ youtube_notification_   │ ← ✅ 테이블 생성 완료
+│ youtube_notification_   │ ← 테이블 생성 완료
 │ outbox (DB Table)       │
 └────────┬────────────────┘
          │

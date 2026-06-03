@@ -4,7 +4,7 @@
 
 카카오톡을 통해 홀로라이브 소속 VTuber들의 실시간 방송 현황, 예정된 스케줄, 공식 프로필 정보를 빠르고 편리하게 제공합니다. Go 1.26의 최신 기능과 Valkey 기반의 다층 캐싱 시스템, GORM 기반의 안정적인 데이터 관리를 통해 높은 성능과 확장성을 보장합니다.
 
-## ✨ 주요 기능
+## 주요 기능
 
 -   **실시간 방송 조회 (`!라이브`)**: Holodex API와 연동하여 현재 방송 중인 멤버 확인
 -   **스케줄 정보 (`!예정`)**: 향후 24시간 내의 방송 예정 스케줄 조회
@@ -29,7 +29,7 @@
     -   **VSPO**: VSPO 소속 VTuber 방송 조회 및 알림
     -   **개인세 (Indie)**: 등록된 개인 VTuber 방송 조회 및 알림
 
-## 🛠 기술 스택
+## 기술 스택
 
 이 프로젝트는 최신 Go 생태계와 안정적인 오픈소스를 활용하여 구축되었습니다.
 
@@ -48,7 +48,7 @@
     -   **Monitoring**: Deunhealth (컨테이너 상태 모니터링 및 자동 복구)
     -   **Deployment**: Docker & Docker Compose
 
-## 📂 프로젝트 구조
+## 프로젝트 구조
 
 현재 `hololive-kakao-bot-go`는 bot ingress 런타임을 제공합니다.
 runtime split 기준으로 control plane, alarm worker, scheduler, ingestion 런타임은 별도 module에서 운영합니다.
@@ -76,7 +76,7 @@ hololive/
 - `cmd/youtube-producer` → `hololive-youtube-producer/cmd/youtube-producer`
 - 서비스별 Dockerfile → 각 모듈 루트 `Dockerfile`
 
-## 📂 (레거시) 단일 모듈 구조 스냅샷
+## (레거시) 단일 모듈 구조 스냅샷
 
 아래는 분리 이전(참고용) 구조입니다.
 
@@ -106,7 +106,7 @@ hololive-kakao-bot-go/
 └── Dockerfile                    # 프로덕션 배포용 Docker 설정
 ```
 
-## 🚀 시작하기
+## 시작하기
 
 ### 사전 요구사항
 
@@ -162,7 +162,7 @@ runtime split 이후 운영 책임은 다음과 같습니다.
 
 로컬 단일 프로세스 보조 스크립트는 `scripts/README.md`를 참고하세요.
 
-## ⚙️ 환경 변수 설정 (`.env`)
+## 환경 변수 설정 (`.env`)
 
 주요 설정 항목은 다음과 같습니다.
 
@@ -183,7 +183,7 @@ runtime split 이후 운영 책임은 다음과 같습니다.
 
 > 참고: 관리자 콘솔(Auth/Docker/Logs/Traces)은 `admin-dashboard`로 분리되었고, 운영 API는 `hololive-bot`이 아니라 `hololive-admin-api`가 제공합니다.
 
-## 🌐 지원 그룹
+## 지원 그룹
 
 현재 지원되는 VTuber 그룹 및 소속사입니다.
 
@@ -221,7 +221,7 @@ runtime split 이후 운영 책임은 다음과 같습니다.
 !알람 추가 미코 (Hololive)
 ```
 
-## 🕹 명령어 목록
+## 명령어 목록
 
 봇이 있는 채팅방에서 아래 명령어를 사용할 수 있습니다. (`!` 접두사 기준)
 
@@ -245,13 +245,13 @@ runtime split 이후 운영 책임은 다음과 같습니다.
 -   **기타**
     -   `!도움말`: 명령어 도움말 확인
 
-## 🛡 관리 및 모니터링
+## 관리 및 모니터링
 
 -   **Health Check**: `/health` 엔드포인트를 통해 봇의 상태를 확인할 수 있습니다.
 -   **Deunhealth**: 컨테이너가 멈추거나 헬스 체크에 실패하면 `deunhealth`가 자동으로 이를 감지하고 재시작하여 가용성을 유지합니다.
 -   **Graceful Shutdown**: 종료 시그널(SIGTERM) 수신 시 진행 중인 작업을 안전하게 마무리하고 종료합니다.
 
-## 📋 마이그레이션
+## 마이그레이션
 
 ### v2.1.0 - 멀티 그룹 지원 (2026-01)
 
@@ -267,7 +267,7 @@ psql -d <database> -f scripts/migrations/016-add-multi-group-support.sql
 - 기존 데이터는 `org='Hololive'`, `sync_source='holodex'`로 자동 백필
 - 개인세 VTuber 시드 데이터 추가 (유우키 사쿠나, 사메코 사바)
 
-## 📝 라이선스
+## 라이선스
 
 MIT License. See [LICENSE](LICENSE) for details.
 

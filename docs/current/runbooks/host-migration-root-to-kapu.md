@@ -18,18 +18,18 @@
 
 | 항목 | 크기 | 권장 | 결정 |
 |---|---|---|---|
-| `/root/restore-staging` | 101G | **삭제** (LVM 마이그레이션 잔여) | ☐ |
-| `/root/restore` | 5G | 삭제 (재시동 후 1주 이상 안정 시) | ☐ |
-| `/root/restore-safety-20260521-003903`, `/root/restore-metadata` | 1.4M | `/home/kapu/migration-archive/`로 보존 | ☐ |
-| `/root/efi-pve-kernel-backup-20260508`, `/root/efi-loader-entries-backup-20260508` | 902M+52K | 보존 (부팅 복구용) | ☐ |
-| `/root/debian-migrate-backup` | 9M | `/home/kapu/migration-archive/`로 보존 | ☐ |
-| `/root/.codex` | 26G | chown 이전 (Codex 사용) | ☐ |
-| `/root/.cache` | 21G | 이전 안 함 (재생성) | ☐ |
-| `/root/go` | 4.1G | chown 이전 (Go module cache) | ☐ |
-| `/root/.rustup`, `/root/.cargo` | 5G+1.4G | chown 이전 | ☐ |
-| `/root/.gradle`, `/root/.m2`, `/root/.npm`, `/root/.nvm` | 4.0G | chown 이전 | ☐ |
-| compose 서비스 실행 사용자 | - | `root` 유지 (변경 최소화) | ☐ |
-| `code-server-root.service` | - | `code-server-kapu.service`로 신규 작성 (이름까지 변경) | ☐ |
+| `/root/restore-staging` | 101G | **삭제** (LVM 마이그레이션 잔여) | 미정 |
+| `/root/restore` | 5G | 삭제 (재시동 후 1주 이상 안정 시) | 미정 |
+| `/root/restore-safety-20260521-003903`, `/root/restore-metadata` | 1.4M | `/home/kapu/migration-archive/`로 보존 | 미정 |
+| `/root/efi-pve-kernel-backup-20260508`, `/root/efi-loader-entries-backup-20260508` | 902M+52K | 보존 (부팅 복구용) | 미정 |
+| `/root/debian-migrate-backup` | 9M | `/home/kapu/migration-archive/`로 보존 | 미정 |
+| `/root/.codex` | 26G | chown 이전 (Codex 사용) | 미정 |
+| `/root/.cache` | 21G | 이전 안 함 (재생성) | 미정 |
+| `/root/go` | 4.1G | chown 이전 (Go module cache) | 미정 |
+| `/root/.rustup`, `/root/.cargo` | 5G+1.4G | chown 이전 | 미정 |
+| `/root/.gradle`, `/root/.m2`, `/root/.npm`, `/root/.nvm` | 4.0G | chown 이전 | 미정 |
+| compose 서비스 실행 사용자 | - | `root` 유지 (변경 최소화) | 미정 |
+| `code-server-root.service` | - | `code-server-kapu.service`로 신규 작성 (이름까지 변경) | 미정 |
 | `/root/github-runner` | - | 손대지 않음 (별도 시스템 사용자) | 확정 |
 | `kapu` docker 그룹 추가 | - | 필요 (`docker ps` 등 호환) | 확정 |
 
@@ -100,7 +100,7 @@
 
 - [ ] **Step 0.1: 사용자에게 Pre-flight 결정 사항 확정 받기**
 
-상단 표의 ☐ 항목 모두 결정 후 Phase 진행. 특히 `restore-staging` 삭제 여부와 `code-server` 이름 변경 여부 확정.
+상단 표의 미정 항목 모두 결정 후 Phase 진행. 특히 `restore-staging` 삭제 여부와 `code-server` 이름 변경 여부 확정.
 
 - [ ] **Step 0.2: 시스템 상태 스냅샷 저장**
 
@@ -292,7 +292,7 @@ ls /home/kapu/.claude /home/kapu/.codex >/dev/null && echo "configs OK"
 
 ---
 
-### Task 4: prod 서비스 정지 (Phase 2, 다운타임 시작) ⚠️
+### Task 4: prod 서비스 정지 (Phase 2, 다운타임 시작)
 
 **다운타임 시작점.** 시각 기록.
 
@@ -742,7 +742,7 @@ diff <(sort /home/kapu/migration-archive/snapshot-pre/docker-ps.txt | awk '{prin
 | Task 1 | NOPASSWD + docker 그룹 | 0 | 0 |
 | Task 2 | kapu 셸 환경 | 0 | 0 |
 | Task 3 | Claude/Codex/런타임 이전 | 0 (caches, 26G+ 이동도 mv 인스턴트) | 0 |
-| Task 4 | 서비스 정지 ⚠️ | 1~2분 | 2분 |
+| Task 4 | 서비스 정지 | 1~2분 | 2분 |
 | Task 5 | work 이동 + 백업 | <1분 (mv 인스턴트) | 3분 |
 | Task 6 | systemd unit 갱신 | 1~2분 (sed + daemon-reload) | 5분 |
 | Task 7 | 서비스 재기동 | 3~5분 (healthcheck warm-up) | 10분 |

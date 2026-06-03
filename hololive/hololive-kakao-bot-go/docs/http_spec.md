@@ -97,7 +97,7 @@ GET /api/holo/streams/live?org={ORG}
 **파라미터:**
 | 이름 | 타입 | 필수 | 기본값 | 설명 |
 |------|------|------|--------|------|
-| org | string | ❌ | `hololive` | 조회 대상 org (`hololive`, `vspo`, `stellive`, `indie`, `all`) |
+| org | string | 아니오 | `hololive` | 조회 대상 org (`hololive`, `vspo`, `stellive`, `indie`, `all`) |
 
 > `org` 파라미터가 전달되었는데 빈 문자열/공백이면 `400` 반환
 
@@ -143,7 +143,7 @@ GET /api/holo/streams/upcoming?org={ORG}
 **파라미터:**
 | 이름 | 타입 | 필수 | 기본값 | 설명 |
 |------|------|------|--------|------|
-| org | string | ❌ | `hololive` | 조회 대상 org (`hololive`, `vspo`, `stellive`, `indie`, `all`) |
+| org | string | 아니오 | `hololive` | 조회 대상 org (`hololive`, `vspo`, `stellive`, `indie`, `all`) |
 
 > `org` 파라미터가 전달되었는데 빈 문자열/공백이면 `400` 반환
 
@@ -179,7 +179,7 @@ GET /api/holo/channels?channelIds={ID1},{ID2},{ID3}...
 **파라미터:**
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| channelIds | string | ✅ | 쉼표로 구분된 채널 ID 목록 |
+| channelIds | string | 예 | 쉼표로 구분된 채널 ID 목록 |
 
 > `channelIds`는 최대 100개까지 허용되며 초과 시 `400` 반환
 
@@ -228,7 +228,7 @@ GET /api/holo/channels/search?q={QUERY}
 **파라미터:**
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| q | string | ✅ | 검색 쿼리 (영문명/일본어명) |
+| q | string | 예 | 검색 쿼리 (영문명/일본어명) |
 
 **응답:**
 ```json
@@ -590,7 +590,7 @@ Content-Type: application/json
 **요청 필드:**
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| memberNewsWeeklyRunNow | boolean | ✅ | `true`일 때 member news 주간 다이제스트 즉시 실행 |
+| memberNewsWeeklyRunNow | boolean | 예 | `true`일 때 member news 주간 다이제스트 즉시 실행 |
 
 > `majorEventScrapeHourKST`, `majorEventScrapeRunNow`는 2026-03-01부터 제거되었습니다 (`llm-scheduler` 런타임 소유).
 
@@ -739,7 +739,7 @@ POST /webhook/iris
 
 | 이름 | 필수 | 설명 |
 |------|------|------|
-| `X-Iris-Token` | ✅ | bot 인바운드 webhook 인증 토큰 (`IRIS_WEBHOOK_TOKEN`) |
+| `X-Iris-Token` | 예 | bot 인바운드 webhook 인증 토큰 (`IRIS_WEBHOOK_TOKEN`) |
 | `X-Iris-Message-Id` | 권장 | 메시지 dedup 키. 없으면 bot-side dedup이 적용되지 않음 |
 
 **요청 본문:**
@@ -782,7 +782,7 @@ POST /reply
 
 | 이름 | 필수 | 설명 |
 |------|------|------|
-| `X-Bot-Token` | ✅ | Iris outbound 인증 토큰 (`IRIS_BOT_TOKEN`) |
+| `X-Bot-Token` | 예 | Iris outbound 인증 토큰 (`IRIS_BOT_TOKEN`) |
 
 **요청 본문:**
 

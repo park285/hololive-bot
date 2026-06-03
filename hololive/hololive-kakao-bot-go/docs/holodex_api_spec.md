@@ -54,7 +54,7 @@
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |----------|------|------|------|
-| `channels` | string | ✅ | 쉼표로 구분된 YouTube 채널 ID 목록 |
+| `channels` | string | 예 | 쉼표로 구분된 YouTube 채널 ID 목록 |
 
 #### 1.3 응답
 
@@ -82,11 +82,11 @@
 
 | 기능 | `/live` | `/users/live` |
 |------|:-------:|:-------------:|
-| `org` 필터 | ✅ 지원 | ❌ 미지원 |
-| `status` 필터 | ✅ 지원 | ❌ 미지원 |
-| `sort` / `order` | ✅ 지원 | ❌ 미지원 |
-| `max_upcoming_hours` | ✅ 지원 | ❌ 미지원 |
-| `channels` 목록 | ❌ | ✅ 필수 |
+| `org` 필터 | 지원 | 미지원 |
+| `status` 필터 | 지원 | 미지원 |
+| `sort` / `order` | 지원 | 미지원 |
+| `max_upcoming_hours` | 지원 | 미지원 |
+| `channels` 목록 | 미지원 | 필수 |
 | **응답 속도** | 보통 | **빠름** |
 | **API 비용** | 보통 | **저렴** |
 | **반환 결과** | 필터링된 결과 | live + upcoming 모두 |
@@ -100,12 +100,12 @@
 
 #### 1.6 주의사항
 
-⚠️ **제약사항**
+**제약사항**
 - `org`, `status`, `sort` 파라미터 **미지원**
 - 항상 `live`와 `upcoming` 상태 모두 반환
 - 클라이언트에서 추가 필터링 필요 시 직접 구현
 
-⚠️ **fallback 동작**
+**fallback 동작**
 - `/users/live` 호출 실패 시 **retryable 오류(5xx/timeout/circuit/key rotation)** 에서만 fallback 시도
 - fallback은 채널별 **YouTube producer** 결과만 사용
 - live-status batch fallback에서는 **공식 스케줄 페이지를 재조회하지 않음**
@@ -182,7 +182,7 @@
 - `type`: `vtuber`
 - `limit`: `50`
 
-> ⚠️ `name` 파라미터는 Holodex API에서 무시됨 → 클라이언트 사이드 필터링 적용
+> 주의: `name` 파라미터는 Holodex API에서 무시됨 → 클라이언트 사이드 필터링 적용
 
 #### 3.2 fetchHololiveChannelList
 

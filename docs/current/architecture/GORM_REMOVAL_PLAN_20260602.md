@@ -7,12 +7,12 @@
 
 **제거는 기술적으로 깨끗하고 타당하나, P0가 아니며 단계적으로 진행해야 합니다.** 근거:
 
-- ✅ **고급 ORM 기능 미사용** — `Preload` 0, `Association` 0, `gorm.DeletedAt`(soft delete) 0, hook(BeforeCreate 등) 0. 이식이 어려운 부분이 아예 없습니다.
-- ✅ **이미 절반이 raw SQL** — `Exec` 60 + `Scan` 57 + `Raw` 7. GORM은 사실상 query-builder + row scanner + tx + `ON CONFLICT` 편의 계층일 뿐입니다.
-- ✅ **pgx가 이미 기반** — `dbx.Client`가 `pgxpool.Pool` + `sql.DB` + `gorm.DB`를 함께 보유(`gorm.DB`는 `stdlib.OpenDBFromPool`로 파생). GORM은 위에 얹힌 층이라 걷어내면 됩니다.
-- ✅ **숨은 이득**: prod 스키마는 SQL migration(`scripts/migrations/*.sql`)이 SSOT인데 **test 스키마만 GORM `AutoMigrate`(struct tag)** 로 만들어집니다 — 두 정의가 drift할 수 있는 잠재 버그. 제거하면 test도 실제 migration SQL로 통일됩니다.
-- ⚠️ **실제 비용은 test 스키마 전환** — `AutoMigrate` 호출 ~44개 test 파일. 이 test-schema 경로를 먼저 해결하지 않으면 repository 이식을 시작할 수 없습니다. **이것이 진짜 블로커이자 최대 작업량**입니다.
-- ⚠️ **가치는 중간** — GORM이 버그를 일으키고 있지 않습니다. 이득은 의존성 1개 제거, dbx 단순화, 명시적 SQL, 단일 데이터 접근 패턴, test/prod 스키마 통일입니다. 긴급하지 않습니다.
+- **고급 ORM 기능 미사용** — `Preload` 0, `Association` 0, `gorm.DeletedAt`(soft delete) 0, hook(BeforeCreate 등) 0. 이식이 어려운 부분이 아예 없습니다.
+- **이미 절반이 raw SQL** — `Exec` 60 + `Scan` 57 + `Raw` 7. GORM은 사실상 query-builder + row scanner + tx + `ON CONFLICT` 편의 계층일 뿐입니다.
+- **pgx가 이미 기반** — `dbx.Client`가 `pgxpool.Pool` + `sql.DB` + `gorm.DB`를 함께 보유(`gorm.DB`는 `stdlib.OpenDBFromPool`로 파생). GORM은 위에 얹힌 층이라 걷어내면 됩니다.
+- **숨은 이득**: prod 스키마는 SQL migration(`scripts/migrations/*.sql`)이 SSOT인데 **test 스키마만 GORM `AutoMigrate`(struct tag)** 로 만들어집니다 — 두 정의가 drift할 수 있는 잠재 버그. 제거하면 test도 실제 migration SQL로 통일됩니다.
+- (주의) **실제 비용은 test 스키마 전환** — `AutoMigrate` 호출 ~44개 test 파일. 이 test-schema 경로를 먼저 해결하지 않으면 repository 이식을 시작할 수 없습니다. **이것이 진짜 블로커이자 최대 작업량**입니다.
+- (주의) **가치는 중간** — GORM이 버그를 일으키고 있지 않습니다. 이득은 의존성 1개 제거, dbx 단순화, 명시적 SQL, 단일 데이터 접근 패턴, test/prod 스키마 통일입니다. 긴급하지 않습니다.
 
 **결론**: 두 목표를 분리해 권고합니다.
 1. **(권장, 저위험) domain 순수화** — entity struct + `database/sql` import를 `pkg/domain`에서 분리. GORM 제거와 무관하게 가치 있음.

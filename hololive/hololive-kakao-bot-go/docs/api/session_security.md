@@ -538,7 +538,7 @@ sequenceDiagram
 func (s *Server) handleHeartbeat(c *gin.Context) {
 	    // ... 세션 검증 ...
 
-	    // 1️⃣ 먼저 RefreshSessionWithValidation 호출 (TTL 1시간 복원)
+	    // 1. 먼저 RefreshSessionWithValidation 호출 (TTL 1시간 복원)
 	    refreshed, absoluteExpired, err := s.sessions.RefreshSessionWithValidation(ctx, sessionID, req.Idle)
 	    if err != nil { /* 에러 처리 */ }
 
@@ -554,7 +554,7 @@ func (s *Server) handleHeartbeat(c *gin.Context) {
         return
     }
 
-	    // 2️⃣ 그 다음 RotateSession 호출 (새 세션 ID 발급)
+	    // 2. 그 다음 RotateSession 호출 (새 세션 ID 발급)
 	    if s.cfg.SessionTokenRotation {
 	        newSession, rotateErr := s.sessions.RotateSession(ctx, sessionID)
 	        if rotateErr == nil {
