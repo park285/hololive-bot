@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -108,4 +109,35 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 	assert.Nil(t, buildAlarmDispatchRunner(nil, egress.NewIrisMessageSender(nil), nil))
 	assert.Nil(t, buildDeliveryOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil))
 	assert.Nil(t, buildYouTubeOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil))
+}
+
+type claimKeyReleaseRecordingCache struct {
+	cache.Client
+	delManyCalls int
+	delManyKeys  []string
+}
+
+func (c *claimKeyReleaseRecordingCache) DelMany(_ context.Context, keys []string) (int64, error) {
+	c.delManyCalls++
+	c.delManyKeys = append(c.delManyKeys, keys...)
+	return int64(len(keys)), nil
+}
+
+func TestBuildAlarmDispatchRunnerWiresPGModeClaimKeyReleaser(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
+	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "pg")
+	cacheFake := &claimKeyReleaseRecordingCache{}
+	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}, Cache: cacheFake}
+
+	scheduler := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	runner, ok := scheduler.(*alarmDispatchRunner)
+	require.True(t, ok)
+
+	err := runner.consumer.ReleaseClaimKeys(context.Background(), []string{
+		"notified:claim:room-1:stream-1:100:live",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, cacheFake.delManyCalls,
+		"pg-mode consumer must wire claim-key releaser so DLQ claim keys are released (H14/P1-d)")
+	assert.Equal(t, []string{"notified:claim:room-1:stream-1:100:live"}, cacheFake.delManyKeys)
 }
