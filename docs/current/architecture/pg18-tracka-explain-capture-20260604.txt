@@ -83,3 +83,73 @@ ROLLBACK
  Execution Time: 0.072 ms
 (17 rows)
 
+=== Q2 재캡처: outbox claim — ANALYZE in ROLLBACK (literal params) ===
+BEGIN
+                                                                            QUERY PLAN                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=24.39..24.40 rows=1 width=28) (actual time=0.065..0.083 rows=0.00 loops=1)
+   Output: o.id, o.created_at, o.ctid, d.ctid
+   Buffers: shared hit=8
+   ->  LockRows  (cost=24.39..24.40 rows=1 width=28) (actual time=0.061..0.077 rows=0.00 loops=1)
+         Output: o.id, o.created_at, o.ctid, d.ctid
+         Buffers: shared hit=8
+         ->  Sort  (cost=24.39..24.39 rows=1 width=28) (actual time=0.059..0.071 rows=0.00 loops=1)
+               Output: o.id, o.created_at, o.ctid, d.ctid
+               Sort Key: o.created_at
+               Sort Method: quicksort  Memory: 25kB
+               Buffers: shared hit=8
+               ->  Hash Anti Join  (cost=8.57..24.38 rows=1 width=28) (actual time=0.034..0.043 rows=0.00 loops=1)
+                     Output: o.id, o.created_at, o.ctid, d.ctid
+                     Hash Cond: (o.id = d.outbox_id)
+                     Buffers: shared hit=5
+                     ->  Bitmap Heap Scan on public.youtube_notification_outbox o  (cost=4.20..19.98 rows=7 width=22) (actual time=0.031..0.035 rows=0.00 loops=1)
+                           Output: o.id, o.created_at, o.ctid
+                           Recheck Cond: ((o.status)::text = 'PENDING'::text)
+                           Filter: ((o.next_attempt_at <= now()) AND ((o.locked_at IS NULL) OR (o.locked_at < (now() - '00:05:00'::interval))))
+                           Rows Removed by Filter: 8
+                           Heap Blocks: exact=4
+                           Buffers: shared hit=5
+                           ->  Bitmap Index Scan on idx_yno_status_created  (cost=0.00..4.20 rows=8 width=0) (actual time=0.016..0.018 rows=8.00 loops=1)
+                                 Index Cond: ((o.status)::text = 'PENDING'::text)
+                                 Index Searches: 1
+                                 Buffers: shared hit=1
+                     ->  Hash  (cost=3.61..3.61 rows=61 width=14) (never executed)
+                           Output: d.ctid, d.outbox_id
+                           ->  Seq Scan on public.youtube_notification_delivery d  (cost=0.00..3.61 rows=61 width=14) (never executed)
+                                 Output: d.ctid, d.outbox_id
+ Query Identifier: 5162951576446676652
+ Planning:
+   Buffers: shared hit=393
+ Planning Time: 0.768 ms
+ Execution Time: 0.141 ms
+(35 rows)
+
+ROLLBACK
+=== Q3 재캡처: delivery claim — ANALYZE in ROLLBACK (literal params) ===
+BEGIN
+                                                                                                                                            QUERY PLAN                                                                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=4.62..4.71 rows=7 width=22) (actual time=0.021..0.031 rows=0.00 loops=1)
+   Output: id, created_at, ctid
+   Buffers: shared hit=3
+   ->  LockRows  (cost=4.62..4.71 rows=7 width=22) (actual time=0.018..0.025 rows=0.00 loops=1)
+         Output: id, created_at, ctid
+         Buffers: shared hit=3
+         ->  Sort  (cost=4.62..4.64 rows=7 width=22) (actual time=0.015..0.019 rows=0.00 loops=1)
+               Output: id, created_at, ctid
+               Sort Key: youtube_notification_delivery.created_at
+               Sort Method: quicksort  Memory: 25kB
+               Buffers: shared hit=3
+               ->  Seq Scan on public.youtube_notification_delivery  (cost=0.00..4.53 rows=7 width=22) (actual time=0.011..0.012 rows=0.00 loops=1)
+                     Output: id, created_at, ctid
+                     Filter: (((youtube_notification_delivery.status)::text = 'PENDING'::text) AND (youtube_notification_delivery.next_attempt_at <= now()) AND ((youtube_notification_delivery.locked_at IS NULL) OR (youtube_notification_delivery.locked_at < (now() - '00:05:00'::interval))))
+                     Rows Removed by Filter: 61
+                     Buffers: shared hit=3
+ Query Identifier: 5157750362262701232
+ Planning:
+   Buffers: shared hit=15
+ Planning Time: 0.079 ms
+ Execution Time: 0.051 ms
+(21 rows)
+
+ROLLBACK

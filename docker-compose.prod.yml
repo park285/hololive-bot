@@ -182,8 +182,8 @@ services:
     container_name: holo-postgres
     shm_size: 256mb
     # PG18 관측(A1) + 512MB envelope 명시화(A2). shared_preload_libraries는 postmaster
-    # context라 변경 시 컨테이너 recreate 필수. track_wal_io_timing은 PG18에서 제거된
-    # GUC라 금지(기동 실패) — WAL I/O는 track_io_timing + pg_stat_io(object='wal')로 관측.
+    # context라 변경 시 컨테이너 recreate 필수. WAL I/O 타이밍은 track_io_timing +
+    # track_wal_io_timing 둘 다 켜야 pg_stat_io(object='wal')에 시간이 집계된다.
     command:
       - postgres
       - "-c"
@@ -196,6 +196,8 @@ services:
       - "compute_query_id=on"
       - "-c"
       - "track_io_timing=on"
+      - "-c"
+      - "track_wal_io_timing=on"
       - "-c"
       - "shared_buffers=128MB"
       - "-c"
