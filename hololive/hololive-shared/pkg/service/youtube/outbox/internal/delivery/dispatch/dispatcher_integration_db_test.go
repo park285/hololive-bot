@@ -216,11 +216,11 @@ func deliveryIntegrationTableName(model any) string {
 		t = t.Elem()
 	}
 	switch t {
-	case reflect.TypeOf(domain.YouTubeNotificationOutbox{}):
+	case reflect.TypeFor[domain.YouTubeNotificationOutbox]():
 		return "youtube_notification_outbox"
-	case reflect.TypeOf(domain.YouTubeNotificationDelivery{}):
+	case reflect.TypeFor[domain.YouTubeNotificationDelivery]():
 		return "youtube_notification_delivery"
-	case reflect.TypeOf(domain.YouTubeCommunityShortsAlarmState{}):
+	case reflect.TypeFor[domain.YouTubeCommunityShortsAlarmState]():
 		return "youtube_community_shorts_alarm_states"
 	default:
 		return ""

@@ -529,15 +529,15 @@ func normalizePollerTestTimeValue(value reflect.Value) {
 	if value.Kind() != reflect.Struct {
 		return
 	}
-	timeType := reflect.TypeOf(time.Time{})
+	timeType := reflect.TypeFor[time.Time]()
 	if value.Type() == timeType {
 		if value.CanSet() {
 			value.Set(reflect.ValueOf(value.Interface().(time.Time).UTC()))
 		}
 		return
 	}
-	for i := 0; i < value.NumField(); i++ {
-		field := value.Field(i)
+	for _, field := range value.Fields() {
+		field := field
 		if !field.CanSet() && field.Kind() != reflect.Pointer {
 			continue
 		}

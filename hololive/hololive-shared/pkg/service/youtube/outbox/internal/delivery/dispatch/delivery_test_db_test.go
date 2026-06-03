@@ -322,7 +322,7 @@ func deliveryTestInsertAlarm(ctx context.Context, db *pgxpool.Pool, alarm *domai
 
 func deliveryTestApplyCreateDefaults(v reflect.Value) {
 	now := time.Now().UTC()
-	timeType := reflect.TypeOf(time.Time{})
+	timeType := reflect.TypeFor[time.Time]()
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Type().Field(i)
 		value := v.Field(i)
