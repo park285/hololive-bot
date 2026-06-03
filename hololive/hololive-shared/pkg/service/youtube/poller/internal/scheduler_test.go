@@ -312,10 +312,11 @@ func (c *schedulerClaimStub) TryClaim(
 }
 
 type schedulerClaimHandleStub struct {
-	markCompletedCalls int
-	releaseCalls       int
-	renewCalls         int
-	renewFn            func(context.Context, time.Duration) (bool, error)
+	markCompletedCalls  int
+	releaseCalls        int
+	renewCalls          int
+	markCompletedCtxErr error
+	renewFn             func(context.Context, time.Duration) (bool, error)
 }
 
 func (c *schedulerClaimHandleStub) Renew(ctx context.Context, ttl time.Duration) (bool, error) {
@@ -325,8 +326,9 @@ func (c *schedulerClaimHandleStub) Renew(ctx context.Context, ttl time.Duration)
 	}
 	return true, nil
 }
-func (c *schedulerClaimHandleStub) MarkCompleted(context.Context, time.Duration) (bool, error) {
+func (c *schedulerClaimHandleStub) MarkCompleted(ctx context.Context, _ time.Duration) (bool, error) {
 	c.markCompletedCalls++
+	c.markCompletedCtxErr = ctx.Err()
 	return true, nil
 }
 func (c *schedulerClaimHandleStub) Release(context.Context) (bool, error) {
@@ -704,6 +706,27 @@ func TestSchedulerExecuteJobCompletesOrReleasesClaim(t *testing.T) {
 			require.Equal(t, tc.wantReleased, claim.releaseCalls)
 		})
 	}
+}
+
+func TestSchedulerFinishJobClaimDetachesCompletionFromCanceledParentContext(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{
+		WorkerCount:     1,
+		RequestInterval: 0,
+	})
+	claim := &schedulerClaimHandleStub{}
+	job := &Job{
+		ChannelID: "channel-claim",
+		Poller:    &togglePollerStub{name: "videos"},
+		Interval:  time.Minute,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := scheduler.finishJobClaim(ctx, job, claim, nil)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, claim.markCompletedCalls)
+	require.NoError(t, claim.markCompletedCtxErr)
 }
 
 func TestSchedulerRescheduleJobBacksOffAfterPollFailure(t *testing.T) {
