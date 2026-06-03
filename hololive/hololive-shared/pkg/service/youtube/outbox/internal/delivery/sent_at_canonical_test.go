@@ -11,6 +11,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/park285/shared-go/pkg/json"
 )
@@ -93,7 +94,7 @@ func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}))
 	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{item.ID}))
 
@@ -156,7 +157,7 @@ func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonical
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}))
 
 	var updatedTracking deliveryTestTrackingModel
@@ -222,7 +223,7 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}, dispatchstate.ClaimToken{Kind: item.Kind, PostID: "community:post-claimed", AuthorizedAt: authorizedAt}))
 
 	var updatedState domain.YouTubeCommunityShortsAlarmState
@@ -282,7 +283,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&delivery).Error)
 
-	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	err := repository.MarkSentBatch(ctx, []int64{delivery.ID}, dispatchstate.ClaimToken{Kind: item.Kind, PostID: "short:short-claimed", AuthorizedAt: otherAuthorizedAt})
 	require.ErrorContains(t, err, "claim authorization mismatch")
 
@@ -309,12 +310,12 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 	db := newDeliveryTestDB(t)
 
 	currentNow := time.Date(2026, 4, 10, 10, 11, 12, 123000000, time.FixedZone("KST", 9*60*60))
-	original := sentAtNow
-	sentAtNow = func() time.Time {
+	original := dispatchstate.SentAtNow
+	dispatchstate.SentAtNow = func() time.Time {
 		return currentNow
 	}
 	t.Cleanup(func() {
-		sentAtNow = original
+		dispatchstate.SentAtNow = original
 	})
 
 	detectedAt := time.Date(2026, 4, 10, 1, 10, 0, 0, time.UTC)
@@ -353,7 +354,7 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 	require.NoError(t, db.Create(&firstDelivery).Error)
 	require.NoError(t, db.Create(&secondDelivery).Error)
 
-	repository := NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{firstDelivery.ID}))
 
 	firstExpected := yttimestamp.Normalize(currentNow)
@@ -383,12 +384,12 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 func withFixedSentAtNow(t *testing.T, fixed time.Time) {
 	t.Helper()
 
-	original := sentAtNow
-	sentAtNow = func() time.Time {
+	original := dispatchstate.SentAtNow
+	dispatchstate.SentAtNow = func() time.Time {
 		return fixed
 	}
 	t.Cleanup(func() {
-		sentAtNow = original
+		dispatchstate.SentAtNow = original
 	})
 }
 

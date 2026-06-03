@@ -14,6 +14,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 )
 
 func TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce(t *testing.T) {
@@ -106,7 +107,7 @@ func TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce(t *tes
 			assert.Equal(t, string(domain.OutboxStatusPending), failedOutbox.Status)
 			assert.Nil(t, failedOutbox.SentAt)
 
-			postID := canonicalDeliveryPostID(item.Kind, item.ContentID)
+			postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
 			var releasedState domain.YouTubeCommunityShortsAlarmState
 			require.NoError(t, db.First(&releasedState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
 			assert.Nil(t, releasedState.AuthorizedAt)
@@ -269,7 +270,7 @@ func TestProcessOnce_RetryAfterCommunityShortsPostSendFinalizeFailureKeepsSingle
 			}
 			require.NoError(t, db.Create(&delivery).Error)
 
-			postID := canonicalDeliveryPostID(item.Kind, item.ContentID)
+			postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
 			staleAuthorizedAt := now.Add(-10 * time.Minute)
 			var mutateOnce sync.Once
 			sender := &postSendFinalizeFailureSender{

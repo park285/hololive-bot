@@ -1,4 +1,24 @@
-package delivery
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package store
 
 import (
 	"context"
@@ -11,12 +31,16 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
-type deliveryLockToken struct {
+type LockToken struct {
 	id       int64
 	lockedAt *time.Time
 }
 
-func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens []deliveryLockToken, claimTokens ...dispatchstate.ClaimToken) error {
+func NewLockToken(id int64, lockedAt *time.Time) LockToken {
+	return LockToken{id: id, lockedAt: lockedAt}
+}
+
+func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens []LockToken, claimTokens ...dispatchstate.ClaimToken) error {
 	uniqueTokens := uniqueDeliveryLockTokens(tokens)
 	if len(uniqueTokens) == 0 {
 		return nil
@@ -25,7 +49,7 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 		return fmt.Errorf("mark delivery rows sent: db is nil")
 	}
 
-	sentAt := canonicalSentAtNow()
+	sentAt := dispatchstate.CanonicalSentAtNow()
 	if err := deliverysql.InDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
 		updatedIDs, err := updateSentDeliveryRowsIfLocked(ctx, tx, uniqueTokens, sentAt)
 		if err != nil {
@@ -43,7 +67,7 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 	return nil
 }
 
-func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens []deliveryLockToken, sentAt time.Time) ([]int64, error) {
+func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens []LockToken, sentAt time.Time) ([]int64, error) {
 	updatedIDs := make([]int64, 0, len(tokens))
 	for i := range tokens {
 		if tokens[i].id == 0 || tokens[i].lockedAt == nil {
@@ -66,7 +90,7 @@ func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens 
 	return updatedIDs, nil
 }
 
-func (r *DeliveryRepository) MarkFailedRetryBatchIfLocked(ctx context.Context, tokens []deliveryLockToken, maxRetries int, backoff time.Duration, errMsg string) error {
+func (r *DeliveryRepository) MarkFailedRetryBatchIfLocked(ctx context.Context, tokens []LockToken, maxRetries int, backoff time.Duration, errMsg string) error {
 	uniqueTokens := uniqueDeliveryLockTokens(tokens)
 	if len(uniqueTokens) == 0 {
 		return nil
@@ -96,7 +120,7 @@ func (r *DeliveryRepository) MarkFailedRetryBatchIfLocked(ctx context.Context, t
 	return nil
 }
 
-func (r *DeliveryRepository) MarkPermanentFailureBatchIfLocked(ctx context.Context, tokens []deliveryLockToken, maxRetries int, errMsg string) error {
+func (r *DeliveryRepository) MarkPermanentFailureBatchIfLocked(ctx context.Context, tokens []LockToken, maxRetries int, errMsg string) error {
 	uniqueTokens := uniqueDeliveryLockTokens(tokens)
 	if len(uniqueTokens) == 0 {
 		return nil
@@ -122,11 +146,11 @@ func (r *DeliveryRepository) MarkPermanentFailureBatchIfLocked(ctx context.Conte
 	return nil
 }
 
-func uniqueDeliveryLockTokens(tokens []deliveryLockToken) []deliveryLockToken {
+func uniqueDeliveryLockTokens(tokens []LockToken) []LockToken {
 	if len(tokens) == 0 {
 		return nil
 	}
-	unique := make([]deliveryLockToken, 0, len(tokens))
+	unique := make([]LockToken, 0, len(tokens))
 	seen := make(map[int64]struct{}, len(tokens))
 	for i := range tokens {
 		if tokens[i].id == 0 {
@@ -141,7 +165,7 @@ func uniqueDeliveryLockTokens(tokens []deliveryLockToken) []deliveryLockToken {
 	return unique
 }
 
-func deliveryLockTokensForIDs(rows []domain.YouTubeNotificationDelivery, ids []int64) []deliveryLockToken {
+func DeliveryLockTokensForIDs(rows []domain.YouTubeNotificationDelivery, ids []int64) []LockToken {
 	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil
@@ -150,9 +174,9 @@ func deliveryLockTokensForIDs(rows []domain.YouTubeNotificationDelivery, ids []i
 	for i := range rows {
 		lockedByID[rows[i].ID] = rows[i].LockedAt
 	}
-	tokens := make([]deliveryLockToken, 0, len(uniqueIDs))
+	tokens := make([]LockToken, 0, len(uniqueIDs))
 	for _, id := range uniqueIDs {
-		tokens = append(tokens, deliveryLockToken{id: id, lockedAt: lockedByID[id]})
+		tokens = append(tokens, LockToken{id: id, lockedAt: lockedByID[id]})
 	}
 	return tokens
 }

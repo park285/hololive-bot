@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package delivery
+package store
 
 import (
 	"context"
@@ -33,6 +33,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -54,12 +56,12 @@ type deliveryAlarmSentTarget struct {
 
 func NewDeliveryRepository(db any, logger *slog.Logger) *DeliveryRepository {
 	return &DeliveryRepository{
-		db:     asDeliveryDB(db),
+		db:     AsDeliveryDB(db),
 		logger: logger,
 	}
 }
 
-func asDeliveryDB(db any) deliverysql.DeliveryDB {
+func AsDeliveryDB(db any) deliverysql.DeliveryDB {
 	if deliverysql.IsNilDB(db) {
 		return nil
 	}
@@ -70,7 +72,7 @@ func asDeliveryDB(db any) deliverysql.DeliveryDB {
 }
 
 func (r *DeliveryRepository) EnqueueBatch(ctx context.Context, outboxID int64, roomIDs []string) error {
-	uniqueRoomIDs := uniqueStrings(roomIDs)
+	uniqueRoomIDs := UniqueStrings(roomIDs)
 	if len(uniqueRoomIDs) == 0 {
 		return nil
 	}
@@ -152,7 +154,7 @@ func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, cla
 		return fmt.Errorf("mark delivery rows sent: db is nil")
 	}
 
-	sentAt := canonicalSentAtNow()
+	sentAt := dispatchstate.CanonicalSentAtNow()
 	if err := deliverysql.InDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
 		return markSentBatchTx(ctx, tx, uniqueIDs, sentAt, claimTokens)
 	}); err != nil {
@@ -169,7 +171,7 @@ func markSentBatchTx(
 	sentAt time.Time,
 	claimTokens []dispatchstate.ClaimToken,
 ) error {
-	trackingMarks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, claimTokens)
+	trackingMarks, err := LoadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, claimTokens)
 	if err != nil {
 		return fmt.Errorf("load tracking marks: %w", err)
 	}
@@ -212,11 +214,11 @@ func persistSentDeliveryLatencyClassifications(
 	if len(trackingMarks) == 0 {
 		return nil
 	}
-	identities := make([]PostTrackingIdentity, 0, len(trackingMarks))
+	identities := make([]timeline.PostTrackingIdentity, 0, len(trackingMarks))
 	for i := range trackingMarks {
-		identities = append(identities, PostTrackingIdentity{Kind: trackingMarks[i].Kind, ContentID: trackingMarks[i].ContentID})
+		identities = append(identities, timeline.PostTrackingIdentity{Kind: trackingMarks[i].Kind, ContentID: trackingMarks[i].ContentID})
 	}
-	if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+	if err := telemetry.NewRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
 		return fmt.Errorf("persist tracking latency classifications: %w", err)
 	}
 	return nil
@@ -327,7 +329,7 @@ func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outbox
 		return nil
 	}
 
-	sentAt := canonicalSentAtNow()
+	sentAt := dispatchstate.CanonicalSentAtNow()
 	errorText := ""
 	switch status {
 	case domain.OutboxStatusSent:

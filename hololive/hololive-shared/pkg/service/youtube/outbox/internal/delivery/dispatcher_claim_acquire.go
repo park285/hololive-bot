@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
@@ -86,7 +87,7 @@ func deliveryClaimIdentityForOutbox(outbox domain.YouTubeNotificationOutbox) (st
 		return "", fmt.Errorf("resolve post id: empty")
 	}
 
-	return deliveryClaimIdentityKey(outbox.Kind, postID), nil
+	return store.DeliveryClaimIdentityKey(outbox.Kind, postID), nil
 }
 
 func (d *ClaimManager) isCommunityShortsDeliveryAlreadyCompleted(

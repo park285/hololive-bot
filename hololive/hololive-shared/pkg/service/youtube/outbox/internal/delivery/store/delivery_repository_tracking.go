@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package delivery
+package store
 
 import (
 	"context"
@@ -34,7 +34,7 @@ import (
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-func loadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]trackingrepo.AlarmSentMark, error) {
+func LoadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]trackingrepo.AlarmSentMark, error) {
 	status := domain.OutboxStatusPending
 	return loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, &status)
 }
@@ -80,7 +80,7 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 			ContentID:   targets[i].ContentID,
 			AlarmSentAt: sentAt,
 		}
-		claimIdentity := deliveryClaimIdentityKey(targets[i].Kind, canonicalDeliveryPostID(targets[i].Kind, targets[i].ContentID))
+		claimIdentity := DeliveryClaimIdentityKey(targets[i].Kind, CanonicalDeliveryPostID(targets[i].Kind, targets[i].ContentID))
 		if authorizedAt, ok := claimTokensByIdentity[claimIdentity]; ok {
 			authorizedAtCopy := authorizedAt
 			mark.AuthorizedAt = &authorizedAtCopy
@@ -118,7 +118,7 @@ func claimTokenIdentityAndAuthorizedAt(claimToken dispatchstate.ClaimToken, inde
 	if claimToken.AuthorizedAt.IsZero() {
 		return "", time.Time{}, fmt.Errorf("collect claim tokens: authorized_at is empty at index %d", index)
 	}
-	return deliveryClaimIdentityKey(claimToken.Kind, postID), claimToken.AuthorizedAt.UTC(), nil
+	return DeliveryClaimIdentityKey(claimToken.Kind, postID), claimToken.AuthorizedAt.UTC(), nil
 }
 
 func collectClaimTokenAuthorizedAt(collected map[string]time.Time, identity string, authorizedAt time.Time) error {
@@ -133,11 +133,11 @@ func collectClaimTokenAuthorizedAt(collected map[string]time.Time, identity stri
 	return nil
 }
 
-func deliveryClaimIdentityKey(kind domain.OutboxKind, postID string) string {
+func DeliveryClaimIdentityKey(kind domain.OutboxKind, postID string) string {
 	return string(kind) + "\x00" + strings.TrimSpace(postID)
 }
 
-func canonicalDeliveryPostID(kind domain.OutboxKind, contentID string) string {
+func CanonicalDeliveryPostID(kind domain.OutboxKind, contentID string) string {
 	normalizedContentID := strings.TrimSpace(contentID)
 	canonicalContentID, err := ytcontentid.ForOutboxKind(kind, normalizedContentID)
 	if err != nil {
@@ -193,7 +193,7 @@ func resolveOutboxStatus(pending int64, sent int64, failed int64) domain.OutboxS
 	}
 }
 
-func uniqueStrings(values []string) []string {
+func UniqueStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil
 	}

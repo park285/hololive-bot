@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 )
 
 type DeliveryExecutor interface {
@@ -27,7 +28,7 @@ type ClaimManager struct {
 	db          deliverysql.DeliveryDB
 	config      Config
 	logger      *slog.Logger
-	delivery    *DeliveryRepository
+	delivery    *store.DeliveryRepository
 	executor    DeliveryExecutor
 	status      *StatusUpdater
 	metrics     *MetricsRecorder
@@ -39,7 +40,7 @@ func newClaimManager(
 	db deliverysql.DeliveryDB,
 	logger *slog.Logger,
 	config Config,
-	deliveryRepo *DeliveryRepository,
+	deliveryRepo *store.DeliveryRepository,
 	executor DeliveryExecutor,
 	status *StatusUpdater,
 	grouper *OutboxGrouper,

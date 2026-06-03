@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -64,14 +65,14 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 
 	config = dispatchstate.NormalizeDispatcherConfig(config)
 	querier := deliverysql.AsQuerier(db)
-	deliveryDB := asDeliveryDB(db)
+	deliveryDB := store.AsDeliveryDB(db)
 
 	var telemetryRepository *DeliveryTelemetryRepository
 	if querier != nil {
 		telemetryRepository = NewDeliveryTelemetryRepository(querier)
 	}
 
-	deliveryRepo := NewDeliveryRepository(deliveryDB, logger)
+	deliveryRepo := store.NewDeliveryRepository(deliveryDB, logger)
 	tp := newTelemetryProcessor(telemetryRepository, logger, config)
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, config, tp)
 	grouper := newOutboxGrouper(querier, cacheClient, logger, config)

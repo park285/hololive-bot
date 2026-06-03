@@ -523,11 +523,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/audit_logg
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/claim_manager.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/clone_time.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/community_shorts_alarm_timing.go
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_final_result.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_format_aliases.go
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_repository.go
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_repository_lock.go
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_repository_tracking.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_telemetry_facade.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_timelines.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql/pgx.go
@@ -554,6 +550,9 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_status.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_telemetry.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatcher_testhooks.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate/config.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate/sent_at.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate/state.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format/formatter.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format/payload.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/message_format.go
@@ -561,8 +560,11 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/metrics.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/metrics_recorder.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/outbox_grouper.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/send_engine.go
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/sent_at.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/status_updater.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/delivery_final_result.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/delivery_repository.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/delivery_repository_lock.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/delivery_repository_tracking.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/alarm_timing.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/backfill.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/channel_post_summaries.go

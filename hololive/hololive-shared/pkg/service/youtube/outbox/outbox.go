@@ -1,6 +1,9 @@
 package outbox
 
-import delivery "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery"
+import (
+	delivery "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
+)
 
 type DeliveryTelemetryRepository = delivery.DeliveryTelemetryRepository
 
@@ -32,7 +35,7 @@ type PostTrackingIdentity = delivery.PostTrackingIdentity
 
 type PostDeliveryTimeline = delivery.PostDeliveryTimeline
 
-type DeliveryRepository = delivery.DeliveryRepository
+type DeliveryRepository = store.DeliveryRepository
 
 type Config = delivery.Config
 
@@ -82,7 +85,7 @@ var BuildChannelPostDeliverySummaries = delivery.BuildChannelPostDeliverySummari
 
 var FormatYouTubeOutboxPayload = delivery.FormatYouTubeOutboxPayload
 
-var NewDeliveryRepository = delivery.NewDeliveryRepository
+var NewDeliveryRepository = store.NewDeliveryRepository
 
 var DefaultConfig = delivery.DefaultConfig
 

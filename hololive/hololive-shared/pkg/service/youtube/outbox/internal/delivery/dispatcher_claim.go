@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 )
 
 func (d *ClaimManager) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
@@ -234,7 +235,7 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	if err != nil {
 		d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
 		outboxDeliveryProcessedTotal.WithLabelValues("failed").Add(float64(len(rows)))
-		_ = d.delivery.MarkFailedRetryBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, collectDeliveryIDs(rows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows")
+		_ = d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, collectDeliveryIDs(rows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows")
 		return len(rows)
 	}
 
@@ -249,7 +250,7 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 }
 
 func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result dispatchstate.DispatchResult) {
-	if err := d.delivery.MarkSentBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, result.SuccessDeliveryIDs), result.SuccessClaimTokens...); err != nil {
+	if err := d.delivery.MarkSentBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, result.SuccessDeliveryIDs), result.SuccessClaimTokens...); err != nil {
 		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
 		if recoverErr := d.recoverSuccessfulCommunityShortsSentState(ctx, result.SuccessDeliveryIDs); recoverErr != nil {
 			d.logger.Warn("Failed to persist community/shorts sent-state recovery after mark-sent error",
@@ -271,7 +272,7 @@ func (d *ClaimManager) markFailedDispatchBucket(ctx context.Context, rows []doma
 }
 
 func (d *ClaimManager) markPermanentDispatchFailureBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, reason string, ids []int64) {
-	if err := d.delivery.MarkPermanentFailureBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, ids), d.config.MaxRetries, reason); err != nil {
+	if err := d.delivery.MarkPermanentFailureBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, ids), d.config.MaxRetries, reason); err != nil {
 		d.logger.Error("Failed to mark delivery rows as permanent failed",
 			slog.String("reason", reason),
 			slog.Any("error", err))
@@ -279,7 +280,7 @@ func (d *ClaimManager) markPermanentDispatchFailureBucket(ctx context.Context, r
 }
 
 func (d *ClaimManager) markRetryDispatchFailureBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, reason string, ids []int64) {
-	if err := d.delivery.MarkFailedRetryBatchIfLocked(ctx, deliveryLockTokensForIDs(rows, ids), d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
+	if err := d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, ids), d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
 		d.logger.Error("Failed to mark delivery rows as failed",
 			slog.String("reason", reason),
 			slog.Any("error", err))

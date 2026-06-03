@@ -10,12 +10,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 )
 
 type AuditLogger struct {
 	telemetry          *DeliveryTelemetryRepository
-	delivery           *DeliveryRepository
+	delivery           *store.DeliveryRepository
 	logger             *slog.Logger
 	config             Config
 	telemetryProcessor *TelemetryProcessor
@@ -23,7 +24,7 @@ type AuditLogger struct {
 
 func newAuditLogger(
 	telemetry *DeliveryTelemetryRepository,
-	deliveryRepo *DeliveryRepository,
+	deliveryRepo *store.DeliveryRepository,
 	logger *slog.Logger,
 	config Config,
 	telemetryProcessor *TelemetryProcessor,
@@ -279,7 +280,7 @@ func (al *AuditLogger) loadFinalizedCommunityShortsTimelines(
 }
 
 func (al *AuditLogger) logFinalizedCommunityShortsOutboxResultWithTimeline(
-	result terminalCommunityShortsOutboxResult,
+	result store.TerminalCommunityShortsOutboxResult,
 	timelinesByOutboxID map[int64]PostDeliveryTimeline,
 	finalizedAt time.Time,
 ) {
@@ -292,7 +293,7 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResultWithTimeline(
 }
 
 func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
-	result terminalCommunityShortsOutboxResult,
+	result store.TerminalCommunityShortsOutboxResult,
 	finalizedAt time.Time,
 	timing alarmtiming.Snapshot,
 ) {

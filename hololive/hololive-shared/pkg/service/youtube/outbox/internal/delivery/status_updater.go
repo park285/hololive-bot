@@ -8,6 +8,7 @@ import (
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 
 type StatusUpdater struct {
@@ -52,7 +53,7 @@ func (u *StatusUpdater) markSentBatch(ctx context.Context, ids []int64) {
 		return
 	}
 
-	now := canonicalSentAtNow()
+	now := dispatchstate.CanonicalSentAtNow()
 	for start := 0; start < len(uniqueIDs); start += markSentBatchChunkSize {
 		end := min(start+markSentBatchChunkSize, len(uniqueIDs))
 		chunk := uniqueIDs[start:end]
@@ -78,7 +79,7 @@ func (u *StatusUpdater) markSentBatchIfLocked(ctx context.Context, tokens []outb
 		return
 	}
 
-	now := canonicalSentAtNow()
+	now := dispatchstate.CanonicalSentAtNow()
 	for i := range tokens {
 		if tokens[i].id == 0 || tokens[i].lockedAt == nil {
 			continue
