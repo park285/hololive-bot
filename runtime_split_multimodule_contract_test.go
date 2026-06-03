@@ -51,8 +51,8 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 
 	projectMap := readContractFile(t, filepath.ToSlash("docs/current/PROJECT_MAP.md"))
 	for _, want := range []string{
-		"| `hololive-admin-api` | Go 1.26.3 | `hololive/hololive-admin-api/` |",
-		"| `hololive-alarm-worker` | Go 1.26.3 | `hololive/hololive-alarm-worker/` |",
+		"| `hololive-admin-api` | Go 1.26 | `hololive/hololive-admin-api/` |",
+		"| `hololive-alarm-worker` | Go 1.26 | `hololive/hololive-alarm-worker/` |",
 	} {
 		if !strings.Contains(projectMap, want) {
 			t.Fatalf("project map must contain %q", want)

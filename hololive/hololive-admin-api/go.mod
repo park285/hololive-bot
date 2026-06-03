@@ -2,8 +2,6 @@ module github.com/kapu/hololive-admin-api
 
 go 1.26.2
 
-toolchain go1.26.3
-
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gin-contrib/cors v1.7.7

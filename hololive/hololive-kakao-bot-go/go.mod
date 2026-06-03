@@ -2,8 +2,6 @@ module github.com/kapu/hololive-kakao-bot-go
 
 go 1.26.2
 
-toolchain go1.26.3
-
 // Gin uses goccy/go-json instead of sonic with -tags=go_json.
 
 require (
