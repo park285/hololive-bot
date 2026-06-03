@@ -1,0 +1,105 @@
+name: ci
+
+# GitHub CI 는 ubuntu-latest fast gate(lint + build + 빠른 unit test, race 제외)만 책임진다.
+# staticcheck, go fix/mod tidy drift, architecture gate, gofmt 등은 로컬 pre-push 게이트
+# (scripts/ci/pre-push-gate.sh → scripts/ci/local-ci.sh)가 기본으로 책임진다.
+# race·govulncheck 는 로컬 풀검증(FULL_PRE_PUSH=true 또는 PRE_PUSH_MODE=full)에서 자동 실행되고
+# 기본 fast pre-push 에서는 생략된다. PostgreSQL 통합 테스트는 TEST_DATABASE_URL 지정 시에만 실행.
+# go.work 이 sibling ../shared-go, ../iris-client-go 를 use 하므로 멀티 repo 를 checkout 한다.
+# 검증 대상 모듈 목록은 하드코딩하지 않고 scripts/ci/go-workspace-modules.sh 를 단일 소스로 source 한다.
+# 루트 워크스페이스 모듈(github.com/kapu/hololive-bot-workspace) 의 contract 테스트는 ./... 로 포함한다.
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  GOPRIVATE: github.com/park285/*
+
+jobs:
+  fast-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hololive-bot
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@v6.0.2
+        with:
+          path: hololive-bot
+
+      - name: Checkout shared-go
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: park285/shared-go
+          token: ${{ secrets.MODULES_TOKEN }}
+          path: shared-go
+
+      - name: Checkout iris-client-go
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: park285/iris-client-go
+          token: ${{ secrets.MODULES_TOKEN }}
+          path: iris-client-go
+
+      - name: Setup Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version: "1.26.4"
+          cache-dependency-path: |
+            hololive-bot/go.work.sum
+            hololive-bot/go.sum
+            hololive-bot/hololive/*/go.sum
+            shared-go/go.sum
+            iris-client-go/go.sum
+
+      - name: Configure private module access
+        env:
+          MODULES_TOKEN: ${{ secrets.MODULES_TOKEN }}
+        run: |
+          if [[ -z "${MODULES_TOKEN}" ]]; then
+            echo "::error::MODULES_TOKEN secret is required to fetch private modules under github.com/park285/*"
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${MODULES_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Resolve workspace package patterns
+        run: |
+          source scripts/ci/go-workspace-modules.sh
+          # go-workspace-modules.sh 는 모듈마다 './<module>/...' 를 찍으므로 ../shared-go 는
+          # './../shared-go/...' 가 된다. go 패턴으로 안전하도록 './../' 를 '../' 로 정규화한다.
+          # ./... 는 루트 워크스페이스 모듈(github.com/kapu/hololive-bot-workspace) contract 테스트 포함.
+          patterns="$(go_workspace_package_patterns | sed 's#^\./\.\./#../#' | tr '\n' ' ')"
+          patterns="./... ${patterns}"
+          echo "GO_PKG_PATTERNS=${patterns}" >> "${GITHUB_ENV}"
+          echo "resolved patterns: ${patterns}"
+
+      - name: gofmt
+        run: |
+          files="$(gofmt -l . ../shared-go)"
+          if [[ -n "${files}" ]]; then
+            echo "::error::gofmt required for the following files:"
+            echo "${files}"
+            exit 1
+          fi
+
+      - name: go vet
+        run: |
+          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
+          go vet "${pkgs[@]}"
+
+      - name: go build
+        run: |
+          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
+          go build "${pkgs[@]}"
+
+      - name: go test
+        run: |
+          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
+          go test -count=1 "${pkgs[@]}"
