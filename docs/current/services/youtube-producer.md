@@ -9,11 +9,11 @@
 | Compose service | `youtube-producer` |
 | Port | `30005` (AP-A) / `30015` (AP-B) / `30025` (AP-C) |
 | Health endpoint | `http://127.0.0.1:30005/health` (AP-A); AP-B `30015`, AP-C `30025` |
-| Ready endpoint | AP-A `http://127.0.0.1:30005/ready`; Osaka AP-B `http://127.0.0.1:30015/ready`; main-host AP-C `http://127.0.0.1:30025/ready` |
+| Ready endpoint | Osaka AP-A `http://127.0.0.1:30005/ready`; Seoul AP-B `http://127.0.0.1:30015/ready`; main-host AP-C `http://127.0.0.1:30025/ready` |
 
 ## Role
 
-YouTube scraping/polling, `youtube_notification_outbox` production, 3-way active-active AP runtime입니다. `youtube-producer-a`/`youtube-producer-b`는 Osaka 호스트(`docker-compose.osaka.yml`), `youtube-producer-c`는 메인 호스트(`docker-compose.main-ap.yml`, profile `main-ap`)에서 같은 target set을 봅니다. Osaka a/b는 메인 valkey에 TCP로, c는 같은 호스트 valkey unix socket으로 붙어 동일한 lease 백엔드(`production` namespace)를 공유하므로, 각 `poller + channel` 실행은 단일 Valkey-backed JobRunGuard의 lease/cooldown으로 N-way 분배됩니다.
+YouTube scraping/polling, `youtube_notification_outbox` production, 3-way active-active AP runtime입니다. `youtube-producer-a`는 Osaka 호스트(`docker-compose.osaka.yml`), `youtube-producer-b`는 Seoul 호스트(`docker-compose.seoul.yml`), `youtube-producer-c`는 메인 호스트(`docker-compose.main-ap.yml`, profile `main-ap`)에서 같은 target set을 봅니다. Osaka a와 Seoul b는 메인 valkey에 TCP로, c는 같은 호스트 valkey unix socket으로 붙어 동일한 lease 백엔드(`production` namespace)를 공유하므로, 각 `poller + channel` 실행은 단일 Valkey-backed JobRunGuard의 lease/cooldown으로 N-way 분배됩니다.
 
 ## Owns
 

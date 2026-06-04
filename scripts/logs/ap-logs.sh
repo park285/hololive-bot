@@ -2,23 +2,22 @@
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-. "$REPO_ROOT/scripts/deploy/lib/compose-services.sh"
-SSH_KEY="${SSH_KEY:-$REPO_ROOT/KR.key}"
-OSAKA_HOST="${OSAKA_HOST:-kapu-iris-osaka-1}"
-OSAKA_HOST_KEY_ALIAS="${OSAKA_HOST_KEY_ALIAS:-100.100.1.7}"
-SERVICE="${1:-all}"
+
+. "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
+
+AP_HOST_ARG="${1:-}"
+SERVICE="${2:-all}"
 SINCE="${SINCE:-30m}"
 TAIL="${TAIL:-300}"
 PATTERN="${PATTERN:-}"
 FOLLOW="${FOLLOW:-0}"
 FULL="${FULL:-0}"
 SOURCE="${SOURCE:-docker}"
-SSH_OSAKA=(ssh -F /dev/null -i "$SSH_KEY" -o IdentitiesOnly=yes -o HostKeyAlias="$OSAKA_HOST_KEY_ALIAS" -o SetEnv=LC_ALL=C -o SetEnv=LANG=C "ubuntu@$OSAKA_HOST")
 
 usage() {
   cat <<'USAGE'
 Usage:
-  osaka-logs.sh [youtube-producer|all]
+  ap-logs.sh <ap-host> [youtube-producer|<ap-service>|all]
 
 Environment:
   SINCE=30m              docker log since window
@@ -27,38 +26,65 @@ Environment:
   FOLLOW=1               follow docker logs
   FULL=1                 print all available logs; ignores SINCE and TAIL
   SOURCE=docker|file     read docker logs or /home/ubuntu/hololive-bot/logs/*.log
-  OSAKA_HOST_KEY_ALIAS=100.100.1.7
 
 Examples:
-  osaka-logs.sh youtube-producer
-  SINCE=2h PATTERN='pre-send claim|ERR' osaka-logs.sh youtube-producer
-  FOLLOW=1 osaka-logs.sh all
-  FULL=1 osaka-logs.sh all
-  SOURCE=file TAIL=500 osaka-logs.sh all
+  ap-logs.sh osaka youtube-producer
+  SINCE=2h PATTERN='pre-send claim|ERR' ap-logs.sh seoul youtube-producer
+  FOLLOW=1 ap-logs.sh osaka all
+  FULL=1 ap-logs.sh seoul all
+  SOURCE=file TAIL=500 ap-logs.sh osaka all
 USAGE
 }
 
-if [[ "$SERVICE" == "-h" || "$SERVICE" == "--help" || "$SERVICE" == "help" ]]; then
+if [[ "$AP_HOST_ARG" == "-h" || "$AP_HOST_ARG" == "--help" || "$AP_HOST_ARG" == "help" || -z "$AP_HOST_ARG" ]]; then
   usage
-  exit 0
+  [[ -n "$AP_HOST_ARG" ]] && exit 0
+  exit 2
 fi
 
-services_output="$(compose_service_resolve_osaka_log_targets "$SERVICE")" || {
-  echo "unknown service: $SERVICE" >&2
-  echo "Available: $(compose_service_osaka_log_targets_text)" >&2
-  usage >&2
-  exit 2
-}
-mapfile -t services <<<"$services_output"
+ap_host_load "$REPO_ROOT" "$AP_HOST_ARG"
+
+services=()
+case "$SERVICE" in
+  youtube-producer|all)
+    services=("${AP_SERVICES[@]}")
+    ;;
+  *)
+    for candidate in "${AP_SERVICES[@]}"; do
+      if [[ "$candidate" == "$SERVICE" ]]; then
+        services=("$SERVICE")
+        break
+      fi
+    done
+    if [[ ${#services[@]} -eq 0 ]]; then
+      echo "unknown service for $AP_NAME: $SERVICE" >&2
+      echo "Available: youtube-producer ${AP_SERVICES[*]} all" >&2
+      usage >&2
+      exit 2
+    fi
+    ;;
+esac
 
 remote() {
-  "${SSH_OSAKA[@]}" "$@"
+  "${AP_SSH[@]}" "$@"
+}
+
+ap_container_for_service() {
+  local service="$1"
+  local i
+  for i in "${!AP_SERVICES[@]}"; do
+    if [[ "${AP_SERVICES[$i]}" == "$service" ]]; then
+      printf '%s\n' "${AP_CONTAINERS[$i]}"
+      return 0
+    fi
+  done
+  return 1
 }
 
 for service in "${services[@]}"; do
   echo "== $service =="
   if [[ "$SOURCE" == "file" ]]; then
-    logfile=$(compose_service_resolve_osaka_log_file "$service")
+    logfile="logs/youtube-producer.log"
     if [[ "$FULL" == "1" ]]; then
       if [[ -n "$PATTERN" ]]; then
         remote "cd ~/hololive-bot && sudo -n cat '$logfile' | grep -E '$PATTERN' || true"
@@ -74,7 +100,7 @@ for service in "${services[@]}"; do
       remote "cd ~/hololive-bot && sudo -n tail -n '$TAIL' '$logfile'"
     fi
   else
-    container=$(compose_service_resolve_osaka_container "$service")
+    container=$(ap_container_for_service "$service")
     follow_args=()
     range_args=(--since "$SINCE" --tail "$TAIL")
     if [[ "$FOLLOW" == "1" ]]; then

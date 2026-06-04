@@ -96,7 +96,7 @@ hololive/hololive-shared/pkg/config/internal/settings/config_env_loaders.go
 | 인스턴스 | 위치 | 포트 | 역할 | PhotoSync |
 |---|---:|---:|---|---|
 | `youtube-producer-a` | Osaka | `30005` | scraping/polling active-active AP | 참여 |
-| `youtube-producer-b` | Osaka | `30015` | scraping/polling active-active AP | 미참여 |
+| `youtube-producer-b` | Seoul | `30015` | scraping/polling active-active AP | 미참여 |
 | `youtube-producer-c` | main host | `30025` | scraping/polling active-active AP | 참여 |
 
 공통 요구사항은 다음입니다.

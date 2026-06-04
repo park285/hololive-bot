@@ -58,42 +58,58 @@ expect_fail "log target rejects removed producer shorthand" compose_service_reso
 expect_eq "$(compose_service_resolve_log_target llm)" "llm-scheduler" "log alias llm"
 expect_fail "log target rejects removed dispatcher" compose_service_resolve_log_target dispatcher-go
 
-expect_eq "$(compose_service_resolve_osaka_log_targets youtube-producer)" $'youtube-producer-a\nyoutube-producer-b' "osaka log target youtube-producer"
-expect_fail "osaka log target rejects removed youtube alias" compose_service_resolve_osaka_log_targets youtube
-expect_fail "osaka log target rejects removed producer shorthand" compose_service_resolve_osaka_log_targets producer
-expect_eq "$(compose_service_resolve_osaka_log_targets all)" $'youtube-producer-a\nyoutube-producer-b' "osaka log all active targets"
-expect_eq "$(compose_service_resolve_osaka_container youtube-producer-a)" "hololive-youtube-producer-a" "osaka youtube a container"
-expect_eq "$(compose_service_resolve_osaka_container youtube-producer-b)" "hololive-youtube-producer-b" "osaka youtube b container"
-expect_eq "$(compose_service_resolve_osaka_container youtube-producer)" "hololive-youtube-producer-a" "osaka youtube-producer container default"
-expect_eq "$(compose_service_resolve_osaka_log_file youtube-producer-a)" "logs/youtube-producer.log" "osaka youtube a log file"
-expect_eq "$(compose_service_resolve_osaka_log_file youtube-producer-b)" "logs/youtube-producer.log" "osaka youtube b log file"
-expect_eq "$(compose_service_resolve_osaka_log_file youtube-producer)" "logs/youtube-producer.log" "osaka youtube-producer log file default"
-expect_fail "osaka log target rejects removed dispatcher" compose_service_resolve_osaka_log_targets dispatcher-go
+. "${ROOT_DIR}/scripts/deploy/lib/ap-host.sh"
 
-OSAKA_ACTIVE_ACTIVE_FILES="${ROOT_DIR}/scripts/deploy/osaka-active-active-rsync-files.txt"
-[[ -r "${OSAKA_ACTIVE_ACTIVE_FILES}" ]] || fail "osaka active-active files list is readable"
-grep -qx 'scripts/deploy/osaka-iris-h3-trust-preflight.sh' "${OSAKA_ACTIVE_ACTIVE_FILES}" || fail "osaka active-active syncs Iris H3 trust preflight"
-pass "osaka active-active syncs Iris H3 trust preflight"
-grep -q 'osaka-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/osaka-active-active-deploy.sh" || fail "osaka active-active deploy runs Iris H3 trust preflight"
-pass "osaka active-active deploy runs Iris H3 trust preflight"
+ap_host_load "${ROOT_DIR}" osaka || fail "osaka ap-host conf loads"
+expect_eq "${AP_SERVICES[*]}" "youtube-producer-a" "osaka AP services"
+expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-a" "osaka AP containers"
+expect_eq "${AP_PORTS[*]}" "30005" "osaka AP ports"
+expect_eq "${AP_COMPOSE_FILE}" "docker-compose.osaka.yml" "osaka AP compose file"
+expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY" "osaka AP deploy approval var"
+
+ap_host_load "${ROOT_DIR}" seoul || fail "seoul ap-host conf loads"
+expect_eq "${AP_SERVICES[*]}" "youtube-producer-b" "seoul AP services"
+expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-b" "seoul AP containers"
+expect_eq "${AP_PORTS[*]}" "30015" "seoul AP ports"
+expect_eq "${AP_COMPOSE_FILE}" "docker-compose.seoul.yml" "seoul AP compose file"
+expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY" "seoul AP deploy approval var"
+
+expect_fail "ap-host loader rejects unknown host" ap_host_load "${ROOT_DIR}" nonexistent-host
+
+AP_ACTIVE_ACTIVE_FILES="${ROOT_DIR}/scripts/deploy/ap-rsync-files.txt"
+[[ -r "${AP_ACTIVE_ACTIVE_FILES}" ]] || fail "ap active-active files list is readable"
+grep -qx 'scripts/deploy/ap-iris-h3-trust-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs Iris H3 trust preflight"
+pass "ap active-active syncs Iris H3 trust preflight"
+grep -q 'ap-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs Iris H3 trust preflight"
+pass "ap active-active deploy runs Iris H3 trust preflight"
+for ap_compose in docker-compose.osaka.yml docker-compose.seoul.yml; do
+    grep -qx "${ap_compose}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_compose}"
+done
+pass "ap active-active syncs per-host compose files"
+for ap_conf in scripts/deploy/lib/ap-host.sh scripts/deploy/ap-hosts/osaka.conf scripts/deploy/ap-hosts/seoul.conf; do
+    grep -qx "${ap_conf}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_conf}"
+done
+pass "ap active-active syncs host conf and loader"
 while IFS= read -r path; do
     [[ -n "${path}" ]] || continue
-    [[ -e "${ROOT_DIR}/${path}" ]] || fail "osaka active-active files list path exists: ${path}"
+    [[ -e "${ROOT_DIR}/${path}" ]] || fail "ap active-active files list path exists: ${path}"
     case "${path}" in
         hololive/hololive-youtube-producer/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
-        go.sum|*/go.sum) fail "osaka active-active files list excludes unapproved go.sum path: ${path}" ;;
+        go.sum|*/go.sum) fail "ap active-active files list excludes unapproved go.sum path: ${path}" ;;
     esac
     case "${path}" in
         hololive/hololive-shared/pkg/domain/internal/model/data/*) ;;
-        data|data/*|*/data/*) fail "osaka active-active files list excludes unapproved data path: ${path}" ;;
+        data|data/*|*/data/*) fail "ap active-active files list excludes unapproved data path: ${path}" ;;
     esac
-done < "${OSAKA_ACTIVE_ACTIVE_FILES}"
-pass "osaka active-active files list paths exist"
+done < "${AP_ACTIVE_ACTIVE_FILES}"
+pass "ap active-active files list paths exist"
 
-if grep -En '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "${OSAKA_ACTIVE_ACTIVE_FILES}"; then
-    fail "osaka active-active files list excludes forbidden deployment scope"
+if grep -En '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "${AP_ACTIVE_ACTIVE_FILES}"; then
+    fail "ap active-active files list excludes forbidden deployment scope"
 fi
-pass "osaka active-active files list excludes forbidden deployment scope"
+pass "ap active-active files list excludes forbidden deployment scope"
 
-expect_fail "osaka active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/osaka-active-active-deploy.sh" --apply
-expect_fail "osaka active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/osaka-active-active-rollback.sh" --apply
+expect_fail "osaka active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka --apply
+expect_fail "seoul active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" seoul --apply
+expect_fail "osaka active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka --apply
+expect_fail "seoul active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --apply

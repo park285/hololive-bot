@@ -4,7 +4,7 @@
 
 ## 한 줄 요약
 
-`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube producer AP, LLM 스케줄링, 관리자 API, 공유 라이브러리를 Docker Compose production baseline과 Osaka split-host override로 운영합니다.
+`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube producer AP, LLM 스케줄링, 관리자 API, 공유 라이브러리를 Docker Compose production baseline과 Osaka/Seoul split-host override로 운영합니다.
 
 ## 큰 구조
 
@@ -22,7 +22,8 @@
 ├── docs/current/                   # current architecture, service, contract, runbook docs
 ├── scripts/                        # architecture, deploy, log, runtime, CI helpers
 ├── docker-compose.prod.yml         # production compose baseline
-├── docker-compose.osaka.yml        # Osaka split-host APs (youtube-producer-a/-b)
+├── docker-compose.osaka.yml        # Osaka split-host AP (youtube-producer-a)
+├── docker-compose.seoul.yml        # Seoul split-host AP (youtube-producer-b)
 └── docker-compose.main-ap.yml      # main-host active-active AP (youtube-producer-c, profile main-ap)
 ```
 
@@ -107,7 +108,8 @@ Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS
 The production baseline is Docker Compose, not Kubernetes. The main files are:
 
 - `docker-compose.prod.yml`: production service shape;
-- `docker-compose.osaka.yml`: Osaka split-host active-active APs (`youtube-producer-a`/`-b`);
+- `docker-compose.osaka.yml`: Osaka split-host active-active AP (`youtube-producer-a`);
+- `docker-compose.seoul.yml`: Seoul split-host active-active AP (`youtube-producer-b`);
 - `docker-compose.main-ap.yml`: main-host active-active AP (`youtube-producer-c`, profile `main-ap`);
 - `scripts/deploy/`: deployment and compose validation helpers;
 - `scripts/logs/`: status and smoke-check helpers;
@@ -118,7 +120,7 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 
 ## Active-Active YouTube Producer Notes
 
-The `youtube-producer` active-active path runs three AP containers — `youtube-producer-a`/`-b` on the Osaka host (`docker-compose.osaka.yml`) and `youtube-producer-c` on the main host (`docker-compose.main-ap.yml`, profile `main-ap`) — while preserving a producer-only contract. All three share the main Valkey lease backend (`production` namespace): Osaka a/b connect over TCP, c over the local Valkey unix socket. The important invariants are:
+The `youtube-producer` active-active path runs three AP containers — `youtube-producer-a` on the Osaka host (`docker-compose.osaka.yml`), `youtube-producer-b` on the Seoul host (`docker-compose.seoul.yml`), and `youtube-producer-c` on the main host (`docker-compose.main-ap.yml`, profile `main-ap`) — while preserving a producer-only contract. All three share the main Valkey lease backend (`production` namespace): Osaka a and Seoul b connect over TCP, c over the local Valkey unix socket. The important invariants are:
 
 - per-channel polling uses Valkey-backed `JobRunGuard` keyed by `(namespace, poller, channel)`, distributing jobs N-way;
 - successful polls mark a cooldown instead of simply releasing the lease;
@@ -135,7 +137,7 @@ Current operational details live in `docs/current/services/youtube-producer.md` 
 |---|---|
 | Find runtime ownership | `docs/current/SERVICE_OWNERSHIP.md` |
 | Find module/service inventory | `docs/current/PROJECT_MAP.md` |
-| Change deploy shape | `docker-compose.prod.yml`, `docker-compose.osaka.yml`, `docs/current/DEPLOYMENT_BASELINE.md` |
+| Change deploy shape | `docker-compose.prod.yml`, `docker-compose.osaka.yml`, `docker-compose.seoul.yml`, `docs/current/DEPLOYMENT_BASELINE.md` |
 | Release, rollback, or deploy | `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`, `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
 | Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
 | Change YouTube producer behavior | `hololive/hololive-youtube-producer/`, `hololive/hololive-shared/pkg/service/youtube/`, `docs/current/services/youtube-producer.md` |

@@ -1,0 +1,82 @@
+x-seoul-ap-env: &seoul-ap-env
+  CACHE_SOCKET_PATH: ""
+  CACHE_HOST: ${SEOUL_CACHE_HOST:-100.100.1.3}
+  CACHE_PORT: ${SEOUL_CACHE_PORT:-6379}
+  POSTGRES_SOCKET_PATH: ""
+  POSTGRES_HOST: ${SEOUL_POSTGRES_HOST:-100.100.1.3}
+  POSTGRES_PORT: ${SEOUL_POSTGRES_PORT:-5433}
+  CLIPROXY_BASE_URL: ${SEOUL_CLIPROXY_BASE_URL:-http://100.100.1.3:8787/v1}
+  SCRAPER_BACKFILL_ENABLED: "${SCRAPER_BACKFILL_ENABLED:-false}"
+  SCRAPER_BACKFILL_SHORTS_ENABLED: "${SCRAPER_BACKFILL_SHORTS_ENABLED:-true}"
+  SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS: "${SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS:-300}"
+  SCRAPER_BACKFILL_COMMUNITY_ENABLED: "${SCRAPER_BACKFILL_COMMUNITY_ENABLED:-true}"
+  SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS: "${SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS:-600}"
+  SCRAPER_BACKFILL_LIVE_ENABLED: "${SCRAPER_BACKFILL_LIVE_ENABLED:-true}"
+  SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS: "${SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS:-180}"
+  SCRAPER_BACKFILL_TARGET_GROUP: "${SCRAPER_BACKFILL_TARGET_GROUP:-notification}"
+
+x-seoul-ap-logging: &seoul-ap-logging
+  driver: "json-file"
+  options:
+    max-size: "5m"
+    max-file: "3"
+
+services:
+  youtube-producer:
+    profiles: !override ["retired-youtube-producer"]
+    env_file: !override
+      - /run/hololive-bot/env
+    environment:
+      <<: *seoul-ap-env
+      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
+    volumes: !override
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+    logging: *seoul-ap-logging
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  # Osaka 에서 이전된 scraping/polling 전용 AP. PhotoSync 미참여(a/c 만 참여) 정책 유지.
+  # Seoul docker 는 overlay2(classic store)라 provenance/sbom attestation 미지원 — 로컬 빌드/로컬 소비라 비활성.
+  # producer Dockerfile 은 shared_go_workspace 만 COPY 하므로 미사용 iris_client context 정의를 제거한다.
+  youtube-producer-b:
+    extends:
+      file: docker-compose.prod.yml
+      service: youtube-producer
+    profiles: ["oracle"]
+    build:
+      provenance: false
+      sbom: false
+      additional_contexts: !override
+        shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
+    container_name: hololive-youtube-producer-b
+    env_file:
+      - /run/hololive-bot/env
+    environment:
+      <<: *seoul-ap-env
+      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
+      YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"
+      YOUTUBE_PRODUCER_LEASE_NAMESPACE: ${YOUTUBE_PRODUCER_LEASE_NAMESPACE:-production}
+      SCRAPER_SCHEDULER_WORKER_COUNT: ${YOUTUBE_PRODUCER_AP_WORKER_COUNT:-2}
+      GOMEMLIMIT: "640MiB"
+      YOUTUBE_PRODUCER_INSTANCE_ID: "youtube-producer-b"
+      SERVER_PORT: 30015
+      PHOTO_SYNC_ENABLED: "false"
+    ports: !override
+      - "127.0.0.1:30015:30015"
+    healthcheck:
+      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30015/health"]
+    volumes: !override
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+    logging: *seoul-ap-logging
+    deploy:
+      resources:
+        limits:
+          memory: 768m
