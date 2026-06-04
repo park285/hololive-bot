@@ -99,8 +99,14 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 		return
 	}
 	defer conn.Close()
-	updates, unsubscribe := r.statsHub.Subscribe()
+	history, updates, unsubscribe := r.statsHub.Subscribe()
 	defer unsubscribe()
+	for _, stats := range history {
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if err := conn.WriteJSON(stats); err != nil {
+			return
+		}
+	}
 	for stats := range updates {
 		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		if err := conn.WriteJSON(stats); err != nil {

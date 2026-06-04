@@ -5,6 +5,33 @@ import (
 	"time"
 )
 
+func TestHubSubscribeReplaysCappedHistory(t *testing.T) {
+	hub := NewHub(nil)
+	for i := range historyCap + 5 {
+		hub.Publish(SystemStats{ThreadCount: i})
+	}
+
+	history, updates, cancel := hub.Subscribe()
+	defer cancel()
+
+	if len(history) != historyCap {
+		t.Fatalf("history length = %d, want %d", len(history), historyCap)
+	}
+	if got := history[len(history)-1].ThreadCount; got != historyCap+4 {
+		t.Fatalf("latest replayed sample = %d, want %d", got, historyCap+4)
+	}
+
+	hub.Publish(SystemStats{ThreadCount: 999})
+	select {
+	case live := <-updates:
+		if live.ThreadCount != 999 {
+			t.Fatalf("live sample = %d, want 999", live.ThreadCount)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("live update not delivered after replay")
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	if FormatDuration(5*time.Minute) != "5m" {
 		t.Fatal("minute formatting failed")
