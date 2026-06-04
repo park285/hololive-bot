@@ -33,6 +33,7 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           path: hololive-bot
+          persist-credentials: false
 
       - name: Checkout shared-go
         uses: actions/checkout@v6.0.2
@@ -40,6 +41,7 @@ jobs:
           repository: park285/shared-go
           token: ${{ secrets.MODULES_TOKEN }}
           path: shared-go
+          persist-credentials: false
 
       - name: Checkout iris-client-go
         uses: actions/checkout@v6.0.2
@@ -47,6 +49,7 @@ jobs:
           repository: park285/iris-client-go
           token: ${{ secrets.MODULES_TOKEN }}
           path: iris-client-go
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@v6.4.0
@@ -58,16 +61,6 @@ jobs:
             hololive-bot/hololive/*/go.sum
             shared-go/go.sum
             iris-client-go/go.sum
-
-      - name: Configure private module access
-        env:
-          MODULES_TOKEN: ${{ secrets.MODULES_TOKEN }}
-        run: |
-          if [[ -z "${MODULES_TOKEN}" ]]; then
-            echo "::error::MODULES_TOKEN secret is required to fetch private modules under github.com/park285/*"
-            exit 1
-          fi
-          git config --global url."https://x-access-token:${MODULES_TOKEN}@github.com/".insteadOf "https://github.com/"
 
       - name: Resolve workspace package patterns
         run: |

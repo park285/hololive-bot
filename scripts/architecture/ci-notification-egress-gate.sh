@@ -63,6 +63,15 @@ check_forbidden_scoped_go_hits \
   "hololive/hololive-admin-api"
 
 compose="${ROOT_DIR}/docker-compose.prod.yml"
+env_file_hits="$(rg -n '^\s*env_file:' "${compose}" || true)"
+if [[ -n "${env_file_hits}" ]]; then
+  echo "[FAIL] docker-compose.prod.yml must not inject whole env files into app containers" >&2
+  echo "${env_file_hits}" >&2
+  fail=1
+else
+  echo "[PASS] docker-compose.prod.yml has no broad env_file injection"
+fi
+
 for service in youtube-producer llm-scheduler; do
   block="$(awk -v service="  ${service}:" '
     $0 == service {in_block=1; print; next}

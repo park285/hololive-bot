@@ -18,7 +18,16 @@ tar \
   --exclude='.serena' \
   --exclude='.gemini' \
   --exclude='artifacts' \
+  --exclude='backups' \
+  --exclude='data' \
   --exclude='logs' \
+  --exclude='runtime-config' \
+  --exclude='.env' \
+  --exclude='.env.*' \
+  --exclude='**/.env' \
+  --exclude='**/.env.*' \
+  --exclude='*.key' \
+  --exclude='*.pem' \
   --exclude='**/node_modules' \
   --exclude='**/dist' \
   --exclude='**/coverage' \
