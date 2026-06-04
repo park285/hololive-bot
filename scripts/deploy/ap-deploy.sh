@@ -55,7 +55,7 @@ while IFS= read -r path; do
   esac
 done < "$FILES_FROM"
 
-if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM"; then
+if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM"; then
   echo "files-from list contains forbidden deployment scope" >&2
   exit 1
 fi
