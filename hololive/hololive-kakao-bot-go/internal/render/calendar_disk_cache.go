@@ -58,6 +58,22 @@ func (r *CalendarCardRenderer) storeDiskCachedImage(key calendarCacheKey, data [
 	}
 	if err := os.Rename(tmpName, path); err != nil {
 		_ = os.Remove(tmpName)
+		return
+	}
+	r.pruneDiskCacheMonth(path, key)
+}
+
+func (r *CalendarCardRenderer) pruneDiskCacheMonth(keepPath string, key calendarCacheKey) {
+	dir := filepath.Dir(keepPath)
+	pattern := filepath.Join(dir, fmt.Sprintf("%04d-%02d-*.png", key.year, key.month))
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return
+	}
+	for _, match := range matches {
+		if match != keepPath {
+			_ = os.Remove(match)
+		}
 	}
 }
 
