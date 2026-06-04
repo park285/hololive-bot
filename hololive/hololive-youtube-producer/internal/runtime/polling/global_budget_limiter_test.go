@@ -333,6 +333,31 @@ func testSourceCooldownKey(source poller.BudgetSource) string {
 	return fmt.Sprintf("hololive:%s:youtube-producer:source-cooldown:{%s}", testBudgetNamespace, source)
 }
 
+func TestGlobalBudgetLimiterReleaseRestoresBackfillClassInflight(t *testing.T) {
+	ctx := context.Background()
+	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
+	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
+		SourceMaxInflight: map[poller.BudgetSource]int{poller.BudgetSourceYouTubeScraper: 5},
+		ClassMaxInflight:  map[poller.BudgetBurstClass]int{poller.BudgetBurstBackfill: 1},
+	})
+
+	held, decision, err := limiter.TryReserve(ctx, testBudgetJob("backfill-release"), testBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstBackfill), time.Minute)
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.NotNil(t, held)
+	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testClassInflightKey(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstBackfill)))
+	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceYouTubeScraper)))
+
+	require.NoError(t, held.Release(ctx))
+	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testClassInflightKey(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstBackfill)))
+	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceYouTubeScraper)))
+
+	again, decision, err := limiter.TryReserve(ctx, testBudgetJob("backfill-release-again"), testBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstBackfill), time.Minute)
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.NotNil(t, again)
+}
+
 func TestGlobalBudgetLimiterRollbackSucceedsWithCanceledContext(t *testing.T) {
 	ctx := context.Background()
 	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
