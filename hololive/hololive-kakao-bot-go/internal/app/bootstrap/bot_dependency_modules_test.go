@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -52,9 +53,11 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 
 	appConfig := &config.Config{
 		Bot: config.BotConfig{
-			SelfUser:      "bot-self",
-			Prefix:        "!",
-			MentionPrefix: "@bot",
+			SelfUser:              "bot-self",
+			Prefix:                "!",
+			MentionPrefix:         "@bot",
+			CalendarImageCacheDir: "data/test-calendar-cache",
+			CalendarEntryCacheTTL: time.Hour,
 		},
 		Iris: config.IrisConfig{
 			BaseURL: "http://iris.local",
@@ -95,6 +98,12 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	if modules.Core.IrisBaseURL != "http://iris.local" {
 		t.Fatalf("Core.IrisBaseURL = %q, want http://iris.local", modules.Core.IrisBaseURL)
 	}
+	if modules.Core.CalendarImageCacheDir != "data/test-calendar-cache" {
+		t.Fatalf("Core.CalendarImageCacheDir = %q, want data/test-calendar-cache", modules.Core.CalendarImageCacheDir)
+	}
+	if modules.Core.CalendarEntryCacheTTL != time.Hour {
+		t.Fatalf("Core.CalendarEntryCacheTTL = %s, want 1h", modules.Core.CalendarEntryCacheTTL)
+	}
 	if !slices.Equal(modules.Core.Notification.AdvanceMinutes, []int{15, 3, 1}) {
 		t.Fatalf("Core.Notification.AdvanceMinutes = %v, want [15 3 1]", modules.Core.Notification.AdvanceMinutes)
 	}
@@ -127,6 +136,12 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	}
 	if deps.Postgres != postgres {
 		t.Fatal("Dependencies.Postgres did not preserve the module postgres client")
+	}
+	if deps.CalendarImageCacheDir != "data/test-calendar-cache" {
+		t.Fatalf("Dependencies.CalendarImageCacheDir = %q, want data/test-calendar-cache", deps.CalendarImageCacheDir)
+	}
+	if deps.CalendarEntryCacheTTL != time.Hour {
+		t.Fatalf("Dependencies.CalendarEntryCacheTTL = %s, want 1h", deps.CalendarEntryCacheTTL)
 	}
 	if deps.MembersData != memberData {
 		t.Fatal("Dependencies.MembersData did not preserve the module member data provider")

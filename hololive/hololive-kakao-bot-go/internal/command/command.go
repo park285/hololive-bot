@@ -29,6 +29,7 @@ type CelebrationCalendarFinder = handlers.CelebrationCalendarFinder
 
 var ErrUnknownCommand = handlers.ErrUnknownCommand
 
+var NewCachedCelebrationCalendarFinder = handlers.NewCachedCelebrationCalendarFinder
 var NewCalendarCommand = handlers.NewCalendarCommand
 var FindActiveMemberOrError = handlers.FindActiveMemberOrError
 var FindMemberOrError = handlers.FindMemberOrError

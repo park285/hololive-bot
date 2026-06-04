@@ -51,10 +51,12 @@ func BuildBotDependencyModules(
 
 func buildBotCoreModule(appConfig *config.Config, logger *slog.Logger) BotCoreModule {
 	return BotCoreModule{
-		BotSelfUser:  appConfig.Bot.SelfUser,
-		IrisBaseURL:  appConfig.Iris.BaseURL,
-		Notification: appConfig.Notification,
-		Logger:       logger,
+		BotSelfUser:           appConfig.Bot.SelfUser,
+		IrisBaseURL:           appConfig.Iris.BaseURL,
+		Notification:          appConfig.Notification,
+		CalendarImageCacheDir: appConfig.Bot.CalendarImageCacheDir,
+		CalendarEntryCacheTTL: appConfig.Bot.CalendarEntryCacheTTL,
+		Logger:                logger,
 	}
 }
 

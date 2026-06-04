@@ -26,16 +26,31 @@ import (
 var fontMu sync.Mutex
 
 type CalendarCardRenderer struct {
-	cacheMu    sync.Mutex
-	cache      map[calendarCacheKey][]byte
-	cacheOrder []calendarCacheKey
-	rendering  singleflight.Group
+	cacheMu      sync.Mutex
+	cache        map[calendarCacheKey][]byte
+	cacheOrder   []calendarCacheKey
+	rendering    singleflight.Group
+	diskCacheDir string
 }
 
-func NewCalendarCardRenderer() *CalendarCardRenderer {
-	return &CalendarCardRenderer{
+type CalendarCardRendererOption func(*CalendarCardRenderer)
+
+func WithCalendarDiskCacheDir(dir string) CalendarCardRendererOption {
+	return func(r *CalendarCardRenderer) {
+		r.diskCacheDir = strings.TrimSpace(dir)
+	}
+}
+
+func NewCalendarCardRenderer(options ...CalendarCardRendererOption) *CalendarCardRenderer {
+	r := &CalendarCardRenderer{
 		cache: make(map[calendarCacheKey][]byte),
 	}
+	for _, option := range options {
+		if option != nil {
+			option(r)
+		}
+	}
+	return r
 }
 
 type calendarFonts struct {
@@ -73,15 +88,7 @@ func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []do
 	}
 
 	data, err, _ := r.rendering.Do(cacheKey.string(), func() (any, error) {
-		if data, ok := r.cachedImage(cacheKey); ok {
-			return data, nil
-		}
-		data, err := r.renderCalendarImage(month, year, entries)
-		if err != nil {
-			return nil, err
-		}
-		r.storeCachedImage(cacheKey, data)
-		return data, nil
+		return r.renderCalendarImageOnce(cacheKey, month, year, entries)
 	})
 	if err != nil {
 		return nil, err
@@ -91,6 +98,23 @@ func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []do
 		return nil, fmt.Errorf("calendar render cache returned %T", data)
 	}
 	return bytes.Clone(rendered), nil
+}
+
+func (r *CalendarCardRenderer) renderCalendarImageOnce(cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) (any, error) {
+	if data, ok := r.cachedImage(cacheKey); ok {
+		return data, nil
+	}
+	if data, ok := r.diskCachedImage(cacheKey); ok {
+		r.storeCachedImage(cacheKey, data)
+		return data, nil
+	}
+	data, err := r.renderCalendarImage(month, year, entries)
+	if err != nil {
+		return nil, err
+	}
+	r.storeCachedImage(cacheKey, data)
+	r.storeDiskCachedImage(cacheKey, data)
+	return data, nil
 }
 
 func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error) {

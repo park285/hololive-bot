@@ -138,6 +138,39 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesMonthlyCache(t *testing.
 	}
 }
 
+func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers(t *testing.T) {
+	var requests atomic.Int32
+	server := newPNGServer(t, &requests)
+	defer server.Close()
+
+	dir := t.TempDir()
+	entries := []domain.CalendarEntry{
+		{
+			Kind:   domain.CelebrationKindBirthday,
+			Member: &domain.Member{ShortKoreanName: "페코라", Photo: server.URL + "/avatar=s88-c"},
+			Day:    15,
+		},
+	}
+
+	firstRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+	first, err := firstRenderer.RenderCalendarImage(6, 2026, entries)
+	if err != nil {
+		t.Fatalf("first RenderCalendarImage() error = %v", err)
+	}
+	assertValidPNG(t, first)
+
+	secondRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+	second, err := secondRenderer.RenderCalendarImage(6, 2026, entries)
+	if err != nil {
+		t.Fatalf("second RenderCalendarImage() error = %v", err)
+	}
+	assertValidPNG(t, second)
+
+	if got, want := requests.Load(), int32(1); got != want {
+		t.Fatalf("photo requests = %d, want %d", got, want)
+	}
+}
+
 func TestCalendarCardRenderer_RenderCalendarImage_CoalescesConcurrentMonthlyCacheMisses(t *testing.T) {
 	var requests atomic.Int32
 	pngData := tinyPNG(t)
