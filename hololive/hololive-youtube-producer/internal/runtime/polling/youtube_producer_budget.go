@@ -54,14 +54,7 @@ func summarizeYouTubeProducerBudget(registrations []providers.ChannelPollerRegis
 }
 
 func validateYouTubeProducerPollerBudget(summary youtubeProducerBudgetSummary) error {
-	if summary.CombinedRPM <= summary.BudgetRPM {
-		return nil
-	}
-	return fmt.Errorf(
-		"youtube-producer combined active scraper RPM %.3f exceeds YouTube producer budget %.3f; increase poll intervals or reduce target channels",
-		summary.CombinedRPM,
-		summary.BudgetRPM,
-	)
+	return validateYouTubeProducerAggregateBudget(summary)
 }
 
 func logYouTubeProducerBudgetSummary(summary youtubeProducerBudgetSummary, logger *slog.Logger) {

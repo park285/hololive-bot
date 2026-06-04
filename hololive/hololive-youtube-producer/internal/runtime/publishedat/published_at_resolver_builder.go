@@ -80,7 +80,15 @@ func buildPublishedAtResolverRegistration(
 		resolverConfig.Interval,
 	).WithRequestsPerRun(resolverConfig.MaxResolvePerRun).
 		WithWorstCaseAttempts(scraper.MetadataResolveFetchPolicy.MaxAttempts).
-		WithWorstCaseRequestUnitsPerRun(float64(resolverConfig.MaxResolvePerRun * scraper.MetadataResolveFetchPolicy.MaxAttempts))
+		WithWorstCaseRequestUnitsPerRun(float64(resolverConfig.MaxResolvePerRun * scraper.MetadataResolveFetchPolicy.MaxAttempts)).
+		WithBudgetProfile(poller.BudgetProfile{
+			SourceUnits: map[poller.BudgetSource]float64{
+				poller.BudgetSourceYouTubeScraper: float64(resolverConfig.MaxResolvePerRun * scraper.MetadataResolveFetchPolicy.MaxAttempts),
+				poller.BudgetSourcePostgresWrite:  1,
+			},
+			BurstClass: poller.BudgetBurstPrimary,
+			Priority:   poller.BudgetPriorityLow,
+		})
 	if logger != nil {
 		logger.Info("published_at_resolver_registered_with_scraper_scheduler",
 			slog.Duration("interval", resolverConfig.Interval),
