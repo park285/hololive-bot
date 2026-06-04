@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod fake_valkey;
 mod heartbeat;
 #[cfg(test)]
 mod heartbeat_test;
