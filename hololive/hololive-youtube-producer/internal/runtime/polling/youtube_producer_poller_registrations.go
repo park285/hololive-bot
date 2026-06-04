@@ -145,6 +145,44 @@ func newYouTubeProducerPollerSet(
 	}
 }
 
+func youtubeScraperBudgetProfile(units float64, class poller.BudgetBurstClass, priority poller.BudgetPriority) poller.BudgetProfile {
+	return poller.BudgetProfile{
+		SourceUnits: map[poller.BudgetSource]float64{
+			poller.BudgetSourceYouTubeScraper: units,
+			poller.BudgetSourcePostgresWrite:  1,
+		},
+		BurstClass: class,
+		Priority:   priority,
+	}
+}
+
+func holodexLiveBudgetProfile(class poller.BudgetBurstClass, priority poller.BudgetPriority) poller.BudgetProfile {
+	return poller.BudgetProfile{
+		SourceUnits: map[poller.BudgetSource]float64{
+			poller.BudgetSourceHolodexLive:   1,
+			poller.BudgetSourcePostgresWrite: 1,
+		},
+		BurstClass: class,
+		Priority:   priority,
+	}
+}
+
+func budgetProfileWithRegistrationPriority(profile poller.BudgetProfile, priority poller.Priority) poller.BudgetProfile {
+	profile.Priority = budgetPriorityFromRegistrationPriority(priority)
+	return profile
+}
+
+func budgetPriorityFromRegistrationPriority(priority poller.Priority) poller.BudgetPriority {
+	switch priority {
+	case poller.PriorityHigh, poller.PriorityBoost:
+		return poller.BudgetPriorityHigh
+	case poller.PriorityLow:
+		return poller.BudgetPriorityLow
+	default:
+		return poller.BudgetPriorityNormal
+	}
+}
+
 func appendBackfillChannelPollerRegistrations(
 	registrations []providers.ChannelPollerRegistration,
 	pollers youTubeProducerPollerSet,
@@ -161,21 +199,24 @@ func appendBackfillChannelPollerRegistrations(
 			WithChannelIDs(notificationChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupNotification).
 			WithWorstCaseAttempts(scraper.HighFrequencyChannelFetchPolicy.MaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)))
+			WithWorstCaseRequestUnitsPerRun(shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)).
+			WithBudgetProfile(youtubeScraperBudgetProfile(shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), poller.BudgetBurstBackfill, poller.BudgetPriorityLow)))
 	}
 	if backfill.CommunityEnabled {
 		registrations = append(registrations, providers.NewChannelPollerRegistration(newNamedBackfillPoller("community_backfill", pollers.community), poller.PriorityLow, backfill.CommunityInterval).
 			WithChannelIDs(notificationChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupNotification).
 			WithWorstCaseAttempts(scraper.HighFrequencyChannelFetchPolicy.MaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)))
+			WithWorstCaseRequestUnitsPerRun(communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)).
+			WithBudgetProfile(youtubeScraperBudgetProfile(communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), poller.BudgetBurstBackfill, poller.BudgetPriorityLow)))
 	}
 	if backfill.LiveEnabled {
 		registrations = append(registrations, providers.NewChannelPollerRegistration(newNamedBackfillPoller("live_backfill", pollers.live), poller.PriorityLow, backfill.LiveInterval).
 			WithChannelIDs(notificationChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupNotification).
 			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)))
+			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)).
+			WithBudgetProfile(holodexLiveBudgetProfile(poller.BudgetBurstBackfill, poller.BudgetPriorityLow)))
 	}
 	return registrations
 }
@@ -193,27 +234,32 @@ func buildFlatYouTubeProducerChannelPollerRegistrations(
 			WithChannelIDs(notificationChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupNotification).
 			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(videosWorstCaseRequestUnits()),
+			WithWorstCaseRequestUnitsPerRun(videosWorstCaseRequestUnits()).
+			WithBudgetProfile(youtubeScraperBudgetProfile(videosWorstCaseRequestUnits(), poller.BudgetBurstPrimary, poller.BudgetPriorityNormal)),
 		providers.NewChannelPollerRegistration(pollers.shorts, poller.PriorityLow, poll.Shorts).
 			WithChannelIDs(notificationChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupNotification).
 			WithWorstCaseAttempts(scraper.HighFrequencyChannelFetchPolicy.MaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)),
+			WithWorstCaseRequestUnitsPerRun(shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)).
+			WithBudgetProfile(youtubeScraperBudgetProfile(shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), poller.BudgetBurstPrimary, budgetPriorityFromRegistrationPriority(poller.PriorityLow))),
 		providers.NewChannelPollerRegistration(pollers.community, poller.PriorityLow, poll.Community).
 			WithChannelIDs(notificationChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupNotification).
 			WithWorstCaseAttempts(scraper.HighFrequencyChannelFetchPolicy.MaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)),
+			WithWorstCaseRequestUnitsPerRun(communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)).
+			WithBudgetProfile(youtubeScraperBudgetProfile(communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), poller.BudgetBurstPrimary, budgetPriorityFromRegistrationPriority(poller.PriorityLow))),
 		providers.NewChannelPollerRegistration(pollers.stats, poller.PriorityLow, poll.Stats).
 			WithChannelIDs(statsChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupStats).
 			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
+			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)).
+			WithBudgetProfile(youtubeScraperBudgetProfile(float64(scraper.FetchPageMaxAttempts), poller.BudgetBurstPrimary, poller.BudgetPriorityLow)),
 		providers.NewChannelPollerRegistration(pollers.live, poller.PriorityHigh, poll.Live).
 			WithChannelIDs(notificationChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupNotification).
 			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
+			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)).
+			WithBudgetProfile(holodexLiveBudgetProfile(poller.BudgetBurstPrimary, poller.BudgetPriorityHigh)),
 	}
 }
 
@@ -244,19 +290,21 @@ func buildTieredYouTubeProducerChannelPollerRegistrations(
 	maxResults int,
 ) []providers.ChannelPollerRegistration {
 	registrations := make([]providers.ChannelPollerRegistration, 0, 11)
-	registrations = appendTieredNotificationRegistration(registrations, pollers.videos, targets, poll.Videos, poller.PriorityNormal, scraper.FetchPageMaxAttempts, videosWorstCaseRequestUnits())
-	registrations = appendTieredNotificationRegistration(registrations, pollers.shorts, targets, poll.Shorts, poller.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults))
-	registrations = appendTieredNotificationRegistration(registrations, pollers.community, targets, poll.Community, poller.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults))
+	registrations = appendTieredNotificationRegistration(registrations, pollers.videos, targets, poll.Videos, poller.PriorityNormal, scraper.FetchPageMaxAttempts, videosWorstCaseRequestUnits(), youtubeScraperBudgetProfile(videosWorstCaseRequestUnits(), poller.BudgetBurstPrimary, poller.BudgetPriorityNormal), false)
+	registrations = appendTieredNotificationRegistration(registrations, pollers.shorts, targets, poll.Shorts, poller.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), youtubeScraperBudgetProfile(shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), poller.BudgetBurstPrimary, poller.BudgetPriorityLow), true)
+	registrations = appendTieredNotificationRegistration(registrations, pollers.community, targets, poll.Community, poller.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), youtubeScraperBudgetProfile(communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), poller.BudgetBurstPrimary, poller.BudgetPriorityLow), true)
 	registrations = append(registrations, providers.NewChannelPollerRegistration(pollers.stats, poller.PriorityLow, poll.Stats).
 		WithChannelIDs(targets.StatsChannelIDs).
 		WithTargetGroup(providers.ChannelTargetGroupStats).
 		WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-		WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)))
+		WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)).
+		WithBudgetProfile(youtubeScraperBudgetProfile(float64(scraper.FetchPageMaxAttempts), poller.BudgetBurstPrimary, poller.BudgetPriorityLow)))
 	registrations = append(registrations, providers.NewChannelPollerRegistration(pollers.live, poller.PriorityHigh, poll.Live).
 		WithChannelIDs(targets.NotificationChannelIDs).
 		WithTargetGroup(providers.ChannelTargetGroupNotification).
 		WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-		WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)))
+		WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)).
+		WithBudgetProfile(holodexLiveBudgetProfile(poller.BudgetBurstPrimary, poller.BudgetPriorityHigh)))
 	return registrations
 }
 
@@ -268,14 +316,16 @@ func appendTieredNotificationRegistration(
 	basePriority poller.Priority,
 	worstCaseAttempts int,
 	worstCaseRequestUnits float64,
+	budgetProfile poller.BudgetProfile,
+	deriveBudgetPriorityFromRegistration bool,
 ) []providers.ChannelPollerRegistration {
-	registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupActive, basePriority, baseInterval, targets.ActiveNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits))
+	registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupActive, basePriority, baseInterval, targets.ActiveNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits, budgetProfile, deriveBudgetPriorityFromRegistration))
 	priority := poller.PriorityNormal
 	if basePriority == poller.PriorityLow {
 		priority = poller.PriorityLow
 	}
-	registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupWarm, priority, baseInterval*2, targets.WarmNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits))
-	registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupCold, poller.PriorityLow, baseInterval*6, targets.ColdNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits))
+	registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupWarm, priority, baseInterval*2, targets.WarmNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits, budgetProfile, deriveBudgetPriorityFromRegistration))
+	registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupCold, poller.PriorityLow, baseInterval*6, targets.ColdNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits, budgetProfile, deriveBudgetPriorityFromRegistration))
 	return registrations
 }
 
@@ -287,12 +337,18 @@ func newTieredNotificationRegistration(
 	channelIDs []string,
 	worstCaseAttempts int,
 	worstCaseRequestUnits float64,
+	budgetProfile poller.BudgetProfile,
+	deriveBudgetPriorityFromRegistration bool,
 ) providers.ChannelPollerRegistration {
+	if deriveBudgetPriorityFromRegistration {
+		budgetProfile = budgetProfileWithRegistrationPriority(budgetProfile, priority)
+	}
 	return providers.NewChannelPollerRegistration(pollerInstance, priority, interval).
 		WithChannelIDs(channelIDs).
 		WithTargetGroup(targetGroup).
 		WithWorstCaseAttempts(worstCaseAttempts).
-		WithWorstCaseRequestUnitsPerRun(worstCaseRequestUnits)
+		WithWorstCaseRequestUnitsPerRun(worstCaseRequestUnits).
+		WithBudgetProfile(budgetProfile)
 }
 
 func videosWorstCaseRequestUnits() float64 {
