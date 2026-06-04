@@ -2,20 +2,23 @@
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-SSH_KEY="${SSH_KEY:-$REPO_ROOT/KR.key}"
-OSAKA_HOST="${OSAKA_HOST:-kapu-iris-osaka-1}"
+AP_PREFLIGHT_ALLOW_FIRST_BOOT="${AP_PREFLIGHT_ALLOW_FIRST_BOOT:-false}"
 
-if [[ ! -r "$SSH_KEY" ]]; then
-  echo "SSH key not readable: $SSH_KEY" >&2
-  exit 1
-fi
+. "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
+ap_host_load "$REPO_ROOT" "${1:-}"
 
-SSH_OSAKA=(ssh -F /dev/null -i "$SSH_KEY" -o IdentitiesOnly=yes -o SetEnv=LC_ALL=C -o SetEnv=LANG=C "ubuntu@$OSAKA_HOST")
+case "$AP_PREFLIGHT_ALLOW_FIRST_BOOT" in
+  true|false) ;;
+  *)
+    echo "AP_PREFLIGHT_ALLOW_FIRST_BOOT must be true or false" >&2
+    exit 2
+    ;;
+esac
 
-"${SSH_OSAKA[@]}" 'bash -s' <<'REMOTE'
+containers_list="${AP_CONTAINERS[*]}"
+
+"${AP_SSH[@]}" "AP_PREFLIGHT_ALLOW_FIRST_BOOT='$AP_PREFLIGHT_ALLOW_FIRST_BOOT' AP_CONTAINERS_LIST='$containers_list' AP_NAME='$AP_NAME' bash -s" <<'REMOTE'
 set -euo pipefail
-
-cd ~/hololive-bot
 
 unit_type="$(systemctl show openbao-agent-hololive-bot.service -p Type --value)"
 unit_state="$(systemctl show openbao-agent-hololive-bot.service -p ActiveState --value)"
@@ -45,12 +48,36 @@ if [[ -z "$iris_base_url" ]]; then
   exit 1
 fi
 if [[ "$iris_base_url" != https://* ]]; then
-  echo "IRIS_BASE_URL must be H3 https for Osaka trust preflight" >&2
+  echo "IRIS_BASE_URL must be H3 https for $AP_NAME trust preflight" >&2
+  exit 1
+fi
+
+existing=0
+missing=0
+for container in $AP_CONTAINERS_LIST; do
+  if docker inspect "$container" >/dev/null 2>&1; then
+    existing=$((existing + 1))
+  else
+    missing=$((missing + 1))
+  fi
+done
+
+if [[ "$existing" -eq 0 ]]; then
+  if [[ "$AP_PREFLIGHT_ALLOW_FIRST_BOOT" == "true" ]]; then
+    echo "$AP_NAME first boot: no AP containers exist yet; skipping in-container Iris H3 trust check"
+    exit 0
+  fi
+  echo "No AP containers exist on $AP_NAME. Set AP_PREFLIGHT_ALLOW_FIRST_BOOT=true only for the documented first boot." >&2
+  exit 1
+fi
+
+if [[ "$missing" -gt 0 ]]; then
+  echo "Partial AP container set on $AP_NAME ($missing missing); refusing preflight" >&2
   exit 1
 fi
 
 ready_url="${iris_base_url%/}/ready"
-for container in hololive-youtube-producer-a hololive-youtube-producer-b; do
+for container in $AP_CONTAINERS_LIST; do
   status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")"
   if [[ "$status" != "healthy" ]]; then
     echo "$container is not healthy before Iris H3 trust preflight: $status" >&2
@@ -62,5 +89,5 @@ for container in hololive-youtube-producer-a hololive-youtube-producer-b; do
     "$container" ./bin/healthcheck "$ready_url"
 done
 
-echo "osaka Iris H3 trust preflight passed"
+echo "$AP_NAME Iris H3 trust preflight passed"
 REMOTE

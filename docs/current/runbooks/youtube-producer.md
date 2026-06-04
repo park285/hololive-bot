@@ -2,13 +2,13 @@
 
 ## Role
 
-`youtube-producer`는 YouTube scraping/polling, outbox production, 3-way active-active AP runtime을 담당합니다. Osaka 호스트에서 `youtube-producer-a`(30005)와 `youtube-producer-b`(30015)가, 메인 호스트에서 `youtube-producer-c`(30025, `docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. 셋은 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다.
+`youtube-producer`는 YouTube scraping/polling, outbox production, 3-way active-active AP runtime을 담당합니다. Osaka 호스트에서 `youtube-producer-a`(30005, `docker-compose.osaka.yml`)가, Seoul 호스트에서 `youtube-producer-b`(30015, `docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. 셋은 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트(osaka, seoul)는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
 
 ## Normal status
 
 | Check | Expected |
 |---|---|
-| Health | `http://127.0.0.1:30005/health`, `:30015/health`, and `:30025/health` return success |
+| Health | Osaka `http://127.0.0.1:30005/health`, Seoul `:30015/health`, main `:30025/health` return success (각 호스트 로컬 기준) |
 | Ready | all three `/ready` payloads show `mode=active-active` |
 | Logs | no repeated poller, photo sync, outbox, DB, cache, or proxy errors |
 | Queue | produces outbox/tracking state; does not consume alarm dispatch queue |
@@ -28,12 +28,12 @@
 | `SERVER_PORT` | HTTP health port | yes |
 | `YOUTUBE_INGESTION_ENABLED` | must be true for this service | yes |
 | `PHOTO_SYNC_ENABLED` | AP-A and AP-C run photo sync (`true`); a global Valkey singleton lease keeps only one active with TTL failover. AP-B is `false` | yes |
-| `SCRAPER_SCHEDULER_WORKER_COUNT` | per-AP worker cap; Osaka active-active defaults each AP to `2` | Osaka yes |
-| `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED` | enables per-job JobRunGuard and disables global runtime lease gate | Osaka yes |
-| `YOUTUBE_PRODUCER_INSTANCE_ID` | unique active-active owner token prefix per AP | Osaka yes |
-| `YOUTUBE_PRODUCER_LEASE_NAMESPACE` | shared lease namespace for APs in the same environment | Osaka yes |
+| `SCRAPER_SCHEDULER_WORKER_COUNT` | per-AP worker cap; remote active-active defaults each AP to `2` | remote AP yes |
+| `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED` | enables per-job JobRunGuard and disables global runtime lease gate | remote AP yes |
+| `YOUTUBE_PRODUCER_INSTANCE_ID` | unique active-active owner token prefix per AP | remote AP yes |
+| `YOUTUBE_PRODUCER_LEASE_NAMESPACE` | shared lease namespace for APs in the same environment | remote AP yes |
 | `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false` | producer-only egress boundary | yes |
-| `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true` | must be true only on the owning Osaka host | yes |
+| `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true` | must be true only on owning AP hosts | yes |
 | `SCRAPER_*` | poller intervals/workers | yes |
 | `SCRAPER_BACKFILL_ENABLED=false` | optional secondary poller identities for coverage; disabled by default | no |
 | `SCRAPER_BACKFILL_*_INTERVAL_SECONDS` | backfill poller intervals for shorts/community/live when enabled | no |
@@ -42,8 +42,10 @@
 ## Logs
 
 ```bash
-# Osaka a/b
-./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.osaka.yml logs -f youtube-producer-a youtube-producer-b
+# Osaka a
+./scripts/logs/ap-logs.sh osaka youtube-producer-a
+# Seoul b
+./scripts/logs/ap-logs.sh seoul youtube-producer-b
 # 메인 호스트 c (main-ap profile)
 COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.main-ap.yml logs -f youtube-producer-c
 ```
@@ -94,9 +96,9 @@ SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS=180
 SCRAPER_BACKFILL_TARGET_GROUP=notification
 ```
 
-Before any live cadence/backfill change, run the local budget and compose gates, then request explicit operator approval for the config write and redeploy. Rollback restores the previous `SCRAPER_*_SECONDS` and `SCRAPER_BACKFILL_*` values, then redeploys the approved `youtube-producer-a`/`youtube-producer-b` services only.
+Before any live cadence/backfill change, run the local budget and compose gates, then request explicit operator approval for the config write and redeploy. Rollback restores the previous `SCRAPER_*_SECONDS` and `SCRAPER_BACKFILL_*` values, then redeploys the approved AP services only (`youtube-producer-a` on osaka, `youtube-producer-b` on seoul).
 
-Osaka backfill rollout must be an env/config change, not a hardcoded service default. Set `SCRAPER_BACKFILL_ENABLED=true` and the selected intervals in `/run/hololive-bot/env` or an approved equivalent env override, then redeploy only after explicit operator approval. Monitor:
+Remote AP backfill rollout must be an env/config change, not a hardcoded service default. Set `SCRAPER_BACKFILL_ENABLED=true` and the selected intervals in `/run/hololive-bot/env` or an approved equivalent env override, then redeploy only after explicit operator approval. Monitor:
 
 ```text
 youtube_poller_job_claim_total{poller="shorts_backfill",result="acquired"}
@@ -105,28 +107,33 @@ youtube_poller_outbox_insert_total{kind=...,result="conflict"}
 /ready: mode=active-active, valkey_available=true, scraping_paused=false
 ```
 
-## Osaka rollout
+## Remote AP rollout (osaka, seoul)
 
-Use the scoped deployment wrapper for Osaka active-active rollout. It syncs only the active-active runtime files listed in `scripts/deploy/osaka-active-active-rsync-files.txt`; it intentionally excludes secrets, docs, tests, `hololive-alarm-worker/**`, runtime data, and all data paths except the embedded `hololive-shared` profile data required by the producer image.
+Use the scoped deployment wrapper for remote AP active-active rollout. Host topology is defined in `scripts/deploy/ap-hosts/<host>.conf` (osaka: `youtube-producer-a`, seoul: `youtube-producer-b`). The wrapper syncs only the active-active runtime files listed in `scripts/deploy/ap-rsync-files.txt`; it intentionally excludes secrets, docs, tests, `hololive-alarm-worker/**`, runtime data, and all data paths except the embedded `hololive-shared` profile data required by the producer image.
 
 ```bash
-./scripts/deploy/osaka-active-active-deploy.sh --dry-run
-I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/osaka-active-active-deploy.sh --apply
+./scripts/deploy/ap-deploy.sh osaka --dry-run
+I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh osaka --apply
+
+./scripts/deploy/ap-deploy.sh seoul --dry-run
+I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh seoul --apply
 ```
 
-Live `--apply` requires explicit operator approval before execution. The wrapper captures a prechange backup under `backups/osaka-active-active-<timestamp>/`, validates compose config, builds only `youtube-producer-a` and `youtube-producer-b`, recreates both APs with `--no-deps --remove-orphans`, and runs readiness/health/log smoke checks.
+Live `--apply` requires explicit operator approval before execution, with a per-host approval env var (`I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY`, `I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY`). The wrapper captures a prechange backup under `backups/<host>-active-active-<timestamp>/`, validates compose config, builds only that host's AP services, recreates them with `--no-deps --remove-orphans`, and runs readiness/health/log smoke checks.
 
 After rollout, the read-only completion check must pass:
 
 ```bash
-CHANGE_STARTED_AT=<change_started_at> ./scripts/deploy/osaka-active-active-completion-check.sh
+CHANGE_STARTED_AT=<change_started_at> ./scripts/deploy/ap-completion-check.sh <host>
 ```
 
-The Osaka wrapper covers `youtube-producer-a`/`youtube-producer-b` only. The main-host `youtube-producer-c` is redeployed separately on the main host, guarded by its `main-ap` profile:
+The remote wrapper covers that host's AP services only. The main-host `youtube-producer-c` is redeployed separately on the main host, guarded by its `main-ap` profile:
 
 ```bash
 COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
+
+First boot on a newly provisioned AP host (no AP containers yet) requires `AP_PREFLIGHT_ALLOW_FIRST_BOOT=true` so the Iris H3 trust preflight skips its in-container check once; post-start readiness checks still gate the rollout.
 
 ## Common failure modes
 
@@ -157,10 +164,10 @@ Symptoms:
 
 Diagnosis:
 ```bash
-curl -fsS http://127.0.0.1:30005/ready
-curl -fsS http://127.0.0.1:30015/ready
+# 각 AP 호스트 로컬에서 /ready 확인 (osaka 30005, seoul 30015, main 30025)
+./scripts/logs/ap-status.sh osaka
+./scripts/logs/ap-status.sh seoul
 curl -fsS http://127.0.0.1:30025/ready
-./scripts/logs/osaka-status.sh
 ```
 
 Mitigation:
@@ -207,15 +214,17 @@ docker exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock PING
 ssh -F /dev/null -i ./KR.key -o IdentitiesOnly=yes -o HostKeyAlias=100.100.1.7 ubuntu@kapu-iris-osaka-1 \
   'docker ps --format "{{.Names}}\t{{.Status}}" | grep -iE "youtube|producer"'
 SINCE=15m TAIL=600 PATTERN='active_active_paused|active_active_resumed|valkey' \
-  ./scripts/logs/osaka-logs.sh youtube-producer | tail -80
+  ./scripts/logs/ap-logs.sh osaka youtube-producer | tail -80
+SINCE=15m TAIL=600 PATTERN='active_active_paused|active_active_resumed|valkey' \
+  ./scripts/logs/ap-logs.sh seoul youtube-producer | tail -80
 ```
 
 Mitigation:
 - 백그라운드 recovery loop가 `__readiness_probe__`를 사용해 5초 base interval로 재시도하므로, 메인 valkey가 살아나면 자동으로 `active_active_resumed` 로그가 등장하고 `MarkLeaseAvailable()`이 호출됩니다. 일반적으로 사람 개입 없이 회복됩니다.
-- 회복이 5분 이상 걸리면 메인 valkey-cache의 listen/auth와 Tailscale ACL, 호스트 방화벽을 먼저 확인. 그래도 막히면 producer-a → 30초 대기 → producer-b 순서로 재시작.
+- 회복이 5분 이상 걸리면 메인 valkey-cache의 listen/auth와 Tailscale ACL, 호스트 방화벽을 먼저 확인. 그래도 막히면 producer-a(osaka) → 30초 대기 → producer-b(seoul) 순서로 재시작.
 
 Rollback:
-- 기존 active-active rollback 절차(`./scripts/deploy/osaka-active-active-rollback.sh`)를 그대로 사용. recovery loop는 readiness 보조 경로이므로 별도 롤백 대상이 아닙니다.
+- 기존 active-active rollback 절차(`./scripts/deploy/ap-rollback.sh <host>`)를 그대로 사용. recovery loop는 readiness 보조 경로이므로 별도 롤백 대상이 아닙니다.
 
 ### 5. Outbox backlog grows
 
@@ -237,13 +246,14 @@ Rollback:
 ## Smoke test
 
 ```bash
-./scripts/logs/osaka-smoke.sh
+./scripts/logs/ap-smoke.sh osaka
+./scripts/logs/ap-smoke.sh seoul
 ```
 
-Default smoke checks both AP `/ready` payloads for `mode=active-active`, `valkey_available=true`, and `scraping_paused=false`, then verifies `/health` inside each container. External CA/egress smoke is optional because it depends on public network reachability:
+Default smoke checks the host's AP `/ready` payloads for `mode=active-active`, `valkey_available=true`, and `scraping_paused=false`, then verifies `/health` inside each container. External CA/egress smoke is optional because it depends on public network reachability:
 
 ```bash
-OSAKA_SMOKE_EXTERNAL=true ./scripts/logs/osaka-smoke.sh
+AP_SMOKE_EXTERNAL=true ./scripts/logs/ap-smoke.sh <host>
 ```
 
 ## Observation runtime cutover
@@ -275,14 +285,17 @@ Do not add runtime-name aliases in application code. Historical rows remain hist
 
 - Use `docs/current/runbooks/rollback.md`.
 - Redeploy the previous `youtube-producer` image/config.
-- Scale down `youtube-producer-b` first, confirm `youtube-producer-a` remains healthy, then redeploy the previous image/config.
+- Scale down `youtube-producer-b` (seoul) first, confirm `youtube-producer-a` (osaka) remains healthy, then redeploy the previous image/config.
 - Confirm `YOUTUBE_INGESTION_ENABLED=true`, active `/ready`, health on port `30005`, and outbox/photo sync state after rollback.
-- The deploy wrapper stores overwritten files and prechange container inventory under `backups/osaka-active-active-<timestamp>/`; use that evidence to restore the previous `docker-compose.prod.yml` and `docker-compose.osaka.yml` if active-active startup fails.
-- Dry-run the rollback helper before applying:
+- The deploy wrapper stores overwritten files and prechange container inventory under `backups/<host>-active-active-<timestamp>/` on that AP host; use that evidence to restore the previous `docker-compose.prod.yml` and that host's compose override if active-active startup fails.
+- Dry-run the rollback helper before applying (per-host approval env var):
 
 ```bash
-BACKUP_DIR=backups/osaka-active-active-<timestamp> ./scripts/deploy/osaka-active-active-rollback.sh --dry-run
-I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK=true BACKUP_DIR=backups/osaka-active-active-<timestamp> ./scripts/deploy/osaka-active-active-rollback.sh --apply
+BACKUP_DIR=backups/osaka-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh osaka --dry-run
+I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK=true BACKUP_DIR=backups/osaka-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh osaka --apply
+
+BACKUP_DIR=backups/seoul-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh seoul --dry-run
+I_APPROVE_SEOUL_ACTIVE_ACTIVE_ROLLBACK=true BACKUP_DIR=backups/seoul-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh seoul --apply
 ```
 
 ## Related contracts

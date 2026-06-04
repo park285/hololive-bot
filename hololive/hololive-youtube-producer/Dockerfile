@@ -40,14 +40,14 @@ ENV GOWORK=off
 WORKDIR /workspace/hololive-bot
 
 COPY go.mod go.work go.work.sum ./
-COPY scripts/deploy/osaka-active-active-rsync-files.txt ./scripts/deploy/osaka-active-active-rsync-files.txt
+COPY scripts/deploy/ap-rsync-files.txt ./scripts/deploy/ap-rsync-files.txt
 COPY --from=shared_go_workspace . /workspace/shared-go
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
 RUN set -eu; \
     find hololive/hololive-shared hololive/hololive-youtube-producer -type f -print | \
       while IFS= read -r file; do \
-        grep -Fxq "$file" scripts/deploy/osaka-active-active-rsync-files.txt || rm -f "$file"; \
+        grep -Fxq "$file" scripts/deploy/ap-rsync-files.txt || rm -f "$file"; \
       done
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-producer
