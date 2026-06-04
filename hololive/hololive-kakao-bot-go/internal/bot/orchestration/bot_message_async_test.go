@@ -45,7 +45,7 @@ func TestExecuteCommandAsync_RunsSynchronouslyWhenWorkerPoolMissing(t *testing.T
 	}
 }
 
-func TestExecuteCommandAsync_BlocksOnWorkerPoolBackpressureUntilCapacityAvailable(t *testing.T) {
+func TestExecuteCommandAsync_RejectsImmediatelyOnWorkerPoolBackpressure(t *testing.T) {
 	t.Parallel()
 
 	pool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
@@ -87,32 +87,17 @@ func TestExecuteCommandAsync_BlocksOnWorkerPoolBackpressureUntilCapacityAvailabl
 		formatter:       adapter.NewResponseFormatter("!", nil),
 	}
 
-	returned := make(chan struct{})
-	go func() {
-		b.executeCommandAsync(t.Context(), &domain.CommandContext{Room: "room-1"}, domain.CommandHelp, nil, "help", "room-1")
-		close(returned)
-	}()
+	b.executeCommandAsync(t.Context(), &domain.CommandContext{Room: "room-1"}, domain.CommandHelp, nil, "help", "room-1")
 
-	select {
-	case <-returned:
-		t.Fatal("expected SubmitWait to block while the worker queue is full")
-	case <-time.After(50 * time.Millisecond):
-	}
-	assert.Zero(t, executed.Load(), "expected queued task not to run while SubmitWait is blocked")
+	assert.Zero(t, executed.Load(), "expected rejected task not to run")
 	select {
 	case msg := <-msgCh:
-		t.Fatalf("unexpected backpressure message: %#v", msg)
-	default:
+		assert.Contains(t, msg.message, asyncCommandBackpressureMessage)
+	case <-time.After(time.Second):
+		t.Fatal("expected backpressure message")
 	}
 
 	unblock()
-
-	select {
-	case <-returned:
-	case <-time.After(time.Second):
-		t.Fatal("expected SubmitWait to return after capacity becomes available")
-	}
-	require.Eventually(t, func() bool {
-		return executed.Load() == 1
-	}, time.Second, 10*time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+	assert.Zero(t, executed.Load(), "rejected task must not run after capacity becomes available")
 }

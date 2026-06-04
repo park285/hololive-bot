@@ -56,7 +56,7 @@ func (b *Bot) executeCommandAsync(
 		return
 	}
 
-	if b.workerPool.SubmitWait(task) {
+	if b.workerPool.TrySubmit(task) {
 		return
 	}
 
