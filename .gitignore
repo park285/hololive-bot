@@ -90,6 +90,7 @@ Desktop.ini
 *.swo
 *~
 tmp/
+.tmp_work/
 backup/
 backups/
 artifacts/*
