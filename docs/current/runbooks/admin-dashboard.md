@@ -1,0 +1,158 @@
+# Runbook: admin-dashboard
+
+## Role
+
+`admin-dashboard`는 운영 대시보드 서비스입니다. Go 1.26/gin backend가 embedded frontend(React 빌드 산출물)를 서빙하고, Valkey 기반 admin 세션 인증, `hololive-admin-api` relay, docker-proxy를 통한 컨테이너 제어를 담당합니다.
+
+## Normal status
+
+| Check | Expected |
+|---|---|
+| Health | `http://127.0.0.1:30190/health` returns `{"status":"ok"}` |
+| Container | `admin-dashboard` healthy (`./bin/healthcheck` 기반 compose healthcheck) |
+| Auth | 미인증 `/admin/api/*` 호출이 401 JSON 반환 |
+| Logs | no repeated valkey/session/relay errors |
+
+## Dependencies
+
+| Dependency | Required | Failure impact |
+|---|---|---|
+| Valkey (`valkey-cache`) | yes | 로그인/세션 전체 실패 (503 store unavailable) |
+| `hololive-admin-api` | partial | holo 데이터 조회/뮤테이션 relay 실패 |
+| `docker-proxy` | partial | 컨테이너 상태 조회/start/stop/restart 실패 |
+| Embedded frontend assets | yes | 대시보드 UI 미서빙 (API는 동작) |
+
+## Key environment variables
+
+| Env | Purpose | Required |
+|---|---|---|
+| `PORT` | HTTP port (기본 30190) | no |
+| `ENV` | `production` 여부 (localhost origin 차단 등) | no |
+| `ADMIN_USER` | 로그인 사용자명 (기본 `admin`) | no |
+| `ADMIN_PASS_HASH` (alias `ADMIN_PASS_BCRYPT`) | bcrypt 해시 | yes |
+| `SESSION_SECRET` (alias `ADMIN_SECRET_KEY`) | 세션/CSRF 서명 키 (16바이트 이상) | yes |
+| `VALKEY_URL` | `host:port` 또는 `:urlencoded_password@host:port` (스킴 금지) | yes |
+| `DOCKER_HOST` | docker-proxy 주소 | no |
+| `HOLO_ADMIN_API_URL` (alias `HOLO_BOT_URL`) | holo relay 대상 | no |
+| `HOLO_BOT_API_KEY` (alias `API_SECRET_KEY`) | relay 인증 키 | partial |
+| `FORCE_HTTPS` | HSTS + Secure cookie | no |
+| `CSRF_MODE` / `WS_ORIGIN_MODE` | `enforce`/`monitor`/`off` | no |
+| `ALLOWED_ORIGINS` | WS origin 허용 목록 (콤마 구분) | no |
+| `SESSION_TOKEN_ROTATION` | 세션 토큰 회전 활성화 | no |
+| `LOG_LEVEL` / `LOG_DIR` | 로그 레벨, 파일 로깅 디렉터리 (`/app/logs`) | no |
+| `ENABLE_OPENAPI` / `ENABLE_SWAGGER_UI` | 스펙/문서 노출 (production 기본 off) | no |
+| `TRUST_FORWARDED_HEADERS` | X-Forwarded-For 신뢰 (rate limiter IP) | no |
+
+## Build · Test · CI
+
+```bash
+# backend 빌드/테스트 (repo root 기준, go.work 워크스페이스)
+go build ./admin-dashboard/backend/...
+go test -race ./admin-dashboard/backend/...
+
+# 전용 CI 게이트 (gofmt/vet/staticcheck/govulncheck/build/test)
+./scripts/ci/admin-dashboard-go-ci.sh
+
+# 전체 게이트 (architecture gate 포함)
+./scripts/ci/local-ci.sh
+
+# Rust 잔재 차단 게이트
+./scripts/architecture/check-admin-dashboard-go-only.sh
+
+# frontend (변경 시)
+cd admin-dashboard/frontend && npm ci && npm run lint && npm run build
+```
+
+## Deploy (container recreation)
+
+```bash
+# 이미지 재빌드 + 컨테이너 재생성 (canonical 경로, alias: admin)
+./scripts/deploy/compose-redeploy-service.sh admin-dashboard
+```
+
+- `shared_go_workspace` build context는 스크립트가 `SHARED_GO_WORKSPACE_PATH`로 자동 해석합니다 (기본 `../shared-go`).
+- 이미지 버전 스탬프는 `HOLO_BOT_VERSION` → `-X main.Version` 으로 주입됩니다.
+- compose 정의: `docker-compose.prod.yml`의 `admin-dashboard` 서비스, Dockerfile: `admin-dashboard/Dockerfile`.
+
+## Logs
+
+```bash
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f admin-dashboard
+tail -f logs/admin-dashboard.log
+```
+
+## Common failure modes
+
+### 1. 로그인/세션 전면 실패
+
+Symptoms:
+- `/admin/api/auth/login` 또는 인증 API가 503 반환.
+
+Diagnosis:
+```bash
+./scripts/deploy/compose.sh -f docker-compose.prod.yml ps valkey-cache admin-dashboard
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 admin-dashboard
+```
+
+Mitigation:
+- `valkey-cache` health와 `VALKEY_URL`/`CACHE_PASSWORD` 일치 확인.
+
+### 2. holo 데이터 조회 실패
+
+Symptoms:
+- 대시보드 멤버/스트림/설정 화면이 에러 표시.
+
+Diagnosis:
+```bash
+curl http://127.0.0.1:30006/health
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 hololive-admin-api
+```
+
+Mitigation:
+- `hololive-admin-api` health 복구, `HOLO_ADMIN_API_URL`/`HOLO_BOT_API_KEY` 확인.
+
+### 3. 컨테이너 제어(restart 등) 실패
+
+Symptoms:
+- Docker 탭 액션이 실패하거나 컨테이너 목록이 비어 있음.
+
+Diagnosis:
+```bash
+docker ps --filter name=docker-proxy
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=100 docker-proxy
+```
+
+Mitigation:
+- `docker-proxy` 기동 확인, `DOCKER_HOST` 값 확인.
+
+### 4. 시작 직후 즉시 종료 (config 검증 실패)
+
+Symptoms:
+- 컨테이너 restart loop, 로그에 `required environment variable missing` 또는 bcrypt/세션 검증 에러.
+
+Diagnosis:
+```bash
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=50 admin-dashboard
+```
+
+Mitigation:
+- `ADMIN_PASS_BCRYPT`/`SESSION_SECRET` env 주입과 해시 형식(`$2b$...`, compose의 `$$` 이스케이프) 확인.
+
+## Smoke test
+
+```bash
+curl -s http://127.0.0.1:30190/health
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30190/admin/api/auth/session   # 401
+curl -sI http://127.0.0.1:30190/health | grep -i x-content-type-options                  # nosniff
+```
+
+## Rollback
+
+- `docs/current/runbooks/rollback.md` 기준으로 직전 `admin-dashboard` 이미지/설정 재배포.
+- 롤백 후 위 Smoke test와 대시보드 로그인 경로 재확인.
+
+## Related
+
+- `admin-dashboard/AGENTS.md` — 모듈 규칙
+- `admin-dashboard/docs/openapi-pipeline.md` — OpenAPI 계약 파이프라인
+- `docs/current/PROJECT_MAP.md` — 포트/소유 경계
