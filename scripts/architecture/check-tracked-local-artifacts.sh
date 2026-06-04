@@ -17,6 +17,7 @@ forbidden_patterns=(
   '^\.env$'
   '^\.env\.local$'
   '^\.env\..*\.local$'
+  '^\.env\.(osaka|seoul|main-ap|prod|production|staging)$'
   '^.*\.key$'
   '^.*\.pem$'
   '^.*\.tar\.gz$'
