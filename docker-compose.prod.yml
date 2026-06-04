@@ -525,6 +525,8 @@ services:
     build:
       <<: *go-build-base
       dockerfile: admin-dashboard/Dockerfile
+      args:
+        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
     container_name: admin-dashboard
     environment:
       PORT: "30190"
