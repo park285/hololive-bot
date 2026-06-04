@@ -6,12 +6,6 @@ admin-dashboard/backend/src/holo/types.rs:80
 admin-dashboard/backend/src/holo/types/members.rs:160
 admin-dashboard/backend/src/holo/types/milestones.rs:180
 admin-dashboard/backend/src/config/security.rs:220
-admin-dashboard/backend/src/auth/session.rs:720
-admin-dashboard/backend/src/handlers/auth/test_support.rs:500
 admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
 scripts/logs/remote-sync-main-logs.sh:480
 hololive/hololive-kakao-bot-go/scripts/bot.sh:560
-../shared-go/pkg/logging/logging.go:215
-hololive/hololive-shared/pkg/dbtest/migrations.go:420
-hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/live_poller.go:500
-hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/observation_post_baseline_repository.go:440

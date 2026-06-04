@@ -26,7 +26,12 @@ changed="$(
 admin_changed="$(echo "$changed" | grep -E '^admin-dashboard/' | grep -v -E '^admin-dashboard/Dockerfile$' || true)"
 if [[ -n "${admin_changed}" ]]; then
   echo "${admin_changed}"
-  echo "admin-dashboard scope files changed; this refactor must not touch admin-dashboard" >&2
+  {
+    echo "admin-dashboard files changed while the admin-touch guardrail is active."
+    echo "intentional admin-dashboard work: commit it so pre-push swaps this tripwire for the admin quality gates"
+    echo "(cargo fmt/clippy/test + frontend). otherwise remove the stray admin-dashboard changes,"
+    echo "or set RUN_ADMIN_TOUCH_GUARDRAIL=false for a one-off bypass."
+  } >&2
   exit 1
 fi
 

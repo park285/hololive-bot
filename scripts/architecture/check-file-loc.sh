@@ -35,6 +35,11 @@ load_threshold_file() {
       exit 1
     fi
 
+    if [[ "${path}" = /* || "${path}" == ../* || "${path}" == */../* ]]; then
+      echo "error: threshold path escapes the repository (LOC governance belongs to the owning repo): ${path}" >&2
+      exit 1
+    fi
+
     if [[ -n "${configured[${path}]:-}" ]]; then
       violations+=("duplicate-threshold:${path}")
     fi
