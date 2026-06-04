@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DOCS_DIR="${ROOT_DIR}/docs"
-HISTORY_PLAN_KITS_DIR="${DOCS_DIR}/history/plan-kits"
 
 echo "[CHECK] legacy docs plan kits are under docs/history/plan-kits"
 
@@ -23,27 +22,20 @@ legacy_names=(
   "hololive_scraper_plan_v2"
 )
 
-missing=()
 misplaced=()
 
+# docs/history/plan-kits/ 는 .gitignore 대상 로컬 아카이브라 존재 단언은
+# 클린 체크아웃에서 항상 실패한다. 추적 콘텐츠로 검증 가능한
+# top-level 오배치 금지만 게이트로 유지한다.
 for name in "${legacy_names[@]}"; do
   if [[ -e "${DOCS_DIR}/${name}" ]]; then
     misplaced+=("docs/${name}")
-  fi
-  if [[ ! -d "${HISTORY_PLAN_KITS_DIR}/${name}" ]]; then
-    missing+=("docs/history/plan-kits/${name}")
   fi
 done
 
 if (( ${#misplaced[@]} > 0 )); then
   echo "[FAIL] legacy plan-kit directory found at docs top level"
   printf ' - %s\n' "${misplaced[@]}"
-  exit 1
-fi
-
-if (( ${#missing[@]} > 0 )); then
-  echo "[FAIL] legacy plan-kit directory missing from docs/history/plan-kits"
-  printf ' - %s\n' "${missing[@]}"
   exit 1
 fi
 
