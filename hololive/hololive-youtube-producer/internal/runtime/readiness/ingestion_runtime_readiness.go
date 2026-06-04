@@ -22,7 +22,9 @@ package readiness
 
 import (
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/kapu/hololive-shared/pkg/health"
@@ -35,19 +37,25 @@ type Features struct {
 	PhotoSyncEnabled     bool
 	ActiveActiveEnabled  bool
 	ActiveActiveInstance string
+	GlobalBudgetEnabled  bool
 }
 
 type State struct {
-	runtimeName         string
-	youtubeEnabled      bool
-	photoSyncEnabled    bool
-	activeActiveEnabled bool
-	instanceID          string
-	leaseAvailable      atomic.Bool
-	httpServerStarted   atomic.Bool
-	shuttingDown        atomic.Bool
-	leaseReason         atomic.Value // string
-	lastError           atomic.Value // string
+	runtimeName            string
+	youtubeEnabled         bool
+	photoSyncEnabled       bool
+	activeActiveEnabled    bool
+	globalBudgetEnabled    atomic.Bool
+	instanceID             string
+	leaseAvailable         atomic.Bool
+	budgetBackendAvailable atomic.Bool
+	httpServerStarted      atomic.Bool
+	shuttingDown           atomic.Bool
+	leaseReason            atomic.Value // string
+	lastError              atomic.Value // string
+	budgetMu               sync.Mutex
+	budgetExhausted        map[string]struct{}
+	sourceCooldown         map[string]struct{}
 }
 
 func New(runtimeName string, features Features) *State {
@@ -57,10 +65,14 @@ func New(runtimeName string, features Features) *State {
 		photoSyncEnabled:    features.PhotoSyncEnabled,
 		activeActiveEnabled: features.ActiveActiveEnabled,
 		instanceID:          strings.TrimSpace(features.ActiveActiveInstance),
+		budgetExhausted:     make(map[string]struct{}),
+		sourceCooldown:      make(map[string]struct{}),
 	}
 	state.leaseReason.Store("")
 	state.lastError.Store("")
 	state.leaseAvailable.Store(true)
+	state.globalBudgetEnabled.Store(features.GlobalBudgetEnabled)
+	state.budgetBackendAvailable.Store(true)
 	if features.ActiveActiveEnabled {
 		state.MarkLeaseUnavailable("valkey_unavailable_active_active_fail_closed")
 	}
@@ -121,6 +133,69 @@ func (s *State) MarkLeaseUnavailable(reason string) {
 	s.leaseReason.Store(reason)
 }
 
+func (s *State) SetGlobalBudgetEnabled(enabled bool) {
+	if s == nil {
+		return
+	}
+	s.globalBudgetEnabled.Store(enabled)
+}
+
+func (s *State) MarkBudgetBackendUnavailable(reason string) {
+	if s == nil {
+		return
+	}
+	s.budgetBackendAvailable.Store(false)
+	if reason = strings.TrimSpace(reason); reason != "" {
+		s.lastError.Store(reason)
+	}
+}
+
+func (s *State) MarkBudgetBackendAvailable() {
+	if s == nil {
+		return
+	}
+	s.budgetBackendAvailable.Store(true)
+}
+
+func (s *State) MarkBudgetAdmissionDenied(reason string, sources []string) {
+	if s == nil {
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if reason != "budget_exhausted" && reason != "source_cooldown" {
+		return
+	}
+	normalized := normalizeBudgetSources(sources)
+	if len(normalized) == 0 {
+		return
+	}
+	s.budgetMu.Lock()
+	defer s.budgetMu.Unlock()
+	target := s.budgetExhausted
+	if reason == "source_cooldown" {
+		target = s.sourceCooldown
+	}
+	for _, source := range normalized {
+		target[source] = struct{}{}
+	}
+}
+
+func (s *State) ClearBudgetAdmission(sources []string) {
+	if s == nil {
+		return
+	}
+	normalized := normalizeBudgetSources(sources)
+	if len(normalized) == 0 {
+		return
+	}
+	s.budgetMu.Lock()
+	defer s.budgetMu.Unlock()
+	for _, source := range normalized {
+		delete(s.budgetExhausted, source)
+		delete(s.sourceCooldown, source)
+	}
+}
+
 func (s *State) Response() (int, map[string]any) {
 	base := health.Get()
 	if s == nil {
@@ -129,23 +204,33 @@ func (s *State) Response() (int, map[string]any) {
 
 	leaseAvailable := s.leaseAvailable.Load()
 	leaseEnabled := s.activeActiveEnabled
-	statusCode, status := readinessHTTPStatus(s.ready(leaseEnabled, leaseAvailable))
-	response := s.responsePayload(base, status, leaseEnabled, leaseAvailable)
+	budgetEnabled := s.globalBudgetEnabled.Load()
+	budgetBackendAvailable := !budgetEnabled || s.budgetBackendAvailable.Load()
+	budgetExhausted, sourceCooldown, affectedSources := s.budgetAdmissionPayload(budgetEnabled)
+	statusCode, status := readinessHTTPStatus(s.ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable))
+	response := s.responsePayload(base, status, leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable, budgetExhausted, sourceCooldown, affectedSources)
 	s.addLeaseReason(response, leaseEnabled, leaseAvailable)
 	return statusCode, response
 }
 
 func nilReadinessPayload(base health.Response) map[string]any {
 	return map[string]any{
-		"status":     "not_ready",
-		"version":    base.Version,
-		"uptime":     base.Uptime,
-		"goroutines": base.Goroutines,
+		"status":                   "not_ready",
+		"version":                  base.Version,
+		"uptime":                   base.Uptime,
+		"goroutines":               base.Goroutines,
+		"budget_backend_available": true,
+		"budget_exhausted":         false,
+		"source_cooldown":          false,
+		"affected_sources":         []string{},
 	}
 }
 
-func (s *State) ready(leaseEnabled bool, leaseAvailable bool) bool {
-	return s.httpServerStarted.Load() && !s.shuttingDown.Load() && (!leaseEnabled || leaseAvailable)
+func (s *State) ready(leaseEnabled bool, leaseAvailable bool, budgetEnabled bool, budgetBackendAvailable bool) bool {
+	return s.httpServerStarted.Load() &&
+		!s.shuttingDown.Load() &&
+		(!leaseEnabled || leaseAvailable) &&
+		(!budgetEnabled || budgetBackendAvailable)
 }
 
 func readinessHTTPStatus(ready bool) (int, string) {
@@ -160,23 +245,32 @@ func (s *State) responsePayload(
 	status string,
 	leaseEnabled bool,
 	leaseAvailable bool,
+	budgetEnabled bool,
+	budgetBackendAvailable bool,
+	budgetExhausted bool,
+	sourceCooldown bool,
+	affectedSources []string,
 ) map[string]any {
 	return map[string]any{
-		"status":              status,
-		"version":             base.Version,
-		"uptime":              base.Uptime,
-		"goroutines":          base.Goroutines,
-		"runtime":             s.runtimeName,
-		"http_server_started": s.httpServerStarted.Load(),
-		"shutting_down":       s.shuttingDown.Load(),
-		"youtube_enabled":     s.youtubeEnabled,
-		"photo_sync_enabled":  s.photoSyncEnabled,
-		"mode":                readinessMode(s.activeActiveEnabled),
-		"active_active":       s.activeActiveEnabled,
-		"instance_id":         s.instanceID,
-		"job_lease_enabled":   leaseEnabled,
-		"valkey_available":    !leaseEnabled || leaseAvailable,
-		"scraping_paused":     leaseEnabled && !leaseAvailable,
+		"status":                   status,
+		"version":                  base.Version,
+		"uptime":                   base.Uptime,
+		"goroutines":               base.Goroutines,
+		"runtime":                  s.runtimeName,
+		"http_server_started":      s.httpServerStarted.Load(),
+		"shutting_down":            s.shuttingDown.Load(),
+		"youtube_enabled":          s.youtubeEnabled,
+		"photo_sync_enabled":       s.photoSyncEnabled,
+		"mode":                     readinessMode(s.activeActiveEnabled),
+		"active_active":            s.activeActiveEnabled,
+		"instance_id":              s.instanceID,
+		"job_lease_enabled":        leaseEnabled,
+		"valkey_available":         !leaseEnabled || leaseAvailable,
+		"budget_backend_available": budgetBackendAvailable,
+		"budget_exhausted":         budgetEnabled && budgetExhausted,
+		"source_cooldown":          budgetEnabled && sourceCooldown,
+		"affected_sources":         affectedSources,
+		"scraping_paused":          (leaseEnabled && !leaseAvailable) || (budgetEnabled && !budgetBackendAvailable),
 	}
 }
 
@@ -193,4 +287,42 @@ func readinessMode(activeActiveEnabled bool) string {
 		return "active-active"
 	}
 	return "single-owner"
+}
+
+func (s *State) budgetAdmissionPayload(budgetEnabled bool) (bool, bool, []string) {
+	if !budgetEnabled {
+		return false, false, []string{}
+	}
+	s.budgetMu.Lock()
+	defer s.budgetMu.Unlock()
+	affected := make(map[string]struct{}, len(s.budgetExhausted)+len(s.sourceCooldown))
+	for source := range s.budgetExhausted {
+		affected[source] = struct{}{}
+	}
+	for source := range s.sourceCooldown {
+		affected[source] = struct{}{}
+	}
+	sources := make([]string, 0, len(affected))
+	for source := range affected {
+		sources = append(sources, source)
+	}
+	sort.Strings(sources)
+	return len(s.budgetExhausted) > 0, len(s.sourceCooldown) > 0, sources
+}
+
+func normalizeBudgetSources(sources []string) []string {
+	seen := make(map[string]struct{}, len(sources))
+	normalized := make([]string, 0, len(sources))
+	for _, source := range sources {
+		source = strings.TrimSpace(source)
+		if source == "" {
+			continue
+		}
+		if _, ok := seen[source]; ok {
+			continue
+		}
+		seen[source] = struct{}{}
+		normalized = append(normalized, source)
+	}
+	return normalized
 }

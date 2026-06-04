@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
@@ -25,6 +26,23 @@ func (s readinessClaimStub) TryClaim(
 	time.Duration,
 ) (poller.JobClaimStatus, poller.JobClaim, error) {
 	return s.status, s.claim, s.err
+}
+
+type readinessBudgetLimiterStub struct {
+	reservation poller.BudgetReservation
+	decision    poller.BudgetDecision
+	err         error
+	calls       int
+}
+
+func (s *readinessBudgetLimiterStub) TryReserve(
+	context.Context,
+	poller.BudgetJob,
+	poller.BudgetProfile,
+	time.Duration,
+) (poller.BudgetReservation, poller.BudgetDecision, error) {
+	s.calls++
+	return s.reservation, s.decision, s.err
 }
 
 type readinessProbeClaimStub struct {
@@ -139,5 +157,151 @@ func TestProbeReadinessJobClaimerKeepsLeaseUnavailableOnFailure(t *testing.T) {
 	}
 	if payload["scraping_paused"] != true {
 		t.Fatalf("scraping_paused = %v, want true", payload["scraping_paused"])
+	}
+}
+
+func TestReadinessReportingBudgetLimiterMarksBackendUnavailableOnError(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	limiter := newReadinessReportingBudgetLimiter(&readinessBudgetLimiterStub{
+		err: fmt.Errorf("valkey unavailable"),
+	}, state)
+
+	_, _, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+
+	if err == nil {
+		t.Fatal("TryReserve error = nil, want error")
+	}
+	statusCode, payload := state.Response()
+	if statusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
+	}
+	if payload["budget_backend_available"] != false {
+		t.Fatalf("budget_backend_available = %v, want false", payload["budget_backend_available"])
+	}
+	if payload["scraping_paused"] != true {
+		t.Fatalf("scraping_paused = %v, want true", payload["scraping_paused"])
+	}
+}
+
+func TestReadinessReportingBudgetLimiterMarksBudgetExhausted(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	limiter := newReadinessReportingBudgetLimiter(&readinessBudgetLimiterStub{
+		decision: poller.BudgetDecision{Allowed: false, Reason: "budget_exhausted"},
+	}, state)
+
+	_, decision, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetSourceHolodexLive), time.Minute)
+
+	if err != nil {
+		t.Fatalf("TryReserve error = %v, want nil", err)
+	}
+	if decision.Allowed {
+		t.Fatal("decision.Allowed = true, want false")
+	}
+	statusCode, payload := state.Response()
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["budget_backend_available"] != true {
+		t.Fatalf("budget_backend_available = %v, want true", payload["budget_backend_available"])
+	}
+	if payload["budget_exhausted"] != true {
+		t.Fatalf("budget_exhausted = %v, want true", payload["budget_exhausted"])
+	}
+	if payload["source_cooldown"] != false {
+		t.Fatalf("source_cooldown = %v, want false", payload["source_cooldown"])
+	}
+	wantSources := []string{"holodex_live", "youtube_scraper"}
+	if !reflect.DeepEqual(payload["affected_sources"], wantSources) {
+		t.Fatalf("affected_sources = %v, want %v", payload["affected_sources"], wantSources)
+	}
+}
+
+func TestReadinessReportingBudgetLimiterMarksSourceCooldown(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	limiter := newReadinessReportingBudgetLimiter(&readinessBudgetLimiterStub{
+		decision: poller.BudgetDecision{Allowed: false, Reason: "source_cooldown"},
+	}, state)
+
+	_, _, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "live"}, readinessBudgetProfile(poller.BudgetSourceHolodexLive), time.Minute)
+
+	if err != nil {
+		t.Fatalf("TryReserve error = %v, want nil", err)
+	}
+	statusCode, payload := state.Response()
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["budget_exhausted"] != false {
+		t.Fatalf("budget_exhausted = %v, want false", payload["budget_exhausted"])
+	}
+	if payload["source_cooldown"] != true {
+		t.Fatalf("source_cooldown = %v, want true", payload["source_cooldown"])
+	}
+	wantSources := []string{"holodex_live"}
+	if !reflect.DeepEqual(payload["affected_sources"], wantSources) {
+		t.Fatalf("affected_sources = %v, want %v", payload["affected_sources"], wantSources)
+	}
+}
+
+func TestReadinessReportingBudgetLimiterAllowedClearsAdmissionAndBackend(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	state.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
+	limiter := newReadinessReportingBudgetLimiter(&readinessBudgetLimiterStub{
+		decision: poller.BudgetDecision{Allowed: true},
+	}, state)
+
+	_, decision, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+
+	if err != nil {
+		t.Fatalf("TryReserve error = %v, want nil", err)
+	}
+	if !decision.Allowed {
+		t.Fatal("decision.Allowed = false, want true")
+	}
+	statusCode, payload := state.Response()
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["budget_backend_available"] != true {
+		t.Fatalf("budget_backend_available = %v, want true", payload["budget_backend_available"])
+	}
+	if payload["budget_exhausted"] != false {
+		t.Fatalf("budget_exhausted = %v, want false", payload["budget_exhausted"])
+	}
+	if payload["source_cooldown"] != false {
+		t.Fatalf("source_cooldown = %v, want false", payload["source_cooldown"])
+	}
+	wantSources := []string{}
+	if !reflect.DeepEqual(payload["affected_sources"], wantSources) {
+		t.Fatalf("affected_sources = %v, want empty slice", payload["affected_sources"])
+	}
+}
+
+func readinessBudgetProfile(sources ...poller.BudgetSource) poller.BudgetProfile {
+	sourceUnits := make(map[poller.BudgetSource]float64, len(sources))
+	for _, source := range sources {
+		sourceUnits[source] = 1
+	}
+	return poller.BudgetProfile{
+		SourceUnits: sourceUnits,
+		BurstClass:  poller.BudgetBurstPrimary,
+		Priority:    poller.BudgetPriorityNormal,
 	}
 }

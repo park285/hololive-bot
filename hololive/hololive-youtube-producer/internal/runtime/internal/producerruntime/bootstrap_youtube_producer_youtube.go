@@ -115,6 +115,10 @@ func buildIngestionRuntimeYouTubeDependencies(
 	readinessState *readiness.State,
 ) (ingestionRuntimeYouTubeDependencies, error) {
 	deps := ingestionRuntimeYouTubeDependencies{}
+	budgetCfg := config.LoadYouTubeProducerGlobalBudgetConfig()
+	if readinessState != nil {
+		readinessState.SetGlobalBudgetEnabled(budgetCfg.Enabled)
+	}
 	if !enabled {
 		return deps, nil
 	}
@@ -129,6 +133,10 @@ func buildIngestionRuntimeYouTubeDependencies(
 		return deps, err
 	}
 	jobClaimer = newReadinessReportingJobClaimer(jobClaimer, readinessState)
+	budgetWiring, err := buildIngestionRuntimeGlobalBudgetWiring(appConfig, infra, budgetCfg, readinessState)
+	if err != nil {
+		return deps, err
+	}
 	if appConfig.Scraper.ActiveActive.Enabled {
 		probeReadinessJobClaimer(ctx, jobClaimer, logger)
 	}
@@ -145,6 +153,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 	deps.scraperScheduler, deps.pollerRegistrations, err = polling.BuildComponentsWithJobClaimer(
 		appConfig.Scraper,
 		jobClaimer,
+		budgetWiring,
 		infra.postgresService,
 		state.pollTargets.NotificationChannelIDs,
 		state.pollTargets.StatsChannelIDs,
@@ -161,6 +170,50 @@ func buildIngestionRuntimeYouTubeDependencies(
 	deps.pollTargetRefresher = buildPollTargetRefresher(appConfig, infra, deps, state, logger)
 	deps.youtubeScheduler = infra.ytStack.Scheduler
 	return deps, nil
+}
+
+func buildIngestionRuntimeGlobalBudgetWiring(
+	appConfig *config.Config,
+	infra *youtubeProducerInfrastructure,
+	budgetCfg config.YouTubeProducerGlobalBudgetConfig,
+	readinessState *readiness.State,
+) (polling.GlobalBudgetWiring, error) {
+	if !budgetCfg.Enabled {
+		return polling.GlobalBudgetWiring{}, nil
+	}
+	namespace := strings.TrimSpace(appConfig.Scraper.ActiveActive.Namespace)
+	if namespace == "" {
+		return polling.GlobalBudgetWiring{}, fmt.Errorf("build global budget limiter: active-active namespace must not be empty")
+	}
+	instanceID := strings.TrimSpace(appConfig.Scraper.ActiveActive.InstanceID)
+	limiter, err := polling.NewGlobalBudgetLimiter(infra.cacheService, polling.GlobalBudgetLimiterConfig{
+		Namespace:  namespace,
+		InstanceID: instanceID,
+		SourceMaxInflight: map[poller.BudgetSource]int{
+			poller.BudgetSourceYouTubeScraper:  budgetCfg.YouTubeScraperMaxInflight,
+			poller.BudgetSourceHolodexLive:     budgetCfg.HolodexLiveMaxInflight,
+			poller.BudgetSourceBrowserSnapshot: budgetCfg.BrowserSnapshotMaxInflight,
+		},
+		ClassMaxInflight: map[poller.BudgetBurstClass]int{
+			poller.BudgetBurstBackfill: budgetCfg.BackfillMaxInflight,
+			poller.BudgetBurstFallback: budgetCfg.FallbackMaxInflight,
+		},
+		WindowCheckEnabled: budgetCfg.WindowCheckEnabled,
+	})
+	if err != nil {
+		return polling.GlobalBudgetWiring{}, fmt.Errorf("build global budget limiter: %w", err)
+	}
+	limiter = newReadinessReportingBudgetLimiter(limiter, readinessState)
+	return polling.GlobalBudgetWiring{
+		Limiter: limiter,
+		Context: poller.BudgetContext{
+			Namespace:  namespace,
+			InstanceID: instanceID,
+			Enabled:    true,
+		},
+		AcquireTimeout:      budgetCfg.AcquireTimeout,
+		ActiveInstanceCount: budgetCfg.ActiveInstanceCount,
+	}, nil
 }
 
 func startActiveActiveRecoveryLoopIfEnabled(

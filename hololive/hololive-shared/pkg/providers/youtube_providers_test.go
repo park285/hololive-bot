@@ -29,6 +29,17 @@ type namedNoopPoller struct {
 func (p namedNoopPoller) Poll(context.Context, string) error { return nil }
 func (p namedNoopPoller) Name() string                       { return p.name }
 
+type providerBudgetLimiterStub struct{}
+
+func (providerBudgetLimiterStub) TryReserve(
+	context.Context,
+	poller.BudgetJob,
+	poller.BudgetProfile,
+	time.Duration,
+) (poller.BudgetReservation, poller.BudgetDecision, error) {
+	return nil, poller.BudgetDecision{Allowed: true}, nil
+}
+
 type testMemberDataProvider struct {
 	members []*domain.Member
 }
@@ -279,6 +290,49 @@ func TestProvideScraperScheduler_RegistersSyntheticGlobalPollerWithoutDefaults(t
 	}
 }
 
+func TestNewScraperSchedulerMapsBudgetOptions(t *testing.T) {
+	t.Parallel()
+
+	limiter := providerBudgetLimiterStub{}
+	budgetContext := poller.BudgetContext{Namespace: "production", InstanceID: "ap-a", Enabled: true}
+	scheduler := newScraperScheduler(
+		resolveScraperSchedulerOptions(
+			WithSchedulerBudgetLimiter(limiter),
+			WithSchedulerBudgetContext(budgetContext),
+			WithSchedulerBudgetAcquireTimeout(250*time.Millisecond),
+		),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+
+	assert.Equal(t, limiter, providerSchedulerField(t, scheduler, "budgetLimiter").Interface())
+	assert.Equal(t, budgetContext, providerSchedulerField(t, scheduler, "budgetContext").Interface())
+	assert.Equal(t, 250*time.Millisecond, providerSchedulerField(t, scheduler, "budgetAcquireTimeout").Interface())
+}
+
+func TestProvideScraperSchedulerRegistersBudgetProfiles(t *testing.T) {
+	t.Parallel()
+
+	profile := poller.BudgetProfile{
+		SourceUnits: map[poller.BudgetSource]float64{
+			poller.BudgetSourceYouTubeScraper: 2,
+			poller.BudgetSourcePostgresWrite:  1,
+		},
+		BurstClass: poller.BudgetBurstPrimary,
+		Priority:   poller.BudgetPriorityNormal,
+	}
+	scheduler := ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		WithChannelPollerRegistrations([]ChannelPollerRegistration{
+			NewChannelPollerRegistration(namedNoopPoller{name: "videos"}, poller.PriorityNormal, 15*time.Minute).
+				WithChannelIDs([]string{"UC_A"}).
+				WithBudgetProfile(profile),
+		}),
+	)
+
+	assert.Equal(t, profile, providerJobBudgetProfile(t, scheduler, "UC_A:videos"))
+}
+
 func TestProvideScraperScheduler_SeparatesExpectedRPMFromFaultEnvelope(t *testing.T) {
 	t.Parallel()
 
@@ -321,12 +375,7 @@ func TestEstimatedRegistrationRPMUsesRequestsPerRunNotWorstCaseUnits(t *testing.
 func providerJobKeys(t *testing.T, scheduler *poller.Scheduler) []string {
 	t.Helper()
 
-	field := reflect.ValueOf(scheduler).Elem().FieldByName("jobMap")
-	if !field.IsValid() {
-		t.Fatal("jobMap field must exist")
-	}
-
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	field := providerSchedulerField(t, scheduler, "jobMap")
 	keys := make([]string, 0, field.Len())
 	iterator := field.MapRange()
 	for iterator.Next() {
@@ -334,6 +383,34 @@ func providerJobKeys(t *testing.T, scheduler *poller.Scheduler) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+func providerJobBudgetProfile(t *testing.T, scheduler *poller.Scheduler, key string) poller.BudgetProfile {
+	t.Helper()
+
+	jobMap := providerSchedulerField(t, scheduler, "jobMap")
+	jobValue := jobMap.MapIndex(reflect.ValueOf(key))
+	if !jobValue.IsValid() {
+		t.Fatalf("job %q must exist", key)
+	}
+	field := jobValue.Elem().FieldByName("budgetProfile")
+	if !field.IsValid() {
+		t.Fatal("budgetProfile field must exist")
+	}
+
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	return field.Interface().(poller.BudgetProfile)
+}
+
+func providerSchedulerField(t *testing.T, scheduler *poller.Scheduler, name string) reflect.Value {
+	t.Helper()
+
+	field := reflect.ValueOf(scheduler).Elem().FieldByName(name)
+	if !field.IsValid() {
+		t.Fatalf("%s field must exist", name)
+	}
+
+	return reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
 }
 
 func repeatProviderChannelIDs(prefix string, count int) []string {

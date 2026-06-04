@@ -2,6 +2,7 @@ package readiness
 
 import (
 	"net/http"
+	"reflect"
 	"testing"
 )
 
@@ -136,5 +137,95 @@ func TestStateResponseActiveActiveRecoversFromStartupFailClosed(t *testing.T) {
 	}
 	if state.LeaseAvailable() != true {
 		t.Fatal("LeaseAvailable() = false, want true after recovery")
+	}
+}
+
+func TestStateResponseBudgetBackendUnavailableIsNotReady(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	state.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
+
+	statusCode, payload := state.Response()
+
+	if statusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
+	}
+	if payload["status"] != "not_ready" {
+		t.Fatalf("status = %v, want not_ready", payload["status"])
+	}
+	if payload["budget_backend_available"] != false {
+		t.Fatalf("budget_backend_available = %v, want false", payload["budget_backend_available"])
+	}
+	if payload["scraping_paused"] != true {
+		t.Fatalf("scraping_paused = %v, want true", payload["scraping_paused"])
+	}
+}
+
+func TestStateResponseBudgetAdmissionDeniedDoesNotChangeHTTPReadiness(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper", "holodex_live", "youtube_scraper"})
+	state.MarkBudgetAdmissionDenied("source_cooldown", []string{"browser_snapshot", "holodex_live"})
+
+	statusCode, payload := state.Response()
+
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["status"] != "ready" {
+		t.Fatalf("status = %v, want ready", payload["status"])
+	}
+	if payload["budget_backend_available"] != true {
+		t.Fatalf("budget_backend_available = %v, want true", payload["budget_backend_available"])
+	}
+	if payload["budget_exhausted"] != true {
+		t.Fatalf("budget_exhausted = %v, want true", payload["budget_exhausted"])
+	}
+	if payload["source_cooldown"] != true {
+		t.Fatalf("source_cooldown = %v, want true", payload["source_cooldown"])
+	}
+	wantSources := []string{"browser_snapshot", "holodex_live", "youtube_scraper"}
+	if !reflect.DeepEqual(payload["affected_sources"], wantSources) {
+		t.Fatalf("affected_sources = %v, want %v", payload["affected_sources"], wantSources)
+	}
+	if payload["scraping_paused"] != false {
+		t.Fatalf("scraping_paused = %v, want false", payload["scraping_paused"])
+	}
+}
+
+func TestStateResponseBudgetDisabledIgnoresBudgetState(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled: true,
+	})
+	state.MarkRunning()
+	state.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
+
+	statusCode, payload := state.Response()
+
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["budget_backend_available"] != true {
+		t.Fatalf("budget_backend_available = %v, want true", payload["budget_backend_available"])
+	}
+	if payload["budget_exhausted"] != false {
+		t.Fatalf("budget_exhausted = %v, want false", payload["budget_exhausted"])
+	}
+	if payload["source_cooldown"] != false {
+		t.Fatalf("source_cooldown = %v, want false", payload["source_cooldown"])
+	}
+	wantSources := []string{}
+	if !reflect.DeepEqual(payload["affected_sources"], wantSources) {
+		t.Fatalf("affected_sources = %v, want empty slice", payload["affected_sources"])
+	}
+	if payload["scraping_paused"] != false {
+		t.Fatalf("scraping_paused = %v, want false", payload["scraping_paused"])
 	}
 }
