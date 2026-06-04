@@ -171,6 +171,30 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers
 	}
 }
 
+func TestStoreDiskCachedImage_PrunesStaleMonthHashes(t *testing.T) {
+	dir := t.TempDir()
+	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+	png := tinyPNG(t)
+
+	old := calendarCacheKey{year: 2026, month: 6, entriesHash: "old"}
+	fresh := calendarCacheKey{year: 2026, month: 6, entriesHash: "new"}
+	otherMonth := calendarCacheKey{year: 2026, month: 7, entriesHash: "keep"}
+
+	r.storeDiskCachedImage(old, png)
+	r.storeDiskCachedImage(otherMonth, png)
+	r.storeDiskCachedImage(fresh, png)
+
+	if _, ok := r.diskCachedImage(old); ok {
+		t.Fatal("stale same-month hash should be pruned")
+	}
+	if _, ok := r.diskCachedImage(fresh); !ok {
+		t.Fatal("latest same-month hash should remain")
+	}
+	if _, ok := r.diskCachedImage(otherMonth); !ok {
+		t.Fatal("other-month entry must not be pruned")
+	}
+}
+
 func TestCalendarCardRenderer_RenderCalendarImage_CoalescesConcurrentMonthlyCacheMisses(t *testing.T) {
 	var requests atomic.Int32
 	pngData := tinyPNG(t)
