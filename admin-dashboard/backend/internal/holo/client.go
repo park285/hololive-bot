@@ -48,6 +48,8 @@ func NewClient(baseURL, apiKey string) (*Client, error) {
 	}, nil
 }
 
+const maxProxyBodyBytes = 8 << 20
+
 func (c *Client) Proxy(ctx context.Context, method, path string, query url.Values, body []byte) (ProxyResponse, error) {
 	req, err := c.buildRequest(ctx, method, path, query, body)
 	if err != nil {
@@ -58,8 +60,11 @@ func (c *Client) Proxy(ctx context.Context, method, path string, query url.Value
 		return ProxyResponse{}, httpx.BadGateway()
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxProxyBodyBytes+1))
 	if err != nil {
+		return ProxyResponse{}, httpx.BadGateway()
+	}
+	if len(respBody) > maxProxyBodyBytes {
 		return ProxyResponse{}, httpx.BadGateway()
 	}
 	if resp.StatusCode >= 500 {
