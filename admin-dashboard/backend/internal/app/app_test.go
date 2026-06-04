@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/park285/shared-go/pkg/json"
 	"github.com/park285/shared-go/pkg/logging"
 	"github.com/stretchr/testify/require"
@@ -129,6 +130,7 @@ func newTestRuntime(t *testing.T, store sessionStore, mutate func(*config.Config
 		sessions:        store,
 		rateLimiter:     auth.NewLoginRateLimiter(),
 		statusCollector: status.NewCollector(nil, "test"),
+		statsHub:        status.NewHub(nil),
 		static:          static.NewHandler(),
 		wsStreams:       make(chan struct{}, maxSystemStatsStreams),
 		openapiJSON:     openapiJSON,
@@ -444,6 +446,34 @@ func TestWSOriginRejected(t *testing.T) {
 	req.AddCookie(signedSessionCookie(sess.ID))
 	req.Header.Set("Origin", "https://evil.test")
 	require.Equal(t, http.StatusForbidden, doRequest(rt.Handler(), req).Code)
+}
+
+func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
+	sess := liveSession("ws-replay-session")
+	rt := newTestRuntime(t, storeWith(sess), nil)
+	rt.statsHub.Publish(status.SystemStats{ThreadCount: 1})
+	rt.statsHub.Publish(status.SystemStats{ThreadCount: 2})
+
+	server := httptest.NewServer(rt.Handler())
+	defer server.Close()
+
+	header := http.Header{}
+	header.Set("Origin", "https://ok.test")
+	header.Set("Cookie", signedSessionCookie(sess.ID).String())
+	conn, resp, err := websocket.DefaultDialer.Dial(
+		"ws"+strings.TrimPrefix(server.URL, "http")+"/admin/api/ws/system-stats", header)
+	require.NoError(t, err)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	defer conn.Close()
+
+	for want := 1; want <= 2; want++ {
+		require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+		var frame status.SystemStats
+		require.NoError(t, conn.ReadJSON(&frame))
+		require.Equal(t, want, frame.ThreadCount)
+	}
 }
 
 func TestOpenAPIToggle(t *testing.T) {

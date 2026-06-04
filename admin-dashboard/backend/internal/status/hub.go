@@ -4,12 +4,15 @@ import (
 	"context"
 	"net/http"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/park285/shared-go/pkg/json"
 )
+
+const historyCap = 30
 
 type Hub struct {
 	endpoints []ServiceEndpoint
@@ -18,6 +21,7 @@ type Hub struct {
 	mu        sync.Mutex
 	nextID    int64
 	subs      map[int64]chan SystemStats
+	history   []SystemStats
 	stop      chan struct{}
 	done      chan struct{}
 }
@@ -56,13 +60,10 @@ func (h *Hub) tick(tick <-chan time.Time) bool {
 }
 
 func (h *Hub) broadcastSample() {
-	if h.receiverCount() == 0 {
-		return
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	stats := h.collect(ctx)
 	cancel()
-	h.publish(stats)
+	h.Publish(stats)
 }
 
 func (h *Hub) Stop() {
@@ -75,14 +76,14 @@ func (h *Hub) Stop() {
 	<-h.done
 }
 
-func (h *Hub) Subscribe() (chan SystemStats, func()) {
+func (h *Hub) Subscribe() ([]SystemStats, chan SystemStats, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.nextID++
 	id := h.nextID
 	ch := make(chan SystemStats, 4)
 	h.subs[id] = ch
-	return ch, func() {
+	return slices.Clone(h.history), ch, func() {
 		h.mu.Lock()
 		delete(h.subs, id)
 		close(ch)
@@ -90,15 +91,13 @@ func (h *Hub) Subscribe() (chan SystemStats, func()) {
 	}
 }
 
-func (h *Hub) receiverCount() int {
+func (h *Hub) Publish(stats SystemStats) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return len(h.subs)
-}
-
-func (h *Hub) publish(stats SystemStats) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.history = append(h.history, stats)
+	if len(h.history) > historyCap {
+		h.history = h.history[len(h.history)-historyCap:]
+	}
 	for _, ch := range h.subs {
 		select {
 		case ch <- stats:
