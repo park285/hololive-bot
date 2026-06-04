@@ -348,6 +348,25 @@ WithBudgetProfile(poller.BudgetProfile{
 
 `live` fallback은 Holodex provider 내부에서 별도로 `BudgetSourceYouTubeScraper`를 debit합니다.
 
+### 필수 `BudgetProfile` matrix
+
+구현자는 아래 matrix를 모두 채워야 합니다. `BudgetProfile`이 없는 registration은 startup validator에서 실패시킵니다.
+
+| Job | SourceUnits | BurstClass | Priority | 비고 |
+|---|---|---|---|---|
+| `videos` | `youtube_scraper=videosWorstCaseRequestUnits()`, `postgres_write=1` | `primary` | `normal` | 기존 worst-case unit 유지 |
+| `shorts` | `youtube_scraper=shortsWorstCaseRequestUnits(...)`, `postgres_write=1` | `primary` | `normal` 또는 registration priority | inline published_at resolver 반영 |
+| `community` | `youtube_scraper=communityWorstCaseRequestUnits(...)`, `postgres_write=1` | `primary` | `normal` 또는 registration priority | inline published_at resolver 반영 |
+| `stats` | `youtube_scraper=FetchPageMaxAttempts`, `postgres_write=1` | `primary` | `low` | stats target만 적용 |
+| `live` | `holodex_live=1`, `postgres_write=1` | `primary` | `high` | fallback scraper는 별도 reservation |
+| `pending_published_at_resolver` | `youtube_scraper=maxResolvePerRun*MetadataResolveFetchPolicy.MaxAttempts`, `postgres_write=1` | `primary` | `low` | global synthetic target |
+| `shorts_backfill` | `youtube_scraper=shortsWorstCaseRequestUnits(...)`, `postgres_write=1` | `backfill` | `low` | backfill enabled일 때만 |
+| `community_backfill` | `youtube_scraper=communityWorstCaseRequestUnits(...)`, `postgres_write=1` | `backfill` | `low` | backfill enabled일 때만 |
+| `live_backfill` | `holodex_live=1`, `postgres_write=1` | `backfill` | `low` | fallback scraper는 별도 reservation |
+| Holodex live fallback | `youtube_scraper=len(channelIDs)` | `fallback` | `high` 또는 `normal` | Holodex service 내부에서 reserve |
+
+`BudgetSourceProxy`와 `BudgetSourceBrowserSnapshot`은 scraper client가 실제로 proxy 또는 browser snapshot path를 사용할 때만 추가합니다. source unit을 모르면 0으로 추정하지 말고 해당 source profile을 생략합니다.
+
 ---
 
 ## D-002. active-active budget 계산은 sustained rate와 burst concurrency를 분리한다
