@@ -187,6 +187,40 @@ func loadScraperActiveActiveConfig() ScraperActiveActiveConfig {
 	}
 }
 
+func LoadYouTubeProducerGlobalBudgetConfig() YouTubeProducerGlobalBudgetConfig {
+	defaults := DefaultYouTubeProducerGlobalBudgetConfig()
+	return YouTubeProducerGlobalBudgetConfig{
+		Enabled:                    sharedenv.Bool("YOUTUBE_PRODUCER_GLOBAL_BUDGET_ENABLED", defaults.Enabled),
+		AcquireTimeout:             loadYouTubeProducerBudgetAcquireTimeout(defaults.AcquireTimeout),
+		ActiveInstanceCount:        sharedenv.Int("YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT", defaults.ActiveInstanceCount),
+		YouTubeScraperMaxInflight:  loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_YOUTUBE_SCRAPER_MAX_INFLIGHT", defaults.YouTubeScraperMaxInflight),
+		HolodexLiveMaxInflight:     loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_HOLODEX_LIVE_MAX_INFLIGHT", defaults.HolodexLiveMaxInflight),
+		BrowserSnapshotMaxInflight: loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_BROWSER_SNAPSHOT_MAX_INFLIGHT", defaults.BrowserSnapshotMaxInflight),
+		BackfillMaxInflight:        loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_BACKFILL_MAX_INFLIGHT", defaults.BackfillMaxInflight),
+		FallbackMaxInflight:        loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_FALLBACK_MAX_INFLIGHT", defaults.FallbackMaxInflight),
+		WindowCheckEnabled:         sharedenv.Bool("YOUTUBE_PRODUCER_BUDGET_WINDOW_CHECK_ENABLED", defaults.WindowCheckEnabled),
+	}
+}
+
+func loadYouTubeProducerBudgetAcquireTimeout(defaultTimeout time.Duration) time.Duration {
+	timeout := time.Duration(sharedenv.Int("YOUTUBE_PRODUCER_BUDGET_ACQUIRE_TIMEOUT_MS", int(defaultTimeout/time.Millisecond))) * time.Millisecond
+	if timeout <= 0 {
+		return defaultTimeout
+	}
+	if timeout > 5*time.Second {
+		return 5 * time.Second
+	}
+	return timeout
+}
+
+func loadYouTubeProducerBudgetMaxInflight(key string, defaultValue int) int {
+	value := sharedenv.Int(key, defaultValue)
+	if value < 0 {
+		return 0
+	}
+	return value
+}
+
 func loadWorkerPoolConfig(profile workerconfig.IrisBotWebhookWorkerProfile) WorkerPoolConfig {
 	return WorkerPoolConfig{
 		Workers:   profile.BotPool.Workers,
