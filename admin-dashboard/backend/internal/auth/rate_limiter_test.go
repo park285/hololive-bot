@@ -49,6 +49,50 @@ func TestRateLimiterCleanupDropsStaleEntries(t *testing.T) {
 	require.Empty(t, limiter.attempts)
 }
 
+func TestRateLimiterCleanupKeepsActiveLockoutAfterWindowExpires(t *testing.T) {
+	limiter := NewLoginRateLimiter()
+	now := time.Now()
+	limiter.now = func() time.Time { return now }
+	ip := "203.0.113.6"
+	limiter.attempts[ip] = attemptInfo{
+		count:        limiter.maxAttempts,
+		firstAttempt: now.Add(-10 * time.Minute),
+		lockedUntil:  now.Add(10 * time.Minute),
+	}
+
+	limiter.cleanup(now)
+
+	allowed, retryAfter := limiter.IsAllowed(ip)
+	require.False(t, allowed)
+	require.Greater(t, retryAfter, time.Duration(0))
+
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	require.Contains(t, limiter.attempts, ip)
+}
+
+func TestRateLimiterCleanupDropsExpiredLockoutAndAllowsLogin(t *testing.T) {
+	limiter := NewLoginRateLimiter()
+	now := time.Now()
+	limiter.now = func() time.Time { return now }
+	ip := "203.0.113.7"
+	limiter.attempts[ip] = attemptInfo{
+		count:        limiter.maxAttempts,
+		firstAttempt: now.Add(-10 * time.Minute),
+		lockedUntil:  now.Add(-time.Minute),
+	}
+
+	limiter.cleanup(now)
+
+	limiter.mu.Lock()
+	require.NotContains(t, limiter.attempts, ip)
+	limiter.mu.Unlock()
+
+	allowed, retryAfter := limiter.IsAllowed(ip)
+	require.True(t, allowed)
+	require.Zero(t, retryAfter)
+}
+
 func TestRateLimiterStartStop(t *testing.T) {
 	limiter := NewLoginRateLimiter()
 	limiter.Start()

@@ -17,6 +17,7 @@ type LoginRateLimiter struct {
 	maxAttempts int
 	window      time.Duration
 	lockout     time.Duration
+	now         func() time.Time
 	stop        chan struct{}
 	done        chan struct{}
 }
@@ -27,6 +28,7 @@ func NewLoginRateLimiter() *LoginRateLimiter {
 		maxAttempts: 5,
 		window:      5 * time.Minute,
 		lockout:     15 * time.Minute,
+		now:         time.Now,
 		stop:        make(chan struct{}),
 		done:        make(chan struct{}),
 	}
@@ -49,7 +51,7 @@ func (l *LoginRateLimiter) cleanupTick(tick <-chan time.Time) bool {
 	case <-l.stop:
 		return false
 	case <-tick:
-		l.cleanup(time.Now())
+		l.cleanup(l.now())
 		return true
 	}
 }
@@ -67,14 +69,14 @@ func (l *LoginRateLimiter) Stop() {
 func (l *LoginRateLimiter) IsAllowed(ip string) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	now := time.Now()
+	now := l.now()
 	info, ok := l.attempts[ip]
 	if !ok {
 		return true, 0
 	}
 	if !info.lockedUntil.IsZero() {
 		if now.Before(info.lockedUntil) {
-			return false, time.Until(info.lockedUntil)
+			return false, info.lockedUntil.Sub(now)
 		}
 		delete(l.attempts, ip)
 		return true, 0
@@ -89,7 +91,7 @@ func (l *LoginRateLimiter) IsAllowed(ip string) (bool, time.Duration) {
 func (l *LoginRateLimiter) RecordFailure(ip string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	now := time.Now()
+	now := l.now()
 	info := l.attempts[ip]
 	if info.firstAttempt.IsZero() || now.Sub(info.firstAttempt) > l.window {
 		info = attemptInfo{firstAttempt: now}
@@ -112,7 +114,13 @@ func (l *LoginRateLimiter) cleanup(now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for ip, info := range l.attempts {
-		if (!info.lockedUntil.IsZero() && now.After(info.lockedUntil)) || now.Sub(info.firstAttempt) > l.window {
+		if !info.lockedUntil.IsZero() {
+			if now.After(info.lockedUntil) {
+				delete(l.attempts, ip)
+			}
+			continue
+		}
+		if now.Sub(info.firstAttempt) > l.window {
 			delete(l.attempts, ip)
 		}
 	}
