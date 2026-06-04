@@ -89,7 +89,11 @@ func (l readinessReportingBudgetLimiter) TryReserve(
 	l.readiness.MarkBudgetBackendAvailable()
 	sources := budgetProfileSources(profile)
 	if !decision.Allowed {
-		l.readiness.MarkBudgetAdmissionDenied(decision.Reason, sources)
+		denied := sources
+		if decision.AffectedSource != "" {
+			denied = []string{decision.AffectedSource}
+		}
+		l.readiness.MarkBudgetAdmissionDenied(decision.Reason, denied)
 		return reservation, decision, nil
 	}
 	l.readiness.ClearBudgetAdmission(sources)
