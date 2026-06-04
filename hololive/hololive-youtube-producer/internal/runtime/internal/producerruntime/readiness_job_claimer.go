@@ -21,11 +21,26 @@ type readinessReportingJobClaimer struct {
 	readiness *readiness.State
 }
 
+type readinessReportingBudgetLimiter struct {
+	inner     poller.GlobalBudgetLimiter
+	readiness *readiness.State
+}
+
 func newReadinessReportingJobClaimer(inner poller.JobClaimer, state *readiness.State) poller.JobClaimer {
 	if inner == nil || state == nil {
 		return inner
 	}
 	return readinessReportingJobClaimer{
+		inner:     inner,
+		readiness: state,
+	}
+}
+
+func newReadinessReportingBudgetLimiter(inner poller.GlobalBudgetLimiter, state *readiness.State) poller.GlobalBudgetLimiter {
+	if inner == nil || state == nil {
+		return inner
+	}
+	return readinessReportingBudgetLimiter{
 		inner:     inner,
 		readiness: state,
 	}
@@ -53,6 +68,40 @@ func (c readinessReportingJobClaimer) TryClaim(
 	c.readiness.MarkLeaseAvailable()
 	slog.Debug("active_active_lease_available", slog.String("poller", pollerName))
 	return status, claim, nil
+}
+
+func (l readinessReportingBudgetLimiter) TryReserve(
+	ctx context.Context,
+	job poller.BudgetJob,
+	profile poller.BudgetProfile,
+	ttl time.Duration,
+) (poller.BudgetReservation, poller.BudgetDecision, error) {
+	reservation, decision, err := l.inner.TryReserve(ctx, job, profile, ttl)
+	if err != nil {
+		l.readiness.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
+		slog.Warn("global_budget_paused",
+			slog.String("reason", "valkey_unavailable_global_budget_fail_closed"),
+			slog.String("poller", job.PollerName),
+			slog.Any("error", err),
+		)
+		return reservation, decision, err
+	}
+	l.readiness.MarkBudgetBackendAvailable()
+	sources := budgetProfileSources(profile)
+	if !decision.Allowed {
+		l.readiness.MarkBudgetAdmissionDenied(decision.Reason, sources)
+		return reservation, decision, nil
+	}
+	l.readiness.ClearBudgetAdmission(sources)
+	return reservation, decision, nil
+}
+
+func budgetProfileSources(profile poller.BudgetProfile) []string {
+	sources := make([]string, 0, len(profile.SourceUnits))
+	for source := range profile.SourceUnits {
+		sources = append(sources, string(source))
+	}
+	return sources
 }
 
 func probeReadinessJobClaimer(ctx context.Context, claimer poller.JobClaimer, logger *slog.Logger) {

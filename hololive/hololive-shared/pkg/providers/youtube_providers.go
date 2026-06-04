@@ -159,6 +159,11 @@ func newScraperScheduler(opts scraperSchedulerOptions, logger *slog.Logger) *pol
 		schedulerConfig.ErrorBackoffMax = opts.errorBackoffMax
 	}
 	schedulerConfig.JobClaimer = opts.jobClaimer
+	schedulerConfig.BudgetLimiter = opts.budgetLimiter
+	schedulerConfig.BudgetContext = opts.budgetContext
+	if opts.budgetAcquireTimeout > 0 {
+		schedulerConfig.BudgetAcquireTimeout = opts.budgetAcquireTimeout
+	}
 	return poller.NewScheduler(schedulerConfig)
 }
 
@@ -218,7 +223,7 @@ func registerScraperSchedulerPollers(
 
 		registeredTargets := 0
 		for _, channelID := range targetChannelIDs {
-			if err := scheduler.RegisterChecked(channelID, registration.Poller, registration.Priority, registration.Interval); err != nil {
+			if err := scheduler.RegisterCheckedWithBudgetProfile(channelID, registration.Poller, registration.Priority, registration.Interval, registration.BudgetProfile); err != nil {
 				logger.Warn("Skip invalid scraper poller registration",
 					slog.String("channel_id", channelID),
 					slog.String("poller", registration.Poller.Name()),

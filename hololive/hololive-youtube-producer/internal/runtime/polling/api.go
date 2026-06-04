@@ -2,6 +2,7 @@ package polling
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/providers"
@@ -12,6 +13,13 @@ import (
 )
 
 type BudgetSummary = youtubeProducerBudgetSummary
+
+type GlobalBudgetWiring struct {
+	Limiter             poller.GlobalBudgetLimiter
+	Context             poller.BudgetContext
+	AcquireTimeout      time.Duration
+	ActiveInstanceCount int
+}
 
 func BuildComponents(
 	scraperConfig config.ScraperConfig,
@@ -27,6 +35,7 @@ func BuildComponents(
 	return BuildComponentsWithJobClaimer(
 		scraperConfig,
 		nil,
+		GlobalBudgetWiring{},
 		postgresService,
 		notificationChannelIDs,
 		statsChannelIDs,
@@ -41,6 +50,7 @@ func BuildComponents(
 func BuildComponentsWithJobClaimer(
 	scraperConfig config.ScraperConfig,
 	jobClaimer poller.JobClaimer,
+	budgetWiring GlobalBudgetWiring,
 	postgresService database.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -53,6 +63,7 @@ func BuildComponentsWithJobClaimer(
 	return buildYouTubeProducerComponents(
 		scraperConfig,
 		jobClaimer,
+		budgetWiring,
 		postgresService,
 		notificationChannelIDs,
 		statsChannelIDs,

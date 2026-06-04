@@ -15,6 +15,7 @@ import (
 func buildYouTubeProducerComponents(
 	scraperConfig config.ScraperConfig,
 	jobClaimer poller.JobClaimer,
+	budgetWiring GlobalBudgetWiring,
 	postgresService database.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -39,6 +40,15 @@ func buildYouTubeProducerComponents(
 	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
 		return nil, nil, err
 	}
+	if err := validateRegistrationBudgetProfiles(pollerRegistrations); err != nil {
+		return nil, nil, err
+	}
+	sourceBudgetEstimate := estimateYouTubeProducerSourceBudget(
+		pollerRegistrations,
+		resolveYouTubeProducerActiveAPCount(budgetWiring.ActiveInstanceCount, scraperConfig.ActiveActive.Enabled),
+		scraperConfig.WorkerCountOrDefault(),
+	)
+	logYouTubeProducerSourceBudgetEstimate(sourceBudgetEstimate, logger)
 	budgetSummary := summarizeYouTubeProducerBudget(pollerRegistrations)
 	logYouTubeProducerBudgetSummary(budgetSummary, logger)
 	if err := validateYouTubeProducerPollerBudget(budgetSummary); err != nil {
@@ -46,15 +56,25 @@ func buildYouTubeProducerComponents(
 	}
 
 	schedulerConfig := scraperConfig.SchedulerOrDefault()
-	scraperScheduler := providers.ProvideScraperScheduler(
-		nil,
-		logger,
+	schedulerOptions := []providers.ScraperSchedulerOption{
 		providers.WithChannelPollerRegistrations(pollerRegistrations),
 		providers.WithSchedulerWorkerCount(scraperConfig.WorkerCountOrDefault()),
 		providers.WithSchedulerPollTimeout(schedulerConfig.PollTimeout),
 		providers.WithSchedulerErrorBackoff(schedulerConfig.ErrorBackoffMin, schedulerConfig.ErrorBackoffMax),
 		providers.WithSchedulerJobClaimer(jobClaimer),
-	)
+	}
+	if budgetWiring.Limiter != nil {
+		schedulerOptions = append(
+			schedulerOptions,
+			providers.WithSchedulerBudgetLimiter(budgetWiring.Limiter),
+			providers.WithSchedulerBudgetContext(budgetWiring.Context),
+		)
+	}
+	if budgetWiring.AcquireTimeout > 0 {
+		schedulerOptions = append(schedulerOptions, providers.WithSchedulerBudgetAcquireTimeout(budgetWiring.AcquireTimeout))
+	}
+
+	scraperScheduler := providers.ProvideScraperScheduler(nil, logger, schedulerOptions...)
 
 	return scraperScheduler, pollerRegistrations, nil
 }
