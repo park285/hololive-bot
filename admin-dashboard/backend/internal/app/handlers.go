@@ -99,6 +99,10 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 		return
 	}
 	defer conn.Close()
+	r.streamSystemStats(conn)
+}
+
+func (r *Runtime) streamSystemStats(conn *websocket.Conn) {
 	history, updates, unsubscribe := r.statsHub.Subscribe()
 	defer unsubscribe()
 	for _, stats := range history {
