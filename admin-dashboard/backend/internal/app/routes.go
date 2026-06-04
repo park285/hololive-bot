@@ -88,5 +88,7 @@ func (r *Runtime) handleFallback(c *gin.Context) {
 		ginjson.Respond(c, http.StatusNotFound, httpx.ErrorResponse{Error: "Not found"})
 		return
 	}
+	// gin NoRoute는 핸들러 진입 전에 status를 404로 선설정하므로 SPA fallback은 200을 명시해야 한다.
+	c.Status(http.StatusOK)
 	r.static.ServeIndex(c.Writer, c.Request)
 }
