@@ -33,8 +33,6 @@ x-security-hardening: &security-hardening
 
 x-app-service: &app-service
   <<: [*autoheal-service, *security-hardening]
-  env_file:
-    - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
 
 x-public-dns: &public-dns
   - 8.8.8.8
@@ -93,19 +91,19 @@ x-cache-env: &cache-env
   CACHE_PASSWORD: ${CACHE_PASSWORD:?CACHE_PASSWORD is required}
 
 x-postgres-env: &postgres-env
-  POSTGRES_HOST: host.docker.internal
-  POSTGRES_PORT: "5433"
+  POSTGRES_HOST: holo-postgres
+  POSTGRES_PORT: "5432"
   POSTGRES_SOCKET_PATH: ""
   POSTGRES_DB: hololive
   POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
   POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
   POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
   POSTGRES_AUTO_PREPARE_SCHEMA: "false"
 
 x-iris-env: &iris-env
   IRIS_BASE_URL: ${IRIS_BASE_URL:-}
-  IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
+  IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-}
   IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h3}
   IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/run/hololive-bot/certs/iris-ca.pem}
   IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
@@ -148,8 +146,22 @@ x-scraper-env: &scraper-env
 x-go-volumes: &go-volumes
   - ./data:/app/data
   - ./logs:/app/logs
+  - valkey-cache-socket:/var/run/valkey:ro
+
+x-hololive-bot-volumes: &hololive-bot-volumes
+  - ./data:/app/data
+  - ./logs:/app/logs
   - ./runtime-config:/app/runtime-config:ro
-  - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+  - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+  - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+  - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+  - valkey-cache-socket:/var/run/valkey:ro
+
+x-alarm-worker-volumes: &alarm-worker-volumes
+  - ./data:/app/data
+  - ./logs:/app/logs
+  - ./runtime-config:/app/runtime-config:ro
+  - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-go-basic-volumes: &go-basic-volumes
@@ -159,8 +171,6 @@ x-go-basic-volumes: &go-basic-volumes
 
 x-logs-runtime-cache-volumes: &logs-runtime-cache-volumes
   - ./logs:/app/logs
-  - ./runtime-config:/app/runtime-config:ro
-  - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-db-depends: &db-depends
@@ -227,7 +237,7 @@ services:
       HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
       HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
       PGDATA: /var/lib/postgresql/data/pgdata
-      PGPORT: "5433"
+      PGPORT: "5432"
     volumes:
       - holo-pg-data:/var/lib/postgresql/data
       - ./backups:/backups
@@ -236,13 +246,14 @@ services:
       - /tmp:size=64m,mode=1777
       - /var/run/postgresql:size=16m,mode=3775
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5433 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5433 -c 'SELECT 1' -q -t" ]
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     deploy: *deploy-512m
-    network_mode: host
+    networks:
+      - hololive-net
 
   valkey-cache:
     <<: *db-service
@@ -252,15 +263,13 @@ services:
       CACHE_PASSWORD: ${CACHE_PASSWORD:?CACHE_PASSWORD is required}
     ports:
       - "127.0.0.1:6379:6379"
-      # 원격 AP(osaka a·seoul b)의 lease 백엔드 경로 — Tailnet publish는 운영 전제(password 필수).
-      - "${VALKEY_PORT_BIND_IP:-100.100.1.3}:6379:6379"
     volumes:
       - valkey-cache-data:/data
       - valkey-cache-socket:/var/run/valkey
     command:
       - /bin/sh
       - -c
-      - exec valkey-server --unixsocket /var/run/valkey/valkey-cache.sock --unixsocketperm 777 --port 6379 --requirepass "$$CACHE_PASSWORD" --appendonly no --save "" --maxmemory 384mb --maxmemory-policy allkeys-lfu --loglevel notice --io-threads 4 --io-threads-do-reads yes --activedefrag yes --active-defrag-threshold-lower 10 --active-defrag-cycle-min 1 --active-defrag-cycle-max 25
+      - exec valkey-server --unixsocket /var/run/valkey/valkey-cache.sock --unixsocketperm 770 --port 6379 --requirepass "$$CACHE_PASSWORD" --appendonly no --save "" --maxmemory 384mb --maxmemory-policy allkeys-lfu --loglevel notice --io-threads 4 --io-threads-do-reads yes --activedefrag yes --active-defrag-threshold-lower 10 --active-defrag-cycle-min 1 --active-defrag-cycle-max 25
     sysctls:
       - net.core.somaxconn=1024
     healthcheck:
@@ -277,8 +286,8 @@ services:
     container_name: hololive-db-migrate
     restart: "no"
     environment:
-      PGHOST: 127.0.0.1
-      PGPORT: "5433"
+      PGHOST: holo-postgres
+      PGPORT: "5432"
       PGDATABASE: hololive
       PGUSER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
       PGPASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
@@ -297,7 +306,8 @@ services:
     logging: *default-logging
     security_opt:
       - no-new-privileges:true
-    network_mode: host
+    networks:
+      - hololive-net
 
   # Core Services
   hololive-bot:
@@ -309,6 +319,8 @@ services:
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
     container_name: hololive-kakao-bot-go
+    env_file:
+      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
       <<: [*app-file-log-env, *iris-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
       HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_HTTP_TRANSPORTS:-h3}
@@ -317,7 +329,7 @@ services:
       HOLOLIVE_H3_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
       HOLOLIVE_H3_KEY_FILE: ${HOLOLIVE_H3_KEY_FILE:-/run/hololive-bot/certs/hololive-h3.key}
       HEALTHCHECK_CA_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
-      HEALTHCHECK_SERVER_NAME: ${HOLOLIVE_H3_SERVER_NAME:-100.100.1.3}
+      HEALTHCHECK_SERVER_NAME: ${HOLOLIVE_H3_SERVER_NAME:-127.0.0.1}
       # Dockerfile 기본값은 GOGC=200이지만 운영 Compose에서는 메모리 상한을 우선해 60으로 낮춥니다.
       GOGC: "60"
       LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
@@ -335,10 +347,8 @@ services:
     dns: *public-dns
     ports:
       - "127.0.0.1:30001:30001"
-      - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001"
       - "127.0.0.1:30001:30001/udp"
-      - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001/udp"
-    volumes: *go-volumes
+    volumes: *hololive-bot-volumes
     extra_hosts: *iris-extra-hosts
     depends_on:
       <<: *db-cache-depends
@@ -396,6 +406,8 @@ services:
       args:
         VERSION: ${HOLO_ALARM_WORKER_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
     container_name: hololive-alarm-worker
+    env_file:
+      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
       <<: [*app-file-log-env, *iris-env, *cache-env, *postgres-env]
       NOTIFICATION_EGRESS_ROLE: "owner"
@@ -437,7 +449,7 @@ services:
       APP_ENV: "production"
     ports:
       - "127.0.0.1:30007:30007"
-    volumes: *go-volumes
+    volumes: *alarm-worker-volumes
     extra_hosts: *iris-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-384m
@@ -536,7 +548,7 @@ services:
       ENV: "production"
       FORCE_HTTPS: "true"
       LOG_LEVEL: "info"
-      ALLOWED_ORIGINS: "https://admin.holo-oshi.com,https://admin.capu.blog,http://100.100.1.3:30190"
+      ALLOWED_ORIGINS: "https://admin.holo-oshi.com,https://admin.capu.blog"
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASS_HASH: ${ADMIN_PASS_BCRYPT:?ADMIN_PASS_BCRYPT is required}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
@@ -549,7 +561,6 @@ services:
       LOG_DIR: /app/logs
     ports:
       - "127.0.0.1:30190:30190"
-      - "${ADMIN_DASHBOARD_PORT_BIND_IP:-100.100.1.3}:30190:30190"
     volumes:
       - ./logs:/app/logs
     extra_hosts: *host-extra-hosts

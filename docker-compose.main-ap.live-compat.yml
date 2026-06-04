@@ -1,0 +1,16 @@
+# main-ap 확장 인스턴스의 사전 hardening 운영 동작을 보존하는 명시 opt-in overlay입니다.
+
+services:
+  youtube-producer-c:
+    env_file: !override
+      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
+    environment:
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: "5433"
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+    volumes: !override
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+      - valkey-cache-socket:/var/run/valkey:ro
