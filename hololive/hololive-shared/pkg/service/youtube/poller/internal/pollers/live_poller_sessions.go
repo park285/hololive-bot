@@ -1,0 +1,173 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package pollers
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/georgysavva/scany/v2/pgxscan"
+
+	"github.com/kapu/hololive-shared/internal/dbx"
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, baselinePoll bool) error {
+	return inPollerTx(ctx, p.db, func(tx dbx.Querier) error {
+		existing, _, err := loadExistingLiveSession(ctx, tx, stream.ID)
+		if err != nil {
+			return err
+		}
+
+		session := buildLiveSession(channelID, stream, status, now, existing)
+		session.LastSeenAt = now.UTC().Truncate(time.Microsecond)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO youtube_live_sessions
+				(video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (video_id) DO UPDATE SET
+				status = excluded.status,
+				title = excluded.title,
+				scheduled_start_time = excluded.scheduled_start_time,
+				started_at = excluded.started_at,
+				live_first_seen_at = COALESCE(youtube_live_sessions.live_first_seen_at, excluded.live_first_seen_at),
+				last_seen_at = excluded.last_seen_at`,
+			session.VideoID,
+			session.ChannelID,
+			session.Status,
+			session.Title,
+			session.ScheduledStartTime,
+			session.StartedAt,
+			session.EndedAt,
+			session.LiveFirstSeenAt,
+			session.LastSeenAt,
+		); err != nil {
+			return fmt.Errorf("save live session: %w", err)
+		}
+
+		return nil
+	})
+}
+
+func loadExistingLiveSession(ctx context.Context, tx dbx.Querier, videoID string) (domain.YouTubeLiveSession, bool, error) {
+	var existing domain.YouTubeLiveSession
+	err := pgxscan.Get(ctx, tx, &existing, liveSessionSelectSQL+`
+		WHERE video_id = $1`,
+		videoID,
+	)
+	if err == nil {
+		normalizeLiveSessionTimes(&existing)
+		return existing, true, nil
+	}
+	if pgxscan.NotFound(err) {
+		return domain.YouTubeLiveSession{}, false, nil
+	}
+	return domain.YouTubeLiveSession{}, false, fmt.Errorf("load existing live session: %w", err)
+}
+
+const liveSessionSelectSQL = `
+	SELECT video_id,
+		channel_id,
+		status,
+		title,
+		scheduled_start_time,
+		started_at,
+		ended_at,
+		live_first_seen_at,
+		last_seen_at
+	FROM youtube_live_sessions`
+
+func normalizeLiveSessionTimes(session *domain.YouTubeLiveSession) {
+	if session == nil {
+		return
+	}
+	session.LastSeenAt = session.LastSeenAt.UTC()
+	if session.ScheduledStartTime != nil {
+		value := session.ScheduledStartTime.UTC()
+		session.ScheduledStartTime = &value
+	}
+	if session.StartedAt != nil {
+		value := session.StartedAt.UTC()
+		session.StartedAt = &value
+	}
+	if session.EndedAt != nil {
+		value := session.EndedAt.UTC()
+		session.EndedAt = &value
+	}
+	if session.LiveFirstSeenAt != nil {
+		value := session.LiveFirstSeenAt.UTC()
+		session.LiveFirstSeenAt = &value
+	}
+}
+
+func buildLiveSession(channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, existing domain.YouTubeLiveSession) *domain.YouTubeLiveSession {
+	session := &domain.YouTubeLiveSession{
+		VideoID:            stream.ID,
+		ChannelID:          firstNonEmpty(stream.ChannelID, channelID),
+		Status:             status,
+		Title:              stream.Title,
+		ScheduledStartTime: stream.StartScheduled,
+		LiveFirstSeenAt:    liveFirstSeenAt(status, now, existing),
+	}
+
+	if status == domain.LiveStatusLive {
+		session.StartedAt = liveStartedAt(stream, now, existing)
+	}
+
+	return session
+}
+
+func liveFirstSeenAt(status domain.LiveStatus, now time.Time, existing domain.YouTubeLiveSession) *time.Time {
+	if existing.LiveFirstSeenAt != nil && !existing.LiveFirstSeenAt.IsZero() {
+		value := existing.LiveFirstSeenAt.UTC()
+		return &value
+	}
+	if status != domain.LiveStatusLive {
+		return nil
+	}
+	value := now.UTC()
+	return &value
+}
+
+func firstNonEmpty(primary string, fallback string) string {
+	if primary != "" {
+		return primary
+	}
+	return fallback
+}
+
+func liveStartedAt(stream *domain.Stream, now time.Time, existing domain.YouTubeLiveSession) *time.Time {
+	if existing.StartedAt != nil && !existing.StartedAt.IsZero() {
+		startedAt := existing.StartedAt.UTC()
+		return &startedAt
+	}
+	if stream.StartActual != nil && !stream.StartActual.IsZero() {
+		startedAt := stream.StartActual.UTC()
+		return &startedAt
+	}
+	if stream.StartScheduled != nil && !stream.StartScheduled.IsZero() {
+		startedAt := stream.StartScheduled.UTC()
+		return &startedAt
+	}
+	startedAt := now.UTC()
+	return &startedAt
+}
