@@ -65,11 +65,11 @@ These scripts do not rebuild, redeploy, or recreate Docker Compose services. `sm
 Equivalent manual checks:
 
 ```bash
-curl -k https://127.0.0.1:30001/health
+curl http://127.0.0.1:30001/health
 curl http://127.0.0.1:30006/health
 curl http://127.0.0.1:30007/health
 curl http://127.0.0.1:30003/health
-curl http://127.0.0.1:30005/health
+curl http://127.0.0.1:30025/health
 ```
 
 ## Related documents

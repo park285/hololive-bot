@@ -5,7 +5,7 @@
 
 ## 1) 목적
 
-현재 Docker Compose 기준 YouTube 수집/스크래핑/아웃박스 런타임을 `youtube-producer` 단일 서비스로 운영합니다.
+현재 Docker Compose 기준 YouTube 수집/스크래핑/아웃박스 런타임을 `youtube-producer` 서비스의 3-way active-active 인스턴스(osaka `a` + seoul `b` + main `c`)로 운영합니다.
 
 포함 책임:
 - YouTube ingestion scheduler
@@ -73,7 +73,7 @@ SINCE=15m TAIL=600 PATTERN='ingestion_lease|outbox|ERR|WRN' ./scripts/logs/ap-lo
 ```
 
 정상 기준:
-- `youtube-producer` 컨테이너 `healthy`
+- 각 AP 컨테이너(`hololive-youtube-producer-a`/`-b`/`-c`) `healthy`
 - `/health` 200
 - `YouTube ingestion scheduler started`
 - `Scraper scheduler started`
@@ -82,7 +82,7 @@ SINCE=15m TAIL=600 PATTERN='ingestion_lease|outbox|ERR|WRN' ./scripts/logs/ap-lo
 
 ## 4) 컷오버 체크리스트
 
-1. `./scripts/deploy/compose.sh ... ps`에서 `youtube-producer`가 `healthy`
+1. `./scripts/logs/ap-status.sh osaka`/`seoul`과 main `docker ps --filter name=hololive-youtube-producer-c`에서 모든 AP 컨테이너가 `healthy`
 2. `/health`가 200을 반환
 3. 로그에서 `event=ingestion_runtime_configured`와 `runtime=youtube-producer` 확인
 4. 로그에서 `event=ingestion_lease_acquired`, `role=youtube-producer` 확인
