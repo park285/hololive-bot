@@ -19,6 +19,24 @@ type RateLimiter = polling.RateLimiter
 
 type ShortsPoller = pollers.ShortsPoller
 
+type BudgetSource = polling.BudgetSource
+
+type BudgetProfile = polling.BudgetProfile
+
+type BudgetBurstClass = polling.BudgetBurstClass
+
+type BudgetPriority = polling.BudgetPriority
+
+type BudgetJob = polling.BudgetJob
+
+type BudgetDecision = polling.BudgetDecision
+
+type BudgetReservation = polling.BudgetReservation
+
+type GlobalBudgetLimiter = polling.GlobalBudgetLimiter
+
+type BudgetContext = polling.BudgetContext
+
 type Poller = polling.Poller
 
 type Job = polling.Job
@@ -61,6 +79,20 @@ const (
 	PriorityNormal = polling.PriorityNormal
 	PriorityHigh   = polling.PriorityHigh
 	PriorityBoost  = polling.PriorityBoost
+
+	BudgetSourceYouTubeScraper  = polling.BudgetSourceYouTubeScraper
+	BudgetSourceHolodexLive     = polling.BudgetSourceHolodexLive
+	BudgetSourceBrowserSnapshot = polling.BudgetSourceBrowserSnapshot
+	BudgetSourceProxy           = polling.BudgetSourceProxy
+	BudgetSourcePostgresWrite   = polling.BudgetSourcePostgresWrite
+
+	BudgetBurstPrimary  = polling.BudgetBurstPrimary
+	BudgetBurstBackfill = polling.BudgetBurstBackfill
+	BudgetBurstFallback = polling.BudgetBurstFallback
+
+	BudgetPriorityHigh   = polling.BudgetPriorityHigh
+	BudgetPriorityNormal = polling.BudgetPriorityNormal
+	BudgetPriorityLow    = polling.BudgetPriorityLow
 
 	JobClaimAcquired         = polling.JobClaimAcquired
 	JobClaimPeerOwned        = polling.JobClaimPeerOwned
