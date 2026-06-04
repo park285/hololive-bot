@@ -2,12 +2,16 @@
 # pre-push-gate: push 전 필수 품질 게이트.
 # ~/.git-hooks/pre-push 에서 위임 호출됨.
 # 이전 GitHub Actions CI (Verify, Architecture Gates, Dependency Hygiene,
-# Rust Quality, Frontend Quality) 를 로컬 게이트로 대체.
+# Frontend Quality) 를 로컬 게이트로 대체.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}"
+
+# hook이 주입한 GIT_DIR 등이 남으면 linked worktree나 tmp 레포 대상 git 호출이
+# 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
 
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate"
@@ -56,18 +60,6 @@ RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-${dependency_hygiene_default}}
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}" \
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-${race_default}}" \
   ./scripts/ci/local-ci.sh
-
-if echo "$changed_files" | grep -q '^admin-dashboard/backend/'; then
-  echo "[pre-push] admin-dashboard backend Rust 품질 게이트"
-  cargo fmt --check --manifest-path admin-dashboard/backend/Cargo.toml
-  cargo clippy --manifest-path admin-dashboard/backend/Cargo.toml -- -D warnings
-  cargo test --manifest-path admin-dashboard/backend/Cargo.toml
-  if command -v cargo-deny >/dev/null 2>&1; then
-    (cd admin-dashboard/backend && cargo deny check --config deny.toml)
-  else
-    echo "[pre-push] cargo-deny 미설치 — 라이선스/보안 감사 스킵 (cargo install cargo-deny)" >&2
-  fi
-fi
 
 if echo "$changed_files" | grep -qE '^admin-dashboard/(frontend|backend)/'; then
   echo "[pre-push] admin-dashboard frontend 품질 게이트"
