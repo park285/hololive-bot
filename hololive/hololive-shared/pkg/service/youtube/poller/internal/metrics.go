@@ -22,6 +22,7 @@ package polling
 
 import (
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -39,8 +40,15 @@ type Metrics struct {
 	SchedulerRegisteredJobs           prometheus.Gauge
 	SchedulerDispatchDefer            *prometheus.CounterVec
 	SchedulerPollDuration             *prometheus.HistogramVec
+	BudgetReserveTotal                *prometheus.CounterVec
+	BudgetReserveWaitSeconds          *prometheus.HistogramVec
+	BudgetRetryAfterSeconds           *prometheus.HistogramVec
+	BudgetInflight                    *prometheus.GaugeVec
 	JobClaimTotal                     *prometheus.CounterVec
 	JobLeaseRenewTotal                *prometheus.CounterVec
+	JobLeaseTTLSeconds                *prometheus.GaugeVec
+	JobLeaseElapsedRatio              *prometheus.GaugeVec
+	JobLeaseNearExpiryTotal           *prometheus.CounterVec
 	JobMarkCompletedTotal             *prometheus.CounterVec
 	JobReleaseTotal                   *prometheus.CounterVec
 	OutboxInsertTotal                 *prometheus.CounterVec
@@ -81,6 +89,24 @@ func (m *Metrics) registerSchedulerMetrics() {
 		Help:    "poller별 channel poll 실행 시간",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"poller", "status"})
+	m.BudgetReserveTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_budget_reserve_total",
+		Help: "source별 scheduler budget reservation 결과",
+	}, []string{"source", "result", "burst_class", "priority"})
+	m.BudgetReserveWaitSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "youtube_poller_budget_reserve_wait_seconds",
+		Help:    "source별 scheduler budget reservation 대기 시간",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"source"})
+	m.BudgetRetryAfterSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "youtube_poller_budget_retry_after_seconds",
+		Help:    "source별 scheduler budget denial retry_after",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"source"})
+	m.BudgetInflight = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "youtube_poller_budget_inflight",
+		Help: "source별 scheduler budget reservation inflight 수",
+	}, []string{"source"})
 }
 
 func (m *Metrics) registerJobClaimMetrics() {
@@ -92,6 +118,18 @@ func (m *Metrics) registerJobClaimMetrics() {
 		Name: "youtube_poller_job_lease_renew_total",
 		Help: "poller별 distributed job lease renew 결과",
 	}, []string{"poller", "result"})
+	m.JobLeaseTTLSeconds = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "youtube_poller_job_lease_ttl_seconds",
+		Help: "poller별 distributed job claim lease TTL",
+	}, []string{"poller"})
+	m.JobLeaseElapsedRatio = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "youtube_poller_job_lease_elapsed_ratio",
+		Help: "poller별 distributed job claim lease elapsed ratio",
+	}, []string{"poller"})
+	m.JobLeaseNearExpiryTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_job_lease_near_expiry_total",
+		Help: "poller별 distributed job claim lease near-expiry 횟수",
+	}, []string{"poller"})
 	m.JobMarkCompletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_mark_completed_total",
 		Help: "poller별 distributed job completion marker 결과",
@@ -157,6 +195,47 @@ func (m *Metrics) ObserveJobLeaseRenew(pollerName, result string) {
 	m.JobLeaseRenewTotal.WithLabelValues(pollerName, result).Inc()
 }
 
+func (m *Metrics) ObserveBudgetReserve(profile BudgetProfile, result string) {
+	forBudgetProfileSource(profile, func(source BudgetSource) {
+		m.BudgetReserveTotal.WithLabelValues(
+			string(source),
+			result,
+			string(profile.BurstClass),
+			string(profile.Priority),
+		).Inc()
+	})
+}
+
+func (m *Metrics) ObserveBudgetReserveWait(profile BudgetProfile, elapsed time.Duration) {
+	forBudgetProfileSource(profile, func(source BudgetSource) {
+		m.BudgetReserveWaitSeconds.WithLabelValues(string(source)).Observe(elapsed.Seconds())
+	})
+}
+
+func (m *Metrics) ObserveBudgetRetryAfter(profile BudgetProfile, retryAfter time.Duration) {
+	forBudgetProfileSource(profile, func(source BudgetSource) {
+		m.BudgetRetryAfterSeconds.WithLabelValues(string(source)).Observe(retryAfter.Seconds())
+	})
+}
+
+func (m *Metrics) AddBudgetInflight(profile BudgetProfile, delta float64) {
+	forBudgetProfileSource(profile, func(source BudgetSource) {
+		m.BudgetInflight.WithLabelValues(string(source)).Add(delta)
+	})
+}
+
+func (m *Metrics) ObserveJobLeaseTTL(pollerName string, ttl time.Duration) {
+	m.JobLeaseTTLSeconds.WithLabelValues(pollerName).Set(ttl.Seconds())
+}
+
+func (m *Metrics) ObserveJobLeaseElapsedRatio(pollerName string, ratio float64) {
+	m.JobLeaseElapsedRatio.WithLabelValues(pollerName).Set(ratio)
+}
+
+func (m *Metrics) ObserveJobLeaseNearExpiry(pollerName string) {
+	m.JobLeaseNearExpiryTotal.WithLabelValues(pollerName).Inc()
+}
+
 func (m *Metrics) ObserveJobMarkCompleted(pollerName, result string) {
 	m.JobMarkCompletedTotal.WithLabelValues(pollerName, result).Inc()
 }
@@ -187,6 +266,12 @@ func boolResult(ok bool, err error) string {
 		return "success"
 	}
 	return "lost"
+}
+
+func forBudgetProfileSource(profile BudgetProfile, observe func(BudgetSource)) {
+	for source := range profile.SourceUnits {
+		observe(source)
+	}
 }
 
 func (m *Metrics) ObservePublishedAtResolutionSuccess(kind domain.OutboxKind) {

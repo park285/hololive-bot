@@ -39,6 +39,10 @@ func (s *Scheduler) Register(channelID string, poller Poller, priority Priority,
 }
 
 func (s *Scheduler) RegisterChecked(channelID string, poller Poller, priority Priority, interval time.Duration) error {
+	return s.RegisterCheckedWithBudgetProfile(channelID, poller, priority, interval, BudgetProfile{})
+}
+
+func (s *Scheduler) RegisterCheckedWithBudgetProfile(channelID string, poller Poller, priority Priority, interval time.Duration, profile BudgetProfile) error {
 	channelID = strings.TrimSpace(channelID)
 	if channelID == "" {
 		return fmt.Errorf("channel id is empty")
@@ -65,13 +69,14 @@ func (s *Scheduler) RegisterChecked(channelID string, poller Poller, priority Pr
 
 	offset := calculateOffset(key, interval)
 	job := &Job{
-		ChannelID: channelID,
-		Poller:    poller,
-		Priority:  priority,
-		NextRunAt: nextPollAt(time.Now(), interval, offset),
-		Interval:  interval,
-		Offset:    offset,
-		key:       key,
+		ChannelID:     channelID,
+		Poller:        poller,
+		Priority:      priority,
+		NextRunAt:     nextPollAt(time.Now(), interval, offset),
+		Interval:      interval,
+		Offset:        offset,
+		key:           key,
+		budgetProfile: profile,
 	}
 
 	heap.Push(&s.jobs, job)
@@ -230,6 +235,7 @@ func (s *Scheduler) removePollerTargetJob(key string, job *Job) {
 func (s *Scheduler) updatePollerTargetJob(job *Job, targetSync PollerTargetSync) {
 	job.Poller = targetSync.Poller
 	job.Priority = targetSync.Priority
+	job.budgetProfile = targetSync.BudgetProfile
 	if job.Interval != targetSync.Interval {
 		s.resetJobScheduleForIntervalChange(job, targetSync.Interval)
 	}
@@ -263,6 +269,7 @@ func newPollerTargetJob(channelID string, pollerName string, targetSync PollerTa
 		Interval:          targetSync.Interval,
 		Offset:            offset,
 		key:               key,
+		budgetProfile:     targetSync.BudgetProfile,
 		immediateFirstRun: targetSync.ForceImmediateFirstRun,
 	}
 }

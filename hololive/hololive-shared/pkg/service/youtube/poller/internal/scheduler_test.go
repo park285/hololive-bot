@@ -316,6 +316,7 @@ type schedulerClaimHandleStub struct {
 	releaseCalls        int
 	renewCalls          int
 	markCompletedCtxErr error
+	releaseCtxErr       error
 	renewFn             func(context.Context, time.Duration) (bool, error)
 }
 
@@ -331,9 +332,83 @@ func (c *schedulerClaimHandleStub) MarkCompleted(ctx context.Context, _ time.Dur
 	c.markCompletedCtxErr = ctx.Err()
 	return true, nil
 }
-func (c *schedulerClaimHandleStub) Release(context.Context) (bool, error) {
+func (c *schedulerClaimHandleStub) Release(ctx context.Context) (bool, error) {
 	c.releaseCalls++
+	c.releaseCtxErr = ctx.Err()
 	return true, nil
+}
+
+type schedulerBudgetLimiterStub struct {
+	mu          sync.Mutex
+	decision    BudgetDecision
+	reservation *schedulerBudgetReservationStub
+	err         error
+	calls       int
+	job         BudgetJob
+	profile     BudgetProfile
+	ttl         time.Duration
+	ctxErr      error
+}
+
+func (l *schedulerBudgetLimiterStub) TryReserve(
+	ctx context.Context,
+	job BudgetJob,
+	profile BudgetProfile,
+	ttl time.Duration,
+) (BudgetReservation, BudgetDecision, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls++
+	l.job = job
+	l.profile = profile
+	l.ttl = ttl
+	l.ctxErr = ctx.Err()
+	if l.reservation != nil {
+		return l.reservation, l.decision, l.err
+	}
+	return nil, l.decision, l.err
+}
+
+func (l *schedulerBudgetLimiterStub) callCount() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.calls
+}
+
+type schedulerBudgetReservationStub struct {
+	mu            sync.Mutex
+	commitCalls   int
+	releaseCalls  int
+	commitCtxErr  error
+	releaseCtxErr error
+	commitErr     error
+	releaseErr    error
+}
+
+func (r *schedulerBudgetReservationStub) Commit(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.commitCalls++
+	r.commitCtxErr = ctx.Err()
+	return r.commitErr
+}
+
+func (r *schedulerBudgetReservationStub) Release(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.releaseCalls++
+	r.releaseCtxErr = ctx.Err()
+	return r.releaseErr
+}
+
+func testBudgetProfile() BudgetProfile {
+	return BudgetProfile{
+		SourceUnits: map[BudgetSource]float64{
+			BudgetSourceYouTubeScraper: 1,
+		},
+		BurstClass: BudgetBurstPrimary,
+		Priority:   BudgetPriorityHigh,
+	}
 }
 
 type sharedSchedulerClaimState struct {
@@ -706,6 +781,334 @@ func TestSchedulerExecuteJobCompletesOrReleasesClaim(t *testing.T) {
 			require.Equal(t, tc.wantReleased, claim.releaseCalls)
 		})
 	}
+}
+
+func TestSchedulerExecuteJobBudgetAllowedPollsAndCommits(t *testing.T) {
+	reservation := &schedulerBudgetReservationStub{}
+	limiter := &schedulerBudgetLimiterStub{
+		decision:    BudgetDecision{Allowed: true},
+		reservation: reservation,
+	}
+	claim := &schedulerClaimHandleStub{}
+	scheduler := NewScheduler(SchedulerConfig{
+		WorkerCount:            1,
+		RequestInterval:        0,
+		PollTimeout:            2 * time.Second,
+		JobClaimer:             &schedulerClaimStub{status: JobClaimStatus{Result: JobClaimAcquired}, claim: claim},
+		BudgetLimiter:          limiter,
+		BudgetContext:          BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+		BudgetAcquireTimeout:   time.Second,
+		ClaimCompletionTimeout: time.Second,
+		ClaimLeaseSafetyMargin: time.Second,
+	})
+	profile := testBudgetProfile()
+	p := &countingPollerStub{name: "videos"}
+	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-budget", p, PriorityHigh, time.Hour, profile))
+	job := scheduler.jobMap["channel-budget:videos"]
+	require.NotNil(t, job)
+	heap.Remove(&scheduler.jobs, job.index)
+
+	scheduler.executeJob(context.Background(), job, 1)
+
+	require.Equal(t, 1, p.calls)
+	require.Equal(t, 1, limiter.callCount())
+	require.Equal(t, BudgetJob{
+		Namespace:  "test",
+		InstanceID: "worker-a",
+		PollerName: "videos",
+		ChannelID:  "channel-budget",
+		JobKey:     "channel-budget:videos",
+	}, limiter.job)
+	require.Equal(t, profile, limiter.profile)
+	require.Equal(t, scheduler.jobClaimLeaseTTL(), limiter.ttl)
+	require.NoError(t, limiter.ctxErr)
+	require.Equal(t, 1, claim.markCompletedCalls)
+	require.Equal(t, 0, claim.releaseCalls)
+	require.Equal(t, 1, reservation.commitCalls)
+	require.Equal(t, 0, reservation.releaseCalls)
+	require.NoError(t, reservation.commitCtxErr)
+}
+
+func TestSchedulerExecuteJobBudgetDeniedSkipsPollAndUsesRetryAfter(t *testing.T) {
+	retryAfter := 17 * time.Second
+	claim := &schedulerClaimHandleStub{}
+	limiter := &schedulerBudgetLimiterStub{
+		decision: BudgetDecision{Allowed: false, RetryAfter: retryAfter, Reason: string(JobSkipBudgetExhausted)},
+	}
+	scheduler := NewScheduler(SchedulerConfig{
+		WorkerCount:          1,
+		RequestInterval:      0,
+		JobClaimer:           &schedulerClaimStub{status: JobClaimStatus{Result: JobClaimAcquired}, claim: claim},
+		BudgetLimiter:        limiter,
+		BudgetContext:        BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+		BudgetAcquireTimeout: time.Second,
+		ErrorBackoffMin:      5 * time.Second,
+		ErrorBackoffMax:      5 * time.Second,
+	})
+	p := &countingPollerStub{name: "videos"}
+	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-denied", p, PriorityHigh, time.Hour, testBudgetProfile()))
+	job := scheduler.jobMap["channel-denied:videos"]
+	require.NotNil(t, job)
+	heap.Remove(&scheduler.jobs, job.index)
+
+	before := time.Now()
+	scheduler.executeJob(context.Background(), job, 1)
+	after := time.Now()
+
+	require.Equal(t, 0, p.calls)
+	require.Equal(t, 1, limiter.callCount())
+	require.Equal(t, 0, claim.markCompletedCalls)
+	require.Equal(t, 1, claim.releaseCalls)
+	require.NoError(t, claim.releaseCtxErr)
+	require.Equal(t, 0, job.consecutiveFailures)
+	assert.False(t, job.NextRunAt.Before(before.Add(retryAfter)))
+	assert.False(t, job.NextRunAt.After(after.Add(retryAfter+100*time.Millisecond)))
+}
+
+func TestSchedulerExecuteJobBudgetLimiterErrorReleasesClaimAndBacksOff(t *testing.T) {
+	claim := &schedulerClaimHandleStub{}
+	limiter := &schedulerBudgetLimiterStub{err: assert.AnError}
+	scheduler := NewScheduler(SchedulerConfig{
+		WorkerCount:          1,
+		RequestInterval:      0,
+		JobClaimer:           &schedulerClaimStub{status: JobClaimStatus{Result: JobClaimAcquired}, claim: claim},
+		BudgetLimiter:        limiter,
+		BudgetContext:        BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+		BudgetAcquireTimeout: time.Second,
+		ErrorBackoffMin:      11 * time.Second,
+		ErrorBackoffMax:      11 * time.Second,
+	})
+	p := &countingPollerStub{name: "videos"}
+	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-budget-error", p, PriorityHigh, time.Hour, testBudgetProfile()))
+	job := scheduler.jobMap["channel-budget-error:videos"]
+	require.NotNil(t, job)
+	heap.Remove(&scheduler.jobs, job.index)
+
+	before := time.Now()
+	scheduler.executeJob(context.Background(), job, 1)
+	after := time.Now()
+
+	require.Equal(t, 0, p.calls)
+	require.Equal(t, 1, limiter.callCount())
+	require.Equal(t, 0, claim.markCompletedCalls)
+	require.Equal(t, 1, claim.releaseCalls)
+	require.Equal(t, 1, job.consecutiveFailures)
+	assert.False(t, job.NextRunAt.Before(before.Add(11*time.Second)))
+	assert.False(t, job.NextRunAt.After(after.Add(11*time.Second+100*time.Millisecond)))
+}
+
+func TestBudgetLimiterDisabledOrEmptyProfileSkipsReserve(t *testing.T) {
+	tests := map[string]struct {
+		limiter       *schedulerBudgetLimiterStub
+		budgetContext BudgetContext
+		profile       BudgetProfile
+	}{
+		"nil limiter": {
+			profile: testBudgetProfile(),
+		},
+		"disabled context": {
+			limiter:       &schedulerBudgetLimiterStub{decision: BudgetDecision{Allowed: true}},
+			budgetContext: BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: false},
+			profile:       testBudgetProfile(),
+		},
+		"empty source units": {
+			limiter:       &schedulerBudgetLimiterStub{decision: BudgetDecision{Allowed: true}},
+			budgetContext: BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+			profile:       BudgetProfile{SourceUnits: map[BudgetSource]float64{}, BurstClass: BudgetBurstPrimary, Priority: BudgetPriorityHigh},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			scheduler := NewScheduler(SchedulerConfig{
+				WorkerCount:          1,
+				RequestInterval:      0,
+				BudgetLimiter:        tc.limiter,
+				BudgetContext:        tc.budgetContext,
+				BudgetAcquireTimeout: time.Second,
+			})
+			p := &countingPollerStub{name: "videos"}
+			require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-disabled", p, PriorityHigh, time.Hour, tc.profile))
+			job := scheduler.jobMap["channel-disabled:videos"]
+			require.NotNil(t, job)
+			heap.Remove(&scheduler.jobs, job.index)
+
+			scheduler.executeJob(context.Background(), job, 1)
+
+			require.Equal(t, 1, p.calls)
+			require.Equal(t, 0, job.consecutiveFailures)
+			if tc.limiter != nil {
+				require.Equal(t, 0, tc.limiter.callCount())
+			}
+		})
+	}
+}
+
+func TestSchedulerExecuteJobPollFailureReleasesBudgetReservation(t *testing.T) {
+	reservation := &schedulerBudgetReservationStub{}
+	claim := &schedulerClaimHandleStub{}
+	scheduler := NewScheduler(SchedulerConfig{
+		WorkerCount:          1,
+		RequestInterval:      0,
+		JobClaimer:           &schedulerClaimStub{status: JobClaimStatus{Result: JobClaimAcquired}, claim: claim},
+		BudgetLimiter:        &schedulerBudgetLimiterStub{decision: BudgetDecision{Allowed: true}, reservation: reservation},
+		BudgetContext:        BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+		BudgetAcquireTimeout: time.Second,
+		ErrorBackoffMin:      7 * time.Second,
+		ErrorBackoffMax:      7 * time.Second,
+	})
+	p := &countingPollerStub{name: "videos", err: assert.AnError}
+	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-poll-fail", p, PriorityHigh, time.Hour, testBudgetProfile()))
+	job := scheduler.jobMap["channel-poll-fail:videos"]
+	require.NotNil(t, job)
+	heap.Remove(&scheduler.jobs, job.index)
+
+	scheduler.executeJob(context.Background(), job, 1)
+
+	require.Equal(t, 1, p.calls)
+	require.Equal(t, 1, claim.releaseCalls)
+	require.Equal(t, 0, claim.markCompletedCalls)
+	require.Equal(t, 0, reservation.commitCalls)
+	require.Equal(t, 1, reservation.releaseCalls)
+	require.NoError(t, reservation.releaseCtxErr)
+}
+
+func TestSchedulerRegisterAndSyncPropagateBudgetProfile(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	p := &togglePollerStub{name: "videos"}
+	profile := testBudgetProfile()
+
+	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-direct", p, PriorityHigh, time.Hour, profile))
+
+	require.Equal(t, profile, scheduler.jobMap["channel-direct:videos"].budgetProfile)
+
+	syncProfile := BudgetProfile{
+		SourceUnits: map[BudgetSource]float64{BudgetSourceHolodexLive: 2},
+		BurstClass:  BudgetBurstBackfill,
+		Priority:    BudgetPriorityLow,
+	}
+	scheduler.SyncPollerTargets(PollerTargetSync{
+		Poller:        p,
+		Priority:      PriorityLow,
+		Interval:      2 * time.Hour,
+		ChannelIDs:    []string{"channel-sync"},
+		BudgetProfile: syncProfile,
+	})
+	require.Equal(t, syncProfile, scheduler.jobMap["channel-sync:videos"].budgetProfile)
+
+	updatedProfile := BudgetProfile{
+		SourceUnits: map[BudgetSource]float64{BudgetSourceBrowserSnapshot: 3},
+		BurstClass:  BudgetBurstFallback,
+		Priority:    BudgetPriorityNormal,
+	}
+	scheduler.SyncPollerTargets(PollerTargetSync{
+		Poller:        p,
+		Priority:      PriorityNormal,
+		Interval:      3 * time.Hour,
+		ChannelIDs:    []string{"channel-sync"},
+		BudgetProfile: updatedProfile,
+	})
+	require.Equal(t, updatedProfile, scheduler.jobMap["channel-sync:videos"].budgetProfile)
+}
+
+func TestSchedulerJobClaimLeaseTTLIncludesBudgetAndCompletionWindows(t *testing.T) {
+	defaults := DefaultSchedulerConfig()
+	require.Equal(t, 3*time.Second, defaults.BudgetAcquireTimeout)
+	require.Equal(t, 5*time.Second, defaults.ClaimCompletionTimeout)
+	require.Equal(t, 15*time.Second, defaults.ClaimLeaseSafetyMargin)
+
+	minScheduler := NewScheduler(SchedulerConfig{
+		PollTimeout:            2 * time.Second,
+		BudgetAcquireTimeout:   3 * time.Second,
+		ClaimCompletionTimeout: 4 * time.Second,
+		ClaimLeaseSafetyMargin: 5 * time.Second,
+	})
+	require.Equal(t, time.Minute, minScheduler.jobClaimLeaseTTL())
+
+	base := NewScheduler(SchedulerConfig{
+		PollTimeout:            2 * time.Minute,
+		BudgetAcquireTimeout:   3 * time.Second,
+		ClaimCompletionTimeout: 4 * time.Second,
+		ClaimLeaseSafetyMargin: 5 * time.Second,
+	})
+	require.Equal(t, 2*time.Minute+12*time.Second, base.jobClaimLeaseTTL())
+
+	corrected := NewScheduler(SchedulerConfig{
+		PollTimeout:            2 * time.Minute,
+		BudgetAcquireTimeout:   0,
+		ClaimCompletionTimeout: -time.Second,
+		ClaimLeaseSafetyMargin: 0,
+	})
+	require.Equal(t, 2*time.Minute+23*time.Second, corrected.jobClaimLeaseTTL())
+
+	increasedBudget := NewScheduler(SchedulerConfig{
+		PollTimeout:            2 * time.Minute,
+		BudgetAcquireTimeout:   20 * time.Second,
+		ClaimCompletionTimeout: 4 * time.Second,
+		ClaimLeaseSafetyMargin: 5 * time.Second,
+	})
+	require.Greater(t, increasedBudget.jobClaimLeaseTTL(), base.jobClaimLeaseTTL())
+
+	noClamp := NewScheduler(SchedulerConfig{
+		PollTimeout:            90 * time.Minute,
+		BudgetAcquireTimeout:   time.Minute,
+		ClaimCompletionTimeout: time.Minute,
+		ClaimLeaseSafetyMargin: time.Minute,
+	})
+	require.Equal(t, 93*time.Minute, noClamp.jobClaimLeaseTTL())
+}
+
+func TestMetricsBudgetAndLeaseCollectors(t *testing.T) {
+	m, reg := newIsolatedPollerMetrics(t)
+	profile := testBudgetProfile()
+
+	m.ObserveBudgetReserve(profile, "allowed")
+	m.ObserveBudgetReserve(profile, "denied")
+	m.ObserveBudgetReserveWait(profile, 125*time.Millisecond)
+	m.ObserveBudgetRetryAfter(profile, 3*time.Second)
+	m.AddBudgetInflight(profile, 1)
+	m.AddBudgetInflight(profile, -1)
+	m.ObserveJobLeaseTTL("videos", 90*time.Second)
+	m.ObserveJobLeaseElapsedRatio("videos", 0.8)
+	m.ObserveJobLeaseNearExpiry("videos")
+
+	families, err := reg.Gather()
+	require.NoError(t, err)
+
+	sourceLabels := map[string]string{
+		"source":      string(BudgetSourceYouTubeScraper),
+		"burst_class": string(BudgetBurstPrimary),
+		"priority":    string(BudgetPriorityHigh),
+	}
+	assertCounterValue(t, families, "youtube_poller_budget_reserve_total", map[string]string{
+		"source":      sourceLabels["source"],
+		"result":      "allowed",
+		"burst_class": sourceLabels["burst_class"],
+		"priority":    sourceLabels["priority"],
+	}, 1)
+	assertCounterValue(t, families, "youtube_poller_budget_reserve_total", map[string]string{
+		"source":      sourceLabels["source"],
+		"result":      "denied",
+		"burst_class": sourceLabels["burst_class"],
+		"priority":    sourceLabels["priority"],
+	}, 1)
+	assertHistogramLabels(t, families, "youtube_poller_budget_reserve_wait_seconds", map[string]string{
+		"source": sourceLabels["source"],
+	})
+	assertHistogramLabels(t, families, "youtube_poller_budget_retry_after_seconds", map[string]string{
+		"source": sourceLabels["source"],
+	})
+	assertGaugeValue(t, families, "youtube_poller_budget_inflight", map[string]string{
+		"source": sourceLabels["source"],
+	}, 0)
+	assertGaugeValue(t, families, "youtube_poller_job_lease_ttl_seconds", map[string]string{
+		"poller": "videos",
+	}, 90)
+	assertGaugeValue(t, families, "youtube_poller_job_lease_elapsed_ratio", map[string]string{
+		"poller": "videos",
+	}, 0.8)
+	assertCounterValue(t, families, "youtube_poller_job_lease_near_expiry_total", map[string]string{
+		"poller": "videos",
+	}, 1)
 }
 
 func TestSchedulerFinishJobClaimDetachesCompletionFromCanceledParentContext(t *testing.T) {

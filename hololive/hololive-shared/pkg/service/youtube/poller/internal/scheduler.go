@@ -47,6 +47,7 @@ type Job struct {
 	Interval            time.Duration
 	Offset              time.Duration
 	key                 string
+	budgetProfile       BudgetProfile
 	retired             bool
 	immediateFirstRun   bool
 	consecutiveFailures int
@@ -89,22 +90,27 @@ const (
 )
 
 type Scheduler struct {
-	mu              sync.Mutex
-	jobs            jobHeap
-	jobMap          map[string]*Job // key: channelID:pollerName
-	rateLimiter     *RateLimiter
-	workerCount     int
-	pollTimeout     time.Duration
-	errorBackoffMin time.Duration
-	errorBackoffMax time.Duration
-	jobClaimer      JobClaimer
-	metrics         *Metrics
-	logger          *slog.Logger
-	stopCh          chan struct{}
-	stopCancel      context.CancelFunc
-	wakeCh          chan struct{}
-	wg              sync.WaitGroup
-	running         bool
+	mu                     sync.Mutex
+	jobs                   jobHeap
+	jobMap                 map[string]*Job // key: channelID:pollerName
+	rateLimiter            *RateLimiter
+	workerCount            int
+	pollTimeout            time.Duration
+	errorBackoffMin        time.Duration
+	errorBackoffMax        time.Duration
+	jobClaimer             JobClaimer
+	budgetLimiter          GlobalBudgetLimiter
+	budgetContext          BudgetContext
+	budgetAcquireTimeout   time.Duration
+	claimLeaseSafetyMargin time.Duration
+	claimCompletionTimeout time.Duration
+	metrics                *Metrics
+	logger                 *slog.Logger
+	stopCh                 chan struct{}
+	stopCancel             context.CancelFunc
+	wakeCh                 chan struct{}
+	wg                     sync.WaitGroup
+	running                bool
 }
 
 type PollerTargetSync struct {
@@ -117,23 +123,31 @@ type PollerTargetSync struct {
 }
 
 type SchedulerConfig struct {
-	WorkerCount     int           // 동시 워커 수 (기본: 4)
-	RequestInterval time.Duration // 요청 간 최소 간격 (기본: 4초)
-	PollTimeout     time.Duration // 폴러 1회 실행 최대 시간 (기본: 45초)
-	ErrorBackoffMin time.Duration // 실패 후 최소 재시도 지연 (기본: 30초)
-	ErrorBackoffMax time.Duration // 실패 후 최대 재시도 지연 (기본: 5분)
-	JobClaimer      JobClaimer
-	Metrics         *Metrics
-	Logger          *slog.Logger // nil이면 slog.Default()로 폴백
+	WorkerCount            int           // 동시 워커 수 (기본: 4)
+	RequestInterval        time.Duration // 요청 간 최소 간격 (기본: 4초)
+	PollTimeout            time.Duration // 폴러 1회 실행 최대 시간 (기본: 45초)
+	ErrorBackoffMin        time.Duration // 실패 후 최소 재시도 지연 (기본: 30초)
+	ErrorBackoffMax        time.Duration // 실패 후 최대 재시도 지연 (기본: 5분)
+	JobClaimer             JobClaimer
+	BudgetLimiter          GlobalBudgetLimiter
+	BudgetContext          BudgetContext
+	BudgetAcquireTimeout   time.Duration
+	ClaimLeaseSafetyMargin time.Duration
+	ClaimCompletionTimeout time.Duration
+	Metrics                *Metrics
+	Logger                 *slog.Logger // nil이면 slog.Default()로 폴백
 }
 
 func DefaultSchedulerConfig() SchedulerConfig {
 	return SchedulerConfig{
-		WorkerCount:     4,
-		RequestInterval: 4 * time.Second,
-		PollTimeout:     45 * time.Second,
-		ErrorBackoffMin: 30 * time.Second,
-		ErrorBackoffMax: 5 * time.Minute,
+		WorkerCount:            4,
+		RequestInterval:        4 * time.Second,
+		PollTimeout:            45 * time.Second,
+		ErrorBackoffMin:        30 * time.Second,
+		ErrorBackoffMax:        5 * time.Minute,
+		BudgetAcquireTimeout:   3 * time.Second,
+		ClaimLeaseSafetyMargin: 15 * time.Second,
+		ClaimCompletionTimeout: 5 * time.Second,
 	}
 }
 
@@ -162,6 +176,15 @@ func NewScheduler(config SchedulerConfig) *Scheduler {
 	if config.ErrorBackoffMax < config.ErrorBackoffMin {
 		config.ErrorBackoffMax = config.ErrorBackoffMin
 	}
+	if config.BudgetAcquireTimeout <= 0 {
+		config.BudgetAcquireTimeout = defaults.BudgetAcquireTimeout
+	}
+	if config.ClaimLeaseSafetyMargin <= 0 {
+		config.ClaimLeaseSafetyMargin = defaults.ClaimLeaseSafetyMargin
+	}
+	if config.ClaimCompletionTimeout <= 0 {
+		config.ClaimCompletionTimeout = defaults.ClaimCompletionTimeout
+	}
 	// RequestInterval이 0이면 NewRateLimiter(0)이 생성되어 Wait()가 즉시 반환.
 	// 외부 RateLimiter에 rate limiting을 위임하는 경우에 사용.
 	metrics := config.Metrics
@@ -175,18 +198,23 @@ func NewScheduler(config SchedulerConfig) *Scheduler {
 	}
 
 	return &Scheduler{
-		jobs:            make(jobHeap, 0),
-		jobMap:          make(map[string]*Job),
-		rateLimiter:     NewRateLimiter(config.RequestInterval),
-		workerCount:     config.WorkerCount,
-		pollTimeout:     config.PollTimeout,
-		errorBackoffMin: config.ErrorBackoffMin,
-		errorBackoffMax: config.ErrorBackoffMax,
-		jobClaimer:      config.JobClaimer,
-		metrics:         metrics,
-		logger:          logger,
-		stopCh:          make(chan struct{}),
-		wakeCh:          make(chan struct{}, 1),
+		jobs:                   make(jobHeap, 0),
+		jobMap:                 make(map[string]*Job),
+		rateLimiter:            NewRateLimiter(config.RequestInterval),
+		workerCount:            config.WorkerCount,
+		pollTimeout:            config.PollTimeout,
+		errorBackoffMin:        config.ErrorBackoffMin,
+		errorBackoffMax:        config.ErrorBackoffMax,
+		jobClaimer:             config.JobClaimer,
+		budgetLimiter:          config.BudgetLimiter,
+		budgetContext:          config.BudgetContext,
+		budgetAcquireTimeout:   config.BudgetAcquireTimeout,
+		claimLeaseSafetyMargin: config.ClaimLeaseSafetyMargin,
+		claimCompletionTimeout: config.ClaimCompletionTimeout,
+		metrics:                metrics,
+		logger:                 logger,
+		stopCh:                 make(chan struct{}),
+		wakeCh:                 make(chan struct{}, 1),
 	}
 }
 
