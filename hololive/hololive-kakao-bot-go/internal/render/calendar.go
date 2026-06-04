@@ -103,17 +103,19 @@ func (r *CalendarCardRenderer) renderCalendarImageOnce(cacheKey calendarCacheKey
 		r.storeCachedImage(cacheKey, data)
 		return data, nil
 	}
-	data, err := r.renderCalendarImage(month, year, entries)
+	data, diskCacheable, err := r.renderCalendarImage(month, year, entries)
 	if err != nil {
 		return nil, err
 	}
 	r.storeCachedImage(cacheKey, data)
-	r.storeDiskCachedImage(cacheKey, data)
+	if diskCacheable {
+		r.storeDiskCachedImage(cacheKey, data)
+	}
 	return data, nil
 }
 
-func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error) {
-	photos := fetchMemberPhotos(entries)
+func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, bool, error) {
+	photos, diskCacheable := fetchMemberPhotos(entries)
 
 	fontMu.Lock()
 	defer fontMu.Unlock()
@@ -132,7 +134,7 @@ func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []do
 
 	f, err := loadCalendarFonts(m.sf)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	m.fonts = f
 
@@ -148,9 +150,9 @@ func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []do
 
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, out); err != nil {
-		return nil, fmt.Errorf("encode calendar png: %w", err)
+		return nil, false, fmt.Errorf("encode calendar png: %w", err)
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes(), diskCacheable, nil
 }
 
 // 고해상도 캔버스를 카카오 표시폭(calendarOutputWidth)으로 다운스케일한다.
