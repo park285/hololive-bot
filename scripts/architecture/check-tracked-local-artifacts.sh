@@ -38,15 +38,18 @@ is_allowed_exception() {
 }
 
 while IFS= read -r path; do
-  if [[ ! -e "${ROOT_DIR}/${path}" ]]; then
-    continue
-  fi
+  [[ -z "${path}" ]] && continue
   if is_allowed_exception "${path}"; then
     continue
   fi
+  if [[ -e "${ROOT_DIR}/${path}" ]]; then
+    missing_suffix=""
+  else
+    missing_suffix=" (missing from working tree)"
+  fi
   for pattern in "${forbidden_patterns[@]}"; do
     if [[ "${path}" =~ ${pattern} ]]; then
-      violations+=("${path}")
+      violations+=("${path}${missing_suffix}")
       continue 2
     fi
   done
@@ -73,10 +76,15 @@ while IFS= read -r path; do
     */.idea/*|\
     */.vscode/*|\
     */.omc/*)
-      violations+=("${path}")
+      violations+=("${path}${missing_suffix}")
       ;;
   esac
-done < <(git -C "${ROOT_DIR}" ls-files)
+done < <(
+  {
+    git -C "${ROOT_DIR}" ls-files -s | sed -E $'s/^[0-9]+ [0-9a-f]+ [0-9]+\t//'
+    git -C "${ROOT_DIR}" diff --cached --name-only --no-renames
+  } | sort -u
+)
 
 if (( ${#violations[@]} > 0 )); then
   echo "FAIL: tracked local artifacts detected" >&2
