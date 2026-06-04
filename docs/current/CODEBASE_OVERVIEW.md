@@ -79,7 +79,7 @@ youtube-producer
   -> Iris / Kakao egress
 ```
 
-The key ownership split is that `youtube-producer` produces YouTube outbox rows and owns Osaka poll coordination/readiness, while `alarm-worker` owns final delivery. Duplicate suppression depends on Valkey `JobRunGuard`, database identities such as `(kind, content_id)`, and the dispatch worker's delivery claims.
+The key ownership split is that `youtube-producer` produces YouTube outbox rows and owns 3-way active-active poll coordination/readiness (Osaka `a` + Seoul `b` + main `c`), while `alarm-worker` owns final delivery. Duplicate suppression depends on Valkey `JobRunGuard`, database identities such as `(kind, content_id)`, and the dispatch worker's delivery claims.
 
 ### LLM Work Flow
 

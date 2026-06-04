@@ -13,7 +13,7 @@ OSAKA_SSH_KEY="${HOL_LOG_OSAKA_SSH_KEY:-${REPO_ROOT}/KR.key}"
 OSAKA_HOST_KEY_ALIAS="${HOL_LOG_OSAKA_HOST_KEY_ALIAS:-100.100.1.7}"
 OSAKA_REMOTE_LOG_DIR="${HOL_LOG_OSAKA_LOG_DIR:-/home/ubuntu/hololive-bot/logs}"
 OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-producer}"
-OSAKA_DOCKER_SERVICES="${HOL_LOG_OSAKA_DOCKER_SERVICES:-youtube-producer youtube-producer-a youtube-producer-b}"
+OSAKA_DOCKER_SERVICES="${HOL_LOG_OSAKA_DOCKER_SERVICES:-youtube-producer youtube-producer-a}"
 
 usage() {
   cat <<'USAGE'
@@ -99,7 +99,6 @@ osaka_container_for() {
   case "${service}" in
     youtube-producer) printf '%s\n' "hololive-youtube-producer-a" ;;
     youtube-producer-a) printf '%s\n' "hololive-youtube-producer-a" ;;
-    youtube-producer-b) printf '%s\n' "hololive-youtube-producer-b" ;;
     *) echo "ERROR: unknown service for osaka: ${service}" >&2; exit 1 ;;
   esac
 }

@@ -1,6 +1,6 @@
 # 메인 서버 active-active 3번째 인스턴스 (youtube-producer-c).
 # docker-compose.prod.yml 의 youtube-producer 를 extends 하여 로컬 인프라를 그대로 상속한다:
-#   - CACHE: 베이스 *cache-env(로컬 valkey unix socket)를 유지한다. 오사카(a/b)는 다른 호스트라 TCP 100.100.1.3 을
+#   - CACHE: 베이스 *cache-env(로컬 valkey unix socket)를 유지한다. 오사카(a)·서울(b)은 다른 호스트라 TCP 100.100.1.3 을
 #     쓰지만, c 는 같은 호스트의 valkey-cache 에 소켓으로 붙으므로 a/b 와 동일한 lease 백엔드를 공유한다.
 #   - POSTGRES/CLIPROXY: 베이스 *postgres-env / *cliproxy-env(host.docker.internal)를 그대로 쓴다.
 # 따라서 environment 에서 CACHE_*/POSTGRES_* 를 override 하지 않는다(오사카식 TCP override 복사 금지).
