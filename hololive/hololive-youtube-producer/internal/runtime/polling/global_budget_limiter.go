@@ -359,7 +359,7 @@ func (l *globalBudgetLimiter) releaseSources(ctx context.Context, ownerToken str
 		ownerToken:  ownerToken,
 		sources:     sources,
 	}
-	return reservation.releaseAll(ctx, "rollback global budget")
+	return reservation.releaseAll(context.WithoutCancel(ctx), "rollback global budget")
 }
 
 func parseGlobalBudgetReserveResult(values []valkey.ValkeyMessage) (poller.BudgetDecision, error) {

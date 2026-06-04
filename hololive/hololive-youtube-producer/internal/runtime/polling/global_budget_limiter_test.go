@@ -333,4 +333,30 @@ func testSourceCooldownKey(source poller.BudgetSource) string {
 	return fmt.Sprintf("hololive:%s:youtube-producer:source-cooldown:{%s}", testBudgetNamespace, source)
 }
 
+func TestGlobalBudgetLimiterRollbackSucceedsWithCanceledContext(t *testing.T) {
+	ctx := context.Background()
+	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
+	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
+		SourceMaxInflight: map[poller.BudgetSource]int{poller.BudgetSourceHolodexLive: 2},
+	})
+
+	held, decision, err := limiter.TryReserve(ctx, testBudgetJob("rollback-canceled-ctx"), testBudgetProfile(poller.BudgetSourceHolodexLive, poller.BudgetBurstPrimary), time.Minute)
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.NotNil(t, held)
+	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceHolodexLive)))
+
+	reservation, ok := held.(*globalBudgetReservation)
+	require.True(t, ok)
+	inner, ok := limiter.(*globalBudgetLimiter)
+	require.True(t, ok)
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	require.NoError(t, inner.releaseSources(canceledCtx, reservation.ownerToken, reservation.sources))
+	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceHolodexLive)))
+	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testClassInflightKey(poller.BudgetSourceHolodexLive, poller.BudgetBurstPrimary)))
+}
+
 const testBudgetNamespace = "test"
