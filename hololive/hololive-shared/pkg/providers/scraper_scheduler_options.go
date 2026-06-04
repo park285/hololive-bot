@@ -36,6 +36,8 @@ type ChannelPollerRegistration struct {
 	RequestsPerRun              int
 	WorstCaseAttempts           int
 	WorstCaseRequestUnitsPerRun float64
+	BudgetProfile               poller.BudgetProfile
+	HasBudgetProfile            bool
 }
 
 type ChannelTargetGroup string
@@ -94,6 +96,19 @@ func (r ChannelPollerRegistration) WithWorstCaseRequestUnitsPerRun(units float64
 	return r
 }
 
+func (r ChannelPollerRegistration) WithBudgetProfile(profile poller.BudgetProfile) ChannelPollerRegistration {
+	if profile.SourceUnits != nil {
+		sourceUnits := make(map[poller.BudgetSource]float64, len(profile.SourceUnits))
+		for source, units := range profile.SourceUnits {
+			sourceUnits[source] = units
+		}
+		profile.SourceUnits = sourceUnits
+	}
+	r.BudgetProfile = profile
+	r.HasBudgetProfile = true
+	return r
+}
+
 func NewGlobalPollerRegistration(p poller.Poller, priority poller.Priority, interval time.Duration) ChannelPollerRegistration {
 	return NewChannelPollerRegistration(p, priority, interval).
 		WithChannelIDs([]string{SyntheticGlobalPollerChannelID}).
@@ -102,10 +117,11 @@ func NewGlobalPollerRegistration(p poller.Poller, priority poller.Priority, inte
 
 func (r ChannelPollerRegistration) ToTargetSync() poller.PollerTargetSync {
 	return poller.PollerTargetSync{
-		Poller:     r.Poller,
-		Priority:   r.Priority,
-		Interval:   r.Interval,
-		ChannelIDs: append([]string(nil), r.ChannelIDs...),
+		Poller:        r.Poller,
+		Priority:      r.Priority,
+		Interval:      r.Interval,
+		ChannelIDs:    append([]string(nil), r.ChannelIDs...),
+		BudgetProfile: r.BudgetProfile,
 	}
 }
 

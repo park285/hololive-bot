@@ -112,6 +112,7 @@ type PollerTargetSync struct {
 	Priority               Priority
 	Interval               time.Duration
 	ChannelIDs             []string
+	BudgetProfile          BudgetProfile
 	ForceImmediateFirstRun bool
 }
 

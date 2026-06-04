@@ -20,7 +20,12 @@
 
 package providers
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+)
 
 func TestYouTubeStackNilSafeAccessors(t *testing.T) {
 	t.Parallel()
@@ -34,5 +39,65 @@ func TestYouTubeStackNilSafeAccessors(t *testing.T) {
 	}
 	if stack.GetStatsRepository() != nil {
 		t.Fatal("GetStatsRepository() must return nil for nil receiver")
+	}
+}
+
+func TestChannelPollerRegistrationWithBudgetProfileCopiesSourceUnits(t *testing.T) {
+	t.Parallel()
+
+	sourceUnits := map[poller.BudgetSource]float64{
+		poller.BudgetSourceYouTubeScraper: 3,
+		poller.BudgetSourcePostgresWrite:  1,
+	}
+	profile := poller.BudgetProfile{
+		SourceUnits: sourceUnits,
+		BurstClass:  poller.BudgetBurstPrimary,
+		Priority:    poller.BudgetPriorityHigh,
+	}
+
+	registration := NewChannelPollerRegistration(nil, poller.PriorityHigh, time.Minute).
+		WithBudgetProfile(profile)
+	sourceUnits[poller.BudgetSourceYouTubeScraper] = 999
+	sourceUnits[poller.BudgetSourceHolodexLive] = 2
+
+	if !registration.HasBudgetProfile {
+		t.Fatal("WithBudgetProfile must mark profile as explicit")
+	}
+	if registration.BudgetProfile.BurstClass != poller.BudgetBurstPrimary {
+		t.Fatalf("unexpected burst class: %q", registration.BudgetProfile.BurstClass)
+	}
+	if registration.BudgetProfile.Priority != poller.BudgetPriorityHigh {
+		t.Fatalf("unexpected priority: %q", registration.BudgetProfile.Priority)
+	}
+	if got := registration.BudgetProfile.SourceUnits[poller.BudgetSourceYouTubeScraper]; got != 3 {
+		t.Fatalf("registration source units were not defensively copied: got %v", got)
+	}
+	if _, ok := registration.BudgetProfile.SourceUnits[poller.BudgetSourceHolodexLive]; ok {
+		t.Fatal("registration source units must not observe mutations to the original map")
+	}
+
+	target := registration.ToTargetSync()
+	if target.BudgetProfile.BurstClass != poller.BudgetBurstPrimary {
+		t.Fatalf("target sync burst class was not propagated: %q", target.BudgetProfile.BurstClass)
+	}
+	if target.BudgetProfile.Priority != poller.BudgetPriorityHigh {
+		t.Fatalf("target sync priority was not propagated: %q", target.BudgetProfile.Priority)
+	}
+	if got := target.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite]; got != 1 {
+		t.Fatalf("target sync budget profile was not propagated: got %v", got)
+	}
+}
+
+func TestChannelPollerRegistrationDefaultHasNoBudgetProfile(t *testing.T) {
+	t.Parallel()
+
+	registration := NewChannelPollerRegistration(nil, poller.PriorityNormal, time.Minute)
+	if registration.HasBudgetProfile {
+		t.Fatal("new registration must not have an explicit budget profile")
+	}
+
+	target := registration.ToTargetSync()
+	if target.BudgetProfile.SourceUnits != nil {
+		t.Fatal("target sync must not have source units when profile is not configured")
 	}
 }
