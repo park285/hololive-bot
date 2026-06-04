@@ -533,6 +533,7 @@ services:
       ENV: "production"
       FORCE_HTTPS: "true"
       LOG_LEVEL: "info"
+      ALLOWED_ORIGINS: "https://admin.capu.blog,http://100.100.1.3:30190"
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASS_HASH: ${ADMIN_PASS_BCRYPT:?ADMIN_PASS_BCRYPT is required}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
