@@ -33,6 +33,8 @@ x-security-hardening: &security-hardening
 
 x-app-service: &app-service
   <<: [*autoheal-service, *security-hardening]
+  env_file:
+    - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
 
 x-public-dns: &public-dns
   - 8.8.8.8
