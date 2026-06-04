@@ -99,12 +99,27 @@ func (h *Hub) Publish(stats SystemStats) {
 		h.history = h.history[len(h.history)-historyCap:]
 	}
 	for _, ch := range h.subs {
-		select {
-		case ch <- stats:
-		default:
-			<-ch
-			ch <- stats
-		}
+		sendDropOldest(ch, stats)
+	}
+}
+
+func sendDropOldest(ch chan SystemStats, stats SystemStats) {
+	if trySend(ch, stats) {
+		return
+	}
+	select {
+	case <-ch:
+	default:
+	}
+	trySend(ch, stats)
+}
+
+func trySend(ch chan SystemStats, stats SystemStats) bool {
+	select {
+	case ch <- stats:
+		return true
+	default:
+		return false
 	}
 }
 

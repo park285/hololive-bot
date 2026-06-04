@@ -32,6 +32,52 @@ func TestHubSubscribeReplaysCappedHistory(t *testing.T) {
 	}
 }
 
+func TestSendDropOldestNeverBlocks(t *testing.T) {
+	for _, prefill := range []int{0, 1, 4} {
+		ch := make(chan SystemStats, 4)
+		for range prefill {
+			ch <- SystemStats{}
+		}
+		done := make(chan struct{})
+		go func() {
+			sendDropOldest(ch, SystemStats{ThreadCount: 1})
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatalf("sendDropOldest blocked on channel with prefill=%d", prefill)
+		}
+	}
+}
+
+func TestPublishNeverDeadlocksWithRacingConsumer(t *testing.T) {
+	hub := NewHub(nil)
+	_, updates, cancel := hub.Subscribe()
+	defer cancel()
+
+	consumed := make(chan struct{})
+	go func() {
+		for range updates {
+		}
+		close(consumed)
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		for range 50000 {
+			hub.Publish(SystemStats{})
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Publish deadlocked against a racing consumer")
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	if FormatDuration(5*time.Minute) != "5m" {
 		t.Fatal("minute formatting failed")
