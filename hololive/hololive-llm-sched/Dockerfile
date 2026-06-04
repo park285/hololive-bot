@@ -44,6 +44,7 @@ COPY --from=shared_go_workspace . /workspace/shared-go
 COPY --from=iris_client_go_workspace . /workspace/iris-client-go
 COPY hololive/hololive-kakao-bot-go ./hololive/hololive-kakao-bot-go
 COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
+COPY admin-dashboard/backend ./admin-dashboard/backend
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
 COPY hololive/hololive-admin-api ./hololive/hololive-admin-api

@@ -523,10 +523,8 @@ services:
     <<: *app-service
     image: admin-dashboard:prod
     build:
-      context: .
+      <<: *go-build-base
       dockerfile: admin-dashboard/Dockerfile
-      provenance: mode=max
-      sbom: true
     container_name: admin-dashboard
     environment:
       PORT: "30190"

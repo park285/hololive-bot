@@ -187,20 +187,6 @@ export class Admin<
    * No description
    *
    * @tags holo
-   * @name HoloGetAlarms
-   * @request GET:/admin/api/holo/alarms
-   */
-  holoGetAlarms = (params: RequestParams = {}) =>
-    this.request<AlarmsResponse, ErrorResponse>({
-      path: `/admin/api/holo/alarms`,
-      method: "GET",
-      format: "json",
-      ...params,
-    });
-  /**
-   * No description
-   *
-   * @tags holo
    * @name HoloDeleteAlarm
    * @request DELETE:/admin/api/holo/alarms
    */
@@ -210,6 +196,20 @@ export class Admin<
       method: "DELETE",
       body: data,
       type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetAlarms
+   * @request GET:/admin/api/holo/alarms
+   */
+  holoGetAlarms = (params: RequestParams = {}) =>
+    this.request<AlarmsResponse, ErrorResponse>({
+      path: `/admin/api/holo/alarms`,
+      method: "GET",
       format: "json",
       ...params,
     });
@@ -270,26 +270,6 @@ export class Admin<
    * No description
    *
    * @tags holo
-   * @name HoloAddAlias
-   * @request POST:/admin/api/holo/members/{id}/aliases
-   */
-  holoAddAlias = (
-    id: number,
-    data: AddAliasRequest,
-    params: RequestParams = {},
-  ) =>
-    this.request<StatusOnlyResponse, ErrorResponse>({
-      path: `/admin/api/holo/members/${id}/aliases`,
-      method: "POST",
-      body: data,
-      type: ContentType.Json,
-      format: "json",
-      ...params,
-    });
-  /**
-   * No description
-   *
-   * @tags holo
    * @name HoloRemoveAlias
    * @request DELETE:/admin/api/holo/members/{id}/aliases
    */
@@ -301,6 +281,26 @@ export class Admin<
     this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/members/${id}/aliases`,
       method: "DELETE",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloAddAlias
+   * @request POST:/admin/api/holo/members/{id}/aliases
+   */
+  holoAddAlias = (
+    id: number,
+    data: AddAliasRequest,
+    params: RequestParams = {},
+  ) =>
+    this.request<StatusOnlyResponse, ErrorResponse>({
+      path: `/admin/api/holo/members/${id}/aliases`,
+      method: "POST",
       body: data,
       type: ContentType.Json,
       format: "json",
@@ -462,6 +462,22 @@ export class Admin<
    * No description
    *
    * @tags holo
+   * @name HoloRemoveRoom
+   * @request DELETE:/admin/api/holo/rooms
+   */
+  holoRemoveRoom = (data: RemoveRoomRequest, params: RequestParams = {}) =>
+    this.request<StatusOnlyResponse, ErrorResponse>({
+      path: `/admin/api/holo/rooms`,
+      method: "DELETE",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
    * @name HoloGetRooms
    * @request GET:/admin/api/holo/rooms
    */
@@ -483,22 +499,6 @@ export class Admin<
     this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/rooms`,
       method: "POST",
-      body: data,
-      type: ContentType.Json,
-      format: "json",
-      ...params,
-    });
-  /**
-   * No description
-   *
-   * @tags holo
-   * @name HoloRemoveRoom
-   * @request DELETE:/admin/api/holo/rooms
-   */
-  holoRemoveRoom = (data: RemoveRoomRequest, params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, ErrorResponse>({
-      path: `/admin/api/holo/rooms`,
-      method: "DELETE",
       body: data,
       type: ContentType.Json,
       format: "json",

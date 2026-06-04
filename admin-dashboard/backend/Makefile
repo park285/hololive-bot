@@ -1,19 +1,34 @@
-.PHONY: build test lint fmt clean docker-build
+.PHONY: build test lint fmt vet staticcheck vulncheck quality clean docker-build
+
+GO ?= go
+STATICCHECK ?= staticcheck
+GOVULNCHECK ?= govulncheck
 
 build:
-	cargo build --release
+	$(GO) build -trimpath -buildvcs=false ./cmd/admin-dashboard
 
 test:
-	cargo test
+	$(GO) test -count=1 ./...
 
-lint:
-	cargo clippy -- -D warnings
+vet:
+	$(GO) vet ./...
+
+staticcheck:
+	$(STATICCHECK) ./...
+
+vulncheck:
+	$(GOVULNCHECK) ./...
+
+lint: fmt vet staticcheck
 
 fmt:
-	cargo fmt --check
+	@test -z "$$($(GO)fmt -l $$(find . -name '*.go' -not -path './vendor/*'))" || (echo "gofmt required" >&2; $(GO)fmt -l $$(find . -name '*.go' -not -path './vendor/*') >&2; exit 1)
+
+quality:
+	../../scripts/ci/admin-dashboard-go-ci.sh
 
 clean:
-	cargo clean
+	rm -rf dist
 
 docker-build:
 	cd ../.. && docker build -f admin-dashboard/Dockerfile -t admin-dashboard:latest .

@@ -193,8 +193,6 @@ check_go_fix() {
         --exclude=.serena
         --exclude=.gemini
         --exclude=.tmp
-        --exclude=./admin-dashboard
-        --exclude=./admin-dashboard/*
         --exclude=./artifacts
         --exclude=./artifacts/*
         --exclude=./backups
