@@ -2,6 +2,7 @@
 
 GO_WORKSPACE_MODULES=(
     ../shared-go
+    admin-dashboard/backend
     hololive/hololive-shared
     hololive/hololive-kakao-bot-go
     hololive/hololive-admin-api

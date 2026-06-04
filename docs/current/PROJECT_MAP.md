@@ -13,6 +13,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | `hololive-youtube-producer` | Go 1.26 | `hololive/hololive-youtube-producer/` | YouTube producer AP runtime: primary/backfill polling, outbox production, 3-way active-active coordination (Osaka a + Seoul b + main-host c), readiness, and Holodex photo sync | 30005 |
 | `hololive-shared` | Go 1.26 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.26 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
+| `admin-dashboard-backend` | Go 1.26 | `admin-dashboard/backend/` | Admin dashboard Go backend (auth/session, holo API relay, Docker control, embedded frontend serving) | 30190 |
 | `docker-compose.prod.yml` | YAML | `docker-compose.prod.yml` | Production docker compose stack | - |
 | `docker-compose.osaka.yml` | YAML | `docker-compose.osaka.yml` | Osaka split-host active-active AP (`youtube-producer-a`) | - |
 | `docker-compose.seoul.yml` | YAML | `docker-compose.seoul.yml` | Seoul split-host active-active AP (`youtube-producer-b`) | - |
@@ -35,7 +36,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | `holo-postgres` | PostgreSQL data store | Host-networked PostgreSQL on port 5433 |
 | `hololive-db-migrate` | Migration bootstrap/apply job | Must complete before app runtime services start |
 | `valkey-cache` | Valkey cache, queue, Pub/Sub | TCP and Unix socket endpoints |
-| `admin-dashboard` | Dashboard frontend | Not part of the 5 Go runtime set |
+| `admin-dashboard` | Dashboard (Go backend + embedded frontend) | Not part of the 5 Go runtime set |
 | `docker-proxy` | Docker socket proxy | Used by bot operational endpoints |
 | `deunhealth` | Container autoheal | Restarts unhealthy labeled containers |
 

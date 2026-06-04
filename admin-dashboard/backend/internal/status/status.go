@@ -1,0 +1,228 @@
+package status
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+type ServiceEndpoint struct {
+	Name       string
+	URL        string
+	HealthPath string
+}
+
+type ServiceStatus struct {
+	Name           string  `json:"name"`
+	Available      bool    `json:"available"`
+	ResponseTimeMS *uint64 `json:"response_time_ms"`
+	Error          *string `json:"error"`
+}
+
+type AggregatedStatus struct {
+	Services []ServiceStatus `json:"services"`
+	Uptime   string          `json:"uptime"`
+	Version  string          `json:"version"`
+}
+
+type Collector struct {
+	http      *http.Client
+	endpoints []ServiceEndpoint
+	start     time.Time
+	version   string
+}
+
+func NewCollector(endpoints []ServiceEndpoint, version string) *Collector {
+	return &Collector{
+		http:      &http.Client{Timeout: 3 * time.Second},
+		endpoints: append([]ServiceEndpoint(nil), endpoints...),
+		start:     time.Now(),
+		version:   version,
+	}
+}
+
+func (c *Collector) Collect(ctx context.Context) AggregatedStatus {
+	services := make([]ServiceStatus, 1, len(c.endpoints)+1)
+	zero := uint64(0)
+	services[0] = ServiceStatus{Name: "admin-dashboard", Available: true, ResponseTimeMS: &zero}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, endpoint := range c.endpoints {
+		wg.Go(func() {
+			status := c.collectEndpoint(ctx, endpoint)
+			mu.Lock()
+			services = append(services, status)
+			mu.Unlock()
+		})
+	}
+	wg.Wait()
+	return AggregatedStatus{Services: services, Uptime: FormatDuration(time.Since(c.start)), Version: c.version}
+}
+
+func (c *Collector) collectEndpoint(ctx context.Context, endpoint ServiceEndpoint) ServiceStatus {
+	start := time.Now()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, nil)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		msg := err.Error()
+		return ServiceStatus{Name: endpoint.Name, Available: false, Error: &msg}
+	}
+	defer resp.Body.Close()
+	elapsed := uint64(time.Since(start).Milliseconds())
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return ServiceStatus{Name: endpoint.Name, Available: true, ResponseTimeMS: &elapsed}
+	}
+	msg := "status: " + resp.Status
+	return ServiceStatus{Name: endpoint.Name, Available: false, ResponseTimeMS: &elapsed, Error: &msg}
+}
+
+func FormatDuration(duration time.Duration) string {
+	secs := int64(duration.Seconds())
+	days := secs / 86400
+	hours := (secs % 86400) / 3600
+	minutes := (secs % 3600) / 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+type RuntimeMetricKind string
+
+const RuntimeMetricGoroutine RuntimeMetricKind = "goroutine"
+
+type ServiceRuntimeStats struct {
+	Name       string            `json:"name"`
+	Count      int               `json:"count"`
+	MetricKind RuntimeMetricKind `json:"metricKind"`
+	Available  bool              `json:"available"`
+	Error      *string           `json:"error,omitempty"`
+}
+
+type SystemStats struct {
+	CPUUsage          float64               `json:"cpuUsage"`
+	MemoryTotal       uint64                `json:"memoryTotal"`
+	MemoryUsed        uint64                `json:"memoryUsed"`
+	MemoryUsage       float64               `json:"memoryUsage"`
+	ThreadCount       int                   `json:"threadCount"`
+	TotalGoGoroutines int                   `json:"totalGoGoroutines"`
+	TotalRuntimeUnits int                   `json:"totalRuntimeUnits"`
+	ServiceRuntime    []ServiceRuntimeStats `json:"serviceRuntime"`
+	LoadAvg1          float64               `json:"loadAvg1"`
+	LoadAvg5          float64               `json:"loadAvg5"`
+	LoadAvg15         float64               `json:"loadAvg15"`
+}
+
+func memoryStats() (total, used uint64) {
+	data, err := osReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, 0
+	}
+	values := map[string]uint64{}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		key := strings.TrimSuffix(fields[0], ":")
+		value, _ := strconv.ParseUint(fields[1], 10, 64)
+		values[key] = value * 1024
+	}
+	total = values["MemTotal"]
+	available := values["MemAvailable"]
+	if total > available {
+		used = total - available
+	}
+	return total, used
+}
+
+func loadAverage() (float64, float64, float64) {
+	data, err := osReadFile("/proc/loadavg")
+	if err != nil {
+		return 0, 0, 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 3 {
+		return 0, 0, 0
+	}
+	one, _ := strconv.ParseFloat(fields[0], 64)
+	five, _ := strconv.ParseFloat(fields[1], 64)
+	fifteen, _ := strconv.ParseFloat(fields[2], 64)
+	return one, five, fifteen
+}
+
+func threadCount() int {
+	data, err := osReadFile("/proc/self/status")
+	if err != nil {
+		return 0
+	}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if strings.HasPrefix(line, "Threads:") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 {
+				value, _ := strconv.Atoi(fields[1])
+				return value
+			}
+		}
+	}
+	return 0
+}
+
+type procSampler struct {
+	mu        sync.Mutex
+	lastIdle  uint64
+	lastTotal uint64
+}
+
+func (s *procSampler) cpuUsage() float64 {
+	idle, total, ok := readCPUSample()
+	if !ok {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lastTotal == 0 {
+		s.lastTotal = total
+		s.lastIdle = idle
+		return 0
+	}
+	totalDelta := total - s.lastTotal
+	idleDelta := idle - s.lastIdle
+	s.lastTotal = total
+	s.lastIdle = idle
+	if totalDelta == 0 || idleDelta > totalDelta {
+		return 0
+	}
+	return float64(totalDelta-idleDelta) / float64(totalDelta) * 100
+}
+
+func readCPUSample() (idle, total uint64, ok bool) {
+	data, err := osReadFile("/proc/stat")
+	if err != nil {
+		return 0, 0, false
+	}
+	fields := strings.Fields(strings.SplitN(string(data), "\n", 2)[0])
+	if len(fields) < 5 || fields[0] != "cpu" {
+		return 0, 0, false
+	}
+	values := make([]uint64, 0, len(fields)-1)
+	for _, field := range fields[1:] {
+		value, _ := strconv.ParseUint(field, 10, 64)
+		values = append(values, value)
+	}
+	idle = values[3]
+	if len(values) > 4 {
+		idle += values[4]
+	}
+	for _, value := range values {
+		total += value
+	}
+	return idle, total, true
+}

@@ -42,6 +42,7 @@ WORKDIR /workspace/hololive-bot
 COPY go.mod go.work go.work.sum ./
 COPY scripts/deploy/ap-rsync-files.txt ./scripts/deploy/ap-rsync-files.txt
 COPY --from=shared_go_workspace . /workspace/shared-go
+COPY admin-dashboard/backend ./admin-dashboard/backend
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
 RUN set -eu; \

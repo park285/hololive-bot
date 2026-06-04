@@ -1,11 +1,4 @@
 # relative/path:MAX_LINES
-admin-dashboard/backend/src/holo/handlers.rs:80
-admin-dashboard/backend/src/holo/handlers_queries.rs:360
-admin-dashboard/backend/src/holo/handlers_commands.rs:340
-admin-dashboard/backend/src/holo/types.rs:80
-admin-dashboard/backend/src/holo/types/members.rs:160
-admin-dashboard/backend/src/holo/types/milestones.rs:180
-admin-dashboard/backend/src/config/security.rs:220
 admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
 scripts/logs/remote-sync-main-logs.sh:480
 hololive/hololive-kakao-bot-go/scripts/bot.sh:560

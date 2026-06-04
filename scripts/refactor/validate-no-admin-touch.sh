@@ -23,16 +23,22 @@ changed="$(
     git ls-files --others --exclude-standard 2>/dev/null || true
   } | sort -u
 )"
-admin_changed="$(echo "$changed" | grep -E '^admin-dashboard/' | grep -v -E '^admin-dashboard/Dockerfile$' || true)"
-if [[ -n "${admin_changed}" ]]; then
-  echo "${admin_changed}"
-  {
-    echo "admin-dashboard files changed while the admin-touch guardrail is active."
-    echo "intentional admin-dashboard work: commit it so pre-push swaps this tripwire for the admin quality gates"
-    echo "(cargo fmt/clippy/test + frontend). otherwise remove the stray admin-dashboard changes,"
-    echo "or set RUN_ADMIN_TOUCH_GUARDRAIL=false for a one-off bypass."
-  } >&2
-  exit 1
+
+admin_changed="$(echo "${changed}" | grep -E '^admin-dashboard/' || true)"
+if [[ -z "${admin_changed}" ]]; then
+  echo "ok: no admin-dashboard scope changes against ${BASE_REF}...${HEAD_REF}"
+  exit 0
 fi
 
-echo "ok: no admin-dashboard scope changes against ${BASE_REF}...${HEAD_REF}"
+printf '%s\n' "${admin_changed}"
+
+echo "admin-dashboard files changed; running Go-only admin-dashboard quality gates" >&2
+./scripts/ci/admin-dashboard-go-ci.sh
+
+frontend_changed="$(echo "${admin_changed}" | grep -E '^admin-dashboard/frontend/' || true)"
+if [[ -n "${frontend_changed}" ]]; then
+  echo "frontend files changed; running frontend lint/build" >&2
+  (cd admin-dashboard/frontend && npm ci --no-audit --no-fund && npm run lint && npm run build)
+fi
+
+echo "ok: admin-dashboard changes passed active quality gates"
