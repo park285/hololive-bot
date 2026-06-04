@@ -8,7 +8,6 @@ import (
 	"image/png"
 	"math"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -197,13 +196,7 @@ func TestStoreDiskCachedImage_PrunesStaleMonthHashes(t *testing.T) {
 
 func TestCalendarCardRenderer_RenderCalendarImage_CoalescesConcurrentMonthlyCacheMisses(t *testing.T) {
 	var requests atomic.Int32
-	pngData := tinyPNG(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		time.Sleep(25 * time.Millisecond)
-		w.Header().Set("Content-Type", "image/png")
-		_, _ = w.Write(pngData)
-	}))
+	server := newDelayedPNGServer(t, &requests, 25*time.Millisecond)
 	defer server.Close()
 
 	r := NewCalendarCardRenderer()
@@ -284,15 +277,13 @@ func TestCalendarCardRenderer_RenderCalendarImage_RefreshesCacheWhenEntriesChang
 func TestFetchMemberPhotoRequestsHighResolutionThumbnail(t *testing.T) {
 	var requestedPath string
 	pngData := tinyPNG(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestedPath = r.URL.Path
-		w.Header().Set("Content-Type", "image/png")
-		_, _ = w.Write(pngData)
-	}))
-	defer server.Close()
+	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requestedPath = req.URL.Path
+		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+	})))
 
 	photos := make(map[string]image.Image)
-	photoURL := server.URL + "/avatar=s88-c"
+	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
 	fetchMemberPhoto(domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
@@ -311,13 +302,11 @@ func TestFetchImageAcceptsLargeThumbnailPayload(t *testing.T) {
 		t.Fatalf("test PNG size = %d, want larger than %d", got, want)
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "image/png")
-		_, _ = w.Write(pngData)
-	}))
-	defer server.Close()
+	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+	})))
 
-	img, err := fetchImage(server.URL)
+	img, err := fetchImage("https://yt3.googleusercontent.com/avatar=s1024-c")
 	if err != nil {
 		t.Fatalf("fetchImage() error = %v", err)
 	}
@@ -466,15 +455,39 @@ func assertValidPNG(t *testing.T, data []byte) {
 	}
 }
 
-func newPNGServer(t *testing.T, requests *atomic.Int32) *httptest.Server {
+type pngPhotoServer struct {
+	URL   string
+	close func()
+}
+
+func (s *pngPhotoServer) Close() {
+	if s.close != nil {
+		s.close()
+	}
+}
+
+func newPNGServer(t *testing.T, requests *atomic.Int32) *pngPhotoServer {
+	return newDelayedPNGServer(t, requests, 0)
+}
+
+func newDelayedPNGServer(t *testing.T, requests *atomic.Int32, delay time.Duration) *pngPhotoServer {
 	t.Helper()
 
 	pngData := tinyPNG(t)
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	previous := photoClient
+	photoClient = newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(1)
-		w.Header().Set("Content-Type", "image/png")
-		_, _ = w.Write(pngData)
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+		return calendarPhotoTestResponse(req, "image/png", pngData), nil
 	}))
+	return &pngPhotoServer{
+		URL: "https://yt3.googleusercontent.com",
+		close: func() {
+			photoClient = previous
+		},
+	}
 }
 
 func tinyPNG(t *testing.T) []byte {
