@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -404,6 +405,19 @@ func TestETagRoundTrip(t *testing.T) {
 	rec = doRequest(handler, req)
 	require.Equal(t, http.StatusNotModified, rec.Code)
 	require.Empty(t, rec.Body.String())
+}
+
+func TestSPAFallbackServesIndexWith200(t *testing.T) {
+	rt := newTestRuntime(t, &fakeSessions{}, nil)
+	rt.static = static.NewHandlerFromFS(fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte("<!doctype html><html lang=\"ko\"></html>")},
+	})
+	for _, path := range []string{"/", "/dashboard/stats", "/login"} {
+		rec := doRequest(rt.Handler(), httptest.NewRequest(http.MethodGet, path, nil))
+		require.Equal(t, http.StatusOK, rec.Code, "path %s", path)
+		require.Contains(t, rec.Header().Get("Content-Type"), "text/html", "path %s", path)
+		require.Contains(t, rec.Body.String(), "<!doctype html>", "path %s", path)
+	}
 }
 
 func TestUnknownAdminAPIRouteIs404JSON(t *testing.T) {

@@ -24,6 +24,10 @@ func NewHandler() Handler {
 	return Handler{dist: dist}
 }
 
+func NewHandlerFromFS(dist fs.FS) Handler {
+	return Handler{dist: dist}
+}
+
 func (h Handler) ServeAsset(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/assets/")
 	h.serveFile(w, r, "assets/"+path, "public, max-age=31536000, immutable")
