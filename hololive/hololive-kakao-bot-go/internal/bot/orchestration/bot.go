@@ -96,15 +96,6 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	core, messaging, data := deps.coreDeps(), deps.messagingDeps(), deps.dataDeps()
 	stream, support, feature := deps.streamDeps(), deps.supportDeps(), deps.featureDeps()
 
-	calendarFinder := command.CelebrationCalendarFinder(nil)
-	if data.memberRepository != nil {
-		calendarFinder = command.NewCachedCelebrationCalendarFinder(
-			data.memberRepository,
-			core.calendarImageCacheDir,
-			core.calendarEntryCacheTTL,
-		)
-	}
-
 	bot := &Bot{
 		botSelfUser:           core.botSelfUser,
 		irisBaseURL:           core.irisBaseURL,
@@ -127,7 +118,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		memberNews:            feature.memberNews,
 		commandBuilders:       feature.commandBuilders,
 		membersData:           stream.membersData,
-		memberRepository:      calendarFinder,
+		memberRepository:      newCelebrationCalendarFinder(data, core),
 		calendarImageRenderer: render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(core.calendarImageCacheDir)),
 		workerPool:            support.workerPool,
 		stopCh:                make(chan struct{}),
@@ -152,6 +143,17 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	bot.initializeCommands()
 
 	return bot, nil
+}
+
+func newCelebrationCalendarFinder(data dataDependencies, core coreDependencies) command.CelebrationCalendarFinder {
+	if data.memberRepository == nil {
+		return nil
+	}
+	return command.NewCachedCelebrationCalendarFinder(
+		data.memberRepository,
+		core.calendarImageCacheDir,
+		core.calendarEntryCacheTTL,
+	)
 }
 
 func (b *Bot) initializeCommands() {
