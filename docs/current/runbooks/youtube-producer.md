@@ -133,7 +133,7 @@ The remote wrapper covers that host's AP services only. The main-host `youtube-p
 COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
-First boot on a newly provisioned AP host (no AP containers yet) requires `AP_PREFLIGHT_ALLOW_FIRST_BOOT=true` so the Iris H3 trust preflight skips its in-container check once; post-start readiness checks still gate the rollout.
+First boot on a newly provisioned AP host (no AP containers yet) requires `AP_PREFLIGHT_ALLOW_FIRST_BOOT=true` so the Iris H3 trust preflight skips its in-container check once; post-start readiness checks still gate the rollout. The wrapper also copies `docker-compose.prod.yml` and the host overlay into its prechange backup *before* the rsync step, so pre-seed the repo files onto the host once (manual rsync with `--files-from=scripts/deploy/ap-rsync-files.txt`) before the first `--apply`.
 
 ## Common failure modes
 
@@ -288,6 +288,7 @@ Do not add runtime-name aliases in application code. Historical rows remain hist
 - Scale down `youtube-producer-b` (seoul) first, confirm `youtube-producer-a` (osaka) remains healthy, then redeploy the previous image/config.
 - Confirm `YOUTUBE_INGESTION_ENABLED=true`, active `/ready`, health on port `30005`, and outbox/photo sync state after rollback.
 - The deploy wrapper stores overwritten files and prechange container inventory under `backups/<host>-active-active-<timestamp>/` on that AP host; use that evidence to restore the previous `docker-compose.prod.yml` and that host's compose override if active-active startup fails.
+- Topology-level rollback to the pre-2026-06-04 Osaka `a`+`b` layout is manual: stop `youtube-producer-b` on seoul, restore the osaka prechange `docker-compose.osaka.yml` (it still defines `youtube-producer-b`), then start it on osaka with an explicit `up -d --no-deps youtube-producer-b`. `ap-rollback.sh osaka` alone restores files but only recreates the services listed in `ap-hosts/osaka.conf` (now `youtube-producer-a`).
 - Dry-run the rollback helper before applying (per-host approval env var):
 
 ```bash

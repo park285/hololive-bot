@@ -10,7 +10,7 @@
 
 ## 1. 이 문서의 목적
 
-현재 `youtube-producer`는 Osaka의 `youtube-producer-a`, `youtube-producer-b`와 main host의 `youtube-producer-c`가 동시에 실행되는 3-way active-active 구조입니다.
+현재 `youtube-producer`는 Osaka의 `youtube-producer-a`, Seoul의 `youtube-producer-b`, main host의 `youtube-producer-c`가 동시에 실행되는 3-way active-active 구조입니다.
 
 현재 구조는 이미 다음을 갖고 있습니다.
 
