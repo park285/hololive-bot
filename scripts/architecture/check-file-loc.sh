@@ -35,6 +35,9 @@ load_threshold_file() {
       exit 1
     fi
 
+    if [[ -n "${configured[${path}]:-}" ]]; then
+      violations+=("duplicate-threshold:${path}")
+    fi
     configured["${path}"]="${max}"
   done < "${threshold_file}"
 }
