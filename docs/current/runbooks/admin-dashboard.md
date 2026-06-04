@@ -140,6 +140,18 @@ Diagnosis:
 Mitigation:
 - `ADMIN_PASS_BCRYPT`/`SESSION_SECRET` env 주입과 해시 형식(`$2b$...`, compose의 `$$` 이스케이프) 확인.
 
+### 5. 시스템 리소스(인프라) 패널 미동작
+
+Symptoms:
+- 대시보드 로그인은 되지만 시스템 리소스 차트가 비어 있음 (`/admin/api/ws/system-stats` WS 403).
+
+Diagnosis:
+- 접속 origin이 allowlist에 있는지 확인. `WS_ORIGIN_MODE=enforce`(기본)에서 미등록 origin은 조용히 403 (로그 없음).
+- fallback allowlist는 `https://admin.capu.blog` 하나뿐이며 production에서는 localhost 계열이 제거됨.
+
+Mitigation:
+- compose `ALLOWED_ORIGINS`에 실제 접속 origin(예: `http://100.100.1.3:30190`)을 콤마로 추가 후 `up -d --no-deps admin-dashboard`.
+
 ## Smoke test
 
 ```bash
