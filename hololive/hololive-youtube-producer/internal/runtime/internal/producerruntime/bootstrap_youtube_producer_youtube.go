@@ -133,7 +133,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 		return deps, err
 	}
 	jobClaimer = newReadinessReportingJobClaimer(jobClaimer, readinessState)
-	budgetWiring, err := buildIngestionRuntimeGlobalBudgetWiring(appConfig, infra, budgetCfg, readinessState)
+	budgetWiring, err := buildIngestionRuntimeGlobalBudgetWiring(appConfig, infra, budgetCfg, readinessState, logger)
 	if err != nil {
 		return deps, err
 	}
@@ -177,9 +177,16 @@ func buildIngestionRuntimeGlobalBudgetWiring(
 	infra *youtubeProducerInfrastructure,
 	budgetCfg config.YouTubeProducerGlobalBudgetConfig,
 	readinessState *readiness.State,
+	logger *slog.Logger,
 ) (polling.GlobalBudgetWiring, error) {
 	if !budgetCfg.Enabled {
 		return polling.GlobalBudgetWiring{}, nil
+	}
+	if budgetCfg.WindowCheckEnabled && logger != nil {
+		logger.Warn("budget_window_check_not_implemented",
+			slog.String("env", "YOUTUBE_PRODUCER_BUDGET_WINDOW_CHECK_ENABLED"),
+			slog.String("effect", "ignored_in_phase1"),
+		)
 	}
 	namespace := strings.TrimSpace(appConfig.Scraper.ActiveActive.Namespace)
 	if namespace == "" {
