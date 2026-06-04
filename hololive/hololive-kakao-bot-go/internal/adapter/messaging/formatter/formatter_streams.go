@@ -80,16 +80,7 @@ func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*do
 		return msging.ErrorMessage(msging.ErrDisplayLiveStreamsFailed)
 	}
 
-	if data.Count == 0 {
-		return rendered
-	}
-
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }
 
 func (f *ResponseFormatter) liveStreamsTemplateData(streams []*domain.Stream) liveStreamsTemplateData {
@@ -145,16 +136,7 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 		return msging.ErrorMessage(msging.ErrDisplayUpcomingFailed)
 	}
 
-	if data.Count == 0 {
-		return rendered
-	}
-
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }
 
 func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) string {
@@ -164,16 +146,7 @@ func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain
 		return msging.ErrorMessage(msging.ErrDisplayScheduleFailed)
 	}
 
-	if data.Count == 0 {
-		return rendered
-	}
-
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }
 
 func (f *ResponseFormatter) channelScheduleTemplateData(channel *domain.Channel, streams []*domain.Stream, days int) channelScheduleTemplateData {

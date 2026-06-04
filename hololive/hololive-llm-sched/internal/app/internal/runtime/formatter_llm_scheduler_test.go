@@ -82,45 +82,6 @@ func TestErrorMessage(t *testing.T) {
 	assert.Equal(t, "❌ 실패", errorMessage("실패"))
 }
 
-func TestSplitTemplateInstruction(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name            string
-		rendered        string
-		wantInstruction string
-		wantBody        string
-	}{
-		{
-			name:            "empty",
-			rendered:        "\n\n",
-			wantInstruction: "",
-			wantBody:        "",
-		},
-		{
-			name:            "instruction only",
-			rendered:        "안내문",
-			wantInstruction: "안내문",
-			wantBody:        "",
-		},
-		{
-			name:            "instruction and body",
-			rendered:        "\r\n 자세히 보기 \r\n\r\n본문 줄1\n본문 줄2",
-			wantInstruction: "자세히 보기",
-			wantBody:        "본문 줄1\n본문 줄2",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			instruction, body := splitTemplateInstruction(tt.rendered)
-			assert.Equal(t, tt.wantInstruction, instruction)
-			assert.Equal(t, tt.wantBody, body)
-		})
-	}
-}
-
 func TestLLMSchedulerFormatterRender(t *testing.T) {
 	t.Parallel()
 

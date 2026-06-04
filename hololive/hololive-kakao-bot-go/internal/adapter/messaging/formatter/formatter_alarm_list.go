@@ -25,7 +25,6 @@ import (
 
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmListEntry) string {
@@ -50,16 +49,7 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 		return msging.ErrorMessage(msging.ErrDisplayAlarmListFailed)
 	}
 
-	if data.Count == 0 {
-		return rendered
-	}
-
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }
 
 func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) string {

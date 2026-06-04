@@ -29,7 +29,6 @@ import (
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	templateview "github.com/kapu/hololive-shared/pkg/templateview"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type majorEventWeeklySummaryData struct {
@@ -89,12 +88,7 @@ func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, e
 		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }
 
 func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
@@ -122,12 +116,7 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
 	}
 
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }
 
 func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {

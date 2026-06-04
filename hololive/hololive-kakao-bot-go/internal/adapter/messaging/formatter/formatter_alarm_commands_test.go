@@ -27,7 +27,6 @@ import (
 
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,7 +65,7 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 	})
 	assert.Contains(t, list, "알람 목록")
 	assert.Contains(t, list, "미코|방송+커뮤니티|live")
-	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(list, util.KakaoZeroWidthSpace))
+	assert.NotContains(t, list, "\u200b")
 
 	emptyList := formatter.FormatAlarmList(t.Context(), nil)
 	assert.Equal(t, "알람 목록", emptyList)

@@ -26,7 +26,6 @@ import (
 
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
@@ -77,16 +76,7 @@ func (f *ResponseFormatter) MemberDirectory(ctx context.Context, groups []Member
 		return msging.ErrorMessage(msging.ErrDisplayMemberListFailed)
 	}
 
-	if len(viewGroups) == 0 {
-		return rendered
-	}
-
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }
 
 func prepareMemberDirectoryGroups(groups []MemberDirectoryGroup) []memberDirectoryGroupView {

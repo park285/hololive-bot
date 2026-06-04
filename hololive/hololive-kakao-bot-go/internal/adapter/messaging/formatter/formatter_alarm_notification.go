@@ -167,8 +167,6 @@ func compareAlarmNotificationGroupEntry(a, b alarmNotificationGroupEntry) int {
 }
 
 func renderAlarmNotificationGroup(minutesUntil int, entries []alarmNotificationGroupEntry) string {
-	instruction := msging.DefaultEmoji.Alarm + " 방송 알림"
-
 	var sb strings.Builder
 	sb.WriteString(msging.CountedHeader(msging.DefaultEmoji.Alarm, "방송 알림", len(entries)))
 	sb.WriteString("\n\n")
@@ -179,12 +177,7 @@ func renderAlarmNotificationGroup(minutesUntil int, entries []alarmNotificationG
 		writeAlarmNotificationGroupEntry(&sb, idx, len(entries), minutesUntil, entry)
 	}
 
-	content := stringutil.TrimSpace(sb.String())
-	if content == "" {
-		return ""
-	}
-
-	return util.ApplyKakaoSeeMorePadding(content, instruction)
+	return stringutil.TrimSpace(sb.String())
 }
 
 func writeAlarmNotificationGroupEntry(sb *strings.Builder, idx, count, minutesUntil int, entry alarmNotificationGroupEntry) {

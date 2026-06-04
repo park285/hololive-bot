@@ -28,7 +28,6 @@ import (
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,18 +62,18 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 	assert.Contains(t, live, "라이브 목록")
 	assert.Contains(t, live, "[Holo] 사쿠라 미코")
 	assert.Contains(t, live, "https://youtube.com/watch?v=abc123")
-	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(live, util.KakaoZeroWidthSpace))
+	assert.NotContains(t, live, "\u200b")
 
 	upcoming := formatter.UpcomingStreams(t.Context(), streams, 12)
 	assert.Contains(t, upcoming, "예정 목록")
 	assert.Contains(t, upcoming, "https://youtube.com/watch?v=abc123")
-	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(upcoming, util.KakaoZeroWidthSpace))
+	assert.NotContains(t, upcoming, "\u200b")
 
 	channel := &domain.Channel{Name: "사쿠라 미코"}
 	schedule := formatter.ChannelSchedule(t.Context(), channel, streams, 7)
 	assert.Contains(t, schedule, "채널 일정")
 	assert.Contains(t, schedule, "https://youtube.com/watch?v=abc123")
-	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(schedule, util.KakaoZeroWidthSpace))
+	assert.NotContains(t, schedule, "\u200b")
 
 	emptyLive := formatter.FormatLiveStreams(t.Context(), nil)
 	assert.Equal(t, "라이브 목록", emptyLive)
@@ -177,7 +176,7 @@ func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
 	assert.Contains(t, message, "멤버 목록")
 	assert.Contains(t, message, "JP 1기생")
 	assert.Contains(t, message, "사쿠라 미코(Sakura Miko)")
-	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(message, util.KakaoZeroWidthSpace))
+	assert.NotContains(t, message, "\u200b")
 
 	emptyPrepared := prepareMemberDirectoryGroups(nil)
 	assert.Nil(t, emptyPrepared)

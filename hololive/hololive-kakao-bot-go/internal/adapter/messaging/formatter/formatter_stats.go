@@ -53,9 +53,7 @@ func (f *ResponseFormatter) FormatStatsTopGainers(periodLabel string, gainers []
 		builder.WriteString("\n\n")
 	}
 
-	content := stringutil.TrimSpace(builder.String())
-
-	return util.ApplyKakaoSeeMorePadding(stringutil.StripLeadingHeader(content, instruction), instruction)
+	return stringutil.TrimSpace(builder.String())
 }
 
 func (f *ResponseFormatter) FormatSubscriberCount(memberName string, subscribers uint64) string {
