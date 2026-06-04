@@ -128,28 +128,14 @@ func buildIngestionRuntimeYouTubeDependencies(
 	if err := publishedat.ValidateSchemaIfEnabled(ctx, appConfig.Scraper, infra.postgresService, logger); err != nil {
 		return deps, fmt.Errorf("validate published_at resolver schema: %w", err)
 	}
-	jobClaimer, err := buildIngestionRuntimeJobClaimer(appConfig, infra)
-	if err != nil {
-		return deps, err
-	}
-	jobClaimer = newReadinessReportingJobClaimer(jobClaimer, readinessState)
-	budgetWiring, err := buildIngestionRuntimeGlobalBudgetWiring(appConfig, infra, budgetCfg, readinessState, logger)
+	jobClaimer, budgetWiring, err := buildIngestionRuntimeCoordination(appConfig, infra, budgetCfg, readinessState, logger)
 	if err != nil {
 		return deps, err
 	}
 	if appConfig.Scraper.ActiveActive.Enabled {
 		probeReadinessJobClaimer(ctx, jobClaimer, logger)
 	}
-	deps.publishedAtResolver = publishedat.BuildPendingResolver(
-		appConfig.Scraper,
-		infra.postgresService,
-		sharedScraperClient,
-		routeDecider,
-		logger,
-	)
-	if deps.publishedAtResolver != nil {
-		deps.publishedAtResolver.SetCandidateClaimer(jobClaimer)
-	}
+	deps.publishedAtResolver = buildIngestionRuntimePublishedAtResolver(appConfig, infra, sharedScraperClient, routeDecider, jobClaimer, logger)
 	deps.scraperScheduler, deps.pollerRegistrations, err = polling.BuildComponentsWithJobClaimer(
 		appConfig.Scraper,
 		jobClaimer,
@@ -170,6 +156,46 @@ func buildIngestionRuntimeYouTubeDependencies(
 	deps.pollTargetRefresher = buildPollTargetRefresher(appConfig, infra, deps, state, logger)
 	deps.youtubeScheduler = infra.ytStack.Scheduler
 	return deps, nil
+}
+
+func buildIngestionRuntimeCoordination(
+	appConfig *config.Config,
+	infra *youtubeProducerInfrastructure,
+	budgetCfg config.YouTubeProducerGlobalBudgetConfig,
+	readinessState *readiness.State,
+	logger *slog.Logger,
+) (poller.JobClaimer, polling.GlobalBudgetWiring, error) {
+	jobClaimer, err := buildIngestionRuntimeJobClaimer(appConfig, infra)
+	if err != nil {
+		return nil, polling.GlobalBudgetWiring{}, err
+	}
+	jobClaimer = newReadinessReportingJobClaimer(jobClaimer, readinessState)
+	budgetWiring, err := buildIngestionRuntimeGlobalBudgetWiring(appConfig, infra, budgetCfg, readinessState, logger)
+	if err != nil {
+		return nil, polling.GlobalBudgetWiring{}, err
+	}
+	return jobClaimer, budgetWiring, nil
+}
+
+func buildIngestionRuntimePublishedAtResolver(
+	appConfig *config.Config,
+	infra *youtubeProducerInfrastructure,
+	sharedScraperClient *scraper.Client,
+	routeDecider poller.NotificationRouteDecider,
+	jobClaimer poller.JobClaimer,
+	logger *slog.Logger,
+) *poller.PendingPublishedAtResolver {
+	resolver := publishedat.BuildPendingResolver(
+		appConfig.Scraper,
+		infra.postgresService,
+		sharedScraperClient,
+		routeDecider,
+		logger,
+	)
+	if resolver != nil {
+		resolver.SetCandidateClaimer(jobClaimer)
+	}
+	return resolver
 }
 
 func buildIngestionRuntimeGlobalBudgetWiring(

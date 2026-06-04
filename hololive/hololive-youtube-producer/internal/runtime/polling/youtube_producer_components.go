@@ -37,11 +37,27 @@ func buildYouTubeProducerComponents(
 	if resolverRegistration := publishedat.BuildRegistration(publishedAtResolver, scraperConfig, logger); resolverRegistration != nil {
 		pollerRegistrations = append(pollerRegistrations, *resolverRegistration)
 	}
-	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
+	if err := validateYouTubeProducerRegistrationsAndBudgets(pollerRegistrations, scraperConfig, budgetWiring, logger); err != nil {
 		return nil, nil, err
 	}
+
+	schedulerOptions := buildYouTubeProducerSchedulerOptions(pollerRegistrations, scraperConfig, jobClaimer, budgetWiring)
+	scraperScheduler := providers.ProvideScraperScheduler(nil, logger, schedulerOptions...)
+
+	return scraperScheduler, pollerRegistrations, nil
+}
+
+func validateYouTubeProducerRegistrationsAndBudgets(
+	pollerRegistrations []providers.ChannelPollerRegistration,
+	scraperConfig config.ScraperConfig,
+	budgetWiring GlobalBudgetWiring,
+	logger *slog.Logger,
+) error {
+	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
+		return err
+	}
 	if err := validateRegistrationBudgetProfiles(pollerRegistrations); err != nil {
-		return nil, nil, err
+		return err
 	}
 	sourceBudgetEstimate := estimateYouTubeProducerSourceBudget(
 		pollerRegistrations,
@@ -51,10 +67,15 @@ func buildYouTubeProducerComponents(
 	logYouTubeProducerSourceBudgetEstimate(sourceBudgetEstimate, logger)
 	budgetSummary := summarizeYouTubeProducerBudget(pollerRegistrations)
 	logYouTubeProducerBudgetSummary(budgetSummary, logger)
-	if err := validateYouTubeProducerPollerBudget(budgetSummary); err != nil {
-		return nil, nil, err
-	}
+	return validateYouTubeProducerPollerBudget(budgetSummary)
+}
 
+func buildYouTubeProducerSchedulerOptions(
+	pollerRegistrations []providers.ChannelPollerRegistration,
+	scraperConfig config.ScraperConfig,
+	jobClaimer poller.JobClaimer,
+	budgetWiring GlobalBudgetWiring,
+) []providers.ScraperSchedulerOption {
 	schedulerConfig := scraperConfig.SchedulerOrDefault()
 	schedulerOptions := []providers.ScraperSchedulerOption{
 		providers.WithChannelPollerRegistrations(pollerRegistrations),
@@ -73,10 +94,7 @@ func buildYouTubeProducerComponents(
 	if budgetWiring.AcquireTimeout > 0 {
 		schedulerOptions = append(schedulerOptions, providers.WithSchedulerBudgetAcquireTimeout(budgetWiring.AcquireTimeout))
 	}
-
-	scraperScheduler := providers.ProvideScraperScheduler(nil, logger, schedulerOptions...)
-
-	return scraperScheduler, pollerRegistrations, nil
+	return schedulerOptions
 }
 
 func buildSharedYouTubeProducerClient(

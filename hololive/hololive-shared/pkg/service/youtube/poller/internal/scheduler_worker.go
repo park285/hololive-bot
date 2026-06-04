@@ -72,30 +72,43 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	claimCtx, renewCancel, renewErrCh := s.maybeStartJobClaimRenewLoop(ctx, job.Poller.Name(), decision)
 	defer renewCancel()
 
+	reservation, proceed := s.gateJobBudget(ctx, claimCtx, job, decision)
+	if !proceed {
+		return
+	}
+	s.runClaimedJobPoll(ctx, claimCtx, job, workerID, decision, reservation, renewErrCh, claimStartedAt)
+}
+
+func (s *Scheduler) gateJobBudget(ctx, claimCtx context.Context, job *Job, decision jobClaimDecision) (BudgetReservation, bool) {
 	reservation, budgetDecision, err := s.reserveJobBudget(claimCtx, job)
 	if err != nil {
 		if decision.claimed {
 			s.releaseJobClaim(context.WithoutCancel(ctx), job, decision.claim)
 		}
 		s.rescheduleJobAfterPoll(job, err)
-		return
+		return nil, false
 	}
 	if !budgetDecision.Allowed {
 		if decision.claimed {
 			s.releaseJobClaim(context.WithoutCancel(ctx), job, decision.claim)
 		}
 		s.rescheduleJobAfterBudgetSkip(job, budgetDecision.RetryAfter)
-		return
+		return nil, false
 	}
+	return reservation, true
+}
 
+func (s *Scheduler) runClaimedJobPoll(
+	ctx, claimCtx context.Context,
+	job *Job,
+	workerID int,
+	decision jobClaimDecision,
+	reservation BudgetReservation,
+	renewErrCh <-chan error,
+	claimStartedAt time.Time,
+) {
 	reservationTerminal := false
-	defer func() {
-		if reservation != nil && !reservationTerminal {
-			_ = reservation.Release(context.WithoutCancel(ctx))
-			reservationTerminal = true
-			s.metrics.AddBudgetInflight(job.budgetProfile, -1)
-		}
-	}()
+	defer s.releaseJobReservationIfNotTerminal(ctx, job, reservation, &reservationTerminal)
 
 	if err := s.waitForJobRunSlot(claimCtx, job, decision); err != nil {
 		return
@@ -105,7 +118,7 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	defer cancel()
 
 	start := time.Now()
-	err = job.Poller.Poll(pollCtx, job.ChannelID)
+	err := job.Poller.Poll(pollCtx, job.ChannelID)
 	elapsed := time.Since(start)
 	if renewErr := drainJobClaimRenewError(renewErrCh); renewErr != nil && err == nil {
 		err = renewErr
@@ -113,14 +126,7 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	if decision.claimed {
 		err = s.finishJobClaim(context.WithoutCancel(ctx), job, decision.claim, err)
 	}
-	if err == nil && reservation != nil {
-		if commitErr := reservation.Commit(context.WithoutCancel(ctx)); commitErr != nil {
-			err = fmt.Errorf("commit budget reservation: %w", commitErr)
-		} else {
-			reservationTerminal = true
-			s.metrics.AddBudgetInflight(job.budgetProfile, -1)
-		}
-	}
+	err = s.commitJobReservation(ctx, job, reservation, err, &reservationTerminal)
 	if decision.claimed {
 		s.observeJobLeaseElapsed(job, time.Since(claimStartedAt))
 	}
@@ -128,6 +134,27 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	s.metrics.SchedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
 
 	s.rescheduleJobAfterPoll(job, err)
+}
+
+func (s *Scheduler) releaseJobReservationIfNotTerminal(ctx context.Context, job *Job, reservation BudgetReservation, terminal *bool) {
+	if reservation == nil || *terminal {
+		return
+	}
+	_ = reservation.Release(context.WithoutCancel(ctx))
+	*terminal = true
+	s.metrics.AddBudgetInflight(job.budgetProfile, -1)
+}
+
+func (s *Scheduler) commitJobReservation(ctx context.Context, job *Job, reservation BudgetReservation, pollErr error, terminal *bool) error {
+	if pollErr != nil || reservation == nil {
+		return pollErr
+	}
+	if commitErr := reservation.Commit(context.WithoutCancel(ctx)); commitErr != nil {
+		return fmt.Errorf("commit budget reservation: %w", commitErr)
+	}
+	*terminal = true
+	s.metrics.AddBudgetInflight(job.budgetProfile, -1)
+	return nil
 }
 
 type jobClaimDecision struct {
