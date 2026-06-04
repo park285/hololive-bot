@@ -130,7 +130,7 @@ CHANGE_STARTED_AT=<change_started_at> ./scripts/deploy/ap-completion-check.sh <h
 The remote wrapper covers that host's AP services only. The main-host `youtube-producer-c` is redeployed separately on the main host, guarded by its `main-ap` profile:
 
 ```bash
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
 First boot on a newly provisioned AP host (no AP containers yet) requires `AP_PREFLIGHT_ALLOW_FIRST_BOOT=true` so the Iris H3 trust preflight skips its in-container check once; post-start readiness checks still gate the rollout. The wrapper also copies `docker-compose.prod.yml` and the host overlay into its prechange backup *before* the rsync step, so pre-seed the repo files onto the host once (manual rsync with `--files-from=scripts/deploy/ap-rsync-files.txt`) before the first `--apply`.
@@ -145,8 +145,10 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 youtube-producer
-curl http://127.0.0.1:30005/health
+./scripts/logs/ap-status.sh osaka
+./scripts/logs/ap-status.sh seoul
+docker logs --tail 300 hololive-youtube-producer-c
+curl -fsS http://127.0.0.1:30025/ready
 ```
 
 Mitigation:
@@ -189,8 +191,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 youtube-producer
-curl http://127.0.0.1:30005/health
+SINCE=30m TAIL=600 PATTERN='photo' ./scripts/logs/ap-logs.sh osaka youtube-producer | tail -n 80
+docker logs --since 30m hololive-youtube-producer-c 2>&1 | grep -i photo | tail -n 80
 ```
 
 Mitigation:
@@ -233,7 +235,9 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 youtube-producer
+SINCE=30m TAIL=600 PATTERN='outbox' ./scripts/logs/ap-logs.sh osaka youtube-producer | tail -n 80
+SINCE=30m TAIL=600 PATTERN='outbox' ./scripts/logs/ap-logs.sh seoul youtube-producer | tail -n 80
+docker logs --tail 300 hololive-youtube-producer-c
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
 ```
 
@@ -288,7 +292,7 @@ Do not add runtime-name aliases in application code. Historical rows remain hist
 - Scale down `youtube-producer-b` (seoul) first, confirm `youtube-producer-a` (osaka) remains healthy, then redeploy the previous image/config.
 - Confirm `YOUTUBE_INGESTION_ENABLED=true`, active `/ready`, health on port `30005`, and outbox/photo sync state after rollback.
 - The deploy wrapper stores overwritten files and prechange container inventory under `backups/<host>-active-active-<timestamp>/` on that AP host; use that evidence to restore the previous `docker-compose.prod.yml` and that host's compose override if active-active startup fails.
-- Topology-level rollback to the pre-2026-06-04 Osaka `a`+`b` layout is manual: stop `youtube-producer-b` on seoul, restore the osaka prechange `docker-compose.osaka.yml` (it still defines `youtube-producer-b`), then start it on osaka with an explicit `up -d --no-deps youtube-producer-b`. `ap-rollback.sh osaka` alone restores files but only recreates the services listed in `ap-hosts/osaka.conf` (now `youtube-producer-a`).
+- Topology-level rollback to the pre-2026-06-04 Osaka `a`+`b` layout is manual: stop `youtube-producer-b` on seoul, restore a pre-cutover `docker-compose.osaka.yml` that defines `youtube-producer-b` — recover it from git history (`git show 7558024f^:docker-compose.osaka.yml`) or from the 2026-06-04 cutover backup (`backups/osaka-active-active-20260604T102113Z/`); prechange backups taken by deploys *after* the cutover no longer define `youtube-producer-b` — then start it on osaka with an explicit `up -d --no-deps youtube-producer-b`. `ap-rollback.sh osaka` alone restores files but only recreates the services listed in `ap-hosts/osaka.conf` (now `youtube-producer-a`).
 - Dry-run the rollback helper before applying (per-host approval env var):
 
 ```bash

@@ -38,9 +38,9 @@ sudo find data logs -type f -exec chmod 660 {} +
 
 ## YouTube producer 런타임
 
-`docker-compose.prod.yml` 기준 현재 YouTube 수집과 photo sync 책임은 `youtube-producer` 단일 서비스가 소유합니다.
+`docker-compose.prod.yml` 기준 현재 YouTube 수집과 photo sync 책임은 `youtube-producer` 서비스가 소유하며, 런타임은 3-way active-active 인스턴스로 실행됩니다 (osaka `youtube-producer-a` `30005`, seoul `youtube-producer-b` `30015`, main `youtube-producer-c` `30025`).
 
-- `youtube-producer` (`30005`): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`
+- `youtube-producer` (base 정의, 인스턴스 overlay가 포트·instance id·PhotoSync 참여를 override — `youtube-producer-b`는 PhotoSync 미참여): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`
   - YouTube ingestion scheduler
   - YouTube producer scheduler
   - YouTube outbox row production; final send is owned by `alarm-worker`
@@ -171,7 +171,7 @@ COMPOSE_ENV_FILE=./.env.local ./build-all.sh --no-bump --build-only --skip-local
 ./scripts/deploy/compose-redeploy-service.sh hololive-admin-api
 ./scripts/deploy/compose-redeploy-service.sh hololive-alarm-worker
 ./scripts/deploy/compose-redeploy-service.sh llm-scheduler
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
 base `youtube-producer`의 중앙 재배포는 guard로 차단됩니다. 원격 AP(`youtube-producer-a`/`youtube-producer-b`)는 `./scripts/deploy/ap-deploy.sh <host>`로 재배포합니다.

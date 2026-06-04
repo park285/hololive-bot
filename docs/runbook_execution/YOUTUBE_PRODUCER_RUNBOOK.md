@@ -99,7 +99,7 @@ SINCE=15m TAIL=600 PATTERN='ingestion_lease|outbox|ERR|WRN' ./scripts/logs/ap-lo
 docker logs --tail 300 hololive-youtube-producer-c
 ```
 
-복구는 해당 호스트만 재배포합니다 — 원격 AP는 `./scripts/deploy/ap-deploy.sh <host>`, main은 `COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c`.
+복구는 해당 호스트만 재배포합니다 — 원격 AP는 `./scripts/deploy/ap-deploy.sh <host>`, main은 `COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c`.
 
 ### B. 분산 limiter 과차단 의심
 
