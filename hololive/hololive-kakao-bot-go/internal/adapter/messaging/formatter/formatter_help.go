@@ -25,7 +25,6 @@ import (
 
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type helpTemplateData struct {
@@ -41,10 +40,5 @@ func (f *ResponseFormatter) FormatHelp(ctx context.Context) string {
 		return msging.ErrorMessage(msging.ErrDisplayHelpFailed)
 	}
 
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,34 +53,6 @@ func setupFormatterTestRenderer(t *testing.T, templates map[domain.TemplateKey]s
 	logger := slog.New(slog.DiscardHandler)
 
 	return serviceTemplate.NewRenderer(pool, logger)
-}
-
-func TestSplitTemplateInstruction(t *testing.T) {
-	t.Parallel()
-
-	t.Run("blank string", func(t *testing.T) {
-		t.Parallel()
-
-		instruction, body := splitTemplateInstruction("\n\r\n")
-		assert.Empty(t, instruction)
-		assert.Empty(t, body)
-	})
-
-	t.Run("single line only", func(t *testing.T) {
-		t.Parallel()
-
-		instruction, body := splitTemplateInstruction("사용법 안내만")
-		assert.Equal(t, "사용법 안내만", instruction)
-		assert.Empty(t, body)
-	})
-
-	t.Run("instruction and body", func(t *testing.T) {
-		t.Parallel()
-
-		instruction, body := splitTemplateInstruction("\n\r\n안내\r\n\r\n본문 첫줄\n본문 둘째줄")
-		assert.Equal(t, "안내", instruction)
-		assert.Equal(t, "본문 첫줄\n본문 둘째줄", body)
-	})
 }
 
 func TestNewResponseFormatterAndPrefix(t *testing.T) {
@@ -141,7 +112,7 @@ func TestResponseFormatterRender(t *testing.T) {
 func TestFormatHelp(t *testing.T) {
 	t.Parallel()
 
-	t.Run("template with instruction and body applies see-more padding", func(t *testing.T) {
+	t.Run("template with instruction and body returns full render", func(t *testing.T) {
 		t.Parallel()
 
 		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
@@ -152,7 +123,7 @@ func TestFormatHelp(t *testing.T) {
 		got := formatter.FormatHelp(t.Context())
 		assert.True(t, strings.HasPrefix(got, "도움말 안내"))
 		assert.Contains(t, got, "\n사용 가능한 명령어 목록")
-		assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(got, util.KakaoZeroWidthSpace))
+		assert.NotContains(t, got, "\u200b")
 	})
 
 	t.Run("single line template returns original render", func(t *testing.T) {

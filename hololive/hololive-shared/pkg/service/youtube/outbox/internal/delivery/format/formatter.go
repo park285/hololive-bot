@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type MessageFormatter struct {
@@ -74,7 +73,7 @@ func (mf *MessageFormatter) FormatMessage(ctx context.Context, item domain.YouTu
 	if mf.Renderer != nil {
 		msg, renderErr := mf.Renderer.Render(ctx, templateKey, item.ChannelID, data)
 		if renderErr == nil {
-			return mf.ApplySeeMorePadding(msg, item.Kind, data), nil
+			return mf.PrependSingleMessageHeader(msg, item.Kind, data), nil
 		}
 		mf.logger().Warn("Template render failed, using fallback",
 			slog.String("template_key", string(templateKey)),
@@ -155,13 +154,10 @@ var singleMessageHeaderFormats = map[domain.OutboxKind]string{
 	domain.OutboxKindMilestone:     "🎉 %s 마일스톤 알림",
 }
 
-func (mf *MessageFormatter) ApplySeeMorePadding(msg string, kind domain.OutboxKind, data TemplateData) string {
+func (mf *MessageFormatter) PrependSingleMessageHeader(msg string, kind domain.OutboxKind, data TemplateData) string {
 	header, ok := SingleMessageHeader(kind, data.MemberName)
 	if !ok {
 		return msg
-	}
-	if kind == domain.OutboxKindCommunityPost {
-		return util.ApplyKakaoSeeMorePadding(msg, header)
 	}
 	return header + "\n" + msg
 }
@@ -240,7 +236,7 @@ func (mf *MessageFormatter) FormatCommunityMessage(memberName, payload string) (
 	url := fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID)
 	header := fmt.Sprintf("📝 %s 커뮤니티 알림", memberName)
 	body := fmt.Sprintf("%s\n\n%s", p.ContentText, url)
-	return util.ApplyKakaoSeeMorePadding(body, header), nil
+	return header + "\n" + body, nil
 }
 
 func (mf *MessageFormatter) FormatMilestoneMessage(memberName, payload string) (string, error) {
@@ -292,7 +288,7 @@ func (mf *MessageFormatter) FormatGroupedMessage(ctx context.Context, memberName
 	if err != nil {
 		return "", fmt.Errorf("render grouped template %s: %w", templateKey, err)
 	}
-	return util.ApplyKakaoSeeMorePadding(msg, header), nil
+	return header + "\n" + msg, nil
 }
 
 func (mf *MessageFormatter) GetGroupedTemplateKeyAndHeader(memberName string, kind domain.OutboxKind, count int) (domain.TemplateKey, string) {

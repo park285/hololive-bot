@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	templateview "github.com/kapu/hololive-shared/pkg/templateview"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 // llmSchedulerFormatter는 llm-scheduler가 사용하는 최소 메시지 포맷터 구현이다.
@@ -123,10 +122,6 @@ func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateK
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
-func splitTemplateInstruction(rendered string) (instruction string, body string) {
-	return templateview.SplitTemplateInstruction(rendered)
-}
-
 type majorEventWeeklySummaryData struct {
 	Emoji      UIEmoji
 	Count      int
@@ -168,11 +163,7 @@ func (f *llmSchedulerFormatter) FormatMajorEventWeeklySummary(ctx context.Contex
 		return errorMessage(errDisplayMajorEventFailed)
 	}
 
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }
 
 func (f *llmSchedulerFormatter) FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
@@ -199,11 +190,7 @@ func (f *llmSchedulerFormatter) FormatMajorEventMonthlySummary(ctx context.Conte
 		return errorMessage(errDisplayMajorEventFailed)
 	}
 
-	instruction, body := splitTemplateInstruction(rendered)
-	if instruction == "" || body == "" {
-		return rendered
-	}
-	return util.ApplyKakaoSeeMorePadding(body, instruction)
+	return rendered
 }
 
 func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {

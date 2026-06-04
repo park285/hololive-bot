@@ -28,7 +28,6 @@ import (
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
@@ -44,10 +43,6 @@ func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, 
 	}
 
 	return strings.TrimRight(rendered, "\n"), nil
-}
-
-func splitTemplateInstruction(rendered string) (instruction, body string) {
-	return templateview.SplitTemplateInstruction(rendered)
 }
 
 func NewResponseFormatter(prefix string, renderer *template.Renderer) *ResponseFormatter {

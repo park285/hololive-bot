@@ -21,13 +21,11 @@
 package formatter
 
 import (
-	"strings"
 	"testing"
 	"time"
 
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,7 +58,7 @@ func TestFormatMajorEventCommandMessages(t *testing.T) {
 	assert.Contains(t, weekly, "주간 행사")
 	assert.Contains(t, weekly, "EXPO")
 	assert.Contains(t, weekly, "https://example.com/expo")
-	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(weekly, util.KakaoZeroWidthSpace))
+	assert.NotContains(t, weekly, "\u200b")
 
 	assert.Equal(t, "구독완료 !", formatter.FormatMajorEventSubscribed(t.Context()))
 	assert.Equal(t, "구독해제", formatter.FormatMajorEventUnsubscribed(t.Context()))
@@ -144,7 +142,7 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 	msg := formatter.FormatTalentProfile(raw, translated)
 	assert.Contains(t, msg, "시라카미 후부키")
 	assert.Contains(t, msg, "공식 프로필")
-	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(msg, util.KakaoZeroWidthSpace))
+	assert.NotContains(t, msg, "\u200b")
 
 	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayProfileDataFailed), formatter.FormatTalentProfile(nil, translated))
 }

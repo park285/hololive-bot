@@ -26,7 +26,6 @@ import (
 
 	msging "github.com/kapu/hololive-kakao-bot-go/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
@@ -197,24 +196,7 @@ func (f *ResponseFormatter) FormatTalentProfile(raw *domain.TalentProfile, trans
 	sb.WriteString(formatProfileSocialLinks(raw))
 	sb.WriteString(formatProfileOfficialURL(raw))
 
-	content := stringutil.TrimSpace(sb.String())
-	if content == "" {
-		return content
-	}
-
-	body := stringutil.StripLeadingHeader(content, header)
-
-	body = stringutil.TrimSpace(body)
-	if body == "" {
-		return content
-	}
-
-	instructionBase := stringutil.TrimSpace(header)
-	if instructionBase == "" {
-		instructionBase = msging.DefaultEmoji.Member + " 멤버 정보"
-	}
-
-	return util.ApplyKakaoSeeMorePadding(body, instructionBase)
+	return stringutil.TrimSpace(sb.String())
 }
 
 func socialLinkLabel(label string) string {

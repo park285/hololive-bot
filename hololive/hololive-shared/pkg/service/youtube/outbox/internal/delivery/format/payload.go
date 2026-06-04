@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type DispatchPayloadFormatter interface {
@@ -60,9 +59,6 @@ func FormatGroupedMessageFallback(memberName string, kind domain.OutboxKind, ite
 	renderedBody := renderGroupedFallbackBody(kind, items)
 	if renderedBody == "" {
 		return "", fmt.Errorf("format grouped youtube outbox fallback: rendered body is empty")
-	}
-	if kind == domain.OutboxKindCommunityPost {
-		return util.ApplyKakaoSeeMorePadding(renderedBody, header), nil
 	}
 	return strings.TrimSpace(header + "\n" + renderedBody), nil
 }

@@ -22,7 +22,6 @@ package runtime
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -32,7 +31,6 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func TestFormatMajorEventWeeklySummary_EmptyEvents(t *testing.T) {
@@ -43,7 +41,7 @@ func TestFormatMajorEventWeeklySummary_EmptyEvents(t *testing.T) {
 	assert.Equal(t, "", got)
 }
 
-func TestFormatMajorEventWeeklySummary_AppliesSeeMorePadding(t *testing.T) {
+func TestFormatMajorEventWeeklySummary_NoSeeMorePadding(t *testing.T) {
 	t.Parallel()
 
 	renderer := setupFormatterRenderer(
@@ -61,7 +59,7 @@ func TestFormatMajorEventWeeklySummary_AppliesSeeMorePadding(t *testing.T) {
 	got := formatter.FormatMajorEventWeeklySummary(context.Background(), events, "")
 	assert.Contains(t, got, "주간 행사 안내")
 	assert.Contains(t, got, "이벤트 수: 2")
-	assert.Equal(t, util.KakaoSeeMorePadding, countZWSP(got))
+	assert.NotContains(t, got, "\u200b")
 }
 
 func TestFormatMajorEventWeeklySummary_UsesLLMSummaryWithoutFallbackList(t *testing.T) {
@@ -191,8 +189,4 @@ func TestLocalizeMemberNewsItemsAndCategoryLabel(t *testing.T) {
 	assert.Equal(t, "굿즈", memberNewsCategoryLabel("goods"))
 	assert.Equal(t, "기타", memberNewsCategoryLabel("other"))
 	assert.Equal(t, "custom", memberNewsCategoryLabel("custom"))
-}
-
-func countZWSP(s string) int {
-	return strings.Count(s, util.KakaoZeroWidthSpace)
 }

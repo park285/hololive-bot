@@ -21,11 +21,9 @@
 package formatter
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -45,7 +43,7 @@ func TestFormatStatsTopGainers(t *testing.T) {
 	assert.Contains(t, message, "+1만 2345명")
 	assert.Contains(t, message, "현재 200만명")
 	assert.Contains(t, message, "2위. 시라카미 후부키")
-	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(message, util.KakaoZeroWidthSpace))
+	assert.NotContains(t, message, "\u200b")
 }
 
 func TestFormatSubscriberCount(t *testing.T) {
