@@ -8,7 +8,7 @@
 
 | Check | Expected |
 |---|---|
-| Health | `https://127.0.0.1:30001/health` returns success |
+| Health | `http://127.0.0.1:30001/health` returns success |
 | Ready | 검토 필요 |
 | Logs | no repeated webhook, Iris, DB, or Valkey errors |
 | Queue | does not own dispatch queue draining |
@@ -53,7 +53,7 @@ Diagnosis:
 ```bash
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml ps hololive-bot
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 hololive-bot
-curl -k https://127.0.0.1:30001/health
+curl http://127.0.0.1:30001/health
 ```
 
 Mitigation:
@@ -84,7 +84,7 @@ Rollback:
 ## Smoke test
 
 ```bash
-curl -k https://127.0.0.1:30001/health
+curl http://127.0.0.1:30001/health
 ```
 
 ## Rollback
