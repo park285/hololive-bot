@@ -68,23 +68,61 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 		return
 	}
 
-	if err := s.waitForJobRunSlot(ctx, job, decision); err != nil {
+	claimStartedAt := time.Now()
+	claimCtx, renewCancel, renewErrCh := s.maybeStartJobClaimRenewLoop(ctx, job.Poller.Name(), decision)
+	defer renewCancel()
+
+	reservation, budgetDecision, err := s.reserveJobBudget(claimCtx, job)
+	if err != nil {
+		if decision.claimed {
+			s.releaseJobClaim(context.WithoutCancel(ctx), job, decision.claim)
+		}
+		s.rescheduleJobAfterPoll(job, err)
+		return
+	}
+	if !budgetDecision.Allowed {
+		if decision.claimed {
+			s.releaseJobClaim(context.WithoutCancel(ctx), job, decision.claim)
+		}
+		s.rescheduleJobAfterBudgetSkip(job, budgetDecision.RetryAfter)
 		return
 	}
 
-	pollCtx, cancel := s.pollContext(ctx)
+	reservationTerminal := false
+	defer func() {
+		if reservation != nil && !reservationTerminal {
+			_ = reservation.Release(context.WithoutCancel(ctx))
+			reservationTerminal = true
+			s.metrics.AddBudgetInflight(job.budgetProfile, -1)
+		}
+	}()
+
+	if err := s.waitForJobRunSlot(claimCtx, job, decision); err != nil {
+		return
+	}
+
+	pollCtx, cancel := s.pollContext(claimCtx)
 	defer cancel()
-	pollCtx, renewCancel, renewErrCh := s.maybeStartJobClaimRenewLoop(pollCtx, job.Poller.Name(), decision)
-	defer renewCancel()
 
 	start := time.Now()
-	err := job.Poller.Poll(pollCtx, job.ChannelID)
+	err = job.Poller.Poll(pollCtx, job.ChannelID)
 	elapsed := time.Since(start)
 	if renewErr := drainJobClaimRenewError(renewErrCh); renewErr != nil && err == nil {
 		err = renewErr
 	}
 	if decision.claimed {
-		err = s.finishJobClaim(ctx, job, decision.claim, err)
+		err = s.finishJobClaim(context.WithoutCancel(ctx), job, decision.claim, err)
+	}
+	if err == nil && reservation != nil {
+		if commitErr := reservation.Commit(context.WithoutCancel(ctx)); commitErr != nil {
+			err = fmt.Errorf("commit budget reservation: %w", commitErr)
+		} else {
+			reservationTerminal = true
+			s.metrics.AddBudgetInflight(job.budgetProfile, -1)
+		}
+	}
+	if decision.claimed {
+		s.observeJobLeaseElapsed(job, time.Since(claimStartedAt))
 	}
 	status := s.logPollResult(job, workerID, pollCtx, elapsed, err)
 	s.metrics.SchedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
@@ -104,6 +142,7 @@ func (s *Scheduler) claimJobRun(ctx context.Context, job *Job) jobClaimDecision 
 		return jobClaimDecision{proceed: true}
 	}
 	leaseTTL := s.jobClaimLeaseTTL()
+	s.metrics.ObserveJobLeaseTTL(job.Poller.Name(), leaseTTL)
 	status, claim, err := s.jobClaimer.TryClaim(ctx, job.Poller.Name(), job.ChannelID, leaseTTL, job.Interval)
 	if err != nil {
 		s.metrics.ObserveJobClaim(job.Poller.Name(), string(JobClaimUnavailable))
@@ -149,7 +188,7 @@ func (s *Scheduler) waitForJobRunSlot(ctx context.Context, job *Job, decision jo
 	if err := s.rateLimiter.Wait(ctx); err != nil {
 		logRateLimiterWaitError(s.logger, err)
 		if decision.claimed {
-			s.releaseJobClaim(ctx, job, decision.claim)
+			s.releaseJobClaim(context.WithoutCancel(ctx), job, decision.claim)
 		}
 		s.rescheduleJobAfterPoll(job, err)
 		return err
@@ -173,11 +212,51 @@ func (s *Scheduler) pollContext(ctx context.Context) (context.Context, context.C
 }
 
 func (s *Scheduler) jobClaimLeaseTTL() time.Duration {
-	ttl := s.pollTimeout + 15*time.Second
+	ttl := s.pollTimeout +
+		s.budgetAcquireTimeout +
+		s.claimCompletionTimeout +
+		s.claimLeaseSafetyMargin
 	if ttl < time.Minute {
 		return time.Minute
 	}
 	return ttl
+}
+
+func (s *Scheduler) reserveJobBudget(ctx context.Context, job *Job) (BudgetReservation, BudgetDecision, error) {
+	if s.budgetLimiter == nil || !s.budgetContext.Enabled || len(job.budgetProfile.SourceUnits) == 0 {
+		return nil, BudgetDecision{Allowed: true}, nil
+	}
+
+	reserveCtx, cancel := context.WithTimeout(ctx, s.budgetAcquireTimeout)
+	defer cancel()
+
+	budgetJob := BudgetJob{
+		Namespace:  s.budgetContext.Namespace,
+		InstanceID: s.budgetContext.InstanceID,
+		PollerName: job.Poller.Name(),
+		ChannelID:  job.ChannelID,
+		JobKey:     job.key,
+	}
+	start := time.Now()
+	reservation, decision, err := s.budgetLimiter.TryReserve(reserveCtx, budgetJob, job.budgetProfile, s.jobClaimLeaseTTL())
+	elapsed := time.Since(start)
+	s.metrics.ObserveBudgetReserveWait(job.budgetProfile, elapsed)
+	if err != nil {
+		s.metrics.ObserveBudgetReserve(job.budgetProfile, "error")
+		return nil, BudgetDecision{}, fmt.Errorf("reserve poll job budget: %w", err)
+	}
+	if !decision.Allowed {
+		s.metrics.ObserveBudgetReserve(job.budgetProfile, "denied")
+		if decision.RetryAfter > 0 {
+			s.metrics.ObserveBudgetRetryAfter(job.budgetProfile, decision.RetryAfter)
+		}
+		return nil, decision, nil
+	}
+	s.metrics.ObserveBudgetReserve(job.budgetProfile, "allowed")
+	if reservation != nil {
+		s.metrics.AddBudgetInflight(job.budgetProfile, 1)
+	}
+	return reservation, decision, nil
 }
 
 func (s *Scheduler) maybeStartJobClaimRenewLoop(
@@ -288,7 +367,7 @@ func drainJobClaimRenewError(errCh <-chan error) error {
 }
 
 func (s *Scheduler) finishJobClaim(ctx context.Context, job *Job, claim JobClaim, pollErr error) error {
-	completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.claimCompletionTimeout)
 	defer cancel()
 
 	if pollErr == nil {
@@ -356,6 +435,26 @@ func (s *Scheduler) logPollResult(job *Job, workerID int, pollCtx context.Contex
 		"error", err,
 		"elapsed", elapsed)
 	return "error"
+}
+
+func (s *Scheduler) observeJobLeaseElapsed(job *Job, elapsed time.Duration) {
+	ttl := s.jobClaimLeaseTTL()
+	if ttl <= 0 {
+		return
+	}
+	ratio := elapsed.Seconds() / ttl.Seconds()
+	s.metrics.ObserveJobLeaseElapsedRatio(job.Poller.Name(), ratio)
+	if ratio <= 0.75 {
+		return
+	}
+	s.metrics.ObserveJobLeaseNearExpiry(job.Poller.Name())
+	s.logger.Warn("job_lease_near_expiry",
+		slog.String("poller", job.Poller.Name()),
+		slog.String("channel_id", job.ChannelID),
+		slog.Duration("lease_elapsed", elapsed),
+		slog.Duration("lease_ttl", ttl),
+		slog.Float64("ratio", ratio),
+	)
 }
 
 func (s *Scheduler) logPollTimeout(job *Job, workerID int, elapsed time.Duration, err error) {

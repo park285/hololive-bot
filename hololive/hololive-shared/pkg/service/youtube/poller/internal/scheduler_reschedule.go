@@ -37,6 +37,15 @@ type retryDelayError interface {
 	RetryDelay() time.Duration
 }
 
+type JobSkipReason string
+
+const (
+	JobSkipPeerOwned        JobSkipReason = "peer_owned"
+	JobSkipAlreadyCompleted JobSkipReason = "already_completed"
+	JobSkipBudgetExhausted  JobSkipReason = "budget_exhausted"
+	JobSkipSourceCooldown   JobSkipReason = "source_cooldown"
+)
+
 func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -82,6 +91,37 @@ func (s *Scheduler) rescheduleJobAfterClaimSkip(job *Job, retryAfter time.Durati
 	} else {
 		heap.Push(&s.jobs, job)
 	}
+	s.notifyDispatcher()
+}
+
+func (s *Scheduler) rescheduleJobAfterBudgetSkip(job *Job, retryAfter time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if job == nil || job.retired {
+		return
+	}
+	current, ok := s.jobMap[job.key]
+	if !ok || current != job {
+		return
+	}
+	if retryAfter <= 0 {
+		retryAfter = s.errorBackoffMin
+	}
+
+	job.consecutiveFailures = 0
+	job.NextRunAt = time.Now().Add(retryAfter)
+	if job.index >= 0 {
+		heap.Fix(&s.jobs, job.index)
+	} else {
+		heap.Push(&s.jobs, job)
+	}
+	s.logger.Info("Poll job rescheduled after budget skip",
+		"poller", job.Poller.Name(),
+		"channel_id", job.ChannelID,
+		"reason", string(JobSkipBudgetExhausted),
+		"retry_after", retryAfter,
+		"next_run_at", job.NextRunAt)
 	s.notifyDispatcher()
 }
 
