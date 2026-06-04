@@ -57,7 +57,7 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	}
 }
 
-func TestBuildBotHTTP3ServerReloadsCertificateFiles(t *testing.T) {
+func TestBuildBotHTTP3ServerServesCachedCertificateFiles(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
@@ -94,8 +94,8 @@ func TestBuildBotHTTP3ServerReloadsCertificateFiles(t *testing.T) {
 
 	secondSerial := certificateSerial(t, second)
 
-	if secondSerial == firstSerial {
-		t.Fatalf("certificate serial did not reload: %s", secondSerial)
+	if secondSerial != firstSerial {
+		t.Fatalf("certificate serial = %s, want cached %s", secondSerial, firstSerial)
 	}
 }
 

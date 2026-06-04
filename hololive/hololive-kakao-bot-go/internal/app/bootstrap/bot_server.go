@@ -52,6 +52,7 @@ func BuildBotHTTP3Server(
 	if err != nil {
 		return nil, fmt.Errorf("load h3 certificate: %w", err)
 	}
+	certReloader.Start(ctx)
 
 	quicConfig := &quic.Config{
 		InitialPacketSize: 1200,
