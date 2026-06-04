@@ -60,6 +60,11 @@ expect_fail "log target rejects removed dispatcher" compose_service_resolve_log_
 
 . "${ROOT_DIR}/scripts/deploy/lib/ap-host.sh"
 
+# KR.key는 gitignore된 로컬 배포 키라 클린 체크아웃에 없다.
+# conf 계약 검증에는 키 실체가 불필요하므로 tmp 키로 대체한다.
+SSH_KEY="$(mktemp)"
+trap 'rm -f "${SSH_KEY}"' EXIT
+
 ap_host_load "${ROOT_DIR}" osaka || fail "osaka ap-host conf loads"
 expect_eq "${AP_SERVICES[*]}" "youtube-producer-a" "osaka AP services"
 expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-a" "osaka AP containers"
