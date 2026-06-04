@@ -101,11 +101,16 @@ func (h Handler) ChannelStats(c *gin.Context) {
 	writeProxyJSON(c, resp)
 }
 
+const maxRequestBodyBytes = 2 << 20
+
 func readJSONBody(r *http.Request) ([]byte, error) {
 	defer r.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(r.Body, 2<<20))
+	data, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodyBytes+1))
 	if err != nil {
 		return nil, httpx.BadRequest("invalid json payload")
+	}
+	if len(data) > maxRequestBodyBytes {
+		return nil, httpx.NewError(http.StatusRequestEntityTooLarge, "request payload too large")
 	}
 	if len(strings.TrimSpace(string(data))) == 0 {
 		data = []byte("{}")
