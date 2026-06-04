@@ -471,7 +471,6 @@ github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/k
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/templateview
-github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/logging
@@ -868,7 +867,6 @@ github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dis
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/service/template
-github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store -> github.com/kapu/hololive-shared/internal/dbx
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store -> github.com/kapu/hololive-shared/pkg/dbtest
