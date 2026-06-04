@@ -23,6 +23,7 @@ package orchestration
 import (
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -73,23 +74,29 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	})
 
 	deps := &Dependencies{
-		BotSelfUser:      "bot-self",
-		IrisBaseURL:      "https://iris.internal",
-		Notification:     config.NotificationConfig{},
-		Logger:           logger,
-		Client:           &fakeIrisClient{},
-		MessageAdapter:   messageAdapter,
-		Formatter:        formatter,
-		Cache:            cache,
-		Postgres:         postgresService,
-		MemberRepository: memberRepository,
-		MemberCache:      memberCache,
-		CommandBuilders:  []orchcmd.CommandBuilder{externalBuilder},
-		WorkerPool:       workerPool,
+		BotSelfUser:           "bot-self",
+		IrisBaseURL:           "https://iris.internal",
+		Notification:          config.NotificationConfig{},
+		CalendarImageCacheDir: "data/test-calendar-cache",
+		CalendarEntryCacheTTL: time.Hour,
+		Logger:                logger,
+		Client:                &fakeIrisClient{},
+		MessageAdapter:        messageAdapter,
+		Formatter:             formatter,
+		Cache:                 cache,
+		Postgres:              postgresService,
+		MemberRepository:      memberRepository,
+		MemberCache:           memberCache,
+		CommandBuilders:       []orchcmd.CommandBuilder{externalBuilder},
+		WorkerPool:            workerPool,
 	}
 
 	core := deps.coreDeps()
-	if core.botSelfUser != "bot-self" || core.irisBaseURL != "https://iris.internal" || core.logger != logger {
+	if core.botSelfUser != "bot-self" ||
+		core.irisBaseURL != "https://iris.internal" ||
+		core.calendarImageCacheDir != "data/test-calendar-cache" ||
+		core.calendarEntryCacheTTL != time.Hour ||
+		core.logger != logger {
 		t.Fatal("coreDeps mapping mismatch")
 	}
 

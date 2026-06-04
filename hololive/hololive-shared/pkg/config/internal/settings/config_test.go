@@ -1333,6 +1333,31 @@ func TestLoadLLMScheduler_EnvApplied(t *testing.T) {
 	}
 }
 
+func TestLoadBotConfig_CalendarImageCacheDir(t *testing.T) {
+	t.Setenv("BOT_CALENDAR_IMAGE_CACHE_DIR", "/tmp/calendar-cache")
+	t.Setenv("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", "3600")
+
+	config := loadBotConfig()
+
+	if config.CalendarImageCacheDir != "/tmp/calendar-cache" {
+		t.Fatalf("CalendarImageCacheDir = %q, want /tmp/calendar-cache", config.CalendarImageCacheDir)
+	}
+	if config.CalendarEntryCacheTTL != time.Hour {
+		t.Fatalf("CalendarEntryCacheTTL = %s, want 1h", config.CalendarEntryCacheTTL)
+	}
+}
+
+func TestLoadBotConfig_DefaultCalendarImageCacheDir(t *testing.T) {
+	config := loadBotConfig()
+
+	if config.CalendarImageCacheDir != "data/calendar-cache" {
+		t.Fatalf("CalendarImageCacheDir = %q, want data/calendar-cache", config.CalendarImageCacheDir)
+	}
+	if config.CalendarEntryCacheTTL != 24*time.Hour {
+		t.Fatalf("CalendarEntryCacheTTL = %s, want 24h", config.CalendarEntryCacheTTL)
+	}
+}
+
 func TestLoadLLMScheduler_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "")

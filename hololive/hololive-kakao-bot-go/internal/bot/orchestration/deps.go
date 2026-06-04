@@ -22,6 +22,7 @@ package orchestration
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -47,6 +48,8 @@ type Dependencies struct {
 	BotSelfUser            string
 	IrisBaseURL            string
 	Notification           config.NotificationConfig
+	CalendarImageCacheDir  string
+	CalendarEntryCacheTTL  time.Duration
 	Logger                 *slog.Logger
 	Client                 irisClient
 	MessageAdapter         *adapter.MessageAdapter
@@ -74,10 +77,12 @@ type Dependencies struct {
 }
 
 type coreDependencies struct {
-	botSelfUser  string
-	irisBaseURL  string
-	notification config.NotificationConfig
-	logger       *slog.Logger
+	botSelfUser           string
+	irisBaseURL           string
+	notification          config.NotificationConfig
+	calendarImageCacheDir string
+	calendarEntryCacheTTL time.Duration
+	logger                *slog.Logger
 }
 
 type messagingDependencies struct {
@@ -124,10 +129,12 @@ func (d *Dependencies) coreDeps() coreDependencies {
 	}
 
 	return coreDependencies{
-		botSelfUser:  d.BotSelfUser,
-		irisBaseURL:  d.IrisBaseURL,
-		notification: d.Notification,
-		logger:       d.Logger,
+		botSelfUser:           d.BotSelfUser,
+		irisBaseURL:           d.IrisBaseURL,
+		notification:          d.Notification,
+		calendarImageCacheDir: d.CalendarImageCacheDir,
+		calendarEntryCacheTTL: d.CalendarEntryCacheTTL,
+		logger:                d.Logger,
 	}
 }
 

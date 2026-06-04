@@ -47,9 +47,11 @@ type LoggingConfig struct {
 }
 
 type BotConfig struct {
-	Prefix        string
-	SelfUser      string
-	MentionPrefix string // 멘션 기반 명령어 접두사 (예: @카푸봇)
+	Prefix                string
+	SelfUser              string
+	MentionPrefix         string // 멘션 기반 명령어 접두사 (예: @카푸봇)
+	CalendarImageCacheDir string
+	CalendarEntryCacheTTL time.Duration
 }
 
 type ServicesConfig struct {

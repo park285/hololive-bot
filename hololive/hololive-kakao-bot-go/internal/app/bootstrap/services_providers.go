@@ -55,6 +55,8 @@ func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
 		BotSelfUser:            modules.Core.BotSelfUser,
 		IrisBaseURL:            modules.Core.IrisBaseURL,
 		Notification:           modules.Core.Notification,
+		CalendarImageCacheDir:  modules.Core.CalendarImageCacheDir,
+		CalendarEntryCacheTTL:  modules.Core.CalendarEntryCacheTTL,
 		Logger:                 modules.Core.Logger,
 		Client:                 modules.Messaging.Client,
 		MessageAdapter:         modules.Messaging.MessageAdapter,

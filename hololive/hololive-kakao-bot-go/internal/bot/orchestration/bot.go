@@ -75,7 +75,7 @@ type Bot struct {
 	memberNews            command.MemberNewsService
 	commandBuilders       []orchcmd.CommandBuilder
 	membersData           member.DataProvider
-	memberRepository      *member.Repository
+	memberRepository      command.CelebrationCalendarFinder
 	calendarImageRenderer command.CalendarImageRenderer
 	stopCh                chan struct{}
 	doneCh                chan struct{}
@@ -95,6 +95,15 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 
 	core, messaging, data := deps.coreDeps(), deps.messagingDeps(), deps.dataDeps()
 	stream, support, feature := deps.streamDeps(), deps.supportDeps(), deps.featureDeps()
+
+	calendarFinder := command.CelebrationCalendarFinder(nil)
+	if data.memberRepository != nil {
+		calendarFinder = command.NewCachedCelebrationCalendarFinder(
+			data.memberRepository,
+			core.calendarImageCacheDir,
+			core.calendarEntryCacheTTL,
+		)
+	}
 
 	bot := &Bot{
 		botSelfUser:           core.botSelfUser,
@@ -118,8 +127,8 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		memberNews:            feature.memberNews,
 		commandBuilders:       feature.commandBuilders,
 		membersData:           stream.membersData,
-		memberRepository:      data.memberRepository,
-		calendarImageRenderer: render.NewCalendarCardRenderer(),
+		memberRepository:      calendarFinder,
+		calendarImageRenderer: render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(core.calendarImageCacheDir)),
 		workerPool:            support.workerPool,
 		stopCh:                make(chan struct{}),
 		doneCh:                make(chan struct{}),

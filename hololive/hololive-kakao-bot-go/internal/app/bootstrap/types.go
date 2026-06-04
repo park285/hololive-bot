@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -78,10 +79,12 @@ type BotIrisClient interface {
 }
 
 type BotCoreModule struct {
-	BotSelfUser  string
-	IrisBaseURL  string
-	Notification config.NotificationConfig
-	Logger       *slog.Logger
+	BotSelfUser           string
+	IrisBaseURL           string
+	Notification          config.NotificationConfig
+	CalendarImageCacheDir string
+	CalendarEntryCacheTTL time.Duration
+	Logger                *slog.Logger
 }
 
 type BotMessagingModule struct {
