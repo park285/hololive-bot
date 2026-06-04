@@ -21,6 +21,7 @@
 package providers
 
 import (
+	"maps"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -99,9 +100,7 @@ func (r ChannelPollerRegistration) WithWorstCaseRequestUnitsPerRun(units float64
 func (r ChannelPollerRegistration) WithBudgetProfile(profile poller.BudgetProfile) ChannelPollerRegistration {
 	if profile.SourceUnits != nil {
 		sourceUnits := make(map[poller.BudgetSource]float64, len(profile.SourceUnits))
-		for source, units := range profile.SourceUnits {
-			sourceUnits[source] = units
-		}
+		maps.Copy(sourceUnits, profile.SourceUnits)
 		profile.SourceUnits = sourceUnits
 	}
 	r.BudgetProfile = profile
