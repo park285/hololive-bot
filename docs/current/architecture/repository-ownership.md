@@ -33,7 +33,7 @@ Structured allowlist: `repository-ownership.allowlist`.
 
 | Runtime | Enabled role | Must stay disabled |
 |---|---|---|
-| `youtube-producer` | YouTube scraping/polling, `youtube_notification_outbox` production, and Osaka Holodex photo sync | Iris send, direct outbox dispatch |
+| `youtube-producer` | YouTube scraping/polling, `youtube_notification_outbox` production, and Holodex photo sync (a/c singleton lease) | Iris send, direct outbox dispatch |
 
 Duplicated polling prevention is enforced operationally by Compose env ownership: `youtube-producer` owns `YOUTUBE_INGESTION_ENABLED=true`.
 Duplicated sending prevention is enforced by code and architecture gates: `youtube-producer` and producer runtimes must not import `pkg/service/delivery` for proactive egress, call `delivery.NewIrisMessageSender`, call `outbox.NewDispatcher`, or start `OutboxDispatcher`.

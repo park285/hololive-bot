@@ -2,11 +2,11 @@
 set -euo pipefail
 
 checks=(
-  "bot|https://127.0.0.1:30001/health|-k"
+  "bot|http://127.0.0.1:30001/health|"
   "admin-api|http://127.0.0.1:30006/health|"
   "alarm-worker|http://127.0.0.1:30007/health|"
   "llm-scheduler|http://127.0.0.1:30003/health|"
-  "youtube-producer|http://127.0.0.1:30005/health|"
+  "youtube-producer-c|http://127.0.0.1:30025/health|"
 )
 
 echo "[SMOKE] runtime health endpoints"

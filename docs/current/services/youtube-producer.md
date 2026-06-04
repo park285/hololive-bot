@@ -59,8 +59,8 @@ YouTube scraping/polling, `youtube_notification_outbox` production, 3-way active
 
 ## Observability
 
-- Logs: `./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f youtube-producer`
-- Health: `http://127.0.0.1:30005/health`
+- Logs: `docker logs -f hololive-youtube-producer-c` (main), `SINCE=15m TAIL=600 ./scripts/logs/ap-logs.sh osaka youtube-producer`, `SINCE=15m TAIL=600 ./scripts/logs/ap-logs.sh seoul youtube-producer`
+- Health: `http://127.0.0.1:30005/health` (a), `http://127.0.0.1:30015/health` (b), `http://127.0.0.1:30025/health` (c)
 - Ready: `http://127.0.0.1:30005/ready` (a), `http://127.0.0.1:30015/ready` (b), `http://127.0.0.1:30025/ready` (c), all with `mode=active-active`
 - Metrics: `youtube_poller_job_claim_total`, `youtube_poller_job_lease_renew_total`, `youtube_poller_job_mark_completed_total`, `youtube_poller_job_release_total`, `youtube_poller_outbox_insert_total`, `youtube_poller_published_at_resolver_*`
 
