@@ -232,6 +232,28 @@ func (l *globalBudgetLimiter) TryReserve(
 		return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: owner token: %w", err)
 	}
 
+	acquired, decision, err := l.reserveProfileSources(ctx, profile, ownerToken, ttl)
+	if err != nil {
+		return nil, poller.BudgetDecision{}, err
+	}
+	if !decision.Allowed {
+		return nil, decision, nil
+	}
+
+	return &globalBudgetReservation{
+		cacheClient: l.cacheClient,
+		namespace:   l.namespace,
+		ownerToken:  ownerToken,
+		sources:     acquired,
+	}, poller.BudgetDecision{Allowed: true}, nil
+}
+
+func (l *globalBudgetLimiter) reserveProfileSources(
+	ctx context.Context,
+	profile poller.BudgetProfile,
+	ownerToken string,
+	ttl time.Duration,
+) ([]poller.BudgetSource, poller.BudgetDecision, error) {
 	sources := sortedBudgetSources(profile.SourceUnits)
 	acquired := make([]poller.BudgetSource, 0, len(sources))
 	nowMS := time.Now().UnixMilli()
@@ -250,13 +272,7 @@ func (l *globalBudgetLimiter) TryReserve(
 		}
 		acquired = append(acquired, source)
 	}
-
-	return &globalBudgetReservation{
-		cacheClient: l.cacheClient,
-		namespace:   l.namespace,
-		ownerToken:  ownerToken,
-		sources:     acquired,
-	}, poller.BudgetDecision{Allowed: true}, nil
+	return acquired, poller.BudgetDecision{Allowed: true}, nil
 }
 
 func (l *globalBudgetLimiter) reserveSource(
@@ -363,20 +379,9 @@ func (l *globalBudgetLimiter) releaseSources(ctx context.Context, ownerToken str
 }
 
 func parseGlobalBudgetReserveResult(values []valkey.ValkeyMessage) (poller.BudgetDecision, error) {
-	if len(values) != 3 {
-		return poller.BudgetDecision{}, fmt.Errorf("reserve global budget: unexpected result length: %d", len(values))
-	}
-	code, err := values[0].AsInt64()
+	code, retryAfterMS, reason, err := parseGlobalBudgetReserveValues(values)
 	if err != nil {
-		return poller.BudgetDecision{}, fmt.Errorf("reserve global budget: parse result code: %w", err)
-	}
-	retryAfterMS, err := values[1].AsInt64()
-	if err != nil {
-		return poller.BudgetDecision{}, fmt.Errorf("reserve global budget: parse retry after: %w", err)
-	}
-	reason, err := values[2].ToString()
-	if err != nil {
-		return poller.BudgetDecision{}, fmt.Errorf("reserve global budget: parse reason: %w", err)
+		return poller.BudgetDecision{}, err
 	}
 	switch code {
 	case globalBudgetReserveCodeAllowed:
@@ -390,6 +395,25 @@ func parseGlobalBudgetReserveResult(values []valkey.ValkeyMessage) (poller.Budge
 	default:
 		return poller.BudgetDecision{}, fmt.Errorf("reserve global budget: unknown result code: %d", code)
 	}
+}
+
+func parseGlobalBudgetReserveValues(values []valkey.ValkeyMessage) (int64, int64, string, error) {
+	if len(values) != 3 {
+		return 0, 0, "", fmt.Errorf("reserve global budget: unexpected result length: %d", len(values))
+	}
+	code, err := values[0].AsInt64()
+	if err != nil {
+		return 0, 0, "", fmt.Errorf("reserve global budget: parse result code: %w", err)
+	}
+	retryAfterMS, err := values[1].AsInt64()
+	if err != nil {
+		return 0, 0, "", fmt.Errorf("reserve global budget: parse retry after: %w", err)
+	}
+	reason, err := values[2].ToString()
+	if err != nil {
+		return 0, 0, "", fmt.Errorf("reserve global budget: parse reason: %w", err)
+	}
+	return code, retryAfterMS, reason, nil
 }
 
 func evalGlobalBudgetArray(ctx context.Context, cacheClient cache.Client, cmd valkey.Completed, action string) ([]valkey.ValkeyMessage, error) {
@@ -497,7 +521,7 @@ func (l *globalBudgetLimiter) newOwnerToken(job poller.BudgetJob) (string, error
 func sanitizeGlobalBudgetTokenPart(value string) string {
 	var b strings.Builder
 	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+		if isGlobalBudgetTokenRune(r) {
 			b.WriteRune(r)
 			continue
 		}
@@ -507,6 +531,13 @@ func sanitizeGlobalBudgetTokenPart(value string) string {
 		return "unknown"
 	}
 	return b.String()
+}
+
+func isGlobalBudgetTokenRune(r rune) bool {
+	if ('a' <= r && r <= 'z') || ('A' <= r && r <= 'Z') || ('0' <= r && r <= '9') {
+		return true
+	}
+	return strings.ContainsRune("_-.", r)
 }
 
 func normalizeGlobalBudgetNamespace(namespace string) string {

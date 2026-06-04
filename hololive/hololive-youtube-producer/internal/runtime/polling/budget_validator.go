@@ -44,19 +44,22 @@ func estimateYouTubeProducerSourceBudget(registrations []providers.ChannelPoller
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}
-		sourceUnits := registration.BudgetProfile.SourceUnits
-		if len(sourceUnits) == 0 {
+		if len(registration.BudgetProfile.SourceUnits) == 0 {
 			continue
 		}
-		channelCount := resolvedRegistrationChannelCount(registration)
-		for source, units := range sourceUnits {
-			if channelCount > 0 {
-				estimate.SustainedRPMBySource[source] += float64(channelCount) * units * (60.0 / registration.Interval.Seconds())
-			}
-			estimate.BurstInflightBySource[source] = burstInflight
-		}
+		accumulateRegistrationSourceBudget(estimate, registration, burstInflight)
 	}
 	return estimate
+}
+
+func accumulateRegistrationSourceBudget(estimate BudgetEstimate, registration providers.ChannelPollerRegistration, burstInflight int) {
+	channelCount := resolvedRegistrationChannelCount(registration)
+	for source, units := range registration.BudgetProfile.SourceUnits {
+		if channelCount > 0 {
+			estimate.SustainedRPMBySource[source] += float64(channelCount) * units * (60.0 / registration.Interval.Seconds())
+		}
+		estimate.BurstInflightBySource[source] = burstInflight
+	}
 }
 
 func logYouTubeProducerSourceBudgetEstimate(estimate BudgetEstimate, logger *slog.Logger) {

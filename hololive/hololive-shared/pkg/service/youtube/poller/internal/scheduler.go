@@ -159,8 +159,7 @@ func (s *Scheduler) WorkerCount() int {
 	return s.workerCount
 }
 
-func NewScheduler(config SchedulerConfig) *Scheduler {
-	defaults := DefaultSchedulerConfig()
+func applySchedulerWorkerDefaults(config, defaults SchedulerConfig) SchedulerConfig {
 	if config.WorkerCount <= 0 {
 		config.WorkerCount = defaults.WorkerCount
 	}
@@ -176,6 +175,10 @@ func NewScheduler(config SchedulerConfig) *Scheduler {
 	if config.ErrorBackoffMax < config.ErrorBackoffMin {
 		config.ErrorBackoffMax = config.ErrorBackoffMin
 	}
+	return config
+}
+
+func applySchedulerClaimBudgetDefaults(config, defaults SchedulerConfig) SchedulerConfig {
 	if config.BudgetAcquireTimeout <= 0 {
 		config.BudgetAcquireTimeout = defaults.BudgetAcquireTimeout
 	}
@@ -185,6 +188,13 @@ func NewScheduler(config SchedulerConfig) *Scheduler {
 	if config.ClaimCompletionTimeout <= 0 {
 		config.ClaimCompletionTimeout = defaults.ClaimCompletionTimeout
 	}
+	return config
+}
+
+func NewScheduler(config SchedulerConfig) *Scheduler {
+	defaults := DefaultSchedulerConfig()
+	config = applySchedulerWorkerDefaults(config, defaults)
+	config = applySchedulerClaimBudgetDefaults(config, defaults)
 	// RequestInterval이 0이면 NewRateLimiter(0)이 생성되어 Wait()가 즉시 반환.
 	// 외부 RateLimiter에 rate limiting을 위임하는 경우에 사용.
 	metrics := config.Metrics
