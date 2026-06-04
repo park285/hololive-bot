@@ -37,6 +37,32 @@ type YouTubeConfig struct {
 	ProducerDistributedRateLimit DistributedRateLimitConfig
 }
 
+type YouTubeProducerGlobalBudgetConfig struct {
+	Enabled                    bool
+	AcquireTimeout             time.Duration
+	ActiveInstanceCount        int
+	YouTubeScraperMaxInflight  int
+	HolodexLiveMaxInflight     int
+	BrowserSnapshotMaxInflight int
+	BackfillMaxInflight        int
+	FallbackMaxInflight        int
+	WindowCheckEnabled         bool
+}
+
+func DefaultYouTubeProducerGlobalBudgetConfig() YouTubeProducerGlobalBudgetConfig {
+	return YouTubeProducerGlobalBudgetConfig{
+		Enabled:                    false,
+		AcquireTimeout:             3 * time.Second,
+		ActiveInstanceCount:        0,
+		YouTubeScraperMaxInflight:  6,
+		HolodexLiveMaxInflight:     4,
+		BrowserSnapshotMaxInflight: 1,
+		BackfillMaxInflight:        2,
+		FallbackMaxInflight:        2,
+		WindowCheckEnabled:         false,
+	}
+}
+
 type IngestionConfig struct {
 	YouTubeEnabled                  bool
 	PhotoSyncEnabled                bool
