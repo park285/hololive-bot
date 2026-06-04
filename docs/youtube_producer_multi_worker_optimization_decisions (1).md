@@ -1120,22 +1120,22 @@ Modify:
 
 ### 작업 체크리스트
 
-- [ ] `budget.go`에 `BudgetSource`, `BudgetProfile`, `BudgetBurstClass`, `BudgetPriority`, `BudgetJob`, `BudgetDecision`, `BudgetReservation`, `GlobalBudgetLimiter`를 추가한다.
-- [ ] `poller/poller.go`에 새 budget 타입 alias를 export한다.
-- [ ] `ChannelPollerRegistration`에 `BudgetProfile`을 추가하고 `WithBudgetProfile` builder를 구현한다.
-- [ ] `providers.ScraperSchedulerOption`에 `WithSchedulerBudgetLimiter`, `WithSchedulerBudgetContext`를 추가한다. context에는 namespace, instance ID, enabled flag를 포함한다.
-- [ ] `SchedulerConfig`에 `BudgetLimiter`, `BudgetAcquireTimeout`, `ClaimLeaseSafetyMargin`, `ClaimCompletionTimeout`, `BudgetContext`를 추가한다.
-- [ ] `executeJob` 순서를 `claim -> renew start -> budget reserve -> local wait -> poll -> finish claim -> terminal reservation`으로 바꾼다.
-- [ ] budget denied는 error가 아닌 skip으로 처리하고, claim을 release한 뒤 `rescheduleJobAfterBudgetSkip`으로 `RetryAfter`를 반영한다.
-- [ ] budget backend error는 fail-closed로 처리한다. claim을 release하고 readiness에 `budget_backend_available=false`를 반영한다.
-- [ ] `jobClaimLeaseTTL()` 계산식을 `pollTimeout + budgetAcquireTimeout + claimCompletionTimeout + claimLeaseSafetyMargin`, minimum `1m`, no max clamp로 바꾼다.
-- [ ] `Metrics`에 budget reserve, retryAfter, inflight, lease TTL, lease near-expiry metric을 추가한다.
-- [ ] `global_budget_limiter.go`에 Valkey Lua 기반 reservation/in-flight limiter를 구현한다. Phase 1 runtime window check는 config로 disabled 가능해야 한다.
-- [ ] `youtube_producer_budget.go`의 aggregate summary를 유지하되 `budget_validator.go`로 source-aware sustained RPM과 burst upper bound를 추가한다.
-- [ ] `youtube_producer_poller_registrations.go`와 `published_at_resolver_builder.go`의 모든 registration에 필수 `BudgetProfile`을 채운다.
-- [ ] `YOUTUBE_PRODUCER_GLOBAL_BUDGET_ENABLED=false`이면 scheduler에 nil budget limiter를 주입하여 기존 동작을 유지한다.
-- [ ] `SCRAPER_SCHEDULER_WORKER_COUNT`를 canonical worker env로 유지한다. `YOUTUBE_PRODUCER_AP_WORKER_COUNT` alias는 구현하지 않는다.
-- [ ] readiness payload에 `budget_backend_available`, `budget_exhausted`, `affected_sources`, `source_cooldown`을 추가한다. budget exhausted/source cooldown은 HTTP 200 ready를 유지한다.
+- [x] `budget.go`에 `BudgetSource`, `BudgetProfile`, `BudgetBurstClass`, `BudgetPriority`, `BudgetJob`, `BudgetDecision`, `BudgetReservation`, `GlobalBudgetLimiter`를 추가한다.
+- [x] `poller/poller.go`에 새 budget 타입 alias를 export한다.
+- [x] `ChannelPollerRegistration`에 `BudgetProfile`을 추가하고 `WithBudgetProfile` builder를 구현한다.
+- [x] `providers.ScraperSchedulerOption`에 `WithSchedulerBudgetLimiter`, `WithSchedulerBudgetContext`를 추가한다. context에는 namespace, instance ID, enabled flag를 포함한다.
+- [x] `SchedulerConfig`에 `BudgetLimiter`, `BudgetAcquireTimeout`, `ClaimLeaseSafetyMargin`, `ClaimCompletionTimeout`, `BudgetContext`를 추가한다.
+- [x] `executeJob` 순서를 `claim -> renew start -> budget reserve -> local wait -> poll -> finish claim -> terminal reservation`으로 바꾼다.
+- [x] budget denied는 error가 아닌 skip으로 처리하고, claim을 release한 뒤 `rescheduleJobAfterBudgetSkip`으로 `RetryAfter`를 반영한다.
+- [x] budget backend error는 fail-closed로 처리한다. claim을 release하고 readiness에 `budget_backend_available=false`를 반영한다.
+- [x] `jobClaimLeaseTTL()` 계산식을 `pollTimeout + budgetAcquireTimeout + claimCompletionTimeout + claimLeaseSafetyMargin`, minimum `1m`, no max clamp로 바꾼다.
+- [x] `Metrics`에 budget reserve, retryAfter, inflight, lease TTL, lease near-expiry metric을 추가한다.
+- [x] `global_budget_limiter.go`에 Valkey Lua 기반 reservation/in-flight limiter를 구현한다. Phase 1 runtime window check는 config로 disabled 가능해야 한다.
+- [x] `youtube_producer_budget.go`의 aggregate summary를 유지하되 `budget_validator.go`로 source-aware sustained RPM과 burst upper bound를 추가한다.
+- [x] `youtube_producer_poller_registrations.go`와 `published_at_resolver_builder.go`의 모든 registration에 필수 `BudgetProfile`을 채운다.
+- [x] `YOUTUBE_PRODUCER_GLOBAL_BUDGET_ENABLED=false`이면 scheduler에 nil budget limiter를 주입하여 기존 동작을 유지한다.
+- [x] `SCRAPER_SCHEDULER_WORKER_COUNT`를 canonical worker env로 유지한다. `YOUTUBE_PRODUCER_AP_WORKER_COUNT` alias는 구현하지 않는다.
+- [x] readiness payload에 `budget_backend_available`, `budget_exhausted`, `affected_sources`, `source_cooldown`을 추가한다. budget exhausted/source cooldown은 HTTP 200 ready를 유지한다.
 
 ### Phase 1 검증 명령
 
