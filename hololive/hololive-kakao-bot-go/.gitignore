@@ -36,6 +36,7 @@ bot.log
 # Runtime config (tracked file 제거는 별도 git 작업 필요)
 config.json
 /fetch_profiles
+/warm_member_cache
 
 # IDE and editor files
 .vscode/
