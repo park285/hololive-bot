@@ -1,0 +1,6 @@
+# /etc/systemd/system/valkey-selfheal.service.d/apply.conf 로 복사한 뒤 systemctl daemon-reload 를 실행한다.
+# 이 override 는 watchdog 이 Docker restart / compose recreate 를 직접 수행하게 한다.
+
+[Service]
+ExecStart=
+ExecStart=/home/kapu/work/iris-stack/hololive-bot/scripts/ops/valkey-selfheal.sh --apply

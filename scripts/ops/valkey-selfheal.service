@@ -18,6 +18,6 @@ Environment=PATH=/home/kapu/.local/bin:/usr/local/bin:/usr/bin:/bin
 # %h 는 system manager 에선 User= 와 무관하게 /root 로 풀린다(systemd 함정, man systemd.unit) → 절대경로 고정.
 Environment=SELFHEAL_STATE=/home/kapu/.local/state/valkey-selfheal.state
 Environment=SELFHEAL_JOURNAL=/home/kapu/.local/state/valkey-selfheal.jsonl
-# 복구 활성: --apply. 감지/저널만 원하면 --dry-run 으로 시작해 거동을 먼저 관찰할 것.
-ExecStart=/home/kapu/work/iris-stack/hololive-bot/scripts/ops/valkey-selfheal.sh --apply
+# 기본값은 관찰/로그/알림만 수행한다. 복구 활성화는 valkey-selfheal-apply.conf.example 참조.
+ExecStart=/home/kapu/work/iris-stack/hololive-bot/scripts/ops/valkey-selfheal.sh --dry-run
 TimeoutStartSec=360
