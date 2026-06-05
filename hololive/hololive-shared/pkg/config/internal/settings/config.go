@@ -25,7 +25,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -190,23 +189,6 @@ func fetchIrisBotWebhookWorkerProfile(config IrisConfig) (workerconfig.IrisBotWe
 		return workerconfig.IrisBotWebhookWorkerProfile{}, err
 	}
 	return workerconfig.DecodeIrisBotWebhookWorkerProfileFromRuntimeDiagnostics(bytes.NewReader(diagnostics))
-}
-
-func resolveIrisBaseURL(config IrisConfig) (string, error) {
-	if baseURL := strings.TrimSpace(config.BaseURL); baseURL != "" {
-		return baseURL, nil
-	}
-	if path := strings.TrimSpace(config.BaseURLFile); path != "" {
-		raw, err := os.ReadFile(path) //nolint:gosec // Runtime operator-provided Iris base URL file.
-		if err != nil {
-			return "", fmt.Errorf("read IRIS_BASE_URL_FILE: %w", err)
-		}
-		if baseURL := strings.TrimSpace(string(raw)); baseURL != "" {
-			return baseURL, nil
-		}
-		return "", fmt.Errorf("IRIS_BASE_URL_FILE is empty")
-	}
-	return "", fmt.Errorf("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 }
 
 func loadKakaoConfig() KakaoConfig {

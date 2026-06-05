@@ -34,7 +34,6 @@ x-osaka-ap-service: &osaka-ap-service
     - ./data:/app/data
     - ./logs:/app/logs
     - ./runtime-config:/app/runtime-config:ro
-    - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
   logging: *osaka-ap-logging
   deploy:
     resources:
@@ -62,7 +61,6 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
     logging: *osaka-ap-logging
     deploy:
       resources:

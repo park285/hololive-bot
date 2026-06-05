@@ -21,11 +21,18 @@
 package settings
 
 import (
+	"bytes"
+	"crypto/tls"
+	"encoding/pem"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,16 +49,39 @@ func setRequiredLoadEnv(t *testing.T) {
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	server := newIrisRuntimeDiagnosticsServer(t, loadTestWorkerProfileDiagnosticsJSON())
 	t.Setenv("IRIS_BASE_URL", server.URL)
+	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testURLHostname(t, server.URL))
 	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
 }
 
+func captureSlogOutput(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var output bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&output, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+	})
+	return &output
+}
+
+var (
+	irisRuntimeDiagnosticsTLSOnce     sync.Once
+	irisRuntimeDiagnosticsTLSCert     tls.Certificate
+	irisRuntimeDiagnosticsTLSCertFile string
+	irisRuntimeDiagnosticsTLSErr      error
+)
+
 func newIrisRuntimeDiagnosticsServer(t *testing.T, body string) *httptest.Server {
 	t.Helper()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	cert, certFile := irisRuntimeDiagnosticsTLS(t)
+	t.Setenv("SSL_CERT_FILE", certFile)
+
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/diagnostics/runtime" {
 			http.NotFound(w, r)
 			return
@@ -59,8 +89,71 @@ func newIrisRuntimeDiagnosticsServer(t *testing.T, body string) *httptest.Server
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(body))
 	}))
+	server.TLS = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"http/1.1"},
+	}
+	server.StartTLS()
 	t.Cleanup(server.Close)
 	return server
+}
+
+func irisRuntimeDiagnosticsTLS(t *testing.T) (tls.Certificate, string) {
+	t.Helper()
+
+	irisRuntimeDiagnosticsTLSOnce.Do(func() {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		defer server.Close()
+		if len(server.TLS.Certificates) == 0 {
+			irisRuntimeDiagnosticsTLSErr = errors.New("test TLS server did not provide a certificate")
+			return
+		}
+
+		certPEM := pem.EncodeToMemory(&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: server.Certificate().Raw,
+		})
+		file, err := os.CreateTemp("", "hololive-iris-diagnostics-ca-*.pem")
+		if err != nil {
+			irisRuntimeDiagnosticsTLSErr = err
+			return
+		}
+		if _, err := file.Write(certPEM); err != nil {
+			irisRuntimeDiagnosticsTLSErr = err
+			_ = file.Close()
+			return
+		}
+		if err := file.Close(); err != nil {
+			irisRuntimeDiagnosticsTLSErr = err
+			return
+		}
+		irisRuntimeDiagnosticsTLSCert = server.TLS.Certificates[0]
+		irisRuntimeDiagnosticsTLSCertFile = file.Name()
+	})
+	if irisRuntimeDiagnosticsTLSErr != nil {
+		t.Fatalf("initialize Iris diagnostics TLS failed: %v", irisRuntimeDiagnosticsTLSErr)
+	}
+	return irisRuntimeDiagnosticsTLSCert, irisRuntimeDiagnosticsTLSCertFile
+}
+
+func testURLHostname(t *testing.T, raw string) string {
+	t.Helper()
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse URL %q failed: %v", raw, err)
+	}
+	return parsed.Hostname()
+}
+
+func writeIrisBaseURLFile(t *testing.T, raw string) string {
+	t.Helper()
+
+	path := t.TempDir() + "/iris_base_url"
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write IRIS_BASE_URL_FILE failed: %v", err)
+	}
+	return path
 }
 
 func loadTestWorkerProfileDiagnosticsJSON() string {
@@ -101,6 +194,93 @@ func loadTestWorkerProfileDiagnosticsJSON() string {
 			}
 		}
 	}`
+}
+
+func TestResolveIrisBaseURLValidatesFileURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		env     map[string]string
+		wantErr string
+	}{
+		{
+			name:    "rejects http scheme",
+			raw:     "http://attacker/",
+			wantErr: "https",
+		},
+		{
+			name: "rejects host mismatch",
+			raw:  "https://evil.example/",
+			env: map[string]string{
+				"IRIS_H3_SERVER_NAME": "otherhost",
+			},
+			wantErr: "must match IRIS_H3_SERVER_NAME or IRIS_BASE_URL_ALLOWED_HOSTS",
+		},
+		{
+			name: "accepts allowed host",
+			raw:  "https://100.100.1.5:3001",
+			env: map[string]string{
+				"IRIS_BASE_URL_ALLOWED_HOSTS": "100.100.1.5",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("IRIS_H3_SERVER_NAME", "")
+			t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", "")
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			got, err := resolveIrisBaseURL(IrisConfig{BaseURLFile: writeIrisBaseURLFile(t, tt.raw)})
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("resolveIrisBaseURL() error = nil, want %q", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("resolveIrisBaseURL() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveIrisBaseURL() error = %v", err)
+			}
+			if got != tt.raw {
+				t.Fatalf("resolveIrisBaseURL() = %q, want %q", got, tt.raw)
+			}
+		})
+	}
+}
+
+func TestResolveIrisBaseURLAllowsUnconfiguredHostWithWarning(t *testing.T) {
+	t.Setenv("IRIS_H3_SERVER_NAME", "")
+	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", "")
+	output := captureSlogOutput(t)
+
+	raw := "https://iris.example:3001"
+	got, err := resolveIrisBaseURL(IrisConfig{BaseURLFile: writeIrisBaseURLFile(t, raw)})
+	if err != nil {
+		t.Fatalf("resolveIrisBaseURL() error = %v", err)
+	}
+	if got != raw {
+		t.Fatalf("resolveIrisBaseURL() = %q, want %q", got, raw)
+	}
+	for _, want := range []string{"IRIS_BASE_URL_FILE host is unvalidated", "allowlist_env"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("warning output = %q, want %q", output.String(), want)
+		}
+	}
+}
+
+func TestResolveIrisBaseURLValidatesDirectBaseURL(t *testing.T) {
+	_, err := resolveIrisBaseURL(IrisConfig{BaseURL: "http://100.100.1.5:3001"})
+	if err == nil {
+		t.Fatal("resolveIrisBaseURL() error = nil, want bad scheme rejection")
+	}
+	if !strings.Contains(err.Error(), "https") {
+		t.Fatalf("resolveIrisBaseURL() error = %v, want https rejection", err)
+	}
 }
 
 func assertScraperPoll(t *testing.T, got, want ScraperPoll) {
@@ -1039,7 +1219,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 	})
 }
 
-func TestLoad_DefaultPostgresSSLModeRequire(t *testing.T) {
+func TestLoad_DefaultPostgresSSLModeVerifyFull(t *testing.T) {
 	setRequiredLoadEnv(t)
 
 	config, err := Load()
@@ -1047,8 +1227,23 @@ func TestLoad_DefaultPostgresSSLModeRequire(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if config.Postgres.SSLMode != "require" {
-		t.Fatalf("Postgres.SSLMode = %q, want %q", config.Postgres.SSLMode, "require")
+	if config.Postgres.SSLMode != "verify-full" {
+		t.Fatalf("Postgres.SSLMode = %q, want %q", config.Postgres.SSLMode, "verify-full")
+	}
+}
+
+func TestLoad_PostgresSSLRootCertEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("POSTGRES_SSLMODE", "verify-full")
+	t.Setenv("POSTGRES_SSLROOTCERT", "/run/postgresql/root.crt")
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if config.Postgres.SSLRootCert != "/run/postgresql/root.crt" {
+		t.Fatalf("Postgres.SSLRootCert = %q, want %q", config.Postgres.SSLRootCert, "/run/postgresql/root.crt")
 	}
 }
 
@@ -1066,28 +1261,109 @@ func TestLoad_ProductionRequiresAPISecretKey(t *testing.T) {
 	}
 }
 
-func TestLoad_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
+func TestLoad_ProductionRejectsWeakPostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("APP_ENV", "production")
-	t.Setenv("POSTGRES_SSLMODE", "disable")
+	t.Setenv("POSTGRES_SSLMODE", "require")
 
 	_, err := Load()
 	if err == nil {
 		t.Fatal("Load() expected production sslmode validation error, got nil")
 	}
-	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=disable is not allowed in production") {
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE_ALLOW_INSECURE=true") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestLoad_ProductionAllowsInsecurePostgresSSLMode_WithOverride(t *testing.T) {
+func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("APP_ENV", "production")
-	t.Setenv("POSTGRES_SSLMODE", "disable")
+	t.Setenv("POSTGRES_SSLMODE", "verify-ca")
+	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected production verify-ca validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=verify-ca is not allowed in production") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "verify-full") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoad_ProductionAllowsVerifyCAPostgresSSLMode_WithOverrideWarning(t *testing.T) {
+	setRequiredLoadEnv(t)
+	output := captureSlogOutput(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("POSTGRES_SSLMODE", "verify-ca")
+	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if config.Postgres.SSLMode != "verify-ca" {
+		t.Fatalf("Postgres.SSLMode = %q, want verify-ca", config.Postgres.SSLMode)
+	}
+
+	warning := output.String()
+	for _, want := range []string{"POSTGRES_SSLMODE=verify-ca", "POSTGRES_SSLMODE_ALLOW_INSECURE=true"} {
+		if !strings.Contains(warning, want) {
+			t.Fatalf("warning output = %q, want %q", warning, want)
+		}
+	}
+}
+
+func TestLoad_ProductionAllowsVerifyFullPostgresSSLMode(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("POSTGRES_SSLMODE", "verify-full")
+	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "")
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if config.Postgres.SSLMode != "verify-full" {
+		t.Fatalf("Postgres.SSLMode = %q, want verify-full", config.Postgres.SSLMode)
+	}
+}
+
+func TestLoad_ProductionAllowsWeakPostgresSSLMode_WithOverrideWarning(t *testing.T) {
+	setRequiredLoadEnv(t)
+	output := captureSlogOutput(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("POSTGRES_SSLMODE", "require")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 
 	if _, err := Load(); err != nil {
 		t.Fatalf("Load() error = %v", err)
+	}
+
+	warning := output.String()
+	for _, want := range []string{"POSTGRES_SSLMODE=require", "POSTGRES_SSLMODE_ALLOW_INSECURE=true"} {
+		if !strings.Contains(warning, want) {
+			t.Fatalf("warning output = %q, want %q", warning, want)
+		}
+	}
+}
+
+func TestLoad_DevelopmentAllowsWeakPostgresSSLMode(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("POSTGRES_SSLMODE", "prefer")
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if config.Postgres.SSLMode != "prefer" {
+		t.Fatalf("Postgres.SSLMode = %q, want prefer", config.Postgres.SSLMode)
 	}
 }
 
@@ -1095,13 +1371,13 @@ func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("APP_ENV", "production")
-	t.Setenv("POSTGRES_SSLMODE", "disable")
+	t.Setenv("POSTGRES_SSLMODE", "require")
 
 	_, err := LoadAdminAPI()
 	if err == nil {
 		t.Fatal("LoadAdminAPI() expected production sslmode validation error, got nil")
 	}
-	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=disable is not allowed in production") {
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1126,13 +1402,13 @@ func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T)
 	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("APP_ENV", "production")
-	t.Setenv("POSTGRES_SSLMODE", "disable")
+	t.Setenv("POSTGRES_SSLMODE", "require")
 
 	_, err := LoadLLMScheduler()
 	if err == nil {
 		t.Fatal("LoadLLMScheduler() expected production sslmode validation error, got nil")
 	}
-	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=disable is not allowed in production") {
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

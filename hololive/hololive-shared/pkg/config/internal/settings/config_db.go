@@ -28,6 +28,7 @@ type PostgresConfig struct {
 	Password         string
 	Database         string
 	SSLMode          string
+	SSLRootCert      string
 	QueryExecMode    string
 	PoolMinConns     int
 	PoolMaxConns     int
