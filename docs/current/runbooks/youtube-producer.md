@@ -130,7 +130,11 @@ CHANGE_STARTED_AT=<change_started_at> ./scripts/deploy/ap-completion-check.sh <h
 The remote wrapper covers that host's AP services only. The main-host `youtube-producer-c` is redeployed separately on the main host, guarded by its `main-ap` profile:
 
 ```bash
-COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+sudo -n env \
+  COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml:docker-compose.main-ap.yml:docker-compose.main-ap.live-compat.yml \
+  COMPOSE_PROFILES=main-ap \
+  COMPOSE_ENV_FILE=/run/hololive-bot/env \
+  ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
 First boot on a newly provisioned AP host (no AP containers yet) requires `AP_PREFLIGHT_ALLOW_FIRST_BOOT=true` so the Iris H3 trust preflight skips its in-container check once; post-start readiness checks still gate the rollout. The wrapper also copies `docker-compose.prod.yml` and the host overlay into its prechange backup *before* the rsync step, so pre-seed the repo files onto the host once (manual rsync with `--files-from=scripts/deploy/ap-rsync-files.txt`) before the first `--apply`.
