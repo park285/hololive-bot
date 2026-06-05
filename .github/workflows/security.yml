@@ -1,0 +1,273 @@
+name: security
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - ci
+    types:
+      - completed
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 18 * * 0"
+
+permissions:
+  contents: read
+
+env:
+  GOCACHE: /tmp/go-cache
+  GOPRIVATE: github.com/park285/*
+  GOTMPDIR: /tmp
+  GOVULNCHECK_VERSION: v1.3.0
+  GOSEC_VERSION: v2.27.1
+  STATICCHECK_VERSION: "2026.1"
+
+jobs:
+  prepare-private-modules:
+    name: prepare-private-modules
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests[0].number != null && github.event.workflow_run.pull_requests[0].base.ref == 'main') }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout shared-go
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: park285/shared-go
+          token: ${{ secrets.MODULES_TOKEN }}
+          path: shared-go
+          persist-credentials: false
+
+      - name: Checkout iris-client-go
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: park285/iris-client-go
+          token: ${{ secrets.MODULES_TOKEN }}
+          path: iris-client-go
+          persist-credentials: false
+
+      - name: Package private modules without credentials
+        run: |
+          mkdir -p private-modules/shared-go private-modules/iris-client-go
+          tar -C shared-go --exclude='.git' -cf - . | tar -C private-modules/shared-go -xf -
+          tar -C iris-client-go --exclude='.git' -cf - . | tar -C private-modules/iris-client-go -xf -
+          if find private-modules \( -name .git -o -name .netrc -o -name .gitconfig \) -print -quit | grep -q .; then
+            echo "::error::private module artifact contains credential-bearing metadata"
+            exit 1
+          fi
+
+      - name: Upload private module artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-go-modules
+          path: private-modules
+          if-no-files-found: error
+          retention-days: 1
+
+  build-test-no-secrets:
+    name: build-test-no-secrets
+    needs: prepare-private-modules
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: hololive-bot
+    steps:
+      - name: Checkout PR candidate
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: hololive-bot
+          persist-credentials: false
+
+      - name: Checkout trusted branch
+        if: ${{ github.event_name != 'workflow_run' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          path: hololive-bot
+          persist-credentials: false
+
+      - name: Checkout trusted scripts
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: refs/heads/main
+          path: hololive-bot-trusted
+          persist-credentials: false
+
+      - name: Overlay trusted scripts
+        if: ${{ github.event_name == 'workflow_run' }}
+        working-directory: .
+        run: |
+          rm -rf hololive-bot/scripts
+          cp -a hololive-bot-trusted/scripts hololive-bot/scripts
+
+      - name: Download private module artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: private-go-modules
+          path: .
+
+      - name: Setup Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version: "1.26.4"
+          cache-dependency-path: |
+            hololive-bot/go.work.sum
+            hololive-bot/go.sum
+            hololive-bot/admin-dashboard/backend/go.sum
+            hololive-bot/hololive/*/go.sum
+            shared-go/go.sum
+            iris-client-go/go.sum
+
+      - name: Workflow secret boundary
+        run: bash scripts/ci/check-workflow-secrets.sh
+
+      - name: Architecture gates
+        run: ./scripts/architecture/ci-boundary-gate.sh
+
+      - name: Resolve workspace package patterns
+        run: |
+          source scripts/ci/go-workspace-modules.sh
+          patterns="$(go_workspace_package_patterns | sed 's#^\./\.\./#../#' | tr '\n' ' ')"
+          patterns="./... ${patterns}"
+          echo "GO_PKG_PATTERNS=${patterns}" >> "${GITHUB_ENV}"
+          echo "resolved patterns: ${patterns}"
+
+      - name: gofmt
+        run: |
+          files="$(gofmt -l . ../shared-go ../iris-client-go)"
+          if [[ -n "${files}" ]]; then
+            echo "::error::gofmt required for the following files:"
+            echo "${files}"
+            exit 1
+          fi
+
+      - name: go vet
+        run: |
+          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
+          go vet "${pkgs[@]}"
+
+      - name: go build
+        run: |
+          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
+          go build "${pkgs[@]}"
+
+      - name: go test
+        run: |
+          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
+          go test -count=1 "${pkgs[@]}"
+
+      - name: Compose security contract tests
+        run: go test -count=1 ./hololive/hololive-shared/pkg/config/...
+
+  static-analysis-no-secrets:
+    name: static-analysis-no-secrets
+    needs: prepare-private-modules
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: hololive-bot
+    steps:
+      - name: Checkout PR candidate
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: hololive-bot
+          persist-credentials: false
+
+      - name: Checkout trusted branch
+        if: ${{ github.event_name != 'workflow_run' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          path: hololive-bot
+          persist-credentials: false
+
+      - name: Checkout trusted scripts
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: refs/heads/main
+          path: hololive-bot-trusted
+          persist-credentials: false
+
+      - name: Overlay trusted scripts
+        if: ${{ github.event_name == 'workflow_run' }}
+        working-directory: .
+        run: |
+          rm -rf hololive-bot/scripts
+          cp -a hololive-bot-trusted/scripts hololive-bot/scripts
+
+      - name: Download private module artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: private-go-modules
+          path: .
+
+      - name: Setup Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version: "1.26.4"
+          cache-dependency-path: |
+            hololive-bot/go.work.sum
+            hololive-bot/go.sum
+            hololive-bot/admin-dashboard/backend/go.sum
+            hololive-bot/hololive/*/go.sum
+            shared-go/go.sum
+            iris-client-go/go.sum
+
+      - name: Install security tools
+        run: |
+          export GOBIN="${RUNNER_TEMP}/go-tools"
+          mkdir -p "${GOBIN}"
+          go install "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}"
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          echo "${GOBIN}" >> "${GITHUB_PATH}"
+
+      - name: Workflow secret boundary
+        run: bash scripts/ci/check-workflow-secrets.sh
+
+      - name: Resolve workspace package patterns
+        run: |
+          source scripts/ci/go-workspace-modules.sh
+          patterns="$(go_workspace_package_patterns | sed 's#^\./\.\./#../#' | tr '\n' ' ')"
+          patterns="./... ${patterns}"
+          echo "GO_PKG_PATTERNS=${patterns}" >> "${GITHUB_ENV}"
+          echo "resolved patterns: ${patterns}"
+
+      - name: staticcheck
+        run: |
+          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
+          staticcheck "${pkgs[@]}"
+
+      - name: gosec
+        run: |
+          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
+          gosec -quiet -fmt text "${pkgs[@]}"
+
+      - name: govulncheck
+        run: |
+          mapfile -t modules < <(go work edit -json | python3 -c 'import json, sys; print("\n".join(use["DiskPath"] for use in json.load(sys.stdin)["Use"]))')
+          for module in "${modules[@]}"; do
+            echo "govulncheck ${module}"
+            (cd "${module}" && govulncheck ./...)
+          done
+
+  trusted-security:
+    name: trusted-security
+    needs:
+      - build-test-no-secrets
+      - static-analysis-no-secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Complete
+        run: echo "trusted-security checks completed"
