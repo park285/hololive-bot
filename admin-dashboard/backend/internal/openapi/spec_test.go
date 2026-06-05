@@ -47,7 +47,7 @@ func TestMarshalSpecIsStable(t *testing.T) {
 		t.Fatalf("marshal first spec: %v", err)
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		next, err := MarshalSpec("9.9.9-test")
 		if err != nil {
 			t.Fatalf("marshal spec iteration %d: %v", i, err)
