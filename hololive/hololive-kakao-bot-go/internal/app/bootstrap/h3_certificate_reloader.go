@@ -192,10 +192,6 @@ func (r *reloadingTLSCertificate) clearReloadFailure() {
 	r.lastReloadFailure = ""
 }
 
-func loadTLSCertificatePair(certFile, keyFile string) (*tls.Certificate, tlsCertificateFingerprint, error) {
-	return loadTLSCertificatePairWithReader(certFile, keyFile, os.ReadFile, tls.X509KeyPair)
-}
-
 func loadTLSCertificatePairWithReader(
 	certFile, keyFile string,
 	readFile tlsCertificateFileReader,

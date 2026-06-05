@@ -115,9 +115,7 @@ func TestReloadingTLSCertificateReloadFailureKeepsPreviousCertificateConcurrentl
 	errs := make(chan string, 16)
 	var wg sync.WaitGroup
 	for range 16 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 100 {
 				cert, getErr := reloader.GetCertificate(&tls.ClientHelloInfo{})
 				if getErr != nil {
@@ -129,7 +127,7 @@ func TestReloadingTLSCertificateReloadFailureKeepsPreviousCertificateConcurrentl
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)

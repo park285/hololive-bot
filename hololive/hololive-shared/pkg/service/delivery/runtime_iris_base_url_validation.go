@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -201,12 +202,7 @@ func normalizeRuntimeIrisBaseURLFilePath(path string, strict bool) (string, erro
 }
 
 func runtimeIrisBaseURLFilePathContainsDotDot(path string) bool {
-	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
-		if part == ".." {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(filepath.ToSlash(path), "/"), "..")
 }
 
 func validateRuntimeIrisBaseURLFileStat(path string) error {
@@ -300,7 +296,7 @@ func runtimeIrisBaseURLParentPathStart(parent string) (string, string) {
 
 func runtimeIrisBaseURLParentPathParts(rest string) []string {
 	parts := make([]string, 0)
-	for _, part := range strings.Split(rest, string(os.PathSeparator)) {
+	for part := range strings.SplitSeq(rest, string(os.PathSeparator)) {
 		if part == "" || part == "." {
 			continue
 		}
