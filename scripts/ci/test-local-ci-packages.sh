@@ -32,6 +32,8 @@ setup_repo() {
   printf 'package lib\n' >"${workdir}/hololive/hololive-kakao-bot-go/internal/lib/a.go"
   printf 'package app\n' >"${workdir}/hololive/hololive-kakao-bot-go/internal/app/a.go"
   printf '#!/usr/bin/env bash\n' >"${workdir}/scripts/run.sh"
+  printf 'services: {}\n' >"${workdir}/docker-compose.prod.yml"
+  printf 'APP_ENV=production\n' >"${workdir}/.env.example"
 
   git -C "${workdir}" add -A
   git -C "${workdir}" commit -q -m base
@@ -137,5 +139,21 @@ setup_repo "${workdir}"
 base_ref="$(git -C "${workdir}" rev-parse HEAD)"
 printf 'echo changed\n' >>"${workdir}/scripts/run.sh"
 expect_scope "changed scripts only" "$(run_scope "${workdir}" changed "${base_ref}")" ""
+
+workdir="${tmpdir}/compose-contract"
+setup_repo "${workdir}"
+base_ref="$(git -C "${workdir}" rev-parse HEAD)"
+printf '# changed\n' >>"${workdir}/docker-compose.prod.yml"
+expect_scope "changed compose contract file" \
+  "$(run_scope "${workdir}" changed "${base_ref}")" \
+  "./hololive/hololive-shared/..."
+
+workdir="${tmpdir}/env-example-contract"
+setup_repo "${workdir}"
+base_ref="$(git -C "${workdir}" rev-parse HEAD)"
+printf 'NEW_KEY=\n' >>"${workdir}/.env.example"
+expect_scope "changed .env.example contract file" \
+  "$(run_scope "${workdir}" changed "${base_ref}")" \
+  "./hololive/hololive-shared/..."
 
 echo "ok: local-ci package scope tests passed"
