@@ -2,3 +2,4 @@
 admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
 scripts/logs/remote-sync-main-logs.sh:480
 hololive/hololive-kakao-bot-go/scripts/bot.sh:560
+scripts/review/verify-full-bundle.sh:500
