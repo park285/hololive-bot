@@ -54,6 +54,7 @@ const (
 )
 
 var Load = settings.Load
+var LoadAdminAPIRuntime = settings.LoadAdminAPIRuntime
 
 //lint:ignore SA1019 legacy compatibility facade.
 var LoadAdminAPI = settings.LoadAdminAPI

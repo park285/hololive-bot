@@ -66,6 +66,14 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	return loadConfigValidated((*Config).Validate)
+}
+
+func LoadAdminAPIRuntime() (*Config, error) {
+	return loadConfigValidated((*Config).ValidateAdminAPIRuntime)
+}
+
+func loadConfigValidated(validate func(*Config) error) (*Config, error) {
 	_ = godotenv.Load()
 
 	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
@@ -74,7 +82,7 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	if err := config.Validate(); err != nil {
+	if err := validate(config); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 

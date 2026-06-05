@@ -42,7 +42,7 @@ func main() {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             config.Load,
+		LoadConfig:             config.LoadAdminAPIRuntime,
 		LoadConfigErrorMessage: "Failed to load config",
 		LoggerConfig: func(appConfig *config.Config) sharedlogging.Config {
 			return sharedlogging.Config{

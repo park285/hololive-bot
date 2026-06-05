@@ -169,3 +169,44 @@ func TestIsValidPostgresSSLMode(t *testing.T) {
 		t.Fatal("isValidPostgresSSLMode(\"invalid\") = true, want false")
 	}
 }
+
+func setAdminAPIRuntimeEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOLODEX_API_KEY", "test-key")
+	t.Setenv("KAKAO_ROOMS", "test-room")
+	t.Setenv("API_SECRET_KEY", "test-api-key")
+	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h2c")
+	t.Setenv("SERVER_PORT", "30006")
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "")
+	t.Setenv("IRIS_BOT_TOKEN", "")
+	t.Setenv("IRIS_BASE_URL", "")
+	t.Setenv("IRIS_BASE_URL_FILE", "")
+	t.Setenv("YOUTUBE_API_KEY", "")
+}
+
+func TestLoadAdminAPIRuntime_BootsWithoutIrisEgressTokens(t *testing.T) {
+	setAdminAPIRuntimeEnv(t)
+
+	config, err := LoadAdminAPIRuntime()
+	if err != nil {
+		t.Fatalf("LoadAdminAPIRuntime() error = %v", err)
+	}
+	if config.Iris.WebhookToken != "" || config.Iris.BotToken != "" {
+		t.Fatalf("Iris tokens = %q/%q, want empty", config.Iris.WebhookToken, config.Iris.BotToken)
+	}
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
+		t.Fatalf("Load() error = %v, want IRIS_WEBHOOK_TOKEN is required", err)
+	}
+}
+
+func TestLoadAdminAPIRuntime_RequiresHolodexKey(t *testing.T) {
+	setAdminAPIRuntimeEnv(t)
+	t.Setenv("HOLODEX_API_KEY", "")
+	t.Setenv("HOLODEX_API_KEY_1", "")
+
+	_, err := LoadAdminAPIRuntime()
+	if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY is required") {
+		t.Fatalf("LoadAdminAPIRuntime() error = %v, want HOLODEX_API_KEY is required", err)
+	}
+}

@@ -33,6 +33,16 @@ import (
 )
 
 func (c *Config) Validate() error {
+	return c.validateWithRequired(c.validateRequiredConfig)
+}
+
+// ValidateAdminAPIRuntime: admin-api는 compose 보안 계약상 nonEgress라
+// Iris egress 토큰을 받을 수 없으므로 IRIS·YouTube 필수 검증을 면제합니다.
+func (c *Config) ValidateAdminAPIRuntime() error {
+	return c.validateWithRequired(c.validateAdminAPIRequiredConfig)
+}
+
+func (c *Config) validateWithRequired(validateRequired func() error) error {
 	if err := validateDeprecatedEnvUsage(); err != nil {
 		return err
 	}
@@ -45,7 +55,7 @@ func (c *Config) Validate() error {
 	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
 		return err
 	}
-	if err := c.validateRequiredConfig(); err != nil {
+	if err := validateRequired(); err != nil {
 		return err
 	}
 	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
@@ -56,6 +66,16 @@ func (c *Config) Validate() error {
 	}
 	if err := validateCORSConfig(c.Environment, c.CORS); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (c *Config) validateAdminAPIRequiredConfig() error {
+	if len(c.Kakao.Rooms) == 0 {
+		return fmt.Errorf("KAKAO_ROOMS is required")
+	}
+	if strings.TrimSpace(c.Holodex.APIKey) == "" {
+		return fmt.Errorf("HOLODEX_API_KEY is required")
 	}
 	return nil
 }
