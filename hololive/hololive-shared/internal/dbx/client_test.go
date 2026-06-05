@@ -22,8 +22,19 @@ package dbx
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestNewLazy(t *testing.T) {
@@ -79,9 +90,10 @@ func TestNormalizePoolConfig(t *testing.T) {
 
 func TestConfigDSN(t *testing.T) {
 	tests := []struct {
-		name   string
-		config Config
-		want   string
+		name        string
+		config      Config
+		envRootCert string
+		want        string
 	}{
 		{
 			name: "TCP connection",
@@ -92,7 +104,7 @@ func TestConfigDSN(t *testing.T) {
 				Password: "pass",
 				Name:     "db",
 			},
-			want: "host=localhost port=5432 user=user password=pass dbname=db sslmode=require",
+			want: "host='localhost' port=5432 user='user' password='pass' dbname='db' sslmode='verify-full'",
 		},
 		{
 			name: "UDS connection",
@@ -102,7 +114,7 @@ func TestConfigDSN(t *testing.T) {
 				Password:   "pass",
 				Name:       "db",
 			},
-			want: "host=/var/run/postgresql user=user password=pass dbname=db sslmode=require",
+			want: "host='/var/run/postgresql' user='user' password='pass' dbname='db' sslmode='verify-full'",
 		},
 		{
 			name: "custom SSL mode",
@@ -114,7 +126,7 @@ func TestConfigDSN(t *testing.T) {
 				Name:     "db",
 				SSLMode:  "require",
 			},
-			want: "host=localhost port=5432 user=user password=pass dbname=db sslmode=require",
+			want: "host='localhost' port=5432 user='user' password='pass' dbname='db' sslmode='require'",
 		},
 		{
 			name: "query exec mode",
@@ -126,16 +138,122 @@ func TestConfigDSN(t *testing.T) {
 				Name:          "db",
 				QueryExecMode: "exec",
 			},
-			want: "host=localhost port=5432 user=user password=pass dbname=db sslmode=require default_query_exec_mode=exec",
+			want: "host='localhost' port=5432 user='user' password='pass' dbname='db' sslmode='verify-full' default_query_exec_mode='exec'",
+		},
+		{
+			name: "ssl root cert from config",
+			config: Config{
+				Host:        "localhost",
+				Port:        5432,
+				User:        "user",
+				Password:    "pass",
+				Name:        "db",
+				SSLMode:     "verify-full",
+				SSLRootCert: "/run/postgresql/root.crt",
+			},
+			want: "host='localhost' port=5432 user='user' password='pass' dbname='db' sslmode='verify-full' sslrootcert='/run/postgresql/root.crt'",
+		},
+		{
+			name: "ssl root cert from env",
+			config: Config{
+				Host:     "localhost",
+				Port:     5432,
+				User:     "user",
+				Password: "pass",
+				Name:     "db",
+				SSLMode:  "verify-full",
+			},
+			envRootCert: "/run/postgresql/env-root.crt",
+			want:        "host='localhost' port=5432 user='user' password='pass' dbname='db' sslmode='verify-full' sslrootcert='/run/postgresql/env-root.crt'",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("POSTGRES_SSLROOTCERT", tt.envRootCert)
 			if got := tt.config.DSN(); got != tt.want {
 				t.Errorf("DSN() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestConfigDSNQuotesSSLRootCertToPreventKeywordInjection(t *testing.T) {
+	t.Setenv("POSTGRES_SSLROOTCERT", "")
+
+	dir := t.TempDir()
+	truncatedRootCertPath := filepath.Join(dir, "root")
+	injectedRootCertPath := truncatedRootCertPath + " sslmode=disable"
+	writeTestCACert(t, truncatedRootCertPath, "truncated.example.test")
+	intendedCert := writeTestCACert(t, injectedRootCertPath, "intended.example.test")
+
+	config := Config{
+		Host:        "db.example.test",
+		Port:        5432,
+		User:        "user",
+		Password:    "pass",
+		Name:        "db",
+		SSLMode:     "verify-full",
+		SSLRootCert: injectedRootCertPath,
+	}
+
+	dsn := config.DSN()
+	want := "host='db.example.test' port=5432 user='user' password='pass' dbname='db' sslmode='verify-full' sslrootcert='" + injectedRootCertPath + "'"
+	if dsn != want {
+		t.Fatalf("DSN() = %q, want %q", dsn, want)
+	}
+
+	poolConfig, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.ParseConfig() error = %v", err)
+	}
+
+	tlsConfig := poolConfig.ConnConfig.Config.TLSConfig
+	if tlsConfig == nil {
+		t.Fatal("TLSConfig = nil, want verify-full TLS config")
+	}
+	if tlsConfig.ServerName != "db.example.test" {
+		t.Fatalf("TLSConfig.ServerName = %q, want %q", tlsConfig.ServerName, "db.example.test")
+	}
+	if _, err := intendedCert.Verify(x509.VerifyOptions{Roots: tlsConfig.RootCAs, DNSName: "intended.example.test"}); err != nil {
+		t.Fatalf("TLSConfig.RootCAs did not load literal sslrootcert value: %v", err)
+	}
+}
+
+func TestConfigDSNQuotesKeywordValues(t *testing.T) {
+	t.Setenv("POSTGRES_SSLROOTCERT", "")
+
+	config := Config{
+		Host:     "db.example.test",
+		Port:     5432,
+		User:     "app user",
+		Password: `pa's\word`,
+		Name:     "main db",
+		SSLMode:  "disable",
+	}
+
+	dsn := config.DSN()
+	want := `host='db.example.test' port=5432 user='app user' password='pa\'s\\word' dbname='main db' sslmode='disable'`
+	if dsn != want {
+		t.Fatalf("DSN() = %q, want %q", dsn, want)
+	}
+
+	poolConfig, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.ParseConfig() error = %v", err)
+	}
+	connConfig := poolConfig.ConnConfig.Config
+	if connConfig.User != config.User {
+		t.Fatalf("User = %q, want %q", connConfig.User, config.User)
+	}
+	if connConfig.Password != config.Password {
+		t.Fatalf("Password = %q, want %q", connConfig.Password, config.Password)
+	}
+	if connConfig.Database != config.Name {
+		t.Fatalf("Database = %q, want %q", connConfig.Database, config.Name)
+	}
+	if connConfig.TLSConfig != nil {
+		t.Fatal("TLSConfig != nil, want sslmode=disable to remain a single parsed keyword")
 	}
 }
 
@@ -162,4 +280,39 @@ func TestTryConnect_ParseConfigError_MasksPassword(t *testing.T) {
 	if !strings.Contains(errMsg, "sslmode is invalid") {
 		t.Fatalf("expected sslmode parse error, got: %q", errMsg)
 	}
+}
+
+func writeTestCACert(t *testing.T, path, commonName string) *x509.Certificate {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate CA key: %v", err)
+	}
+	serialNumber, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+	if err != nil {
+		t.Fatalf("generate CA serial: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber:          serialNumber,
+		Subject:               pkix.Name{CommonName: commonName},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		DNSNames:              []string{commonName},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create CA certificate: %v", err)
+	}
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		t.Fatalf("write CA certificate: %v", err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("parse CA certificate: %v", err)
+	}
+	return cert
 }

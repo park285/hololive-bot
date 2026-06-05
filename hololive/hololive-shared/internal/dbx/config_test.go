@@ -27,6 +27,8 @@ import (
 )
 
 func TestSafeDSN(t *testing.T) {
+	t.Setenv("POSTGRES_SSLROOTCERT", "")
+
 	tests := []struct {
 		name     string
 		config   Config
@@ -42,7 +44,7 @@ func TestSafeDSN(t *testing.T) {
 				Name:     "mydb",
 				SSLMode:  "disable",
 			},
-			wantSafe: "host=localhost port=5432 user=admin password=*** dbname=mydb sslmode=disable",
+			wantSafe: "host='localhost' port=5432 user='admin' password='***' dbname='mydb' sslmode='disable'",
 		},
 		{
 			name: "UDS with password masked",
@@ -53,7 +55,7 @@ func TestSafeDSN(t *testing.T) {
 				Name:       "mydb",
 				SSLMode:    "disable",
 			},
-			wantSafe: "host=/var/run/postgresql user=admin password=*** dbname=mydb sslmode=disable",
+			wantSafe: "host='/var/run/postgresql' user='admin' password='***' dbname='mydb' sslmode='disable'",
 		},
 		{
 			name: "empty password stays empty",
@@ -65,7 +67,7 @@ func TestSafeDSN(t *testing.T) {
 				Name:     "mydb",
 				SSLMode:  "disable",
 			},
-			wantSafe: "host=localhost port=5432 user=admin password= dbname=mydb sslmode=disable",
+			wantSafe: "host='localhost' port=5432 user='admin' password='' dbname='mydb' sslmode='disable'",
 		},
 		{
 			name: "password not in SafeDSN output",
@@ -76,7 +78,7 @@ func TestSafeDSN(t *testing.T) {
 				Password: "z",
 				Name:     "prod",
 			},
-			wantSafe: "host=db.prod port=5432 user=app password=*** dbname=prod sslmode=require",
+			wantSafe: "host='db.prod' port=5432 user='app' password='***' dbname='prod' sslmode='verify-full'",
 		},
 	}
 

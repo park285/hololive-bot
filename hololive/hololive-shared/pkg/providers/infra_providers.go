@@ -130,11 +130,15 @@ func provideRuntimeIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*
 		return nil, fmt.Errorf("provide iris client: bot token is required")
 	}
 
-	return delivery.NewRuntimeIrisClient(
+	client := delivery.NewRuntimeIrisClient(
 		fallbackBaseURL,
 		botToken,
 		baseURLFilePath,
 		logger,
 		opts...,
-	), nil
+	)
+	if err := client.ValidateBaseURL(); err != nil {
+		return nil, fmt.Errorf("provide iris client: %w", err)
+	}
+	return client, nil
 }

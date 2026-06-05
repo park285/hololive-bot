@@ -4,6 +4,8 @@ x-live-postgres-env: &live-postgres-env
   POSTGRES_HOST: host.docker.internal
   POSTGRES_PORT: "5433"
   POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+  IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS: ${IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS:-true}
+  POSTGRES_SSLMODE_ALLOW_INSECURE: ${POSTGRES_SSLMODE_ALLOW_INSECURE:-true}
 
 services:
   holo-postgres:
@@ -35,6 +37,7 @@ services:
     environment:
       <<: *live-postgres-env
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
+      IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
       HEALTHCHECK_SERVER_NAME: ${HOLOLIVE_H3_SERVER_NAME:-100.100.1.3}
     ports:
       - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001"
@@ -64,6 +67,7 @@ services:
     environment:
       <<: *live-postgres-env
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
+      IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
     volumes: !override
       - ./data:/app/data
       - ./logs:/app/logs

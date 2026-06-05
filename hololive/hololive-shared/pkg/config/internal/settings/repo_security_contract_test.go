@@ -193,12 +193,41 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 	}
 }
 
+func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+	}{
+		{
+			name: "osaka",
+			file: "docker-compose.osaka.yml",
+		},
+		{
+			name: "seoul",
+			file: "docker-compose.seoul.yml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := renderComposeConfig(t, "docker-compose.prod.yml", renderableAPComposeFile(t, tt.file))
+			assertAPComposeCertMountsAreMinimized(t, cfg, tt.file)
+		})
+	}
+}
+
 func TestRepoComposeLiveCompatOverlayRestoresPreHardeningSnapshot(t *testing.T) {
 	overlay := readRepoFile(t, "docker-compose.live-compat.yml")
 	for _, service := range []string{"hololive-bot", "hololive-admin-api", "hololive-alarm-worker", "youtube-producer", "llm-scheduler", "admin-dashboard"} {
 		block := composeServiceBlock(t, overlay, service)
 		if !strings.Contains(block, "env_file:") || !strings.Contains(block, "${COMPOSE_ENV_FILE:-/run/hololive-bot/env}") {
 			t.Fatalf("live overlay must restore common env_file for %s", service)
+		}
+	}
+	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
+		block := composeServiceBlock(t, overlay, service)
+		if !strings.Contains(block, "IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}") {
+			t.Fatalf("docker-compose.live-compat.yml missing IRIS_BASE_URL_ALLOWED_HOSTS default for %s", service)
 		}
 	}
 
@@ -234,6 +263,9 @@ func TestRepoComposeLiveCompatOverlayRestoresPreHardeningSnapshot(t *testing.T) 
 		if env["POSTGRES_HOST"] != "host.docker.internal" || env["POSTGRES_PORT"] != "5433" || env["POSTGRES_SSLMODE"] != "require" {
 			t.Fatalf("%s POSTGRES env = %q/%q/%q, want host.docker.internal/5433/require", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
 		}
+		if env["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
+			t.Fatalf("%s POSTGRES_SSLMODE_ALLOW_INSECURE = %q, want true", service, env["POSTGRES_SSLMODE_ALLOW_INSECURE"])
+		}
 		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if _, ok := env[key]; !ok {
 				t.Fatalf("%s missing env_file-restored key %s", service, key)
@@ -264,11 +296,23 @@ func TestRepoComposeLiveCompatOverlayRestoresPreHardeningSnapshot(t *testing.T) 
 		if env["IRIS_BASE_URL_FILE"] != "/app/runtime-config/iris_base_url" {
 			t.Fatalf("%s IRIS_BASE_URL_FILE = %q, want /app/runtime-config/iris_base_url", service, env["IRIS_BASE_URL_FILE"])
 		}
+		if env["IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS"] != "true" {
+			t.Fatalf("%s IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS = %q, want true", service, env["IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS"])
+		}
+		if env["IRIS_BASE_URL_ALLOWED_HOSTS"] != "100.100.1.5" {
+			t.Fatalf("%s IRIS_BASE_URL_ALLOWED_HOSTS = %q, want 100.100.1.5", service, env["IRIS_BASE_URL_ALLOWED_HOSTS"])
+		}
 	}
 }
 
 func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T) {
-	_ = readRepoFile(t, "docker-compose.main-ap.live-compat.yml")
+	overlay := readRepoFile(t, "docker-compose.main-ap.live-compat.yml")
+	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
+		block := composeServiceBlock(t, overlay, service)
+		if !strings.Contains(block, "IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}") {
+			t.Fatalf("docker-compose.main-ap.live-compat.yml missing IRIS_BASE_URL_ALLOWED_HOSTS default for %s", service)
+		}
+	}
 
 	cfg := renderComposeConfig(t,
 		"docker-compose.prod.yml",
@@ -277,9 +321,19 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 		"docker-compose.main-ap.live-compat.yml",
 	)
 
+	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
+		env := composeEnvironment(t, cfg, service)
+		if env["IRIS_BASE_URL_ALLOWED_HOSTS"] != "100.100.1.5" {
+			t.Fatalf("%s IRIS_BASE_URL_ALLOWED_HOSTS = %q, want 100.100.1.5", service, env["IRIS_BASE_URL_ALLOWED_HOSTS"])
+		}
+	}
+
 	env := composeEnvironment(t, cfg, "youtube-producer-c")
 	if env["POSTGRES_HOST"] != "host.docker.internal" || env["POSTGRES_PORT"] != "5433" || env["POSTGRES_SSLMODE"] != "require" {
 		t.Fatalf("youtube-producer-c POSTGRES env = %q/%q/%q, want host.docker.internal/5433/require", env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
+	}
+	if env["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
+		t.Fatalf("youtube-producer-c POSTGRES_SSLMODE_ALLOW_INSECURE = %q, want true", env["POSTGRES_SSLMODE_ALLOW_INSECURE"])
 	}
 	for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 		if _, ok := env[key]; !ok {
@@ -292,6 +346,42 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 		if !strings.Contains(targets, target) {
 			t.Fatalf("youtube-producer-c missing live-compat volume target %s in %q", target, targets)
 		}
+	}
+}
+
+func TestRepoComposeLiveCompatWeakPostgresSSLModesCarryEscapeHatch(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+	}{
+		{
+			name:  "live-compat",
+			files: []string{"docker-compose.prod.yml", "docker-compose.live-compat.yml"},
+		},
+		{
+			name: "main-ap live-compat",
+			files: []string{
+				"docker-compose.prod.yml",
+				"docker-compose.live-compat.yml",
+				"docker-compose.main-ap.yml",
+				"docker-compose.main-ap.live-compat.yml",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := renderComposeConfig(t, tt.files...)
+			for service := range cfg.Services {
+				env := composeEnvironment(t, cfg, service)
+				if !isWeakPostgresSSLMode(env["POSTGRES_SSLMODE"]) {
+					continue
+				}
+				if env["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
+					t.Fatalf("%s in %s has POSTGRES_SSLMODE=%q without POSTGRES_SSLMODE_ALLOW_INSECURE=true", service, tt.name, env["POSTGRES_SSLMODE"])
+				}
+			}
+		})
 	}
 }
 
@@ -309,6 +399,15 @@ func TestRepoCompose_StandaloneDispatcherServiceIsRemoved(t *testing.T) {
 		if strings.Contains(content, pattern) {
 			t.Fatalf("docker-compose.prod.yml still contains standalone dispatcher pattern %q", pattern)
 		}
+	}
+}
+
+func isWeakPostgresSSLMode(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "disable", "allow", "prefer", "require", "verify-ca":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -409,6 +508,85 @@ func renderComposeConfig(t *testing.T, files ...string) renderedCompose {
 	return cfg
 }
 
+func renderableAPComposeFile(t *testing.T, relativePath string) string {
+	t.Helper()
+
+	return writeRenderableAPComposeFile(t, relativePath, readRepoFile(t, relativePath))
+}
+
+func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) string {
+	t.Helper()
+
+	const envFile = "- /run/hololive-bot/env"
+	if !strings.Contains(content, envFile) {
+		t.Fatalf("%s missing hardcoded AP env_file path %s", sourceName, envFile)
+	}
+	content = strings.ReplaceAll(content, envFile, "- .env.example")
+
+	repoRoot := repoRootFromConfigTest(t)
+	baseName := strings.TrimSuffix(filepath.Base(sourceName), filepath.Ext(sourceName))
+	tempFile, err := os.CreateTemp(repoRoot, "."+baseName+"-*.yml")
+	if err != nil {
+		t.Fatalf("create temp AP compose for %s failed: %v", sourceName, err)
+	}
+	tempPath := tempFile.Name()
+	t.Cleanup(func() {
+		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+			t.Errorf("remove temp AP compose %s failed: %v", tempPath, err)
+		}
+	})
+
+	if _, err := tempFile.WriteString(content); err != nil {
+		_ = tempFile.Close()
+		t.Fatalf("write temp AP compose for %s failed: %v", sourceName, err)
+	}
+	if err := tempFile.Close(); err != nil {
+		t.Fatalf("close temp AP compose for %s failed: %v", sourceName, err)
+	}
+
+	return tempPath
+}
+
+func assertAPComposeCertMountsAreMinimized(t *testing.T, cfg renderedCompose, composeFile string) {
+	t.Helper()
+
+	serviceNames := apComposeServiceNames(t, cfg, composeFile)
+	for _, service := range serviceNames {
+		for _, volume := range composeVolumes(t, cfg, service) {
+			source := cleanVolumePath(volume.Source)
+			target := cleanVolumePath(volume.Target)
+			if source == "/run/hololive-bot/certs" && target == "/run/hololive-bot/certs" {
+				t.Fatalf("%s %s mounts broad cert directory: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
+			}
+			if strings.HasSuffix(volume.Source, ".key") || strings.HasSuffix(volume.Target, ".key") {
+				t.Fatalf("%s %s mounts private key file: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
+			}
+		}
+	}
+}
+
+func apComposeServiceNames(t *testing.T, cfg renderedCompose, composeFile string) []string {
+	t.Helper()
+
+	serviceNames := make([]string, 0, len(cfg.Services))
+	for service := range cfg.Services {
+		if strings.HasPrefix(service, "youtube-producer") {
+			serviceNames = append(serviceNames, service)
+		}
+	}
+	if len(serviceNames) == 0 {
+		t.Fatalf("%s rendered no AP youtube-producer services", composeFile)
+	}
+	return serviceNames
+}
+
+func cleanVolumePath(value string) string {
+	if value == "" {
+		return ""
+	}
+	return filepath.Clean(value)
+}
+
 func composeService(t *testing.T, cfg renderedCompose, service string) map[string]any {
 	t.Helper()
 
@@ -482,6 +660,22 @@ func assertRenderedPort(t *testing.T, cfg renderedCompose, service, hostIP, publ
 func composeVolumeTargets(t *testing.T, cfg renderedCompose, service string) []string {
 	t.Helper()
 
+	volumes := composeVolumes(t, cfg, service)
+	targets := make([]string, 0, len(volumes))
+	for _, volume := range volumes {
+		targets = append(targets, volume.Target)
+	}
+	return targets
+}
+
+type renderedVolume struct {
+	Source string
+	Target string
+}
+
+func composeVolumes(t *testing.T, cfg renderedCompose, service string) []renderedVolume {
+	t.Helper()
+
 	raw, ok := composeService(t, cfg, service)["volumes"]
 	if !ok {
 		return nil
@@ -492,15 +686,18 @@ func composeVolumeTargets(t *testing.T, cfg renderedCompose, service string) []s
 		t.Fatalf("%s volumes has unexpected type %T", service, raw)
 	}
 
-	targets := make([]string, 0, len(values))
+	volumes := make([]renderedVolume, 0, len(values))
 	for _, value := range values {
 		volumeMap, ok := value.(map[string]any)
 		if !ok {
 			t.Fatalf("%s volume has unexpected type %T", service, value)
 		}
-		targets = append(targets, stringValue(volumeMap["target"]))
+		volumes = append(volumes, renderedVolume{
+			Source: stringValue(volumeMap["source"]),
+			Target: stringValue(volumeMap["target"]),
+		})
 	}
-	return targets
+	return volumes
 }
 
 func composeCommand(t *testing.T, cfg renderedCompose, service string) string {

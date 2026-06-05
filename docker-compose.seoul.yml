@@ -33,7 +33,6 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
     logging: *seoul-ap-logging
     deploy:
       resources:
@@ -74,7 +73,6 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
     logging: *seoul-ap-logging
     deploy:
       resources:

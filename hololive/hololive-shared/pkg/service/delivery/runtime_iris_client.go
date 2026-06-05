@@ -20,9 +20,10 @@ type RuntimeIrisClient struct {
 	logger          *slog.Logger
 	clientOpts      []iris.ClientOption
 
-	mu              sync.Mutex
-	cachedBaseURL   string
-	cachedH2CClient *iris.H2CClient
+	mu                             sync.Mutex
+	baseURLHostUnvalidatedWarnOnce sync.Once
+	cachedBaseURL                  string
+	cachedH2CClient                *iris.H2CClient
 }
 
 func NewRuntimeIrisClient(
@@ -222,73 +223,67 @@ func (c *RuntimeIrisClient) currentClient() (*iris.H2CClient, error) {
 	return c.cachedH2CClient, nil
 }
 
+func (c *RuntimeIrisClient) ValidateBaseURL() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	_, err := c.resolveBaseURLLocked()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *RuntimeIrisClient) resolveBaseURLLocked() (string, error) {
 	if c == nil {
 		return "", fmt.Errorf("runtime iris client: client is nil")
 	}
 
 	if c.baseURLFilePath != "" {
-		fileBaseURL, err := c.resolveBaseURLFromFileLocked()
-		if err == nil && fileBaseURL != "" {
-			return fileBaseURL, nil
-		}
-		if err != nil {
-			c.logBaseURLFileFallback(err.Error())
-		}
+		return c.resolveBaseURLFromFileLocked()
 	}
 
 	return validateHTTPBaseURL(c.fallbackBaseURL)
 }
 
 func (c *RuntimeIrisClient) resolveBaseURLFromFileLocked() (string, error) {
-	raw, err := os.ReadFile(c.baseURLFilePath)
+	validateStat := shouldValidateRuntimeIrisBaseURLFileStat()
+	baseURLFilePath, err := normalizeRuntimeIrisBaseURLFilePath(c.baseURLFilePath, validateStat)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
+		return "", fmt.Errorf("validate IRIS_BASE_URL_FILE path: %w", err)
+	}
+
+	if validateStat {
+		if err := validateRuntimeIrisBaseURLFileStat(baseURLFilePath); err != nil {
+			return "", fmt.Errorf("validate IRIS_BASE_URL_FILE: %w", err)
 		}
-		return "", fmt.Errorf("read base URL file: %w", err)
 	}
 
-	baseURL, err := validateRuntimeIrisBaseURL(string(raw))
+	raw, err := os.ReadFile(baseURLFilePath)
 	if err != nil {
-		return "", fmt.Errorf("parse base URL file: %w", err)
+		return "", fmt.Errorf("read IRIS_BASE_URL_FILE: %w", err)
+	}
+
+	baseURL, err := validateRuntimeIrisBaseURLFileOverride(string(raw), c.warnBaseURLHostUnvalidated)
+	if err != nil {
+		return "", fmt.Errorf("validate IRIS_BASE_URL_FILE URL: %w", err)
 	}
 
 	return baseURL, nil
 }
 
-func validateRuntimeIrisBaseURL(raw string) (string, error) {
-	baseURL, err := validateHTTPBaseURL(raw)
-	if err != nil {
-		return "", err
+func (c *RuntimeIrisClient) warnBaseURLHostUnvalidated(host string) {
+	if c == nil || c.logger == nil {
+		return
 	}
 
-	parsed, err := url.Parse(baseURL)
-	if err != nil {
-		return "", err
-	}
-
-	if err := validateRuntimeIrisTransportScheme(normalizeRuntimeIrisTransport(os.Getenv("IRIS_TRANSPORT")), parsed.Scheme); err != nil {
-		return "", err
-	}
-
-	return baseURL, nil
-}
-
-func validateRuntimeIrisTransportScheme(transport, scheme string) error {
-	requiredScheme, ok := runtimeIrisTransportRequiredSchemes()[transport]
-	if !ok || scheme == requiredScheme {
-		return nil
-	}
-	return fmt.Errorf("IRIS_TRANSPORT=%s requires %s IRIS_BASE_URL, got %s", transport, requiredScheme, scheme)
-}
-
-func runtimeIrisTransportRequiredSchemes() map[string]string {
-	return map[string]string{
-		"h3":    "https",
-		"h2c":   "http",
-		"http2": "https",
-	}
+	c.baseURLHostUnvalidatedWarnOnce.Do(func() {
+		c.logger.Warn("IRIS_BASE_URL_FILE host is unvalidated because no Iris base URL allowlist is configured",
+			slog.String("host", host),
+			slog.String("path", c.baseURLFilePath),
+			slog.String("allowlist_env", irisH3ServerNameEnv+","+irisBaseURLAllowedHostsEnv),
+		)
+	})
 }
 
 func validateHTTPBaseURL(raw string) (string, error) {
@@ -311,36 +306,4 @@ func validateHTTPBaseURL(raw string) (string, error) {
 	}
 
 	return baseURL, nil
-}
-
-func normalizeRuntimeIrisTransport(raw string) string {
-	normalized := strings.ToLower(strings.TrimSpace(raw))
-	if isRuntimeIrisHTTP3Transport(normalized) {
-		return "h3"
-	}
-	if normalized == "h2c" {
-		return normalized
-	}
-	if normalized == "h2" || normalized == "http2" {
-		return "http2"
-	}
-	if normalized == "http1" || normalized == "http" || normalized == "http/1.1" {
-		return "http1"
-	}
-	return normalized
-}
-
-func isRuntimeIrisHTTP3Transport(normalized string) bool {
-	return normalized == "h3" || normalized == "http3" || normalized == "http/3" || normalized == "quic"
-}
-
-func (c *RuntimeIrisClient) logBaseURLFileFallback(reason string) {
-	if c == nil || c.logger == nil || strings.TrimSpace(reason) == "" {
-		return
-	}
-
-	c.logger.Warn("Runtime Iris client falling back to configured base URL",
-		slog.String("path", c.baseURLFilePath),
-		slog.String("reason", reason),
-	)
 }

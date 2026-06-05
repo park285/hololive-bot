@@ -23,7 +23,7 @@
 package dbx
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,13 +39,14 @@ var queryExecModeNames = map[string]string{
 }
 
 type Config struct {
-	Host       string // TCP 호스트 (예: "localhost", "postgres")
-	Port       int    // TCP 포트 (예: 5432)
-	SocketPath string // UDS 경로 (비어있으면 TCP 사용)
-	User       string
-	Password   string //nolint:gosec // 설정 구조체 필드명이며 시크릿 값 자체를 로그/출력하지 않는다.
-	Name       string // 데이터베이스 이름
-	SSLMode    string // sslmode (기본: "require")
+	Host        string // TCP 호스트 (예: "localhost", "postgres")
+	Port        int    // TCP 포트 (예: 5432)
+	SocketPath  string // UDS 경로 (비어있으면 TCP 사용)
+	User        string
+	Password    string //nolint:gosec // 설정 구조체 필드명이며 시크릿 값 자체를 로그/출력하지 않는다.
+	Name        string // 데이터베이스 이름
+	SSLMode     string // sslmode (기본: "verify-full")
+	SSLRootCert string
 	// QueryExecMode: pgx default_query_exec_mode
 	// 허용값: cache_statement, cache_describe, describe_exec, exec, simple_protocol
 	QueryExecMode string
@@ -62,23 +63,54 @@ func (c Config) SafeDSN() string {
 func (c Config) DSN() string {
 	sslmode := c.SSLMode
 	if sslmode == "" {
-		sslmode = "require"
+		sslmode = "verify-full"
+	}
+	sslRootCert := strings.TrimSpace(c.SSLRootCert)
+	if sslRootCert == "" {
+		sslRootCert = strings.TrimSpace(sharedenv.String("POSTGRES_SSLROOTCERT", ""))
 	}
 	queryExecMode := normalizeQueryExecMode(c.QueryExecMode)
-	queryExecModePart := ""
-	if queryExecMode != "" {
-		queryExecModePart = " default_query_exec_mode=" + queryExecMode
-	}
+
+	parts := make([]string, 0, 8)
 	if c.SocketPath != "" {
-		return fmt.Sprintf(
-			"host=%s user=%s password=%s dbname=%s sslmode=%s%s",
-			c.SocketPath, c.User, c.Password, c.Name, sslmode, queryExecModePart,
+		parts = append(parts, libpqKeywordValue("host", c.SocketPath))
+	} else {
+		parts = append(parts,
+			libpqKeywordValue("host", c.Host),
+			"port="+strconv.Itoa(c.Port),
 		)
 	}
-	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s%s",
-		c.Host, c.Port, c.User, c.Password, c.Name, sslmode, queryExecModePart,
+	parts = append(parts,
+		libpqKeywordValue("user", c.User),
+		libpqKeywordValue("password", c.Password),
+		libpqKeywordValue("dbname", c.Name),
+		libpqKeywordValue("sslmode", sslmode),
 	)
+	if sslRootCert != "" {
+		parts = append(parts, libpqKeywordValue("sslrootcert", sslRootCert))
+	}
+	if queryExecMode != "" {
+		parts = append(parts, libpqKeywordValue("default_query_exec_mode", queryExecMode))
+	}
+	return strings.Join(parts, " ")
+}
+
+func libpqKeywordValue(key, value string) string {
+	return key + "=" + libpqQuote(value)
+}
+
+func libpqQuote(value string) string {
+	var builder strings.Builder
+	builder.Grow(len(value) + 2)
+	builder.WriteByte('\'')
+	for _, char := range value {
+		if char == '\\' || char == '\'' {
+			builder.WriteByte('\\')
+		}
+		builder.WriteRune(char)
+	}
+	builder.WriteByte('\'')
+	return builder.String()
 }
 
 func normalizeQueryExecMode(mode string) string {
