@@ -114,6 +114,16 @@ func TestNormalizeSummarySeverity(t *testing.T) {
 	}
 }
 
+func TestShouldRunConsensusReview_SingleHighlightRunsReview(t *testing.T) {
+	resp := &summaryResponse{
+		Highlights: []eventHighlight{{Name: "fes"}},
+	}
+
+	if !shouldRunConsensusReview(resp) {
+		t.Fatal("shouldRunConsensusReview() = false, want true for single highlight")
+	}
+}
+
 func TestDeriveConsensusBudget_CapsToParentDeadline(t *testing.T) {
 	parent, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()

@@ -680,6 +680,108 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 	}
 }
 
+func TestGetLivesByChannelIDs_PageScanStopsOnRepeatedCursor(t *testing.T) {
+	var pageCalls atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pageCalls.Add(1)
+		if r.URL.Path != "/open/v1/lives" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		response := OpenAPIResponse[LivesResponse]{
+			Code: http.StatusOK,
+			Content: LivesResponse{
+				Data: []LiveData{},
+				Page: PageInfo{Next: "loop"},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := NewClientWithConfig(ClientConfig{
+		HTTPClient:   http.DefaultClient,
+		BaseURL:      server.URL,
+		ClientID:     "id",
+		ClientSecret: "secret",
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	})
+	client.openAPIBaseURL = server.URL
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := client.GetLivesByChannelIDs(ctx, largeChzzkTargetIDs(1))
+	if err == nil {
+		t.Fatal("expected repeated cursor error")
+	}
+	if !strings.Contains(err.Error(), "pagination cursor repeated") {
+		t.Fatalf("error = %q, want repeated cursor diagnostic", err.Error())
+	}
+	if got := pageCalls.Load(); got > 3 {
+		t.Fatalf("page scan calls = %d, want bounded repeated cursor detection", got)
+	}
+}
+
+func TestGetLivesByChannelIDs_PageScanStopsAfterPageCap(t *testing.T) {
+	var pageCalls atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := pageCalls.Add(1)
+		if r.URL.Path != "/open/v1/lives" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		response := OpenAPIResponse[LivesResponse]{
+			Code: http.StatusOK,
+			Content: LivesResponse{
+				Data: []LiveData{},
+				Page: PageInfo{Next: fmt.Sprintf("page-%d", call+1)},
+			},
+		}
+		if call >= 129 {
+			response.Code = http.StatusInternalServerError
+			response.Message = "test guard reached before page cap"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := NewClientWithConfig(ClientConfig{
+		HTTPClient:   http.DefaultClient,
+		BaseURL:      server.URL,
+		ClientID:     "id",
+		ClientSecret: "secret",
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	})
+	client.openAPIBaseURL = server.URL
+
+	_, err := client.GetLivesByChannelIDs(t.Context(), largeChzzkTargetIDs(1))
+	if err == nil {
+		t.Fatal("expected page cap error")
+	}
+	if !strings.Contains(err.Error(), "page scan exceeded") {
+		t.Fatalf("error = %q, want page cap diagnostic", err.Error())
+	}
+	if got := pageCalls.Load(); got >= 129 {
+		t.Fatalf("page scan calls = %d, want page cap before test guard", got)
+	}
+}
+
+func largeChzzkTargetIDs(extra int) []string {
+	threshold := config.DefaultChzzkOperationalConfig().BatchLookupThreshold
+	channelIDs := make([]string, 0, threshold+extra)
+	for i := 0; i < threshold+extra; i++ {
+		channelIDs = append(channelIDs, fmt.Sprintf("target-%d", i+1))
+	}
+	return channelIDs
+}
+
 func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 	var (
 		liveStatusCalls atomic.Int32

@@ -46,6 +46,9 @@ func safeLLMProviderError(err error) error {
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, errOpenAIRefusalOutput) {
+		return safeProviderError{errType: "openai_refusal_output"}
+	}
 	if errors.Is(err, errOpenAIEmptyOutput) {
 		return safeProviderError{errType: "openai_empty_output"}
 	}
@@ -68,6 +71,9 @@ func safeOpenAIProviderError(apiErr *openai.Error) safeProviderError {
 func llmProviderErrorAttrs(err error) []slog.Attr {
 	if err == nil {
 		return nil
+	}
+	if errors.Is(err, errOpenAIRefusalOutput) {
+		return []slog.Attr{slog.String("error_type", "openai_refusal_output")}
 	}
 	if errors.Is(err, errOpenAIEmptyOutput) {
 		return []slog.Attr{slog.String("error_type", "openai_empty_output")}

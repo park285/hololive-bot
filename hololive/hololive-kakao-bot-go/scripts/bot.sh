@@ -4,6 +4,9 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${PROJECT_ROOT}"
+REPO_ROOT="$(cd "${PROJECT_ROOT}/../.." && pwd)"
+
+source "${REPO_ROOT}/scripts/deploy/lib/compose-env.sh"
 
 PID_FILE=".bot.pid"
 LOG_DIR="logs"
@@ -43,6 +46,19 @@ find_bot_pids() {
       echo "${pid}"
     fi
   done || true
+}
+
+load_env_file_literal() {
+  local env_file="$1"
+  local key=""
+  local value=""
+
+  compose_env_validate_file_format "${env_file}"
+  while IFS= read -r key; do
+    [[ -n "${key}" ]] || continue
+    value="$(compose_env_read_value_from_file "${env_file}" "${key}")"
+    export "${key}=${value}"
+  done < <(compose_env_list_keys_from_file "${env_file}")
 }
 
 cmd_start() {
@@ -112,13 +128,14 @@ cmd_start() {
   fi
 
   echo "[CHECK] Validating environment variables..."
+  load_env_file_literal ".env"
   for var in ${required_vars}; do
-    if ! grep -q "^${var}=" .env; then
+    if [[ -z "${!var+x}" ]]; then
       echo "[ERROR] Required variable missing: ${var}"
       exit 1
     fi
 
-    value="$(grep "^${var}=" .env | cut -d'=' -f2-)"
+    value="${!var:-}"
     if [[ -z "${value}" ]]; then
       echo "[ERROR] Required variable is empty: ${var}"
       exit 1
@@ -126,10 +143,6 @@ cmd_start() {
   done
   echo "[OK] Environment variables validated"
 
-  set -a
-  # shellcheck source=/dev/null
-  . ./.env
-  set +a
   min_count="${CORE_MEMBER_HASH_SOFT_MIN_COUNT:-${min_count}}"
   timeout_sec="${CORE_MEMBER_HASH_SOFT_TIMEOUT_SECONDS:-${timeout_sec}}"
 

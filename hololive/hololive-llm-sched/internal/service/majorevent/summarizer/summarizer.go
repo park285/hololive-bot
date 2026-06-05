@@ -234,7 +234,7 @@ func shouldRunConsensusReview(resp *summaryResponse) bool {
 	if resp == nil {
 		return false
 	}
-	return len(resp.Highlights) > 1 || len(resp.OngoingEvents) > 0 || len(resp.DiscoveredEvents) > 0
+	return len(resp.Highlights) > 0 || len(resp.OngoingEvents) > 0 || len(resp.DiscoveredEvents) > 0
 }
 
 func shouldRunFinalOutputReview(resp *summaryResponse, assembled string) bool {
@@ -244,7 +244,7 @@ func shouldRunFinalOutputReview(resp *summaryResponse, assembled string) bool {
 	if len(resp.OngoingEvents) > 0 || len(resp.DiscoveredEvents) > 0 {
 		return true
 	}
-	return len(resp.Highlights) > 1
+	return len(resp.Highlights) > 0
 }
 
 func (s *EventSummarizer) searchWithTimeout(ctx context.Context, query string, warnMessage string) ([]sharedmodel.SearchResult, bool) {

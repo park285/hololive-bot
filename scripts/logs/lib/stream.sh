@@ -6,6 +6,105 @@ ensure_mirror_enabled() {
   fi
 }
 
+stream_mirror_positive_int() {
+  local value="$1"
+  local fallback="$2"
+
+  if [[ "${value}" =~ ^[0-9]+$ ]] && [[ "${value}" -gt 0 ]]; then
+    printf '%s\n' "${value}"
+    return
+  fi
+
+  printf '%s\n' "${fallback}"
+}
+
+stream_mirror_non_negative_int() {
+  local value="$1"
+  local fallback="$2"
+
+  if [[ "${value}" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "${value}"
+    return
+  fi
+
+  printf '%s\n' "${fallback}"
+}
+
+stream_mirror_max_bytes() {
+  stream_mirror_positive_int "${STREAM_MIRROR_MAX_BYTES:-10485760}" 10485760
+}
+
+stream_mirror_max_rotations() {
+  stream_mirror_non_negative_int "${STREAM_MIRROR_MAX_ROTATIONS:-3}" 3
+}
+
+stream_mirror_rotate() {
+  local log_file="$1"
+  local rotations=""
+  local i=0
+
+  rotations="$(stream_mirror_max_rotations)"
+  if [[ "${rotations}" -eq 0 ]]; then
+    rm -f "${log_file}"
+    return
+  fi
+
+  rm -f "${log_file}.${rotations}"
+  for ((i = rotations - 1; i >= 1; i--)); do
+    if [[ -e "${log_file}.${i}" ]]; then
+      mv "${log_file}.${i}" "${log_file}.$((i + 1))"
+    fi
+  done
+
+  if [[ -e "${log_file}" ]]; then
+    mv "${log_file}" "${log_file}.1"
+  fi
+}
+
+stream_mirror_append_file() {
+  local log_file="$1"
+  local chunk_file="$2"
+  local max_bytes=""
+  local current_size=0
+  local chunk_size=0
+
+  mkdir -p "$(dirname "${log_file}")"
+
+  if [[ ! -s "${chunk_file}" ]]; then
+    return
+  fi
+
+  max_bytes="$(stream_mirror_max_bytes)"
+  chunk_size="$(stat -c%s "${chunk_file}" 2>/dev/null || echo 0)"
+
+  if [[ "${chunk_size}" -gt "${max_bytes}" ]]; then
+    stream_mirror_rotate "${log_file}"
+    tail -c "${max_bytes}" "${chunk_file}" > "${log_file}"
+    return
+  fi
+
+  if [[ -e "${log_file}" ]]; then
+    current_size="$(stat -c%s "${log_file}" 2>/dev/null || echo 0)"
+  fi
+
+  if [[ "$((current_size + chunk_size))" -gt "${max_bytes}" ]]; then
+    stream_mirror_rotate "${log_file}"
+  fi
+
+  cat "${chunk_file}" >> "${log_file}"
+}
+
+stream_mirror_append_line() {
+  local log_file="$1"
+  local line="$2"
+  local chunk_file=""
+
+  chunk_file="$(mktemp "$(dirname "${log_file}")/.stream-line.XXXXXX")"
+  printf '%s\n' "${line}" > "${chunk_file}"
+  stream_mirror_append_file "${log_file}" "${chunk_file}"
+  rm -f "${chunk_file}"
+}
+
 run_stream_service_worker() {
   local svc="$1"
   local log_root="${REPO_ROOT}/logs"
@@ -13,13 +112,20 @@ run_stream_service_worker() {
   local pid_dir="${log_root}/runtime/pids"
   local log_file="${mirror_dir}/${svc}.log"
   local since="${STREAM_SINCE:-5m}"
+  local chunk_file=""
 
   mkdir -p "${mirror_dir}" "${pid_dir}"
 
   while true; do
-    if ! "${SCRIPT_PATH}" tail "${svc}" --since "${since}" --tail 50 >> "${log_file}" 2>&1; then
-      echo "$(date '+%Y-%m-%d %H:%M:%S') ${svc}: log stream reconnect" >> "${log_file}"
+    chunk_file="$(mktemp "${mirror_dir}/.${svc}.stream.XXXXXX")"
+    if ! "${SCRIPT_PATH}" tail "${svc}" --since "${since}" --tail 50 > "${chunk_file}" 2>&1; then
+      stream_mirror_append_file "${log_file}" "${chunk_file}"
+      rm -f "${chunk_file}"
+      stream_mirror_append_line "${log_file}" "$(date '+%Y-%m-%d %H:%M:%S') ${svc}: log stream reconnect"
       sleep 1
+    else
+      stream_mirror_append_file "${log_file}" "${chunk_file}"
+      rm -f "${chunk_file}"
     fi
     since="1m"
   done

@@ -34,6 +34,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const maxLivesPageScanPages = 100
+
 func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesResponse, error) {
 	if !c.HasOpenAPICredentials() {
 		return nil, errors.New("chzzk open API credentials not configured")
@@ -212,9 +214,10 @@ func (c *Client) liveDataFromStatus(ctx context.Context, channelID string) (Live
 func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([]LiveData, error) {
 	targets := channelIDSet(channelIDs)
 	found := make(map[string]LiveData, len(targets))
+	seenNext := make(map[string]struct{})
 	next := ""
 
-	for {
+	for page := 1; page <= maxLivesPageScanPages; page++ {
 		resp, err := c.GetLives(ctx, c.maxLivesPageSize, next)
 		if err != nil {
 			return nil, fmt.Errorf("get lives page: %w", err)
@@ -223,13 +226,17 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 		addTargetLives(found, targets, resp.Data)
 
 		if len(found) == len(targets) || resp.Page.Next == "" {
-			break
+			return orderedLives(channelIDs, found), nil
 		}
 
+		if _, ok := seenNext[resp.Page.Next]; ok {
+			return nil, fmt.Errorf("pagination cursor repeated: %s", resp.Page.Next)
+		}
+		seenNext[resp.Page.Next] = struct{}{}
 		next = resp.Page.Next
 	}
 
-	return orderedLives(channelIDs, found), nil
+	return nil, fmt.Errorf("page scan exceeded %d pages without resolving %d target channels", maxLivesPageScanPages, len(targets)-len(found))
 }
 
 func channelIDSet(channelIDs []string) map[string]struct{} {

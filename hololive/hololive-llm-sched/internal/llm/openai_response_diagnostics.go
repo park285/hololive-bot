@@ -42,6 +42,10 @@ func extractResponsesOutputTextWithDiagnostics(resp *responses.Response) (string
 		return "", errOpenAIEmptyOutput
 	}
 
+	if responsesOutputHasRefusal(resp.Output) {
+		return "", fmt.Errorf("%w: %w: %s", errOpenAIEmptyOutput, errOpenAIRefusalOutput, diagnostic)
+	}
+
 	return "", fmt.Errorf("%w: %s", errOpenAIEmptyOutput, diagnostic)
 }
 
@@ -82,6 +86,15 @@ func appendResponseOutputDiagnostics(parts []string, output []responses.Response
 	}
 
 	return parts
+}
+
+func responsesOutputHasRefusal(output []responses.ResponseOutputItemUnion) bool {
+	for _, item := range output {
+		if responseOutputItemRefusal(item) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func describeResponseOutputItemType(item responses.ResponseOutputItemUnion) string {
