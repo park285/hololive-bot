@@ -92,6 +92,7 @@ hololive/hololive-shared/pkg/config/internal/settings/config_cache.go
 hololive/hololive-shared/pkg/config/internal/settings/config_db.go
 hololive/hololive-shared/pkg/config/internal/settings/config_env_loaders.go
 hololive/hololive-shared/pkg/config/internal/settings/config_iris.go
+hololive/hololive-shared/pkg/config/internal/settings/iris_base_url_validation.go
 hololive/hololive-shared/pkg/config/internal/settings/config_kakao.go
 hololive/hololive-shared/pkg/config/internal/settings/config_llm.go
 hololive/hololive-shared/pkg/config/internal/settings/config_notification.go
@@ -424,6 +425,7 @@ hololive/hololive-shared/pkg/service/delivery/dispatcher.go
 hololive/hololive-shared/pkg/service/delivery/locker.go
 hololive/hololive-shared/pkg/service/delivery/outbox_repository.go
 hololive/hololive-shared/pkg/service/delivery/result.go
+hololive/hololive-shared/pkg/service/delivery/runtime_iris_base_url_validation.go
 hololive/hololive-shared/pkg/service/delivery/runtime_iris_client.go
 hololive/hololive-shared/pkg/service/delivery/runtime_iris_client_reply.go
 hololive/hololive-shared/pkg/service/fallback/executor.go
