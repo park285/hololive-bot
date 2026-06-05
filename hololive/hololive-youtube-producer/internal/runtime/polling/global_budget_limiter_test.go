@@ -49,6 +49,7 @@ func TestGlobalBudgetLimiterDeniesWhenSourceMaxInflightReached(t *testing.T) {
 	require.Nil(t, second)
 	require.False(t, decision.Allowed)
 	require.Equal(t, "budget_exhausted", decision.Reason)
+	require.Equal(t, string(poller.BudgetSourceYouTubeScraper), decision.AffectedSource)
 	require.Greater(t, decision.RetryAfter, time.Duration(0))
 	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceYouTubeScraper)))
 }

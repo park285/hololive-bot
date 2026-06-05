@@ -123,6 +123,7 @@ func (l *globalBudgetLimiter) reserveProfileSources(
 			if rollbackErr := l.releaseSources(ctx, ownerToken, acquired); rollbackErr != nil {
 				return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: rollback source %s: %w", source, rollbackErr)
 			}
+			decision.AffectedSource = string(source)
 			return nil, decision, nil
 		}
 		acquired = append(acquired, source)
