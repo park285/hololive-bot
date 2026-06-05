@@ -1,6 +1,9 @@
 package openapi
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 func TestSpecPreservesContract(t *testing.T) {
 	spec := Spec("9.9.9-test")
@@ -34,6 +37,23 @@ func TestSpecPreservesContract(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("path %s missing operationId %s", path, wantOp)
+		}
+	}
+}
+
+func TestMarshalSpecIsStable(t *testing.T) {
+	first, err := MarshalSpec("9.9.9-test")
+	if err != nil {
+		t.Fatalf("marshal first spec: %v", err)
+	}
+
+	for i := 0; i < 5; i++ {
+		next, err := MarshalSpec("9.9.9-test")
+		if err != nil {
+			t.Fatalf("marshal spec iteration %d: %v", i, err)
+		}
+		if !bytes.Equal(first, next) {
+			t.Fatalf("marshal spec output changed on iteration %d", i)
 		}
 	}
 }
