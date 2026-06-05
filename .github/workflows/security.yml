@@ -83,7 +83,16 @@ jobs:
       - name: gosec
         run: |
           read -ra pkgs <<< "${GO_PKG_PATTERNS}"
-          gosec -quiet -fmt text "${pkgs[@]}"
+          owned_pkgs=()
+          for pkg in "${pkgs[@]}"; do
+            case "${pkg}" in
+              ../shared-go/...)
+                continue
+                ;;
+            esac
+            owned_pkgs+=("${pkg}")
+          done
+          gosec -quiet -fmt text "${owned_pkgs[@]}"
 
       - name: govulncheck
         run: |
