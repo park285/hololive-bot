@@ -79,7 +79,7 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 		opts = append(opts, iris.WithThreadID(threadID))
 	}
 
-	clientRequestIDBase := commandReplyClientRequestIDBase(room, message, commandReplyIdentity(sendCtx, threadID))
+	clientRequestIDBase := commandReplyClientRequestIDBase(room, message, commandReplyIdentity(sendCtx))
 	if err := t.sendMessage(sendCtx, room, message, clientRequestIDBase, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
 		return fmt.Errorf("send message to room %s: %w", room, serviceErr)
@@ -118,8 +118,8 @@ func appendReplyClientRequestID(opts []iris.SendOption, base string, attempt int
 	return next
 }
 
-func commandReplyClientRequestIDBase(room, message, threadID string) string {
-	identity := strings.TrimSpace(threadID)
+func commandReplyClientRequestIDBase(room, message, replyIdentity string) string {
+	identity := strings.TrimSpace(replyIdentity)
 	if identity == "" {
 		sequence := replyClientRequestSequence.Add(1)
 		identity = fmt.Sprintf("local:%d:%d", time.Now().UnixNano(), sequence)
@@ -133,10 +133,7 @@ func commandReplyClientRequestIDBase(room, message, threadID string) string {
 	return "hololive-bot:reply:" + hex.EncodeToString(sum[:16])
 }
 
-func commandReplyIdentity(ctx context.Context, threadID string) string {
-	if id := strings.TrimSpace(threadID); id != "" {
-		return id
-	}
+func commandReplyIdentity(ctx context.Context) string {
 	if id, ok := ReplyIdentityFromContext(ctx); ok {
 		return id
 	}
@@ -275,7 +272,7 @@ func appendMediaClientRequestOptions(ctx context.Context, opts []iris.SendOption
 	base := commandReplyClientRequestIDBase(
 		room,
 		string(mediaPayloadDigest(kind, payload)),
-		commandReplyIdentity(ctx, threadID),
+		commandReplyIdentity(ctx),
 	)
 	next := make([]iris.SendOption, 0, len(opts)+2)
 	next = append(next, iris.WithClientRequestID(fmt.Sprintf("%s:a1", base)))
@@ -296,7 +293,7 @@ func appendMultipleImageClientRequestOptions(ctx context.Context, opts []iris.Se
 	base := commandReplyClientRequestIDBase(
 		room,
 		hex.EncodeToString(digest.Sum(nil)),
-		commandReplyIdentity(ctx, threadID),
+		commandReplyIdentity(ctx),
 	)
 	next := make([]iris.SendOption, 0, len(opts)+2)
 	next = append(next, iris.WithClientRequestID(fmt.Sprintf("%s:a1", base)))
