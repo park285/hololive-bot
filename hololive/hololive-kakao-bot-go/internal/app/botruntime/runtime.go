@@ -47,6 +47,8 @@ type BotRuntime struct {
 	HTTPServer *http.Server
 	H3Server   *http3.Server
 
+	h3CertReloadStart func(context.Context)
+
 	webhookHandlerCloser interface{ Close() error }
 	webhookPool          interface{ StopAndWait() }
 	lifecycle.Managed

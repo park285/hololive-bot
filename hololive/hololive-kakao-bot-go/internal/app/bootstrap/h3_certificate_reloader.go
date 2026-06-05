@@ -55,10 +55,6 @@ type reloadingTLSCertificate struct {
 	lastReloadFailure string
 }
 
-func newReloadingTLSCertificate(certFile, keyFile string, logger *slog.Logger) (*reloadingTLSCertificate, error) {
-	return newReloadingTLSCertificateWithOptions(certFile, keyFile, logger, reloadingTLSCertificateOptions{})
-}
-
 func newReloadingTLSCertificateWithOptions(
 	certFile, keyFile string,
 	logger *slog.Logger,

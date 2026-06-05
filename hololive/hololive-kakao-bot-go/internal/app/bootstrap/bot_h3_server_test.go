@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -17,6 +18,57 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 )
 
+func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
+	t.Parallel()
+
+	certFile, keyFile := writeLocalhostCertificate(t)
+	appConfig := &config.Config{
+		Server: config.ServerConfig{
+			H3Addr:     "127.0.0.1:0",
+			H3CertFile: certFile,
+			H3KeyFile:  keyFile,
+		},
+	}
+
+	buildCtx, buildCancel := context.WithCancel(t.Context())
+	server, startCertReload, err := buildBotHTTP3ServerWithReloaderOptions(
+		buildCtx, appConfig, nil, nil, nil,
+		reloadingTLSCertificateOptions{reloadInterval: 10 * time.Millisecond},
+	)
+	if err != nil {
+		t.Fatalf("buildBotHTTP3ServerWithReloaderOptions() error = %v", err)
+	}
+	// bootstrap.Run의 buildCtx는 첫 reload tick(기본 45초) 전인 30초에 만료된다 — reload 수명이 build 수명과 분리됨을 고정
+	buildCancel()
+
+	first, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatalf("first GetCertificate() error = %v", err)
+	}
+	firstSerial := certificateSerial(t, first)
+
+	runCtx, runCancel := context.WithCancel(t.Context())
+	defer runCancel()
+	startCertReload(runCtx)
+
+	overwriteLocalhostCertificate(t, certFile, keyFile)
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		cert, getErr := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
+		if getErr != nil {
+			t.Fatalf("GetCertificate() error = %v", getErr)
+		}
+		if certificateSerial(t, cert) != firstSerial {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("certificate was not reloaded after build context ended")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	t.Parallel()
 
@@ -29,7 +81,7 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 		},
 	}
 
-	server, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
+	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}
@@ -69,7 +121,7 @@ func TestBuildBotHTTP3ServerServesCachedCertificateFiles(t *testing.T) {
 		},
 	}
 
-	server, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
+	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}
@@ -111,7 +163,7 @@ func TestBuildBotHTTP3ServerKeepsPreviousCertificateWhenReloadFails(t *testing.T
 		},
 	}
 
-	server, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
+	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}

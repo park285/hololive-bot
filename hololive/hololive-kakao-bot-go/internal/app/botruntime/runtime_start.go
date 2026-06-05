@@ -45,6 +45,7 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 			}
 			return r.Bot.Start(ctx)
 		},
-		StartHTTPServer: r.StartHTTPServer,
+		StartH3CertReload: r.h3CertReloadStart,
+		StartHTTPServer:   r.StartHTTPServer,
 	})
 }
