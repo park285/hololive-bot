@@ -28,6 +28,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/openai/openai-go/v3/responses"
 	json "github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,6 +52,11 @@ func TestShouldFallbackToChatCompletions(t *testing.T) {
 			err:  fmt.Errorf("openai responses API: %w", errOpenAIEmptyOutput),
 			want: true,
 		},
+		{
+			name: "responses refusal empty output returns false",
+			err:  openAIRefusalEmptyOutputTestError(),
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -60,6 +66,16 @@ func TestShouldFallbackToChatCompletions(t *testing.T) {
 			assert.Equal(t, tt.want, shouldFallbackToChatCompletions(tt.err))
 		})
 	}
+}
+
+func openAIRefusalEmptyOutputTestError() error {
+	_, err := extractResponsesOutputTextWithDiagnostics(&responses.Response{
+		Status: responses.ResponseStatusCompleted,
+		Output: []responses.ResponseOutputItemUnion{
+			responseDiagnosticsRefusalItem("policy refusal"),
+		},
+	})
+	return err
 }
 
 func TestShouldFallbackOpenAIStatus(t *testing.T) {

@@ -36,6 +36,9 @@ func shouldFallbackToChatCompletions(err error) bool {
 	if err == nil {
 		return false
 	}
+	if errors.Is(err, errOpenAIRefusalOutput) {
+		return false
+	}
 	if errors.Is(err, errOpenAIEmptyOutput) {
 		return true
 	}

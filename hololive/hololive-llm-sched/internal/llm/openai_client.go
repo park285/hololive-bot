@@ -43,7 +43,11 @@ import (
 )
 
 var _ Client = (*OpenAIClient)(nil)
-var errOpenAIEmptyOutput = errors.New("openai: 응답에 텍스트 출력 없음")
+
+var (
+	errOpenAIEmptyOutput   = errors.New("openai: 응답에 텍스트 출력 없음")
+	errOpenAIRefusalOutput = errors.New("openai: 응답이 안전 정책에 의해 거절됨")
+)
 
 type OpenAIClient struct {
 	client          openai.Client

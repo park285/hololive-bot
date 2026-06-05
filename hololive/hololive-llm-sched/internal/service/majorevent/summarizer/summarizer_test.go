@@ -309,11 +309,11 @@ func TestEventSummarizer_Summarize_CacheHitSkipsSearchAndLLM(t *testing.T) {
 	}
 }
 
-func TestEventSummarizer_Summarize_SimpleOutputSkipsFinalReview(t *testing.T) {
+func TestEventSummarizer_Summarize_SingleHighlightRunsFinalReview(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Simple Event","date":"2/20(금)","members":"","note":"단일 항목","link":"https://example.com/simple"}],"ongoing_events":[],"discovered_events":[]}`
 
 	primary := &mockSummarizer{jsonResponse: llmJSON}
-	reviewer := &mockSummarizer{jsonResponse: `{"summary":"[리뷰 완료]\nshould-not-apply"}`}
+	reviewer := &mockSummarizer{jsonResponse: `{"summary":"[리뷰 완료]\n2/20(금) Simple Event\n- 단일 항목\nhttps://example.com/simple"}`}
 	summarizer := NewEventSummarizer(
 		primary,
 		nil,
@@ -328,10 +328,10 @@ func TestEventSummarizer_Summarize_SimpleOutputSkipsFinalReview(t *testing.T) {
 	)
 
 	result := summarizer.Summarize(context.Background(), []domain.MajorEvent{{ID: 1, Title: "Simple Event"}}, SummaryTypeWeekly, "2026-02-15")
-	if reviewer.callCount != 0 {
-		t.Fatalf("reviewer callCount = %d, want 0", reviewer.callCount)
+	if reviewer.callCount != 1 {
+		t.Fatalf("reviewer callCount = %d, want 1", reviewer.callCount)
 	}
-	assertNotContains(t, result, "[리뷰 완료]")
+	assertContains(t, result, "[리뷰 완료]")
 	assertContains(t, result, "Simple Event")
 }
 
