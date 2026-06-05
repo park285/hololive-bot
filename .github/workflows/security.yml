@@ -1,12 +1,10 @@
 name: security
 
+# PR 트리거(workflow_run after ci) 제거 — push 전 풀검증은 로컬 pre-push 게이트가
+# 책임지고, 서버측 보안 스캔은 push(main)·주간 schedule·수동 실행으로만 돈다.
+# workflow_run 분기 step 들은 재활성화 대비로 남겨둔다(트리거가 없어 실행되지 않음).
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - ci
-    types:
-      - completed
   push:
     branches:
       - main
