@@ -12,13 +12,32 @@ Use the repository deploy script for service-level redeploys:
 ./scripts/deploy/compose-redeploy-service.sh <service>
 ```
 
+On the current main production host, include the live-compat overlay because
+`/run/hololive-bot/env` preserves the live Postgres and certificate contract:
+
+```bash
+sudo -n env COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml \
+  COMPOSE_ENV_FILE=/run/hololive-bot/env \
+  ./scripts/deploy/compose-redeploy-service.sh <service>
+```
+
+For the main-host active-active AP, include both main-ap overlays:
+
+```bash
+sudo -n env \
+  COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml:docker-compose.main-ap.yml:docker-compose.main-ap.live-compat.yml \
+  COMPOSE_PROFILES=main-ap \
+  COMPOSE_ENV_FILE=/run/hololive-bot/env \
+  ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+```
+
 Current Go runtime services:
 
 - `hololive-bot`
 - `hololive-admin-api`
 - `hololive-alarm-worker`
 - `llm-scheduler`
-- `youtube-producer`
+- `youtube-producer-c` on the main host; `youtube-producer-a/b` use the AP host wrappers.
 
 ## Required Checks
 
