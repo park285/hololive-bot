@@ -23,22 +23,20 @@ executes attacker-modifiable repository scripts.
 ## Workflow split
 
 - `*.yml` workflows that include `pull_request` run on `ubuntu-latest`.
-- `*-trusted.yml` workflows run equivalent trusted `push` and
-  `workflow_dispatch` gates on `[self-hosted, linux, x64, hololive-ci]`.
-- Do not add `pull_request` triggers to `*-trusted.yml` workflows.
+- `ci.yml` is the secret-free PR fast gate.
+- `security.yml` runs only on trusted non-PR events (`push` to `main`,
+  `schedule`, and `workflow_dispatch`) and may use private-module credentials.
+- Heavy full verification stays in the local pre-push gate
+  (`scripts/ci/pre-push-gate.sh` -> `scripts/ci/local-ci.sh`).
 
 ## Blocking gates
 
-The `Verify` and `Verify Trusted` workflows provide the repository-level
-closeout gate:
+The local pre-push gate provides the repository-level closeout gate:
 
-- `actionlint` for workflow syntax and custom runner label validation.
 - `scripts/ci/local-ci.sh` for architecture contracts, admin-dashboard
   guardrails, Go toolchain pinning, `gofmt`, `go fix` drift, `go mod tidy`
   drift, `go vet`, `staticcheck`, build, unit tests, PostgreSQL integration,
   and `govulncheck`.
-- A final `verify` job fails the workflow when any required gate fails or is
-  cancelled.
 
 Self-hosted runner minutes are not charged as GitHub-hosted Actions minutes, but
 that cost saving is not a security control. Use self-hosted capacity only for
