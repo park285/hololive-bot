@@ -59,3 +59,4 @@
 059 062_add_member_short_korean_name.sql
 060 063_add_member_celebration_dates.sql
 061 064_add_mekpark_units.sql
+062 065_record_alarm_dispatch_event_collisions.sql

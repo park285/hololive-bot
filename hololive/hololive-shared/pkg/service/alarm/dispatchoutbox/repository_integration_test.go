@@ -63,6 +63,7 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 	for _, migration := range []string{
 		"hololive/hololive-kakao-bot-go/scripts/migrations/058_create_alarm_dispatch_outbox.sql",
 		"hololive/hololive-kakao-bot-go/scripts/migrations/059_harden_alarm_dispatch_outbox.sql",
+		"hololive/hololive-kakao-bot-go/scripts/migrations/065_record_alarm_dispatch_event_collisions.sql",
 	} {
 		sql := readRepoMigration(t, migration)
 		if _, err := pool.Exec(ctx, sql); err != nil {
@@ -135,7 +136,7 @@ func TestPgxRepositoryInsertBatch_SetBasedPath(t *testing.T) {
 	}
 }
 
-func TestPgxRepositoryInsertBatch_RollsBackSameBatchHashConflict(t *testing.T) {
+func TestPgxRepositoryInsertBatch_RecordsSameBatchHashConflict(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
@@ -152,9 +153,18 @@ func TestPgxRepositoryInsertBatch_RollsBackSameBatchHashConflict(t *testing.T) {
 	second.Notification.RoomID = "room-2"
 	second.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "second"}
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}, Status: StatusPending})
-	if err == nil || !strings.Contains(err.Error(), "dispatch event hash conflict") {
-		t.Fatalf("InsertBatch() error = %v, want hash conflict", err)
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}, Status: StatusPending})
+	if err != nil {
+		t.Fatalf("InsertBatch() error = %v", err)
+	}
+	if result.HashConflictEvents != 1 {
+		t.Fatalf("HashConflictEvents = %d, want 1", result.HashConflictEvents)
+	}
+	if result.InsertedEvents != 1 {
+		t.Fatalf("InsertedEvents = %d, want 1 committed event", result.InsertedEvents)
+	}
+	if result.InsertedDeliveries != 0 {
+		t.Fatalf("InsertedDeliveries = %d, want 0", result.InsertedDeliveries)
 	}
 
 	var eventCount, deliveryCount int
@@ -164,12 +174,20 @@ func TestPgxRepositoryInsertBatch_RollsBackSameBatchHashConflict(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if eventCount != 0 || deliveryCount != 0 {
-		t.Fatalf("stored counts after conflict events=%d deliveries=%d, want 0/0", eventCount, deliveryCount)
+	if eventCount != 1 || deliveryCount != 0 {
+		t.Fatalf("stored counts after conflict events=%d deliveries=%d, want 1/0", eventCount, deliveryCount)
+	}
+
+	var collisionCount int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_event_collisions").Scan(&collisionCount); err != nil {
+		t.Fatalf("count collisions: %v", err)
+	}
+	if collisionCount != 1 {
+		t.Fatalf("collision count = %d, want 1", collisionCount)
 	}
 }
 
-func TestPgxRepositoryInsertBatch_RejectsExistingEventHashConflict(t *testing.T) {
+func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
@@ -191,13 +209,19 @@ func TestPgxRepositoryInsertBatch_RejectsExistingEventHashConflict(t *testing.T)
 	}
 	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{second}, Status: StatusPending})
 	if err != nil {
-		t.Fatalf("second InsertBatch() error = %v, want conflict skip", err)
+		t.Fatalf("second InsertBatch() error = %v", err)
 	}
 	if result.HashConflictEvents != 1 {
 		t.Fatalf("HashConflictEvents = %d, want 1", result.HashConflictEvents)
 	}
+	if result.ProcessedDeliveries != 1 {
+		t.Fatalf("ProcessedDeliveries = %d, want 1", result.ProcessedDeliveries)
+	}
+	if result.InsertedEvents != 0 {
+		t.Fatalf("InsertedEvents = %d, want 0", result.InsertedEvents)
+	}
 	if result.InsertedDeliveries != 0 {
-		t.Fatalf("InsertedDeliveries = %d, want 0 (conflict delivery filtered)", result.InsertedDeliveries)
+		t.Fatalf("InsertedDeliveries = %d, want 0", result.InsertedDeliveries)
 	}
 
 	var eventCount int
@@ -224,9 +248,25 @@ func TestPgxRepositoryInsertBatch_RejectsExistingEventHashConflict(t *testing.T)
 	if deliveryCount != 1 {
 		t.Fatalf("delivery count = %d, want original row only", deliveryCount)
 	}
+
+	secondEvent, _, _ := buildLedgerRows(second, StatusPending)
+	var existingHash, incomingHash string
+	var collisionPayload []byte
+	if err := pool.QueryRow(ctx, `
+		SELECT existing_payload_hash, incoming_payload_hash, payload
+		FROM alarm_dispatch_event_collisions
+		WHERE event_key=$1`, secondEvent.EventKey).Scan(&existingHash, &incomingHash, &collisionPayload); err != nil {
+		t.Fatalf("load collision: %v", err)
+	}
+	if existingHash != firstEvent.PayloadHash || incomingHash != secondEvent.PayloadHash {
+		t.Fatalf("collision hashes existing=%q incoming=%q, want %q/%q", existingHash, incomingHash, firstEvent.PayloadHash, secondEvent.PayloadHash)
+	}
+	if !strings.Contains(string(collisionPayload), "second") {
+		t.Fatalf("collision payload = %s, want changed payload title", string(collisionPayload))
+	}
 }
 
-func TestPgxRepositoryInsertBatch_SkipsConflictEventAndFiltersDelivery(t *testing.T) {
+func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversOtherRooms(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
@@ -266,8 +306,14 @@ func TestPgxRepositoryInsertBatch_SkipsConflictEventAndFiltersDelivery(t *testin
 	if result.HashConflictEvents != 1 {
 		t.Fatalf("HashConflictEvents = %d, want 1", result.HashConflictEvents)
 	}
+	if result.ProcessedDeliveries != 2 {
+		t.Fatalf("ProcessedDeliveries = %d, want 2", result.ProcessedDeliveries)
+	}
+	if result.InsertedEvents != 1 {
+		t.Fatalf("InsertedEvents = %d, want 1 committed non-conflicting event", result.InsertedEvents)
+	}
 	if result.InsertedDeliveries != 1 {
-		t.Fatalf("InsertedDeliveries = %d, want 1 (only event B delivery)", result.InsertedDeliveries)
+		t.Fatalf("InsertedDeliveries = %d, want 1", result.InsertedDeliveries)
 	}
 
 	var eventCount int
@@ -275,7 +321,7 @@ func TestPgxRepositoryInsertBatch_SkipsConflictEventAndFiltersDelivery(t *testin
 		t.Fatalf("count events: %v", err)
 	}
 	if eventCount != 2 {
-		t.Fatalf("event count = %d, want 2 (A and B)", eventCount)
+		t.Fatalf("event count = %d, want original plus non-conflicting event", eventCount)
 	}
 
 	var deliveryCount int
@@ -283,7 +329,7 @@ func TestPgxRepositoryInsertBatch_SkipsConflictEventAndFiltersDelivery(t *testin
 		t.Fatalf("count deliveries: %v", err)
 	}
 	if deliveryCount != 2 {
-		t.Fatalf("delivery count = %d, want 2 (room-1 from step 1, room-3 from step 2)", deliveryCount)
+		t.Fatalf("delivery count = %d, want original plus non-conflicting delivery", deliveryCount)
 	}
 
 	var room2Count int
@@ -291,11 +337,27 @@ func TestPgxRepositoryInsertBatch_SkipsConflictEventAndFiltersDelivery(t *testin
 		t.Fatalf("count room-2 deliveries: %v", err)
 	}
 	if room2Count != 0 {
-		t.Fatalf("room-2 delivery count = %d, want 0 (conflict filtered)", room2Count)
+		t.Fatalf("room-2 delivery count = %d, want 0", room2Count)
+	}
+
+	var room3Count int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries WHERE room_id='room-3'").Scan(&room3Count); err != nil {
+		t.Fatalf("count room-3 deliveries: %v", err)
+	}
+	if room3Count != 1 {
+		t.Fatalf("room-3 delivery count = %d, want 1", room3Count)
+	}
+
+	var collisionCount int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_event_collisions").Scan(&collisionCount); err != nil {
+		t.Fatalf("count collisions: %v", err)
+	}
+	if collisionCount != 1 {
+		t.Fatalf("collision count = %d, want 1", collisionCount)
 	}
 }
 
-func TestPgxRepositoryInsertBatch_FiltersAllDeliveriesForConflictEvent(t *testing.T) {
+func TestPgxRepositoryInsertBatch_CoalescesRepeatedConflictCollisions(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
@@ -329,8 +391,11 @@ func TestPgxRepositoryInsertBatch_FiltersAllDeliveriesForConflictEvent(t *testin
 	if result.HashConflictEvents != 1 {
 		t.Fatalf("HashConflictEvents = %d, want 1", result.HashConflictEvents)
 	}
+	if result.ProcessedDeliveries != 3 {
+		t.Fatalf("ProcessedDeliveries = %d, want 3", result.ProcessedDeliveries)
+	}
 	if result.InsertedDeliveries != 0 {
-		t.Fatalf("InsertedDeliveries = %d, want 0 (all conflict deliveries filtered)", result.InsertedDeliveries)
+		t.Fatalf("InsertedDeliveries = %d, want 0", result.InsertedDeliveries)
 	}
 
 	var deliveryCount int
@@ -339,6 +404,14 @@ func TestPgxRepositoryInsertBatch_FiltersAllDeliveriesForConflictEvent(t *testin
 	}
 	if deliveryCount != 1 {
 		t.Fatalf("delivery count = %d, want 1 (only original seed)", deliveryCount)
+	}
+
+	var collisionCount int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_event_collisions").Scan(&collisionCount); err != nil {
+		t.Fatalf("count collisions: %v", err)
+	}
+	if collisionCount != 1 {
+		t.Fatalf("collision count = %d, want 1", collisionCount)
 	}
 }
 
