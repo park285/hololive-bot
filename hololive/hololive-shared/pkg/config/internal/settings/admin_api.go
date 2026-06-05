@@ -28,7 +28,7 @@ import (
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 )
 
-// Deprecated: current admin-api runtime uses config.Load() with SERVER_PORT=30006.
+// Deprecated: current admin-api runtime uses config.LoadAdminAPIRuntime() with SERVER_PORT=30006.
 // This compatibility config remains only for legacy callers until cleanup lands.
 type AdminAPIConfig struct {
 	Server          ServerConfig
@@ -43,7 +43,7 @@ type AdminAPIConfig struct {
 	Version         string
 }
 
-// Deprecated: current admin-api runtime uses config.Load() instead of LoadAdminAPI.
+// Deprecated: current admin-api runtime uses config.LoadAdminAPIRuntime() instead of LoadAdminAPI.
 func LoadAdminAPI() (*AdminAPIConfig, error) {
 	_ = godotenv.Load()
 
