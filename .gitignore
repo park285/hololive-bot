@@ -32,6 +32,7 @@ secrets/*
 # hololive-kakao-bot-go 빌드 산출물
 hololive/hololive-kakao-bot-go/bot
 hololive/hololive-kakao-bot-go/fetch_profiles
+hololive/hololive-kakao-bot-go/warm_member_cache
 hololive/hololive-kakao-bot-go/config.json
 hololive/hololive-youtube-producer/youtube-producer
 
