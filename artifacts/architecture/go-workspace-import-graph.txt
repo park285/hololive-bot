@@ -4,7 +4,6 @@ github.com/kapu/admin-dashboard/cmd/admin-dashboard -> github.com/park285/shared
 github.com/kapu/admin-dashboard/cmd/admin-dashboard -> github.com/park285/shared-go/pkg/runtime/automaxprocs
 github.com/kapu/admin-dashboard/cmd/admin-dashboard -> github.com/park285/shared-go/pkg/runtime/bootstrap
 github.com/kapu/admin-dashboard/cmd/export-openapi -> github.com/kapu/admin-dashboard/internal/openapi
-github.com/kapu/admin-dashboard/cmd/export-openapi -> github.com/park285/shared-go/pkg/json
 github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/internal/auth
 github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/internal/config
 github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/internal/docker
