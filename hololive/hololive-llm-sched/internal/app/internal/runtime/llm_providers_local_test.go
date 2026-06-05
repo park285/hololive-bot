@@ -22,8 +22,12 @@ package runtime
 
 import (
 	"bytes"
+	"crypto/tls"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -344,7 +348,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 func newWorkerProfileDisabledIrisServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/diagnostics/runtime" {
 			http.NotFound(w, r)
 
@@ -355,8 +359,16 @@ func newWorkerProfileDisabledIrisServer(t *testing.T) *httptest.Server {
 
 		_, _ = w.Write([]byte(`{"workers":{"webhook":{"webhookPipeline":{"profileEnabled":false}}}}`))
 	}))
-
+	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
+	server.StartTLS()
 	t.Cleanup(server.Close)
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+	caFile := filepath.Join(t.TempDir(), "iris-diagnostics-ca.pem")
+	if err := os.WriteFile(caFile, certPEM, 0o600); err != nil {
+		t.Fatalf("write Iris diagnostics CA failed: %v", err)
+	}
+	t.Setenv("SSL_CERT_FILE", caFile)
 
 	return server
 }
