@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -324,9 +325,10 @@ func TestPerAttemptTimeout(t *testing.T) {
 }
 
 func TestTimeoutMaxRetries(t *testing.T) {
-	requestCount := 0
+	var requestCount atomic.Int32
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requestCount++
+		requestCount.Add(1)
 		time.Sleep(300 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -351,8 +353,8 @@ func TestTimeoutMaxRetries(t *testing.T) {
 	}
 
 	// maxTimeoutRetries(3)회에서 중단되어야 함
-	if requestCount > 3 {
-		t.Errorf("timeout 재시도 제한 미동작: requests=%d, want <= 3", requestCount)
+	if got := requestCount.Load(); got > 3 {
+		t.Errorf("timeout 재시도 제한 미동작: requests=%d, want <= 3", got)
 	}
 
 	// 3회 × 100ms + backoff ≈ 2s 이내
