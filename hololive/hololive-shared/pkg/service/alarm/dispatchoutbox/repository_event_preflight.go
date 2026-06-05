@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -77,9 +78,7 @@ func classifyEventPreflight(events []eventInsert, existing map[string]insertedEv
 }
 
 func mergeEventIDs(dst map[string]int64, src map[string]int64) {
-	for key, id := range src {
-		dst[key] = id
-	}
+	maps.Copy(dst, src)
 }
 
 func missingInsertedEvents(events []eventInsert, eventIDs map[string]int64) []eventInsert {
