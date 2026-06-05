@@ -36,6 +36,7 @@ type StartHooks struct {
 	StartAlarmScheduler     func(ctx context.Context)
 	RunConfigSubscriber     func(ctx context.Context)
 	StartBot                func(ctx context.Context) error
+	StartH3CertReload       func(ctx context.Context)
 	StartHTTPServer         func(errCh chan<- error)
 	SetAlarmSchedulerCancel func(cancel context.CancelFunc)
 }
@@ -62,6 +63,11 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	}
 
 	startBot(ctx, hooks.Logger, hooks.StartBot)
+
+	if hooks.StartH3CertReload != nil {
+		hooks.StartH3CertReload(ctx)
+		logInfo(hooks.Logger, "H3 certificate reload started")
+	}
 
 	if hooks.StartHTTPServer != nil {
 		hooks.StartHTTPServer(errCh)

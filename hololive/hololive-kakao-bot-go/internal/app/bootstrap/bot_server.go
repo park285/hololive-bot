@@ -42,17 +42,27 @@ func BuildBotHTTP3Server(
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 	logger *slog.Logger,
-) (*http3.Server, error) {
+) (*http3.Server, func(context.Context), error) {
+	return buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, logger, reloadingTLSCertificateOptions{})
+}
+
+func buildBotHTTP3ServerWithReloaderOptions(
+	ctx context.Context,
+	appConfig *config.Config,
+	webhookHandler *iris.WebhookHandler,
+	triggerHandler *sharedserver.TriggerHandler,
+	logger *slog.Logger,
+	reloaderOptions reloadingTLSCertificateOptions,
+) (*http3.Server, func(context.Context), error) {
 	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler)
 	if err != nil {
-		return nil, fmt.Errorf("build bot h3 server: provide bot router: %w", err)
+		return nil, nil, fmt.Errorf("build bot h3 server: provide bot router: %w", err)
 	}
 
-	certReloader, err := newReloadingTLSCertificate(appConfig.Server.H3CertFile, appConfig.Server.H3KeyFile, logger)
+	certReloader, err := newReloadingTLSCertificateWithOptions(appConfig.Server.H3CertFile, appConfig.Server.H3KeyFile, logger, reloaderOptions)
 	if err != nil {
-		return nil, fmt.Errorf("load h3 certificate: %w", err)
+		return nil, nil, fmt.Errorf("load h3 certificate: %w", err)
 	}
-	certReloader.Start(ctx)
 
 	quicConfig := &quic.Config{
 		InitialPacketSize: 1200,
@@ -69,5 +79,5 @@ func BuildBotHTTP3Server(
 		}),
 		QUICConfig:     quicConfig,
 		MaxHeaderBytes: http.DefaultMaxHeaderBytes,
-	}, nil
+	}, certReloader.Start, nil
 }
