@@ -2,6 +2,7 @@ package openapi
 
 import (
 	_ "embed"
+	stdjson "encoding/json"
 
 	"github.com/park285/shared-go/pkg/json"
 )
@@ -22,4 +23,8 @@ func Spec(version string) map[string]any {
 		info["version"] = version
 	}
 	return spec
+}
+
+func MarshalSpec(version string) ([]byte, error) {
+	return stdjson.MarshalIndent(Spec(version), "", "  ")
 }
