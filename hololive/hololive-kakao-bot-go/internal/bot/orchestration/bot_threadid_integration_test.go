@@ -38,55 +38,9 @@ import (
 func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 	t.Parallel()
 
-	reqCh := make(chan iris.ReplyRequest, 1)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/reply", func(w http.ResponseWriter, r *http.Request) {
-		var req iris.ReplyRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		select {
-		case reqCh <- req:
-		default:
-		}
-
-		_ = json.NewEncoder(w).Encode(iris.ReplyAcceptedResponse{
-			Success:  true,
-			Delivery: "queued",
-			Room:     req.Room,
-			Type:     req.Type,
-		})
-	})
-
-	srv := httptest.NewUnstartedServer(mux)
-	sharedserver.EnableH2C(srv.Config)
-	srv.Start()
-	t.Cleanup(srv.Close)
-
-	irisClient := iris.NewH2CClient(srv.URL, "bot-token", iris.WithTransport("h2c"))
-	b := &Bot{
-		logger:          newBotTestLogger(),
-		commandRegistry: command.NewRegistry(),
-		messageAdapter:  adapter.NewMessageAdapter("!", ""),
-		irisClient:      irisClient,
-		formatter:       adapter.NewResponseFormatter("!", nil),
-	}
-
+	b, reqCh := newReplyCaptureBot(t, 1)
 	threadID := "12345"
-	sender := "user"
-	b.HandleMessage(t.Context(), &iris.Message{
-		Msg:    "!help",
-		Room:   "room-name",
-		Sender: &sender,
-		JSON: &iris.MessageJSON{
-			UserID:   "user-1",
-			ChatID:   "room-1",
-			ThreadID: &threadID,
-		},
-	})
+	handleHelpMessage(t, b, "stable-message-1", threadID)
 
 	select {
 	case req := <-reqCh:
@@ -99,10 +53,50 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 	}
 }
 
-func TestBotHandleMessage_UsesStableInboundIDForReplyWithoutThreadID(t *testing.T) {
+func TestBotHandleMessage_UsesInboundIDForThreadedReplyIdentity(t *testing.T) {
 	t.Parallel()
 
-	reqCh := make(chan iris.ReplyRequest, 2)
+	b, reqCh := newReplyCaptureBot(t, 2)
+	threadID := "12345"
+	handleHelpMessage(t, b, "stable-message-1", threadID)
+	handleHelpMessage(t, b, "stable-message-2", threadID)
+
+	first := receiveReplyRequest(t, reqCh)
+	second := receiveReplyRequest(t, reqCh)
+	require.NotNil(t, first.ThreadID)
+	require.NotNil(t, second.ThreadID)
+	require.Equal(t, threadID, *first.ThreadID)
+	require.Equal(t, threadID, *second.ThreadID)
+	require.Equal(t, first.Data, second.Data)
+	require.NotNil(t, first.ClientRequestID)
+	require.NotNil(t, second.ClientRequestID)
+	require.NotEqual(t, *first.ClientRequestID, *second.ClientRequestID)
+}
+
+func TestBotHandleMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T) {
+	t.Parallel()
+
+	b, reqCh := newReplyCaptureBot(t, 2)
+	threadID := "12345"
+	for range 2 {
+		handleHelpMessage(t, b, "stable-message-1", threadID)
+	}
+
+	first := receiveReplyRequest(t, reqCh)
+	second := receiveReplyRequest(t, reqCh)
+	require.NotNil(t, first.ThreadID)
+	require.NotNil(t, second.ThreadID)
+	require.Equal(t, threadID, *first.ThreadID)
+	require.Equal(t, threadID, *second.ThreadID)
+	require.NotNil(t, first.ClientRequestID)
+	require.NotNil(t, second.ClientRequestID)
+	require.Equal(t, *first.ClientRequestID, *second.ClientRequestID)
+}
+
+func newReplyCaptureBot(t *testing.T, capacity int) (*Bot, <-chan iris.ReplyRequest) {
+	t.Helper()
+
+	reqCh := make(chan iris.ReplyRequest, capacity)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/reply", func(w http.ResponseWriter, r *http.Request) {
@@ -135,27 +129,24 @@ func TestBotHandleMessage_UsesStableInboundIDForReplyWithoutThreadID(t *testing.
 		formatter:       adapter.NewResponseFormatter("!", nil),
 	}
 
-	for range 2 {
-		sender := "user"
-		b.HandleMessage(t.Context(), &iris.Message{
-			Msg:    "!help",
-			Room:   "room-name",
-			Sender: &sender,
-			JSON: &iris.MessageJSON{
-				UserID:    "user-1",
-				ChatID:    "room-1",
-				MessageID: "stable-message-1",
-			},
-		})
-	}
+	return b, reqCh
+}
 
-	first := receiveReplyRequest(t, reqCh)
-	second := receiveReplyRequest(t, reqCh)
-	require.Nil(t, first.ThreadID)
-	require.Nil(t, second.ThreadID)
-	require.NotNil(t, first.ClientRequestID)
-	require.NotNil(t, second.ClientRequestID)
-	require.Equal(t, *first.ClientRequestID, *second.ClientRequestID)
+func handleHelpMessage(t *testing.T, b *Bot, messageID, threadID string) {
+	t.Helper()
+
+	sender := "user"
+	b.HandleMessage(t.Context(), &iris.Message{
+		Msg:    "!help",
+		Room:   "room-name",
+		Sender: &sender,
+		JSON: &iris.MessageJSON{
+			UserID:    "user-1",
+			ChatID:    "room-1",
+			MessageID: messageID,
+			ThreadID:  &threadID,
+		},
+	})
 }
 
 func receiveReplyRequest(t *testing.T, reqCh <-chan iris.ReplyRequest) iris.ReplyRequest {
