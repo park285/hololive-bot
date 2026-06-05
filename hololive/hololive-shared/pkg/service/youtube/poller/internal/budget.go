@@ -66,9 +66,10 @@ type BudgetJob struct {
 }
 
 type BudgetDecision struct {
-	Allowed    bool
-	RetryAfter time.Duration
-	Reason     string
+	Allowed        bool
+	RetryAfter     time.Duration
+	Reason         string
+	AffectedSource string
 }
 
 type BudgetReservation interface {
