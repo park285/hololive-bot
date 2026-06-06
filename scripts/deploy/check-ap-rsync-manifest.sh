@@ -19,11 +19,14 @@ fi
 
 # Dockerfile이 실제 빌드하는 런타임 타겟만 검사한다. 운영 CLI(cmd/ops/...)는
 # 원격 AP 컨테이너에 포함되지 않으므로 매니페스트 대상이 아니다.
+# shared-go는 replace(../../../shared-go)로 로컬 워크스페이스를 쓰므로 그 의존 파일도
+# ../shared-go/ 경로로 매니페스트에 있어야 원격 빌드가 성립한다.
+SHARED_GO_DIR="$(cd "$ROOT_DIR/../shared-go" 2>/dev/null && pwd || true)"
 build_targets=(./cmd/runtime/youtube-producer ./cmd/runtime/healthcheck)
 missing="$(cd "$ROOT_DIR/hololive/hololive-youtube-producer" &&
   go list -deps -f '{{if and .Module (not .Standard)}}{{range .GoFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{end}}' "${build_targets[@]}" 2>/dev/null |
-  sed "s#^$ROOT_DIR/##" |
-  grep -E '^hololive/' |
+  sed "s#^$ROOT_DIR/##; s#^$SHARED_GO_DIR/#../shared-go/#" |
+  grep -E '^(hololive/|\.\./shared-go/)' |
   sort -u |
   while IFS= read -r f; do grep -qxF "$f" "$MANIFEST" || echo "$f"; done)"
 
