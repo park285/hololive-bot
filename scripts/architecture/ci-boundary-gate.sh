@@ -102,9 +102,11 @@ bash -n "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh" \
     "${ROOT_DIR}/scripts/deploy/compose.sh" \
     "${ROOT_DIR}/scripts/deploy/test-compose-env.sh" \
     "${ROOT_DIR}/scripts/deploy/test-compose-services.sh" \
+    "${ROOT_DIR}/scripts/deploy/test-compose-h3-contract.sh" \
     "${ROOT_DIR}/scripts/deploy/test-removed-runtimes.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-env.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-services.sh"
+"${ROOT_DIR}/scripts/deploy/test-compose-h3-contract.sh"
 "${ROOT_DIR}/scripts/deploy/test-removed-runtimes.sh"
 echo
 
