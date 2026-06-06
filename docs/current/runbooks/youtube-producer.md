@@ -2,7 +2,7 @@
 
 ## Role
 
-`youtube-producer`는 YouTube scraping/polling, outbox production, 3-way active-active AP runtime을 담당합니다. Osaka 호스트에서 `youtube-producer-a`(30005, `docker-compose.osaka.yml`)가, Seoul 호스트에서 `youtube-producer-b`(30015, `docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. 셋은 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트(osaka, seoul)는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
+`youtube-producer`는 YouTube scraping/polling, outbox production, 3-way active-active AP runtime을 담당합니다. Osaka 호스트에서 `youtube-producer-a`(30005, `deploy/compose/docker-compose.osaka.yml`)가, Seoul 호스트에서 `youtube-producer-b`(30015, `deploy/compose/docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. 셋은 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트(osaka, seoul)는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
 
 ## Normal status
 
@@ -48,7 +48,7 @@
 # Seoul b
 ./scripts/logs/ap-logs.sh seoul youtube-producer-b
 # 메인 호스트 c (main-ap profile)
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.main-ap.yml logs -f youtube-producer-c
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml logs -f youtube-producer-c
 ```
 
 Expected startup and sync markers:
@@ -135,13 +135,13 @@ The remote wrapper covers that host's AP services only. The main-host `youtube-p
 
 ```bash
 sudo -n env \
-  COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml:docker-compose.main-ap.yml:docker-compose.main-ap.live-compat.yml \
+  COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.live-compat.yml:deploy/compose/docker-compose.main-ap.yml:deploy/compose/docker-compose.main-ap.live-compat.yml \
   COMPOSE_PROFILES=main-ap \
   COMPOSE_ENV_FILE=/run/hololive-bot/env \
   ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
-First boot on a newly provisioned AP host (no AP containers yet) requires `AP_PREFLIGHT_ALLOW_FIRST_BOOT=true` so the Iris H3 trust preflight skips its in-container check once; post-start readiness checks still gate the rollout. The wrapper also copies `docker-compose.prod.yml` and the host overlay into its prechange backup *before* the rsync step, so pre-seed the repo files onto the host once (manual rsync with `--files-from=scripts/deploy/ap-rsync-files.txt`) before the first `--apply`.
+First boot on a newly provisioned AP host (no AP containers yet) requires `AP_PREFLIGHT_ALLOW_FIRST_BOOT=true` so the Iris H3 trust preflight skips its in-container check once; post-start readiness checks still gate the rollout. The wrapper also copies `deploy/compose/docker-compose.prod.yml` and the host overlay into its prechange backup *before* the rsync step, so pre-seed the repo files onto the host once (manual rsync with `--files-from=scripts/deploy/ap-rsync-files.txt`) before the first `--apply`.
 
 ## Common failure modes
 
@@ -246,7 +246,7 @@ Diagnosis:
 SINCE=30m TAIL=600 PATTERN='outbox' ./scripts/logs/ap-logs.sh osaka youtube-producer | tail -n 80
 SINCE=30m TAIL=600 PATTERN='outbox' ./scripts/logs/ap-logs.sh seoul youtube-producer | tail -n 80
 docker logs --tail 300 hololive-youtube-producer-c
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
 ```
 
 Mitigation:
@@ -299,8 +299,8 @@ Do not add runtime-name aliases in application code. Historical rows remain hist
 - Redeploy the previous `youtube-producer` image/config.
 - Scale down `youtube-producer-b` (seoul) first, confirm `youtube-producer-a` (osaka) remains healthy, then redeploy the previous image/config.
 - Confirm `YOUTUBE_INGESTION_ENABLED=true`, active `/ready`, health on port `30005`, and outbox/photo sync state after rollback.
-- The deploy wrapper stores overwritten files and prechange container inventory under `backups/<host>-active-active-<timestamp>/` on that AP host; use that evidence to restore the previous `docker-compose.prod.yml` and that host's compose override if active-active startup fails.
-- Topology-level rollback to the pre-2026-06-04 Osaka `a`+`b` layout is manual: stop `youtube-producer-b` on seoul, restore a pre-cutover `docker-compose.osaka.yml` that defines `youtube-producer-b` — recover it from git history (`git show 7558024f^:docker-compose.osaka.yml`) or from the 2026-06-04 cutover backup (`backups/osaka-active-active-20260604T102113Z/`); prechange backups taken by deploys *after* the cutover no longer define `youtube-producer-b` — then start it on osaka with an explicit `up -d --no-deps youtube-producer-b`. `ap-rollback.sh osaka` alone restores files but only recreates the services listed in `ap-hosts/osaka.conf` (now `youtube-producer-a`).
+- The deploy wrapper stores overwritten files and prechange container inventory under `backups/<host>-active-active-<timestamp>/` on that AP host; use that evidence to restore the previous `deploy/compose/docker-compose.prod.yml` and that host's compose override if active-active startup fails.
+- Topology-level rollback to the pre-2026-06-04 Osaka `a`+`b` layout is manual: stop `youtube-producer-b` on seoul, restore a pre-cutover `deploy/compose/docker-compose.osaka.yml` that defines `youtube-producer-b` — recover it from git history before the compose-directory refactor (`git show 7558024f^:docker-compose.osaka.yml`) or from the 2026-06-04 cutover backup (`backups/osaka-active-active-20260604T102113Z/`); prechange backups taken by deploys *after* the cutover no longer define `youtube-producer-b` — then start it on osaka with an explicit `up -d --no-deps youtube-producer-b`. `ap-rollback.sh osaka` alone restores files but only recreates the services listed in `ap-hosts/osaka.conf` (now `youtube-producer-a`).
 - Dry-run the rollback helper before applying (per-host approval env var):
 
 ```bash

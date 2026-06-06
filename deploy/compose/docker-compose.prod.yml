@@ -64,12 +64,12 @@ x-db-service: &db-service
   <<: [*autoheal-service, *db-security]
 
 x-go-build-base: &go-build-base
-  context: .
+  context: ../..
   provenance: mode=max
   sbom: true
   additional_contexts:
-    shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
-    iris_client_go_workspace: ${IRIS_CLIENT_GO_WORKSPACE_PATH:-../iris-client-go}
+    shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-../../../shared-go}
+    iris_client_go_workspace: ${IRIS_CLIENT_GO_WORKSPACE_PATH:-../../../iris-client-go}
 
 x-go-healthcheck: &go-healthcheck
   interval: 30s
@@ -110,6 +110,14 @@ x-iris-env: &iris-env
   IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
   IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
 
+x-hololive-h3-files-env: &hololive-h3-files-env
+  HOLOLIVE_H3_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
+  HOLOLIVE_H3_KEY_FILE: ${HOLOLIVE_H3_KEY_FILE:-/run/hololive-bot/certs/hololive-h3.key}
+  HOLOLIVE_INTERNAL_H3_CA_CERT_FILE: ${HOLOLIVE_INTERNAL_H3_CA_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
+  HOLOLIVE_INTERNAL_H3_SERVER_NAME: ${HOLOLIVE_INTERNAL_H3_SERVER_NAME:-127.0.0.1}
+  HEALTHCHECK_CA_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
+  HEALTHCHECK_SERVER_NAME: ${HOLOLIVE_H3_SERVER_NAME:-127.0.0.1}
+
 x-cliproxy-env: &cliproxy-env
   CLIPROXY_ENABLED: "true"
   CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
@@ -144,33 +152,37 @@ x-scraper-env: &scraper-env
   SCRAPER_BACKFILL_TARGET_GROUP: "${SCRAPER_BACKFILL_TARGET_GROUP:-notification}"
 
 x-go-volumes: &go-volumes
-  - ./data:/app/data
-  - ./logs:/app/logs
+  - ../../data:/app/data
+  - ../../logs:/app/logs
+  - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+  - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-hololive-bot-volumes: &hololive-bot-volumes
-  - ./data:/app/data
-  - ./logs:/app/logs
-  - ./runtime-config:/app/runtime-config:ro
+  - ../../data:/app/data
+  - ../../logs:/app/logs
+  - ../../runtime-config:/app/runtime-config:ro
   - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
   - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-alarm-worker-volumes: &alarm-worker-volumes
-  - ./data:/app/data
-  - ./logs:/app/logs
-  - ./runtime-config:/app/runtime-config:ro
+  - ../../data:/app/data
+  - ../../logs:/app/logs
+  - ../../runtime-config:/app/runtime-config:ro
+  - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+  - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-go-basic-volumes: &go-basic-volumes
-  - ./data:/app/data
-  - ./logs:/app/logs
+  - ../../data:/app/data
+  - ../../logs:/app/logs
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-logs-runtime-cache-volumes: &logs-runtime-cache-volumes
-  - ./logs:/app/logs
+  - ../../logs:/app/logs
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-db-depends: &db-depends
@@ -240,8 +252,8 @@ services:
       PGPORT: "5432"
     volumes:
       - holo-pg-data:/var/lib/postgresql/data
-      - ./backups:/backups
-      - ./hololive/hololive-kakao-bot-go/scripts/init-db:/docker-entrypoint-initdb.d:ro
+      - ../../backups:/backups
+      - ../../hololive/hololive-kakao-bot-go/scripts/init-db:/docker-entrypoint-initdb.d:ro
     tmpfs:
       - /tmp:size=64m,mode=1777
       - /var/run/postgresql:size=16m,mode=3775
@@ -299,7 +311,7 @@ services:
       - /bin/sh
       - /migrations/bootstrap-and-apply.sh
     volumes:
-      - ./hololive/hololive-kakao-bot-go/scripts/migrations:/migrations:ro
+      - ../../hololive/hololive-kakao-bot-go/scripts/migrations:/migrations:ro
     depends_on:
       holo-postgres:
         condition: service_healthy
@@ -322,23 +334,18 @@ services:
     env_file:
       - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
-      <<: [*app-file-log-env, *iris-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
+      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
       HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_HTTP_TRANSPORTS:-h3}
-      HOLOLIVE_H2C_ADDR: ${HOLOLIVE_H2C_ADDR:-:30001}
       HOLOLIVE_H3_ADDR: ${HOLOLIVE_H3_ADDR:-:30001}
-      HOLOLIVE_H3_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
-      HOLOLIVE_H3_KEY_FILE: ${HOLOLIVE_H3_KEY_FILE:-/run/hololive-bot/certs/hololive-h3.key}
-      HEALTHCHECK_CA_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
-      HEALTHCHECK_SERVER_NAME: ${HOLOLIVE_H3_SERVER_NAME:-127.0.0.1}
       # Dockerfile 기본값은 GOGC=200이지만 운영 Compose에서는 메모리 상한을 우선해 60으로 낮춥니다.
       GOGC: "60"
-      LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
+      LLM_SCHEDULER_INTERNAL_URL: https://llm-scheduler:30003
       NOTIFICATION_SCHEDULER_ROLE: "off"
       SERVER_PORT: 30001
       LOG_DIR: /app/logs
       GOMEMLIMIT: "450MiB"
       # 통합 Goroutine 모니터링용 외부 서비스 Health URL (llm 레포 서비스 → host.docker.internal)
-      SERVICES_LLM_SCHEDULER_HEALTH_URL: http://llm-scheduler:30003/health
+      SERVICES_LLM_SCHEDULER_HEALTH_URL: https://llm-scheduler:30003/health
       SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
       SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
       APP_ENV: "production"
@@ -374,10 +381,12 @@ services:
         VERSION: ${HOLO_ADMIN_API_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
     container_name: hololive-admin-api
     environment:
-      <<: [*app-file-log-env, *cache-env, *postgres-env]
+      <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env]
       SERVER_PORT: 30006
-      HOLOLIVE_HTTP_TRANSPORTS: h2c
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_ADMIN_API_H3_ADDR:-:30006}
       API_SECRET_KEY: ${API_SECRET_KEY:-}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-172.16.0.0/12,127.0.0.1/32}
       KAKAO_ROOMS: ${KAKAO_ROOMS:-}
       KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED:-true}
       KAKAO_ACL_MODE: ${KAKAO_ACL_MODE:-whitelist}
@@ -388,15 +397,18 @@ services:
       LOG_DIR: /app/logs
       GOMEMLIMIT: "320MiB"
       APP_ENV: "production"
-      LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
-      SERVICES_LLM_SCHEDULER_HEALTH_URL: http://llm-scheduler:30003/health
+      LLM_SCHEDULER_INTERNAL_URL: https://llm-scheduler:30003
+      SERVICES_LLM_SCHEDULER_HEALTH_URL: https://llm-scheduler:30003/health
       SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
       SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
     ports:
       - "127.0.0.1:30006:30006"
+      - "127.0.0.1:30006:30006/udp"
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts: *host-extra-hosts
@@ -404,7 +416,7 @@ services:
     deploy: *deploy-384m
     healthcheck:
       <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30006/health"]
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30006/health"]
     networks:
       hololive-net:
         aliases:
@@ -422,7 +434,7 @@ services:
     env_file:
       - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
-      <<: [*app-file-log-env, *iris-env, *cache-env, *postgres-env]
+      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env]
       NOTIFICATION_EGRESS_ROLE: "owner"
       NOTIFICATION_SCHEDULER_ROLE: "worker"
       YOUTUBE_OUTBOX_DISPATCHER_ENABLED: ${YOUTUBE_OUTBOX_DISPATCHER_ENABLED:-true}
@@ -430,6 +442,8 @@ services:
       DELIVERY_DISPATCHER_ENABLED: ${DELIVERY_DISPATCHER_ENABLED:-true}
       ALARM_WORKER_EGRESS_LEASE_ENABLED: ${ALARM_WORKER_EGRESS_LEASE_ENABLED:-true}
       SERVER_PORT: 30007
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_ALARM_WORKER_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_ALARM_WORKER_H3_ADDR:-:30007}
       POSTGRES_POOL_MIN_CONNS: ${ALARM_WORKER_POSTGRES_POOL_MIN_CONNS:-1}
       POSTGRES_POOL_MAX_CONNS: ${ALARM_WORKER_POSTGRES_POOL_MAX_CONNS:-8}
       POSTGRES_POOL_MAX_IDLE_CONNS: ${ALARM_WORKER_POSTGRES_POOL_MAX_IDLE_CONNS:-4}
@@ -462,13 +476,14 @@ services:
       APP_ENV: "production"
     ports:
       - "127.0.0.1:30007:30007"
+      - "127.0.0.1:30007:30007/udp"
     volumes: *alarm-worker-volumes
     extra_hosts: *iris-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-384m
     healthcheck:
       <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30007/health"]
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30007/health"]
     networks:
       hololive-net:
         aliases:
@@ -485,12 +500,13 @@ services:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
     container_name: hololive-youtube-producer
     environment:
-      <<: [*app-file-log-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
+      <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
       NOTIFICATION_EGRESS_ROLE: "producer"
       YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "false"
       SERVER_PORT: 30005
-      HOLOLIVE_HTTP_TRANSPORTS: h2c
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_YOUTUBE_PRODUCER_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_YOUTUBE_PRODUCER_H3_ADDR:-:30005}
       API_SECRET_KEY: ${API_SECRET_KEY:-}
       HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
       HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
@@ -506,13 +522,14 @@ services:
     dns: *public-dns
     ports:
       - "127.0.0.1:30005:30005"
+      - "127.0.0.1:30005:30005/udp"
     volumes: *go-volumes
     extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-384m
     healthcheck:
       <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30005/health"]
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30005/health"]
     networks:
       hololive-net:
         aliases:
@@ -528,10 +545,12 @@ services:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
     container_name: hololive-llm-scheduler
     environment:
-      <<: [*app-file-log-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
+      <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
       NOTIFICATION_EGRESS_ROLE: "producer"
       DELIVERY_DISPATCHER_ENABLED: "false"
       LLM_SCHEDULER_PORT: 30003
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_LLM_SCHEDULER_H3_ADDR:-:30003}
       API_SECRET_KEY: ${API_SECRET_KEY:-}
       GOGC: "100"
       # Dockerfile 기본값은 GOMEMLIMIT=192MiB이지만 운영 deploy limit에 맞춰 256MiB로 올립니다.
@@ -541,13 +560,14 @@ services:
     dns: *public-dns
     ports:
       - "127.0.0.1:30003:30003"
+      - "127.0.0.1:30003:30003/udp"
     volumes: *go-volumes
     extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-320m
     healthcheck:
       <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30003/health"]
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30003/health"]
     networks:
       hololive-net:
         aliases:
@@ -582,7 +602,7 @@ services:
     ports:
       - "127.0.0.1:30190:30190"
     volumes:
-      - ./logs:/app/logs
+      - ../../logs:/app/logs
     extra_hosts: *host-extra-hosts
     depends_on:
       valkey-cache:

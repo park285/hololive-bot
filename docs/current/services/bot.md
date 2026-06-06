@@ -56,7 +56,7 @@ Kakao/Iris webhook ingress와 사용자 명령 routing을 담당하는 main bot 
 
 ## Observability
 
-- Logs: `./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f hololive-bot`
+- Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-bot`
 - Health: `http://127.0.0.1:30001/health`
 - Metrics: 검토 필요
 

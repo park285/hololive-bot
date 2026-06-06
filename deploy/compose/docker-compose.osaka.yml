@@ -31,9 +31,9 @@ x-osaka-ap-service: &osaka-ap-service
   env_file:
     - /run/hololive-bot/env
   volumes: !override
-    - ./data:/app/data
-    - ./logs:/app/logs
-    - ./runtime-config:/app/runtime-config:ro
+    - ../../data:/app/data
+    - ../../logs:/app/logs
+    - ../../runtime-config:/app/runtime-config:ro
     - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
   logging: *osaka-ap-logging
   deploy:
@@ -59,9 +59,9 @@ services:
       <<: *osaka-ap-env
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
     volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
     logging: *osaka-ap-logging
     deploy:

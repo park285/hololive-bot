@@ -1,5 +1,5 @@
 resolve_compose_cmd() {
-  COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+  COMPOSE_FILE="${COMPOSE_FILE:-deploy/compose/docker-compose.prod.yml}"
   CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 
   case "${CONTAINER_CLI}" in

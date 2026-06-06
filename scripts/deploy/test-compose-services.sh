@@ -69,14 +69,14 @@ ap_host_load "${ROOT_DIR}" osaka || fail "osaka ap-host conf loads"
 expect_eq "${AP_SERVICES[*]}" "youtube-producer-a" "osaka AP services"
 expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-a" "osaka AP containers"
 expect_eq "${AP_PORTS[*]}" "30005" "osaka AP ports"
-expect_eq "${AP_COMPOSE_FILE}" "docker-compose.osaka.yml" "osaka AP compose file"
+expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.osaka.yml" "osaka AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY" "osaka AP deploy approval var"
 
 ap_host_load "${ROOT_DIR}" seoul || fail "seoul ap-host conf loads"
 expect_eq "${AP_SERVICES[*]}" "youtube-producer-b" "seoul AP services"
 expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-b" "seoul AP containers"
 expect_eq "${AP_PORTS[*]}" "30015" "seoul AP ports"
-expect_eq "${AP_COMPOSE_FILE}" "docker-compose.seoul.yml" "seoul AP compose file"
+expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.seoul.yml" "seoul AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY" "seoul AP deploy approval var"
 
 expect_fail "ap-host loader rejects unknown host" ap_host_load "${ROOT_DIR}" nonexistent-host
@@ -87,7 +87,7 @@ grep -qx 'scripts/deploy/ap-iris-h3-trust-preflight.sh' "${AP_ACTIVE_ACTIVE_FILE
 pass "ap active-active syncs Iris H3 trust preflight"
 grep -q 'ap-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs Iris H3 trust preflight"
 pass "ap active-active deploy runs Iris H3 trust preflight"
-for ap_compose in docker-compose.osaka.yml docker-compose.seoul.yml; do
+for ap_compose in deploy/compose/docker-compose.osaka.yml deploy/compose/docker-compose.seoul.yml; do
     grep -qx "${ap_compose}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_compose}"
 done
 pass "ap active-active syncs per-host compose files"

@@ -15,7 +15,7 @@
 2. 512MB 제한을 가진 `holo-postgres`에서 메모리 과약정을 제거한다.
 3. 이미 좋은 실행계획을 보이는 쿼리에는 불필요한 인덱스를 추가하지 않는다.
 4. 장기적으로 데이터가 증가했을 때 어떤 지표를 보고 어떤 인덱스를 추가할지 사전에 결정한다.
-5. 모든 변경은 롤백 가능하고, `docker-compose.prod.yml` 기준 운영 절차와 충돌하지 않아야 한다.
+5. 모든 변경은 롤백 가능하고, `deploy/compose/docker-compose.prod.yml` 기준 운영 절차와 충돌하지 않아야 한다.
 
 공식 PostgreSQL 18 기준 문서:
 
@@ -27,7 +27,7 @@
 
 ## 2. 현재 상태 요약
 
-현재 `docker-compose.prod.yml`의 `holo-postgres`는 `postgres:18` 계열을 사용하고 있고, PG18 Track A에서 다음이 이미 적용되어 있다.
+현재 `deploy/compose/docker-compose.prod.yml`의 `holo-postgres`는 `postgres:18` 계열을 사용하고 있고, PG18 Track A에서 다음이 이미 적용되어 있다.
 
 - `shared_preload_libraries=pg_stat_statements`
 - `pg_stat_statements.track=all`
@@ -59,7 +59,7 @@
 
 ### 3.1. 운영 DB 변경은 3단계로 나눈다
 
-1. 관측/설정 변경: `docker-compose.prod.yml`의 PostgreSQL `command` 또는 service env 변경
+1. 관측/설정 변경: `deploy/compose/docker-compose.prod.yml`의 PostgreSQL `command` 또는 service env 변경
 2. 스키마 변경: migration SQL 추가
 3. 코드 경로 변경: Go 코드의 SQL 또는 repository 로직 변경
 
@@ -96,7 +96,7 @@ POSTGRES_IMAGE=postgres:18.4
 
 ### 결정 H2 — PG18 GUC는 현재 Track A 값을 유지한다
 
-`docker-compose.prod.yml`의 `holo-postgres.command` 값은 현재 값을 정본으로 둔다.
+`deploy/compose/docker-compose.prod.yml`의 `holo-postgres.command` 값은 현재 값을 정본으로 둔다.
 
 정본 값:
 
@@ -143,7 +143,7 @@ command:
 
 현재 문서 기준 이론상 pool 합은 `4서비스 × 기본 25 + alarm-worker 8 = 108`로 `max_connections=100`을 넘을 수 있다. 실측은 33conn 수준이라 즉시 장애 위험은 낮지만, 이론상 과약정은 제거해야 한다.
 
-`docker-compose.prod.yml`에서 각 서비스 env에 다음을 명시한다.
+`deploy/compose/docker-compose.prod.yml`에서 각 서비스 env에 다음을 명시한다.
 
 ```yaml
 hololive-bot:
@@ -346,7 +346,7 @@ PG18은 multicolumn B-tree skip scan을 지원하지만, 현재 주요 쿼리는
 검증:
 
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml config | grep -E 'POSTGRES_IMAGE|POSTGRES_POOL|pg_stat_statements|io_method|shared_buffers'
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml config | grep -E 'POSTGRES_IMAGE|POSTGRES_POOL|pg_stat_statements|io_method|shared_buffers'
 ```
 
 ### Phase 2 — PostgreSQL recreate

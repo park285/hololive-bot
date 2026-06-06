@@ -34,7 +34,7 @@
 ## Logs
 
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f llm-scheduler
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f llm-scheduler
 ```
 
 ## Metrics
@@ -50,7 +50,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 llm-scheduler
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 llm-scheduler
 ```
 
 Mitigation:
@@ -68,8 +68,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 llm-scheduler
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=100 hololive-bot
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 llm-scheduler
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=100 hololive-bot
 ```
 
 Mitigation:

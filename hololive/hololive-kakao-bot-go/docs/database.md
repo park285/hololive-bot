@@ -151,4 +151,4 @@ POSTGRES_USER=twentyq_app
 POSTGRES_PASSWORD=<비밀번호>
 ```
 
-> `docker-compose.prod.yml`의 `hololive-bot` 서비스에서 위 환경변수가 설정됩니다.
+> `deploy/compose/docker-compose.prod.yml`의 `hololive-bot` 서비스에서 위 환경변수가 설정됩니다.

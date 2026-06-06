@@ -16,8 +16,8 @@ services:
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
       POSTGRES_SSLMODE_ALLOW_INSECURE: ${POSTGRES_SSLMODE_ALLOW_INSECURE:-true}
     volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
       - valkey-cache-socket:/var/run/valkey:ro

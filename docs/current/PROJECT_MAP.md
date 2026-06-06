@@ -14,10 +14,10 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | `hololive-shared` | Go 1.26 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.26 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
 | `admin-dashboard-backend` | Go 1.26 | `admin-dashboard/backend/` | Admin dashboard Go backend (auth/session, holo API relay, Docker control, embedded frontend serving) | 30190 |
-| `docker-compose.prod.yml` | YAML | `docker-compose.prod.yml` | Production docker compose stack | - |
-| `docker-compose.osaka.yml` | YAML | `docker-compose.osaka.yml` | Osaka split-host active-active AP (`youtube-producer-a`) | - |
-| `docker-compose.seoul.yml` | YAML | `docker-compose.seoul.yml` | Seoul split-host active-active AP (`youtube-producer-b`) | - |
-| `docker-compose.main-ap.yml` | YAML | `docker-compose.main-ap.yml` | Main-host active-active AP (`youtube-producer-c`, profile `main-ap`) | - |
+| `deploy/compose/docker-compose.prod.yml` | YAML | `deploy/compose/docker-compose.prod.yml` | Production docker compose stack | - |
+| `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host active-active AP (`youtube-producer-a`) | - |
+| `deploy/compose/docker-compose.seoul.yml` | YAML | `deploy/compose/docker-compose.seoul.yml` | Seoul split-host active-active AP (`youtube-producer-b`) | - |
+| `deploy/compose/docker-compose.main-ap.yml` | YAML | `deploy/compose/docker-compose.main-ap.yml` | Main-host active-active AP (`youtube-producer-c`, profile `main-ap`) | - |
 
 ## Runtime Operations Inventory
 
@@ -51,7 +51,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 ## Maintenance
 
 - Keep Go module entries aligned with `go.work`.
-- Keep runtime binary and Docker Compose service entries aligned with `docker-compose.prod.yml`.
+- Keep runtime binary and Docker Compose service entries aligned with `deploy/compose/docker-compose.prod.yml`.
 - Keep service docs and runbook links valid for all 5 runtime rows.
 - Keep contract docs aligned with `hololive/hololive-shared/pkg/contracts/*`.
 - Run `./scripts/architecture/check-project-map.sh` after changing `go.work`, module inventory, or repo-root docs references.
@@ -59,5 +59,5 @@ Module and runtime inventory for the `hololive-bot` workspace.
 - Run `./scripts/architecture/check-contract-map.sh` after changing contract docs or `hololive-shared/pkg/contracts/*`.
 - Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
 - Architecture: Go single-language runtime (5 binaries: bot + admin-api + alarm-worker + llm-scheduler + youtube-producer).
-- Deployment baseline: Docker Compose (`docker-compose.prod.yml`) is the current production standard after the 2026-03-07 rollback from k8s/k3s.
+- Deployment baseline: Docker Compose (`deploy/compose/docker-compose.prod.yml`) is the current production standard after the 2026-03-07 rollback from k8s/k3s.
 - Retired runtime names: `hololive-alarm`, `hololive-scraper`, `rust-dispatcher`, `hololive-admin`, `hololive-rs`.

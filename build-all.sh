@@ -142,16 +142,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-COMPOSE_FILE_PATHS=(docker-compose.prod.yml)
-COMPOSE_FILES=(-f docker-compose.prod.yml)
+COMPOSE_FILE_PATHS=(deploy/compose/docker-compose.prod.yml)
+COMPOSE_FILES=(-f deploy/compose/docker-compose.prod.yml)
 if [[ "${REMOTE_CACHE}" == true ]]; then
     if [[ -z "${REMOTE_CACHE_PREFIX:-}" ]]; then
         echo "[ERROR] --remote-cache requires REMOTE_CACHE_PREFIX" >&2
         echo "        Example: REMOTE_CACHE_PREFIX=ghcr.io/<owner>" >&2
         exit 1
     fi
-    COMPOSE_FILE_PATHS+=(docker-compose.remote-cache.yml)
-    COMPOSE_FILES+=(-f docker-compose.remote-cache.yml)
+    COMPOSE_FILE_PATHS+=(deploy/compose/docker-compose.remote-cache.yml)
+    COMPOSE_FILES+=(-f deploy/compose/docker-compose.remote-cache.yml)
 fi
 
 if ! COMPOSE_ENV_FILE="$(compose_env_resolve_file)"; then

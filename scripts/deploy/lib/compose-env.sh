@@ -6,7 +6,7 @@ compose_env_resolve_file() {
             echo "[ERROR] COMPOSE_ENV_FILE not readable: ${COMPOSE_ENV_FILE}" >&2
             exit 1
         fi
-        printf '%s\n' "${COMPOSE_ENV_FILE}"
+        realpath -e -- "${COMPOSE_ENV_FILE}"
         return
     fi
 

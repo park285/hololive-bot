@@ -43,9 +43,9 @@ services:
       - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001"
       - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001/udp"
     volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
@@ -53,9 +53,9 @@ services:
     environment:
       <<: *live-postgres-env
     volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
@@ -67,9 +67,9 @@ services:
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
       IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
     volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
@@ -77,9 +77,9 @@ services:
     environment:
       <<: *live-postgres-env
     volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
@@ -87,9 +87,9 @@ services:
     environment:
       <<: *live-postgres-env
     volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
       - valkey-cache-socket:/var/run/valkey:ro
 

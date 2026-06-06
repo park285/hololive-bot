@@ -64,7 +64,7 @@ changed_go_package_patterns() {
                 ;;
             # compose/.env.example은 hololive-shared settings의 repo 계약 테스트 입력이라
             # Go 파일이 안 바뀌어도 해당 모듈 테스트를 선택해야 한다 (61e1c75f 회귀 재발 방지).
-            docker-compose*.yml|.env.example)
+            docker-compose*.yml|deploy/compose/docker-compose*.yml|.env.example)
                 package_patterns+=("./hololive/hololive-shared/...")
                 ;;
             *.go)

@@ -36,7 +36,7 @@ P5 분리 이후 `llm-scheduler` 장애/재실행/수동 실행 절차를 표준
 ## 3) 정상 상태 점검
 
 ```bash
-docker compose -f docker-compose.prod.yml ps llm-scheduler hololive-admin-api
+docker compose -f deploy/compose/docker-compose.prod.yml ps llm-scheduler hololive-admin-api
 curl -fsS http://127.0.0.1:30003/health
 curl -fsS http://127.0.0.1:30006/health
 docker logs --tail 150 hololive-llm-scheduler
@@ -59,8 +59,8 @@ docker logs --tail 150 hololive-admin-api
 
 ```bash
 docker logs --tail 300 hololive-llm-scheduler
-docker compose -f docker-compose.prod.yml up -d --build llm-scheduler
-docker compose -f docker-compose.prod.yml ps llm-scheduler
+docker compose -f deploy/compose/docker-compose.prod.yml up -d --build llm-scheduler
+docker compose -f deploy/compose/docker-compose.prod.yml ps llm-scheduler
 curl -fsS http://127.0.0.1:30003/health
 ```
 

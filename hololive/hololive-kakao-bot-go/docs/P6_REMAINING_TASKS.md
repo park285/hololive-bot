@@ -89,5 +89,5 @@
 ```bash
 go test ./internal/service/ratelimit ./internal/service/holodex ./internal/service/youtube/scraper ./internal/app
 go build ./...
-docker compose -f docker-compose.prod.yml ps youtube-producer
+docker compose -f deploy/compose/docker-compose.prod.yml ps youtube-producer
 ```

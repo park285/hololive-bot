@@ -141,7 +141,7 @@ hololive-kakao-bot-go/
 
 ### Docker Compose 배포 (프로덕션)
 
-이 저장소는 루트 `docker-compose.prod.yml` 기준으로 통합 배포합니다.
+이 저장소는 `deploy/compose/docker-compose.prod.yml` 기준으로 통합 배포합니다.
 
 ```bash
 ./build-all.sh --no-bump
