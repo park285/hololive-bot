@@ -3,7 +3,23 @@ package status
 import (
 	"testing"
 	"time"
+
+	"github.com/quic-go/quic-go/http3"
 )
+
+func TestEndpointClientsSelectH3ForHTTPS(t *testing.T) {
+	clients := endpointClients([]ServiceEndpoint{
+		{Name: "h3-svc", URL: "https://hololive-admin-api:30006", HealthPath: "/health"},
+		{Name: "tcp-svc", URL: "http://localhost:30190", HealthPath: "/health"},
+	}, time.Second)
+
+	if _, isH3 := clients["h3-svc"].Transport.(*http3.Transport); !isH3 {
+		t.Fatalf("h3-svc transport = %T, want *http3.Transport", clients["h3-svc"].Transport)
+	}
+	if _, isH3 := clients["tcp-svc"].Transport.(*http3.Transport); isH3 {
+		t.Fatal("tcp-svc must not use http3 transport")
+	}
+}
 
 func TestHubSubscribeReplaysCappedHistory(t *testing.T) {
 	hub := NewHub(nil)

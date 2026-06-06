@@ -431,8 +431,7 @@ func TestLoad_UsesSeparateIrisTokens(t *testing.T) {
 func TestLoad_ServerHTTP3Config(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SERVER_PORT", "30001")
-	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h2c,h3")
-	t.Setenv("HOLOLIVE_H2C_ADDR", ":30001")
+	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h3")
 	t.Setenv("HOLOLIVE_H3_ADDR", ":30001")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
@@ -442,11 +441,8 @@ func TestLoad_ServerHTTP3Config(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if got, want := config.Server.HTTPTransports, []string{"h2c", "h3"}; !reflect.DeepEqual(got, want) {
+	if got, want := config.Server.HTTPTransports, []string{"h3"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Server.HTTPTransports = %#v, want %#v", got, want)
-	}
-	if config.Server.H2CAddr != ":30001" {
-		t.Fatalf("Server.H2CAddr = %q, want :30001", config.Server.H2CAddr)
 	}
 	if config.Server.H3Addr != ":30001" {
 		t.Fatalf("Server.H3Addr = %q, want :30001", config.Server.H3Addr)
@@ -488,7 +484,7 @@ func TestLoad_ServerHTTP3AliasesRequireCertificateFiles(t *testing.T) {
 
 func TestLoad_ServerHTTPTransportsRejectUnsupportedValue(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h2c,htp3")
+	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "htp3")
 
 	_, err := Load()
 	if err == nil || !strings.Contains(err.Error(), "unsupported HOLOLIVE_HTTP_TRANSPORTS value: htp3") {
