@@ -22,8 +22,9 @@ services:
       GOMEMLIMIT: "640MiB"
     ports: !override
       - "127.0.0.1:30025:30025"
+      - "127.0.0.1:30025:30025/udp"
     healthcheck:
-      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30025/health"]
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30025/health"]
     deploy:
       resources:
         limits:
