@@ -29,12 +29,14 @@ x-osaka-ap-service: &osaka-ap-service
     service: youtube-producer
   profiles: ["oracle"]
   env_file:
-    - /run/hololive-bot/env
+    - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
   volumes: !override
     - ../../data:/app/data
     - ../../logs:/app/logs
     - ../../runtime-config:/app/runtime-config:ro
     - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+    - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+    - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   logging: *osaka-ap-logging
   deploy:
     resources:
@@ -54,7 +56,7 @@ services:
   youtube-producer:
     profiles: !override ["retired-youtube-producer"]
     env_file: !override
-      - /run/hololive-bot/env
+      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
       <<: *osaka-ap-env
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
@@ -79,3 +81,4 @@ services:
       PHOTO_SYNC_ENABLED: "true"
     ports: !override
       - "127.0.0.1:30005:30005"
+      - "127.0.0.1:30005:30005/udp"
