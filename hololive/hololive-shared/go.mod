@@ -37,6 +37,7 @@ require (
 	github.com/gin-contrib/gzip v1.2.6
 	github.com/park285/iris-client-go v0.15.3
 	github.com/prometheus/client_model v0.6.2
+	github.com/quic-go/quic-go v0.59.1
 	github.com/tech-engine/goscrapy v0.27.17
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
@@ -145,7 +146,6 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
