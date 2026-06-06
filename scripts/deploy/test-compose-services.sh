@@ -107,6 +107,30 @@ grep -q 'net.core.wmem_max' "${ROOT_DIR}/${ap_udp_lib}" || fail "${ap_udp_lib} c
 grep -q '/etc/sysctl.d/\*.conf' "${ROOT_DIR}/${ap_udp_lib}" || fail "${ap_udp_lib} checks persisted sysctl values"
 grep -qx "${ap_udp_lib}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_udp_lib}"
 pass "ap active-active verifies QUIC UDP buffer sysctls (runtime+persisted via lib)"
+
+# persisted 검증은 sysctl --system 적용 의미론(last-wins: sysctl.d lexical 순서 후 sysctl.conf 최종)을 따라야 한다.
+quic_fixture_root="$(mktemp -d)"
+trap 'rm -rf "${quic_fixture_root}"' EXIT
+mkdir -p "${quic_fixture_root}/etc/sysctl.d"
+printf 'net.core.rmem_max=2048\nnet.core.wmem_max=2048\n' > "${quic_fixture_root}/etc/sysctl.d/10-high.conf"
+printf 'net.core.rmem_max=512\nnet.core.wmem_max=512\n' > "${quic_fixture_root}/etc/sysctl.d/90-low-override.conf"
+if AP_SYSCTL_ROOT="${quic_fixture_root}" bash "${ROOT_DIR}/${ap_udp_lib}" 1024 fixture-host >/dev/null 2>&1; then
+    fail "${ap_udp_lib} must fail when a later sysctl.d file overrides persisted buffers below the requirement (last-wins)"
+fi
+pass "quic udp lib rejects later-file low override (persisted last-wins)"
+
+printf 'net.core.rmem_max=4096\nnet.core.wmem_max=4096\n' > "${quic_fixture_root}/etc/sysctl.d/90-low-override.conf"
+AP_SYSCTL_ROOT="${quic_fixture_root}" bash "${ROOT_DIR}/${ap_udp_lib}" 1024 fixture-host >/dev/null 2>&1 \
+    || fail "${ap_udp_lib} must pass when the effective persisted value satisfies the requirement"
+pass "quic udp lib accepts sufficient effective persisted value"
+
+printf 'net.core.rmem_max=512\nnet.core.wmem_max=512\n' > "${quic_fixture_root}/etc/sysctl.conf"
+if AP_SYSCTL_ROOT="${quic_fixture_root}" bash "${ROOT_DIR}/${ap_udp_lib}" 1024 fixture-host >/dev/null 2>&1; then
+    fail "${ap_udp_lib} must treat /etc/sysctl.conf as the final persisted assignment (sysctl --system order)"
+fi
+pass "quic udp lib applies sysctl.conf as final override"
+rm -rf "${quic_fixture_root}"
+trap - EXIT
 for ap_compose in deploy/compose/docker-compose.osaka.yml deploy/compose/docker-compose.seoul.yml; do
     grep -qx "${ap_compose}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_compose}"
 done
