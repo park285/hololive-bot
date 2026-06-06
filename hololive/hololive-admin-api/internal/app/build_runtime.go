@@ -74,18 +74,9 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *config.Config, logger 
 	systemCollector := buildAdminAPISystemCollector(appConfig)
 	communityShortsOpsRepository := buildAdminAPICommunityShortsOpsRepository(infra)
 	handler := buildAdminHandler(
-		appConfig,
-		infra,
-		foundation,
-		alarmMode,
-		aclService,
-		ytStack,
-		communityShortsOpsRepository,
-		settingsApplier,
-		systemCollector,
-		templateAdmin,
-		majorEventTriggerClient,
-		logger,
+		appConfig, infra, foundation, alarmMode, aclService, ytStack,
+		communityShortsOpsRepository, settingsApplier, systemCollector,
+		templateAdmin, majorEventTriggerClient, logger,
 	)
 	router, err := buildAdminAPIRouter(ctx, appConfig, infra, authService, handler, logger)
 	if err != nil {
