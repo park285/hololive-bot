@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/park285/shared-go/pkg/workerpool"
@@ -55,14 +54,6 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 
 	configSubscriber := appbootstrap.BuildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
 
-	var botServer = nilHTTPServer()
-	if appConfig.ServerTransportEnabled("h2c") {
-		botServer, err = appbootstrap.BuildBotServer(ctx, appConfig, webhookHandler, nil, logger)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	var h3Server *http3.Server
 	var h3CertReloadStart func(context.Context)
 	if appConfig.ServerTransportEnabled("h3") {
@@ -77,15 +68,10 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 		Logger:               logger,
 		Bot:                  botBot,
 		ConfigSubscriber:     configSubscriber,
-		ServerAddr:           appConfig.Server.H2CAddr,
-		HTTPServer:           botServer,
+		ServerAddr:           appConfig.Server.H3Addr,
 		H3Server:             h3Server,
 		h3CertReloadStart:    h3CertReloadStart,
 		webhookHandlerCloser: webhookHandler,
 		webhookPool:          webhookPool,
 	}, nil
-}
-
-func nilHTTPServer() *http.Server {
-	return nil
 }

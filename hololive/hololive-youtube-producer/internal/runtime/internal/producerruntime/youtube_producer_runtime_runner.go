@@ -23,7 +23,6 @@ package producerruntime
 import (
 	"context"
 	"log/slog"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -54,7 +53,6 @@ type YouTubeProducerRuntime struct {
 	PollTargetRefresher *polltarget.Refresher
 
 	ServerAddr  string
-	HTTPServer  *http.Server
 	HTTPServers *sharedserver.RuntimeHTTPServers
 
 	Readiness *readiness.State

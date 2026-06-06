@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
@@ -44,7 +43,6 @@ type BotRuntime struct {
 	ConfigSubscriber *configsub.Subscriber
 
 	ServerAddr string
-	HTTPServer *http.Server
 	H3Server   *http3.Server
 
 	h3CertReloadStart func(context.Context)

@@ -2,9 +2,18 @@ package app
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"log/slog"
+	"math/big"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -45,10 +54,13 @@ func TestNewAdminAPIRuntimeInitializesServerAndCleanup(t *testing.T) {
 
 	cleanupCalls := 0
 	logger := slog.New(slog.DiscardHandler)
+	certFile, keyFile := writeRuntimeTestCertificate(t)
 	runtime, err := newAdminAPIRuntime(&config.Config{
 		Server: config.ServerConfig{
-			HTTPTransports: []string{"h2c"},
-			H2CAddr:        "127.0.0.1:0",
+			HTTPTransports: []string{"h3"},
+			H3Addr:         "127.0.0.1:0",
+			H3CertFile:     certFile,
+			H3KeyFile:      keyFile,
 		},
 	}, logger, gin.New(), func() {
 		cleanupCalls++
@@ -69,17 +81,53 @@ func TestNewAdminAPIRuntimeInitializesServerAndCleanup(t *testing.T) {
 	if runtime.ServerAddr != "127.0.0.1:0" {
 		t.Fatalf("runtime.ServerAddr = %q", runtime.ServerAddr)
 	}
-	if runtime.HTTPServer == nil {
-		t.Fatal("runtime.HTTPServer is nil")
+	if runtime.HTTPServers == nil || runtime.HTTPServers.H3 == nil {
+		t.Fatal("runtime.HTTPServers.H3 is nil")
 	}
-	if runtime.HTTPServer.Addr != "127.0.0.1:0" {
-		t.Fatalf("runtime.HTTPServer.Addr = %q", runtime.HTTPServer.Addr)
+	if runtime.HTTPServers.H3.Addr != "127.0.0.1:0" {
+		t.Fatalf("runtime.HTTPServers.H3.Addr = %q", runtime.HTTPServers.H3.Addr)
 	}
 
 	runtime.Close()
 	if cleanupCalls != 1 {
 		t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
 	}
+}
+
+func writeRuntimeTestCertificate(t *testing.T) (string, string) {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		DNSNames:     []string{"localhost"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create cert: %v", err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}), 0o600); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	return certFile, keyFile
 }
 
 func TestCleanupAdminAPIRuntimeBuildRunsInfraCleanupAndWrapsError(t *testing.T) {

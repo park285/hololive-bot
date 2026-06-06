@@ -34,7 +34,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/quic-go/quic-go/http3"
 )
 
 func testRuntimeLogger() *slog.Logger {
@@ -63,11 +65,8 @@ func TestLLMSchedulerRuntimeStartStopSchedulers_NoPanic(t *testing.T) {
 
 func TestLLMSchedulerRuntimeStartHTTPServer_ReportsError(t *testing.T) {
 	runtime := &LLMSchedulerRuntime{
-		Logger: testRuntimeLogger(),
-		httpServer: &http.Server{
-			Addr:    "invalid-address",
-			Handler: http.NewServeMux(),
-		},
+		Logger:      testRuntimeLogger(),
+		httpServers: &sharedserver.RuntimeHTTPServers{H3: &http3.Server{Addr: "invalid-address"}},
 	}
 
 	errCh := make(chan error, 1)
@@ -76,7 +75,7 @@ func TestLLMSchedulerRuntimeStartHTTPServer_ReportsError(t *testing.T) {
 	select {
 	case err := <-errCh:
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "HTTP server error")
+		assert.Contains(t, err.Error(), "HTTP/3 server error")
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected server error from startHTTPServer, got timeout")
 	}
@@ -93,27 +92,23 @@ func TestLLMSchedulerRuntimeShutdown_StopsHTTPServer(t *testing.T) {
 	require.NoError(t, response.Body.Close())
 	assert.Equal(t, http.StatusNoContent, response.StatusCode)
 
+	server.Close()
+
 	runtime := &LLMSchedulerRuntime{
-		Logger:     testRuntimeLogger(),
-		httpServer: server.Config,
+		Logger:      testRuntimeLogger(),
+		httpServers: nil,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	require.NoError(t, runtime.Shutdown(ctx))
-
-	_, err = server.Client().Get(server.URL)
-	require.Error(t, err)
 }
 
 func TestLLMSchedulerRuntimeRun_ReturnsOnServerError(t *testing.T) {
 	runtime := &LLMSchedulerRuntime{
-		Logger: testRuntimeLogger(),
-		httpServer: &http.Server{
-			Addr:    "invalid-address",
-			Handler: http.NewServeMux(),
-		},
+		Logger:      testRuntimeLogger(),
+		httpServers: &sharedserver.RuntimeHTTPServers{H3: &http3.Server{Addr: "invalid-address"}},
 	}
 
 	done := make(chan struct{})

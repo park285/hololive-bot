@@ -26,7 +26,6 @@ type ServerConfig struct {
 	Port           int
 	APIKey         string // API 인증용 시크릿 키 (X-API-Key 헤더로 검증)
 	HTTPTransports []string
-	H2CAddr        string
 	H3Addr         string
 	H3CertFile     string
 	H3KeyFile      string

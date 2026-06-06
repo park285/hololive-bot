@@ -30,10 +30,12 @@ import (
 	"time"
 	"unsafe"
 
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/quic-go/quic-go/http3"
 )
 
 type fakeYouTubeService struct {
@@ -145,10 +147,6 @@ func TestYouTubeProducerRuntimeShutdown(t *testing.T) {
 	runtime := &YouTubeProducerRuntime{
 		Logger:    testLogger(),
 		Scheduler: scheduler,
-		HTTPServer: &http.Server{
-			Addr:    "invalid-address",
-			Handler: http.NewServeMux(),
-		},
 	}
 
 	runtime.shutdown(context.Background())
@@ -161,11 +159,9 @@ func TestYouTubeProducerRuntimeStartHTTPServerSendsListenError(t *testing.T) {
 	t.Parallel()
 
 	runtime := &YouTubeProducerRuntime{
-		Logger:     testLogger(),
-		ServerAddr: "invalid::addr",
-		HTTPServer: &http.Server{
-			Addr: "invalid::addr",
-		},
+		Logger:      testLogger(),
+		ServerAddr:  "invalid::addr",
+		HTTPServers: &sharedserver.RuntimeHTTPServers{H3: &http3.Server{Addr: "invalid::addr"}},
 	}
 	errCh := make(chan error, 1)
 
@@ -173,7 +169,7 @@ func TestYouTubeProducerRuntimeStartHTTPServerSendsListenError(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		if err == nil || !strings.Contains(err.Error(), "http server error") {
+		if err == nil || !strings.Contains(err.Error(), "HTTP/3 server error") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	case <-time.After(2 * time.Second):
@@ -190,14 +186,11 @@ func TestYouTubeProducerRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 		photoSyncEnabled: false,
 	})
 	runtime := &YouTubeProducerRuntime{
-		Logger:     testLogger(),
-		Scheduler:  scheduler,
-		ServerAddr: "invalid-address",
-		HTTPServer: &http.Server{
-			Addr:    "invalid-address",
-			Handler: http.NewServeMux(),
-		},
-		Readiness: readiness,
+		Logger:      testLogger(),
+		Scheduler:   scheduler,
+		ServerAddr:  "invalid-address",
+		HTTPServers: &sharedserver.RuntimeHTTPServers{H3: &http3.Server{Addr: "invalid-address"}},
+		Readiness:   readiness,
 	}
 
 	runtime.Run()

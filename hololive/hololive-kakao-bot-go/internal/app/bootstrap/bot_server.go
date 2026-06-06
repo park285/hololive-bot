@@ -29,10 +29,7 @@ func BuildBotServer(
 		return nil, fmt.Errorf("build bot server: provide bot router: %w", err)
 	}
 
-	addr := appConfig.Server.H2CAddr
-	if addr == "" {
-		addr = fmt.Sprintf(":%d", appConfig.Server.Port)
-	}
+	addr := fmt.Sprintf(":%d", appConfig.Server.Port)
 	return sharedserver.NewH2CServer(addr, botRouter, "hololive-bot.http"), nil
 }
 

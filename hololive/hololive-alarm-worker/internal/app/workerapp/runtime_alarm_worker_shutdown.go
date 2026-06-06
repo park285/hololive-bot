@@ -25,7 +25,6 @@ import (
 
 	appruntime "github.com/kapu/hololive-alarm-worker/internal/app/runtime"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
-	"github.com/park285/shared-go/pkg/runtime/httpserver"
 )
 
 func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) {
@@ -46,8 +45,5 @@ func (r *AlarmWorkerRuntime) ShutdownHTTPServer(ctx context.Context) error {
 		return nil
 	}
 
-	if r.HTTPServers != nil {
-		return r.HTTPServers.Shutdown(ctx)
-	}
-	return httpserver.ShutdownHTTPServer(ctx, r.HTTPServer)
+	return r.HTTPServers.Shutdown(ctx)
 }
