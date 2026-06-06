@@ -321,6 +321,7 @@ hololive/hololive-shared/pkg/providers/youtube_providers.go
 hololive/hololive-shared/pkg/repository/template_repository.go
 hololive/hololive-shared/pkg/server/internal/httpserver/channel_ids.go
 hololive/hololive-shared/pkg/server/internal/httpserver/h2c.go
+hololive/hololive-shared/pkg/server/internal/httpserver/h3.go
 hololive/hololive-shared/pkg/server/internal/httpserver/oauth_proxy.go
 hololive/hololive-shared/pkg/server/internal/httpserver/response.go
 hololive/hololive-shared/pkg/server/internal/httpserver/router_base.go
