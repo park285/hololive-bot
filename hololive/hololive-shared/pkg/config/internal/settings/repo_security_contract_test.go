@@ -272,7 +272,7 @@ func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml", renderableAPComposeFile(t, tt.file))
+			cfg := renderComposeConfigWithEnvFile(t, writeAPComposeEnvFile(t), "deploy/compose/docker-compose.prod.yml", renderableAPComposeFile(t, tt.file))
 			assertAPComposeCertMountsAreMinimized(t, cfg, tt.file)
 		})
 	}
@@ -404,8 +404,8 @@ func TestRepoAPDeployScriptsUseSplitRuntimeEnv(t *testing.T) {
 		if strings.Contains(content, "/run/hololive-bot/env") {
 			t.Fatalf("%s still references monolithic /run/hololive-bot/env", file)
 		}
-		if !strings.Contains(content, "/run/hololive-bot/compose.env") {
-			t.Fatalf("%s missing split compose env file contract", file)
+		if !strings.Contains(content, "/run/hololive-bot/ap-compose.env") {
+			t.Fatalf("%s missing AP-safe compose env file contract", file)
 		}
 	}
 }
@@ -581,6 +581,12 @@ func composeServiceBlock(t *testing.T, content, service string) string {
 func renderComposeConfig(t *testing.T, files ...string) renderedCompose {
 	t.Helper()
 
+	return renderComposeConfigWithEnvFile(t, writeCentralComposeEnvFile(t), files...)
+}
+
+func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files ...string) renderedCompose {
+	t.Helper()
+
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skipf("docker CLI unavailable: %v", err)
 	}
@@ -593,12 +599,11 @@ func renderComposeConfig(t *testing.T, files ...string) renderedCompose {
 
 	cmd := exec.Command("docker", args...)
 	repoRoot := repoRootFromConfigTest(t)
-	appEnvFile := filepath.Join(repoRoot, ".env.example")
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
-		"COMPOSE_ENV_FILE="+appEnvFile,
-		"HOLOLIVE_BOT_ENV_FILE="+appEnvFile,
-		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+appEnvFile,
+		"COMPOSE_ENV_FILE="+composeEnvFile,
+		"HOLOLIVE_BOT_ENV_FILE="+composeEnvFile,
+		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+composeEnvFile,
 		"HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="+writeAPProducerEnvFile(t),
 		"DB_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
@@ -626,6 +631,30 @@ func renderComposeConfig(t *testing.T, files ...string) renderedCompose {
 	return cfg
 }
 
+func writeCentralComposeEnvFile(t *testing.T) string {
+	t.Helper()
+
+	return writeTempEnvFile(t, "central-compose-*.env", []string{
+		"ADMIN_PASS_BCRYPT=dummy",
+		"CACHE_PASSWORD=dummy",
+		"DB_PASSWORD=dummy",
+		"IRIS_WEBHOOK_TOKEN=dummy",
+		"IRIS_BOT_TOKEN=dummy",
+		"SESSION_SECRET=dummy",
+	})
+}
+
+func writeAPComposeEnvFile(t *testing.T) string {
+	t.Helper()
+
+	return writeTempEnvFile(t, "ap-compose-*.env", []string{
+		"ADMIN_PASS_BCRYPT=dummy",
+		"CACHE_PASSWORD=dummy",
+		"DB_PASSWORD=dummy",
+		"SESSION_SECRET=dummy",
+	})
+}
+
 func renderableAPComposeFile(t *testing.T, relativePath string) string {
 	t.Helper()
 
@@ -649,25 +678,31 @@ func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) stri
 func writeAPProducerEnvFile(t *testing.T) string {
 	t.Helper()
 
-	tempFile, err := os.CreateTemp(t.TempDir(), "youtube-producer-*.env")
-	if err != nil {
-		t.Fatalf("create AP producer env file failed: %v", err)
-	}
-	tempPath := tempFile.Name()
-
-	content := strings.Join([]string{
+	return writeTempEnvFile(t, "youtube-producer-*.env", []string{
 		"API_SECRET_KEY=dummy",
 		"HOLODEX_API_KEY=dummy",
 		"HOLODEX_API_KEY_1=dummy",
 		"YOUTUBE_API_KEY=dummy",
-	}, "\n") + "\n"
+	})
+}
+
+func writeTempEnvFile(t *testing.T, pattern string, lines []string) string {
+	t.Helper()
+
+	tempFile, err := os.CreateTemp(t.TempDir(), pattern)
+	if err != nil {
+		t.Fatalf("create temp env file failed: %v", err)
+	}
+	tempPath := tempFile.Name()
+
+	content := strings.Join(lines, "\n") + "\n"
 
 	if _, err := tempFile.WriteString(content); err != nil {
 		_ = tempFile.Close()
-		t.Fatalf("write AP producer env file failed: %v", err)
+		t.Fatalf("write temp env file failed: %v", err)
 	}
 	if err := tempFile.Close(); err != nil {
-		t.Fatalf("close AP producer env file failed: %v", err)
+		t.Fatalf("close temp env file failed: %v", err)
 	}
 
 	return tempPath

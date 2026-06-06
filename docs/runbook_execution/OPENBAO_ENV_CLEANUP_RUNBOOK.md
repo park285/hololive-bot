@@ -2,17 +2,17 @@
 
 ## 목적
 
-OpenBao Agent가 렌더링한 `/run/hololive-bot/env`를 운영 Compose env의 단일 정본으로 고정하기 위해, 운영 호스트에 남은 local `.env` 파일과 shell profile export 잔재를 정리합니다.
+OpenBao Agent가 렌더링한 split env를 운영 Compose/env_file 정본으로 고정하기 위해, 운영 호스트에 남은 local `.env` 파일과 shell profile export 잔재를 정리합니다. 중앙 Compose 입력은 `/run/hololive-bot/compose.env`, AP Compose 입력은 `/run/hololive-bot/ap-compose.env`입니다. legacy `/run/hololive-bot/env`는 전환 기간 rollback용 병행 렌더입니다.
 
 이 절차는 secret 값을 출력하지 않습니다. 파일 삭제는 후보를 먼저 확인한 뒤 실행합니다.
 
 ## 1. OpenBao env 확인
 
-운영 호스트에서 `/run/hololive-bot/env`가 읽히는지 먼저 확인합니다.
+운영 호스트에서 `/run/hololive-bot/compose.env`가 읽히는지 먼저 확인합니다.
 
 ```bash
 sudo find /run/hololive-bot -maxdepth 2 -printf "%M %u %g %s %p\n" | sort
-test -r /run/hololive-bot/env || {
+test -r /run/hololive-bot/compose.env || {
   echo "env file is not readable by $(id -un)"
   exit 1
 }
@@ -28,7 +28,7 @@ awk -F= '
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
     print key
   }
-' /run/hololive-bot/env | sort
+' /run/hololive-bot/compose.env | sort
 ```
 
 wrapper preflight를 통과해야 합니다.
@@ -40,7 +40,7 @@ wrapper preflight를 통과해야 합니다.
 Osaka overlay 호스트에서는 overlay까지 함께 확인합니다.
 
 ```bash
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env \
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env \
   ./scripts/deploy/compose.sh \
   -f docker-compose.prod.yml \
   -f docker-compose.osaka.yml \
@@ -257,7 +257,7 @@ COMPOSE_ENV_FILE=./.env.local ./build-all.sh --no-bump --build-only --skip-local
 Osaka host에서는 다음도 확인합니다.
 
 ```bash
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env \
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env \
   ./scripts/deploy/compose.sh \
   -f docker-compose.prod.yml \
   -f docker-compose.osaka.yml \

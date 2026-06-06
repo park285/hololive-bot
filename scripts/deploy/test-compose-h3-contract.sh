@@ -5,10 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # 렌더 전용 더미 env — 필수 보간 변수(:?)만 채운다. live 값과 무관.
 STUB_COMPOSE_ENV="$(mktemp)"
+STUB_AP_COMPOSE_ENV="$(mktemp)"
 STUB_APP_ENV="$(mktemp)"
 STUB_YOUTUBE_PRODUCER_ENV="$(mktemp)"
 cleanup() {
-    rm -f "${STUB_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}"
+    rm -f "${STUB_COMPOSE_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}"
 }
 trap cleanup EXIT
 cat >"${STUB_COMPOSE_ENV}" <<'EOF'
@@ -17,6 +18,12 @@ CACHE_PASSWORD=stub
 DB_PASSWORD=stub
 IRIS_BOT_TOKEN=stub
 IRIS_WEBHOOK_TOKEN=stub
+SESSION_SECRET=stub
+EOF
+cat >"${STUB_AP_COMPOSE_ENV}" <<'EOF'
+ADMIN_PASS_BCRYPT=stub
+CACHE_PASSWORD=stub
+DB_PASSWORD=stub
 SESSION_SECRET=stub
 EOF
 cp "${STUB_COMPOSE_ENV}" "${STUB_APP_ENV}"
@@ -42,8 +49,10 @@ renderable_ap_compose() {
 
 render() {
     local profiles="$1"
+    local compose_env_file="$2"
     shift
-    COMPOSE_ENV_FILE="${STUB_COMPOSE_ENV}" \
+    shift
+    COMPOSE_ENV_FILE="${compose_env_file}" \
         HOLOLIVE_BOT_ENV_FILE="${STUB_APP_ENV}" \
         HOLOLIVE_ALARM_WORKER_ENV_FILE="${STUB_APP_ENV}" \
         HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="${STUB_YOUTUBE_PRODUCER_ENV}" \
@@ -51,10 +60,10 @@ render() {
         "${ROOT_DIR}/scripts/deploy/compose.sh" "$@" config --format json
 }
 
-main_render="$(render oracle "${PROD_OVERLAYS[@]}")"
-ap_render="$(render main-ap "${MAIN_AP_OVERLAYS[@]}")"
-osaka_render="$(render oracle -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka.yml)")"
-seoul_render="$(render oracle -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
+main_render="$(render oracle "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
+ap_render="$(render main-ap "${STUB_COMPOSE_ENV}" "${MAIN_AP_OVERLAYS[@]}")"
+osaka_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka.yml)")"
+seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
 
 MAIN_RENDER="${main_render}" AP_RENDER="${ap_render}" \
     OSAKA_RENDER="${osaka_render}" SEOUL_RENDER="${seoul_render}" python3 - <<'PY'

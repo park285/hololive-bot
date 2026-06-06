@@ -37,13 +37,13 @@ if [[ "$unit_exec" == *"-exit-after-auth"* ]]; then
   exit 1
 fi
 
-sudo -n test -r /run/hololive-bot/compose.env
+sudo -n test -r /run/hololive-bot/ap-compose.env
 sudo -n test -r /run/hololive-bot/youtube-producer.env
 sudo -n test -r /run/hololive-bot/certs/iris-ca.pem
 sudo -n openssl x509 -in /run/hololive-bot/certs/iris-ca.pem -noout >/dev/null
 
-iris_base_url="$(sudo -n awk -F= '$1 == "IRIS_BASE_URL" {print $2}' /run/hololive-bot/compose.env | tail -n 1)"
-iris_server_name="$(sudo -n awk -F= '$1 == "IRIS_H3_SERVER_NAME" {print $2}' /run/hololive-bot/compose.env | tail -n 1)"
+iris_base_url="$(sudo -n awk -F= '$1 == "IRIS_BASE_URL" {print $2}' /run/hololive-bot/ap-compose.env | tail -n 1)"
+iris_server_name="$(sudo -n awk -F= '$1 == "IRIS_H3_SERVER_NAME" {print $2}' /run/hololive-bot/ap-compose.env | tail -n 1)"
 if [[ -z "$iris_base_url" ]]; then
   echo "IRIS_BASE_URL is missing from rendered env" >&2
   exit 1
