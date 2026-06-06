@@ -82,6 +82,13 @@ type acceptedTestIrisClient struct {
 	statuses      []*iris.ReplyStatusSnapshot
 }
 
+type acceptedImageTestIrisClient struct {
+	acceptedTestIrisClient
+
+	imageAcceptedCalls          int
+	multipleImagesAcceptedCalls int
+}
+
 func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
 	c.mu.Lock()
 	c.lastMessageRoom = room
@@ -147,6 +154,22 @@ func (c *acceptedTestIrisClient) GetReplyStatus(_ context.Context, _ string) (*i
 	status := c.statuses[0]
 	c.statuses = c.statuses[1:]
 	return status, nil
+}
+
+func (c *acceptedImageTestIrisClient) SendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.imageAcceptedCalls++
+	if _, err := c.testIrisClient.SendImage(ctx, room, imageData, opts...); err != nil {
+		return nil, err
+	}
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-image-1", Delivery: "queued", Room: room, Type: "image"}, nil
+}
+
+func (c *acceptedImageTestIrisClient) SendMultipleImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.multipleImagesAcceptedCalls++
+	if _, err := c.testIrisClient.SendMultipleImages(ctx, room, images, opts...); err != nil {
+		return nil, err
+	}
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-images-1", Delivery: "queued", Room: room, Type: "image_multiple"}, nil
 }
 
 func (c *testIrisClient) Ping(ctx context.Context) bool { return true }
@@ -280,6 +303,22 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		assert.Contains(t, err.Error(), "send image to room room")
 	})
 
+	t.Run("send image returns failed reply status", func(t *testing.T) {
+		failedDetail := "image bridge send failed: image lease last modified mismatch"
+		client := &acceptedImageTestIrisClient{
+			acceptedTestIrisClient: acceptedTestIrisClient{
+				statuses: []*iris.ReplyStatusSnapshot{{State: "failed", Detail: &failedDetail}},
+			},
+		}
+		transport := NewCommandTransport(client, nil)
+
+		err := transport.SendImage(ctx, "room", []byte("img"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send image to room room")
+		assert.Contains(t, err.Error(), "image lease last modified mismatch")
+		assert.Equal(t, 1, client.imageAcceptedCalls)
+	})
+
 	t.Run("send image forwards byte data to client", func(t *testing.T) {
 		client := &testIrisClient{}
 		transport := NewCommandTransport(client, nil)
@@ -334,6 +373,22 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		err := transport.SendMultipleImages(ctx, "room", [][]byte{[]byte("img")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send multiple images to room room")
+	})
+
+	t.Run("send multiple images returns failed reply status", func(t *testing.T) {
+		failedDetail := "image bridge send failed: image lease last modified mismatch"
+		client := &acceptedImageTestIrisClient{
+			acceptedTestIrisClient: acceptedTestIrisClient{
+				statuses: []*iris.ReplyStatusSnapshot{{State: "failed", Detail: &failedDetail}},
+			},
+		}
+		transport := NewCommandTransport(client, nil)
+
+		err := transport.SendMultipleImages(ctx, "room", [][]byte{[]byte("img")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send multiple images to room room")
+		assert.Contains(t, err.Error(), "image lease last modified mismatch")
+		assert.Equal(t, 1, client.multipleImagesAcceptedCalls)
 	})
 
 	t.Run("send error uses formatter", func(t *testing.T) {

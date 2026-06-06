@@ -217,6 +217,41 @@ func TestCalendarCommand_Execute_ImageFailureFallsBackToText(t *testing.T) {
 	}
 }
 
+func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
+	var sentMessage string
+	deps := &Dependencies{
+		Formatter: formatter.NewResponseFormatter("!", nil),
+		SendMessage: func(_ context.Context, _, msg string) error {
+			sentMessage = msg
+			return nil
+		},
+		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+			return errors.New("iris image upload failed")
+		},
+		SendError: func(_ context.Context, _, _ string) error { return nil },
+		Logger:    slog.Default(),
+	}
+
+	repo := &calendarRepoStub{
+		entries: []domain.CalendarEntry{
+			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5},
+		},
+	}
+	renderer := &calendarImageRendererStub{data: []byte("png-data")}
+
+	cmd := NewCalendarCommand(deps, repo, renderer)
+	cmdCtx := &domain.CommandContext{Room: "test-room"}
+
+	err := cmd.Execute(context.Background(), cmdCtx, map[string]any{"month": 3})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if sentMessage == "" {
+		t.Error("expected text fallback message to be sent")
+	}
+}
+
 func TestCalendarCommand_Execute_RepoError(t *testing.T) {
 	var sentError string
 	deps := &Dependencies{
