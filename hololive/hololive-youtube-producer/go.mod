@@ -10,6 +10,7 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/shared-go v1.5.2
 	github.com/prometheus/client_golang v1.23.2
+	github.com/quic-go/quic-go v0.59.1
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.75
 	go.opentelemetry.io/otel v1.43.0
@@ -130,7 +131,6 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
