@@ -8,12 +8,23 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
 type ServiceEndpoint struct {
 	Name       string
 	URL        string
 	HealthPath string
+}
+
+// https endpoint는 H3-only 서비스이므로 URL scheme에 맞는 client를 endpoint별로 고정한다.
+func endpointClients(endpoints []ServiceEndpoint, timeout time.Duration) map[string]*http.Client {
+	clients := make(map[string]*http.Client, len(endpoints))
+	for _, endpoint := range endpoints {
+		clients[endpoint.Name] = internalhttp.NewClientForURL(endpoint.URL, timeout, nil)
+	}
+	return clients
 }
 
 type ServiceStatus struct {
@@ -30,7 +41,7 @@ type AggregatedStatus struct {
 }
 
 type Collector struct {
-	http      *http.Client
+	clients   map[string]*http.Client
 	endpoints []ServiceEndpoint
 	start     time.Time
 	version   string
@@ -38,7 +49,7 @@ type Collector struct {
 
 func NewCollector(endpoints []ServiceEndpoint, version string) *Collector {
 	return &Collector{
-		http:      &http.Client{Timeout: 3 * time.Second},
+		clients:   endpointClients(endpoints, 3*time.Second),
 		endpoints: append([]ServiceEndpoint(nil), endpoints...),
 		start:     time.Now(),
 		version:   version,
@@ -66,7 +77,7 @@ func (c *Collector) Collect(ctx context.Context) AggregatedStatus {
 func (c *Collector) collectEndpoint(ctx context.Context, endpoint ServiceEndpoint) ServiceStatus {
 	start := time.Now()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, nil)
-	resp, err := c.http.Do(req)
+	resp, err := c.clients[endpoint.Name].Do(req)
 	if err != nil {
 		msg := err.Error()
 		return ServiceStatus{Name: endpoint.Name, Available: false, Error: &msg}
