@@ -445,10 +445,37 @@ func TestRepoAPPostgresSSLModeDowngradeHasAcceptedRiskLedger(t *testing.T) {
 		"Expiry:",
 		"youtube-producer",
 		"verify-full",
+		"docker-compose.live-compat.yml",
 	} {
 		if !strings.Contains(ledger, snippet) {
 			t.Fatalf("accepted-risk-ap-postgres-sslmode.md missing required ledger field %q", snippet)
 		}
+	}
+}
+
+// ledger의 적용 범위 서술은 실제 compose overlay 렌더 결과와 일치해야 한다:
+// 기본 스택(prod 단독)은 중앙 서비스에 insecure 플래그를 렌더하지 않고,
+// AP live overlay는 youtube-producer-c에만 렌더한다. central live-compat은
+// opt-in 예외로 ledger 본문에 명시적으로 기록되어야 한다(위 테스트의
+// docker-compose.live-compat.yml snippet 계약).
+func TestRepoAPPostgresSSLModeLedgerScopeMatchesComposeRendering(t *testing.T) {
+	baseCfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml")
+	for _, service := range []string{"hololive-bot", "hololive-admin-api", "hololive-alarm-worker", "youtube-producer", "llm-scheduler"} {
+		env := composeEnvironment(t, baseCfg, service)
+		if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok && value == "true" {
+			t.Fatalf("base prod stack renders %s with POSTGRES_SSLMODE_ALLOW_INSECURE=true; insecure downgrade must stay opt-in via live-compat overlays", service)
+		}
+	}
+
+	apCfg := renderComposeConfig(t,
+		"deploy/compose/docker-compose.prod.yml",
+		"deploy/compose/docker-compose.live-compat.yml",
+		"deploy/compose/docker-compose.main-ap.yml",
+		"deploy/compose/docker-compose.main-ap.live-compat.yml",
+	)
+	producerEnv := composeEnvironment(t, apCfg, "youtube-producer-c")
+	if producerEnv["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
+		t.Fatalf("AP live overlay must keep the accepted-risk insecure flag for youtube-producer-c, got %q", producerEnv["POSTGRES_SSLMODE_ALLOW_INSECURE"])
 	}
 }
 
