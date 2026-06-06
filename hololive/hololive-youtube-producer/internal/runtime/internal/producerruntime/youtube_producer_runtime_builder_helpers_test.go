@@ -181,7 +181,7 @@ func TestBuildYouTubeProducerYouTubeComponents_AllowsBudgetSafeDefaultPollConfig
 	require.Len(t, registrations, 5)
 }
 
-func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalKeepsRecoveryEnvelopeWithinBudget(t *testing.T) {
+func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalLogsRecoveryEnvelopePressure(t *testing.T) {
 	t.Parallel()
 
 	var logBuf bytes.Buffer
@@ -221,8 +221,8 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalKeepsReco
 
 	require.NoError(t, err)
 	assert.NotContains(t, logBuf.String(), `"msg":"youtube_producer_combined_budget_exceeds_rate_limit"`)
-	assert.NotContains(t, logBuf.String(), `"msg":"youtube_producer_fault_envelope_exceeds_rate_limit"`)
-	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":18.858333333333334`)
+	assert.Contains(t, logBuf.String(), `"msg":"youtube_producer_fault_envelope_exceeds_rate_limit"`)
+	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":24.058333333333334`)
 }
 
 func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {

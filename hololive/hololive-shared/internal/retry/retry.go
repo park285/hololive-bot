@@ -41,6 +41,10 @@ type RetryOptions struct {
 	ShouldRetry func(err error) bool
 	// OnRetry: 재시도 시 호출되는 콜백 (로깅용, optional)
 	OnRetry func(attempt int, err error, delay time.Duration)
+	// MaxDelay: 계산된 재시도 지연 상한. 0이면 상한을 두지 않는다.
+	MaxDelay time.Duration
+	// DelayOverride: 에러별 재시도 지연 재정의 훅. ok=false이면 기본 지연을 사용한다.
+	DelayOverride func(err error, computed time.Duration) (delay time.Duration, ok bool)
 	// Sleep: 대기 함수 (테스트용 주입 가능, nil이면 ctxutil.SleepWithContext 사용)
 	Sleep func(ctx context.Context, d time.Duration) bool
 }
@@ -130,11 +134,24 @@ func shouldContinueRetry(opts RetryOptions, err error) bool {
 }
 
 func sleepBeforeRetry(ctx context.Context, opts RetryOptions, attempt int, err error) bool {
-	delay := ComputeBackoffDelay(attempt, opts.BaseDelay, opts.Jitter)
+	delay := retryDelay(opts, attempt, err)
 	if opts.OnRetry != nil {
 		opts.OnRetry(attempt+1, err, delay)
 	}
 	return opts.Sleep(ctx, delay)
+}
+
+func retryDelay(opts RetryOptions, attempt int, err error) time.Duration {
+	delay := ComputeBackoffDelay(attempt, opts.BaseDelay, opts.Jitter)
+	if opts.DelayOverride != nil {
+		if override, ok := opts.DelayOverride(err, delay); ok {
+			delay = override
+		}
+	}
+	if opts.MaxDelay > 0 && delay > opts.MaxDelay {
+		return opts.MaxDelay
+	}
+	return delay
 }
 
 func DefaultRetryOptions(maxAttempts int, baseDelay, jitter time.Duration) RetryOptions {

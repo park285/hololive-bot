@@ -54,10 +54,15 @@ end
 local function decrementInflight(key)
   local value = currentValue(key)
   if value <= 0 then
+    redis.call('DEL', key)
     return 0
   end
   local nextValue = value - 1
-  redis.call('SET', key, nextValue)
+  if nextValue <= 0 then
+    redis.call('DEL', key)
+    return 0
+  end
+  redis.call('DECR', key)
   return nextValue
 end
 
@@ -130,10 +135,15 @@ end
 local function decrementInflight(key)
   local value = currentValue(key)
   if value <= 0 then
+    redis.call('DEL', key)
     return 0
   end
   local nextValue = value - 1
-  redis.call('SET', key, nextValue)
+  if nextValue <= 0 then
+    redis.call('DEL', key)
+    return 0
+  end
+  redis.call('DECR', key)
   return nextValue
 end
 

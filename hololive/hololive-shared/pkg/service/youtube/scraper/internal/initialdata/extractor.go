@@ -31,6 +31,11 @@ import (
 const maxYtInitialDataCandidates = 8
 
 const (
+	maxYtInitialDataAssignmentScanBytes  = 256
+	maxYtInitialDataObjectStartScanBytes = 512
+)
+
+const (
 	ytJSONObjectOpen  byte = 123
 	ytJSONObjectClose byte = 125
 	ytDoubleQuote     byte = 34
@@ -50,6 +55,8 @@ var ytInitialDataPatterns = []*regexp.Regexp{
 
 var ytInitialDataAnchors = []string{
 	"var ytInitialData",
+	"window.ytInitialData",
+	"self.ytInitialData",
 	`window["ytInitialData"]`,
 	`window['ytInitialData']`,
 }
@@ -143,7 +150,8 @@ func findNextAnchorCandidate(html, anchor string, searchFrom int) (string, int, 
 	}
 	idx += searchFrom
 
-	eqOffset := strings.Index(html[idx:], "=")
+	assignmentEnd := min(len(html), idx+maxYtInitialDataAssignmentScanBytes)
+	eqOffset := strings.Index(html[idx:assignmentEnd], "=")
 	if eqOffset < 0 {
 		return "", idx + len(anchor), false
 	}
@@ -152,7 +160,8 @@ func findNextAnchorCandidate(html, anchor string, searchFrom int) (string, int, 
 		return "", len(html), false
 	}
 
-	objOffset := strings.IndexByte(html[eqIdx+1:], ytJSONObjectOpen)
+	objectSearchEnd := min(len(html), eqIdx+1+maxYtInitialDataObjectStartScanBytes)
+	objOffset := strings.IndexByte(html[eqIdx+1:objectSearchEnd], ytJSONObjectOpen)
 	if objOffset < 0 {
 		return "", eqIdx + 1, false
 	}

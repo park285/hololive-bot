@@ -182,10 +182,13 @@ func (s *ChannelHealthStore) delayFor(reason FailureReason, failures int) time.D
 
 func (s *ChannelHealthStore) delayBounds(reason FailureReason) (time.Duration, time.Duration, bool) {
 	bounds := map[FailureReason][2]time.Duration{
-		FailureReasonParserDrift: {s.policy.ParserDriftBase, s.policy.ParserDriftMax},
-		FailureReasonTransport:   {s.policy.TransportBase, s.policy.TransportMax},
-		FailureReasonTimeout:     {s.policy.TimeoutBase, s.policy.TimeoutMax},
-		FailureReasonHTTPStatus:  {s.policy.HTTPStatusBase, s.policy.HTTPStatusMax},
+		FailureReasonParserDrift:      {s.policy.ParserDriftBase, s.policy.ParserDriftMax},
+		FailureReasonTransport:        {s.policy.TransportBase, s.policy.TransportMax},
+		FailureReasonTimeout:          {s.policy.TimeoutBase, s.policy.TimeoutMax},
+		FailureReasonEmptyResponse:    {s.policy.TransportBase, s.policy.TransportMax},
+		FailureReasonHTTPStatus:       {s.policy.HTTPStatusBase, s.policy.HTTPStatusMax},
+		FailureReasonBlockedResponse:  {s.policy.HTTPStatusBase, s.policy.HTTPStatusMax},
+		FailureReasonResponseTooLarge: {s.policy.HTTPStatusBase, s.policy.HTTPStatusMax},
 	}
 	selected, ok := bounds[reason]
 	if !ok {

@@ -2,6 +2,7 @@ package scraping
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -71,9 +72,22 @@ func (f netHTTPPageFetcher) FetchPage(ctx context.Context, fetchReq pageFetchReq
 
 	body, err := jsonutil.ReadAllLimit(resp.Body, ytDefaults.MaxPageBodyBytes)
 	if err != nil {
-		return pageFetchResponse{}, fmt.Errorf("failed to read response body: %w", err)
+		return pageFetchResponse{}, responseBodyReadError(err)
 	}
 	fetchResp.Body = body
 
 	return fetchResp, nil
+}
+
+func responseBodyReadError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+	if errors.Is(err, jsonutil.ErrBodyTooLarge) {
+		return fmt.Errorf("%w: %v", ErrResponseTooLarge, err)
+	}
+	return fmt.Errorf("failed to read response body: %w", err)
 }

@@ -392,7 +392,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations(t *testing.T) {
 	}{
 		{name: "videos", priority: poller.PriorityNormal, interval: int64(7 * time.Minute)},
 		{name: "shorts", priority: poller.PriorityLow, interval: int64(11 * time.Minute)},
-		{name: "community", priority: poller.PriorityLow, interval: int64(13 * time.Minute)},
+		{name: "community", priority: poller.PriorityLow, interval: int64(11 * time.Minute)},
 		{name: "channel_stats", priority: poller.PriorityLow, interval: int64(4 * time.Hour)},
 		{name: "live", priority: poller.PriorityHigh, interval: int64(3 * time.Minute)},
 	}

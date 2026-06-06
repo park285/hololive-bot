@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -19,6 +20,12 @@ type backfillTestPoller struct {
 	name         string
 	polled       int
 	proxyEnabled bool
+}
+
+type registrationTestLiveStatusProvider struct{}
+
+func (registrationTestLiveStatusProvider) GetChannelsLiveStatus(context.Context, []string) ([]*domain.Stream, error) {
+	return nil, nil
 }
 
 func (p *backfillTestPoller) Poll(context.Context, string) error {
@@ -193,8 +200,54 @@ func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
 	require.Equal(t, poller.BudgetPriorityLow, shortsCold.BudgetProfile.Priority)
 }
 
+func TestPrimaryCommunityRegistrationUsesShortsInterval(t *testing.T) {
+	registrations := buildBackfillTestRegistrations(config.ScraperBackfillConfig{}, []string{"UC_A"})
+
+	shorts := requireRegistration(t, registrations, "shorts")
+	community := requireRegistration(t, registrations, "community")
+
+	require.Equal(t, shorts.Interval, community.Interval)
+	require.Equal(t, 6*time.Minute, community.Interval)
+}
+
+func TestTieredCommunityRegistrationsUseShortsInterval(t *testing.T) {
+	pollers := newYouTubeProducerPollerSet(nil, nil, nil, defaultChannelPollerMaxResults, []string{}, nil, false)
+	poll := config.ScraperPoll{
+		Videos:    15 * time.Minute,
+		Shorts:    6 * time.Minute,
+		Community: 15 * time.Minute,
+		Stats:     6 * time.Hour,
+		Live:      2 * time.Minute,
+	}
+	registrations := buildTieredYouTubeProducerChannelPollerRegistrations(
+		pollers,
+		poll,
+		polltarget.TieredTargets{
+			NotificationChannelIDs:       []string{"UC_A", "UC_B", "UC_C"},
+			ActiveNotificationChannelIDs: []string{"UC_A"},
+			WarmNotificationChannelIDs:   []string{"UC_B"},
+			ColdNotificationChannelIDs:   []string{"UC_C"},
+			StatsChannelIDs:              []string{"UC_STATS"},
+		},
+		false,
+		defaultChannelPollerMaxResults,
+	)
+
+	shortsName := pollers.shorts.Name()
+	communityName := pollers.community.Name()
+	for _, targetGroup := range []providers.ChannelTargetGroup{
+		providers.ChannelTargetGroupActive,
+		providers.ChannelTargetGroupWarm,
+		providers.ChannelTargetGroupCold,
+	} {
+		shorts := requireRegistrationForTargetGroup(t, registrations, shortsName, targetGroup)
+		community := requireRegistrationForTargetGroup(t, registrations, communityName, targetGroup)
+		require.Equal(t, shorts.Interval, community.Interval)
+	}
+}
+
 func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
-	registrations := buildBackfillTestRegistrations(config.ScraperBackfillConfig{
+	registrations := buildBackfillTestRegistrationsWithLiveBatch(config.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -205,9 +258,9 @@ func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
 		TargetGroup:       "notification",
 	}, []string{"UC_A", "UC_B"})
 
-	live := requireRegistration(t, registrations, "live")
+	live := requireRegistration(t, registrations, "live_batch")
 	require.Equal(t, float64(1), live.BudgetProfile.SourceUnits[poller.BudgetSourceHolodexLive])
-	require.Equal(t, float64(1), live.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
+	require.Equal(t, float64(2), live.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
 	require.Equal(t, poller.BudgetBurstPrimary, live.BudgetProfile.BurstClass)
 	require.Equal(t, poller.BudgetPriorityHigh, live.BudgetProfile.Priority)
 
@@ -217,7 +270,7 @@ func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
 	require.Equal(t, poller.BudgetBurstPrimary, videos.BudgetProfile.BurstClass)
 	require.Equal(t, poller.BudgetPriorityNormal, videos.BudgetProfile.Priority)
 
-	liveBackfill := requireRegistration(t, registrations, "live_backfill")
+	liveBackfill := requireRegistration(t, registrations, "live_backfill_batch")
 	require.Equal(t, poller.BudgetBurstBackfill, liveBackfill.BudgetProfile.BurstClass)
 	require.Equal(t, poller.BudgetPriorityLow, liveBackfill.BudgetProfile.Priority)
 
@@ -287,7 +340,7 @@ func TestValidateRegistrationBudgetProfilesRequiresExplicitProfiles(t *testing.T
 }
 
 func TestEstimateYouTubeProducerSourceBudgetKeepsSustainedIndependentOfAPCount(t *testing.T) {
-	registrations := buildBackfillTestRegistrations(config.ScraperBackfillConfig{
+	registrations := buildBackfillTestRegistrationsWithLiveBatch(config.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -333,6 +386,14 @@ func TestBudgetRejectsAggressiveBackfillInterval(t *testing.T) {
 }
 
 func buildBackfillTestRegistrations(backfill config.ScraperBackfillConfig, notificationChannelIDs []string) []providers.ChannelPollerRegistration {
+	return buildBackfillTestRegistrationsWithLiveStatusProvider(backfill, notificationChannelIDs, nil)
+}
+
+func buildBackfillTestRegistrationsWithLiveBatch(backfill config.ScraperBackfillConfig, notificationChannelIDs []string) []providers.ChannelPollerRegistration {
+	return buildBackfillTestRegistrationsWithLiveStatusProvider(backfill, notificationChannelIDs, registrationTestLiveStatusProvider{})
+}
+
+func buildBackfillTestRegistrationsWithLiveStatusProvider(backfill config.ScraperBackfillConfig, notificationChannelIDs []string, liveStatusProvider poller.LiveStatusProvider) []providers.ChannelPollerRegistration {
 	postgres := &databasemocks.Client{}
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		postgres,
@@ -347,7 +408,7 @@ func buildBackfillTestRegistrations(backfill config.ScraperBackfillConfig, notif
 			Backfill: backfill,
 		},
 		nil,
-		nil,
+		liveStatusProvider,
 		nil,
 		notificationChannelIDs,
 		[]string{"UC_STATS"},

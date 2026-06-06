@@ -22,6 +22,7 @@ package holodexprovider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	sharedjson "github.com/park285/shared-go/pkg/json"
 	"io"
@@ -319,6 +320,92 @@ func TestGetChannelsLiveStatus_UsesYouTubeProducerWithoutOfficialScheduleFallbac
 	}
 }
 
+func TestGetChannelsLiveStatus_PropagatesYouTubeProducerFallbackError(t *testing.T) {
+	mockReq := &MockRequester{
+		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
+			if method != "GET" {
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			}
+			if path != "/users/live" {
+				return nil, fmt.Errorf("unexpected path: %s", path)
+			}
+			return nil, &APIError{
+				Operation:  "channels_live_status",
+				StatusCode: http.StatusServiceUnavailable,
+				Err:        fmt.Errorf("upstream unavailable"),
+			}
+		},
+	}
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
+		return nil, fmt.Errorf("%s: %w", channelID, ytscraper.ErrRateLimited)
+	})
+
+	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+
+	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
+
+	if err == nil {
+		t.Fatal("GetChannelsLiveStatus() error = nil, want non-nil")
+	}
+	if !errors.Is(err, ytscraper.ErrRateLimited) {
+		t.Fatalf("GetChannelsLiveStatus() error = %v, want ErrRateLimited", err)
+	}
+	if len(streams) != 0 {
+		t.Fatalf("len(streams) = %d, want 0", len(streams))
+	}
+}
+
+func TestGetChannelsLiveStatus_PropagatesSourceLevelFallbackErrorWithPartialStreams(t *testing.T) {
+	startUnix := time.Now().UTC().Add(10 * time.Minute).Unix()
+	mockReq := &MockRequester{
+		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
+			if method != "GET" {
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			}
+			if path != "/users/live" {
+				return nil, fmt.Errorf("unexpected path: %s", path)
+			}
+			return nil, &APIError{
+				Operation:  "channels_live_status",
+				StatusCode: http.StatusServiceUnavailable,
+				Err:        fmt.Errorf("upstream unavailable"),
+			}
+		},
+	}
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
+		switch channelID {
+		case "c1":
+			return []*ytscraper.UpcomingEvent{
+				{
+					VideoID:      "video-1",
+					Title:        "stream-1",
+					Status:       "UPCOMING",
+					StartTime:    &startUnix,
+					ChannelTitle: "channel-1",
+				},
+			}, nil
+		case "c2":
+			return nil, ytscraper.ErrRateLimited
+		default:
+			return nil, fmt.Errorf("unexpected channel: %s", channelID)
+		}
+	})
+
+	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+
+	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
+
+	if err == nil {
+		t.Fatal("GetChannelsLiveStatus() error = nil, want non-nil")
+	}
+	if !errors.Is(err, ytscraper.ErrRateLimited) {
+		t.Fatalf("GetChannelsLiveStatus() error = %v, want ErrRateLimited", err)
+	}
+	if len(streams) != 0 {
+		t.Fatalf("len(streams) = %d, want 0", len(streams))
+	}
+}
+
 func TestGetChannelsLiveStatus_DoesNotFallbackOnNonRetryableError(t *testing.T) {
 	var scraperCalls atomic.Int32
 	mockReq := &MockRequester{
@@ -500,5 +587,97 @@ func TestGetChannel_ReturnsErrorWhenRetryableFallbackAlsoFails(t *testing.T) {
 	}
 	if channel != nil {
 		t.Fatalf("GetChannel() channel = %#v, want nil", channel)
+	}
+}
+
+func TestGetChannelsLiveStatusWithFailures_ReportsPartialBenignFailuresWithoutCaching(t *testing.T) {
+	startUnix := time.Now().UTC().Add(10 * time.Minute).Unix()
+	mockReq := &MockRequester{
+		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
+			return nil, &APIError{
+				Operation:  "channels_live_status",
+				StatusCode: http.StatusServiceUnavailable,
+				Err:        fmt.Errorf("upstream unavailable"),
+			}
+		},
+	}
+	benignErr := fmt.Errorf("transient fetch failure")
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
+		switch channelID {
+		case "c1":
+			return []*ytscraper.UpcomingEvent{
+				{
+					VideoID:      "video-1",
+					Title:        "stream-1",
+					Status:       "UPCOMING",
+					StartTime:    &startUnix,
+					ChannelTitle: "channel-1",
+				},
+			}, nil
+		case "c2":
+			return nil, benignErr
+		default:
+			return nil, fmt.Errorf("unexpected channel: %s", channelID)
+		}
+	})
+
+	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+	channelIDs := []string{"c1", "c2"}
+
+	streams, failed, err := service.GetChannelsLiveStatusWithFailures(context.Background(), channelIDs)
+
+	if err != nil {
+		t.Fatalf("GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
+	}
+	if len(streams) != 1 {
+		t.Fatalf("len(streams) = %d, want 1", len(streams))
+	}
+	if streams[0].ID != "video-1" {
+		t.Fatalf("streams[0].ID = %q, want %q", streams[0].ID, "video-1")
+	}
+	if len(failed) != 1 {
+		t.Fatalf("len(failed) = %d, want 1", len(failed))
+	}
+	if failedErr, ok := failed["c2"]; !ok || !errors.Is(failedErr, benignErr) {
+		t.Fatalf("failed[\"c2\"] = %v (present=%v), want wrapped benign error", failedErr, ok)
+	}
+	if _, found := service.cacheManager.GetChannelsLiveStatusStreams(context.Background(), channelIDs); found {
+		t.Fatal("partial fallback result must not be cached for the full channel set")
+	}
+}
+
+func TestGetChannelsLiveStatus_PropagatesSourceLevelErrorEvenWhenNotLast(t *testing.T) {
+	mockReq := &MockRequester{
+		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
+			return nil, &APIError{
+				Operation:  "channels_live_status",
+				StatusCode: http.StatusServiceUnavailable,
+				Err:        fmt.Errorf("upstream unavailable"),
+			}
+		},
+	}
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
+		switch channelID {
+		case "c1":
+			return nil, ytscraper.ErrRateLimited
+		case "c2":
+			return nil, fmt.Errorf("transient fetch failure")
+		default:
+			return nil, fmt.Errorf("unexpected channel: %s", channelID)
+		}
+	})
+
+	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+
+	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
+
+	if err == nil {
+		t.Fatal("GetChannelsLiveStatus() error = nil, want non-nil")
+	}
+	if !errors.Is(err, ytscraper.ErrRateLimited) {
+		t.Fatalf("GetChannelsLiveStatus() error = %v, want ErrRateLimited regardless of channel order", err)
+	}
+	if len(streams) != 0 {
+		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
 }

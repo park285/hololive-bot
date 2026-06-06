@@ -103,6 +103,11 @@ func (r ChannelPollerRegistration) WithBudgetProfile(profile poller.BudgetProfil
 		maps.Copy(sourceUnits, profile.SourceUnits)
 		profile.SourceUnits = sourceUnits
 	}
+	if profile.FallbackSourceUnits != nil {
+		fallbackSourceUnits := make(map[poller.BudgetSource]float64, len(profile.FallbackSourceUnits))
+		maps.Copy(fallbackSourceUnits, profile.FallbackSourceUnits)
+		profile.FallbackSourceUnits = fallbackSourceUnits
+	}
 	r.BudgetProfile = profile
 	r.HasBudgetProfile = true
 	return r

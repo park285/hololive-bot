@@ -25,12 +25,16 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// invalid JSON을 fallback으로 반환하면 ErrNotFound가 사라져 parser drift 기록이 막힌다.
 func pickBestYtInitialDataCandidate(candidates []string) (string, bool) {
 	best := ""
 	bestScore := -1_000_000_000
 
 	for _, candidate := range candidates {
 		score := scoreYtInitialDataCandidate(candidate)
+		if score < 0 {
+			continue
+		}
 		if score > bestScore || (score == bestScore && len(candidate) > len(best)) {
 			bestScore = score
 			best = candidate

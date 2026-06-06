@@ -100,6 +100,20 @@ func (l readinessReportingBudgetLimiter) TryReserve(
 	return reservation, decision, nil
 }
 
+func (l readinessReportingBudgetLimiter) MarkSourceCooldown(ctx context.Context, source poller.BudgetSource, ttl time.Duration, reason string) error {
+	reporter, ok := l.inner.(poller.SourceCooldownReporter)
+	if !ok {
+		return nil
+	}
+	if err := reporter.MarkSourceCooldown(ctx, source, ttl, reason); err != nil {
+		l.readiness.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
+		return err
+	}
+	l.readiness.MarkBudgetBackendAvailable()
+	l.readiness.MarkSourceCooldownFor([]string{string(source)}, ttl)
+	return nil
+}
+
 func budgetProfileSources(profile poller.BudgetProfile) []string {
 	sources := make([]string, 0, len(profile.SourceUnits))
 	for source := range profile.SourceUnits {

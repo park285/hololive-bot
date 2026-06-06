@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestStateResponseActiveActiveStartsLeaseUnavailable(t *testing.T) {
@@ -227,5 +228,34 @@ func TestStateResponseBudgetDisabledIgnoresBudgetState(t *testing.T) {
 	}
 	if payload["scraping_paused"] != false {
 		t.Fatalf("scraping_paused = %v, want false", payload["scraping_paused"])
+	}
+}
+
+func TestStateResponseSourceCooldownExpiresAfterTTL(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+
+	base := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
+	now := base
+	state.nowFunc = func() time.Time { return now }
+
+	state.MarkSourceCooldownFor([]string{"youtube_scraper"}, 30*time.Minute)
+
+	_, payload := state.Response()
+	if payload["source_cooldown"] != true {
+		t.Fatalf("source_cooldown = %v, want true while TTL active", payload["source_cooldown"])
+	}
+
+	now = base.Add(31 * time.Minute)
+
+	_, payload = state.Response()
+	if payload["source_cooldown"] != false {
+		t.Fatalf("source_cooldown = %v, want false after TTL expiry without any reserve", payload["source_cooldown"])
+	}
+	if affected, ok := payload["affected_sources"].([]string); !ok || len(affected) != 0 {
+		t.Fatalf("affected_sources = %v, want empty after expiry", payload["affected_sources"])
 	}
 }
