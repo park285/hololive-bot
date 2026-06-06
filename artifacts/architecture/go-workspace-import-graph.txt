@@ -68,7 +68,6 @@ github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shar
 github.com/kapu/hololive-admin-api/internal/app -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
 github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/shared-go/pkg/runtime/bootstrap
-github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-admin-api/internal/app -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-admin-api/internal/app/http -> github.com/kapu/hololive-admin-api/internal/server
 github.com/kapu/hololive-admin-api/internal/app/http -> github.com/kapu/hololive-shared/pkg/config
@@ -155,7 +154,6 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/backoff
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/runtime/bootstrap
-github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
@@ -340,7 +338,6 @@ github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/kapu
 github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/park285/shared-go/pkg/runtime/bootstrap
-github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/park285/shared-go/pkg/workerpool
 github.com/kapu/hololive-kakao-bot-go/internal/app/http -> github.com/kapu/hololive-shared/pkg/config
@@ -509,7 +506,6 @@ github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/k
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/logging
-github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-llm-sched/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-llm-sched/internal/llm -> github.com/kapu/hololive-shared/pkg/constants
@@ -1133,7 +1129,6 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerrunt
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/kapu/hololive-youtube-producer/internal/runtime/readiness
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/park285/shared-go/pkg/logging
-github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-youtube-producer/internal/runtime/polling -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-youtube-producer/internal/runtime/polling -> github.com/kapu/hololive-shared/pkg/domain
