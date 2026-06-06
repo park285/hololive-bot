@@ -65,6 +65,7 @@ services:
       GOMEMLIMIT: "640MiB"
       YOUTUBE_PRODUCER_INSTANCE_ID: "youtube-producer-b"
       SERVER_PORT: 30015
+      HOLOLIVE_H3_ADDR: ":30015"
       PHOTO_SYNC_ENABLED: "false"
     ports: !override
       - "127.0.0.1:30015:30015"

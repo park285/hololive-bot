@@ -94,6 +94,10 @@ for name, (url, udp_port) in H3_HEALTH.items():
     if udp_port is not None:
         check(f"{name} publishes {udp_port}/udp", has_udp_published(svc, udp_port))
 
+def h3_addr_aligned(svc, port):
+    return (svc.get("environment") or {}).get("HOLOLIVE_H3_ADDR") == f":{port}"
+
+
 pc = ap.get("youtube-producer-c")
 check("youtube-producer-c present in main-ap render", pc is not None)
 if pc is not None:
@@ -102,6 +106,7 @@ if pc is not None:
         healthcheck_url(pc) == "https://127.0.0.1:30025/health",
     )
     check("youtube-producer-c publishes 30025/udp", has_udp_published(pc, 30025))
+    check("youtube-producer-c HOLOLIVE_H3_ADDR is :30025", h3_addr_aligned(pc, 30025))
 
 
 def has_bind_target(svc, target):
@@ -122,6 +127,7 @@ for render_env, name, port in AP_PRODUCERS:
     url = f"https://127.0.0.1:{port}/health"
     check(f"{name} healthcheck is {url}", healthcheck_url(svc) == url)
     check(f"{name} publishes {port}/udp", has_udp_published(svc, port))
+    check(f"{name} HOLOLIVE_H3_ADDR is :{port}", h3_addr_aligned(svc, port))
     for cert_path in (
         "/run/hololive-bot/certs/hololive-h3.crt",
         "/run/hololive-bot/certs/hololive-h3.key",
