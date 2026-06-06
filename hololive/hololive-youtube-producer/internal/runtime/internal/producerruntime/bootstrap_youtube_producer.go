@@ -106,13 +106,13 @@ func buildIngestionRuntime(ctx context.Context, appConfig *config.Config, logger
 	configSubscriber := buildRuntimeConfigSubscriber(features, infra, youtubeDeps.scraperScheduler, logger)
 	observationWindowWriter := buildIngestionRuntimeObservationWindowWriter(spec.name, youtubeState.communityShortsPolicy, infra)
 
-	httpServer, err := buildYouTubeProducerHTTPServer(ctx, appConfig, logger, spec.name, readiness)
+	httpServers, err := buildYouTubeProducerHTTPServers(ctx, appConfig, logger, spec.name, readiness)
 	if err != nil {
 		infra.cleanup()
 		return nil, err
 	}
 
-	return newYouTubeProducerRuntime(appConfig, logger, spec.name, features, readiness, infra, youtubeState, youtubeDeps, configSubscriber, observationWindowWriter, httpServer), nil
+	return newYouTubeProducerRuntime(appConfig, logger, spec.name, features, readiness, infra, youtubeState, youtubeDeps, configSubscriber, observationWindowWriter, httpServers), nil
 }
 
 func validateIngestionRuntimeInputs(appConfig *config.Config, logger *slog.Logger) error {
@@ -166,7 +166,7 @@ func newYouTubeProducerRuntime(
 	youtubeDeps ingestionRuntimeYouTubeDependencies,
 	configSubscriber *configsub.Subscriber,
 	observationWindowWriter communityShortsObservationWindowWriter,
-	httpServer *http.Server,
+	httpServers *sharedserver.RuntimeHTTPServers,
 ) *YouTubeProducerRuntime {
 	cleanup := func() {
 		infra.cleanup()
@@ -182,8 +182,9 @@ func newYouTubeProducerRuntime(
 		PhotoSync:                              buildRuntimePhotoSyncService(appConfig, features, infra, logger),
 		ConfigSubscriber:                       configSubscriber,
 		PollTargetRefresher:                    youtubeDeps.pollTargetRefresher,
-		ServerAddr:                             fmt.Sprintf(":%d", appConfig.Server.Port),
-		HTTPServer:                             httpServer,
+		ServerAddr:                             httpServers.Addr(),
+		HTTPServer:                             legacyPrimaryHTTPServer(httpServers),
+		HTTPServers:                            httpServers,
 		Readiness:                              readinessState,
 		CommunityShortsBigBangPolicy:           youtubeState.communityShortsPolicy,
 		communityShortsObservationWindowWriter: observationWindowWriter,
@@ -219,13 +220,7 @@ func buildYouTubeProducerHTTPServer(
 	runtimeName string,
 	readinessState *readiness.State,
 ) (*http.Server, error) {
-	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, appConfig.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
-		opts.EnableGzip = true
-		opts.ReadyResponder = func(c *gin.Context) {
-			statusCode, payload := readinessState.Response()
-			c.JSON(statusCode, payload)
-		}
-	})
+	router, err := buildYouTubeProducerHTTPRouter(ctx, appConfig, logger, readinessState)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube producer router: %w", err)
 	}
@@ -234,4 +229,44 @@ func buildYouTubeProducerHTTPServer(
 		router,
 		readiness.HTTPServerOperationName(runtimeName),
 	), nil
+}
+
+func buildYouTubeProducerHTTPServers(
+	ctx context.Context,
+	appConfig *config.Config,
+	logger *slog.Logger,
+	runtimeName string,
+	readinessState *readiness.State,
+) (*sharedserver.RuntimeHTTPServers, error) {
+	router, err := buildYouTubeProducerHTTPRouter(ctx, appConfig, logger, readinessState)
+	if err != nil {
+		return nil, fmt.Errorf("build youtube producer router: %w", err)
+	}
+	return sharedserver.NewRuntimeHTTPServers(
+		appConfig.Server,
+		router,
+		readiness.HTTPServerOperationName(runtimeName),
+	)
+}
+
+func buildYouTubeProducerHTTPRouter(
+	ctx context.Context,
+	appConfig *config.Config,
+	logger *slog.Logger,
+	readinessState *readiness.State,
+) (http.Handler, error) {
+	return sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, appConfig.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
+		opts.EnableGzip = true
+		opts.ReadyResponder = func(c *gin.Context) {
+			statusCode, payload := readinessState.Response()
+			c.JSON(statusCode, payload)
+		}
+	})
+}
+
+func legacyPrimaryHTTPServer(servers *sharedserver.RuntimeHTTPServers) *http.Server {
+	if servers == nil {
+		return nil
+	}
+	return servers.H2C
 }

@@ -14,6 +14,7 @@ type MajorEventScheduler = httpserver.MajorEventScheduler
 type MajorEventMonthlyScheduler = httpserver.MajorEventMonthlyScheduler
 type MemberNewsWeeklyScheduler = httpserver.MemberNewsWeeklyScheduler
 type TriggerHandler = httpserver.TriggerHandler
+type RuntimeHTTPServers = httpserver.RuntimeHTTPServers
 
 const (
 	AppScheme                         = httpserver.AppScheme
@@ -41,6 +42,10 @@ var RegisterHealthRoutes = httpserver.RegisterHealthRoutes
 var NewHealthOnlyRuntimeRouter = httpserver.NewHealthOnlyRuntimeRouter
 var NewTriggerRuntimeRouter = httpserver.NewTriggerRuntimeRouter
 var NewH2CServer = httpserver.NewH2CServer
+var NewH3Server = httpserver.NewH3Server
+var NewRuntimeHTTPServers = httpserver.NewRuntimeHTTPServers
+var StartH3Server = httpserver.StartH3Server
+var ShutdownH3Server = httpserver.ShutdownH3Server
 var NewRuntimeRouter = httpserver.NewRuntimeRouter
 var NewStreamState = httpserver.NewStreamState
 var MemberToChannelResponse = httpserver.MemberToChannelResponse

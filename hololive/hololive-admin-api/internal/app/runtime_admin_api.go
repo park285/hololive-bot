@@ -25,6 +25,7 @@ import (
 	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -32,8 +33,9 @@ type AdminAPIRuntime struct {
 	Config *config.Config
 	Logger *slog.Logger
 
-	ServerAddr string
-	HTTPServer *http.Server
+	ServerAddr  string
+	HTTPServer  *http.Server
+	HTTPServers *sharedserver.RuntimeHTTPServers
 
 	lifecycle.Managed
 }

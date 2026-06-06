@@ -48,7 +48,7 @@ func TestRepoEnvExample_DefaultsToProductionAppEnv(t *testing.T) {
 }
 
 func TestRepoComposeProdHardenedDefaults(t *testing.T) {
-	content := readRepoFile(t, "docker-compose.prod.yml")
+	content := readRepoFile(t, "deploy/compose/docker-compose.prod.yml")
 
 	disallowed := []string{
 		"100.100.1.3",
@@ -131,7 +131,7 @@ func TestRepoComposeProdHardenedDefaults(t *testing.T) {
 }
 
 func TestRepoComposeProdRenderedIsolation(t *testing.T) {
-	cfg := renderComposeConfig(t, "docker-compose.prod.yml")
+	cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml")
 
 	for _, service := range []string{"holo-postgres", "hololive-db-migrate"} {
 		if got := stringValue(composeService(t, cfg, service)["network_mode"]); got == "host" {
@@ -174,8 +174,8 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 			t.Fatalf("youtube-producer missing scoped %s mapping", key)
 		}
 	}
-	if producerEnv["HOLOLIVE_HTTP_TRANSPORTS"] != "h2c" {
-		t.Fatalf("youtube-producer HOLOLIVE_HTTP_TRANSPORTS = %q, want h2c", producerEnv["HOLOLIVE_HTTP_TRANSPORTS"])
+	if producerEnv["HOLOLIVE_HTTP_TRANSPORTS"] != "h3" {
+		t.Fatalf("youtube-producer HOLOLIVE_HTTP_TRANSPORTS = %q, want h3", producerEnv["HOLOLIVE_HTTP_TRANSPORTS"])
 	}
 
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
@@ -193,6 +193,13 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 		}
 	}
 
+	h3KeyConsumers := map[string]bool{
+		"hololive-bot":          true,
+		"hololive-admin-api":    true,
+		"hololive-alarm-worker": true,
+		"youtube-producer":      true,
+		"llm-scheduler":         true,
+	}
 	for serviceName, service := range cfg.Services {
 		for _, port := range composePorts(t, serviceName, service) {
 			if port.HostIP != "" && port.HostIP != "127.0.0.1" && port.HostIP != "::1" && port.HostIP != "localhost" {
@@ -203,7 +210,7 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 			if target == "/run/hololive-bot/certs" {
 				t.Fatalf("%s still mounts the broad cert directory", serviceName)
 			}
-			if strings.HasSuffix(target, ".key") && serviceName != "hololive-bot" {
+			if strings.HasSuffix(target, ".key") && !h3KeyConsumers[serviceName] {
 				t.Fatalf("%s mounts private key file %s", serviceName, target)
 			}
 		}
@@ -217,24 +224,24 @@ func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
 	}{
 		{
 			name: "osaka",
-			file: "docker-compose.osaka.yml",
+			file: "deploy/compose/docker-compose.osaka.yml",
 		},
 		{
 			name: "seoul",
-			file: "docker-compose.seoul.yml",
+			file: "deploy/compose/docker-compose.seoul.yml",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := renderComposeConfig(t, "docker-compose.prod.yml", renderableAPComposeFile(t, tt.file))
+			cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml", renderableAPComposeFile(t, tt.file))
 			assertAPComposeCertMountsAreMinimized(t, cfg, tt.file)
 		})
 	}
 }
 
 func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *testing.T) {
-	overlay := readRepoFile(t, "docker-compose.live-compat.yml")
+	overlay := readRepoFile(t, "deploy/compose/docker-compose.live-compat.yml")
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
 		block := composeServiceBlock(t, overlay, service)
 		if !strings.Contains(block, "env_file:") || !strings.Contains(block, "${COMPOSE_ENV_FILE:-/run/hololive-bot/env}") {
@@ -254,7 +261,7 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 		}
 	}
 
-	cfg := renderComposeConfig(t, "docker-compose.prod.yml", "docker-compose.live-compat.yml")
+	cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml", "deploy/compose/docker-compose.live-compat.yml")
 
 	assertRenderedPort(t, cfg, "valkey-cache", "100.100.1.3", "6379", "6379", "tcp")
 	assertRenderedPort(t, cfg, "admin-dashboard", "100.100.1.3", "30190", "30190", "tcp")
@@ -335,7 +342,7 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 }
 
 func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T) {
-	overlay := readRepoFile(t, "docker-compose.main-ap.live-compat.yml")
+	overlay := readRepoFile(t, "deploy/compose/docker-compose.main-ap.live-compat.yml")
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
 		block := composeServiceBlock(t, overlay, service)
 		if !strings.Contains(block, "IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}") {
@@ -347,10 +354,10 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 	}
 
 	cfg := renderComposeConfig(t,
-		"docker-compose.prod.yml",
-		"docker-compose.live-compat.yml",
-		"docker-compose.main-ap.yml",
-		"docker-compose.main-ap.live-compat.yml",
+		"deploy/compose/docker-compose.prod.yml",
+		"deploy/compose/docker-compose.live-compat.yml",
+		"deploy/compose/docker-compose.main-ap.yml",
+		"deploy/compose/docker-compose.main-ap.live-compat.yml",
 	)
 
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
@@ -393,15 +400,15 @@ func TestRepoComposeLiveCompatWeakPostgresSSLModesCarryEscapeHatch(t *testing.T)
 	}{
 		{
 			name:  "live-compat",
-			files: []string{"docker-compose.prod.yml", "docker-compose.live-compat.yml"},
+			files: []string{"deploy/compose/docker-compose.prod.yml", "deploy/compose/docker-compose.live-compat.yml"},
 		},
 		{
 			name: "main-ap live-compat",
 			files: []string{
-				"docker-compose.prod.yml",
-				"docker-compose.live-compat.yml",
-				"docker-compose.main-ap.yml",
-				"docker-compose.main-ap.live-compat.yml",
+				"deploy/compose/docker-compose.prod.yml",
+				"deploy/compose/docker-compose.live-compat.yml",
+				"deploy/compose/docker-compose.main-ap.yml",
+				"deploy/compose/docker-compose.main-ap.live-compat.yml",
 			},
 		},
 	}
@@ -423,7 +430,7 @@ func TestRepoComposeLiveCompatWeakPostgresSSLModesCarryEscapeHatch(t *testing.T)
 }
 
 func TestRepoCompose_StandaloneDispatcherServiceIsRemoved(t *testing.T) {
-	content := readRepoFile(t, "docker-compose.prod.yml")
+	content := readRepoFile(t, "deploy/compose/docker-compose.prod.yml")
 
 	disallowed := []string{
 		"\n  dispatcher-go:",
@@ -516,9 +523,10 @@ func renderComposeConfig(t *testing.T, files ...string) renderedCompose {
 	args = append(args, "config")
 
 	cmd := exec.Command("docker", args...)
-	cmd.Dir = repoRootFromConfigTest(t)
+	repoRoot := repoRootFromConfigTest(t)
+	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
-		"COMPOSE_ENV_FILE=.env.example",
+		"COMPOSE_ENV_FILE="+filepath.Join(repoRoot, ".env.example"),
 		"DB_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
 		"IRIS_WEBHOOK_TOKEN=dummy",
@@ -558,11 +566,11 @@ func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) stri
 	if !strings.Contains(content, envFile) {
 		t.Fatalf("%s missing hardcoded AP env_file path %s", sourceName, envFile)
 	}
-	content = strings.ReplaceAll(content, envFile, "- .env.example")
+	content = strings.ReplaceAll(content, envFile, "- ../../.env.example")
 
 	repoRoot := repoRootFromConfigTest(t)
 	baseName := strings.TrimSuffix(filepath.Base(sourceName), filepath.Ext(sourceName))
-	tempFile, err := os.CreateTemp(repoRoot, "."+baseName+"-*.yml")
+	tempFile, err := os.CreateTemp(filepath.Join(repoRoot, filepath.Dir(sourceName)), "."+baseName+"-*.yml")
 	if err != nil {
 		t.Fatalf("create temp AP compose for %s failed: %v", sourceName, err)
 	}

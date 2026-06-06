@@ -82,5 +82,9 @@ func (r *AlarmWorkerRuntime) StartHTTPServer(errCh chan<- error) {
 		return
 	}
 
+	if r.HTTPServers != nil {
+		r.HTTPServers.Start(r.Logger, errCh)
+		return
+	}
 	httpserver.StartHTTPServer(r.HTTPServer, r.Logger, errCh)
 }

@@ -94,7 +94,11 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *config.Config, logger 
 
 	registerAdminAPIInternalAlarmRoutes(router, appConfig, alarmMode, logger)
 
-	return newAdminAPIRuntime(appConfig, logger, fmt.Sprintf(":%d", appConfig.Server.Port), router, infra.Cleanup), nil
+	runtime, err := newAdminAPIRuntime(appConfig, logger, router, infra.Cleanup)
+	if err != nil {
+		return cleanupAdminAPIRuntimeBuild(infra, "http server", err)
+	}
+	return runtime, nil
 }
 
 func cleanupAdminAPIRuntimeBuild(infra *sharedmodules.InfraModule, stage string, err error) (*AdminAPIRuntime, error) {
@@ -105,15 +109,19 @@ func cleanupAdminAPIRuntimeBuild(infra *sharedmodules.InfraModule, stage string,
 func newAdminAPIRuntime(
 	appConfig *config.Config,
 	logger *slog.Logger,
-	addr string,
 	router *gin.Engine,
 	cleanup func(),
-) *AdminAPIRuntime {
-	return &AdminAPIRuntime{
-		Config:     appConfig,
-		Logger:     logger,
-		ServerAddr: addr,
-		HTTPServer: sharedserver.NewH2CServer(addr, router, "hololive-admin-api.http"),
-		Managed:    lifecycle.NewManaged(cleanup),
+) (*AdminAPIRuntime, error) {
+	servers, err := sharedserver.NewRuntimeHTTPServers(appConfig.Server, router, "hololive-admin-api.http")
+	if err != nil {
+		return nil, fmt.Errorf("build admin api http servers: %w", err)
 	}
+	return &AdminAPIRuntime{
+		Config:      appConfig,
+		Logger:      logger,
+		ServerAddr:  servers.Addr(),
+		HTTPServer:  servers.H2C,
+		HTTPServers: servers,
+		Managed:     lifecycle.NewManaged(cleanup),
+	}, nil
 }

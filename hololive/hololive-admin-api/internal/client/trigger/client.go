@@ -29,6 +29,7 @@ import (
 	"time"
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/park285/shared-go/pkg/httputil"
 )
 
@@ -45,7 +46,7 @@ func NewClient(schedulerURL, apiKey string, logger *slog.Logger) *Client {
 	}
 
 	return &Client{
-		httpClient: httputil.NewJSONClient(schedulerURL, apiKey, 30*time.Second),
+		httpClient: internalhttp.NewJSONClient(schedulerURL, apiKey, 30*time.Second, logger),
 		logger:     logger,
 	}
 }

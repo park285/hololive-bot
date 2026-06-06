@@ -46,5 +46,8 @@ func (r *AlarmWorkerRuntime) ShutdownHTTPServer(ctx context.Context) error {
 		return nil
 	}
 
+	if r.HTTPServers != nil {
+		return r.HTTPServers.Shutdown(ctx)
+	}
 	return httpserver.ShutdownHTTPServer(ctx, r.HTTPServer)
 }
