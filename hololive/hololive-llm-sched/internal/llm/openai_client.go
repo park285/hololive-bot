@@ -135,7 +135,7 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	}
 
 	attrs := llmPromptSummaryAttrs("openai", c.model, systemPrompt, userPrompt)
-	sharedlog.Info(ctx, c.logger, "llm.prompt.built", "llm prompt built", attrs...)
+	sharedlog.Debug(ctx, c.logger, "llm.prompt.built", "llm prompt built", attrs...)
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.started", "llm provider request started", attrs...)
 	started := time.Now()
 
@@ -160,7 +160,7 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	successAttrs := append([]slog.Attr{}, attrs...)
 	successAttrs = append(successAttrs, sharedlog.SinceMS(started), slog.Int("result_count", 1))
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.succeeded", "llm provider request succeeded", successAttrs...)
-	sharedlog.Info(ctx, c.logger, "llm.result.validated", "llm result validated", successAttrs...)
+	sharedlog.Debug(ctx, c.logger, "llm.result.validated", "llm result validated", successAttrs...)
 
 	return text.value, nil
 }

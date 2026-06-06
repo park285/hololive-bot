@@ -59,7 +59,7 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 
 	started := time.Now()
 	attrs := commandExecutionAttrs(cmdCtx, key, cmdType)
-	sharedlog.Info(ctx, r.logger, EventBotCommandExecuteStarted, "command execution started", attrs...)
+	sharedlog.Debug(ctx, r.logger, EventBotCommandExecuteStarted, "command execution started", attrs...)
 
 	if err := r.registry.Execute(ctx, cmdCtx, key, normalizedParams); err != nil {
 		if errors.Is(err, command.ErrUnknownCommand) {
