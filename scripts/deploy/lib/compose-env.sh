@@ -10,7 +10,7 @@ compose_env_resolve_file() {
         return
     fi
 
-    local openbao_env="${OPENBAO_HOLOLIVE_ENV_FILE:-/run/hololive-bot/env}"
+    local openbao_env="${OPENBAO_HOLOLIVE_ENV_FILE:-/run/hololive-bot/compose.env}"
     if [[ -r "${openbao_env}" ]]; then
         printf '%s\n' "${openbao_env}"
         return
@@ -175,6 +175,9 @@ compose_env_is_allowed_shell_control_key() {
 
     case "${key}" in
         COMPOSE_ENV_FILE|OPENBAO_HOLOLIVE_ENV_FILE|COMPOSE_PROFILES|COMPOSE_PROJECT_NAME)
+            return 0
+            ;;
+        HOLOLIVE_BOT_ENV_FILE|HOLOLIVE_ALARM_WORKER_ENV_FILE|HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE)
             return 0
             ;;
         SHARED_GO_WORKSPACE_PATH|IRIS_CLIENT_GO_WORKSPACE_PATH)

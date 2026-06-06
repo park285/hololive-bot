@@ -25,7 +25,7 @@ services:
   youtube-producer:
     profiles: !override ["retired-youtube-producer"]
     env_file: !override
-      - /run/hololive-bot/env
+      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       <<: *seoul-ap-env
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
@@ -55,7 +55,7 @@ services:
         shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-../../../shared-go}
     container_name: hololive-youtube-producer-b
     env_file:
-      - /run/hololive-bot/env
+      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       <<: *seoul-ap-env
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"

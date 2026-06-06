@@ -4,18 +4,27 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # 렌더 전용 더미 env — 필수 보간 변수(:?)만 채운다. live 값과 무관.
-STUB_ENV="$(mktemp)"
+STUB_COMPOSE_ENV="$(mktemp)"
+STUB_APP_ENV="$(mktemp)"
+STUB_YOUTUBE_PRODUCER_ENV="$(mktemp)"
 cleanup() {
-    rm -f "${STUB_ENV}" "${ROOT_DIR}"/deploy/compose/.h3-contract-*.yml
+    rm -f "${STUB_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}"
 }
 trap cleanup EXIT
-cat >"${STUB_ENV}" <<'EOF'
+cat >"${STUB_COMPOSE_ENV}" <<'EOF'
 ADMIN_PASS_BCRYPT=stub
 CACHE_PASSWORD=stub
 DB_PASSWORD=stub
 IRIS_BOT_TOKEN=stub
 IRIS_WEBHOOK_TOKEN=stub
 SESSION_SECRET=stub
+EOF
+cp "${STUB_COMPOSE_ENV}" "${STUB_APP_ENV}"
+cat >"${STUB_YOUTUBE_PRODUCER_ENV}" <<'EOF'
+API_SECRET_KEY=stub
+HOLODEX_API_KEY=stub
+HOLODEX_API_KEY_1=stub
+YOUTUBE_API_KEY=stub
 EOF
 
 PROD_OVERLAYS=(
@@ -27,19 +36,18 @@ MAIN_AP_OVERLAYS=(
     -f deploy/compose/docker-compose.main-ap.yml
     -f deploy/compose/docker-compose.main-ap.live-compat.yml
 )
-# AP compose 는 보안 계약상 env_file 을 /run/hololive-bot/env 로 하드코딩하므로
-# repo_security_contract_test 와 동일하게 임시 사본에서 더미 env 로 치환해 렌더한다.
 renderable_ap_compose() {
-    local src="$1" tmp
-    tmp="$(mktemp "${ROOT_DIR}/deploy/compose/.h3-contract-XXXXXX.yml")"
-    sed "s#- /run/hololive-bot/env#- ${STUB_ENV}#" "${ROOT_DIR}/${src}" >"${tmp}"
-    printf '%s\n' "${tmp}"
+    printf '%s\n' "$1"
 }
 
 render() {
     local profiles="$1"
     shift
-    COMPOSE_ENV_FILE="${STUB_ENV}" COMPOSE_PROFILES="${profiles}" \
+    COMPOSE_ENV_FILE="${STUB_COMPOSE_ENV}" \
+        HOLOLIVE_BOT_ENV_FILE="${STUB_APP_ENV}" \
+        HOLOLIVE_ALARM_WORKER_ENV_FILE="${STUB_APP_ENV}" \
+        HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="${STUB_YOUTUBE_PRODUCER_ENV}" \
+        COMPOSE_PROFILES="${profiles}" \
         "${ROOT_DIR}/scripts/deploy/compose.sh" "$@" config --format json
 }
 
@@ -136,6 +144,9 @@ for render_env, name, port in AP_PRODUCERS:
         "/run/hololive-bot/certs/hololive-h3.key",
     ):
         check(f"{name} mounts {cert_path}", has_bind_target(svc, cert_path))
+    env = svc.get("environment") or {}
+    for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
+        check(f"{name} does not receive {iris_key}", iris_key not in env)
 
 H2C_URL_PATTERNS = ("http://llm-scheduler", "http://hololive-admin-api")
 

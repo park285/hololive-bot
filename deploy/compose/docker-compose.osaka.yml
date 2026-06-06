@@ -29,7 +29,7 @@ x-osaka-ap-service: &osaka-ap-service
     service: youtube-producer
   profiles: ["oracle"]
   env_file:
-    - /run/hololive-bot/env
+    - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
   volumes: !override
     - ../../data:/app/data
     - ../../logs:/app/logs
@@ -56,7 +56,7 @@ services:
   youtube-producer:
     profiles: !override ["retired-youtube-producer"]
     env_file: !override
-      - /run/hololive-bot/env
+      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       <<: *osaka-ap-env
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
