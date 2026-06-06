@@ -2,17 +2,15 @@ package httpserver
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	runtimehttpserver "github.com/park285/shared-go/pkg/runtime/httpserver"
-	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -45,25 +43,7 @@ func NewH3Server(addr string, handler http.Handler, certFile, keyFile, operation
 		handler = otelhttp.NewHandler(handler, operation)
 	}
 
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, fmt.Errorf("load h3 certificate pair: %w", err)
-	}
-
-	return &http3.Server{
-		Addr:    addr,
-		Handler: handler,
-		TLSConfig: http3.ConfigureTLSConfig(&tls.Config{
-			MinVersion:   tls.VersionTLS13,
-			Certificates: []tls.Certificate{cert},
-		}),
-		QUICConfig: &quic.Config{
-			InitialPacketSize: 1200,
-			KeepAlivePeriod:   10 * time.Second,
-			MaxIdleTimeout:    60 * time.Second,
-		},
-		MaxHeaderBytes: http.DefaultMaxHeaderBytes,
-	}, nil
+	return sharedh3.NewServer(addr, handler, certFile, keyFile)
 }
 
 func (s *RuntimeHTTPServers) Addr() string {
