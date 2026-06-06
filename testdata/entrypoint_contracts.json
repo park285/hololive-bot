@@ -56,7 +56,7 @@
   {
     "path": "hololive/hololive-youtube-producer/cmd/runtime/healthcheck/main.go",
     "must_contain": [
-      "checkURL("
+      "healthprobe.CheckURL("
     ]
   },
   {
