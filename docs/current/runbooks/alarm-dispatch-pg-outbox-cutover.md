@@ -76,7 +76,7 @@ go test ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox -count=1
 ```
 
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml config \
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml config \
   | grep -E 'ALARM_DISPATCH_(PUBLISH_MODE|CONSUMER_MODE|WAKEUP|MAX_BATCH|POLL|LEASE|RECOVERY|RETENTION|IDLE)'
 ```
 

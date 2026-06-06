@@ -97,7 +97,7 @@ Local CI gate:
 ./scripts/deploy/compose-redeploy-service.sh hololive-admin-api
 ./scripts/deploy/compose-redeploy-service.sh hololive-alarm-worker
 ./scripts/deploy/compose-redeploy-service.sh llm-scheduler
-COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
 원격 AP(`youtube-producer-a`/`-b`)는 [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)의 `./scripts/deploy/ap-deploy.sh <host>` 절차를 따릅니다.
@@ -121,8 +121,8 @@ SSOT는 application stdout/stderr와 `./scripts/deploy/compose.sh ... logs`입�
 | `youtube-producer` | `http://127.0.0.1:30025/health` (main `c`; `a`/`b`는 해당 AP 로컬 `30005`/`30015`) |
 
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml ps
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f <service>
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f <service>
 ./scripts/logs/logs.sh query <service> --since 1h --limit 1000
 ```
 

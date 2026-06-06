@@ -62,7 +62,7 @@ check_forbidden_scoped_go_hits \
   'DeliveryDispatcher|NewIrisMessageSender|outbox\.NewDispatcher|ProvideIrisClient|iris\.WithBaseURL|iris\.WithBotToken' \
   "hololive/hololive-admin-api"
 
-compose="${ROOT_DIR}/docker-compose.prod.yml"
+compose="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
 for service in youtube-producer llm-scheduler; do
   block="$(awk -v service="  ${service}:" '
     $0 == service {in_block=1; print; next}

@@ -14,6 +14,7 @@ setup_repo() {
   mkdir -p \
     "${workdir}/internal/workspace" \
     "${workdir}/cmd/probe" \
+    "${workdir}/deploy/compose" \
     "${workdir}/shared-go/pkg/lib" \
     "${workdir}/hololive/hololive-shared/pkg/common" \
     "${workdir}/hololive/hololive-kakao-bot-go/internal/lib" \
@@ -32,7 +33,7 @@ setup_repo() {
   printf 'package lib\n' >"${workdir}/hololive/hololive-kakao-bot-go/internal/lib/a.go"
   printf 'package app\n' >"${workdir}/hololive/hololive-kakao-bot-go/internal/app/a.go"
   printf '#!/usr/bin/env bash\n' >"${workdir}/scripts/run.sh"
-  printf 'services: {}\n' >"${workdir}/docker-compose.prod.yml"
+  printf 'services: {}\n' >"${workdir}/deploy/compose/docker-compose.prod.yml"
   printf 'APP_ENV=production\n' >"${workdir}/.env.example"
 
   git -C "${workdir}" add -A
@@ -143,7 +144,7 @@ expect_scope "changed scripts only" "$(run_scope "${workdir}" changed "${base_re
 workdir="${tmpdir}/compose-contract"
 setup_repo "${workdir}"
 base_ref="$(git -C "${workdir}" rev-parse HEAD)"
-printf '# changed\n' >>"${workdir}/docker-compose.prod.yml"
+printf '# changed\n' >>"${workdir}/deploy/compose/docker-compose.prod.yml"
 expect_scope "changed compose contract file" \
   "$(run_scope "${workdir}" changed "${base_ref}")" \
   "./hololive/hololive-shared/..."

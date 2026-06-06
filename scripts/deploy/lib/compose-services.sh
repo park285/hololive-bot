@@ -52,7 +52,7 @@ compose_service_redeploy_usage_lines() {
         "  hololive-alarm-worker | alarm-worker" \
         "  llm-scheduler | llm" \
         "  youtube-producer" \
-        "  youtube-producer-c (main-ap; COMPOSE_FILE 에 docker-compose.main-ap.yml + COMPOSE_PROFILES=main-ap 필요)" \
+        "  youtube-producer-c (main-ap; COMPOSE_FILE 에 deploy/compose/docker-compose.main-ap.yml + COMPOSE_PROFILES=main-ap 필요)" \
         "  holo-postgres | postgres" \
         "  valkey-cache | valkey" \
         "  hololive-db-migrate | migrate" \

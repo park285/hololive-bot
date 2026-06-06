@@ -16,8 +16,8 @@ Use the repository deployment flow for the affected Compose service. Exact image
 
 ```bash
 ./scripts/deploy/compose-redeploy-service.sh <service>
-./scripts/deploy/compose.sh -f docker-compose.prod.yml ps <service>
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 <service>
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps <service>
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 <service>
 ```
 
 Runtime service names:

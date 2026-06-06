@@ -52,17 +52,31 @@ esac
 services_list="${AP_SERVICES[*]}"
 containers_list="${AP_CONTAINERS[*]}"
 ports_list="${AP_PORTS[*]}"
+PROD_COMPOSE_FILE="deploy/compose/docker-compose.prod.yml"
+PROD_COMPOSE_LEGACY_FILE="docker-compose.prod.yml"
+PROD_BACKUP_FILE="$BACKUP_DIR/$PROD_COMPOSE_FILE.prechange"
+PROD_BACKUP_LEGACY_FILE="$BACKUP_DIR/$PROD_COMPOSE_LEGACY_FILE.prechange"
+AP_BACKUP_FILE="$BACKUP_DIR/$AP_COMPOSE_FILE.prechange"
+AP_BACKUP_LEGACY_FILE="$BACKUP_DIR/$(basename "$AP_COMPOSE_FILE").prechange"
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-test -r '$BACKUP_DIR/$AP_COMPOSE_FILE.prechange'
-test -r '$BACKUP_DIR/docker-compose.prod.yml.prechange'
+prod_backup_file='$PROD_BACKUP_FILE'
+if [[ ! -r \"\$prod_backup_file\" && -r '$PROD_BACKUP_LEGACY_FILE' ]]; then
+  prod_backup_file='$PROD_BACKUP_LEGACY_FILE'
+fi
+ap_backup_file='$AP_BACKUP_FILE'
+if [[ ! -r \"\$ap_backup_file\" && -r '$AP_BACKUP_LEGACY_FILE' ]]; then
+  ap_backup_file='$AP_BACKUP_LEGACY_FILE'
+fi
+test -r \"\$prod_backup_file\"
+test -r \"\$ap_backup_file\"
 sudo -n test -r /run/hololive-bot/env
 test -w /var/run/docker.sock || groups | grep -qw docker
 echo backup_dir='$BACKUP_DIR'
-echo would_restore='$BACKUP_DIR/docker-compose.prod.yml.prechange'
-echo would_restore='$BACKUP_DIR/$AP_COMPOSE_FILE.prechange'
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$BACKUP_DIR/docker-compose.prod.yml.prechange' -f '$BACKUP_DIR/$AP_COMPOSE_FILE.prechange' config --quiet"
+echo would_restore=\"\$prod_backup_file\"
+echo would_restore=\"\$ap_backup_file\"
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_backup_file\" -f \"\$ap_backup_file\" config --quiet"
 
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "[DRY-RUN] Rollback preflight passed; no remote files or containers changed."
@@ -75,11 +89,20 @@ rollback_started_at="$(
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-cp '$BACKUP_DIR/docker-compose.prod.yml.prechange' docker-compose.prod.yml
-cp '$BACKUP_DIR/$AP_COMPOSE_FILE.prechange' '$AP_COMPOSE_FILE'
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f '$AP_COMPOSE_FILE' config --quiet
+prod_backup_file='$PROD_BACKUP_FILE'
+if [[ ! -r \"\$prod_backup_file\" && -r '$PROD_BACKUP_LEGACY_FILE' ]]; then
+  prod_backup_file='$PROD_BACKUP_LEGACY_FILE'
+fi
+ap_backup_file='$AP_BACKUP_FILE'
+if [[ ! -r \"\$ap_backup_file\" && -r '$AP_BACKUP_LEGACY_FILE' ]]; then
+  ap_backup_file='$AP_BACKUP_LEGACY_FILE'
+fi
+mkdir -p \"\$(dirname '$PROD_COMPOSE_FILE')\" \"\$(dirname '$AP_COMPOSE_FILE')\"
+cp \"\$prod_backup_file\" '$PROD_COMPOSE_FILE'
+cp \"\$ap_backup_file\" '$AP_COMPOSE_FILE'
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
 docker stop $containers_list >/dev/null 2>&1 || true
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate $services_list
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate $services_list
 echo rollback_started_at='$rollback_started_at'"
 
 remote "set -euo pipefail

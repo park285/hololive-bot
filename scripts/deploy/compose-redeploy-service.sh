@@ -9,13 +9,28 @@ cd "$ROOT_DIR"
 . "$ROOT_DIR/scripts/deploy/lib/removed-runtimes.sh"
 REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+compose_file_resolve_path() {
+    local file="$1"
+    if [ ! -r "$file" ] && [ -r "$ROOT_DIR/deploy/compose/$file" ]; then
+        printf '%s\n' "deploy/compose/$file"
+        return
+    fi
+    printf '%s\n' "$file"
+}
+
+COMPOSE_FILE="${COMPOSE_FILE:-deploy/compose/docker-compose.prod.yml}"
 # COMPOSE_FILE 은 docker compose 관례대로 ':' 로 구분된 다중 경로를 허용한다(예: prod:main-ap overlay).
 IFS=':' read -r -a COMPOSE_FILE_PATHS <<< "${COMPOSE_FILE}"
 COMPOSE_FILE_ARGS=()
-for _compose_file in "${COMPOSE_FILE_PATHS[@]}"; do
-    [ -n "${_compose_file}" ] && COMPOSE_FILE_ARGS+=("-f" "${_compose_file}")
+for _compose_file_index in "${!COMPOSE_FILE_PATHS[@]}"; do
+    _compose_file="${COMPOSE_FILE_PATHS[$_compose_file_index]}"
+    if [ -n "${_compose_file}" ]; then
+        _compose_file="$(compose_file_resolve_path "${_compose_file}")"
+        COMPOSE_FILE_PATHS[$_compose_file_index]="${_compose_file}"
+        COMPOSE_FILE_ARGS+=("-f" "${_compose_file}")
+    fi
 done
+COMPOSE_FILE="$(IFS=:; printf '%s' "${COMPOSE_FILE_PATHS[*]}")"
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 
 resolve_shared_go_workspace_path() {
@@ -95,7 +110,7 @@ if [ "$TARGET" = "youtube-producer" ] && [[ ",${COMPOSE_FILE}," != *"docker-comp
 fi
 if [ "$TARGET" = "youtube-producer-c" ]; then
     if [[ ",${COMPOSE_FILE}," != *"docker-compose.main-ap.yml"* ]]; then
-        echo "[ERROR] youtube-producer-c requires docker-compose.main-ap.yml in COMPOSE_FILE (e.g. COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml)."
+        echo "[ERROR] youtube-producer-c requires docker-compose.main-ap.yml in COMPOSE_FILE (e.g. COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.main-ap.yml)."
         exit 1
     fi
     if [[ ",${COMPOSE_PROFILES:-}," != *",main-ap,"* ]]; then

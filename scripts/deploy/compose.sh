@@ -6,6 +6,15 @@ cd "${ROOT_DIR}"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 
+compose_file_resolve_path() {
+    local file="$1"
+    if [[ ! -r "${file}" && -r "${ROOT_DIR}/deploy/compose/${file}" ]]; then
+        printf '%s\n' "deploy/compose/${file}"
+        return
+    fi
+    printf '%s\n' "${file}"
+}
+
 resolve_shared_go_workspace_path() {
     local candidate="${SHARED_GO_WORKSPACE_PATH:-}"
     if [[ -z "${candidate}" ]]; then
@@ -28,13 +37,15 @@ if ! SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"; then
 fi
 export SHARED_GO_WORKSPACE_PATH
 
-compose_args=("$@")
+compose_args=()
 compose_files=()
 compose_invokes_up=false
 previous=""
 for arg in "$@"; do
     if [[ "${previous}" == "-f" || "${previous}" == "--file" ]]; then
-        compose_files+=("${arg}")
+        resolved_file="$(compose_file_resolve_path "${arg}")"
+        compose_files+=("${resolved_file}")
+        compose_args+=("${previous}" "${resolved_file}")
         previous=""
         continue
     fi
@@ -42,9 +53,13 @@ for arg in "$@"; do
     case "${arg}" in
         -f|--file)
             previous="${arg}"
+            continue
             ;;
         --file=*)
-            compose_files+=("${arg#--file=}")
+            resolved_file="$(compose_file_resolve_path "${arg#--file=}")"
+            compose_files+=("${resolved_file}")
+            compose_args+=("--file=${resolved_file}")
+            continue
             ;;
         --env-file|--env-file=*)
             echo "[ERROR] Use COMPOSE_ENV_FILE with this wrapper; do not pass --env-file directly" >&2
@@ -55,6 +70,7 @@ for arg in "$@"; do
     if [[ "${arg}" == "up" ]]; then
         compose_invokes_up=true
     fi
+    compose_args+=("${arg}")
 done
 
 if [[ -n "${previous}" ]]; then
@@ -63,8 +79,8 @@ if [[ -n "${previous}" ]]; then
 fi
 
 if [[ ${#compose_files[@]} -eq 0 ]]; then
-    compose_files=(docker-compose.prod.yml)
-    compose_args=(-f docker-compose.prod.yml "$@")
+    compose_files=(deploy/compose/docker-compose.prod.yml)
+    compose_args=(-f deploy/compose/docker-compose.prod.yml "$@")
 fi
 
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"

@@ -73,13 +73,13 @@ cd admin-dashboard/frontend && npm ci && npm run lint && npm run build
 - env 정본은 OpenBao 렌더 파일 `/run/hololive-bot/env` (`0600 root`)이므로 중앙 호스트 재배포는 `sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env ./scripts/deploy/compose-redeploy-service.sh admin-dashboard` 형태로 실행합니다.
 - `shared_go_workspace` build context는 스크립트가 `SHARED_GO_WORKSPACE_PATH`로 자동 해석합니다 (기본 `../shared-go`).
 - 이미지 버전 스탬프는 `HOLO_BOT_VERSION` → `-X main.Version` 으로 주입됩니다.
-- compose 정의: `docker-compose.prod.yml`의 `admin-dashboard` 서비스, Dockerfile: `admin-dashboard/Dockerfile`.
+- compose 정의: `deploy/compose/docker-compose.prod.yml`의 `admin-dashboard` 서비스, Dockerfile: `admin-dashboard/Dockerfile`.
 - `--build`가 의존성 `hololive-admin-api` 이미지도 재빌드하므로 admin-api 컨테이너가 함께 재생성됩니다(수 초 단절). 동반 재기동을 피해야 하면 사전 빌드 후 `up -d --no-deps admin-dashboard`를 사용합니다.
 
 ## Logs
 
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f admin-dashboard
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f admin-dashboard
 tail -f logs/admin-dashboard.log
 ```
 
@@ -92,8 +92,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml ps valkey-cache admin-dashboard
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 admin-dashboard
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps valkey-cache admin-dashboard
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 admin-dashboard
 ```
 
 Mitigation:
@@ -107,7 +107,7 @@ Symptoms:
 Diagnosis:
 ```bash
 curl http://127.0.0.1:30006/health
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 hololive-admin-api
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 hololive-admin-api
 ```
 
 Mitigation:
@@ -121,7 +121,7 @@ Symptoms:
 Diagnosis:
 ```bash
 docker ps --filter name=docker-proxy
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=100 docker-proxy
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=100 docker-proxy
 ```
 
 Mitigation:
@@ -134,7 +134,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=50 admin-dashboard
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=50 admin-dashboard
 ```
 
 Mitigation:

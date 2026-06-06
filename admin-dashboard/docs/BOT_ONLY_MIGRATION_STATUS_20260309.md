@@ -240,5 +240,5 @@ Docker 관리 대상 필터에서 제거:
 
 주의:
 
-- `admin-dashboard`는 현재 `docker-compose.prod.yml`에 서비스로 등록되어 있지 않습니다.
+- `admin-dashboard`는 현재 `deploy/compose/docker-compose.prod.yml`에 서비스로 등록되어 있지 않습니다.
 - 따라서 이미지 재빌드는 가능하지만, compose 기반 “서비스 반영”은 별도 배포 경로가 필요합니다.

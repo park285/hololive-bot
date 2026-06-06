@@ -2,7 +2,7 @@
 
 ## Scope
 
-현재 production baseline은 단일 호스트 `docker-compose.prod.yml`입니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 실제 배포 절차는 `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`를 따릅니다.
+현재 production baseline은 단일 호스트 `deploy/compose/docker-compose.prod.yml`입니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 실제 배포 절차는 `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`를 따릅니다.
 
 ## Non-Goals
 
@@ -50,6 +50,6 @@
 
 ## Related Files
 
-- `docker-compose.prod.yml`
+- `deploy/compose/docker-compose.prod.yml`
 - `docs/current/PROJECT_MAP.md`
 - `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`

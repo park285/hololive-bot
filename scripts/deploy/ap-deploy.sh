@@ -130,6 +130,9 @@ fi
 services_list="${AP_SERVICES[*]}"
 containers_list="${AP_CONTAINERS[*]}"
 ports_list="${AP_PORTS[*]}"
+PROD_COMPOSE_FILE="deploy/compose/docker-compose.prod.yml"
+PROD_COMPOSE_LEGACY_FILE="docker-compose.prod.yml"
+AP_COMPOSE_LEGACY_FILE="$(basename "$AP_COMPOSE_FILE")"
 
 change_id="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="backups/$AP_BACKUP_PREFIX-$change_id"
@@ -137,12 +140,23 @@ backup_dir="backups/$AP_BACKUP_PREFIX-$change_id"
 remote "set -euo pipefail
 cd ~/hololive-bot
 mkdir -p '$backup_dir'
-cp docker-compose.prod.yml '$backup_dir/docker-compose.prod.yml.prechange'
-cp '$AP_COMPOSE_FILE' '$backup_dir/$AP_COMPOSE_FILE.prechange'
+prod_prechange_file='$PROD_COMPOSE_FILE'
+if [[ ! -r \"\$prod_prechange_file\" && -r '$PROD_COMPOSE_LEGACY_FILE' ]]; then
+  prod_prechange_file='$PROD_COMPOSE_LEGACY_FILE'
+fi
+ap_prechange_file='$AP_COMPOSE_FILE'
+if [[ ! -r \"\$ap_prechange_file\" && -r '$AP_COMPOSE_LEGACY_FILE' ]]; then
+  ap_prechange_file='$AP_COMPOSE_LEGACY_FILE'
+fi
+test -r \"\$prod_prechange_file\"
+test -r \"\$ap_prechange_file\"
+mkdir -p \"\$(dirname '$backup_dir/$PROD_COMPOSE_FILE.prechange')\" \"\$(dirname '$backup_dir/$AP_COMPOSE_FILE.prechange')\"
+cp \"\$prod_prechange_file\" '$backup_dir/$PROD_COMPOSE_FILE.prechange'
+cp \"\$ap_prechange_file\" '$backup_dir/$AP_COMPOSE_FILE.prechange'
 docker ps -a --filter label=com.docker.compose.project=hololive --format '{{json .}}' > '$backup_dir/prechange-containers.json' 2>/dev/null || true
 sudo -n test -r /run/hololive-bot/env
 test -w /var/run/docker.sock || groups | grep -qw docker
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f '$AP_COMPOSE_FILE' config --quiet
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet
 echo backup_dir='$backup_dir'"
 
 rsync -ai \
@@ -160,9 +174,9 @@ change_started_at="$(
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f '$AP_COMPOSE_FILE' config --quiet
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f '$AP_COMPOSE_FILE' build $services_list
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
 echo change_started_at='$change_started_at'"
 
 remote "set -euo pipefail

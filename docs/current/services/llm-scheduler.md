@@ -58,7 +58,7 @@ Major event, member news, LLM scheduling, digest generation, and notification in
 
 ## Observability
 
-- Logs: `./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f llm-scheduler`
+- Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f llm-scheduler`
 - Health: `http://127.0.0.1:30003/health`
 - Ready: `http://127.0.0.1:30003/ready`
 - Metrics: 검토 필요

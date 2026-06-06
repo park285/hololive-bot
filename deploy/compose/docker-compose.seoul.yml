@@ -30,9 +30,9 @@ services:
       <<: *seoul-ap-env
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
     volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
     logging: *seoul-ap-logging
     deploy:
@@ -52,7 +52,7 @@ services:
       provenance: false
       sbom: false
       additional_contexts: !override
-        shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
+        shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-../../../shared-go}
     container_name: hololive-youtube-producer-b
     env_file:
       - /run/hololive-bot/env
@@ -71,9 +71,9 @@ services:
     healthcheck:
       test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30015/health"]
     volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
     logging: *seoul-ap-logging
     deploy:

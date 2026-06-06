@@ -10,9 +10,9 @@ scripts/deploy/lib/removed-runtimes.sh
 scripts/deploy/lib/ap-host.sh
 scripts/deploy/ap-hosts/osaka.conf
 scripts/deploy/ap-hosts/seoul.conf
-docker-compose.prod.yml
-docker-compose.osaka.yml
-docker-compose.seoul.yml
+deploy/compose/docker-compose.prod.yml
+deploy/compose/docker-compose.osaka.yml
+deploy/compose/docker-compose.seoul.yml
 hololive/hololive-youtube-producer/Dockerfile
 hololive/hololive-youtube-producer/Dockerfile.dockerignore
 hololive/hololive-youtube-producer/go.mod

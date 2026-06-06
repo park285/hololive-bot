@@ -22,7 +22,7 @@ services_list="${AP_SERVICES[*]}"
 ports_list="${AP_PORTS[*]}"
 
 echo "== $AP_NAME compose services =="
-remote "cd ~/hololive-bot && sudo -n test -r /run/hololive-bot/env && (test -w /var/run/docker.sock || groups | grep -qw docker) && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps --format 'table {{.Name}}\t{{.Service}}\t{{.Status}}\t{{.Ports}}'"
+remote "cd ~/hololive-bot && sudo -n test -r /run/hololive-bot/env && (test -w /var/run/docker.sock || groups | grep -qw docker) && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps --format 'table {{.Name}}\t{{.Service}}\t{{.Status}}\t{{.Ports}}'"
 
 echo
 echo "== Health =="

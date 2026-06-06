@@ -66,6 +66,13 @@ compose_env_assert_shell_matches_all_file_keys "$env_file"
 compose_env_assert_no_shell_shadow_for_compose_files "$env_file" "$compose_file"
 pass "valid env passes"
 
+(
+    cd "$tmpdir"
+    resolved="$(COMPOSE_ENV_FILE=env compose_env_resolve_file)"
+    [[ "${resolved}" == "${env_file}" ]] || fail "relative COMPOSE_ENV_FILE resolved to ${resolved}, want ${env_file}"
+)
+pass "relative COMPOSE_ENV_FILE resolves to an absolute path"
+
 mapfile -t keys < <(compose_env_list_keys_from_file "$env_file")
 [[ "${keys[*]}" == "ALARM_DISPATCH_CONSUMER_MODE ALARM_DISPATCH_PUBLISH_MODE CACHE_PASSWORD DB_PASSWORD YOUTUBE_PRODUCER_RUNTIME_ALLOWED" ]] || fail "unexpected env keys: ${keys[*]}"
 pass "env keys are listed"

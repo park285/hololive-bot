@@ -33,7 +33,7 @@
 ## Logs
 
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f hololive-admin-api
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-admin-api
 ```
 
 ## Metrics
@@ -50,8 +50,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml ps hololive-admin-api
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 hololive-admin-api
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps hololive-admin-api
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 hololive-admin-api
 curl http://127.0.0.1:30006/health
 ```
 
@@ -68,8 +68,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 hololive-admin-api
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 llm-scheduler
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 hololive-admin-api
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 llm-scheduler
 ```
 
 Mitigation:

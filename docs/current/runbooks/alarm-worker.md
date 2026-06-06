@@ -41,7 +41,7 @@
 ## Logs
 
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f hololive-alarm-worker
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-alarm-worker
 ```
 
 ## Metrics
@@ -58,8 +58,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
-./scripts/deploy/compose.sh -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LLEN alarm:dispatch:queue
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LLEN alarm:dispatch:queue
 ```
 
 Mitigation:
@@ -76,7 +76,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 hololive-alarm-worker
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 hololive-alarm-worker
 ```
 
 Mitigation:
