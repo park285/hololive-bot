@@ -10,8 +10,6 @@ services:
       IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
 
   youtube-producer-c:
-    env_file: !override
-      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
       POSTGRES_HOST: host.docker.internal
       POSTGRES_PORT: "5433"

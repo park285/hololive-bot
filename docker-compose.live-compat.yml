@@ -50,8 +50,6 @@ services:
       - valkey-cache-socket:/var/run/valkey:ro
 
   hololive-admin-api:
-    env_file: !override
-      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
       <<: *live-postgres-env
     volumes: !override
@@ -76,8 +74,6 @@ services:
       - valkey-cache-socket:/var/run/valkey:ro
 
   youtube-producer:
-    env_file: !override
-      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
       <<: *live-postgres-env
     volumes: !override
@@ -88,8 +84,6 @@ services:
       - valkey-cache-socket:/var/run/valkey:ro
 
   llm-scheduler:
-    env_file: !override
-      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
       <<: *live-postgres-env
     volumes: !override
@@ -100,8 +94,6 @@ services:
       - valkey-cache-socket:/var/run/valkey:ro
 
   admin-dashboard:
-    env_file: !override
-      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
     environment:
       ALLOWED_ORIGINS: "https://admin.holo-oshi.com,https://admin.capu.blog,http://100.100.1.3:30190"
     ports:

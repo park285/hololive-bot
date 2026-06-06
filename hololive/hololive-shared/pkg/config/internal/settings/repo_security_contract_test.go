@@ -161,6 +161,23 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 		}
 	}
 
+	for _, service := range []string{"youtube-producer", "llm-scheduler"} {
+		env := composeEnvironment(t, cfg, service)
+		if _, ok := env["API_SECRET_KEY"]; !ok {
+			t.Fatalf("%s missing scoped API_SECRET_KEY mapping", service)
+		}
+	}
+
+	producerEnv := composeEnvironment(t, cfg, "youtube-producer")
+	for _, key := range []string{"YOUTUBE_API_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
+		if _, ok := producerEnv[key]; !ok {
+			t.Fatalf("youtube-producer missing scoped %s mapping", key)
+		}
+	}
+	if producerEnv["HOLOLIVE_HTTP_TRANSPORTS"] != "h2c" {
+		t.Fatalf("youtube-producer HOLOLIVE_HTTP_TRANSPORTS = %q, want h2c", producerEnv["HOLOLIVE_HTTP_TRANSPORTS"])
+	}
+
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
 		env := composeEnvironment(t, cfg, service)
 		if env["IRIS_BASE_URL_FILE"] != "" {
@@ -216,12 +233,18 @@ func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
 	}
 }
 
-func TestRepoComposeLiveCompatOverlayRestoresPreHardeningSnapshot(t *testing.T) {
+func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *testing.T) {
 	overlay := readRepoFile(t, "docker-compose.live-compat.yml")
-	for _, service := range []string{"hololive-bot", "hololive-admin-api", "hololive-alarm-worker", "youtube-producer", "llm-scheduler", "admin-dashboard"} {
+	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
 		block := composeServiceBlock(t, overlay, service)
 		if !strings.Contains(block, "env_file:") || !strings.Contains(block, "${COMPOSE_ENV_FILE:-/run/hololive-bot/env}") {
 			t.Fatalf("live overlay must restore common env_file for %s", service)
+		}
+	}
+	for _, service := range []string{"hololive-admin-api", "youtube-producer", "llm-scheduler", "admin-dashboard"} {
+		block := composeServiceBlock(t, overlay, service)
+		if strings.Contains(block, "env_file:") {
+			t.Fatalf("live overlay must keep nonEgress %s scoped without env_file", service)
 		}
 	}
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
@@ -266,11 +289,6 @@ func TestRepoComposeLiveCompatOverlayRestoresPreHardeningSnapshot(t *testing.T) 
 		if env["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
 			t.Fatalf("%s POSTGRES_SSLMODE_ALLOW_INSECURE = %q, want true", service, env["POSTGRES_SSLMODE_ALLOW_INSECURE"])
 		}
-		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
-			if _, ok := env[key]; !ok {
-				t.Fatalf("%s missing env_file-restored key %s", service, key)
-			}
-		}
 		targets := strings.Join(composeVolumeTargets(t, cfg, service), "\n")
 		for _, target := range []string{"/app/data", "/app/logs", "/app/runtime-config", "/run/hololive-bot/certs", "/var/run/valkey"} {
 			if !strings.Contains(targets, target) {
@@ -279,16 +297,27 @@ func TestRepoComposeLiveCompatOverlayRestoresPreHardeningSnapshot(t *testing.T) 
 		}
 	}
 
-	for _, service := range []string{"admin-dashboard"} {
+	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
 		env := composeEnvironment(t, cfg, service)
 		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if _, ok := env[key]; !ok {
 				t.Fatalf("%s missing env_file-restored key %s", service, key)
 			}
 		}
-		if !strings.Contains(env["ALLOWED_ORIGINS"], "http://100.100.1.3:30190") {
-			t.Fatalf("admin-dashboard ALLOWED_ORIGINS = %q, want Tailnet origin restored", env["ALLOWED_ORIGINS"])
+	}
+
+	for _, service := range []string{"hololive-admin-api", "youtube-producer", "llm-scheduler", "admin-dashboard"} {
+		env := composeEnvironment(t, cfg, service)
+		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
+			if _, ok := env[key]; ok {
+				t.Fatalf("nonEgress %s rendered with %s under live overlay", service, key)
+			}
 		}
+	}
+
+	dashboardEnv := composeEnvironment(t, cfg, "admin-dashboard")
+	if !strings.Contains(dashboardEnv["ALLOWED_ORIGINS"], "http://100.100.1.3:30190") {
+		t.Fatalf("admin-dashboard ALLOWED_ORIGINS = %q, want Tailnet origin restored", dashboardEnv["ALLOWED_ORIGINS"])
 	}
 
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
@@ -313,6 +342,9 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 			t.Fatalf("docker-compose.main-ap.live-compat.yml missing IRIS_BASE_URL_ALLOWED_HOSTS default for %s", service)
 		}
 	}
+	if block := composeServiceBlock(t, overlay, "youtube-producer-c"); strings.Contains(block, "env_file:") {
+		t.Fatal("main-ap live overlay must keep youtube-producer-c scoped without env_file")
+	}
 
 	cfg := renderComposeConfig(t,
 		"docker-compose.prod.yml",
@@ -336,8 +368,13 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 		t.Fatalf("youtube-producer-c POSTGRES_SSLMODE_ALLOW_INSECURE = %q, want true", env["POSTGRES_SSLMODE_ALLOW_INSECURE"])
 	}
 	for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
+		if _, ok := env[key]; ok {
+			t.Fatalf("youtube-producer-c rendered with %s under live overlay", key)
+		}
+	}
+	for _, key := range []string{"API_SECRET_KEY", "YOUTUBE_API_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
 		if _, ok := env[key]; !ok {
-			t.Fatalf("youtube-producer-c missing env_file-restored key %s", key)
+			t.Fatalf("youtube-producer-c missing scoped %s mapping", key)
 		}
 	}
 
