@@ -787,6 +787,8 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/backoff/doc.go
 ../shared-go/pkg/envutil/env.go
 ../shared-go/pkg/ginjson/ginjson.go
+../shared-go/pkg/h3/h3.go
+../shared-go/pkg/healthprobe/healthprobe.go
 ../shared-go/pkg/httputil/client.go
 ../shared-go/pkg/httputil/doc.go
 ../shared-go/pkg/httputil/json_client.go
