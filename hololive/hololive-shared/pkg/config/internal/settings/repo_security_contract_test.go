@@ -589,6 +589,7 @@ func assertAPComposeCertMountsAreMinimized(t *testing.T, cfg renderedCompose, co
 
 	serviceNames := apComposeServiceNames(t, cfg, composeFile)
 	for _, service := range serviceNames {
+		hasIrisCA := false
 		for _, volume := range composeVolumes(t, cfg, service) {
 			source := cleanVolumePath(volume.Source)
 			target := cleanVolumePath(volume.Target)
@@ -598,6 +599,12 @@ func assertAPComposeCertMountsAreMinimized(t *testing.T, cfg renderedCompose, co
 			if strings.HasSuffix(volume.Source, ".key") || strings.HasSuffix(volume.Target, ".key") {
 				t.Fatalf("%s %s mounts private key file: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
 			}
+			if target == "/run/hololive-bot/certs/iris-ca.pem" {
+				hasIrisCA = true
+			}
+		}
+		if !hasIrisCA {
+			t.Fatalf("%s %s missing iris-ca.pem mount — producer config load fetches the Iris webhook worker profile over H3 at startup", composeFile, service)
 		}
 	}
 }
