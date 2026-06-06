@@ -33,6 +33,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
     logging: *seoul-ap-logging
     deploy:
       resources:
@@ -73,6 +74,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
     logging: *seoul-ap-logging
     deploy:
       resources:

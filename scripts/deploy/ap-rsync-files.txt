@@ -1,6 +1,7 @@
 go.mod
 go.work
 go.work.sum
+admin-dashboard/backend/go.mod
 scripts/deploy/ap-rsync-files.txt
 scripts/deploy/compose.sh
 scripts/deploy/ap-iris-h3-trust-preflight.sh
@@ -50,6 +51,8 @@ hololive/hololive-youtube-producer/internal/runtime/polling/budget_validator.go
 hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter.go
 hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter_keys.go
 hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter_scripts.go
+hololive/hololive-youtube-producer/internal/runtime/polling/live_batch_poller.go
+hololive/hololive-youtube-producer/internal/runtime/polling/source_cooldown_poller.go
 hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_components.go
 hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registrations.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/api.go
@@ -792,6 +795,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/jsonutil/doc.go
 ../shared-go/pkg/jsonutil/extract.go
 ../shared-go/pkg/jsonutil/gjson.go
+../shared-go/pkg/logging/async_writer.go
 ../shared-go/pkg/logging/attrs.go
 ../shared-go/pkg/logging/context.go
 ../shared-go/pkg/logging/doc.go

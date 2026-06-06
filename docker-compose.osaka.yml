@@ -34,6 +34,7 @@ x-osaka-ap-service: &osaka-ap-service
     - ./data:/app/data
     - ./logs:/app/logs
     - ./runtime-config:/app/runtime-config:ro
+    - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
   logging: *osaka-ap-logging
   deploy:
     resources:
@@ -61,6 +62,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
     logging: *osaka-ap-logging
     deploy:
       resources:
