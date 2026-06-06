@@ -87,6 +87,22 @@ grep -qx 'scripts/deploy/ap-iris-h3-trust-preflight.sh' "${AP_ACTIVE_ACTIVE_FILE
 pass "ap active-active syncs Iris H3 trust preflight"
 grep -q 'ap-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs Iris H3 trust preflight"
 pass "ap active-active deploy runs Iris H3 trust preflight"
+for ap_script in scripts/logs/ap-smoke.sh scripts/logs/ap-status.sh; do
+    grep -q '/run/hololive-bot/ap-compose.env' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} uses AP compose env"
+    if grep -q '/run/hololive-bot/env' "${ROOT_DIR}/${ap_script}"; then
+        fail "${ap_script} must not require legacy monolithic env"
+    fi
+done
+pass "ap active-active smoke/status use AP compose env"
+grep -q 'AP prechange compose config skipped' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy allows token-free transition prechange config only with explicit marker"
+grep -Fq "grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|/run/hololive-bot/(bot|alarm-worker)\\.env'" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy prechange config bypass is limited to AP token/env-file transition"
+pass "ap active-active deploy handles token-free prechange transition"
+for ap_runtime_script in scripts/deploy/ap-iris-h3-trust-preflight.sh scripts/deploy/ap-completion-check.sh; do
+    grep -q 'AP_REQUIRED_UDP_BUFFER_BYTES' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} exposes AP_REQUIRED_UDP_BUFFER_BYTES"
+    grep -q 'net.core.rmem_max' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} checks net.core.rmem_max"
+    grep -q 'net.core.wmem_max' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} checks net.core.wmem_max"
+done
+pass "ap active-active verifies QUIC UDP buffer sysctls"
 for ap_compose in deploy/compose/docker-compose.osaka.yml deploy/compose/docker-compose.seoul.yml; do
     grep -qx "${ap_compose}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_compose}"
 done

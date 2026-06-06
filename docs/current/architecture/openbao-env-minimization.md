@@ -390,14 +390,16 @@ Repo-side 변경만. **기본 경로 플립은 merge 가능하지만, 대상 호
 - KV 신규 경로 write는 기존 `kv/prod/hololive-bot/env` 값의 분배 복사다 — 값 신규 발급 없음, 회전은 범위 외.
 - `config/agent-chatbotgo.hcl` — 변경 없음(이미 분할 완료). D3 정리는 Phase 5로 이연.
 
-#### Phase 3 Repo-Side Status (2026-06-06)
+#### Phase 3 Repo/Live Status (2026-06-06)
 
 - `openbao-secrets-stack/config/agent-hololive-bot.hcl`은 legacy `/run/hololive-bot/env`를 유지하면서 `/run/hololive-bot/{compose,ap-compose,bot,alarm-worker,youtube-producer}.env` split render template을 추가했다.
-- `openbao-secrets-stack/config/agent-hololive-bot-ap.hcl`과 `policies/prod-hololive-bot-ap-read.hcl`은 AP host 전용이다. AP host는 `/run/hololive-bot/ap-compose.env`, `/run/hololive-bot/youtube-producer.env`, cert 파일만 렌더/read하고 central `/run/hololive-bot/compose.env` 및 legacy `/run/hololive-bot/env`는 렌더하지 않는다.
+- `openbao-secrets-stack/config/agent-hololive-bot-ap.hcl`, `policies/prod-hololive-bot-ap-read.hcl`, `deploy/systemd/openbao-agent-hololive-bot-ap.service`는 AP host 전용이다. AP host는 `/run/hololive-bot/ap-compose.env`, `/run/hololive-bot/youtube-producer.env`, cert 파일만 렌더/read하고 central `/run/hololive-bot/compose.env` 및 legacy `/run/hololive-bot/env`는 렌더하지 않는다.
+- AP unit은 `Group=opc`로 실행한다. AP producer image가 `1000:1000` non-root로 실행되므로 cert/key는 `root:opc 0640`으로 렌더되어 container-readable하고, env 파일은 `0600`으로 유지된다.
 - `openbao-secrets-stack/scripts/split-hololive-env-bundles.py`는 기존 `kv/prod/hololive-bot/env`를 새 KV bundle 5종으로 분배하는 helper다. `ap-compose-env`는 `IRIS_WEBHOOK_TOKEN`/`IRIS_BOT_TOKEN`을 제외한다. fixture dry-run은 `--source-json`, live KV read dry-run은 `--read-live`를 명시한다. live KV write는 `--write`가 필요하다.
-- 기존 monolithic KV에 없는 optional/default key는 합성하지 않는다. `bot.env`는 현재 0-key 파일로 렌더되고, 앱 기본값을 사용한다.
-- `openbao-secrets-stack/scripts/verify-hololive-h3-contract.sh`는 split template 존재, strict missing-key 설정, helper/template key parity, source 누락 key 거부, `ap-compose.env`/AP producer env의 Iris egress token 부재, AP agent/policy의 central env read/render 금지, systemd `ExecStart=/usr/bin/bao`를 검증한다.
-- 아직 수행하지 않은 live 작업: 신규 KV path write, installed `/etc/openbao-agent/hololive-bot.hcl` 교체, `openbao-agent-hololive-bot.service` restart, app container recreate.
+- 기존 monolithic KV에 없는 optional/default key는 합성하지 않는다. `bot.env`는 comment-only 파일로 렌더되고, 앱 기본값을 사용한다.
+- `openbao-secrets-stack/scripts/verify-hololive-h3-contract.sh`는 split template 존재, strict missing-key 설정, helper/template key parity, source 누락 key 거부, `ap-compose.env`/AP producer env의 Iris egress token 부재, AP agent/policy의 central env read/render 금지, central/AP systemd `ExecStart=/usr/bin/bao`, AP runtime legacy env 부재를 검증한다.
+- live 적용 완료: 신규 KV path write, central installed hcl/verifier 교체, central `openbao-agent-hololive-bot.service` restart, `hololive-bot`/`hololive-alarm-worker` recreate, Osaka/Seoul AP hcl/unit/verifier/AppRole credential 설치, AP agent restart, AP producer recreate.
+- AP host H3/QUIC 안정성 계약: `scripts/deploy/ap-iris-h3-trust-preflight.sh`와 `scripts/deploy/ap-completion-check.sh`는 `net.core.rmem_max`/`net.core.wmem_max >= 7500000`을 요구한다. quic-go가 요구하는 UDP socket buffer를 host kernel limit이 막으면 health/preflight는 성공해도 receive buffer warning이 발생하므로, AP host는 `/etc/sysctl.d/99-hololive-quic-udp-buffer.conf` 등으로 값을 영구 적용해야 한다.
 
 Required evidence (호스트별 수집, 값 미출력):
 
@@ -414,9 +416,9 @@ sudo sh -c 'cut -d= -f1 /run/hololive-bot/compose.env /run/hololive-bot/ap-compo
 
 순서:
 
-1. ChatBotGo: 렌더 확인 → `docker compose -f deploy/compose/chatbotgo.yml config --quiet` → `bot-chatbotgo` recreate → `/health`, `/ready`.
-2. Hololive central: `hololive-bot`, `hololive-alarm-worker` recreate → health/readiness + Iris egress 경로 스모크.
-3. Hololive AP: Osaka → Seoul 한 호스트씩. recreate 후 **token 부재 확인**:
+1. ChatBotGo: 렌더 확인 → `docker compose -f deploy/compose/chatbotgo.yml config --quiet` → `bot-chatbotgo` recreate → `/health`, `/ready`. 2026-06-06 완료.
+2. Hololive central: `hololive-bot`, `hololive-alarm-worker` recreate → health/readiness + Iris egress 경로 스모크. 2026-06-06 완료.
+3. Hololive AP: Osaka → Seoul 한 호스트씩. recreate 후 **token 부재 확인**. 2026-06-06 완료:
 
 ```bash
 # 값 미출력 — key 이름만 검사

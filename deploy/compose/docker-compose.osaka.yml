@@ -46,6 +46,7 @@ x-osaka-ap-service: &osaka-ap-service
 # AP 공통 env. GOMEMLIMIT: 768m 컨테이너에 맞춰 베이스 320MiB → 640MiB 상향(GC 빈도↓). GOGC 는 베이스(100) 유지.
 x-osaka-ap-env-common: &osaka-ap-env-common
   <<: *osaka-ap-env
+  POSTGRES_SSLMODE_ALLOW_INSECURE: "true"
   YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
   YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"
   YOUTUBE_PRODUCER_LEASE_NAMESPACE: ${YOUTUBE_PRODUCER_LEASE_NAMESPACE:-production}
@@ -53,12 +54,19 @@ x-osaka-ap-env-common: &osaka-ap-env-common
   GOMEMLIMIT: "640MiB"
 
 services:
+  hololive-bot:
+    env_file: !override []
+
+  hololive-alarm-worker:
+    env_file: !override []
+
   youtube-producer:
     profiles: !override ["retired-youtube-producer"]
     env_file: !override
       - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       <<: *osaka-ap-env
+      POSTGRES_SSLMODE_ALLOW_INSECURE: "true"
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
     volumes: !override
       - ../../data:/app/data

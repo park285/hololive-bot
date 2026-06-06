@@ -272,8 +272,9 @@ func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := renderComposeConfigWithEnvFile(t, writeAPComposeEnvFile(t), "deploy/compose/docker-compose.prod.yml", renderableAPComposeFile(t, tt.file))
+			cfg := renderAPComposeConfig(t, "deploy/compose/docker-compose.prod.yml", renderableAPComposeFile(t, tt.file))
 			assertAPComposeCertMountsAreMinimized(t, cfg, tt.file)
+			assertAPComposeDoesNotRequireCentralEgressEnvFiles(t, cfg, tt.file)
 		})
 	}
 }
@@ -631,6 +632,43 @@ func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files .
 	return cfg
 }
 
+func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
+	t.Helper()
+
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skipf("docker CLI unavailable: %v", err)
+	}
+
+	args := []string{"compose", "--profile", "oracle"}
+	for _, file := range files {
+		args = append(args, "-f", file)
+	}
+	args = append(args, "config")
+
+	cmd := exec.Command("docker", args...)
+	repoRoot := repoRootFromConfigTest(t)
+	cmd.Dir = repoRoot
+	cmd.Env = append(os.Environ(),
+		"COMPOSE_ENV_FILE="+writeAPComposeEnvFile(t),
+		"HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="+writeAPProducerEnvFile(t),
+		"DB_PASSWORD=dummy",
+		"CACHE_PASSWORD=dummy",
+		"ADMIN_PASS_BCRYPT=dummy",
+		"SESSION_SECRET=dummy",
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("docker compose AP config failed: %v\n%s", err, output)
+	}
+
+	var cfg renderedCompose
+	if err := yaml.Unmarshal(output, &cfg); err != nil {
+		t.Fatalf("decode docker compose AP config: %v\n%s", err, output)
+	}
+	return cfg
+}
+
 func writeCentralComposeEnvFile(t *testing.T) string {
 	t.Helper()
 
@@ -734,10 +772,26 @@ func assertAPComposeCertMountsAreMinimized(t *testing.T, cfg renderedCompose, co
 		}
 
 		env := composeEnvironment(t, cfg, service)
+		if env["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
+			t.Fatalf("%s %s POSTGRES_SSLMODE_ALLOW_INSECURE = %q, want true for AP Tailscale Postgres", composeFile, service, env["POSTGRES_SSLMODE_ALLOW_INSECURE"])
+		}
 		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if _, ok := env[key]; ok {
 				t.Fatalf("%s %s rendered with Iris egress token %s", composeFile, service, key)
 			}
+		}
+	}
+}
+
+func assertAPComposeDoesNotRequireCentralEgressEnvFiles(t *testing.T, cfg renderedCompose, composeFile string) {
+	t.Helper()
+
+	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
+		if _, ok := cfg.Services[service]; !ok {
+			continue
+		}
+		if envFile, ok := composeService(t, cfg, service)["env_file"]; ok {
+			t.Fatalf("%s %s must not require central egress env_file on AP host: %v", composeFile, service, envFile)
 		}
 	}
 }

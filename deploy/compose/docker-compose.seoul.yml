@@ -22,12 +22,19 @@ x-seoul-ap-logging: &seoul-ap-logging
     max-file: "3"
 
 services:
+  hololive-bot:
+    env_file: !override []
+
+  hololive-alarm-worker:
+    env_file: !override []
+
   youtube-producer:
     profiles: !override ["retired-youtube-producer"]
     env_file: !override
       - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       <<: *seoul-ap-env
+      POSTGRES_SSLMODE_ALLOW_INSECURE: "true"
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
     volumes: !override
       - ../../data:/app/data
@@ -58,6 +65,7 @@ services:
       - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       <<: *seoul-ap-env
+      POSTGRES_SSLMODE_ALLOW_INSECURE: "true"
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
       YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"
       YOUTUBE_PRODUCER_LEASE_NAMESPACE: ${YOUTUBE_PRODUCER_LEASE_NAMESPACE:-production}

@@ -22,10 +22,10 @@ ports_list="${AP_PORTS[*]}"
 set -euo pipefail
 cd ~/hololive-bot
 
-sudo -n test -r /run/hololive-bot/env
+sudo -n test -r /run/hololive-bot/ap-compose.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f "$AP_COMPOSE_FILE" ps $AP_SERVICES_LIST
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f "$AP_COMPOSE_FILE" ps $AP_SERVICES_LIST
 
 ports=($AP_PORTS_LIST)
 idx=0

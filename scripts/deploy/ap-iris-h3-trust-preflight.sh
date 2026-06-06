@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 AP_PREFLIGHT_ALLOW_FIRST_BOOT="${AP_PREFLIGHT_ALLOW_FIRST_BOOT:-false}"
+AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
@@ -14,11 +15,23 @@ case "$AP_PREFLIGHT_ALLOW_FIRST_BOOT" in
     exit 2
     ;;
 esac
+if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
+  echo "AP_REQUIRED_UDP_BUFFER_BYTES must be an integer" >&2
+  exit 2
+fi
 
 containers_list="${AP_CONTAINERS[*]}"
 
-"${AP_SSH[@]}" "AP_PREFLIGHT_ALLOW_FIRST_BOOT='$AP_PREFLIGHT_ALLOW_FIRST_BOOT' AP_CONTAINERS_LIST='$containers_list' AP_NAME='$AP_NAME' bash -s" <<'REMOTE'
+"${AP_SSH[@]}" "AP_PREFLIGHT_ALLOW_FIRST_BOOT='$AP_PREFLIGHT_ALLOW_FIRST_BOOT' AP_REQUIRED_UDP_BUFFER_BYTES='$AP_REQUIRED_UDP_BUFFER_BYTES' AP_CONTAINERS_LIST='$containers_list' AP_NAME='$AP_NAME' bash -s" <<'REMOTE'
 set -euo pipefail
+
+required_udp_buffer_bytes="$AP_REQUIRED_UDP_BUFFER_BYTES"
+rmem_max="$(sysctl -n net.core.rmem_max 2>/dev/null || echo 0)"
+wmem_max="$(sysctl -n net.core.wmem_max 2>/dev/null || echo 0)"
+if (( rmem_max < required_udp_buffer_bytes || wmem_max < required_udp_buffer_bytes )); then
+  echo "AP QUIC UDP buffers too small on $AP_NAME: net.core.rmem_max=$rmem_max net.core.wmem_max=$wmem_max required>=$required_udp_buffer_bytes" >&2
+  exit 1
+fi
 
 unit_type="$(systemctl show openbao-agent-hololive-bot.service -p Type --value)"
 unit_state="$(systemctl show openbao-agent-hololive-bot.service -p ActiveState --value)"
