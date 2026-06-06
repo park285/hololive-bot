@@ -109,17 +109,23 @@ func TestServerTransportEnabled_ExplicitList(t *testing.T) {
 
 	c := &Config{
 		Server: ServerConfig{
-			HTTPTransports: []string{"h2c", "h3"},
+			HTTPTransports: []string{"h3"},
 		},
-	}
-	if !c.ServerTransportEnabled("h2c") {
-		t.Fatal("h2c should be enabled when in list")
 	}
 	if !c.ServerTransportEnabled("http3") {
 		t.Fatal("http3 alias should match h3")
 	}
 	if !c.ServerTransportEnabled("quic") {
 		t.Fatal("quic alias should match h3")
+	}
+}
+
+func TestValidateServerTransports_RejectsH2C(t *testing.T) {
+	t.Parallel()
+
+	err := validateServerTransports(ServerConfig{HTTPTransports: []string{"h2c"}})
+	if err == nil || !strings.Contains(err.Error(), "unsupported HOLOLIVE_HTTP_TRANSPORTS value: h2c") {
+		t.Fatalf("validateServerTransports(h2c) error = %v, want unsupported h2c", err)
 	}
 }
 
@@ -132,7 +138,7 @@ func TestNormalizeServerHTTPTransport(t *testing.T) {
 		ok    bool
 	}{
 		{"", "", true},
-		{"h2c", "h2c", true},
+		{"h2c", "h2c", false},
 		{"h3", "h3", true},
 		{"http3", "h3", true},
 		{"http/3", "h3", true},

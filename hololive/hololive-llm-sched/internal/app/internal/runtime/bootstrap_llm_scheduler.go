@@ -42,7 +42,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/shared-go/pkg/runtime/httpserver"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -56,7 +55,6 @@ type LLMSchedulerRuntime struct {
 	MemberNewsScheduler        *mnscheduler.Scheduler
 	MemberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler
 
-	httpServer  *http.Server
 	httpServers *sharedserver.RuntimeHTTPServers
 	lifecycle.Managed
 }
@@ -86,18 +84,12 @@ func (r *LLMSchedulerRuntime) Run() {
 }
 
 func (r *LLMSchedulerRuntime) startHTTPServer(errCh chan<- error) {
-	if r.httpServers != nil {
-		r.httpServers.Start(r.Logger, errCh)
-		r.Logger.Info("LLM scheduler HTTP server started",
-			slog.String("addr", r.httpServers.Addr()))
+	if r.httpServers == nil {
 		return
 	}
-	httpserver.StartHTTPServer(r.httpServer, r.Logger, errCh)
-	if r.httpServer == nil {
-		return
-	}
+	r.httpServers.Start(r.Logger, errCh)
 	r.Logger.Info("LLM scheduler HTTP server started",
-		slog.String("addr", r.httpServer.Addr))
+		slog.String("addr", r.httpServers.Addr()))
 }
 
 func (r *LLMSchedulerRuntime) startSchedulers(ctx context.Context) {
@@ -165,10 +157,7 @@ func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	var errs []error
 	r.stopSchedulers()
 	shutdownHTTPServer := func(ctx context.Context) error {
-		if r.httpServers != nil {
-			return r.httpServers.Shutdown(ctx)
-		}
-		return httpserver.ShutdownHTTPServer(ctx, r.httpServer)
+		return r.httpServers.Shutdown(ctx)
 	}
 	if err := shutdownHTTPServer(ctx); err != nil {
 		r.Logger.Error("HTTP server shutdown error", slog.Any("error", err))
@@ -285,7 +274,6 @@ func newLLMSchedulerRuntime(
 		MajorEventScraperScheduler: majorEventScraperScheduler,
 		MemberNewsScheduler:        memberNewsScheduler,
 		MemberNewsMonthlyScheduler: memberNewsMonthlyScheduler,
-		httpServer:                 legacyPrimaryHTTPServer(httpServers),
 		httpServers:                httpServers,
 	}
 }
@@ -356,11 +344,4 @@ func buildLLMSchedulerHTTPServers(
 	registerMemberNewsInternalRoutes(router, apiKey, memberNewsService)
 
 	return sharedserver.NewRuntimeHTTPServers(serverConfig, router, "hololive-llm-sched.http")
-}
-
-func legacyPrimaryHTTPServer(servers *sharedserver.RuntimeHTTPServers) *http.Server {
-	if servers == nil {
-		return nil
-	}
-	return servers.H2C
 }

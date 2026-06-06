@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"sync"
 	"time"
 
@@ -53,7 +52,6 @@ type AlarmWorkerRuntime struct {
 	CelebrationRunner  runtimeAlarmScheduler
 	ConfigSubscriber   *configsub.Subscriber
 	ServerAddr         string
-	HTTPServer         *http.Server
 	HTTPServers        *sharedserver.RuntimeHTTPServers
 
 	schedulerMu     sync.Mutex

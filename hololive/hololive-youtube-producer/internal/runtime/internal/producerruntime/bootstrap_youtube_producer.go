@@ -183,7 +183,6 @@ func newYouTubeProducerRuntime(
 		ConfigSubscriber:                       configSubscriber,
 		PollTargetRefresher:                    youtubeDeps.pollTargetRefresher,
 		ServerAddr:                             httpServers.Addr(),
-		HTTPServer:                             legacyPrimaryHTTPServer(httpServers),
 		HTTPServers:                            httpServers,
 		Readiness:                              readinessState,
 		CommunityShortsBigBangPolicy:           youtubeState.communityShortsPolicy,
@@ -262,11 +261,4 @@ func buildYouTubeProducerHTTPRouter(
 			c.JSON(statusCode, payload)
 		}
 	})
-}
-
-func legacyPrimaryHTTPServer(servers *sharedserver.RuntimeHTTPServers) *http.Server {
-	if servers == nil {
-		return nil
-	}
-	return servers.H2C
 }

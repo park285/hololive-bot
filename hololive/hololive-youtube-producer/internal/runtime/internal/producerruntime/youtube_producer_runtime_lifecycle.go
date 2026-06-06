@@ -22,34 +22,10 @@ package producerruntime
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
-	"net/http"
 
 	sharedlog "github.com/park285/shared-go/pkg/logging"
-	"github.com/park285/shared-go/pkg/runtime/httpserver"
 )
-
-type listenErrorPrefixServer struct {
-	httpserver.Server
-	errorText string
-	logger    *slog.Logger
-	errCh     chan<- error
-}
-
-func (s listenErrorPrefixServer) ListenAndServe() error {
-	err := s.Server.ListenAndServe()
-	if err == nil || errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-
-	if s.errCh == nil && s.logger != nil {
-		s.logger.Error(s.errorText, slog.Any("error", err))
-	}
-
-	return fmt.Errorf("%s: %w", s.errorText, err)
-}
 
 func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, errCh chan<- error) {
 	if r.ConfigSubscriber != nil {
@@ -78,23 +54,13 @@ func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, er
 }
 
 func (r *YouTubeProducerRuntime) startHTTPServer(errCh chan<- error) {
-	if r.HTTPServers != nil {
-		r.HTTPServers.Start(r.Logger, errCh)
-		r.Logger.Info("Ingestion runtime HTTP server started",
-			slog.String("runtime", r.runtimeName()),
-			slog.String("addr", r.HTTPServers.Addr()),
-		)
+	if r.HTTPServers == nil {
 		return
 	}
-	httpserver.Start(listenErrorPrefixServer{
-		Server:    r.HTTPServer,
-		errorText: "http server error",
-		logger:    r.Logger,
-		errCh:     errCh,
-	}, nil, errCh)
+	r.HTTPServers.Start(r.Logger, errCh)
 	r.Logger.Info("Ingestion runtime HTTP server started",
 		slog.String("runtime", r.runtimeName()),
-		slog.String("addr", r.ServerAddr),
+		slog.String("addr", r.HTTPServers.Addr()),
 	)
 }
 
@@ -121,22 +87,14 @@ func (r *YouTubeProducerRuntime) stopSchedulers() {
 }
 
 func (r *YouTubeProducerRuntime) shutdownHTTPServer(ctx context.Context) {
-	if r.HTTPServers != nil {
-		if err := r.HTTPServers.Shutdown(ctx); err != nil {
-			r.Logger.Error("Ingestion runtime HTTP shutdown failed",
-				slog.String("runtime", r.runtimeName()),
-				slog.Any("error", err),
-			)
-		}
+	if r.HTTPServers == nil {
 		return
 	}
-	if r.HTTPServer != nil {
-		if err := httpserver.Shutdown(ctx, r.HTTPServer, "Ingestion runtime HTTP shutdown failed"); err != nil {
-			r.Logger.Error("Ingestion runtime HTTP shutdown failed",
-				slog.String("runtime", r.runtimeName()),
-				slog.Any("error", err),
-			)
-		}
+	if err := r.HTTPServers.Shutdown(ctx); err != nil {
+		r.Logger.Error("Ingestion runtime HTTP shutdown failed",
+			slog.String("runtime", r.runtimeName()),
+			slog.Any("error", err),
+		)
 	}
 }
 

@@ -22,7 +22,6 @@ package app
 
 import (
 	"log/slog"
-	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
@@ -34,7 +33,6 @@ type AdminAPIRuntime struct {
 	Logger *slog.Logger
 
 	ServerAddr  string
-	HTTPServer  *http.Server
 	HTTPServers *sharedserver.RuntimeHTTPServers
 
 	lifecycle.Managed

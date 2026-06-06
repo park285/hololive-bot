@@ -111,7 +111,6 @@ func newAdminAPIRuntime(
 		Config:      appConfig,
 		Logger:      logger,
 		ServerAddr:  servers.Addr(),
-		HTTPServer:  servers.H2C,
 		HTTPServers: servers,
 		Managed:     lifecycle.NewManaged(cleanup),
 	}, nil

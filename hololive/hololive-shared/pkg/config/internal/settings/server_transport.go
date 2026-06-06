@@ -69,8 +69,6 @@ func normalizeServerHTTPTransport(raw string) (string, bool) {
 	switch transport := strings.TrimSpace(strings.ToLower(raw)); transport {
 	case "":
 		return "", true
-	case "h2c":
-		return "h2c", true
 	case "h3", "http3", "http/3", "quic":
 		return "h3", true
 	default:

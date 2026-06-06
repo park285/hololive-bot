@@ -104,7 +104,6 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		CelebrationRunner:  celebRunner,
 		ConfigSubscriber:   BuildAlarmWorkerConfigSubscriber(infra.Cache, foundation.AlarmCRUD, logger),
 		ServerAddr:         servers.Addr(),
-		HTTPServer:         servers.H2C,
 		HTTPServers:        servers,
 		Managed:            lifecycle.NewManaged(infra.Cleanup),
 	}, nil

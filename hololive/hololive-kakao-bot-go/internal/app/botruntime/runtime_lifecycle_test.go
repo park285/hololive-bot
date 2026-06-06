@@ -24,12 +24,12 @@ import (
 	"bytes"
 	"errors"
 	"log/slog"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/quic-go/quic-go/http3"
 )
 
 func TestBotRuntimeClose_CallsCleanup(t *testing.T) {
@@ -60,7 +60,7 @@ func TestBotRuntimeStartHTTPServer_Branches(t *testing.T) {
 
 	t.Run("listen error pushes err channel", func(t *testing.T) {
 		runtime := &BotRuntime{
-			HTTPServer: &http.Server{Addr: "invalid::addr"},
+			H3Server: &http3.Server{Addr: "invalid::addr"},
 		}
 		errCh := make(chan error, 1)
 
@@ -68,7 +68,7 @@ func TestBotRuntimeStartHTTPServer_Branches(t *testing.T) {
 
 		select {
 		case err := <-errCh:
-			if err == nil || !strings.Contains(err.Error(), "HTTP server error") {
+			if err == nil || !strings.Contains(err.Error(), "HTTP/3 server error") {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		case <-time.After(2 * time.Second):
@@ -101,9 +101,7 @@ func TestBotRuntimeRun_ExitsOnServerError(t *testing.T) {
 	runtime := &BotRuntime{
 		Logger:     slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		ServerAddr: "invalid::addr",
-		HTTPServer: &http.Server{
-			Addr: "invalid::addr",
-		},
+		H3Server:   &http3.Server{Addr: "invalid::addr"},
 	}
 
 	done := make(chan struct{})
