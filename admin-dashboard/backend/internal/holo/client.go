@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
+	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/park285/shared-go/pkg/json"
 )
 
@@ -34,18 +35,25 @@ func NewClient(baseURL, apiKey string) (*Client, error) {
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  strings.TrimSpace(apiKey),
-		http: &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				Proxy:                 http.ProxyFromEnvironment,
-				MaxIdleConns:          64,
-				MaxIdleConnsPerHost:   16,
-				IdleConnTimeout:       90 * time.Second,
-				TLSHandshakeTimeout:   5 * time.Second,
-				ResponseHeaderTimeout: 10 * time.Second,
-			},
-		},
+		http:    newHoloHTTPClient(baseURL),
 	}, nil
+}
+
+func newHoloHTTPClient(baseURL string) *http.Client {
+	if strings.HasPrefix(strings.ToLower(baseURL), "https://") {
+		return internalhttp.NewClientForURL(baseURL, 10*time.Second, nil)
+	}
+	return &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxIdleConns:          64,
+			MaxIdleConnsPerHost:   16,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
+		},
+	}
 }
 
 const maxProxyBodyBytes = 8 << 20
