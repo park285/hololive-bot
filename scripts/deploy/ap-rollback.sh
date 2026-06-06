@@ -71,12 +71,13 @@ if [[ ! -r \"\$ap_backup_file\" && -r '$AP_BACKUP_LEGACY_FILE' ]]; then
 fi
 test -r \"\$prod_backup_file\"
 test -r \"\$ap_backup_file\"
-sudo -n test -r /run/hololive-bot/env
+sudo -n test -r /run/hololive-bot/compose.env
+sudo -n test -r /run/hololive-bot/youtube-producer.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 echo backup_dir='$BACKUP_DIR'
 echo would_restore=\"\$prod_backup_file\"
 echo would_restore=\"\$ap_backup_file\"
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_backup_file\" -f \"\$ap_backup_file\" config --quiet"
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_backup_file\" -f \"\$ap_backup_file\" config --quiet"
 
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "[DRY-RUN] Rollback preflight passed; no remote files or containers changed."
@@ -100,9 +101,9 @@ fi
 mkdir -p \"\$(dirname '$PROD_COMPOSE_FILE')\" \"\$(dirname '$AP_COMPOSE_FILE')\"
 cp \"\$prod_backup_file\" '$PROD_COMPOSE_FILE'
 cp \"\$ap_backup_file\" '$AP_COMPOSE_FILE'
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
 docker stop $containers_list >/dev/null 2>&1 || true
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate $services_list
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate $services_list
 echo rollback_started_at='$rollback_started_at'"
 
 remote "set -euo pipefail

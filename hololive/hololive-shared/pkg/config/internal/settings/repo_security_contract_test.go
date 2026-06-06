@@ -108,8 +108,15 @@ func TestRepoComposeProdHardenedDefaults(t *testing.T) {
 	egressOwners := []string{"hololive-bot", "hololive-alarm-worker"}
 	for _, service := range egressOwners {
 		block := composeServiceBlock(t, content, service)
-		if !strings.Contains(block, "env_file:") || !strings.Contains(block, "${COMPOSE_ENV_FILE:-/run/hololive-bot/env}") {
-			t.Fatalf("%s must keep an explicit env_file for Iris egress secrets", service)
+		wantEnvFile := map[string]string{
+			"hololive-bot":          "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/bot.env}",
+			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}",
+		}[service]
+		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {
+			t.Fatalf("%s must use per-service env_file %q for app-only secrets", service, wantEnvFile)
+		}
+		if strings.Contains(block, "/run/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
+			t.Fatalf("%s must not consume monolithic COMPOSE_ENV_FILE as env_file", service)
 		}
 		if !strings.Contains(block, "*iris-env") {
 			t.Fatalf("%s must keep x-iris-env", service)
@@ -125,6 +132,13 @@ func TestRepoComposeProdHardenedDefaults(t *testing.T) {
 		for _, pattern := range []string{"*iris-env", "IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if strings.Contains(block, pattern) {
 				t.Fatalf("%s contains Iris egress pattern %q", service, pattern)
+			}
+		}
+		if service != "admin-dashboard" {
+			for _, key := range []string{"ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
+				if strings.Contains(block, key) {
+					t.Fatalf("%s contains dashboard-only secret %q", service, key)
+				}
 			}
 		}
 	}
@@ -157,6 +171,30 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if _, ok := env[key]; ok {
 				t.Fatalf("%s rendered with %s", service, key)
+			}
+		}
+		if service != "admin-dashboard" {
+			for _, key := range []string{"ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
+				if _, ok := env[key]; ok {
+					t.Fatalf("%s rendered with dashboard-only secret %s", service, key)
+				}
+			}
+		}
+	}
+
+	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
+		env := composeEnvironment(t, cfg, service)
+		for _, key := range []string{
+			"KAKAO_ROOMS",
+			"KAKAO_ACL_ENABLED",
+			"KAKAO_ACL_MODE",
+			"API_SECRET_KEY",
+			"HOLODEX_API_KEY",
+			"HOLODEX_API_KEY_1",
+			"YOUTUBE_API_KEY",
+		} {
+			if _, ok := env[key]; !ok {
+				t.Fatalf("%s missing egress runtime key %s", service, key)
 			}
 		}
 	}
@@ -244,8 +282,15 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 	overlay := readRepoFile(t, "deploy/compose/docker-compose.live-compat.yml")
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
 		block := composeServiceBlock(t, overlay, service)
-		if !strings.Contains(block, "env_file:") || !strings.Contains(block, "${COMPOSE_ENV_FILE:-/run/hololive-bot/env}") {
-			t.Fatalf("live overlay must restore common env_file for %s", service)
+		wantEnvFile := map[string]string{
+			"hololive-bot":          "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/bot.env}",
+			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}",
+		}[service]
+		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {
+			t.Fatalf("live overlay must keep per-service env_file %q for %s", wantEnvFile, service)
+		}
+		if strings.Contains(block, "/run/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
+			t.Fatalf("live overlay must not restore monolithic env_file for %s", service)
 		}
 	}
 	for _, service := range []string{"hololive-admin-api", "youtube-producer", "llm-scheduler", "admin-dashboard"} {
@@ -320,6 +365,13 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 				t.Fatalf("nonEgress %s rendered with %s under live overlay", service, key)
 			}
 		}
+		if service != "admin-dashboard" {
+			for _, key := range []string{"ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
+				if _, ok := env[key]; ok {
+					t.Fatalf("nonEgress %s rendered with dashboard-only secret %s under live overlay", service, key)
+				}
+			}
+		}
 	}
 
 	dashboardEnv := composeEnvironment(t, cfg, "admin-dashboard")
@@ -337,6 +389,23 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 		}
 		if env["IRIS_BASE_URL_ALLOWED_HOSTS"] != "100.100.1.5" {
 			t.Fatalf("%s IRIS_BASE_URL_ALLOWED_HOSTS = %q, want 100.100.1.5", service, env["IRIS_BASE_URL_ALLOWED_HOSTS"])
+		}
+	}
+}
+
+func TestRepoAPDeployScriptsUseSplitRuntimeEnv(t *testing.T) {
+	for _, file := range []string{
+		"scripts/deploy/ap-deploy.sh",
+		"scripts/deploy/ap-completion-check.sh",
+		"scripts/deploy/ap-rollback.sh",
+		"scripts/deploy/ap-iris-h3-trust-preflight.sh",
+	} {
+		content := readRepoFile(t, file)
+		if strings.Contains(content, "/run/hololive-bot/env") {
+			t.Fatalf("%s still references monolithic /run/hololive-bot/env", file)
+		}
+		if !strings.Contains(content, "/run/hololive-bot/compose.env") {
+			t.Fatalf("%s missing split compose env file contract", file)
 		}
 	}
 }
@@ -524,9 +593,13 @@ func renderComposeConfig(t *testing.T, files ...string) renderedCompose {
 
 	cmd := exec.Command("docker", args...)
 	repoRoot := repoRootFromConfigTest(t)
+	appEnvFile := filepath.Join(repoRoot, ".env.example")
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
-		"COMPOSE_ENV_FILE="+filepath.Join(repoRoot, ".env.example"),
+		"COMPOSE_ENV_FILE="+appEnvFile,
+		"HOLOLIVE_BOT_ENV_FILE="+appEnvFile,
+		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+appEnvFile,
+		"HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="+writeAPProducerEnvFile(t),
 		"DB_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
 		"IRIS_WEBHOOK_TOKEN=dummy",
@@ -562,31 +635,39 @@ func renderableAPComposeFile(t *testing.T, relativePath string) string {
 func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) string {
 	t.Helper()
 
-	const envFile = "- /run/hololive-bot/env"
-	if !strings.Contains(content, envFile) {
-		t.Fatalf("%s missing hardcoded AP env_file path %s", sourceName, envFile)
+	if strings.Contains(content, "/run/hololive-bot/env") || strings.Contains(content, "COMPOSE_ENV_FILE") {
+		t.Fatalf("%s must not reference monolithic hololive env file", sourceName)
 	}
-	content = strings.ReplaceAll(content, envFile, "- ../../.env.example")
+	const producerEnvFile = "${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}"
+	if !strings.Contains(content, producerEnvFile) {
+		t.Fatalf("%s missing AP youtube-producer env_file path %s", sourceName, producerEnvFile)
+	}
 
-	repoRoot := repoRootFromConfigTest(t)
-	baseName := strings.TrimSuffix(filepath.Base(sourceName), filepath.Ext(sourceName))
-	tempFile, err := os.CreateTemp(filepath.Join(repoRoot, filepath.Dir(sourceName)), "."+baseName+"-*.yml")
+	return sourceName
+}
+
+func writeAPProducerEnvFile(t *testing.T) string {
+	t.Helper()
+
+	tempFile, err := os.CreateTemp(t.TempDir(), "youtube-producer-*.env")
 	if err != nil {
-		t.Fatalf("create temp AP compose for %s failed: %v", sourceName, err)
+		t.Fatalf("create AP producer env file failed: %v", err)
 	}
 	tempPath := tempFile.Name()
-	t.Cleanup(func() {
-		if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
-			t.Errorf("remove temp AP compose %s failed: %v", tempPath, err)
-		}
-	})
+
+	content := strings.Join([]string{
+		"API_SECRET_KEY=dummy",
+		"HOLODEX_API_KEY=dummy",
+		"HOLODEX_API_KEY_1=dummy",
+		"YOUTUBE_API_KEY=dummy",
+	}, "\n") + "\n"
 
 	if _, err := tempFile.WriteString(content); err != nil {
 		_ = tempFile.Close()
-		t.Fatalf("write temp AP compose for %s failed: %v", sourceName, err)
+		t.Fatalf("write AP producer env file failed: %v", err)
 	}
 	if err := tempFile.Close(); err != nil {
-		t.Fatalf("close temp AP compose for %s failed: %v", sourceName, err)
+		t.Fatalf("close AP producer env file failed: %v", err)
 	}
 
 	return tempPath
@@ -615,6 +696,13 @@ func assertAPComposeCertMountsAreMinimized(t *testing.T, cfg renderedCompose, co
 		}
 		if !hasIrisCA {
 			t.Fatalf("%s %s missing iris-ca.pem mount — producer config load fetches the Iris webhook worker profile over H3 at startup", composeFile, service)
+		}
+
+		env := composeEnvironment(t, cfg, service)
+		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
+			if _, ok := env[key]; ok {
+				t.Fatalf("%s %s rendered with Iris egress token %s", composeFile, service, key)
+			}
 		}
 	}
 }

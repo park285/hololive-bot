@@ -14,3 +14,31 @@ Prefer repository wrappers over raw `docker compose`:
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml config
 ./scripts/deploy/compose-redeploy-service.sh <service>
 ```
+
+## Runtime Env Inputs
+
+`scripts/deploy/compose.sh` injects one Compose interpolation env file with `--env-file`.
+The OpenBao default is:
+
+```text
+/run/hololive-bot/compose.env
+```
+
+Use `COMPOSE_ENV_FILE=<path>` for local tests or transition-period compatibility. The
+legacy monolithic `/run/hololive-bot/env` is no longer a production `env_file` default.
+
+Application-only env is scoped per service:
+
+```text
+HOLOLIVE_BOT_ENV_FILE=/run/hololive-bot/bot.env
+HOLOLIVE_ALARM_WORKER_ENV_FILE=/run/hololive-bot/alarm-worker.env
+HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE=/run/hololive-bot/youtube-producer.env
+```
+
+AP overlays use only `youtube-producer.env` for `youtube-producer` instances, so Iris
+egress tokens stay out of AP producer containers. `docker-compose.main-ap.yml` keeps
+`youtube-producer-c` without an `env_file`; it receives only explicit `environment:`
+values from the base compose and overlay.
+
+Do not deploy this repo-side contract to a host until OpenBao Agent renders
+`compose.env` and the per-service env files for that host.

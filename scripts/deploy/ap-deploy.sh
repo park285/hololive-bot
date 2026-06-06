@@ -154,9 +154,10 @@ mkdir -p \"\$(dirname '$backup_dir/$PROD_COMPOSE_FILE.prechange')\" \"\$(dirname
 cp \"\$prod_prechange_file\" '$backup_dir/$PROD_COMPOSE_FILE.prechange'
 cp \"\$ap_prechange_file\" '$backup_dir/$AP_COMPOSE_FILE.prechange'
 docker ps -a --filter label=com.docker.compose.project=hololive --format '{{json .}}' > '$backup_dir/prechange-containers.json' 2>/dev/null || true
-sudo -n test -r /run/hololive-bot/env
+sudo -n test -r /run/hololive-bot/compose.env
+sudo -n test -r /run/hololive-bot/youtube-producer.env
 test -w /var/run/docker.sock || groups | grep -qw docker
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet
 echo backup_dir='$backup_dir'"
 
 rsync -ai \
@@ -174,9 +175,9 @@ change_started_at="$(
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
 echo change_started_at='$change_started_at'"
 
 remote "set -euo pipefail

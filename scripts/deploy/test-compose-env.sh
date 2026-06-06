@@ -73,6 +73,16 @@ pass "valid env passes"
 )
 pass "relative COMPOSE_ENV_FILE resolves to an absolute path"
 
+openbao_compose_env="$tmpdir/compose.env"
+cp "$env_file" "$openbao_compose_env"
+(
+    unset COMPOSE_ENV_FILE
+    OPENBAO_HOLOLIVE_ENV_FILE="$openbao_compose_env"
+    resolved="$(compose_env_resolve_file)"
+    [[ "${resolved}" == "${openbao_compose_env}" ]] || fail "OPENBAO_HOLOLIVE_ENV_FILE resolved to ${resolved}, want ${openbao_compose_env}"
+)
+pass "OpenBao compose.env fallback resolves"
+
 mapfile -t keys < <(compose_env_list_keys_from_file "$env_file")
 [[ "${keys[*]}" == "ALARM_DISPATCH_CONSUMER_MODE ALARM_DISPATCH_PUBLISH_MODE CACHE_PASSWORD DB_PASSWORD YOUTUBE_PRODUCER_RUNTIME_ALLOWED" ]] || fail "unexpected env keys: ${keys[*]}"
 pass "env keys are listed"

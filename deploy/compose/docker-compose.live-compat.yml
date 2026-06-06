@@ -33,7 +33,7 @@ services:
 
   hololive-bot:
     env_file: !override
-      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
+      - ${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/bot.env}
     environment:
       <<: *live-postgres-env
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
@@ -61,7 +61,7 @@ services:
 
   hololive-alarm-worker:
     env_file: !override
-      - ${COMPOSE_ENV_FILE:-/run/hololive-bot/env}
+      - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}
     environment:
       <<: *live-postgres-env
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
