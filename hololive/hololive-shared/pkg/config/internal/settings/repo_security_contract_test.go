@@ -411,6 +411,47 @@ func TestRepoAPDeployScriptsUseSplitRuntimeEnv(t *testing.T) {
 	}
 }
 
+func TestRepoAPDeployScriptsRequirePersistedQUICUDPBuffers(t *testing.T) {
+	lib := readRepoFile(t, "scripts/deploy/lib/require-quic-udp-buffer.sh")
+	for _, snippet := range []string{
+		"net.core.rmem_max",
+		"net.core.wmem_max",
+		"/etc/sysctl.d/*.conf",
+		"are not persisted",
+	} {
+		if !strings.Contains(lib, snippet) {
+			t.Fatalf("require-quic-udp-buffer.sh missing runtime+persisted contract %q", snippet)
+		}
+	}
+
+	for _, file := range []string{
+		"scripts/deploy/ap-iris-h3-trust-preflight.sh",
+		"scripts/deploy/ap-completion-check.sh",
+	} {
+		content := readRepoFile(t, file)
+		if !strings.Contains(content, "require-quic-udp-buffer.sh") {
+			t.Fatalf("%s must delegate QUIC UDP buffer checks to require-quic-udp-buffer.sh", file)
+		}
+		if strings.Contains(content, "sysctl -n net.core.rmem_max") {
+			t.Fatalf("%s still uses runtime-only inline sysctl check", file)
+		}
+	}
+}
+
+func TestRepoAPPostgresSSLModeDowngradeHasAcceptedRiskLedger(t *testing.T) {
+	ledger := readRepoFile(t, "docs/current/security/accepted-risk-ap-postgres-sslmode.md")
+	for _, snippet := range []string{
+		"POSTGRES_SSLMODE_ALLOW_INSECURE=true",
+		"Expiry:",
+		"youtube-producer",
+		"verify-full",
+	} {
+		if !strings.Contains(ledger, snippet) {
+			t.Fatalf("accepted-risk-ap-postgres-sslmode.md missing required ledger field %q", snippet)
+		}
+	}
+}
+
 func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T) {
 	overlay := readRepoFile(t, "deploy/compose/docker-compose.main-ap.live-compat.yml")
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {

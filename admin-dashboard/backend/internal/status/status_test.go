@@ -13,10 +13,10 @@ func TestEndpointClientsSelectH3ForHTTPS(t *testing.T) {
 		{Name: "tcp-svc", URL: "http://localhost:30190", HealthPath: "/health"},
 	}, time.Second)
 
-	if _, isH3 := clients["h3-svc"].Transport.(*http3.Transport); !isH3 {
-		t.Fatalf("h3-svc transport = %T, want *http3.Transport", clients["h3-svc"].Transport)
+	if _, isH3 := clients["h3-svc"].client.Transport.(*http3.Transport); !isH3 {
+		t.Fatalf("h3-svc transport = %T, want *http3.Transport", clients["h3-svc"].client.Transport)
 	}
-	if _, isH3 := clients["tcp-svc"].Transport.(*http3.Transport); isH3 {
+	if _, isH3 := clients["tcp-svc"].client.Transport.(*http3.Transport); isH3 {
 		t.Fatal("tcp-svc must not use http3 transport")
 	}
 }

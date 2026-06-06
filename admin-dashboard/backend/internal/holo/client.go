@@ -32,16 +32,20 @@ func NewClient(baseURL, apiKey string) (*Client, error) {
 	if _, err := url.ParseRequestURI(baseURL); err != nil {
 		return nil, fmt.Errorf("invalid holo admin api url: %w", err)
 	}
+	httpClient, err := newHoloHTTPClient(baseURL)
+	if err != nil {
+		return nil, err
+	}
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  strings.TrimSpace(apiKey),
-		http:    newHoloHTTPClient(baseURL),
+		http:    httpClient,
 	}, nil
 }
 
-func newHoloHTTPClient(baseURL string) *http.Client {
+func newHoloHTTPClient(baseURL string) (*http.Client, error) {
 	if strings.HasPrefix(strings.ToLower(baseURL), "https://") {
-		return internalhttp.NewClientForURL(baseURL, 10*time.Second, nil)
+		return internalhttp.NewClientForURLStrict(baseURL, 10*time.Second, nil)
 	}
 	return &http.Client{
 		Timeout: 10 * time.Second,
@@ -53,7 +57,7 @@ func newHoloHTTPClient(baseURL string) *http.Client {
 			TLSHandshakeTimeout:   5 * time.Second,
 			ResponseHeaderTimeout: 10 * time.Second,
 		},
-	}
+	}, nil
 }
 
 const maxProxyBodyBytes = 8 << 20

@@ -61,6 +61,7 @@ const defaultLocalServiceName = "hololive-admin-api"
 type Collector struct {
 	httpClient  *http.Client
 	h3Client    *http.Client
+	h3ClientErr error
 	endpoints   []ServiceEndpoint
 	cacheTTL    time.Duration
 	serviceName string
@@ -82,9 +83,11 @@ func WithServiceName(name string) CollectorOption {
 }
 
 func NewCollector(endpoints []ServiceEndpoint, opts ...CollectorOption) *Collector {
+	h3Client, h3ClientErr := internalhttp.NewClientForURLStrict("https://internal", 2*time.Second, nil)
 	collector := &Collector{
 		httpClient:  httputil.NewInternalServiceClient(2 * time.Second),
-		h3Client:    internalhttp.NewClientForURL("https://internal", 2*time.Second, nil),
+		h3Client:    h3Client,
+		h3ClientErr: h3ClientErr,
 		endpoints:   endpoints,
 		cacheTTL:    2 * time.Second,
 		serviceName: defaultLocalServiceName,
@@ -247,7 +250,7 @@ type healthResponse struct {
 
 // fetchGoroutineCount: 단일 서비스의 goroutine 수를 조회합니다.
 func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, bool) {
-	if c == nil || c.httpClient == nil {
+	if c == nil {
 		return 0, false
 	}
 
@@ -256,7 +259,12 @@ func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, b
 		return 0, false
 	}
 
-	resp, err := c.clientForURL(url).Do(req)
+	client, ok := c.clientForURL(url)
+	if !ok {
+		return 0, false
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, false
 	}
@@ -274,11 +282,14 @@ func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, b
 	return goroutineCountFromHealthResponse(hr)
 }
 
-func (c *Collector) clientForURL(rawURL string) *http.Client {
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(rawURL)), "https://") && c.h3Client != nil {
-		return c.h3Client
+func (c *Collector) clientForURL(rawURL string) (*http.Client, bool) {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(rawURL)), "https://") {
+		if c.h3ClientErr != nil || c.h3Client == nil {
+			return nil, false
+		}
+		return c.h3Client, true
 	}
-	return c.httpClient
+	return c.httpClient, c.httpClient != nil
 }
 
 func goroutineCountFromHealthResponse(hr healthResponse) (int, bool) {

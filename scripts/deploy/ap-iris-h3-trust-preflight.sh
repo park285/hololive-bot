@@ -25,13 +25,7 @@ containers_list="${AP_CONTAINERS[*]}"
 "${AP_SSH[@]}" "AP_PREFLIGHT_ALLOW_FIRST_BOOT='$AP_PREFLIGHT_ALLOW_FIRST_BOOT' AP_REQUIRED_UDP_BUFFER_BYTES='$AP_REQUIRED_UDP_BUFFER_BYTES' AP_CONTAINERS_LIST='$containers_list' AP_NAME='$AP_NAME' bash -s" <<'REMOTE'
 set -euo pipefail
 
-required_udp_buffer_bytes="$AP_REQUIRED_UDP_BUFFER_BYTES"
-rmem_max="$(sysctl -n net.core.rmem_max 2>/dev/null || echo 0)"
-wmem_max="$(sysctl -n net.core.wmem_max 2>/dev/null || echo 0)"
-if (( rmem_max < required_udp_buffer_bytes || wmem_max < required_udp_buffer_bytes )); then
-  echo "AP QUIC UDP buffers too small on $AP_NAME: net.core.rmem_max=$rmem_max net.core.wmem_max=$wmem_max required>=$required_udp_buffer_bytes" >&2
-  exit 1
-fi
+bash "$HOME/hololive-bot/scripts/deploy/lib/require-quic-udp-buffer.sh" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_NAME"
 
 unit_type="$(systemctl show openbao-agent-hololive-bot.service -p Type --value)"
 unit_state="$(systemctl show openbao-agent-hololive-bot.service -p ActiveState --value)"

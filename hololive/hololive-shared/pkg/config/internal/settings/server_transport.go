@@ -14,7 +14,7 @@ func validateServerTransports(server ServerConfig) error {
 		return err
 	}
 	if !server.TransportEnabled("h3") {
-		return nil
+		return fmt.Errorf("HOLOLIVE_HTTP_TRANSPORTS must include h3")
 	}
 	return validateH3TransportFiles(server)
 }
