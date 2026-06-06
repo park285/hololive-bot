@@ -5,7 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # 렌더 전용 더미 env — 필수 보간 변수(:?)만 채운다. live 값과 무관.
 STUB_ENV="$(mktemp)"
-trap 'rm -f "${STUB_ENV}"' EXIT
+cleanup() {
+    rm -f "${STUB_ENV}" "${ROOT_DIR}"/deploy/compose/.h3-contract-*.yml
+}
+trap cleanup EXIT
 cat >"${STUB_ENV}" <<'EOF'
 ADMIN_PASS_BCRYPT=stub
 CACHE_PASSWORD=stub
@@ -24,14 +27,14 @@ MAIN_AP_OVERLAYS=(
     -f deploy/compose/docker-compose.main-ap.yml
     -f deploy/compose/docker-compose.main-ap.live-compat.yml
 )
-OSAKA_OVERLAYS=(
-    -f deploy/compose/docker-compose.prod.yml
-    -f deploy/compose/docker-compose.osaka.yml
-)
-SEOUL_OVERLAYS=(
-    -f deploy/compose/docker-compose.prod.yml
-    -f deploy/compose/docker-compose.seoul.yml
-)
+# AP compose 는 보안 계약상 env_file 을 /run/hololive-bot/env 로 하드코딩하므로
+# repo_security_contract_test 와 동일하게 임시 사본에서 더미 env 로 치환해 렌더한다.
+renderable_ap_compose() {
+    local src="$1" tmp
+    tmp="$(mktemp "${ROOT_DIR}/deploy/compose/.h3-contract-XXXXXX.yml")"
+    sed "s#- /run/hololive-bot/env#- ${STUB_ENV}#" "${ROOT_DIR}/${src}" >"${tmp}"
+    printf '%s\n' "${tmp}"
+}
 
 render() {
     local profiles="$1"
@@ -42,8 +45,8 @@ render() {
 
 main_render="$(render oracle "${PROD_OVERLAYS[@]}")"
 ap_render="$(render main-ap "${MAIN_AP_OVERLAYS[@]}")"
-osaka_render="$(render oracle "${OSAKA_OVERLAYS[@]}")"
-seoul_render="$(render oracle "${SEOUL_OVERLAYS[@]}")"
+osaka_render="$(render oracle -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka.yml)")"
+seoul_render="$(render oracle -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
 
 MAIN_RENDER="${main_render}" AP_RENDER="${ap_render}" \
     OSAKA_RENDER="${osaka_render}" SEOUL_RENDER="${seoul_render}" python3 - <<'PY'

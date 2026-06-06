@@ -605,7 +605,7 @@ services:
       - "127.0.0.1:30190:30190"
     volumes:
       - ../../logs:/app/logs
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
     extra_hosts: *host-extra-hosts
     depends_on:
       valkey-cache:
