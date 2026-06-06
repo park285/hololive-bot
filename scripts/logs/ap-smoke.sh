@@ -27,17 +27,14 @@ test -w /var/run/docker.sock || groups | grep -qw docker
 
 sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f "$AP_COMPOSE_FILE" ps $AP_SERVICES_LIST
 
-for port in $AP_PORTS_LIST; do
-  ready="$(curl -fsS "http://127.0.0.1:$port/ready")"
-  printf "%s" "$ready" | grep -q "\"mode\":\"active-active\""
-  printf "%s" "$ready" | grep -q "\"valkey_available\":true"
-  printf "%s" "$ready" | grep -q "\"scraping_paused\":false"
-done
-
 ports=($AP_PORTS_LIST)
 idx=0
 for container in $AP_CONTAINERS_LIST; do
-  docker exec "$container" ./bin/healthcheck "http://127.0.0.1:${ports[$idx]}/health"
+  ready="$(docker exec "$container" ./bin/healthcheck --body "https://127.0.0.1:${ports[$idx]}/ready")"
+  printf "%s" "$ready" | grep -q "\"mode\":\"active-active\""
+  printf "%s" "$ready" | grep -q "\"valkey_available\":true"
+  printf "%s" "$ready" | grep -q "\"scraping_paused\":false"
+  docker exec "$container" ./bin/healthcheck "https://127.0.0.1:${ports[$idx]}/health"
   idx=$((idx + 1))
 done
 

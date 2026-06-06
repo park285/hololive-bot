@@ -35,9 +35,10 @@ func NewClientForURL(rawURL string, timeout time.Duration, logger *slog.Logger) 
 		ServerName: firstNonEmptyEnv(internalH3ServerNameEnv, hololiveH3ServerNameEnv),
 	})
 	if err != nil {
-		if logger != nil {
-			logger.Warn("Failed to configure internal H3 client; falling back to default client", slog.Any("error", err))
+		if logger == nil {
+			logger = slog.Default()
 		}
+		logger.Warn("Failed to configure internal H3 client; falling back to default client", slog.Any("error", err))
 		return httputil.NewInternalServiceClient(timeout)
 	}
 	return client

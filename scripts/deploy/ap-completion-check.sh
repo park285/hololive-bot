@@ -32,11 +32,14 @@ for container in $containers_list; do
   [[ \"\$status\" == healthy ]]
 done
 
-for port in $ports_list; do
-  ready=\$(curl -fsS \"http://127.0.0.1:\$port/ready\")
+ports=($ports_list)
+idx=0
+for container in $containers_list; do
+  ready=\$(docker exec \"\$container\" ./bin/healthcheck --body \"https://127.0.0.1:\${ports[\$idx]}/ready\")
   printf '%s' \"\$ready\" | grep -q '\"mode\":\"active-active\"'
   printf '%s' \"\$ready\" | grep -q '\"valkey_available\":true'
   printf '%s' \"\$ready\" | grep -q '\"scraping_paused\":false'
+  idx=\$((idx + 1))
 done
 
 if [[ -n '$CHANGE_STARTED_AT' ]]; then

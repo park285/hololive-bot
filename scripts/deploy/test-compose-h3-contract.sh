@@ -24,6 +24,14 @@ MAIN_AP_OVERLAYS=(
     -f deploy/compose/docker-compose.main-ap.yml
     -f deploy/compose/docker-compose.main-ap.live-compat.yml
 )
+OSAKA_OVERLAYS=(
+    -f deploy/compose/docker-compose.prod.yml
+    -f deploy/compose/docker-compose.osaka.yml
+)
+SEOUL_OVERLAYS=(
+    -f deploy/compose/docker-compose.prod.yml
+    -f deploy/compose/docker-compose.seoul.yml
+)
 
 render() {
     local profiles="$1"
@@ -34,8 +42,11 @@ render() {
 
 main_render="$(render oracle "${PROD_OVERLAYS[@]}")"
 ap_render="$(render main-ap "${MAIN_AP_OVERLAYS[@]}")"
+osaka_render="$(render oracle "${OSAKA_OVERLAYS[@]}")"
+seoul_render="$(render oracle "${SEOUL_OVERLAYS[@]}")"
 
-MAIN_RENDER="${main_render}" AP_RENDER="${ap_render}" python3 - <<'PY'
+MAIN_RENDER="${main_render}" AP_RENDER="${ap_render}" \
+    OSAKA_RENDER="${osaka_render}" SEOUL_RENDER="${seoul_render}" python3 - <<'PY'
 import json
 import os
 import sys
@@ -92,6 +103,31 @@ if pc is not None:
     )
     check("youtube-producer-c publishes 30025/udp", has_udp_published(pc, 30025))
 
+
+def has_bind_target(svc, target):
+    return any(v.get("target") == target for v in svc.get("volumes") or [])
+
+
+AP_PRODUCERS = (
+    ("OSAKA_RENDER", "youtube-producer-a", 30005),
+    ("SEOUL_RENDER", "youtube-producer-b", 30015),
+)
+
+for render_env, name, port in AP_PRODUCERS:
+    services = json.loads(os.environ[render_env])["services"]
+    svc = services.get(name)
+    check(f"{name} present in {render_env}", svc is not None)
+    if svc is None:
+        continue
+    url = f"https://127.0.0.1:{port}/health"
+    check(f"{name} healthcheck is {url}", healthcheck_url(svc) == url)
+    check(f"{name} publishes {port}/udp", has_udp_published(svc, port))
+    for cert_path in (
+        "/run/hololive-bot/certs/hololive-h3.crt",
+        "/run/hololive-bot/certs/hololive-h3.key",
+    ):
+        check(f"{name} mounts {cert_path}", has_bind_target(svc, cert_path))
+
 H2C_URL_PATTERNS = ("http://llm-scheduler", "http://hololive-admin-api")
 
 for render_name, services in (("oracle", main), ("main-ap", ap)):
@@ -110,3 +146,14 @@ if failures:
     sys.exit(1)
 print("[PASS] h3 compose contract")
 PY
+
+AP_VERIFY_SCRIPTS=(
+    scripts/deploy/ap-deploy.sh
+    scripts/deploy/ap-completion-check.sh
+    scripts/logs/ap-smoke.sh
+)
+if grep -nE 'http://127\.0\.0\.1' "${AP_VERIFY_SCRIPTS[@]/#/${ROOT_DIR}/}"; then
+    echo "[FAIL] AP verify scripts still probe over TCP http://" >&2
+    exit 1
+fi
+echo "[PASS] AP verify scripts are h3-only"
