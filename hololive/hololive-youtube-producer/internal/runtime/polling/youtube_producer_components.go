@@ -66,7 +66,7 @@ func validateYouTubeProducerRegistrationsAndBudgets(
 		scraperConfig.WorkerCountOrDefault(),
 	)
 	logYouTubeProducerSourceBudgetEstimate(sourceBudgetEstimate, logger)
-	budgetSummary := summarizeYouTubeProducerBudget(pollerRegistrations)
+	budgetSummary := summarizeYouTubeProducerBudgetWithLimit(pollerRegistrations, budgetWiring.BudgetRPM)
 	logYouTubeProducerBudgetSummary(budgetSummary, logger)
 	return validateYouTubeProducerPollerBudget(budgetSummary)
 }

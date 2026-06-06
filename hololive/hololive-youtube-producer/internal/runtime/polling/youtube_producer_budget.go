@@ -23,6 +23,10 @@ type youtubeProducerBudgetSummary struct {
 }
 
 func summarizeYouTubeProducerBudget(registrations []providers.ChannelPollerRegistration) youtubeProducerBudgetSummary {
+	return summarizeYouTubeProducerBudgetWithLimit(registrations, defaultYouTubeProducerBudgetRPM())
+}
+
+func summarizeYouTubeProducerBudgetWithLimit(registrations []providers.ChannelPollerRegistration, budgetRPM float64) youtubeProducerBudgetSummary {
 	pollerRPM := 0.0
 	pollerRetryAmplifiedRPM := 0.0
 	resolverRPM := 0.0
@@ -40,7 +44,9 @@ func summarizeYouTubeProducerBudget(registrations []providers.ChannelPollerRegis
 	}
 	combinedRPM := pollerRPM + resolverRPM
 	combinedRetryAmplifiedRPM := pollerRetryAmplifiedRPM + resolverRetryAmplifiedRPM
-	budgetRPM := 60.0 / config.DefaultYouTubeOperationalConfig().ProducerRequestInterval.Seconds()
+	if budgetRPM <= 0 {
+		budgetRPM = defaultYouTubeProducerBudgetRPM()
+	}
 
 	return youtubeProducerBudgetSummary{
 		PollerRPM:                 pollerRPM,
@@ -51,6 +57,10 @@ func summarizeYouTubeProducerBudget(registrations []providers.ChannelPollerRegis
 		CombinedRetryAmplifiedRPM: combinedRetryAmplifiedRPM,
 		BudgetRPM:                 budgetRPM,
 	}
+}
+
+func defaultYouTubeProducerBudgetRPM() float64 {
+	return 60.0 / config.DefaultYouTubeOperationalConfig().ProducerRequestInterval.Seconds()
 }
 
 func estimateRegistrationYouTubeScraperRPM(registration providers.ChannelPollerRegistration) float64 {
