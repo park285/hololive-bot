@@ -263,7 +263,7 @@ func readGoScrapyResponse(resp core.IResponseReader) (pageFetchResponse, error) 
 
 	data, err := jsonutil.ReadAllLimit(body, ytDefaults.MaxPageBodyBytes)
 	if err != nil {
-		return out, fmt.Errorf("failed to read response body: %w", err)
+		return out, responseBodyReadError(err)
 	}
 	out.Body = data
 	return out, nil

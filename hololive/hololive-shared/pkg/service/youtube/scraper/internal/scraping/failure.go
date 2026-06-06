@@ -22,6 +22,8 @@ const (
 	FailureReasonHTTPStatus         FailureReason = "http_status"
 	FailureReasonParserDrift        FailureReason = "parser_drift"
 	FailureReasonEmptyResponse      FailureReason = "empty_response"
+	FailureReasonBlockedResponse    FailureReason = "blocked_response"
+	FailureReasonResponseTooLarge   FailureReason = "response_too_large"
 	FailureReasonChannelNotFound    FailureReason = "channel_not_found"
 	FailureReasonChannelUnavailable FailureReason = "channel_unavailable"
 	FailureReasonContextCanceled    FailureReason = "context_canceled"
@@ -83,6 +85,18 @@ func classifyYouTubeSentinelFailure(err error, detail *FailureDetail) bool {
 		detail.Reason = FailureReasonForbidden
 		detail.StatusCode = http.StatusForbidden
 		detail.RetryAfter = extractHTTPRetryAfter(err)
+		return true
+	}
+	if errors.Is(err, ErrBlockedResponse) {
+		detail.Reason = FailureReasonBlockedResponse
+		return true
+	}
+	if errors.Is(err, ErrResponseTooLarge) {
+		detail.Reason = FailureReasonResponseTooLarge
+		return true
+	}
+	if errors.Is(err, ErrEmptyResponse) {
+		detail.Reason = FailureReasonEmptyResponse
 		return true
 	}
 	if IsParserDriftError(err) {

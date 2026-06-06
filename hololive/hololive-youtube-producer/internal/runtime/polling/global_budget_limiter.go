@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -101,6 +102,51 @@ func (l *globalBudgetLimiter) TryReserve(
 		ownerToken:  ownerToken,
 		sources:     acquired,
 	}, poller.BudgetDecision{Allowed: true}, nil
+}
+
+func (l *globalBudgetLimiter) MarkSourceCooldown(ctx context.Context, source poller.BudgetSource, ttl time.Duration, reason string) error {
+	if l == nil || l.cacheClient == nil {
+		return fmt.Errorf("mark source cooldown: limiter is nil")
+	}
+	if strings.TrimSpace(string(source)) == "" {
+		return fmt.Errorf("mark source cooldown: source must not be empty")
+	}
+	if ttl <= 0 {
+		return nil
+	}
+
+	keys := buildGlobalBudgetKeys(l.namespace, source, poller.BudgetBurstPrimary, "")
+	value := globalBudgetSourceCooldownValue(l.instanceID, reason)
+	cmd := l.cacheClient.B().
+		Set().
+		Key(keys.SourceCooldown).
+		Value(value).
+		ExSeconds(globalBudgetCooldownSeconds(ttl)).
+		Build()
+
+	if err := l.cacheClient.GetClient().Do(ctx, cmd).Error(); err != nil {
+		return fmt.Errorf("mark source cooldown %s: %w", source, err)
+	}
+	return nil
+}
+
+func globalBudgetSourceCooldownValue(instanceID, reason string) string {
+	trimmedReason := strings.TrimSpace(reason)
+	if trimmedReason == "" {
+		trimmedReason = "source_cooldown"
+	}
+	return normalizeGlobalBudgetInstanceID(instanceID) + ":" + trimmedReason
+}
+
+func globalBudgetCooldownSeconds(ttl time.Duration) int64 {
+	seconds := int64(ttl / time.Second)
+	if ttl%time.Second != 0 {
+		seconds++
+	}
+	if seconds <= 0 {
+		return 1
+	}
+	return seconds
 }
 
 func (l *globalBudgetLimiter) reserveProfileSources(

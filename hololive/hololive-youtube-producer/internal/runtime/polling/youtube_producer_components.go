@@ -37,6 +37,7 @@ func buildYouTubeProducerComponents(
 	if resolverRegistration := publishedat.BuildRegistration(publishedAtResolver, scraperConfig, logger); resolverRegistration != nil {
 		pollerRegistrations = append(pollerRegistrations, *resolverRegistration)
 	}
+	pollerRegistrations = wrapYouTubeProducerSourceCooldownPollers(pollerRegistrations, budgetWiring.Limiter, logger)
 	if err := validateYouTubeProducerRegistrationsAndBudgets(pollerRegistrations, scraperConfig, budgetWiring, logger); err != nil {
 		return nil, nil, err
 	}
@@ -120,8 +121,10 @@ func buildSharedYouTubeProducerClient(
 			MaxBodyBytes: snapshotConfig.MaxBodyBytes,
 			MinInterval:  snapshotConfig.MinInterval,
 			AllowedReasons: map[scraper.FailureReason]bool{
-				scraper.FailureReasonParserDrift:   true,
-				scraper.FailureReasonEmptyResponse: true,
+				scraper.FailureReasonParserDrift:      true,
+				scraper.FailureReasonEmptyResponse:    true,
+				scraper.FailureReasonBlockedResponse:  true,
+				scraper.FailureReasonResponseTooLarge: true,
 			},
 		}),
 	}

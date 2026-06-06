@@ -58,10 +58,11 @@ func buildTestFlatRegistrations(
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
+	communityInterval := testCommunityPrimaryPollInterval(poll)
 	return []providers.ChannelPollerRegistration{
 		testNotificationRegistration(pollers.videos, poller.PriorityNormal, poll.Videos, notificationChannelIDs),
 		testNotificationRegistration(pollers.shorts, poller.PriorityLow, poll.Shorts, notificationChannelIDs),
-		testNotificationRegistration(pollers.community, poller.PriorityLow, poll.Community, notificationChannelIDs),
+		testNotificationRegistration(pollers.community, poller.PriorityLow, communityInterval, notificationChannelIDs),
 		providers.NewChannelPollerRegistration(pollers.stats, poller.PriorityLow, poll.Stats).
 			WithChannelIDs(statsChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupStats),
@@ -77,12 +78,19 @@ func buildTestTieredRegistrations(
 	registrations := make([]providers.ChannelPollerRegistration, 0, 11)
 	registrations = appendTestTieredNotificationRegistrations(registrations, pollers.videos, poll.Videos, poller.PriorityNormal, targets)
 	registrations = appendTestTieredNotificationRegistrations(registrations, pollers.shorts, poll.Shorts, poller.PriorityLow, targets)
-	registrations = appendTestTieredNotificationRegistrations(registrations, pollers.community, poll.Community, poller.PriorityLow, targets)
+	registrations = appendTestTieredNotificationRegistrations(registrations, pollers.community, testCommunityPrimaryPollInterval(poll), poller.PriorityLow, targets)
 	registrations = append(registrations, providers.NewChannelPollerRegistration(pollers.stats, poller.PriorityLow, poll.Stats).
 		WithChannelIDs(targets.StatsChannelIDs).
 		WithTargetGroup(providers.ChannelTargetGroupStats))
 	registrations = append(registrations, testNotificationRegistration(pollers.live, poller.PriorityHigh, poll.Live, targets.NotificationChannelIDs))
 	return registrations
+}
+
+func testCommunityPrimaryPollInterval(poll config.ScraperPoll) time.Duration {
+	if poll.Shorts > 0 {
+		return poll.Shorts
+	}
+	return poll.Community
 }
 
 func appendTestTieredNotificationRegistrations(

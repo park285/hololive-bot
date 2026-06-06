@@ -76,12 +76,14 @@ Use primary interval tuning first, then enable backfill only if metrics show mis
 
 ```text
 SCRAPER_SHORTS_SECONDS=90
-SCRAPER_COMMUNITY_SECONDS=300
+SCRAPER_COMMUNITY_SECONDS=90
 SCRAPER_LIVE_SECONDS=90
 SCRAPER_VIDEOS_SECONDS=900
 SCRAPER_STATS_SECONDS=21600
 YOUTUBE_PRODUCER_AP_WORKER_COUNT=2
 ```
+
+Primary community polling follows the shorts cadence in youtube-producer; keep `SCRAPER_COMMUNITY_SECONDS` aligned for config readability. Backfill community polling remains separately controlled by `SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS`.
 
 Optional backfill pollers use separate names (`shorts_backfill`, `community_backfill`, `live_backfill`) and separate cooldown keys. They reuse the same persistence/outbox path, so duplicate delivery is still guarded by `(kind, content_id)` idempotency and `alarm-worker` delivery claims. Backfill remains disabled by default:
 

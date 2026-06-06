@@ -22,6 +22,7 @@ package holodexprovider
 
 import (
 	"context"
+	stdErrors "errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -33,6 +34,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 type channelFetchResult struct {
@@ -126,12 +128,24 @@ func stringSet(values []string) map[string]bool {
 // 주의: org, status, sort 필터링 미지원 - live+upcoming 모두 반환됨
 // 사용 시나리오: 알림 체크, 대시보드 상태 표시 등 빠른 상태 확인
 func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
+	streams, failed, err := h.GetChannelsLiveStatusWithFailures(ctx, channelIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(streams) == 0 && len(failed) > 0 {
+		return nil, fmt.Errorf("get channels live status: %w", joinChannelsLiveStatusFailures(channelIDs, failed))
+	}
+	return streams, nil
+}
+
+// failed map은 fetch 실패 채널을 "방송 없음" 채널과 구분해 live session 오종료를 막는 계약이다.
+func (h *Service) GetChannelsLiveStatusWithFailures(ctx context.Context, channelIDs []string) ([]*domain.Stream, map[string]error, error) {
 	if len(channelIDs) == 0 {
-		return []*domain.Stream{}, nil
+		return []*domain.Stream{}, nil, nil
 	}
 
 	if cached, found := h.cacheManager.GetChannelsLiveStatusStreams(ctx, channelIDs); found {
-		return cached, nil
+		return cached, nil, nil
 	}
 
 	params := url.Values{}
@@ -142,41 +156,91 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 		return h.handleChannelsLiveStatusRequestError(ctx, channelIDs, err)
 	}
 
-	return h.mapAndCacheChannelsLiveStatus(ctx, channelIDs, body)
+	streams, mapErr := h.mapAndCacheChannelsLiveStatus(ctx, channelIDs, body)
+	if mapErr != nil {
+		return nil, nil, mapErr
+	}
+	return streams, nil, nil
 }
 
-func (h *Service) handleChannelsLiveStatusRequestError(ctx context.Context, channelIDs []string, err error) ([]*domain.Stream, error) {
+func (h *Service) handleChannelsLiveStatusRequestError(ctx context.Context, channelIDs []string, err error) ([]*domain.Stream, map[string]error, error) {
 	h.logger.Error("Failed to get channels live status",
 		slog.Int("channel_count", len(channelIDs)),
 		slog.Any("error", err),
 	)
 
-	allStreams, ok := h.tryChannelsLiveStatusFallback(ctx, channelIDs, err)
+	allStreams, failed, fallbackErr, ok := h.tryChannelsLiveStatusFallback(ctx, channelIDs, err)
 	if ok {
-		return allStreams, nil
+		return allStreams, failed, nil
 	}
-	return nil, fmt.Errorf("get channels live status: %w", err)
+	if fallbackErr != nil {
+		return nil, nil, fmt.Errorf("get channels live status: %w", errorsJoin(err, fallbackErr))
+	}
+	return nil, nil, fmt.Errorf("get channels live status: %w", err)
 }
 
-func (h *Service) tryChannelsLiveStatusFallback(ctx context.Context, channelIDs []string, err error) ([]*domain.Stream, bool) {
+func (h *Service) tryChannelsLiveStatusFallback(ctx context.Context, channelIDs []string, err error) ([]*domain.Stream, map[string]error, error, bool) {
 	if !h.shouldUseFallback(ctx, err) || h.scraper == nil {
-		return nil, false
+		return nil, nil, nil, false
 	}
 
 	h.logger.Warn("Using scraper fallback for channels live status", slog.Any("error", err))
-	allStreams, fallbackErr := h.getChannelsLiveStatusFromScraper(ctx, channelIDs)
-	if fallbackErr != nil {
-		h.logger.Warn("Scraper live status fallback failed",
-			slog.Int("channel_count", len(channelIDs)),
-			slog.Any("error", fallbackErr),
-		)
+	allStreams, failed := h.getChannelsLiveStatusFromScraper(ctx, channelIDs)
+	h.logChannelsLiveStatusFallbackFailures(channelIDs, failed)
+	return h.resolveChannelsLiveStatusFallback(ctx, channelIDs, allStreams, failed)
+}
+
+func (h *Service) logChannelsLiveStatusFallbackFailures(channelIDs []string, failed map[string]error) {
+	if len(failed) == 0 {
+		return
+	}
+	h.logger.Warn("Scraper live status fallback failed for some channels",
+		slog.Int("channel_count", len(channelIDs)),
+		slog.Int("failed_count", len(failed)),
+	)
+}
+
+func (h *Service) resolveChannelsLiveStatusFallback(ctx context.Context, channelIDs []string, allStreams []*domain.Stream, failed map[string]error) ([]*domain.Stream, map[string]error, error, bool) {
+	if sourceLevelErr := firstChannelsLiveStatusSourceLevelError(channelIDs, failed); sourceLevelErr != nil {
+		return nil, nil, fmt.Errorf("fetch channels live status from scraper: %w", sourceLevelErr), false
+	}
+	if len(failed) > 0 && len(failed) == len(channelIDs) {
+		return nil, nil, fmt.Errorf("fetch channels live status from scraper: %w", joinChannelsLiveStatusFailures(channelIDs, failed)), false
+	}
+	if len(failed) > 0 {
+		return allStreams, failed, nil, true
 	}
 	if len(allStreams) == 0 {
-		return nil, false
+		return nil, nil, nil, false
 	}
 
 	h.cacheManager.SetChannelsLiveStatusStreams(ctx, channelIDs, allStreams, 30*time.Second)
-	return allStreams, true
+	return allStreams, nil, nil, true
+}
+
+func firstChannelsLiveStatusSourceLevelError(channelIDs []string, failed map[string]error) error {
+	for _, channelID := range channelIDs {
+		if channelErr, ok := failed[channelID]; ok && isYouTubeProducerSourceLevelFallbackError(channelErr) {
+			return channelErr
+		}
+	}
+	return nil
+}
+
+func joinChannelsLiveStatusFailures(channelIDs []string, failed map[string]error) error {
+	errs := make([]error, 0, len(failed))
+	for _, channelID := range channelIDs {
+		if channelErr, ok := failed[channelID]; ok {
+			errs = append(errs, fmt.Errorf("channel %s: %w", channelID, channelErr))
+		}
+	}
+	return errorsJoin(errs...)
+}
+
+func isYouTubeProducerSourceLevelFallbackError(err error) bool {
+	return stdErrors.Is(err, scraper.ErrRateLimited) ||
+		stdErrors.Is(err, scraper.ErrForbidden) ||
+		stdErrors.Is(err, scraper.ErrBlockedResponse)
 }
 
 func (h *Service) mapAndCacheChannelsLiveStatus(ctx context.Context, channelIDs []string, body []byte) ([]*domain.Stream, error) {
@@ -250,22 +314,21 @@ func (h *Service) hydrateIndieStreamChannel(stream *domain.Stream, indieRequeste
 	}
 }
 
-func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
+func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelIDs []string) ([]*domain.Stream, map[string]error) {
 	allStreams := make([]*domain.Stream, 0, len(channelIDs))
-	var lastErr error
+	var failed map[string]error
 
 	for _, channelID := range channelIDs {
 		streams, err := h.scraper.FetchFromYouTubeProducer(ctx, channelID)
 		if err != nil {
-			lastErr = err
+			if failed == nil {
+				failed = make(map[string]error, 1)
+			}
+			failed[channelID] = err
 			continue
 		}
 		allStreams = append(allStreams, streams...)
 	}
 
-	if lastErr != nil {
-		return allStreams, fmt.Errorf("fetch channels live status from scraper: %w", lastErr)
-	}
-
-	return allStreams, nil
+	return allStreams, failed
 }

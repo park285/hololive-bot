@@ -25,12 +25,11 @@ const channelStatsAboutHTML = `<html><body><script>var ytInitialData = ` +
 	`"description":"Test channel description",` +
 	`"country":"Japan",` +
 	`"handle":"@testchannel"` +
-	`}}}}]}}]}}}}}],"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"/@testchannel"}}}}]}}}` +
+	`}}}}]}}]}}}}}}],"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"/@testchannel"}}}}]}}}` +
 	`;</script></body></html>`
 
 const channelSnippetHTML = `<html><body><script>var ytInitialData = ` +
-	`{"header":{"pageHeaderRenderer":{"content":{"pageHeaderViewModel":{"image":{"decoratedAvatarViewModel":{"avatar":{"avatarViewModel":{"image":{"sources":[{"url":"https://img.test/avatar.jpg","width":88,"height":88}]}}}}},"banner":{"imageBannerViewModel":{"image":{"sources":[{"url":"https://img.test/banner.jpg","width":1280,"height":351}]}}}}}}}}` +
-	`}` +
+	`{"header":{"pageHeaderRenderer":{"content":{"pageHeaderViewModel":{"image":{"decoratedAvatarViewModel":{"avatar":{"avatarViewModel":{"image":{"sources":[{"url":"https://img.test/avatar.jpg","width":88,"height":88}]}}}}},"banner":{"imageBannerViewModel":{"image":{"sources":[{"url":"https://img.test/banner.jpg","width":1280,"height":351}]}}}}}}}}}` +
 	`;</script></body></html>`
 
 func newChannelStatsTestClient(t *testing.T, transport http.RoundTripper) *scraper.Client {

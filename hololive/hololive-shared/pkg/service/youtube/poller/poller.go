@@ -35,6 +35,8 @@ type BudgetReservation = polling.BudgetReservation
 
 type GlobalBudgetLimiter = polling.GlobalBudgetLimiter
 
+type SourceCooldownReporter = polling.SourceCooldownReporter
+
 type BudgetContext = polling.BudgetContext
 
 type Poller = polling.Poller

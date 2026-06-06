@@ -49,16 +49,22 @@ func TestChannelPollerRegistrationWithBudgetProfileCopiesSourceUnits(t *testing.
 		poller.BudgetSourceYouTubeScraper: 3,
 		poller.BudgetSourcePostgresWrite:  1,
 	}
+	fallbackSourceUnits := map[poller.BudgetSource]float64{
+		poller.BudgetSourceYouTubeScraper: 12,
+	}
 	profile := poller.BudgetProfile{
-		SourceUnits: sourceUnits,
-		BurstClass:  poller.BudgetBurstPrimary,
-		Priority:    poller.BudgetPriorityHigh,
+		SourceUnits:         sourceUnits,
+		FallbackSourceUnits: fallbackSourceUnits,
+		BurstClass:          poller.BudgetBurstPrimary,
+		Priority:            poller.BudgetPriorityHigh,
 	}
 
 	registration := NewChannelPollerRegistration(nil, poller.PriorityHigh, time.Minute).
 		WithBudgetProfile(profile)
 	sourceUnits[poller.BudgetSourceYouTubeScraper] = 999
 	sourceUnits[poller.BudgetSourceHolodexLive] = 2
+	fallbackSourceUnits[poller.BudgetSourceYouTubeScraper] = 999
+	fallbackSourceUnits[poller.BudgetSourceHolodexLive] = 2
 
 	if !registration.HasBudgetProfile {
 		t.Fatal("WithBudgetProfile must mark profile as explicit")
@@ -75,6 +81,12 @@ func TestChannelPollerRegistrationWithBudgetProfileCopiesSourceUnits(t *testing.
 	if _, ok := registration.BudgetProfile.SourceUnits[poller.BudgetSourceHolodexLive]; ok {
 		t.Fatal("registration source units must not observe mutations to the original map")
 	}
+	if got := registration.BudgetProfile.FallbackSourceUnits[poller.BudgetSourceYouTubeScraper]; got != 12 {
+		t.Fatalf("registration fallback source units were not defensively copied: got %v", got)
+	}
+	if _, ok := registration.BudgetProfile.FallbackSourceUnits[poller.BudgetSourceHolodexLive]; ok {
+		t.Fatal("registration fallback source units must not observe mutations to the original map")
+	}
 
 	target := registration.ToTargetSync()
 	if target.BudgetProfile.BurstClass != poller.BudgetBurstPrimary {
@@ -85,6 +97,9 @@ func TestChannelPollerRegistrationWithBudgetProfileCopiesSourceUnits(t *testing.
 	}
 	if got := target.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite]; got != 1 {
 		t.Fatalf("target sync budget profile was not propagated: got %v", got)
+	}
+	if got := target.BudgetProfile.FallbackSourceUnits[poller.BudgetSourceYouTubeScraper]; got != 12 {
+		t.Fatalf("target sync fallback budget profile was not propagated: got %v", got)
 	}
 }
 

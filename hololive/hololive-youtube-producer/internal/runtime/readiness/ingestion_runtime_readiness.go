@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/health"
 )
@@ -55,7 +56,15 @@ type State struct {
 	lastError              atomic.Value // string
 	budgetMu               sync.Mutex
 	budgetExhausted        map[string]struct{}
-	sourceCooldown         map[string]struct{}
+	sourceCooldown         map[string]time.Time
+	nowFunc                func() time.Time
+}
+
+func (s *State) now() time.Time {
+	if s.nowFunc != nil {
+		return s.nowFunc()
+	}
+	return time.Now()
 }
 
 func New(runtimeName string, features Features) *State {
@@ -66,7 +75,7 @@ func New(runtimeName string, features Features) *State {
 		activeActiveEnabled: features.ActiveActiveEnabled,
 		instanceID:          strings.TrimSpace(features.ActiveActiveInstance),
 		budgetExhausted:     make(map[string]struct{}),
-		sourceCooldown:      make(map[string]struct{}),
+		sourceCooldown:      make(map[string]time.Time),
 	}
 	state.leaseReason.Store("")
 	state.lastError.Store("")
@@ -171,12 +180,31 @@ func (s *State) MarkBudgetAdmissionDenied(reason string, sources []string) {
 	}
 	s.budgetMu.Lock()
 	defer s.budgetMu.Unlock()
-	target := s.budgetExhausted
 	if reason == "source_cooldown" {
-		target = s.sourceCooldown
+		for _, source := range normalized {
+			s.sourceCooldown[source] = time.Time{}
+		}
+		return
 	}
 	for _, source := range normalized {
-		target[source] = struct{}{}
+		s.budgetExhausted[source] = struct{}{}
+	}
+}
+
+// reserve가 다시 돌지 않는 source(fallback 전용 등)도 TTL이 지나면 readiness에서 자동 해제한다.
+func (s *State) MarkSourceCooldownFor(sources []string, ttl time.Duration) {
+	if s == nil || ttl <= 0 {
+		return
+	}
+	normalized := normalizeBudgetSources(sources)
+	if len(normalized) == 0 {
+		return
+	}
+	expiry := s.now().Add(ttl)
+	s.budgetMu.Lock()
+	defer s.budgetMu.Unlock()
+	for _, source := range normalized {
+		s.sourceCooldown[source] = expiry
 	}
 }
 
@@ -295,6 +323,12 @@ func (s *State) budgetAdmissionPayload(budgetEnabled bool) (bool, bool, []string
 	}
 	s.budgetMu.Lock()
 	defer s.budgetMu.Unlock()
+	now := s.now()
+	for source, expiry := range s.sourceCooldown {
+		if !expiry.IsZero() && now.After(expiry) {
+			delete(s.sourceCooldown, source)
+		}
+	}
 	affected := make(map[string]struct{}, len(s.budgetExhausted)+len(s.sourceCooldown))
 	for source := range s.budgetExhausted {
 		affected[source] = struct{}{}

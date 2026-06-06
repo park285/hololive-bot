@@ -33,6 +33,8 @@ type readinessBudgetLimiterStub struct {
 	decision    poller.BudgetDecision
 	err         error
 	calls       int
+	markCalls   int
+	markErr     error
 }
 
 func (s *readinessBudgetLimiterStub) TryReserve(
@@ -43,6 +45,11 @@ func (s *readinessBudgetLimiterStub) TryReserve(
 ) (poller.BudgetReservation, poller.BudgetDecision, error) {
 	s.calls++
 	return s.reservation, s.decision, s.err
+}
+
+func (s *readinessBudgetLimiterStub) MarkSourceCooldown(context.Context, poller.BudgetSource, time.Duration, string) error {
+	s.markCalls++
+	return s.markErr
 }
 
 type readinessProbeClaimStub struct {
@@ -250,6 +257,40 @@ func TestReadinessReportingBudgetLimiterMarksSourceCooldown(t *testing.T) {
 		t.Fatalf("source_cooldown = %v, want true", payload["source_cooldown"])
 	}
 	wantSources := []string{"holodex_live"}
+	if !reflect.DeepEqual(payload["affected_sources"], wantSources) {
+		t.Fatalf("affected_sources = %v, want %v", payload["affected_sources"], wantSources)
+	}
+}
+
+func TestReadinessReportingBudgetLimiterMarkSourceCooldownUpdatesReadiness(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	inner := &readinessBudgetLimiterStub{}
+	limiter := newReadinessReportingBudgetLimiter(inner, state)
+	reporter, ok := limiter.(poller.SourceCooldownReporter)
+	if !ok {
+		t.Fatal("limiter does not implement SourceCooldownReporter")
+	}
+
+	err := reporter.MarkSourceCooldown(context.Background(), poller.BudgetSourceYouTubeScraper, time.Minute, "youtube_rate_limited")
+
+	if err != nil {
+		t.Fatalf("MarkSourceCooldown error = %v, want nil", err)
+	}
+	if inner.markCalls != 1 {
+		t.Fatalf("markCalls = %d, want 1", inner.markCalls)
+	}
+	statusCode, payload := state.Response()
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["source_cooldown"] != true {
+		t.Fatalf("source_cooldown = %v, want true", payload["source_cooldown"])
+	}
+	wantSources := []string{"youtube_scraper"}
 	if !reflect.DeepEqual(payload["affected_sources"], wantSources) {
 		t.Fatalf("affected_sources = %v, want %v", payload["affected_sources"], wantSources)
 	}

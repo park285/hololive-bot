@@ -21,6 +21,7 @@
 package scraping
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -50,13 +51,8 @@ func (c *Client) currentPageFetcher() pageFetcher {
 
 // fetchPageOnce: 단일 HTTP 요청 수행 (재시도 없음)
 func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, error) {
-	// 불변식: hard cooldown만 차단 (transient는 재시도 허용)
-	if cooldownRemaining := c.backoffState.HardCooldownRemaining(); cooldownRemaining > 0 {
-		return "", fmt.Errorf("in cooldown for %v: %w", cooldownRemaining.Round(time.Second), ErrRateLimited)
-	}
-
-	if err := c.rateLimiter.WaitWithBucket(ctx, distributedBucketFromURL(pageURL)); err != nil {
-		return "", fmt.Errorf("rate limiter wait failed: %w", err)
+	if err := c.fetchPagePreflight(ctx, pageURL); err != nil {
+		return "", err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
@@ -78,11 +74,30 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 		return "", err
 	}
 
+	if err := validateSuccessfulFetchBody(pageURL, resp.Body); err != nil {
+		return "", err
+	}
+
+	c.recordFetchSuccess()
+	return string(resp.Body), nil
+}
+
+// 불변식: hard cooldown만 차단 (transient는 재시도 허용)
+func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string) error {
+	if cooldownRemaining := c.backoffState.HardCooldownRemaining(); cooldownRemaining > 0 {
+		return fmt.Errorf("in cooldown for %v: %w", cooldownRemaining.Round(time.Second), ErrRateLimited)
+	}
+	if err := c.rateLimiter.WaitWithBucket(ctx, distributedBucketFromURL(pageURL)); err != nil {
+		return fmt.Errorf("rate limiter wait failed: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) recordFetchSuccess() {
 	c.backoffState.RecordSuccess()
 	if c.ProxyEnabled() {
 		c.proxyHealth.RecordSuccess()
 	}
-	return string(resp.Body), nil
 }
 
 func (c *Client) observeProxyTransportFailure(err error) {
@@ -175,6 +190,45 @@ func drainResponseBody(resp *http.Response) {
 	}
 
 	_, _ = io.CopyN(io.Discard, resp.Body, 4*1024)
+}
+
+const successfulBodySignatureScanLimit = 64 * 1024
+
+func validateSuccessfulFetchBody(pageURL string, body []byte) error {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return fmt.Errorf("%w: %s", ErrEmptyResponse, pageURL)
+	}
+	if bodyLooksBlockedByYouTube(body) {
+		return fmt.Errorf("%w: %s", ErrBlockedResponse, pageURL)
+	}
+	return nil
+}
+
+func bodyLooksBlockedByYouTube(body []byte) bool {
+	sample := body
+	if len(sample) > successfulBodySignatureScanLimit {
+		sample = sample[:successfulBodySignatureScanLimit]
+	}
+	lower := strings.ToLower(string(sample))
+	for _, signature := range blockedResponseSignatures {
+		if strings.Contains(lower, signature) {
+			return true
+		}
+	}
+	return false
+}
+
+// "captcha"·"enable cookies" 같은 일반 단어는 영상 제목/설명에도 나타나
+// fleet-wide source cooldown 오탐을 일으키므로 도메인 고정 마커만 쓴다.
+var blockedResponseSignatures = []string{
+	"youtube.com/sorry",
+	"/sorry/index",
+	"our systems have detected unusual traffic",
+	"unusual traffic from your computer network",
+	"to continue, please type the characters",
+	"before you continue to youtube",
+	"consent.youtube.com",
+	"google.com/recaptcha",
 }
 
 func applyScraperHeaders(req *http.Request, snap ua.HeaderSnapshot) {

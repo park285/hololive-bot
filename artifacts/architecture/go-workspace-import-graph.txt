@@ -1128,6 +1128,7 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerrunt
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-youtube-producer/internal/runtime/polling -> github.com/kapu/hololive-shared/pkg/config
+github.com/kapu/hololive-youtube-producer/internal/runtime/polling -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-youtube-producer/internal/runtime/polling -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-youtube-producer/internal/runtime/polling -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-youtube-producer/internal/runtime/polling -> github.com/kapu/hololive-shared/pkg/service/database

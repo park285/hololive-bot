@@ -28,8 +28,8 @@ func summarizeYouTubeProducerBudget(registrations []providers.ChannelPollerRegis
 	resolverRPM := 0.0
 	resolverRetryAmplifiedRPM := 0.0
 	for _, registration := range registrations {
-		rpm := estimateRegistrationRPM(registration)
-		retryAmplifiedRPM := estimateRegistrationWorstCaseRPM(registration)
+		rpm := estimateRegistrationYouTubeScraperRPM(registration)
+		retryAmplifiedRPM := estimateRegistrationYouTubeScraperWorstCaseRPM(registration)
 		if isPublishedAtResolverRegistration(registration) {
 			resolverRPM += rpm
 			resolverRetryAmplifiedRPM += retryAmplifiedRPM
@@ -51,6 +51,45 @@ func summarizeYouTubeProducerBudget(registrations []providers.ChannelPollerRegis
 		CombinedRetryAmplifiedRPM: combinedRetryAmplifiedRPM,
 		BudgetRPM:                 budgetRPM,
 	}
+}
+
+func estimateRegistrationYouTubeScraperRPM(registration providers.ChannelPollerRegistration) float64 {
+	if registration.HasBudgetProfile && !registrationHasReservedSourceUnits(registration, poller.BudgetSourceYouTubeScraper) {
+		return 0
+	}
+	return estimateRegistrationRPM(registration)
+}
+
+func estimateRegistrationYouTubeScraperWorstCaseRPM(registration providers.ChannelPollerRegistration) float64 {
+	if fallbackUnits := registrationFallbackSourceUnits(registration, poller.BudgetSourceYouTubeScraper); fallbackUnits > 0 {
+		if registration.Poller == nil || registration.Interval <= 0 {
+			return 0
+		}
+		channelCount := resolvedRegistrationChannelCount(registration)
+		if channelCount == 0 {
+			return 0
+		}
+		return float64(channelCount) * fallbackUnits * (60.0 / registration.Interval.Seconds())
+	}
+	if registration.HasBudgetProfile && !registrationHasReservedSourceUnits(registration, poller.BudgetSourceYouTubeScraper) {
+		return 0
+	}
+	return estimateRegistrationWorstCaseRPM(registration)
+}
+
+func registrationHasReservedSourceUnits(registration providers.ChannelPollerRegistration, source poller.BudgetSource) bool {
+	if len(registration.BudgetProfile.SourceUnits) == 0 {
+		return false
+	}
+	units := registration.BudgetProfile.SourceUnits[source]
+	return units > 0
+}
+
+func registrationFallbackSourceUnits(registration providers.ChannelPollerRegistration, source poller.BudgetSource) float64 {
+	if len(registration.BudgetProfile.FallbackSourceUnits) == 0 {
+		return 0
+	}
+	return registration.BudgetProfile.FallbackSourceUnits[source]
 }
 
 func validateYouTubeProducerPollerBudget(summary youtubeProducerBudgetSummary) error {
@@ -163,4 +202,31 @@ func validateExplicitPollerRegistrations(registrations []providers.ChannelPoller
 		"youtube-producer poller registrations require explicit channel IDs: %s",
 		strings.Join(missing, ", "),
 	)
+}
+
+func youtubeScraperBudgetProfile(units float64, class poller.BudgetBurstClass, priority poller.BudgetPriority) poller.BudgetProfile {
+	return poller.BudgetProfile{
+		SourceUnits: map[poller.BudgetSource]float64{
+			poller.BudgetSourceYouTubeScraper: units,
+			poller.BudgetSourcePostgresWrite:  1,
+		},
+		BurstClass: class,
+		Priority:   priority,
+	}
+}
+
+func budgetProfileWithRegistrationPriority(profile poller.BudgetProfile, priority poller.Priority) poller.BudgetProfile {
+	profile.Priority = budgetPriorityFromRegistrationPriority(priority)
+	return profile
+}
+
+func budgetPriorityFromRegistrationPriority(priority poller.Priority) poller.BudgetPriority {
+	switch priority {
+	case poller.PriorityHigh, poller.PriorityBoost:
+		return poller.BudgetPriorityHigh
+	case poller.PriorityLow:
+		return poller.BudgetPriorityLow
+	default:
+		return poller.BudgetPriorityNormal
+	}
 }

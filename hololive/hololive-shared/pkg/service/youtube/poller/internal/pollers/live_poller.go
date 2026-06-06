@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +42,11 @@ type LivePoller struct {
 
 type LiveStatusProvider interface {
 	GetChannelsLiveStatus(ctx context.Context, channelIDs []string) ([]*domain.Stream, error)
+}
+
+// failed map을 주는 provider만 fetch 실패 채널과 "방송 없음" 채널을 구분할 수 있다.
+type LiveStatusWithFailuresProvider interface {
+	GetChannelsLiveStatusWithFailures(ctx context.Context, channelIDs []string) ([]*domain.Stream, map[string]error, error)
 }
 
 func NewLivePoller(scraperClient *scraper.Client, db any) *LivePoller {
@@ -79,20 +85,151 @@ func (p *LivePoller) Poll(ctx context.Context, channelID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get live streams: %w", err)
 	}
+	return p.pollLiveStreams(ctx, channelID, streams, time.Now())
+}
 
+func (p *LivePoller) PollBatch(ctx context.Context, channelIDs []string) map[string]error {
+	ids := uniqueLiveChannelIDs(channelIDs)
+	if len(ids) == 0 {
+		return nil
+	}
+	if p.liveStatusProvider == nil {
+		return p.pollBatchViaSinglePoll(ctx, ids)
+	}
+
+	streams, failures, err := p.fetchChannelsLiveStatusBatch(ctx, ids)
+	if err != nil {
+		return liveBatchErrorForAll(ids, fmt.Errorf("failed to get live streams batch: %w", err))
+	}
+
+	return p.pollGroupedLiveStreams(ctx, ids, groupLiveStreamsByChannel(ids, streams), failures)
+}
+
+func (p *LivePoller) fetchChannelsLiveStatusBatch(ctx context.Context, ids []string) ([]*domain.Stream, map[string]error, error) {
+	if detailed, ok := p.liveStatusProvider.(LiveStatusWithFailuresProvider); ok {
+		return detailed.GetChannelsLiveStatusWithFailures(ctx, ids)
+	}
+	streams, err := p.liveStatusProvider.GetChannelsLiveStatus(ctx, ids)
+	return streams, nil, err
+}
+
+func (p *LivePoller) pollGroupedLiveStreams(
+	ctx context.Context,
+	ids []string,
+	streamsByChannel map[string][]*domain.Stream,
+	failures map[string]error,
+) map[string]error {
 	now := time.Now()
-	baselinePoll := p.isBaselinePoll(channelID)
+	errs := make(map[string]error)
+	for _, channelID := range ids {
+		if pollErr := p.pollBatchChannel(ctx, channelID, streamsByChannel[channelID], failures, now); pollErr != nil {
+			errs[channelID] = pollErr
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errs
+}
 
+func (p *LivePoller) pollBatchChannel(
+	ctx context.Context,
+	channelID string,
+	streams []*domain.Stream,
+	failures map[string]error,
+	now time.Time,
+) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	if fetchErr, ok := failures[channelID]; ok {
+		return fmt.Errorf("failed to get live streams: %w", fetchErr)
+	}
+	return p.pollLiveStreams(ctx, channelID, streams, now)
+}
+
+func (p *LivePoller) pollBatchViaSinglePoll(ctx context.Context, channelIDs []string) map[string]error {
+	errs := make(map[string]error)
+	for _, channelID := range channelIDs {
+		if err := p.Poll(ctx, channelID); err != nil {
+			errs[channelID] = err
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errs
+}
+
+func (p *LivePoller) pollLiveStreams(ctx context.Context, channelID string, streams []*domain.Stream, now time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	baselinePoll := p.isBaselinePoll(channelID)
 	for _, stream := range streams {
 		if err := p.pollStream(ctx, channelID, stream, now, baselinePoll); err != nil {
 			return err
 		}
 	}
-
 	p.markEndedSessions(ctx, channelID, streams)
 	p.markBaselineComplete(channelID)
-
 	return nil
+}
+
+func uniqueLiveChannelIDs(channelIDs []string) []string {
+	seen := make(map[string]struct{}, len(channelIDs))
+	ids := make([]string, 0, len(channelIDs))
+	for _, channelID := range channelIDs {
+		trimmed := strings.TrimSpace(channelID)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		ids = append(ids, trimmed)
+	}
+	return ids
+}
+
+func groupLiveStreamsByChannel(channelIDs []string, streams []*domain.Stream) map[string][]*domain.Stream {
+	grouped := make(map[string][]*domain.Stream, len(channelIDs))
+	for _, channelID := range channelIDs {
+		grouped[channelID] = nil
+	}
+
+	for _, stream := range streams {
+		channelID := liveStreamGroupKey(stream, channelIDs)
+		if _, ok := grouped[channelID]; !ok {
+			continue
+		}
+		grouped[channelID] = append(grouped[channelID], stream)
+	}
+	return grouped
+}
+
+func liveStreamGroupKey(stream *domain.Stream, channelIDs []string) string {
+	if stream == nil {
+		return ""
+	}
+	channelID := strings.TrimSpace(stream.ChannelID)
+	if channelID == "" && len(channelIDs) == 1 {
+		return channelIDs[0]
+	}
+	return channelID
+}
+
+func liveBatchErrorForAll(channelIDs []string, err error) map[string]error {
+	if err == nil {
+		return nil
+	}
+	errs := make(map[string]error, len(channelIDs))
+	for _, channelID := range channelIDs {
+		errs[channelID] = err
+	}
+	return errs
 }
 
 func (p *LivePoller) isBaselinePoll(channelID string) bool {

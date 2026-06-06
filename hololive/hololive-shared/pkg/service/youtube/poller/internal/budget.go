@@ -36,9 +36,10 @@ const (
 )
 
 type BudgetProfile struct {
-	SourceUnits map[BudgetSource]float64
-	BurstClass  BudgetBurstClass
-	Priority    BudgetPriority
+	SourceUnits         map[BudgetSource]float64
+	FallbackSourceUnits map[BudgetSource]float64
+	BurstClass          BudgetBurstClass
+	Priority            BudgetPriority
 }
 
 type BudgetBurstClass string
@@ -79,6 +80,10 @@ type BudgetReservation interface {
 
 type GlobalBudgetLimiter interface {
 	TryReserve(ctx context.Context, job BudgetJob, profile BudgetProfile, ttl time.Duration) (BudgetReservation, BudgetDecision, error)
+}
+
+type SourceCooldownReporter interface {
+	MarkSourceCooldown(ctx context.Context, source BudgetSource, ttl time.Duration, reason string) error
 }
 
 type BudgetContext struct {

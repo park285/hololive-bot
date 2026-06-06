@@ -68,11 +68,7 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	claimCtx, renewCancel, renewErrCh := s.maybeStartJobClaimRenewLoop(ctx, job.Poller.Name(), decision)
 	defer renewCancel()
 
-	reservation, proceed := s.gateJobBudget(ctx, claimCtx, job, decision)
-	if !proceed {
-		return
-	}
-	s.runClaimedJobPoll(ctx, claimCtx, job, workerID, decision, reservation, renewErrCh, claimStartedAt)
+	s.runClaimedJobPoll(ctx, claimCtx, job, workerID, decision, renewErrCh, claimStartedAt)
 }
 
 func (s *Scheduler) gateJobBudget(ctx, claimCtx context.Context, job *Job, decision jobClaimDecision) (BudgetReservation, bool) {
@@ -99,16 +95,20 @@ func (s *Scheduler) runClaimedJobPoll(
 	job *Job,
 	workerID int,
 	decision jobClaimDecision,
-	reservation BudgetReservation,
 	renewErrCh <-chan error,
 	claimStartedAt time.Time,
 ) {
-	reservationTerminal := false
-	defer s.releaseJobReservationIfNotTerminal(ctx, job, reservation, &reservationTerminal)
-
 	if err := s.waitForJobRunSlot(claimCtx, job, decision); err != nil {
 		return
 	}
+
+	reservation, proceed := s.gateJobBudget(ctx, claimCtx, job, decision)
+	if !proceed {
+		return
+	}
+
+	reservationTerminal := false
+	defer s.releaseJobReservationIfNotTerminal(ctx, job, reservation, &reservationTerminal)
 
 	pollCtx, cancel := s.pollContext(claimCtx)
 	defer cancel()

@@ -87,16 +87,19 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 		}
 	}
 
-	resolvedPolicy := DefaultFetchPolicy
-	if len(policy) > 0 && policy[0].MaxAttempts > 0 {
-		resolvedPolicy = policy[0]
-	}
+	resolvedPolicy := resolveFetchPolicy(policy...)
 
 	var result string
 
 	err := retry.WithRetry(ctx, c.fetchPageRetryOptions(pageURL, resolvedPolicy), func(ctx context.Context) error {
+		attemptCtx, cancel := contextWithFetchAttemptTimeout(ctx, resolvedPolicy)
+		defer cancel()
+
 		var err error
-		result, err = c.fetchPageOnce(ctx, pageURL)
+		result, err = c.fetchPageOnce(attemptCtx, pageURL)
+		if err != nil && errors.Is(attemptCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			return fmt.Errorf("%w: %w", errFetchAttemptTimeout, err)
+		}
 		return err
 	})
 
@@ -107,12 +110,49 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 	return result, nil
 }
 
+func resolveFetchPolicy(policy ...FetchPolicy) FetchPolicy {
+	resolved := DefaultFetchPolicy
+	if len(policy) == 0 {
+		return resolved
+	}
+
+	override := policy[0]
+	if override.MaxAttempts > 0 {
+		resolved.MaxAttempts = override.MaxAttempts
+	}
+	if override.PerAttemptTimeout > 0 {
+		resolved.PerAttemptTimeout = override.PerAttemptTimeout
+	}
+	if override.BaseDelay > 0 {
+		resolved.BaseDelay = override.BaseDelay
+	}
+	if override.Jitter > 0 {
+		resolved.Jitter = override.Jitter
+	}
+	if override.MaxDelay > 0 {
+		resolved.MaxDelay = override.MaxDelay
+	}
+	return resolved
+}
+
+func contextWithFetchAttemptTimeout(ctx context.Context, policy FetchPolicy) (context.Context, context.CancelFunc) {
+	if policy.PerAttemptTimeout <= 0 {
+		return ctx, func() {}
+	}
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= policy.PerAttemptTimeout {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, policy.PerAttemptTimeout)
+}
+
 func (c *Client) fetchPageRetryOptions(pageURL string, policy FetchPolicy) retry.RetryOptions {
 	return retry.RetryOptions{
-		MaxAttempts: policy.MaxAttempts,
-		BaseDelay:   2 * time.Second,
-		Jitter:      1500 * time.Millisecond,
-		ShouldRetry: shouldRetryFetchPage,
+		MaxAttempts:   policy.MaxAttempts,
+		BaseDelay:     policy.BaseDelay,
+		Jitter:        policy.Jitter,
+		MaxDelay:      policy.MaxDelay,
+		DelayOverride: fetchPageRetryDelayOverride,
+		ShouldRetry:   shouldRetryFetchPage,
 		OnRetry: func(attempt int, err error, delay time.Duration) {
 			if isRetryableTransportError(err) {
 				c.closeIdleConnections()
@@ -126,22 +166,34 @@ func (c *Client) fetchPageRetryOptions(pageURL string, policy FetchPolicy) retry
 	}
 }
 
+func fetchPageRetryDelayOverride(err error, computed time.Duration) (time.Duration, bool) {
+	if retryAfter := extractHTTPRetryAfter(err); retryAfter > 0 {
+		return retryAfter, true
+	}
+
+	var cooldown *CooldownError
+	if errors.As(err, &cooldown) && cooldown.RetryDelay() > 0 {
+		return cooldown.RetryDelay(), true
+	}
+
+	return computed, false
+}
+
 func shouldRetryFetchPage(err error) bool {
-	if errors.Is(err, ErrRateLimited) || errors.Is(err, ErrForbidden) {
+	if errors.Is(err, ErrRateLimited) ||
+		errors.Is(err, ErrForbidden) ||
+		errors.Is(err, ErrBlockedResponse) ||
+		errors.Is(err, ErrResponseTooLarge) {
 		return false
 	}
-	var statusErr *httpStatusError
-	if errors.As(err, &statusErr) {
-		return isRetryableStatusCode(statusErr.code)
-	}
-	return isRetryableTransportError(err)
+	return isRetryableFetchPageError(err)
 }
 
 func (c *Client) recordFetchPageTransientError(ctx context.Context, err error) {
 	if ctx.Err() != nil {
 		return
 	}
-	if isRetryableStatusError(err) || isRetryableTransportError(err) {
+	if isRetryableFetchPageError(err) {
 		c.backoffState.RecordTransientErrorWithSuggestedCooldown(extractHTTPRetryAfter(err))
 	}
 }

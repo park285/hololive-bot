@@ -228,6 +228,18 @@ func TestReadGoScrapyResponse_ClosesBodyAfterBoundedNonOKRead(t *testing.T) {
 	assert.True(t, body.closed)
 }
 
+func TestReadGoScrapyResponse_ClassifiesTooLargeBody(t *testing.T) {
+	resp, err := readGoScrapyResponse(fakeGoScrapyResponse{
+		statusCode: http.StatusOK,
+		header:     make(http.Header),
+		body:       io.NopCloser(strings.NewReader(strings.Repeat("x", int(ytDefaults.MaxPageBodyBytes)+1))),
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrResponseTooLarge)
+	assert.Empty(t, resp.Body)
+}
+
 func TestSafeFetchError_RedactsURLQueryFromWrappedURLError(t *testing.T) {
 	rawURL := "http://example.test/path?token=secret"
 	err := fmt.Errorf("goscrapy fetch page: %w", &url.Error{

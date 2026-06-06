@@ -34,13 +34,36 @@ import (
 const FetchPageMaxAttempts = 3
 
 type FetchPolicy struct {
-	MaxAttempts int
+	MaxAttempts       int
+	PerAttemptTimeout time.Duration
+	BaseDelay         time.Duration
+	Jitter            time.Duration
+	MaxDelay          time.Duration
+}
+
+func defaultFetchPerAttemptTimeout(fallback time.Duration) time.Duration {
+	if ytDefaults.ScraperHTTPTimeout > 0 {
+		return ytDefaults.ScraperHTTPTimeout
+	}
+	return fallback
 }
 
 var (
-	DefaultFetchPolicy              = FetchPolicy{MaxAttempts: FetchPageMaxAttempts}
-	HighFrequencyChannelFetchPolicy = FetchPolicy{MaxAttempts: 1}
-	MetadataResolveFetchPolicy      = FetchPolicy{MaxAttempts: 1}
+	DefaultFetchPolicy = FetchPolicy{
+		MaxAttempts:       FetchPageMaxAttempts,
+		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
+		BaseDelay:         2 * time.Second,
+		Jitter:            1500 * time.Millisecond,
+		MaxDelay:          10 * time.Second,
+	}
+	HighFrequencyChannelFetchPolicy = FetchPolicy{
+		MaxAttempts:       1,
+		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
+	}
+	MetadataResolveFetchPolicy = FetchPolicy{
+		MaxAttempts:       1,
+		PerAttemptTimeout: 10 * time.Second,
+	}
 )
 
 var ErrRateLimited = errors.New("rate limited by YouTube (429)")
@@ -48,6 +71,14 @@ var ErrRateLimited = errors.New("rate limited by YouTube (429)")
 var ErrForbidden = errors.New("forbidden by YouTube (403)")
 
 var ErrTransientCooldown = errors.New("youtube transient cooldown")
+
+var ErrEmptyResponse = errors.New("youtube returned empty response")
+
+var ErrBlockedResponse = errors.New("youtube returned blocked or challenge response")
+
+var ErrResponseTooLarge = errors.New("youtube response body exceeds configured limit")
+
+var errFetchAttemptTimeout = errors.New("youtube fetch attempt timeout")
 
 type CooldownError struct {
 	Kind  string
@@ -134,7 +165,14 @@ func isRetryableStatusError(err error) bool {
 }
 
 func isRetryableVideoPageError(err error) bool {
-	return isRetryableStatusError(err) || isRetryableTransportError(err)
+	return isRetryableFetchPageError(err)
+}
+
+func isRetryableFetchPageError(err error) bool {
+	return errors.Is(err, ErrEmptyResponse) ||
+		errors.Is(err, errFetchAttemptTimeout) ||
+		isRetryableStatusError(err) ||
+		isRetryableTransportError(err)
 }
 
 func isRetryableStatusCode(code int) bool {
@@ -221,15 +259,31 @@ func isTimeoutOrTemporaryError(err error) bool {
 	return errors.As(err, &tempErr) && tempErr.Temporary()
 }
 
+var transientTransportSignatures = []string{
+	"connection reset by peer",
+	"connection reset",
+	"connection refused",
+	"broken pipe",
+	"http2: timeout awaiting response headers",
+	"http2: client connection lost",
+	"server closed idle connection",
+	"use of closed network connection",
+	"forcibly closed by the remote host",
+	"tls handshake timeout",
+	"timeout exceeded while awaiting headers",
+	"client.timeout exceeded while awaiting headers",
+	"client.timeout exceeded",
+	"temporary failure in name resolution",
+	"no such host",
+	"unexpected eof",
+}
+
 func hasTransientTransportSignature(msg string) bool {
 	lower := strings.ToLower(msg)
-	return strings.Contains(lower, "connection reset by peer") ||
-		strings.Contains(lower, "connection reset") ||
-		strings.Contains(lower, "connection refused") ||
-		strings.Contains(lower, "broken pipe") ||
-		strings.Contains(lower, "http2: timeout awaiting response headers") ||
-		strings.Contains(lower, "timeout exceeded while awaiting headers") ||
-		strings.Contains(lower, "client.timeout exceeded while awaiting headers") ||
-		strings.Contains(lower, "client.timeout exceeded") ||
-		strings.Contains(lower, "unexpected eof")
+	for _, signature := range transientTransportSignatures {
+		if strings.Contains(lower, signature) {
+			return true
+		}
+	}
+	return false
 }

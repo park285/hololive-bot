@@ -92,7 +92,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 	}{
 		{name: "videos", priority: poller.PriorityNormal, interval: 7 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 9},
 		{name: "shorts", priority: poller.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
-		{name: "community", priority: poller.PriorityLow, interval: 13 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
+		{name: "community", priority: poller.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
 		{name: "channel_stats", priority: poller.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupStats, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 3},
 		{name: "live", priority: poller.PriorityHigh, interval: 3 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 3},
 	}
