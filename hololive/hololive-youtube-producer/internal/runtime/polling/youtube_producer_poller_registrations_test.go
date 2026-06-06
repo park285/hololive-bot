@@ -2,6 +2,7 @@ package polling
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -468,4 +469,38 @@ func manyChannelIDs(count int) []string {
 		ids = append(ids, "UC_BACKFILL_"+time.Unix(int64(i), 0).Format("150405"))
 	}
 	return ids
+}
+
+func TestSummarizeBudgetFaultEnvelopeComparesAgainstFleetBudget(t *testing.T) {
+	channelIDs := make([]string, 15)
+	for i := range channelIDs {
+		channelIDs[i] = fmt.Sprintf("UC_%02d", i)
+	}
+	registration := providers.NewChannelPollerRegistration(
+		sourceCooldownTestPoller{name: "videos"},
+		poller.PriorityNormal,
+		time.Minute,
+	).
+		WithChannelIDs(channelIDs).
+		WithBudgetProfile(youtubeScraperBudgetProfile(1, poller.BudgetBurstPrimary, poller.BudgetPriorityNormal))
+
+	registrations := []providers.ChannelPollerRegistration{registration}
+
+	singleAP := summarizeYouTubeProducerBudgetForFleet(registrations, 30, 1)
+	require.Equal(t, 30.0, singleAP.FleetBudgetRPM)
+	require.Equal(t, 1, singleAP.ActiveAPCount)
+
+	tripleAP := summarizeYouTubeProducerBudgetForFleet(registrations, 30, 3)
+	require.Equal(t, 90.0, tripleAP.FleetBudgetRPM)
+	require.Equal(t, 3, tripleAP.ActiveAPCount)
+	require.Equal(t, singleAP.CombinedRetryAmplifiedRPM, tripleAP.CombinedRetryAmplifiedRPM,
+		"수요 추정은 fleet-aggregate라 AP 수와 무관해야 한다")
+
+	if singleAP.CombinedRetryAmplifiedRPM <= 30 || singleAP.CombinedRetryAmplifiedRPM > 90 {
+		t.Fatalf("fixture must amplify between per-AP and fleet budget, got %.2f", singleAP.CombinedRetryAmplifiedRPM)
+	}
+	require.True(t, singleAP.faultEnvelopeExceedsFleetBudget(),
+		"단일 AP fleet에서는 envelope 초과 경고가 유지되어야 한다")
+	require.False(t, tripleAP.faultEnvelopeExceedsFleetBudget(),
+		"3-AP fleet 용량(90 RPM) 안의 envelope는 경고 대상이 아니다")
 }

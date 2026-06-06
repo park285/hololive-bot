@@ -40,6 +40,7 @@
 14. community 폴링은 shorts 간격이 설정된 환경에서 shorts 간격을 따른다(`communityPrimaryPollInterval`) — v6 번들의 cadence 변경으로, shorts 간격이 community 간격보다 짧으면 community 폴링 빈도와 budget 소비가 늘어난다. 운영 RPM 상한은 `YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS`와 runbook의 30 RPM 기준으로 관리한다.
 15. 재시도 지연은 서버 `Retry-After`(DelayOverride)를 포함해 `MaxDelay`(기본 10s)로 캡한다 — 재시도 sleep이 scheduler worker slot을 점유하므로, 캡을 넘는 backpressure는 `backoffState` hard cooldown과 source cooldown(15-30분)이 담당한다.
 16. transient transport 시그니처는 v6에서 9건→16건으로 확장됐다(연결 종료·TLS·DNS 일시 장애류 추가). v6.1에서 `"no such host"`(NXDOMAIN, 통상 영구 실패)는 retryable에서 제외 — 일시 resolver 장애는 `"temporary failure in name resolution"`이 계속 커버한다.
+17. fault envelope 경고(`youtube_producer_fault_envelope_exceeds_rate_limit`)는 fleet 용량(`BudgetRPM × active AP 수`, 3-AP 기준 90 RPM)과 비교한다 — 수요 합산이 fleet-aggregate(JobRunGuard 분배)인데 per-AP 상한과 비교하면 multi-AP에서 구조적 오탐이 난다. steady 하드 게이트(`CombinedRPM ≤ BudgetRPM`)는 단일 생존 AP가 steady를 감당해야 하므로 per-AP 기준을 유지하고, per-IP 노출을 결정하는 런타임 limiter(2s 간격)도 그대로 둔다.
 
 ## 롤아웃 확인
 

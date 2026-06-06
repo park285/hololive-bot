@@ -20,6 +20,14 @@ type youtubeProducerBudgetSummary struct {
 	CombinedRPM               float64
 	CombinedRetryAmplifiedRPM float64
 	BudgetRPM                 float64
+	FleetBudgetRPM            float64
+	ActiveAPCount             int
+}
+
+// 수요 합산은 fleet-aggregate(JobRunGuard가 AP 간 분배)이므로 retry envelope는
+// per-AP 상한이 아니라 fleet 용량(BudgetRPM × AP 수)과 비교해야 오탐이 없다.
+func (s youtubeProducerBudgetSummary) faultEnvelopeExceedsFleetBudget() bool {
+	return s.CombinedRetryAmplifiedRPM > s.FleetBudgetRPM
 }
 
 func summarizeYouTubeProducerBudget(registrations []providers.ChannelPollerRegistration) youtubeProducerBudgetSummary {
@@ -27,6 +35,10 @@ func summarizeYouTubeProducerBudget(registrations []providers.ChannelPollerRegis
 }
 
 func summarizeYouTubeProducerBudgetWithLimit(registrations []providers.ChannelPollerRegistration, budgetRPM float64) youtubeProducerBudgetSummary {
+	return summarizeYouTubeProducerBudgetForFleet(registrations, budgetRPM, 1)
+}
+
+func summarizeYouTubeProducerBudgetForFleet(registrations []providers.ChannelPollerRegistration, budgetRPM float64, activeAPCount int) youtubeProducerBudgetSummary {
 	pollerRPM := 0.0
 	pollerRetryAmplifiedRPM := 0.0
 	resolverRPM := 0.0
@@ -47,6 +59,9 @@ func summarizeYouTubeProducerBudgetWithLimit(registrations []providers.ChannelPo
 	if budgetRPM <= 0 {
 		budgetRPM = defaultYouTubeProducerBudgetRPM()
 	}
+	if activeAPCount < 1 {
+		activeAPCount = 1
+	}
 
 	return youtubeProducerBudgetSummary{
 		PollerRPM:                 pollerRPM,
@@ -56,6 +71,8 @@ func summarizeYouTubeProducerBudgetWithLimit(registrations []providers.ChannelPo
 		CombinedRPM:               combinedRPM,
 		CombinedRetryAmplifiedRPM: combinedRetryAmplifiedRPM,
 		BudgetRPM:                 budgetRPM,
+		FleetBudgetRPM:            budgetRPM * float64(activeAPCount),
+		ActiveAPCount:             activeAPCount,
 	}
 }
 
@@ -128,7 +145,7 @@ func logYouTubeProducerBudgetSummary(summary youtubeProducerBudgetSummary, logge
 			slog.Float64("budget_rpm", summary.BudgetRPM),
 		)
 	}
-	if summary.CombinedRetryAmplifiedRPM > summary.BudgetRPM {
+	if summary.faultEnvelopeExceedsFleetBudget() {
 		logger.Warn("youtube_producer_fault_envelope_exceeds_rate_limit",
 			slog.Float64("expected_poller_rpm", summary.PollerRPM),
 			slog.Float64("expected_poller_retry_amplified_rpm_max", summary.PollerRetryAmplifiedRPM),
@@ -137,6 +154,8 @@ func logYouTubeProducerBudgetSummary(summary youtubeProducerBudgetSummary, logge
 			slog.Float64("expected_combined_rpm", summary.CombinedRPM),
 			slog.Float64("expected_combined_retry_amplified_rpm_max", summary.CombinedRetryAmplifiedRPM),
 			slog.Float64("budget_rpm", summary.BudgetRPM),
+			slog.Float64("fleet_budget_rpm", summary.FleetBudgetRPM),
+			slog.Int("active_ap_count", summary.ActiveAPCount),
 		)
 	}
 }

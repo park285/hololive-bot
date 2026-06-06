@@ -60,13 +60,14 @@ func validateYouTubeProducerRegistrationsAndBudgets(
 	if err := validateRegistrationBudgetProfiles(pollerRegistrations); err != nil {
 		return err
 	}
+	activeAPCount := resolveYouTubeProducerActiveAPCount(budgetWiring.ActiveInstanceCount, scraperConfig.ActiveActive.Enabled)
 	sourceBudgetEstimate := estimateYouTubeProducerSourceBudget(
 		pollerRegistrations,
-		resolveYouTubeProducerActiveAPCount(budgetWiring.ActiveInstanceCount, scraperConfig.ActiveActive.Enabled),
+		activeAPCount,
 		scraperConfig.WorkerCountOrDefault(),
 	)
 	logYouTubeProducerSourceBudgetEstimate(sourceBudgetEstimate, logger)
-	budgetSummary := summarizeYouTubeProducerBudgetWithLimit(pollerRegistrations, budgetWiring.BudgetRPM)
+	budgetSummary := summarizeYouTubeProducerBudgetForFleet(pollerRegistrations, budgetWiring.BudgetRPM, activeAPCount)
 	logYouTubeProducerBudgetSummary(budgetSummary, logger)
 	return validateYouTubeProducerPollerBudget(budgetSummary)
 }
