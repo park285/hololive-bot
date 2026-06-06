@@ -19,6 +19,7 @@ type GlobalBudgetWiring struct {
 	Context             poller.BudgetContext
 	AcquireTimeout      time.Duration
 	ActiveInstanceCount int
+	BudgetRPM           float64
 }
 
 func BuildComponents(

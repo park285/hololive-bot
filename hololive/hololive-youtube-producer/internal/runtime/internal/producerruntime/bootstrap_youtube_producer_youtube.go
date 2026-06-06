@@ -174,6 +174,7 @@ func buildIngestionRuntimeCoordination(
 	if err != nil {
 		return nil, polling.GlobalBudgetWiring{}, err
 	}
+	budgetWiring.BudgetRPM = youtubeProducerBudgetRPM(appConfig.YouTube.ProducerRequestInterval)
 	return jobClaimer, budgetWiring, nil
 }
 
@@ -196,6 +197,13 @@ func buildIngestionRuntimePublishedAtResolver(
 		resolver.SetCandidateClaimer(jobClaimer)
 	}
 	return resolver
+}
+
+func youtubeProducerBudgetRPM(requestInterval time.Duration) float64 {
+	if requestInterval <= 0 {
+		return 0
+	}
+	return 60.0 / requestInterval.Seconds()
 }
 
 func buildIngestionRuntimeGlobalBudgetWiring(

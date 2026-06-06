@@ -27,6 +27,7 @@
 |---|---|---|
 | `SERVER_PORT` | HTTP health port | yes |
 | `YOUTUBE_INGESTION_ENABLED` | must be true for this service | yes |
+| `YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS=2` | YouTube producer scraper request ceiling; `2s` means `30 RPM` | yes |
 | `PHOTO_SYNC_ENABLED` | AP-A and AP-C run photo sync (`true`); a global Valkey singleton lease keeps only one active with TTL failover. AP-B is `false` | yes |
 | `SCRAPER_SCHEDULER_WORKER_COUNT` | per-AP worker cap; remote active-active defaults each AP to `2` | remote AP yes |
 | `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED` | enables per-job JobRunGuard and disables global runtime lease gate | remote AP yes |
@@ -81,6 +82,7 @@ SCRAPER_LIVE_SECONDS=90
 SCRAPER_VIDEOS_SECONDS=900
 SCRAPER_STATS_SECONDS=21600
 YOUTUBE_PRODUCER_AP_WORKER_COUNT=2
+YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS=2
 ```
 
 Primary community polling follows the shorts cadence in youtube-producer; keep `SCRAPER_COMMUNITY_SECONDS` aligned for config readability. Backfill community polling remains separately controlled by `SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS`.

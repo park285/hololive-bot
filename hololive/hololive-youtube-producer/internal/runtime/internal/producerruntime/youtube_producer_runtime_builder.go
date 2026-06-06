@@ -99,7 +99,7 @@ func initYouTubeProducerInfrastructure(ctx context.Context, appConfig *config.Co
 
 func buildYouTubeProducerResources(ctx context.Context, appConfig *config.Config, logger *slog.Logger, infra *sharedmodules.InfraModule) (*youtubeProducerYouTubeResources, error) {
 	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-	sharedRL, err := sharedproviders.ProvideYouTubeProducerRateLimiter(infra.Cache, logger)
+	sharedRL, err := sharedproviders.ProvideYouTubeProducerRateLimiterWithConfig(appConfig.YouTube, infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}
