@@ -30,6 +30,7 @@ github.com/kapu/admin-dashboard/internal/openapi -> github.com/park285/shared-go
 github.com/kapu/admin-dashboard/internal/session -> github.com/kapu/admin-dashboard/internal/auth
 github.com/kapu/admin-dashboard/internal/session -> github.com/kapu/admin-dashboard/internal/config
 github.com/kapu/admin-dashboard/internal/session -> github.com/park285/shared-go/pkg/json
+github.com/kapu/admin-dashboard/internal/status -> github.com/kapu/hololive-shared/pkg/service/internalhttp
 github.com/kapu/admin-dashboard/internal/status -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-admin-api/cmd/admin-api -> github.com/kapu/hololive-admin-api/internal/app
 github.com/kapu/hololive-admin-api/cmd/admin-api -> github.com/kapu/hololive-shared/pkg/config
