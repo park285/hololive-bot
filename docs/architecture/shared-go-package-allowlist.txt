@@ -1,6 +1,8 @@
 backoff
 envutil
 ginjson
+h3
+healthprobe
 httputil
 json
 jsonutil
