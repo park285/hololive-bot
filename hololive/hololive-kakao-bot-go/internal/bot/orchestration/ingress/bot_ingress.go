@@ -185,7 +185,7 @@ func (i *MessageIngress) logCommandReceived(
 		return
 	}
 	ctx := sharedlog.WithComponent(sharedlog.WithRuntime(context.Background(), "bot"), "ingress")
-	sharedlog.Info(
+	sharedlog.Debug(
 		ctx,
 		i.logger,
 		EventCommandReceived,

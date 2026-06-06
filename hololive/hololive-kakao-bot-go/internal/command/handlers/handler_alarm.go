@@ -93,7 +93,7 @@ func (c *AlarmCommand) alarmActionHandlers() map[string]alarmActionHandler {
 }
 
 func (c *AlarmCommand) handleListAction(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
-	c.Deps().Logger.Info("Alarm list requested")
+	c.Deps().Logger.Debug("Alarm list requested")
 	return c.handleList(ctx, cmdCtx)
 }
 
@@ -134,7 +134,7 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 
 	alarmTypes := c.parseAlarmTypes(params)
 
-	c.Deps().Logger.Info("Alarm add requested",
+	c.Deps().Logger.Debug("Alarm add requested",
 		slog.String("member", memberName),
 		slog.Any("types", alarmTypes))
 
@@ -212,7 +212,7 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 
 	alarmTypes := c.parseAlarmTypes(params)
 
-	c.Deps().Logger.Info("Alarm remove requested",
+	c.Deps().Logger.Debug("Alarm remove requested",
 		slog.String("member", memberName),
 		slog.Any("types", alarmTypes))
 

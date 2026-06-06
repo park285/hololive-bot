@@ -93,6 +93,7 @@ func (s *RuntimeScheduler) runLoopIteration(
 		StartEvent:   EventAlarmSchedulerLoopIterationStarted,
 		SuccessEvent: EventAlarmSchedulerLoopIterationSucceeded,
 		FailureEvent: EventAlarmSchedulerLoopIterationFailed,
+		Level:        slog.LevelDebug,
 		Attrs: []slog.Attr{
 			slog.String("loop", name),
 			slog.Duration("timeout", timeout),
