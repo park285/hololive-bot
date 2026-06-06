@@ -13,20 +13,29 @@ func main() {
 	case len(os.Args) == 2 && os.Args[1] == "--smoke":
 		runSmoke()
 	case len(os.Args) == 3 && os.Args[1] == "--body":
-		body, err := healthprobe.FetchURL(os.Args[2])
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		_, _ = os.Stdout.Write(body)
+		runBody(os.Args[2])
 	case len(os.Args) == 2:
-		if err := healthprobe.CheckURL(os.Args[1]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
+		runCheck(os.Args[1])
 	default:
 		fmt.Fprintln(os.Stderr, "usage: healthcheck <url>|--body <url>|--smoke")
 		os.Exit(2)
+	}
+}
+
+func runBody(url string) {
+	body, err := healthprobe.FetchURL(url)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	_, _ = os.Stdout.Write(body)
+}
+
+func runCheck(url string) {
+	if err := healthprobe.CheckURL(url); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
 
