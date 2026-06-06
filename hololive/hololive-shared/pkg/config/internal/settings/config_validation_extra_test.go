@@ -129,6 +129,15 @@ func TestValidateServerTransports_RejectsH2C(t *testing.T) {
 	}
 }
 
+func TestValidateServerTransports_RejectsExplicitEmptyTransport(t *testing.T) {
+	t.Parallel()
+
+	err := validateServerTransports(ServerConfig{HTTPTransports: []string{""}})
+	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_HTTP_TRANSPORTS must include h3") {
+		t.Fatalf("validateServerTransports(empty explicit) error = %v, want h3 required", err)
+	}
+}
+
 func TestNormalizeServerHTTPTransport(t *testing.T) {
 	t.Parallel()
 

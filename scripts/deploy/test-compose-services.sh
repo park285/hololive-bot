@@ -99,10 +99,14 @@ grep -Fq "grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|/run/hololive-bot/(bot|alarm-worker
 pass "ap active-active deploy handles token-free prechange transition"
 for ap_runtime_script in scripts/deploy/ap-iris-h3-trust-preflight.sh scripts/deploy/ap-completion-check.sh; do
     grep -q 'AP_REQUIRED_UDP_BUFFER_BYTES' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} exposes AP_REQUIRED_UDP_BUFFER_BYTES"
-    grep -q 'net.core.rmem_max' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} checks net.core.rmem_max"
-    grep -q 'net.core.wmem_max' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} checks net.core.wmem_max"
+    grep -q 'require-quic-udp-buffer.sh' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} delegates QUIC UDP buffer checks to require-quic-udp-buffer.sh"
 done
-pass "ap active-active verifies QUIC UDP buffer sysctls"
+ap_udp_lib="scripts/deploy/lib/require-quic-udp-buffer.sh"
+grep -q 'net.core.rmem_max' "${ROOT_DIR}/${ap_udp_lib}" || fail "${ap_udp_lib} checks net.core.rmem_max"
+grep -q 'net.core.wmem_max' "${ROOT_DIR}/${ap_udp_lib}" || fail "${ap_udp_lib} checks net.core.wmem_max"
+grep -q '/etc/sysctl.d/\*.conf' "${ROOT_DIR}/${ap_udp_lib}" || fail "${ap_udp_lib} checks persisted sysctl values"
+grep -qx "${ap_udp_lib}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_udp_lib}"
+pass "ap active-active verifies QUIC UDP buffer sysctls (runtime+persisted via lib)"
 for ap_compose in deploy/compose/docker-compose.osaka.yml deploy/compose/docker-compose.seoul.yml; do
     grep -qx "${ap_compose}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_compose}"
 done

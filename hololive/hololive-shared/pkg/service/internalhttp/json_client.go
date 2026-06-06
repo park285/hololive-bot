@@ -1,6 +1,7 @@
 package internalhttp
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -26,8 +27,21 @@ func NewJSONClient(baseURL, apiKey string, timeout time.Duration, logger *slog.L
 
 // NewClientForURL은 https 내부 URL에는 H3 client를, 그 외에는 기존 internal HTTP client를 반환합니다.
 func NewClientForURL(rawURL string, timeout time.Duration, logger *slog.Logger) *http.Client {
+	client, err := NewClientForURLStrict(rawURL, timeout, logger)
+	if err == nil {
+		return client
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.Warn("Failed to configure internal H3 client; falling back to default client", slog.Any("error", err))
+	return httputil.NewInternalServiceClient(timeout)
+}
+
+// NewClientForURLStrict은 https 내부 URL의 H3 client 구성 실패를 fallback으로 숨기지 않습니다.
+func NewClientForURLStrict(rawURL string, timeout time.Duration, _ *slog.Logger) (*http.Client, error) {
 	if !internalURLUsesHTTPS(rawURL) {
-		return httputil.NewInternalServiceClient(timeout)
+		return httputil.NewInternalServiceClient(timeout), nil
 	}
 
 	client, _, err := sharedh3.NewClient(timeout, sharedh3.ClientOptions{
@@ -35,13 +49,9 @@ func NewClientForURL(rawURL string, timeout time.Duration, logger *slog.Logger) 
 		ServerName: firstNonEmptyEnv(internalH3ServerNameEnv, hololiveH3ServerNameEnv),
 	})
 	if err != nil {
-		if logger == nil {
-			logger = slog.Default()
-		}
-		logger.Warn("Failed to configure internal H3 client; falling back to default client", slog.Any("error", err))
-		return httputil.NewInternalServiceClient(timeout)
+		return nil, fmt.Errorf("configure internal H3 client for %s: %w", rawURL, err)
 	}
-	return client
+	return client, nil
 }
 
 func internalURLUsesHTTPS(raw string) bool {

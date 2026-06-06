@@ -1,10 +1,23 @@
 package holo
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/quic-go/quic-go/http3"
 )
+
+func TestNewClientReturnsErrorWhenH3ClientConfigFails(t *testing.T) {
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", filepath.Join(t.TempDir(), "missing-ca.pem"))
+
+	client, err := NewClient("https://hololive-admin-api:30006", "test-key")
+	if err == nil {
+		t.Fatal("NewClient() error = nil, want h3 client config error")
+	}
+	if client != nil {
+		t.Fatalf("NewClient() = %v, want nil on h3 config error", client)
+	}
+}
 
 func TestNewClientTransportSelection(t *testing.T) {
 	t.Parallel()

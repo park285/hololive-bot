@@ -16,7 +16,7 @@ const historyCap = 30
 
 type Hub struct {
 	endpoints []ServiceEndpoint
-	clients   map[string]*http.Client
+	clients   map[string]endpointClient
 	sampler   *procSampler
 	mu        sync.Mutex
 	nextID    int64
@@ -172,8 +172,16 @@ func (h *Hub) externalRuntimeStats(ctx context.Context) []ServiceRuntimeStats {
 }
 
 func (h *Hub) fetchRuntime(ctx context.Context, endpoint ServiceEndpoint) ServiceRuntimeStats {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, nil)
-	resp, err := h.clients[endpoint.Name].Do(req)
+	client, errMsg := h.clients[endpoint.Name].resolve()
+	if client == nil {
+		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &errMsg}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, nil)
+	if err != nil {
+		msg := err.Error()
+		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &msg}
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		msg := err.Error()
 		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &msg}

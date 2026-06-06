@@ -18,11 +18,27 @@ type ServiceEndpoint struct {
 	HealthPath string
 }
 
+type endpointClient struct {
+	client *http.Client
+	err    error
+}
+
+func (e endpointClient) resolve() (*http.Client, string) {
+	if e.err != nil {
+		return nil, e.err.Error()
+	}
+	if e.client == nil {
+		return nil, "status client missing"
+	}
+	return e.client, ""
+}
+
 // https endpoint는 H3-only 서비스이므로 URL scheme에 맞는 client를 endpoint별로 고정한다.
-func endpointClients(endpoints []ServiceEndpoint, timeout time.Duration) map[string]*http.Client {
-	clients := make(map[string]*http.Client, len(endpoints))
+func endpointClients(endpoints []ServiceEndpoint, timeout time.Duration) map[string]endpointClient {
+	clients := make(map[string]endpointClient, len(endpoints))
 	for _, endpoint := range endpoints {
-		clients[endpoint.Name] = internalhttp.NewClientForURL(endpoint.URL, timeout, nil)
+		client, err := internalhttp.NewClientForURLStrict(endpoint.URL, timeout, nil)
+		clients[endpoint.Name] = endpointClient{client: client, err: err}
 	}
 	return clients
 }
@@ -41,7 +57,7 @@ type AggregatedStatus struct {
 }
 
 type Collector struct {
-	clients   map[string]*http.Client
+	clients   map[string]endpointClient
 	endpoints []ServiceEndpoint
 	start     time.Time
 	version   string
@@ -75,9 +91,17 @@ func (c *Collector) Collect(ctx context.Context) AggregatedStatus {
 }
 
 func (c *Collector) collectEndpoint(ctx context.Context, endpoint ServiceEndpoint) ServiceStatus {
+	client, errMsg := c.clients[endpoint.Name].resolve()
+	if client == nil {
+		return ServiceStatus{Name: endpoint.Name, Available: false, Error: &errMsg}
+	}
 	start := time.Now()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, nil)
-	resp, err := c.clients[endpoint.Name].Do(req)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, nil)
+	if err != nil {
+		msg := err.Error()
+		return ServiceStatus{Name: endpoint.Name, Available: false, Error: &msg}
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		msg := err.Error()
 		return ServiceStatus{Name: endpoint.Name, Available: false, Error: &msg}

@@ -27,13 +27,7 @@ ports_list="${AP_PORTS[*]}"
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-required_udp_buffer_bytes='$AP_REQUIRED_UDP_BUFFER_BYTES'
-rmem_max=\$(sysctl -n net.core.rmem_max 2>/dev/null || echo 0)
-wmem_max=\$(sysctl -n net.core.wmem_max 2>/dev/null || echo 0)
-if (( rmem_max < required_udp_buffer_bytes || wmem_max < required_udp_buffer_bytes )); then
-  echo \"AP QUIC UDP buffers too small on $AP_NAME: net.core.rmem_max=\$rmem_max net.core.wmem_max=\$wmem_max required>=\$required_udp_buffer_bytes\" >&2
-  exit 1
-fi
+bash scripts/deploy/lib/require-quic-udp-buffer.sh '$AP_REQUIRED_UDP_BUFFER_BYTES' '$AP_NAME'
 sudo -n test -r /run/hololive-bot/ap-compose.env
 sudo -n test -r /run/hololive-bot/youtube-producer.env
 test -w /var/run/docker.sock || groups | grep -qw docker
