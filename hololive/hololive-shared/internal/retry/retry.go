@@ -148,6 +148,8 @@ func retryDelay(opts RetryOptions, attempt int, err error) time.Duration {
 			delay = override
 		}
 	}
+	// Retry-After 같은 DelayOverride도 MaxDelay로 캡한다 — 이 sleep은 scheduler worker
+	// slot을 점유한 채 돌므로, 캡을 넘는 backpressure는 backoffState/source cooldown이 담당한다.
 	if opts.MaxDelay > 0 && delay > opts.MaxDelay {
 		return opts.MaxDelay
 	}

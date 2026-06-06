@@ -201,3 +201,9 @@ func TestResponseBodyReadErrorDoesNotMisclassifyTransportErrors(t *testing.T) {
 	typed := fmt.Errorf("read body: %w", jsonutil.ErrBodyTooLarge)
 	require.ErrorIs(t, responseBodyReadError(typed), ErrResponseTooLarge)
 }
+
+func TestHasTransientTransportSignatureTreatsNXDomainAsPermanent(t *testing.T) {
+	require.False(t, hasTransientTransportSignature("lookup www.youtube.com: no such host"),
+		"NXDOMAIN is a permanent failure; retrying wastes budget within the attempt loop")
+	require.True(t, hasTransientTransportSignature("lookup www.youtube.com: temporary failure in name resolution"))
+}

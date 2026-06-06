@@ -274,7 +274,6 @@ var transientTransportSignatures = []string{
 	"client.timeout exceeded while awaiting headers",
 	"client.timeout exceeded",
 	"temporary failure in name resolution",
-	"no such host",
 	"unexpected eof",
 }
 
