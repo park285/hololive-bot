@@ -37,6 +37,9 @@
 11. ytInitialData 후보가 전부 invalid JSON이면 `ErrNotFound`를 반환해 parser drift 기록 경로를 보존한다(invalid fallback 반환 금지).
 12. readiness의 `source_cooldown` 표시는 기록 시점의 TTL을 기억하고 만료 시 자동 해제한다 — fallback 전용 source처럼 reserve가 다시 돌지 않는 topology에서도 stale 표시가 남지 않는다.
 13. body read 오류의 too-large 분류는 typed sentinel(`jsonutil.ErrBodyTooLarge`)만 사용한다(문자열 휴리스틱 제거).
+14. community 폴링은 shorts 간격이 설정된 환경에서 shorts 간격을 따른다(`communityPrimaryPollInterval`) — v6 번들의 cadence 변경으로, shorts 간격이 community 간격보다 짧으면 community 폴링 빈도와 budget 소비가 늘어난다. 운영 RPM 상한은 `YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS`와 runbook의 30 RPM 기준으로 관리한다.
+15. 재시도 지연은 서버 `Retry-After`(DelayOverride)를 포함해 `MaxDelay`(기본 10s)로 캡한다 — 재시도 sleep이 scheduler worker slot을 점유하므로, 캡을 넘는 backpressure는 `backoffState` hard cooldown과 source cooldown(15-30분)이 담당한다.
+16. transient transport 시그니처는 v6에서 9건→16건으로 확장됐다(연결 종료·TLS·DNS 일시 장애류 추가). v6.1에서 `"no such host"`(NXDOMAIN, 통상 영구 실패)는 retryable에서 제외 — 일시 resolver 장애는 `"temporary failure in name resolution"`이 계속 커버한다.
 
 ## 롤아웃 확인
 

@@ -110,3 +110,66 @@ func TestLivePollerPollBatchKeepsSessionsForFetchFailedChannels(t *testing.T) {
 	require.NoError(t, db.First(&sessionA, "video_id = ?", "live-a").Error)
 	require.Equal(t, domain.LiveStatusLive, sessionA.Status)
 }
+
+func TestLivePollerPollBatchAttributesEmptyChannelIDStreamToSingleChannel(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+	startedAt := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
+	provider := &fakeLiveStatusWithFailuresProvider{
+		streams: []*domain.Stream{
+			{
+				ID:          "live-anon",
+				ChannelID:   "",
+				Title:       "Anon",
+				Status:      domain.StreamStatusLive,
+				StartActual: &startedAt,
+			},
+		},
+	}
+	poller := NewLivePollerWithStatusProvider(provider, nil, db)
+
+	errs := poller.PollBatch(context.Background(), []string{"UC_ONLY"})
+
+	require.Empty(t, errs)
+	var session domain.YouTubeLiveSession
+	require.NoError(t, db.First(&session, "video_id = ?", "live-anon").Error)
+	require.Equal(t, "UC_ONLY", session.ChannelID)
+}
+
+func TestLivePollerPollBatchDropsStreamsOutsideRequestedChannelSet(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+	startedAt := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
+	provider := &fakeLiveStatusWithFailuresProvider{
+		streams: []*domain.Stream{
+			{
+				ID:          "live-a",
+				ChannelID:   "UC_A",
+				Title:       "A",
+				Status:      domain.StreamStatusLive,
+				StartActual: &startedAt,
+			},
+			{
+				ID:          "live-x",
+				ChannelID:   "UC_X",
+				Title:       "X",
+				Status:      domain.StreamStatusLive,
+				StartActual: &startedAt,
+			},
+			{
+				ID:          "live-anon",
+				ChannelID:   "",
+				Title:       "Anon",
+				Status:      domain.StreamStatusLive,
+				StartActual: &startedAt,
+			},
+		},
+	}
+	poller := NewLivePollerWithStatusProvider(provider, nil, db)
+
+	errs := poller.PollBatch(context.Background(), []string{"UC_A", "UC_B"})
+
+	require.Empty(t, errs)
+	var sessions []domain.YouTubeLiveSession
+	require.NoError(t, db.Order("video_id").Find(&sessions).Error)
+	require.Len(t, sessions, 1, "out-of-set and empty-ChannelID streams must be dropped in multi-channel batches")
+	require.Equal(t, "live-a", sessions[0].VideoID)
+}
