@@ -22,10 +22,10 @@ ports_list="${AP_PORTS[*]}"
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-sudo -n test -r /run/hololive-bot/compose.env
+sudo -n test -r /run/hololive-bot/ap-compose.env
 sudo -n test -r /run/hololive-bot/youtube-producer.env
 test -w /var/run/docker.sock || groups | grep -qw docker
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps $services_list
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps $services_list
 
 for container in $containers_list; do
   docker inspect \"\$container\" >/dev/null

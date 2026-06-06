@@ -107,8 +107,8 @@ x-iris-env: &iris-env
   IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h3}
   IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/run/hololive-bot/certs/iris-ca.pem}
   IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
-  IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
-  IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
+  IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:-}
+  IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:-}
 
 x-hololive-h3-files-env: &hololive-h3-files-env
   HOLOLIVE_H3_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}

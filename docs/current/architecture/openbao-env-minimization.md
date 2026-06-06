@@ -72,7 +72,8 @@ ChatBotGo:
 채널 정의(혼동 방지):
 
 1. **Compose interpolation 입력**(`compose.env`): `${VAR}`/`${VAR:?}` 보간용. 보간은 각 서비스 `environment:` 블록이 참조한 key만 컨테이너에 들어가므로 per-container 최소화와 양립한다. 단 `DB_PASSWORD`, `CACHE_PASSWORD`, `IRIS_*_TOKEN`, `ADMIN_PASS_BCRYPT`, `SESSION_SECRET`, `API_SECRET_KEY` 등 **secret이 계속 포함되는 파일**이다. "compose.env = non-secret"이 아님을 전제로 perms 0600 유지.
-2. **Per-service env_file**: compose `environment:` 블록에 없는 앱 전용 key만 담는다 (예: bot의 `KAKAO_REST_API_KEY`/`NAVER_*`/`KASI_*`/`TOKEN_ENCRYPTION_KEY`, alarm-worker의 `ALARM_HOLODEX_API_KEYS`/`HOLOLIVE_ALARM_*`, youtube-producer의 `HOLODEX_API_KEY_2..5`/`SCRAPER_PROXY_*`/`YOUTUBE_*` 계열).
+2. **AP Compose interpolation 입력**(`ap-compose.env`): Osaka/Seoul AP host 전용 보간 파일이다. AP producer에 필요한 DB/cache/API/H3/Iris endpoint key는 유지하지만 `IRIS_WEBHOOK_TOKEN`/`IRIS_BOT_TOKEN`은 넣지 않는다.
+3. **Per-service env_file**: compose `environment:` 블록에 없는 앱 전용 key만 담는다 (예: bot의 `KAKAO_REST_API_KEY`/`NAVER_*`/`KASI_*`/`TOKEN_ENCRYPTION_KEY`, alarm-worker의 `ALARM_HOLODEX_API_KEYS`/`HOLOLIVE_ALARM_*`, youtube-producer의 `HOLODEX_API_KEY_2..5`/`SCRAPER_PROXY_*`/`YOUTUBE_*` 계열).
 
 key→파일 배치는 Phase 0의 ownership matrix가 단일 근거다. matrix에 없는 key는 어떤 렌더 파일에도 넣지 않는다.
 
@@ -89,6 +90,7 @@ kv/prod/chatbotgo/kimi-env          # 소비자 확인 후 정리 후보(D3)
 
 # KV (신규 — Phase 3 write, approval-gated)
 kv/prod/hololive-bot/compose-env
+kv/prod/hololive-bot/ap-compose-env
 kv/prod/hololive-bot/bot-env
 kv/prod/hololive-bot/alarm-worker-env
 kv/prod/hololive-bot/youtube-producer-env
@@ -97,8 +99,8 @@ kv/prod/hololive-bot/youtube-producer-env
 ```text
 # 렌더 결과 (호스트별)
 central:  /run/hololive-bot/compose.env  bot.env  alarm-worker.env  youtube-producer.env  certs/*
-Osaka AP: /run/hololive-bot/compose.env  youtube-producer.env  certs/*        # egress env 불필요
-Seoul AP: /run/hololive-bot/compose.env  youtube-producer.env  certs/*        # egress env 불필요
+Osaka AP: /run/hololive-bot/ap-compose.env  youtube-producer.env  certs/*        # egress env/token 불필요
+Seoul AP: /run/hololive-bot/ap-compose.env  youtube-producer.env  certs/*        # egress env/token 불필요
 central:  /run/chatbotgo/common.env  bot.env  certs/*                          # 기존 렌더 그대로
 ```
 
@@ -106,7 +108,7 @@ cert는 현행 유지: H3 서버 cert/key는 PKI 발급(`pki/issue/<svc>-h3-serv
 
 Rules:
 
-- `compose.env`에는 compose 파일들이 실제 보간하는 key만 둔다. 도출은 `compose_env_list_interpolation_keys_from_files`(이미 `compose-env.sh:153`에 존재)로 기계적으로 한다.
+- `compose.env`/`ap-compose.env`에는 OpenBao source에 실제 존재하는 compose 보간 key만 둔다. `${VAR:-default}`로 충분한 optional/default tuning key는 합성하지 않는다.
 - per-service env에는 해당 service가 실제로 읽는 key만 둔다(ownership matrix 근거).
 - certificate/private key/multiline 값은 env가 아니라 file render로 유지한다.
 - OpenBao Agent template key list는 정적이다 — key 추가 시 KV·template·matrix·계약 테스트를 한 commit 단위로 같이 갱신한다.
@@ -115,7 +117,7 @@ Rules:
 
 | ID | 결정 사항 | 권고 |
 |---|---|---|
-| D1 | AP 호스트 AppRole/policy 분리(AP는 `youtube-producer-env`+`compose-env`+PKI만 read) | 분리 권장 — AP 호스트 탈취 시 egress token 노출 차단. 단 rollout 복잡도가 오르므로 Phase 3에서 별도 승인 |
+| D1 | AP 호스트 AppRole/policy 분리(AP는 `youtube-producer-env`+`ap-compose-env`+PKI만 read) | 분리 권장 — AP 호스트 탈취 시 egress token 노출 차단. AP compose input도 `ap-compose.env`로 분리해 token-free로 유지한다. |
 | D2 | `${VAR:?}` interpolation secret을 per-service env_file로 이전할지 | 1차에서는 유지. 보간 채널 폐지는 compose 전반 재설계라 범위 초과 |
 | D3 | `memory-service.env`/`kimi.env` 렌더 및 KV 정리 | Phase 0에서 소비자 부재 확인 → Phase 5에서 template 제거 + KV 보존 스냅샷 후 폐기 |
 | D4 | `openbao-secrets-stack/deploy/compose/docker-compose.chatbotgo.openbao.yml` 처리 | chat-bot-go-kakao 본가 compose로 수렴하고 해당 파일은 폐기(superseded 표기) |
@@ -162,7 +164,8 @@ Ownership matrix rule: 아래 목록에 없는 key는 Phase 3 template/KV 분배
 
 | Owner | Keys / policy |
 |---|---|
-| `compose.env` | compose `environment:` 보간 소유. 아래 `compose.env keys`의 non-control key가 대상이다. `${VAR:-default}`가 안전한 기본값만 쓰는 key는 Phase 3 template에서 생략 가능하지만, template에 넣는 순간 이 owner에 속한다. |
+| `compose.env` | central host compose `environment:` 보간 소유. 아래 `compose.env keys`가 실제 OpenBao-rendered bundle이다. |
+| `ap-compose.env` | Osaka/Seoul AP host compose 보간 소유. `compose.env`에서 Iris egress token만 제외한 token-free AP bundle이다. |
 | `bot.env` | `hololive-bot` 앱 전용 key. compose `environment:`가 이미 주입하는 DB/Cache/Iris/H3/API/Kakao key는 넣지 않는다. |
 | `alarm-worker.env` | `hololive-alarm-worker` 앱 전용 key. egress 공통 key와 `config.Load` 필수 key는 compose `environment:`로 유지한다. |
 | `youtube-producer.env` | AP `youtube-producer` 전용 key. `IRIS_WEBHOOK_TOKEN`/`IRIS_BOT_TOKEN`은 절대 넣지 않는다. |
@@ -172,56 +175,18 @@ Ownership matrix rule: 아래 목록에 없는 key는 Phase 3 template/KV 분배
 
 ```text
 ADMIN_ALLOWED_IPS
-ADMIN_DASHBOARD_PORT_BIND_IP
 ADMIN_PASS_BCRYPT
 ADMIN_USER
-ALARM_DISPATCH_CONSUMER_MODE
-ALARM_DISPATCH_IDLE_BACKOFF_MAX_MS
-ALARM_DISPATCH_IDLE_BACKOFF_MIN_MS
-ALARM_DISPATCH_KARING_ENABLED
-ALARM_DISPATCH_LEASE_SECONDS
-ALARM_DISPATCH_MAX_BATCH
-ALARM_DISPATCH_MAX_BATCHES_PER_WAKE
-ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH
-ALARM_DISPATCH_POLL_INTERVAL_MS
-ALARM_DISPATCH_PUBLISH_MODE
-ALARM_DISPATCH_RECOVERY_BATCH_SIZE
-ALARM_DISPATCH_RECOVERY_INTERVAL_MS
-ALARM_DISPATCH_RETENTION_CANCELLED_DAYS
-ALARM_DISPATCH_RETENTION_DLQ_DAYS
-ALARM_DISPATCH_RETENTION_ENABLED
-ALARM_DISPATCH_RETENTION_EVENT_DAYS
-ALARM_DISPATCH_RETENTION_INTERVAL_MS
-ALARM_DISPATCH_RETENTION_LIMIT
-ALARM_DISPATCH_RETENTION_QUARANTINED_DAYS
-ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS
-ALARM_DISPATCH_RETENTION_SENT_DAYS
-ALARM_DISPATCH_SHADOW_FATAL
-ALARM_DISPATCH_WAKEUP_ENABLED
 ALARM_TWITCH_ENABLED
-ALARM_WORKER_EGRESS_LEASE_ENABLED
-ALARM_WORKER_POSTGRES_POOL_MAX_CONNS
-ALARM_WORKER_POSTGRES_POOL_MAX_IDLE_CONNS
-ALARM_WORKER_POSTGRES_POOL_MIN_CONNS
 API_SECRET_KEY
 CACHE_PASSWORD
-CACHE_SOCKET_PATH
 CLIPROXY_API_KEY
 CLIPROXY_BASE_URL
 CLIPROXY_MODEL
 CLIPROXY_REASONING_EFFORT
-CORS_ALLOWED_ORIGINS
-CORS_ENFORCE
 DB_PASSWORD
-DELIVERY_DISPATCHER_ENABLED
-DEUNHEALTH_IMAGE
-DOCKER_SOCKET_PROXY_IMAGE
 HOLODEX_API_KEY
 HOLODEX_API_KEY_1
-HOLOLIVE_ADMIN_API_H3_ADDR
-HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS
-HOLOLIVE_ALARM_WORKER_H3_ADDR
-HOLOLIVE_ALARM_WORKER_HTTP_TRANSPORTS
 HOLOLIVE_BOT_PORT_BIND_IP
 HOLOLIVE_DB_USER
 HOLOLIVE_H3_ADDR
@@ -229,77 +194,67 @@ HOLOLIVE_H3_CERT_FILE
 HOLOLIVE_H3_KEY_FILE
 HOLOLIVE_H3_SERVER_NAME
 HOLOLIVE_HTTP_TRANSPORTS
-HOLOLIVE_INTERNAL_H3_CA_CERT_FILE
 HOLOLIVE_INTERNAL_H3_SERVER_NAME
-HOLOLIVE_LLM_SCHEDULER_H3_ADDR
-HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS
 HOLOLIVE_MIGRATOR_USER
 HOLOLIVE_SCRAPER_PASSWORD
 HOLOLIVE_SCRAPER_USER
-HOLOLIVE_YOUTUBE_PRODUCER_H3_ADDR
-HOLOLIVE_YOUTUBE_PRODUCER_HTTP_TRANSPORTS
 HOLO_BOT_API_KEY
 IRIS_BASE_URL
-IRIS_BASE_URL_ALLOWED_HOSTS
-IRIS_BASE_URL_FILE
-IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS
 IRIS_BOT_TOKEN
 IRIS_H3_CA_CERT_FILE
 IRIS_H3_SERVER_NAME
 IRIS_TRANSPORT
 IRIS_WEBHOOK_TOKEN
-KAKAO_ACL_ENABLED
-KAKAO_ACL_MODE
-KAKAO_ROOMS
-LOG_COMPRESS
 LOG_LEVEL
-LOG_MAX_AGE_DAYS
-LOG_MAX_BACKUPS
-LOG_MAX_SIZE_MB
 MAJOREVENT_SCRAPER_ENABLED
-OSAKA_CACHE_HOST
-OSAKA_CACHE_PORT
-OSAKA_CLIPROXY_BASE_URL
-OSAKA_POSTGRES_HOST
-OSAKA_POSTGRES_PORT
 POSTGRES_ADMIN_USER
-POSTGRES_IMAGE
-POSTGRES_QUERY_EXEC_MODE
 POSTGRES_SSLMODE
 POSTGRES_SSLMODE_ALLOW_INSECURE
-SCRAPER_BACKFILL_COMMUNITY_ENABLED
-SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS
-SCRAPER_BACKFILL_ENABLED
-SCRAPER_BACKFILL_LIVE_ENABLED
-SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS
-SCRAPER_BACKFILL_SHORTS_ENABLED
-SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS
-SCRAPER_BACKFILL_TARGET_GROUP
-SCRAPER_COMMUNITY_SECONDS
-SCRAPER_LIVE_SECONDS
-SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS
-SCRAPER_POLL_LIVE_INTERVAL_SECONDS
-SCRAPER_POLL_SHORTS_INTERVAL_SECONDS
-SCRAPER_POLL_STATS_INTERVAL_SECONDS
-SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS
-SCRAPER_SCHEDULER_WORKER_COUNT
-SCRAPER_SHORTS_SECONDS
-SCRAPER_STATS_SECONDS
-SCRAPER_VIDEOS_SECONDS
-SCRAPER_WORKER_COUNT
-SEOUL_CACHE_HOST
-SEOUL_CACHE_PORT
-SEOUL_CLIPROXY_BASE_URL
-SEOUL_POSTGRES_HOST
-SEOUL_POSTGRES_PORT
 SESSION_SECRET
 VALKEY_PORT_BIND_IP
 YOUTUBE_API_KEY
-YOUTUBE_OUTBOX_DISPATCHER_ENABLED
-YOUTUBE_OUTBOX_KARING_ENABLED
-YOUTUBE_PRODUCER_AP_WORKER_COUNT
-YOUTUBE_PRODUCER_LEASE_NAMESPACE
-YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS
+```
+
+`ap-compose.env keys`:
+
+```text
+ADMIN_ALLOWED_IPS
+ADMIN_PASS_BCRYPT
+ADMIN_USER
+ALARM_TWITCH_ENABLED
+API_SECRET_KEY
+CACHE_PASSWORD
+CLIPROXY_API_KEY
+CLIPROXY_BASE_URL
+CLIPROXY_MODEL
+CLIPROXY_REASONING_EFFORT
+DB_PASSWORD
+HOLODEX_API_KEY
+HOLODEX_API_KEY_1
+HOLOLIVE_BOT_PORT_BIND_IP
+HOLOLIVE_DB_USER
+HOLOLIVE_H3_ADDR
+HOLOLIVE_H3_CERT_FILE
+HOLOLIVE_H3_KEY_FILE
+HOLOLIVE_H3_SERVER_NAME
+HOLOLIVE_HTTP_TRANSPORTS
+HOLOLIVE_INTERNAL_H3_SERVER_NAME
+HOLOLIVE_MIGRATOR_USER
+HOLOLIVE_SCRAPER_PASSWORD
+HOLOLIVE_SCRAPER_USER
+HOLO_BOT_API_KEY
+IRIS_BASE_URL
+IRIS_H3_CA_CERT_FILE
+IRIS_H3_SERVER_NAME
+IRIS_TRANSPORT
+LOG_LEVEL
+MAJOREVENT_SCRAPER_ENABLED
+POSTGRES_ADMIN_USER
+POSTGRES_SSLMODE
+POSTGRES_SSLMODE_ALLOW_INSECURE
+SESSION_SECRET
+VALKEY_PORT_BIND_IP
+YOUTUBE_API_KEY
 ```
 
 `bot.env keys`:
@@ -431,16 +386,16 @@ Repo-side 변경만. **기본 경로 플립은 merge 가능하지만, 대상 호
 
 - `config/agent-hololive-bot.hcl` — 모놀리식 template을 `compose.env` + per-service template으로 분할. **전환 기간 동안 기존 `/run/hololive-bot/env` template은 병행 유지**(rollback을 compose 되돌리기만으로 가능하게).
 - `policies/prod-hololive-bot-read.hcl` — D1 채택 시 host-scope policy 분리, 미채택 시 변경 없음.
-- 호스트별 적용 매트릭스: central → Osaka → Seoul 순서로 한 호스트씩. AP 호스트는 `compose.env`+`youtube-producer.env`만 렌더.
+- 호스트별 적용 매트릭스: central → Osaka → Seoul 순서로 한 호스트씩. AP 호스트는 token-free `ap-compose.env`+`youtube-producer.env`만 렌더.
 - KV 신규 경로 write는 기존 `kv/prod/hololive-bot/env` 값의 분배 복사다 — 값 신규 발급 없음, 회전은 범위 외.
 - `config/agent-chatbotgo.hcl` — 변경 없음(이미 분할 완료). D3 정리는 Phase 5로 이연.
 
 #### Phase 3 Repo-Side Status (2026-06-06)
 
-- `openbao-secrets-stack/config/agent-hololive-bot.hcl`은 legacy `/run/hololive-bot/env`를 유지하면서 `/run/hololive-bot/{compose,bot,alarm-worker,youtube-producer}.env` split render template을 추가했다.
-- `openbao-secrets-stack/scripts/split-hololive-env-bundles.py`는 기존 `kv/prod/hololive-bot/env`를 새 KV bundle 4종으로 분배하는 helper다. fixture dry-run은 `--source-json`, live KV read dry-run은 `--read-live`를 명시한다. live KV write는 `--write`가 필요하다.
+- `openbao-secrets-stack/config/agent-hololive-bot.hcl`은 legacy `/run/hololive-bot/env`를 유지하면서 `/run/hololive-bot/{compose,ap-compose,bot,alarm-worker,youtube-producer}.env` split render template을 추가했다.
+- `openbao-secrets-stack/scripts/split-hololive-env-bundles.py`는 기존 `kv/prod/hololive-bot/env`를 새 KV bundle 5종으로 분배하는 helper다. `ap-compose-env`는 `IRIS_WEBHOOK_TOKEN`/`IRIS_BOT_TOKEN`을 제외한다. fixture dry-run은 `--source-json`, live KV read dry-run은 `--read-live`를 명시한다. live KV write는 `--write`가 필요하다.
 - 기존 monolithic KV에 없는 optional/default key는 합성하지 않는다. `bot.env`는 현재 0-key 파일로 렌더되고, 앱 기본값을 사용한다.
-- `openbao-secrets-stack/scripts/verify-hololive-h3-contract.sh`는 split template 존재, strict missing-key 설정, helper/template key parity, source 누락 key 거부, AP producer env의 Iris egress token 부재를 검증한다.
+- `openbao-secrets-stack/scripts/verify-hololive-h3-contract.sh`는 split template 존재, strict missing-key 설정, helper/template key parity, source 누락 key 거부, `ap-compose.env`/AP producer env의 Iris egress token 부재, systemd `ExecStart=/usr/bin/bao`를 검증한다.
 - 아직 수행하지 않은 live 작업: 신규 KV path write, installed `/etc/openbao-agent/hololive-bot.hcl` 교체, `openbao-agent-hololive-bot.service` restart, app container recreate.
 
 Required evidence (호스트별 수집, 값 미출력):
@@ -449,7 +404,7 @@ Required evidence (호스트별 수집, 값 미출력):
 sudo find /run/hololive-bot /run/chatbotgo -maxdepth 3 -printf "%M %u %g %s %TY-%Tm-%TdT%TH:%TM:%TS %p\n" | sort
 journalctl -u openbao-agent-hololive-bot.service -u openbao-agent-chatbotgo.service -n 160 --no-pager |
   grep -E 'rendered|permission denied|x509|no such file|ERROR|WARN' || true
-sudo sh -c 'cut -d= -f1 /run/hololive-bot/compose.env | sort'   # key 이름 대조용, per-service 동일
+sudo sh -c 'cut -d= -f1 /run/hololive-bot/compose.env /run/hololive-bot/ap-compose.env | sort -u'   # key 이름 대조용
 ```
 
 ### Phase 4: Live Rollout
