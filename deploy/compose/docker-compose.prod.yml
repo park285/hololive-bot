@@ -595,14 +595,17 @@ services:
       SESSION_TOKEN_ROTATION: "true"
       VALKEY_URL: :${CACHE_PASSWORD:?CACHE_PASSWORD is required}@valkey-cache:6379
       DOCKER_HOST: tcp://docker-proxy:2375
-      HOLO_ADMIN_API_URL: http://hololive-admin-api:30006
-      HOLO_BOT_URL: http://hololive-admin-api:30006
+      HOLO_ADMIN_API_URL: https://hololive-admin-api:30006
+      HOLO_BOT_URL: https://hololive-admin-api:30006
       HOLO_BOT_API_KEY: ${HOLO_BOT_API_KEY:-}
+      HOLOLIVE_INTERNAL_H3_CA_CERT_FILE: ${HOLOLIVE_INTERNAL_H3_CA_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
+      HOLOLIVE_INTERNAL_H3_SERVER_NAME: ${HOLOLIVE_INTERNAL_H3_SERVER_NAME:-127.0.0.1}
       LOG_DIR: /app/logs
     ports:
       - "127.0.0.1:30190:30190"
     volumes:
       - ../../logs:/app/logs
+      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
     extra_hosts: *host-extra-hosts
     depends_on:
       valkey-cache:

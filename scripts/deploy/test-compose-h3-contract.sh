@@ -92,14 +92,16 @@ if pc is not None:
     )
     check("youtube-producer-c publishes 30025/udp", has_udp_published(pc, 30025))
 
+H2C_URL_PATTERNS = ("http://llm-scheduler", "http://hololive-admin-api")
+
 for render_name, services in (("oracle", main), ("main-ap", ap)):
     offenders = [
-        f"{name}.{key}"
+        f"{name}.{key}={value}"
         for name, svc in services.items()
         for key, value in (svc.get("environment") or {}).items()
-        if isinstance(value, str) and "http://llm-scheduler" in value
+        if isinstance(value, str) and any(p in value for p in H2C_URL_PATTERNS)
     ]
-    check(f"no http://llm-scheduler URLs in {render_name} render", not offenders)
+    check(f"no h2c internal URLs in {render_name} render", not offenders)
     for offender in offenders:
         print(f"  offender: {offender}", file=sys.stderr)
 
