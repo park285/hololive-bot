@@ -43,10 +43,20 @@ type LLMSchedulerConfig struct {
 }
 
 func LoadLLMScheduler() (*LLMSchedulerConfig, error) {
+	return loadLLMSchedulerValidated((*LLMSchedulerConfig).validate)
+}
+
+// LoadLLMSchedulerRuntime: llm-scheduler는 compose 보안 계약상 nonEgress라
+// Iris egress 토큰을 받을 수 없으므로 Iris 입력 필수 검증을 면제합니다.
+func LoadLLMSchedulerRuntime() (*LLMSchedulerConfig, error) {
+	return loadLLMSchedulerValidated((*LLMSchedulerConfig).validateRuntime)
+}
+
+func loadLLMSchedulerValidated(validate func(*LLMSchedulerConfig) error) (*LLMSchedulerConfig, error) {
 	_ = godotenv.Load()
 
 	config := buildLLMSchedulerConfig()
-	if err := config.validate(); err != nil {
+	if err := validate(config); err != nil {
 		return nil, fmt.Errorf("llm scheduler config validation failed: %w", err)
 	}
 	return config, nil
@@ -82,10 +92,7 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 }
 
 func (c *LLMSchedulerConfig) validate() error {
-	if c.Server.Port == 0 {
-		return fmt.Errorf("LLM_SCHEDULER_PORT is required")
-	}
-	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
+	if err := c.validateServerBasics(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
@@ -97,8 +104,19 @@ func (c *LLMSchedulerConfig) validate() error {
 	if strings.TrimSpace(c.Iris.BaseURL) == "" && strings.TrimSpace(c.Iris.BaseURLFile) == "" {
 		return fmt.Errorf("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
-	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+	return validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode)
+}
+
+func (c *LLMSchedulerConfig) validateRuntime() error {
+	if err := c.validateServerBasics(); err != nil {
 		return err
 	}
-	return nil
+	return validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode)
+}
+
+func (c *LLMSchedulerConfig) validateServerBasics() error {
+	if c.Server.Port == 0 {
+		return fmt.Errorf("LLM_SCHEDULER_PORT is required")
+	}
+	return validateAPISecretKey(c.Environment, c.Server.APIKey)
 }

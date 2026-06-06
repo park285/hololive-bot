@@ -43,7 +43,7 @@ func main() {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             config.Load,
+		LoadConfig:             config.LoadYouTubeProducerRuntime,
 		LoadConfigErrorMessage: "Failed to load youtube producer config",
 		LoggerConfig: func(appConfig *config.Config) sharedlogging.Config {
 			return sharedlogging.Config{

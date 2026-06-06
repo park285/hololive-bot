@@ -73,6 +73,12 @@ func LoadAdminAPIRuntime() (*Config, error) {
 	return loadConfigValidated((*Config).ValidateAdminAPIRuntime)
 }
 
+// LoadYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
+// Iris egress 토큰·KAKAO_ROOMS를 받지 않으므로 해당 필수 검증을 면제합니다.
+func LoadYouTubeProducerRuntime() (*Config, error) {
+	return loadConfigValidated((*Config).ValidateYouTubeProducerRuntime)
+}
+
 func loadConfigValidated(validate func(*Config) error) (*Config, error) {
 	_ = godotenv.Load()
 

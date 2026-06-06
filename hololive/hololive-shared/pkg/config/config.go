@@ -55,10 +55,12 @@ const (
 
 var Load = settings.Load
 var LoadAdminAPIRuntime = settings.LoadAdminAPIRuntime
+var LoadYouTubeProducerRuntime = settings.LoadYouTubeProducerRuntime
 
 //lint:ignore SA1019 legacy compatibility facade.
 var LoadAdminAPI = settings.LoadAdminAPI
 var LoadLLMScheduler = settings.LoadLLMScheduler
+var LoadLLMSchedulerRuntime = settings.LoadLLMSchedulerRuntime
 
 var DefaultScraperWorkerCount = settings.DefaultScraperWorkerCount
 var DefaultScraperFetcherEngine = settings.DefaultScraperFetcherEngine

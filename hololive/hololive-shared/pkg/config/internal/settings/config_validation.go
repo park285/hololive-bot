@@ -80,6 +80,22 @@ func (c *Config) validateAdminAPIRequiredConfig() error {
 	return nil
 }
 
+// ValidateYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
+// Iris egress 토큰·KAKAO_ROOMS를 받지 않으므로 해당 필수 검증을 면제합니다.
+func (c *Config) ValidateYouTubeProducerRuntime() error {
+	return c.validateWithRequired(c.validateYouTubeProducerRequiredConfig)
+}
+
+func (c *Config) validateYouTubeProducerRequiredConfig() error {
+	if strings.TrimSpace(c.Holodex.APIKey) == "" {
+		return fmt.Errorf("HOLODEX_API_KEY is required")
+	}
+	if isPlaceholderAPIKey(c.YouTube.APIKey) {
+		return fmt.Errorf("YOUTUBE_API_KEY uses placeholder value; set a real API key")
+	}
+	return nil
+}
+
 func (c *Config) validateRequiredConfig() error {
 	if len(c.Kakao.Rooms) == 0 {
 		return fmt.Errorf("KAKAO_ROOMS is required")

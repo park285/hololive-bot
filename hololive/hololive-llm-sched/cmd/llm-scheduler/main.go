@@ -43,7 +43,7 @@ func main() {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             config.LoadLLMScheduler,
+		LoadConfig:             config.LoadLLMSchedulerRuntime,
 		LoadConfigErrorMessage: "Failed to load llm scheduler config",
 		LoggerConfig: func(schedulerConfig *config.LLMSchedulerConfig) sharedlogging.Config {
 			return sharedlogging.Config{
