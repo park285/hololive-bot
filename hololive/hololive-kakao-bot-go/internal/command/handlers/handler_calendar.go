@@ -56,18 +56,35 @@ func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrCalendarQueryFailed)
 	}
 
-	if c.imageRenderer != nil {
-		if imgData, renderErr := c.imageRenderer.RenderCalendarImage(month, year, entries); renderErr == nil {
-			return c.Deps().SendImage(ctx, cmdCtx.Room, imgData)
-		} else {
-			c.Deps().Logger.Warn("calendar image render failed, falling back to text",
-				slog.Any("error", renderErr),
-			)
-		}
+	if c.trySendCalendarImage(ctx, cmdCtx.Room, month, year, entries) {
+		return nil
 	}
 
 	message := c.Deps().Formatter.CelebrationCalendar(ctx, month, year, entries)
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+}
+
+func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string, month, year int, entries []domain.CalendarEntry) bool {
+	if c.imageRenderer == nil {
+		return false
+	}
+
+	imgData, err := c.imageRenderer.RenderCalendarImage(month, year, entries)
+	if err != nil {
+		c.Deps().Logger.Warn("calendar image render failed, falling back to text",
+			slog.Any("error", err),
+		)
+		return false
+	}
+
+	if err := c.Deps().SendImage(ctx, room, imgData); err != nil {
+		c.Deps().Logger.Warn("calendar image send failed, falling back to text",
+			slog.Any("error", err),
+		)
+		return false
+	}
+
+	return true
 }
 
 func (c *CalendarCommand) ensureDeps() error {

@@ -46,9 +46,13 @@ const (
 
 var replyClientRequestSequence atomic.Uint64
 
+type replyStatusGetter interface {
+	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
+}
+
 type acceptedMessageSender interface {
 	SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
-	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
+	replyStatusGetter
 }
 
 type CommandTransport struct {
@@ -145,11 +149,8 @@ func sendAcceptedMessageAttempt(ctx context.Context, sender acceptedMessageSende
 	if err != nil {
 		return false, err
 	}
-	if accepted == nil || strings.TrimSpace(accepted.RequestID) == "" {
-		return true, nil
-	}
 
-	err = waitForReplyHandoff(ctx, sender, accepted.RequestID)
+	err = waitForAcceptedReplyHandoff(ctx, sender, accepted)
 	if err == nil {
 		return true, nil
 	}
@@ -157,6 +158,13 @@ func sendAcceptedMessageAttempt(ctx context.Context, sender acceptedMessageSende
 		return false, err
 	}
 	return true, nil
+}
+
+func waitForAcceptedReplyHandoff(ctx context.Context, getter replyStatusGetter, accepted *iris.ReplyAcceptedResponse) error {
+	if accepted == nil || strings.TrimSpace(accepted.RequestID) == "" {
+		return nil
+	}
+	return waitForReplyHandoff(ctx, getter, accepted.RequestID)
 }
 
 type replyStatusFailedError struct {
@@ -176,7 +184,7 @@ func isReplyStatusFailed(err error) bool {
 	return errors.As(err, &failed)
 }
 
-func waitForReplyHandoff(ctx context.Context, client acceptedMessageSender, requestID string) error {
+func waitForReplyHandoff(ctx context.Context, client replyStatusGetter, requestID string) error {
 	ticker := time.NewTicker(replyStatusPollInterval)
 	defer ticker.Stop()
 
@@ -195,7 +203,7 @@ func waitForReplyHandoff(ctx context.Context, client acceptedMessageSender, requ
 	}
 }
 
-func checkReplyHandoffStatus(ctx context.Context, client acceptedMessageSender, requestID string) (bool, error) {
+func checkReplyHandoffStatus(ctx context.Context, client replyStatusGetter, requestID string) (bool, error) {
 	status, err := client.GetReplyStatus(ctx, requestID)
 	if err != nil || status == nil {
 		return err != nil, nil
@@ -239,7 +247,11 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	defer cancel()
 
 	opts = appendMediaClientRequestOptions(sendCtx, opts, "image", room, imageData)
-	if _, err := t.irisClient.SendImage(sendCtx, room, imageData, opts...); err != nil {
+	accepted, err := t.irisClient.SendImage(sendCtx, room, imageData, opts...)
+	if err == nil {
+		err = waitForAcceptedReplyHandoff(sendCtx, t.irisClient, accepted)
+	}
+	if err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send image", serviceNameIris, "send_image", err)
 		return fmt.Errorf("send image to room %s: %w", room, serviceErr)
 	}
@@ -259,7 +271,11 @@ func (t *CommandTransport) SendMultipleImages(ctx context.Context, room string, 
 	defer cancel()
 
 	opts = appendMultipleImageClientRequestOptions(sendCtx, opts, room, images)
-	if _, err := t.irisClient.SendMultipleImages(sendCtx, room, images, opts...); err != nil {
+	accepted, err := t.irisClient.SendMultipleImages(sendCtx, room, images, opts...)
+	if err == nil {
+		err = waitForAcceptedReplyHandoff(sendCtx, t.irisClient, accepted)
+	}
+	if err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send multiple images", serviceNameIris, "send_multiple_images", err)
 		return fmt.Errorf("send multiple images to room %s: %w", room, serviceErr)
 	}
