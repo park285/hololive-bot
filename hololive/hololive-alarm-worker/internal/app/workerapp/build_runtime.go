@@ -49,6 +49,11 @@ type alarmFoundation struct {
 	Postgres       database.Client
 }
 
+func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err error) (*AlarmWorkerRuntime, error) {
+	infra.Cleanup()
+	return nil, fmt.Errorf("build alarm worker runtime: %s: %w", stage, err)
+}
+
 func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*AlarmWorkerRuntime, error) {
 	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
@@ -62,39 +67,33 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 
 	foundation, err := buildAlarmFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
-		infra.Cleanup()
-		return nil, fmt.Errorf("build alarm worker runtime: alarm foundation: %w", err)
+		return failAlarmWorkerBuild(infra, "alarm foundation", err)
 	}
 
 	scheduler, err := buildRuntimeScheduler(appConfig, infra.Cache, foundation, logger, os.Getenv(notificationSchedulerRoleEnv))
 	if err != nil {
-		infra.Cleanup()
-		return nil, fmt.Errorf("build alarm worker runtime: scheduler: %w", err)
+		return failAlarmWorkerBuild(infra, "scheduler", err)
 	}
 
 	notificationEgress, err := buildNotificationEgress(appConfig, infra, logger)
 	if err != nil {
-		infra.Cleanup()
-		return nil, fmt.Errorf("build alarm worker runtime: notification egress: %w", err)
+		return failAlarmWorkerBuild(infra, "notification egress", err)
 	}
 
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{APIKey: appConfig.Server.APIKey})
 	if err != nil {
-		infra.Cleanup()
-		return nil, fmt.Errorf("build alarm worker runtime: router: %w", err)
+		return failAlarmWorkerBuild(infra, "router", err)
 	}
 
 	publishConfig, err := loadAlarmDispatchPublishConfig()
 	if err != nil {
-		infra.Cleanup()
-		return nil, fmt.Errorf("build alarm worker runtime: celebration publish config: %w", err)
+		return failAlarmWorkerBuild(infra, "celebration publish config", err)
 	}
 	celebRunner := buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger)
 
 	servers, err := sharedserver.NewRuntimeHTTPServers(appConfig.Server, router, "hololive-alarm-worker.http")
 	if err != nil {
-		infra.Cleanup()
-		return nil, fmt.Errorf("build alarm worker runtime: http servers: %w", err)
+		return failAlarmWorkerBuild(infra, "http servers", err)
 	}
 
 	return &AlarmWorkerRuntime{

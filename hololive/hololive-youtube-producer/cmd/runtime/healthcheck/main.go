@@ -9,17 +9,23 @@ import (
 )
 
 func main() {
-	switch {
-	case len(os.Args) == 2 && os.Args[1] == "--smoke":
-		runSmoke()
-	case len(os.Args) == 3 && os.Args[1] == "--body":
-		runBody(os.Args[2])
-	case len(os.Args) == 2:
-		runCheck(os.Args[1])
-	default:
+	args := os.Args[1:]
+	if len(args) == 2 && args[0] == "--body" {
+		runBody(args[1])
+		return
+	}
+
+	if len(args) != 1 {
 		fmt.Fprintln(os.Stderr, "usage: healthcheck <url>|--body <url>|--smoke")
 		os.Exit(2)
 	}
+
+	if args[0] == "--smoke" {
+		runSmoke()
+		return
+	}
+
+	runCheck(args[0])
 }
 
 func runBody(url string) {
