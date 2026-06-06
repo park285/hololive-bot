@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	youtubeoutbox "github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
@@ -53,6 +54,7 @@ type AlarmWorkerRuntime struct {
 	ConfigSubscriber   *configsub.Subscriber
 	ServerAddr         string
 	HTTPServer         *http.Server
+	HTTPServers        *sharedserver.RuntimeHTTPServers
 
 	schedulerMu     sync.Mutex
 	schedulerCancel context.CancelFunc

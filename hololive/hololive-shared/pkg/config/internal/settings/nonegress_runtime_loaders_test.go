@@ -19,8 +19,17 @@ func clearIrisAndRoomEnv(t *testing.T) {
 	}
 }
 
+func setRuntimeH3ServerEnv(t *testing.T) {
+	t.Helper()
+
+	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h3")
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
+}
+
 func TestLoadLLMSchedulerRuntimeAllowsMissingIrisInputs(t *testing.T) {
 	clearIrisAndRoomEnv(t)
+	setRuntimeH3ServerEnv(t)
 	t.Setenv("API_SECRET_KEY", "dummy-secret")
 
 	cfg, err := LoadLLMSchedulerRuntime()
@@ -30,10 +39,14 @@ func TestLoadLLMSchedulerRuntimeAllowsMissingIrisInputs(t *testing.T) {
 	if cfg.Server.Port != 30003 {
 		t.Fatalf("Server.Port = %d, want 30003", cfg.Server.Port)
 	}
+	if !cfg.Server.TransportEnabled("h3") {
+		t.Fatal("Server.TransportEnabled(h3) = false, want true")
+	}
 }
 
 func TestLoadLLMSchedulerStillRequiresIrisTokens(t *testing.T) {
 	clearIrisAndRoomEnv(t)
+	setRuntimeH3ServerEnv(t)
 	t.Setenv("API_SECRET_KEY", "dummy-secret")
 
 	_, err := LoadLLMScheduler()
@@ -45,7 +58,7 @@ func TestLoadLLMSchedulerStillRequiresIrisTokens(t *testing.T) {
 func TestLoadYouTubeProducerRuntimeAllowsMissingIrisAndRooms(t *testing.T) {
 	clearIrisAndRoomEnv(t)
 	t.Setenv("API_SECRET_KEY", "dummy-secret")
-	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h2c")
+	setRuntimeH3ServerEnv(t)
 	t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
 	t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
 
@@ -61,7 +74,7 @@ func TestLoadYouTubeProducerRuntimeAllowsMissingIrisAndRooms(t *testing.T) {
 func TestLoadYouTubeProducerRuntimeRequiresRealYouTubeKey(t *testing.T) {
 	clearIrisAndRoomEnv(t)
 	t.Setenv("API_SECRET_KEY", "dummy-secret")
-	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h2c")
+	setRuntimeH3ServerEnv(t)
 	t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
 	t.Setenv("YOUTUBE_API_KEY", "changeme")
 
@@ -74,7 +87,7 @@ func TestLoadYouTubeProducerRuntimeRequiresRealYouTubeKey(t *testing.T) {
 func TestLoadYouTubeProducerRuntimeRequiresHolodexKey(t *testing.T) {
 	clearIrisAndRoomEnv(t)
 	t.Setenv("API_SECRET_KEY", "dummy-secret")
-	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h2c")
+	setRuntimeH3ServerEnv(t)
 	t.Setenv("HOLODEX_API_KEY", "")
 	t.Setenv("HOLODEX_API_KEY_1", "")
 	t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")

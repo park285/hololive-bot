@@ -56,7 +56,8 @@ type LLMSchedulerRuntime struct {
 	MemberNewsScheduler        *mnscheduler.Scheduler
 	MemberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler
 
-	httpServer *http.Server
+	httpServer  *http.Server
+	httpServers *sharedserver.RuntimeHTTPServers
 	lifecycle.Managed
 }
 
@@ -85,7 +86,16 @@ func (r *LLMSchedulerRuntime) Run() {
 }
 
 func (r *LLMSchedulerRuntime) startHTTPServer(errCh chan<- error) {
+	if r.httpServers != nil {
+		r.httpServers.Start(r.Logger, errCh)
+		r.Logger.Info("LLM scheduler HTTP server started",
+			slog.String("addr", r.httpServers.Addr()))
+		return
+	}
 	httpserver.StartHTTPServer(r.httpServer, r.Logger, errCh)
+	if r.httpServer == nil {
+		return
+	}
 	r.Logger.Info("LLM scheduler HTTP server started",
 		slog.String("addr", r.httpServer.Addr))
 }
@@ -154,7 +164,13 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	var errs []error
 	r.stopSchedulers()
-	if err := httpserver.ShutdownHTTPServer(ctx, r.httpServer); err != nil {
+	shutdownHTTPServer := func(ctx context.Context) error {
+		if r.httpServers != nil {
+			return r.httpServers.Shutdown(ctx)
+		}
+		return httpserver.ShutdownHTTPServer(ctx, r.httpServer)
+	}
+	if err := shutdownHTTPServer(ctx); err != nil {
 		r.Logger.Error("HTTP server shutdown error", slog.Any("error", err))
 		errs = append(errs, err)
 	} else {
@@ -233,7 +249,7 @@ func buildLLMSchedulerComponents(
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, logger)
 
 	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
-	httpServer, err := buildLLMSchedulerHTTPServer(ctx, schedulerConfig.Server.Port, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService)
+	httpServers, err := buildLLMSchedulerHTTPServers(ctx, schedulerConfig.Server, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +262,7 @@ func buildLLMSchedulerComponents(
 		majorEventScraperScheduler,
 		memberNewsScheduler,
 		memberNewsMonthlyScheduler,
-		httpServer,
+		httpServers,
 	), nil
 }
 
@@ -259,7 +275,7 @@ func newLLMSchedulerRuntime(
 	majorEventScraperScheduler *mescraper.RuntimeScheduler,
 	memberNewsScheduler *mnscheduler.Scheduler,
 	memberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler,
-	httpServer *http.Server,
+	httpServers *sharedserver.RuntimeHTTPServers,
 ) *LLMSchedulerRuntime {
 	return &LLMSchedulerRuntime{
 		Config:                     schedulerConfig,
@@ -269,7 +285,8 @@ func newLLMSchedulerRuntime(
 		MajorEventScraperScheduler: majorEventScraperScheduler,
 		MemberNewsScheduler:        memberNewsScheduler,
 		MemberNewsMonthlyScheduler: memberNewsMonthlyScheduler,
-		httpServer:                 httpServer,
+		httpServer:                 legacyPrimaryHTTPServer(httpServers),
+		httpServers:                httpServers,
 	}
 }
 
@@ -313,4 +330,37 @@ func buildLLMSchedulerHTTPServer(
 
 	addr := fmt.Sprintf(":%d", port)
 	return sharedserver.NewH2CServer(addr, router, "hololive-llm-sched.http"), nil
+}
+
+func buildLLMSchedulerHTTPServers(
+	ctx context.Context,
+	serverConfig config.ServerConfig,
+	logger *slog.Logger,
+	triggerHandler *sharedserver.TriggerHandler,
+	apiKey string,
+	majorEventRepository *majorevent.Repository,
+	memberNewsService *membernews.Service,
+) (*sharedserver.RuntimeHTTPServers, error) {
+	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepository != nil || memberNewsService != nil) {
+		return nil, fmt.Errorf("build llm scheduler router: API_SECRET_KEY required")
+	}
+
+	router, err := buildTriggerRouter(ctx, logger, triggerHandler, apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("build llm scheduler router: %w", err)
+	}
+
+	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
+	registerMajorEventInternalRoutes(router, apiKey, majorEventRepository)
+	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
+	registerMemberNewsInternalRoutes(router, apiKey, memberNewsService)
+
+	return sharedserver.NewRuntimeHTTPServers(serverConfig, router, "hololive-llm-sched.http")
+}
+
+func legacyPrimaryHTTPServer(servers *sharedserver.RuntimeHTTPServers) *http.Server {
+	if servers == nil {
+		return nil
+	}
+	return servers.H2C
 }

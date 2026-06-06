@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -52,8 +53,9 @@ type YouTubeProducerRuntime struct {
 	ConfigSubscriber    *configsub.Subscriber
 	PollTargetRefresher *polltarget.Refresher
 
-	ServerAddr string
-	HTTPServer *http.Server
+	ServerAddr  string
+	HTTPServer  *http.Server
+	HTTPServers *sharedserver.RuntimeHTTPServers
 
 	Readiness *readiness.State
 

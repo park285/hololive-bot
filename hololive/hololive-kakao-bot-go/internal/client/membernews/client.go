@@ -9,8 +9,8 @@ import (
 	"time"
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/kapu/hololive-shared/pkg/service/subscriptionclient"
-	"github.com/park285/shared-go/pkg/httputil"
 	sharedjson "github.com/park285/shared-go/pkg/json"
 )
 
@@ -21,7 +21,7 @@ type Client struct {
 func New(baseURL, apiKey string) *Client {
 	return &Client{
 		Client: subscriptionclient.Client{
-			HTTPClient:        httputil.NewJSONClient(baseURL, apiKey, 60*time.Second),
+			HTTPClient:        internalhttp.NewJSONClient(baseURL, apiKey, 60*time.Second, nil),
 			SubscriptionsPath: membernewscontracts.SubscriptionsPath,
 		},
 	}

@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -59,6 +60,7 @@ const defaultLocalServiceName = "hololive-admin-api"
 
 type Collector struct {
 	httpClient  *http.Client
+	h3Client    *http.Client
 	endpoints   []ServiceEndpoint
 	cacheTTL    time.Duration
 	serviceName string
@@ -82,6 +84,7 @@ func WithServiceName(name string) CollectorOption {
 func NewCollector(endpoints []ServiceEndpoint, opts ...CollectorOption) *Collector {
 	collector := &Collector{
 		httpClient:  httputil.NewInternalServiceClient(2 * time.Second),
+		h3Client:    internalhttp.NewClientForURL("https://internal", 2*time.Second, nil),
 		endpoints:   endpoints,
 		cacheTTL:    2 * time.Second,
 		serviceName: defaultLocalServiceName,
@@ -253,7 +256,7 @@ func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, b
 		return 0, false
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.clientForURL(url).Do(req)
 	if err != nil {
 		return 0, false
 	}
@@ -269,6 +272,13 @@ func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, b
 	}
 
 	return goroutineCountFromHealthResponse(hr)
+}
+
+func (c *Collector) clientForURL(rawURL string) *http.Client {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(rawURL)), "https://") && c.h3Client != nil {
+		return c.h3Client
+	}
+	return c.httpClient
 }
 
 func goroutineCountFromHealthResponse(hr healthResponse) (int, bool) {

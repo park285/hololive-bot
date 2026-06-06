@@ -78,6 +78,14 @@ func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, er
 }
 
 func (r *YouTubeProducerRuntime) startHTTPServer(errCh chan<- error) {
+	if r.HTTPServers != nil {
+		r.HTTPServers.Start(r.Logger, errCh)
+		r.Logger.Info("Ingestion runtime HTTP server started",
+			slog.String("runtime", r.runtimeName()),
+			slog.String("addr", r.HTTPServers.Addr()),
+		)
+		return
+	}
 	httpserver.Start(listenErrorPrefixServer{
 		Server:    r.HTTPServer,
 		errorText: "http server error",
@@ -113,6 +121,15 @@ func (r *YouTubeProducerRuntime) stopSchedulers() {
 }
 
 func (r *YouTubeProducerRuntime) shutdownHTTPServer(ctx context.Context) {
+	if r.HTTPServers != nil {
+		if err := r.HTTPServers.Shutdown(ctx); err != nil {
+			r.Logger.Error("Ingestion runtime HTTP shutdown failed",
+				slog.String("runtime", r.runtimeName()),
+				slog.Any("error", err),
+			)
+		}
+		return
+	}
 	if r.HTTPServer != nil {
 		if err := httpserver.Shutdown(ctx, r.HTTPServer, "Ingestion runtime HTTP shutdown failed"); err != nil {
 			r.Logger.Error("Ingestion runtime HTTP shutdown failed",

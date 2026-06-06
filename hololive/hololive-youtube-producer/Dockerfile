@@ -88,7 +88,7 @@ ENV GOGC=100 \
 EXPOSE 30005
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["./bin/healthcheck", "http://127.0.0.1:30005/health"]
+    CMD ["./bin/healthcheck", "https://127.0.0.1:30005/health"]
 
 USER 1000:1000
 

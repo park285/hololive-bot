@@ -45,9 +45,17 @@ func TestNewAdminAPIRuntimeInitializesServerAndCleanup(t *testing.T) {
 
 	cleanupCalls := 0
 	logger := slog.New(slog.DiscardHandler)
-	runtime := newAdminAPIRuntime(&config.Config{}, logger, "127.0.0.1:0", gin.New(), func() {
+	runtime, err := newAdminAPIRuntime(&config.Config{
+		Server: config.ServerConfig{
+			HTTPTransports: []string{"h2c"},
+			H2CAddr:        "127.0.0.1:0",
+		},
+	}, logger, gin.New(), func() {
 		cleanupCalls++
 	})
+	if err != nil {
+		t.Fatalf("newAdminAPIRuntime() error = %v", err)
+	}
 
 	if runtime == nil {
 		t.Fatal("newAdminAPIRuntime() returned nil")

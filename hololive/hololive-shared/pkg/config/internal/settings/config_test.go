@@ -56,6 +56,12 @@ func setRequiredLoadEnv(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
 }
 
+func setRequiredH3ServerEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
+}
+
 func captureSlogOutput(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
@@ -1397,6 +1403,7 @@ func TestLoadAdminAPI_ProductionRequiresAPISecretKey(t *testing.T) {
 }
 
 func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
+	setRequiredH3ServerEnv(t)
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
@@ -1414,6 +1421,7 @@ func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T)
 }
 
 func TestLoadLLMScheduler_ProductionRequiresAPISecretKey(t *testing.T) {
+	setRequiredH3ServerEnv(t)
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("APP_ENV", "production")
@@ -1590,6 +1598,7 @@ func TestLoadAdminAPI_CORSLooseBoolParsing(t *testing.T) {
 }
 
 func TestLoadLLMScheduler_EnvApplied(t *testing.T) {
+	setRequiredH3ServerEnv(t)
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
@@ -1635,6 +1644,7 @@ func TestLoadBotConfig_DefaultCalendarImageCacheDir(t *testing.T) {
 }
 
 func TestLoadLLMScheduler_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
+	setRequiredH3ServerEnv(t)
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "")
 	t.Setenv("IRIS_BOT_TOKEN", "")

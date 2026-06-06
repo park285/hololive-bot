@@ -91,7 +91,12 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 	}
 	celebRunner := buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger)
 
-	addr := fmt.Sprintf(":%d", appConfig.Server.Port)
+	servers, err := sharedserver.NewRuntimeHTTPServers(appConfig.Server, router, "hololive-alarm-worker.http")
+	if err != nil {
+		infra.Cleanup()
+		return nil, fmt.Errorf("build alarm worker runtime: http servers: %w", err)
+	}
+
 	return &AlarmWorkerRuntime{
 		Config:             appConfig,
 		Logger:             logger,
@@ -99,8 +104,9 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		NotificationEgress: notificationEgress,
 		CelebrationRunner:  celebRunner,
 		ConfigSubscriber:   BuildAlarmWorkerConfigSubscriber(infra.Cache, foundation.AlarmCRUD, logger),
-		ServerAddr:         addr,
-		HTTPServer:         sharedserver.NewH2CServer(addr, router, "hololive-alarm-worker.http"),
+		ServerAddr:         servers.Addr(),
+		HTTPServer:         servers.H2C,
+		HTTPServers:        servers,
 		Managed:            lifecycle.NewManaged(infra.Cleanup),
 	}, nil
 }
