@@ -10,14 +10,15 @@
 |---|---|
 | Health | Osaka `http://127.0.0.1:30005/health`, Seoul `:30015/health`, main `:30025/health` return success (각 호스트 로컬 기준) |
 | Ready | all three `/ready` payloads show `mode=active-active` |
-| Logs | no repeated poller, photo sync, outbox, DB, cache, or proxy errors |
+| Logs | startup markers include PostgreSQL and Valkey connection success; repeated poller, photo sync, outbox, DB, cache, or proxy errors are absent |
 | Queue | produces outbox/tracking state; does not consume alarm dispatch queue |
+| PostgreSQL TLS | AP `a`, AP `b`, and main `c` render `POSTGRES_SSLMODE=verify-full` and mount `/run/hololive-bot/certs/postgres-ca.pem` |
 
 ## Dependencies
 
 | Dependency | Required | Failure impact |
 |---|---|---|
-| PostgreSQL | yes | polling/outbox persistence fails |
+| PostgreSQL | yes; `verify-full` TLS with `/run/hololive-bot/certs/postgres-ca.pem` | polling/outbox persistence fails |
 | Valkey | yes | cache/config/coordination degrades |
 | Iris | no | final proactive egress is owned by `alarm-worker` |
 
@@ -35,6 +36,8 @@
 | `YOUTUBE_PRODUCER_LEASE_NAMESPACE` | shared lease namespace for APs in the same environment | remote AP yes |
 | `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false` | producer-only egress boundary | yes |
 | `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true` | must be true only on owning AP hosts | yes |
+| `POSTGRES_SSLMODE=verify-full` | required client verification mode for central and AP PostgreSQL TCP paths | yes |
+| `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem` | CA bundle rendered by OpenBao Agent and mounted read-only into producer containers | yes |
 | `SCRAPER_*` | poller intervals/workers | yes |
 | `SCRAPER_BACKFILL_ENABLED=false` | optional secondary poller identities for coverage; disabled by default | no |
 | `SCRAPER_BACKFILL_*_INTERVAL_SECONDS` | backfill poller intervals for shorts/community/live when enabled | no |
@@ -56,6 +59,11 @@ Expected startup and sync markers:
 - `Photo sync completed`
 
 Photo sync policy: `youtube-producer-a` and `youtube-producer-c` set `PHOTO_SYNC_ENABLED=true`; a global Valkey singleton lease lets only one of them own photo sync at a time, with TTL-based failover. `youtube-producer-b` is a scraping/polling failover peer only (`PHOTO_SYNC_ENABLED=false`) and does not participate in PhotoSync failover.
+
+PostgreSQL TLS policy: all producer instances use `verify-full`. AP hosts receive
+only the CA bundle at `/run/hololive-bot/certs/postgres-ca.pem`; the central
+PostgreSQL server key lives under `/run/hololive-bot/postgres-tls/` on the
+central host.
 
 ## Metrics
 

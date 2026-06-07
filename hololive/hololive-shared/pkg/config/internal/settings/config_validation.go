@@ -23,7 +23,6 @@ package settings
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -322,15 +321,7 @@ func validatePostgresSSLMode(environment, sslMode string) error {
 		return nil
 	}
 	if isInsecurePostgresSSLMode(mode) {
-		if sharedenv.Bool("POSTGRES_SSLMODE_ALLOW_INSECURE", false) {
-			slog.Warn(
-				"SECURITY WARNING: production Postgres TLS verification override enabled; weak sslmode accepted",
-				"POSTGRES_SSLMODE", mode,
-				"POSTGRES_SSLMODE_ALLOW_INSECURE", true,
-			)
-			return nil
-		}
-		return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use verify-full with POSTGRES_SSLROOTCERT, or set POSTGRES_SSLMODE_ALLOW_INSECURE=true as a temporary emergency override", sslMode)
+		return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use verify-full with POSTGRES_SSLROOTCERT", sslMode)
 	}
 
 	return nil

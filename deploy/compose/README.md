@@ -43,5 +43,19 @@ egress tokens stay out of AP producer containers. Osaka/Seoul AP hosts also use
 `docker-compose.main-ap.yml` keeps `youtube-producer-c` without an `env_file`; it
 receives only explicit `environment:` values from the base compose and overlay.
 
-Do not deploy this repo-side contract to a host until OpenBao Agent renders
-`compose.env` or `ap-compose.env` and the per-service env files for that host.
+Deploy this repo-side contract after OpenBao Agent has rendered `compose.env` or
+`ap-compose.env` plus the per-service env files for the target host.
+
+## PostgreSQL TLS
+
+`holo-postgres` serves TLS with `ssl=on`. The central OpenBao Agent renders the
+server certificate and key under `/run/hololive-bot/postgres-tls/`, outside the
+client-mounted `certs/` directory. Certificate renewal sends `SIGHUP` to
+`holo-postgres` so PostgreSQL reloads the server material without a container
+recreate.
+
+All production PostgreSQL clients use `verify-full` with the CA bundle mounted
+at `/run/hololive-bot/certs/postgres-ca.pem`: the five central Go runtimes,
+`youtube-producer-c`, `hololive-db-migrate`, Osaka `youtube-producer-a`, and
+Seoul `youtube-producer-b`. The retired insecure downgrade ledger stays closed
+by preserving production paths with verified TLS and the CA bundle above.
