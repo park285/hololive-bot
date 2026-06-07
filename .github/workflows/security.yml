@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GOCACHE: /tmp/go-cache
   GOPRIVATE: github.com/park285/*
@@ -22,6 +26,7 @@ env:
 jobs:
   dependency-security:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
