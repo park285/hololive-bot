@@ -13,8 +13,7 @@ services:
     environment:
       POSTGRES_HOST: host.docker.internal
       POSTGRES_PORT: "5433"
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
-      POSTGRES_SSLMODE_ALLOW_INSECURE: ${POSTGRES_SSLMODE_ALLOW_INSECURE:-true}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
     volumes: !override
       - ../../data:/app/data
       - ../../logs:/app/logs
