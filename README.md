@@ -1,6 +1,6 @@
 # Hololive Bot
 
-홀로라이브 VTuber 알림/관리 플랫폼입니다. KakaoTalk 챗봇을 통해 방송 알림, 스트림 상태, 멤버 뉴스, 운영 관리 기능을 제공합니다.
+홀로라이브 VTuber 알림/관리 플랫폼입니다. KakaoTalk 챗봇으로 방송 알림, 스트림 상태, 멤버 뉴스, 운영 관리 기능을 제공합니다.
 
 이 README는 저장소 진입점입니다. 현재 구조의 상세 SSOT는 [docs/current/PROJECT_MAP.md](docs/current/PROJECT_MAP.md)이며, 배포 절차는 [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)를 따릅니다.
 
