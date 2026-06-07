@@ -54,6 +54,9 @@ jobs:
           path: iris-client-go
           persist-credentials: false
 
+      - name: Quality gate contract
+        run: bash scripts/ci/check-quality-gate-contract.sh
+
       - name: Setup Go
         uses: actions/setup-go@v6.4.0
         with:
