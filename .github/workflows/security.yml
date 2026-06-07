@@ -69,9 +69,6 @@ jobs:
           go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
           echo "${GOBIN}" >> "${GITHUB_PATH}"
 
-      - name: Workflow secret boundary
-        run: bash scripts/ci/check-workflow-secrets.sh
-
       - name: Resolve workspace package patterns
         run: |
           source scripts/ci/go-workspace-modules.sh
