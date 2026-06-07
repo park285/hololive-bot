@@ -34,13 +34,13 @@ services:
       - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       <<: *seoul-ap-env
-      POSTGRES_SSLMODE_ALLOW_INSECURE: "true"
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
     volumes: !override
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
     logging: *seoul-ap-logging
     deploy:
       resources:
@@ -65,7 +65,6 @@ services:
       - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       <<: *seoul-ap-env
-      POSTGRES_SSLMODE_ALLOW_INSECURE: "true"
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
       YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"
       YOUTUBE_PRODUCER_LEASE_NAMESPACE: ${YOUTUBE_PRODUCER_LEASE_NAMESPACE:-production}
@@ -85,6 +84,7 @@ services:
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
     logging: *seoul-ap-logging

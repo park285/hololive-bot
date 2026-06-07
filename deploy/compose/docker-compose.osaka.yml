@@ -35,6 +35,7 @@ x-osaka-ap-service: &osaka-ap-service
     - ../../logs:/app/logs
     - ../../runtime-config:/app/runtime-config:ro
     - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+    - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
     - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
     - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   logging: *osaka-ap-logging
@@ -46,7 +47,6 @@ x-osaka-ap-service: &osaka-ap-service
 # AP 공통 env. GOMEMLIMIT: 768m 컨테이너에 맞춰 베이스 320MiB → 640MiB 상향(GC 빈도↓). GOGC 는 베이스(100) 유지.
 x-osaka-ap-env-common: &osaka-ap-env-common
   <<: *osaka-ap-env
-  POSTGRES_SSLMODE_ALLOW_INSECURE: "true"
   YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
   YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"
   YOUTUBE_PRODUCER_LEASE_NAMESPACE: ${YOUTUBE_PRODUCER_LEASE_NAMESPACE:-production}
@@ -66,13 +66,13 @@ services:
       - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       <<: *osaka-ap-env
-      POSTGRES_SSLMODE_ALLOW_INSECURE: "true"
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
     volumes: !override
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
     logging: *osaka-ap-logging
     deploy:
       resources:

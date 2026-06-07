@@ -330,7 +330,7 @@ func validatePostgresSSLMode(environment, sslMode string) error {
 			)
 			return nil
 		}
-		return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use verify-full, or set POSTGRES_SSLMODE_ALLOW_INSECURE=true for the live-compat overlay", sslMode)
+		return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use verify-full with POSTGRES_SSLROOTCERT, or set POSTGRES_SSLMODE_ALLOW_INSECURE=true as a temporary emergency override", sslMode)
 	}
 
 	return nil

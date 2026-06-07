@@ -336,11 +336,14 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 
 	for _, service := range []string{"hololive-bot", "hololive-admin-api", "hololive-alarm-worker", "youtube-producer", "llm-scheduler"} {
 		env := composeEnvironment(t, cfg, service)
-		if env["POSTGRES_HOST"] != "host.docker.internal" || env["POSTGRES_PORT"] != "5433" || env["POSTGRES_SSLMODE"] != "require" {
-			t.Fatalf("%s POSTGRES env = %q/%q/%q, want host.docker.internal/5433/require", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
+		if env["POSTGRES_HOST"] != "host.docker.internal" || env["POSTGRES_PORT"] != "5433" || env["POSTGRES_SSLMODE"] != "verify-full" {
+			t.Fatalf("%s POSTGRES env = %q/%q/%q, want host.docker.internal/5433/verify-full", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
 		}
-		if env["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
-			t.Fatalf("%s POSTGRES_SSLMODE_ALLOW_INSECURE = %q, want true", service, env["POSTGRES_SSLMODE_ALLOW_INSECURE"])
+		if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
+			t.Fatalf("%s renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q; verify-full replaced the downgrade path", service, value)
+		}
+		if env["POSTGRES_SSLROOTCERT"] != "/run/hololive-bot/certs/postgres-ca.pem" {
+			t.Fatalf("%s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", service, env["POSTGRES_SSLROOTCERT"])
 		}
 		targets := strings.Join(composeVolumeTargets(t, cfg, service), "\n")
 		for _, target := range []string{"/app/data", "/app/logs", "/app/runtime-config", "/run/hololive-bot/certs", "/var/run/valkey"} {
@@ -438,44 +441,139 @@ func TestRepoAPDeployScriptsRequirePersistedQUICUDPBuffers(t *testing.T) {
 	}
 }
 
-func TestRepoAPPostgresSSLModeDowngradeHasAcceptedRiskLedger(t *testing.T) {
-	ledger := readRepoFile(t, "docs/current/security/accepted-risk-ap-postgres-sslmode.md")
-	for _, snippet := range []string{
-		"POSTGRES_SSLMODE_ALLOW_INSECURE=true",
-		"Expiry:",
-		"youtube-producer",
-		"verify-full",
-		"docker-compose.live-compat.yml",
-	} {
-		if !strings.Contains(ledger, snippet) {
-			t.Fatalf("accepted-risk-ap-postgres-sslmode.md missing required ledger field %q", snippet)
+// accepted-risk ledger는 verify-full 전환으로 종료되었다. 문서가 다시 생기거나
+// compose 어디든 POSTGRES_SSLMODE_ALLOW_INSECURE가 재등장하면 회귀다.
+func TestRepoPostgresSSLModeInsecureDowngradeIsRetired(t *testing.T) {
+	root := repoRootFromConfigTest(t)
+	ledgerPath := filepath.Join(root, "docs/current/security/accepted-risk-ap-postgres-sslmode.md")
+	if _, err := os.Stat(ledgerPath); !os.IsNotExist(err) {
+		t.Fatalf("accepted-risk-ap-postgres-sslmode.md still exists; the ledger exits with the verify-full transition (stat err=%v)", err)
+	}
+
+	composeDir := filepath.Join(root, "deploy/compose")
+	entries, err := os.ReadDir(composeDir)
+	if err != nil {
+		t.Fatalf("read compose dir: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yml") {
+			continue
+		}
+		content := readRepoFile(t, "deploy/compose/"+entry.Name())
+		if strings.Contains(content, "POSTGRES_SSLMODE_ALLOW_INSECURE") {
+			t.Fatalf("deploy/compose/%s still references POSTGRES_SSLMODE_ALLOW_INSECURE; verify-full replaced the downgrade path", entry.Name())
 		}
 	}
 }
 
-// ledger의 적용 범위 서술은 실제 compose overlay 렌더 결과와 일치해야 한다:
-// 기본 스택(prod 단독)은 중앙 서비스에 insecure 플래그를 렌더하지 않고,
-// AP live overlay는 youtube-producer-c에만 렌더한다. central live-compat은
-// opt-in 예외로 ledger 본문에 명시적으로 기록되어야 한다(위 테스트의
-// docker-compose.live-compat.yml snippet 계약).
-func TestRepoAPPostgresSSLModeLedgerScopeMatchesComposeRendering(t *testing.T) {
-	baseCfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml")
-	for _, service := range []string{"hololive-bot", "hololive-admin-api", "hololive-alarm-worker", "youtube-producer", "llm-scheduler"} {
-		env := composeEnvironment(t, baseCfg, service)
-		if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok && value == "true" {
-			t.Fatalf("base prod stack renders %s with POSTGRES_SSLMODE_ALLOW_INSECURE=true; insecure downgrade must stay opt-in via live-compat overlays", service)
-		}
+// 모든 운영 스택 렌더에서 Postgres 클라이언트는 verify-full + 마운트된 CA 번들을
+// 사용해야 한다(구 accepted-risk ledger의 exit criteria).
+func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
+	stacks := []struct {
+		name     string
+		files    []string
+		services []string
+	}{
+		{
+			name:     "base prod",
+			files:    []string{"deploy/compose/docker-compose.prod.yml"},
+			services: []string{"hololive-bot", "hololive-admin-api", "hololive-alarm-worker", "youtube-producer", "llm-scheduler"},
+		},
+		{
+			name: "live-compat",
+			files: []string{
+				"deploy/compose/docker-compose.prod.yml",
+				"deploy/compose/docker-compose.live-compat.yml",
+			},
+			services: []string{"hololive-bot", "hololive-admin-api", "hololive-alarm-worker", "youtube-producer", "llm-scheduler"},
+		},
+		{
+			name: "main-ap live-compat",
+			files: []string{
+				"deploy/compose/docker-compose.prod.yml",
+				"deploy/compose/docker-compose.live-compat.yml",
+				"deploy/compose/docker-compose.main-ap.yml",
+				"deploy/compose/docker-compose.main-ap.live-compat.yml",
+			},
+			services: []string{"youtube-producer-c"},
+		},
 	}
 
-	apCfg := renderComposeConfig(t,
-		"deploy/compose/docker-compose.prod.yml",
-		"deploy/compose/docker-compose.live-compat.yml",
-		"deploy/compose/docker-compose.main-ap.yml",
-		"deploy/compose/docker-compose.main-ap.live-compat.yml",
-	)
-	producerEnv := composeEnvironment(t, apCfg, "youtube-producer-c")
-	if producerEnv["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
-		t.Fatalf("AP live overlay must keep the accepted-risk insecure flag for youtube-producer-c, got %q", producerEnv["POSTGRES_SSLMODE_ALLOW_INSECURE"])
+	for _, tt := range stacks {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := renderComposeConfig(t, tt.files...)
+			for _, service := range tt.services {
+				env := composeEnvironment(t, cfg, service)
+				if env["POSTGRES_SSLMODE"] != "verify-full" {
+					t.Fatalf("%s in %s POSTGRES_SSLMODE = %q, want verify-full", service, tt.name, env["POSTGRES_SSLMODE"])
+				}
+				if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
+					t.Fatalf("%s in %s renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q", service, tt.name, value)
+				}
+				if env["POSTGRES_SSLROOTCERT"] != "/run/hololive-bot/certs/postgres-ca.pem" {
+					t.Fatalf("%s in %s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", service, tt.name, env["POSTGRES_SSLROOTCERT"])
+				}
+			}
+		})
+	}
+}
+
+// holo-postgres는 server TLS를 켠 채로 기동해야 verify-full 클라이언트가 성립한다.
+// server key는 클라이언트들이 통째로 마운트하는 certs/ 디렉토리 밖(postgres-tls/)에 둔다.
+func TestRepoComposeHoloPostgresServesTLS(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		files []string
+	}{
+		{name: "base prod", files: []string{"deploy/compose/docker-compose.prod.yml"}},
+		{name: "live-compat", files: []string{
+			"deploy/compose/docker-compose.prod.yml",
+			"deploy/compose/docker-compose.live-compat.yml",
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := renderComposeConfig(t, tt.files...)
+			command := composeCommand(t, cfg, "holo-postgres")
+			for _, flag := range []string{
+				"ssl=on",
+				"ssl_cert_file=/run/hololive-bot/postgres-tls/server.crt",
+				"ssl_key_file=/run/hololive-bot/postgres-tls/server.key",
+			} {
+				if !strings.Contains(command, flag) {
+					t.Fatalf("holo-postgres command in %s missing %q: %q", tt.name, flag, command)
+				}
+			}
+
+			foundTLSMount := false
+			for _, volume := range composeVolumes(t, cfg, "holo-postgres") {
+				source := cleanVolumePath(volume.Source)
+				target := cleanVolumePath(volume.Target)
+				if source == "/run/hololive-bot/postgres-tls" && target == "/run/hololive-bot/postgres-tls" {
+					if !volume.ReadOnly {
+						t.Fatalf("holo-postgres postgres-tls mount must be read-only in %s", tt.name)
+					}
+					foundTLSMount = true
+				}
+				if target == "/run/hololive-bot/certs" {
+					t.Fatalf("holo-postgres must not mount the shared client certs directory in %s", tt.name)
+				}
+			}
+			if !foundTLSMount {
+				t.Fatalf("holo-postgres missing /run/hololive-bot/postgres-tls read-only mount in %s", tt.name)
+			}
+
+			migrateEnv := composeEnvironment(t, cfg, "hololive-db-migrate")
+			if migrateEnv["PGSSLMODE"] != "verify-full" {
+				t.Fatalf("hololive-db-migrate PGSSLMODE = %q in %s, want verify-full", migrateEnv["PGSSLMODE"], tt.name)
+			}
+			if migrateEnv["PGSSLROOTCERT"] != "/run/hololive-bot/certs/postgres-ca.pem" {
+				t.Fatalf("hololive-db-migrate PGSSLROOTCERT = %q in %s, want /run/hololive-bot/certs/postgres-ca.pem", migrateEnv["PGSSLROOTCERT"], tt.name)
+			}
+			migrateTargets := strings.Join(composeVolumeTargets(t, cfg, "hololive-db-migrate"), "\n")
+			if !strings.Contains(migrateTargets, "/run/hololive-bot/certs/postgres-ca.pem") {
+				t.Fatalf("hololive-db-migrate missing postgres-ca.pem mount in %s: %q", tt.name, migrateTargets)
+			}
+		})
 	}
 }
 
@@ -506,11 +604,14 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 	}
 
 	env := composeEnvironment(t, cfg, "youtube-producer-c")
-	if env["POSTGRES_HOST"] != "host.docker.internal" || env["POSTGRES_PORT"] != "5433" || env["POSTGRES_SSLMODE"] != "require" {
-		t.Fatalf("youtube-producer-c POSTGRES env = %q/%q/%q, want host.docker.internal/5433/require", env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
+	if env["POSTGRES_HOST"] != "host.docker.internal" || env["POSTGRES_PORT"] != "5433" || env["POSTGRES_SSLMODE"] != "verify-full" {
+		t.Fatalf("youtube-producer-c POSTGRES env = %q/%q/%q, want host.docker.internal/5433/verify-full", env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
 	}
-	if env["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
-		t.Fatalf("youtube-producer-c POSTGRES_SSLMODE_ALLOW_INSECURE = %q, want true", env["POSTGRES_SSLMODE_ALLOW_INSECURE"])
+	if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
+		t.Fatalf("youtube-producer-c renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q", value)
+	}
+	if env["POSTGRES_SSLROOTCERT"] != "/run/hololive-bot/certs/postgres-ca.pem" {
+		t.Fatalf("youtube-producer-c POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", env["POSTGRES_SSLROOTCERT"])
 	}
 	for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 		if _, ok := env[key]; ok {
@@ -531,7 +632,7 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 	}
 }
 
-func TestRepoComposeLiveCompatWeakPostgresSSLModesCarryEscapeHatch(t *testing.T) {
+func TestRepoComposeNoStackRendersWeakPostgresSSLMode(t *testing.T) {
 	tests := []struct {
 		name  string
 		files []string
@@ -556,11 +657,8 @@ func TestRepoComposeLiveCompatWeakPostgresSSLModesCarryEscapeHatch(t *testing.T)
 			cfg := renderComposeConfig(t, tt.files...)
 			for service := range cfg.Services {
 				env := composeEnvironment(t, cfg, service)
-				if !isWeakPostgresSSLMode(env["POSTGRES_SSLMODE"]) {
-					continue
-				}
-				if env["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
-					t.Fatalf("%s in %s has POSTGRES_SSLMODE=%q without POSTGRES_SSLMODE_ALLOW_INSECURE=true", service, tt.name, env["POSTGRES_SSLMODE"])
+				if isWeakPostgresSSLMode(env["POSTGRES_SSLMODE"]) {
+					t.Fatalf("%s in %s renders weak POSTGRES_SSLMODE=%q; only verify-full is allowed", service, tt.name, env["POSTGRES_SSLMODE"])
 				}
 			}
 		})
@@ -820,6 +918,7 @@ func assertAPComposeCertMountsAreMinimized(t *testing.T, cfg renderedCompose, co
 	serviceNames := apComposeServiceNames(t, cfg, composeFile)
 	for _, service := range serviceNames {
 		hasIrisCA := false
+		hasPostgresCA := false
 		for _, volume := range composeVolumes(t, cfg, service) {
 			source := cleanVolumePath(volume.Source)
 			target := cleanVolumePath(volume.Target)
@@ -834,14 +933,23 @@ func assertAPComposeCertMountsAreMinimized(t *testing.T, cfg renderedCompose, co
 			if target == "/run/hololive-bot/certs/iris-ca.pem" {
 				hasIrisCA = true
 			}
+			if target == "/run/hololive-bot/certs/postgres-ca.pem" {
+				hasPostgresCA = true
+			}
 		}
 		if !hasIrisCA {
 			t.Fatalf("%s %s missing iris-ca.pem mount — producer config load fetches the Iris webhook worker profile over H3 at startup", composeFile, service)
 		}
+		if !hasPostgresCA {
+			t.Fatalf("%s %s missing postgres-ca.pem mount — verify-full needs the CA bundle over the Tailscale Postgres path", composeFile, service)
+		}
 
 		env := composeEnvironment(t, cfg, service)
-		if env["POSTGRES_SSLMODE_ALLOW_INSECURE"] != "true" {
-			t.Fatalf("%s %s POSTGRES_SSLMODE_ALLOW_INSECURE = %q, want true for AP Tailscale Postgres", composeFile, service, env["POSTGRES_SSLMODE_ALLOW_INSECURE"])
+		if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
+			t.Fatalf("%s %s renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q", composeFile, service, value)
+		}
+		if env["POSTGRES_SSLROOTCERT"] != "/run/hololive-bot/certs/postgres-ca.pem" {
+			t.Fatalf("%s %s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", composeFile, service, env["POSTGRES_SSLROOTCERT"])
 		}
 		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if _, ok := env[key]; ok {
@@ -968,8 +1076,9 @@ func composeVolumeTargets(t *testing.T, cfg renderedCompose, service string) []s
 }
 
 type renderedVolume struct {
-	Source string
-	Target string
+	Source   string
+	Target   string
+	ReadOnly bool
 }
 
 func composeVolumes(t *testing.T, cfg renderedCompose, service string) []renderedVolume {
@@ -992,8 +1101,9 @@ func composeVolumes(t *testing.T, cfg renderedCompose, service string) []rendere
 			t.Fatalf("%s volume has unexpected type %T", service, value)
 		}
 		volumes = append(volumes, renderedVolume{
-			Source: stringValue(volumeMap["source"]),
-			Target: stringValue(volumeMap["target"]),
+			Source:   stringValue(volumeMap["source"]),
+			Target:   stringValue(volumeMap["target"]),
+			ReadOnly: volumeMap["read_only"] == true,
 		})
 	}
 	return volumes

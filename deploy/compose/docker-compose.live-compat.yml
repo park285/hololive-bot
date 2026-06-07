@@ -3,9 +3,8 @@
 x-live-postgres-env: &live-postgres-env
   POSTGRES_HOST: host.docker.internal
   POSTGRES_PORT: "5433"
-  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
   IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS: ${IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS:-true}
-  POSTGRES_SSLMODE_ALLOW_INSECURE: ${POSTGRES_SSLMODE_ALLOW_INSECURE:-true}
 
 services:
   holo-postgres:
