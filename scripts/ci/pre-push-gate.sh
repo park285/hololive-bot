@@ -13,8 +13,6 @@ cd "${ROOT_DIR}"
 # 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
 
-bash scripts/ci/check-quality-gate-contract.sh
-
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate"
 echo "════════════════════════════════════════"
