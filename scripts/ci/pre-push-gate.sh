@@ -13,12 +13,14 @@ cd "${ROOT_DIR}"
 # 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
 
+bash scripts/ci/check-quality-gate-contract.sh
+
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate"
 echo "════════════════════════════════════════"
 
 if git rev-parse --verify origin/main >/dev/null 2>&1; then
-  changed_files="$(git diff --name-only origin/main..HEAD 2>/dev/null || true)"
+  changed_files="$(git diff --name-only origin/main...HEAD 2>/dev/null || true)"
 else
   changed_files="$(git diff --name-only HEAD~1..HEAD 2>/dev/null || true)"
 fi
