@@ -1,5 +1,9 @@
 name: ci
 
+# GitHub CI 는 secret-free fast gate만 책임진다.
+# private workspace checkout, full local-ci, race, dependency hygiene, frontend full build는
+# 로컬 pre-push 또는 non-PR security workflow 가 책임진다.
+
 on:
   workflow_dispatch:
   pull_request:
@@ -10,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GOCACHE: /tmp/go-cache
   GOTMPDIR: /tmp
@@ -18,11 +26,18 @@ jobs:
   secret-free-gate:
     name: secret-free-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout hololive-bot
         uses: actions/checkout@v6.0.2
         with:
           persist-credentials: false
+
+      - name: Quality gate contract
+        run: bash scripts/ci/check-quality-gate-contract.sh
 
       - name: Setup Go
         uses: actions/setup-go@v6.4.0
@@ -33,9 +48,6 @@ jobs:
             go.sum
             admin-dashboard/backend/go.sum
             hololive/*/go.sum
-
-      - name: Workflow secret boundary
-        run: bash scripts/ci/check-workflow-secrets.sh
 
       - name: Shell syntax
         run: |
