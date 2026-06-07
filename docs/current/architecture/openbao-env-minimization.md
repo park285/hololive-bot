@@ -399,6 +399,15 @@ Repo-side 변경만. **기본 경로 플립은 merge 가능하지만, 대상 호
 - live 적용 완료: 신규 KV path write, central installed hcl/verifier 교체, central `openbao-agent-hololive-bot.service` restart, `hololive-bot`/`hololive-alarm-worker` recreate, Osaka/Seoul AP hcl/unit/verifier/AppRole credential 설치, AP agent restart, AP producer recreate.
 - AP host H3/QUIC 안정성 계약: `scripts/deploy/ap-iris-h3-trust-preflight.sh`와 `scripts/deploy/ap-completion-check.sh`는 `net.core.rmem_max`/`net.core.wmem_max >= 7500000`을 요구한다. quic-go가 요구하는 UDP socket buffer를 host kernel limit이 막으면 health/preflight는 성공해도 receive buffer warning이 발생하므로, AP host는 `/etc/sysctl.d/99-hololive-quic-udp-buffer.conf` 등으로 값을 영구 적용해야 한다.
 
+#### Phase 3 Postgres TLS Status (2026-06-07)
+
+- `holo-postgres`는 `ssl=on`으로 동작한다. 중앙 OpenBao Agent가 `pki/issue/hololive-postgres-server`에서 TTL `720h` 서버 인증서를 발급받아 `/run/hololive-bot/postgres-tls/server.crt`와 `server.key`로 렌더한다.
+- 인증서 name/IP set은 `holo-postgres`, `host.docker.internal`, `localhost`, `100.100.1.3`, `127.0.0.1`이다. PostgreSQL server key는 client CA bundle 디렉토리와 분리된 `postgres-tls/`에 둔다.
+- 중앙 Agent template command가 인증서 갱신 뒤 `docker kill -s HUP holo-postgres`를 실행해 PostgreSQL reload를 유도한다.
+- 클라이언트 CA bundle은 `/run/hololive-bot/certs/postgres-ca.pem`이다. 중앙 5개 Go runtime, `youtube-producer-c`, `hololive-db-migrate`, Osaka `youtube-producer-a`, Seoul `youtube-producer-b`가 모두 `verify-full`로 접속한다.
+- Live evidence: TCP PostgreSQL 연결 35건이 모두 TLSv1.3이며 plaintext TCP 연결은 0건이었다. Unix domain socket monitor 연결 1건은 TCP TLS 판정 대상에서 제외한다.
+- `docs/current/security/accepted-risk-ap-postgres-sslmode.md` ledger는 삭제 상태가 정본이다. 계약 테스트는 `POSTGRES_SSLMODE_ALLOW_INSECURE` 재도입, weak sslmode 렌더, `postgres-ca.pem` 마운트 누락을 회귀로 판정한다.
+
 Required evidence (호스트별 수집, 값 미출력):
 
 ```bash

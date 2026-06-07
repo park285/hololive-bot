@@ -32,7 +32,7 @@ YouTube scraping/polling, `youtube_notification_outbox` production, 3-way active
 
 | Dependency | Purpose | Failure impact |
 |---|---|---|
-| PostgreSQL | YouTube channel/outbox/tracking state | scraping and handoff pipeline fail |
+| PostgreSQL | YouTube channel/outbox/tracking state over `verify-full` TLS with `/run/hololive-bot/certs/postgres-ca.pem` | scraping and handoff pipeline fail |
 | Valkey | cache/config/coordination | stale targets or degraded queue behavior |
 
 ## Must not own
@@ -50,6 +50,7 @@ YouTube scraping/polling, `youtube_notification_outbox` production, 3-way active
 - `YOUTUBE_PRODUCER_INSTANCE_ID` unique per AP (`youtube-producer-a/-b/-c`)
 - `YOUTUBE_PRODUCER_LEASE_NAMESPACE` shared by all APs in the same environment (`production`)
 - `PHOTO_SYNC_ENABLED=true` on `youtube-producer-a` and `youtube-producer-c`, `PHOTO_SYNC_ENABLED=false` on `youtube-producer-b`
+- `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem`
 - scraper interval env values
 
 ## Shutdown behavior

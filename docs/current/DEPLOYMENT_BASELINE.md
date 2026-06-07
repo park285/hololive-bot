@@ -24,8 +24,8 @@
 
 | Service | Purpose | Current notes |
 |---|---|---|
-| `holo-postgres` | Primary PostgreSQL | Host-networked, port 5433 |
-| `hololive-db-migrate` | Migration job | Must complete before app services |
+| `holo-postgres` | Primary PostgreSQL | Host-networked, port 5433; TLS `ssl=on`; PKI server certificate rendered under `/run/hololive-bot/postgres-tls/` |
+| `hololive-db-migrate` | Migration job | Runs before app services; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
 | `valkey-cache` | Cache, queue, Pub/Sub | TCP and Unix socket, password required |
 | `admin-dashboard` | Dashboard frontend | Port 30190, not part of Go runtime count |
 | `docker-proxy` | Restricted Docker API proxy | Used instead of mounting the Docker socket directly |
@@ -39,6 +39,25 @@
 | PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-kakao-bot-go/scripts/migrations` |
 | Valkey | cache, alarm queue, config Pub/Sub | `QUEUE_AND_PUBSUB_CONTRACTS.md` |
 | CLIPROXY/OpenAI-compatible LLM proxy | `bot`, `llm-scheduler`, `youtube-producer` where configured | 검토 필요 |
+
+## PostgreSQL TLS Baseline
+
+Production PostgreSQL access is certificate-verified end to end. `holo-postgres`
+loads an OpenBao PKI server certificate with the name/IP set
+`holo-postgres`, `host.docker.internal`, `localhost`, `100.100.1.3`, and
+`127.0.0.1`; certificate TTL is `720h`. The central OpenBao Agent writes the
+server material to `/run/hololive-bot/postgres-tls/` and sends `SIGHUP` to
+`holo-postgres` after renewal.
+
+The production client set uses `verify-full` with
+`/run/hololive-bot/certs/postgres-ca.pem`: `bot`, `admin-api`, `alarm-worker`,
+`llm-scheduler`, central `youtube-producer`, `youtube-producer-c`,
+`hololive-db-migrate`, Osaka `youtube-producer-a`, and Seoul
+`youtube-producer-b`.
+
+Operational evidence from the 2026-06-07 transition showed all 35 TCP
+PostgreSQL connections on TLSv1.3 and `0` plaintext TCP connections. One Unix
+domain socket monitor connection remained outside the TCP TLS scope.
 
 ## Validation
 

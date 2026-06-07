@@ -33,8 +33,8 @@ Module and runtime inventory for the `hololive-bot` workspace.
 
 | Compose service | Role | Notes |
 |---|---|---|
-| `holo-postgres` | PostgreSQL data store | Host-networked PostgreSQL on port 5433 |
-| `hololive-db-migrate` | Migration bootstrap/apply job | Must complete before app runtime services start |
+| `holo-postgres` | PostgreSQL data store | Host-networked PostgreSQL on port 5433; `ssl=on`; OpenBao PKI server cert under `/run/hololive-bot/postgres-tls/` |
+| `hololive-db-migrate` | Migration bootstrap/apply job | Must complete before app runtime services start; `PGSSLMODE=verify-full` with `postgres-ca.pem` |
 | `valkey-cache` | Valkey cache, queue, Pub/Sub | TCP and Unix socket endpoints |
 | `admin-dashboard` | Dashboard (Go backend + embedded frontend) | Not part of the 5 Go runtime set |
 | `docker-proxy` | Docker socket proxy | Used by bot operational endpoints |

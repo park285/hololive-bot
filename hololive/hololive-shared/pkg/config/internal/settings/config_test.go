@@ -1275,7 +1275,7 @@ func TestLoad_ProductionRejectsWeakPostgresSSLMode(t *testing.T) {
 	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE_ALLOW_INSECURE=true") {
+	if !strings.Contains(err.Error(), "verify-full") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1298,26 +1298,18 @@ func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode(t *testing.T) {
 	}
 }
 
-func TestLoad_ProductionAllowsVerifyCAPostgresSSLMode_WithOverrideWarning(t *testing.T) {
+func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode_WithRetiredOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
-	output := captureSlogOutput(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("POSTGRES_SSLMODE", "verify-ca")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 
-	config, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected production verify-ca validation error, got nil")
 	}
-	if config.Postgres.SSLMode != "verify-ca" {
-		t.Fatalf("Postgres.SSLMode = %q, want verify-ca", config.Postgres.SSLMode)
-	}
-
-	warning := output.String()
-	for _, want := range []string{"POSTGRES_SSLMODE=verify-ca", "POSTGRES_SSLMODE_ALLOW_INSECURE=true"} {
-		if !strings.Contains(warning, want) {
-			t.Fatalf("warning output = %q, want %q", warning, want)
-		}
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=verify-ca is not allowed in production") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -1336,22 +1328,18 @@ func TestLoad_ProductionAllowsVerifyFullPostgresSSLMode(t *testing.T) {
 	}
 }
 
-func TestLoad_ProductionAllowsWeakPostgresSSLMode_WithOverrideWarning(t *testing.T) {
+func TestLoad_ProductionRejectsWeakPostgresSSLMode_WithRetiredOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
-	output := captureSlogOutput(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("POSTGRES_SSLMODE", "require")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 
-	if _, err := Load(); err != nil {
-		t.Fatalf("Load() error = %v", err)
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected production sslmode validation error, got nil")
 	}
-
-	warning := output.String()
-	for _, want := range []string{"POSTGRES_SSLMODE=require", "POSTGRES_SSLMODE_ALLOW_INSECURE=true"} {
-		if !strings.Contains(warning, want) {
-			t.Fatalf("warning output = %q, want %q", warning, want)
-		}
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
