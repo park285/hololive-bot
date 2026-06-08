@@ -38,17 +38,16 @@ type PostgresService struct {
 }
 
 type PostgresConfig struct {
-	Host             string
-	Port             int
-	SocketPath       string // UDS 경로 (비어있으면 TCP 사용)
-	User             string
-	Password         string
-	Database         string
-	SSLMode          string
-	QueryExecMode    string
-	PoolMinConns     int
-	PoolMaxConns     int
-	PoolMaxIdleConns int
+	Host          string
+	Port          int
+	SocketPath    string // UDS 경로 (비어있으면 TCP 사용)
+	User          string
+	Password      string
+	Database      string
+	SSLMode       string
+	QueryExecMode string
+	PoolMinConns  int
+	PoolMaxConns  int
 }
 
 // hololive-shared/internal/dbx.Client를 사용하여 pgxpool 기반 PostgreSQL 연결을 제공한다.
@@ -71,13 +70,8 @@ func NewPostgresService(ctx context.Context, config PostgresConfig, logger *slog
 	if maxConns <= 0 {
 		maxConns = constants.DatabaseConfig.MaxOpenConns
 	}
-	maxIdleConns := config.PoolMaxIdleConns
-	if maxIdleConns <= 0 {
-		maxIdleConns = constants.DatabaseConfig.MaxIdleConns
-	}
 	poolConfig := dbx.PoolConfig{
 		MaxConns:        maxConns,
-		MaxIdleConns:    maxIdleConns,
 		MinConns:        minConns,
 		ConnMaxLifetime: constants.DatabaseConfig.ConnMaxLifetime,
 	}

@@ -83,9 +83,6 @@ func TestNormalizePoolConfig(t *testing.T) {
 	if pool.MaxConns != 10 {
 		t.Errorf("MaxConns = %d, want 10", pool.MaxConns)
 	}
-	if pool.MaxIdleConns != 2 {
-		t.Errorf("MaxIdleConns = %d, want 2", pool.MaxIdleConns)
-	}
 }
 
 func TestConfigDSN(t *testing.T) {

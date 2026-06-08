@@ -107,65 +107,57 @@ func TestSafeDSN(t *testing.T) {
 
 func TestDefaultPoolConfig(t *testing.T) {
 	tests := []struct {
-		name        string
-		envVars     map[string]string
-		wantMin     int
-		wantMax     int
-		wantMaxIdle int
+		name    string
+		envVars map[string]string
+		wantMin int
+		wantMax int
 	}{
 		{
-			name:        "default values when no env vars set",
-			envVars:     nil,
-			wantMin:     5,
-			wantMax:     20,
-			wantMaxIdle: 0,
+			name:    "default values when no env vars set",
+			envVars: nil,
+			wantMin: 5,
+			wantMax: 20,
 		},
 		{
 			name: "custom values from env vars",
 			envVars: map[string]string{
-				"DB_POOL_MIN_CONNS":      "5",
-				"DB_POOL_MAX_CONNS":      "25",
-				"DB_POOL_MAX_IDLE_CONNS": "3",
+				"DB_POOL_MIN_CONNS": "5",
+				"DB_POOL_MAX_CONNS": "25",
 			},
-			wantMin:     5,
-			wantMax:     25,
-			wantMaxIdle: 3,
+			wantMin: 5,
+			wantMax: 25,
 		},
 		{
 			name: "clamp min below lower bound",
 			envVars: map[string]string{
 				"DB_POOL_MIN_CONNS": "0",
 			},
-			wantMin:     1, // clamped to 1
-			wantMax:     20,
-			wantMaxIdle: 0,
+			wantMin: 1, // clamped to 1
+			wantMax: 20,
 		},
 		{
 			name: "clamp min above upper bound",
 			envVars: map[string]string{
 				"DB_POOL_MIN_CONNS": "150",
 			},
-			wantMin:     100, // clamped to 100
-			wantMax:     20,
-			wantMaxIdle: 0,
+			wantMin: 100, // clamped to 100
+			wantMax: 20,
 		},
 		{
 			name: "clamp max below lower bound",
 			envVars: map[string]string{
 				"DB_POOL_MAX_CONNS": "0",
 			},
-			wantMin:     5,
-			wantMax:     1, // clamped to 1
-			wantMaxIdle: 0,
+			wantMin: 5,
+			wantMax: 1, // clamped to 1
 		},
 		{
 			name: "clamp max above upper bound",
 			envVars: map[string]string{
 				"DB_POOL_MAX_CONNS": "300",
 			},
-			wantMin:     5,
-			wantMax:     200, // clamped to 200
-			wantMaxIdle: 0,
+			wantMin: 5,
+			wantMax: 200, // clamped to 200
 		},
 		{
 			name: "invalid env var returns default",
@@ -173,16 +165,15 @@ func TestDefaultPoolConfig(t *testing.T) {
 				"DB_POOL_MIN_CONNS": "invalid",
 				"DB_POOL_MAX_CONNS": "abc",
 			},
-			wantMin:     5,  // default
-			wantMax:     20, // default
-			wantMaxIdle: 0,
+			wantMin: 5,  // default
+			wantMax: 20, // default
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear and set env vars
-			for _, key := range []string{"DB_POOL_MIN_CONNS", "DB_POOL_MAX_CONNS", "DB_POOL_MAX_IDLE_CONNS"} {
+			for _, key := range []string{"DB_POOL_MIN_CONNS", "DB_POOL_MAX_CONNS"} {
 				t.Setenv(key, "")
 			}
 			for k, v := range tt.envVars {
@@ -196,9 +187,6 @@ func TestDefaultPoolConfig(t *testing.T) {
 			}
 			if config.MaxConns != tt.wantMax {
 				t.Errorf("MaxConns = %d, want %d", config.MaxConns, tt.wantMax)
-			}
-			if config.MaxIdleConns != tt.wantMaxIdle {
-				t.Errorf("MaxIdleConns = %d, want %d", config.MaxIdleConns, tt.wantMaxIdle)
 			}
 			if config.ConnMaxLifetime != time.Hour {
 				t.Errorf("ConnMaxLifetime = %v, want %v", config.ConnMaxLifetime, time.Hour)

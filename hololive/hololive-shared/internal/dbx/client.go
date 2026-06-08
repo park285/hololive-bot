@@ -243,9 +243,6 @@ func normalizePoolConfig(pool PoolConfig) PoolConfig {
 	if pool.MaxConns <= 0 {
 		pool.MaxConns = 10
 	}
-	if pool.MaxIdleConns <= 0 {
-		pool.MaxIdleConns = pool.MinConns
-	}
 	if pool.ConnMaxLifetime <= 0 {
 		pool.ConnMaxLifetime = time.Hour
 	}

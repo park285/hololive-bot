@@ -70,17 +70,16 @@ func ProvideCacheResources(ctx context.Context, valkeyConfig config.ValkeyConfig
 // ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함)
 func ProvideDatabaseResources(ctx context.Context, postgresConfig config.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
 	dbService, err := database.NewPostgresService(ctx, database.PostgresConfig{
-		Host:             postgresConfig.Host,
-		Port:             postgresConfig.Port,
-		SocketPath:       postgresConfig.SocketPath,
-		User:             postgresConfig.User,
-		Password:         postgresConfig.Password,
-		Database:         postgresConfig.Database,
-		SSLMode:          postgresConfig.SSLMode,
-		QueryExecMode:    postgresConfig.QueryExecMode,
-		PoolMinConns:     postgresConfig.PoolMinConns,
-		PoolMaxConns:     postgresConfig.PoolMaxConns,
-		PoolMaxIdleConns: postgresConfig.PoolMaxIdleConns,
+		Host:          postgresConfig.Host,
+		Port:          postgresConfig.Port,
+		SocketPath:    postgresConfig.SocketPath,
+		User:          postgresConfig.User,
+		Password:      postgresConfig.Password,
+		Database:      postgresConfig.Database,
+		SSLMode:       postgresConfig.SSLMode,
+		QueryExecMode: postgresConfig.QueryExecMode,
+		PoolMinConns:  postgresConfig.PoolMinConns,
+		PoolMaxConns:  postgresConfig.PoolMaxConns,
 	}, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create database resources: %w", err)
