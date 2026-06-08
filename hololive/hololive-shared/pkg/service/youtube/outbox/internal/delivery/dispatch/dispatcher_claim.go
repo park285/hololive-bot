@@ -57,7 +57,7 @@ func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.You
 				SELECT 1 FROM youtube_notification_delivery d
 				WHERE d.outbox_id = o.id
 			  )
-			ORDER BY o.created_at ASC
+			ORDER BY o.next_attempt_at ASC, o.created_at ASC, o.id ASC
 			LIMIT $4
 			FOR UPDATE SKIP LOCKED
 		),
@@ -72,7 +72,7 @@ func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.You
 			SELECT id, kind, channel_id, content_id, payload, status,
 		       attempt_count, next_attempt_at, created_at, locked_at, sent_at, error
 		FROM updated
-		ORDER BY created_at ASC
+		ORDER BY next_attempt_at ASC, created_at ASC, id ASC
 	`, domain.OutboxStatusPending, lockExpiry, now, d.config.BatchSize, now)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)

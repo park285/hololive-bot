@@ -123,7 +123,7 @@ func (r *DeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lo
 			WHERE status = $1
 			  AND (locked_at IS NULL OR locked_at < $2)
 			  AND next_attempt_at <= $3
-			ORDER BY created_at ASC
+			ORDER BY next_attempt_at ASC, created_at ASC, id ASC
 			LIMIT $4
 			FOR UPDATE SKIP LOCKED
 		)

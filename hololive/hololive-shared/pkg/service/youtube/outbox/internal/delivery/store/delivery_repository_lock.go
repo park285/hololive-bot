@@ -67,24 +67,55 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 	return nil
 }
 
-func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens []LockToken, sentAt time.Time) ([]int64, error) {
-	updatedIDs := make([]int64, 0, len(tokens))
+func deliveryLockTokenArrays(tokens []LockToken) ([]int64, []time.Time) {
+	ids := make([]int64, 0, len(tokens))
+	lockedAts := make([]time.Time, 0, len(tokens))
 	for i := range tokens {
 		if tokens[i].id == 0 || tokens[i].lockedAt == nil {
 			continue
 		}
-		tag, err := tx.Exec(ctx, `
-			UPDATE youtube_notification_delivery
-			SET status = $1, sent_at = $2, locked_at = NULL, error = ''
-			WHERE id = $3 AND status = $4
-			  AND locked_at = $5
-		`, domain.OutboxStatusSent, sentAt, tokens[i].id, domain.OutboxStatusPending, *tokens[i].lockedAt)
-		if err != nil {
-			return nil, fmt.Errorf("update delivery row %d: %w", tokens[i].id, err)
+		ids = append(ids, tokens[i].id)
+		lockedAts = append(lockedAts, *tokens[i].lockedAt)
+	}
+	return ids, lockedAts
+}
+
+func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens []LockToken, sentAt time.Time) ([]int64, error) {
+	ids, lockedAts := deliveryLockTokenArrays(tokens)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	rows, err := tx.Query(ctx, `
+		WITH input AS (
+			SELECT *
+			FROM unnest($1::bigint[], $2::timestamptz[]) AS t(id, locked_at)
+		), updated AS (
+			UPDATE youtube_notification_delivery d
+			SET status = $3, sent_at = $4, locked_at = NULL, error = ''
+			FROM input i
+			WHERE d.id = i.id
+			  AND d.status = $5
+			  AND d.locked_at = i.locked_at
+			RETURNING d.id
+		)
+		SELECT id FROM updated
+	`, ids, lockedAts, domain.OutboxStatusSent, sentAt, domain.OutboxStatusPending)
+	if err != nil {
+		return nil, fmt.Errorf("batch update sent delivery rows: %w", err)
+	}
+	defer rows.Close()
+
+	updatedIDs := make([]int64, 0, len(ids))
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan updated delivery id: %w", err)
 		}
-		if tag.RowsAffected() > 0 {
-			updatedIDs = append(updatedIDs, tokens[i].id)
-		}
+		updatedIDs = append(updatedIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate updated delivery ids: %w", err)
 	}
 	return updatedIDs, nil
 }
@@ -95,25 +126,32 @@ func (r *DeliveryRepository) MarkFailedRetryBatchIfLocked(ctx context.Context, t
 		return nil
 	}
 
+	ids, lockedAts := deliveryLockTokenArrays(uniqueTokens)
+	if len(ids) == 0 {
+		return nil
+	}
+
 	now := time.Now()
 	nextAttempt := now.Add(backoff)
 
-	for i := range uniqueTokens {
-		if uniqueTokens[i].id == 0 || uniqueTokens[i].lockedAt == nil {
-			continue
-		}
-		_, err := r.db.Exec(ctx, `
-			UPDATE youtube_notification_delivery
-			SET attempt_count = attempt_count + 1,
-			    error = $1,
-			    status = CASE WHEN attempt_count + 1 >= $2 THEN $3 ELSE $4 END,
-			    next_attempt_at = CASE WHEN attempt_count + 1 >= $5 THEN next_attempt_at ELSE $6 END,
-			    locked_at = NULL
-			WHERE id = $7 AND status = $8 AND locked_at = $9
-		`, deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt)
-		if err != nil {
-			return fmt.Errorf("mark delivery row %d failed batch: %w", uniqueTokens[i].id, err)
-		}
+	_, err := r.db.Exec(ctx, `
+		WITH input AS (
+			SELECT *
+			FROM unnest($1::bigint[], $2::timestamptz[]) AS t(id, locked_at)
+		)
+		UPDATE youtube_notification_delivery d
+		SET attempt_count = attempt_count + 1,
+		    error = $3,
+		    status = CASE WHEN attempt_count + 1 >= $4 THEN $5 ELSE $6 END,
+		    next_attempt_at = CASE WHEN attempt_count + 1 >= $4 THEN next_attempt_at ELSE $7 END,
+		    locked_at = NULL
+		FROM input i
+		WHERE d.id = i.id
+		  AND d.status = $8
+		  AND d.locked_at = i.locked_at
+	`, ids, lockedAts, deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, nextAttempt, domain.OutboxStatusPending)
+	if err != nil {
+		return fmt.Errorf("batch mark failed retry delivery rows: %w", err)
 	}
 
 	return nil
@@ -125,21 +163,28 @@ func (r *DeliveryRepository) MarkPermanentFailureBatchIfLocked(ctx context.Conte
 		return nil
 	}
 
-	for i := range uniqueTokens {
-		if uniqueTokens[i].id == 0 || uniqueTokens[i].lockedAt == nil {
-			continue
-		}
-		_, err := r.db.Exec(ctx, `
-			UPDATE youtube_notification_delivery
-			SET attempt_count = CASE WHEN attempt_count >= $1 THEN attempt_count ELSE $2 END,
-			    error = $3,
-			    status = $4,
-			    locked_at = NULL
-			WHERE id = $5 AND status = $6 AND locked_at = $7
-		`, maxRetries, maxRetries, deliverysql.TruncateString(errMsg, 500), domain.OutboxStatusFailed, uniqueTokens[i].id, domain.OutboxStatusPending, *uniqueTokens[i].lockedAt)
-		if err != nil {
-			return fmt.Errorf("mark delivery row %d permanent failed batch: %w", uniqueTokens[i].id, err)
-		}
+	ids, lockedAts := deliveryLockTokenArrays(uniqueTokens)
+	if len(ids) == 0 {
+		return nil
+	}
+
+	_, err := r.db.Exec(ctx, `
+		WITH input AS (
+			SELECT *
+			FROM unnest($1::bigint[], $2::timestamptz[]) AS t(id, locked_at)
+		)
+		UPDATE youtube_notification_delivery d
+		SET attempt_count = CASE WHEN attempt_count >= $3 THEN attempt_count ELSE $3 END,
+		    error = $4,
+		    status = $5,
+		    locked_at = NULL
+		FROM input i
+		WHERE d.id = i.id
+		  AND d.status = $6
+		  AND d.locked_at = i.locked_at
+	`, ids, lockedAts, maxRetries, deliverysql.TruncateString(errMsg, 500), domain.OutboxStatusFailed, domain.OutboxStatusPending)
+	if err != nil {
+		return fmt.Errorf("batch mark permanent failure delivery rows: %w", err)
 	}
 
 	return nil
