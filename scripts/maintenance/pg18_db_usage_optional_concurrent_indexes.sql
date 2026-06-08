@@ -8,15 +8,8 @@
 --   3) pending backlog가 10,000 rows 이상 유지
 --   4) pg_stat_io relation read 증가
 
--- youtube_notification_delivery claim path.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ynd_pending_due_created_id
-    ON youtube_notification_delivery(next_attempt_at ASC, created_at ASC, id ASC)
-    WHERE status = 'PENDING';
-
--- youtube_notification_outbox claim path.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_yno_pending_due_created_id
-    ON youtube_notification_outbox(next_attempt_at ASC, created_at ASC, id ASC)
-    WHERE status = 'PENDING';
+-- youtube_notification_delivery/outbox claim 인덱스는 migration 067_align_claim_index_due_first.sql에서
+-- 기존 prefix 인덱스를 (next_attempt_at, created_at, id) 완전 매칭으로 정식 교체했다(여기서 수동 생성하지 않음).
 
 -- alarm_dispatch_deliveries terminal retention 인덱스는 migration 059_harden_alarm_dispatch_outbox.sql이
 -- 이미 idx_alarm_dispatch_deliveries_{sent,dlq,quarantined,cancelled}_retention로 동일 정의를 제공하므로

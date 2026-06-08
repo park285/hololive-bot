@@ -61,3 +61,4 @@
 061 064_add_mekpark_units.sql
 062 065_record_alarm_dispatch_event_collisions.sql
 063 066_pg18_db_usage_hot_table_autovacuum.sql
+064 067_align_claim_index_due_first.sql
