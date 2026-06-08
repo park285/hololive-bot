@@ -107,7 +107,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now()
 	item := domain.YouTubeNotificationOutbox{
@@ -120,10 +120,10 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 		NextAttemptAt: now,
 		LockedAt:      &now,
 	}
-	require.NoError(t, db.Create(&item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -135,7 +135,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{})
 
 	var updated domain.YouTubeNotificationOutbox
-	require.NoError(t, db.First(&updated, item.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updated, item.ID).Error)
 	assert.Equal(t, domain.OutboxStatusPending, updated.Status)
 	assert.Equal(t, 1, updated.AttemptCount)
 	assert.Nil(t, updated.LockedAt)
@@ -147,7 +147,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now()
 	item := domain.YouTubeNotificationOutbox{
@@ -160,10 +160,10 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 		NextAttemptAt: now,
 		LockedAt:      &now,
 	}
-	require.NoError(t, db.Create(&item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -179,7 +179,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 	})
 
 	var updated domain.YouTubeNotificationOutbox
-	require.NoError(t, db.First(&updated, item.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updated, item.ID).Error)
 	assert.Equal(t, domain.OutboxStatusSent, updated.Status)
 }
 
@@ -187,7 +187,7 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now()
 	shortsItem := domain.YouTubeNotificationOutbox{
@@ -210,11 +210,11 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 		NextAttemptAt: now,
 		LockedAt:      &now,
 	}
-	require.NoError(t, db.Create(&shortsItem).Error)
-	require.NoError(t, db.Create(&communityItem).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &shortsItem).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &communityItem).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -231,7 +231,7 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 	})
 
 	var rows []deliveryTestDeliveryModel
-	require.NoError(t, db.Order("outbox_id ASC, room_id ASC").Find(&rows).Error)
+	require.NoError(t, findDeliveryTestRowsOrdered(db, &rows, "outbox_id ASC, room_id ASC").Error)
 	require.Len(t, rows, 2)
 	assert.Equal(t, shortsItem.ID, rows[0].OutboxID)
 	assert.Equal(t, "room-shorts", rows[0].RoomID)
@@ -243,7 +243,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	cacheClient := cachemocks.NewLenientClient()
 
@@ -257,8 +257,8 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 		AttemptCount:  0,
 		NextAttemptAt: now,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&deliveryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:       string(item.Kind),
 		ContentID:  item.ContentID,
 		ChannelID:  item.ChannelID,
@@ -272,10 +272,10 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 		AttemptCount:  0,
 		NextAttemptAt: now,
 	}
-	require.NoError(t, db.Create(&delivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, cacheClient, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cacheClient, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -293,12 +293,12 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.TouchedOutboxIDs))
 
 	var updatedDelivery deliveryTestDeliveryModel
-	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedDelivery, delivery.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedDelivery.Status)
 	require.NotNil(t, updatedDelivery.SentAt)
 
 	var updatedOutbox deliveryTestOutboxModel
-	require.NoError(t, db.First(&updatedOutbox, item.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedOutbox, item.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedOutbox.Status)
 	require.NotNil(t, updatedOutbox.SentAt)
 

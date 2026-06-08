@@ -14,7 +14,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
@@ -32,7 +32,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 	liveDetectedAt := now.Add(-14 * time.Minute)
 	liveEventAt := now.Add(-13 * time.Minute)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:        101,
 			AttemptOrdinal:    1,
@@ -123,7 +123,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	rows, err := repository.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 0)
 	require.NoError(t, err)
 	require.Len(t, rows, 3)
@@ -150,7 +150,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Respec
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
@@ -177,9 +177,9 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Respec
 			NextAttemptAt:     eventAt,
 		})
 	}
-	require.NoError(t, db.Create(&rows).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &rows).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	limited, err := repository.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 2)
 	require.NoError(t, err)
 	require.Len(t, limited, 2)

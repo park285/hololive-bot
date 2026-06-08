@@ -18,7 +18,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	cache := cachemocks.NewLenientClient()
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
@@ -29,7 +29,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -41,7 +41,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 
 	now := time.Now()
 	for _, contentID := range []string{"drain-1", "drain-2", "drain-3"} {
-		require.NoError(t, db.Create(&domain.YouTubeNotificationOutbox{
+		require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationOutbox{
 			Kind:          domain.OutboxKindNewVideo,
 			ChannelID:     "UCdrain",
 			ContentID:     contentID,
@@ -59,9 +59,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	sender.mu.Unlock()
 
 	var sentCount int64
-	require.NoError(t, db.Model(&deliveryTestOutboxModel{}).
-		Where("status = ?", string(domain.OutboxStatusSent)).
-		Count(&sentCount).Error)
+	require.NoError(t, countDeliveryTestRowsWhere(db, &deliveryTestOutboxModel{}, &sentCount, "status = ?", string(domain.OutboxStatusSent)).Error)
 	require.EqualValues(t, 3, sentCount)
 }
 
@@ -69,10 +67,10 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -89,6 +87,6 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 	sender.mu.Unlock()
 
 	var deliveryCount int64
-	require.NoError(t, db.Model(&deliveryTestDeliveryModel{}).Count(&deliveryCount).Error)
+	require.NoError(t, countDeliveryTestRowsWhere(db, &deliveryTestDeliveryModel{}, &deliveryCount, "").Error)
 	require.Zero(t, deliveryCount)
 }

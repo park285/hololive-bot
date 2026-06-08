@@ -87,7 +87,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	publishedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(1 * time.Minute)
@@ -111,9 +111,9 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 		NextAttemptAt: retryReadyAt,
 		CreatedAt:     queueEnqueuedAt,
 	}
-	require.NoError(t, db.Create(&outboxRow).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &outboxRow).Error)
 
-	require.NoError(t, db.Create(&timelineTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &timelineTestTrackingModel{
 		Kind:                 string(domain.OutboxKindCommunityPost),
 		ContentID:            outboxRow.ContentID,
 		ChannelID:            outboxRow.ChannelID,
@@ -126,7 +126,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 		UpdatedAt:            secondAttemptFinishedAt,
 	}).Error)
 
-	require.NoError(t, db.Create([]timelineTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []timelineTestBufferModel{
 		{
 			DeliveryID:        101,
 			AttemptOrdinal:    1,
@@ -166,7 +166,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	rows, err := repository.ListPostDeliveryTimelinesSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -241,7 +241,7 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	publishedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(30 * time.Second)
@@ -261,9 +261,9 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 		NextAttemptAt: firstAttemptFinishedAt,
 		CreatedAt:     queueEnqueuedAt,
 	}
-	require.NoError(t, db.Create(&outboxRow).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &outboxRow).Error)
 
-	require.NoError(t, db.Create(&timelineTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &timelineTestTrackingModel{
 		Kind:                 string(domain.OutboxKindCommunityPost),
 		ContentID:            outboxRow.ContentID,
 		ChannelID:            outboxRow.ChannelID,
@@ -276,7 +276,7 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 		UpdatedAt:            firstAttemptFinishedAt,
 	}).Error)
 
-	require.NoError(t, db.Create(&timelineTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, &timelineTestBufferModel{
 		DeliveryID:        9001,
 		AttemptOrdinal:    1,
 		OutboxID:          outboxRow.ID,
@@ -295,14 +295,14 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 		NextAttemptAt:     firstAttemptFinishedAt,
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	require.NoError(t, repository.PersistPostLatencyClassificationsByIdentities(ctx, []PostTrackingIdentity{{
 		Kind:      domain.OutboxKindCommunityPost,
 		ContentID: outboxRow.ContentID,
 	}}))
 
 	var stored timelineTestTrackingModel
-	require.NoError(t, db.Where("kind = ? AND content_id = ?", string(domain.OutboxKindCommunityPost), outboxRow.ContentID).First(&stored).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &stored, "kind = ? AND content_id = ?", string(domain.OutboxKindCommunityPost), outboxRow.ContentID).Error)
 	require.Equal(t, string(PostLatencyClassificationStatusExceeded), stored.LatencyClassificationStatus)
 	require.Equal(t, string(PostDelaySourceInternalDelivery), stored.DelaySource)
 	require.Equal(t, string(PostInternalDelayCauseQueueWait), stored.InternalDelayCause)
@@ -443,7 +443,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinPublishedWin
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	publishedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(2 * time.Minute)
@@ -459,8 +459,8 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinPublishedWin
 		NextAttemptAt: eventAt,
 		CreatedAt:     detectedAt,
 	}
-	require.NoError(t, db.Create(&outboxRow).Error)
-	require.NoError(t, db.Create(&timelineTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &outboxRow).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &timelineTestTrackingModel{
 		Kind:              string(domain.OutboxKindCommunityPost),
 		ContentID:         outboxRow.ContentID,
 		ChannelID:         outboxRow.ChannelID,
@@ -469,7 +469,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinPublishedWin
 		CreatedAt:         detectedAt,
 		UpdatedAt:         eventAt,
 	}).Error)
-	require.NoError(t, db.Create(&timelineTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, &timelineTestBufferModel{
 		DeliveryID:     7001,
 		AttemptOrdinal: 1,
 		OutboxID:       outboxRow.ID,
@@ -486,7 +486,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinPublishedWin
 		NextAttemptAt:  eventAt,
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	insideRows, err := repository.ListPostDeliveryTimelinesWithinPublishedWindow(ctx, publishedAt.Add(-time.Minute), publishedAt.Add(time.Minute))
 	require.NoError(t, err)
 	require.Len(t, insideRows, 1)
@@ -501,7 +501,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinObservationW
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 	windowStart := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
 	windowEnd := windowStart.Add(24 * time.Hour)
 
@@ -534,8 +534,8 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinObservationW
 		NextAttemptAt: lateEventAt,
 		CreatedAt:     lateDetectedAt,
 	}
-	require.NoError(t, db.Create([]timelineTestOutboxModel{timelyOutbox, lateOutbox}).Error)
-	require.NoError(t, db.Create([]timelineTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []timelineTestOutboxModel{timelyOutbox, lateOutbox}).Error)
+	require.NoError(t, insertDeliveryTestRows(db, []timelineTestTrackingModel{
 		{
 			Kind:              string(domain.OutboxKindCommunityPost),
 			ContentID:         timelyOutbox.ContentID,
@@ -555,7 +555,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinObservationW
 			UpdatedAt:         lateEventAt,
 		},
 	}).Error)
-	require.NoError(t, db.Create([]timelineTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []timelineTestBufferModel{
 		{
 			DeliveryID:     7101,
 			AttemptOrdinal: 1,
@@ -590,7 +590,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinObservationW
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	rows, err := repository.ListPostDeliveryTimelinesWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -601,7 +601,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByFinalizedObserva
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	finalizedAt := time.Date(2026, 4, 11, 1, 0, 0, 0, time.UTC)
@@ -636,9 +636,9 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByFinalizedObserva
 		NextAttemptAt: lateAttemptFinishedAt,
 		CreatedAt:     lateDetectedAt,
 	}
-	require.NoError(t, db.Create([]timelineTestOutboxModel{timelyOutbox, lateOutbox}).Error)
+	require.NoError(t, insertDeliveryTestRows(db, []timelineTestOutboxModel{timelyOutbox, lateOutbox}).Error)
 
-	require.NoError(t, db.Create([]timelineTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []timelineTestTrackingModel{
 		{
 			Kind:               string(domain.OutboxKindCommunityPost),
 			ContentID:          timelyOutbox.ContentID,
@@ -660,7 +660,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByFinalizedObserva
 			UpdatedAt:          lateAttemptFinishedAt,
 		},
 	}).Error)
-	require.NoError(t, db.Create([]deliveryTelemetryTestObservationBaselineModel{{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestObservationBaselineModel{{
 		RuntimeName:       "youtube-producer",
 		BigBangCutoverAt:  cutoverAt,
 		Kind:              string(domain.OutboxKindCommunityPost),
@@ -671,7 +671,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByFinalizedObserva
 		FinalizedAt:       finalizedAt,
 	}}).Error)
 
-	require.NoError(t, db.Create([]timelineTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []timelineTestBufferModel{
 		{
 			DeliveryID:        9301,
 			AttemptOrdinal:    1,
@@ -710,7 +710,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByFinalizedObserva
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	rows, err := repository.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

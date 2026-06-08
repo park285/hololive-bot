@@ -99,7 +99,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	currentLockedAt := staleLockedAt.Add(time.Minute)
@@ -111,14 +111,14 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 		NextAttemptAt: time.Now().UTC(),
 		LockedAt:      &currentLockedAt,
 	}
-	require.NoError(t, db.Create(&row).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
 
-	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	err := repository.MarkFailedRetryBatchIfLocked(ctx, []store.LockToken{store.NewLockToken(row.ID, &staleLockedAt)}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery
-	require.NoError(t, db.First(&got, row.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
 	require.Equal(t, domain.OutboxStatusPending, got.Status)
 	require.Equal(t, 0, got.AttemptCount)
 	require.NotNil(t, got.LockedAt)
@@ -130,7 +130,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnoth
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	sentAt := time.Now().UTC()
@@ -142,14 +142,14 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnoth
 		NextAttemptAt: time.Now().UTC(),
 		SentAt:        &sentAt,
 	}
-	require.NoError(t, db.Create(&row).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
 
-	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	err := repository.MarkFailedRetryBatchIfLocked(ctx, []store.LockToken{store.NewLockToken(row.ID, &staleLockedAt)}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery
-	require.NoError(t, db.First(&got, row.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
 	require.Equal(t, domain.OutboxStatusSent, got.Status)
 	require.Equal(t, 0, got.AttemptCount)
 	require.Nil(t, got.LockedAt)
@@ -161,7 +161,7 @@ func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	lockedAt := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
 	row := domain.YouTubeNotificationDelivery{
@@ -172,12 +172,12 @@ func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
 		NextAttemptAt: time.Now().UTC().Add(-time.Hour),
 		LockedAt:      &lockedAt,
 	}
-	require.NoError(t, db.Create(&row).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
 
 	manager := &ClaimManager{
 		config:   Config{MaxRetries: 3, RetryBackoff: time.Second},
 		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		delivery: store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		delivery: store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil))),
 	}
 	startedAt := time.Now().UTC()
 	result := dispatchstate.DispatchResult{
@@ -187,7 +187,7 @@ func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
 	manager.markRetryDispatchFailureBucket(ctx, []domain.YouTubeNotificationDelivery{row}, result, "rate-limited", []int64{row.ID})
 
 	var got domain.YouTubeNotificationDelivery
-	require.NoError(t, db.First(&got, row.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
 	require.Equal(t, domain.OutboxStatusPending, got.Status)
 	require.Equal(t, 1, got.AttemptCount)
 	require.Nil(t, got.LockedAt)

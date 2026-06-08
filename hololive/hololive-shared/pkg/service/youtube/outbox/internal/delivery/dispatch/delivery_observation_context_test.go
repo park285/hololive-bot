@@ -93,7 +93,7 @@ func TestDeliveryTelemetryRepository_EnqueueEnrichesObservationWindowContext(t *
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
@@ -102,7 +102,7 @@ func TestDeliveryTelemetryRepository_EnqueueEnrichesObservationWindowContext(t *
 	seedObservationWindow(t, db, cutoverAt, observationStartedAt)
 	seedTrackingRow(t, db, domain.OutboxKindNewShort, "short-inside", "UC_inside", &actualPublishedAt, detectedAt)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     101,
 		AttemptOrdinal: 1,
@@ -119,7 +119,7 @@ func TestDeliveryTelemetryRepository_EnqueueEnrichesObservationWindowContext(t *
 	}}))
 
 	var saved observationTestBufferModel
-	require.NoError(t, db.First(&saved).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &saved).Error)
 	require.NotNil(t, saved.ActualPublishedAt)
 	require.Equal(t, actualPublishedAt, saved.ActualPublishedAt.UTC())
 	require.NotNil(t, saved.DetectedAt)
@@ -142,7 +142,7 @@ func TestDeliveryTelemetryRepository_EnqueueMarksLateDetectionsOutsideObservatio
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
@@ -151,7 +151,7 @@ func TestDeliveryTelemetryRepository_EnqueueMarksLateDetectionsOutsideObservatio
 	seedObservationWindow(t, db, cutoverAt, observationStartedAt)
 	seedTrackingRow(t, db, domain.OutboxKindNewShort, "short-late-detect", "UC_late", &actualPublishedAt, detectedAt)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     111,
 		AttemptOrdinal: 1,
@@ -168,7 +168,7 @@ func TestDeliveryTelemetryRepository_EnqueueMarksLateDetectionsOutsideObservatio
 	}}))
 
 	var saved observationTestBufferModel
-	require.NoError(t, db.First(&saved).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &saved).Error)
 	require.Equal(t, deliveryTelemetryObservationStatusOutsideWindow, saved.ObservationStatus)
 	require.Equal(t, "", saved.ObservationRuntimeName)
 	require.Nil(t, saved.ObservationBigBangCutoverAt)
@@ -180,7 +180,7 @@ func TestDeliveryTelemetryRepository_ListByObservationWindowReturnsMatchedOnly(t
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
@@ -194,7 +194,7 @@ func TestDeliveryTelemetryRepository_ListByObservationWindowReturnsMatchedOnly(t
 	outsideDetectedAt := outsidePublishedAt.Add(20 * time.Second)
 	seedTrackingRow(t, db, domain.OutboxKindNewShort, "short-outside", "UC_outside", &outsidePublishedAt, outsideDetectedAt)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
 		{
 			DeliveryID:     201,
@@ -238,12 +238,12 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
 	finalizedAt := observationStartedAt.Add(24 * time.Hour)
-	require.NoError(t, db.Create(&observationTestWindowModel{
+	require.NoError(t, insertDeliveryTestRows(db, &observationTestWindowModel{
 		RuntimeName:             "youtube-producer",
 		BigBangCutoverAt:        cutoverAt,
 		AppVersion:              "v-test",
@@ -260,7 +260,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 	insideDetectedAt := insidePublishedAt.Add(20 * time.Second)
 	latePublishedAt := observationStartedAt.Add(25 * time.Hour)
 	lateDetectedAt := latePublishedAt.Add(20 * time.Second)
-	require.NoError(t, db.Create([]observationTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []observationTestTrackingModel{
 		{
 			Kind:               domain.OutboxKindCommunityPost,
 			ContentID:          "post-inside",
@@ -278,7 +278,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 			DetectedAt:         lateDetectedAt,
 		},
 	}).Error)
-	require.NoError(t, db.Create([]deliveryTelemetryTestOutboxModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestOutboxModel{
 		{
 			ID:            401,
 			Kind:          string(domain.OutboxKindCommunityPost),
@@ -302,7 +302,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 			CreatedAt:     lateDetectedAt,
 		},
 	}).Error)
-	require.NoError(t, db.Create([]deliveryTelemetryTestObservationBaselineModel{{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestObservationBaselineModel{{
 		RuntimeName:       "youtube-producer",
 		BigBangCutoverAt:  cutoverAt,
 		Kind:              string(domain.OutboxKindCommunityPost),
@@ -312,7 +312,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 		DetectedAt:        insideDetectedAt,
 		FinalizedAt:       finalizedAt,
 	}}).Error)
-	require.NoError(t, db.Create([]observationTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []observationTestBufferModel{
 		{
 			DeliveryID:     301,
 			AttemptOrdinal: 1,
@@ -347,7 +347,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	rows, err := repository.ListByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -357,7 +357,7 @@ func TestDeliveryTelemetryRepository_ListByFinalizedObservationWindowUsesFrozenB
 
 func seedObservationWindow(t *testing.T, db *deliveryTestDB, cutoverAt, observationStartedAt time.Time) {
 	t.Helper()
-	require.NoError(t, db.Create(&observationTestWindowModel{
+	require.NoError(t, insertDeliveryTestRows(db, &observationTestWindowModel{
 		RuntimeName:           "youtube-producer",
 		BigBangCutoverAt:      cutoverAt,
 		AppVersion:            "v-test",
@@ -391,5 +391,5 @@ func seedTrackingRow(
 		record.AlarmSentAt = &alarmSentAt
 		record.AlarmLatencyMillis = &alarmLatencyMillis
 	}
-	require.NoError(t, db.Create(&record).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &record).Error)
 }

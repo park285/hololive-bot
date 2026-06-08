@@ -163,7 +163,7 @@ func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPo
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	withinPublishedAt := now.Add(-45 * time.Minute)
@@ -187,7 +187,7 @@ func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPo
 	oldPublishedAt := now.Add(-30 * time.Hour)
 	oldDetectedAt := now.Add(-30*time.Hour + time.Minute)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
 		{
 			Kind:                 string(domain.OutboxKindCommunityPost),
 			ContentID:            "community-within",
@@ -241,7 +241,7 @@ func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPo
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	summaries, err := repository.ListPostLatencyPeriodSummaries(ctx, []PostLatencyPeriod{
 		{Label: "last_hour", StartAt: now.Add(-time.Hour), EndAt: now},
 		{Label: "last_day", StartAt: now.Add(-24 * time.Hour), EndAt: now},

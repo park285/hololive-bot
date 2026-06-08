@@ -91,7 +91,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	actualPublishedAt := now.Add(-190 * time.Second)
@@ -104,15 +104,15 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 		Status:        string(domain.OutboxStatusPending),
 		NextAttemptAt: now,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&finalResultTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultTrackingModel{
 		Kind:              string(domain.OutboxKindNewShort),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
 		ActualPublishedAt: &actualPublishedAt,
 		DetectedAt:        detectedAt,
 	}).Error)
-	require.NoError(t, db.Create(&finalResultDeliveryModel{
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultDeliveryModel{
 		OutboxID:      item.ID,
 		RoomID:        "room-success",
 		Status:        string(domain.OutboxStatusPending),
@@ -157,7 +157,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	actualPublishedAt := now.Add(-190 * time.Second)
@@ -170,15 +170,15 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 		Status:        string(domain.OutboxStatusPending),
 		NextAttemptAt: now,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&finalResultTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultTrackingModel{
 		Kind:              string(domain.OutboxKindCommunityPost),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
 		ActualPublishedAt: &actualPublishedAt,
 		DetectedAt:        detectedAt,
 	}).Error)
-	require.NoError(t, db.Create(&finalResultDeliveryModel{
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultDeliveryModel{
 		OutboxID:      item.ID,
 		RoomID:        "room-community-success",
 		Status:        string(domain.OutboxStatusPending),
@@ -222,7 +222,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCod
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	actualPublishedAt := now.Add(-210 * time.Second)
@@ -235,15 +235,15 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCod
 		Status:        string(domain.OutboxStatusPending),
 		NextAttemptAt: now,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&finalResultTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultTrackingModel{
 		Kind:              string(domain.OutboxKindNewShort),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
 		ActualPublishedAt: &actualPublishedAt,
 		DetectedAt:        detectedAt,
 	}).Error)
-	require.NoError(t, db.Create(&finalResultDeliveryModel{
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultDeliveryModel{
 		OutboxID:      item.ID,
 		RoomID:        "room-external-delay",
 		Status:        string(domain.OutboxStatusPending),
@@ -273,7 +273,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	actualPublishedAt := now.Add(-200 * time.Second)
@@ -286,15 +286,15 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 		Status:        string(domain.OutboxStatusPending),
 		NextAttemptAt: now,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&finalResultTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultTrackingModel{
 		Kind:              string(domain.OutboxKindCommunityPost),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
 		ActualPublishedAt: &actualPublishedAt,
 		DetectedAt:        detectedAt,
 	}).Error)
-	require.NoError(t, db.Create(&finalResultDeliveryModel{
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultDeliveryModel{
 		OutboxID:      item.ID,
 		RoomID:        "room-failure",
 		Status:        string(domain.OutboxStatusPending),
@@ -338,7 +338,7 @@ func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *deliveryTestD
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	cache := cachemocks.NewLenientClient()
-	return NewDispatcher(db.Pool, cache, sender, nil, logger, config), logBuffer
+	return NewDispatcher(db, cache, sender, nil, logger, config), logBuffer
 }
 
 func findAuditLogEntryByTelemetrySource(t *testing.T, logBuffer *bytes.Buffer, source string) map[string]any {

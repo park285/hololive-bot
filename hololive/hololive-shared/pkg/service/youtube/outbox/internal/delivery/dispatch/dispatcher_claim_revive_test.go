@@ -38,7 +38,7 @@ import (
 // reviveTestClaimManager는 reviveStaleFailedOutbox만 행사하는 최소 ClaimManager를 만든다.
 func reviveTestClaimManager(db *deliveryTestDB) *ClaimManager {
 	return &ClaimManager{
-		db:     store.AsDeliveryDB(db.Pool),
+		db:     store.AsDeliveryDB(db),
 		config: Config{MaxRetries: 3, LockTimeout: 5 * time.Minute},
 		logger: slog.Default(),
 	}
@@ -52,7 +52,7 @@ func reviveTestClaimManager(db *deliveryTestDB) *ClaimManager {
 //   - stale(freshness window 밖)·이미 발송 완료(sent_at NOT NULL)·in-flight(locked_at 미만료) 행은 제외.
 //   - delivery 행이 없는 직접 FAILED outbox(구독자 조회/enqueue 실패 경로)도 되살린다.
 func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *testing.T) {
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 	cm := reviveTestClaimManager(db)
 	ctx := context.Background()
 
@@ -69,17 +69,17 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 			Payload: `{"id":"` + contentID + `"}`, Status: domain.OutboxStatusFailed,
 			AttemptCount: 3, NextAttemptAt: oldNextAttempt, CreatedAt: createdAt, Error: "failed",
 		}
-		require.NoError(t, db.Create(row).Error)
+		require.NoError(t, insertDeliveryTestRows(db, row).Error)
 		return row
 	}
 
 	// (1) fresh·미발송·FAILED video — 되살아나야 함. room-A는 SENT(중복 방지), room-B는 FAILED(재시도).
 	freshVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-fresh", freshCreatedAt)
-	require.NoError(t, db.Create(&domain.YouTubeNotificationDelivery{
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
 		OutboxID: freshVideo.ID, RoomID: "room-sent", Status: domain.OutboxStatusSent,
 		AttemptCount: 1, NextAttemptAt: oldNextAttempt, SentAt: &sentAt,
 	}).Error)
-	require.NoError(t, db.Create(&domain.YouTubeNotificationDelivery{
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
 		OutboxID: freshVideo.ID, RoomID: "room-failed", Status: domain.OutboxStatusFailed,
 		AttemptCount: 3, NextAttemptAt: oldNextAttempt, Error: "send failed",
 	}).Error)
@@ -98,13 +98,11 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 
 	// (6) FAILED지만 이미 발송 완료(sent_at NOT NULL) — 제외(중복 방지).
 	deliveredVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-delivered", freshCreatedAt)
-	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ?", deliveredVideo.ID).Updates(map[string]any{"sent_at": sentAt}).Error)
+	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, map[string]any{"sent_at": sentAt}, "id = ?", deliveredVideo.ID).Error)
 
 	// (7) in-flight video(locked_at 미만료) — 처리 중이라 제외.
 	lockedVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-locked", freshCreatedAt)
-	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ?", lockedVideo.ID).Updates(map[string]any{"locked_at": recentLock}).Error)
+	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, map[string]any{"locked_at": recentLock}, "id = ?", lockedVideo.ID).Error)
 
 	// (8) fresh·미발송·FAILED community_post — 스코프 밖(alarm-once 게이트 우회 불가)이라 제외.
 	freshCommunity := newFailedOutbox(domain.OutboxKindCommunityPost, "post-fresh", freshCreatedAt)
@@ -115,7 +113,7 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 
 	assertRevived := func(id int64, label string) {
 		var row domain.YouTubeNotificationOutbox
-		require.NoError(t, db.Where("id = ?", id).First(&row).Error)
+		require.NoError(t, firstDeliveryTestRowWhere(db, &row, "id = ?", id).Error)
 		assert.Equal(t, domain.OutboxStatusPending, row.Status, label+" → PENDING")
 		assert.Zero(t, row.AttemptCount, label+" attempt 리셋")
 		assert.Empty(t, row.Error, label+" error clear")
@@ -124,7 +122,7 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 	}
 	assertNotRevived := func(id int64, label string) {
 		var row domain.YouTubeNotificationOutbox
-		require.NoError(t, db.Where("id = ?", id).First(&row).Error)
+		require.NoError(t, firstDeliveryTestRowWhere(db, &row, "id = ?", id).Error)
 		assert.Equal(t, domain.OutboxStatusFailed, row.Status, label+" → FAILED 유지")
 	}
 
@@ -139,12 +137,12 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 
 	// per-room dedup: SENT 행 불변, FAILED 행만 PENDING.
 	var sentDelivery domain.YouTubeNotificationDelivery
-	require.NoError(t, db.Where("outbox_id = ? AND room_id = ?", freshVideo.ID, "room-sent").First(&sentDelivery).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &sentDelivery, "outbox_id = ? AND room_id = ?", freshVideo.ID, "room-sent").Error)
 	assert.Equal(t, domain.OutboxStatusSent, sentDelivery.Status, "이미 발송된 room은 재발송 금지")
 	require.NotNil(t, sentDelivery.SentAt)
 
 	var failedDelivery domain.YouTubeNotificationDelivery
-	require.NoError(t, db.Where("outbox_id = ? AND room_id = ?", freshVideo.ID, "room-failed").First(&failedDelivery).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &failedDelivery, "outbox_id = ? AND room_id = ?", freshVideo.ID, "room-failed").Error)
 	assert.Equal(t, domain.OutboxStatusPending, failedDelivery.Status, "실패한 room은 재시도 대상")
 	assert.Zero(t, failedDelivery.AttemptCount)
 }
@@ -153,11 +151,11 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 // revive 전에는 dispatcher가 FAILED 행을 재전달하지 않지만, revive 후 ProcessOnce가 실제로 실패했던
 // room에 메시지를 발송하고 delivery 행이 SENT로 전이된다(end-to-end revive→dispatch 경로 검증).
 func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 	ctx := context.Background()
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), sender, nil,
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 			BatchSize:             10,
 			LockTimeout:           time.Minute,
@@ -177,12 +175,12 @@ func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
 		AttemptCount: 3, NextAttemptAt: now.Add(-10 * time.Minute), CreatedAt: now.Add(-5 * time.Minute),
 		Error: "all rooms failed",
 	}
-	require.NoError(t, db.Create(outboxRow).Error)
+	require.NoError(t, insertDeliveryTestRows(db, outboxRow).Error)
 	deliveryRow := &domain.YouTubeNotificationDelivery{
 		OutboxID: outboxRow.ID, RoomID: "room-x", Status: domain.OutboxStatusFailed,
 		AttemptCount: 3, NextAttemptAt: now.Add(-10 * time.Minute), Error: "send failed",
 	}
-	require.NoError(t, db.Create(deliveryRow).Error)
+	require.NoError(t, insertDeliveryTestRows(db, deliveryRow).Error)
 
 	// revive 전: FAILED 행은 claim 대상이 아니므로 재전달 없음.
 	dispatcher.ProcessOnceForTest(ctx)
@@ -197,7 +195,7 @@ func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
 	assert.Contains(t, msgs[0], "room-x")
 
 	var updated domain.YouTubeNotificationDelivery
-	require.NoError(t, db.Where("id = ?", deliveryRow.ID).First(&updated).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &updated, "id = ?", deliveryRow.ID).Error)
 	assert.Equal(t, domain.OutboxStatusSent, updated.Status, "재전달 후 delivery 행은 SENT")
 }
 

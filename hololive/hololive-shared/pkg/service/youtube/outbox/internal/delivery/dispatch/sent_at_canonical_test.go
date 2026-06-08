@@ -21,7 +21,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	nextAttemptAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
 	item := domain.YouTubeNotificationOutbox{
@@ -34,9 +34,9 @@ func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t
 		NextAttemptAt: nextAttemptAt,
 		LockedAt:      &nextAttemptAt,
 	}
-	require.NoError(t, db.Create(&item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	dispatcher := NewDispatcher(db.Pool, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -52,7 +52,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t
 	})
 
 	var updated deliveryTestOutboxModel
-	require.NoError(t, db.First(&updated, item.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updated, item.ID).Error)
 	require.Equal(t, string(domain.OutboxStatusSent), updated.Status)
 	require.NotNil(t, updated.SentAt)
 	require.Equal(t, yttimestamp.Canonical.Location, updated.SentAt.UTC().Location())
@@ -64,7 +64,7 @@ func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	nextAttemptAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
 	item := domain.YouTubeNotificationOutbox{
@@ -76,8 +76,8 @@ func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp
 		AttemptCount:  0,
 		NextAttemptAt: nextAttemptAt,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&deliveryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:           string(item.Kind),
 		ContentID:      item.ContentID,
 		ChannelID:      item.ChannelID,
@@ -92,21 +92,21 @@ func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp
 		AttemptCount:  0,
 		NextAttemptAt: nextAttemptAt,
 	}
-	require.NoError(t, db.Create(&delivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
-	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}))
 	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{item.ID}))
 
 	var updatedDelivery deliveryTestDeliveryModel
-	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedDelivery, delivery.ID).Error)
 	require.Equal(t, string(domain.OutboxStatusSent), updatedDelivery.Status)
 	require.NotNil(t, updatedDelivery.SentAt)
 	require.Equal(t, yttimestamp.Canonical.Location, updatedDelivery.SentAt.UTC().Location())
 	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedDelivery.SentAt.UTC().Format(yttimestamp.Canonical.Layout))
 
 	var updatedOutbox deliveryTestOutboxModel
-	require.NoError(t, db.First(&updatedOutbox, item.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedOutbox, item.ID).Error)
 	require.Equal(t, string(domain.OutboxStatusSent), updatedOutbox.Status)
 	require.NotNil(t, updatedOutbox.SentAt)
 	require.Equal(t, yttimestamp.Canonical.Location, updatedOutbox.SentAt.UTC().Location())
@@ -126,7 +126,7 @@ func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonical
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	detectedAt := time.Date(2026, 4, 10, 1, 10, 0, 0, time.UTC)
 	item := domain.YouTubeNotificationOutbox{
@@ -138,8 +138,8 @@ func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonical
 		AttemptCount:  0,
 		NextAttemptAt: detectedAt,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&deliveryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:              string(item.Kind),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
@@ -155,13 +155,13 @@ func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonical
 		AttemptCount:  0,
 		NextAttemptAt: detectedAt,
 	}
-	require.NoError(t, db.Create(&delivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
-	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}))
 
 	var updatedTracking deliveryTestTrackingModel
-	require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&updatedTracking).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &updatedTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
 	require.NotNil(t, updatedTracking.AlarmSentAt)
 	require.Equal(t, yttimestamp.Canonical.Location, updatedTracking.AlarmSentAt.UTC().Location())
 	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedTracking.AlarmSentAt.UTC().Format(yttimestamp.Canonical.Layout))
@@ -180,7 +180,7 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	detectedAt := time.Date(2026, 4, 10, 1, 10, 0, 0, time.UTC)
 	authorizedAt := time.Date(2026, 4, 10, 1, 10, 30, 0, time.UTC)
@@ -193,8 +193,8 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 		AttemptCount:  0,
 		NextAttemptAt: detectedAt,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&deliveryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:               string(item.Kind),
 		ContentID:          item.ContentID,
 		CanonicalContentID: "community:post-claimed",
@@ -203,7 +203,7 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 		DetectedAt:         detectedAt,
 		DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusPending),
 	}).Error)
-	require.NoError(t, db.Create(&domain.YouTubeCommunityShortsAlarmState{
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeCommunityShortsAlarmState{
 		Kind:              item.Kind,
 		PostID:            "community:post-claimed",
 		ContentID:         item.ContentID,
@@ -221,13 +221,13 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 		AttemptCount:  0,
 		NextAttemptAt: detectedAt,
 	}
-	require.NoError(t, db.Create(&delivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
-	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{delivery.ID}, dispatchstate.ClaimToken{Kind: item.Kind, PostID: "community:post-claimed", AuthorizedAt: authorizedAt}))
 
 	var updatedState domain.YouTubeCommunityShortsAlarmState
-	require.NoError(t, db.First(&updatedState, "kind = ? AND post_id = ?", item.Kind, "community:post-claimed").Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedState, "kind = ? AND post_id = ?", item.Kind, "community:post-claimed").Error)
 	require.Nil(t, updatedState.AuthorizedAt)
 	require.NotNil(t, updatedState.AlarmSentAt)
 	require.Equal(t, "2026-04-10T01:11:12.123Z", updatedState.AlarmSentAt.UTC().Format(yttimestamp.Canonical.Layout))
@@ -239,7 +239,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 	withFixedSentAtNow(t, fixedNow)
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	detectedAt := time.Date(2026, 4, 10, 1, 10, 0, 0, time.UTC)
 	authorizedAt := time.Date(2026, 4, 10, 1, 10, 30, 0, time.UTC)
@@ -253,8 +253,8 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: detectedAt,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&deliveryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:               string(item.Kind),
 		ContentID:          item.ContentID,
 		CanonicalContentID: "short:short-claimed",
@@ -263,7 +263,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 		DetectedAt:         detectedAt,
 		DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusPending),
 	}).Error)
-	require.NoError(t, db.Create(&domain.YouTubeCommunityShortsAlarmState{
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeCommunityShortsAlarmState{
 		Kind:              item.Kind,
 		PostID:            "short:short-claimed",
 		ContentID:         item.ContentID,
@@ -281,24 +281,24 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: detectedAt,
 	}
-	require.NoError(t, db.Create(&delivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
-	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	err := repository.MarkSentBatch(ctx, []int64{delivery.ID}, dispatchstate.ClaimToken{Kind: item.Kind, PostID: "short:short-claimed", AuthorizedAt: otherAuthorizedAt})
 	require.ErrorContains(t, err, "claim authorization mismatch")
 
 	var updatedDelivery deliveryTestDeliveryModel
-	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedDelivery, delivery.ID).Error)
 	require.Equal(t, string(domain.OutboxStatusPending), updatedDelivery.Status)
 	require.Nil(t, updatedDelivery.SentAt)
 
 	var updatedTracking deliveryTestTrackingModel
-	require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&updatedTracking).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &updatedTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
 	require.Nil(t, updatedTracking.AlarmSentAt)
 	require.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusPending), updatedTracking.DeliveryStatus)
 
 	var updatedState domain.YouTubeCommunityShortsAlarmState
-	require.NoError(t, db.First(&updatedState, "kind = ? AND post_id = ?", item.Kind, "short:short-claimed").Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedState, "kind = ? AND post_id = ?", item.Kind, "short:short-claimed").Error)
 	require.NotNil(t, updatedState.AuthorizedAt)
 	require.Equal(t, authorizedAt, updatedState.AuthorizedAt.UTC())
 	require.Nil(t, updatedState.AlarmSentAt)
@@ -307,7 +307,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 
 func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateExecution(t *testing.T) {
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	currentNow := time.Date(2026, 4, 10, 10, 11, 12, 123000000, time.FixedZone("KST", 9*60*60))
 	original := dispatchstate.SentAtNow
@@ -328,8 +328,8 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 		AttemptCount:  0,
 		NextAttemptAt: detectedAt,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&deliveryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:              string(item.Kind),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
@@ -351,10 +351,10 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 		AttemptCount:  0,
 		NextAttemptAt: detectedAt,
 	}
-	require.NoError(t, db.Create(&firstDelivery).Error)
-	require.NoError(t, db.Create(&secondDelivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &firstDelivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &secondDelivery).Error)
 
-	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{firstDelivery.ID}))
 
 	firstExpected := yttimestamp.Normalize(currentNow)
@@ -365,18 +365,18 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 	require.NoError(t, repository.MarkSentBatch(ctx, []int64{secondDelivery.ID}))
 
 	var updatedTracking deliveryTestTrackingModel
-	require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&updatedTracking).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &updatedTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
 	require.NotNil(t, updatedTracking.AlarmSentAt)
 	require.Equal(t, firstExpected, updatedTracking.AlarmSentAt.UTC())
 	require.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), updatedTracking.DeliveryStatus)
 
 	var updatedFirstDelivery deliveryTestDeliveryModel
-	require.NoError(t, db.First(&updatedFirstDelivery, firstDelivery.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedFirstDelivery, firstDelivery.ID).Error)
 	require.NotNil(t, updatedFirstDelivery.SentAt)
 	require.Equal(t, firstExpected, updatedFirstDelivery.SentAt.UTC())
 
 	var updatedSecondDelivery deliveryTestDeliveryModel
-	require.NoError(t, db.First(&updatedSecondDelivery, secondDelivery.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedSecondDelivery, secondDelivery.ID).Error)
 	require.NotNil(t, updatedSecondDelivery.SentAt)
 	require.True(t, updatedSecondDelivery.SentAt.UTC().After(firstExpected))
 }

@@ -36,7 +36,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
@@ -98,12 +98,12 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-30 * time.Minute),
 	}
-	require.NoError(t, db.Create(&communityOutbox).Error)
-	require.NoError(t, db.Create(&shortOutbox).Error)
-	require.NoError(t, db.Create(&oldOutbox).Error)
-	require.NoError(t, db.Create(&nonTargetOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &communityOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &shortOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &oldOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &nonTargetOutbox).Error)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
 		{
 			Kind:                 string(domain.OutboxKindCommunityPost),
 			ContentID:            communityOutbox.ContentID,
@@ -279,9 +279,9 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 			NextAttemptAt:  nonTargetSuccessAt,
 		},
 	}
-	require.NoError(t, db.Create(&rows).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &rows).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	summaries, err := repository.ListPostSendCountsSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, summaries, 3)
@@ -383,7 +383,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	windowStart := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
 	windowEnd := windowStart.Add(45 * time.Minute)
@@ -414,10 +414,10 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 		NextAttemptAt: outsideEventAt,
 		CreatedAt:     outsideDetectedAt,
 	}
-	require.NoError(t, db.Create(&insideOutbox).Error)
-	require.NoError(t, db.Create(&outsideOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &insideOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &outsideOutbox).Error)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
 		{
 			Kind:              string(domain.OutboxKindCommunityPost),
 			ContentID:         insideOutbox.ContentID,
@@ -438,7 +438,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 		},
 	}).Error)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     9001,
 			AttemptOrdinal: 1,
@@ -473,7 +473,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	rows, err := repository.ListPostSendCountsWithinPublishedWindow(ctx, windowStart, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -485,7 +485,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	windowStart := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
 	windowEnd := windowStart.Add(24 * time.Hour)
@@ -512,13 +512,13 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 		NextAttemptAt: windowStart,
 		CreatedAt:     windowStart.Add(10 * time.Minute),
 	}
-	require.NoError(t, db.Create([]deliveryTelemetryTestOutboxModel{timelyOutbox, lateOutbox}).Error)
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestOutboxModel{timelyOutbox, lateOutbox}).Error)
 
 	timelyPublishedAt := windowStart.Add(2 * time.Minute)
 	timelyDetectedAt := timelyPublishedAt.Add(30 * time.Second)
 	latePublishedAt := windowStart.Add(5 * time.Minute)
 	lateDetectedAt := windowEnd.Add(time.Minute)
-	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
 		{
 			Kind:              string(domain.OutboxKindCommunityPost),
 			ContentID:         timelyOutbox.ContentID,
@@ -539,7 +539,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 		},
 	}).Error)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     9101,
 			AttemptOrdinal: 1,
@@ -574,7 +574,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinObservationWindow_E
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	rows, err := repository.ListPostSendCountsWithinObservationWindow(ctx, windowStart, windowEnd, windowEnd)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -585,7 +585,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	finalizedAt := time.Date(2026, 4, 11, 1, 0, 0, 0, time.UTC)
@@ -617,9 +617,9 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 		NextAttemptAt: lateDetectedAt,
 		CreatedAt:     lateDetectedAt,
 	}
-	require.NoError(t, db.Create([]deliveryTelemetryTestOutboxModel{timelyOutbox, lateOutbox}).Error)
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestOutboxModel{timelyOutbox, lateOutbox}).Error)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
 		{
 			Kind:               string(domain.OutboxKindCommunityPost),
 			ContentID:          timelyOutbox.ContentID,
@@ -662,9 +662,9 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 			FinalizedAt:      finalizedAt,
 		},
 	}
-	require.NoError(t, db.Create(&finalizedRows).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &finalizedRows).Error)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     9201,
 			AttemptOrdinal: 1,
@@ -699,7 +699,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsByFinalizedObservationWin
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	rows, err := repository.ListPostSendCountsByFinalizedObservationWindow(ctx, "youtube-producer", cutoverAt)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)

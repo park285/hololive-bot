@@ -141,7 +141,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	cache, cacheStore := newRouteAuditCacheClient()
 	alarms := []*domain.Alarm{
@@ -161,7 +161,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	require.Len(t, expectedTargets, 4)
 
 	items := buildRouteAuditOutboxItems(expectedTargets)
-	require.NoError(t, db.Create(&items).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &items).Error)
 
 	trackingRows := make([]deliveryTestTrackingModel, 0, len(items))
 	for _, item := range items {
@@ -172,10 +172,10 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 			DetectedAt: item.NextAttemptAt,
 		})
 	}
-	require.NoError(t, db.Create(&trackingRows).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &trackingRows).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -188,7 +188,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	dispatcher.claim.enqueueDeliveries(ctx, items, roomsByChannel)
 
 	var deliveryRows []domain.YouTubeNotificationDelivery
-	require.NoError(t, db.Order("id ASC").Find(&deliveryRows).Error)
+	require.NoError(t, findDeliveryTestRowsOrdered(db, &deliveryRows, "id ASC").Error)
 	require.Len(t, deliveryRows, totalRouteAuditDeliveries(expectedTargets))
 
 	outboxByID := make(map[int64]domain.YouTubeNotificationOutbox, len(items))
@@ -207,7 +207,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	require.NotContains(t, cacheStore.lookupKeys(), sharedalarmkeys.BuildChannelSubscriberKey("UC_LIVE_ONLY", domain.AlarmTypeLive))
 
 	var deliveries []deliveryTestDeliveryModel
-	require.NoError(t, db.Order("outbox_id ASC, room_id ASC").Find(&deliveries).Error)
+	require.NoError(t, findDeliveryTestRowsOrdered(db, &deliveries, "outbox_id ASC, room_id ASC").Error)
 	require.Len(t, deliveries, totalRouteAuditDeliveries(expectedTargets))
 
 	gotRoomsByOutbox := make(map[int64][]string, len(items))
@@ -222,7 +222,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	}
 
 	var updatedItems []domain.YouTubeNotificationOutbox
-	require.NoError(t, db.Order("id ASC").Find(&updatedItems).Error)
+	require.NoError(t, findDeliveryTestRowsOrdered(db, &updatedItems, "id ASC").Error)
 	require.Len(t, updatedItems, len(items))
 	for _, item := range updatedItems {
 		require.Equal(t, domain.OutboxStatusSent, item.Status)

@@ -89,46 +89,46 @@ func TestSeedCommunityShortsRecoveryInputFixtureCreatesSentAndPendingPosts(t *te
 			fixture := seedCommunityShortsRecoveryInputFixture(t, db, tc.spec)
 
 			var outboxes []deliveryTestOutboxModel
-			require.NoError(t, db.Order("content_id ASC").Find(&outboxes).Error)
+			require.NoError(t, findDeliveryTestRowsOrdered(db, &outboxes, "content_id ASC").Error)
 			require.Len(t, outboxes, 2)
 			require.Equal(t, tc.spec.sentContentID, fixture.sentOutbox.ContentID)
 			require.Equal(t, tc.spec.pendingContentID, fixture.pendingOutbox.ContentID)
 
 			var deliveries []deliveryTestDeliveryModel
-			require.NoError(t, db.Order("id ASC").Find(&deliveries).Error)
+			require.NoError(t, findDeliveryTestRowsOrdered(db, &deliveries, "id ASC").Error)
 			require.Len(t, deliveries, 2)
 			require.Equal(t, tc.spec.roomID, fixture.sentDelivery.RoomID)
 			require.Equal(t, tc.spec.roomID, fixture.pendingDelivery.RoomID)
 
 			var trackingRows []deliveryTestTrackingModel
-			require.NoError(t, db.Find(&trackingRows).Error)
+			require.NoError(t, findDeliveryTestRows(db, &trackingRows).Error)
 			require.Len(t, trackingRows, 2)
 
 			var sentTracking deliveryTestTrackingModel
-			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).First(&sentTracking).Error)
+			require.NoError(t, firstDeliveryTestRowWhere(db, &sentTracking, "kind = ? AND content_id = ?", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).Error)
 			require.Equal(t, fixture.sentPostID, sentTracking.CanonicalContentID)
 			require.NotNil(t, sentTracking.AlarmSentAt)
 			require.Equal(t, tc.spec.alreadySentAt, sentTracking.AlarmSentAt.UTC())
 			require.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), sentTracking.DeliveryStatus)
 
 			var pendingTracking deliveryTestTrackingModel
-			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).First(&pendingTracking).Error)
+			require.NoError(t, firstDeliveryTestRowWhere(db, &pendingTracking, "kind = ? AND content_id = ?", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).Error)
 			require.Equal(t, fixture.pendingPostID, pendingTracking.CanonicalContentID)
 			require.Nil(t, pendingTracking.AlarmSentAt)
 			require.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusPending), pendingTracking.DeliveryStatus)
 
 			var states []domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, db.Find(&states).Error)
+			require.NoError(t, findDeliveryTestRows(db, &states).Error)
 			require.Len(t, states, 2)
 
 			var sentState domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, db.First(&sentState, "kind = ? AND post_id = ?", fixture.sentOutbox.Kind, fixture.sentPostID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &sentState, "kind = ? AND post_id = ?", fixture.sentOutbox.Kind, fixture.sentPostID).Error)
 			require.NotNil(t, sentState.AlarmSentAt)
 			require.Equal(t, tc.spec.alreadySentAt, sentState.AlarmSentAt.UTC())
 			require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, sentState.DeliveryStatus)
 
 			var pendingState domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, db.First(&pendingState, "kind = ? AND post_id = ?", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &pendingState, "kind = ? AND post_id = ?", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
 			require.Nil(t, pendingState.AuthorizedAt)
 			require.Nil(t, pendingState.AlarmSentAt)
 			require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, pendingState.DeliveryStatus)
@@ -139,7 +139,7 @@ func TestSeedCommunityShortsRecoveryInputFixtureCreatesSentAndPendingPosts(t *te
 func newRecoveryInputFixtureDB(t *testing.T, _ string) *deliveryTestDB {
 	t.Helper()
 
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	return db
 }
@@ -167,13 +167,13 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, s
 		NextAttemptAt: spec.retryReadyAt,
 		CreatedAt:     spec.pendingDetectedAt,
 	}
-	require.NoError(t, db.Create(&sentItem).Error)
-	require.NoError(t, db.Create(&pendingItem).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &sentItem).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &pendingItem).Error)
 
 	sentPostID := store.CanonicalDeliveryPostID(spec.kind, sentItem.ContentID)
 	pendingPostID := store.CanonicalDeliveryPostID(spec.kind, pendingItem.ContentID)
 
-	require.NoError(t, db.Create(&deliveryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:               string(sentItem.Kind),
 		ContentID:          sentItem.ContentID,
 		CanonicalContentID: sentPostID,
@@ -183,7 +183,7 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, s
 		AlarmSentAt:        new(spec.alreadySentAt),
 		DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusSent),
 	}).Error)
-	require.NoError(t, db.Create(&deliveryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:               string(pendingItem.Kind),
 		ContentID:          pendingItem.ContentID,
 		CanonicalContentID: pendingPostID,
@@ -193,7 +193,7 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, s
 		DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusPending),
 	}).Error)
 
-	require.NoError(t, db.Create([]domain.YouTubeCommunityShortsAlarmState{
+	require.NoError(t, insertDeliveryTestRows(db, []domain.YouTubeCommunityShortsAlarmState{
 		{
 			Kind:              sentItem.Kind,
 			PostID:            sentPostID,
@@ -231,8 +231,8 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, s
 		NextAttemptAt: spec.retryReadyAt,
 		CreatedAt:     spec.pendingDetectedAt,
 	}
-	require.NoError(t, db.Create(&sentDelivery).Error)
-	require.NoError(t, db.Create(&pendingDelivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &sentDelivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &pendingDelivery).Error)
 
 	return recoveryInputFixture{
 		sentOutbox:      sentItem,

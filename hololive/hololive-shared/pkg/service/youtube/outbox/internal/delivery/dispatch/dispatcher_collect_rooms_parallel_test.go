@@ -73,7 +73,7 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheEmpty(t *testing.T) {
 	t.Parallel()
 
 	db := newDispatcherSubscriberLookupTestDB(t)
-	require.NoError(t, db.Create(&domain.Alarm{
+	require.NoError(t, insertDeliveryTestRows(db, &domain.Alarm{
 		RoomID:     "room-db",
 		ChannelID:  "UCfallback",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
@@ -85,7 +85,7 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheEmpty(t *testing.T) {
 		return nil, nil
 	}
 
-	dispatcher := NewDispatcher(db.Pool, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
 	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback", Kind: domain.OutboxKindNewShort},
 	})
@@ -98,7 +98,7 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheErrors(t *testing.T) {
 	t.Parallel()
 
 	db := newDispatcherSubscriberLookupTestDB(t)
-	require.NoError(t, db.Create(&domain.Alarm{
+	require.NoError(t, insertDeliveryTestRows(db, &domain.Alarm{
 		RoomID:     "room-db",
 		ChannelID:  "UCfallback-error",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
@@ -110,7 +110,7 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheErrors(t *testing.T) {
 		return nil, errors.New("cache unavailable")
 	}
 
-	dispatcher := NewDispatcher(db.Pool, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
 	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback-error", Kind: domain.OutboxKindCommunityPost},
 	})
@@ -122,7 +122,7 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheErrors(t *testing.T) {
 func newDispatcherSubscriberLookupTestDB(t *testing.T) *deliveryTestDB {
 	t.Helper()
 
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	return db
 }

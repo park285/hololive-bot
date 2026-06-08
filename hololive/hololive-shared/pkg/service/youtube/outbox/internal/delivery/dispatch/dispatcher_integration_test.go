@@ -111,7 +111,7 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "test123",
@@ -128,17 +128,17 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := db.Create(item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() {
-		db.Delete(item)
+		deleteDeliveryTestRows(db, item)
 	})
 
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
-	if err := db.First(&updated, item.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
 
@@ -185,7 +185,7 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "retry123",
@@ -202,17 +202,17 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := db.Create(item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() {
-		db.Delete(item)
+		deleteDeliveryTestRows(db, item)
 	})
 
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
-	if err := db.First(&updated, item.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
 
@@ -254,7 +254,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "nosub123",
@@ -271,17 +271,17 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := db.Create(item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() {
-		db.Delete(item)
+		deleteDeliveryTestRows(db, item)
 	})
 
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
-	if err := db.First(&updated, item.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
 
@@ -319,7 +319,7 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 		RetryBackoff: 50 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_success_video",
@@ -335,15 +335,15 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := db.Create(item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
-	t.Cleanup(func() { db.Delete(item) })
+	t.Cleanup(func() { deleteDeliveryTestRows(db, item) })
 
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
-	if err := db.First(&updated, item.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
 	if updated.Status != domain.OutboxStatusSent {
@@ -391,7 +391,7 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		RetryBackoff: 30 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_retry_video",
@@ -407,15 +407,15 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := db.Create(item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
-	t.Cleanup(func() { db.Delete(item) })
+	t.Cleanup(func() { deleteDeliveryTestRows(db, item) })
 
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var first domain.YouTubeNotificationOutbox
-	if err := db.First(&first, item.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &first, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch first state: %v", err)
 	}
 	if first.Status != domain.OutboxStatusPending {
@@ -431,7 +431,7 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var second domain.YouTubeNotificationOutbox
-	if err := db.First(&second, item.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &second, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch second state: %v", err)
 	}
 	if second.Status != domain.OutboxStatusSent {
@@ -467,7 +467,7 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 		RetryBackoff: 50 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_no_sub_video",
@@ -483,15 +483,15 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := db.Create(item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
-	t.Cleanup(func() { db.Delete(item) })
+	t.Cleanup(func() { deleteDeliveryTestRows(db, item) })
 
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
-	if err := db.First(&updated, item.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
 	if updated.Status != domain.OutboxStatusSent {
@@ -534,7 +534,7 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 		RetryBackoff: 30 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	payload, _ := json.Marshal(map[string]string{
 		"video_id": "perroom_terminal_fail_video",
@@ -550,15 +550,15 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := db.Create(item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
-	t.Cleanup(func() { db.Delete(item) })
+	t.Cleanup(func() { deleteDeliveryTestRows(db, item) })
 
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
-	if err := db.First(&updated, item.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated outbox: %v", err)
 	}
 	if updated.Status != domain.OutboxStatusFailed {
@@ -665,8 +665,8 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			}
 
 			dispatchers := []*outbox.Dispatcher{
-				outbox.NewDispatcher(dbPrimary.Pool, cacheService, sender, nil, testLogger, config),
-				outbox.NewDispatcher(dbSecondary.Pool, cacheService, sender, nil, testLogger, config),
+				outbox.NewDispatcher(dbPrimary, cacheService, sender, nil, testLogger, config),
+				outbox.NewDispatcher(dbSecondary, cacheService, sender, nil, testLogger, config),
 			}
 
 			contentID := "test_" + tc.contentPrefix + "_" + time.Now().UTC().Format("150405000000000")
@@ -681,7 +681,7 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 				AttemptCount:  0,
 				NextAttemptAt: time.Now(),
 			}
-			require.NoError(t, dbPrimary.Create(item).Error)
+			require.NoError(t, insertDeliveryTestRows(dbPrimary, item).Error)
 
 			delivery := &domain.YouTubeNotificationDelivery{
 				OutboxID:      item.ID,
@@ -690,12 +690,12 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 				AttemptCount:  0,
 				NextAttemptAt: time.Now(),
 			}
-			require.NoError(t, dbPrimary.Create(delivery).Error)
+			require.NoError(t, insertDeliveryTestRows(dbPrimary, delivery).Error)
 
 			t.Cleanup(func() {
-				dbPrimary.Where("kind = ? AND post_id = ?", tc.kind, postID).Delete(&domain.YouTubeCommunityShortsAlarmState{})
-				dbPrimary.Delete(delivery)
-				dbPrimary.Delete(item)
+				deleteDeliveryTestRowsWhere(dbPrimary, &domain.YouTubeCommunityShortsAlarmState{}, "kind = ? AND post_id = ?", tc.kind, postID)
+				deleteDeliveryTestRows(dbPrimary, delivery)
+				deleteDeliveryTestRows(dbPrimary, item)
 			})
 
 			start := make(chan struct{})
@@ -718,7 +718,7 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			require.Contains(t, msgs[0].Message, tc.messageFragment)
 
 			var updated domain.YouTubeNotificationOutbox
-			require.NoError(t, dbPrimary.First(&updated, item.ID).Error)
+			require.NoError(t, firstDeliveryTestRow(dbPrimary, &updated, item.ID).Error)
 			require.Equal(t, domain.OutboxStatusSent, updated.Status)
 			require.NotNil(t, updated.SentAt)
 
@@ -728,7 +728,7 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			require.NotNil(t, deliveries[0].SentAt)
 
 			var state domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, dbPrimary.First(&state, "kind = ? AND post_id = ?", tc.kind, postID).Error)
+			require.NoError(t, firstDeliveryTestRow(dbPrimary, &state, "kind = ? AND post_id = ?", tc.kind, postID).Error)
 			require.Equal(t, postID, state.PostID)
 			require.Equal(t, contentID, state.ContentID)
 			require.NotNil(t, state.AlarmSentAt)
@@ -761,7 +761,7 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 		CleanupEnabled: false,
 	}
 
-	dispatcher := outbox.NewDispatcher(db.Pool, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
 
 	oldFailed := &domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
@@ -786,17 +786,17 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 		Error:         "recent failed",
 	}
 
-	if err := db.Create(oldFailed).Error; err != nil {
+	if err := insertDeliveryTestRows(db, oldFailed).Error; err != nil {
 		t.Fatalf("Failed to create old failed outbox item: %v", err)
 	}
-	if err := db.Create(recentFailed).Error; err != nil {
+	if err := insertDeliveryTestRows(db, recentFailed).Error; err != nil {
 		t.Fatalf("Failed to create recent failed outbox item: %v", err)
 	}
 
 	dispatcher.CleanupForTest(ctx)
 
 	var oldCount int64
-	if err := db.Model(&domain.YouTubeNotificationOutbox{}).Where("id = ?", oldFailed.ID).Count(&oldCount).Error; err != nil {
+	if err := countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, &oldCount, "id = ?", oldFailed.ID).Error; err != nil {
 		t.Fatalf("Failed to count old failed item: %v", err)
 	}
 	if oldCount != 0 {
@@ -804,7 +804,7 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 	}
 
 	var recentCount int64
-	if err := db.Model(&domain.YouTubeNotificationOutbox{}).Where("id = ?", recentFailed.ID).Count(&recentCount).Error; err != nil {
+	if err := countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, &recentCount, "id = ?", recentFailed.ID).Error; err != nil {
 		t.Fatalf("Failed to count recent failed item: %v", err)
 	}
 	if recentCount != 1 {
@@ -815,18 +815,18 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 func setupTestDB(t *testing.T) *deliveryTestDB {
 	t.Helper()
 
-	return newDeliveryIntegrationTestDB(t)
+	return newDeliveryIntegrationPool(t)
 }
 
 func cleanupOutbox(t *testing.T, db *deliveryTestDB) {
 	t.Helper()
-	db.Exec(`
+	execDeliveryTestSQL(db, `
 		DELETE FROM youtube_notification_delivery
 		WHERE outbox_id IN (
 			SELECT id FROM youtube_notification_outbox WHERE content_id LIKE 'test%'
 		)
 	`)
-	db.Exec("DELETE FROM youtube_notification_outbox WHERE content_id LIKE 'test%'")
+	execDeliveryTestSQL(db, "DELETE FROM youtube_notification_outbox WHERE content_id LIKE 'test%'")
 }
 
 func setupCacheService(t *testing.T) *cache.Service {
@@ -891,7 +891,7 @@ func setupMemberName(t *testing.T, cacheService *cache.Service, channelID, name 
 func fetchDeliveryRows(t *testing.T, db *deliveryTestDB, outboxID int64) []domain.YouTubeNotificationDelivery {
 	t.Helper()
 	var rows []domain.YouTubeNotificationDelivery
-	if err := db.Where("outbox_id = ?", outboxID).Order("room_id ASC").Find(&rows).Error; err != nil {
+	if err := findDeliveryTestRowsOrderedWhere(db, &rows, "room_id ASC", "outbox_id = ?", outboxID).Error; err != nil {
 		t.Fatalf("Failed to fetch delivery rows: %v", err)
 	}
 	return rows

@@ -123,7 +123,7 @@ func TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED(t *testing.T
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now().Truncate(time.Microsecond)
 	nextAttemptAt := now.Add(30 * time.Minute)
@@ -137,17 +137,17 @@ func TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED(t *testing.T
 		CreatedAt:     now,
 		LockedAt:      &lockedAt,
 	}
-	if err := db.Create(&row).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &row).Error; err != nil {
 		t.Fatalf("create delivery row: %v", err)
 	}
 
-	repository := store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := repository.MarkPermanentFailureBatch(ctx, []int64{row.ID}, 3, "auth"); err != nil {
 		t.Fatalf("MarkPermanentFailureBatch() error = %v", err)
 	}
 
 	var updated deliveryTestDeliveryModel
-	if err := db.First(&updated, row.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &updated, row.ID).Error; err != nil {
 		t.Fatalf("load updated delivery row: %v", err)
 	}
 	if updated.Status != string(domain.OutboxStatusFailed) {
@@ -171,7 +171,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 	cache, mini := newDispatcherTestCache(t)
 	defer mini.Close()
 	defer func() {
@@ -191,7 +191,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 		NextAttemptAt: now,
 		CreatedAt:     now,
 	}
-	if err := db.Create(&outbox).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &outbox).Error; err != nil {
 		t.Fatalf("create outbox row: %v", err)
 	}
 	delivery := deliveryTestDeliveryModel{
@@ -202,11 +202,11 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 		NextAttemptAt: now,
 		CreatedAt:     now,
 	}
-	if err := db.Create(&delivery).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &delivery).Error; err != nil {
 		t.Fatalf("create delivery row: %v", err)
 	}
 
-	dispatcher := NewDispatcher(db.Pool, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		MaxRetries:          3,
@@ -220,7 +220,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	}
 
 	var updatedDelivery deliveryTestDeliveryModel
-	if err := db.First(&updatedDelivery, delivery.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &updatedDelivery, delivery.ID).Error; err != nil {
 		t.Fatalf("load updated delivery row: %v", err)
 	}
 	if updatedDelivery.Status != string(domain.OutboxStatusFailed) {
@@ -234,7 +234,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	}
 
 	var updatedOutbox deliveryTestOutboxModel
-	if err := db.First(&updatedOutbox, outbox.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(db, &updatedOutbox, outbox.ID).Error; err != nil {
 		t.Fatalf("load updated outbox row: %v", err)
 	}
 	if updatedOutbox.Status != string(domain.OutboxStatusFailed) {

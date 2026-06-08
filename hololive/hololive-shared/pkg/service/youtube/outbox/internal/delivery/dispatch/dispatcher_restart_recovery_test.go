@@ -19,7 +19,7 @@ func TestProcessOnce_RetriesPersistedDeliveriesWithoutNewOutboxClaim(t *testing.
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now().UTC()
 	item := domain.YouTubeNotificationOutbox{
@@ -31,8 +31,8 @@ func TestProcessOnce_RetriesPersistedDeliveriesWithoutNewOutboxClaim(t *testing.
 		AttemptCount:  0,
 		NextAttemptAt: now,
 	}
-	require.NoError(t, db.Create(&item).Error)
-	require.NoError(t, db.Create(&deliveryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:       string(item.Kind),
 		ContentID:  item.ContentID,
 		ChannelID:  item.ChannelID,
@@ -46,10 +46,10 @@ func TestProcessOnce_RetriesPersistedDeliveriesWithoutNewOutboxClaim(t *testing.
 		AttemptCount:  0,
 		NextAttemptAt: now,
 	}
-	require.NoError(t, db.Create(&delivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -61,12 +61,12 @@ func TestProcessOnce_RetriesPersistedDeliveriesWithoutNewOutboxClaim(t *testing.
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updatedDelivery deliveryTestDeliveryModel
-	require.NoError(t, db.First(&updatedDelivery, delivery.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedDelivery, delivery.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedDelivery.Status)
 	require.NotNil(t, updatedDelivery.SentAt)
 
 	var updatedOutbox deliveryTestOutboxModel
-	require.NoError(t, db.First(&updatedOutbox, item.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedOutbox, item.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedOutbox.Status)
 	require.NotNil(t, updatedOutbox.SentAt)
 
@@ -82,7 +82,7 @@ func TestProcessOnce_ReconcilesOutboxStatusFromPersistedDeliveryRows(t *testing.
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Now().UTC()
 	sentAt := now.Add(-30 * time.Second)
@@ -95,7 +95,7 @@ func TestProcessOnce_ReconcilesOutboxStatusFromPersistedDeliveryRows(t *testing.
 		AttemptCount:  0,
 		NextAttemptAt: now,
 	}
-	require.NoError(t, db.Create(&item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 	delivery := domain.YouTubeNotificationDelivery{
 		OutboxID:      item.ID,
@@ -105,10 +105,10 @@ func TestProcessOnce_ReconcilesOutboxStatusFromPersistedDeliveryRows(t *testing.
 		NextAttemptAt: now,
 		SentAt:        &sentAt,
 	}
-	require.NoError(t, db.Create(&delivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -120,7 +120,7 @@ func TestProcessOnce_ReconcilesOutboxStatusFromPersistedDeliveryRows(t *testing.
 	dispatcher.AggregateSyncForTest(ctx)
 
 	var updatedOutbox deliveryTestOutboxModel
-	require.NoError(t, db.First(&updatedOutbox, item.ID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedOutbox, item.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedOutbox.Status)
 	require.NotNil(t, updatedOutbox.SentAt)
 
@@ -184,10 +184,10 @@ func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherR
 				NextAttemptAt: tc.detectedAt,
 				CreatedAt:     tc.detectedAt,
 			}
-			require.NoError(t, db.Create(&item).Error)
+			require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 			postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
-			require.NoError(t, db.Create(&deliveryTestTrackingModel{
+			require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 				Kind:               string(item.Kind),
 				ContentID:          item.ContentID,
 				CanonicalContentID: postID,
@@ -205,10 +205,10 @@ func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherR
 				NextAttemptAt: tc.detectedAt,
 				CreatedAt:     tc.detectedAt,
 			}
-			require.NoError(t, db.Create(&delivery).Error)
+			require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 			firstSender := &testSender{failRoom: map[string]bool{}}
-			firstDispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			firstDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,
@@ -227,32 +227,32 @@ func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherR
 			assert.Contains(t, firstMessages[0], tc.expectedMessageMarker)
 
 			var sentDelivery deliveryTestDeliveryModel
-			require.NoError(t, db.First(&sentDelivery, delivery.ID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &sentDelivery, delivery.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), sentDelivery.Status)
 			require.NotNil(t, sentDelivery.SentAt)
 			assert.Equal(t, fixedSentAt, sentDelivery.SentAt.UTC())
 
 			var sentOutbox deliveryTestOutboxModel
-			require.NoError(t, db.First(&sentOutbox, item.ID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &sentOutbox, item.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), sentOutbox.Status)
 			require.NotNil(t, sentOutbox.SentAt)
 			assert.Equal(t, fixedSentAt, sentOutbox.SentAt.UTC())
 
 			var sentTracking deliveryTestTrackingModel
-			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&sentTracking).Error)
+			require.NoError(t, firstDeliveryTestRowWhere(db, &sentTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
 			require.NotNil(t, sentTracking.AlarmSentAt)
 			assert.Equal(t, fixedSentAt, sentTracking.AlarmSentAt.UTC())
 			assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), sentTracking.DeliveryStatus)
 
 			var sentState domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, db.First(&sentState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &sentState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
 			assert.Nil(t, sentState.AuthorizedAt)
 			require.NotNil(t, sentState.AlarmSentAt)
 			assert.Equal(t, fixedSentAt, sentState.AlarmSentAt.UTC())
 			assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, sentState.DeliveryStatus)
 
 			secondSender := &testSender{failRoom: map[string]bool{}}
-			secondDispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			secondDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,
@@ -269,32 +269,32 @@ func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherR
 			assert.Equal(t, 0, secondMessageCount)
 
 			var persistedDelivery deliveryTestDeliveryModel
-			require.NoError(t, db.First(&persistedDelivery, delivery.ID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &persistedDelivery, delivery.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), persistedDelivery.Status)
 			require.NotNil(t, persistedDelivery.SentAt)
 			assert.Equal(t, fixedSentAt, persistedDelivery.SentAt.UTC())
 
 			var persistedOutbox deliveryTestOutboxModel
-			require.NoError(t, db.First(&persistedOutbox, item.ID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &persistedOutbox, item.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), persistedOutbox.Status)
 			require.NotNil(t, persistedOutbox.SentAt)
 			assert.Equal(t, fixedSentAt, persistedOutbox.SentAt.UTC())
 
 			var persistedTracking deliveryTestTrackingModel
-			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(item.Kind), item.ContentID).First(&persistedTracking).Error)
+			require.NoError(t, firstDeliveryTestRowWhere(db, &persistedTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
 			require.NotNil(t, persistedTracking.AlarmSentAt)
 			assert.Equal(t, fixedSentAt, persistedTracking.AlarmSentAt.UTC())
 			assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), persistedTracking.DeliveryStatus)
 
 			var persistedState domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, db.First(&persistedState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &persistedState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
 			assert.Nil(t, persistedState.AuthorizedAt)
 			require.NotNil(t, persistedState.AlarmSentAt)
 			assert.Equal(t, fixedSentAt, persistedState.AlarmSentAt.UTC())
 			assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, persistedState.DeliveryStatus)
 
 			var deliveryRows []deliveryTestDeliveryModel
-			require.NoError(t, db.Where("outbox_id = ?", item.ID).Order("id ASC").Find(&deliveryRows).Error)
+			require.NoError(t, findDeliveryTestRowsOrderedWhere(db, &deliveryRows, "id ASC", "outbox_id = ?", item.ID).Error)
 			require.Len(t, deliveryRows, 1)
 		})
 	}
@@ -359,7 +359,7 @@ func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactly
 			fixture := seedCommunityShortsRecoveryInputFixture(t, db, tc.spec)
 
 			firstSender := &testSender{failRoom: map[string]bool{}}
-			firstDispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			firstDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,
@@ -379,7 +379,7 @@ func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactly
 			assert.NotContains(t, firstMessages[0], tc.sentMarker)
 
 			secondSender := &testSender{failRoom: map[string]bool{}}
-			secondDispatcher := NewDispatcher(db.Pool, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			secondDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,
@@ -396,58 +396,58 @@ func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactly
 			assert.Equal(t, 0, secondMessageCount)
 
 			var updatedSentDelivery deliveryTestDeliveryModel
-			require.NoError(t, db.First(&updatedSentDelivery, fixture.sentDelivery.ID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &updatedSentDelivery, fixture.sentDelivery.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), updatedSentDelivery.Status)
 			assert.Equal(t, 1, updatedSentDelivery.AttemptCount)
 			require.NotNil(t, updatedSentDelivery.SentAt)
 			assert.Equal(t, fixedSentAt, updatedSentDelivery.SentAt.UTC())
 
 			var updatedPendingDelivery deliveryTestDeliveryModel
-			require.NoError(t, db.First(&updatedPendingDelivery, fixture.pendingDelivery.ID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &updatedPendingDelivery, fixture.pendingDelivery.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), updatedPendingDelivery.Status)
 			assert.Equal(t, 1, updatedPendingDelivery.AttemptCount)
 			require.NotNil(t, updatedPendingDelivery.SentAt)
 			assert.Equal(t, fixedSentAt, updatedPendingDelivery.SentAt.UTC())
 
 			var updatedSentOutbox deliveryTestOutboxModel
-			require.NoError(t, db.First(&updatedSentOutbox, fixture.sentOutbox.ID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &updatedSentOutbox, fixture.sentOutbox.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), updatedSentOutbox.Status)
 			require.NotNil(t, updatedSentOutbox.SentAt)
 			assert.Equal(t, fixedSentAt, updatedSentOutbox.SentAt.UTC())
 
 			var updatedPendingOutbox deliveryTestOutboxModel
-			require.NoError(t, db.First(&updatedPendingOutbox, fixture.pendingOutbox.ID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &updatedPendingOutbox, fixture.pendingOutbox.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), updatedPendingOutbox.Status)
 			require.NotNil(t, updatedPendingOutbox.SentAt)
 			assert.Equal(t, fixedSentAt, updatedPendingOutbox.SentAt.UTC())
 
 			var updatedSentTracking deliveryTestTrackingModel
-			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).First(&updatedSentTracking).Error)
+			require.NoError(t, firstDeliveryTestRowWhere(db, &updatedSentTracking, "kind = ? AND content_id = ?", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).Error)
 			require.NotNil(t, updatedSentTracking.AlarmSentAt)
 			assert.Equal(t, tc.spec.alreadySentAt, updatedSentTracking.AlarmSentAt.UTC())
 			assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), updatedSentTracking.DeliveryStatus)
 
 			var updatedPendingTracking deliveryTestTrackingModel
-			require.NoError(t, db.Where("kind = ? AND content_id = ?", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).First(&updatedPendingTracking).Error)
+			require.NoError(t, firstDeliveryTestRowWhere(db, &updatedPendingTracking, "kind = ? AND content_id = ?", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).Error)
 			require.NotNil(t, updatedPendingTracking.AlarmSentAt)
 			assert.Equal(t, fixedSentAt, updatedPendingTracking.AlarmSentAt.UTC())
 			assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), updatedPendingTracking.DeliveryStatus)
 
 			var updatedSentState domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, db.First(&updatedSentState, "kind = ? AND post_id = ?", fixture.sentOutbox.Kind, fixture.sentPostID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &updatedSentState, "kind = ? AND post_id = ?", fixture.sentOutbox.Kind, fixture.sentPostID).Error)
 			require.NotNil(t, updatedSentState.AlarmSentAt)
 			assert.Equal(t, tc.spec.alreadySentAt, updatedSentState.AlarmSentAt.UTC())
 			assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, updatedSentState.DeliveryStatus)
 
 			var updatedPendingState domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, db.First(&updatedPendingState, "kind = ? AND post_id = ?", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &updatedPendingState, "kind = ? AND post_id = ?", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
 			assert.Nil(t, updatedPendingState.AuthorizedAt)
 			require.NotNil(t, updatedPendingState.AlarmSentAt)
 			assert.Equal(t, fixedSentAt, updatedPendingState.AlarmSentAt.UTC())
 			assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, updatedPendingState.DeliveryStatus)
 
 			var deliveryRows []deliveryTestDeliveryModel
-			require.NoError(t, db.Order("id ASC").Find(&deliveryRows).Error)
+			require.NoError(t, findDeliveryTestRowsOrdered(db, &deliveryRows, "id ASC").Error)
 			require.Len(t, deliveryRows, 2)
 		})
 	}

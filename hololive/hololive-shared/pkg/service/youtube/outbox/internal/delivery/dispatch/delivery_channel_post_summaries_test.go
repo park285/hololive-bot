@@ -14,7 +14,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
@@ -79,12 +79,12 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-30 * time.Hour),
 	}
-	require.NoError(t, db.Create(&communitySuccessOutbox).Error)
-	require.NoError(t, db.Create(&shortFailureOutbox).Error)
-	require.NoError(t, db.Create(&recoveredOutbox).Error)
-	require.NoError(t, db.Create(&oldOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &communitySuccessOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &shortFailureOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &recoveredOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &oldOutbox).Error)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
 		{
 			Kind:                 string(domain.OutboxKindCommunityPost),
 			ContentID:            communitySuccessOutbox.ContentID,
@@ -143,7 +143,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 	recoveredSuccessAt := now.Add(-25 * time.Minute)
 	oldSuccessAt := now.Add(-29 * time.Hour)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     1001,
 			AttemptOrdinal: 1,
@@ -228,7 +228,7 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	summaries, err := repository.ListChannelPostDeliverySummariesSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, summaries, 2)

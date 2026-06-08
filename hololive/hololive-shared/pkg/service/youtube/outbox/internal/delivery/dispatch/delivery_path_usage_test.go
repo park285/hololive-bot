@@ -14,7 +14,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 	t.Parallel()
 
 	ctx := context.Background()
-	db := newDeliveryTestDB(t)
+	db := newDeliveryPool(t)
 
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
@@ -45,10 +45,10 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 		NextAttemptAt: now,
 		CreatedAt:     now.Add(-75 * time.Minute),
 	}
-	require.NoError(t, db.Create(&communityOutbox).Error)
-	require.NoError(t, db.Create(&shortOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &communityOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &shortOutbox).Error)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
 		{
 			Kind:              string(domain.OutboxKindCommunityPost),
 			ContentID:         communityOutbox.ContentID,
@@ -82,7 +82,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 	legacyTraceAt := now.Add(-105 * time.Minute)
 	shortSuccessAt := now.Add(-45 * time.Minute)
 
-	require.NoError(t, db.Create([]deliveryTelemetryTestBufferModel{
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     1001,
 			AttemptOrdinal: 1,
@@ -134,7 +134,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryPathUsageSince_GroupsByCont
 		},
 	}).Error)
 
-	repository := NewDeliveryTelemetryRepository(db.Pool)
+	repository := NewDeliveryTelemetryRepository(db)
 	rows, err := repository.ListPostDeliveryPathUsageSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, rows, 4)
