@@ -69,7 +69,7 @@ remote_log_service_name() {
   local target="$1"
   local service="$2"
   case "${target}:${service}" in
-    osaka:youtube-producer-a|seoul:youtube-producer-b) printf '%s\n' "youtube-producer" ;;
+    osaka:youtube-producer-a) printf '%s\n' "youtube-producer" ;;
     *) printf '%s\n' "${service}" ;;
   esac
 }

@@ -23,6 +23,7 @@ package main
 import (
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -54,7 +55,7 @@ func main() {
 				Compress:   appConfig.Logging.Compress,
 			}
 		},
-		LoggerFileName: "youtube-producer.log",
+		LoggerFileName: youtubeProducerLogFileName(),
 		LoggerLevel: func(appConfig *config.Config) string {
 			return appConfig.Logging.Level
 		},
@@ -66,4 +67,12 @@ func main() {
 		BuildRuntime:      runtimeapp.BuildYouTubeProducerRuntime,
 		BuildErrorMessage: "Failed to build youtube producer runtime",
 	}))
+}
+
+func youtubeProducerLogFileName() string {
+	fileName := strings.TrimSpace(os.Getenv("YOUTUBE_PRODUCER_LOG_FILE_NAME"))
+	if fileName == "" || strings.Contains(fileName, "/") || strings.Contains(fileName, "\\") {
+		return "youtube-producer.log"
+	}
+	return fileName
 }
