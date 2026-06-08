@@ -243,20 +243,28 @@ func (c *JobRunClaim) Renew(ctx context.Context, ttl time.Duration) (bool, error
 }
 
 func (c *JobRunClaim) MarkCompleted(ctx context.Context, cooldownTTL time.Duration) (bool, error) {
+	return c.setCooldownAndRelease(ctx, cooldownTTL, "complete job run", "cooldown ttl")
+}
+
+func (c *JobRunClaim) Defer(ctx context.Context, retryAfter time.Duration) (bool, error) {
+	return c.setCooldownAndRelease(ctx, retryAfter, "defer job run", "retry after")
+}
+
+func (c *JobRunClaim) setCooldownAndRelease(ctx context.Context, ttl time.Duration, action, ttlName string) (bool, error) {
 	if c == nil || c.cacheClient == nil {
-		return false, fmt.Errorf("complete job run: claim must not be nil")
+		return false, fmt.Errorf("%s: claim must not be nil", action)
 	}
-	if cooldownTTL <= 0 {
-		return false, fmt.Errorf("complete job run: cooldown ttl must be positive")
+	if ttl <= 0 {
+		return false, fmt.Errorf("%s: %s must be positive", action, ttlName)
 	}
 	cmd := c.cacheClient.B().
 		Eval().
 		Script(completeJobRunScript).
 		Numkeys(2).
 		Key(c.keys.LeaseKey, c.keys.CooldownKey).
-		Arg(c.ownerToken, strconv.FormatInt(durationMillis(cooldownTTL), 10)).
+		Arg(c.ownerToken, strconv.FormatInt(durationMillis(ttl), 10)).
 		Build()
-	return evalBool(ctx, c.cacheClient, cmd, "complete job run")
+	return evalBool(ctx, c.cacheClient, cmd, action)
 }
 
 func (c *JobRunClaim) Release(ctx context.Context) (bool, error) {

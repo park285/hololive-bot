@@ -55,10 +55,6 @@ func (c *Client) currentPageFetcherWithEngine() (pageFetcher, FetcherEngine) {
 }
 
 func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string, err error) {
-	if err := c.fetchPagePreflight(ctx, pageURL); err != nil {
-		return "", err
-	}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -97,8 +93,14 @@ func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string) error {
 	if cooldownRemaining := c.backoffState.HardCooldownRemaining(); cooldownRemaining > 0 {
 		return fmt.Errorf("in cooldown for %v: %w", cooldownRemaining.Round(time.Second), ErrRateLimited)
 	}
-	if err := c.rateLimiter.WaitWithBucket(ctx, distributedBucketFromURL(pageURL)); err != nil {
-		return fmt.Errorf("rate limiter wait failed: %w", err)
+
+	bucket := distributedBucketFromURL(pageURL)
+	decision, err := c.rateLimiter.TryReserveWithBucket(ctx, bucket)
+	if err != nil {
+		return fmt.Errorf("rate limiter admission failed: %w", err)
+	}
+	if !decision.Allowed {
+		return newRateLimitAdmissionDeferredError(bucket, decision)
 	}
 	return nil
 }

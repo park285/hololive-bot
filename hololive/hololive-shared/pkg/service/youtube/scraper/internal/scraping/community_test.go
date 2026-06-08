@@ -102,6 +102,44 @@ func TestGetCommunityPosts_404DoesNotRecordHTMLCooldown(t *testing.T) {
 	require.False(t, skip, "community /posts 404 should not cooldown the shared HTML source; wait=%s", wait)
 }
 
+func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *testing.T) {
+	httpClient := &http.Client{
+		Transport: communityRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("<html>ytInitialData = {};</html>")),
+			}, nil
+		}),
+	}
+
+	client := NewClient(
+		WithHTTPClient(httpClient),
+		WithRateLimiter(NewRateLimiter(time.Hour)),
+		WithUAProvider(ua.NewStaticProvider("test-agent")),
+		WithStateStore(newChannelHealthTestStore()),
+		WithChannelHealthPolicy(ChannelHealthPolicy{
+			Enforce:     true,
+			TimeoutBase: time.Hour,
+			TimeoutMax:  time.Hour,
+		}),
+	)
+
+	html, missing, err := client.fetchCommunityPostsPage(context.Background(), "UC_TEST")
+	require.NoError(t, err)
+	require.False(t, missing)
+	require.NotEmpty(t, html)
+
+	errCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, _, err = client.fetchCommunityPostsPage(errCtx, "UC_TEST")
+	require.Error(t, err)
+	require.True(t, IsAdmissionDeferred(err), "err = %v", err)
+
+	wait, skip := client.channelHealth.ShouldSkip(context.Background(), "UC_TEST", FailureSourceHTML, time.Now())
+	require.False(t, skip, "admission defer should not cooldown the shared HTML source; wait=%s", wait)
+}
+
 func TestParseBackstagePostIncludesUpstreamPostID(t *testing.T) {
 	client := &Client{}
 	post := client.parseBackstagePost(gjson.Parse(`{

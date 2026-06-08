@@ -64,6 +64,33 @@ func TestJobRunGuardMarkCompletedCreatesCooldown(t *testing.T) {
 	require.Greater(t, next.RetryAfter, time.Duration(0))
 }
 
+func TestJobRunGuardDeferCreatesCooldown(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	guard := NewJobRunGuard(cache, JobRunGuardConfig{
+		Namespace:  "test",
+		InstanceID: "ap-a",
+	})
+	identity := JobIdentity{PollerName: "community", ChannelID: "UC_DEFER", Interval: time.Minute}
+
+	status, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	require.NoError(t, err)
+	require.Equal(t, JobClaimAcquired, status.Result)
+
+	deferred, err := claim.Defer(ctx, 5*time.Second)
+	require.NoError(t, err)
+	require.True(t, deferred)
+
+	next, nextClaim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	require.NoError(t, err)
+	require.Equal(t, JobClaimAlreadyCompleted, next.Result)
+	require.Nil(t, nextClaim)
+	require.Greater(t, next.RetryAfter, time.Duration(0))
+	require.LessOrEqual(t, next.RetryAfter, 5*time.Second)
+}
+
 func TestJobRunGuardWinnerCompleteMakesPeerAlreadyCompleted(t *testing.T) {
 	t.Parallel()
 
@@ -135,6 +162,49 @@ func TestJobRunGuardMarkCompletedUsesOwnerCAS(t *testing.T) {
 	_, hit, err := cache.GetString(ctx, claim.CooldownKey())
 	require.NoError(t, err)
 	require.False(t, hit)
+}
+
+func TestJobRunGuardDeferUsesOwnerCAS(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	guard := NewJobRunGuard(cache, JobRunGuardConfig{
+		Namespace:  "test",
+		InstanceID: "ap-a",
+	})
+	identity := JobIdentity{PollerName: "shorts", ChannelID: "UC_DEFER_CAS", Interval: time.Minute}
+
+	_, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	require.NoError(t, err)
+	require.NoError(t, cache.GetClient().Do(ctx, cache.B().Set().Key(claim.LeaseKey()).Value("peer-owner").Build()).Error())
+
+	deferred, err := claim.Defer(ctx, 5*time.Second)
+	require.NoError(t, err)
+	require.False(t, deferred)
+
+	_, hit, err := cache.GetString(ctx, claim.CooldownKey())
+	require.NoError(t, err)
+	require.False(t, hit)
+}
+
+func TestJobRunGuardDeferRejectsNonPositiveTTL(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	guard := NewJobRunGuard(cache, JobRunGuardConfig{
+		Namespace:  "test",
+		InstanceID: "ap-a",
+	})
+	identity := JobIdentity{PollerName: "shorts", ChannelID: "UC_DEFER_TTL", Interval: time.Minute}
+
+	_, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	require.NoError(t, err)
+
+	deferred, err := claim.Defer(ctx, 0)
+	require.Error(t, err)
+	require.False(t, deferred)
 }
 
 func TestJobRunGuardRenewAndReleaseUseOwnerCAS(t *testing.T) {

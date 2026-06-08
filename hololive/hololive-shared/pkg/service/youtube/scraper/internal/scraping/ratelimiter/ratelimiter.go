@@ -55,9 +55,7 @@ func (r *RateLimiter) Wait(ctx context.Context) error {
 }
 
 func (r *RateLimiter) WaitWithBucket(ctx context.Context, bucket string) error {
-	if bucket == "" {
-		bucket = "default"
-	}
+	bucket = normalizeBucket(bucket)
 	if err := r.waitLocal(ctx); err != nil {
 		return err
 	}

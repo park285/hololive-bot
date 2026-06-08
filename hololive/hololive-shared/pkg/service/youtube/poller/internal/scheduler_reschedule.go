@@ -40,10 +40,11 @@ type retryDelayError interface {
 type JobSkipReason string
 
 const (
-	JobSkipPeerOwned        JobSkipReason = "peer_owned"
-	JobSkipAlreadyCompleted JobSkipReason = "already_completed"
-	JobSkipBudgetExhausted  JobSkipReason = "budget_exhausted"
-	JobSkipSourceCooldown   JobSkipReason = "source_cooldown"
+	JobSkipPeerOwned         JobSkipReason = "peer_owned"
+	JobSkipAlreadyCompleted  JobSkipReason = "already_completed"
+	JobSkipBudgetExhausted   JobSkipReason = "budget_exhausted"
+	JobSkipSourceCooldown    JobSkipReason = "source_cooldown"
+	JobSkipAdmissionDeferred JobSkipReason = "admission_deferred"
 )
 
 func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
@@ -126,9 +127,15 @@ func (s *Scheduler) rescheduleJobAfterBudgetSkip(job *Job, retryAfter time.Durat
 }
 
 func (s *Scheduler) updateJobNextRunAfterPoll(job *Job, pollErr error, now time.Time) {
-	if pollErr != nil && !errors.Is(pollErr, context.Canceled) {
-		s.updateJobNextRunAfterFailure(job, pollErr, now)
-		return
+	if pollErr != nil {
+		if isAdmissionDeferredPollError(pollErr) {
+			s.updateJobNextRunAfterAdmissionDeferred(job, pollErr, now)
+			return
+		}
+		if !errors.Is(pollErr, context.Canceled) {
+			s.updateJobNextRunAfterFailure(job, pollErr, now)
+			return
+		}
 	}
 	s.updateJobNextRunAfterSuccess(job, now)
 }

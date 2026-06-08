@@ -169,6 +169,9 @@ func isRetryableVideoPageError(err error) bool {
 }
 
 func isRetryableFetchPageError(err error) bool {
+	if IsAdmissionDeferred(err) {
+		return false
+	}
 	return errors.Is(err, ErrEmptyResponse) ||
 		errors.Is(err, errFetchAttemptTimeout) ||
 		isRetryableStatusError(err) ||

@@ -92,6 +92,10 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 	var result string
 
 	err := retry.WithRetry(ctx, c.fetchPageRetryOptions(pageURL, resolvedPolicy), func(ctx context.Context) error {
+		if err := c.fetchPagePreflight(ctx, pageURL); err != nil {
+			return err
+		}
+
 		attemptCtx, cancel := contextWithFetchAttemptTimeout(ctx, resolvedPolicy)
 		defer cancel()
 
@@ -190,7 +194,7 @@ func shouldRetryFetchPage(err error) bool {
 }
 
 func (c *Client) recordFetchPageTransientError(ctx context.Context, err error) {
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || IsAdmissionDeferred(err) {
 		return
 	}
 	if isRetryableFetchPageError(err) {

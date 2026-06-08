@@ -88,6 +88,9 @@ func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) 
 		return "", true, nil
 	}
 	if err != nil {
+		if IsAdmissionDeferred(err) {
+			return "", false, err
+		}
 		delay := c.recordChannelSourceFailure(ctx, channelID, ClassifyFailure(err, FailureSourceHTML))
 		return "", false, channelSourceCooldownError(FailureSourceHTML, delay, err)
 	}

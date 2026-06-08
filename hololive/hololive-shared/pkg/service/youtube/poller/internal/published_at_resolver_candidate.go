@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
@@ -252,6 +253,9 @@ func (r *PendingPublishedAtResolver) handlePendingPublishedAtResolveError(
 ) (publishedAtResolverCandidateResult, error) {
 	if errors.Is(err, errResolverParentCanceled) {
 		return publishedAtResolverCandidateResult{}, fmt.Errorf("run pending published_at resolver: parent context canceled: %w", ctx.Err())
+	}
+	if scraper.IsAdmissionDeferred(err) {
+		return result, err
 	}
 
 	m := r.ensureMetrics()

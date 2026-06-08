@@ -65,6 +65,10 @@ func (c jobRunGuardClaim) MarkCompleted(ctx context.Context, cooldownTTL time.Du
 	return c.claim.MarkCompleted(ctx, cooldownTTL)
 }
 
+func (c jobRunGuardClaim) Defer(ctx context.Context, retryAfter time.Duration) (bool, error) {
+	return c.claim.Defer(ctx, retryAfter)
+}
+
 func (c jobRunGuardClaim) Release(ctx context.Context) (bool, error) {
 	return c.claim.Release(ctx)
 }

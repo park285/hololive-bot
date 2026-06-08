@@ -291,6 +291,16 @@ func (s *Scheduler) logPollResult(job *Job, workerID int, pollCtx context.Contex
 			"elapsed", elapsed)
 		return "success"
 	}
+	if isAdmissionDeferredPollError(err) {
+		s.logger.Debug("Poll deferred",
+			"poller", job.Poller.Name(),
+			"channel_id", job.ChannelID,
+			"worker_id", workerID,
+			"retry_after", admissionRetryAfterFromError(err, s.errorBackoffMin),
+			"elapsed", elapsed,
+			"error", err)
+		return "deferred"
+	}
 	if errors.Is(err, context.Canceled) {
 		s.logger.Debug("Poll canceled",
 			"poller", job.Poller.Name(),

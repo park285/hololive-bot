@@ -24,6 +24,9 @@ func (c *Client) fetchChannelSourcePage(ctx context.Context, operation, channelI
 	}
 	html, err := c.fetchPage(ctx, pageURL, policy...)
 	if err != nil {
+		if IsAdmissionDeferred(err) {
+			return "", err
+		}
 		delay := c.recordChannelSourceFailure(ctx, channelID, ClassifyFailure(err, source))
 		return "", channelSourceCooldownError(source, delay, err)
 	}

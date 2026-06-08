@@ -26,6 +26,7 @@ const (
 	FailureReasonResponseTooLarge   FailureReason = "response_too_large"
 	FailureReasonChannelNotFound    FailureReason = "channel_not_found"
 	FailureReasonChannelUnavailable FailureReason = "channel_unavailable"
+	FailureReasonAdmissionDeferred  FailureReason = "admission_deferred"
 	FailureReasonContextCanceled    FailureReason = "context_canceled"
 	FailureReasonUnknown            FailureReason = "unknown"
 )
@@ -53,6 +54,7 @@ func ClassifyFailure(err error, source FailureSource) FailureDetail {
 	}
 	detail := FailureDetail{Reason: FailureReasonUnknown, Source: source, Message: err.Error()}
 	for _, classify := range []func(error, *FailureDetail) bool{
+		classifyAdmissionDeferredFailure,
 		classifyContextFailure,
 		classifyYouTubeSentinelFailure,
 		classifyHTTPFailure,
@@ -64,6 +66,18 @@ func ClassifyFailure(err error, source FailureSource) FailureDetail {
 		}
 	}
 	return detail
+}
+
+func classifyAdmissionDeferredFailure(err error, detail *FailureDetail) bool {
+	if !IsAdmissionDeferred(err) {
+		return false
+	}
+	detail.Reason = FailureReasonAdmissionDeferred
+	var deferred *AdmissionDeferredError
+	if errors.As(err, &deferred) && deferred != nil {
+		detail.RetryAfter = deferred.RetryDelay()
+	}
+	return true
 }
 
 func classifyContextFailure(err error, detail *FailureDetail) bool {

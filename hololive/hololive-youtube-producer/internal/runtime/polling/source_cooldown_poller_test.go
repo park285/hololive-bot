@@ -71,6 +71,16 @@ func TestSourceCooldownReportingPollerReportsOnlySourceLevelYouTubeErrors(t *tes
 
 	reporter.calls = 0
 	wrapped = newSourceCooldownReportingPoller(
+		sourceCooldownTestPoller{err: scraper.ErrAdmissionDeferred},
+		reporter,
+		poller.BudgetSourceYouTubeScraper,
+		nil,
+	)
+	require.Error(t, wrapped.Poll(context.Background(), "UC_TEST"))
+	require.Equal(t, 0, reporter.calls)
+
+	reporter.calls = 0
+	wrapped = newSourceCooldownReportingPoller(
 		sourceCooldownTestPoller{err: errors.New("parser drift")},
 		reporter,
 		poller.BudgetSourceYouTubeScraper,

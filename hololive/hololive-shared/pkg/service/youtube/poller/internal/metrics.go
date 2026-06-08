@@ -50,6 +50,7 @@ type Metrics struct {
 	JobLeaseElapsedRatio              *prometheus.GaugeVec
 	JobLeaseNearExpiryTotal           *prometheus.CounterVec
 	JobMarkCompletedTotal             *prometheus.CounterVec
+	JobDeferTotal                     *prometheus.CounterVec
 	JobReleaseTotal                   *prometheus.CounterVec
 	OutboxInsertTotal                 *prometheus.CounterVec
 	CommunityShortsDetectedPostsTotal *prometheus.CounterVec
@@ -133,6 +134,10 @@ func (m *Metrics) registerJobClaimMetrics() {
 	m.JobMarkCompletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_mark_completed_total",
 		Help: "poller별 distributed job completion marker 결과",
+	}, []string{"poller", "result"})
+	m.JobDeferTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_job_defer_total",
+		Help: "poller별 distributed job defer marker 결과",
 	}, []string{"poller", "result"})
 	m.JobReleaseTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_release_total",
@@ -238,6 +243,10 @@ func (m *Metrics) ObserveJobLeaseNearExpiry(pollerName string) {
 
 func (m *Metrics) ObserveJobMarkCompleted(pollerName, result string) {
 	m.JobMarkCompletedTotal.WithLabelValues(pollerName, result).Inc()
+}
+
+func (m *Metrics) ObserveJobDefer(pollerName, result string) {
+	m.JobDeferTotal.WithLabelValues(pollerName, result).Inc()
 }
 
 func (m *Metrics) ObserveJobRelease(pollerName, result string) {

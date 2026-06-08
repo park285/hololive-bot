@@ -3,8 +3,10 @@ package polling
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -39,6 +41,36 @@ func TestBuildJobRunGuardClaimerMapsClaims(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "acquired", string(status.Result))
 	require.NotNil(t, claim)
+}
+
+func TestBuildJobRunGuardClaimerMapsDefer(t *testing.T) {
+	ctx := context.Background()
+	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	claimer, err := BuildJobRunGuardClaimer(cache, config.ScraperActiveActiveConfig{
+		Enabled:    true,
+		Namespace:  "test",
+		InstanceID: "ap-a",
+	})
+	require.NoError(t, err)
+
+	status, claim, err := claimer.TryClaim(ctx, "videos", "UC_DEFER", testLeaseTTL, testCooldownTTL)
+	require.NoError(t, err)
+	require.Equal(t, poller.JobClaimAcquired, status.Result)
+
+	deferrer, ok := claim.(interface {
+		Defer(context.Context, time.Duration) (bool, error)
+	})
+	require.True(t, ok, "jobRunGuardClaim must expose Defer for admission deferred polls")
+
+	deferred, err := deferrer.Defer(ctx, 5*time.Second)
+	require.NoError(t, err)
+	require.True(t, deferred)
+
+	status, peerClaim, err := claimer.TryClaim(ctx, "videos", "UC_DEFER", testLeaseTTL, testCooldownTTL)
+	require.NoError(t, err)
+	require.Equal(t, poller.JobClaimAlreadyCompleted, status.Result)
+	require.Nil(t, peerClaim)
+	require.Greater(t, status.RetryAfter, time.Duration(0))
 }
 
 const (

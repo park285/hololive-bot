@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 func TestPendingPublishedAtResolver_StartWaitsIntervalAfterCompletion(t *testing.T) {
@@ -133,6 +134,43 @@ func TestPendingPublishedAtResolver_UsesPerCandidateResolveTimeout(t *testing.T)
 	var alarmState domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-timeout").Error)
 	require.NotNil(t, alarmState.PublishedAtRetryAfter)
+}
+
+func TestPendingPublishedAtResolver_AdmissionDeferredDoesNotSetCandidateRetryAfter(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	seedPendingShortResolution(t, db, "channel-admission", "short-admission", detectedAt)
+
+	limiter := scraper.NewRateLimiter(time.Hour)
+	decision, err := limiter.TryReserve(context.Background())
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+
+	resolver := &PendingPublishedAtResolver{
+		db:                db,
+		client:            scraper.NewClient(scraper.WithRateLimiter(limiter)),
+		interval:          15 * time.Second,
+		batchSize:         1,
+		maxResolvePerRun:  1,
+		maxRunDuration:    200 * time.Millisecond,
+		resolveTimeout:    100 * time.Millisecond,
+		failureBackoffTTL: time.Minute,
+		logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	err = resolver.runOnce(context.Background(), detectedAt.Add(time.Minute))
+	require.Error(t, err)
+	require.True(t, scraper.IsAdmissionDeferred(err), "err = %v", err)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-admission").Error)
+	require.Nil(t, alarmState.PublishedAtRetryAfter)
 }
 
 func TestPendingPublishedAtResolver_SkipsFreshCandidatesBeforeMinDetectedAge(t *testing.T) {

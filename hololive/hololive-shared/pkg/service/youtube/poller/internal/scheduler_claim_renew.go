@@ -159,6 +159,9 @@ func (s *Scheduler) finishJobClaim(ctx context.Context, job *Job, claim JobClaim
 		}
 		return nil
 	}
+	if isAdmissionDeferredPollError(pollErr) {
+		return s.deferJobClaim(completeCtx, job, claim, pollErr)
+	}
 
 	s.releaseJobClaim(completeCtx, job, claim)
 	return pollErr

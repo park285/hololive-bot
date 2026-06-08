@@ -22,6 +22,7 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 	m.ObserveJobClaim("videos", "acquired")
 	m.ObserveJobLeaseRenew("", "success")
 	m.ObserveJobMarkCompleted("resolver", "lost")
+	m.ObserveJobDefer("resolver", "success")
 	m.ObserveJobRelease("resolver", "error")
 	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, "success", 2)
 	m.CommunityShortsDetectedPostsTotal.WithLabelValues(string(domain.AlarmTypeShorts)).Add(3)
@@ -57,6 +58,10 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 	assertCounterValue(t, families, "youtube_poller_job_mark_completed_total", map[string]string{
 		"poller": "resolver",
 		"result": "lost",
+	}, 1)
+	assertCounterValue(t, families, "youtube_poller_job_defer_total", map[string]string{
+		"poller": "resolver",
+		"result": "success",
 	}, 1)
 	assertCounterValue(t, families, "youtube_poller_job_release_total", map[string]string{
 		"poller": "resolver",
