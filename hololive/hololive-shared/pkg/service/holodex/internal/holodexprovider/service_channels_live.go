@@ -309,6 +309,11 @@ func (h *Service) hydrateIndieStreamChannel(stream *domain.Stream, indieRequeste
 			Name: stream.ChannelName,
 		}
 	}
+	if override, ok := constants.IndieChannelOrgOverrides[stream.ChannelID]; ok {
+		org := override
+		stream.Channel.Org = &org
+		return
+	}
 	if stream.Channel.Org == nil || *stream.Channel.Org == "" {
 		stream.Channel.Org = &indie
 	}

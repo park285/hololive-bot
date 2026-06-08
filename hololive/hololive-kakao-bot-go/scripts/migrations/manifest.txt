@@ -62,3 +62,4 @@
 062 065_record_alarm_dispatch_event_collisions.sql
 063 066_pg18_db_usage_hot_table_autovacuum.sql
 064 067_align_claim_index_due_first.sql
+065 068_add_shigure_ui.sql

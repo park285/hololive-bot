@@ -144,6 +144,55 @@ func TestGetChannelsLiveStatus_DoesNotHydrateNonIndieMissingOrg(t *testing.T) {
 	}
 }
 
+func TestGetChannelsLiveStatus_AppliesIndieOrgOverride(t *testing.T) {
+	t.Parallel()
+
+	const channelID = "UCt30jJgChL8qeT9VPadidSw" // しぐれうい (Shigure Ui)
+	override, ok := constants.IndieChannelOrgOverrides[channelID]
+	if !ok {
+		t.Fatalf("channel %q missing from IndieChannelOrgOverrides", channelID)
+	}
+
+	mockReq := &MockRequester{
+		DoRequestFunc: func(_ context.Context, method, path string, params url.Values) ([]byte, error) {
+			if method != "GET" {
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			}
+			if path != "/users/live" {
+				return nil, fmt.Errorf("unexpected path: %s", path)
+			}
+			if got := params.Get("channels"); got != channelID {
+				return nil, fmt.Errorf("channels = %q, want %q", got, channelID)
+			}
+			return fmt.Appendf(nil, `[
+				{
+					"id":"video-ui",
+					"title":"ui live",
+					"channel_id":"%s",
+					"status":"live",
+					"channel":{"id":"%s","name":"しぐれうい","org":"Independents"}
+				}
+			]`, channelID, channelID), nil
+		},
+	}
+
+	service := newServiceForFallbackTest(mockReq)
+
+	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{channelID})
+	if err != nil {
+		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
+	}
+	if len(streams) != 1 {
+		t.Fatalf("len(streams) = %d, want 1", len(streams))
+	}
+	if streams[0].Channel == nil || streams[0].Channel.Org == nil {
+		t.Fatalf("stream channel/org not hydrated: %+v", streams[0].Channel)
+	}
+	if got := *streams[0].Channel.Org; got != override {
+		t.Fatalf("channel org = %q, want %q (override forced over Holodex value)", got, override)
+	}
+}
+
 func TestCacheManager_GetChannelsLiveStatusStreams_OrderIndependentKeys(t *testing.T) {
 	t.Parallel()
 

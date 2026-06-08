@@ -55,4 +55,12 @@ var HolodexAPIParams = struct {
 var IndieChannelIDs = []string{
 	"UCrV1Hf5r8P148idjoSfrGEQ", // 結城さくな (Yuuki Sakuna)
 	"UCxsZ6NCzjU_t4YSxQLBcM5A", // 사메코 사바 (Sameko Saba)
+	"UCt30jJgChL8qeT9VPadidSw", // しぐれうい (Shigure Ui) — Holodex상 개인세라 채널 직접 조회 대상
+}
+
+// IndieChannelOrgOverrides는 IndieChannelIDs 채널 중 라이브 표시 org를 기본값
+// (Independents)이 아닌 다른 값으로 고정해야 하는 예외를 정의한다. Holodex 응답 org와
+// 무관하게 강제 적용된다. 시구레 우이(우이마마)는 홀로멤 취급 밈을 반영해 Hololive로 노출한다.
+var IndieChannelOrgOverrides = map[string]string{
+	"UCt30jJgChL8qeT9VPadidSw": "Hololive", // しぐれうい (Shigure Ui)
 }
