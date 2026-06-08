@@ -22,7 +22,6 @@ package readiness
 
 import (
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -159,101 +158,6 @@ func (s *State) MarkLeaseUnavailable(reason string) {
 	s.leaseReason.Store(reason)
 }
 
-func (s *State) SetGlobalBudgetEnabled(enabled bool) {
-	if s == nil {
-		return
-	}
-	s.globalBudgetEnabled.Store(enabled)
-}
-
-func (s *State) MarkBudgetBackendUnavailable(reason string) {
-	if s == nil {
-		return
-	}
-	s.budgetBackendAvailable.Store(false)
-	if reason = strings.TrimSpace(reason); reason != "" {
-		s.lastError.Store(reason)
-	}
-}
-
-func (s *State) MarkBudgetBackendAvailable() {
-	if s == nil {
-		return
-	}
-	s.budgetBackendAvailable.Store(true)
-}
-
-func (s *State) MarkBudgetAdmissionDenied(reason string, sources []string) {
-	if s == nil {
-		return
-	}
-	reason = strings.TrimSpace(reason)
-	if reason != "budget_exhausted" && reason != "source_cooldown" && reason != "budget_cleanup_incomplete" {
-		return
-	}
-	normalized := normalizeBudgetSources(sources)
-	if len(normalized) == 0 {
-		return
-	}
-	s.budgetMu.Lock()
-	defer s.budgetMu.Unlock()
-	if reason == "source_cooldown" {
-		for _, source := range normalized {
-			s.sourceCooldown[source] = time.Time{}
-			delete(s.budgetExhausted, source)
-			delete(s.budgetCleanupIncomplete, source)
-		}
-		return
-	}
-	if reason == "budget_cleanup_incomplete" {
-		for _, source := range normalized {
-			s.budgetCleanupIncomplete[source] = struct{}{}
-			delete(s.budgetExhausted, source)
-			delete(s.sourceCooldown, source)
-		}
-		return
-	}
-	for _, source := range normalized {
-		s.budgetExhausted[source] = struct{}{}
-		delete(s.sourceCooldown, source)
-		delete(s.budgetCleanupIncomplete, source)
-	}
-}
-
-// reserve가 다시 돌지 않는 source(fallback 전용 등)도 TTL이 지나면 readiness에서 자동 해제한다.
-func (s *State) MarkSourceCooldownFor(sources []string, ttl time.Duration) {
-	if s == nil || ttl <= 0 {
-		return
-	}
-	normalized := normalizeBudgetSources(sources)
-	if len(normalized) == 0 {
-		return
-	}
-	expiry := s.now().Add(ttl)
-	s.budgetMu.Lock()
-	defer s.budgetMu.Unlock()
-	for _, source := range normalized {
-		s.sourceCooldown[source] = expiry
-	}
-}
-
-func (s *State) ClearBudgetAdmission(sources []string) {
-	if s == nil {
-		return
-	}
-	normalized := normalizeBudgetSources(sources)
-	if len(normalized) == 0 {
-		return
-	}
-	s.budgetMu.Lock()
-	defer s.budgetMu.Unlock()
-	for _, source := range normalized {
-		delete(s.budgetExhausted, source)
-		delete(s.sourceCooldown, source)
-		delete(s.budgetCleanupIncomplete, source)
-	}
-}
-
 func (s *State) Response() (int, map[string]any) {
 	base := health.Get()
 	if s == nil {
@@ -369,51 +273,4 @@ func normalizeScraperFetcherEngine(engine string) string {
 	default:
 		return defaultScraperFetcherEngine
 	}
-}
-
-func (s *State) budgetAdmissionPayload(budgetEnabled bool) (bool, bool, bool, []string) {
-	if !budgetEnabled {
-		return false, false, false, []string{}
-	}
-	s.budgetMu.Lock()
-	defer s.budgetMu.Unlock()
-	now := s.now()
-	for source, expiry := range s.sourceCooldown {
-		if !expiry.IsZero() && now.After(expiry) {
-			delete(s.sourceCooldown, source)
-		}
-	}
-	affected := make(map[string]struct{}, len(s.budgetExhausted)+len(s.sourceCooldown)+len(s.budgetCleanupIncomplete))
-	for source := range s.budgetExhausted {
-		affected[source] = struct{}{}
-	}
-	for source := range s.sourceCooldown {
-		affected[source] = struct{}{}
-	}
-	for source := range s.budgetCleanupIncomplete {
-		affected[source] = struct{}{}
-	}
-	sources := make([]string, 0, len(affected))
-	for source := range affected {
-		sources = append(sources, source)
-	}
-	sort.Strings(sources)
-	return len(s.budgetExhausted) > 0, len(s.sourceCooldown) > 0, len(s.budgetCleanupIncomplete) > 0, sources
-}
-
-func normalizeBudgetSources(sources []string) []string {
-	seen := make(map[string]struct{}, len(sources))
-	normalized := make([]string, 0, len(sources))
-	for _, source := range sources {
-		source = strings.TrimSpace(source)
-		if source == "" {
-			continue
-		}
-		if _, ok := seen[source]; ok {
-			continue
-		}
-		seen[source] = struct{}{}
-		normalized = append(normalized, source)
-	}
-	return normalized
 }
