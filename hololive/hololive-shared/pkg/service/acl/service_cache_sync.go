@@ -57,11 +57,11 @@ func aclRoomsTempKey(key string) string {
 }
 
 func hasValkeyHashTag(key string) bool {
-	start := strings.IndexByte(key, '{')
-	if start < 0 {
+	_, after, ok := strings.Cut(key, "{")
+	if !ok {
 		return false
 	}
-	end := strings.IndexByte(key[start+1:], '}')
+	end := strings.IndexByte(after, '}')
 	return end > 0
 }
 
