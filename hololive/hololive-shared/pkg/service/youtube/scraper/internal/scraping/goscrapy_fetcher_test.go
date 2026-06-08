@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -45,6 +46,40 @@ func TestGoScrapyPageFetcher_ReturnsStatusHeadersAndBody(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "ok", resp.Header.Get("X-Goscrapy-Test"))
 	assert.Contains(t, string(resp.Body), "ytInitialData")
+}
+
+func TestGoScrapyFetchAppRegistersDiscardPipeline(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+	}))
+	defer server.Close()
+
+	logger := &recordingGoScrapyLogger{}
+	client := NewClient(
+		WithHTTPClient(server.Client()),
+		WithRateLimiter(NewRateLimiter(0)),
+		WithFetcherEngine(FetcherEngineGoScrapy),
+	)
+
+	app, err := newGoScrapyFetchApp(client, logger)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	appReq := app.Request(ctx)
+	appReq.Url(server.URL).Method(http.MethodGet)
+	app.Parse(appReq, func(_ context.Context, resp core.IResponseReader) {
+		_, _ = readGoScrapyResponse(resp)
+		cancel()
+	})
+
+	require.NoError(t, app.Start(ctx))
+
+	logs := logger.String()
+	assert.Contains(t, logs, "Starting pipeline manager with 1 pipelines")
+	assert.NotContains(t, logs, "No pipelines registered")
 }
 
 func TestGoScrapyFetchPageOnce_DoesNotFallbackOn429(t *testing.T) {
@@ -158,6 +193,42 @@ type failingGoscrapyRunner struct {
 
 func (r failingGoscrapyRunner) Run(context.Context, *Client, pageFetchRequest) (pageFetchResponse, bool, error) {
 	return pageFetchResponse{}, false, r.err
+}
+
+type recordingGoScrapyLogger struct {
+	mu      sync.Mutex
+	entries []string
+}
+
+func (l *recordingGoScrapyLogger) Debug(args ...any)                 { l.record(args...) }
+func (l *recordingGoScrapyLogger) Info(args ...any)                  { l.record(args...) }
+func (l *recordingGoScrapyLogger) Warn(args ...any)                  { l.record(args...) }
+func (l *recordingGoScrapyLogger) Error(args ...any)                 { l.record(args...) }
+func (l *recordingGoScrapyLogger) Debugf(format string, args ...any) { l.recordf(format, args...) }
+func (l *recordingGoScrapyLogger) Infof(format string, args ...any)  { l.recordf(format, args...) }
+func (l *recordingGoScrapyLogger) Warnf(format string, args ...any)  { l.recordf(format, args...) }
+func (l *recordingGoScrapyLogger) Errorf(format string, args ...any) { l.recordf(format, args...) }
+
+func (l *recordingGoScrapyLogger) WithName(string) core.ILogger {
+	return l
+}
+
+func (l *recordingGoScrapyLogger) record(args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = append(l.entries, fmt.Sprint(args...))
+}
+
+func (l *recordingGoScrapyLogger) recordf(format string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = append(l.entries, fmt.Sprintf(format, args...))
+}
+
+func (l *recordingGoScrapyLogger) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return strings.Join(l.entries, "\n")
 }
 
 func TestGoScrapyPageFetcher_TimeoutBeforeResponse(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/park285/shared-go/pkg/jsonutil"
 	"github.com/tech-engine/goscrapy/pkg/core"
+	"github.com/tech-engine/goscrapy/pkg/engine"
 	"github.com/tech-engine/goscrapy/pkg/gos"
 	goslogger "github.com/tech-engine/goscrapy/pkg/logger"
 )
@@ -29,6 +30,8 @@ type goscrapyPageFetcher struct {
 }
 
 type defaultGoscrapyRunner struct{}
+
+type discardGoScrapyPipeline struct{}
 
 type goscrapyFetchResult struct {
 	response    pageFetchResponse
@@ -100,10 +103,7 @@ func (defaultGoscrapyRunner) Run(ctx context.Context, client *Client, req pageFe
 	appCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	app, err := gos.New[struct{}](&gos.Config{
-		Client: client.currentHTTPClient(),
-		Logger: goslogger.NewNoopLogger(),
-	})
+	app, err := newGoScrapyFetchApp(client, nil)
 	if err != nil {
 		return pageFetchResponse{}, false, fmt.Errorf("goscrapy init: %w", err)
 	}
@@ -136,6 +136,33 @@ func (defaultGoscrapyRunner) Run(ctx context.Context, client *Client, req pageFe
 		poll:        poll.C,
 	}
 	return waitForGoScrapyFetch(waitState)
+}
+
+func newGoScrapyFetchApp(client *Client, logger core.ILogger) (*gos.App[struct{}], error) {
+	if logger == nil {
+		logger = goslogger.NewNoopLogger()
+	}
+
+	app, err := gos.New[struct{}](&gos.Config{
+		Client: client.currentHTTPClient(),
+		Logger: logger,
+	})
+	if err != nil {
+		return nil, err
+	}
+	app.WithPipelines(discardGoScrapyPipeline{})
+	return app, nil
+}
+
+func (discardGoScrapyPipeline) Open(context.Context) error {
+	return nil
+}
+
+func (discardGoScrapyPipeline) ProcessItem(engine.IPipelineItem, core.IOutput[struct{}]) error {
+	return nil
+}
+
+func (discardGoScrapyPipeline) Close() {
 }
 
 type goscrapyEngineSignals struct {
