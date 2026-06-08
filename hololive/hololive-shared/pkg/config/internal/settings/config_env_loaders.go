@@ -197,6 +197,7 @@ func LoadYouTubeProducerGlobalBudgetConfig() YouTubeProducerGlobalBudgetConfig {
 		BrowserSnapshotMaxInflight: loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_BROWSER_SNAPSHOT_MAX_INFLIGHT", defaults.BrowserSnapshotMaxInflight),
 		BackfillMaxInflight:        loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_BACKFILL_MAX_INFLIGHT", defaults.BackfillMaxInflight),
 		FallbackMaxInflight:        loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_FALLBACK_MAX_INFLIGHT", defaults.FallbackMaxInflight),
+		CleanupLimit:               loadYouTubeProducerBudgetCleanupLimit(defaults.CleanupLimit),
 		WindowCheckEnabled:         sharedenv.Bool("YOUTUBE_PRODUCER_BUDGET_WINDOW_CHECK_ENABLED", defaults.WindowCheckEnabled),
 	}
 }
@@ -216,6 +217,14 @@ func loadYouTubeProducerBudgetMaxInflight(key string, defaultValue int) int {
 	value := sharedenv.Int(key, defaultValue)
 	if value < 0 {
 		return 0
+	}
+	return value
+}
+
+func loadYouTubeProducerBudgetCleanupLimit(defaultValue int) int {
+	value := sharedenv.Int("YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT", defaultValue)
+	if value <= 0 {
+		return defaultValue
 	}
 	return value
 }

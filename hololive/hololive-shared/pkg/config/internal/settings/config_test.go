@@ -1784,6 +1784,7 @@ func clearYouTubeProducerGlobalBudgetEnv(t *testing.T) {
 		"YOUTUBE_PRODUCER_BUDGET_BROWSER_SNAPSHOT_MAX_INFLIGHT",
 		"YOUTUBE_PRODUCER_BUDGET_BACKFILL_MAX_INFLIGHT",
 		"YOUTUBE_PRODUCER_BUDGET_FALLBACK_MAX_INFLIGHT",
+		"YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT",
 		"YOUTUBE_PRODUCER_BUDGET_WINDOW_CHECK_ENABLED",
 	} {
 		t.Setenv(key, "")
@@ -1814,6 +1815,7 @@ func TestLoadYouTubeProducerGlobalBudgetConfigDefaults(t *testing.T) {
 		BrowserSnapshotMaxInflight: 1,
 		BackfillMaxInflight:        2,
 		FallbackMaxInflight:        2,
+		CleanupLimit:               128,
 		WindowCheckEnabled:         false,
 	})
 }
@@ -1828,6 +1830,7 @@ func TestLoadYouTubeProducerGlobalBudgetConfigEnvOverrides(t *testing.T) {
 	t.Setenv("YOUTUBE_PRODUCER_BUDGET_BROWSER_SNAPSHOT_MAX_INFLIGHT", "2")
 	t.Setenv("YOUTUBE_PRODUCER_BUDGET_BACKFILL_MAX_INFLIGHT", "4")
 	t.Setenv("YOUTUBE_PRODUCER_BUDGET_FALLBACK_MAX_INFLIGHT", "8")
+	t.Setenv("YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT", "17")
 	t.Setenv("YOUTUBE_PRODUCER_BUDGET_WINDOW_CHECK_ENABLED", "true")
 
 	config := LoadYouTubeProducerGlobalBudgetConfig()
@@ -1841,6 +1844,7 @@ func TestLoadYouTubeProducerGlobalBudgetConfigEnvOverrides(t *testing.T) {
 		BrowserSnapshotMaxInflight: 2,
 		BackfillMaxInflight:        4,
 		FallbackMaxInflight:        8,
+		CleanupLimit:               17,
 		WindowCheckEnabled:         true,
 	})
 }
@@ -1865,6 +1869,31 @@ func TestLoadYouTubeProducerGlobalBudgetConfigAcquireTimeoutClamp(t *testing.T) 
 
 			if config.AcquireTimeout != tt.want {
 				t.Fatalf("AcquireTimeout = %s, want %s", config.AcquireTimeout, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadYouTubeProducerGlobalBudgetConfigCleanupLimitDefault(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want int
+	}{
+		{name: "zero", env: "0", want: 128},
+		{name: "negative", env: "-1", want: 128},
+		{name: "positive", env: "9", want: 9},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearYouTubeProducerGlobalBudgetEnv(t)
+			t.Setenv("YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT", tt.env)
+
+			config := LoadYouTubeProducerGlobalBudgetConfig()
+
+			if config.CleanupLimit != tt.want {
+				t.Fatalf("CleanupLimit = %d, want %d", config.CleanupLimit, tt.want)
 			}
 		})
 	}

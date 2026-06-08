@@ -46,6 +46,7 @@ type YouTubeProducerGlobalBudgetConfig struct {
 	BrowserSnapshotMaxInflight int
 	BackfillMaxInflight        int
 	FallbackMaxInflight        int
+	CleanupLimit               int
 	WindowCheckEnabled         bool
 }
 
@@ -59,6 +60,7 @@ func DefaultYouTubeProducerGlobalBudgetConfig() YouTubeProducerGlobalBudgetConfi
 		BrowserSnapshotMaxInflight: 1,
 		BackfillMaxInflight:        2,
 		FallbackMaxInflight:        2,
+		CleanupLimit:               128,
 		WindowCheckEnabled:         false,
 	}
 }

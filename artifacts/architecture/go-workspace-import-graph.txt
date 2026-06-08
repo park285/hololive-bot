@@ -929,6 +929,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal -> github.co
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal -> github.com/kapu/hololive-shared/pkg/service/youtube/contentid
+github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/admission
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal -> github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
@@ -962,6 +963,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/internal/retry
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/service/ratelimit
+github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/admission
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/browserfetcher
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping/backoff

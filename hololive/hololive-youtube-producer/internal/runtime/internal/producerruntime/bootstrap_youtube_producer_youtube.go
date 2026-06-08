@@ -240,6 +240,7 @@ func buildIngestionRuntimeGlobalBudgetWiring(
 			poller.BudgetBurstFallback: budgetCfg.FallbackMaxInflight,
 		},
 		WindowCheckEnabled: budgetCfg.WindowCheckEnabled,
+		CleanupLimit:       budgetCfg.CleanupLimit,
 	})
 	if err != nil {
 		return polling.GlobalBudgetWiring{}, fmt.Errorf("build global budget limiter: %w", err)

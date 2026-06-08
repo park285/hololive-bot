@@ -22,6 +22,7 @@ package producerruntime
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"reflect"
@@ -56,6 +57,13 @@ import (
 type fakeMemberDataProvider struct {
 	members []*domain.Member
 }
+
+var seedProducerRuntimeExpiredBudgetReservationsLua = valkey.NewLuaScript(`
+redis.call('SET', KEYS[1], '2')
+redis.call('SET', KEYS[2], '2')
+redis.call('ZADD', KEYS[3], ARGV[1], ARGV[2], ARGV[1], ARGV[3])
+return 1
+`)
 
 type trackingProxyTogglePoller struct {
 	mu      sync.Mutex
@@ -730,6 +738,69 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersPublishedAtResolverAsGlo
 	assert.Equal(t, []string{providers.SyntheticGlobalPollerChannelID}, resolverRegistration.ChannelIDs)
 	assert.Equal(t, 1, resolverRegistration.RequestsPerRun)
 	assert.Equal(t, scraper.MetadataResolveFetchPolicy.MaxAttempts, resolverRegistration.WorstCaseAttempts)
+}
+
+func TestBuildIngestionRuntimeGlobalBudgetWiringPassesCleanupLimit(t *testing.T) {
+	ctx := context.Background()
+	cacheService := testutil.NewTestCacheService(t, ctx)
+	namespace := "budget-cleanup-limit"
+	source := poller.BudgetSourceYouTubeScraper
+	class := poller.BudgetBurstPrimary
+	appConfig := &config.Config{}
+	appConfig.Scraper.ActiveActive.Namespace = namespace
+	appConfig.Scraper.ActiveActive.InstanceID = "ap-a"
+	wiring, err := buildIngestionRuntimeGlobalBudgetWiring(appConfig, &youtubeProducerInfrastructure{cacheService: cacheService}, config.YouTubeProducerGlobalBudgetConfig{
+		Enabled:                   true,
+		AcquireTimeout:            time.Second,
+		YouTubeScraperMaxInflight: 1,
+		BackfillMaxInflight:       1,
+		CleanupLimit:              1,
+	}, nil, testLogger())
+	require.NoError(t, err)
+	require.NotNil(t, wiring.Limiter)
+	seedProducerRuntimeExpiredBudgetReservations(t, ctx, cacheService, namespace, source, class)
+
+	reservation, decision, err := wiring.Limiter.TryReserve(ctx, poller.BudgetJob{
+		Namespace:  namespace,
+		InstanceID: "ap-a",
+		PollerName: "videos",
+		ChannelID:  "channel-1",
+		JobKey:     "cleanup-limit",
+	}, poller.BudgetProfile{
+		SourceUnits: map[poller.BudgetSource]float64{source: 1},
+		BurstClass:  class,
+		Priority:    poller.BudgetPriorityNormal,
+	}, time.Minute)
+
+	require.NoError(t, err)
+	require.Nil(t, reservation)
+	require.False(t, decision.Allowed)
+	require.Equal(t, "budget_cleanup_incomplete", decision.Reason)
+}
+
+func seedProducerRuntimeExpiredBudgetReservations(
+	t *testing.T,
+	ctx context.Context,
+	cacheService *cache.Service,
+	namespace string,
+	source poller.BudgetSource,
+	class poller.BudgetBurstClass,
+) {
+	t.Helper()
+	budgetPrefix := fmt.Sprintf("hololive:%s:youtube-producer:budget:{%s}:", namespace, source)
+	expiredAtMS := fmt.Sprintf("%d", time.Now().Add(-time.Second).UnixMilli())
+	firstMember := string(class) + "|expired-a"
+	secondMember := string(class) + "|expired-b"
+	result := seedProducerRuntimeExpiredBudgetReservationsLua.Exec(ctx, cacheService.GetClient(), []string{
+		budgetPrefix + string(class) + ":inflight",
+		budgetPrefix + "global:inflight",
+		budgetPrefix + "reservations",
+	}, []string{
+		expiredAtMS,
+		firstMember,
+		secondMember,
+	})
+	require.NoError(t, result.Error())
 }
 
 func TestBuildYouTubeProducerConfigSubscriber_ApplyScraperProxyToggle(t *testing.T) {

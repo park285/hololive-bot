@@ -12,7 +12,7 @@ The intent is not to remove Lua. Lua remains appropriate where Valkey needs sing
 ## Changes
 
 - Global budget reserve/release now execute through `valkey.NewLuaScript`, so script execution uses the client-side SHA path (`EVALSHA` first, `EVAL` on `NOSCRIPT`) instead of sending long script bodies for every call.
-- Expired reservation cleanup is bounded by `GlobalBudgetLimiterConfig.CleanupLimit`; non-positive values fall back to `defaultGlobalBudgetCleanupLimit`.
+- Expired reservation cleanup is bounded by `GlobalBudgetLimiterConfig.CleanupLimit`; production runtime config loads it from `YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT`, and non-positive values fall back to `defaultGlobalBudgetCleanupLimit`.
 - If bounded cleanup leaves an expired backlog and stale counters still block the source/class, the reserve script returns `budget_cleanup_incomplete` instead of ordinary `budget_exhausted`.
 - Reservation ZSET members and new reservation hash keys now encode the burst class (`class|ownerToken`). New writes use the encoded member shape only; owner-token-only legacy reservations are retired by bounded expired-entry cleanup as they age out.
 - Shared counter/ZSET TTLs are extended only when the requested TTL is greater than the current TTL. The script deliberately avoids shortening a key that may still represent a longer-lived reservation.
@@ -32,5 +32,8 @@ The intent is not to remove Lua. Lua remains appropriate where Valkey needs sing
 
 ```bash
 go test ./hololive/hololive-youtube-producer/internal/runtime/polling -count=1
+go test ./hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime -run TestBuildIngestionRuntimeGlobalBudgetWiringPassesCleanupLimit -count=1
 go test ./hololive/hololive-shared/pkg/service/acl -count=1
+go test ./hololive/hololive-shared/pkg/config/internal/settings -run 'TestLoadYouTubeProducerGlobalBudgetConfig(Defaults|EnvOverrides|CleanupLimitDefault)' -count=1
+go test ./hololive/hololive-youtube-producer/internal/runtime/readiness -count=1
 ```
