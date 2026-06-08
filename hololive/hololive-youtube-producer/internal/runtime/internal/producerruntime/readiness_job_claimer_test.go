@@ -1,10 +1,14 @@
 package producerruntime
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,10 +84,13 @@ func TestReadinessReportingJobClaimerMarksLeaseUnavailable(t *testing.T) {
 		err:    fmt.Errorf("valkey unavailable"),
 	}, state)
 
-	_, _, err := claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+	status, _, err := claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
 
-	if err == nil {
-		t.Fatal("TryClaim error = nil, want error")
+	if err != nil {
+		t.Fatalf("TryClaim error = %v, want nil unavailable status", err)
+	}
+	if status.Result != poller.JobClaimUnavailable {
+		t.Fatalf("status.Result = %s, want %s", status.Result, poller.JobClaimUnavailable)
 	}
 	statusCode, payload := state.Response()
 	if statusCode != http.StatusServiceUnavailable {
@@ -91,6 +98,36 @@ func TestReadinessReportingJobClaimerMarksLeaseUnavailable(t *testing.T) {
 	}
 	if payload["valkey_available"] != false {
 		t.Fatalf("valkey_available = %v, want false", payload["valkey_available"])
+	}
+}
+
+func TestReadinessReportingJobClaimerCoalescesUnavailableWarnings(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{
+		YouTubeEnabled:      true,
+		ActiveActiveEnabled: true,
+	})
+	state.MarkRunning()
+	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+		status: poller.JobClaimStatus{Result: poller.JobClaimUnavailable},
+		err:    fmt.Errorf("valkey unavailable"),
+	}, state)
+	var logBuffer bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(previousLogger)
+
+	for range 2 {
+		status, _, err := claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+		if err != nil {
+			t.Fatalf("TryClaim error = %v, want nil unavailable status", err)
+		}
+		if status.Result != poller.JobClaimUnavailable {
+			t.Fatalf("status.Result = %s, want %s", status.Result, poller.JobClaimUnavailable)
+		}
+	}
+
+	if count := countJSONLogMessage(logBuffer.String(), "active_active_paused"); count != 1 {
+		t.Fatalf("active_active_paused warnings = %d, want 1; logs=%s", count, logBuffer.String())
 	}
 }
 
@@ -117,6 +154,23 @@ func TestReadinessReportingJobClaimerMarksLeaseAvailable(t *testing.T) {
 	if payload["valkey_available"] != true {
 		t.Fatalf("valkey_available = %v, want true", payload["valkey_available"])
 	}
+}
+
+func countJSONLogMessage(logs string, message string) int {
+	count := 0
+	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			continue
+		}
+		if payload["msg"] == message {
+			count++
+		}
+	}
+	return count
 }
 
 func TestProbeReadinessJobClaimerMarksLeaseAvailableAndReleasesSyntheticClaim(t *testing.T) {
@@ -191,6 +245,41 @@ func TestReadinessReportingBudgetLimiterMarksBackendUnavailableOnError(t *testin
 	}
 	if payload["scraping_paused"] != true {
 		t.Fatalf("scraping_paused = %v, want true", payload["scraping_paused"])
+	}
+}
+
+func TestReadinessReportingBudgetLimiterCoalescesBackendWarnings(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	stub := &readinessBudgetLimiterStub{err: fmt.Errorf("valkey unavailable")}
+	limiter := newReadinessReportingBudgetLimiter(stub, state)
+	var logBuffer bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(previousLogger)
+
+	for range 2 {
+		_, _, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+		if err == nil {
+			t.Fatal("TryReserve error = nil, want error")
+		}
+	}
+	stub.err = nil
+	_, _, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+	if err != nil {
+		t.Fatalf("TryReserve recovery error = %v, want nil", err)
+	}
+	stub.err = fmt.Errorf("valkey unavailable again")
+	_, _, err = limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+	if err == nil {
+		t.Fatal("TryReserve second outage error = nil, want error")
+	}
+
+	if count := countJSONLogMessage(logBuffer.String(), "global_budget_paused"); count != 2 {
+		t.Fatalf("global_budget_paused warnings = %d, want 2; logs=%s", count, logBuffer.String())
 	}
 }
 

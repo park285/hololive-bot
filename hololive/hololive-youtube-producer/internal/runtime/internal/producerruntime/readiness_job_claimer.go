@@ -2,8 +2,8 @@ package producerruntime
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -17,13 +17,15 @@ const (
 )
 
 type readinessReportingJobClaimer struct {
-	inner     poller.JobClaimer
-	readiness *readiness.State
+	inner       poller.JobClaimer
+	readiness   *readiness.State
+	pauseLogger *pauseTransitionLogger
 }
 
 type readinessReportingBudgetLimiter struct {
-	inner     poller.GlobalBudgetLimiter
-	readiness *readiness.State
+	inner       poller.GlobalBudgetLimiter
+	readiness   *readiness.State
+	pauseLogger *pauseTransitionLogger
 }
 
 func newReadinessReportingJobClaimer(inner poller.JobClaimer, state *readiness.State) poller.JobClaimer {
@@ -31,8 +33,9 @@ func newReadinessReportingJobClaimer(inner poller.JobClaimer, state *readiness.S
 		return inner
 	}
 	return readinessReportingJobClaimer{
-		inner:     inner,
-		readiness: state,
+		inner:       inner,
+		readiness:   state,
+		pauseLogger: &pauseTransitionLogger{},
 	}
 }
 
@@ -41,8 +44,9 @@ func newReadinessReportingBudgetLimiter(inner poller.GlobalBudgetLimiter, state 
 		return inner
 	}
 	return readinessReportingBudgetLimiter{
-		inner:     inner,
-		readiness: state,
+		inner:       inner,
+		readiness:   state,
+		pauseLogger: &pauseTransitionLogger{},
 	}
 }
 
@@ -55,19 +59,67 @@ func (c readinessReportingJobClaimer) TryClaim(
 ) (poller.JobClaimStatus, poller.JobClaim, error) {
 	status, claim, err := c.inner.TryClaim(ctx, pollerName, channelID, leaseTTL, cooldownTTL)
 	if err != nil || status.Result == poller.JobClaimUnavailable {
-		c.readiness.MarkLeaseUnavailable("valkey_unavailable_active_active_fail_closed")
-		slog.Warn("active_active_paused",
-			slog.String("reason", "valkey_unavailable_active_active_fail_closed"),
-			slog.String("poller", pollerName),
-		)
-		if err != nil {
-			return status, claim, err
-		}
-		return status, claim, fmt.Errorf("job lease unavailable")
+		return c.markLeaseUnavailable(status, claim, pollerName, err)
 	}
-	c.readiness.MarkLeaseAvailable()
-	slog.Debug("active_active_lease_available", slog.String("poller", pollerName))
+	c.markLeaseAvailable(pollerName)
 	return status, claim, nil
+}
+
+func (c readinessReportingJobClaimer) markLeaseUnavailable(
+	status poller.JobClaimStatus,
+	claim poller.JobClaim,
+	pollerName string,
+	err error,
+) (poller.JobClaimStatus, poller.JobClaim, error) {
+	c.readiness.MarkLeaseUnavailable("valkey_unavailable_active_active_fail_closed")
+	if status.Result == "" {
+		status.Result = poller.JobClaimUnavailable
+	}
+	c.logLeaseUnavailable(pollerName, err)
+	return status, claim, nil
+}
+
+func (c readinessReportingJobClaimer) logLeaseUnavailable(pollerName string, err error) {
+	if c.pauseLogger != nil && !c.pauseLogger.markPaused() {
+		return
+	}
+	attrs := []any{
+		slog.String("reason", "valkey_unavailable_active_active_fail_closed"),
+		slog.String("poller", pollerName),
+	}
+	if err != nil {
+		attrs = append(attrs, slog.Any("error", err))
+	}
+	slog.Warn("active_active_paused", attrs...)
+}
+
+func (c readinessReportingJobClaimer) markLeaseAvailable(pollerName string) {
+	c.readiness.MarkLeaseAvailable()
+	if c.pauseLogger != nil {
+		c.pauseLogger.markAvailable()
+	}
+	slog.Debug("active_active_lease_available", slog.String("poller", pollerName))
+}
+
+type pauseTransitionLogger struct {
+	mu     sync.Mutex
+	paused bool
+}
+
+func (l *pauseTransitionLogger) markPaused() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.paused {
+		return false
+	}
+	l.paused = true
+	return true
+}
+
+func (l *pauseTransitionLogger) markAvailable() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.paused = false
 }
 
 func (l readinessReportingBudgetLimiter) TryReserve(
@@ -78,15 +130,10 @@ func (l readinessReportingBudgetLimiter) TryReserve(
 ) (poller.BudgetReservation, poller.BudgetDecision, error) {
 	reservation, decision, err := l.inner.TryReserve(ctx, job, profile, ttl)
 	if err != nil {
-		l.readiness.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
-		slog.Warn("global_budget_paused",
-			slog.String("reason", "valkey_unavailable_global_budget_fail_closed"),
-			slog.String("poller", job.PollerName),
-			slog.Any("error", err),
-		)
+		l.markBudgetBackendUnavailable(job.PollerName, err)
 		return reservation, decision, err
 	}
-	l.readiness.MarkBudgetBackendAvailable()
+	l.markBudgetBackendAvailable()
 	sources := budgetProfileSources(profile)
 	if !decision.Allowed {
 		denied := sources
@@ -98,6 +145,25 @@ func (l readinessReportingBudgetLimiter) TryReserve(
 	}
 	l.readiness.ClearBudgetAdmission(sources)
 	return reservation, decision, nil
+}
+
+func (l readinessReportingBudgetLimiter) markBudgetBackendUnavailable(pollerName string, err error) {
+	l.readiness.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
+	if l.pauseLogger != nil && !l.pauseLogger.markPaused() {
+		return
+	}
+	slog.Warn("global_budget_paused",
+		slog.String("reason", "valkey_unavailable_global_budget_fail_closed"),
+		slog.String("poller", pollerName),
+		slog.Any("error", err),
+	)
+}
+
+func (l readinessReportingBudgetLimiter) markBudgetBackendAvailable() {
+	l.readiness.MarkBudgetBackendAvailable()
+	if l.pauseLogger != nil {
+		l.pauseLogger.markAvailable()
+	}
 }
 
 func (l readinessReportingBudgetLimiter) MarkSourceCooldown(ctx context.Context, source poller.BudgetSource, ttl time.Duration, reason string) error {
