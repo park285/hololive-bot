@@ -35,22 +35,26 @@ import (
 )
 
 func (c *Client) currentPageFetcher() pageFetcher {
+	fetcher, _ := c.currentPageFetcherWithEngine()
+	return fetcher
+}
+
+func (c *Client) currentPageFetcherWithEngine() (pageFetcher, FetcherEngine) {
 	netHTTPFetcher := netHTTPPageFetcher{client: c}
 	switch normalizeFetcherEngine(c.fetcherEngine) {
 	case FetcherEngineGoScrapy:
-		return goscrapyPageFetcher{client: c, fallback: netHTTPFetcher}
+		return goscrapyPageFetcher{client: c, fallback: netHTTPFetcher}, FetcherEngineGoScrapy
 	case FetcherEngineBrowserSnapshot:
 		if c.browserSnapshotFetcher != nil {
-			return c.browserSnapshotFetcher
+			return c.browserSnapshotFetcher, FetcherEngineBrowserSnapshot
 		}
-		return netHTTPFetcher
+		return netHTTPFetcher, FetcherEngineNetHTTP
 	default:
-		return netHTTPFetcher
+		return netHTTPFetcher, FetcherEngineNetHTTP
 	}
 }
 
-// fetchPageOnce: 단일 HTTP 요청 수행 (재시도 없음)
-func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, error) {
+func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string, err error) {
 	if err := c.fetchPagePreflight(ctx, pageURL); err != nil {
 		return "", err
 	}
@@ -60,15 +64,22 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// 헤더 스냅샷 기반 설정
 	snap := c.uaProvider.Headers(ctx)
 	applyScraperHeaders(req, snap)
 
-	resp, err := c.currentPageFetcher().FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header})
+	fetcher, engine := c.currentPageFetcherWithEngine()
+	started := time.Now()
+	statusCode := 0
+	defer func() {
+		observeScraperFetch(engine, statusCode, err, time.Since(started))
+	}()
+
+	resp, err := fetcher.FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header})
 	if err != nil {
 		c.observeProxyTransportFailure(err)
 		return "", err
 	}
+	statusCode = resp.StatusCode
 
 	if err := c.handleFetchStatus(pageURL, resp); err != nil {
 		return "", err
@@ -82,7 +93,6 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 	return string(resp.Body), nil
 }
 
-// 불변식: hard cooldown만 차단 (transient는 재시도 허용)
 func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string) error {
 	if cooldownRemaining := c.backoffState.HardCooldownRemaining(); cooldownRemaining > 0 {
 		return fmt.Errorf("in cooldown for %v: %w", cooldownRemaining.Round(time.Second), ErrRateLimited)

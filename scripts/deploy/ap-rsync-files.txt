@@ -677,6 +677,7 @@ hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/client_re
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/community.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/community_published_at.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/failure.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/fetch_metrics.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/fetcher.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/goscrapy_fetcher.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser_error.go

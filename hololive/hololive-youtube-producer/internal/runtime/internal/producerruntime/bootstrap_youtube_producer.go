@@ -71,9 +71,9 @@ func buildIngestionRuntime(ctx context.Context, appConfig *config.Config, logger
 	logFeatureOverride(logger, spec)
 
 	features := spec.features
-	readiness := newReadinessState(spec.name, features)
+	readiness := newReadinessStateWithFetcherEngine(spec.name, features, appConfig.Scraper.FetcherEngine)
 
-	logIngestionRuntimeConfigured(logger, spec.name, features)
+	logIngestionRuntimeConfigured(logger, spec.name, features, appConfig.Scraper.FetcherEngine)
 
 	infra, err := initYouTubeProducerInfrastructureFn(ctx, appConfig, logger)
 	if err != nil {
@@ -125,15 +125,24 @@ func validateIngestionRuntimeInputs(appConfig *config.Config, logger *slog.Logge
 	return nil
 }
 
-func logIngestionRuntimeConfigured(logger *slog.Logger, runtimeName string, features ingestionRuntimeFeatures) {
+func logIngestionRuntimeConfigured(logger *slog.Logger, runtimeName string, features ingestionRuntimeFeatures, scraperFetcherEngine string) {
 	sharedlog.Info(context.Background(), logger, EventIngestionRuntimeConfigured, "ingestion runtime configured",
 		sharedlog.Runtime(runtimeName),
 		slog.Bool("youtube_enabled", features.youtubeEnabled),
 		slog.Bool("photo_sync_enabled", features.photoSyncEnabled),
 		slog.Bool("community_shorts_bigbang_enabled", features.communityShortsBigBangEnabled),
 		slog.Bool("active_active_enabled", features.activeActiveEnabled),
+		slog.String("scraper_fetcher_engine", normalizeScraperFetcherEngineForLog(scraperFetcherEngine)),
 		slog.String("lock_key", ingestionlease.Key),
 	)
+}
+
+func normalizeScraperFetcherEngineForLog(engine string) string {
+	engine = strings.TrimSpace(engine)
+	if engine == "" {
+		return "nethttp"
+	}
+	return engine
 }
 
 func acquireIngestionLeaseIfEnabled(

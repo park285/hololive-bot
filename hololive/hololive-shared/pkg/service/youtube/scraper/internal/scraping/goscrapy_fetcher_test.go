@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tech-engine/goscrapy/pkg/core"
@@ -83,10 +84,14 @@ func TestGoScrapyPageFetcher_FallsBackOnlyBeforeResponse(t *testing.T) {
 		fallback: netHTTPPageFetcher{client: client},
 	}
 
+	before := testutil.ToFloat64(scraperFetchFallbackTotal.WithLabelValues("goscrapy", "nethttp", "unknown"))
 	resp, err := fetcher.FetchPage(context.Background(), pageFetchRequest{URL: server.URL, Header: http.Header{}})
+	after := testutil.ToFloat64(scraperFetchFallbackTotal.WithLabelValues("goscrapy", "nethttp", "unknown"))
+
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "fallback body", string(resp.Body))
+	assert.Equal(t, float64(1), after-before)
 }
 
 func TestGoScrapyPageFetcher_FallsBackOnExecutorErrorBeforeResponse(t *testing.T) {

@@ -51,6 +51,39 @@ func TestStateResponseSingleOwnerStartsLeaseAvailable(t *testing.T) {
 	}
 }
 
+func TestStateResponseIncludesScraperFetcherEngine(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:       true,
+		ScraperFetcherEngine: "goscrapy",
+		ActiveActiveEnabled:  false,
+		GlobalBudgetEnabled:  true,
+		ActiveActiveInstance: "youtube-producer-b",
+	})
+	state.MarkRunning()
+
+	statusCode, payload := state.Response()
+
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["scraper_fetcher_engine"] != "goscrapy" {
+		t.Fatalf("scraper_fetcher_engine = %v, want goscrapy", payload["scraper_fetcher_engine"])
+	}
+}
+
+func TestStateResponseDefaultsScraperFetcherEngine(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled: true,
+	})
+	state.MarkRunning()
+
+	_, payload := state.Response()
+
+	if payload["scraper_fetcher_engine"] != "nethttp" {
+		t.Fatalf("scraper_fetcher_engine = %v, want nethttp", payload["scraper_fetcher_engine"])
+	}
+}
+
 func TestStateResponseActiveActiveLeaseUnavailableIsNotReady(t *testing.T) {
 	state := New("youtube-producer", Features{
 		YouTubeEnabled:       true,

@@ -31,7 +31,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/health"
 )
 
-const defaultRuntimeName = "youtube-producer"
+const (
+	defaultRuntimeName           = "youtube-producer"
+	defaultScraperFetcherEngine  = "nethttp"
+	scraperFetcherEngineGoScrapy = "goscrapy"
+	scraperFetcherEngineBrowser  = "browser_snapshot"
+)
 
 type Features struct {
 	YouTubeEnabled       bool
@@ -39,6 +44,7 @@ type Features struct {
 	ActiveActiveEnabled  bool
 	ActiveActiveInstance string
 	GlobalBudgetEnabled  bool
+	ScraperFetcherEngine string
 }
 
 type State struct {
@@ -54,6 +60,7 @@ type State struct {
 	shuttingDown           atomic.Bool
 	leaseReason            atomic.Value // string
 	lastError              atomic.Value // string
+	scraperFetcherEngine   atomic.Value // string
 	budgetMu               sync.Mutex
 	budgetExhausted        map[string]struct{}
 	sourceCooldown         map[string]time.Time
@@ -79,6 +86,7 @@ func New(runtimeName string, features Features) *State {
 	}
 	state.leaseReason.Store("")
 	state.lastError.Store("")
+	state.scraperFetcherEngine.Store(normalizeScraperFetcherEngine(features.ScraperFetcherEngine))
 	state.leaseAvailable.Store(true)
 	state.globalBudgetEnabled.Store(features.GlobalBudgetEnabled)
 	state.budgetBackendAvailable.Store(true)
@@ -86,6 +94,13 @@ func New(runtimeName string, features Features) *State {
 		state.MarkLeaseUnavailable("valkey_unavailable_active_active_fail_closed")
 	}
 	return state
+}
+
+func (s *State) SetScraperFetcherEngine(engine string) {
+	if s == nil {
+		return
+	}
+	s.scraperFetcherEngine.Store(normalizeScraperFetcherEngine(engine))
 }
 
 func HTTPServerOperationName(runtimeName string) string {
@@ -251,6 +266,7 @@ func nilReadinessPayload(base health.Response) map[string]any {
 		"budget_exhausted":         false,
 		"source_cooldown":          false,
 		"affected_sources":         []string{},
+		"scraper_fetcher_engine":   defaultScraperFetcherEngine,
 	}
 }
 
@@ -298,6 +314,7 @@ func (s *State) responsePayload(
 		"budget_exhausted":         budgetEnabled && budgetExhausted,
 		"source_cooldown":          budgetEnabled && sourceCooldown,
 		"affected_sources":         affectedSources,
+		"scraper_fetcher_engine":   s.currentScraperFetcherEngine(),
 		"scraping_paused":          (leaseEnabled && !leaseAvailable) || (budgetEnabled && !budgetBackendAvailable),
 	}
 }
@@ -315,6 +332,25 @@ func readinessMode(activeActiveEnabled bool) string {
 		return "active-active"
 	}
 	return "single-owner"
+}
+
+func (s *State) currentScraperFetcherEngine() string {
+	if s == nil {
+		return defaultScraperFetcherEngine
+	}
+	engine, _ := s.scraperFetcherEngine.Load().(string)
+	return normalizeScraperFetcherEngine(engine)
+}
+
+func normalizeScraperFetcherEngine(engine string) string {
+	switch strings.TrimSpace(engine) {
+	case scraperFetcherEngineGoScrapy:
+		return scraperFetcherEngineGoScrapy
+	case scraperFetcherEngineBrowser:
+		return scraperFetcherEngineBrowser
+	default:
+		return defaultScraperFetcherEngine
+	}
 }
 
 func (s *State) budgetAdmissionPayload(budgetEnabled bool) (bool, bool, []string) {

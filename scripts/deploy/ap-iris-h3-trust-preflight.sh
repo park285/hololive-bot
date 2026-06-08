@@ -21,11 +21,18 @@ if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
 fi
 
 containers_list="${AP_CONTAINERS[*]}"
+udp_buffer_check="$REPO_ROOT/scripts/deploy/lib/require-quic-udp-buffer.sh"
+if [[ ! -r "$udp_buffer_check" ]]; then
+  echo "QUIC UDP buffer check helper not readable: $udp_buffer_check" >&2
+  exit 1
+fi
+
+remote_required_udp_buffer="$(printf '%q' "$AP_REQUIRED_UDP_BUFFER_BYTES")"
+remote_ap_name="$(printf '%q' "$AP_NAME")"
+"${AP_SSH[@]}" "bash -s -- $remote_required_udp_buffer $remote_ap_name" < "$udp_buffer_check"
 
 "${AP_SSH[@]}" "AP_PREFLIGHT_ALLOW_FIRST_BOOT='$AP_PREFLIGHT_ALLOW_FIRST_BOOT' AP_REQUIRED_UDP_BUFFER_BYTES='$AP_REQUIRED_UDP_BUFFER_BYTES' AP_CONTAINERS_LIST='$containers_list' AP_NAME='$AP_NAME' bash -s" <<'REMOTE'
 set -euo pipefail
-
-bash "$HOME/hololive-bot/scripts/deploy/lib/require-quic-udp-buffer.sh" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_NAME"
 
 unit_type="$(systemctl show openbao-agent-hololive-bot.service -p Type --value)"
 unit_state="$(systemctl show openbao-agent-hololive-bot.service -p ActiveState --value)"

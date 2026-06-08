@@ -83,6 +83,7 @@ func (f goscrapyPageFetcher) FetchPage(ctx context.Context, req pageFetchRequest
 
 	resp, gotResponse, err := runner.Run(ctx, f.client, req)
 	if err != nil && !gotResponse && f.fallback != nil {
+		observeScraperFetchFallback(FetcherEngineGoScrapy, FetcherEngineNetHTTP, err)
 		slog.Warn("goscrapy fetch failed before response, falling back to nethttp",
 			"url", safeFetchURL(req.URL),
 			"error", safeFetchError(err, req.URL))
