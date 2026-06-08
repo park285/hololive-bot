@@ -27,11 +27,6 @@ func newDeliveryIntegrationPool(t testing.TB) *pgxpool.Pool {
 	return dbtest.NewPool(t)
 }
 
-func newDeliveryIntegrationTestDB(t testing.TB) *pgxpool.Pool {
-	t.Helper()
-	return newDeliveryIntegrationPool(t)
-}
-
 func insertDeliveryTestRows(pool *pgxpool.Pool, value any) deliveryTestSQLResult {
 	rows, err := insertDeliveryIntegrationRows(context.Background(), pool, value)
 	return deliveryTestSQLResult{Error: err, RowsAffected: rows}
@@ -39,27 +34,6 @@ func insertDeliveryTestRows(pool *pgxpool.Pool, value any) deliveryTestSQLResult
 
 func firstDeliveryTestRow(pool *pgxpool.Pool, dest any, conds ...any) deliveryTestSQLResult {
 	err := firstDeliveryIntegrationRow(context.Background(), pool, dest, conds...)
-	return deliveryTestSQLResult{Error: err}
-}
-
-func firstDeliveryTestRowWhere(pool *pgxpool.Pool, dest any, where string, args ...any) deliveryTestSQLResult {
-	all := append([]any{where}, args...)
-	err := firstDeliveryIntegrationRow(context.Background(), pool, dest, all...)
-	return deliveryTestSQLResult{Error: err}
-}
-
-func findDeliveryTestRows(pool *pgxpool.Pool, dest any) deliveryTestSQLResult {
-	err := findDeliveryIntegrationRows(context.Background(), pool, dest, "", "")
-	return deliveryTestSQLResult{Error: err}
-}
-
-func findDeliveryTestRowsWhere(pool *pgxpool.Pool, dest any, where string, args ...any) deliveryTestSQLResult {
-	err := findDeliveryIntegrationRows(context.Background(), pool, dest, where, "", args...)
-	return deliveryTestSQLResult{Error: err}
-}
-
-func findDeliveryTestRowsOrdered(pool *pgxpool.Pool, dest any, order string) deliveryTestSQLResult {
-	err := findDeliveryIntegrationRows(context.Background(), pool, dest, "", order)
 	return deliveryTestSQLResult{Error: err}
 }
 

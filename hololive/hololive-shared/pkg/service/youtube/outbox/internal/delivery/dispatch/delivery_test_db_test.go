@@ -44,11 +44,6 @@ func newDeliveryPool(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
-func newDeliveryTestDB(t testing.TB) *pgxpool.Pool {
-	t.Helper()
-	return newDeliveryPool(t)
-}
-
 func newDeliveryExecModePool(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
 	t.Helper()
 	cfg := pool.Config()
@@ -77,11 +72,6 @@ func firstDeliveryTestRowWhere(pool *pgxpool.Pool, dest any, where string, args 
 
 func findDeliveryTestRows(pool *pgxpool.Pool, dest any) deliveryTestSQLResult {
 	err := findDeliveryTestRowsContext(context.Background(), pool, dest, "", "")
-	return deliveryTestSQLResult{Error: err}
-}
-
-func findDeliveryTestRowsWhere(pool *pgxpool.Pool, dest any, where string, args ...any) deliveryTestSQLResult {
-	err := findDeliveryTestRowsContext(context.Background(), pool, dest, where, "", args...)
 	return deliveryTestSQLResult{Error: err}
 }
 
@@ -135,35 +125,6 @@ func updateDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, values map[strin
 	queryArgs = append(queryArgs, args...)
 	tag, err := pool.Exec(context.Background(), deliverysql.PostgresPlaceholders(query), queryArgs...)
 	return deliveryTestSQLResult{Error: err, RowsAffected: tag.RowsAffected()}
-}
-
-func execDeliveryTestSQL(pool *pgxpool.Pool, query string, args ...any) deliveryTestSQLResult {
-	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(query)), "PRAGMA ") {
-		return deliveryTestSQLResult{}
-	}
-	tag, err := pool.Exec(context.Background(), deliverysql.PostgresPlaceholders(query), args...)
-	return deliveryTestSQLResult{Error: err, RowsAffected: tag.RowsAffected()}
-}
-
-func deleteDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, where string, args ...any) deliveryTestSQLResult {
-	table := deliveryTestTableForModel(model)
-	if table == "" {
-		return deliveryTestSQLResult{Error: fmt.Errorf("delete rows: unsupported model %T", model)}
-	}
-	query := "DELETE FROM " + table
-	if strings.TrimSpace(where) != "" {
-		query += " WHERE " + where
-	}
-	tag, err := pool.Exec(context.Background(), deliverysql.PostgresPlaceholders(query), args...)
-	return deliveryTestSQLResult{Error: err, RowsAffected: tag.RowsAffected()}
-}
-
-func deleteDeliveryTestRows(pool *pgxpool.Pool, model any) deliveryTestSQLResult {
-	id, ok := deliveryTestIDForModel(model)
-	if !ok {
-		return deliveryTestSQLResult{Error: fmt.Errorf("delete row: unsupported model or missing id %T", model)}
-	}
-	return deleteDeliveryTestRowsWhere(pool, model, "id = ?", id)
 }
 
 func firstDeliveryTestRowContext(ctx context.Context, pool *pgxpool.Pool, dest any, conds ...any) error {
@@ -612,25 +573,6 @@ func deliveryTestTableForModel(model any) string {
 		return "alarms"
 	default:
 		return deliveryTestTableForDest(model)
-	}
-}
-
-func deliveryTestIDForModel(model any) (int64, bool) {
-	switch row := model.(type) {
-	case *domain.YouTubeNotificationOutbox:
-		return row.ID, row.ID != 0
-	case *deliveryTestOutboxModel:
-		return row.ID, row.ID != 0
-	case *domain.YouTubeNotificationDelivery:
-		return row.ID, row.ID != 0
-	case *deliveryTestDeliveryModel:
-		return row.ID, row.ID != 0
-	case *domain.YouTubeNotificationDeliveryTelemetry:
-		return row.ID, row.ID != 0
-	case *domain.Alarm:
-		return int64(row.ID), row.ID != 0
-	default:
-		return 0, false
 	}
 }
 
