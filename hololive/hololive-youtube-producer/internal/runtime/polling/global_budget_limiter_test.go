@@ -447,7 +447,7 @@ func TestGlobalBudgetLimiterRollbackSucceedsWithCanceledContext(t *testing.T) {
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	require.NoError(t, inner.releaseSources(canceledCtx, reservation.ownerToken, reservation.sources))
+	require.NoError(t, inner.releaseSourcesForClass(canceledCtx, reservation.ownerToken, reservation.reservationMember, reservation.burstClass, reservation.sources))
 	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceHolodexLive)))
 	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testClassInflightKey(poller.BudgetSourceHolodexLive, poller.BudgetBurstPrimary)))
 }

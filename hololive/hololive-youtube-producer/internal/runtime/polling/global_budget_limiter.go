@@ -294,11 +294,6 @@ func (r *globalBudgetReservation) releaseAll(ctx context.Context, action string)
 	return firstErr
 }
 
-func (l *globalBudgetLimiter) releaseSources(ctx context.Context, ownerToken string, sources []poller.BudgetSource) error {
-	class := poller.BudgetBurstPrimary
-	return l.releaseSourcesForClass(ctx, ownerToken, globalBudgetReservationMember(class, ownerToken), class, sources)
-}
-
 func (l *globalBudgetLimiter) releaseSourcesForClass(
 	ctx context.Context,
 	ownerToken string,
