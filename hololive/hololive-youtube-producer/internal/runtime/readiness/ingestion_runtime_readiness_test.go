@@ -233,6 +233,59 @@ func TestStateResponseBudgetAdmissionDeniedDoesNotChangeHTTPReadiness(t *testing
 	}
 }
 
+func TestStateResponseBudgetCleanupIncompleteDoesNotChangeHTTPReadiness(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	state.MarkBudgetAdmissionDenied("budget_cleanup_incomplete", []string{"youtube_scraper", "holodex_live", "youtube_scraper"})
+
+	statusCode, payload := state.Response()
+
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["status"] != "ready" {
+		t.Fatalf("status = %v, want ready", payload["status"])
+	}
+	if payload["budget_exhausted"] != false {
+		t.Fatalf("budget_exhausted = %v, want false", payload["budget_exhausted"])
+	}
+	if payload["source_cooldown"] != false {
+		t.Fatalf("source_cooldown = %v, want false", payload["source_cooldown"])
+	}
+	if payload["budget_cleanup_incomplete"] != true {
+		t.Fatalf("budget_cleanup_incomplete = %v, want true", payload["budget_cleanup_incomplete"])
+	}
+	wantSources := []string{"holodex_live", "youtube_scraper"}
+	if !reflect.DeepEqual(payload["affected_sources"], wantSources) {
+		t.Fatalf("affected_sources = %v, want %v", payload["affected_sources"], wantSources)
+	}
+	if payload["scraping_paused"] != false {
+		t.Fatalf("scraping_paused = %v, want false", payload["scraping_paused"])
+	}
+}
+
+func TestStateResponseBudgetAdmissionReasonSwitchClearsCleanupIncomplete(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:      true,
+		GlobalBudgetEnabled: true,
+	})
+	state.MarkRunning()
+	state.MarkBudgetAdmissionDenied("budget_cleanup_incomplete", []string{"youtube_scraper"})
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
+
+	_, payload := state.Response()
+
+	if payload["budget_cleanup_incomplete"] != false {
+		t.Fatalf("budget_cleanup_incomplete = %v, want false after reason switch", payload["budget_cleanup_incomplete"])
+	}
+	if payload["budget_exhausted"] != true {
+		t.Fatalf("budget_exhausted = %v, want true after reason switch", payload["budget_exhausted"])
+	}
+}
+
 func TestStateResponseBudgetDisabledIgnoresBudgetState(t *testing.T) {
 	state := New("youtube-producer", Features{
 		YouTubeEnabled: true,
@@ -240,6 +293,7 @@ func TestStateResponseBudgetDisabledIgnoresBudgetState(t *testing.T) {
 	state.MarkRunning()
 	state.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
 	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
+	state.MarkBudgetAdmissionDenied("budget_cleanup_incomplete", []string{"holodex_live"})
 
 	statusCode, payload := state.Response()
 
@@ -254,6 +308,9 @@ func TestStateResponseBudgetDisabledIgnoresBudgetState(t *testing.T) {
 	}
 	if payload["source_cooldown"] != false {
 		t.Fatalf("source_cooldown = %v, want false", payload["source_cooldown"])
+	}
+	if payload["budget_cleanup_incomplete"] != false {
+		t.Fatalf("budget_cleanup_incomplete = %v, want false", payload["budget_cleanup_incomplete"])
 	}
 	wantSources := []string{}
 	if !reflect.DeepEqual(payload["affected_sources"], wantSources) {
@@ -290,5 +347,18 @@ func TestStateResponseSourceCooldownExpiresAfterTTL(t *testing.T) {
 	}
 	if affected, ok := payload["affected_sources"].([]string); !ok || len(affected) != 0 {
 		t.Fatalf("affected_sources = %v, want empty after expiry", payload["affected_sources"])
+	}
+}
+
+func TestNilStateResponseIncludesBudgetCleanupIncompleteFalse(t *testing.T) {
+	var state *State
+
+	statusCode, payload := state.Response()
+
+	if statusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
+	}
+	if payload["budget_cleanup_incomplete"] != false {
+		t.Fatalf("budget_cleanup_incomplete = %v, want false", payload["budget_cleanup_incomplete"])
 	}
 }

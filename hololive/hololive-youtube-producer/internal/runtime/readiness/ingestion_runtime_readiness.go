@@ -48,23 +48,24 @@ type Features struct {
 }
 
 type State struct {
-	runtimeName            string
-	youtubeEnabled         bool
-	photoSyncEnabled       bool
-	activeActiveEnabled    bool
-	globalBudgetEnabled    atomic.Bool
-	instanceID             string
-	leaseAvailable         atomic.Bool
-	budgetBackendAvailable atomic.Bool
-	httpServerStarted      atomic.Bool
-	shuttingDown           atomic.Bool
-	leaseReason            atomic.Value // string
-	lastError              atomic.Value // string
-	scraperFetcherEngine   atomic.Value // string
-	budgetMu               sync.Mutex
-	budgetExhausted        map[string]struct{}
-	sourceCooldown         map[string]time.Time
-	nowFunc                func() time.Time
+	runtimeName             string
+	youtubeEnabled          bool
+	photoSyncEnabled        bool
+	activeActiveEnabled     bool
+	globalBudgetEnabled     atomic.Bool
+	instanceID              string
+	leaseAvailable          atomic.Bool
+	budgetBackendAvailable  atomic.Bool
+	httpServerStarted       atomic.Bool
+	shuttingDown            atomic.Bool
+	leaseReason             atomic.Value // string
+	lastError               atomic.Value // string
+	scraperFetcherEngine    atomic.Value // string
+	budgetMu                sync.Mutex
+	budgetExhausted         map[string]struct{}
+	sourceCooldown          map[string]time.Time
+	budgetCleanupIncomplete map[string]struct{}
+	nowFunc                 func() time.Time
 }
 
 func (s *State) now() time.Time {
@@ -76,13 +77,14 @@ func (s *State) now() time.Time {
 
 func New(runtimeName string, features Features) *State {
 	state := &State{
-		runtimeName:         strings.TrimSpace(runtimeName),
-		youtubeEnabled:      features.YouTubeEnabled,
-		photoSyncEnabled:    features.PhotoSyncEnabled,
-		activeActiveEnabled: features.ActiveActiveEnabled,
-		instanceID:          strings.TrimSpace(features.ActiveActiveInstance),
-		budgetExhausted:     make(map[string]struct{}),
-		sourceCooldown:      make(map[string]time.Time),
+		runtimeName:             strings.TrimSpace(runtimeName),
+		youtubeEnabled:          features.YouTubeEnabled,
+		photoSyncEnabled:        features.PhotoSyncEnabled,
+		activeActiveEnabled:     features.ActiveActiveEnabled,
+		instanceID:              strings.TrimSpace(features.ActiveActiveInstance),
+		budgetExhausted:         make(map[string]struct{}),
+		sourceCooldown:          make(map[string]time.Time),
+		budgetCleanupIncomplete: make(map[string]struct{}),
 	}
 	state.leaseReason.Store("")
 	state.lastError.Store("")
@@ -186,7 +188,7 @@ func (s *State) MarkBudgetAdmissionDenied(reason string, sources []string) {
 		return
 	}
 	reason = strings.TrimSpace(reason)
-	if reason != "budget_exhausted" && reason != "source_cooldown" {
+	if reason != "budget_exhausted" && reason != "source_cooldown" && reason != "budget_cleanup_incomplete" {
 		return
 	}
 	normalized := normalizeBudgetSources(sources)
@@ -198,11 +200,23 @@ func (s *State) MarkBudgetAdmissionDenied(reason string, sources []string) {
 	if reason == "source_cooldown" {
 		for _, source := range normalized {
 			s.sourceCooldown[source] = time.Time{}
+			delete(s.budgetExhausted, source)
+			delete(s.budgetCleanupIncomplete, source)
+		}
+		return
+	}
+	if reason == "budget_cleanup_incomplete" {
+		for _, source := range normalized {
+			s.budgetCleanupIncomplete[source] = struct{}{}
+			delete(s.budgetExhausted, source)
+			delete(s.sourceCooldown, source)
 		}
 		return
 	}
 	for _, source := range normalized {
 		s.budgetExhausted[source] = struct{}{}
+		delete(s.sourceCooldown, source)
+		delete(s.budgetCleanupIncomplete, source)
 	}
 }
 
@@ -236,6 +250,7 @@ func (s *State) ClearBudgetAdmission(sources []string) {
 	for _, source := range normalized {
 		delete(s.budgetExhausted, source)
 		delete(s.sourceCooldown, source)
+		delete(s.budgetCleanupIncomplete, source)
 	}
 }
 
@@ -249,24 +264,25 @@ func (s *State) Response() (int, map[string]any) {
 	leaseEnabled := s.activeActiveEnabled
 	budgetEnabled := s.globalBudgetEnabled.Load()
 	budgetBackendAvailable := !budgetEnabled || s.budgetBackendAvailable.Load()
-	budgetExhausted, sourceCooldown, affectedSources := s.budgetAdmissionPayload(budgetEnabled)
+	budgetExhausted, sourceCooldown, budgetCleanupIncomplete, affectedSources := s.budgetAdmissionPayload(budgetEnabled)
 	statusCode, status := readinessHTTPStatus(s.ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable))
-	response := s.responsePayload(base, status, leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable, budgetExhausted, sourceCooldown, affectedSources)
+	response := s.responsePayload(base, status, leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable, budgetExhausted, sourceCooldown, budgetCleanupIncomplete, affectedSources)
 	s.addLeaseReason(response, leaseEnabled, leaseAvailable)
 	return statusCode, response
 }
 
 func nilReadinessPayload(base health.Response) map[string]any {
 	return map[string]any{
-		"status":                   "not_ready",
-		"version":                  base.Version,
-		"uptime":                   base.Uptime,
-		"goroutines":               base.Goroutines,
-		"budget_backend_available": true,
-		"budget_exhausted":         false,
-		"source_cooldown":          false,
-		"affected_sources":         []string{},
-		"scraper_fetcher_engine":   defaultScraperFetcherEngine,
+		"status":                    "not_ready",
+		"version":                   base.Version,
+		"uptime":                    base.Uptime,
+		"goroutines":                base.Goroutines,
+		"budget_backend_available":  true,
+		"budget_exhausted":          false,
+		"source_cooldown":           false,
+		"budget_cleanup_incomplete": false,
+		"affected_sources":          []string{},
+		"scraper_fetcher_engine":    defaultScraperFetcherEngine,
 	}
 }
 
@@ -293,29 +309,31 @@ func (s *State) responsePayload(
 	budgetBackendAvailable bool,
 	budgetExhausted bool,
 	sourceCooldown bool,
+	budgetCleanupIncomplete bool,
 	affectedSources []string,
 ) map[string]any {
 	return map[string]any{
-		"status":                   status,
-		"version":                  base.Version,
-		"uptime":                   base.Uptime,
-		"goroutines":               base.Goroutines,
-		"runtime":                  s.runtimeName,
-		"http_server_started":      s.httpServerStarted.Load(),
-		"shutting_down":            s.shuttingDown.Load(),
-		"youtube_enabled":          s.youtubeEnabled,
-		"photo_sync_enabled":       s.photoSyncEnabled,
-		"mode":                     readinessMode(s.activeActiveEnabled),
-		"active_active":            s.activeActiveEnabled,
-		"instance_id":              s.instanceID,
-		"job_lease_enabled":        leaseEnabled,
-		"valkey_available":         !leaseEnabled || leaseAvailable,
-		"budget_backend_available": budgetBackendAvailable,
-		"budget_exhausted":         budgetEnabled && budgetExhausted,
-		"source_cooldown":          budgetEnabled && sourceCooldown,
-		"affected_sources":         affectedSources,
-		"scraper_fetcher_engine":   s.currentScraperFetcherEngine(),
-		"scraping_paused":          (leaseEnabled && !leaseAvailable) || (budgetEnabled && !budgetBackendAvailable),
+		"status":                    status,
+		"version":                   base.Version,
+		"uptime":                    base.Uptime,
+		"goroutines":                base.Goroutines,
+		"runtime":                   s.runtimeName,
+		"http_server_started":       s.httpServerStarted.Load(),
+		"shutting_down":             s.shuttingDown.Load(),
+		"youtube_enabled":           s.youtubeEnabled,
+		"photo_sync_enabled":        s.photoSyncEnabled,
+		"mode":                      readinessMode(s.activeActiveEnabled),
+		"active_active":             s.activeActiveEnabled,
+		"instance_id":               s.instanceID,
+		"job_lease_enabled":         leaseEnabled,
+		"valkey_available":          !leaseEnabled || leaseAvailable,
+		"budget_backend_available":  budgetBackendAvailable,
+		"budget_exhausted":          budgetEnabled && budgetExhausted,
+		"source_cooldown":           budgetEnabled && sourceCooldown,
+		"budget_cleanup_incomplete": budgetEnabled && budgetCleanupIncomplete,
+		"affected_sources":          affectedSources,
+		"scraper_fetcher_engine":    s.currentScraperFetcherEngine(),
+		"scraping_paused":           (leaseEnabled && !leaseAvailable) || (budgetEnabled && !budgetBackendAvailable),
 	}
 }
 
@@ -353,9 +371,9 @@ func normalizeScraperFetcherEngine(engine string) string {
 	}
 }
 
-func (s *State) budgetAdmissionPayload(budgetEnabled bool) (bool, bool, []string) {
+func (s *State) budgetAdmissionPayload(budgetEnabled bool) (bool, bool, bool, []string) {
 	if !budgetEnabled {
-		return false, false, []string{}
+		return false, false, false, []string{}
 	}
 	s.budgetMu.Lock()
 	defer s.budgetMu.Unlock()
@@ -365,11 +383,14 @@ func (s *State) budgetAdmissionPayload(budgetEnabled bool) (bool, bool, []string
 			delete(s.sourceCooldown, source)
 		}
 	}
-	affected := make(map[string]struct{}, len(s.budgetExhausted)+len(s.sourceCooldown))
+	affected := make(map[string]struct{}, len(s.budgetExhausted)+len(s.sourceCooldown)+len(s.budgetCleanupIncomplete))
 	for source := range s.budgetExhausted {
 		affected[source] = struct{}{}
 	}
 	for source := range s.sourceCooldown {
+		affected[source] = struct{}{}
+	}
+	for source := range s.budgetCleanupIncomplete {
 		affected[source] = struct{}{}
 	}
 	sources := make([]string, 0, len(affected))
@@ -377,7 +398,7 @@ func (s *State) budgetAdmissionPayload(budgetEnabled bool) (bool, bool, []string
 		sources = append(sources, source)
 	}
 	sort.Strings(sources)
-	return len(s.budgetExhausted) > 0, len(s.sourceCooldown) > 0, sources
+	return len(s.budgetExhausted) > 0, len(s.sourceCooldown) > 0, len(s.budgetCleanupIncomplete) > 0, sources
 }
 
 func normalizeBudgetSources(sources []string) []string {

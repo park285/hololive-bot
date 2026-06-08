@@ -192,6 +192,59 @@ func TestGlobalBudgetLimiterCleansExpiredReservationOnNextTryReserve(t *testing.
 	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testClassInflightKey(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstPrimary)))
 }
 
+func TestGlobalBudgetLimiterStoresReservationHashAtEncodedMemberKey(t *testing.T) {
+	ctx := context.Background()
+	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
+	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
+		SourceMaxInflight: map[poller.BudgetSource]int{poller.BudgetSourceYouTubeScraper: 5},
+		ClassMaxInflight:  map[poller.BudgetBurstClass]int{poller.BudgetBurstBackfill: 5},
+	})
+
+	held, decision, err := limiter.TryReserve(ctx, testBudgetJob("encoded-member-hash"), testBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstBackfill), time.Minute)
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.NotNil(t, held)
+	reservation, ok := held.(*globalBudgetReservation)
+	require.True(t, ok)
+
+	member := string(poller.BudgetBurstBackfill) + "|" + reservation.ownerToken
+	keys := buildGlobalBudgetKeys(testBudgetNamespace, poller.BudgetSourceYouTubeScraper, poller.BudgetBurstBackfill, member)
+	require.True(t, testKeyExists(t, ctx, cacheClient, keys.Reservation), "encoded reservation hash must use the encoded member key")
+}
+
+func TestGlobalBudgetLimiterPreservesNoTTLSharedKeysWhenSettingReservationTTL(t *testing.T) {
+	ctx := context.Background()
+	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
+	source := poller.BudgetSourceYouTubeScraper
+	class := poller.BudgetBurstPrimary
+	keys := buildGlobalBudgetKeys(testBudgetNamespace, source, class, "legacy")
+	require.NoError(t, cacheClient.GetClient().Do(ctx, cacheClient.B().Set().Key(keys.ClassInflight).Value("0").Build()).Error())
+	require.NoError(t, cacheClient.GetClient().Do(ctx, cacheClient.B().Set().Key(keys.GlobalInflight).Value("0").Build()).Error())
+	require.NoError(t, cacheClient.GetClient().Do(ctx, cacheClient.B().Zadd().
+		Key(keys.Reservations).
+		ScoreMember().
+		ScoreMember(float64(time.Now().Add(time.Hour).UnixMilli()), "legacy").
+		Build()).Error())
+	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
+		SourceMaxInflight: map[poller.BudgetSource]int{source: 5},
+		ClassMaxInflight:  map[poller.BudgetBurstClass]int{class: 5},
+	})
+
+	held, decision, err := limiter.TryReserve(ctx, testBudgetJob("ttl-preserve"), testBudgetProfile(source, class), time.Minute)
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.NotNil(t, held)
+	reservation, ok := held.(*globalBudgetReservation)
+	require.True(t, ok)
+
+	require.Equal(t, int64(-1), testKeyPTTL(t, ctx, cacheClient, keys.ClassInflight))
+	require.Equal(t, int64(-1), testKeyPTTL(t, ctx, cacheClient, keys.GlobalInflight))
+	require.Equal(t, int64(-1), testKeyPTTL(t, ctx, cacheClient, keys.Reservations))
+	reservationMember := string(class) + "|" + reservation.ownerToken
+	reservationKeys := buildGlobalBudgetKeys(testBudgetNamespace, source, class, reservationMember)
+	require.Greater(t, testKeyPTTL(t, ctx, cacheClient, reservationKeys.Reservation), int64(0))
+}
+
 func TestGlobalBudgetLimiterDeniesWhenSourceCooldownPresent(t *testing.T) {
 	ctx := context.Background()
 	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
@@ -320,6 +373,20 @@ func testInflightValue(t *testing.T, ctx context.Context, cacheClient *cache.Ser
 	parsed, err := strconv.Atoi(value)
 	require.NoError(t, err)
 	return parsed
+}
+
+func testKeyExists(t *testing.T, ctx context.Context, cacheClient *cache.Service, key string) bool {
+	t.Helper()
+	exists, err := cacheClient.GetClient().Do(ctx, cacheClient.B().Exists().Key(key).Build()).AsInt64()
+	require.NoError(t, err)
+	return exists > 0
+}
+
+func testKeyPTTL(t *testing.T, ctx context.Context, cacheClient *cache.Service, key string) int64 {
+	t.Helper()
+	ttl, err := cacheClient.GetClient().Do(ctx, cacheClient.B().Pttl().Key(key).Build()).AsInt64()
+	require.NoError(t, err)
+	return ttl
 }
 
 func testClassInflightKey(source poller.BudgetSource, class poller.BudgetBurstClass) string {

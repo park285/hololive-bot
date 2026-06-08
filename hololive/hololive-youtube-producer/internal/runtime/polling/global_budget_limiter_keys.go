@@ -12,6 +12,16 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 )
 
+const globalBudgetReservationMemberSeparator = "|"
+
+func globalBudgetReservationMember(class poller.BudgetBurstClass, ownerToken string) string {
+	className := strings.TrimSpace(string(class))
+	if className == "" {
+		className = string(poller.BudgetBurstPrimary)
+	}
+	return className + globalBudgetReservationMemberSeparator + ownerToken
+}
+
 type globalBudgetKeys struct {
 	BudgetPrefix      string
 	ReservationPrefix string

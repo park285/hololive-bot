@@ -14,6 +14,11 @@ const (
 	globalBudgetReserveCodeAllowed int64 = 1
 )
 
+var (
+	globalBudgetReserveLua = valkey.NewLuaScript(globalBudgetReserveScript)
+	globalBudgetReleaseLua = valkey.NewLuaScript(globalBudgetReleaseScript)
+)
+
 const globalBudgetReserveScript = `
 local currentClassKey = KEYS[1]
 local globalKey = KEYS[2]
@@ -23,7 +28,7 @@ local cooldownKey = KEYS[5]
 local primaryClassKey = KEYS[6]
 local backfillClassKey = KEYS[7]
 local fallbackClassKey = KEYS[8]
-local ownerToken = ARGV[1]
+local reservationMember = ARGV[1]
 local className = ARGV[2]
 local units = ARGV[3]
 local nowMS = tonumber(ARGV[4])
@@ -33,6 +38,19 @@ local classMax = tonumber(ARGV[7])
 local deniedRetryAfterMS = tonumber(ARGV[8])
 local reservationPrefix = ARGV[9]
 local budgetPrefix = ARGV[10]
+local cleanupLimit = tonumber(ARGV[11]) or 128
+if cleanupLimit <= 0 then
+  cleanupLimit = 128
+end
+
+local cleanupGraceMS = deniedRetryAfterMS
+if cleanupGraceMS < 60000 then
+  cleanupGraceMS = 60000
+end
+local reservationTTLMS = ttlMS + cleanupGraceMS
+if reservationTTLMS <= ttlMS then
+  reservationTTLMS = ttlMS
+end
 
 local function classKeyFor(name)
   if name == 'primary' then
@@ -66,18 +84,41 @@ local function decrementInflight(key)
   return nextValue
 end
 
-local expiredTokens = redis.call('ZRANGEBYSCORE', reservationsKey, '-inf', nowMS)
-for _, expiredToken in ipairs(expiredTokens) do
-  local expiredReservationKey = reservationPrefix .. expiredToken
-  if redis.call('EXISTS', expiredReservationKey) == 1 then
-    local expiredClass = redis.call('HGET', expiredReservationKey, 'class')
-    if expiredClass then
-      decrementInflight(classKeyFor(expiredClass))
-    end
-    decrementInflight(globalKey)
-    redis.call('DEL', expiredReservationKey)
+local function pexpireAtLeast(key, currentTTL, ttl)
+  if ttl <= 0 then
+    return
   end
-  redis.call('ZREM', reservationsKey, expiredToken)
+  if currentTTL == -1 then
+    return
+  end
+  if currentTTL == -2 or currentTTL < ttl then
+    redis.call('PEXPIRE', key, ttl)
+  end
+end
+
+local function classForExpiredMember(member)
+  local sep = string.find(member, '|', 1, true)
+  if sep ~= nil then
+    return string.sub(member, 1, sep - 1)
+  end
+  return redis.call('HGET', reservationPrefix .. member, 'class')
+end
+
+local expiredMembers = redis.call('ZRANGEBYSCORE', reservationsKey, '-inf', nowMS, 'LIMIT', 0, cleanupLimit)
+for _, expiredMember in ipairs(expiredMembers) do
+  local expiredClass = classForExpiredMember(expiredMember)
+  if expiredClass then
+    decrementInflight(classKeyFor(expiredClass))
+    decrementInflight(globalKey)
+    redis.call('DEL', reservationPrefix .. expiredMember)
+  end
+  redis.call('ZREM', reservationsKey, expiredMember)
+end
+
+local cleanupIncomplete = false
+local remainingExpired = redis.call('ZRANGEBYSCORE', reservationsKey, '-inf', nowMS, 'LIMIT', 0, 1)
+if #remainingExpired > 0 then
+  cleanupIncomplete = true
 end
 
 if redis.call('EXISTS', cooldownKey) == 1 then
@@ -90,18 +131,32 @@ end
 
 local globalCurrent = currentValue(globalKey)
 if sourceMax > 0 and globalCurrent >= sourceMax then
+  if cleanupIncomplete then
+    return {0, deniedRetryAfterMS, 'budget_cleanup_incomplete'}
+  end
   return {0, deniedRetryAfterMS, 'budget_exhausted'}
 end
 
 local classCurrent = currentValue(currentClassKey)
 if classMax > 0 and classCurrent >= classMax then
+  if cleanupIncomplete then
+    return {0, deniedRetryAfterMS, 'budget_cleanup_incomplete'}
+  end
   return {0, deniedRetryAfterMS, 'budget_exhausted'}
 end
 
+local classTTL = redis.call('PTTL', currentClassKey)
+local globalTTL = redis.call('PTTL', globalKey)
+local reservationsTTL = redis.call('PTTL', reservationsKey)
+local reservationTTL = redis.call('PTTL', reservationKey)
 redis.call('INCR', currentClassKey)
 redis.call('INCR', globalKey)
-redis.call('HSET', reservationKey, 'class', className, 'units', units)
-redis.call('ZADD', reservationsKey, nowMS + ttlMS, ownerToken)
+redis.call('HSET', reservationKey, 'class', className, 'units', units, 'member', reservationMember)
+redis.call('ZADD', reservationsKey, nowMS + ttlMS, reservationMember)
+pexpireAtLeast(currentClassKey, classTTL, reservationTTLMS)
+pexpireAtLeast(globalKey, globalTTL, reservationTTLMS)
+pexpireAtLeast(reservationsKey, reservationsTTL, reservationTTLMS)
+pexpireAtLeast(reservationKey, reservationTTL, reservationTTLMS)
 return {1, 0, ''}
 `
 
@@ -112,8 +167,9 @@ local reservationKey = KEYS[3]
 local primaryClassKey = KEYS[4]
 local backfillClassKey = KEYS[5]
 local fallbackClassKey = KEYS[6]
-local ownerToken = ARGV[1]
+local reservationMember = ARGV[1]
 local budgetPrefix = ARGV[2]
+local className = ARGV[3]
 
 local function classKeyFor(name)
   if name == 'primary' then
@@ -147,17 +203,15 @@ local function decrementInflight(key)
   return nextValue
 end
 
-if redis.call('EXISTS', reservationKey) == 1 then
-  local className = redis.call('HGET', reservationKey, 'class')
-  if className then
-    decrementInflight(classKeyFor(className))
-  end
+local removed = redis.call('ZREM', reservationsKey, reservationMember)
+local hashExists = redis.call('EXISTS', reservationKey)
+if removed == 1 or hashExists == 1 then
+  decrementInflight(classKeyFor(className))
   decrementInflight(globalKey)
   redis.call('DEL', reservationKey)
-  redis.call('ZREM', reservationsKey, ownerToken)
   return 1
 end
-redis.call('ZREM', reservationsKey, ownerToken)
+redis.call('DEL', reservationKey)
 return 0
 `
 
@@ -199,30 +253,50 @@ func parseGlobalBudgetReserveValues(values []valkey.ValkeyMessage) (int64, int64
 	return code, retryAfterMS, reason, nil
 }
 
-func evalGlobalBudgetArray(ctx context.Context, cacheClient cache.Client, cmd valkey.Completed, action string) ([]valkey.ValkeyMessage, error) {
-	results := cacheClient.DoMulti(ctx, cmd)
-	if len(results) != 1 {
-		return nil, fmt.Errorf("%s: unexpected result count: %d", action, len(results))
+func evalGlobalBudgetArray(
+	ctx context.Context,
+	cacheClient cache.Client,
+	script *valkey.Lua,
+	keys []string,
+	args []string,
+	action string,
+) ([]valkey.ValkeyMessage, error) {
+	if cacheClient == nil || cacheClient.GetClient() == nil {
+		return nil, fmt.Errorf("%s: cache client must not be nil", action)
 	}
-	if results[0].Error() != nil {
-		return nil, fmt.Errorf("%s: %w", action, results[0].Error())
+	if script == nil {
+		return nil, fmt.Errorf("%s: lua script must not be nil", action)
 	}
-	values, err := results[0].ToArray()
+	result := script.Exec(ctx, cacheClient.GetClient(), keys, args)
+	if result.Error() != nil {
+		return nil, fmt.Errorf("%s: %w", action, result.Error())
+	}
+	values, err := result.ToArray()
 	if err != nil {
 		return nil, fmt.Errorf("%s: parse result: %w", action, err)
 	}
 	return values, nil
 }
 
-func evalGlobalBudgetInt(ctx context.Context, cacheClient cache.Client, cmd valkey.Completed, action string) error {
-	results := cacheClient.DoMulti(ctx, cmd)
-	if len(results) != 1 {
-		return fmt.Errorf("%s: unexpected result count: %d", action, len(results))
+func evalGlobalBudgetInt(
+	ctx context.Context,
+	cacheClient cache.Client,
+	script *valkey.Lua,
+	keys []string,
+	args []string,
+	action string,
+) error {
+	if cacheClient == nil || cacheClient.GetClient() == nil {
+		return fmt.Errorf("%s: cache client must not be nil", action)
 	}
-	if results[0].Error() != nil {
-		return fmt.Errorf("%s: %w", action, results[0].Error())
+	if script == nil {
+		return fmt.Errorf("%s: lua script must not be nil", action)
 	}
-	if _, err := results[0].AsInt64(); err != nil {
+	result := script.Exec(ctx, cacheClient.GetClient(), keys, args)
+	if result.Error() != nil {
+		return fmt.Errorf("%s: %w", action, result.Error())
+	}
+	if _, err := result.AsInt64(); err != nil {
 		return fmt.Errorf("%s: parse result: %w", action, err)
 	}
 	return nil

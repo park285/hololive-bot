@@ -189,6 +189,22 @@ func (s *aclRoomSetCacheState) keysWithPrefix(prefix string) []string {
 	return keys
 }
 
+func testACLRoomsTempKeyPrefix(key string) string {
+	if testHasValkeyHashTag(key) {
+		return key + aclRoomsTempKeySeparator
+	}
+	return "{" + key + "}" + aclRoomsTempKeySeparator
+}
+
+func testHasValkeyHashTag(key string) bool {
+	start := strings.IndexByte(key, '{')
+	if start < 0 {
+		return false
+	}
+	end := strings.IndexByte(key[start+1:], '}')
+	return end > 0
+}
+
 func newACLRoomSetStatefulCache(state *aclRoomSetCacheState) *cachemocks.Client {
 	return &cachemocks.Client{
 		DelFunc: func(_ context.Context, key string) error {
@@ -611,7 +627,7 @@ func TestNewACLService_LogsRoomsCacheSyncFailureAndKeepsLoadedState(t *testing.T
 	assertNewACLServiceKeepsLoadedStateOnCacheSyncFailure(t,
 		func(cacheMock *cachemocks.Client) {
 			cacheMock.SAddFunc = func(_ context.Context, key string, _ []string) (int64, error) {
-				if strings.HasPrefix(key, aclBlacklistRoomsKey+aclRoomsTempKeySeparator) {
+				if strings.HasPrefix(key, testACLRoomsTempKeyPrefix(aclBlacklistRoomsKey)) {
 					return 0, errors.New("sadd failed")
 				}
 
@@ -870,7 +886,7 @@ func TestACLService_SyncRoomsToValkeyAtomicSuccess(t *testing.T) {
 		t.Fatalf("target set=%v want=[room-a room-b]", got)
 	}
 
-	if tempKeys := state.keysWithPrefix(aclWhitelistRoomsKey + aclRoomsTempKeySeparator); len(tempKeys) != 0 {
+	if tempKeys := state.keysWithPrefix(testACLRoomsTempKeyPrefix(aclWhitelistRoomsKey)); len(tempKeys) != 0 {
 		t.Fatalf("expected no temp keys after successful swap, got %v", tempKeys)
 	}
 }
@@ -882,7 +898,7 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnTempWriteFailure(t *tes
 	cacheMock := newACLRoomSetStatefulCache(state)
 
 	cacheMock.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
-		if strings.HasPrefix(key, aclWhitelistRoomsKey+aclRoomsTempKeySeparator) {
+		if strings.HasPrefix(key, testACLRoomsTempKeyPrefix(aclWhitelistRoomsKey)) {
 			return 0, errors.New("sadd failed")
 		}
 
@@ -913,7 +929,7 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnTempWriteFailure(t *tes
 		t.Fatalf("target set=%v want=[legacy-room]", got)
 	}
 
-	if tempKeys := state.keysWithPrefix(aclWhitelistRoomsKey + aclRoomsTempKeySeparator); len(tempKeys) != 0 {
+	if tempKeys := state.keysWithPrefix(testACLRoomsTempKeyPrefix(aclWhitelistRoomsKey)); len(tempKeys) != 0 {
 		t.Fatalf("expected no temp keys after temp write failure, got %v", tempKeys)
 	}
 }
@@ -949,7 +965,7 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnSwapFailure(t *testing.
 		t.Fatalf("target set=%v want=[legacy-room]", got)
 	}
 
-	if tempKeys := state.keysWithPrefix(aclWhitelistRoomsKey + aclRoomsTempKeySeparator); len(tempKeys) != 0 {
+	if tempKeys := state.keysWithPrefix(testACLRoomsTempKeyPrefix(aclWhitelistRoomsKey)); len(tempKeys) != 0 {
 		t.Fatalf("expected no temp keys after swap failure, got %v", tempKeys)
 	}
 }

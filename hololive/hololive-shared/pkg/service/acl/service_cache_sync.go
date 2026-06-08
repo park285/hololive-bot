@@ -23,6 +23,7 @@ package acl
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/valkey-io/valkey-go"
@@ -35,8 +36,8 @@ const (
 var aclRoomsTempKeySeq atomic.Uint64
 
 const renameRoomsKeyScript = `
-local source = ARGV[1]
-local target = ARGV[2]
+local source = KEYS[1]
+local target = KEYS[2]
 
 if redis.call('EXISTS', source) == 1 then
 	redis.call('RENAME', source, target)
@@ -47,6 +48,23 @@ end
 return 1
 `
 
+func aclRoomsTempKey(key string) string {
+	sequence := aclRoomsTempKeySeq.Add(1)
+	if hasValkeyHashTag(key) {
+		return fmt.Sprintf("%s%s%d", key, aclRoomsTempKeySeparator, sequence)
+	}
+	return fmt.Sprintf("{%s}%s%d", key, aclRoomsTempKeySeparator, sequence)
+}
+
+func hasValkeyHashTag(key string) bool {
+	start := strings.IndexByte(key, '{')
+	if start < 0 {
+		return false
+	}
+	end := strings.IndexByte(key[start+1:], '}')
+	return end > 0
+}
+
 func (s *Service) syncRoomsToValkeyAtomic(ctx context.Context, key string, rooms []string) error {
 	if len(rooms) == 0 {
 		if err := s.cache.Del(ctx, key); err != nil {
@@ -56,7 +74,7 @@ func (s *Service) syncRoomsToValkeyAtomic(ctx context.Context, key string, rooms
 		return nil
 	}
 
-	tempKey := fmt.Sprintf("%s%s%d", key, aclRoomsTempKeySeparator, aclRoomsTempKeySeq.Add(1))
+	tempKey := aclRoomsTempKey(key)
 
 	if err := s.cache.Del(ctx, tempKey); err != nil {
 		return fmt.Errorf("cleanup temp %s: %w", tempKey, err)
@@ -117,8 +135,8 @@ func (s *Service) renameRoomsKeyFallback(ctx context.Context, key string, rooms 
 func (s *Service) renameRoomsKeyEval(ctx context.Context, client valkey.Client, builder valkey.Builder, tempKey, key string) error {
 	resp := client.Do(ctx, builder.Eval().
 		Script(renameRoomsKeyScript).
-		Numkeys(0).
-		Arg(tempKey, key).
+		Numkeys(2).
+		Key(tempKey, key).
 		Build(),
 	)
 	if err := resp.Error(); err != nil {
