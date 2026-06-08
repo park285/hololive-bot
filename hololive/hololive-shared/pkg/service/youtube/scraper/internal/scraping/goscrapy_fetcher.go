@@ -102,11 +102,11 @@ func (defaultGoscrapyRunner) Run(ctx context.Context, client *Client, req pageFe
 
 	app, err := gos.New[struct{}](&gos.Config{
 		Client: client.currentHTTPClient(),
+		Logger: goslogger.NewNoopLogger(),
 	})
 	if err != nil {
 		return pageFetchResponse{}, false, fmt.Errorf("goscrapy init: %w", err)
 	}
-	app.WithLogger(goslogger.NewNoopLogger())
 
 	resultCh := make(chan goscrapyFetchResult, 1)
 	poll := time.NewTicker(goscrapyRunnerPollInterval)
