@@ -1,4 +1,4 @@
-import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle.mjs";
 import {
 	type ConfirmModalState,
 	type ContainerAction,

@@ -113,7 +113,7 @@ func (mr *MetricsRecorder) recordPerRoomSendFailure(
 		slog.Any("error", sendErr))
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, "per_room", "failure", reason, sendErr)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", reason)
-	mr.recordDeliveryFailure(result, mu, reason, row.ID, row.OutboxID)
+	mr.recordDeliveryFailureWithRetryAfter(result, mu, reason, row.ID, row.OutboxID, deliveryRetryAfter(sendErr))
 }
 
 func (mr *MetricsRecorder) recordPerRoomSuccess(
@@ -148,9 +148,30 @@ func (mr *MetricsRecorder) recordDeliveryFailure(
 	reason string,
 	deliveryID, outboxID int64,
 ) {
+	mr.recordDeliveryFailureWithRetryAfter(result, mu, reason, deliveryID, outboxID, 0)
+}
+
+func (mr *MetricsRecorder) recordDeliveryFailureWithRetryAfter(
+	result *dispatchstate.DispatchResult,
+	mu *sync.Mutex,
+	reason string,
+	deliveryID, outboxID int64,
+	retryAfter time.Duration,
+) {
 	mu.Lock()
 	result.FailedDeliveries++
+	if result.FailureBuckets == nil {
+		result.FailureBuckets = make(map[string][]int64)
+	}
 	result.FailureBuckets[reason] = append(result.FailureBuckets[reason], deliveryID)
+	if retryAfter > 0 {
+		if result.FailureRetryAfter == nil {
+			result.FailureRetryAfter = make(map[string]time.Duration)
+		}
+		if retryAfter > result.FailureRetryAfter[reason] {
+			result.FailureRetryAfter[reason] = retryAfter
+		}
+	}
 	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, outboxID)
 	mu.Unlock()
 }
@@ -210,7 +231,7 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, failedAt, "grouped", "failure", reason, sendErr)
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", reason)
 	for i := range validRows {
-		mr.recordDeliveryFailure(result, mu, reason, validRows[i].ID, validRows[i].OutboxID)
+		mr.recordDeliveryFailureWithRetryAfter(result, mu, reason, validRows[i].ID, validRows[i].OutboxID, deliveryRetryAfter(sendErr))
 	}
 }
 
@@ -304,7 +325,7 @@ func (mr *MetricsRecorder) recordKaringSendFailure(
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, mode, "failure", "karing send", err)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, mode, "failure", "karing send")
 	for i := range rows {
-		mr.recordDeliveryFailure(result, mu, "karing send", rows[i].ID, rows[i].OutboxID)
+		mr.recordDeliveryFailureWithRetryAfter(result, mu, "karing send", rows[i].ID, rows[i].OutboxID, deliveryRetryAfter(err))
 	}
 }
 

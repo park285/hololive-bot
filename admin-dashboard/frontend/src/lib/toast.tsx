@@ -1,6 +1,6 @@
-import CircleAlert from "lucide-react/dist/esm/icons/circle-alert";
-import CheckCircle2 from "lucide-react/dist/esm/icons/circle-check-big";
-import X from "lucide-react/dist/esm/icons/x";
+import CircleAlert from "lucide-react/dist/esm/icons/circle-alert.mjs";
+import CheckCircle2 from "lucide-react/dist/esm/icons/circle-check-big.mjs";
+import X from "lucide-react/dist/esm/icons/x.mjs";
 import { type CSSProperties, useEffect, useState } from "react";
 import toastApi, {
 	getToastItems,

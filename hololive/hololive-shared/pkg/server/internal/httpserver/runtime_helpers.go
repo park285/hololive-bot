@@ -81,9 +81,7 @@ func NewH2CServer(addr string, handler http.Handler, operation string) *http.Ser
 	if handler == nil {
 		handler = http.NotFoundHandler()
 	}
-	if strings.TrimSpace(operation) != "" {
-		handler = otelhttp.NewHandler(handler, operation)
-	}
+	handler = newOtelHandler(handler, operation)
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -96,6 +94,19 @@ func NewH2CServer(addr string, handler http.Handler, operation string) *http.Ser
 	}
 	EnableH2C(srv)
 	return srv
+}
+
+func newOtelHandler(handler http.Handler, operation string) http.Handler {
+	if strings.TrimSpace(operation) == "" {
+		return handler
+	}
+	return otelhttp.NewHandler(
+		handler,
+		operation,
+		otelhttp.WithSpanNameFormatter(func(operation string, _ *http.Request) string {
+			return operation
+		}),
+	)
 }
 
 func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts RuntimeRouterOptions) (*gin.Engine, error) {

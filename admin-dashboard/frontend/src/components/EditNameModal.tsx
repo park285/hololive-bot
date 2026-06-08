@@ -1,5 +1,5 @@
-import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
-import Save from "lucide-react/dist/esm/icons/save";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle.mjs";
+import Save from "lucide-react/dist/esm/icons/save.mjs";
 import { type SyntheticEvent, useEffect, useMemo, useState } from "react";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
@@ -126,6 +127,14 @@ func deliveryFailureReasonIsPermanent(reason string) bool {
 		}
 	}
 	return false
+}
+
+func deliveryRetryAfter(err error) time.Duration {
+	var httpErr *iris.HTTPError
+	if errors.As(err, &httpErr) && httpErr != nil && httpErr.RetryAfter > 0 {
+		return httpErr.RetryAfter
+	}
+	return 0
 }
 
 func deliveryClientRequestID(roomID string, dedupeKeys []string) string {

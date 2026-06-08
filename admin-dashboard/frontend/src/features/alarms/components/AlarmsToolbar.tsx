@@ -1,4 +1,4 @@
-import Search from "lucide-react/dist/esm/icons/search";
+import Search from "lucide-react/dist/esm/icons/search.mjs";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";

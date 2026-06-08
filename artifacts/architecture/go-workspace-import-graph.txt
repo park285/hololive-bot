@@ -297,6 +297,7 @@ github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap -> github.com/kapu/
 github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/youtube/poller
 github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
+github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/testutil
 github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap -> github.com/park285/shared-go/pkg/workerpool
 github.com/kapu/hololive-kakao-bot-go/internal/app/botruntime -> github.com/kapu/hololive-kakao-bot-go/internal/adapter

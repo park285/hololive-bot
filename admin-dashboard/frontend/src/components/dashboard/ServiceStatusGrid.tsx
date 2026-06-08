@@ -1,7 +1,7 @@
-import Bot from "lucide-react/dist/esm/icons/bot";
-import Cpu from "lucide-react/dist/esm/icons/cpu";
-import Server from "lucide-react/dist/esm/icons/server";
-import ShieldCheck from "lucide-react/dist/esm/icons/shield-check";
+import Bot from "lucide-react/dist/esm/icons/bot.mjs";
+import Cpu from "lucide-react/dist/esm/icons/cpu.mjs";
+import Server from "lucide-react/dist/esm/icons/server.mjs";
+import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import type { ServiceStatus } from "@/api/core";
 
 interface ServiceStatusGridProps {

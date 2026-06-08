@@ -27,8 +27,6 @@ type alarmDispatchQuarantineConsumer interface {
 	Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error
 }
 
-// alarmDispatchSendingRetryConsumer는 post-send retryable failure(502/503)에서
-// row가 이미 'sending' 상태일 때 retry로 전환하는 경로를 지원한다.
 type alarmDispatchSendingRetryConsumer interface {
 	ScheduleSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 }
@@ -167,10 +165,6 @@ func (r alarmDispatchRunner) persistPostSendingFailure(ctx context.Context, enve
 	return nil
 }
 
-// persistSendingRetry는 post-send retryable failure에서 row가 'sending' 상태임을 알고
-// ScheduleSendingRetry(status IN ('leased','sending'))를 사용한다. consumer가
-// alarmDispatchSendingRetryConsumer를 구현하지 않으면 기존 persistPreSendFailure로
-// 폴백하여 backward-compatibility를 유지한다.
 func (r alarmDispatchRunner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	consumer, ok := r.consumer.(alarmDispatchSendingRetryConsumer)
 	if !ok {
@@ -195,7 +189,7 @@ func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
 	}
 	var httpErr *iris.HTTPError
 	if errors.As(cause, &httpErr) {
-		return httpErr.StatusCode == 502 || httpErr.StatusCode == 503
+		return httpErr.StatusCode == 429 || httpErr.StatusCode == 502 || httpErr.StatusCode == 503
 	}
 	return false
 }
@@ -359,8 +353,13 @@ func nextAlarmDispatchRetry(envelope domain.AlarmQueueEnvelope, cause error) *do
 	}
 	retry.Attempt++
 	retry.LastError = cause.Error()
-	retry.RetryAfterMS = int64((time.Duration(retry.Attempt) * 5 * time.Second) / time.Millisecond)
-	retry.NextVisibleAt = time.Now().UTC().Add(time.Duration(retry.RetryAfterMS) * time.Millisecond).Format(time.RFC3339Nano)
+	retryAfter := time.Duration(retry.Attempt) * 5 * time.Second
+	var httpErr *iris.HTTPError
+	if errors.As(cause, &httpErr) && httpErr.RetryAfter > retryAfter {
+		retryAfter = httpErr.RetryAfter
+	}
+	retry.RetryAfterMS = int64(retryAfter / time.Millisecond)
+	retry.NextVisibleAt = time.Now().UTC().Add(retryAfter).Format(time.RFC3339Nano)
 	return retry
 }
 

@@ -3,6 +3,7 @@ package workerapp
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
@@ -10,11 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesScheduleSendingRetry는
-// PG 모드에서 row가 'sending' 상태일 때 502 에러가 발생하면 ScheduleSendingRetry를
-// 호출해야 하며 ScheduleRetry (status='leased' 조건) 는 호출되지 않아야 함을 검증한다.
 func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesScheduleSendingRetry(t *testing.T) {
-	// 실제 HTTP 에러 타입을 사용 — URL이 /karing/content-list여도 아니어도 502면 retryable
 	karingErr := &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"}
 
 	consumer := &alarmDispatchRunnerSendingRetryTestConsumer{
@@ -33,22 +30,16 @@ func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesScheduleSendingRetry
 
 	require.NoError(t, err)
 	assert.True(t, processed)
-	// MarkSending은 호출됨 (row가 sending 상태로 전환)
 	require.Len(t, consumer.markSending, 1)
-	// ScheduleSendingRetry가 호출되어 sending → retry 전환
 	require.Len(t, consumer.scheduledSendingRetry, 1, "502 post-send failure must route through ScheduleSendingRetry, not ScheduleRetry")
 	require.NotNil(t, consumer.scheduledSendingRetry[0].Retry)
 	assert.Equal(t, 1, consumer.scheduledSendingRetry[0].Retry.Attempt)
-	// ScheduleRetry (status='leased' 조건) 는 호출되지 않아야 함
 	assert.Empty(t, consumer.scheduledRetry, "ScheduleRetry must not be called for post-send failure when row is already 'sending'")
-	// quarantine도 발생하지 않아야 함
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.markDispatched)
 }
 
-// TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesScheduleSendingRetry는
-// 503 에러에 대해서도 동일하게 ScheduleSendingRetry 경로를 사용함을 검증한다.
 func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesScheduleSendingRetry(t *testing.T) {
 	karingErr := &iris.HTTPError{StatusCode: 503}
 
@@ -73,8 +64,46 @@ func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesScheduleSendingRetry
 	assert.Empty(t, consumer.quarantined)
 }
 
-// alarmDispatchRunnerSendingRetryTestConsumer는 alarmDispatchConsumer와
-// alarmDispatchSendingRetryConsumer 두 인터페이스를 모두 구현하는 테스트용 mock이다.
+func TestPrepareDispatchFailureUsesHTTPRetryAfterHintWhenLongerThanAttemptDelay(t *testing.T) {
+	for _, statusCode := range []int{503, 429} {
+		t.Run((&iris.HTTPError{StatusCode: statusCode}).Error(), func(t *testing.T) {
+			envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+			cause := &iris.HTTPError{StatusCode: statusCode, RetryAfter: 12 * time.Second}
+			startedAt := time.Now().UTC()
+
+			retryEnvelopes, dlqEnvelopes := prepareDispatchFailure([]domain.AlarmQueueEnvelope{envelope}, cause)
+
+			require.Empty(t, dlqEnvelopes)
+			require.Len(t, retryEnvelopes, 1)
+			require.NotNil(t, retryEnvelopes[0].Retry)
+			assert.Equal(t, 1, retryEnvelopes[0].Retry.Attempt)
+			assert.Equal(t, int64(12000), retryEnvelopes[0].Retry.RetryAfterMS)
+			assertRetryNextVisibleDelay(t, retryEnvelopes[0].Retry, startedAt, 12*time.Second)
+		})
+	}
+}
+
+func TestNextAlarmDispatchRetryKeepsAttemptDelayWhenHTTPRetryAfterHintIsShorter(t *testing.T) {
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", &domain.AlarmQueueRetryMetadata{Attempt: 1})
+	cause := &iris.HTTPError{StatusCode: 503, RetryAfter: time.Second}
+	startedAt := time.Now().UTC()
+
+	retry := nextAlarmDispatchRetry(envelope, cause)
+
+	require.NotNil(t, retry)
+	assert.Equal(t, 2, retry.Attempt)
+	assert.Equal(t, int64(10000), retry.RetryAfterMS)
+	assertRetryNextVisibleDelay(t, retry, startedAt, 10*time.Second)
+}
+
+func assertRetryNextVisibleDelay(t *testing.T, retry *domain.AlarmQueueRetryMetadata, startedAt time.Time, delay time.Duration) {
+	t.Helper()
+	nextVisibleAt, err := time.Parse(time.RFC3339Nano, retry.NextVisibleAt)
+	require.NoError(t, err)
+	assert.False(t, nextVisibleAt.Before(startedAt.Add(delay)), "NextVisibleAt %s should be at least %s after start", nextVisibleAt, delay)
+	assert.False(t, nextVisibleAt.After(time.Now().UTC().Add(delay+200*time.Millisecond)), "NextVisibleAt %s should stay near RetryAfterMS delay %s", nextVisibleAt, delay)
+}
+
 type alarmDispatchRunnerSendingRetryTestConsumer struct {
 	batches               [][]domain.AlarmQueueEnvelope
 	markSending           []domain.AlarmQueueEnvelope

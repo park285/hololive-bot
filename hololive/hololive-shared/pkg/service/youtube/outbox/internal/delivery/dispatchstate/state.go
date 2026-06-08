@@ -38,4 +38,5 @@ type DispatchResult struct {
 	SuccessClaimTokens []ClaimToken
 	FailedDeliveries   int
 	FailureBuckets     map[string][]int64
+	FailureRetryAfter  map[string]time.Duration
 }

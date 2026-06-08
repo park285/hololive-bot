@@ -27,6 +27,11 @@ func TestIsAlarmDispatchRetryablePostSendFailure_TypedHTTPError(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "typed 429 direct",
+			err:  &iris.HTTPError{StatusCode: 429, URL: "/karing/content-list"},
+			want: true,
+		},
+		{
 			name: "typed 502 wrapped through fmt.Errorf",
 			err:  fmt.Errorf("iris send karing content list: %w", fmt.Errorf("send iris karing content list: %w", &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"})),
 			want: true,
@@ -37,13 +42,11 @@ func TestIsAlarmDispatchRetryablePostSendFailure_TypedHTTPError(t *testing.T) {
 			want: true,
 		},
 		{
-			// 502 에러지만 URL이 /karing/content-list가 아닌 다른 엔드포인트 — strings.Contains는 false를 반환하지만 errors.As는 StatusCode만 봐야 함
 			name: "typed 502 on different URL should also be retryable",
 			err:  &iris.HTTPError{StatusCode: 502, URL: "/some-other-endpoint"},
 			want: true,
 		},
 		{
-			// 503 에러, URL 없음 — strings.Contains는 URL 패턴에 의존하므로 false 반환
 			name: "typed 503 with empty URL should be retryable",
 			err:  &iris.HTTPError{StatusCode: 503},
 			want: true,

@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
 import { lazy, Suspense, useCallback } from "react";
 import {
 	createBrowserRouter,

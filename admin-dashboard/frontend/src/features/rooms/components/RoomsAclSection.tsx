@@ -1,7 +1,7 @@
 import clsx from "clsx";
-import Shield from "lucide-react/dist/esm/icons/shield";
-import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert";
-import ShieldBan from "lucide-react/dist/esm/icons/shield-ban";
+import Shield from "lucide-react/dist/esm/icons/shield.mjs";
+import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert.mjs";
+import ShieldBan from "lucide-react/dist/esm/icons/shield-ban.mjs";
 import { Card } from "@/components/ui/Card";
 import type { ACLMode } from "@/features/rooms/types";
 

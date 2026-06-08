@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	"github.com/stretchr/testify/require"
 )
@@ -154,4 +155,43 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnoth
 	require.Nil(t, got.LockedAt)
 	require.NotNil(t, got.SentAt)
 	require.Empty(t, got.Error)
+}
+
+func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := newDeliveryTestDB(t)
+
+	lockedAt := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
+	row := domain.YouTubeNotificationDelivery{
+		OutboxID:      10,
+		RoomID:        "room-rate-limited",
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now().UTC().Add(-time.Hour),
+		LockedAt:      &lockedAt,
+	}
+	require.NoError(t, db.Create(&row).Error)
+
+	manager := &ClaimManager{
+		config:   Config{MaxRetries: 3, RetryBackoff: time.Second},
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		delivery: store.NewDeliveryRepository(db.Pool, slog.New(slog.NewTextHandler(io.Discard, nil))),
+	}
+	startedAt := time.Now().UTC()
+	result := dispatchstate.DispatchResult{
+		FailureRetryAfter: map[string]time.Duration{"rate-limited": 12 * time.Second},
+	}
+
+	manager.markRetryDispatchFailureBucket(ctx, []domain.YouTubeNotificationDelivery{row}, result, "rate-limited", []int64{row.ID})
+
+	var got domain.YouTubeNotificationDelivery
+	require.NoError(t, db.First(&got, row.ID).Error)
+	require.Equal(t, domain.OutboxStatusPending, got.Status)
+	require.Equal(t, 1, got.AttemptCount)
+	require.Nil(t, got.LockedAt)
+	require.Equal(t, "rate-limited", got.Error)
+	require.False(t, got.NextAttemptAt.Before(startedAt.Add(12*time.Second)))
+	require.False(t, got.NextAttemptAt.After(time.Now().UTC().Add(13*time.Second)))
 }

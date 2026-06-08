@@ -1,10 +1,10 @@
-import Bell from "lucide-react/dist/esm/icons/bell";
-import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
-import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
-import Edit2 from "lucide-react/dist/esm/icons/edit-2";
-import MapPin from "lucide-react/dist/esm/icons/map-pin";
-import Trash2 from "lucide-react/dist/esm/icons/trash-2";
-import User from "lucide-react/dist/esm/icons/user";
+import Bell from "lucide-react/dist/esm/icons/bell.mjs";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
+import ChevronUp from "lucide-react/dist/esm/icons/chevron-up.mjs";
+import Edit2 from "lucide-react/dist/esm/icons/edit-2.mjs";
+import MapPin from "lucide-react/dist/esm/icons/map-pin.mjs";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
+import User from "lucide-react/dist/esm/icons/user.mjs";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Check from "lucide-react/dist/esm/icons/check";
-import Loader2 from "lucide-react/dist/esm/icons/loader-2";
-import Save from "lucide-react/dist/esm/icons/save";
-import SettingsIcon from "lucide-react/dist/esm/icons/settings";
+import Check from "lucide-react/dist/esm/icons/check.mjs";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
+import Save from "lucide-react/dist/esm/icons/save.mjs";
+import SettingsIcon from "lucide-react/dist/esm/icons/settings.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { queryKeys } from "@/api/queryKeys";
 import { Button } from "@/components/ui/Button";

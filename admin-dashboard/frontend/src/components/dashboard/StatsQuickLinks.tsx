@@ -1,4 +1,4 @@
-import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
+import ArrowRight from "lucide-react/dist/esm/icons/arrow-right.mjs";
 
 interface StatsQuickLinksProps {
 	onNavigate: (path: string) => void;

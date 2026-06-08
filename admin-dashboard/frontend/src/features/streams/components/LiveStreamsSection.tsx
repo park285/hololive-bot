@@ -1,6 +1,6 @@
-import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
-import ExternalLink from "lucide-react/dist/esm/icons/external-link";
-import PlayCircle from "lucide-react/dist/esm/icons/play-circle";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link.mjs";
+import PlayCircle from "lucide-react/dist/esm/icons/play-circle.mjs";
 import { type SyntheticEvent, useMemo } from "react";
 import { VirtualList } from "@/components/ui/VirtualList";
 import {

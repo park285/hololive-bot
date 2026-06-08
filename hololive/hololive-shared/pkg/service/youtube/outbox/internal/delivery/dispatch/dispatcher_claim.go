@@ -38,7 +38,6 @@ func (d *ClaimManager) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNo
 	return d.fetchAndLockForPerRoom(ctx)
 }
 
-// fetchAndLockForPerRoom: delivery row가 아직 없는 outbox만 claim
 func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
 	if d == nil || d.db == nil {
 		return nil, nil
@@ -259,16 +258,16 @@ func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.You
 		}
 	}
 	for reason, ids := range result.FailureBuckets {
-		d.markFailedDispatchBucket(ctx, rows, reason, ids)
+		d.markFailedDispatchBucket(ctx, rows, result, reason, ids)
 	}
 }
 
-func (d *ClaimManager) markFailedDispatchBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, reason string, ids []int64) {
+func (d *ClaimManager) markFailedDispatchBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result dispatchstate.DispatchResult, reason string, ids []int64) {
 	if deliveryFailureReasonIsPermanent(reason) {
 		d.markPermanentDispatchFailureBucket(ctx, rows, reason, ids)
 		return
 	}
-	d.markRetryDispatchFailureBucket(ctx, rows, reason, ids)
+	d.markRetryDispatchFailureBucket(ctx, rows, result, reason, ids)
 }
 
 func (d *ClaimManager) markPermanentDispatchFailureBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, reason string, ids []int64) {
@@ -279,8 +278,13 @@ func (d *ClaimManager) markPermanentDispatchFailureBucket(ctx context.Context, r
 	}
 }
 
-func (d *ClaimManager) markRetryDispatchFailureBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, reason string, ids []int64) {
-	if err := d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, ids), d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
+func (d *ClaimManager) markRetryDispatchFailureBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result dispatchstate.DispatchResult, reason string, ids []int64) {
+	backoff := d.config.RetryBackoff
+	if retryAfter := result.FailureRetryAfter[reason]; retryAfter > backoff {
+		backoff = retryAfter
+	}
+
+	if err := d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, ids), d.config.MaxRetries, backoff, reason); err != nil {
 		d.logger.Error("Failed to mark delivery rows as failed",
 			slog.String("reason", reason),
 			slog.Any("error", err))

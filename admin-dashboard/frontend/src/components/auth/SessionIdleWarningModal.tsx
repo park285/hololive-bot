@@ -1,6 +1,6 @@
-import Clock from "lucide-react/dist/esm/icons/clock";
-import LogOut from "lucide-react/dist/esm/icons/log-out";
-import RefreshCcw from "lucide-react/dist/esm/icons/refresh-ccw";
+import Clock from "lucide-react/dist/esm/icons/clock.mjs";
+import LogOut from "lucide-react/dist/esm/icons/log-out.mjs";
+import RefreshCcw from "lucide-react/dist/esm/icons/refresh-ccw.mjs";
 import { useEffect, useState } from "react";
 import { authApi } from "@/api/core";
 import { BaseModal } from "@/components/ui/BaseModal";

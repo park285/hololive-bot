@@ -1,7 +1,7 @@
 import clsx from "clsx";
-import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
-import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
-import Server from "lucide-react/dist/esm/icons/server";
+import AlertCircle from "lucide-react/dist/esm/icons/alert-circle.mjs";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
+import Server from "lucide-react/dist/esm/icons/server.mjs";
 import type { DockerContainer } from "@/api/core";
 import { useDockerContainerActions } from "@/components/settings/DockerContainerActions";
 import { DockerContainerConfirmModal } from "@/components/settings/DockerContainerConfirmModal";

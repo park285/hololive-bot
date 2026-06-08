@@ -2,8 +2,6 @@ package config
 
 import settings "github.com/kapu/hololive-shared/pkg/config/internal/settings"
 
-//lint:ignore SA1019 legacy compatibility facade.
-type AdminAPIConfig = settings.AdminAPIConfig
 type BotConfig = settings.BotConfig
 type CORSConfig = settings.CORSConfig
 type ChzzkConfig = settings.ChzzkConfig
@@ -57,8 +55,6 @@ var Load = settings.Load
 var LoadAdminAPIRuntime = settings.LoadAdminAPIRuntime
 var LoadYouTubeProducerRuntime = settings.LoadYouTubeProducerRuntime
 
-//lint:ignore SA1019 legacy compatibility facade.
-var LoadAdminAPI = settings.LoadAdminAPI
 var LoadLLMScheduler = settings.LoadLLMScheduler
 var LoadLLMSchedulerRuntime = settings.LoadLLMSchedulerRuntime
 

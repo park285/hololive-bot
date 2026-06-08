@@ -37,8 +37,9 @@ func NewRuntimeIrisClient(
 		logger = slog.Default()
 	}
 
-	clientOpts := make([]iris.ClientOption, 0, len(opts)+1)
+	clientOpts := make([]iris.ClientOption, 0, len(opts)+2)
 	clientOpts = append(clientOpts, iris.WithLogger(logger))
+	clientOpts = append(clientOpts, iris.WithReplyRetry(3))
 	clientOpts = append(clientOpts, opts...)
 
 	return &RuntimeIrisClient{

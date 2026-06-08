@@ -1,4 +1,4 @@
-import Activity from "lucide-react/dist/esm/icons/activity";
+import Activity from "lucide-react/dist/esm/icons/activity.mjs";
 import type { ReactNode } from "react";
 import { StatCard } from "@/components/ui/StatCard";
 

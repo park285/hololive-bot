@@ -1,5 +1,5 @@
-import Save from "lucide-react/dist/esm/icons/save";
-import Video from "lucide-react/dist/esm/icons/video";
+import Save from "lucide-react/dist/esm/icons/save.mjs";
+import Video from "lucide-react/dist/esm/icons/video.mjs";
 import { type SyntheticEvent, useEffect, useMemo, useState } from "react";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";

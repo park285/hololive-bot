@@ -1,5 +1,5 @@
 import type { VariantProps } from "class-variance-authority";
-import X from "lucide-react/dist/esm/icons/x";
+import X from "lucide-react/dist/esm/icons/x.mjs";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -11,7 +11,6 @@ import {
 export interface BadgeProps
 	extends React.HTMLAttributes<HTMLDivElement>,
 		VariantProps<typeof badgeVariants> {
-	/** 레거시 호환성을 위한 color prop (variant 우선) */
 	color?: BadgeVariant;
 	onRemove?: () => void;
 }

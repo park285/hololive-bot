@@ -1,5 +1,5 @@
-import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
-import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle.mjs";
+import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert.mjs";
 import { useEffect, useState } from "react";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";

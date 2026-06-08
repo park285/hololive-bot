@@ -1,5 +1,5 @@
-import Plus from "lucide-react/dist/esm/icons/plus";
-import Search from "lucide-react/dist/esm/icons/search";
+import Plus from "lucide-react/dist/esm/icons/plus.mjs";
+import Search from "lucide-react/dist/esm/icons/search.mjs";
 import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 

@@ -1,4 +1,4 @@
-import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
 import { useCalendarPage } from "../hooks/useCalendarPage";
 import { CalendarToolbar } from "../components/CalendarToolbar";
 import { CalendarGrid } from "../components/CalendarGrid";

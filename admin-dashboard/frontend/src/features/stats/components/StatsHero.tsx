@@ -1,4 +1,4 @@
-import Play from "lucide-react/dist/esm/icons/play";
+import Play from "lucide-react/dist/esm/icons/play.mjs";
 
 export const StatsHero = () => (
 	<div className="relative overflow-hidden rounded-3xl bg-white border border-slate-100 p-8 shadow-sm animate-fade-in-up">

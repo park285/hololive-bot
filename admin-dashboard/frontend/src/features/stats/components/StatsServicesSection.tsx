@@ -1,8 +1,8 @@
-import Bot from "lucide-react/dist/esm/icons/bot";
-import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
-import Loader2 from "lucide-react/dist/esm/icons/loader-2";
-import Server from "lucide-react/dist/esm/icons/server";
-import ShieldCheck from "lucide-react/dist/esm/icons/shield-check";
+import Bot from "lucide-react/dist/esm/icons/bot.mjs";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
+import Server from "lucide-react/dist/esm/icons/server.mjs";
+import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import { lazy, Suspense } from "react";
 import type { AggregatedStatus } from "@/api/core";
 import { StatsQuickLinks } from "@/components/dashboard/StatsQuickLinks";

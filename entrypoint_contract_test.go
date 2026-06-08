@@ -89,7 +89,7 @@ func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 func TestDocsUseConsolidatedYouTubeProducerOpsCommand(t *testing.T) {
 	t.Parallel()
 
-	deprecatedCommandPaths := []string{
+	legacyCommandPaths := []string{
 		"hololive/hololive-youtube-producer/cmd/youtube-",
 		"hololive/hololive-youtube-producer/cmd/ops/youtube-community-alarm-sent-history",
 		"hololive/hololive-youtube-producer/cmd/ops/youtube-shorts-alarm-sent-history",
@@ -108,9 +108,9 @@ func TestDocsUseConsolidatedYouTubeProducerOpsCommand(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		for _, deprecatedPath := range deprecatedCommandPaths {
-			if strings.Contains(string(content), deprecatedPath) {
-				t.Fatalf("%s contains deprecated command path %q", path, deprecatedPath)
+		for _, legacyPath := range legacyCommandPaths {
+			if strings.Contains(string(content), legacyPath) {
+				t.Fatalf("%s contains legacy command path %q", path, legacyPath)
 			}
 		}
 		return nil

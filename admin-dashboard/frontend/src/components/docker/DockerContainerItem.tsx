@@ -1,10 +1,10 @@
 import clsx from "clsx";
-import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
-import Play from "lucide-react/dist/esm/icons/play";
-import Power from "lucide-react/dist/esm/icons/power";
-import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
-import Square from "lucide-react/dist/esm/icons/square";
-import StopCircle from "lucide-react/dist/esm/icons/stop-circle";
+import AlertCircle from "lucide-react/dist/esm/icons/alert-circle.mjs";
+import Play from "lucide-react/dist/esm/icons/play.mjs";
+import Power from "lucide-react/dist/esm/icons/power.mjs";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
+import Square from "lucide-react/dist/esm/icons/square.mjs";
+import StopCircle from "lucide-react/dist/esm/icons/stop-circle.mjs";
 import type { DockerContainer } from "@/api/core";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";

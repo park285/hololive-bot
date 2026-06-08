@@ -1,10 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
 import axios from "axios";
-import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
-import Loader2 from "lucide-react/dist/esm/icons/loader-2";
-import Lock from "lucide-react/dist/esm/icons/lock";
-import Play from "lucide-react/dist/esm/icons/play";
-import User from "lucide-react/dist/esm/icons/user";
+import ArrowRight from "lucide-react/dist/esm/icons/arrow-right.mjs";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
+import Lock from "lucide-react/dist/esm/icons/lock.mjs";
+import Play from "lucide-react/dist/esm/icons/play.mjs";
+import User from "lucide-react/dist/esm/icons/user.mjs";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "@/api/core";
@@ -65,13 +65,7 @@ const LoginPage = () => {
 			return;
 		}
 
-		void (async () => {
-			try {
-				await loginMutation.mutateAsync();
-			} catch {
-				// handled in onError
-			}
-		})();
+		void loginMutation.mutateAsync().catch(() => undefined);
 	};
 
 	return (

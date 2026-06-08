@@ -1,5 +1,5 @@
-import TrendingUp from "lucide-react/dist/esm/icons/trending-up";
-import Video from "lucide-react/dist/esm/icons/video";
+import TrendingUp from "lucide-react/dist/esm/icons/trending-up.mjs";
+import Video from "lucide-react/dist/esm/icons/video.mjs";
 import { Progress } from "@/components/ui/Progress";
 import type { NearMilestonesResponse } from "@/features/milestones/types";
 

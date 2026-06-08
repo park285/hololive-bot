@@ -89,7 +89,6 @@ hololive/hololive-shared/internal/dbx/tx.go
 hololive/hololive-shared/internal/retry/retry.go
 hololive/hololive-shared/pkg/apperrors/errors.go
 hololive/hololive-shared/pkg/config/config.go
-hololive/hololive-shared/pkg/config/internal/settings/admin_api.go
 hololive/hololive-shared/pkg/config/internal/settings/config.go
 hololive/hololive-shared/pkg/config/internal/settings/config_api_operational.go
 hololive/hololive-shared/pkg/config/internal/settings/config_cache.go

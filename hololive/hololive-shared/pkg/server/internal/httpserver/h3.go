@@ -11,7 +11,6 @@ import (
 	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	runtimehttpserver "github.com/park285/shared-go/pkg/runtime/httpserver"
 	"github.com/quic-go/quic-go/http3"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type RuntimeHTTPServers struct {
@@ -34,9 +33,7 @@ func NewH3Server(addr string, handler http.Handler, certFile, keyFile, operation
 	if handler == nil {
 		handler = http.NotFoundHandler()
 	}
-	if strings.TrimSpace(operation) != "" {
-		handler = otelhttp.NewHandler(handler, operation)
-	}
+	handler = newOtelHandler(handler, operation)
 
 	return sharedh3.NewServer(addr, handler, certFile, keyFile)
 }

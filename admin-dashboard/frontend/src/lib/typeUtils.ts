@@ -2,11 +2,11 @@ import { isAxiosError } from "axios";
 
 export function extractErrorMessage(data: unknown): string | undefined {
 	if (typeof data === "object" && data !== null && "message" in data) {
-		const { message } = data as { message: unknown };
+		const { message } = data;
 		return typeof message === "string" ? message : String(message);
 	}
 	if (typeof data === "object" && data !== null && "error" in data) {
-		const { error } = data as { error: unknown };
+		const { error } = data;
 		return typeof error === "string" ? error : String(error);
 	}
 	return undefined;

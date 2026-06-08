@@ -222,8 +222,8 @@ func TestProvideMemberNewsLLMClient_NewModel_NoDeprecationWarn(t *testing.T) {
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
-	if strings.Contains(buf.String(), "deprecated") {
-		t.Error("should not have deprecation warning for new env var")
+	if strings.Contains(buf.String(), "legacy") {
+		t.Error("should not have legacy warning for new env var")
 	}
 	if !strings.Contains(buf.String(), "new-model") {
 		t.Error("expected log with model name")
@@ -306,7 +306,6 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 }
 
 func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
-	// config.Load() 필수 env vars
 	t.Setenv("HOLODEX_API_KEY_1", "test-key")
 	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
@@ -318,13 +317,11 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
 
-	// Cliproxy 활성화
 	t.Setenv("CLIPROXY_ENABLED", "true")
 	t.Setenv("CLIPROXY_API_KEY", "test-api-key")
 	t.Setenv("CLIPROXY_BASE_URL", "https://example.com/v1")
 	t.Setenv("CLIPROXY_MODEL", "default-model")
 
-	// 최신 env만 설정
 	t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 
 	appConfig, err := config.Load()

@@ -1,8 +1,8 @@
-import Edit2 from "lucide-react/dist/esm/icons/edit-2";
-import ExternalLink from "lucide-react/dist/esm/icons/external-link";
-import GraduationCap from "lucide-react/dist/esm/icons/graduation-cap";
-import Plus from "lucide-react/dist/esm/icons/plus";
-import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import Edit2 from "lucide-react/dist/esm/icons/edit-2.mjs";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link.mjs";
+import GraduationCap from "lucide-react/dist/esm/icons/graduation-cap.mjs";
+import Plus from "lucide-react/dist/esm/icons/plus.mjs";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.mjs";
 import { memo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";

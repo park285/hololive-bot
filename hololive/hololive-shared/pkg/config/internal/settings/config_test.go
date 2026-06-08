@@ -1124,26 +1124,26 @@ func TestLoad_CORSProductionFiltersWildcardAndLocalhost(t *testing.T) {
 	}
 }
 
-func TestLoad_DeprecatedDBAliasRejected(t *testing.T) {
+func TestLoad_UnsupportedLegacyDBAliasRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("DB_SSLMODE", "disable")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("Load() expected deprecated env error, got nil")
+		t.Fatal("Load() expected unsupported legacy env error, got nil")
 	}
 	if !strings.Contains(err.Error(), "DB_SSLMODE is no longer supported") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestLoad_DeprecatedQueryModeAliasRejected(t *testing.T) {
+func TestLoad_UnsupportedLegacyQueryModeAliasRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("DB_QUERY_EXEC_MODE", "describe_exec")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("Load() expected deprecated env error, got nil")
+		t.Fatal("Load() expected unsupported legacy env error, got nil")
 	}
 	if !strings.Contains(err.Error(), "DB_QUERY_EXEC_MODE is no longer supported") {
 		t.Fatalf("unexpected error: %v", err)
@@ -1175,7 +1175,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 
 		_, err := Load()
 		if err == nil {
-			t.Fatal("Load() expected deprecated env error, got nil")
+			t.Fatal("Load() expected unsupported legacy env error, got nil")
 		}
 		if !strings.Contains(err.Error(), "MEMBER_NEWS_CLIPROXY_MODEL is no longer supported") {
 			t.Fatalf("unexpected error: %v", err)
@@ -1189,7 +1189,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 
 		_, err := Load()
 		if err == nil {
-			t.Fatal("Load() expected deprecated env error, got nil")
+			t.Fatal("Load() expected unsupported legacy env error, got nil")
 		}
 		if !strings.Contains(err.Error(), "MEMBER_NEWS_CLIPROXY_MODEL is no longer supported") {
 			t.Fatalf("unexpected error: %v", err)
@@ -1357,35 +1357,6 @@ func TestLoad_DevelopmentAllowsWeakPostgresSSLMode(t *testing.T) {
 	}
 }
 
-func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("APP_ENV", "production")
-	t.Setenv("POSTGRES_SSLMODE", "require")
-
-	_, err := LoadAdminAPI()
-	if err == nil {
-		t.Fatal("LoadAdminAPI() expected production sslmode validation error, got nil")
-	}
-	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestLoadAdminAPI_ProductionRequiresAPISecretKey(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("APP_ENV", "production")
-	t.Setenv("API_SECRET_KEY", "")
-
-	_, err := LoadAdminAPI()
-	if err == nil {
-		t.Fatal("LoadAdminAPI() expected production API key validation error, got nil")
-	}
-	if !strings.Contains(err.Error(), "API_SECRET_KEY is required in production") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	setRequiredH3ServerEnv(t)
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
@@ -1531,7 +1502,6 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		// config 레벨에서는 빈값 유지, provider 레벨에서 fallback
 		if config.LLM.MemberNews.ReviewerModel != "" {
 			t.Errorf("ConsensusReviewerModel = %q, want empty (fallback at provider level)", config.LLM.MemberNews.ReviewerModel)
 		}
@@ -1547,38 +1517,6 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 			t.Errorf("ConsensusReviewerModel = %q, want gpt-4.1-mini", config.LLM.MemberNews.ReviewerModel)
 		}
 	})
-}
-
-func TestLoadAdminAPI_EnvApplied(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("ADMIN_API_PORT", "39002")
-	t.Setenv("LOG_LEVEL", "")
-
-	config, err := LoadAdminAPI()
-	if err != nil {
-		t.Fatalf("LoadAdminAPI() error = %v", err)
-	}
-	if config.Server.Port != 39002 {
-		t.Fatalf("Server.Port = %d, want %d", config.Server.Port, 39002)
-	}
-	if config.Logging.Level != "info" {
-		t.Fatalf("Logging.Level = %q, want %q", config.Logging.Level, "info")
-	}
-}
-
-func TestLoadAdminAPI_CORSLooseBoolParsing(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("CORS_ENFORCE", "yes")
-
-	config, err := LoadAdminAPI()
-	if err != nil {
-		t.Fatalf("LoadAdminAPI() error = %v", err)
-	}
-	if !config.CORS.Enforce {
-		t.Fatal("CORS.Enforce = false, want true")
-	}
 }
 
 func TestLoadLLMScheduler_EnvApplied(t *testing.T) {
@@ -1761,20 +1699,6 @@ func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 	config, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
-	}
-	if config.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
-		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", config.Services.LLMSchedulerHealthURL)
-	}
-}
-
-func TestLoadAdminAPI_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("SERVICES_LLM_SERVER_HEALTH_URL", "http://legacy-llm-server/health")
-
-	config, err := LoadAdminAPI()
-	if err != nil {
-		t.Fatalf("LoadAdminAPI() error = %v", err)
 	}
 	if config.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
 		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", config.Services.LLMSchedulerHealthURL)

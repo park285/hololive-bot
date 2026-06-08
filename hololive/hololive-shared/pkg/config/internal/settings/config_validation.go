@@ -42,7 +42,7 @@ func (c *Config) ValidateAdminAPIRuntime() error {
 }
 
 func (c *Config) validateWithRequired(validateRequired func() error) error {
-	if err := validateDeprecatedEnvUsage(); err != nil {
+	if err := validateUnsupportedLegacyEnvUsage(); err != nil {
 		return err
 	}
 	if c.Server.Port == 0 {
@@ -295,7 +295,7 @@ func isPlaceholderAPIKey(value string) bool {
 	}
 }
 
-func validateDeprecatedEnvUsage() error {
+func validateUnsupportedLegacyEnvUsage() error {
 	if value, exists := os.LookupEnv("MEMBER_NEWS_CLIPROXY_MODEL"); exists && stringutil.TrimSpace(value) != "" {
 		return fmt.Errorf("MEMBER_NEWS_CLIPROXY_MODEL is no longer supported; use MEMBER_NEWS_LLM_MODEL")
 	}

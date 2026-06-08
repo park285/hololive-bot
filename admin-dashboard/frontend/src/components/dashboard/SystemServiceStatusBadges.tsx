@@ -1,4 +1,4 @@
-import Server from "lucide-react/dist/esm/icons/server";
+import Server from "lucide-react/dist/esm/icons/server.mjs";
 import { Badge } from "@/components/ui/Badge";
 import type { SystemStats } from "@/features/stats/types";
 import { cn } from "@/lib/utils";

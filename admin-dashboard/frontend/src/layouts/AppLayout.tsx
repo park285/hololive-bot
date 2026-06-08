@@ -1,8 +1,8 @@
 import clsx from "clsx";
-import LogOut from "lucide-react/dist/esm/icons/log-out";
-import Menu from "lucide-react/dist/esm/icons/menu";
-import Play from "lucide-react/dist/esm/icons/play";
-import X from "lucide-react/dist/esm/icons/x";
+import LogOut from "lucide-react/dist/esm/icons/log-out.mjs";
+import Menu from "lucide-react/dist/esm/icons/menu.mjs";
+import Play from "lucide-react/dist/esm/icons/play.mjs";
+import X from "lucide-react/dist/esm/icons/x.mjs";
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "@/api/core";

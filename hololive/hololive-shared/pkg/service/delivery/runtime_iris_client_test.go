@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/park285/iris-client-go/iris"
@@ -85,6 +86,33 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 		t.Fatalf("second calls after reload = %d, want 1", secondCalls)
 	}
 	secondMu.Unlock()
+}
+
+func TestRuntimeIrisClient_SendMessageDefaultsToReplyRetry(t *testing.T) {
+	ctx := context.Background()
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != iris.PathReply {
+			t.Fatalf("path = %q, want %q", r.URL.Path, iris.PathReply)
+		}
+		if attempts.Add(1) == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":"rate limited"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	client := NewRuntimeIrisClient(server.URL, "bot-token", "", nil, iris.WithHTTPClient(server.Client()), iris.WithTransport("http1"))
+
+	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Fatalf("attempts = %d, want 2", got)
+	}
 }
 
 func TestRuntimeIrisClient_ResolveBaseURLFileOverrideValidation(t *testing.T) {

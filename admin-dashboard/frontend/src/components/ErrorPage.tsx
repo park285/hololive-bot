@@ -1,8 +1,8 @@
-import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
-import Home from "lucide-react/dist/esm/icons/home";
-import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
-import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert";
-import Terminal from "lucide-react/dist/esm/icons/terminal";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle.mjs";
+import Home from "lucide-react/dist/esm/icons/home.mjs";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
+import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert.mjs";
+import Terminal from "lucide-react/dist/esm/icons/terminal.mjs";
 import { useEffect } from "react";
 import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router-dom";
 import { extractErrorMessage } from "@/lib/typeUtils";

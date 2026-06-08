@@ -1,5 +1,5 @@
-import Activity from "lucide-react/dist/esm/icons/activity";
-import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import Activity from "lucide-react/dist/esm/icons/activity.mjs";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
 import { lazy, Suspense } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatsHero } from "@/features/stats/components/StatsHero";

@@ -1,6 +1,6 @@
-import Bell from "lucide-react/dist/esm/icons/bell";
-import MessageSquare from "lucide-react/dist/esm/icons/message-square";
-import Users from "lucide-react/dist/esm/icons/users";
+import Bell from "lucide-react/dist/esm/icons/bell.mjs";
+import MessageSquare from "lucide-react/dist/esm/icons/message-square.mjs";
+import Users from "lucide-react/dist/esm/icons/users.mjs";
 import type { AggregatedStatus } from "@/api/core";
 import type { StatsOverviewCard } from "@/features/stats/components/StatsOverviewSection";
 import type {

@@ -1,12 +1,12 @@
 import type { LucideIcon } from "lucide-react";
-import Bell from "lucide-react/dist/esm/icons/bell";
-import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
-import MessageSquare from "lucide-react/dist/esm/icons/message-square";
-import Radio from "lucide-react/dist/esm/icons/radio";
-import Settings from "lucide-react/dist/esm/icons/settings";
-import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
-import Trophy from "lucide-react/dist/esm/icons/trophy";
-import Users from "lucide-react/dist/esm/icons/users";
+import Bell from "lucide-react/dist/esm/icons/bell.mjs";
+import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard.mjs";
+import MessageSquare from "lucide-react/dist/esm/icons/message-square.mjs";
+import Radio from "lucide-react/dist/esm/icons/radio.mjs";
+import Settings from "lucide-react/dist/esm/icons/settings.mjs";
+import CalendarDays from "lucide-react/dist/esm/icons/calendar-days.mjs";
+import Trophy from "lucide-react/dist/esm/icons/trophy.mjs";
+import Users from "lucide-react/dist/esm/icons/users.mjs";
 import { prefetchRoute, ROUTE_DEFINITIONS } from "@/routes/route-definitions";
 
 export type RouteGroup = "개요" | "홀로라이브 봇" | "인프라";

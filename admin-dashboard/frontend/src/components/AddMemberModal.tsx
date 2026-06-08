@@ -1,5 +1,5 @@
-import Save from "lucide-react/dist/esm/icons/save";
-import UserPlus from "lucide-react/dist/esm/icons/user-plus";
+import Save from "lucide-react/dist/esm/icons/save.mjs";
+import UserPlus from "lucide-react/dist/esm/icons/user-plus.mjs";
 import { type SyntheticEvent, useEffect, useMemo, useState } from "react";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";
