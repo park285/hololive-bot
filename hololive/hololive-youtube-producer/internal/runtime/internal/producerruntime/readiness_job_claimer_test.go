@@ -158,7 +158,7 @@ func TestReadinessReportingJobClaimerMarksLeaseAvailable(t *testing.T) {
 
 func countJSONLogMessage(logs string, message string) int {
 	count := 0
-	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(logs), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
