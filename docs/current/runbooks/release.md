@@ -31,6 +31,12 @@ sudo -n env \
   ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
+> 배포 스크립트는 holo-postgres가 host network(live-compat 토폴로지)로 실행 중인데
+> `COMPOSE_FILE`에 live-compat overlay가 없으면 fail-closed로 거부한다. overlay 없이
+> 배포하면 holo-postgres가 bridge network로 재생성되어 host:5433 소비자(AP
+> youtube-producer 등)의 DB 연결이 끊기기 때문이다. 의도적 토폴로지 변경 시에만
+> `ALLOW_POSTGRES_TOPOLOGY_CHANGE=true`를 설정한다.
+
 Current Go runtime services:
 
 - `hololive-bot`

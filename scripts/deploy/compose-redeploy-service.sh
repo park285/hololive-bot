@@ -130,6 +130,7 @@ export COMPOSE_ENV_FILE
 compose_env_validate_file_format "$COMPOSE_ENV_FILE"
 compose_env_assert_shell_matches_all_file_keys "$COMPOSE_ENV_FILE"
 compose_env_assert_no_shell_shadow_for_compose_files "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_PATHS[@]}"
+compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
 
 export HOLO_BOT_VERSION="$(cat hololive/hololive-kakao-bot-go/VERSION 2>/dev/null | xargs || echo dev)"
 

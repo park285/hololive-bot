@@ -296,6 +296,7 @@ elif [[ "${BUILD_ONLY}" == true ]]; then
 else
     # 전체 빌드 + 배포
     echo "  Target: All Services (build + deploy)"
+    compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
     printf '  [Docker]'; printf ' %q' "${COMPOSE_FILES[@]}"; echo ""
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --build
     removed_runtime_cleanup_standalone_dispatcher

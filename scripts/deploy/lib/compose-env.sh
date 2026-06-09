@@ -226,3 +226,40 @@ compose_env_assert_no_shell_shadow_for_compose_files() {
         fi
     done < <(compose_env_list_interpolation_keys_from_files "$@")
 }
+
+compose_postgres_runtime_network_mode() {
+    local cli="${CONTAINER_CLI:-docker}"
+    "${cli}" inspect holo-postgres --format '{{.HostConfig.NetworkMode}}' 2>/dev/null || true
+}
+
+# holo-postgres가 host network(live-compat 토폴로지)로 떠 있을 때 live-compat overlay 없이
+# 배포하면 bridge로 재생성되어 host:5433 소비자(AP youtube-producer 등)의 DB 연결이 끊긴다.
+# 의도치 않은 토폴로지 변경을 fail-closed로 막는다.
+compose_env_assert_live_compat_for_host_networked_postgres() {
+    local path
+    for path in "$@"; do
+        case "${path}" in
+            *live-compat*) return 0 ;;
+        esac
+    done
+
+    local pg_net
+    pg_net="$(compose_postgres_runtime_network_mode)"
+    if [[ "${pg_net}" != "host" ]]; then
+        return 0
+    fi
+
+    if [[ "${ALLOW_POSTGRES_TOPOLOGY_CHANGE:-}" == "true" ]]; then
+        echo "[WARN] holo-postgres is host-networked but no live-compat overlay is set;" >&2
+        echo "       proceeding because ALLOW_POSTGRES_TOPOLOGY_CHANGE=true." >&2
+        return 0
+    fi
+
+    echo "[ERROR] holo-postgres runs on host network (live-compat topology) but COMPOSE_FILE" >&2
+    echo "        has no live-compat overlay. Deploying now would recreate holo-postgres on a" >&2
+    echo "        bridge network and break host:5433 consumers (AP youtube-producer-a/b 등)." >&2
+    echo "        Add the overlay, for example:" >&2
+    echo "          COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.live-compat.yml" >&2
+    echo "        Set ALLOW_POSTGRES_TOPOLOGY_CHANGE=true only for an intentional topology change." >&2
+    exit 1
+}
