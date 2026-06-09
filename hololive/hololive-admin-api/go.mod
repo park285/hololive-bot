@@ -10,7 +10,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.16.2
+	github.com/park285/iris-client-go v0.17.0
 	github.com/park285/shared-go v1.7.1
 	github.com/shirou/gopsutil/v4 v4.26.5
 	github.com/stretchr/testify v1.11.1

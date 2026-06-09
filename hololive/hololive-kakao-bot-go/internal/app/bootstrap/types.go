@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"context"
 	"log/slog"
 	"time"
 
@@ -72,11 +71,7 @@ type CoreIntegrationServices struct {
 	WorkerPool           *workerpool.QueuedPool
 }
 
-type BotIrisClient interface {
-	iris.Sender
-	Ping(ctx context.Context) bool
-	GetConfig(ctx context.Context) (*iris.ConfigResponse, error)
-}
+type BotIrisClient = iris.BotClient
 
 type BotCoreModule struct {
 	BotSelfUser           string

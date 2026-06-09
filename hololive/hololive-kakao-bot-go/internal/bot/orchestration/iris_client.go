@@ -21,15 +21,9 @@
 package orchestration
 
 import (
-	"context"
-
 	"github.com/park285/iris-client-go/iris"
 )
 
 const serviceNameIris = "iris"
 
-type irisClient interface {
-	iris.Sender
-	Ping(ctx context.Context) bool
-	GetConfig(ctx context.Context) (*iris.ConfigResponse, error)
-}
+type irisClient = iris.BotClient

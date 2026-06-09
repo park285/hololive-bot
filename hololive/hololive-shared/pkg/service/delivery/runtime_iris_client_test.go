@@ -307,29 +307,29 @@ func TestRuntimeIrisClient_ResolveBaseURLFileOverrideValidation(t *testing.T) {
 			var logBuffer bytes.Buffer
 			logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
 			client := NewRuntimeIrisClient("http://fallback.example", "bot-token", baseURLFilePath, logger)
-			got, err := client.resolveBaseURLLocked()
+			got, err := client.resolver.resolve()
 			if tc.wantErrContains != "" {
 				if err == nil {
-					t.Fatalf("resolveBaseURLLocked() error = nil, want containing %q", tc.wantErrContains)
+					t.Fatalf("resolve() error = nil, want containing %q", tc.wantErrContains)
 				}
 				if !strings.Contains(err.Error(), tc.wantErrContains) {
-					t.Fatalf("resolveBaseURLLocked() error = %v, want containing %q", err, tc.wantErrContains)
+					t.Fatalf("resolve() error = %v, want containing %q", err, tc.wantErrContains)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("resolveBaseURLLocked() error = %v, want nil", err)
+				t.Fatalf("resolve() error = %v, want nil", err)
 			}
 			if got != tc.wantBaseURL {
-				t.Fatalf("resolveBaseURLLocked() = %q, want %q", got, tc.wantBaseURL)
+				t.Fatalf("resolve() = %q, want %q", got, tc.wantBaseURL)
 			}
 			if tc.wantWarnContains != "" {
-				got, err = client.resolveBaseURLLocked()
+				got, err = client.resolver.resolve()
 				if err != nil {
-					t.Fatalf("second resolveBaseURLLocked() error = %v, want nil", err)
+					t.Fatalf("second resolve() error = %v, want nil", err)
 				}
 				if got != tc.wantBaseURL {
-					t.Fatalf("second resolveBaseURLLocked() = %q, want %q", got, tc.wantBaseURL)
+					t.Fatalf("second resolve() = %q, want %q", got, tc.wantBaseURL)
 				}
 				logs := logBuffer.String()
 				if strings.Count(logs, tc.wantWarnContains) != 1 {
@@ -397,21 +397,21 @@ func TestRuntimeIrisClient_ResolveBaseURLFileRejectsUncleanSymlinkTraversalInPro
 			t.Setenv("IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS", tc.skipStatChecks)
 
 			client := NewRuntimeIrisClient("http://fallback.example", "bot-token", uncleanPath, nil)
-			got, err := client.resolveBaseURLLocked()
+			got, err := client.resolver.resolve()
 			if tc.wantErrContains != "" {
 				if err == nil {
-					t.Fatalf("resolveBaseURLLocked() error = nil, want containing %q", tc.wantErrContains)
+					t.Fatalf("resolve() error = nil, want containing %q", tc.wantErrContains)
 				}
 				if !strings.Contains(err.Error(), tc.wantErrContains) {
-					t.Fatalf("resolveBaseURLLocked() error = %v, want containing %q", err, tc.wantErrContains)
+					t.Fatalf("resolve() error = %v, want containing %q", err, tc.wantErrContains)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("resolveBaseURLLocked() error = %v, want nil", err)
+				t.Fatalf("resolve() error = %v, want nil", err)
 			}
 			if got != tc.wantBaseURL {
-				t.Fatalf("resolveBaseURLLocked() = %q, want %q", got, tc.wantBaseURL)
+				t.Fatalf("resolve() = %q, want %q", got, tc.wantBaseURL)
 			}
 		})
 	}

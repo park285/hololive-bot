@@ -6,34 +6,27 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 )
 
-func (c *RuntimeIrisClient) ValidateBaseURL() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	_, err := c.resolveBaseURLLocked()
-	if err != nil {
-		return err
-	}
-	return nil
+type runtimeIrisBaseURLResolver struct {
+	fallbackBaseURL string
+	baseURLFilePath string
+	logger          *slog.Logger
+	warnOnce        sync.Once
 }
 
-func (c *RuntimeIrisClient) resolveBaseURLLocked() (string, error) {
-	if c == nil {
-		return "", fmt.Errorf("runtime iris client: client is nil")
+func (r *runtimeIrisBaseURLResolver) resolve() (string, error) {
+	if r.baseURLFilePath != "" {
+		return r.resolveFromFile()
 	}
 
-	if c.baseURLFilePath != "" {
-		return c.resolveBaseURLFromFileLocked()
-	}
-
-	return validateHTTPBaseURL(c.fallbackBaseURL)
+	return validateHTTPBaseURL(r.fallbackBaseURL)
 }
 
-func (c *RuntimeIrisClient) resolveBaseURLFromFileLocked() (string, error) {
+func (r *runtimeIrisBaseURLResolver) resolveFromFile() (string, error) {
 	validateStat := shouldValidateRuntimeIrisBaseURLFileStat()
-	baseURLFilePath, err := normalizeRuntimeIrisBaseURLFilePath(c.baseURLFilePath, validateStat)
+	baseURLFilePath, err := normalizeRuntimeIrisBaseURLFilePath(r.baseURLFilePath, validateStat)
 	if err != nil {
 		return "", fmt.Errorf("validate IRIS_BASE_URL_FILE path: %w", err)
 	}
@@ -49,7 +42,7 @@ func (c *RuntimeIrisClient) resolveBaseURLFromFileLocked() (string, error) {
 		return "", fmt.Errorf("read IRIS_BASE_URL_FILE: %w", err)
 	}
 
-	baseURL, err := validateRuntimeIrisBaseURLFileOverride(string(raw), c.warnBaseURLHostUnvalidated)
+	baseURL, err := validateRuntimeIrisBaseURLFileOverride(string(raw), r.warnBaseURLHostUnvalidated)
 	if err != nil {
 		return "", fmt.Errorf("validate IRIS_BASE_URL_FILE URL: %w", err)
 	}
@@ -57,15 +50,15 @@ func (c *RuntimeIrisClient) resolveBaseURLFromFileLocked() (string, error) {
 	return baseURL, nil
 }
 
-func (c *RuntimeIrisClient) warnBaseURLHostUnvalidated(host string) {
-	if c == nil || c.logger == nil {
+func (r *runtimeIrisBaseURLResolver) warnBaseURLHostUnvalidated(host string) {
+	if r.logger == nil {
 		return
 	}
 
-	c.baseURLHostUnvalidatedWarnOnce.Do(func() {
-		c.logger.Warn("IRIS_BASE_URL_FILE host is unvalidated because no Iris base URL allowlist is configured",
+	r.warnOnce.Do(func() {
+		r.logger.Warn("IRIS_BASE_URL_FILE host is unvalidated because no Iris base URL allowlist is configured",
 			slog.String("host", host),
-			slog.String("path", c.baseURLFilePath),
+			slog.String("path", r.baseURLFilePath),
 			slog.String("allowlist_env", irisH3ServerNameEnv+","+irisBaseURLAllowedHostsEnv),
 		)
 	})

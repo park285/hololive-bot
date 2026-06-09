@@ -35,7 +35,7 @@ replace github.com/park285/shared-go => ../../../shared-go
 require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v0.16.2
+	github.com/park285/iris-client-go v0.17.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/quic-go/quic-go v0.60.0
 	github.com/tech-engine/goscrapy v0.27.17
