@@ -13,11 +13,11 @@ Use the repository deploy script for service-level redeploys:
 ```
 
 On the current main production host, include the live-compat overlay because
-`/run/hololive-bot/env` preserves the live Postgres and certificate contract:
+`/run/hololive-bot/compose.env` preserves the live Postgres and certificate contract:
 
 ```bash
 sudo -n env COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.live-compat.yml \
-  COMPOSE_ENV_FILE=/run/hololive-bot/env \
+  COMPOSE_ENV_FILE=/run/hololive-bot/compose.env \
   ./scripts/deploy/compose-redeploy-service.sh <service>
 ```
 
@@ -27,7 +27,7 @@ For the main-host active-active AP, include both main-ap overlays:
 sudo -n env \
   COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.live-compat.yml:deploy/compose/docker-compose.main-ap.yml:deploy/compose/docker-compose.main-ap.live-compat.yml \
   COMPOSE_PROFILES=main-ap \
-  COMPOSE_ENV_FILE=/run/hololive-bot/env \
+  COMPOSE_ENV_FILE=/run/hololive-bot/compose.env \
   ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 

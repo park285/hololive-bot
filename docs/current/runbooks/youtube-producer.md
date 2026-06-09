@@ -176,7 +176,7 @@ The remote wrapper covers that host's AP services only. The main-host `youtube-p
 sudo -n env \
   COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.live-compat.yml:deploy/compose/docker-compose.main-ap.yml:deploy/compose/docker-compose.main-ap.live-compat.yml \
   COMPOSE_PROFILES=main-ap \
-  COMPOSE_ENV_FILE=/run/hololive-bot/env \
+  COMPOSE_ENV_FILE=/run/hololive-bot/compose.env \
   ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
