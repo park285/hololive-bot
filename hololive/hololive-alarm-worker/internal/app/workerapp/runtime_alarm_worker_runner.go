@@ -23,7 +23,7 @@ package workerapp
 import (
 	"context"
 
-	appruntime "github.com/kapu/hololive-alarm-worker/internal/app/runtime"
+	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,7 +32,7 @@ func (r *AlarmWorkerRuntime) Run() {
 		return
 	}
 
-	appruntime.Run(r.Logger, r.Start, r.Shutdown)
+	applifecycle.Run(r.Logger, r.Start, r.Shutdown)
 }
 
 func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
@@ -40,7 +40,7 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 		return
 	}
 
-	appruntime.Start(ctx, errCh, appruntime.StartHooks{
+	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:     r.Logger,
 		ServerAddr: r.ServerAddr,
 		StartAlarmScheduler: func(ctx context.Context) error {

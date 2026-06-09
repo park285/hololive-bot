@@ -23,7 +23,7 @@ package botruntime
 import (
 	"context"
 
-	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
+	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 )
 
 func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
@@ -31,7 +31,7 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 		return
 	}
 
-	appruntime.Start(ctx, errCh, appruntime.StartHooks{
+	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:     r.Logger,
 		ServerAddr: r.ServerAddr,
 		RunConfigSubscriber: func(ctx context.Context) {

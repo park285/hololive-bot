@@ -23,7 +23,7 @@ package botruntime
 import (
 	"context"
 
-	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
+	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 )
 
@@ -43,7 +43,7 @@ func (r *BotRuntime) Shutdown(ctx context.Context) {
 		return
 	}
 
-	appruntime.Shutdown(ctx, appruntime.ShutdownHooks{
+	applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
 		Logger:                r.Logger,
 		ShutdownHTTPServer:    r.ShutdownHTTPServer,
 		WebhookHandlerClose:   r.closeWebhook,

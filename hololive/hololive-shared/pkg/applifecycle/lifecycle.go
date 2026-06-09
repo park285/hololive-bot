@@ -18,11 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package runtime
+package applifecycle
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -33,9 +34,10 @@ import (
 type StartHooks struct {
 	Logger                  *slog.Logger
 	ServerAddr              string
-	StartAlarmScheduler     func(ctx context.Context)
+	StartAlarmScheduler     func(ctx context.Context) error
 	RunConfigSubscriber     func(ctx context.Context)
 	StartBot                func(ctx context.Context) error
+	StartH3CertReload       func(ctx context.Context)
 	StartHTTPServer         func(errCh chan<- error)
 	SetAlarmSchedulerCancel func(cancel context.CancelFunc)
 }
@@ -54,7 +56,7 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 		ctx = context.Background()
 	}
 
-	startAlarmScheduler(ctx, hooks)
+	startAlarmScheduler(ctx, errCh, hooks)
 
 	if hooks.RunConfigSubscriber != nil {
 		go hooks.RunConfigSubscriber(ctx)
@@ -62,6 +64,11 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	}
 
 	startBot(ctx, hooks.Logger, hooks.StartBot)
+
+	if hooks.StartH3CertReload != nil {
+		hooks.StartH3CertReload(ctx)
+		logInfo(hooks.Logger, "H3 certificate reload started")
+	}
 
 	if hooks.StartHTTPServer != nil {
 		hooks.StartHTTPServer(errCh)
@@ -167,23 +174,46 @@ func shutdownBot(ctx context.Context, hooks ShutdownHooks) {
 	}
 }
 
-func startAlarmScheduler(ctx context.Context, hooks StartHooks) {
+func startAlarmScheduler(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	if hooks.StartAlarmScheduler == nil {
 		logInfo(hooks.Logger, "Alarm runtime scheduler not configured")
 		return
 	}
 
+	alarmCtx := alarmSchedulerContext(ctx, hooks)
+
+	go func() {
+		if err := hooks.StartAlarmScheduler(alarmCtx); err != nil {
+			handleAlarmSchedulerError(err, errCh, hooks.Logger)
+		}
+	}()
+
+	logInfo(hooks.Logger, "Alarm runtime scheduler started")
+}
+
+func alarmSchedulerContext(ctx context.Context, hooks StartHooks) context.Context {
 	if hooks.SetAlarmSchedulerCancel == nil {
-		go hooks.StartAlarmScheduler(ctx)
-		logInfo(hooks.Logger, "Alarm runtime scheduler started")
-		return
+		return ctx
 	}
 
 	alarmCtx, alarmCancel := context.WithCancel(ctx)
 	hooks.SetAlarmSchedulerCancel(alarmCancel)
+	return alarmCtx
+}
 
-	go hooks.StartAlarmScheduler(alarmCtx)
-	logInfo(hooks.Logger, "Alarm runtime scheduler started")
+func handleAlarmSchedulerError(err error, errCh chan<- error, logger *slog.Logger) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		logInfo(logger, "Alarm runtime scheduler stopped")
+		return
+	}
+
+	wrapped := fmt.Errorf("alarm runtime scheduler error: %w", err)
+	if errCh != nil {
+		errCh <- wrapped
+		return
+	}
+
+	logError(logger, "Alarm runtime scheduler error", wrapped)
 }
 
 func startBot(ctx context.Context, logger *slog.Logger, startBot func(ctx context.Context) error) {

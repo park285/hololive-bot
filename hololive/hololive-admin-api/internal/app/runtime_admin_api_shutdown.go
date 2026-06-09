@@ -23,7 +23,7 @@ package app
 import (
 	"context"
 
-	appruntime "github.com/kapu/hololive-admin-api/internal/app/runtime"
+	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 )
 
@@ -32,7 +32,7 @@ func (r *AdminAPIRuntime) Shutdown(ctx context.Context) {
 		return
 	}
 
-	appruntime.Shutdown(ctx, appruntime.ShutdownHooks{
+	applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
 		Logger:                r.Logger,
 		ShutdownHTTPServer:    r.ShutdownHTTPServer,
 		ShutdownAlarmServices: notification.CloseAllAlarmServices,

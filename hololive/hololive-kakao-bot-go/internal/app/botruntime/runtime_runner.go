@@ -21,7 +21,7 @@
 package botruntime
 
 import (
-	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
+	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 )
 
 func (r *BotRuntime) Run() {
@@ -29,5 +29,5 @@ func (r *BotRuntime) Run() {
 		return
 	}
 
-	appruntime.Run(r.Logger, r.Start, r.Shutdown)
+	applifecycle.Run(r.Logger, r.Start, r.Shutdown)
 }

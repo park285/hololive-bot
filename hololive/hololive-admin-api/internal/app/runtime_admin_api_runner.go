@@ -23,7 +23,7 @@ package app
 import (
 	"context"
 
-	appruntime "github.com/kapu/hololive-admin-api/internal/app/runtime"
+	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 )
 
 func (r *AdminAPIRuntime) Run() {
@@ -31,7 +31,7 @@ func (r *AdminAPIRuntime) Run() {
 		return
 	}
 
-	appruntime.Run(r.Logger, r.Start, r.Shutdown)
+	applifecycle.Run(r.Logger, r.Start, r.Shutdown)
 }
 
 func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
@@ -39,7 +39,7 @@ func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
 		return
 	}
 
-	appruntime.Start(ctx, errCh, appruntime.StartHooks{
+	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:          r.Logger,
 		ServerAddr:      r.ServerAddr,
 		StartHTTPServer: r.StartHTTPServer,

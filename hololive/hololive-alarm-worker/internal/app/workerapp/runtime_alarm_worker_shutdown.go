@@ -23,7 +23,7 @@ package workerapp
 import (
 	"context"
 
-	appruntime "github.com/kapu/hololive-alarm-worker/internal/app/runtime"
+	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 )
 
@@ -32,7 +32,7 @@ func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) {
 		return
 	}
 
-	appruntime.Shutdown(ctx, appruntime.ShutdownHooks{
+	applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
 		Logger:                r.Logger,
 		ClearAlarmScheduler:   r.clearAlarmSchedulerCancel,
 		ShutdownHTTPServer:    r.ShutdownHTTPServer,

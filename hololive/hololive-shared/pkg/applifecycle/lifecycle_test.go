@@ -1,24 +1,4 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-package runtime
+package applifecycle
 
 import (
 	"context"
@@ -48,8 +28,9 @@ func TestStart_RunsConfiguredHooks(t *testing.T) {
 	Start(ctx, errCh, StartHooks{
 		Logger:     slog.New(slog.DiscardHandler),
 		ServerAddr: "127.0.0.1:0",
-		StartAlarmScheduler: func(ctx context.Context) {
+		StartAlarmScheduler: func(ctx context.Context) error {
 			alarmCtxCh <- ctx
+			return nil
 		},
 		RunConfigSubscriber: func(ctx context.Context) {
 			configCtxCh <- ctx
@@ -97,8 +78,9 @@ func TestStart_UsesParentContextWithoutAlarmCancelSetter(t *testing.T) {
 
 	Start(ctx, nil, StartHooks{
 		Logger: slog.New(slog.DiscardHandler),
-		StartAlarmScheduler: func(ctx context.Context) {
+		StartAlarmScheduler: func(ctx context.Context) error {
 			alarmCtxCh <- ctx
+			return nil
 		},
 	})
 
@@ -112,6 +94,93 @@ func TestStart_HandlesNilHooksAndNilContext(t *testing.T) {
 	require.NotPanics(t, func() {
 		Start(context.TODO(), make(chan error, 1), StartHooks{})
 	})
+}
+
+func TestStart_AlarmSchedulerErrorPropagatesToErrCh(t *testing.T) {
+	t.Parallel()
+
+	errCh := make(chan error, 1)
+	schedulerCrash := errors.New("scheduler crashed")
+
+	Start(t.Context(), errCh, StartHooks{
+		Logger: slog.New(slog.DiscardHandler),
+		StartAlarmScheduler: func(context.Context) error {
+			return schedulerCrash
+		},
+	})
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("expected scheduler error, got nil")
+		}
+		if !errors.Is(err, schedulerCrash) {
+			t.Fatalf("unexpected scheduler error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected scheduler error to be sent to errCh")
+	}
+}
+
+func TestStart_AlarmSchedulerContextCancellationIsNotFatal(t *testing.T) {
+	t.Parallel()
+
+	errCh := make(chan error, 1)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	Start(ctx, errCh, StartHooks{
+		Logger: slog.New(slog.DiscardHandler),
+		StartAlarmScheduler: func(context.Context) error {
+			return context.Canceled
+		},
+	})
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("context cancellation must not be propagated as fatal error: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestStart_NonErrorAlarmAdapterDoesNotTouchErrCh(t *testing.T) {
+	t.Parallel()
+
+	errCh := make(chan error, 1)
+	called := make(chan struct{}, 1)
+
+	Start(t.Context(), errCh, StartHooks{
+		Logger: slog.New(slog.DiscardHandler),
+		StartAlarmScheduler: func(context.Context) error {
+			called <- struct{}{}
+			return nil
+		},
+	})
+
+	receiveLifecycleTestValue(t, called)
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("non-error alarm adapter must not send to errCh: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestStartRunsH3CertReloadHookWithRunContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	gotCh := make(chan context.Context, 1)
+	Start(ctx, nil, StartHooks{
+		StartH3CertReload: func(c context.Context) { gotCh <- c },
+	})
+
+	got := receiveLifecycleTestValue(t, gotCh)
+	if got != ctx {
+		t.Fatalf("StartH3CertReload ctx = %v, want run ctx", got)
+	}
 }
 
 func TestRun_DelegatesStartAndShutdown(t *testing.T) {
