@@ -9,9 +9,12 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/park285/iris-client-go/iris"
 )
+
+const defaultStaleClientCloseGrace = 30 * time.Second
 
 type RuntimeIrisClient struct {
 	fallbackBaseURL string
@@ -19,11 +22,15 @@ type RuntimeIrisClient struct {
 	baseURLFilePath string
 	logger          *slog.Logger
 	clientOpts      []iris.ClientOption
+	staleCloseGrace time.Duration
 
 	mu                             sync.Mutex
 	baseURLHostUnvalidatedWarnOnce sync.Once
 	cachedBaseURL                  string
 	cachedH2CClient                *iris.H2CClient
+	closed                         bool
+	closeSignal                    chan struct{}
+	staleClosers                   sync.WaitGroup
 }
 
 func NewRuntimeIrisClient(
@@ -48,6 +55,8 @@ func NewRuntimeIrisClient(
 		baseURLFilePath: strings.TrimSpace(baseURLFilePath),
 		logger:          logger,
 		clientOpts:      clientOpts,
+		staleCloseGrace: defaultStaleClientCloseGrace,
+		closeSignal:     make(chan struct{}),
 	}
 }
 
@@ -208,20 +217,100 @@ func (c *RuntimeIrisClient) currentClient() (*iris.H2CClient, error) {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	if c.closed {
+		c.mu.Unlock()
+		return nil, fmt.Errorf("runtime iris client: client is closed")
+	}
 	baseURL, err := c.resolveBaseURLLocked()
 	if err != nil {
+		c.mu.Unlock()
 		return nil, err
 	}
 
 	if c.cachedH2CClient != nil && c.cachedBaseURL == baseURL {
-		return c.cachedH2CClient, nil
+		client := c.cachedH2CClient
+		c.mu.Unlock()
+		return client, nil
 	}
 
+	next := iris.NewH2CClient(baseURL, c.botToken, c.clientOpts...)
+	if err := next.InitError(); err != nil {
+		c.mu.Unlock()
+		return nil, fmt.Errorf("runtime iris client: initialize %s: %w", baseURL, err)
+	}
+
+	previous := c.cachedH2CClient
 	c.cachedBaseURL = baseURL
-	c.cachedH2CClient = iris.NewH2CClient(baseURL, c.botToken, c.clientOpts...)
-	return c.cachedH2CClient, nil
+	c.cachedH2CClient = next
+	c.scheduleStaleCloseLocked(previous)
+	c.mu.Unlock()
+
+	return next, nil
+}
+
+func (c *RuntimeIrisClient) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil
+	}
+	client := c.cachedH2CClient
+	c.cachedH2CClient = nil
+	c.cachedBaseURL = ""
+	c.closed = true
+	close(c.closeSignal)
+	c.mu.Unlock()
+
+	c.staleClosers.Wait()
+
+	if client == nil {
+		return nil
+	}
+
+	return client.Close()
+}
+
+// scheduleStaleCloseLocked는 base URL 회전으로 교체된 이전 client를 grace 기간 뒤에
+// 닫아, 회전 순간 해당 client로 진행 중이던 요청(특히 active conn을 끊는 h3)이 끝날 시간을
+// 준다. RuntimeIrisClient.Close()는 closeSignal로 대기 중인 stale close를 즉시 깨운다.
+// mu를 잡은 상태에서 호출해야 하며(WaitGroup Add가 Close의 Wait보다 happens-before),
+// 실제 teardown은 goroutine에서 lock 밖으로 수행한다.
+func (c *RuntimeIrisClient) scheduleStaleCloseLocked(client *iris.H2CClient) {
+	if client == nil {
+		return
+	}
+
+	c.staleClosers.Add(1)
+	go c.runStaleClose(client, c.staleCloseGrace)
+}
+
+func (c *RuntimeIrisClient) runStaleClose(client *iris.H2CClient, grace time.Duration) {
+	defer c.staleClosers.Done()
+
+	if grace > 0 {
+		c.awaitStaleCloseGrace(grace)
+	}
+	c.closeStaleClient(client)
+}
+
+func (c *RuntimeIrisClient) awaitStaleCloseGrace(grace time.Duration) {
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+	case <-c.closeSignal:
+	}
+}
+
+func (c *RuntimeIrisClient) closeStaleClient(client *iris.H2CClient) {
+	if err := client.Close(); err != nil && c.logger != nil {
+		c.logger.Warn("runtime_iris_client_close_stale_failed", slog.Any("error", err))
+	}
 }
 
 func (c *RuntimeIrisClient) ValidateBaseURL() error {

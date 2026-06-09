@@ -32,6 +32,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 
 	defer func() {
 		if retErr != nil {
+			closeIrisClientForCleanup(irisClient, logger)
 			infra.Cleanup()
 		}
 	}()
@@ -63,7 +64,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 		Deps:           deps,
 		AlarmCRUD:      alarmYouTubeStack.AlarmMode.AlarmCRUD,
 		HolodexService: foundation.HolodexService,
-		Cleanup:        infra.Cleanup,
+		Cleanup:        composeBotInfrastructureCleanup(infra.Cleanup, irisClient, logger),
 	}, nil
 }
 
