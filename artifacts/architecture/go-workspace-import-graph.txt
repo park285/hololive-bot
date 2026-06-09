@@ -1000,6 +1000,7 @@ github.com/kapu/hololive-youtube-producer/cmd/ops/internal/communityshortscli ->
 github.com/kapu/hololive-youtube-producer/cmd/ops/internal/reportcli -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-youtube-producer/cmd/ops/internal/reportcli -> github.com/kapu/hololive-youtube-producer/cmd/ops/internal/observationquery
 github.com/kapu/hololive-youtube-producer/cmd/ops/youtube-community-shorts -> github.com/kapu/hololive-youtube-producer/cmd/ops/internal/communityshortscli
+github.com/kapu/hololive-youtube-producer/cmd/runtime/healthcheck -> github.com/kapu/hololive-shared/pkg/contracts/common
 github.com/kapu/hololive-youtube-producer/cmd/runtime/healthcheck -> github.com/park285/shared-go/pkg/healthprobe
 github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github.com/kapu/hololive-shared/pkg/health
