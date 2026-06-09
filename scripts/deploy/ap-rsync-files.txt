@@ -793,6 +793,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/backoff/backoff.go
 ../shared-go/pkg/backoff/doc.go
 ../shared-go/pkg/envutil/env.go
+../shared-go/pkg/envutil/file.go
 ../shared-go/pkg/ginjson/ginjson.go
 ../shared-go/pkg/h3/h3.go
 ../shared-go/pkg/healthprobe/healthprobe.go
@@ -800,7 +801,6 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/httputil/doc.go
 ../shared-go/pkg/httputil/json_client.go
 ../shared-go/pkg/httputil/response.go
-../shared-go/pkg/httputil/timeout_preset.go
 ../shared-go/pkg/json/json.go
 ../shared-go/pkg/jsonutil/doc.go
 ../shared-go/pkg/jsonutil/extract.go
