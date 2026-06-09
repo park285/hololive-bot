@@ -84,6 +84,19 @@ Active-active `/ready` fails closed on startup until a lightweight Valkey JobRun
 
 `/ready` is readiness state, not recent activity telemetry. Use the `youtube_poller_job_*` metrics above to confirm recent `acquired`, `peer_owned`, `already_completed`, renew, mark-completed, and release activity.
 
+`/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
+
+```bash
+# Osaka a host
+docker exec hololive-youtube-producer-a ./bin/healthcheck --body-api-key-env API_SECRET_KEY https://127.0.0.1:30005/metrics
+
+# Seoul b host
+docker exec hololive-youtube-producer-b ./bin/healthcheck --body-api-key-env API_SECRET_KEY https://127.0.0.1:30015/metrics
+
+# Main c host
+docker exec hololive-youtube-producer-c ./bin/healthcheck --body-api-key-env API_SECRET_KEY https://127.0.0.1:30025/metrics
+```
+
 For `goscrapy` canary, compare `youtube-producer-b` before and after the scoped change:
 
 ```text

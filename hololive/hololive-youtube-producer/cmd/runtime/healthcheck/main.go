@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	"github.com/park285/shared-go/pkg/healthprobe"
 )
 
@@ -14,9 +16,13 @@ func main() {
 		runBody(args[1])
 		return
 	}
+	if len(args) == 3 && args[0] == "--body-api-key-env" {
+		runBodyWithAPIKeyEnv(args[1], args[2])
+		return
+	}
 
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: healthcheck <url>|--body <url>|--smoke")
+		fmt.Fprintln(os.Stderr, "usage: healthcheck <url>|--body <url>|--body-api-key-env <env> <url>|--smoke")
 		os.Exit(2)
 	}
 
@@ -36,6 +42,28 @@ func runBody(url string) {
 	}
 
 	_, _ = os.Stdout.Write(body)
+}
+
+func runBodyWithAPIKeyEnv(envName, url string) {
+	body, err := fetchBodyWithAPIKeyEnv(envName, url)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	_, _ = os.Stdout.Write(body)
+}
+
+func fetchBodyWithAPIKeyEnv(envName, url string) ([]byte, error) {
+	envName = strings.TrimSpace(envName)
+	if envName == "" {
+		return nil, fmt.Errorf("api key env name must not be empty")
+	}
+	apiKey := os.Getenv(envName)
+	if strings.TrimSpace(apiKey) == "" {
+		return nil, fmt.Errorf("%s is empty or not set", envName)
+	}
+	return healthprobe.FetchURLWithHeaders(url, map[string]string{common.APIKeyHeader: apiKey})
 }
 
 func runCheck(url string) {
