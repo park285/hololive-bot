@@ -158,7 +158,6 @@ x-go-volumes: &go-volumes
   - ../../logs:/app/logs
   - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
   - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-  - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-hololive-bot-volumes: &hololive-bot-volumes
@@ -168,7 +167,6 @@ x-hololive-bot-volumes: &hololive-bot-volumes
   - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
   - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-  - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-alarm-worker-volumes: &alarm-worker-volumes
@@ -178,7 +176,6 @@ x-alarm-worker-volumes: &alarm-worker-volumes
   - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
   - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-  - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-go-basic-volumes: &go-basic-volumes
@@ -436,7 +433,6 @@ services:
       - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
