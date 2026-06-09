@@ -34,8 +34,13 @@ const channelSnippetHTML = `<html><body><script>var ytInitialData = ` +
 
 func newChannelStatsTestClient(t *testing.T, transport http.RoundTripper) *scraper.Client {
 	t.Helper()
+	return newChannelStatsTestClientWithRateLimit(t, transport, 0)
+}
+
+func newChannelStatsTestClientWithRateLimit(t *testing.T, transport http.RoundTripper, interval time.Duration) *scraper.Client {
+	t.Helper()
 	return scraper.NewClient(
-		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
+		scraper.WithRateLimiter(scraper.NewRateLimiter(interval)),
 		scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
 		scraper.WithHTTPClient(&http.Client{Transport: transport}),
 	)
@@ -78,6 +83,22 @@ func TestChannelStatsPollerUpdatesStaleProfile(t *testing.T) {
 	// 프로필이 생성되었는지 확인 (avatar 컬럼 JSON 텍스트가 있음)
 	var avatarJSON string
 	require.NoError(t, db.QueryRow(context.Background(), "SELECT avatar::text FROM youtube_channel_profiles WHERE channel_id = $1", "UC_STALE").Scan(&avatarJSON))
+	require.Contains(t, avatarJSON, "https://img.test/avatar.jpg")
+}
+
+func TestChannelStatsPollerRetriesLocalAdmissionDeferredProfileUpdate(t *testing.T) {
+	db := newPollerBatchTestDB(t)
+
+	client := newChannelStatsTestClientWithRateLimit(t, shortsPollerRoundTripFunc(bothPagesTransport), 10*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	poller := NewChannelStatsPoller(client, db)
+	require.NoError(t, poller.Poll(ctx, "UC_PROFILE_DEFERRED"))
+
+	var avatarJSON string
+	require.NoError(t, db.QueryRow(context.Background(), "SELECT avatar::text FROM youtube_channel_profiles WHERE channel_id = $1", "UC_PROFILE_DEFERRED").Scan(&avatarJSON))
 	require.Contains(t, avatarJSON, "https://img.test/avatar.jpg")
 }
 

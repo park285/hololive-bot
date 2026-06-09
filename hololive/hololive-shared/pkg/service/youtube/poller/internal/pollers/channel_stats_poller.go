@@ -22,6 +22,7 @@ package pollers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -38,6 +39,11 @@ type ChannelStatsPoller struct {
 	db              pollerDB
 	profileCacheTTL time.Duration
 }
+
+const (
+	channelProfileLocalAdmissionReason  = "local_interval"
+	channelProfileLocalAdmissionMaxWait = 5 * time.Second
+)
 
 func NewChannelStatsPoller(scraperClient *scraper.Client, db any) *ChannelStatsPoller {
 	return &ChannelStatsPoller{
@@ -120,8 +126,14 @@ func (p *ChannelStatsPoller) updateProfileIfStale(ctx context.Context, channelID
 		return
 	}
 
-	snippet, err := p.client.GetChannelSnippet(ctx, channelID)
+	snippet, err := p.getChannelSnippetForProfileUpdate(ctx, channelID)
 	if err != nil {
+		if scraper.IsAdmissionDeferred(err) {
+			slog.Debug("Channel profile update deferred by scraper admission",
+				"channel_id", channelID,
+				"error", err)
+			return
+		}
 		slog.Warn("Failed to get channel snippet for profile update",
 			"channel_id", channelID,
 			"error", err)
@@ -131,6 +143,50 @@ func (p *ChannelStatsPoller) updateProfileIfStale(ctx context.Context, channelID
 	avatars := polling.ConvertThumbnails(snippet.Avatar)
 	banners := polling.ConvertThumbnails(snippet.Banner)
 	p.upsertChannelProfile(ctx, channelID, avatars, banners)
+}
+
+func (p *ChannelStatsPoller) getChannelSnippetForProfileUpdate(ctx context.Context, channelID string) (*scraper.ChannelSnippet, error) {
+	snippet, err := p.client.GetChannelSnippet(ctx, channelID)
+	if err == nil {
+		return snippet, nil
+	}
+
+	retryAfter, ok := channelProfileLocalAdmissionRetryAfter(err)
+	if !ok {
+		return nil, err
+	}
+
+	if err := waitForChannelProfileRetry(ctx, retryAfter); err != nil {
+		return nil, err
+	}
+	return p.client.GetChannelSnippet(ctx, channelID)
+}
+
+func channelProfileLocalAdmissionRetryAfter(err error) (time.Duration, bool) {
+	var deferred *scraper.AdmissionDeferredError
+	if !errors.As(err, &deferred) || deferred == nil {
+		return 0, false
+	}
+	if deferred.Reason != channelProfileLocalAdmissionReason {
+		return 0, false
+	}
+	retryAfter := deferred.RetryDelay()
+	if retryAfter <= 0 || retryAfter > channelProfileLocalAdmissionMaxWait {
+		return 0, false
+	}
+	return retryAfter, true
+}
+
+func waitForChannelProfileRetry(ctx context.Context, retryAfter time.Duration) error {
+	timer := time.NewTimer(retryAfter)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("wait for channel profile retry: %w", ctx.Err())
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (p *ChannelStatsPoller) channelProfileNeedsUpdate(ctx context.Context, channelID string) bool {

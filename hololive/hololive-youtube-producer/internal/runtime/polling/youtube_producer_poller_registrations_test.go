@@ -276,7 +276,7 @@ func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
 	require.Equal(t, poller.BudgetPriorityLow, liveBackfill.BudgetProfile.Priority)
 
 	stats := requireRegistration(t, registrations, "channel_stats")
-	require.Equal(t, float64(scraper.FetchPageMaxAttempts), stats.BudgetProfile.SourceUnits[poller.BudgetSourceYouTubeScraper])
+	require.Equal(t, 2*float64(scraper.FetchPageMaxAttempts), stats.BudgetProfile.SourceUnits[poller.BudgetSourceYouTubeScraper])
 	require.Equal(t, float64(1), stats.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
 	require.Equal(t, poller.BudgetBurstPrimary, stats.BudgetProfile.BurstClass)
 	require.Equal(t, poller.BudgetPriorityLow, stats.BudgetProfile.Priority)

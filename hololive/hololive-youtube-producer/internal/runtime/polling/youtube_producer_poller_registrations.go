@@ -226,8 +226,8 @@ func buildFlatYouTubeProducerChannelPollerRegistrations(
 			WithChannelIDs(statsChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupStats).
 			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)).
-			WithBudgetProfile(youtubeScraperBudgetProfile(float64(scraper.FetchPageMaxAttempts), poller.BudgetBurstPrimary, poller.BudgetPriorityLow)),
+			WithWorstCaseRequestUnitsPerRun(channelStatsWorstCaseRequestUnits()).
+			WithBudgetProfile(youtubeScraperBudgetProfile(channelStatsWorstCaseRequestUnits(), poller.BudgetBurstPrimary, poller.BudgetPriorityLow)),
 	}
 	return appendLivePollerRegistrations(registrations, livePollerRegistrationSpec{
 		Name:           "live",
@@ -277,8 +277,8 @@ func buildTieredYouTubeProducerChannelPollerRegistrations(
 		WithChannelIDs(targets.StatsChannelIDs).
 		WithTargetGroup(providers.ChannelTargetGroupStats).
 		WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-		WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)).
-		WithBudgetProfile(youtubeScraperBudgetProfile(float64(scraper.FetchPageMaxAttempts), poller.BudgetBurstPrimary, poller.BudgetPriorityLow)))
+		WithWorstCaseRequestUnitsPerRun(channelStatsWorstCaseRequestUnits()).
+		WithBudgetProfile(youtubeScraperBudgetProfile(channelStatsWorstCaseRequestUnits(), poller.BudgetBurstPrimary, poller.BudgetPriorityLow)))
 	registrations = appendLivePollerRegistrations(registrations, livePollerRegistrationSpec{
 		Name:           "live",
 		Base:           pollers.live,
@@ -346,6 +346,10 @@ func newTieredNotificationRegistration(
 
 func videosWorstCaseRequestUnits() float64 {
 	return float64(scraper.FetchPageMaxAttempts * 3)
+}
+
+func channelStatsWorstCaseRequestUnits() float64 {
+	return float64(scraper.FetchPageMaxAttempts * 2)
 }
 
 func shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt bool, maxResults int) float64 {

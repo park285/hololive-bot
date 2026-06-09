@@ -225,7 +225,7 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWith
 	assert.NotContains(t, logBuf.String(), `"msg":"youtube_producer_combined_budget_exceeds_rate_limit"`)
 	assert.NotContains(t, logBuf.String(), `"msg":"youtube_producer_fault_envelope_exceeds_rate_limit"`)
 	assert.Contains(t, logBuf.String(), `"budget_rpm":30`)
-	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":24.058333333333334`)
+	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":24.983333333333334`)
 }
 
 func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {
