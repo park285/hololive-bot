@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -14,7 +12,17 @@ import (
 	"github.com/park285/iris-client-go/iris"
 )
 
-const defaultStaleClientCloseGrace = 30 * time.Second
+const (
+	runtimeIrisReplyRetryMax = 3
+	// runtimeIrisReplyAttemptTimeout은 SDK 기본 per-attempt timeout(http.Client.Timeout)이며,
+	// hololive는 reply 경로에서 이를 override하지 않으므로 grace 산정의 기준값이다.
+	runtimeIrisReplyAttemptTimeout = 10 * time.Second
+	staleClientCloseGraceMargin    = 10 * time.Second
+	// defaultStaleClientCloseGrace must outlast the worst-case in-flight reply on the
+	// rotated-out client (per-attempt timeout × retry + margin); reply retry is pinned to
+	// the captured old client, so a shorter grace would sever an in-flight reply on rotation.
+	defaultStaleClientCloseGrace = runtimeIrisReplyAttemptTimeout*runtimeIrisReplyRetryMax + staleClientCloseGraceMargin
+)
 
 type RuntimeIrisClient struct {
 	fallbackBaseURL string
@@ -46,7 +54,7 @@ func NewRuntimeIrisClient(
 
 	clientOpts := make([]iris.ClientOption, 0, len(opts)+2)
 	clientOpts = append(clientOpts, iris.WithLogger(logger))
-	clientOpts = append(clientOpts, iris.WithReplyRetry(3))
+	clientOpts = append(clientOpts, iris.WithReplyRetry(runtimeIrisReplyRetryMax))
 	clientOpts = append(clientOpts, opts...)
 
 	return &RuntimeIrisClient{
@@ -311,89 +319,4 @@ func (c *RuntimeIrisClient) closeStaleClient(client *iris.H2CClient) {
 	if err := client.Close(); err != nil && c.logger != nil {
 		c.logger.Warn("runtime_iris_client_close_stale_failed", slog.Any("error", err))
 	}
-}
-
-func (c *RuntimeIrisClient) ValidateBaseURL() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	_, err := c.resolveBaseURLLocked()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *RuntimeIrisClient) resolveBaseURLLocked() (string, error) {
-	if c == nil {
-		return "", fmt.Errorf("runtime iris client: client is nil")
-	}
-
-	if c.baseURLFilePath != "" {
-		return c.resolveBaseURLFromFileLocked()
-	}
-
-	return validateHTTPBaseURL(c.fallbackBaseURL)
-}
-
-func (c *RuntimeIrisClient) resolveBaseURLFromFileLocked() (string, error) {
-	validateStat := shouldValidateRuntimeIrisBaseURLFileStat()
-	baseURLFilePath, err := normalizeRuntimeIrisBaseURLFilePath(c.baseURLFilePath, validateStat)
-	if err != nil {
-		return "", fmt.Errorf("validate IRIS_BASE_URL_FILE path: %w", err)
-	}
-
-	if validateStat {
-		if err := validateRuntimeIrisBaseURLFileStat(baseURLFilePath); err != nil {
-			return "", fmt.Errorf("validate IRIS_BASE_URL_FILE: %w", err)
-		}
-	}
-
-	raw, err := os.ReadFile(baseURLFilePath)
-	if err != nil {
-		return "", fmt.Errorf("read IRIS_BASE_URL_FILE: %w", err)
-	}
-
-	baseURL, err := validateRuntimeIrisBaseURLFileOverride(string(raw), c.warnBaseURLHostUnvalidated)
-	if err != nil {
-		return "", fmt.Errorf("validate IRIS_BASE_URL_FILE URL: %w", err)
-	}
-
-	return baseURL, nil
-}
-
-func (c *RuntimeIrisClient) warnBaseURLHostUnvalidated(host string) {
-	if c == nil || c.logger == nil {
-		return
-	}
-
-	c.baseURLHostUnvalidatedWarnOnce.Do(func() {
-		c.logger.Warn("IRIS_BASE_URL_FILE host is unvalidated because no Iris base URL allowlist is configured",
-			slog.String("host", host),
-			slog.String("path", c.baseURLFilePath),
-			slog.String("allowlist_env", irisH3ServerNameEnv+","+irisBaseURLAllowedHostsEnv),
-		)
-	})
-}
-
-func validateHTTPBaseURL(raw string) (string, error) {
-	baseURL := strings.TrimRight(strings.TrimSpace(raw), "/")
-	if baseURL == "" {
-		return "", fmt.Errorf("base URL is empty")
-	}
-
-	parsed, err := url.ParseRequestURI(baseURL)
-	if err != nil {
-		return "", err
-	}
-
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", fmt.Errorf("unsupported URL scheme: %q", parsed.Scheme)
-	}
-
-	if parsed.Host == "" {
-		return "", fmt.Errorf("base URL host is empty")
-	}
-
-	return baseURL, nil
 }

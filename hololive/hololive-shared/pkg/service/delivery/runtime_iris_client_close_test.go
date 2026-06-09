@@ -100,3 +100,13 @@ func TestRuntimeIrisClientCloseFlushesPendingStaleClose(t *testing.T) {
 		t.Fatal("Close() did not flush pending stale close within 5s (closeSignal not honored)")
 	}
 }
+
+func TestStaleCloseGraceExceedsReplyRetryBudget(t *testing.T) {
+	t.Parallel()
+
+	budget := runtimeIrisReplyAttemptTimeout * runtimeIrisReplyRetryMax
+	if defaultStaleClientCloseGrace <= budget {
+		t.Fatalf("defaultStaleClientCloseGrace=%s must exceed reply retry budget=%s (per-attempt %s × %d) so grace-close cannot sever an in-flight reply on base-URL rotation",
+			defaultStaleClientCloseGrace, budget, runtimeIrisReplyAttemptTimeout, runtimeIrisReplyRetryMax)
+	}
+}
