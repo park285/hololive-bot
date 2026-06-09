@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +22,6 @@ func TestApplyBaseMiddleware_PreservesIncomingRequestID(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
-	router.Use(gin.Recovery())
 	ApplyBaseMiddleware(router, context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), BaseMiddlewareOptions{})
 	router.GET("/ping", func(c *gin.Context) {
 		c.Status(http.StatusOK)
@@ -45,4 +45,83 @@ func TestApplyBaseMiddlewareAndRegisterHealthRoutes_NilInputsNoPanic(t *testing.
 
 	ApplyBaseMiddleware(nil, context.Background(), nil, BaseMiddlewareOptions{})
 	RegisterHealthRoutes(nil)
+}
+
+func TestApplyBaseMiddleware_RecoversHandlerPanic(t *testing.T) {
+	t.Parallel()
+
+	prevMode := gin.Mode()
+	t.Cleanup(func() {
+		gin.SetMode(prevMode)
+	})
+	gin.SetMode(gin.ReleaseMode)
+
+	router := gin.New()
+	ApplyBaseMiddleware(router, context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), BaseMiddlewareOptions{})
+	router.GET("/panic", func(c *gin.Context) {
+		panic("boom")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if got, want := rr.Code, http.StatusInternalServerError; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "internal_error") {
+		t.Fatalf("body = %q, want internal_error payload", body)
+	}
+}
+
+func TestApplyBaseMiddleware_RecoversPanicOutsideLogger(t *testing.T) {
+	t.Parallel()
+
+	prevMode := gin.Mode()
+	t.Cleanup(func() {
+		gin.SetMode(prevMode)
+	})
+	gin.SetMode(gin.ReleaseMode)
+
+	router := gin.New()
+	logger := slog.New(panicOnRequestLogHandler{})
+	ApplyBaseMiddleware(router, context.Background(), logger, BaseMiddlewareOptions{})
+	router.GET("/panic-outside-logger", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/panic-outside-logger", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if got, want := rr.Code, http.StatusInternalServerError; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "internal_error") {
+		t.Fatalf("body = %q, want internal_error payload", body)
+	}
+}
+
+type panicOnRequestLogHandler struct{}
+
+func (panicOnRequestLogHandler) Enabled(context.Context, slog.Level) bool {
+	return true
+}
+
+func (panicOnRequestLogHandler) Handle(_ context.Context, record slog.Record) error {
+	record.Attrs(func(attr slog.Attr) bool {
+		if attr.Key == "event" && attr.Value.String() == "http.request.completed" {
+			panic("logger post-next panic")
+		}
+		return true
+	})
+	return nil
+}
+
+func (panicOnRequestLogHandler) WithAttrs([]slog.Attr) slog.Handler {
+	return panicOnRequestLogHandler{}
+}
+
+func (panicOnRequestLogHandler) WithGroup(string) slog.Handler {
+	return panicOnRequestLogHandler{}
 }

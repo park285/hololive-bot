@@ -35,6 +35,9 @@ import (
 //   - "*/suffix": 해당 suffix로 끝나는 경로 스킵 (예: "*/stream")
 //   - "/prefix*": 해당 prefix로 시작하는 경로 스킵 (예: "/api/holo/ws*")
 func LoggerMiddleware(ctx context.Context, logger *slog.Logger, skipPaths ...string) gin.HandlerFunc {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	matcher := newSkipPathMatcher(skipPaths)
 
 	return func(c *gin.Context) {

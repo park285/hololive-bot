@@ -25,6 +25,10 @@ echo "[M0] generic Go internal package name check"
 "${SCRIPT_DIR}/check-go-generic-internal-package-names.sh"
 echo
 
+echo "[M0] cross-cutting boundary guardrail check"
+"${SCRIPT_DIR}/check-crosscutting-guardrails.sh"
+echo
+
 echo "[M0] removed runtime reference check"
 "${SCRIPT_DIR}/check-removed-runtime-references.sh"
 echo

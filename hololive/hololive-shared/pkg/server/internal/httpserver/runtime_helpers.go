@@ -166,13 +166,12 @@ func applyRuntimeRouterOptions(options *RuntimeRouterOptions, opts []func(*Runti
 }
 
 func installRuntimeMiddleware(router *gin.Engine, ctx context.Context, logger *slog.Logger, opts RuntimeRouterOptions) {
-	router.Use(gin.Recovery())
-	if opts.EnableGzip {
-		router.Use(gzip.Gzip(gzip.DefaultCompression))
-	}
 	ApplyBaseMiddleware(router, ctx, logger, BaseMiddlewareOptions{
 		SkipLogPaths: append([]string{"/health", "/ready", "/metrics"}, opts.SkipLogPaths...),
 	})
+	if opts.EnableGzip {
+		router.Use(gzip.Gzip(gzip.DefaultCompression))
+	}
 	for _, use := range opts.PreRouteUse {
 		if use != nil {
 			router.Use(use)

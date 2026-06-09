@@ -39,7 +39,6 @@ func TestApplyBaseMiddlewareAndRegisterHealthRoutes(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
-	router.Use(gin.Recovery())
 	ApplyBaseMiddleware(router, context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), BaseMiddlewareOptions{
 		SkipLogPaths: []string{"/health", "/ready"},
 	})
