@@ -55,6 +55,7 @@ hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limite
 hololive/hololive-youtube-producer/internal/runtime/polling/live_batch_poller.go
 hololive/hololive-youtube-producer/internal/runtime/polling/source_cooldown_poller.go
 hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_components.go
+hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registration_spec.go
 hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registrations.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/api.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/types.go
