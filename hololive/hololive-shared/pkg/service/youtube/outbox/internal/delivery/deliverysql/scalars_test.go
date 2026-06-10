@@ -27,6 +27,48 @@ func TestTruncateString(t *testing.T) {
 	}
 }
 
+func TestTruncateStringGuardMatrix(t *testing.T) {
+	const (
+		short     = "ab"
+		long      = "abcdef"
+		multibyte = "안녕하세요"
+	)
+	tests := []struct {
+		name   string
+		in     string
+		maxLen int
+		want   string
+	}{
+		{name: "short/-1", in: short, maxLen: -1, want: ""},
+		{name: "short/0", in: short, maxLen: 0, want: ""},
+		{name: "short/1", in: short, maxLen: 1, want: "a"},
+		{name: "short/2", in: short, maxLen: 2, want: "ab"},
+		{name: "short/3", in: short, maxLen: 3, want: "ab"},
+		{name: "short/4", in: short, maxLen: 4, want: "ab"},
+
+		{name: "long/-1", in: long, maxLen: -1, want: ""},
+		{name: "long/0", in: long, maxLen: 0, want: ""},
+		{name: "long/1", in: long, maxLen: 1, want: "a"},
+		{name: "long/2", in: long, maxLen: 2, want: "ab"},
+		{name: "long/3", in: long, maxLen: 3, want: "..."},
+		{name: "long/4", in: long, maxLen: 4, want: "a..."},
+
+		{name: "multibyte/-1", in: multibyte, maxLen: -1, want: ""},
+		{name: "multibyte/0", in: multibyte, maxLen: 0, want: ""},
+		{name: "multibyte/1", in: multibyte, maxLen: 1, want: "안"},
+		{name: "multibyte/2", in: multibyte, maxLen: 2, want: "안녕"},
+		{name: "multibyte/3", in: multibyte, maxLen: 3, want: "..."},
+		{name: "multibyte/4", in: multibyte, maxLen: 4, want: "안..."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := TruncateString(tt.in, tt.maxLen); got != tt.want {
+				t.Errorf("TruncateString(%q, %d) = %q, want %q", tt.in, tt.maxLen, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCloneUTCTimePtr(t *testing.T) {
 	if got := CloneUTCTimePtr(nil); got != nil {
 		t.Errorf("CloneUTCTimePtr(nil) = %v, want nil", got)

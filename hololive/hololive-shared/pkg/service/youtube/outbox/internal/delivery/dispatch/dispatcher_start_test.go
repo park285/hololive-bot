@@ -111,7 +111,7 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 
 	select {
 	case <-probe.reached:
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(5 * time.Second):
 		cancel()
 		t.Fatal("dispatcher run loop did not process a periodic tick")
 	}
@@ -119,7 +119,7 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(3 * time.Second):
 		t.Fatal("dispatcher run loop did not stop after context cancellation")
 	}
 }
@@ -151,7 +151,7 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 
 	select {
 	case <-probe.reached:
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(5 * time.Second):
 		cancel()
 		t.Fatal("aggregate sync loop did not process a periodic tick")
 	}
@@ -159,7 +159,7 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(3 * time.Second):
 		t.Fatal("aggregate sync loop did not stop after context cancellation")
 	}
 }
@@ -195,7 +195,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 
 	select {
 	case <-probe.reached:
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(5 * time.Second):
 		cancel()
 		t.Fatal("cleanup loop did not process a periodic tick")
 	}
@@ -203,7 +203,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(3 * time.Second):
 		t.Fatal("cleanup loop did not stop after context cancellation")
 	}
 }

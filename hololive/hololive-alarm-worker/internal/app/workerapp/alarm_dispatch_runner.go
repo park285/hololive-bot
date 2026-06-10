@@ -134,8 +134,22 @@ func (r alarmDispatchRunner) dispatchKaringContentListGroup(ctx context.Context,
 
 func (r alarmDispatchRunner) persistPreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
-	if err := r.consumer.ScheduleRetry(ctx, retryEnvelopes); err != nil {
-		return r.preserveAfterPersistenceFailure(ctx, retryEnvelopes, fmt.Errorf("schedule alarm dispatch retry: %w", err))
+	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(scheduleEnvelopes []domain.AlarmQueueEnvelope) error {
+		if err := r.consumer.ScheduleRetry(ctx, scheduleEnvelopes); err != nil {
+			return fmt.Errorf("schedule alarm dispatch retry: %w", err)
+		}
+		return nil
+	})
+}
+
+func (r alarmDispatchRunner) finalizeDispatchFailure(
+	ctx context.Context,
+	retryEnvelopes []domain.AlarmQueueEnvelope,
+	dlqEnvelopes []domain.AlarmQueueEnvelope,
+	scheduleFn func(envelopes []domain.AlarmQueueEnvelope) error,
+) error {
+	if err := scheduleFn(retryEnvelopes); err != nil {
+		return r.preserveAfterPersistenceFailure(ctx, retryEnvelopes, err)
 	}
 	if err := r.consumer.MoveToDLQ(ctx, dlqEnvelopes); err != nil {
 		return r.preserveAfterPersistenceFailure(ctx, dlqEnvelopes, fmt.Errorf("move alarm dispatch dlq: %w", err))
@@ -171,16 +185,12 @@ func (r alarmDispatchRunner) persistSendingRetry(ctx context.Context, envelopes 
 		return r.persistPreSendFailure(ctx, envelopes, cause)
 	}
 	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
-	if err := consumer.ScheduleSendingRetry(ctx, retryEnvelopes); err != nil {
-		return r.preserveAfterPersistenceFailure(ctx, retryEnvelopes, fmt.Errorf("schedule alarm dispatch sending retry: %w", err))
-	}
-	if err := r.consumer.MoveToDLQ(ctx, dlqEnvelopes); err != nil {
-		return r.preserveAfterPersistenceFailure(ctx, dlqEnvelopes, fmt.Errorf("move alarm dispatch dlq: %w", err))
-	}
-	if err := r.consumer.ReleaseClaimKeys(ctx, claimKeysForAlarmDispatchEnvelopes(dlqEnvelopes)); err != nil {
-		return fmt.Errorf("release alarm dispatch dlq claim keys: %w", err)
-	}
-	return nil
+	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(scheduleEnvelopes []domain.AlarmQueueEnvelope) error {
+		if err := consumer.ScheduleSendingRetry(ctx, scheduleEnvelopes); err != nil {
+			return fmt.Errorf("schedule alarm dispatch sending retry: %w", err)
+		}
+		return nil
+	})
 }
 
 func isAlarmDispatchRetryablePostSendFailure(cause error) bool {

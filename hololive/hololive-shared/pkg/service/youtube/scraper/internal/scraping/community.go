@@ -29,6 +29,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/tidwall/gjson"
 )
 
@@ -167,7 +168,7 @@ func (c *Client) parseBackstagePost(post gjson.Result) *CommunityPost {
 
 	// 첨부 비디오
 	videoID := post.Get("backstageAttachment.videoRenderer.videoId").String()
-	publishedText := firstNonEmptyString(
+	publishedText := util.FirstNonEmptyString(
 		post.Get("publishedTimeText.simpleText").String(),
 		post.Get("publishedTimeText.runs.0.text").String(),
 	)
@@ -254,13 +255,4 @@ func extractCommunityPostIDFromURL(value string) string {
 	}
 
 	return strings.TrimSpace(matches[1])
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }

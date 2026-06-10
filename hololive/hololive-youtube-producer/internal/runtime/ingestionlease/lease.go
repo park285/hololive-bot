@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -67,7 +66,7 @@ func Acquire(
 		logger = slog.Default()
 	}
 
-	owner := fmt.Sprintf("%s:%d:%d", role, os.Getpid(), time.Now().UnixNano())
+	owner := newOwnerToken(role)
 	acquired, err := cacheClient.SetNX(ctx, Key, owner, ingestionLeaseTTL)
 	if err != nil {
 		return nil, fmt.Errorf("acquire ingestion lease: setnx failed: %w", err)

@@ -3,6 +3,7 @@ package polling
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"sync/atomic"
@@ -263,7 +264,11 @@ func TestPendingPublishedAtResolver_CancelDuringCandidateResolutionReturnsParent
 	err := resolver.runOnce(ctx, detectedAt.Add(time.Minute))
 	skippedAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "resolve_timeout"))
 
-	require.ErrorIs(t, err, context.Canceled)
+	require.Error(t, err)
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+	if !errors.Is(err, context.Canceled) {
+		assert.Zero(t, resolveCalls, "resolver must stop before resolving when ctx is canceled")
+	}
 	assert.Zero(t, resolveCalls)
 	assert.Equal(t, float64(0), skippedAfter-skippedBefore)
 

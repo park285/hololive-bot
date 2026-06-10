@@ -287,7 +287,7 @@ func buildAlarmDispatchVideoOutboxKaringContentItem(
 		MemberName:   resolveAlarmDispatchOutboxMemberName(payload),
 		ChannelName:  resolveAlarmDispatchOutboxMemberName(payload),
 		Status:       alarmDispatchVideoOutboxStatus(payload.Kind, data),
-		StartAt:      alarmDispatchKaringTimeString(firstNonNilTime(data.ScheduledStartAt, data.PublishedAt)),
+		StartAt:      alarmDispatchKaringTimeString(util.FirstNonNilTime(data.ScheduledStartAt, data.PublishedAt)),
 		ThumbnailURL: bestKaringThumbnailURL(data.Thumbnail),
 		Platform:     "youtube",
 	}, nil
@@ -373,15 +373,6 @@ func alarmDispatchKaringTimeString(value *time.Time) string {
 		return ""
 	}
 	return value.In(alarmDispatchKaringDisplayLocation).Format("01/02 15:04")
-}
-
-func firstNonNilTime(values ...*time.Time) *time.Time {
-	for _, value := range values {
-		if value != nil {
-			return value
-		}
-	}
-	return nil
 }
 
 func firstNonEmptyString(values ...string) string {

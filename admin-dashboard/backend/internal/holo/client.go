@@ -43,21 +43,10 @@ func NewClient(baseURL, apiKey string) (*Client, error) {
 	}, nil
 }
 
+const holoClientTimeout = 10 * time.Second
+
 func newHoloHTTPClient(baseURL string) (*http.Client, error) {
-	if strings.HasPrefix(strings.ToLower(baseURL), "https://") {
-		return internalhttp.NewClientForURLStrict(baseURL, 10*time.Second, nil)
-	}
-	return &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
-			MaxIdleConns:          64,
-			MaxIdleConnsPerHost:   16,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   5 * time.Second,
-			ResponseHeaderTimeout: 10 * time.Second,
-		},
-	}, nil
+	return internalhttp.NewClientForURLStrict(baseURL, holoClientTimeout, nil)
 }
 
 const maxProxyBodyBytes = 8 << 20

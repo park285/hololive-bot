@@ -78,6 +78,9 @@ func TestAllowEnforcesLimit(t *testing.T) {
 	limiter := newTestLimiter(t)
 	ctx := context.Background()
 
+	fixed := time.Unix(1_700_000_000, 0)
+	limiter.now = func() time.Time { return fixed }
+
 	window := 120 * time.Millisecond
 
 	first, err := limiter.Allow(ctx, "youtube:channels", 2, window)

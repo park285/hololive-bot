@@ -82,6 +82,7 @@ type SlidingWindowLimiter struct {
 	logger      *slog.Logger
 	instanceID  string
 	sequence    atomic.Uint64
+	now         func() time.Time
 }
 
 func NewSlidingWindowLimiter(cacheClient cache.LowLevelCache, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
@@ -99,6 +100,7 @@ func NewSlidingWindowLimiter(cacheClient cache.LowLevelCache, keyPrefix string, 
 		keyPrefix:   keyPrefix,
 		logger:      logger,
 		instanceID:  resolveInstanceID(),
+		now:         time.Now,
 	}, nil
 }
 
@@ -119,7 +121,7 @@ func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit i
 	}
 
 	key := l.buildKey(bucket)
-	nowMS := time.Now().UnixMilli()
+	nowMS := l.nowFunc()().UnixMilli()
 	member := l.memberID(nowMS)
 	ttlSeconds := ttlSecondsFromWindow(window)
 
@@ -218,6 +220,13 @@ func parseNonNegativeScriptInt(message valkey.ValkeyMessage, name string, result
 		return 0, fmt.Errorf("invalid %s: %d", resultName, value)
 	}
 	return value, nil
+}
+
+func (l *SlidingWindowLimiter) nowFunc() func() time.Time {
+	if l.now == nil {
+		return time.Now
+	}
+	return l.now
 }
 
 func (l *SlidingWindowLimiter) buildKey(bucket string) string {

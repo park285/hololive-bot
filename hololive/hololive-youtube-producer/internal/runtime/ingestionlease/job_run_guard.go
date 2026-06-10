@@ -329,7 +329,11 @@ func evalBool(ctx context.Context, cacheClient cache.Client, cmd valkey.Complete
 }
 
 func (g *JobRunGuard) newOwnerToken() string {
-	return fmt.Sprintf("%s:%d:%d", g.instanceID, os.Getpid(), time.Now().UnixNano())
+	return newOwnerToken(g.instanceID)
+}
+
+func newOwnerToken(prefix string) string {
+	return fmt.Sprintf("%s:%d:%d", prefix, os.Getpid(), time.Now().UnixNano())
 }
 
 func validateJobRunTTLs(leaseTTL, cooldownTTL time.Duration) error {

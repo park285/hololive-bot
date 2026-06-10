@@ -811,6 +811,8 @@ github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice -
 github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap -> github.com/kapu/hololive-shared/pkg/service/alarm/keys
 github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap -> github.com/kapu/hololive-shared/pkg/service/cache
+github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
+github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap -> github.com/kapu/hololive-shared/pkg/testutil
 github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/notification/internal/platformmap -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/ratelimit -> github.com/kapu/hololive-shared/pkg/service/cache
@@ -868,6 +870,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/outbox -> github.com/kapu/ho
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql -> github.com/kapu/hololive-shared/internal/dbx
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch -> github.com/kapu/hololive-shared/internal/dbx
@@ -969,6 +972,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping ->
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping/ratelimiter
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/service/youtube/timestamp
+github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping -> github.com/park285/shared-go/pkg/jsonutil

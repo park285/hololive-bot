@@ -39,6 +39,15 @@ func init() {
 	}
 }
 
+func FirstNonNilTime(values ...*time.Time) *time.Time {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
+}
+
 func ToKST(t time.Time) time.Time {
 	return t.In(kstLocation)
 }
