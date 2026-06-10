@@ -28,6 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 )
 
 // 성공 시 (*domain.Channel, nil)을, 실패 시 (nil, error)를 반환한다.
@@ -57,6 +58,49 @@ func FindActiveMemberOrError(ctx context.Context, deps *Dependencies, room, memb
 	}
 
 	// Matcher를 통해 Member 정보 조회하여 졸업 상태 확인
+	if deps.Matcher != nil {
+		if member := deps.Matcher.GetMemberByChannelID(ctx, channel.ID); member != nil && member.IsGraduated {
+			return nil, deps.SendError(ctx, room, adapter.ErrGraduatedMemberBlocked)
+		}
+	}
+
+	return channel, nil
+}
+
+// 동명이인인 경우 FormatAmbiguousMembers 응답을 보내고 (nil, error)를 반환한다.
+func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
+	if err := ValidateMemberLookupDependencies(deps); err != nil {
+		return nil, fmt.Errorf("member lookup dependencies not configured: %w", err)
+	}
+
+	channel, err := deps.Matcher.FindBestMatchWithCandidates(ctx, memberName)
+	if err != nil {
+		var ambiguousErr *matcher.AmbiguousMatchError
+		if errors.As(err, &ambiguousErr) {
+			message := deps.Formatter.FormatAmbiguousMembers(ambiguousErr.Candidates)
+			return nil, deps.SendMessage(ctx, room, message)
+		}
+
+		return nil, deps.SendError(ctx, room, deps.Formatter.MemberNotFound(memberName))
+	}
+
+	if channel == nil {
+		return nil, deps.SendError(ctx, room, deps.Formatter.MemberNotFound(memberName))
+	}
+
+	return channel, nil
+}
+
+// !라이브, !일정, !예정 명령에서 사용한다. 동명이인 응답과 졸업 멤버 차단을 함께 처리한다.
+func FindActiveMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
+	channel, err := FindMemberWithCandidatesOrError(ctx, deps, room, memberName)
+	if err != nil {
+		return nil, err
+	}
+	if channel == nil {
+		return nil, nil
+	}
+
 	if deps.Matcher != nil {
 		if member := deps.Matcher.GetMemberByChannelID(ctx, channel.ID); member != nil && member.IsGraduated {
 			return nil, deps.SendError(ctx, room, adapter.ErrGraduatedMemberBlocked)

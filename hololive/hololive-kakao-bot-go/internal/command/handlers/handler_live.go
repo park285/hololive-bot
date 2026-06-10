@@ -65,9 +65,12 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 }
 
 func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.CommandContext, memberName string) error {
-	channel, err := FindActiveMemberOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
+	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
 	if err != nil {
 		return fmt.Errorf("failed to find member %q: %w", memberName, err)
+	}
+	if channel == nil {
+		return nil
 	}
 
 	streams, err := c.Deps().Holodex.GetLiveStreams(ctx)

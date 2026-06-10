@@ -62,13 +62,12 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrSubscriberNeedMemberName)
 	}
 
-	matchedChannel, err := c.matchSubscriberChannel(ctx, memberQuery)
+	matchedChannel, err := FindMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberQuery)
 	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberQuery))
+		return fmt.Errorf("failed to find member %q: %w", memberQuery, err)
 	}
-
 	if matchedChannel == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberQuery))
+		return nil
 	}
 
 	channel, err := c.getSubscriberChannel(ctx, matchedChannel.ID)
@@ -84,18 +83,6 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	message := c.Deps().Formatter.FormatSubscriberCount(memberName, uint64(*channel.SubscriberCount))
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
-}
-
-func (c *SubscriberCommand) matchSubscriberChannel(ctx context.Context, memberQuery string) (*domain.Channel, error) {
-	matchedChannel, err := c.Deps().Matcher.FindBestMatch(ctx, memberQuery)
-	if err != nil {
-		c.log().Warn("Member match failed",
-			slog.String("query", memberQuery),
-			slog.Any("error", err),
-		)
-	}
-
-	return matchedChannel, err
 }
 
 func (c *SubscriberCommand) getSubscriberChannel(ctx context.Context, channelID string) (*domain.Channel, error) {

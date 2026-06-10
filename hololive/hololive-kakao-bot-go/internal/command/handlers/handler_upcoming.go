@@ -122,9 +122,12 @@ func normalizeUpcomingDisplayLimit(displayLimit int, showAll bool) int {
 }
 
 func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, memberName string, hours int) error {
-	channel, err := FindActiveMemberOrError(ctx, c.Deps(), roomID, memberName)
+	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), roomID, memberName)
 	if err != nil {
 		return fmt.Errorf("failed to find member %q: %w", memberName, err)
+	}
+	if channel == nil {
+		return nil
 	}
 
 	streams, err := c.Deps().Holodex.GetUpcomingStreams(ctx, hours)

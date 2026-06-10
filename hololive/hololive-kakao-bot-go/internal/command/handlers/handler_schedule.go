@@ -64,9 +64,12 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 	}
 
 	days := scheduleDays(params)
-	channel, err := FindActiveMemberOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
+	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
 	if err != nil {
 		return fmt.Errorf("failed to find member %q: %w", memberName, err)
+	}
+	if channel == nil {
+		return nil
 	}
 
 	hours := days * 24
