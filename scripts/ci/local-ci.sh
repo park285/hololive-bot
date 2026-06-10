@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
+source "${SCRIPT_DIR}/go-tooling.sh"
 cd "${ROOT_DIR}"
 
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
@@ -18,91 +19,6 @@ RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-true}"
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-false}"
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}"
 RUN_ADMIN_TOUCH_GUARDRAIL="${RUN_ADMIN_TOUCH_GUARDRAIL:-true}"
-STATICCHECK_VERSION="${STATICCHECK_VERSION:-2026.1}"
-GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.3.0}"
-
-go_bin_tool() {
-    local tool="$1"
-
-    if command -v "${tool}" >/dev/null 2>&1; then
-        command -v "${tool}"
-        return 0
-    fi
-
-    local gobin
-    gobin="$(go env GOBIN)"
-    if [[ -n "${gobin}" && -x "${gobin}/${tool}" ]]; then
-        printf '%s/%s\n' "${gobin}" "${tool}"
-        return 0
-    fi
-
-    local gopath
-    gopath="$(go env GOPATH)"
-    if [[ -n "${gopath}" && -x "${gopath}/bin/${tool}" ]]; then
-        printf '%s/bin/%s\n' "${gopath}" "${tool}"
-        return 0
-    fi
-
-    return 1
-}
-
-go_tool_install_path() {
-    local tool="$1"
-    local gobin
-    gobin="$(go env GOBIN)"
-    if [[ -n "${gobin}" ]]; then
-        printf '%s/%s\n' "${gobin}" "${tool}"
-        return 0
-    fi
-
-    local gopath
-    gopath="$(go env GOPATH)"
-    if [[ -z "${gopath}" ]]; then
-        echo "GOPATH is empty; cannot locate installed Go tool ${tool}" >&2
-        exit 1
-    fi
-    printf '%s/bin/%s\n' "${gopath}" "${tool}"
-}
-
-ensure_staticcheck() {
-    local bin
-    bin="$(go_bin_tool staticcheck || true)"
-    if [[ -z "${bin}" ]] || [[ "$("${bin}" -version 2>/dev/null || true)" != *"staticcheck ${STATICCHECK_VERSION}"* ]]; then
-        echo "[LOCAL CI] Installing staticcheck@${STATICCHECK_VERSION}" >&2
-        go install "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}"
-        bin="$(go_tool_install_path staticcheck)"
-        echo >&2
-    fi
-
-    local version_output
-    version_output="$("${bin}" -version 2>/dev/null || true)"
-    if [[ "${version_output}" != *"staticcheck ${STATICCHECK_VERSION}"* ]]; then
-        echo "expected staticcheck ${STATICCHECK_VERSION}, got: ${version_output}" >&2
-        exit 1
-    fi
-
-    printf '%s\n' "${bin}"
-}
-
-ensure_govulncheck() {
-    local bin
-    bin="$(go_bin_tool govulncheck || true)"
-    if [[ -z "${bin}" ]] || [[ "$("${bin}" -version 2>/dev/null || true)" != *"govulncheck@${GOVULNCHECK_VERSION}"* ]]; then
-        echo "[LOCAL CI] Installing govulncheck@${GOVULNCHECK_VERSION}" >&2
-        go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
-        bin="$(go_tool_install_path govulncheck)"
-        echo >&2
-    fi
-
-    local version_output
-    version_output="$("${bin}" -version 2>/dev/null || true)"
-    if [[ "${version_output}" != *"govulncheck@${GOVULNCHECK_VERSION}"* ]]; then
-        echo "expected govulncheck ${GOVULNCHECK_VERSION}, got: ${version_output}" >&2
-        exit 1
-    fi
-
-    printf '%s\n' "${bin}"
-}
 
 run_step() {
     local name="$1"

@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
+# 스택 공용 단일 정본 — 4개 레포(hololive-bot, chat-bot-go-kakao, iris-client-go,
+# shared-go)에 바이트 동일 사본으로 배포되고, iris-stack 메타레포의
+# tools/check-ci-consistency.sh 가 사본 동일성을 강제한다. 한 곳만 고치지 말 것.
+#
+# 프로필: scripts/ci/pre-push-gate.sh 가 있으면 app, 없으면 lib.
+# PR heavy 검사(go test 전체/race 포함)는 app 전용 — lib 레포는 PR fast gate 가
+# 전체 go test 를 정당하게 실행하므로 lib 프로필에서는 적용하지 않는다.
 set -euo pipefail
 
 python3 - "$@" <<'PY'
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -26,6 +34,16 @@ PR_HEAVY_LINE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("admin frontend full install", re.compile(r"\bnpm\s+ci\b")),
     ("admin frontend full build", re.compile(r"\bnpm\s+run\s+build\b")),
 ]
+
+
+def resolve_profile() -> str:
+    override = os.environ.get("WORKFLOW_GATE_PROFILE", "").strip()
+    if override:
+        if override not in {"app", "lib"}:
+            print(f"unsupported WORKFLOW_GATE_PROFILE={override}; expected app or lib", file=sys.stderr)
+            raise SystemExit(2)
+        return override
+    return "app" if Path("scripts/ci/pre-push-gate.sh").is_file() else "lib"
 
 
 def workflow_paths(args: list[str]) -> list[Path]:
@@ -80,14 +98,6 @@ def event_triggered(text: str, event_name: str) -> bool:
                 return True
 
     return False
-
-
-def has_pull_request_trigger(text: str) -> bool:
-    return event_triggered(text, "pull_request")
-
-
-def has_pull_request_target_trigger(text: str) -> bool:
-    return event_triggered(text, "pull_request_target")
 
 
 def mask_comment_lines(text: str) -> str:
@@ -265,12 +275,13 @@ def pr_heavy_lines(text: str) -> list[tuple[int, str]]:
 
 
 def main() -> int:
+    profile = resolve_profile()
     failures: list[str] = []
     for path in workflow_paths(sys.argv[1:]):
         text = path.read_text(encoding="utf-8")
-        has_pr = has_pull_request_trigger(text)
+        has_pr = event_triggered(text, "pull_request")
 
-        if has_pull_request_target_trigger(text):
+        if event_triggered(text, "pull_request_target"):
             failures.append(f"{path}: pull_request_target workflow is not allowed")
 
         if path.name in SECURITY_WORKFLOWS and has_pr:
@@ -292,16 +303,17 @@ def main() -> int:
             failures.append(f"{path}:{line_no}: pull_request workflow must use read-only permissions or none")
         for line_no in checkout_credential_failures(text):
             failures.append(f"{path}:{line_no}: actions/checkout in pull_request workflow must set persist-credentials: false")
-        for line_no, desc in pr_heavy_lines(text):
-            failures.append(f"{path}:{line_no}: PR fast gate must not reintroduce {desc}")
+        if profile == "app":
+            for line_no, desc in pr_heavy_lines(text):
+                failures.append(f"{path}:{line_no}: PR fast gate must not reintroduce {desc}")
 
     if failures:
-        print("FAIL: workflow PR boundary / quality ownership violation", file=sys.stderr)
+        print(f"FAIL: workflow PR boundary / quality ownership violation (profile={profile})", file=sys.stderr)
         for failure in failures:
             print(f" - {failure}", file=sys.stderr)
         return 1
 
-    print("ok: workflow PR boundary / quality ownership check passed")
+    print(f"ok: workflow PR boundary / quality ownership check passed (profile={profile})")
     return 0
 
 
