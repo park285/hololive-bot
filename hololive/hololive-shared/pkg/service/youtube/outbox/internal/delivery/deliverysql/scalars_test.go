@@ -52,7 +52,7 @@ func TestCloneUTCTimePtr(t *testing.T) {
 	if got == &local {
 		t.Error("CloneUTCTimePtr returned the input pointer, want an independent copy")
 	}
-	got.Add(time.Hour)
+	*got = got.Add(time.Hour)
 	if !local.Equal(time.Date(2026, 6, 10, 12, 0, 0, 0, loc)) {
 		t.Error("mutating clone affected the source")
 	}

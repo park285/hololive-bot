@@ -30,10 +30,6 @@ func anyArgs[T any](values []T) []any {
 	return dbx.AnyArgs(values)
 }
 
-func postgresPlaceholders(query string) string {
-	return dbx.PostgresPlaceholders(query)
-}
-
 func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) error {
 	if _, ok := db.(pgx.Tx); ok {
 		return fn(db)
