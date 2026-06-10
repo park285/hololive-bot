@@ -86,6 +86,7 @@ hololive/hololive-shared/internal/dbx/doc.go
 hololive/hololive-shared/internal/dbx/errors.go
 hololive/hololive-shared/internal/dbx/pagination.go
 hololive/hololive-shared/internal/dbx/retry.go
+hololive/hololive-shared/internal/dbx/sqlhelpers.go
 hololive/hololive-shared/internal/dbx/tx.go
 hololive/hololive-shared/internal/retry/retry.go
 hololive/hololive-shared/pkg/apperrors/errors.go
@@ -388,7 +389,6 @@ hololive/hololive-shared/pkg/service/alarm/targets.go
 hololive/hololive-shared/pkg/service/alarm/tier/policies.go
 hololive/hololive-shared/pkg/service/alarm/tier/scheduler.go
 hololive/hololive-shared/pkg/service/auth/config.go
-hololive/hololive-shared/pkg/service/auth/db.go
 hololive/hololive-shared/pkg/service/auth/errors.go
 hololive/hololive-shared/pkg/service/auth/models.go
 hololive/hololive-shared/pkg/service/auth/service.go
@@ -543,7 +543,6 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysq
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql/scalars.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/audit_logger.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/claim_manager.go
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/clone_time.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/community_shorts_alarm_timing.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/delivery_format_aliases.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/delivery_telemetry_facade.go
@@ -747,7 +746,6 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repository_pgx_helpers.go
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repository_source_posts.go
 hololive/hololive-shared/pkg/service/youtube/tracking/tracking.go
-hololive/hololive-shared/pkg/templateview/helpers.go
 hololive/hololive-shared/pkg/templateview/major_event.go
 hololive/hololive-shared/pkg/templateview/member_news.go
 hololive/hololive-shared/pkg/testutil/cache.go
