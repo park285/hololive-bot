@@ -121,7 +121,7 @@ func buildBackfillEvent(candidate deliveryTelemetryBackfillCandidate) (*domain.Y
 	if dedupeErr != nil {
 		dedupeKey = DedupeKeyLogValue(domain.YouTubeNotificationOutbox{Kind: candidate.Kind, ContentID: candidate.ContentID})
 	}
-	attemptStartedAt := cloneUTCTimePtr(candidate.DeliveryLockedAt)
+	attemptStartedAt := deliverysql.CloneUTCTimePtr(candidate.DeliveryLockedAt)
 	attemptFinishedAt := eventAt
 
 	return &domain.YouTubeNotificationDeliveryTelemetry{

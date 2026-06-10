@@ -27,6 +27,8 @@ import (
 
 	json "github.com/park285/shared-go/pkg/json"
 
+	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -38,15 +40,13 @@ type eventForPrompt struct {
 	Link      string `json:"link"`
 }
 
-var weekdayKR = [...]string{"일", "월", "화", "수", "목", "금", "토"}
-
 func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, periodKey string, searchContext ...string) string {
 	promptEvents := projectPromptEvents(events)
 	eventsJSON, _ := json.Marshal(promptEvents)
 
 	now := time.Now().In(kst)
 	todayStr := fmt.Sprintf("%d년 %d월 %d일 (%s요일)",
-		now.Year(), now.Month(), now.Day(), weekdayKR[now.Weekday()])
+		now.Year(), now.Month(), now.Day(), sharedmodel.WeekdayKR[now.Weekday()])
 
 	var periodDesc string
 	switch summaryType {

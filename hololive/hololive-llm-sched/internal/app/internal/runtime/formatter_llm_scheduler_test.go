@@ -51,6 +51,25 @@ func setupFormatterRenderer(t *testing.T, key domain.TemplateKey, body string) *
 	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
+func setupFormatterRendererMulti(t *testing.T, bodies map[domain.TemplateKey]string) *template.Renderer {
+	t.Helper()
+
+	pool := dbtest.NewPool(t)
+	_, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`)
+	require.NoError(t, err)
+	for key, body := range bodies {
+		_, err = pool.Exec(t.Context(), `
+			INSERT INTO notification_templates(template_key, channel_id, body)
+			VALUES ($1, NULL, $2)
+			ON CONFLICT (template_key) WHERE channel_id IS NULL
+			DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+		`, key, body)
+		require.NoError(t, err)
+	}
+
+	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
 func TestNewLLMSchedulerFormatter_Defaults(t *testing.T) {
 	t.Parallel()
 

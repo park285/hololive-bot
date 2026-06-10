@@ -129,21 +129,7 @@ Rules:
 }
 
 func buildMemberNewsUserPrompt(input model.SummarizeInput, searchContext string) string {
-	candidates := make([]promptCandidate, 0, len(input.Candidates))
-	for i := range input.Candidates {
-		candidate := &input.Candidates[i]
-		candidates = append(candidates, promptCandidate{
-			Member:     candidate.MemberText,
-			Category:   string(candidate.Category),
-			Title:      candidate.Candidate.Title,
-			Date:       candidate.EffectiveDate.In(kst).Format("2006-01-02"),
-			SourceURL:  candidate.SourceURL,
-			SourceTier: string(candidate.SourceTier),
-			Summary:    candidate.Candidate.Description,
-		})
-	}
-
-	payload, _ := json.Marshal(candidates)
+	payload, _ := json.Marshal(buildPromptCandidates(input))
 
 	members := append([]string(nil), input.RoomMembers...)
 	sort.Strings(members)

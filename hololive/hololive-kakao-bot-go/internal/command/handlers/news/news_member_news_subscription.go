@@ -74,47 +74,62 @@ func memberNewsSubscriptionAction(params map[string]any) string {
 	return rawAction
 }
 
+type memberNewsSubscriptionPort struct {
+	service handlercore.MemberNewsService
+}
+
+func (p memberNewsSubscriptionPort) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
+	return p.service.IsRoomSubscribed(ctx, roomID)
+}
+
+func (p memberNewsSubscriptionPort) Subscribe(ctx context.Context, roomID, roomName string) error {
+	return p.service.SubscribeRoom(ctx, roomID, roomName)
+}
+
+func (p memberNewsSubscriptionPort) Unsubscribe(ctx context.Context, roomID string) error {
+	return p.service.UnsubscribeRoom(ctx, roomID)
+}
+
+func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandContext) handlercore.SubscriptionFlow {
+	return handlercore.NewSubscriptionFlow(handlercore.SubscriptionFlowConfig{
+		Port: memberNewsSubscriptionPort{service: c.Deps().MemberNews},
+		OnCheckError: func(ctx context.Context, _ error) error {
+			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+		},
+		OnAlreadySubscribed: func(ctx context.Context) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsAlreadySubscribed(ctx))
+		},
+		OnSubscribeError: func(ctx context.Context, err error) error {
+			c.Deps().Logger.Error("Member news subscribe failed", "room", cmdCtx.Room, "error", err)
+			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+		},
+		OnSubscribed: func(ctx context.Context) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsSubscribed(ctx))
+		},
+		OnNotSubscribed: func(ctx context.Context) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsNotSubscribed(ctx))
+		},
+		OnUnsubscribeError: func(ctx context.Context, err error) error {
+			c.Deps().Logger.Error("Member news unsubscribe failed", "room", cmdCtx.Room, "error", err)
+			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+		},
+		OnUnsubscribed: func(ctx context.Context) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsUnsubscribed(ctx))
+		},
+		OnStatus: func(ctx context.Context, subscribed bool) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsStatus(ctx, subscribed))
+		},
+	})
+}
+
 func (c *MemberNewsSubscriptionCommand) handleSubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	isSubscribed, err := c.Deps().MemberNews.IsRoomSubscribed(ctx, cmdCtx.Room)
-	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
-	}
-
-	if isSubscribed {
-		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsAlreadySubscribed(ctx))
-	}
-
-	if err := c.Deps().MemberNews.SubscribeRoom(ctx, cmdCtx.Room, cmdCtx.RoomName); err != nil {
-		c.Deps().Logger.Error("Member news subscribe failed", "room", cmdCtx.Room, "error", err)
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
-	}
-
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsSubscribed(ctx))
+	return c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName)
 }
 
 func (c *MemberNewsSubscriptionCommand) handleUnsubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	isSubscribed, err := c.Deps().MemberNews.IsRoomSubscribed(ctx, cmdCtx.Room)
-	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
-	}
-
-	if !isSubscribed {
-		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsNotSubscribed(ctx))
-	}
-
-	if err := c.Deps().MemberNews.UnsubscribeRoom(ctx, cmdCtx.Room); err != nil {
-		c.Deps().Logger.Error("Member news unsubscribe failed", "room", cmdCtx.Room, "error", err)
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
-	}
-
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsUnsubscribed(ctx))
+	return c.subscriptionFlow(cmdCtx).Unsubscribe(ctx, cmdCtx.Room)
 }
 
 func (c *MemberNewsSubscriptionCommand) handleStatus(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	isSubscribed, err := c.Deps().MemberNews.IsRoomSubscribed(ctx, cmdCtx.Room)
-	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
-	}
-
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsStatus(ctx, isSubscribed))
+	return c.subscriptionFlow(cmdCtx).Status(ctx, cmdCtx.Room)
 }

@@ -87,6 +87,34 @@ func TestFormatMajorEventMonthlySummary_RenderFailFallback(t *testing.T) {
 	assert.Equal(t, errorMessage(errDisplayMajorEventFailed), got)
 }
 
+func TestFormatMajorEventWeeklySummary_RenderFailFallback(t *testing.T) {
+	t.Parallel()
+
+	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	events := []domain.MajorEvent{{Title: "A"}}
+	got := formatter.FormatMajorEventWeeklySummary(context.Background(), events, "")
+	assert.Equal(t, errorMessage(errDisplayMajorEventFailed), got)
+}
+
+func TestFormatMajorEventSummary_WeeklyMonthlyParity(t *testing.T) {
+	t.Parallel()
+
+	const body = "행사 안내\n수={{.Count}}\n요약={{.LLMSummary}}\n뷰수={{len .Events}}"
+	renderer := setupFormatterRendererMulti(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdMajorEventWeeklySummary:  body,
+		domain.TemplateKeyCmdMajorEventMonthlySummary: body,
+	})
+	formatter := newLLMSchedulerFormatter("!", renderer, nil)
+
+	events := []domain.MajorEvent{{Title: "A"}, {Title: "B"}}
+
+	for _, llmSummary := range []string{"", "요약 본문"} {
+		weekly := formatter.FormatMajorEventWeeklySummary(context.Background(), events, llmSummary)
+		monthly := formatter.FormatMajorEventMonthlySummary(context.Background(), events, llmSummary)
+		assert.Equal(t, weekly, monthly, "weekly/monthly must be identical modulo template key (llmSummary=%q)", llmSummary)
+	}
+}
+
 func TestBuildMajorEventViewsAndDateFormatting(t *testing.T) {
 	t.Parallel()
 

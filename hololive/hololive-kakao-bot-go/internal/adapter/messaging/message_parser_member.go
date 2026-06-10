@@ -63,27 +63,21 @@ func (ma *MessageAdapter) isMemberNewsSubscriptionCommand(cmd string) bool {
 	return stringutil.ContainsString([]string{"뉴스알림", "뉴스구독", "newsalert", "newsalerts", "newssubscription"}, cmd)
 }
 
-func memberNewsSubscriptionAction(args []string) string {
-	if len(args) == 0 {
-		return memberNewsActionStatus
-	}
+var memberNewsSubscriptionActions = map[string]string{
+	"켜기":                   memberNewsActionOn,
+	"on":                   memberNewsActionOn,
+	"구독":                   memberNewsActionOn,
+	"끄기":                   memberNewsActionOff,
+	"off":                  memberNewsActionOff,
+	"해제":                   memberNewsActionOff,
+	"상태":                   memberNewsActionStatus,
+	"목록":                   memberNewsActionStatus,
+	"list":                 memberNewsActionStatus,
+	memberNewsActionStatus: memberNewsActionStatus,
+}
 
-	actions := map[string]string{
-		"켜기":                   memberNewsActionOn,
-		"on":                   memberNewsActionOn,
-		"구독":                   memberNewsActionOn,
-		"끄기":                   memberNewsActionOff,
-		"off":                  memberNewsActionOff,
-		"해제":                   memberNewsActionOff,
-		"상태":                   memberNewsActionStatus,
-		"목록":                   memberNewsActionStatus,
-		"list":                 memberNewsActionStatus,
-		memberNewsActionStatus: memberNewsActionStatus,
-	}
-	if action, ok := actions[stringutil.Normalize(args[0])]; ok {
-		return action
-	}
-	return memberNewsActionStatus
+func memberNewsSubscriptionAction(args []string) string {
+	return parseToggleAction(args, memberNewsSubscriptionActions, memberNewsActionStatus)
 }
 
 func (ma *MessageAdapter) tryMemberNewsCommand(command string, args []string, raw string) (*ParsedCommand, bool) {

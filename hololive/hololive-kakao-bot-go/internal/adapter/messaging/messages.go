@@ -238,6 +238,12 @@ const (
 	MsgMemberNewsStatusOn              = "🔔 뉴스 알림 상태: ON\n- 자동 발송: 매주 월요일 09:00 KST\n- 해제: !뉴스알림 끄기"
 	MsgMemberNewsStatusOff             = "🔕 뉴스 알림 상태: OFF\n- 설정: !뉴스알림 켜기"
 
+	// MajorEvent 관련.
+	ErrMajorEventServiceNotInitialized = "행사 알림 서비스가 초기화되지 않았습니다"
+	ErrMajorEventStatusCheckFailed     = "구독 상태 확인 중 오류가 발생했습니다"
+	ErrMajorEventSubscribeFailed       = "구독 중 오류가 발생했습니다"
+	ErrMajorEventUnsubscribeFailed     = "구독 해제 중 오류가 발생했습니다"
+
 	ErrCalendarQueryFailed = "기념일 달력 조회 중 오류가 발생했습니다."
 
 	// Subscriber Graph 관련.

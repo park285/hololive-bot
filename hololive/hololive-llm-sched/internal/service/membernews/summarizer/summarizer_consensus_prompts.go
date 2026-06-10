@@ -82,29 +82,6 @@ func buildPromptCandidates(input model.SummarizeInput) []promptCandidate {
 	return candidates
 }
 
-func reviewVerdictSchema() map[string]any {
-	return objectSchema(
-		map[string]any{
-			"approved":   typeSchema("boolean"),
-			"issues":     arraySchema(reviewVerdictIssueSchema()),
-			"confidence": numberRangeSchema(0.0, 1.0),
-		},
-		[]string{"approved", "issues", "confidence"},
-	)
-}
-
-func reviewVerdictIssueSchema() map[string]any {
-	return objectSchema(
-		map[string]any{
-			"field":       typeSchema("string"),
-			"item_index":  typeSchema("integer"),
-			"severity":    enumSchema("string", []string{"critical", "warning", "info"}),
-			"description": typeSchema("string"),
-		},
-		[]string{"field", "item_index", "severity", "description"},
-	)
-}
-
 func adjudicatorSystemPrompt() string {
 	return `You are a hololive member-news adjudicator.
 A primary summary was generated but the reviewer found issues.
@@ -142,39 +119,4 @@ Produce a corrected summary that fixes the identified issues. Return only schema
 		string(digestJSON),
 		string(verdictJSON),
 	)
-}
-
-func objectSchema(properties map[string]any, required []string) map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties":           properties,
-		"required":             required,
-	}
-}
-
-func arraySchema(items map[string]any) map[string]any {
-	return map[string]any{
-		"type":  "array",
-		"items": items,
-	}
-}
-
-func typeSchema(schemaType string) map[string]any {
-	return map[string]any{"type": schemaType}
-}
-
-func enumSchema(schemaType string, values []string) map[string]any {
-	return map[string]any{
-		"type": schemaType,
-		"enum": values,
-	}
-}
-
-func numberRangeSchema(minimum, maximum float64) map[string]any {
-	return map[string]any{
-		"type":    "number",
-		"minimum": minimum,
-		"maximum": maximum,
-	}
 }

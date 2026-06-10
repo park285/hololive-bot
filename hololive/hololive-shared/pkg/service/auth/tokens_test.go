@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/stretchr/testify/assert"
@@ -233,11 +234,11 @@ func TestAuthError_Unwrap(t *testing.T) {
 	assert.Equal(t, inner, err.Unwrap())
 }
 
-// -- isDuplicateKeyError --
+// -- dbx.IsDuplicateKey --
 
 func TestIsDuplicateKeyError(t *testing.T) {
 	t.Parallel()
 
-	assert.False(t, isDuplicateKeyError(nil))
-	assert.False(t, isDuplicateKeyError(assert.AnError))
+	assert.False(t, dbx.IsDuplicateKey(nil))
+	assert.False(t, dbx.IsDuplicateKey(assert.AnError))
 }

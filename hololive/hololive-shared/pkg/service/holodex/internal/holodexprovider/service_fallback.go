@@ -52,7 +52,3 @@ func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
 
 	return apiclient.IsTimeoutError(err)
 }
-
-func errorsJoin(errs ...error) error {
-	return stdErrors.Join(errs...)
-}

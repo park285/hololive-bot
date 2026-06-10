@@ -122,14 +122,16 @@ func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateK
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
-type majorEventWeeklySummaryData struct {
-	Emoji      UIEmoji
-	Count      int
-	Events     []majorEventView
-	LLMSummary string
+func (f *llmSchedulerFormatter) renderOrError(ctx context.Context, key domain.TemplateKey, data any, warnMsg, fallback string) string {
+	rendered, err := f.render(ctx, key, data)
+	if err != nil {
+		f.logger.Warn(warnMsg, slog.Any("error", err))
+		return errorMessage(fallback)
+	}
+	return rendered
 }
 
-type majorEventMonthlySummaryData struct {
+type majorEventSummaryData struct {
 	Emoji      UIEmoji
 	Count      int
 	Events     []majorEventView
@@ -139,6 +141,14 @@ type majorEventMonthlySummaryData struct {
 type majorEventView = templateview.MajorEventView
 
 func (f *llmSchedulerFormatter) FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
+	return f.formatMajorEventSummary(ctx, domain.TemplateKeyCmdMajorEventWeeklySummary, events, llmSummary)
+}
+
+func (f *llmSchedulerFormatter) FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
+	return f.formatMajorEventSummary(ctx, domain.TemplateKeyCmdMajorEventMonthlySummary, events, llmSummary)
+}
+
+func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key domain.TemplateKey, events []domain.MajorEvent, llmSummary string) string {
 	if len(events) == 0 {
 		return ""
 	}
@@ -150,47 +160,21 @@ func (f *llmSchedulerFormatter) FormatMajorEventWeeklySummary(ctx context.Contex
 		views = nil
 	}
 
-	data := majorEventWeeklySummaryData{
+	data := majorEventSummaryData{
 		Emoji:      DefaultEmoji,
 		Count:      len(events),
 		Events:     views,
 		LLMSummary: normalizedSummary,
 	}
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventWeeklySummary, data)
-	if err != nil {
-		f.logger.Warn("major event weekly summary render failed", slog.Any("error", err))
-		return errorMessage(errDisplayMajorEventFailed)
-	}
-
-	return rendered
+	return f.renderOrError(ctx, key, data, majorEventSummaryWarnMsg(key), errDisplayMajorEventFailed)
 }
 
-func (f *llmSchedulerFormatter) FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
-	if len(events) == 0 {
-		return ""
+func majorEventSummaryWarnMsg(key domain.TemplateKey) string {
+	if key == domain.TemplateKeyCmdMajorEventMonthlySummary {
+		return "major event monthly summary render failed"
 	}
-
-	normalizedSummary := strings.TrimSpace(llmSummary)
-	views := buildMajorEventViews(events)
-	if normalizedSummary != "" {
-		views = nil
-	}
-
-	data := majorEventMonthlySummaryData{
-		Emoji:      DefaultEmoji,
-		Count:      len(events),
-		Events:     views,
-		LLMSummary: normalizedSummary,
-	}
-
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventMonthlySummary, data)
-	if err != nil {
-		f.logger.Warn("major event monthly summary render failed", slog.Any("error", err))
-		return errorMessage(errDisplayMajorEventFailed)
-	}
-
-	return rendered
+	return "major event weekly summary render failed"
 }
 
 func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {
@@ -222,13 +206,7 @@ func (f *llmSchedulerFormatter) FormatMemberNewsDigest(ctx context.Context, dige
 		TotalCount:  digest.TotalCount,
 	}
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsDigest, data)
-	if err != nil {
-		f.logger.Warn("member news digest render failed", slog.Any("error", err))
-		return errorMessage(errDisplayMemberNewsFailed)
-	}
-
-	return rendered
+	return f.renderOrError(ctx, domain.TemplateKeyCmdMemberNewsDigest, data, "member news digest render failed", errDisplayMemberNewsFailed)
 }
 
 func localizeMemberNewsItems(items []membernews.SummaryItem) []membernews.SummaryItem {

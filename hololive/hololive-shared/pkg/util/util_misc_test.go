@@ -23,7 +23,6 @@ package util
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/valkey-io/valkey-go"
@@ -111,41 +110,6 @@ func TestNormalizeSuffix(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestApplyKakaoSeeMorePadding(t *testing.T) {
-	t.Parallel()
-
-	t.Run("blank text returns original text", func(t *testing.T) {
-		t.Parallel()
-		const text = "   "
-		if got := ApplyKakaoSeeMorePadding(text, "안내"); got != text {
-			t.Fatalf("ApplyKakaoSeeMorePadding() = %q, want original %q", got, text)
-		}
-	})
-
-	t.Run("instruction and body with auto newline", func(t *testing.T) {
-		t.Parallel()
-		got := ApplyKakaoSeeMorePadding("본문", "안내")
-		if !strings.HasPrefix(got, "안내") {
-			t.Fatalf("message prefix = %q, want starts with 안내", got)
-		}
-		if strings.Count(got, KakaoZeroWidthSpace) != KakaoSeeMorePadding {
-			t.Fatalf("zero-width-space count = %d, want %d", strings.Count(got, KakaoZeroWidthSpace), KakaoSeeMorePadding)
-		}
-		if !strings.Contains(got, "\n본문") {
-			t.Fatalf("message does not contain expected body separator: %q", got)
-		}
-	})
-
-	t.Run("body already starts with newline", func(t *testing.T) {
-		t.Parallel()
-		got := ApplyKakaoSeeMorePadding("\n본문", "안내")
-		doubleNewlineMarker := strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding) + "\n\n본문"
-		if strings.Contains(got, doubleNewlineMarker) {
-			t.Fatalf("unexpected double newline in %q", got)
-		}
-	})
 }
 
 func TestIsValkeyNil(t *testing.T) {

@@ -207,7 +207,7 @@ func (c *ConsensusSummarizer) review(
 		ctx,
 		reviewSystemPrompt(),
 		buildReviewUserPrompt(input, digest),
-		reviewVerdictSchema(),
+		consensus.ReviewVerdictSchema(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("reviewer LLM call: %w", err)

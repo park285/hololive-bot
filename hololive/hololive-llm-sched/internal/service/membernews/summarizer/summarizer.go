@@ -232,9 +232,6 @@ func validateSummaryResponseItemSource(item summaryResponseItem, validator model
 	return sourceURL, true
 }
 
-// weekdayKR: 요일 한국어 레이블 (0=일요일 기준).
-var weekdayKR = [...]string{"일", "월", "화", "수", "목", "금", "토"}
-
 // categoryLabel: Category를 한국어 레이블로 변환.
 func categoryLabel(cat model.Category) string {
 	if label, ok := categoryLabels[cat]; ok {
@@ -252,7 +249,7 @@ func BuildDeterministicFallback(period model.Period, candidates []model.Filtered
 		candidate := &candidates[idx]
 
 		localTime := candidate.EffectiveDate.In(kst)
-		dateText := fmt.Sprintf("%d/%d(%s)", localTime.Month(), localTime.Day(), weekdayKR[localTime.Weekday()])
+		dateText := fmt.Sprintf("%d/%d(%s)", localTime.Month(), localTime.Day(), sharedmodel.WeekdayKR[localTime.Weekday()])
 		summary := fmt.Sprintf("%s %s - %s", dateText, categoryLabel(candidate.Category), candidate.Candidate.Title)
 		items = append(items, model.SummaryItem{
 			Member:    candidate.MemberText,

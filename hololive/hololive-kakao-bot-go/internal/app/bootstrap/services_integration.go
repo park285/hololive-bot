@@ -6,8 +6,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/repository"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
@@ -43,16 +41,4 @@ func InitCoreIntegrationServices(
 		CommandBuilders:      []bot.CommandBuilder{},
 		WorkerPool:           workerPool,
 	}, nil
-}
-
-func BuildTemplateAdminService(
-	infra *sharedmodules.InfraModule,
-	templateRenderer *template.Renderer,
-	logger *slog.Logger,
-) *template.AdminService {
-	return template.NewAdminService(
-		repository.NewTemplateRepository(infra.Postgres.GetPool(), logger),
-		templateRenderer,
-		logger,
-	)
 }

@@ -26,6 +26,9 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/command/handlers/handlercore"
 )
 
 type MajorEventCommand struct {
@@ -63,7 +66,7 @@ func (c *MajorEventCommand) ensureMajorEventReady(ctx context.Context, cmdCtx *d
 	}
 
 	if c.repository == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, "행사 알림 서비스가 초기화되지 않았습니다")
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMajorEventServiceNotInitialized)
 	}
 
 	return nil
@@ -91,50 +94,47 @@ func (c *MajorEventCommand) dispatchMajorEventAction(ctx context.Context, cmdCtx
 	}
 }
 
+func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) handlercore.SubscriptionFlow {
+	return handlercore.NewSubscriptionFlow(handlercore.SubscriptionFlowConfig{
+		Port: c.repository,
+		OnCheckError: func(ctx context.Context, err error) error {
+			c.Deps().Logger.Error("Failed to check subscription", slog.String("error", err.Error()))
+			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMajorEventStatusCheckFailed)
+		},
+		OnAlreadySubscribed: func(ctx context.Context) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventAlreadySubscribed(ctx))
+		},
+		OnSubscribeError: func(ctx context.Context, err error) error {
+			c.Deps().Logger.Error("Failed to subscribe", slog.String("error", err.Error()))
+			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMajorEventSubscribeFailed)
+		},
+		OnSubscribed: func(ctx context.Context) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventSubscribed(ctx))
+		},
+		OnNotSubscribed: func(ctx context.Context) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventNotSubscribed(ctx))
+		},
+		OnUnsubscribeError: func(ctx context.Context, err error) error {
+			c.Deps().Logger.Error("Failed to unsubscribe", slog.String("error", err.Error()))
+			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMajorEventUnsubscribeFailed)
+		},
+		OnUnsubscribed: func(ctx context.Context) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventUnsubscribed(ctx))
+		},
+		OnStatus: func(ctx context.Context, subscribed bool) error {
+			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventStatus(ctx, subscribed))
+		},
+	})
+}
+
 func (c *MajorEventCommand) handleSubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	isSubscribed, err := c.repository.IsSubscribed(ctx, cmdCtx.Room)
-	if err != nil {
-		c.Deps().Logger.Error("Failed to check subscription", slog.String("error", err.Error()))
-		return c.Deps().SendError(ctx, cmdCtx.Room, "구독 상태 확인 중 오류가 발생했습니다")
-	}
-
-	if isSubscribed {
-		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventAlreadySubscribed(ctx))
-	}
-
-	if err := c.repository.Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName); err != nil {
-		c.Deps().Logger.Error("Failed to subscribe", slog.String("error", err.Error()))
-		return c.Deps().SendError(ctx, cmdCtx.Room, "구독 중 오류가 발생했습니다")
-	}
-
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventSubscribed(ctx))
+	return c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName)
 }
 
 func (c *MajorEventCommand) handleUnsubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	isSubscribed, err := c.repository.IsSubscribed(ctx, cmdCtx.Room)
-	if err != nil {
-		c.Deps().Logger.Error("Failed to check subscription", slog.String("error", err.Error()))
-		return c.Deps().SendError(ctx, cmdCtx.Room, "구독 상태 확인 중 오류가 발생했습니다")
-	}
-
-	if !isSubscribed {
-		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventNotSubscribed(ctx))
-	}
-
-	if err := c.repository.Unsubscribe(ctx, cmdCtx.Room); err != nil {
-		c.Deps().Logger.Error("Failed to unsubscribe", slog.String("error", err.Error()))
-		return c.Deps().SendError(ctx, cmdCtx.Room, "구독 해제 중 오류가 발생했습니다")
-	}
-
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventUnsubscribed(ctx))
+	return c.subscriptionFlow(cmdCtx).Unsubscribe(ctx, cmdCtx.Room)
 }
 
 func (c *MajorEventCommand) handleStatus(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	isSubscribed, err := c.repository.IsSubscribed(ctx, cmdCtx.Room)
-	if err != nil {
-		c.Deps().Logger.Error("Failed to check subscription", slog.String("error", err.Error()))
-		return c.Deps().SendError(ctx, cmdCtx.Room, "구독 상태 확인 중 오류가 발생했습니다")
-	}
-
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventStatus(ctx, isSubscribed))
+	return c.subscriptionFlow(cmdCtx).Status(ctx, cmdCtx.Room)
 }

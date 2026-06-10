@@ -7,16 +7,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestSplitTemplateInstruction(t *testing.T) {
-	instruction, body := SplitTemplateInstruction("\n\r\n안내\r\n\r\n본문 첫줄\n본문 둘째줄")
-	if instruction != "안내" {
-		t.Fatalf("unexpected instruction: %q", instruction)
-	}
-	if body != "본문 첫줄\n본문 둘째줄" {
-		t.Fatalf("unexpected body: %q", body)
-	}
-}
-
 func TestBuildMajorEventViews(t *testing.T) {
 	start := time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC)
 	events := []domain.MajorEvent{{

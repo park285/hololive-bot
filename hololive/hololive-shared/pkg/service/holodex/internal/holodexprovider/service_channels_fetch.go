@@ -22,6 +22,7 @@ package holodexprovider
 
 import (
 	"context"
+	stdErrors "errors"
 	"fmt"
 	"log/slog"
 
@@ -55,7 +56,7 @@ func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Cha
 
 		return nil, fmt.Errorf(
 			"get channel: primary and scraper fallback failed: %w",
-			errorsJoin(err, fallbackErr),
+			stdErrors.Join(err, fallbackErr),
 		)
 	}
 

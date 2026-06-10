@@ -33,6 +33,7 @@ import (
 	"github.com/park285/shared-go/pkg/stringutil"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -121,7 +122,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 		INSERT INTO auth_users (id, email, password_hash, display_name, avatar_url, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`, model.ID, model.Email, model.PasswordHash, model.DisplayName, model.AvatarURL, model.CreatedAt, model.UpdatedAt); err != nil {
-		if isDuplicateKeyError(err) {
+		if dbx.IsDuplicateKey(err) {
 			return nil, newError(CodeEmailExists, "email already exists", err)
 		}
 		return nil, newError(CodeInternal, "failed to create user", err)

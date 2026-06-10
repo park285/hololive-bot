@@ -1,5 +1,7 @@
 package deliverysql
 
+import "time"
+
 func UniqueInt64s(ids []int64) []int64 {
 	if len(ids) == 0 {
 		return nil
@@ -22,4 +24,13 @@ func TruncateString(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen-3]) + "..."
+}
+
+func CloneUTCTimePtr(value *time.Time) *time.Time {
+	if value == nil || value.IsZero() {
+		return nil
+	}
+
+	normalized := value.UTC()
+	return &normalized
 }

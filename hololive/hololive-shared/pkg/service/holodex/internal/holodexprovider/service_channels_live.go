@@ -174,7 +174,7 @@ func (h *Service) handleChannelsLiveStatusRequestError(ctx context.Context, chan
 		return allStreams, failed, nil
 	}
 	if fallbackErr != nil {
-		return nil, nil, fmt.Errorf("get channels live status: %w", errorsJoin(err, fallbackErr))
+		return nil, nil, fmt.Errorf("get channels live status: %w", stdErrors.Join(err, fallbackErr))
 	}
 	return nil, nil, fmt.Errorf("get channels live status: %w", err)
 }
@@ -234,7 +234,7 @@ func joinChannelsLiveStatusFailures(channelIDs []string, failed map[string]error
 			errs = append(errs, fmt.Errorf("channel %s: %w", channelID, channelErr))
 		}
 	}
-	return errorsJoin(errs...)
+	return stdErrors.Join(errs...)
 }
 
 func isYouTubeProducerSourceLevelFallbackError(err error) bool {

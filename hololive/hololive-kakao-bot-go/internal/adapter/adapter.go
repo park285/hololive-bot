@@ -86,6 +86,11 @@ const (
 	ErrGraphQueryFailed    = messaging.ErrGraphQueryFailed
 	MsgNoGraphData         = messaging.MsgNoGraphData
 
+	ErrMajorEventServiceNotInitialized = messaging.ErrMajorEventServiceNotInitialized
+	ErrMajorEventStatusCheckFailed     = messaging.ErrMajorEventStatusCheckFailed
+	ErrMajorEventSubscribeFailed       = messaging.ErrMajorEventSubscribeFailed
+	ErrMajorEventUnsubscribeFailed     = messaging.ErrMajorEventUnsubscribeFailed
+
 	ErrCalendarQueryFailed = messaging.ErrCalendarQueryFailed
 )
 

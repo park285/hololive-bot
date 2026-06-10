@@ -20,6 +20,8 @@
 
 package summarizer
 
+import "github.com/kapu/hololive-llm-sched/internal/service/consensus"
+
 type summaryResponse struct {
 	Highlights       []eventHighlight  `json:"highlights"`
 	OngoingEvents    []ongoingEvent    `json:"ongoing_events"`
@@ -49,10 +51,8 @@ type discoveredEvent struct {
 }
 
 func summaryResponseSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
+	return consensus.ObjectSchema(
+		map[string]any{
 			"highlights": map[string]any{
 				"type":        "array",
 				"description": "행사별 하이라이트 (날짜순 정렬)",
@@ -69,15 +69,13 @@ func summaryResponseSchema() map[string]any {
 				"items":       summaryDiscoveredItemSchema(),
 			},
 		},
-		"required": []string{"highlights", "ongoing_events", "discovered_events"},
-	}
+		[]string{"highlights", "ongoing_events", "discovered_events"},
+	)
 }
 
 func summaryHighlightItemSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
+	return consensus.ObjectSchema(
+		map[string]any{
 			"name": map[string]any{
 				"type":        "string",
 				"description": "행사명 — 일본어 원제 유지, 번역 금지",
@@ -100,15 +98,13 @@ func summaryHighlightItemSchema() map[string]any {
 				"description": "입력 행사 link 그대로 전달",
 			},
 		},
-		"required": []string{"name", "date", "members", "note", "link"},
-	}
+		[]string{"name", "date", "members", "note", "link"},
+	)
 }
 
 func summaryOngoingItemSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
+	return consensus.ObjectSchema(
+		map[string]any{
 			"name": map[string]any{
 				"type":        "string",
 				"description": "행사명",
@@ -127,15 +123,13 @@ func summaryOngoingItemSchema() map[string]any {
 				"description": "입력 행사 link 그대로 전달",
 			},
 		},
-		"required": []string{"name", "date", "note", "link"},
-	}
+		[]string{"name", "date", "note", "link"},
+	)
 }
 
 func summaryDiscoveredItemSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
+	return consensus.ObjectSchema(
+		map[string]any{
 			"name": map[string]any{
 				"type":        "string",
 				"description": "행사명 — 공식 명칭 사용",
@@ -154,6 +148,6 @@ func summaryDiscoveredItemSchema() map[string]any {
 				"description": "출처 URL — 반드시 https:// 형식 전체 URL 또는 @계정명",
 			},
 		},
-		"required": []string{"name", "date", "note", "source"},
-	}
+		[]string{"name", "date", "note", "source"},
+	)
 }

@@ -8,12 +8,20 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
-func (h *Handler) safeLogger() *slog.Logger {
-	if h != nil && h.logger != nil {
-		return h.logger
+func loggerOrDefault(logger *slog.Logger) *slog.Logger {
+	if logger != nil {
+		return logger
 	}
 
 	return slog.Default()
+}
+
+func (h *Handler) safeLogger() *slog.Logger {
+	if h == nil {
+		return slog.Default()
+	}
+
+	return loggerOrDefault(h.logger)
 }
 
 func (h *Handler) logActivity(entryType, summary string, details map[string]any) {

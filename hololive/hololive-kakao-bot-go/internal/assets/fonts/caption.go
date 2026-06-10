@@ -40,10 +40,6 @@ var (
 	captionFaceCache sync.Map
 )
 
-func CaptionFace() (font.Face, error) {
-	return CaptionFaceSized(24)
-}
-
 // 생성된 Face는 sync.Map으로 캐시되어 재사용됩니다.
 func CaptionFaceSized(size float64) (font.Face, error) {
 	if size <= 0 {

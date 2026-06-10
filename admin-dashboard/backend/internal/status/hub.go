@@ -2,10 +2,8 @@ package status
 
 import (
 	"context"
-	"net/http"
 	"runtime"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -172,27 +170,13 @@ func (h *Hub) externalRuntimeStats(ctx context.Context) []ServiceRuntimeStats {
 }
 
 func (h *Hub) fetchRuntime(ctx context.Context, endpoint ServiceEndpoint) ServiceRuntimeStats {
-	client, errMsg := h.clients[endpoint.Name].resolve()
-	if client == nil {
-		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &errMsg}
+	result := doHealthGET(ctx, h.clients[endpoint.Name], endpoint)
+	if result.errMsg != "" {
+		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &result.errMsg}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, nil)
-	if err != nil {
-		msg := err.Error()
-		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &msg}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		msg := err.Error()
-		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &msg}
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := "status: " + resp.Status
-		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &msg}
-	}
+	defer result.resp.Body.Close()
 	var payload healthPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.NewDecoder(result.resp.Body).Decode(&payload); err != nil {
 		msg := "invalid health payload: " + err.Error()
 		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &msg}
 	}

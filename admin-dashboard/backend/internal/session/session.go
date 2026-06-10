@@ -13,6 +13,7 @@ import (
 
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/config"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/json"
 )
 
@@ -147,14 +148,14 @@ func (s *Store) buildSession(id string, now time.Time) Session {
 func (s *Store) getRaw(ctx context.Context, id string) (string, bool, error) {
 	resp := s.client.Do(ctx, s.client.B().Get().Key(sessionKey(id)).Build())
 	if err := resp.Error(); err != nil {
-		if isValkeyNil(err) {
+		if util.IsValkeyNil(err) {
 			return "", false, nil
 		}
 		return "", false, err
 	}
 	value, err := resp.ToString()
 	if err != nil {
-		if isValkeyNil(err) {
+		if util.IsValkeyNil(err) {
 			return "", false, nil
 		}
 		return "", false, err
@@ -206,23 +207,4 @@ func parseValkeyAddress(value string) (addr, password string, err error) {
 		return "", "", fmt.Errorf("VALKEY_URL host is empty")
 	}
 	return host, password, nil
-}
-
-func isValkeyNil(err error) bool {
-	for err != nil {
-		if valkey.IsValkeyNil(err) {
-			return true
-		}
-		err = unwrap(err)
-	}
-	return false
-}
-
-type unwrapper interface{ Unwrap() error }
-
-func unwrap(err error) error {
-	if u, ok := err.(unwrapper); ok {
-		return u.Unwrap()
-	}
-	return nil
 }

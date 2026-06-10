@@ -18,27 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package httputil
+package model
 
-import (
-	"net/http"
-
-	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/pkg/ginjson"
-)
-
-func Success(c *gin.Context, data any) {
-	ginjson.Respond(c, http.StatusOK, data)
-}
-
-func SuccessWithStatus(c *gin.Context, status int, data any) {
-	ginjson.Respond(c, status, data)
-}
-
-func Error(c *gin.Context, status int, message string) {
-	ginjson.Respond(c, status, gin.H{"error": message})
-}
-
-func ErrorWithData(c *gin.Context, status int, data any) {
-	ginjson.Respond(c, status, data)
-}
+// WeekdayKR: time.Weekday(0=일요일)를 인덱스로 사용하는 요일 한국어 레이블.
+var WeekdayKR = [...]string{"일", "월", "화", "수", "목", "금", "토"}

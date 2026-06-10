@@ -29,7 +29,6 @@ import (
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-shared/internal/dbx"
@@ -128,7 +127,7 @@ func (r *TemplateRepository) createTemplate(ctx context.Context, key domain.Temp
 }
 
 func (r *TemplateRepository) handleCreateTemplateError(ctx context.Context, key domain.TemplateKey, channelID *string, body string, err error) (*domain.NotificationTemplate, error) {
-	if !isDuplicateKeyError(err) {
+	if !dbx.IsDuplicateKey(err) {
 		return nil, fmt.Errorf("create template: %w", err)
 	}
 
@@ -159,27 +158,6 @@ func (r *TemplateRepository) updateTemplate(ctx context.Context, existing *domai
 		return nil, fmt.Errorf("update template: %w", err)
 	}
 	return existing, nil
-}
-
-func isDuplicateKeyError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23505"
-	}
-
-	msg := err.Error()
-	if strings.Contains(msg, "UNIQUE constraint failed") {
-		return true
-	}
-	if strings.Contains(msg, "duplicate key value violates unique constraint") {
-		return true
-	}
-
-	return false
 }
 
 func (r *TemplateRepository) DeleteOverride(ctx context.Context, key domain.TemplateKey, channelID string) error {

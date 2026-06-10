@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/kapu/hololive-shared/internal/dbx"
 )
 
 type batchDB interface {
@@ -18,51 +18,23 @@ type batchDB interface {
 }
 
 func execSQL(ctx context.Context, db batchDB, action string, query string, args ...any) (int64, error) {
-	tag, err := db.Exec(ctx, postgresPlaceholders(query), args...)
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", action, err)
-	}
-	return tag.RowsAffected(), nil
+	return dbx.ExecSQL(ctx, db, action, query, args...)
 }
 
 func selectSQL(ctx context.Context, db batchDB, dest any, action string, query string, args ...any) error {
-	if err := pgxscan.Select(ctx, db, dest, postgresPlaceholders(query), args...); err != nil {
-		return fmt.Errorf("%s: %w", action, err)
-	}
-	return nil
+	return dbx.SelectSQL(ctx, db, dest, action, query, args...)
 }
 
 func inPlaceholders(count int) string {
-	if count <= 0 {
-		return ""
-	}
-	parts := make([]string, count)
-	for i := range parts {
-		parts[i] = "?"
-	}
-	return strings.Join(parts, ", ")
+	return dbx.InPlaceholders(count)
 }
 
 func anyArgs[T any](values []T) []any {
-	args := make([]any, 0, len(values))
-	for _, value := range values {
-		args = append(args, value)
-	}
-	return args
+	return dbx.AnyArgs(values)
 }
 
 func postgresPlaceholders(query string) string {
-	var out strings.Builder
-	index := 1
-	for i := 0; i < len(query); i++ {
-		if query[i] != '?' {
-			out.WriteByte(query[i])
-			continue
-		}
-		out.WriteString(fmt.Sprintf("$%d", index))
-		index++
-	}
-	return out.String()
+	return dbx.PostgresPlaceholders(query)
 }
 
 func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) error) error {

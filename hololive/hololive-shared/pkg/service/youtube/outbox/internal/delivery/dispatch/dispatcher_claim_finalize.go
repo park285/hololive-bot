@@ -9,6 +9,7 @@ import (
 	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
@@ -171,9 +172,9 @@ func resolveClaimActualPublishedAt(
 ) *time.Time {
 	switch {
 	case state != nil && state.ActualPublishedAt != nil:
-		return cloneUTCTimePtr(state.ActualPublishedAt)
+		return deliverysql.CloneUTCTimePtr(state.ActualPublishedAt)
 	case trackingRow != nil && trackingRow.ActualPublishedAt != nil:
-		return cloneUTCTimePtr(trackingRow.ActualPublishedAt)
+		return deliverysql.CloneUTCTimePtr(trackingRow.ActualPublishedAt)
 	default:
 		return resolveOutboxPublishedAt(outbox)
 	}

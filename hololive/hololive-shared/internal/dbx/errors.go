@@ -30,7 +30,15 @@ import (
 )
 
 func IsDuplicateKey(err error) bool {
-	return hasPGCode(err, pgerrcode.UniqueViolation)
+	if err == nil {
+		return false
+	}
+	if hasPGCode(err, pgerrcode.UniqueViolation) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "UNIQUE constraint failed") ||
+		strings.Contains(msg, "duplicate key value violates unique constraint")
 }
 
 func IsForeignKeyViolation(err error) bool {

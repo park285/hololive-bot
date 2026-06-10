@@ -15,10 +15,6 @@ type youTubePollSchedulerSyncer struct {
 	tieringDB     *pgxpool.Pool
 }
 
-func (s *youTubePollSchedulerSyncer) Sync(targets youtubePollTargets) {
-	s.SyncAt(targets, time.Now())
-}
-
 func (s *youTubePollSchedulerSyncer) SyncAt(targets youtubePollTargets, now time.Time) {
 	if s == nil || s.scheduler == nil {
 		return

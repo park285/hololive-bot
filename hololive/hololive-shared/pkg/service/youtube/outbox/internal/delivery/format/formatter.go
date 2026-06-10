@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
 
 type MessageFormatter struct {
@@ -210,7 +211,7 @@ func (mf *MessageFormatter) FormatVideoMessage(memberName, payload string, kind 
 		return "", fmt.Errorf("failed to unmarshal video payload: %w", err)
 	}
 
-	title := TruncateString(p.Title, 50)
+	title := deliverysql.TruncateString(p.Title, 50)
 	if kind == domain.OutboxKindNewShort {
 		url := fmt.Sprintf("https://www.youtube.com/shorts/%s", p.VideoID)
 		header := fmt.Sprintf("📱 %s 쇼츠 알림", memberName)
@@ -361,12 +362,4 @@ func buildGroupedCommunityItemData(payload string) GroupedItemData {
 		ContentText: p.ContentText,
 		URL:         fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID),
 	}
-}
-
-func TruncateString(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	return string(runes[:maxLen-3]) + "..."
 }

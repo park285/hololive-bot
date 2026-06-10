@@ -23,15 +23,6 @@ func NewRepository(db any) *Repository {
 	return &Repository{db: deliverysql.AsQuerier(db)}
 }
 
-func cloneUTCTimePtr(value *time.Time) *time.Time {
-	if value == nil || value.IsZero() {
-		return nil
-	}
-
-	normalized := value.UTC()
-	return &normalized
-}
-
 func (r *Repository) Enqueue(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
 	prepared, err := r.PrepareRows(ctx, rows)
 	if err != nil {
@@ -80,8 +71,8 @@ func prepareDeliveryTelemetryRow(
 }
 
 func normalizeDeliveryTelemetryAttemptTimes(row *domain.YouTubeNotificationDeliveryTelemetry, now time.Time) {
-	row.AttemptStartedAt = cloneUTCTimePtr(row.AttemptStartedAt)
-	row.AttemptFinishedAt = cloneUTCTimePtr(row.AttemptFinishedAt)
+	row.AttemptStartedAt = deliverysql.CloneUTCTimePtr(row.AttemptStartedAt)
+	row.AttemptFinishedAt = deliverysql.CloneUTCTimePtr(row.AttemptFinishedAt)
 	if row.AttemptFinishedAt == nil && !row.EventAt.IsZero() {
 		finishedAt := row.EventAt.UTC()
 		row.AttemptFinishedAt = &finishedAt

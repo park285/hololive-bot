@@ -39,7 +39,7 @@ func (p *YouTubeOutboxDispatchPayload) Validate() error {
 	if p == nil {
 		return fmt.Errorf("youtube outbox dispatch payload is nil")
 	}
-	return errorsJoin(
+	return firstError(
 		validateYouTubeOutboxHeader(p),
 		validateYouTubeOutboxItems(p.Items),
 	)
@@ -194,7 +194,7 @@ func validateCanonicalYouTubeOutboxMatch(notification AlarmNotification, payload
 	}
 }
 
-func errorsJoin(errs ...error) error {
+func firstError(errs ...error) error {
 	for _, err := range errs {
 		if err != nil {
 			return err

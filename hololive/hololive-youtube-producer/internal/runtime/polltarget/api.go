@@ -72,10 +72,6 @@ func ClassifyByActivity(ctx context.Context, pool *pgxpool.Pool, targets Targets
 	return classifyYouTubePollTargetsByActivity(ctx, pool, targets, now)
 }
 
-func ResolveFromRegistrations(registrations []providers.ChannelPollerRegistration) Targets {
-	return resolveYouTubePollTargetsFromRegistrations(registrations)
-}
-
 func MergeUniqueChannelIDs(channelIDSets ...[]string) []string {
 	return mergeUniqueChannelIDs(channelIDSets...)
 }

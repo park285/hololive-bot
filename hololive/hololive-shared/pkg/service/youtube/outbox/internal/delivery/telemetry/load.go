@@ -58,9 +58,9 @@ func (r *Repository) loadTrackingSnapshots(
 		row := trackingRows[i]
 		detectedAt := row.DetectedAt.UTC()
 		snapshots[deliveryTelemetryIdentity{kind: row.Kind, contentID: strings.TrimSpace(row.ContentID)}] = deliveryTelemetryTrackingSnapshot{
-			actualPublishedAt: cloneUTCTimePtr(row.ActualPublishedAt),
+			actualPublishedAt: deliverysql.CloneUTCTimePtr(row.ActualPublishedAt),
 			detectedAt:        &detectedAt,
-			alarmSentAt:       cloneUTCTimePtr(row.AlarmSentAt),
+			alarmSentAt:       deliverysql.CloneUTCTimePtr(row.AlarmSentAt),
 		}
 	}
 

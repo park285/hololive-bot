@@ -6,6 +6,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
@@ -34,10 +35,10 @@ func applyDeliveryTelemetryObservationContext(
 	}
 
 	timing = alarmtiming.Build(snapshot.actualPublishedAt, snapshot.alarmSentAt)
-	row.ActualPublishedAt = cloneUTCTimePtr(timing.ActualPublishedAt)
-	row.AlarmSentAt = cloneUTCTimePtr(timing.AlarmSentAt)
+	row.ActualPublishedAt = deliverysql.CloneUTCTimePtr(timing.ActualPublishedAt)
+	row.AlarmSentAt = deliverysql.CloneUTCTimePtr(timing.AlarmSentAt)
 	row.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(timing.AlarmLatencyMillis)
-	row.DetectedAt = cloneUTCTimePtr(snapshot.detectedAt)
+	row.DetectedAt = deliverysql.CloneUTCTimePtr(snapshot.detectedAt)
 
 	if timing.ActualPublishedAt == nil || timing.ActualPublishedAt.IsZero() {
 		row.ObservationStatus = deliveryTelemetryObservationStatusMissingActualPublishedAt
@@ -55,9 +56,9 @@ func applyDeliveryTelemetryObservationContext(
 	}, windows); ok {
 		row.ObservationStatus = deliveryTelemetryObservationStatusMatched
 		row.ObservationRuntimeName = strings.TrimSpace(matchedWindow.RuntimeName)
-		row.ObservationBigBangCutoverAt = cloneUTCTimePtr(&matchedWindow.BigBangCutoverAt)
-		row.ObservationStartedAt = cloneUTCTimePtr(&matchedWindow.ObservationStartedAt)
-		row.ObservationEndedAt = cloneUTCTimePtr(&matchedWindow.ObservationEndedAt)
+		row.ObservationBigBangCutoverAt = deliverysql.CloneUTCTimePtr(&matchedWindow.BigBangCutoverAt)
+		row.ObservationStartedAt = deliverysql.CloneUTCTimePtr(&matchedWindow.ObservationStartedAt)
+		row.ObservationEndedAt = deliverysql.CloneUTCTimePtr(&matchedWindow.ObservationEndedAt)
 		return
 	}
 

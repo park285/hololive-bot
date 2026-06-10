@@ -18,32 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package auth
+package messaging
 
-import (
-	"errors"
-	"strings"
+import "github.com/park285/shared-go/pkg/stringutil"
 
-	"github.com/jackc/pgx/v5/pgconn"
-)
-
-func isDuplicateKeyError(err error) bool {
-	if err == nil {
-		return false
+func parseToggleAction(args []string, aliases map[string]string, fallback string) string {
+	if len(args) == 0 {
+		return fallback
 	}
 
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23505"
+	if action, ok := aliases[stringutil.Normalize(args[0])]; ok {
+		return action
 	}
 
-	msg := err.Error()
-	if strings.Contains(msg, "UNIQUE constraint failed") {
-		return true
-	}
-	if strings.Contains(msg, "duplicate key value violates unique constraint") {
-		return true
-	}
-
-	return false
+	return fallback
 }

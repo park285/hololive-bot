@@ -91,28 +91,16 @@ func (c *Collector) Collect(ctx context.Context) AggregatedStatus {
 }
 
 func (c *Collector) collectEndpoint(ctx context.Context, endpoint ServiceEndpoint) ServiceStatus {
-	client, errMsg := c.clients[endpoint.Name].resolve()
-	if client == nil {
-		return ServiceStatus{Name: endpoint.Name, Available: false, Error: &errMsg}
+	result := doHealthGET(ctx, c.clients[endpoint.Name], endpoint)
+	if result.errMsg != "" {
+		status := ServiceStatus{Name: endpoint.Name, Available: false, Error: &result.errMsg}
+		if result.measured {
+			status.ResponseTimeMS = &result.latencyMS
+		}
+		return status
 	}
-	start := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, nil)
-	if err != nil {
-		msg := err.Error()
-		return ServiceStatus{Name: endpoint.Name, Available: false, Error: &msg}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		msg := err.Error()
-		return ServiceStatus{Name: endpoint.Name, Available: false, Error: &msg}
-	}
-	defer resp.Body.Close()
-	elapsed := uint64(time.Since(start).Milliseconds())
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return ServiceStatus{Name: endpoint.Name, Available: true, ResponseTimeMS: &elapsed}
-	}
-	msg := "status: " + resp.Status
-	return ServiceStatus{Name: endpoint.Name, Available: false, ResponseTimeMS: &elapsed, Error: &msg}
+	defer result.resp.Body.Close()
+	return ServiceStatus{Name: endpoint.Name, Available: true, ResponseTimeMS: &result.latencyMS}
 }
 
 func FormatDuration(duration time.Duration) string {

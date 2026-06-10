@@ -56,11 +56,11 @@ const (
 )
 
 func (h *SettingsHandler) safeLogger() *slog.Logger {
-	if h != nil && h.Logger != nil {
-		return h.Logger
+	if h == nil {
+		return slog.Default()
 	}
 
-	return slog.Default()
+	return loggerOrDefault(h.Logger)
 }
 
 func (h *SettingsHandler) logActivity(entryType, summary string, details map[string]any) {
@@ -71,7 +71,7 @@ func (h *SettingsHandler) logActivity(entryType, summary string, details map[str
 
 func (h *SettingsHandler) requireAlarm(c *gin.Context) bool {
 	if h == nil || h.Alarm == nil {
-		sharedserver.RespondError(c, http.StatusServiceUnavailable, "alarm service not available", nil)
+		respondServiceUnavailable(c, "alarm service not available")
 		return false
 	}
 
@@ -80,7 +80,7 @@ func (h *SettingsHandler) requireAlarm(c *gin.Context) bool {
 
 func (h *SettingsHandler) requireSettings(c *gin.Context) bool {
 	if h == nil || h.Settings == nil {
-		sharedserver.RespondError(c, http.StatusServiceUnavailable, "settings service not available", nil)
+		respondServiceUnavailable(c, "settings service not available")
 		return false
 	}
 
@@ -89,7 +89,7 @@ func (h *SettingsHandler) requireSettings(c *gin.Context) bool {
 
 func (h *SettingsHandler) requireApplier(c *gin.Context) bool {
 	if h == nil || h.SettingsApplier == nil {
-		sharedserver.RespondError(c, http.StatusServiceUnavailable, "settings applier not available", nil)
+		respondServiceUnavailable(c, "settings applier not available")
 		return false
 	}
 

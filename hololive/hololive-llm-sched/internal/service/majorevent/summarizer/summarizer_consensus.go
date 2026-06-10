@@ -323,60 +323,40 @@ Tasks:
 }
 
 func reviewSummarySchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"approved": map[string]any{
-				"type": "boolean",
-			},
+	return consensus.ObjectSchema(
+		map[string]any{
+			"approved": consensus.TypeSchema("boolean"),
 			"confidence": map[string]any{
 				"type":    "number",
 				"minimum": 0,
 				"maximum": 1,
 			},
-			"issues": map[string]any{
-				"type":  "array",
-				"items": reviewIssueSchema(),
-			},
+			"issues": consensus.ArraySchema(reviewIssueSchema()),
 		},
-		"required": []string{"approved", "confidence", "issues"},
-	}
+		[]string{"approved", "confidence", "issues"},
+	)
 }
 
 func reviewIssueSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"field": map[string]any{
-				"type": "string",
-			},
-			"item_index": map[string]any{
-				"type": "integer",
-			},
-			"severity": map[string]any{
-				"type": "string",
-				"enum": []string{"critical", "warning", "info"},
-			},
-			"description": map[string]any{
-				"type": "string",
-			},
+	return consensus.ObjectSchema(
+		map[string]any{
+			"field":       consensus.TypeSchema("string"),
+			"item_index":  consensus.TypeSchema("integer"),
+			"severity":    consensus.EnumSchema("string", []string{"critical", "warning", "info"}),
+			"description": consensus.TypeSchema("string"),
 		},
-		"required": []string{"field", "item_index", "severity", "description"},
-	}
+		[]string{"field", "item_index", "severity", "description"},
+	)
 }
 
 func finalOutputReviewSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
+	return consensus.ObjectSchema(
+		map[string]any{
 			"summary": map[string]any{
 				"type":        "string",
 				"description": "final deduplicated summary text",
 			},
 		},
-		"required": []string{"summary"},
-	}
+		[]string{"summary"},
+	)
 }

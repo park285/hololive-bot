@@ -8,6 +8,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/admin-dashboard/internal/auth"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/json"
 )
 
@@ -173,14 +174,14 @@ func (s *Store) rotateExec(ctx context.Context, oldID, oldData string, newSessio
 
 func intResultAllowingNil(resp valkey.ValkeyResult) (int64, bool, error) {
 	if err := resp.Error(); err != nil {
-		if isValkeyNil(err) {
+		if util.IsValkeyNil(err) {
 			return 0, false, nil
 		}
 		return 0, false, err
 	}
 	value, err := resp.AsInt64()
 	if err != nil {
-		if isValkeyNil(err) {
+		if util.IsValkeyNil(err) {
 			return 0, false, nil
 		}
 		return 0, false, err

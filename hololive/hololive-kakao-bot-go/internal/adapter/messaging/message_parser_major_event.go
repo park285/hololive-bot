@@ -38,24 +38,18 @@ func (ma *MessageAdapter) tryMajorEventCommand(command string, args []string, ra
 	return &ParsedCommand{Type: domain.CommandMajorEvent, Params: params, RawMessage: raw}, true
 }
 
-func majorEventAction(args []string) string {
-	if len(args) == 0 {
-		return actionStatus
-	}
+var majorEventActions = map[string]string{
+	"켜기":   "on",
+	"on":   "on",
+	"구독":   "on",
+	"끄기":   "off",
+	"off":  "off",
+	"해제":   "off",
+	"목록":   actionStatus,
+	"list": actionStatus,
+	"상태":   actionStatus,
+}
 
-	actions := map[string]string{
-		"켜기":   "on",
-		"on":   "on",
-		"구독":   "on",
-		"끄기":   "off",
-		"off":  "off",
-		"해제":   "off",
-		"목록":   actionStatus,
-		"list": actionStatus,
-		"상태":   actionStatus,
-	}
-	if action, ok := actions[stringutil.Normalize(args[0])]; ok {
-		return action
-	}
-	return actionStatus
+func majorEventAction(args []string) string {
+	return parseToggleAction(args, majorEventActions, actionStatus)
 }
