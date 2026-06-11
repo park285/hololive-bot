@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -144,12 +145,12 @@ func mergeResolvedShortContentIDs(
 
 	var rows []shortIdentityRow
 	args := []any{domain.OutboxKindNewShort}
-	args = append(args, anyArgs(aliases)...)
-	if err := selectSQL(ctx, tx, &rows, action, `
+	args = append(args, dbx.AnyArgs(aliases)...)
+	if err := dbx.SelectSQL(ctx, tx, &rows, action, `
 		SELECT content_id
 		FROM `+table+`
 		WHERE kind = ?
-		  AND content_id IN (`+inPlaceholders(len(aliases))+`)`, args...); err != nil {
+		  AND content_id IN (`+dbx.InPlaceholders(len(aliases))+`)`, args...); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}
 	for i := range rows {

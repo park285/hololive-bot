@@ -372,14 +372,3 @@ func nextAlarmDispatchRetry(envelope domain.AlarmQueueEnvelope, cause error) *do
 	retry.NextVisibleAt = time.Now().UTC().Add(retryAfter).Format(time.RFC3339Nano)
 	return retry
 }
-
-func sleepContext(ctx context.Context, d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
-}

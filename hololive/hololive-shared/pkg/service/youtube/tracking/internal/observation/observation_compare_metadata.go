@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
@@ -157,9 +158,9 @@ func (r *compareMetadataRepository) loadObservationCommunityPostMetadata(
 	query := `
 		SELECT post_id, content_text, published_at
 		FROM youtube_community_posts
-		WHERE post_id IN (` + inPlaceholders(len(rawIDs)) + `)
+		WHERE post_id IN (` + dbx.InPlaceholders(len(rawIDs)) + `)
 	`
-	if err := selectSQL(ctx, r.db, &rows, "load observation community metadata: query rows", query, anyArgs(rawIDs)...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &rows, "load observation community metadata: query rows", query, dbx.AnyArgs(rawIDs)...); err != nil {
 		return nil, err
 	}
 
@@ -191,9 +192,9 @@ func (r *compareMetadataRepository) loadObservationShortMetadata(
 	query := `
 		SELECT video_id, title, published_at
 		FROM youtube_videos
-		WHERE video_id IN (` + inPlaceholders(len(rawIDs)) + `)
+		WHERE video_id IN (` + dbx.InPlaceholders(len(rawIDs)) + `)
 	`
-	if err := selectSQL(ctx, r.db, &rows, "load observation short metadata: query rows", query, anyArgs(rawIDs)...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &rows, "load observation short metadata: query rows", query, dbx.AnyArgs(rawIDs)...); err != nil {
 		return nil, err
 	}
 

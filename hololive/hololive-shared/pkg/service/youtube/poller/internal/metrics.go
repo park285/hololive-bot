@@ -267,7 +267,7 @@ func (m *Metrics) ObserveCommunityShortsDetectedPosts(alarmType domain.AlarmType
 	m.CommunityShortsDetectedPostsTotal.WithLabelValues(string(alarmType)).Add(float64(count))
 }
 
-func boolResult(ok bool, err error) string {
+func BoolResult(ok bool, err error) string {
 	if err != nil {
 		return "error"
 	}

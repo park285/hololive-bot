@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -109,7 +110,7 @@ func (db *batchTestDB) Count(dest *int64) *batchTestDB {
 	if strings.TrimSpace(next.where) != "" {
 		query += " WHERE " + next.where
 	}
-	next.Error = next.QueryRow(context.Background(), postgresPlaceholders(query), args...).Scan(dest)
+	next.Error = next.QueryRow(context.Background(), dbx.PostgresPlaceholders(query), args...).Scan(dest)
 	return next
 }
 
@@ -125,7 +126,7 @@ func (db *batchTestDB) First(dest any, conds ...any) *batchTestDB {
 		query += " WHERE " + next.where
 	}
 	query += " LIMIT 1"
-	next.Error = pgxscan.Get(context.Background(), next.Pool, dest, postgresPlaceholders(query), args...)
+	next.Error = pgxscan.Get(context.Background(), next.Pool, dest, dbx.PostgresPlaceholders(query), args...)
 	return next
 }
 
@@ -140,7 +141,7 @@ func (db *batchTestDB) Find(dest any) *batchTestDB {
 	if strings.TrimSpace(next.order) != "" {
 		query += " ORDER BY " + next.order
 	}
-	next.Error = pgxscan.Select(context.Background(), next.Pool, dest, postgresPlaceholders(query), args...)
+	next.Error = pgxscan.Select(context.Background(), next.Pool, dest, dbx.PostgresPlaceholders(query), args...)
 	return next
 }
 
@@ -155,7 +156,7 @@ func (db *batchTestDB) Exec(query string, args ...any) *batchTestDB {
 	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(query)), "PRAGMA ") {
 		return next
 	}
-	tag, err := next.Pool.Exec(context.Background(), postgresPlaceholders(query), args...)
+	tag, err := next.Pool.Exec(context.Background(), dbx.PostgresPlaceholders(query), args...)
 	next.Error = err
 	next.RowsAffected = tag.RowsAffected()
 	return next
@@ -235,7 +236,7 @@ func insertOutbox(ctx context.Context, db *pgxpool.Pool, row *domain.YouTubeNoti
 	if row.CreatedAt.IsZero() {
 		row.CreatedAt = now
 	}
-	err := db.QueryRow(ctx, postgresPlaceholders(`
+	err := db.QueryRow(ctx, dbx.PostgresPlaceholders(`
 		INSERT INTO youtube_notification_outbox
 			(kind, channel_id, content_id, payload, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, error)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -249,7 +250,7 @@ func insertOutbox(ctx context.Context, db *pgxpool.Pool, row *domain.YouTubeNoti
 }
 
 func execInsert(ctx context.Context, db *pgxpool.Pool, query string, args ...any) (int64, error) {
-	tag, err := db.Exec(ctx, postgresPlaceholders(query), args...)
+	tag, err := db.Exec(ctx, dbx.PostgresPlaceholders(query), args...)
 	if err != nil {
 		return 0, err
 	}

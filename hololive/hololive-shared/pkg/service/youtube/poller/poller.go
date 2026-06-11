@@ -3,6 +3,8 @@ package poller
 import (
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/resolver"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/scheduler"
 )
 
 type NotificationRouteRequest = polling.NotificationRouteRequest
@@ -13,9 +15,9 @@ type ViewerSampleCleanerConfig = polling.ViewerSampleCleanerConfig
 
 type ViewerSampleCleaner = polling.ViewerSampleCleaner
 
-type PendingPublishedAtResolverPoller = polling.PendingPublishedAtResolverPoller
+type PendingPublishedAtResolverPoller = resolver.PendingPublishedAtResolverPoller
 
-type RateLimiter = polling.RateLimiter
+type RateLimiter = scheduler.RateLimiter
 
 type ShortsPoller = pollers.ShortsPoller
 
@@ -39,17 +41,17 @@ type SourceCooldownReporter = polling.SourceCooldownReporter
 
 type BudgetContext = polling.BudgetContext
 
-type Poller = polling.Poller
+type Poller = scheduler.Poller
 
-type Job = polling.Job
+type Job = scheduler.Job
 
-type Priority = polling.Priority
+type Priority = scheduler.Priority
 
-type Scheduler = polling.Scheduler
+type Scheduler = scheduler.Scheduler
 
-type PollerTargetSync = polling.PollerTargetSync
+type PollerTargetSync = scheduler.PollerTargetSync
 
-type SchedulerConfig = polling.SchedulerConfig
+type SchedulerConfig = scheduler.SchedulerConfig
 
 type JobClaimResult = polling.JobClaimResult
 
@@ -65,7 +67,7 @@ type VideosPoller = pollers.VideosPoller
 
 type CommunityPoller = pollers.CommunityPoller
 
-type PendingPublishedAtResolver = polling.PendingPublishedAtResolver
+type PendingPublishedAtResolver = resolver.PendingPublishedAtResolver
 
 type LivePoller = pollers.LivePoller
 
@@ -74,13 +76,13 @@ type LiveStatusProvider = pollers.LiveStatusProvider
 type Metrics = polling.Metrics
 
 const (
-	PendingPublishedAtResolverPollerName          = polling.PendingPublishedAtResolverPollerName
-	PendingPublishedAtResolverCandidatePollerName = polling.PendingPublishedAtResolverCandidatePollerName
+	PendingPublishedAtResolverPollerName          = resolver.PendingPublishedAtResolverPollerName
+	PendingPublishedAtResolverCandidatePollerName = resolver.PendingPublishedAtResolverCandidatePollerName
 
-	PriorityLow    = polling.PriorityLow
-	PriorityNormal = polling.PriorityNormal
-	PriorityHigh   = polling.PriorityHigh
-	PriorityBoost  = polling.PriorityBoost
+	PriorityLow    = scheduler.PriorityLow
+	PriorityNormal = scheduler.PriorityNormal
+	PriorityHigh   = scheduler.PriorityHigh
+	PriorityBoost  = scheduler.PriorityBoost
 
 	BudgetSourceYouTubeScraper  = polling.BudgetSourceYouTubeScraper
 	BudgetSourceHolodexLive     = polling.BudgetSourceHolodexLive
@@ -106,15 +108,15 @@ var DefaultViewerSampleCleanerConfig = polling.DefaultViewerSampleCleanerConfig
 
 var NewViewerSampleCleaner = polling.NewViewerSampleCleaner
 
-var NewPendingPublishedAtResolverPoller = polling.NewPendingPublishedAtResolverPoller
+var NewPendingPublishedAtResolverPoller = resolver.NewPendingPublishedAtResolverPoller
 
-var NewRateLimiter = polling.NewRateLimiter
+var NewRateLimiter = scheduler.NewRateLimiter
 
 var NewShortsPoller = pollers.NewShortsPoller
 
-var DefaultSchedulerConfig = polling.DefaultSchedulerConfig
+var DefaultSchedulerConfig = scheduler.DefaultSchedulerConfig
 
-var NewScheduler = polling.NewScheduler
+var NewScheduler = scheduler.NewScheduler
 
 var NewChannelStatsPoller = pollers.NewChannelStatsPoller
 
@@ -122,9 +124,9 @@ var NewVideosPoller = pollers.NewVideosPoller
 
 var NewCommunityPoller = pollers.NewCommunityPoller
 
-var NewPendingPublishedAtResolver = polling.NewPendingPublishedAtResolver
+var NewPendingPublishedAtResolver = resolver.NewPendingPublishedAtResolver
 
-var NewPendingPublishedAtResolverWithControls = polling.NewPendingPublishedAtResolverWithControls
+var NewPendingPublishedAtResolverWithControls = resolver.NewPendingPublishedAtResolverWithControls
 
 var NewLivePoller = pollers.NewLivePoller
 

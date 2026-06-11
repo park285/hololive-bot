@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -68,7 +69,7 @@ func (r *alarmStateRepository) loadPendingPublishedAtResolutionRows(
 		LIMIT ?
 	`
 	args = append(args, limit)
-	if err := selectSQL(ctx, r.db, &rows, "list pending published_at resolutions page: query rows", query, args...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &rows, "list pending published_at resolutions page: query rows", query, args...); err != nil {
 		return nil, err
 	}
 

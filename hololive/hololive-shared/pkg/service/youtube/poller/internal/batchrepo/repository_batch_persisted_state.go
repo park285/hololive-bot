@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -102,7 +103,7 @@ func loadPersistedOutboxSentState(
 	args []any,
 ) ([]persistedOutboxSentStateRow, error) {
 	var outboxRows []persistedOutboxSentStateRow
-	if err := selectSQL(ctx, tx, &outboxRows, "query outbox rows", `
+	if err := dbx.SelectSQL(ctx, tx, &outboxRows, "query outbox rows", `
 		SELECT id, kind, content_id, sent_at
 		FROM youtube_notification_outbox
 		WHERE `+strings.Join(clauses, " OR "), args...); err != nil {
@@ -144,12 +145,12 @@ func mergePersistedDeliverySentState(
 	}
 
 	var deliveryRows []persistedDeliverySentStateRow
-	args := anyArgs(outboxIDs)
+	args := dbx.AnyArgs(outboxIDs)
 	args = append(args, domain.OutboxStatusSent)
-	if err := selectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", `
+	if err := dbx.SelectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", `
 		SELECT outbox_id, sent_at
 		FROM youtube_notification_delivery
-		WHERE outbox_id IN (`+inPlaceholders(len(outboxIDs))+`)
+		WHERE outbox_id IN (`+dbx.InPlaceholders(len(outboxIDs))+`)
 		  AND status = ?
 		  AND sent_at IS NOT NULL`, args...); err != nil {
 		return fmt.Errorf("query sent delivery rows: %w", err)

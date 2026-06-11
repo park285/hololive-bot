@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -38,7 +39,7 @@ func (r *alarmStateRepository) insertAlarmStateClaim(
 	normalizedRecord *domain.YouTubeCommunityShortsAlarmState,
 ) (bool, error) {
 	now := yttimestamp.Normalize(time.Now())
-	rowsAffected, err := execSQL(ctx, r.db, "try claim alarm state: exec query", `
+	rowsAffected, err := dbx.ExecSQL(ctx, r.db, "try claim alarm state: exec query", `
         INSERT INTO youtube_community_shorts_alarm_states
             (kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -109,7 +110,7 @@ func (r *alarmStateRepository) ReleaseAlarmStateClaim(ctx context.Context, kind 
 	}
 
 	updatedAt := yttimestamp.Normalize(time.Now())
-	rowsAffected, err := execSQL(ctx, r.db, "release alarm state claim: update row", `
+	rowsAffected, err := dbx.ExecSQL(ctx, r.db, "release alarm state claim: update row", `
 		UPDATE youtube_community_shorts_alarm_states
 		SET authorized_at = NULL,
 		    delivery_status = ?,

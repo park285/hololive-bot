@@ -170,3 +170,14 @@ func (w *alarmDispatchWakeupWaiter) effectiveSleep() func(context.Context, time.
 	}
 	return sleepContext
 }
+
+func sleepContext(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}

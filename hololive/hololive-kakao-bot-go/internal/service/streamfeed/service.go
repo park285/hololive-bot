@@ -166,7 +166,7 @@ func mergeLiveStream(merged []*domain.Stream, member *domain.Member, live chzzk.
 
 func updateExistingLiveStream(existing *domain.Stream, member *domain.Member) {
 	existing.ChzzkChannelID = member.ChzzkChannelID
-	existing.ChzzkLiveURL = fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
+	existing.ChzzkLiveURL = member.GetChzzkLiveURL()
 	existing.IsIntegrated = existing.HasYouTubeInfo()
 	if !existing.HasYouTubeInfo() {
 		existing.IsChzzkOnly = true
@@ -176,7 +176,7 @@ func updateExistingLiveStream(existing *domain.Stream, member *domain.Member) {
 }
 
 func buildChzzkLiveStream(member *domain.Member, live chzzk.LiveData) *domain.Stream {
-	liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
+	liveURL := member.GetChzzkLiveURL()
 	thumbnail := live.LiveThumbnailImageURL
 	link := liveURL
 	now := time.Now().UTC().Truncate(time.Minute)
@@ -209,7 +209,7 @@ func buildUpcomingStreams(member *domain.Member, scheduledLives []chzzk.Schedule
 
 	now := time.Now()
 	cutoff := now.Add(time.Duration(hours) * time.Hour)
-	liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
+	liveURL := member.GetChzzkLiveURL()
 	streams := make([]*domain.Stream, 0, len(scheduledLives))
 
 	for _, scheduledLive := range scheduledLives {

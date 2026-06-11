@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -53,11 +54,11 @@ func (r *identityRepository) findByIdentityRecords(
 		query += "(canonical_content_id = ? OR content_id = ?)"
 		args = append(args, preferredContentID, candidates[0])
 	} else {
-		query += "(canonical_content_id = ? OR content_id IN (" + inPlaceholders(len(candidates)) + "))"
+		query += "(canonical_content_id = ? OR content_id IN (" + dbx.InPlaceholders(len(candidates)) + "))"
 		args = append(args, preferredContentID)
-		args = append(args, anyArgs(candidates)...)
+		args = append(args, dbx.AnyArgs(candidates)...)
 	}
-	if err := selectSQL(ctx, r.db, &records, "find tracking by identity: query row", query, args...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &records, "find tracking by identity: query row", query, args...); err != nil {
 		return nil, err
 	}
 
@@ -119,7 +120,7 @@ func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.
 	latencyExceededExpr := buildLatencyExceededExpr(latencyMillisExpr)
 	deliveryStatusExpr := buildDeliveryStatusExpr(finalAlarmSentExpr)
 	query, args := buildTrackingUpsertQuery(normalized, now, latencyMillisExpr, latencyExceededExpr, deliveryStatusExpr)
-	if _, err := execSQL(ctx, r.db, "upsert tracking batch: exec query", query, args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "upsert tracking batch: exec query", query, args...); err != nil {
 		return err
 	}
 

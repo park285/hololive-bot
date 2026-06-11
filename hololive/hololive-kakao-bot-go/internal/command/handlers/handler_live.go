@@ -257,7 +257,7 @@ func newChzzkStream(member *domain.Member, title string) *domain.Stream {
 	}
 
 	now := time.Now().UTC().Truncate(time.Minute)
-	liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
+	liveURL := member.GetChzzkLiveURL()
 	link := liveURL
 	org := member.GetOrg()
 

@@ -198,7 +198,7 @@ func buildChzzkLiveStream(
 	streamID := fmt.Sprintf("chzzk:%s", streamIdentity)
 
 	channelName := checking.ChannelNameForMember(youtubeChannelID, memberName, youtubeChannelID)
-	liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", chzzkChannelID)
+	liveURL := domain.ChzzkLiveURL(chzzkChannelID)
 	link := liveURL
 
 	stream := &domain.Stream{

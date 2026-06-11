@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/">
+  <entry>
+    <yt:videoId>feed_001</yt:videoId>
+    <title>Feed First</title>
+    <published>2026-03-01T09:08:07+00:00</published>
+    <author><name>Feed Channel</name></author>
+    <media:group>
+      <media:thumbnail url="https://i.ytimg.com/vi/feed_001/hqdefault.jpg" width="480" height="360" />
+    </media:group>
+  </entry>
+  <entry>
+    <yt:videoId>feed_002</yt:videoId>
+    <title>Feed Second</title>
+    <published>2026-03-02T01:02:03+09:00</published>
+    <author><name>Feed Channel</name></author>
+    <media:thumbnail url="https://i.ytimg.com/vi/feed_002/hqdefault.jpg" width="120" height="90" />
+  </entry>
+</feed>

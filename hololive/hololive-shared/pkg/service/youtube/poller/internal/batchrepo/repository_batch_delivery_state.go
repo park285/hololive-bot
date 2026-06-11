@@ -28,6 +28,7 @@ import (
 
 	"github.com/park285/shared-go/pkg/json"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
@@ -54,7 +55,7 @@ func loadFailedNotificationOutboxRows(ctx context.Context, tx batchDB, notificat
 	var rows []failedNotificationOutboxRow
 	queryArgs := []any{domain.OutboxStatusFailed}
 	queryArgs = append(queryArgs, args...)
-	if err := selectSQL(ctx, tx, &rows, "query failed outbox rows", `
+	if err := dbx.SelectSQL(ctx, tx, &rows, "query failed outbox rows", `
 		SELECT id, kind, content_id
 		FROM youtube_notification_outbox
 		WHERE status = ?
@@ -221,7 +222,7 @@ func completedSentAtForFailedNotification(row failedNotificationOutboxRow, compl
 }
 
 func updateCompletedFailedNotificationOutboxRow(ctx context.Context, tx batchDB, id int64, sentAt time.Time) error {
-	if _, err := execSQL(ctx, tx, fmt.Sprintf("update completed outbox row %d", id), `
+	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("update completed outbox row %d", id), `
 		UPDATE youtube_notification_outbox
 		SET status = ?,
 		    locked_at = NULL,
@@ -240,7 +241,7 @@ func updateCompletedFailedNotificationOutboxRow(ctx context.Context, tx batchDB,
 }
 
 func updateCompletedFailedNotificationDeliveryRows(ctx context.Context, tx batchDB, outboxID int64, sentAt time.Time) error {
-	if _, err := execSQL(ctx, tx, fmt.Sprintf("update completed delivery rows for outbox %d", outboxID), `
+	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("update completed delivery rows for outbox %d", outboxID), `
 		UPDATE youtube_notification_delivery
 		SET status = ?,
 		    locked_at = NULL,
@@ -354,9 +355,9 @@ func rearmFailedDeliveryRows(ctx context.Context, tx batchDB, outboxIDs []int64,
 	}
 
 	args := []any{domain.OutboxStatusPending, nextAttemptAt}
-	args = append(args, anyArgs(outboxIDs)...)
+	args = append(args, dbx.AnyArgs(outboxIDs)...)
 	args = append(args, domain.OutboxStatusFailed)
-	if _, err := execSQL(ctx, tx, "update delivery rows", `
+	if _, err := dbx.ExecSQL(ctx, tx, "update delivery rows", `
 		UPDATE youtube_notification_delivery
 		SET status = ?,
 		    attempt_count = 0,
@@ -364,7 +365,7 @@ func rearmFailedDeliveryRows(ctx context.Context, tx batchDB, outboxIDs []int64,
 		    locked_at = NULL,
 		    sent_at = NULL,
 		    error = ''
-		WHERE outbox_id IN (`+inPlaceholders(len(outboxIDs))+`)
+		WHERE outbox_id IN (`+dbx.InPlaceholders(len(outboxIDs))+`)
 		  AND status = ?`,
 		args...,
 	); err != nil {

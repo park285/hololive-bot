@@ -182,3 +182,35 @@ func TestMember_GetDisplayName(t *testing.T) {
 		})
 	}
 }
+
+func TestMember_GetChzzkLiveURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		member *domain.Member
+		want   string
+	}{
+		{
+			name:   "ChzzkChannelID 있음",
+			member: &domain.Member{ChzzkChannelID: "abc123"},
+			want:   "https://chzzk.naver.com/live/abc123",
+		},
+		{
+			// 빈 ID는 기존 fmt.Sprintf와 동일하게 trailing slash까지만 생성 (guard 없음 = drop-in)
+			name:   "빈 ChzzkChannelID",
+			member: &domain.Member{ChzzkChannelID: ""},
+			want:   "https://chzzk.naver.com/live/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := tt.member.GetChzzkLiveURL()
+			if got != tt.want {
+				t.Errorf("GetChzzkLiveURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -56,7 +57,7 @@ func (r *deliveryStateRepository) applyAlarmSentMark(ctx context.Context, mark A
 		latencyMillis, latencyExceeded = calculateLatencyResult(trackingRow.ActualPublishedAt, &mark.AlarmSentAt)
 	}
 
-	if _, err := execSQL(ctx, r.db, "update tracking alarm sent row", `
+	if _, err := dbx.ExecSQL(ctx, r.db, "update tracking alarm sent row", `
 		UPDATE youtube_content_alarm_tracking
 		SET alarm_sent_at = ?,
 		    alarm_latency_millis = ?,
@@ -112,7 +113,7 @@ func (r *deliveryStateRepository) finalizeClaimedAlarmState(ctx context.Context,
 		return false, nil
 	}
 
-	rowsAffected, err := execSQL(ctx, r.db, "finalize claimed alarm state: update row", `
+	rowsAffected, err := dbx.ExecSQL(ctx, r.db, "finalize claimed alarm state: update row", `
 		UPDATE youtube_community_shorts_alarm_states
 		SET authorized_at = NULL,
 		    alarm_sent_at = ?,
@@ -174,7 +175,7 @@ func (r *deliveryStateRepository) updateAlarmStateSentRow(ctx context.Context, k
 		return err
 	}
 
-	if _, err := execSQL(ctx, r.db, "update alarm state sent row", `
+	if _, err := dbx.ExecSQL(ctx, r.db, "update alarm state sent row", `
 		UPDATE youtube_community_shorts_alarm_states
 		SET authorized_at = NULL,
 		    alarm_sent_at = CASE

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -32,7 +33,7 @@ func (r *sourcePostRepository) UpsertSourcePostsBatch(ctx context.Context, recor
 	}
 
 	query, args := buildSourcePostsBatchUpsert(normalized, yttimestamp.Normalize(time.Now()))
-	if _, err := execSQL(ctx, r.db, "upsert source posts batch: exec query", query, args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "upsert source posts batch: exec query", query, args...); err != nil {
 		return err
 	}
 
@@ -109,7 +110,7 @@ func (r *sourcePostRepository) ListSourcePostsDetectedWithinWindow(
 	}
 
 	var rows []domain.YouTubeCommunityShortsSourcePost
-	if err := selectSQL(ctx, r.db, &rows, "list source posts within detected window: query rows", `
+	if err := dbx.SelectSQL(ctx, r.db, &rows, "list source posts within detected window: query rows", `
 		SELECT kind, post_id, channel_id, actual_published_at, detected_at, created_at, updated_at
 		FROM youtube_community_shorts_source_posts
 		WHERE kind IN (?, ?)
@@ -153,7 +154,7 @@ func (r *sourcePostRepository) ListSourcePostsWithinObservationWindow(
 	}
 
 	var rows []domain.YouTubeCommunityShortsSourcePost
-	if err := selectSQL(ctx, r.db, &rows, "list source posts within observation window: query rows", `
+	if err := dbx.SelectSQL(ctx, r.db, &rows, "list source posts within observation window: query rows", `
 		SELECT kind, post_id, channel_id, actual_published_at, detected_at, created_at, updated_at
 		FROM youtube_community_shorts_source_posts
 		WHERE kind IN (?, ?)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -30,7 +31,7 @@ func (r *windowRepository) FindCommunityShortsObservationWindow(
 	}
 
 	var record domain.YouTubeCommunityShortsObservationWindow
-	found, err := getSQL(ctx, r.db, &record, "find community shorts observation window: query row", `
+	found, err := dbx.GetSQL(ctx, r.db, &record, "find community shorts observation window: query row", `
 		SELECT runtime_name, bigbang_cutover_at, app_version, target_channel_count,
 		       deployment_completed_at, observation_started_at, observation_ended_at,
 		       closed_at, finalized_post_baseline_at, finalized_post_count, created_at, updated_at
@@ -165,7 +166,7 @@ func (r *windowRepository) EnsureCommunityShortsObservationWindow(
 	}
 
 	now := yttimestamp.Normalize(time.Now())
-	if _, err := execSQL(ctx, r.db, "ensure community shorts observation window: upsert row", `
+	if _, err := dbx.ExecSQL(ctx, r.db, "ensure community shorts observation window: upsert row", `
 		INSERT INTO youtube_community_shorts_observation_windows
 			(runtime_name, bigbang_cutover_at, app_version, target_channel_count, deployment_completed_at,
 			 observation_started_at, observation_ended_at, closed_at, finalized_post_baseline_at,
@@ -229,7 +230,7 @@ func (r *windowRepository) closeCommunityShortsObservationWindow(
 		return fmt.Errorf("close community shorts observation window: closed at is empty")
 	}
 
-	if _, err := execSQL(ctx, r.db, "close community shorts observation window: update row", `
+	if _, err := dbx.ExecSQL(ctx, r.db, "close community shorts observation window: update row", `
 		UPDATE youtube_community_shorts_observation_windows
 		SET closed_at = ?, updated_at = ?
 		WHERE runtime_name = ? AND bigbang_cutover_at = ?

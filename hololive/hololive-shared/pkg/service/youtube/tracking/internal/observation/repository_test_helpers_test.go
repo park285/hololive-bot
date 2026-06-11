@@ -7,6 +7,7 @@ import (
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/require"
@@ -52,7 +53,7 @@ func insertAlarmStatesForTest(t *testing.T, db trackingDB, rows []domain.YouTube
 		if row.UpdatedAt.IsZero() {
 			row.UpdatedAt = now
 		}
-		_, err := execSQL(context.Background(), db, "insert alarm state for test", `
+		_, err := dbx.ExecSQL(context.Background(), db, "insert alarm state for test", `
 			INSERT INTO youtube_community_shorts_alarm_states
 				(kind, post_id, content_id, channel_id, actual_published_at, detected_at,
 				 published_at_retry_after, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
@@ -72,7 +73,7 @@ func ensureObservationWindowForBaselineTest(t *testing.T, db trackingDB, row dom
 	}
 	observationStartedAt := observationEndedAt.Add(-24 * time.Hour)
 	deploymentCompletedAt := observationStartedAt.Add(-time.Minute)
-	_, err := execSQL(context.Background(), db, "insert observation window for baseline test", `
+	_, err := dbx.ExecSQL(context.Background(), db, "insert observation window for baseline test", `
 		INSERT INTO youtube_community_shorts_observation_windows
 			(runtime_name, bigbang_cutover_at, app_version, target_channel_count,
 			 deployment_completed_at, observation_started_at, observation_ended_at,
@@ -113,7 +114,7 @@ func insertObservationBaselinesForTest(t *testing.T, db trackingDB, rows []domai
 		if row.UpdatedAt.IsZero() {
 			row.UpdatedAt = now
 		}
-		_, err := execSQL(context.Background(), db, "insert observation baseline for test", `
+		_, err := dbx.ExecSQL(context.Background(), db, "insert observation baseline for test", `
 			INSERT INTO youtube_community_shorts_observation_post_baselines
 				(runtime_name, bigbang_cutover_at, kind, post_id, channel_id,
 				 actual_published_at, detected_at, finalized_at, created_at, updated_at)

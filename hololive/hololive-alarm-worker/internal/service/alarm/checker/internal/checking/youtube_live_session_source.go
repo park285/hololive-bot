@@ -273,7 +273,7 @@ func streamFromYouTubeLiveSession(row domain.YouTubeLiveSession) *domain.Stream 
 	if title == "" {
 		title = "YouTube 라이브"
 	}
-	link := "https://youtube.com/watch?v=" + videoID
+	link := domain.YouTubeWatchURL(videoID)
 	stream := &domain.Stream{
 		ID:             videoID,
 		Title:          title,

@@ -111,6 +111,17 @@ func TestPGIdleWaiterStopsOnContextCancel(t *testing.T) {
 	assert.False(t, waiter.Wait(ctx))
 }
 
+func TestSleepContextReturnsTrueWhenTimerFires(t *testing.T) {
+	assert.True(t, sleepContext(t.Context(), time.Millisecond))
+}
+
+func TestSleepContextReturnsFalseWhenContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	assert.False(t, sleepContext(ctx, time.Hour))
+}
+
 func TestNewPGIdleWaiterClampsBackoffMaxToMinimum(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_WAKEUP_ENABLED", "false")
 	t.Setenv("ALARM_DISPATCH_POLL_INTERVAL_MS", "125")

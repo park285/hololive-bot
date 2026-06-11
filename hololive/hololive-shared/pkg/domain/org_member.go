@@ -76,3 +76,7 @@ func (m *Member) GetOrg() string {
 func (m *Member) GetDisplayName() string {
 	return fmt.Sprintf("%s (%s)", m.Name, m.GetOrg())
 }
+
+func (m *Member) GetChzzkLiveURL() string {
+	return ChzzkLiveURL(m.ChzzkChannelID)
+}

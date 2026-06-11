@@ -122,7 +122,7 @@ func TestBoolResultMapsClaimOutcomesToMetricLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, boolResult(tt.ok, tt.err))
+			assert.Equal(t, tt.want, BoolResult(tt.ok, tt.err))
 		})
 	}
 }

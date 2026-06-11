@@ -343,7 +343,7 @@ func alarmDispatchVideoOutboxURL(kind domain.OutboxKind, videoID string) string 
 	if kind == domain.OutboxKindNewShort {
 		return fmt.Sprintf("https://www.youtube.com/shorts/%s", videoID)
 	}
-	return fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+	return domain.YouTubeWatchURL(videoID)
 }
 
 var alarmDispatchVideoOutboxStatusByKind = map[domain.OutboxKind]iris.KaringStreamStatus{
