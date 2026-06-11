@@ -1,0 +1,47 @@
+{
+  "contents": {
+    "twoColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "title": "Home"
+          }
+        },
+        {
+          "tabRenderer": {
+            "title": "Videos",
+            "content": {
+              "richGridRenderer": {
+                "contents": [
+                  {
+                    "richItemRenderer": {
+                      "content": {
+                        "videoRenderer": {
+                          "videoId": "vid_aaa",
+                          "title": {"runs": [{"text": "First Video"}]}
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "richItemRenderer": {
+                      "content": {
+                        "videoRenderer": {
+                          "videoId": "vid_bbb",
+                          "title": {"runs": [{"text": "Second Video"}]}
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "continuationItemRenderer": {}
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
