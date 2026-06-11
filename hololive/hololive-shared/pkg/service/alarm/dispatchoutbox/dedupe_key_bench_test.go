@@ -22,6 +22,28 @@ func benchDedupeInput() DedupeInput {
 	}
 }
 
+func TestBuildDedupeKeyAllocationBudget(t *testing.T) {
+	input := benchDedupeInput()
+
+	dedupeAllocs := testing.AllocsPerRun(100, func() {
+		if key := BuildDedupeKey(input); key == "" {
+			t.Fatal("BuildDedupeKey returned empty key")
+		}
+	})
+	if dedupeAllocs > dedupeKeyAllocBudget {
+		t.Errorf("BuildDedupeKey allocs/op = %.1f, want <= %d", dedupeAllocs, dedupeKeyAllocBudget)
+	}
+
+	eventAllocs := testing.AllocsPerRun(100, func() {
+		if key := BuildEventKey(input); key == "" {
+			t.Fatal("BuildEventKey returned empty key")
+		}
+	})
+	if eventAllocs > eventKeyAllocBudget {
+		t.Errorf("BuildEventKey allocs/op = %.1f, want <= %d", eventAllocs, eventKeyAllocBudget)
+	}
+}
+
 func BenchmarkBuildDedupeKey(b *testing.B) {
 	input := benchDedupeInput()
 	b.ReportAllocs()

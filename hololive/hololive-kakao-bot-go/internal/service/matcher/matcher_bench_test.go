@@ -8,8 +8,9 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-func BenchmarkFindBestMatchCacheHit(b *testing.B) {
-	ctx := context.Background()
+func newBenchMatcher(tb testing.TB, ctx context.Context) *Matcher {
+	tb.Helper()
+
 	provider := newStubMemberProvider([]*domain.Member{
 		{ChannelID: "UC-ch1", Name: "sora"},
 		{ChannelID: "UC-ch2", Name: "miko"},
@@ -21,8 +22,30 @@ func BenchmarkFindBestMatchCacheHit(b *testing.B) {
 	}, nil, nil, newMatcherTestLogger())
 
 	if _, err := mm.FindBestMatch(ctx, "sora"); err != nil {
-		b.Fatalf("warmup FindBestMatch: %v", err)
+		tb.Fatalf("warmup FindBestMatch: %v", err)
 	}
+
+	return mm
+}
+
+func TestFindBestMatchCacheHitAllocationBudget(t *testing.T) {
+	ctx := context.Background()
+	mm := newBenchMatcher(t, ctx)
+
+	allocs := testing.AllocsPerRun(100, func() {
+		channel, err := mm.FindBestMatch(ctx, "sora")
+		if err != nil || channel == nil {
+			t.Fatalf("FindBestMatch = (%v, %v), want cached channel", channel, err)
+		}
+	})
+	if allocs > 2 {
+		t.Errorf("FindBestMatch cache hit allocs/op = %.1f, want <= 2", allocs)
+	}
+}
+
+func BenchmarkFindBestMatchCacheHit(b *testing.B) {
+	ctx := context.Background()
+	mm := newBenchMatcher(b, ctx)
 
 	b.ReportAllocs()
 	for b.Loop() {
