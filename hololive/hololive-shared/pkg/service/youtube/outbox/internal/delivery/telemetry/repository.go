@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,6 +106,11 @@ func applyDeliveryTelemetryDefaults(row *domain.YouTubeNotificationDeliveryTelem
 	row.ObservationStatus = normalizeDeliveryTelemetryObservationStatus(row.ObservationStatus)
 }
 
+const (
+	enqueueTelemetryChunkSize     = 500
+	enqueueTelemetryColumnsPerRow = 29
+)
+
 func (r *Repository) EnqueuePrepared(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDeliveryTelemetry,
@@ -116,29 +122,52 @@ func (r *Repository) EnqueuePrepared(
 		return fmt.Errorf("enqueue delivery telemetry: db is nil")
 	}
 
+	for start := 0; start < len(rows); start += enqueueTelemetryChunkSize {
+		end := min(start+enqueueTelemetryChunkSize, len(rows))
+		if err := r.enqueuePreparedChunk(ctx, rows[start:end]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
+	var sb strings.Builder
+	sb.WriteString(`
+		INSERT INTO youtube_notification_delivery_telemetry (
+			delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type,
+			actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at,
+			observation_status, observation_runtime_name, observation_bigbang_cutover_at, observation_started_at, observation_ended_at,
+			dedupe_key, delivery_path, delivery_mode, send_result, failure_reason,
+			attempt_started_at, attempt_finished_at, event_at, next_attempt_at, locked_at, logged_at, error
+		) VALUES `)
+
+	args := make([]any, 0, len(rows)*enqueueTelemetryColumnsPerRow)
 	for i := range rows {
-		if _, err := r.db.Exec(ctx, `
-			INSERT INTO youtube_notification_delivery_telemetry (
-				delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type,
-				actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at,
-				observation_status, observation_runtime_name, observation_bigbang_cutover_at, observation_started_at, observation_ended_at,
-				dedupe_key, delivery_path, delivery_mode, send_result, failure_reason,
-				attempt_started_at, attempt_finished_at, event_at, next_attempt_at, locked_at, logged_at, error
-			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8,
-				$9, $10, $11, $12,
-				$13, $14, $15, $16, $17,
-				$18, $19, $20, $21, $22,
-				$23, $24, $25, $26, $27, $28, $29
-			)
-			ON CONFLICT (delivery_id, attempt_ordinal) DO NOTHING
-		`, rows[i].DeliveryID, rows[i].AttemptOrdinal, rows[i].OutboxID, rows[i].ChannelID, rows[i].ContentID, rows[i].PostID, rows[i].RoomID, rows[i].AlarmType,
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('(')
+		base := i * enqueueTelemetryColumnsPerRow
+		for j := range enqueueTelemetryColumnsPerRow {
+			if j > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteByte('$')
+			sb.WriteString(strconv.Itoa(base + j + 1))
+		}
+		sb.WriteByte(')')
+		args = append(args, rows[i].DeliveryID, rows[i].AttemptOrdinal, rows[i].OutboxID, rows[i].ChannelID, rows[i].ContentID, rows[i].PostID, rows[i].RoomID, rows[i].AlarmType,
 			rows[i].ActualPublishedAt, rows[i].AlarmSentAt, rows[i].AlarmLatencyMillis, rows[i].DetectedAt,
 			rows[i].ObservationStatus, rows[i].ObservationRuntimeName, rows[i].ObservationBigBangCutoverAt, rows[i].ObservationStartedAt, rows[i].ObservationEndedAt,
 			rows[i].DedupeKey, rows[i].DeliveryPath, rows[i].DeliveryMode, rows[i].SendResult, rows[i].FailureReason,
-			rows[i].AttemptStartedAt, rows[i].AttemptFinishedAt, rows[i].EventAt, rows[i].NextAttemptAt, rows[i].LockedAt, rows[i].LoggedAt, rows[i].Error); err != nil {
-			return fmt.Errorf("enqueue delivery telemetry: %w", err)
-		}
+			rows[i].AttemptStartedAt, rows[i].AttemptFinishedAt, rows[i].EventAt, rows[i].NextAttemptAt, rows[i].LockedAt, rows[i].LoggedAt, rows[i].Error)
+	}
+	sb.WriteString(` ON CONFLICT (delivery_id, attempt_ordinal) DO NOTHING`)
+
+	if _, err := r.db.Exec(ctx, sb.String(), args...); err != nil {
+		return fmt.Errorf("enqueue delivery telemetry: %w", err)
 	}
 
 	return nil
