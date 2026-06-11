@@ -92,7 +92,7 @@ func buildChzzkScheduleStreams(member *domain.Member, scheduledLives []chzzk.Sch
 
 	now := time.Now()
 	cutoff := now.Add(time.Duration(hours) * time.Hour)
-	liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
+	liveURL := member.GetChzzkLiveURL()
 	streams := make([]*domain.Stream, 0, len(scheduledLives))
 
 	for _, scheduledLive := range scheduledLives {
