@@ -298,7 +298,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxContentKindsPreserveLabels(t *testing.T
 			wantStatus:    "새 영상",
 			wantAlarm:     "새 영상",
 			wantTimeLeft:  "새 영상",
-			wantURL:       "https://www.youtube.com/watch?v=video000001",
+			wantURL:       "https://youtube.com/watch?v=video000001",
 			wantThumbnail: "https://i.ytimg.com/vi/video000001/maxresdefault.jpg",
 		},
 		{

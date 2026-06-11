@@ -97,7 +97,7 @@ func (s *Stream) GetYouTubeURL() string {
 	if s.Link != nil && *s.Link != "" {
 		return *s.Link
 	}
-	return "https://youtube.com/watch?v=" + s.ID
+	return YouTubeWatchURL(s.ID)
 }
 
 // 이미 시작 시간이 지났거나 예정 시간이 없으면 nil을 반환한다.

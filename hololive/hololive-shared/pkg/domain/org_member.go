@@ -78,5 +78,5 @@ func (m *Member) GetDisplayName() string {
 }
 
 func (m *Member) GetChzzkLiveURL() string {
-	return "https://chzzk.naver.com/live/" + m.ChzzkChannelID
+	return ChzzkLiveURL(m.ChzzkChannelID)
 }

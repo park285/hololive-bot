@@ -297,6 +297,7 @@ hololive/hololive-shared/pkg/domain/org_profiles.go
 hololive/hololive-shared/pkg/domain/org_talent.go
 hololive/hololive-shared/pkg/domain/org_translated.go
 hololive/hololive-shared/pkg/domain/stream.go
+hololive/hololive-shared/pkg/domain/stream_url.go
 hololive/hololive-shared/pkg/domain/stream_interfaces.go
 hololive/hololive-shared/pkg/domain/stream_next.go
 hololive/hololive-shared/pkg/domain/stream_stats_period.go
