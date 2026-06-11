@@ -2,7 +2,6 @@ package member
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -50,35 +49,21 @@ func scanCalendarRow(scanner memberRowScanner, kindStr *string, day *int) (membe
 }
 
 func (r *Repository) collectCalendarEntriesFromRows(rows pgx.Rows, referenceYear int) ([]domain.CalendarEntry, error) {
-	var (
-		entries []domain.CalendarEntry
-		rowErrs []error
-	)
-	for rows.Next() {
+	return collectJoinedRows(rows, "calendar rows iteration", func(rows pgxRows) (domain.CalendarEntry, error) {
 		var (
 			kindStr string
 			day     int
 		)
 		row, err := scanCalendarRow(rows, &kindStr, &day)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("scan calendar row: %w", err))
-			continue
+			return domain.CalendarEntry{}, fmt.Errorf("scan calendar row: %w", err)
 		}
 		member, err := r.parseMemberRow(row)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("parse calendar member row %q: %w", row.englishName, err))
-			continue
+			return domain.CalendarEntry{}, fmt.Errorf("parse calendar member row %q: %w", row.englishName, err)
 		}
-
-		entries = append(entries, buildCalendarEntry(kindStr, member, day, referenceYear))
-	}
-	if err := rows.Err(); err != nil {
-		rowErrs = append(rowErrs, fmt.Errorf("calendar rows iteration: %w", err))
-	}
-	if len(rowErrs) > 0 {
-		return entries, errors.Join(rowErrs...)
-	}
-	return entries, nil
+		return buildCalendarEntry(kindStr, member, day, referenceYear), nil
+	})
 }
 
 func buildCalendarEntry(kindStr string, member *domain.Member, day, referenceYear int) domain.CalendarEntry {
@@ -143,28 +128,15 @@ func (r *Repository) FindMembersWithAnniversaryOn(ctx context.Context, month, da
 }
 
 func (r *Repository) collectCelebrationMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	var (
-		members []*domain.Member
-		rowErrs []error
-	)
-	for rows.Next() {
+	return collectJoinedRows(rows, "celebration member rows iteration", func(rows pgxRows) (*domain.Member, error) {
 		row, err := scanCelebrationMemberRow(rows)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("scan celebration member row: %w", err))
-			continue
+			return nil, fmt.Errorf("scan celebration member row: %w", err)
 		}
 		member, err := r.parseMemberRow(row)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("parse celebration member row %q: %w", row.englishName, err))
-			continue
+			return nil, fmt.Errorf("parse celebration member row %q: %w", row.englishName, err)
 		}
-		members = append(members, member)
-	}
-	if err := rows.Err(); err != nil {
-		rowErrs = append(rowErrs, fmt.Errorf("celebration member rows iteration: %w", err))
-	}
-	if len(rowErrs) > 0 {
-		return members, errors.Join(rowErrs...)
-	}
-	return members, nil
+		return member, nil
+	})
 }

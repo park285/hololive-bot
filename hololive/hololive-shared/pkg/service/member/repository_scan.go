@@ -202,63 +202,41 @@ func (r *Repository) querySingleMemberWithPhoto(ctx context.Context, query strin
 }
 
 func (r *Repository) collectAllMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	var (
-		members []*domain.Member
-		rowErrs []error
-	)
-
-	for rows.Next() {
+	return collectJoinedRows(rows, "rows iteration error", func(rows pgxRows) (*domain.Member, error) {
 		row, err := scanMemberFullRow(rows)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
-			continue
+			return nil, fmt.Errorf("failed to scan member row: %w", err)
 		}
-
 		member, err := r.parseMemberRow(row)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err))
-			continue
+			return nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
 		}
+		return member, nil
+	})
+}
 
-		members = append(members, member)
-	}
-
-	if err := rows.Err(); err != nil {
-		rowErrs = append(rowErrs, fmt.Errorf("rows iteration error: %w", err))
-	}
-
-	if len(rowErrs) > 0 {
-		return members, errors.Join(rowErrs...)
-	}
-
-	return members, nil
+type photoMemberRow struct {
+	channelID *string
+	member    *domain.Member
 }
 
 func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]*domain.Member, error) {
+	collected, err := collectJoinedRows(rows, "rows iteration error", func(rows pgxRows) (photoMemberRow, error) {
+		channelID, member, scanErr := r.collectMemberWithPhotoRow(rows)
+		if scanErr != nil {
+			return photoMemberRow{}, scanErr
+		}
+		return photoMemberRow{channelID: channelID, member: member}, nil
+	})
+
 	result := make(map[string]*domain.Member)
-	var rowErrs []error
-
-	for rows.Next() {
-		channelID, member, err := r.collectMemberWithPhotoRow(rows)
-		if err != nil {
-			rowErrs = append(rowErrs, err)
-			continue
-		}
-
-		if channelID != nil {
-			result[*channelID] = member
+	for _, row := range collected {
+		if row.channelID != nil {
+			result[*row.channelID] = row.member
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		rowErrs = append(rowErrs, fmt.Errorf("rows iteration error: %w", err))
-	}
-
-	if len(rowErrs) > 0 {
-		return result, errors.Join(rowErrs...)
-	}
-
-	return result, nil
+	return result, err
 }
 
 func (r *Repository) collectMemberWithPhotoRow(rows pgx.Rows) (*string, *domain.Member, error) {
@@ -352,34 +330,15 @@ func (r *Repository) scanMemberWithPhoto(
 }
 
 func (r *Repository) collectMembersByNameFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	var (
-		members []*domain.Member
-		rowErrs []error
-	)
-
-	for rows.Next() {
+	return collectJoinedRows(rows, "rows iteration error", func(rows pgxRows) (*domain.Member, error) {
 		row, err := scanMemberQueryRow(rows)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
-			continue
+			return nil, fmt.Errorf("failed to scan member row: %w", err)
 		}
-
 		member, err := r.parseMemberRow(row)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err))
-			continue
+			return nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
 		}
-
-		members = append(members, member)
-	}
-
-	if err := rows.Err(); err != nil {
-		rowErrs = append(rowErrs, fmt.Errorf("rows iteration error: %w", err))
-	}
-
-	if len(rowErrs) > 0 {
-		return members, errors.Join(rowErrs...)
-	}
-
-	return members, nil
+		return member, nil
+	})
 }
