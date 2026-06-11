@@ -126,6 +126,7 @@ func ParseViewCount(text string) int64 {
 		{"만", 10_000},
 		{"万", 10_000},
 		{"억", 100_000_000},
+		{"조", 1_000_000_000_000},
 	} {
 		if before, ok := strings.CutSuffix(text, unit.suffix); ok {
 			text = before

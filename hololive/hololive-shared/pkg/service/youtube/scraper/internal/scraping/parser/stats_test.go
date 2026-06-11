@@ -180,6 +180,8 @@ func TestParseViewCount(t *testing.T) {
 		{"empty", "", 0},
 		{"garbage", "garbage", 0},
 		{"korean eok", "3.4억", 340_000_000},
+		{"korean jo", "조회수 1.5조회", 1_500_000_000_000},
+		{"korean jo bare", "2조", 2_000_000_000_000},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
