@@ -11,7 +11,7 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go/v3 v3.39.0
-	github.com/park285/shared-go v1.8.0
+	github.com/park285/shared-go v1.9.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/quic-go/quic-go v0.60.0
 	github.com/stretchr/testify v1.11.1
