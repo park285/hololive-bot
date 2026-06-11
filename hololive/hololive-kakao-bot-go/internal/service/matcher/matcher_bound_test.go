@@ -44,7 +44,7 @@ func TestStoreMatch_EnforcesSizeBound(t *testing.T) {
 	mm := newBoundTestMatcher()
 
 	total := matchCacheMaxEntries + 500
-	for i := 0; i < total; i++ {
+	for i := range total {
 		mm.storeMatch(fmt.Sprintf("match:q-%d", i), &domain.Channel{ID: fmt.Sprintf("ch-%d", i)})
 	}
 
@@ -63,7 +63,7 @@ func TestStoreMatch_EvictsOldestWhenFull(t *testing.T) {
 	base := time.Now()
 
 	// cap 을 정확히 채우되 결정적 Timestamp 로 oldest 를 고정한다.
-	for i := 0; i < matchCacheMaxEntries; i++ {
+	for i := range matchCacheMaxEntries {
 		key := fmt.Sprintf("match:k-%d", i)
 		mm.matchCache[key] = &MatchCacheEntry{
 			Channel:   &domain.Channel{ID: key},
@@ -94,7 +94,7 @@ func TestStoreMatch_PrefersExpiredEviction(t *testing.T) {
 	mm := newBoundTestMatcher()
 	base := time.Now()
 
-	for i := 0; i < matchCacheMaxEntries; i++ {
+	for i := range matchCacheMaxEntries {
 		key := fmt.Sprintf("match:k-%d", i)
 		ts := base.Add(time.Duration(i) * time.Millisecond)
 		// 인덱스 5 를 만료시킨다(가장 오래된 것은 0번).

@@ -73,7 +73,7 @@ func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 	const total = 64
 	notifications := make([]*domain.AlarmNotification, 0, total)
 	wantRoomOrder := make([]string, 0, total)
-	for i := 0; i < total; i++ {
+	for i := range total {
 		roomID := fmt.Sprintf("room-order-%03d", i)
 		stream := &domain.Stream{
 			ID:             fmt.Sprintf("stream-order-%03d", i),
@@ -136,7 +136,7 @@ func TestPrepareSendBatch_DedupExactlyOnceUnderDuplicates(t *testing.T) {
 
 	const copies = 32
 	notifications := make([]*domain.AlarmNotification, 0, copies)
-	for i := 0; i < copies; i++ {
+	for range copies {
 		// 동일 room+stream+minute -> 동일 claim key. 정확히 1회만 통과해야 한다.
 		notifications = append(notifications, domain.NewAlarmNotification("room-dup", stream.Channel, stream, 10, []string{}, ""))
 	}
@@ -176,7 +176,7 @@ func TestSend_CanceledContextReturnsErrorAndSendsNothing(t *testing.T) {
 
 	start := time.Date(2026, 6, 11, 14, 0, 0, 0, time.UTC)
 	notifications := make([]*domain.AlarmNotification, 0, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		roomID := fmt.Sprintf("room-cancel-%d", i)
 		stream := &domain.Stream{
 			ID:             fmt.Sprintf("stream-cancel-%d", i),
