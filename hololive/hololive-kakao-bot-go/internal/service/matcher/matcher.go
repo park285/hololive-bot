@@ -32,6 +32,10 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// matchCacheMaxEntries 는 matchCache 의 size-bound. 키가 사용자 query(외부 입력)라
+// burst 시 무한정 성장할 수 있어, TTL 만으로 부족한 상한을 강제한다.
+const matchCacheMaxEntries = 1024
+
 type MatchCacheEntry struct {
 	Channel   *domain.Channel
 	Timestamp time.Time

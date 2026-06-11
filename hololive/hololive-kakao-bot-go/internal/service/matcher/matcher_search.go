@@ -73,17 +73,63 @@ func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Cha
 	channel, err := mm.findBestMatchImpl(ctx, query)
 
 	if err == nil {
-		mm.matchCacheMu.Lock()
-		mm.matchCache[cacheKey] = &MatchCacheEntry{
-			Channel:   channel,
-			Timestamp: time.Now(),
-		}
-		mm.matchCacheMu.Unlock()
+		mm.storeMatch(cacheKey, channel)
 	}
 
 	mm.maybeCleanupMatchCache()
 
 	return channel, err
+}
+
+// storeMatch 는 matchCache 에 결과를 저장하되, matchCacheMaxEntries 상한을 강제한다.
+// 상한 도달 시 만료 엔트리를 먼저, 없으면 가장 오래된 엔트리를 evict 한다.
+func (mm *Matcher) storeMatch(cacheKey string, channel *domain.Channel) {
+	now := time.Now()
+
+	mm.matchCacheMu.Lock()
+	defer mm.matchCacheMu.Unlock()
+
+	if _, exists := mm.matchCache[cacheKey]; !exists {
+		for len(mm.matchCache) >= matchCacheMaxEntries {
+			if !mm.evictOneMatchLocked(now) {
+				break
+			}
+		}
+	}
+
+	mm.matchCache[cacheKey] = &MatchCacheEntry{
+		Channel:   channel,
+		Timestamp: now,
+	}
+}
+
+// evictOneMatchLocked 는 matchCacheMu 보유 상태에서 한 엔트리를 제거한다.
+// 만료 엔트리가 있으면 그것을, 없으면 Timestamp 가 가장 오래된 엔트리를 제거한다.
+// 제거 성공 시 true 를 반환한다.
+func (mm *Matcher) evictOneMatchLocked(now time.Time) bool {
+	cutoff := now.Add(-mm.matchCacheTTL)
+
+	var oldestKey string
+	var oldestTS time.Time
+	hasOldest := false
+
+	for key, entry := range mm.matchCache {
+		if entry == nil || entry.Timestamp.Before(cutoff) {
+			delete(mm.matchCache, key)
+			return true
+		}
+		if !hasOldest || entry.Timestamp.Before(oldestTS) {
+			oldestKey = key
+			oldestTS = entry.Timestamp
+			hasOldest = true
+		}
+	}
+
+	if hasOldest {
+		delete(mm.matchCache, oldestKey)
+		return true
+	}
+	return false
 }
 
 func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain.Channel, error) {
