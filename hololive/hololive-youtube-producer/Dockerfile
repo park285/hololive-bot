@@ -32,6 +32,9 @@ ARG TARGETARCH
 # 이미지 축소가 필요하면 --build-arg UPX_ENABLE=1 로 켠다. 문제 시 인자만 빼면 즉시 비활성.
 ARG GOAMD64=v1
 ARG UPX_ENABLE=
+# PGO opt-in: 빈 값이면 -pgo 미적용(현 빌드와 동일). 모듈 기준 상대경로 프로파일을 주면
+# --build-arg GO_PGO_FILE=cmd/runtime/youtube-producer/default.pgo 처럼 활성. 빼면 즉시 비활성.
+ARG GO_PGO_FILE=
 RUN apk add --no-cache git
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
@@ -57,7 +60,7 @@ RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/youtube-producer ./cmd/runtime/youtube-producer && \
+    go build ${GO_PGO_FILE:+-pgo=${GO_PGO_FILE}} -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/youtube-producer ./cmd/runtime/youtube-producer && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/runtime/healthcheck && \
     if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/youtube-producer /dist/bin/healthcheck; fi && \
