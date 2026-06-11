@@ -148,21 +148,8 @@ func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.You
 		if i > 0 {
 			sb.WriteByte(',')
 		}
-		sb.WriteByte('(')
-		base := i * enqueueTelemetryColumnsPerRow
-		for j := range enqueueTelemetryColumnsPerRow {
-			if j > 0 {
-				sb.WriteByte(',')
-			}
-			sb.WriteByte('$')
-			sb.WriteString(strconv.Itoa(base + j + 1))
-		}
-		sb.WriteByte(')')
-		args = append(args, rows[i].DeliveryID, rows[i].AttemptOrdinal, rows[i].OutboxID, rows[i].ChannelID, rows[i].ContentID, rows[i].PostID, rows[i].RoomID, rows[i].AlarmType,
-			rows[i].ActualPublishedAt, rows[i].AlarmSentAt, rows[i].AlarmLatencyMillis, rows[i].DetectedAt,
-			rows[i].ObservationStatus, rows[i].ObservationRuntimeName, rows[i].ObservationBigBangCutoverAt, rows[i].ObservationStartedAt, rows[i].ObservationEndedAt,
-			rows[i].DedupeKey, rows[i].DeliveryPath, rows[i].DeliveryMode, rows[i].SendResult, rows[i].FailureReason,
-			rows[i].AttemptStartedAt, rows[i].AttemptFinishedAt, rows[i].EventAt, rows[i].NextAttemptAt, rows[i].LockedAt, rows[i].LoggedAt, rows[i].Error)
+		writeTelemetryRowPlaceholders(&sb, i*enqueueTelemetryColumnsPerRow)
+		args = appendTelemetryRowArgs(args, &rows[i])
 	}
 	sb.WriteString(` ON CONFLICT (delivery_id, attempt_ordinal) DO NOTHING`)
 
@@ -171,6 +158,26 @@ func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.You
 	}
 
 	return nil
+}
+
+func writeTelemetryRowPlaceholders(sb *strings.Builder, base int) {
+	sb.WriteByte('(')
+	for j := range enqueueTelemetryColumnsPerRow {
+		if j > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('$')
+		sb.WriteString(strconv.Itoa(base + j + 1))
+	}
+	sb.WriteByte(')')
+}
+
+func appendTelemetryRowArgs(args []any, row *domain.YouTubeNotificationDeliveryTelemetry) []any {
+	return append(args, row.DeliveryID, row.AttemptOrdinal, row.OutboxID, row.ChannelID, row.ContentID, row.PostID, row.RoomID, row.AlarmType,
+		row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis, row.DetectedAt,
+		row.ObservationStatus, row.ObservationRuntimeName, row.ObservationBigBangCutoverAt, row.ObservationStartedAt, row.ObservationEndedAt,
+		row.DedupeKey, row.DeliveryPath, row.DeliveryMode, row.SendResult, row.FailureReason,
+		row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.LockedAt, row.LoggedAt, row.Error)
 }
 
 func deliveryTelemetrySelectColumns() string {
