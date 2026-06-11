@@ -43,7 +43,7 @@ func ParseChannelSnippetFromInitialData(data gjson.Result) *ChannelSnippet {
 
 func ParseChannelHandle(data gjson.Result) string {
 	handle := data.Get("contents.twoColumnBrowseResultsRenderer.tabs.0.tabRenderer.endpoint.browseEndpoint.canonicalBaseUrl").String()
-	if len(handle) > 1 && handle[0] == '/' {
+	if len(handle) > 0 && handle[0] == '/' {
 		return handle[1:]
 	}
 	return handle
@@ -51,6 +51,9 @@ func ParseChannelHandle(data gjson.Result) string {
 
 func ParseThumbnailSources(sources gjson.Result) []Thumbnail {
 	thumbnails := make([]Thumbnail, 0)
+	if !sources.IsArray() {
+		return thumbnails
+	}
 	sources.ForEach(func(_, img gjson.Result) bool {
 		thumbnails = append(thumbnails, Thumbnail{
 			URL:    img.Get("url").String(),
@@ -122,6 +125,7 @@ func ParseViewCount(text string) int64 {
 		{"천", 1_000},
 		{"만", 10_000},
 		{"万", 10_000},
+		{"억", 100_000_000},
 	} {
 		if before, ok := strings.CutSuffix(text, unit.suffix); ok {
 			text = before

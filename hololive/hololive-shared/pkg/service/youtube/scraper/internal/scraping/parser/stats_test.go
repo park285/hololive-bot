@@ -81,7 +81,7 @@ func TestParseChannelHandle(t *testing.T) {
 	}{
 		{"leading slash stripped", `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"/@pekora"}}}}]}}}`, "@pekora"},
 		{"no leading slash kept", `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"plainhandle"}}}}]}}}`, "plainhandle"},
-		{"single slash not stripped", `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"/"}}}}]}}}`, "/"},
+		{"bare slash stripped to empty", `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"/"}}}}]}}}`, ""},
 		{"empty input", `{}`, ""},
 	}
 	for _, tt := range tests {
@@ -110,10 +110,16 @@ func TestParseThumbnailSources(t *testing.T) {
 		assert.Empty(t, thumbs)
 	})
 
-	t.Run("null literal yields one empty thumbnail CurrentBehavior", func(t *testing.T) {
+	t.Run("null literal yields empty slice", func(t *testing.T) {
 		thumbs := ParseThumbnailSources(gjson.Parse(`null`))
-		require.Len(t, thumbs, 1)
-		assert.Equal(t, Thumbnail{}, thumbs[0])
+		assert.Empty(t, thumbs)
+		assert.NotNil(t, thumbs)
+	})
+
+	t.Run("scalar yields empty slice", func(t *testing.T) {
+		thumbs := ParseThumbnailSources(gjson.Parse(`42`))
+		assert.Empty(t, thumbs)
+		assert.NotNil(t, thumbs)
 	})
 }
 
@@ -173,7 +179,7 @@ func TestParseViewCount(t *testing.T) {
 		{"no views", "No views", 0},
 		{"empty", "", 0},
 		{"garbage", "garbage", 0},
-		{"korean eok unhandled CurrentBehavior", "3.4억", 0},
+		{"korean eok", "3.4억", 340_000_000},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
