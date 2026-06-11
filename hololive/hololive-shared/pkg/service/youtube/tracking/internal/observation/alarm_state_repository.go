@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -74,7 +75,7 @@ func (r *alarmStateRepository) MarkPublishedAtRetryAfter(
 		return fmt.Errorf("mark published_at retry after: %w", err)
 	}
 
-	if _, err := execSQL(ctx, r.db, "mark published_at retry after", `
+	if _, err := dbx.ExecSQL(ctx, r.db, "mark published_at retry after", `
 		UPDATE youtube_community_shorts_alarm_states
 		SET published_at_retry_after = ?, updated_at = ?
 		WHERE kind = ? AND post_id = ?
@@ -102,7 +103,7 @@ func (r *alarmStateRepository) ClearPublishedAtRetryAfter(
 		return fmt.Errorf("clear published_at retry after: %w", err)
 	}
 
-	if _, err := execSQL(ctx, r.db, "clear published_at retry after", `
+	if _, err := dbx.ExecSQL(ctx, r.db, "clear published_at retry after", `
 		UPDATE youtube_community_shorts_alarm_states
 		SET published_at_retry_after = NULL, updated_at = ?
 		WHERE kind = ? AND post_id = ?
@@ -124,7 +125,7 @@ func (r *alarmStateRepository) FindAlarmStateByPostID(ctx context.Context, kind 
 	}
 
 	var row domain.YouTubeCommunityShortsAlarmState
-	found, err := getSQL(ctx, r.db, &row, "find alarm state by post id: query row", `
+	found, err := dbx.GetSQL(ctx, r.db, &row, "find alarm state by post id: query row", `
 		SELECT kind, post_id, content_id, channel_id, actual_published_at, detected_at,
 		       published_at_retry_after, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at
 		FROM youtube_community_shorts_alarm_states

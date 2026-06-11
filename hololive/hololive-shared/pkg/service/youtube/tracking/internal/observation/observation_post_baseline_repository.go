@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -24,7 +25,7 @@ func (r *baselineRepository) ListCommunityShortsObservationPostBaselines(
 	}
 
 	var rows []domain.YouTubeCommunityShortsObservationPostBaseline
-	if err := selectSQL(ctx, r.db, &rows, "list community shorts observation post baselines: query rows", `
+	if err := dbx.SelectSQL(ctx, r.db, &rows, "list community shorts observation post baselines: query rows", `
 		SELECT runtime_name, bigbang_cutover_at, kind, post_id, channel_id,
 		       actual_published_at, detected_at, finalized_at, created_at, updated_at
 		FROM youtube_community_shorts_observation_post_baselines
@@ -172,7 +173,7 @@ func (r *baselineRepository) upsertCommunityShortsObservationPostBaselines(
 	}
 
 	query, args := buildObservationPostBaselineUpsert(normalized, yttimestamp.Normalize(time.Now()))
-	if _, err := execSQL(ctx, r.db, "upsert community shorts observation post baselines: upsert rows", query, args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "upsert community shorts observation post baselines: upsert rows", query, args...); err != nil {
 		return err
 	}
 
@@ -224,7 +225,7 @@ func (r *baselineRepository) updateCommunityShortsObservationPostBaselineFinaliz
 	finalizedAt time.Time,
 	finalizedCount int,
 ) (bool, error) {
-	rowsAffected, err := execSQL(ctx, r.db, "mark community shorts observation post baseline finalized: update window", `
+	rowsAffected, err := dbx.ExecSQL(ctx, r.db, "mark community shorts observation post baseline finalized: update window", `
 		UPDATE youtube_community_shorts_observation_windows
 		SET finalized_post_baseline_at = ?,
 		    finalized_post_count = ?,

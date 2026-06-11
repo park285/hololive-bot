@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -128,7 +129,7 @@ func (r *historyRepository) listAlarmSentHistoriesWithinObservationWindow(
 	}
 
 	var rows []ObservationAlarmSentHistoryRow
-	if err := selectSQL(ctx, r.db, &rows, "query rows", `
+	if err := dbx.SelectSQL(ctx, r.db, &rows, "query rows", `
 		SELECT track.canonical_content_id AS post_id,
 		       track.content_id AS content_id,
 		       track.channel_id AS channel_id,
@@ -166,7 +167,7 @@ func (r *historyRepository) listAlarmSentHistoriesByFinalizedObservationWindow(
 	}
 
 	var rows []ObservationAlarmSentHistoryRow
-	if err := selectSQL(ctx, r.db, &rows, "query rows", `
+	if err := dbx.SelectSQL(ctx, r.db, &rows, "query rows", `
 		SELECT base.post_id AS post_id,
 		       track.content_id AS content_id,
 		       track.channel_id AS channel_id,

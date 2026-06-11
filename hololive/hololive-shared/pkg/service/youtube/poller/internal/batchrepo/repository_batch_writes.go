@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -86,7 +87,7 @@ func (r *PgxBatchRepository) upsertVideosChunk(ctx context.Context, tx batchDB, 
 		    view_count = EXCLUDED.view_count
 	`)
 
-	if _, err := execSQL(ctx, tx, fmt.Sprintf("exec video upsert chunk (%d rows)", len(videos)), sb.String(), args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec video upsert chunk (%d rows)", len(videos)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec video upsert chunk (%d rows): %w", len(videos), err)
 	}
 
@@ -151,7 +152,7 @@ func (r *PgxBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx b
 		    comment_count = EXCLUDED.comment_count
 	`)
 
-	if _, err := execSQL(ctx, tx, fmt.Sprintf("exec community post upsert chunk (%d rows)", len(posts)), sb.String(), args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec community post upsert chunk (%d rows)", len(posts)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec community post upsert chunk (%d rows): %w", len(posts), err)
 	}
 
@@ -258,7 +259,7 @@ func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Contex
 		  AND youtube_notification_outbox.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 	`)
 
-	rowsAffected, err := execSQL(ctx, tx, fmt.Sprintf("exec notification insert chunk (%d rows)", len(notifications)), sb.String(), args...)
+	rowsAffected, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec notification insert chunk (%d rows)", len(notifications)), sb.String(), args...)
 	if err != nil {
 		observeOutboxInsert(kind, "error", int64(len(notifications)))
 		return fmt.Errorf("exec notification insert chunk (%d rows): %w", len(notifications), err)
@@ -347,7 +348,7 @@ func (r *PgxBatchRepository) upsertWatermark(ctx context.Context, tx batchDB, wa
 	}
 
 	now := time.Now()
-	if _, err := execSQL(ctx, tx, "exec watermark upsert", `
+	if _, err := dbx.ExecSQL(ctx, tx, "exec watermark upsert", `
 		INSERT INTO youtube_content_watermarks
 			(channel_id, watermark_type, initialized, last_content_id, updated_at)
 		VALUES (?, ?, ?, ?, ?)

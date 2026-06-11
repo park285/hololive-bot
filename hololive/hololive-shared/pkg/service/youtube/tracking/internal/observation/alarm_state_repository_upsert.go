@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -37,7 +38,7 @@ func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, record
             END`
 	deliveryStatusExpr := buildAlarmStateDeliveryStatusExpr(finalAuthorizedExpr, finalAlarmSentExpr)
 	query, args := buildAlarmStateUpsertQuery(normalized, now, finalAuthorizedExpr, finalAlarmSentExpr, deliveryStatusExpr)
-	if _, err := execSQL(ctx, r.db, "upsert alarm state batch: exec query", query, args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "upsert alarm state batch: exec query", query, args...); err != nil {
 		return err
 	}
 

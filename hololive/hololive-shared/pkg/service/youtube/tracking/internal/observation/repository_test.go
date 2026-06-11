@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -433,7 +434,7 @@ func TestListPendingPublishedAtResolutionsPage_LegacySchemaWithoutRetryAfterColu
 	ctx := context.Background()
 	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
 	now := detectedAt.Add(time.Minute)
-	_, err := execSQL(ctx, db, "insert legacy alarm state", `
+	_, err := dbx.ExecSQL(ctx, db, "insert legacy alarm state", `
 		INSERT INTO youtube_community_shorts_alarm_states
 			(kind, post_id, content_id, channel_id, detected_at, delivery_status, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -452,7 +453,7 @@ func TestMarkAndClearPublishedAtRetryAfter_WithoutRetryAfterColumnReturnsError(t
 	repository := NewRepository(db)
 	ctx := context.Background()
 	now := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
-	_, err := execSQL(ctx, db, "insert legacy alarm state", `
+	_, err := dbx.ExecSQL(ctx, db, "insert legacy alarm state", `
 		INSERT INTO youtube_community_shorts_alarm_states
 			(kind, post_id, content_id, channel_id, detected_at, delivery_status, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)

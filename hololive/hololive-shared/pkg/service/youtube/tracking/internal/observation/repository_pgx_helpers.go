@@ -6,29 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/kapu/hololive-shared/internal/dbx"
 )
-
-func execSQL(ctx context.Context, db trackingDB, action string, query string, args ...any) (int64, error) {
-	return dbx.ExecSQL(ctx, db, action, query, args...)
-}
-
-func selectSQL(ctx context.Context, db trackingDB, dest any, action string, query string, args ...any) error {
-	return dbx.SelectSQL(ctx, db, dest, action, query, args...)
-}
-
-func getSQL(ctx context.Context, db trackingDB, dest any, action string, query string, args ...any) (bool, error) {
-	return dbx.GetSQL(ctx, db, dest, action, query, args...)
-}
-
-func inPlaceholders(count int) string {
-	return dbx.InPlaceholders(count)
-}
-
-func anyArgs[T any](values []T) []any {
-	return dbx.AnyArgs(values)
-}
 
 func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) error {
 	if _, ok := db.(pgx.Tx); ok {
