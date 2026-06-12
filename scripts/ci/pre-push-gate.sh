@@ -46,6 +46,27 @@ case "${PRE_PUSH_MODE}" in
     ;;
 esac
 
+run_perf_budget_gate() {
+  local collect_args=(--policy perf-budget.yaml --candidate artifacts/perf/pr --gate pr)
+  if [[ -n "${PERF_GATE_COUNT:-}" ]]; then
+    collect_args+=(--count "${PERF_GATE_COUNT}")
+  fi
+  collect_args+=(--benchtime "${PERF_GATE_BENCHTIME:-100ms}")
+
+  echo "[pre-push] perf budget gate (warn)"
+  ./scripts/perf/check-bench-regression.sh collect "${collect_args[@]}"
+  ./scripts/perf/check-bench-regression.sh \
+    --policy perf-budget.yaml \
+    --baseline artifacts/perf/baseline/main \
+    --candidate artifacts/perf/pr \
+    --gate pr
+}
+
+if [[ "${PERF_GATE_ONLY:-false}" == "true" ]]; then
+  run_perf_budget_gate
+  exit 0
+fi
+
 admin_touch_guardrail="${RUN_ADMIN_TOUCH_GUARDRAIL:-true}"
 if echo "$changed_files" | grep -q '^admin-dashboard/' && [[ -z "${RUN_ADMIN_TOUCH_GUARDRAIL+x}" ]]; then
   admin_touch_guardrail=false
@@ -60,6 +81,8 @@ RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-${dependency_hygiene_default}}
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}" \
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-${race_default}}" \
   ./scripts/ci/local-ci.sh
+
+run_perf_budget_gate
 
 if echo "$changed_files" | grep -qE '^admin-dashboard/(frontend|backend)/'; then
   echo "[pre-push] admin-dashboard frontend 품질 게이트"

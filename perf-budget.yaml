@@ -1,0 +1,37 @@
+schemaVersion: 1
+repo: hololive-bot
+defaults:
+  critical:
+    max_ns_regression_percent: 10
+    max_bytes_regression_percent: 10
+    allow_alloc_increase: false
+  hotpath:
+    max_ns_regression_percent: 15
+    max_bytes_regression_percent: 15
+    allow_alloc_increase: false
+  build_path:
+    max_ns_regression_percent: 20
+    max_bytes_regression_percent: 20
+    allow_alloc_increase: warn
+  non_critical:
+    max_ns_regression_percent: 25
+    max_bytes_regression_percent: 25
+    allow_alloc_increase: warn
+benchmarks:
+  BenchmarkGetTemplateCacheHit: { package: ./hololive/hololive-shared/pkg/service/template, class: critical, gate: pr }
+  BenchmarkRenderCachedTemplate: { package: ./hololive/hololive-shared/pkg/service/template, class: hotpath, gate: pr }
+  BenchmarkStoreTemplateAtFullCache: { package: ./hololive/hololive-shared/pkg/service/template, class: hotpath, gate: nightly }
+  BenchmarkBuildDedupeKey: { package: ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox, class: hotpath, gate: pr }
+  BenchmarkBuildEventKey: { package: ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox, class: hotpath, gate: pr }
+  BenchmarkFindBestMatchCacheHit: { package: ./hololive/hololive-kakao-bot-go/internal/service/matcher, class: critical, gate: pr }
+  BenchmarkDeliveryBatchUpdateArgs: { package: ./hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store, class: build_path, gate: pr }
+  BenchmarkHTTP1: { package: ./hololive/hololive-shared/pkg/server/internal/httpserver, class: non_critical, gate: nightly }
+  BenchmarkH2C: { package: ./hololive/hololive-shared/pkg/server/internal/httpserver, class: non_critical, gate: nightly }
+  BenchmarkH2CConcurrent: { package: ./hololive/hololive-shared/pkg/server/internal/httpserver, class: non_critical, gate: nightly }
+  BenchmarkHTTP1Concurrent: { package: ./hololive/hololive-shared/pkg/server/internal/httpserver, class: non_critical, gate: nightly }
+  BenchmarkGetLiveStatus: { package: ./hololive/hololive-shared/pkg/service/chzzk, class: non_critical, gate: nightly }
+settings:
+  mode: warn
+  benchstat_alpha: 0.05
+  min_count: 6
+  noise_floor_ns: 50
