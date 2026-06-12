@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
@@ -74,26 +76,77 @@ func (u *StatusUpdater) markSentBatch(ctx context.Context, ids []int64) {
 	}
 }
 
+type batchQuerier interface {
+	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
+}
+
 func (u *StatusUpdater) markSentBatchIfLocked(ctx context.Context, tokens []outboxLockToken) {
 	if u == nil || u.db == nil || len(tokens) == 0 {
 		return
 	}
 
+	live := filterLiveLockTokens(tokens)
+	if len(live) == 0 {
+		return
+	}
+
 	now := dispatchstate.CanonicalSentAtNow()
+	if batcher, ok := u.db.(batchQuerier); ok {
+		u.markSentTokensBatch(ctx, batcher, live, now)
+		return
+	}
+	u.markSentTokensSequential(ctx, live, now)
+}
+
+func filterLiveLockTokens(tokens []outboxLockToken) []outboxLockToken {
+	live := make([]outboxLockToken, 0, len(tokens))
 	for i := range tokens {
 		if tokens[i].id == 0 || tokens[i].lockedAt == nil {
 			continue
 		}
+		live = append(live, tokens[i])
+	}
+	return live
+}
+
+func (u *StatusUpdater) markSentTokensSequential(ctx context.Context, tokens []outboxLockToken, now time.Time) {
+	for i := range tokens {
 		u.markSentTokenIfLocked(ctx, tokens[i], now)
 	}
 }
 
-func (u *StatusUpdater) markSentTokenIfLocked(ctx context.Context, token outboxLockToken, now time.Time) {
-	_, err := u.db.Exec(ctx, `
+const markSentIfLockedSQL = `
 		UPDATE youtube_notification_outbox
 		SET status = $1, sent_at = $2, locked_at = NULL, error = ''
 		WHERE id = $3 AND status = $4 AND locked_at = $5
-	`, domain.OutboxStatusSent, now, token.id, domain.OutboxStatusPending, *token.lockedAt)
+	`
+
+func (u *StatusUpdater) markSentTokensBatch(ctx context.Context, batcher batchQuerier, tokens []outboxLockToken, now time.Time) {
+	batch := &pgx.Batch{}
+	for i := range tokens {
+		batch.Queue(markSentIfLockedSQL,
+			domain.OutboxStatusSent, now, tokens[i].id, domain.OutboxStatusPending, *tokens[i].lockedAt)
+	}
+	results := batcher.SendBatch(ctx, batch)
+	defer func() {
+		if err := results.Close(); err != nil {
+			u.logger.Error("Failed to close mark-sent batch",
+				slog.Int("batch_size", len(tokens)),
+				slog.Any("error", err))
+		}
+	}()
+	for i := range tokens {
+		if _, err := results.Exec(); err != nil {
+			u.logger.Error("Failed to mark outbox item as sent",
+				slog.Int64("id", tokens[i].id),
+				slog.Any("error", err))
+		}
+	}
+}
+
+func (u *StatusUpdater) markSentTokenIfLocked(ctx context.Context, token outboxLockToken, now time.Time) {
+	_, err := u.db.Exec(ctx, markSentIfLockedSQL,
+		domain.OutboxStatusSent, now, token.id, domain.OutboxStatusPending, *token.lockedAt)
 	if err != nil {
 		u.logger.Error("Failed to mark outbox item as sent",
 			slog.Int64("id", token.id),
