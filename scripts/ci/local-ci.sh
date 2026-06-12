@@ -29,6 +29,17 @@ run_step() {
     echo
 }
 
+run_warning_step() {
+    local name="$1"
+    shift
+
+    echo "[LOCAL CI] ${name} (warning-only)"
+    if ! "$@"; then
+        echo "[LOCAL CI] ${name} reported issues; continuing (warning mode)"
+    fi
+    echo
+}
+
 check_go_toolchain() {
     # 1.26.x patch는 자동 추종한다: minor family만 강제하고 정확한 patch는 고정하지 않는다.
     # 새 patch(예: go1.26.5)가 설치되면 파일 수정 없이 그대로 통과한다.
@@ -283,6 +294,7 @@ run_go_package_step "Go vet" go_mod_readonly go vet
 check_staticcheck
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
+run_warning_step "PGO freshness gate" ./scripts/ci/check-pgo-freshness.sh
 run_go_package_step "Go test" go_mod_readonly go test -count=1
 
 if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
