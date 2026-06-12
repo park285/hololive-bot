@@ -326,6 +326,7 @@ hololive/hololive-shared/pkg/repository/template_repository.go
 hololive/hololive-shared/pkg/server/internal/httpserver/channel_ids.go
 hololive/hololive-shared/pkg/server/internal/httpserver/h2c.go
 hololive/hololive-shared/pkg/server/internal/httpserver/h3.go
+hololive/hololive-shared/pkg/server/internal/httpserver/metrics.go
 hololive/hololive-shared/pkg/server/internal/httpserver/oauth_proxy.go
 hololive/hololive-shared/pkg/server/internal/httpserver/response.go
 hololive/hololive-shared/pkg/server/internal/httpserver/router_base.go
@@ -509,6 +510,7 @@ hololive/hololive-shared/pkg/service/settings/mocks/readwriter.go
 hololive/hololive-shared/pkg/service/settings/service.go
 hololive/hololive-shared/pkg/service/template/admin_service.go
 hololive/hololive-shared/pkg/service/template/renderer.go
+hololive/hololive-shared/pkg/service/template/renderer_cache.go
 hololive/hololive-shared/pkg/service/twitch/client.go
 hololive/hololive-shared/pkg/service/twitch/client_streams.go
 hololive/hololive-shared/pkg/service/twitch/types.go
