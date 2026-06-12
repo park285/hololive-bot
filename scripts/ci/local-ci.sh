@@ -282,6 +282,7 @@ check_go_mod_tidy
 run_go_package_step "Go vet" go_mod_readonly go vet
 check_staticcheck
 run_go_package_step "Go build" go_mod_readonly go build
+run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
 run_go_package_step "Go test" go_mod_readonly go test -count=1
 
 if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
