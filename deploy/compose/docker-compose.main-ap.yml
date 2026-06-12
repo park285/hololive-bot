@@ -26,6 +26,7 @@ services:
     ports: !override
       - "127.0.0.1:30025:30025"
       - "127.0.0.1:30025:30025/udp"
+      - "127.0.0.1:30095:30095"
     healthcheck:
       test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30025/health"]
     deploy:

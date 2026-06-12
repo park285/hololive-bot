@@ -2,19 +2,22 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	runtimehttpserver "github.com/park285/shared-go/pkg/runtime/httpserver"
 	"github.com/quic-go/quic-go/http3"
+
+	"github.com/kapu/hololive-shared/pkg/config"
 )
 
 type RuntimeHTTPServers struct {
-	H3 *http3.Server
+	H3      *http3.Server
+	Metrics *http.Server
 }
 
 func NewRuntimeHTTPServers(serverConfig config.ServerConfig, handler http.Handler, operation string) (*RuntimeHTTPServers, error) {
@@ -25,6 +28,9 @@ func NewRuntimeHTTPServers(serverConfig config.ServerConfig, handler http.Handle
 			return nil, err
 		}
 		servers.H3 = h3Server
+	}
+	if metricsAddr := strings.TrimSpace(serverConfig.MetricsAddr); metricsAddr != "" {
+		servers.Metrics = NewMetricsServer(metricsAddr, serverConfig.APIKey)
 	}
 	return servers, nil
 }
@@ -50,13 +56,20 @@ func (s *RuntimeHTTPServers) Start(logger *slog.Logger, errCh chan<- error) {
 		return
 	}
 	StartH3Server(s.H3, logger, errCh)
+	if s.Metrics != nil {
+		runtimehttpserver.StartServerWithPrefix(s.Metrics, "metrics server error", logger, errCh)
+	}
 }
 
 func (s *RuntimeHTTPServers) Shutdown(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	return ShutdownH3Server(ctx, s.H3)
+	err := ShutdownH3Server(ctx, s.H3)
+	if s.Metrics != nil {
+		err = errors.Join(err, runtimehttpserver.Shutdown(ctx, s.Metrics, "metrics server shutdown failed"))
+	}
+	return err
 }
 
 func StartH3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {

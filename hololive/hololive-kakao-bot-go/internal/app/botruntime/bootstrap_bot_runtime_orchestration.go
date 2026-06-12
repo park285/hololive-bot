@@ -24,8 +24,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/quic-go/quic-go/http3"
 
@@ -63,6 +66,11 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 		}
 	}
 
+	var metricsServer *http.Server
+	if metricsAddr := strings.TrimSpace(appConfig.Server.MetricsAddr); metricsAddr != "" {
+		metricsServer = sharedserver.NewMetricsServer(metricsAddr, appConfig.Server.APIKey)
+	}
+
 	return &BotRuntime{
 		Config:               appConfig,
 		Logger:               logger,
@@ -70,6 +78,7 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 		ConfigSubscriber:     configSubscriber,
 		ServerAddr:           appConfig.Server.H3Addr,
 		H3Server:             h3Server,
+		MetricsServer:        metricsServer,
 		h3CertReloadStart:    h3CertReloadStart,
 		webhookHandlerCloser: webhookHandler,
 		webhookPool:          webhookPool,

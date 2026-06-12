@@ -23,6 +23,7 @@ package runtime
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/park285/shared-go/pkg/runtime/httpserver"
 	"github.com/quic-go/quic-go/http3"
@@ -40,4 +41,18 @@ func ShutdownHTTP3Server(ctx context.Context, server *http3.Server) error {
 		return nil
 	}
 	return httpserver.Shutdown(ctx, server, "HTTP/3 server shutdown failed")
+}
+
+func StartMetricsServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
+	if server == nil {
+		return
+	}
+	httpserver.StartServerWithPrefix(server, "metrics server error", logger, errCh)
+}
+
+func ShutdownMetricsServer(ctx context.Context, server *http.Server) error {
+	if server == nil {
+		return nil
+	}
+	return httpserver.Shutdown(ctx, server, "metrics server shutdown failed")
 }

@@ -43,6 +43,7 @@ var NewHealthOnlyRuntimeRouter = httpserver.NewHealthOnlyRuntimeRouter
 var NewTriggerRuntimeRouter = httpserver.NewTriggerRuntimeRouter
 var NewH2CServer = httpserver.NewH2CServer
 var NewH3Server = httpserver.NewH3Server
+var NewMetricsServer = httpserver.NewMetricsServer
 var NewRuntimeHTTPServers = httpserver.NewRuntimeHTTPServers
 var StartH3Server = httpserver.StartH3Server
 var ShutdownH3Server = httpserver.ShutdownH3Server

@@ -30,6 +30,11 @@ type ServerConfig struct {
 	H3CertFile     string
 	H3KeyFile      string
 
+	// MetricsAddr: Prometheus scrape용 평문 HTTP/1.1 /metrics 전용 리스너 주소.
+	// 운영 표면이 H3 전용이라 Prometheus가 직접 scrape하지 못해 분리한다(PR-P6-01 0단계).
+	// 빈 값이면 비활성. compose에서 127.0.0.1(또는 Tailscale IP)로만 publish한다.
+	MetricsAddr string
+
 	// AdminAllowedIPs: admin-api /api/auth/* 접근을 허용할 CIDR 목록.
 	// admin-api는 Tailscale 직결(reverse-proxy 없음)이라 RemoteAddr 기준으로 판단한다.
 	// 예: ADMIN_ALLOWED_IPS="100.100.1.0/24". 비어 있으면 전체 허용(개발 편의).

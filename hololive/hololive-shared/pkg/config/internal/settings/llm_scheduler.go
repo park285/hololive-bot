@@ -74,6 +74,7 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 			H3Addr:         sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
 			H3CertFile:     strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
 			H3KeyFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
+			MetricsAddr:    strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
 		},
 		Iris: IrisConfig{
 			BaseURL:      sharedenv.String("IRIS_BASE_URL", ""),
