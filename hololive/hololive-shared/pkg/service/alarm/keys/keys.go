@@ -33,7 +33,7 @@ import (
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
-// Valkey 키 접두사 (Go alarm_types.go, Rust keys.rs 1:1 대응)
+// Valkey 키 접두사 (alarmservice alarm_types.go 별칭과 1:1 대응)
 const (
 	AlarmKeyPrefix                    = "alarm:"
 	AlarmRegistryKey                  = "alarm:registry"

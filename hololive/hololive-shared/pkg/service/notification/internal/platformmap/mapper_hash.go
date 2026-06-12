@@ -3,15 +3,16 @@ package platformmap
 import (
 	"context"
 	"fmt"
-	"time"
+	"strings"
+	"sync/atomic"
 
 	"github.com/park285/shared-go/pkg/stringutil"
 	"github.com/valkey-io/valkey-go"
 )
 
 const replaceHashMappingsScript = `
-local source = ARGV[1]
-local target = ARGV[2]
+local source = KEYS[1]
+local target = KEYS[2]
 if redis.call('EXISTS', source) == 1 then
   redis.call('RENAME', source, target)
 else
@@ -19,6 +20,32 @@ else
 end
 return 1
 `
+
+const platformMapTempKeySeparator = ":tmp:"
+
+var platformMapTempKeySeq atomic.Uint64
+
+// hash tag 없는 키는 전체 문자열로 slot이 계산되므로 `{key}` 래핑 tmp 키는
+// target과 같은 slot에 떨어진다. tag가 이미 있으면 그대로 보존한다.
+func platformMapTempKey(key string) string {
+	sequence := platformMapTempKeySeq.Add(1)
+	if hasValkeyHashTag(key) {
+		return fmt.Sprintf("%s%s%d", key, platformMapTempKeySeparator, sequence)
+	}
+
+	return fmt.Sprintf("{%s}%s%d", key, platformMapTempKeySeparator, sequence)
+}
+
+func hasValkeyHashTag(key string) bool {
+	_, after, ok := strings.Cut(key, "{")
+	if !ok {
+		return false
+	}
+
+	end := strings.IndexByte(after, '}')
+
+	return end > 0
+}
 
 func (m *Mapper) replaceHashMappings(
 	ctx context.Context,
@@ -41,7 +68,7 @@ func (m *Mapper) replaceHashMappings(
 		return nil
 	}
 
-	tmpKey := fmt.Sprintf("%s:tmp:%d", key, time.Now().UnixNano())
+	tmpKey := platformMapTempKey(key)
 	if err := m.cache.Del(ctx, tmpKey); err != nil {
 		return fmt.Errorf("delete temp mapping key %s: %w", tmpKey, err)
 	}
@@ -107,7 +134,7 @@ func (m *Mapper) renameHashMappingKey(ctx context.Context, tmpKey, key string, f
 		return nil
 	}
 
-	resp := client.Do(ctx, builder.Eval().Script(replaceHashMappingsScript).Numkeys(0).Arg(tmpKey, key).Build())
+	resp := client.Do(ctx, builder.Eval().Script(replaceHashMappingsScript).Numkeys(2).Key(tmpKey, key).Build())
 	if err := resp.Error(); err != nil {
 		return fmt.Errorf("eval rename key %s from %s: %w", key, tmpKey, err)
 	}

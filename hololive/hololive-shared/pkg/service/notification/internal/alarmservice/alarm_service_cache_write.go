@@ -24,54 +24,15 @@ import (
 	"context"
 	stdErrors "errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/valkey-io/valkey-go"
 )
 
-const cacheAlarmAtomicScript = `
-local roomAlarmKey = ARGV[1]
-local alarmRegistryKey = ARGV[2]
-local channelRegistryKey = ARGV[3]
-local memberNameKey = ARGV[4]
-local roomNamesKey = ARGV[5]
-local userNamesKey = ARGV[6]
-local roomID = ARGV[7]
-local channelID = ARGV[8]
-local memberName = ARGV[9]
-local roomName = ARGV[10]
-local userID = ARGV[11]
-local userName = ARGV[12]
-local registryKey = ARGV[13]
-local emptySubscriberCacheKey = ARGV[14]
-local channelRegistryVersionKey = ARGV[15]
-local channelRegistryVersionValue = ARGV[16]
-
-local added = redis.call('SADD', roomAlarmKey, channelID)
-redis.call('SADD', alarmRegistryKey, registryKey)
-redis.call('SADD', channelRegistryKey, channelID)
-
-if memberName ~= '' then
-  redis.call('HSET', memberNameKey, channelID, memberName)
-end
-if roomID ~= '' and roomName ~= '' then
-  redis.call('HSET', roomNamesKey, roomID, roomName)
-end
-if userID ~= '' and userName ~= '' then
-  redis.call('HSET', userNamesKey, userID, userName)
-end
-
-for i = 17, #ARGV do
-  redis.call('SADD', ARGV[i], registryKey)
-end
-redis.call('DEL', emptySubscriberCacheKey)
-redis.call('SET', channelRegistryVersionKey, channelRegistryVersionValue)
-
-return added
-`
-
+// 캐시 갱신은 의도적으로 비원자(sequential)다: alarm 키들은 hash tag가 없어 단일
+// EVAL이 Cluster에서 cross-slot이 되고, 중간 실패의 부분 상태는 호출부의 repository
+// rebuild와 마지막 version 키 갱신(reader 재구성 트리거)이 흡수한다.
 func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (int64, error) {
 	if record == nil {
 		return 0, stdErrors.New("alarm is nil")
@@ -85,66 +46,7 @@ func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (i
 	cacheRecord.AlarmTypes = alarmTypes
 	cacheRecord.MemberName = as.resolveCacheMemberName(ctx, cacheRecord.ChannelID, cacheRecord.MemberName)
 
-	added, err := as.cacheAlarmAtomic(ctx, &cacheRecord)
-	if err == nil {
-		return added, nil
-	}
-
-	return 0, err
-}
-
-func (as *AlarmService) cacheAlarmAtomic(ctx context.Context, record *domain.Alarm) (int64, error) {
-	client, builder, ok := as.rawAlarmCacheEvalClient()
-	if !ok {
-		return as.cacheAlarmSequential(ctx, record)
-	}
-
-	registryKey := as.getRegistryKey(record.RoomID)
-	args := []string{
-		as.getAlarmKey(record.RoomID),
-		AlarmRegistryKey,
-		AlarmChannelRegistryKey,
-		MemberNameKey,
-		RoomNamesCacheKey,
-		UserNamesCacheKey,
-		record.RoomID,
-		record.ChannelID,
-		record.MemberName,
-		record.RoomName,
-		record.UserID,
-		record.UserName,
-		registryKey,
-		AlarmSubscriberCacheEmptyKey,
-		AlarmChannelRegistryVersionKey,
-		alarmCacheMutationVersion(),
-	}
-	for _, alarmType := range record.AlarmTypes {
-		args = append(args, as.channelSubscribersKeyByType(record.ChannelID, alarmType))
-	}
-
-	resp := client.Do(ctx, builder.Eval().Script(cacheAlarmAtomicScript).Numkeys(0).Arg(args...).Build())
-	added, err := resp.AsInt64()
-	if err != nil {
-		return 0, fmt.Errorf("atomic cache alarm: %w", err)
-	}
-
-	return added, nil
-}
-
-func (as *AlarmService) rawAlarmCacheEvalClient() (_ valkey.Client, _ valkey.Builder, ok bool) {
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-
-	client := as.cache.GetClient()
-	builder := as.cache.B()
-	if client == nil {
-		return nil, valkey.Builder{}, false
-	}
-
-	return client, builder, true
+	return as.cacheAlarmSequential(ctx, &cacheRecord)
 }
 
 func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain.Alarm) (int64, error) {
@@ -218,10 +120,6 @@ func (as *AlarmService) cacheAlarmMetadataSequential(ctx context.Context, record
 	}
 
 	return nil
-}
-
-func alarmCacheMutationVersion() string {
-	return strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
 }
 
 func (as *AlarmService) markAlarmCacheChanged(ctx context.Context) error {
