@@ -71,6 +71,11 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 		metricsServer = sharedserver.NewMetricsServer(metricsAddr, appConfig.Server.APIKey)
 	}
 
+	var pprofServer *http.Server
+	if pprofAddr := strings.TrimSpace(appConfig.Server.PprofAddr); pprofAddr != "" {
+		pprofServer = sharedserver.NewPprofServer(pprofAddr)
+	}
+
 	return &BotRuntime{
 		Config:               appConfig,
 		Logger:               logger,
@@ -79,6 +84,7 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 		ServerAddr:           appConfig.Server.H3Addr,
 		H3Server:             h3Server,
 		MetricsServer:        metricsServer,
+		PprofServer:          pprofServer,
 		h3CertReloadStart:    h3CertReloadStart,
 		webhookHandlerCloser: webhookHandler,
 		webhookPool:          webhookPool,

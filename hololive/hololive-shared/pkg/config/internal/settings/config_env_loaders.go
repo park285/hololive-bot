@@ -77,6 +77,7 @@ func loadServerConfig() ServerConfig {
 		H3CertFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
 		H3KeyFile:       strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
 		MetricsAddr:     strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
+		PprofAddr:       strings.TrimSpace(sharedenv.String("HOLOLIVE_PPROF_ADDR", "")),
 		AdminAllowedIPs: parseCommaSeparated(sharedenv.String("ADMIN_ALLOWED_IPS", "")),
 	}
 }

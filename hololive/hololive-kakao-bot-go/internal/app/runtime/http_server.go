@@ -56,3 +56,17 @@ func ShutdownMetricsServer(ctx context.Context, server *http.Server) error {
 	}
 	return httpserver.Shutdown(ctx, server, "metrics server shutdown failed")
 }
+
+func StartPprofServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
+	if server == nil {
+		return
+	}
+	httpserver.StartServerWithPrefix(server, "pprof server error", logger, errCh)
+}
+
+func ShutdownPprofServer(ctx context.Context, server *http.Server) error {
+	if server == nil {
+		return nil
+	}
+	return httpserver.Shutdown(ctx, server, "pprof server shutdown failed")
+}

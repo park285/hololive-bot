@@ -46,6 +46,7 @@ type BotRuntime struct {
 	ServerAddr    string
 	H3Server      *http3.Server
 	MetricsServer *http.Server
+	PprofServer   *http.Server
 
 	h3CertReloadStart func(context.Context)
 

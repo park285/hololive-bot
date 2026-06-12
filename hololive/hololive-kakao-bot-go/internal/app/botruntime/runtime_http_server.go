@@ -34,6 +34,7 @@ func (r *BotRuntime) StartHTTPServer(errCh chan<- error) {
 
 	appruntime.StartHTTP3Server(r.H3Server, r.Logger, errCh)
 	appruntime.StartMetricsServer(r.MetricsServer, r.Logger, errCh)
+	appruntime.StartPprofServer(r.PprofServer, r.Logger, errCh)
 }
 
 func (r *BotRuntime) ShutdownHTTPServer(ctx context.Context) error {
@@ -44,5 +45,6 @@ func (r *BotRuntime) ShutdownHTTPServer(ctx context.Context) error {
 	return errors.Join(
 		appruntime.ShutdownHTTP3Server(ctx, r.H3Server),
 		appruntime.ShutdownMetricsServer(ctx, r.MetricsServer),
+		appruntime.ShutdownPprofServer(ctx, r.PprofServer),
 	)
 }

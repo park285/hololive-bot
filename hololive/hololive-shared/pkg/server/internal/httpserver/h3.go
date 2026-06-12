@@ -18,6 +18,7 @@ import (
 type RuntimeHTTPServers struct {
 	H3      *http3.Server
 	Metrics *http.Server
+	Pprof   *http.Server
 }
 
 func NewRuntimeHTTPServers(serverConfig config.ServerConfig, handler http.Handler, operation string) (*RuntimeHTTPServers, error) {
@@ -31,6 +32,9 @@ func NewRuntimeHTTPServers(serverConfig config.ServerConfig, handler http.Handle
 	}
 	if metricsAddr := strings.TrimSpace(serverConfig.MetricsAddr); metricsAddr != "" {
 		servers.Metrics = NewMetricsServer(metricsAddr, serverConfig.APIKey)
+	}
+	if pprofAddr := strings.TrimSpace(serverConfig.PprofAddr); pprofAddr != "" {
+		servers.Pprof = NewPprofServer(pprofAddr)
 	}
 	return servers, nil
 }
@@ -59,6 +63,9 @@ func (s *RuntimeHTTPServers) Start(logger *slog.Logger, errCh chan<- error) {
 	if s.Metrics != nil {
 		runtimehttpserver.StartServerWithPrefix(s.Metrics, "metrics server error", logger, errCh)
 	}
+	if s.Pprof != nil {
+		runtimehttpserver.StartServerWithPrefix(s.Pprof, "pprof server error", logger, errCh)
+	}
 }
 
 func (s *RuntimeHTTPServers) Shutdown(ctx context.Context) error {
@@ -68,6 +75,9 @@ func (s *RuntimeHTTPServers) Shutdown(ctx context.Context) error {
 	err := ShutdownH3Server(ctx, s.H3)
 	if s.Metrics != nil {
 		err = errors.Join(err, runtimehttpserver.Shutdown(ctx, s.Metrics, "metrics server shutdown failed"))
+	}
+	if s.Pprof != nil {
+		err = errors.Join(err, runtimehttpserver.Shutdown(ctx, s.Pprof, "pprof server shutdown failed"))
 	}
 	return err
 }
