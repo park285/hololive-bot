@@ -342,6 +342,7 @@ services:
       dockerfile: hololive/hololive-kakao-bot-go/Dockerfile
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+        GO_PGO_FILE: ${HOLOLIVE_BOT_GO_PGO_FILE:-cmd/bot/default.pgo}
     container_name: hololive-kakao-bot-go
     env_file:
       - ${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/bot.env}
@@ -459,6 +460,7 @@ services:
       dockerfile: hololive/hololive-alarm-worker/Dockerfile
       args:
         VERSION: ${HOLO_ALARM_WORKER_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
+        GO_PGO_FILE: ${HOLOLIVE_ALARM_WORKER_GO_PGO_FILE:-cmd/alarm-worker/default.pgo}
     container_name: hololive-alarm-worker
     env_file:
       - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}
