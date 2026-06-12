@@ -25,19 +25,11 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"strconv"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/valkey-io/valkey-go"
 )
-
-const incrWithTTLScript = `
-local current = redis.call('INCR', KEYS[1])
-if current == 1 and tonumber(ARGV[1]) > 0 then
-  redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
-end
-return current
-`
 
 func (s *Service) isLoginRateLimited(ctx context.Context, clientIP string) (bool, error) {
 	if clientIP == "" || s.cacheClient == nil {
@@ -107,31 +99,65 @@ func (s *Service) onLoginSucceeded(ctx context.Context, email string) {
 }
 
 func incrWithTTL(ctx context.Context, cacheClient cache.Client, key string, ttl time.Duration) (int64, error) {
-	ttlSeconds := int64(0)
-	if ttl > 0 {
-		ttlSeconds = int64(math.Ceil(ttl.Seconds()))
-		if ttlSeconds <= 0 {
-			ttlSeconds = 1
-		}
-	}
+	ttlSeconds := ceilTTLSeconds(ttl)
+	builder := cacheClient.B()
+	cmds := incrWithTTLCommands(builder, key, ttlSeconds)
 
-	cmd := cacheClient.B().
-		Eval().
-		Script(incrWithTTLScript).
-		Numkeys(1).
-		Key(key).
-		Arg(strconv.FormatInt(ttlSeconds, 10)).
-		Build()
-	results := cacheClient.DoMulti(ctx, cmd)
-	if len(results) != 1 {
-		return 0, fmt.Errorf("increment with ttl: unexpected result count: %d", len(results))
-	}
-	if results[0].Error() != nil {
-		return 0, results[0].Error()
-	}
-	count, err := results[0].AsInt64()
-	if err != nil {
+	results := cacheClient.DoMulti(ctx, cmds...)
+	if err := validateIncrWithTTLResults(key, results, len(cmds), ttlSeconds > 0); err != nil {
 		return 0, err
 	}
+
+	count, err := results[0].AsInt64()
+	if err != nil {
+		return 0, fmt.Errorf("increment with ttl: parse incr %s: %w", key, err)
+	}
+
 	return count, nil
+}
+
+func ceilTTLSeconds(ttl time.Duration) int64 {
+	if ttl <= 0 {
+		return 0
+	}
+
+	seconds := int64(math.Ceil(ttl.Seconds()))
+	if seconds <= 0 {
+		return 1
+	}
+
+	return seconds
+}
+
+func incrWithTTLCommands(builder valkey.Builder, key string, ttlSeconds int64) []valkey.Completed {
+	cmds := []valkey.Completed{builder.Incr().Key(key).Build()}
+	if ttlSeconds <= 0 {
+		return cmds
+	}
+
+	return append(cmds, builder.Expire().Key(key).Seconds(ttlSeconds).Nx().Build())
+}
+
+func validateIncrWithTTLResults(key string, results []valkey.ValkeyResult, want int, hasTTL bool) error {
+	if len(results) != want {
+		return fmt.Errorf("increment with ttl: unexpected result count: %d", len(results))
+	}
+
+	if err := results[0].Error(); err != nil {
+		return fmt.Errorf("increment with ttl: incr %s: %w", key, err)
+	}
+
+	if hasTTL {
+		return validateIncrTTLExpireResult(key, results[1])
+	}
+
+	return nil
+}
+
+func validateIncrTTLExpireResult(key string, result valkey.ValkeyResult) error {
+	if err := result.Error(); err != nil {
+		return fmt.Errorf("increment with ttl: expire nx %s: %w", key, err)
+	}
+
+	return nil
 }

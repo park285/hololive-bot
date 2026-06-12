@@ -10,17 +10,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 )
 
-const replaceHashMappingsScript = `
-local source = KEYS[1]
-local target = KEYS[2]
-if redis.call('EXISTS', source) == 1 then
-  redis.call('RENAME', source, target)
-else
-  redis.call('DEL', target)
-end
-return 1
-`
-
 const platformMapTempKeySeparator = ":tmp:"
 
 var platformMapTempKeySeq atomic.Uint64
@@ -134,9 +123,10 @@ func (m *Mapper) renameHashMappingKey(ctx context.Context, tmpKey, key string, f
 		return nil
 	}
 
-	resp := client.Do(ctx, builder.Eval().Script(replaceHashMappingsScript).Numkeys(2).Key(tmpKey, key).Build())
+	// source 부재 시 에러를 반환하고 기존 target은 보존한다; 정상 경로는 HMSet 직후라 source가 존재한다.
+	resp := client.Do(ctx, builder.Rename().Key(tmpKey).Newkey(key).Build())
 	if err := resp.Error(); err != nil {
-		return fmt.Errorf("eval rename key %s from %s: %w", key, tmpKey, err)
+		return fmt.Errorf("rename key %s from %s: %w", key, tmpKey, err)
 	}
 
 	return nil

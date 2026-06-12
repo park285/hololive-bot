@@ -35,19 +35,6 @@ const (
 
 var aclRoomsTempKeySeq atomic.Uint64
 
-const renameRoomsKeyScript = `
-local source = KEYS[1]
-local target = KEYS[2]
-
-if redis.call('EXISTS', source) == 1 then
-	redis.call('RENAME', source, target)
-else
-	redis.call('DEL', target)
-end
-
-return 1
-`
-
 func aclRoomsTempKey(key string) string {
 	sequence := aclRoomsTempKeySeq.Add(1)
 	if hasValkeyHashTag(key) {
@@ -105,7 +92,7 @@ func (s *Service) renameRoomsKey(ctx context.Context, tempKey, key string, rooms
 		return s.renameRoomsKeyFallback(ctx, key, rooms)
 	}
 
-	return s.renameRoomsKeyEval(ctx, client, builder, tempKey, key)
+	return s.renameRoomsKeyNative(ctx, client, builder, tempKey, key)
 }
 
 func (s *Service) renameRoomsKeyCustom(ctx context.Context, tempKey, key string, rooms []string) error {
@@ -132,15 +119,11 @@ func (s *Service) renameRoomsKeyFallback(ctx context.Context, key string, rooms 
 	return nil
 }
 
-func (s *Service) renameRoomsKeyEval(ctx context.Context, client valkey.Client, builder valkey.Builder, tempKey, key string) error {
-	resp := client.Do(ctx, builder.Eval().
-		Script(renameRoomsKeyScript).
-		Numkeys(2).
-		Key(tempKey, key).
-		Build(),
-	)
+func (s *Service) renameRoomsKeyNative(ctx context.Context, client valkey.Client, builder valkey.Builder, tempKey, key string) error {
+	// source 부재 시 에러를 반환하고 기존 target은 보존한다; 정상 경로는 SAdd 직후라 source가 존재한다.
+	resp := client.Do(ctx, builder.Rename().Key(tempKey).Newkey(key).Build())
 	if err := resp.Error(); err != nil {
-		return fmt.Errorf("eval rename %s from %s: %w", key, tempKey, err)
+		return fmt.Errorf("rename %s from %s: %w", key, tempKey, err)
 	}
 
 	return nil

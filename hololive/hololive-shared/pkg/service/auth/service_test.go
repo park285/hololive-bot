@@ -727,3 +727,30 @@ func TestIncrWithTTL_SetsTTLOnFirstIncrementAndKeepsIt(t *testing.T) {
 		t.Fatalf("expected ttl to stay unchanged after second incr, got=%v want=%v", secondTTL, firstTTL)
 	}
 }
+
+func TestIncrWithTTL_HealsCounterWithoutTTLOnNextIncrement(t *testing.T) {
+	cacheClient, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
+
+	key := "auth:test:counter:no-ttl"
+	results := cacheClient.DoMulti(context.Background(), cacheClient.B().Incr().Key(key).Build())
+	if len(results) != 1 {
+		t.Fatalf("seed incr result count=%d want=1", len(results))
+	}
+	if err := results[0].Error(); err != nil {
+		t.Fatalf("seed incr failed: %v", err)
+	}
+	if ttl := mini.TTL(key); ttl != 0 {
+		t.Fatalf("seed key ttl=%v want no ttl", ttl)
+	}
+
+	count, err := incrWithTTL(context.Background(), cacheClient, key, 2*time.Second)
+	if err != nil {
+		t.Fatalf("incrWithTTL failed: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("count=%d want=2", count)
+	}
+	if ttl := mini.TTL(key); ttl != 2*time.Second {
+		t.Fatalf("healed ttl=%v want=2s", ttl)
+	}
+}

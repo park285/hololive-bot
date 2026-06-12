@@ -657,6 +657,7 @@ github.com/kapu/hololive-shared/pkg/service/acl -> github.com/kapu/hololive-shar
 github.com/kapu/hololive-shared/pkg/service/acl -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/acl -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-shared/pkg/service/acl -> github.com/kapu/hololive-shared/pkg/service/database/mocks
+github.com/kapu/hololive-shared/pkg/service/acl -> github.com/kapu/hololive-shared/pkg/testutil
 github.com/kapu/hololive-shared/pkg/service/acl -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/activity -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/alarm -> github.com/kapu/hololive-shared/internal/dbx
