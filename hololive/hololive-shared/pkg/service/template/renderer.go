@@ -44,20 +44,15 @@ import (
 type Renderer struct {
 	pool    *pgxpool.Pool
 	logger  *slog.Logger
-	cache   map[cacheKey]*template.Template
+	cache   map[cacheKey]cacheEntry
 	cacheMu sync.RWMutex
-}
-
-type cacheKey struct {
-	templateKey domain.TemplateKey
-	channelID   string
 }
 
 func NewRenderer(pool *pgxpool.Pool, logger *slog.Logger) *Renderer {
 	return &Renderer{
 		pool:   pool,
 		logger: logger,
-		cache:  make(map[cacheKey]*template.Template),
+		cache:  make(map[cacheKey]cacheEntry),
 	}
 }
 
@@ -79,9 +74,9 @@ func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, chan
 	ck := cacheKey{templateKey: key, channelID: channelID}
 
 	r.cacheMu.RLock()
-	if tmpl, ok := r.cache[ck]; ok {
+	if entry, ok := r.cache[ck]; ok {
 		r.cacheMu.RUnlock()
-		return tmpl, nil
+		return entry.tmpl, nil
 	}
 	r.cacheMu.RUnlock()
 
@@ -95,9 +90,7 @@ func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, chan
 		return nil, fmt.Errorf("parse template: %w", err)
 	}
 
-	r.cacheMu.Lock()
-	r.cache[ck] = tmpl
-	r.cacheMu.Unlock()
+	r.storeTemplateAt(ck, tmpl, time.Now())
 
 	return tmpl, nil
 }
