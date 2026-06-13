@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go/v3"
+	sharedllm "github.com/park285/shared-go/pkg/llm"
 )
 
 type safeProviderError struct {
@@ -46,10 +47,13 @@ func safeLLMProviderError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, errOpenAIRefusalOutput) {
+	if strings.HasPrefix(err.Error(), "llm provider request failed") {
+		return errors.New(sharedllm.RedactDiagnostic(err.Error(), 1024))
+	}
+	if errors.Is(err, errOpenAIRefusalOutput) || errors.Is(err, sharedllm.ErrOpenAIRefusalOutput) {
 		return safeProviderError{errType: "openai_refusal_output"}
 	}
-	if errors.Is(err, errOpenAIEmptyOutput) {
+	if errors.Is(err, errOpenAIEmptyOutput) || errors.Is(err, sharedllm.ErrOpenAIEmptyOutput) {
 		return safeProviderError{errType: "openai_empty_output"}
 	}
 	if apiErr, ok := openAIError(err); ok {
@@ -72,10 +76,10 @@ func llmProviderErrorAttrs(err error) []slog.Attr {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, errOpenAIRefusalOutput) {
+	if errors.Is(err, errOpenAIRefusalOutput) || errors.Is(err, sharedllm.ErrOpenAIRefusalOutput) {
 		return []slog.Attr{slog.String("error_type", "openai_refusal_output")}
 	}
-	if errors.Is(err, errOpenAIEmptyOutput) {
+	if errors.Is(err, errOpenAIEmptyOutput) || errors.Is(err, sharedllm.ErrOpenAIEmptyOutput) {
 		return []slog.Attr{slog.String("error_type", "openai_empty_output")}
 	}
 	if apiErr, ok := openAIError(err); ok {

@@ -6,6 +6,7 @@ healthprobe
 httputil
 json
 jsonutil
+llm
 logging
 logging/archive
 runtime/automaxprocs

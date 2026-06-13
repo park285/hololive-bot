@@ -26,6 +26,7 @@ import (
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -38,6 +39,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
 	json "github.com/park285/shared-go/pkg/json"
+	sharedllm "github.com/park285/shared-go/pkg/llm"
 )
 
 func TestNewClient_DefaultOptions(t *testing.T) {
@@ -255,6 +257,97 @@ func TestOpenAIClient_ImplementsClient(t *testing.T) {
 	// compile-time 검증 (var _ Client = (*OpenAIClient)(nil))은 openai_client.go에 존재
 	// 런타임에서도 인터페이스 할당 가능 확인
 	var _ Client = NewClient("https://example.com/v1", "key", "model", nil)
+}
+
+func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
+	temperature := 0.2
+	generator := &fakeJSONGenerator{
+		resp: sharedllm.JSONResponse{
+			Text:  `{"ok":true}`,
+			Model: "gpt-returned",
+			Usage: sharedllm.Usage{TotalTokens: 9},
+		},
+	}
+	tracker := &fakeCostTracker{}
+	client := &OpenAIClient{
+		generator:       generator,
+		model:           "gpt-test",
+		schemaName:      "member_news_summary",
+		temperature:     &temperature,
+		reasoningEffort: "high",
+		webSearch:       false,
+		chatCompletions: true,
+		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		costTracker:     tracker,
+	}
+	schema := map[string]any{"type": "object"}
+
+	got, err := client.GenerateJSON(context.Background(), "system", "user", schema)
+	if err != nil {
+		t.Fatalf("GenerateJSON() error = %v", err)
+	}
+	if got != `{"ok":true}` {
+		t.Fatalf("GenerateJSON() = %q, want JSON text", got)
+	}
+	if !generator.called {
+		t.Fatal("shared generator was not called")
+	}
+	req := generator.req
+	if req.SystemPrompt != "system" || req.UserPrompt != "user" || req.SchemaName != "member_news_summary" || req.Model != "gpt-test" {
+		t.Fatalf("shared request = %+v", req)
+	}
+	if req.Schema["type"] != "object" || req.Temperature == nil || *req.Temperature != 0.2 || req.ReasoningEffort != "high" {
+		t.Fatalf("shared request options = %+v", req)
+	}
+	if req.WebSearch || !req.ChatCompletions {
+		t.Fatalf("shared request transport flags = webSearch:%v chat:%v", req.WebSearch, req.ChatCompletions)
+	}
+	if tracker.tokens == nil || tracker.tokens[0] != 9 || tracker.models[0] != "gpt-returned" {
+		t.Fatalf("usage tracker = models:%v tokens:%v", tracker.models, tracker.tokens)
+	}
+}
+
+func TestOpenAIClientGenerateJSON_SanitizesDiscoveredEventsOnlyAfterFallback(t *testing.T) {
+	generator := &fakeJSONGenerator{
+		resp: sharedllm.JSONResponse{
+			Text:         `{"summary":"ok","discovered_events":[{"id":"a"}]}`,
+			Model:        "gpt-test",
+			FallbackUsed: true,
+		},
+	}
+	client := &OpenAIClient{
+		generator:  generator,
+		model:      "gpt-test",
+		schemaName: "event_summary",
+		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	got, err := client.GenerateJSON(context.Background(), "system", "user", map[string]any{"type": "object"})
+	if err != nil {
+		t.Fatalf("GenerateJSON() error = %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(got), &payload); err != nil {
+		t.Fatalf("unmarshal sanitized json: %v", err)
+	}
+	events, ok := payload["discovered_events"].([]any)
+	if !ok || len(events) != 0 {
+		t.Fatalf("discovered_events = %#v, want empty array", payload["discovered_events"])
+	}
+}
+
+type fakeJSONGenerator struct {
+	called bool
+	req    sharedllm.JSONRequest
+	resp   sharedllm.JSONResponse
+	err    error
+}
+
+func (f *fakeJSONGenerator) GenerateJSON(_ context.Context, req sharedllm.JSONRequest) (sharedllm.JSONResponse, error) {
+	f.called = true
+	f.req = req
+	return f.resp, f.err
 }
 
 func TestShouldFallbackToChat_NilError(t *testing.T) {

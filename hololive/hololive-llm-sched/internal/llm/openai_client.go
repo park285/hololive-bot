@@ -25,18 +25,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
-	"github.com/openai/openai-go/v3/responses"
-	"github.com/openai/openai-go/v3/shared"
 	"github.com/park285/shared-go/pkg/httputil"
-	json "github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/jsonutil"
+	sharedllm "github.com/park285/shared-go/pkg/llm"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -50,7 +44,7 @@ var (
 )
 
 type OpenAIClient struct {
-	client          openai.Client
+	generator       sharedllm.JSONGenerator
 	model           string
 	schemaName      string
 	temperature     *float64
@@ -75,12 +69,6 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		IdleConnTimeout:       constants.LLMHTTPTimeout.IdleConn,
 		DisableHTTP2:          true,
 	})
-	client := openai.NewClient(
-		option.WithBaseURL(baseURL),
-		option.WithAPIKey(apiKey),
-		option.WithHTTPClient(httpClient),
-	)
-
 	o := &Options{
 		SchemaName: "event_summary",
 	}
@@ -97,8 +85,19 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		webSearch = false
 	}
 
+	var generator sharedllm.JSONGenerator
+	generator, err := sharedllm.NewOpenAICompatibleJSONGenerator(sharedllm.OpenAICompatibleConfig{
+		BaseURL:                      baseURL,
+		APIKey:                       apiKey,
+		HTTPClient:                   httpClient,
+		AllowChatCompletionsFallback: true,
+	})
+	if err != nil {
+		generator = errorJSONGenerator{err: err}
+	}
+
 	return &OpenAIClient{
-		client:          client,
+		generator:       generator,
 		model:           model,
 		schemaName:      o.SchemaName,
 		temperature:     o.Temperature,
@@ -117,6 +116,17 @@ func (c *OpenAIClient) recordUsage(ctx context.Context, tokens int64) {
 		return
 	}
 	c.costTracker.RecordUsage(ctx, "openai", c.model, tokens)
+}
+
+type costTrackerUsageReporter struct {
+	tracker CostTracker
+}
+
+func (r costTrackerUsageReporter) RecordUsage(ctx context.Context, provider, model string, usage sharedllm.Usage) {
+	if r.tracker == nil || usage.TotalTokens <= 0 {
+		return
+	}
+	r.tracker.RecordUsage(ctx, provider, model, int64(usage.TotalTokens))
 }
 
 // chatCompletions=true이면 Chat Completions API, 아니면 Responses API를 사용합니다.
@@ -139,15 +149,28 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.started", "llm provider request started", attrs...)
 	started := time.Now()
 
-	var (
-		text errorString
-		err  error
-	)
-	if c.chatCompletions {
-		text.value, err = c.generateJSONChatCompletions(ctx, systemPrompt, userPrompt, schema)
-	} else {
-		text.value, err = c.generateJSON(ctx, systemPrompt, userPrompt, schema)
+	resp, err := sharedllm.RunJSON(ctx, c.generator, sharedllm.JSONRequest{
+		TaskName:        c.schemaName,
+		SystemPrompt:    systemPrompt,
+		UserPrompt:      userPrompt,
+		SchemaName:      c.schemaName,
+		Schema:          schema,
+		Model:           c.model,
+		Temperature:     c.temperature,
+		ReasoningEffort: c.reasoningEffort,
+		WebSearch:       c.webSearch,
+		ChatCompletions: c.chatCompletions,
+	}, "openai", costTrackerUsageReporter{tracker: c.costTracker})
+	if err != nil {
+		safeErr := safeLLMProviderError(err)
+		failedAttrs := append([]slog.Attr{}, attrs...)
+		failedAttrs = append(failedAttrs, sharedlog.SinceMS(started))
+		failedAttrs = append(failedAttrs, llmProviderErrorAttrs(err)...)
+		sharedlog.Error(ctx, c.logger, "llm.provider.request.failed", "llm provider request failed", failedAttrs...)
+		return "", safeErr
 	}
+
+	text, err := c.applyFallbackPostProcess(resp.Text, resp.FallbackUsed)
 	if err != nil {
 		safeErr := safeLLMProviderError(err)
 		failedAttrs := append([]slog.Attr{}, attrs...)
@@ -162,63 +185,7 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.succeeded", "llm provider request succeeded", successAttrs...)
 	sharedlog.Debug(ctx, c.logger, "llm.result.validated", "llm result validated", successAttrs...)
 
-	return text.value, nil
-}
-
-type errorString struct {
-	value string
-}
-
-func (c *OpenAIClient) generateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
-	text, usedFallback, err := c.generateJSONWithTransportFallback(ctx, systemPrompt, userPrompt, schema)
-	if err != nil {
-		return "", err
-	}
-
-	text, err = c.applyFallbackPostProcess(text, usedFallback)
-	if err != nil {
-		return "", err
-	}
-
 	return text, nil
-}
-
-func (c *OpenAIClient) generateJSONWithTransportFallback(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, bool, error) {
-	// 기본 경로: Responses API (web_search/tooling 지원)
-	text, err := c.generateJSONResponses(ctx, systemPrompt, userPrompt, schema)
-	if err == nil {
-		return text, false, nil
-	}
-
-	if !shouldFallbackToChat(err) {
-		return "", false, err
-	}
-
-	if ctx != nil && ctx.Err() != nil {
-		if c.logger != nil {
-			attrs := []slog.Attr{
-				slog.String("context_error", ctx.Err().Error()),
-				slog.String("model", c.model),
-			}
-			attrs = append(attrs, llmProviderErrorAttrs(err)...)
-			c.logger.LogAttrs(ctx, slog.LevelWarn, "responses API failed and context already done; skipping fallback", attrs...)
-		}
-		return "", false, err
-	}
-
-	// 조건부 fallback: Responses API 미지원/일시 오류 시 Chat Completions 재시도
-	if c.logger != nil {
-		attrs := []slog.Attr{slog.String("model", c.model)}
-		attrs = append(attrs, llmProviderErrorAttrs(err)...)
-		c.logger.LogAttrs(ctx, slog.LevelWarn, "responses API failed; conditional fallback to chat completions", attrs...)
-	}
-
-	fallbackText, fallbackErr := c.generateJSONChatCompletions(ctx, systemPrompt, userPrompt, schema)
-	if fallbackErr != nil {
-		return "", true, fmt.Errorf("responses failed (%w) and fallback failed: %w", err, fallbackErr)
-	}
-
-	return fallbackText, true, nil
 }
 
 func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) (string, error) {
@@ -241,96 +208,6 @@ func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) 
 	return sanitized, nil
 }
 
-// generateJSONResponses: Responses API + JSON Schema로 구조화 출력을 생성합니다.
-func (c *OpenAIClient) generateJSONResponses(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
-	params := responses.ResponseNewParams{
-		Model:        c.model,
-		Instructions: openai.String(systemPrompt),
-		Input: responses.ResponseNewParamsInputUnion{
-			OfString: openai.String(userPrompt),
-		},
-		Text: responses.ResponseTextConfigParam{
-			Format: responses.ResponseFormatTextConfigParamOfJSONSchema(c.schemaName, schema),
-		},
-	}
-	if c.webSearch {
-		params.Tools = []responses.ToolUnionParam{
-			responses.ToolParamOfWebSearch(responses.WebSearchToolTypeWebSearch),
-		}
-	}
-	if c.temperature != nil {
-		params.Temperature = openai.Float(*c.temperature)
-	}
-	if c.reasoningEffort != "" {
-		params.Reasoning = shared.ReasoningParam{
-			Effort: shared.ReasoningEffort(c.reasoningEffort),
-		}
-	}
-
-	resp, err := c.client.Responses.New(ctx, params)
-	if err != nil {
-		return "", fmt.Errorf("openai responses API: %w", err)
-	}
-
-	c.recordUsage(ctx, resp.Usage.TotalTokens)
-	return extractResponsesOutputText(resp)
-}
-
-func extractResponsesOutputText(resp *responses.Response) (string, error) {
-	return extractResponsesOutputTextWithDiagnostics(resp)
-}
-
-// generateJSONChatCompletions: Chat Completions API로 구조화 JSON 출력을 생성합니다.
-// system prompt에 JSON schema를 삽입하고, 응답에서 JSON을 추출합니다.
-func (c *OpenAIClient) generateJSONChatCompletions(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
-	schemaJSON, err := json.Marshal(schema)
-	if err != nil {
-		return "", fmt.Errorf("marshal schema: %w", err)
-	}
-
-	// system prompt에 JSON schema 지시 삽입 (cliproxy Structured() 패턴)
-	jsonSystemPrompt := fmt.Sprintf(`%s
-
-IMPORTANT: You MUST respond with ONLY a valid JSON object that follows this schema (no markdown, no explanation, just the JSON):
-%s
-
-Do not include any text before or after the JSON. Only output the JSON object.`, systemPrompt, string(schemaJSON))
-
-	params := openai.ChatCompletionNewParams{
-		Model: c.model,
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(jsonSystemPrompt),
-			openai.UserMessage(userPrompt),
-		},
-	}
-	if c.temperature != nil {
-		params.Temperature = openai.Float(*c.temperature)
-	}
-	if c.reasoningEffort != "" {
-		params.ReasoningEffort = shared.ReasoningEffort(c.reasoningEffort)
-	}
-
-	completion, err := c.client.Chat.Completions.New(ctx, params)
-	if err != nil {
-		return "", fmt.Errorf("openai chat completions API: %w", err)
-	}
-
-	c.recordUsage(ctx, completion.Usage.TotalTokens)
-
-	if len(completion.Choices) == 0 {
-		return "", fmt.Errorf("openai: chat completions 응답에 choices 없음")
-	}
-
-	text := completion.Choices[0].Message.Content
-	// 마크다운 펜스 제거 + JSON 추출
-	extracted, err := jsonutil.Extract(text)
-	if err != nil {
-		return "", fmt.Errorf("chat completions JSON extract failed: %w", err)
-	}
-
-	return string(extracted), nil
-}
-
 func shouldFallbackToChat(err error) bool {
 	return shouldFallbackToChatCompletions(err)
 }
@@ -351,4 +228,12 @@ func llmPromptSummaryAttrs(provider, model, systemPrompt, userPrompt string) []s
 		attrs = append(attrs, slog.String("prompt_sha256_8", hex.EncodeToString(sum[:8])))
 	}
 	return attrs
+}
+
+type errorJSONGenerator struct {
+	err error
+}
+
+func (g errorJSONGenerator) GenerateJSON(context.Context, sharedllm.JSONRequest) (sharedllm.JSONResponse, error) {
+	return sharedllm.JSONResponse{}, g.err
 }

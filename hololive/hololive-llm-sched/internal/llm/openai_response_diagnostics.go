@@ -49,6 +49,10 @@ func extractResponsesOutputTextWithDiagnostics(resp *responses.Response) (string
 	return "", fmt.Errorf("%w: %s", errOpenAIEmptyOutput, diagnostic)
 }
 
+func extractResponsesOutputText(resp *responses.Response) (string, error) {
+	return extractResponsesOutputTextWithDiagnostics(resp)
+}
+
 func describeResponsesOutput(resp *responses.Response) string {
 	if resp == nil {
 		return ""
