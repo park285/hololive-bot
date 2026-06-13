@@ -52,6 +52,7 @@ expect_eq "$(compose_service_resolve_redeploy_target youtube-producer-c)" "youtu
 expect_fail "redeploy target rejects removed dispatcher" compose_service_resolve_redeploy_target dispatcher-go
 
 expect_eq "$(compose_service_resolve_log_target bot)" "hololive-bot" "log alias bot"
+expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
 expect_eq "$(compose_service_resolve_log_target youtube-producer)" "youtube-producer" "log target youtube-producer"
 expect_eq "$(compose_service_resolve_log_target youtube-producer-c)" "youtube-producer-c" "log target youtube-producer-c (main-ap)"
 expect_fail "log target rejects removed producer shorthand" compose_service_resolve_log_target producer

@@ -67,6 +67,7 @@ compose_service_resolve_log_target() {
 
     case "${key}" in
         bot|hololive-bot) printf '%s\n' "hololive-bot" ;;
+        alarm-worker|hololive-alarm-worker) printf '%s\n' "hololive-alarm-worker" ;;
         youtube-producer) printf '%s\n' "youtube-producer" ;;
         youtube-producer-c) printf '%s\n' "youtube-producer-c" ;;
         llm|llm-scheduler) printf '%s\n' "llm-scheduler" ;;
@@ -75,5 +76,5 @@ compose_service_resolve_log_target() {
 }
 
 compose_service_log_targets_text() {
-    printf '%s\n' "bot hololive-bot youtube-producer youtube-producer-c llm llm-scheduler"
+    printf '%s\n' "bot hololive-bot alarm-worker hololive-alarm-worker youtube-producer youtube-producer-c llm llm-scheduler"
 }

@@ -33,6 +33,7 @@ x-security-hardening: &security-hardening
 
 x-app-service: &app-service
   <<: [*autoheal-service, *security-hardening]
+  restart: on-failure
 
 x-public-dns: &public-dns
   - 8.8.8.8
@@ -278,7 +279,7 @@ services:
 
   valkey-cache:
     <<: *db-service
-    image: valkey/valkey:9.0.2-alpine3.23
+    image: valkey/valkey:9.1.0-alpine3.23
     container_name: valkey-cache
     environment:
       CACHE_PASSWORD: ${CACHE_PASSWORD:?CACHE_PASSWORD is required}

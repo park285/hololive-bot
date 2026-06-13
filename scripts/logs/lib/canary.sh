@@ -41,8 +41,64 @@ cmd_prune() {
   echo "prune complete: backfill>${backfill_retention_days}d archive>${archive_retention_days}d aux>${aux_retention_days}d"
 }
 
+canary_log_file_for_service() {
+  local service="$1"
+
+  case "${service}" in
+    alarm-worker|hololive-alarm-worker)
+      printf '%s\n' "${REPO_ROOT}/logs/alarm-worker.log"
+      ;;
+    youtube-producer-c)
+      printf '%s\n' "${REPO_ROOT}/logs/youtube-producer-c.log"
+      ;;
+    youtube-producer)
+      printf '%s\n' "${REPO_ROOT}/logs/youtube-producer.log"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+canary_since_cutoff() {
+  local since="$1"
+  local value=""
+  local unit=""
+
+  if [[ "${since}" =~ ^([0-9]+)([smhd])$ ]]; then
+    value="${BASH_REMATCH[1]}"
+    unit="${BASH_REMATCH[2]}"
+    case "${unit}" in
+      s) unit="seconds" ;;
+      m) unit="minutes" ;;
+      h) unit="hours" ;;
+      d) unit="days" ;;
+    esac
+    date -d "-${value} ${unit}" '+%Y-%m-%dT%H:%M:%S%:z' 2>/dev/null || true
+  fi
+}
+
+canary_file_query_output() {
+  local service="$1"
+  local since="$2"
+  local limit="$3"
+  local grep_pattern="$4"
+  local log_file=""
+  local cutoff=""
+
+  log_file="$(canary_log_file_for_service "${service}" 2>/dev/null || true)"
+  [[ -n "${log_file}" && -r "${log_file}" ]] || return 0
+
+  cutoff="$(canary_since_cutoff "${since}")"
+  if [[ -n "${cutoff}" ]]; then
+    awk -v cutoff="${cutoff}" '$1 >= cutoff { print }' "${log_file}" | tail -n "${limit}" | grep -E -- "${grep_pattern}" || true
+  else
+    tail -n "${limit}" "${log_file}" | grep -E -- "${grep_pattern}" || true
+  fi
+}
+
 cmd_canary() {
-  local service="youtube-producer"
+  local service="alarm-worker"
   local since="30m"
   local limit="5000"
   local warn_failure_rate="0.10"
@@ -95,12 +151,17 @@ cmd_canary() {
     esac
   done
 
+  local grep_pattern="Outbox per-room (enqueue completed|dispatch completed)"
+
   raw_logs="$(compose_query_output \
     "${service}" \
     "${since}" \
     "${limit}" \
-    "Outbox per-room (enqueue completed|dispatch completed)" \
+    "${grep_pattern}" \
     "true")"
+  if [[ -z "${raw_logs}" ]]; then
+    raw_logs="$(canary_file_query_output "${service}" "${since}" "${limit}" "${grep_pattern}")"
+  fi
 
   if [[ -z "${raw_logs}" ]]; then
     echo "NO_DATA: no per-room logs found (service=${service}, since=${since})"
@@ -196,7 +257,7 @@ cmd_canary_cron() {
   local since="${OUTBOX_CANARY_SINCE:-30m}"
   local limit="${OUTBOX_CANARY_LIMIT:-5000}"
   local warn_failure_rate="${OUTBOX_CANARY_WARN_FAILURE_RATE:-0.10}"
-  local service="${OUTBOX_CANARY_SERVICE:-youtube-producer}"
+  local service="${OUTBOX_CANARY_SERVICE:-alarm-worker}"
   local max_aggregate_failures="${OUTBOX_CANARY_MAX_AGGREGATE_FAILURES:-0}"
   local max_enqueue_failures="${OUTBOX_CANARY_MAX_ENQUEUE_FAILURES:-0}"
   local min_delivery_claimed="${OUTBOX_CANARY_MIN_DELIVERY_CLAIMED:-10}"
@@ -236,4 +297,3 @@ cmd_canary_cron() {
 
   return "${exit_code}"
 }
-

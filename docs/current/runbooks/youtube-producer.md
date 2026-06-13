@@ -84,17 +84,17 @@ Active-active `/ready` fails closed on startup until a lightweight Valkey JobRun
 
 `/ready` is readiness state, not recent activity telemetry. Use the `youtube_poller_job_*` metrics above to confirm recent `acquired`, `peer_owned`, `already_completed`, renew, mark-completed, and release activity.
 
-`/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
+`/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. Producer metrics are served from the plain HTTP metrics listener on `:30095`, separate from the H3 app port. AP metrics are published on the host Tailscale IP only (`youtube-producer-a` `100.100.1.7:30095`, `youtube-producer-b` `100.100.1.5:30095`) so central Prometheus can scrape them with the shared API key header. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
 
 ```bash
 # Osaka a host
-docker exec hololive-youtube-producer-a ./bin/healthcheck --body-api-key-env API_SECRET_KEY https://127.0.0.1:30005/metrics
+docker exec hololive-youtube-producer-a ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30095/metrics
 
 # Seoul b host
-docker exec hololive-youtube-producer-b ./bin/healthcheck --body-api-key-env API_SECRET_KEY https://127.0.0.1:30015/metrics
+docker exec hololive-youtube-producer-b ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30095/metrics
 
 # Main c host
-docker exec hololive-youtube-producer-c ./bin/healthcheck --body-api-key-env API_SECRET_KEY https://127.0.0.1:30025/metrics
+docker exec hololive-youtube-producer-c ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30095/metrics
 ```
 
 For `goscrapy` canary, compare `youtube-producer-b` before and after the scoped change:
@@ -105,6 +105,8 @@ hololive_youtube_scraper_fetch_requests_total{engine="goscrapy",outcome="success
 hololive_youtube_scraper_fetch_requests_total{engine="goscrapy",outcome="error",...}
 hololive_youtube_scraper_fetch_fallback_total{from_engine="goscrapy",to_engine="nethttp",...}
 ```
+
+Use `youtube-producer-a` and `youtube-producer-c` as the `nethttp` baseline and `youtube-producer-b` as the `goscrapy` canary unless a rollout explicitly changes the per-instance `YOUTUBE_PRODUCER_*_FETCHER_ENGINE` values.
 
 Rollback restores `YOUTUBE_PRODUCER_B_FETCHER_ENGINE=nethttp`, rerenders the AP env, and redeploys only `youtube-producer-b`.
 

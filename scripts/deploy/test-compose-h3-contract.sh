@@ -118,6 +118,22 @@ def h3_addr_aligned(svc, port):
     return (svc.get("environment") or {}).get("HOLOLIVE_H3_ADDR") == f":{port}"
 
 
+def metrics_addr_aligned(svc):
+    return (svc.get("environment") or {}).get("HOLOLIVE_METRICS_ADDR") == ":30095"
+
+
+def has_tcp_published(svc, target_port, published_port, host_ip=None):
+    for p in svc.get("ports") or []:
+        if (
+            str(p.get("target")) == str(target_port)
+            and str(p.get("published")) == str(published_port)
+            and p.get("protocol", "tcp") == "tcp"
+            and (host_ip is None or p.get("host_ip") == host_ip)
+        ):
+            return True
+    return False
+
+
 pc = ap.get("youtube-producer-c")
 check("youtube-producer-c present in main-ap render", pc is not None)
 if pc is not None:
@@ -127,6 +143,8 @@ if pc is not None:
     )
     check("youtube-producer-c publishes 30025/udp", has_udp_published(pc, 30025))
     check("youtube-producer-c HOLOLIVE_H3_ADDR is :30025", h3_addr_aligned(pc, 30025))
+    check("youtube-producer-c HOLOLIVE_METRICS_ADDR is :30095", metrics_addr_aligned(pc))
+    check("youtube-producer-c publishes metrics on 30095/tcp", has_tcp_published(pc, 30095, 30095))
 
 
 def has_bind_target(svc, target):
@@ -134,11 +152,11 @@ def has_bind_target(svc, target):
 
 
 AP_PRODUCERS = (
-    ("OSAKA_RENDER", "youtube-producer-a", 30005),
-    ("SEOUL_RENDER", "youtube-producer-b", 30015),
+    ("OSAKA_RENDER", "youtube-producer-a", 30005, "100.100.1.7"),
+    ("SEOUL_RENDER", "youtube-producer-b", 30015, "100.100.1.5"),
 )
 
-for render_env, name, port in AP_PRODUCERS:
+for render_env, name, port, metrics_host_ip in AP_PRODUCERS:
     services = json.loads(os.environ[render_env])["services"]
     svc = services.get(name)
     check(f"{name} present in {render_env}", svc is not None)
@@ -148,6 +166,11 @@ for render_env, name, port in AP_PRODUCERS:
     check(f"{name} healthcheck is {url}", healthcheck_url(svc) == url)
     check(f"{name} publishes {port}/udp", has_udp_published(svc, port))
     check(f"{name} HOLOLIVE_H3_ADDR is :{port}", h3_addr_aligned(svc, port))
+    check(f"{name} HOLOLIVE_METRICS_ADDR is :30095", metrics_addr_aligned(svc))
+    check(
+        f"{name} publishes metrics on {metrics_host_ip}:30095/tcp",
+        has_tcp_published(svc, 30095, 30095, metrics_host_ip),
+    )
     for cert_path in (
         "/run/hololive-bot/certs/hololive-h3.crt",
         "/run/hololive-bot/certs/hololive-h3.key",

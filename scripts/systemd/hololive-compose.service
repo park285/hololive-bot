@@ -1,0 +1,16 @@
+[Unit]
+Description=hololive-bot Docker Compose stack
+After=docker.service tailscaled.service network-online.target openbao-agent-hololive-bot.service
+Requires=docker.service openbao-agent-hololive-bot.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/kapu/work/iris-stack/hololive-bot
+ExecStart=/usr/local/sbin/hololive-compose-up
+ExecStop=/bin/sh -c 'COMPOSE_ENV_FILE=/run/hololive-bot/compose.env /home/kapu/work/iris-stack/hololive-bot/scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.live-compat.yml down'
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
