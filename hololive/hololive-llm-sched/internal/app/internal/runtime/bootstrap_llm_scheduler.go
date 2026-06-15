@@ -245,7 +245,6 @@ func buildLLMSchedulerComponents(
 	return newLLMSchedulerRuntime(
 		schedulerConfig,
 		logger,
-		deliveryModule,
 		majorEventScheduler,
 		majorEventMonthlyScheduler,
 		majorEventScraperScheduler,
@@ -258,7 +257,6 @@ func buildLLMSchedulerComponents(
 func newLLMSchedulerRuntime(
 	schedulerConfig *config.LLMSchedulerConfig,
 	logger *slog.Logger,
-	deliveryModule *DeliveryModule,
 	majorEventScheduler *mescheduler.Scheduler,
 	majorEventMonthlyScheduler *mescheduler.MonthlyScheduler,
 	majorEventScraperScheduler *mescraper.RuntimeScheduler,

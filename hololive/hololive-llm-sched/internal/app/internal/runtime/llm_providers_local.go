@@ -102,12 +102,35 @@ func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig config
 	return client
 }
 
-// consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
-func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
-	if !llmConfig.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
+// consensusClientSpec는 reviewer/adjudicator client 빌더가 함수별로 달라지는 축(enabled
+// 결정, model fallback 결과, incomplete 경고 문구, NewClient 옵션, 성공 로그)만 주입받는다.
+// guard·completeness·NewClient boilerplate는 buildConsensusLLMClient가 처리한다.
+type consensusClientSpec struct {
+	enabled        bool
+	model          string
+	incompleteWarn string
+	options        []llm.Option
+	onSuccess      func(model string)
+}
+
+func buildConsensusLLMClient(cliproxy config.CliproxyConfig, logger *slog.Logger, spec consensusClientSpec) llm.Client {
+	if !spec.enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
+		return nil
+	}
+	if cliproxy.BaseURL == "" || spec.model == "" {
+		logger.Warn(spec.incompleteWarn)
 		return nil
 	}
 
+	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, spec.model, logger, spec.options...)
+	if spec.onSuccess != nil {
+		spec.onSuccess(spec.model)
+	}
+	return client
+}
+
+// consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
+func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	model := llmConfig.MemberNews.ReviewerModel
 	if model == "" {
 		model = llmConfig.MemberNewsModel
@@ -115,83 +138,71 @@ func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig c
 	if model == "" {
 		model = cliproxy.Model
 	}
-	if cliproxy.BaseURL == "" || model == "" {
-		logger.Warn("Consensus reviewer LLM configuration incomplete, skipping")
-		return nil
-	}
 
-	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger,
-		llm.WithSchemaName("member_news_review"),
-		llm.WithTemperature(0.1),
-		llm.WithWebSearch(false),
-		llm.WithChatCompletions(),
-		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
-		llm.WithCostTracker(tracker),
-	)
-	logger.Info("Consensus reviewer LLM enabled", slog.String("model", model))
-	return client
+	return buildConsensusLLMClient(cliproxy, logger, consensusClientSpec{
+		enabled:        llmConfig.MemberNews.Enabled,
+		model:          model,
+		incompleteWarn: "Consensus reviewer LLM configuration incomplete, skipping",
+		options: []llm.Option{
+			llm.WithSchemaName("member_news_review"),
+			llm.WithTemperature(0.1),
+			llm.WithWebSearch(false),
+			llm.WithChatCompletions(),
+			llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+			llm.WithCostTracker(tracker),
+		},
+		onSuccess: func(m string) {
+			logger.Info("Consensus reviewer LLM enabled", slog.String("model", m))
+		},
+	})
 }
 
 func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
-	if !llmConfig.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
-		return nil
-	}
-
 	model := llmConfig.MajorEvent.ReviewerModel
 	if model == "" {
 		model = cliproxy.Model
 	}
-	if cliproxy.BaseURL == "" || model == "" {
-		logger.Warn("Major event consensus reviewer LLM configuration incomplete, skipping")
-		return nil
-	}
 
-	return llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger,
-		llm.WithSchemaName("event_summary_review"),
-		llm.WithWebSearch(false),
-		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
-		llm.WithCostTracker(tracker),
-	)
+	return buildConsensusLLMClient(cliproxy, logger, consensusClientSpec{
+		enabled:        llmConfig.MajorEvent.Enabled,
+		model:          model,
+		incompleteWarn: "Major event consensus reviewer LLM configuration incomplete, skipping",
+		options: []llm.Option{
+			llm.WithSchemaName("event_summary_review"),
+			llm.WithWebSearch(false),
+			llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+			llm.WithCostTracker(tracker),
+		},
+	})
 }
 
 func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
-	if !llmConfig.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
-		return nil
-	}
-
 	model := llmConfig.MajorEvent.AdjudicatorModel
 	if model == "" {
 		model = cliproxy.Model
 	}
-	if cliproxy.BaseURL == "" || model == "" {
-		logger.Warn("Major event consensus adjudicator LLM configuration incomplete, skipping")
-		return nil
-	}
 
-	return llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger,
-		llm.WithSchemaName("event_summary"),
-		llm.WithWebSearch(false),
-		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
-		llm.WithCostTracker(tracker),
-	)
+	return buildConsensusLLMClient(cliproxy, logger, consensusClientSpec{
+		enabled:        llmConfig.MajorEvent.Enabled,
+		model:          model,
+		incompleteWarn: "Major event consensus adjudicator LLM configuration incomplete, skipping",
+		options: []llm.Option{
+			llm.WithSchemaName("event_summary"),
+			llm.WithWebSearch(false),
+			llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+			llm.WithCostTracker(tracker),
+		},
+	})
 }
 
 // consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
 func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
-	if !llmConfig.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
-		return nil
-	}
-
 	model := llmConfig.MemberNews.AdjudicatorModel
 	if model == "" {
 		model = llmConfig.MemberNewsModel
 	}
 	if model == "" {
 		model = cliproxy.Model
-	}
-	if cliproxy.BaseURL == "" || model == "" {
-		logger.Warn("Consensus adjudicator LLM configuration incomplete, skipping")
-		return nil
 	}
 
 	opts := []llm.Option{
@@ -205,7 +216,13 @@ func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfi
 		opts = append(opts, llm.WithTemperature(llmConfig.MemberNewsTemperature))
 	}
 
-	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger, opts...)
-	logger.Info("Consensus adjudicator LLM enabled", slog.String("model", model))
-	return client
+	return buildConsensusLLMClient(cliproxy, logger, consensusClientSpec{
+		enabled:        llmConfig.MemberNews.Enabled,
+		model:          model,
+		incompleteWarn: "Consensus adjudicator LLM configuration incomplete, skipping",
+		options:        opts,
+		onSuccess: func(m string) {
+			logger.Info("Consensus adjudicator LLM enabled", slog.String("model", m))
+		},
+	})
 }

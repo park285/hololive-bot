@@ -196,7 +196,7 @@ func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) 
 		return text, nil
 	}
 
-	sanitized, err := suppressDiscoveredEvents(text)
+	sanitized, err := suppressFallbackDiscoveredEvents(text)
 	if err != nil {
 		if c.logger != nil {
 			c.logger.Warn("failed to sanitize discovered_events on fallback",
@@ -206,14 +206,6 @@ func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) 
 	}
 
 	return sanitized, nil
-}
-
-func shouldFallbackToChat(err error) bool {
-	return shouldFallbackToChatCompletions(err)
-}
-
-func suppressDiscoveredEvents(rawJSON string) (string, error) {
-	return suppressFallbackDiscoveredEvents(rawJSON)
 }
 
 func llmPromptSummaryAttrs(provider, model, systemPrompt, userPrompt string) []slog.Attr {

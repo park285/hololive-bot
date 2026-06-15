@@ -351,7 +351,7 @@ func (f *fakeJSONGenerator) GenerateJSON(_ context.Context, req sharedllm.JSONRe
 }
 
 func TestShouldFallbackToChat_NilError(t *testing.T) {
-	if shouldFallbackToChat(nil) {
+	if shouldFallbackToChatCompletions(nil) {
 		t.Error("nil error should not trigger fallback")
 	}
 }
@@ -401,8 +401,8 @@ func TestShouldFallbackToChat_OpenAIStatusAndCode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := shouldFallbackToChat(tt.err); got != tt.want {
-				t.Fatalf("shouldFallbackToChat() = %v, want %v (err=%v)", got, tt.want, tt.err)
+			if got := shouldFallbackToChatCompletions(tt.err); got != tt.want {
+				t.Fatalf("shouldFallbackToChatCompletions() = %v, want %v (err=%v)", got, tt.want, tt.err)
 			}
 		})
 	}
@@ -410,7 +410,7 @@ func TestShouldFallbackToChat_OpenAIStatusAndCode(t *testing.T) {
 
 func TestShouldFallbackToChat_ContextCanceled_NoFallback(t *testing.T) {
 	err := fmt.Errorf("openai responses API: %w", context.Canceled)
-	if shouldFallbackToChat(err) {
+	if shouldFallbackToChatCompletions(err) {
 		t.Fatal("context canceled should not fallback")
 	}
 }
@@ -421,14 +421,14 @@ func TestShouldFallbackToChat_HTTPClientDeadlineExceeded_Fallback(t *testing.T) 
 		URL: "https://example.com/v1/responses",
 		Err: context.DeadlineExceeded,
 	})
-	if !shouldFallbackToChat(err) {
+	if !shouldFallbackToChatCompletions(err) {
 		t.Fatal("http client deadline exceeded should fallback")
 	}
 }
 
 func TestShouldFallbackToChat_EmptyResponsesOutput(t *testing.T) {
 	err := fmt.Errorf("openai responses API: %w", errOpenAIEmptyOutput)
-	if !shouldFallbackToChat(err) {
+	if !shouldFallbackToChatCompletions(err) {
 		t.Fatal("empty responses output should fallback")
 	}
 }
@@ -439,7 +439,7 @@ func TestShouldFallbackToChat_NetworkErrors(t *testing.T) {
 		URL: "https://example.com/v1/responses",
 		Err: &net.DNSError{IsTimeout: true},
 	})
-	if !shouldFallbackToChat(timeoutErr) {
+	if !shouldFallbackToChatCompletions(timeoutErr) {
 		t.Fatal("timeout network error should fallback")
 	}
 
@@ -448,7 +448,7 @@ func TestShouldFallbackToChat_NetworkErrors(t *testing.T) {
 		Net: "tcp",
 		Err: syscall.ECONNREFUSED,
 	})
-	if !shouldFallbackToChat(connRefusedErr) {
+	if !shouldFallbackToChatCompletions(connRefusedErr) {
 		t.Fatal("connection refused error should fallback")
 	}
 
@@ -457,7 +457,7 @@ func TestShouldFallbackToChat_NetworkErrors(t *testing.T) {
 		URL: "https://example.com/v1/responses",
 		Err: errors.New("tls handshake failed"),
 	})
-	if shouldFallbackToChat(nonRetryableNetErr) {
+	if shouldFallbackToChatCompletions(nonRetryableNetErr) {
 		t.Fatal("non-timeout/non-conn-refused network error should not fallback")
 	}
 }
@@ -541,21 +541,21 @@ func TestSafeLLMProviderError_RedactsEmptyOutputDiagnostics(t *testing.T) {
 func TestSuppressDiscoveredEvents_NoField(t *testing.T) {
 	raw := `{"summary":"ok","items":[1,2,3]}`
 
-	sanitized, err := suppressDiscoveredEvents(raw)
+	sanitized, err := suppressFallbackDiscoveredEvents(raw)
 	if err != nil {
-		t.Fatalf("suppressDiscoveredEvents() error = %v", err)
+		t.Fatalf("suppressFallbackDiscoveredEvents() error = %v", err)
 	}
 	if sanitized != raw {
-		t.Fatalf("suppressDiscoveredEvents() = %q, want original %q", sanitized, raw)
+		t.Fatalf("suppressFallbackDiscoveredEvents() = %q, want original %q", sanitized, raw)
 	}
 }
 
 func TestSuppressDiscoveredEvents_WithField(t *testing.T) {
 	raw := `{"summary":"ok","discovered_events":[{"id":"a"}]}`
 
-	sanitized, err := suppressDiscoveredEvents(raw)
+	sanitized, err := suppressFallbackDiscoveredEvents(raw)
 	if err != nil {
-		t.Fatalf("suppressDiscoveredEvents() error = %v", err)
+		t.Fatalf("suppressFallbackDiscoveredEvents() error = %v", err)
 	}
 
 	var payload map[string]any
@@ -577,7 +577,7 @@ func TestSuppressDiscoveredEvents_WithField(t *testing.T) {
 }
 
 func TestSuppressDiscoveredEvents_InvalidJSON(t *testing.T) {
-	_, err := suppressDiscoveredEvents(`{"summary":`)
+	_, err := suppressFallbackDiscoveredEvents(`{"summary":`)
 	if err == nil {
 		t.Fatal("invalid json should return error")
 	}
