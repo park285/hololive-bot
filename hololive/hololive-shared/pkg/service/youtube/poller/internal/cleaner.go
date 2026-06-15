@@ -84,29 +84,3 @@ func (c *ViewerSampleCleaner) Cleanup(ctx context.Context) (int64, error) {
 
 	return rowsAffected, nil
 }
-
-func (c *ViewerSampleCleaner) CleanupOldSessions(ctx context.Context, retentionDays int) (int64, error) {
-	if c.db == nil {
-		return 0, fmt.Errorf("viewer sample cleaner db is nil")
-	}
-	cutoff := time.Now().AddDate(0, 0, -retentionDays)
-
-	tag, err := c.db.Exec(ctx, `
-		DELETE FROM youtube_live_sessions
-		WHERE status = $1 AND ended_at < $2`,
-		domain.LiveStatusEnded,
-		cutoff,
-	)
-	if err != nil {
-		return 0, err
-	}
-	rowsAffected := tag.RowsAffected()
-
-	if rowsAffected > 0 {
-		slog.Info("Cleaned up old live sessions",
-			"deleted", rowsAffected,
-			"retention_days", retentionDays)
-	}
-
-	return rowsAffected, nil
-}

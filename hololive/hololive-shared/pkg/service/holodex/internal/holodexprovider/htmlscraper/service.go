@@ -258,7 +258,3 @@ func (s *Service) GetPopularVideos(ctx context.Context, channelID string, maxRes
 	s.logger.Debug("Popular videos fetched via scraper", slog.String("channel", channelID), slog.Int("count", len(videos)))
 	return videos, nil
 }
-
-func NewTestService(cacheClient cache.StreamCache, membersData domain.MemberDataProvider, logger *slog.Logger) *Service {
-	return NewServiceWithYouTubeProducer(cacheClient, membersData, nil, logger)
-}

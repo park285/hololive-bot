@@ -70,8 +70,8 @@ var dbSeq atomic.Uint64
 //
 // manifest 전체가 빈 DB에서 재생되는 이유: 006-base-runtime-tables.sql이 레거시
 // 초기 DB 생성 경로의 base 테이블(members, alarms 등)을 manifest 최초 단계에서
-// 멱등 복원한다. 따라서 과거의 base-schema gap이 사라졌고 별도 filter 없이 전체 chain을
-// 그대로 적용한다(targeted 테스트는 여전히 WithMigrationFilter로 부분 적용 가능).
+// 멱등 복원한다. 따라서 과거의 base-schema gap이 사라졌고 manifest 전체 chain을
+// 그대로 적용한다.
 //
 // per-schema가 아닌 per-database 격리를 쓰는 이유: prod migration 다수가 idempotent guard로
 // information_schema를 table_schema 한정 없이 조회한다(예: 037이 acl_rooms.list_type 존재 여부를

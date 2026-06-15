@@ -210,11 +210,3 @@ func (ps *PhotoSyncService) hasPhotoForChannel(channelID string, exists bool, ph
 	)
 	return false
 }
-
-func (ps *PhotoSyncService) SetSyncInterval(d time.Duration) {
-	ps.syncInterval = d
-}
-
-func (ps *PhotoSyncService) SetStaleThreshold(d time.Duration) {
-	ps.staleThreshold = d
-}

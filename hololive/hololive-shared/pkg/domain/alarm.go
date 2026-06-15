@@ -147,16 +147,6 @@ func (a *Alarm) RegistryKey() string {
 	return a.RoomID
 }
 
-func NewAlarm(roomID, userID, channelID, memberName string) *Alarm {
-	return &Alarm{
-		RoomID:     roomID,
-		UserID:     userID,
-		ChannelID:  channelID,
-		MemberName: memberName,
-		CreatedAt:  time.Now(),
-	}
-}
-
 type AlarmNotification struct {
 	AlarmType                   AlarmType `json:"alarm_type,omitempty"`
 	RoomID                      string    `json:"room_id"`

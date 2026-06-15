@@ -193,7 +193,7 @@ func buildChzzkLiveStream(
 		title = strings.TrimSpace(status.LiveTitle)
 	}
 
-	startAt := chzzkStartedAtOrFallback(status, detectedAt, title)
+	startAt := chzzkStartedAtOrFallback(status, detectedAt)
 	streamIdentity := chzzkStableLiveIdentity(chzzkChannelID, status, startAt, title)
 	streamID := fmt.Sprintf("chzzk:%s", streamIdentity)
 
@@ -245,7 +245,7 @@ func chzzkStableLiveIdentity(chzzkChannelID string, status *chzzk.LiveStatusCont
 	return fmt.Sprintf("%s:fallback:%x", chzzkChannelID, sum[:8])
 }
 
-func chzzkStartedAtOrFallback(status *chzzk.LiveStatusContent, detectedAt time.Time, title string) time.Time {
+func chzzkStartedAtOrFallback(status *chzzk.LiveStatusContent, detectedAt time.Time) time.Time {
 	for _, field := range []string{"StartedAt", "StartAt", "LiveOpenDate", "OpenDate", "LiveStartAt", "ScheduledStartAt"} {
 		if value := reflectTimeField(status, field); !value.IsZero() {
 			return value.UTC().Truncate(time.Minute)

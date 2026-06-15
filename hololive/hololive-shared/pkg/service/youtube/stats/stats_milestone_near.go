@@ -110,48 +110,6 @@ func (r *StatsRepository) CountNearMilestoneMembers(ctx context.Context, thresho
 	return count, nil
 }
 
-// allowedChannelIDs는 더 이상 사용하지 않고 DB JOIN으로 처리함
-func (r *StatsRepository) GetClosestMilestoneMembers(ctx context.Context, limit int, milestones []uint64) ([]NearMilestoneEntry, error) {
-	if len(milestones) == 0 {
-		return nil, nil
-	}
-
-	query := latestActiveStatsMilestoneCTE + `
-		,
-		next_milestones AS (
-            SELECT 
-                ls.channel_id,
-                ls.member_name,
-                ls.subscribers,
-                MIN(m.milestone) as next_milestone
-            FROM latest_stats ls
-            CROSS JOIN milestones m
-            WHERE ls.subscribers < m.milestone
-            GROUP BY ls.channel_id, ls.member_name, ls.subscribers
-        )
-		SELECT 
-			nm.channel_id,
-			nm.member_name,
-			nm.subscribers as current_subs,
-			nm.next_milestone,
-			nm.next_milestone - nm.subscribers as remaining,
-			ROUND(100.0 * nm.subscribers / nm.next_milestone, 2) as progress_pct
-		FROM next_milestones nm
-        LEFT JOIN youtube_milestones ym ON nm.channel_id = ym.channel_id AND nm.next_milestone = ym.value
-        WHERE ym.channel_id IS NULL
-		ORDER BY progress_pct DESC
-		LIMIT $2
-	`
-
-	rows, err := r.pool.Query(ctx, query, milestones, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query closest milestone members: %w", err)
-	}
-	defer rows.Close()
-
-	return scanNearMilestoneEntries(rows, r.logger, "Failed to scan closest milestone entry")
-}
-
 func scanNearMilestoneEntries(rows pgx.Rows, logger *slog.Logger, warnMessage string) ([]NearMilestoneEntry, error) {
 	var entries []NearMilestoneEntry
 	for rows.Next() {

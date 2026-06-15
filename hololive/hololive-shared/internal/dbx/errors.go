@@ -41,18 +41,6 @@ func IsDuplicateKey(err error) bool {
 		strings.Contains(msg, "duplicate key value violates unique constraint")
 }
 
-func IsForeignKeyViolation(err error) bool {
-	return hasPGCode(err, pgerrcode.ForeignKeyViolation)
-}
-
-func IsCheckViolation(err error) bool {
-	return hasPGCode(err, pgerrcode.CheckViolation)
-}
-
-func IsNotNullViolation(err error) bool {
-	return hasPGCode(err, pgerrcode.NotNullViolation)
-}
-
 // hasPGCode: PostgreSQL 에러 코드 확인
 func hasPGCode(err error, code string) bool {
 	if err == nil {
@@ -63,18 +51,6 @@ func hasPGCode(err error, code string) bool {
 		return pgErr.Code == code
 	}
 	return false
-}
-
-// 에러가 *pgconn.PgError가 아니면 nil 반환
-func PGError(err error) *pgconn.PgError {
-	if err == nil {
-		return nil
-	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return pgErr
-	}
-	return nil
 }
 
 func IsDNSError(err error) bool {

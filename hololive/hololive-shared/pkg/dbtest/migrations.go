@@ -48,43 +48,13 @@ const (
 	migrationsDirEnv = "HOLOLIVE_MIGRATIONS_DIR"
 )
 
-// MigrationFilter는 적용할 migration 파일을 선별한다.
-// 파일명(예: "037_acl_blacklist_mode.sql")을 받아 false를 반환하면 해당 파일을 건너뛴다.
-// nil이면 manifest의 모든 파일을 적용한다.
-type MigrationFilter func(filename string) bool
-
-// applyOptions는 ApplyMigrations의 동작을 조정한다.
-type applyOptions struct {
-	dir    string
-	filter MigrationFilter
-}
-
-// ApplyOption은 ApplyMigrations 동작을 조정하는 함수형 옵션이다.
-type ApplyOption func(*applyOptions)
-
-// WithMigrationsDir는 migration 디렉터리를 명시적으로 지정한다(자동 탐색·env override 우선).
-func WithMigrationsDir(dir string) ApplyOption {
-	return func(o *applyOptions) {
-		o.dir = dir
-	}
-}
-
-// WithMigrationFilter는 적용할 migration 파일을 선별하는 필터를 설정한다.
-func WithMigrationFilter(filter MigrationFilter) ApplyOption {
-	return func(o *applyOptions) {
-		o.filter = filter
-	}
-}
-
 // ApplyMigrations는 manifest.txt 순서대로 prod migration SQL을 pool이 가리키는
 // (search_path 설정된) 스키마에 적용한다.
 //
-// 디렉터리 탐색 우선순위: WithMigrationsDir 옵션 → HOLOLIVE_MIGRATIONS_DIR env →
-// CWD에서 위로 build-all.sh 마커를 찾아 migrationsRelDir append.
-func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, opts ...ApplyOption) error {
-	options := buildApplyOptions(opts)
-
-	dir, err := resolveMigrationsDir(options.dir)
+// 디렉터리 탐색 우선순위: HOLOLIVE_MIGRATIONS_DIR env → CWD에서 위로 build-all.sh
+// 마커를 찾아 migrationsRelDir append.
+func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+	dir, err := resolveMigrationsDir()
 	if err != nil {
 		return fmt.Errorf("apply migrations: resolve dir: %w", err)
 	}
@@ -95,29 +65,12 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, opts ...ApplyOptio
 	}
 
 	for _, filename := range entries {
-		if !options.shouldApply(filename) {
-			continue
-		}
-
 		if err := applyMigrationFile(ctx, pool, filepath.Join(dir, filename), filename); err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-func buildApplyOptions(opts []ApplyOption) *applyOptions {
-	options := &applyOptions{}
-	for _, opt := range opts {
-		opt(options)
-	}
-	return options
-}
-
-// shouldApply는 filter가 nil이거나 filter가 통과시킨 파일이면 true다.
-func (o *applyOptions) shouldApply(filename string) bool {
-	return o.filter == nil || o.filter(filename)
 }
 
 // applyMigrationFile은 단일 migration 파일을 읽어 statement 단위로 적용한다.
@@ -142,11 +95,7 @@ func applyMigrationFile(ctx context.Context, pool *pgxpool.Pool, path, filename 
 }
 
 // resolveMigrationsDir는 migration 디렉터리 절대 경로를 결정한다.
-func resolveMigrationsDir(explicit string) (string, error) {
-	if explicit != "" {
-		return explicit, nil
-	}
-
+func resolveMigrationsDir() (string, error) {
 	if env := strings.TrimSpace(os.Getenv(migrationsDirEnv)); env != "" {
 		return env, nil
 	}

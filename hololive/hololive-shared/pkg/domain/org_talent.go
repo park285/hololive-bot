@@ -39,8 +39,7 @@ type OfficialTalent struct {
 }
 
 type Talents struct {
-	Talents   []*OfficialTalent
-	byEnglish map[string]*OfficialTalent
+	Talents []*OfficialTalent
 }
 
 //go:embed internal/model/data/official_talents.json
@@ -52,25 +51,9 @@ func LoadTalents() (*Talents, error) {
 		return nil, fmt.Errorf("failed to unmarshal talents data: %w", err)
 	}
 
-	index := make(map[string]*OfficialTalent, len(talents))
-	for _, talent := range talents {
-		if talent == nil {
-			continue
-		}
-		index[stringutil.Normalize(talent.English)] = talent
-	}
-
 	return &Talents{
-		Talents:   talents,
-		byEnglish: index,
+		Talents: talents,
 	}, nil
-}
-
-func (ot *Talents) FindByEnglish(name string) *OfficialTalent {
-	if ot == nil {
-		return nil
-	}
-	return ot.byEnglish[stringutil.Normalize(name)]
 }
 
 func (ot *OfficialTalent) Slug() string {

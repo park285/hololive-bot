@@ -6,7 +6,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -247,8 +246,4 @@ func (r *PgxRepository) ListSourcePostsWithinObservationWindow(ctx context.Conte
 
 func (r *PgxRepository) EnrichObservationPostComparisonInputs(ctx context.Context, inputs []ObservationPostComparisonInput) ([]ObservationPostComparisonInput, error) {
 	return r.compareMetadata.EnrichObservationPostComparisonInputs(ctx, inputs)
-}
-
-func NewRepositoryFromPool(pool *pgxpool.Pool) *PgxRepository {
-	return NewRepository(pool)
 }

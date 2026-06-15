@@ -108,16 +108,6 @@ func (e *MajorEvent) HasEventDates() bool {
 	return e.EventStartDate != nil || len(e.EventDates) > 0
 }
 
-func (e *MajorEvent) GetEventStartDate() *time.Time {
-	if e.EventStartDate != nil {
-		return e.EventStartDate
-	}
-	if len(e.EventDates) > 0 {
-		return &e.EventDates[0]
-	}
-	return nil
-}
-
 func (e *MajorEvent) SetEventDatesFromParsed() {
 	if len(e.EventDates) == 0 {
 		return
@@ -135,10 +125,6 @@ func (e *MajorEvent) SetEventDatesFromParsed() {
 
 func (e *MajorEvent) IsNotified(weekKey string) bool {
 	return e.NotifiedWeek == weekKey
-}
-
-func (e *MajorEvent) IsMonthlyNotified(monthKey string) bool {
-	return e.NotifiedMonth == monthKey
 }
 
 func (e *MajorEvent) MarkAsNotified(weekKey string, at time.Time) {

@@ -52,10 +52,6 @@ func NewBatchRepository(db any) BatchRepository {
 	return &PgxBatchRepository{DB: normalizeBatchDB(db)}
 }
 
-func NewPgxBatchRepository(db any) *PgxBatchRepository {
-	return &PgxBatchRepository{DB: normalizeBatchDB(db)}
-}
-
 func NewPgxBatchRepositoryWithPersister(db any, persister PostLatencyClassificationPersister) *PgxBatchRepository {
 	return &PgxBatchRepository{DB: normalizeBatchDB(db), latencyPersister: persister}
 }

@@ -212,43 +212,6 @@ func formatArchitecture(arch, bitness string) string {
 	return arch + bitness
 }
 
-// 값이 있는 필드만 포함됩니다.
-// Windows의 경우 내부 버전(13, 14, 15)을 사용자 친화적 버전(10, 11)으로 변환합니다.
-func (ch ClientHints) ToLogFields() map[string]any {
-	fields := make(map[string]any)
-
-	ch.addPlatformLogFields(fields)
-	addStringLogField(fields, "device_model", ch.Model)
-	addBoolLogField(fields, "mobile", ch.Mobile)
-	addStringLogField(fields, "arch", ch.Architecture)
-
-	return fields
-}
-
-func (ch ClientHints) addPlatformLogFields(fields map[string]any) {
-	addStringLogField(fields, "platform", ch.Platform)
-	if ch.PlatformVersion == "" {
-		return
-	}
-	if strings.EqualFold(ch.Platform, "Windows") {
-		fields["platform_version"] = translateWindowsVersion(clientHintMajorVersion(ch.PlatformVersion))
-		return
-	}
-	fields["platform_version"] = ch.PlatformVersion
-}
-
-func addStringLogField(fields map[string]any, key, value string) {
-	if value != "" {
-		fields[key] = value
-	}
-}
-
-func addBoolLogField(fields map[string]any, key string, value bool) {
-	if value {
-		fields[key] = true
-	}
-}
-
 // clientHintsToRequest: 서버가 브라우저에게 요청할 Client Hints 목록입니다.
 // Accept-CH 헤더에 포함되어 브라우저가 High Entropy 값을 전송하도록 요청합니다.
 const clientHintsToRequest = "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, " +
