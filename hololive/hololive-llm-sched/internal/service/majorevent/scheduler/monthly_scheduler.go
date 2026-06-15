@@ -155,7 +155,7 @@ func (s *MonthlyScheduler) monthlyNotificationInputs(
 func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c monthlyCollected, monthKey string) error {
 	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
 	message := s.monthlyNotificationMessage(ctx, domainEvents, monthKey)
-	result := enqueueToRooms(ctx, s.outboxRepository, toRoomTargets(c.rooms), domain.DeliveryKindMajorEventMonthly, monthKey, message, s.digest.Logger)
+	result := enqueueToRooms(ctx, s.outboxRepository, roomTargets(c.rooms), domain.DeliveryKindMajorEventMonthly, monthKey, message, s.digest.Logger)
 
 	s.digest.Logger.Info("Monthly notification enqueue result",
 		slog.Int("attempted", result.Attempted),
@@ -186,24 +186,6 @@ func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, event
 		llmSummary = s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeMonthly, monthKey)
 	}
 	return s.formatter.FormatMajorEventMonthlySummary(ctx, events, llmSummary)
-}
-
-func toDomainEventsAndIDs(events []*domain.MajorEvent) ([]domain.MajorEvent, []int) {
-	domainEvents := make([]domain.MajorEvent, len(events))
-	eventIDs := make([]int, len(events))
-	for i, e := range events {
-		domainEvents[i] = *e
-		eventIDs[i] = e.ID
-	}
-	return domainEvents, eventIDs
-}
-
-func toRoomTargets(rooms []*domain.EventRoomSubscription) []roomTarget {
-	targets := make([]roomTarget, len(rooms))
-	for i, room := range rooms {
-		targets[i] = roomTarget{roomID: room.RoomID}
-	}
-	return targets
 }
 
 func (s *MonthlyScheduler) getMonthKey() string {

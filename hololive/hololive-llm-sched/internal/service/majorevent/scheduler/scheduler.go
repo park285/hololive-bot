@@ -193,7 +193,7 @@ func (s *Scheduler) weeklyNotificationInputs(
 }
 
 func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyCollected, weekKey string) error {
-	domainEvents, eventIDs := weeklyDomainEvents(c.events)
+	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
 	message := s.weeklyNotificationMessage(ctx, domainEvents, weekKey)
 	result := enqueueToRooms(ctx, s.outboxRepository, roomTargets(c.rooms), domain.DeliveryKindMajorEventWeekly, weekKey, message, s.digest.Logger)
 
@@ -220,7 +220,7 @@ func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyColle
 	return nil
 }
 
-func weeklyDomainEvents(events []*domain.MajorEvent) ([]domain.MajorEvent, []int) {
+func toDomainEventsAndIDs(events []*domain.MajorEvent) ([]domain.MajorEvent, []int) {
 	domainEvents := make([]domain.MajorEvent, len(events))
 	eventIDs := make([]int, len(events))
 	for i, e := range events {
