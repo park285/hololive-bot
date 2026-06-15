@@ -39,41 +39,52 @@ type MajorEventMonthlyScheduler interface {
 }
 
 func (h *MajorEventHandler) TriggerMajorEventNotification(c *gin.Context) {
-	if h == nil || h.Handler == nil || h.majorEventScheduler == nil {
-		sharedserver.RespondError(c, http.StatusServiceUnavailable, "major event scheduler not initialized", nil)
-		return
+	ready := h != nil && h.Handler != nil && h.majorEventScheduler != nil
+	var send func(context.Context) error
+	if ready {
+		send = h.majorEventScheduler.SendWeeklyNotification
 	}
-
-	if err := h.majorEventScheduler.SendWeeklyNotification(c.Request.Context()); err != nil {
-		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
-			sharedserver.RespondError(c, http.StatusConflict, "notification already in progress", nil)
-			return
-		}
-
-		sharedserver.RespondInternalError(h.safeLogger(), c, "failed to send notification", "failed to send weekly major event notification", err)
-
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "weekly notification sent"})
+	h.triggerNotification(c, ready, send,
+		"major event scheduler not initialized",
+		"failed to send weekly major event notification",
+		"weekly notification sent")
 }
 
 func (h *MajorEventHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
-	if h == nil || h.Handler == nil || h.majorEventMonthlyScheduler == nil {
-		sharedserver.RespondError(c, http.StatusServiceUnavailable, "major event monthly scheduler not initialized", nil)
+	ready := h != nil && h.Handler != nil && h.majorEventMonthlyScheduler != nil
+	var send func(context.Context) error
+	if ready {
+		send = h.majorEventMonthlyScheduler.SendMonthlyNotification
+	}
+	h.triggerNotification(c, ready, send,
+		"major event monthly scheduler not initialized",
+		"failed to send monthly major event notification",
+		"monthly notification sent")
+}
+
+func (h *MajorEventHandler) triggerNotification(
+	c *gin.Context,
+	ready bool,
+	send func(context.Context) error,
+	notInitMessage string,
+	logMessage string,
+	successStatus string,
+) {
+	if !ready {
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, notInitMessage, nil)
 		return
 	}
 
-	if err := h.majorEventMonthlyScheduler.SendMonthlyNotification(c.Request.Context()); err != nil {
+	if err := send(c.Request.Context()); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 			sharedserver.RespondError(c, http.StatusConflict, "notification already in progress", nil)
 			return
 		}
 
-		sharedserver.RespondInternalError(h.safeLogger(), c, "failed to send notification", "failed to send monthly major event notification", err)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "failed to send notification", logMessage, err)
 
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "monthly notification sent"})
+	c.JSON(http.StatusOK, gin.H{"status": successStatus})
 }
