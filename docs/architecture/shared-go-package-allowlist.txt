@@ -9,6 +9,8 @@ jsonutil
 llm
 logging
 logging/archive
+outputguard
+promptguard
 runtime/automaxprocs
 runtime/bootstrap
 runtime/httpserver
