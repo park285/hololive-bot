@@ -44,13 +44,6 @@ func reviveTestClaimManager(db *deliveryTestDB) *ClaimManager {
 	}
 }
 
-// TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered는 stale-failed revival
-// sweep의 핵심 계약을 고정한다. 전송 실패로 영구 FAILED된 fresh·미발송 알람을 PENDING으로 되살리되:
-//   - 대상 kind는 per-post alarm-once 게이트를 우회하는 NEW_VIDEO/LIVE_STREAM/MILESTONE만(community/shorts는
-//     되살려도 dispatch에서 alarm_sent_at 게이트로 skip되므로 제외 — 자체 ON CONFLICT 경로가 담당).
-//   - 이미 SENT된 per-room delivery 행은 건드리지 않는다(중복 발송 방지).
-//   - stale(freshness window 밖)·이미 발송 완료(sent_at NOT NULL)·in-flight(locked_at 미만료) 행은 제외.
-//   - delivery 행이 없는 직접 FAILED outbox(구독자 조회/enqueue 실패 경로)도 되살린다.
 func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *testing.T) {
 	db := newDeliveryPool(t)
 	cm := reviveTestClaimManager(db)
@@ -61,7 +54,7 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 	freshCreatedAt := now.Add(-5 * time.Minute)
 	oldNextAttempt := now.Add(-30 * time.Minute)
 	sentAt := now.Add(-20 * time.Minute)
-	recentLock := now.Add(-1 * time.Minute) // LockTimeout(5m) 안 → in-flight로 간주
+	recentLock := now.Add(-1 * time.Minute)
 
 	newFailedOutbox := func(kind domain.OutboxKind, contentID string, createdAt time.Time) *domain.YouTubeNotificationOutbox {
 		row := &domain.YouTubeNotificationOutbox{
@@ -73,7 +66,6 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 		return row
 	}
 
-	// (1) fresh·미발송·FAILED video — 되살아나야 함. room-A는 SENT(중복 방지), room-B는 FAILED(재시도).
 	freshVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-fresh", freshCreatedAt)
 	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
 		OutboxID: freshVideo.ID, RoomID: "room-sent", Status: domain.OutboxStatusSent,
@@ -84,27 +76,20 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 		AttemptCount: 3, NextAttemptAt: oldNextAttempt, Error: "send failed",
 	}).Error)
 
-	// (2) fresh·미발송·FAILED live_stream — 대상 kind, 되살아나야 함.
 	freshLive := newFailedOutbox(domain.OutboxKindLiveStream, "live-fresh", freshCreatedAt)
 
-	// (3) fresh·미발송·FAILED milestone — 대상 kind, 되살아나야 함.
 	freshMilestone := newFailedOutbox(domain.OutboxKindMilestone, "ms-fresh", freshCreatedAt)
 
-	// (4) delivery 행 없는 직접 FAILED video(구독자 조회/enqueue 실패 경로) — 되살아나야 함.
 	zeroDeliveryVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-nodelivery", freshCreatedAt)
 
-	// (5) stale video — freshness window 밖이라 제외.
 	staleVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-stale", staleCreatedAt)
 
-	// (6) FAILED지만 이미 발송 완료(sent_at NOT NULL) — 제외(중복 방지).
 	deliveredVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-delivered", freshCreatedAt)
 	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, map[string]any{"sent_at": sentAt}, "id = ?", deliveredVideo.ID).Error)
 
-	// (7) in-flight video(locked_at 미만료) — 처리 중이라 제외.
 	lockedVideo := newFailedOutbox(domain.OutboxKindNewVideo, "video-locked", freshCreatedAt)
 	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, map[string]any{"locked_at": recentLock}, "id = ?", lockedVideo.ID).Error)
 
-	// (8) fresh·미발송·FAILED community_post — 스코프 밖(alarm-once 게이트 우회 불가)이라 제외.
 	freshCommunity := newFailedOutbox(domain.OutboxKindCommunityPost, "post-fresh", freshCreatedAt)
 
 	revived, err := cm.reviveStaleFailedOutbox(ctx, 60*time.Minute, 50)

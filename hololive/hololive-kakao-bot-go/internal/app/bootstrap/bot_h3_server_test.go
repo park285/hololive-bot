@@ -38,7 +38,6 @@ func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildBotHTTP3ServerWithReloaderOptions() error = %v", err)
 	}
-	// bootstrap.Run의 buildCtx는 첫 reload tick(기본 45초) 전인 30초에 만료된다 — reload 수명이 build 수명과 분리됨을 고정
 	buildCancel()
 
 	first, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})

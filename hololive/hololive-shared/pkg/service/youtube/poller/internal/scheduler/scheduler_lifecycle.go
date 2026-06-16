@@ -18,7 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package poller: YouTube 채널 데이터 폴링 및 스케줄링
 package scheduler
 
 import (

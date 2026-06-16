@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package dbx: PostgreSQL 연결 공통 모듈
-//
 // # 개요
 //
 // dbx는 PostgreSQL 연결을 위한 공통 모듈입니다.

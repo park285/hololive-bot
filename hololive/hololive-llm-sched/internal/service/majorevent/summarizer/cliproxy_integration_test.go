@@ -283,7 +283,6 @@ func TestIntegration_Summarize_RawJSON_GPT_WebSearch(t *testing.T) {
 		}
 	}
 
-	// discovered_events 검증 (web_search 활성화 — 결과 있을 것으로 기대)
 	t.Logf("discovered_events 수: %d", len(resp.DiscoveredEvents))
 	for i, d := range resp.DiscoveredEvents {
 		t.Logf("discovered[%d]: name=%q date=%q note=%q source=%q", i, d.Name, d.Date, d.Note, d.Source)
@@ -449,7 +448,6 @@ func TestIntegration_Summarize_Weekly_ExaPlusWebSearch(t *testing.T) {
 		t.Logf("ongoing[%d]: name=%q date=%q note=%q link=%q", i, o.Name, o.Date, o.Note, o.Link)
 	}
 
-	// discovered_events 검증 — Exa 컨텍스트로 발견 기대
 	t.Logf("discovered_events 수: %d", len(resp.DiscoveredEvents))
 	for i, d := range resp.DiscoveredEvents {
 		t.Logf("discovered[%d]: name=%q date=%q note=%q source=%q", i, d.Name, d.Date, d.Note, d.Source)

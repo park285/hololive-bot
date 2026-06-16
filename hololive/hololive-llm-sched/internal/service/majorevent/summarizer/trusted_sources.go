@@ -14,7 +14,7 @@ func isTrustedDiscoveredSource(source string) bool {
 		return false
 	}
 
-	// URL 형식인 경우만 URL 검증 경로 진입 — bare domain의 parseSourceURL auto-prepend 우회 차단
+	// bare domain의 auto-prepend 우회를 막기 위해 URL 형식만 검증한다.
 	if strings.HasPrefix(normalized, "http://") || strings.HasPrefix(normalized, "https://") {
 		if trusted, handled := isTrustedURLSource(normalized); handled {
 			return trusted

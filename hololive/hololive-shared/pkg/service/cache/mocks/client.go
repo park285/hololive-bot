@@ -31,11 +31,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// Client is a manual mock for cache.Client.
-//
-// NOTE: cache.Client is intentionally broad (matches *cache.Service public surface).
-// For unit tests, zero-value Client is strict by default; unconfigured calls panic
-// unless Lenient is explicitly enabled.
 type Client struct {
 	Lenient bool
 

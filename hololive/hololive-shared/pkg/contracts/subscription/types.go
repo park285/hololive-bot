@@ -18,7 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package subscription: 구독 관련 공유 DTO 타입 정의
 package subscription
 
 type SubscribeRequest struct {

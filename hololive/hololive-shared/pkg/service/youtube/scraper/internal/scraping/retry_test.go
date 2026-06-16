@@ -739,7 +739,6 @@ func TestBackoffState_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
-	// race 플래그로 데이터 레이스 탐지 — PASS이면 동시성 안전
 }
 
 func TestFetchPage_504RetryNotBlockedByTransientCooldown(t *testing.T) {

@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package dbx: PostgreSQL 연결 공통 모듈
-// pgxpool 지원, DSN 생성(UDS/TCP), Retry, Ping/Close 헬퍼 제공
 package dbx
 
 import (

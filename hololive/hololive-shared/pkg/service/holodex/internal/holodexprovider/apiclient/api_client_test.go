@@ -281,7 +281,6 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 		t.Fatal("should allow after timeout")
 	}
 
-	// 1회 실패 — threshold 미달이므로 즉시 재open 금지
 	client.openCircuit()
 	if client.IsCircuitOpen() {
 		t.Fatalf("single failure after reset must not re-open (threshold=%d)", constants.CircuitBreakerConfig.FailureThreshold)

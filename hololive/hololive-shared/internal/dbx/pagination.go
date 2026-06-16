@@ -96,8 +96,6 @@ func DecodeCursor(token string) (*CursorData, error) {
 	return &data, nil
 }
 
-// 반환: (whereClause, args)
-// 예시: ("achieved_at < $1", ["2026-01-20T10:00:00Z"])
 func BuildKeysetCondition(cursor *CursorData, paramIndex int) (string, []any) {
 	if cursor == nil {
 		return "", nil

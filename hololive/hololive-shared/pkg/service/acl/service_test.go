@@ -18,9 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package acl: ACL 서비스의 in-memory 로직 단위 테스트.
-// DB/캐시를 요구하는 SetEnabled, SetMode, AddRoom, RemoveRoom은 통합 테스트 범주이므로
-// 여기서는 순수 메모리 상태(IsRoomAllowed, GetACLStatus)만 테스트한다.
 package acl
 
 import (

@@ -43,13 +43,9 @@ const (
 	ytEscape          byte = 92
 )
 
-// ytInitialData 추출용 정규식 (패턴별 우선순위)
 var ytInitialDataPatterns = []*regexp.Regexp{
-	// 패턴 1: 기본 패턴 (가장 일반적)
 	regexp.MustCompile(`(?s)var\s+ytInitialData\s*=\s*(\{.+?\})\s*;\s*</script>`),
-	// 패턴 2: 세미콜론 없이 닫는 경우
 	regexp.MustCompile(`(?s)var\s+ytInitialData\s*=\s*(\{.+?\})\s*</script>`),
-	// 패턴 3: window['ytInitialData'] 형식
 	regexp.MustCompile(`(?s)window\["ytInitialData"\]\s*=\s*(\{.+?\})\s*;`),
 }
 

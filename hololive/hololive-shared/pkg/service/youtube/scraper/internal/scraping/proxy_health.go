@@ -54,7 +54,6 @@ func (t *proxyHealthTracker) RecordSuccess() {
 	t.triggered = false
 }
 
-// Arm: 새로운 관찰 window 시작 — 외부에서 proxy를 재활성화할 때 호출.
 func (t *proxyHealthTracker) Arm() {
 	if t == nil {
 		return

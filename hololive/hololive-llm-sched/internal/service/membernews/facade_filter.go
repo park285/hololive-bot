@@ -37,7 +37,7 @@ func FilterCandidates(
 	membersData domain.MemberDataProvider,
 	sourceValidator *SourceValidator,
 ) []FilteredCandidate {
-	// NOTE: typed nil pointer를 interface로 넘기면 nil check가 실패하므로 변환을 명시한다.
+	// typed nil pointer가 interface nil check를 우회하지 않도록 명시 변환한다.
 	var validator model.SourceURLValidator
 	if sourceValidator != nil {
 		validator = sourceValidator

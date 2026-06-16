@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package ua: 동적 User-Agent 생성기
-// YouTube 스크래핑 시 봇 탐지를 회피하기 위해 실제 브라우저 분포 기반으로 UA를 생성
 package ua
 
 import (

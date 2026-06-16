@@ -289,7 +289,6 @@ func TestParseMessage_MajorEventNotMisclassifiedAsNews(t *testing.T) {
 func TestParseMessage_MemberNewsMonthlyWithSpace(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
 
-	// "이번 달" — 공백 포함 입력이 monthly로 파싱되는지 검증 (회귀 방지)
 	tests := []struct {
 		input string
 		want  string

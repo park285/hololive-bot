@@ -22,9 +22,6 @@ package cache
 
 import "fmt"
 
-// CacheError는 cache(Service) 계층에서 발생한 오류를 구조화하여 전달합니다.
-//
-// NOTE: 기존 hololive-shared/pkg/errors.CacheError 의존을 제거하기 위한 로컬 타입입니다.
 type CacheError struct {
 	Operation string // get, set, delete 등
 	Key       string // cache key (선택)

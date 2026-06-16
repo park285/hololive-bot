@@ -153,8 +153,6 @@ func clientHintMajorVersion(version string) string {
 //   - Windows 8.1: platformVersion = "0.3.0"
 //   - Windows 8: platformVersion = "0.2.0"
 //   - Windows 7: platformVersion = "0.1.0"
-//
-// 참고: https://learn.microsoft.com/en-us/microsoft-edge/web-platform/how-to-detect-win11
 func translateWindowsVersion(majorVersion string) string {
 	major := parseLeadingInt(majorVersion)
 
@@ -222,8 +220,6 @@ const clientHintsToRequest = "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, "
 //
 // 브라우저는 이 헤더를 받은 후 다음 요청부터 Sec-CH-UA-* 헤더를 전송합니다.
 // 첫 요청에서는 Client Hints가 없을 수 있으므로 폴백 처리가 필요합니다.
-//
-// 참고: https://developer.chrome.com/docs/privacy-sandbox/user-agent/
 func ClientHintsMiddleware() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		// Accept-CH: 브라우저에게 다음 요청에서 이 Client Hints를 보내달라고 요청

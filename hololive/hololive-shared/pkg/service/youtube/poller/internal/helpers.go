@@ -32,11 +32,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
-// 패키지 레벨에서 한 번만 컴파일
 var numericRe = regexp.MustCompile(`[\d.]+`)
 
-// isLiveReplayVideo: 라이브 다시보기 영상인지 판별
-// published_text에 "streamed", "premiered" 등의 키워드가 포함되면 true
 func IsLiveReplayVideo(publishedText string) bool {
 	lower := strings.ToLower(publishedText)
 	return strings.Contains(lower, "streamed") || strings.Contains(lower, "premiered")

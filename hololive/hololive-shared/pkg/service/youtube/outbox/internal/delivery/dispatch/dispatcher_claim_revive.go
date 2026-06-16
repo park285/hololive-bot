@@ -46,8 +46,7 @@ import (
 //     poller가 콘텐츠를 감지한 시각 ≈ 발행 직후라 freshness proxy로 적합하다.
 //   - locked_at 만료: 처리 중(in-flight) 행은 건드리지 않음.
 //
-// freshness window가 재시도 횟수를 자연 bound한다(window/sweep-interval). 영구 미전달 행은 window를
-// 벗어나면 더는 되살아나지 않아 무한 재시도를 막는다 — 별도 카운터 컬럼이 불필요하다.
+// freshness window가 재시도 횟수를 자연 bound한다.
 //
 // 중복 방지는 per-room 단위로도 보장한다: 되살릴 때 FAILED delivery 행만 PENDING으로 리셋하고 SENT 행은
 // 그대로 둔다(부분 전달 시 이미 받은 room에 재발송하지 않음). 전체를 하나의 트랜잭션으로 처리하고

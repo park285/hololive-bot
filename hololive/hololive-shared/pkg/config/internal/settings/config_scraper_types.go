@@ -90,7 +90,7 @@ type ScraperActiveActiveConfig struct {
 
 type ScraperConfig struct {
 	ProxyEnabled        bool
-	ProxyURL            string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
+	ProxyURL            string
 	FetcherEngine       string
 	WorkerCount         int
 	Scheduler           ScraperSchedulerConfig

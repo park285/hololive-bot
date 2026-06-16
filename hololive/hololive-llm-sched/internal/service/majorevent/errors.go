@@ -22,6 +22,5 @@ package majorevent
 
 import "errors"
 
-// NOTE: scheduler 구현이 서브패키지로 이동하더라도(Phase9 P9-5),
-// 트리거 핸들러/클라이언트가 에러를 안정적으로 매핑할 수 있도록 root에 유지합니다.
+// 트리거 핸들러/클라이언트 호환을 위해 root에 유지한다.
 var ErrNotificationInProgress = errors.New("notification already in progress")

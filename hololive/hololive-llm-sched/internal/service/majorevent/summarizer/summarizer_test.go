@@ -851,7 +851,6 @@ func mustBuildSummaryCacheKey(t *testing.T, events []domain.MajorEvent, summaryT
 	return key
 }
 
-// mockSearcher: 검색 결과 mock (병렬 호출 안전 — 쿼리 문자열로 1차/2차 분기)
 type mockSearcher struct {
 	results   []sharedmodel.SearchResult
 	err       error
@@ -1128,13 +1127,11 @@ func TestNoteMaxLength(t *testing.T) {
 }
 
 func TestNoteTruncation(t *testing.T) {
-	// 30 rune 입력 — 트렁케이션 없음
 	input := "가나다라마바사아자차카타파하가나다라마바사아자차카타파하가나" // 30자
 	if truncateNote(input, 30) != input {
 		t.Error("30-char input should not be truncated")
 	}
 
-	// 31 rune 입력 — 트렁케이션 적용
 	longInput := input + "X" // 31자
 	result := truncateNote(longInput, 30)
 	runes := []rune(result)

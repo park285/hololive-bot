@@ -25,7 +25,7 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
 
-// NOTE: membernews는 외부 소비자(봇/스케줄러/어드민) 호환을 위해 root 패키지 API를 유지합니다.
+// 외부 소비자 호환을 위해 root 패키지 API를 유지한다.
 
 var (
 	ErrNoSubscribedMembers = model.ErrNoSubscribedMembers

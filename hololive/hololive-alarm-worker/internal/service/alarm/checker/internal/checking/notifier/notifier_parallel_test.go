@@ -152,8 +152,6 @@ func TestPrepareSendBatch_DedupExactlyOnceUnderDuplicates(t *testing.T) {
 	require.Len(t, outbox.lastBatchInput.Envelopes, 1)
 }
 
-// ctx 가 이미 취소된 상태에서 Send 는 직렬 base 와 동등하게 non-nil error 를 반환해야 한다.
-// (caller 가 EventAlarmNotificationDispatchFailed 로 기록하도록) — 발송 누락을 success 로 오기록하면 안 된다.
 func TestSend_CanceledContextReturnsErrorAndSendsNothing(t *testing.T) {
 	t.Parallel()
 

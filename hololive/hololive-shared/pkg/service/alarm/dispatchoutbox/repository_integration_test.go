@@ -850,7 +850,6 @@ func TestPgxRepositoryScheduleSendingRetry_ExpiredLeaseStillTransitions(t *testi
 	id := claimed[0].ID
 	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
 
-	// lock_expires_at을 과거로 강제 설정 — lease 만료 시뮬레이션
 	_, err = pool.Exec(ctx, `
 		UPDATE alarm_dispatch_deliveries
 		SET lock_expires_at = NOW() - INTERVAL '10 seconds'

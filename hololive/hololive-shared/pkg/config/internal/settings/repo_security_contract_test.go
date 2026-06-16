@@ -925,7 +925,7 @@ func assertAPComposeCertMountsAreMinimized(t *testing.T, cfg renderedCompose, co
 			if source == "/run/hololive-bot/certs" && target == "/run/hololive-bot/certs" {
 				t.Fatalf("%s %s mounts broad cert directory: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
 			}
-			// h3-only AP producer는 H3(QUIC) 서버라 서버 키가 필요하다 — 해당 키 단일 파일만 허용.
+			// h3-only AP producer의 서버 키 단일 파일만 허용한다.
 			isH3ServerKey := source == "/run/hololive-bot/certs/hololive-h3.key" && target == "/run/hololive-bot/certs/hololive-h3.key"
 			if (strings.HasSuffix(volume.Source, ".key") || strings.HasSuffix(volume.Target, ".key")) && !isH3ServerKey {
 				t.Fatalf("%s %s mounts private key file: source=%q target=%q", composeFile, service, volume.Source, volume.Target)

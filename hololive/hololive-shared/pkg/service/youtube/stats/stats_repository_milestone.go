@@ -28,7 +28,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 반환: map[channelID][]uint64 (채널별 달성된 마일스톤 값 목록)
 func (r *StatsRepository) GetAchievedMilestones(ctx context.Context, channelIDs []string, milestoneType domain.MilestoneType) (map[string][]uint64, error) {
 	if len(channelIDs) == 0 {
 		return make(map[string][]uint64), nil

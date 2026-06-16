@@ -70,11 +70,9 @@ func trimSnapshotBody(body string, maxBytes int) []byte {
 }
 
 var snapshotRedactionPatterns = []*regexp.Regexp{
-	// Set-Cookie 한 항목 (`; Path=/` 등 attribute 포함 가능) — 끝 토큰 또는 줄바꿈까지
+	// Set-Cookie 한 항목.
 	regexp.MustCompile(`(?i)(set-cookie\s*:\s*)([^<\n\r]+)`),
-	// Authorization 헤더(Bearer/Basic 등)
 	regexp.MustCompile(`(?i)(authorization\s*:\s*)([^<\n\r]+)`),
-	// JSON-encoded sensitive 식별자
 	regexp.MustCompile(`(?i)("x-goog-visitor-id"\s*:\s*")([^"]+)(")`),
 	regexp.MustCompile(`(?i)("__Secure-[A-Za-z0-9_-]+"\s*:\s*")([^"]+)(")`),
 }

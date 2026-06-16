@@ -9,8 +9,6 @@ import (
 func TestExpectRowsAffected_PartialBatchReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	// MarkSent/MarkSending은 concurrent workers가 동일한 row를 처리할 때
-	// RowsAffected < len(ids) 가 정상 상황 — nil이어야 함
 	tests := []struct {
 		name    string
 		got     int64
