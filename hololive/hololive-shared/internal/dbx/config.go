@@ -122,10 +122,11 @@ func normalizeQueryExecMode(mode string) string {
 }
 
 type PoolConfig struct {
-	MinConns        int           // 최소 연결 수 (pgxpool용, 기본: 5)
-	MaxConns        int           // 최대 연결 수 (기본: 20)
-	ConnMaxLifetime time.Duration // 연결 최대 수명 (기본: 1시간)
-	ConnMaxIdleTime time.Duration // 유휴 연결 최대 시간 (기본: 30분)
+	MinConns              int           // 최소 연결 수 (pgxpool용, 기본: 5)
+	MaxConns              int           // 최대 연결 수 (기본: 20)
+	ConnMaxLifetime       time.Duration // 연결 최대 수명 (기본: 1시간)
+	ConnMaxLifetimeJitter time.Duration // 수명 만료 분산 폭 (0이면 ConnMaxLifetime/5)
+	ConnMaxIdleTime       time.Duration // 유휴 연결 최대 시간 (기본: 30분)
 }
 
 // 환경변수로 오버라이드 가능: DB_POOL_MIN_CONNS, DB_POOL_MAX_CONNS

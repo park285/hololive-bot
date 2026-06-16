@@ -208,6 +208,7 @@ func (c *Client) tryConnect(ctx context.Context, config Config, pool PoolConfig,
 	poolConfig.MinConns = int32(pool.MinConns)
 	poolConfig.MaxConns = int32(pool.MaxConns)
 	poolConfig.MaxConnLifetime = pool.ConnMaxLifetime
+	poolConfig.MaxConnLifetimeJitter = pool.ConnMaxLifetimeJitter
 	poolConfig.MaxConnIdleTime = pool.ConnMaxIdleTime
 
 	pgxPool, err := pgxpool.NewWithConfig(ctx, poolConfig)
@@ -245,6 +246,9 @@ func normalizePoolConfig(pool PoolConfig) PoolConfig {
 	}
 	if pool.ConnMaxLifetime <= 0 {
 		pool.ConnMaxLifetime = time.Hour
+	}
+	if pool.ConnMaxLifetimeJitter <= 0 {
+		pool.ConnMaxLifetimeJitter = pool.ConnMaxLifetime / 5
 	}
 	if pool.ConnMaxIdleTime <= 0 {
 		pool.ConnMaxIdleTime = 30 * time.Minute

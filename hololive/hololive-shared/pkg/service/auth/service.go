@@ -49,16 +49,21 @@ const (
 	accountLockKeyPrefix    = "auth:lock:"
 )
 
+const loginDummyPassword = "login-timing-equalizer"
+
+var comparePassword = bcrypt.CompareHashAndPassword
+
 type Session struct {
 	Token     string
 	ExpiresAt time.Time
 }
 
 type Service struct {
-	db          *pgxpool.Pool
-	cacheClient cache.Client
-	logger      *slog.Logger
-	config      Config
+	db             *pgxpool.Pool
+	cacheClient    cache.Client
+	logger         *slog.Logger
+	config         Config
+	loginDummyHash []byte
 }
 
 func NewService(ctx context.Context, db *pgxpool.Pool, cacheClient cache.Client, logger *slog.Logger, config Config) (*Service, error) {
@@ -70,11 +75,17 @@ func NewService(ctx context.Context, db *pgxpool.Pool, cacheClient cache.Client,
 	}
 	logger, config = normalizeServiceConfig(logger, config)
 
+	dummyHash, err := bcrypt.GenerateFromPassword([]byte(loginDummyPassword), config.BcryptCost)
+	if err != nil {
+		return nil, fmt.Errorf("login dummy hash: %w", err)
+	}
+
 	service := &Service{
-		db:          db,
-		cacheClient: cacheClient,
-		logger:      logger,
-		config:      config,
+		db:             db,
+		cacheClient:    cacheClient,
+		logger:         logger,
+		config:         config,
+		loginDummyHash: dummyHash,
 	}
 
 	return service, nil
@@ -142,7 +153,7 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP string) (
 		return nil, nil, err
 	}
 
-	user, err := s.findLoginUser(ctx, email)
+	user, err := s.findLoginUser(ctx, email, password)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -194,12 +205,14 @@ func (s *Service) validateAccountLock(ctx context.Context, email string) error {
 	return nil
 }
 
-func (s *Service) findLoginUser(ctx context.Context, email string) (userModel, error) {
+func (s *Service) findLoginUser(ctx context.Context, email, password string) (userModel, error) {
 	user, err := s.findUserByEmail(ctx, email)
 	if err == nil {
 		return user, nil
 	}
 	if stdErrors.Is(err, pgx.ErrNoRows) {
+		// 사용자 미존재 경로도 wrong-password 경로와 같은 bcrypt 비용을 지불해 email enumeration 타이밍 누설을 막는다.
+		_ = comparePassword(s.loginDummyHash, []byte(password))
 		s.onLoginFailed(ctx, email)
 		return user, newError(CodeInvalidCredentials, "invalid credentials", nil)
 	}
@@ -241,7 +254,7 @@ func (s *Service) findUserByID(ctx context.Context, id string) (userModel, error
 }
 
 func (s *Service) validateLoginPassword(ctx context.Context, email, passwordHash, password string) error {
-	if bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)) == nil {
+	if comparePassword([]byte(passwordHash), []byte(password)) == nil {
 		return nil
 	}
 	s.onLoginFailed(ctx, email)

@@ -278,7 +278,7 @@ func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 	)
 	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, pool)
 
-	syncer.SyncAt(polltarget.Targets{NotificationChannelIDs: notificationIDs, StatsChannelIDs: statsIDs}, now)
+	syncer.SyncAt(t.Context(), polltarget.Targets{NotificationChannelIDs: notificationIDs, StatsChannelIDs: statsIDs}, now)
 
 	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_ACTIVE:videos"))
 	require.Equal(t, 20*time.Minute, schedulerJobInterval(t, scheduler, "UC_WARM:videos"))
@@ -311,7 +311,7 @@ func TestTieredPollerRefreshRemovesEmptyNotificationTargets(t *testing.T) {
 	)
 	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, pool)
 
-	syncer.SyncAt(polltarget.Targets{NotificationChannelIDs: nil, StatsChannelIDs: statsIDs}, now)
+	syncer.SyncAt(t.Context(), polltarget.Targets{NotificationChannelIDs: nil, StatsChannelIDs: statsIDs}, now)
 
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_ACTIVE:videos")
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_COLD:videos")

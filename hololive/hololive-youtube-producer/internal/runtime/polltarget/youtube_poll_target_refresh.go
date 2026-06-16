@@ -65,6 +65,7 @@ func newYouTubePollTargetRefresher(
 		schedulerSyncer: &youTubePollSchedulerSyncer{
 			scheduler:     scheduler,
 			registrations: append([]providers.ChannelPollerRegistration(nil), registrations...),
+			logger:        logger,
 		},
 		registrations: append([]providers.ChannelPollerRegistration(nil), registrations...),
 		loadOperationalChannels: func(context.Context) ([]communityShortsOperationalChannel, error) {
@@ -158,7 +159,7 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		return
 	}
 	registry := r.readRegistryVersion(ctx)
-	if r.reuseTargetsIfRegistryUnchanged(registry, operational) {
+	if r.reuseTargetsIfRegistryUnchanged(ctx, registry, operational) {
 		return
 	}
 
@@ -167,7 +168,7 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 	if !ok {
 		return
 	}
-	if r.reuseTargetsForEmptyCacheCandidate(candidate, operational) {
+	if r.reuseTargetsForEmptyCacheCandidate(ctx, candidate, operational) {
 		return
 	}
 
@@ -175,7 +176,7 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 	if !ok {
 		return
 	}
-	r.finishRefresh(targets, operational, registry, candidate.fromCache)
+	r.finishRefresh(ctx, targets, operational, registry, candidate.fromCache)
 }
 
 func (r *youTubePollTargetRefresher) readyToRefresh() bool {
@@ -244,6 +245,7 @@ func (r *youTubePollTargetRefresher) readRegistryVersion(ctx context.Context) re
 }
 
 func (r *youTubePollTargetRefresher) reuseTargetsIfRegistryUnchanged(
+	ctx context.Context,
 	registry registryVersionSnapshot,
 	operational operationalChannelResolution,
 ) bool {
@@ -257,13 +259,13 @@ func (r *youTubePollTargetRefresher) reuseTargetsIfRegistryUnchanged(
 		targetsChanged = !equalYouTubePollTargets(r.lastResolvedTargets, targets)
 	}
 	if targetsChanged || r.shouldRefreshTieredTargets() {
-		r.applyResolvedTargets(targets)
+		r.applyResolvedTargets(ctx, targets)
 		return true
 	}
 	return true
 }
 
-func (r *youTubePollTargetRefresher) applyStatsTargetRefreshIfChanged(operational operationalChannelResolution) {
+func (r *youTubePollTargetRefresher) applyStatsTargetRefreshIfChanged(ctx context.Context, operational operationalChannelResolution) {
 	if !operational.changed {
 		return
 	}
@@ -271,7 +273,7 @@ func (r *youTubePollTargetRefresher) applyStatsTargetRefreshIfChanged(operationa
 	targets := r.lastResolvedTargets
 	targets.StatsChannelIDs = communityshorts.EnabledChannelIDs(operational.channels)
 	if !equalYouTubePollTargets(r.lastResolvedTargets, targets) {
-		r.applyResolvedTargets(targets)
+		r.applyResolvedTargets(ctx, targets)
 	}
 }
 
@@ -302,17 +304,19 @@ func (r *youTubePollTargetRefresher) resolveAlarmTargetCandidate(
 }
 
 func (r *youTubePollTargetRefresher) reuseTargetsForEmptyCacheCandidate(
+	ctx context.Context,
 	candidate alarmTargetCandidate,
 	operational operationalChannelResolution,
 ) bool {
 	if !candidate.fromCache || len(candidate.ids) != 0 || !hasYouTubePollTargets(r.lastResolvedTargets) {
 		return false
 	}
-	r.applyStatsTargetRefreshIfChanged(operational)
+	r.applyStatsTargetRefreshIfChanged(ctx, operational)
 	return true
 }
 
 func (r *youTubePollTargetRefresher) finishRefresh(
+	ctx context.Context,
 	targets youtubePollTargets,
 	operational operationalChannelResolution,
 	registry registryVersionSnapshot,
@@ -332,15 +336,15 @@ func (r *youTubePollTargetRefresher) finishRefresh(
 		)
 	}
 	if targetsChanged || tieringRefreshDue {
-		r.applyResolvedTargets(targets)
+		r.applyResolvedTargets(ctx, targets)
 	}
 }
 
-func (r *youTubePollTargetRefresher) applyResolvedTargets(targets youtubePollTargets) {
+func (r *youTubePollTargetRefresher) applyResolvedTargets(ctx context.Context, targets youtubePollTargets) {
 	if r == nil || r.schedulerSyncer == nil {
 		return
 	}
-	r.schedulerSyncer.SyncAt(targets, r.now())
+	r.schedulerSyncer.SyncAt(ctx, targets, r.now())
 	if r.schedulerSyncer.hasTieredRegistrations() {
 		r.lastTieringRefreshAt = r.now()
 	}

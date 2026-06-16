@@ -21,6 +21,7 @@
 package polltarget
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -234,10 +235,10 @@ func TestYouTubePollSchedulerSyncerSyncAtHandlesNilDependencies(t *testing.T) {
 
 	assert.NotPanics(t, func() {
 		var syncer *youTubePollSchedulerSyncer
-		syncer.SyncAt(targets, now)
+		syncer.SyncAt(context.Background(), targets, now)
 	})
 	assert.NotPanics(t, func() {
-		(&youTubePollSchedulerSyncer{}).SyncAt(targets, now)
+		(&youTubePollSchedulerSyncer{}).SyncAt(context.Background(), targets, now)
 	})
 }
 
@@ -260,7 +261,44 @@ func TestYouTubePollSchedulerSyncerSyncAtClearsEmptyTargets(t *testing.T) {
 		registrations: registrations,
 	}
 
-	syncer.SyncAt(youtubePollTargets{}, time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC))
+	syncer.SyncAt(context.Background(), youtubePollTargets{}, time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC))
 
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_OLD:videos")
+}
+
+func TestYouTubePollSchedulerSyncerSyncAtSkipsTieredClassifyOnCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	registration := providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
+		WithChannelIDs([]string{"UC_ACTIVE_REG"}).
+		WithTargetGroup(providers.ChannelTargetGroupActive)
+	registrations := []providers.ChannelPollerRegistration{registration}
+	targets := youtubePollTargets{NotificationChannelIDs: []string{"UC_NOTIFY"}}
+	now := time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
+
+	liveScheduler := providers.ProvideScraperScheduler(
+		nil,
+		newYouTubePollTargetTestLogger(),
+		providers.WithChannelPollerRegistrations(registrations),
+	)
+	liveSyncer := &youTubePollSchedulerSyncer{scheduler: liveScheduler, registrations: registrations}
+	liveSyncer.SyncAt(context.Background(), targets, now)
+	require.Contains(t, schedulerJobKeys(t, liveScheduler), "UC_NOTIFY:videos",
+		"non-cancelled context must classify tiers and sync resolved notification targets")
+
+	cancelledScheduler := providers.ProvideScraperScheduler(
+		nil,
+		newYouTubePollTargetTestLogger(),
+		providers.WithChannelPollerRegistrations(registrations),
+	)
+	cancelledSyncer := &youTubePollSchedulerSyncer{scheduler: cancelledScheduler, registrations: registrations}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cancelledSyncer.SyncAt(ctx, targets, now)
+
+	keys := schedulerJobKeys(t, cancelledScheduler)
+	require.Contains(t, keys, "UC_ACTIVE_REG:videos",
+		"cancelled context must skip tiered classify and fall back to registration channel IDs")
+	require.NotContains(t, keys, "UC_NOTIFY:videos",
+		"cancelled context must not run tiered classify against resolved notification targets")
 }

@@ -2,6 +2,7 @@ package polltarget
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -9,17 +10,20 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 )
 
+const tieringQueryTimeout = 10 * time.Second
+
 type youTubePollSchedulerSyncer struct {
 	scheduler     *poller.Scheduler
 	registrations []providers.ChannelPollerRegistration
 	tieringDB     *pgxpool.Pool
+	logger        *slog.Logger
 }
 
-func (s *youTubePollSchedulerSyncer) SyncAt(targets youtubePollTargets, now time.Time) {
+func (s *youTubePollSchedulerSyncer) SyncAt(ctx context.Context, targets youtubePollTargets, now time.Time) {
 	if s == nil || s.scheduler == nil {
 		return
 	}
-	tieredTargets, hasTieredTargets := s.classifyTargetsForTieredRegistrations(targets, now)
+	tieredTargets, hasTieredTargets := s.classifyTargetsForTieredRegistrations(ctx, targets, now)
 	tieredSyncs := make(map[string][]poller.PollerTargetSync)
 	for _, registration := range s.registrations {
 		if !shouldSyncYouTubePollRegistration(registration) {
@@ -37,15 +41,30 @@ func (s *youTubePollSchedulerSyncer) SyncAt(targets youtubePollTargets, now time
 	}
 }
 
-func (s *youTubePollSchedulerSyncer) classifyTargetsForTieredRegistrations(targets youtubePollTargets, now time.Time) (youtubeTieredPollTargets, bool) {
+func (s *youTubePollSchedulerSyncer) classifyTargetsForTieredRegistrations(ctx context.Context, targets youtubePollTargets, now time.Time) (youtubeTieredPollTargets, bool) {
 	if !s.hasTieredRegistrations() {
 		return youtubeTieredPollTargets{}, false
 	}
-	tieredTargets, err := classifyYouTubePollTargetsByActivity(context.Background(), s.tieringDB, targets, now)
+	if err := ctx.Err(); err != nil {
+		s.logTieredClassifySkipped(err)
+		return youtubeTieredPollTargets{}, false
+	}
+	classifyCtx, cancel := context.WithTimeout(ctx, tieringQueryTimeout)
+	defer cancel()
+	tieredTargets, err := classifyYouTubePollTargetsByActivity(classifyCtx, s.tieringDB, targets, now)
 	if err != nil {
+		if classifyCtx.Err() != nil {
+			s.logTieredClassifySkipped(err)
+		}
 		return youtubeTieredPollTargets{}, false
 	}
 	return tieredTargets, true
+}
+
+func (s *youTubePollSchedulerSyncer) logTieredClassifySkipped(err error) {
+	if s.logger != nil {
+		s.logger.Warn("youtube_poll_target_tiered_classify_skipped", slog.Any("error", err))
+	}
 }
 
 func (s *youTubePollSchedulerSyncer) hasTieredRegistrations() bool {

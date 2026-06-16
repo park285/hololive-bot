@@ -117,8 +117,8 @@ var DatabaseConfig = struct {
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 }{
-	MaxOpenConns:    25,
-	MaxIdleConns:    5,
+	MaxOpenConns:    8,
+	MaxIdleConns:    2,
 	ConnMaxLifetime: 5 * time.Minute,
 }
 
