@@ -85,7 +85,7 @@ Local CI gate:
 ./scripts/ci/local-ci.sh
 ```
 
-`./build-all.sh`는 Docker Compose build 전에 이 local CI gate를 실행합니다. gate가 실패하면 image build/deploy 시작 전에 중단됩니다. 기본 gate는 architecture gates, Go toolchain pin, `go work sync` drift, `gofmt`, `go fix` drift, `go mod tidy -diff`, `go vet`, `staticcheck`, `go build`, `go test -count=1`, `govulncheck`를 포함합니다. PostgreSQL integration test까지 포함하려면 `TEST_DATABASE_URL`을 설정하고, race detector까지 포함하려면 `RUN_RACE_TESTS=true`를 설정합니다.
+`./build-all.sh`는 Docker Compose build 전에 이 local CI gate를 실행합니다. gate가 실패하면 image build/deploy 시작 전에 중단됩니다. 기본 gate는 architecture gates, Go toolchain pin, `go work sync` drift, `gofmt`, `go fix` drift, `go mod tidy -diff`, `go vet`, `staticcheck`, stage-3 `golangci-lint`, NilAway, `go build`, `go test -count=1`, race detector, `govulncheck`를 포함합니다. PostgreSQL integration test까지 포함하려면 `TEST_DATABASE_URL`을 설정합니다.
 
 ## Deployment
 

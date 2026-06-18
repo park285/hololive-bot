@@ -59,7 +59,10 @@ changed_go_package_patterns() {
 
     while IFS= read -r file; do
         case "${file}" in
-            go.work|go.work.sum|go.mod|go.sum|*/go.mod|*/go.sum)
+            go.work|go.work.sum|go.mod|go.sum|*/go.mod|*/go.sum|.golangci.yml)
+                needs_all=true
+                ;;
+            scripts/ci/go-tooling.sh|scripts/ci/local-ci.sh|scripts/ci/pre-push-gate.sh|scripts/ci/admin-dashboard-go-ci.sh)
                 needs_all=true
                 ;;
             # compose/.env.example은 hololive-shared settings의 repo 계약 테스트 입력이라

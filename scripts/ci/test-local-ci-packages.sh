@@ -19,7 +19,8 @@ setup_repo() {
     "${workdir}/hololive/hololive-shared/pkg/common" \
     "${workdir}/hololive/hololive-kakao-bot-go/internal/lib" \
     "${workdir}/hololive/hololive-kakao-bot-go/internal/app" \
-    "${workdir}/scripts"
+    "${workdir}/scripts" \
+    "${workdir}/scripts/ci"
 
   git -C "${workdir}" init -q
   git -C "${workdir}" config user.email "test@example.invalid"
@@ -134,6 +135,18 @@ setup_repo "${workdir}"
 base_ref="$(git -C "${workdir}" rev-parse HEAD)"
 printf 'module example.test/root\n' >"${workdir}/go.mod"
 expect_scope "changed go.mod" "$(run_scope "${workdir}" changed "${base_ref}")" "${full_scope}"
+
+workdir="${tmpdir}/golangci-config"
+setup_repo "${workdir}"
+base_ref="$(git -C "${workdir}" rev-parse HEAD)"
+printf 'version: "2"\n' >"${workdir}/.golangci.yml"
+expect_scope "changed golangci config" "$(run_scope "${workdir}" changed "${base_ref}")" "${full_scope}"
+
+workdir="${tmpdir}/ci-gate-script"
+setup_repo "${workdir}"
+base_ref="$(git -C "${workdir}" rev-parse HEAD)"
+printf '# changed\n' >"${workdir}/scripts/ci/local-ci.sh"
+expect_scope "changed ci gate script" "$(run_scope "${workdir}" changed "${base_ref}")" "${full_scope}"
 
 workdir="${tmpdir}/scripts-only"
 setup_repo "${workdir}"

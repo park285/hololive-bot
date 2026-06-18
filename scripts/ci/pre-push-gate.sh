@@ -32,7 +32,7 @@ fi
 case "${PRE_PUSH_MODE}" in
   fast)
     local_ci_go_scope="changed"
-    race_default="false"
+    race_default="true"
     dependency_hygiene_default="false"
     ;;
   full)
@@ -79,6 +79,7 @@ LOCAL_CI_GO_SCOPE="${resolved_local_ci_go_scope}" \
 RUN_ADMIN_TOUCH_GUARDRAIL="${admin_touch_guardrail}" \
 RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-${dependency_hygiene_default}}" \
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}" \
+RUN_NILAWAY="${RUN_NILAWAY:-true}" \
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-${race_default}}" \
   ./scripts/ci/local-ci.sh
 

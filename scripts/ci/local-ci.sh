@@ -16,7 +16,8 @@ source "${SCRIPT_DIR}/local-ci-packages.sh"
 
 LOCAL_CI_GO_SCOPE="${LOCAL_CI_GO_SCOPE:-all}"
 RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-true}"
-RUN_RACE_TESTS="${RUN_RACE_TESTS:-false}"
+RUN_RACE_TESTS="${RUN_RACE_TESTS:-true}"
+RUN_NILAWAY="${RUN_NILAWAY:-true}"
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}"
 RUN_ADMIN_TOUCH_GUARDRAIL="${RUN_ADMIN_TOUCH_GUARDRAIL:-true}"
 
@@ -266,6 +267,59 @@ run_go_package_step() {
     run_step "${name}" "$@" "${GO_PACKAGES[@]}"
 }
 
+owned_go_package_patterns() {
+    local package_pattern
+    for package_pattern in "${GO_PACKAGES[@]}"; do
+        case "${package_pattern}" in
+            ./../shared-go/...|../shared-go/...|./../iris-client-go/...|../iris-client-go/...)
+                continue
+                ;;
+        esac
+        printf '%s\n' "${package_pattern}"
+    done
+}
+
+check_golangci_lint() {
+    local packages=()
+    mapfile -t packages < <(owned_go_package_patterns)
+    if (( ${#packages[@]} == 0 )); then
+        echo "[LOCAL CI] Skip golangci-lint: no owned Go packages in scope"
+        echo
+        return 0
+    fi
+
+    local golangci_lint_bin
+    golangci_lint_bin="$(ensure_golangci_lint)"
+
+    run_step "golangci-lint" "${golangci_lint_bin}" run -c .golangci.yml "${packages[@]}"
+}
+
+check_nilaway() {
+    if [[ "${RUN_NILAWAY}" != "true" ]]; then
+        echo "[LOCAL CI] Skip NilAway: RUN_NILAWAY=${RUN_NILAWAY}"
+        echo
+        return 0
+    fi
+
+    local packages=()
+    mapfile -t packages < <(owned_go_package_patterns)
+    if (( ${#packages[@]} == 0 )); then
+        echo "[LOCAL CI] Skip NilAway: no owned Go packages in scope"
+        echo
+        return 0
+    fi
+
+    local nilaway_bin
+    nilaway_bin="$(ensure_nilaway)"
+
+    local package_pattern
+    for package_pattern in "${packages[@]}"; do
+        run_step "NilAway: ${package_pattern}" \
+            env GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" \
+            "${nilaway_bin}" -pretty-print "${package_pattern}"
+    done
+}
+
 run_step "local-ci package scope tests" ./scripts/ci/test-local-ci-packages.sh
 configure_go_packages
 echo "[LOCAL CI] Go package scope: ${LOCAL_CI_GO_SCOPE} (${#GO_PACKAGES[@]} packages)"
@@ -292,6 +346,8 @@ run_step "go fix drift" check_go_fix
 check_go_mod_tidy
 run_go_package_step "Go vet" go_mod_readonly go vet
 check_staticcheck
+check_golangci_lint
+check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
 run_warning_step "PGO freshness gate" ./scripts/ci/check-pgo-freshness.sh

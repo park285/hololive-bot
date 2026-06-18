@@ -5,7 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 source "${ROOT_DIR}/scripts/ci/go-tooling.sh"
 
-RUN_RACE_TESTS="${RUN_RACE_TESTS:-false}"
+RUN_RACE_TESTS="${RUN_RACE_TESTS:-true}"
+RUN_NILAWAY="${RUN_NILAWAY:-true}"
 RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-true}"
 
 run_step() {
@@ -31,6 +32,13 @@ run_step "go mod tidy diff" bash -c 'cd admin-dashboard/backend && go mod tidy -
 run_step "gofmt" bash -c 'unformatted="$(find admin-dashboard/backend -name "*.go" -not -path "*/vendor/*" -print0 | xargs -0 -r gofmt -l)"; if [[ -n "${unformatted}" ]]; then echo "gofmt required for:" >&2; echo "${unformatted}" >&2; exit 1; fi'
 run_step "go vet" bash -c 'cd admin-dashboard/backend && GOFLAGS=-mod=readonly go vet ./...'
 run_step "staticcheck" bash -c "cd admin-dashboard/backend && GOFLAGS=-mod=readonly '$(ensure_staticcheck)' ./..."
+run_step "golangci-lint" bash -c "cd admin-dashboard/backend && '$(ensure_golangci_lint)' run -c ../../.golangci.yml ./..."
+if [[ "${RUN_NILAWAY}" == "true" ]]; then
+  run_step "NilAway" bash -c "cd admin-dashboard/backend && GOFLAGS=-mod=readonly '$(ensure_nilaway)' -pretty-print ./..."
+else
+  echo "[ADMIN DASHBOARD GO CI] Skip NilAway: RUN_NILAWAY=${RUN_NILAWAY}"
+  echo
+fi
 run_step "go build" bash -c 'cd admin-dashboard/backend && GOFLAGS=-mod=readonly go build -trimpath -buildvcs=false ./cmd/admin-dashboard ./cmd/healthcheck'
 run_step "go test" bash -c 'cd admin-dashboard/backend && GOFLAGS=-mod=readonly go test -count=1 ./...'
 

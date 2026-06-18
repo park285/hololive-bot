@@ -22,6 +22,7 @@ env:
   GOTMPDIR: /tmp
   GOVULNCHECK_VERSION: v1.3.0
   GOSEC_VERSION: v2.27.1
+  NILAWAY_VERSION: v0.0.0-20260617211854-01ab7e30fbe0
 
 jobs:
   dependency-security:
@@ -72,6 +73,7 @@ jobs:
           mkdir -p "${GOBIN}"
           go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
           go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          go install "go.uber.org/nilaway/cmd/nilaway@${NILAWAY_VERSION}"
           echo "${GOBIN}" >> "${GITHUB_PATH}"
 
       - name: Resolve workspace package patterns
@@ -95,6 +97,22 @@ jobs:
             owned_pkgs+=("${pkg}")
           done
           gosec -quiet -fmt text "${owned_pkgs[@]}"
+
+      - name: NilAway
+        run: |
+          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
+          owned_pkgs=()
+          for pkg in "${pkgs[@]}"; do
+            case "${pkg}" in
+              ../shared-go/...)
+                continue
+                ;;
+            esac
+            owned_pkgs+=("${pkg}")
+          done
+          for pkg in "${owned_pkgs[@]}"; do
+            nilaway -pretty-print "${pkg}"
+          done
 
       - name: govulncheck
         run: |
