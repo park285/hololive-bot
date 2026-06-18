@@ -808,7 +808,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/json/json.go
 ../shared-go/pkg/jsonutil/doc.go
 ../shared-go/pkg/jsonutil/extract.go
-../shared-go/pkg/jsonutil/gjson.go
+../shared-go/pkg/jsonutil/readlimit.go
 ../shared-go/pkg/logging/async_writer.go
 ../shared-go/pkg/logging/attrs.go
 ../shared-go/pkg/logging/context.go

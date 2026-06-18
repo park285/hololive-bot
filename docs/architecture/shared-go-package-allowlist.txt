@@ -9,6 +9,7 @@ jsonutil
 llm
 logging
 logging/archive
+obsmetrics
 outputguard
 promptguard
 runtime/automaxprocs
