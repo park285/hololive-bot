@@ -62,7 +62,7 @@ func TestBuildTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 
-	req, err := http.NewRequest(http.MethodPost, server.URL+triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	if err != nil {
 		t.Fatalf("new request error = %v", err)
 	}
@@ -71,12 +71,13 @@ func TestBuildTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST without API key error = %v", err)
 	}
+	require.NotNil(t, resp)
 	require.NoError(t, resp.Body.Close())
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status without API key = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
 
-	reqWithKey, err := http.NewRequest(http.MethodPost, server.URL+triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	reqWithKey, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	if err != nil {
 		t.Fatalf("new request with key error = %v", err)
 	}
@@ -85,12 +86,13 @@ func TestBuildTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST with API key error = %v", err)
 	}
+	require.NotNil(t, respWithKey)
 	require.NoError(t, respWithKey.Body.Close())
 	if respWithKey.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status with API key = %d, want %d", respWithKey.StatusCode, http.StatusServiceUnavailable)
 	}
 
-	metricsReq, err := http.NewRequest(http.MethodGet, server.URL+"/metrics", http.NoBody)
+	metricsReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/metrics", http.NoBody)
 	if err != nil {
 		t.Fatalf("new metrics request error = %v", err)
 	}
@@ -98,12 +100,13 @@ func TestBuildTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /metrics without API key error = %v", err)
 	}
+	require.NotNil(t, metricsResp)
 	require.NoError(t, metricsResp.Body.Close())
 	if metricsResp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("/metrics status without API key = %d, want %d", metricsResp.StatusCode, http.StatusUnauthorized)
 	}
 
-	metricsReqWithKey, err := http.NewRequest(http.MethodGet, server.URL+"/metrics", http.NoBody)
+	metricsReqWithKey, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/metrics", http.NoBody)
 	if err != nil {
 		t.Fatalf("new metrics request with key error = %v", err)
 	}
@@ -112,6 +115,7 @@ func TestBuildTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /metrics with API key error = %v", err)
 	}
+	require.NotNil(t, metricsRespWithKey)
 	require.NoError(t, metricsRespWithKey.Body.Close())
 	if metricsRespWithKey.StatusCode != http.StatusOK {
 		t.Fatalf("/metrics status with API key = %d, want %d", metricsRespWithKey.StatusCode, http.StatusOK)

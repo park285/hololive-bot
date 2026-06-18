@@ -31,7 +31,9 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 )
 
-// 성공 시 (*domain.Channel, nil)을, 실패 시 (nil, error)를 반환한다.
+var ErrMemberLookupHandled = errors.New("member lookup handled")
+
+// 성공 시 (*domain.Channel, nil)을, 사용자-facing 응답을 보낸 경우 ErrMemberLookupHandled를 반환한다.
 func FindMemberOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
 	if err := ValidateMemberLookupDependencies(deps); err != nil {
 		return nil, fmt.Errorf("member lookup dependencies not configured: %w", err)
@@ -39,35 +41,35 @@ func FindMemberOrError(ctx context.Context, deps *Dependencies, room, memberName
 
 	member, err := deps.Matcher.FindBestMatch(ctx, memberName)
 	if err != nil {
-		return nil, deps.SendError(ctx, room, deps.Formatter.MemberNotFound(memberName))
+		return nil, sendMemberNotFound(ctx, deps, room, memberName)
 	}
 
 	if member == nil {
-		return nil, deps.SendError(ctx, room, deps.Formatter.MemberNotFound(memberName))
+		return nil, sendMemberNotFound(ctx, deps, room, memberName)
 	}
 
 	return member, nil
 }
 
 // !라이브, !일정, !알람 명령에서 사용한다.
-// 성공 시 (*domain.Channel, nil)을, 실패 또는 졸업 멤버인 경우 (nil, error)를 반환한다.
+// 성공 시 (*domain.Channel, nil)을, 사용자-facing 응답을 보낸 경우 ErrMemberLookupHandled를 반환한다.
 func FindActiveMemberOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
 	channel, err := FindMemberOrError(ctx, deps, room, memberName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find member: %w", err)
 	}
 
 	// Matcher를 통해 Member 정보 조회하여 졸업 상태 확인
 	if deps.Matcher != nil {
 		if member := deps.Matcher.GetMemberByChannelID(ctx, channel.ID); member != nil && member.IsGraduated {
-			return nil, deps.SendError(ctx, room, adapter.ErrGraduatedMemberBlocked)
+			return nil, sendGraduatedMemberBlocked(ctx, deps, room)
 		}
 	}
 
 	return channel, nil
 }
 
-// 동명이인인 경우 FormatAmbiguousMembers 응답을 보내고 (nil, error)를 반환한다.
+// 동명이인 또는 미발견인 경우 사용자-facing 응답을 보내고 ErrMemberLookupHandled를 반환한다.
 func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
 	if err := ValidateMemberLookupDependencies(deps); err != nil {
 		return nil, fmt.Errorf("member lookup dependencies not configured: %w", err)
@@ -76,16 +78,18 @@ func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, ro
 	channel, err := deps.Matcher.FindBestMatchWithCandidates(ctx, memberName)
 	if err != nil {
 		var ambiguousErr *matcher.AmbiguousMatchError
+
 		if errors.As(err, &ambiguousErr) {
 			message := deps.Formatter.FormatAmbiguousMembers(ambiguousErr.Candidates)
-			return nil, deps.SendMessage(ctx, room, message)
+
+			return nil, sendAmbiguousMembers(ctx, deps, room, message)
 		}
 
-		return nil, deps.SendError(ctx, room, deps.Formatter.MemberNotFound(memberName))
+		return nil, sendMemberNotFound(ctx, deps, room, memberName)
 	}
 
 	if channel == nil {
-		return nil, deps.SendError(ctx, room, deps.Formatter.MemberNotFound(memberName))
+		return nil, sendMemberNotFound(ctx, deps, room, memberName)
 	}
 
 	return channel, nil
@@ -95,19 +99,41 @@ func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, ro
 func FindActiveMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
 	channel, err := FindMemberWithCandidatesOrError(ctx, deps, room, memberName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find member with candidates: %w", err)
 	}
+
 	if channel == nil {
-		return nil, nil
+		return nil, ErrMemberLookupHandled
 	}
 
 	if deps.Matcher != nil {
 		if member := deps.Matcher.GetMemberByChannelID(ctx, channel.ID); member != nil && member.IsGraduated {
-			return nil, deps.SendError(ctx, room, adapter.ErrGraduatedMemberBlocked)
+			return nil, sendGraduatedMemberBlocked(ctx, deps, room)
 		}
 	}
 
 	return channel, nil
+}
+
+func sendMemberNotFound(ctx context.Context, deps *Dependencies, room, memberName string) error {
+	if err := deps.SendError(ctx, room, deps.Formatter.MemberNotFound(memberName)); err != nil {
+		return fmt.Errorf("send member not found response: %w", err)
+	}
+	return ErrMemberLookupHandled
+}
+
+func sendGraduatedMemberBlocked(ctx context.Context, deps *Dependencies, room string) error {
+	if err := deps.SendError(ctx, room, adapter.ErrGraduatedMemberBlocked); err != nil {
+		return fmt.Errorf("send graduated member blocked response: %w", err)
+	}
+	return ErrMemberLookupHandled
+}
+
+func sendAmbiguousMembers(ctx context.Context, deps *Dependencies, room, message string) error {
+	if err := deps.SendMessage(ctx, room, message); err != nil {
+		return fmt.Errorf("send ambiguous members response: %w", err)
+	}
+	return ErrMemberLookupHandled
 }
 
 func ValidateMemberLookupDependencies(deps *Dependencies) error {

@@ -144,6 +144,8 @@ func addLinkCheckStatus(result *LinkCheckResult, status domain.MajorEventLinkSta
 		result.OK++
 	case domain.MajorEventLinkStatusBlocked:
 		result.Blocked++
+	case domain.MajorEventLinkStatusUnchecked, domain.MajorEventLinkStatusFailed:
+		result.Failed++
 	default:
 		result.Failed++
 	}
@@ -240,9 +242,18 @@ func (c *LinkChecker) probe(ctx context.Context, method, targetURL string) (int,
 	if err != nil {
 		return 0, fmt.Errorf("probe link: do request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	if resp == nil {
+		return 0, fmt.Errorf("probe link: response is nil")
+	}
+	if resp.Body == nil {
+		return 0, fmt.Errorf("probe link: response body is nil")
+	}
 
-	return resp.StatusCode, nil
+	statusCode := resp.StatusCode
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		return 0, fmt.Errorf("probe link: close response body: %w", closeErr)
+	}
+	return statusCode, nil
 }
 
 func isSuccessStatus(code int) bool {

@@ -53,7 +53,12 @@ func TestServerHandlers_DoNotUseErrError(t *testing.T) {
 			continue
 		}
 
-		content, readErr := os.ReadFile(name)
+		cleanName := filepath.Clean(name)
+		if filepath.Dir(cleanName) != "." || cleanName != name {
+			t.Fatalf("unexpected file path outside package directory: %s", name)
+		}
+
+		content, readErr := os.ReadFile(cleanName)
 		if readErr != nil {
 			t.Fatalf("failed to read %s: %v", name, readErr)
 		}

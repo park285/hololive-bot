@@ -103,7 +103,9 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 
-				_ = json.NewEncoder(w).Encode(map[string]any{"goroutines": 42})
+				if err := json.NewEncoder(w).Encode(map[string]any{"goroutines": 42}); err != nil {
+					t.Fatalf("encode stats response: %v", err)
+				}
 			},
 			wantCount: 42,
 			wantOK:    true,
@@ -123,7 +125,9 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 					},
 				}
 
-				_ = json.NewEncoder(w).Encode(body)
+				if err := json.NewEncoder(w).Encode(body); err != nil {
+					t.Fatalf("encode stats response: %v", err)
+				}
 			},
 			wantCount: 30,
 			wantOK:    true,
@@ -141,7 +145,10 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 
-				_, _ = w.Write([]byte("{invalid json"))
+				_, err := w.Write([]byte("{invalid json"))
+				if err != nil {
+					t.Fatalf("write invalid json response: %v", err)
+				}
 			},
 			wantCount: 0,
 			wantOK:    false,

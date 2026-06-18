@@ -47,7 +47,7 @@ func (f *ResponseFormatter) FormatStatsTopGainers(periodLabel string, gainers []
 		fmt.Fprintf(&builder, "    +%s명", util.FormatKoreanNumber(entry.Value))
 
 		if entry.CurrentSubscribers > 0 {
-			fmt.Fprintf(&builder, " (현재 %s명)", util.FormatKoreanNumber(int64(entry.CurrentSubscribers)))
+			fmt.Fprintf(&builder, " (현재 %s명)", util.FormatKoreanNumber(uint64ToInt64(entry.CurrentSubscribers)))
 		}
 
 		builder.WriteString("\n\n")
@@ -57,7 +57,7 @@ func (f *ResponseFormatter) FormatStatsTopGainers(periodLabel string, gainers []
 }
 
 func (f *ResponseFormatter) FormatSubscriberCount(memberName string, subscribers uint64) string {
-	formattedSubs := util.FormatKoreanNumber(int64(subscribers))
+	formattedSubs := util.FormatKoreanNumber(uint64ToInt64(subscribers))
 
 	return fmt.Sprintf("%s %s\n\n%s 현재 구독자: %s명",
 		msging.DefaultEmoji.Member,
@@ -65,4 +65,12 @@ func (f *ResponseFormatter) FormatSubscriberCount(memberName string, subscribers
 		msging.DefaultEmoji.Stats,
 		formattedSubs,
 	)
+}
+
+func uint64ToInt64(value uint64) int64 {
+	const maxInt64 = uint64(1<<63 - 1)
+	if value > maxInt64 {
+		return int64(maxInt64)
+	}
+	return int64(value)
 }

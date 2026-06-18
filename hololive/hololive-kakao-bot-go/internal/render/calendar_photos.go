@@ -125,7 +125,27 @@ func fetchImageWithContext(ctx context.Context, url string) (image.Image, error)
 	if err := validateCalendarPhotoURL(url); err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+
+	resp, err := fetchCalendarPhotoResponse(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	defer closeResponseBody(resp.Body)
+
+	contentType, err := validateCalendarPhotoResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := readCalendarPhotoData(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return decodeCalendarPhoto(data, contentType)
+}
+
+func fetchCalendarPhotoResponse(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build calendar photo request: %w", err)
 	}
@@ -133,26 +153,45 @@ func fetchImageWithContext(ctx context.Context, url string) (image.Image, error)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	if resp == nil {
+		return nil, errors.New("calendar photo response is nil")
+	}
+	if resp.Body == nil {
+		return nil, errors.New("calendar photo response body is nil")
+	}
 
+	return resp, nil
+}
+
+func validateCalendarPhotoResponse(resp *http.Response) (string, error) {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("calendar photo status %d is not successful", resp.StatusCode)
+		return "", fmt.Errorf("calendar photo status %d is not successful", resp.StatusCode)
 	}
 	contentType, err := validateCalendarPhotoContentType(resp.Header.Get("Content-Type"))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
+	return contentType, nil
+}
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, calendarPhotoMaxBytes+1))
+func readCalendarPhotoData(body io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, calendarPhotoMaxBytes+1))
 	if err != nil {
 		return nil, err
 	}
 	if len(data) > calendarPhotoMaxBytes {
 		return nil, errors.New("image exceeds calendar photo byte limit")
 	}
-	return decodeCalendarPhoto(data, contentType)
+	return data, nil
+}
+
+func closeResponseBody(body io.Closer) {
+	if body == nil {
+		return
+	}
+	if err := body.Close(); err != nil {
+		slog.Debug("calendar photo response body close failed", slog.Any("error", err))
+	}
 }
 
 func decodeCalendarPhoto(data []byte, contentType string) (image.Image, error) {

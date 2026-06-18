@@ -93,7 +93,7 @@ func newReloadingTLSCertificateWithOptions(
 
 func (r *reloadingTLSCertificate) Start(ctx context.Context) {
 	if ctx == nil {
-		ctx = context.Background()
+		return
 	}
 
 	r.startOnce.Do(func() {
@@ -145,7 +145,7 @@ func (r *reloadingTLSCertificate) reloadOnce() {
 		return
 	}
 
-	cert, err := parseTLSCertificatePair(pairPEM, r.parseCertificatePair)
+	cert, err := parseTLSCertificatePair(&pairPEM, r.parseCertificatePair)
 	if err != nil {
 		r.recordReloadFailure(err)
 		return
@@ -156,7 +156,10 @@ func (r *reloadingTLSCertificate) reloadOnce() {
 }
 
 func (r *reloadingTLSCertificate) cachedSnapshot() *tlsCertificateSnapshot {
-	snapshot, _ := r.current.Load().(*tlsCertificateSnapshot)
+	snapshot, ok := r.current.Load().(*tlsCertificateSnapshot)
+	if !ok {
+		return nil
+	}
 	return snapshot
 }
 
@@ -198,7 +201,7 @@ func loadTLSCertificatePairWithReader(
 		return nil, pairPEM.fingerprint, err
 	}
 
-	cert, err := parseTLSCertificatePair(pairPEM, parseCertificatePair)
+	cert, err := parseTLSCertificatePair(&pairPEM, parseCertificatePair)
 	if err != nil {
 		return nil, pairPEM.fingerprint, err
 	}
@@ -235,10 +238,10 @@ func readTLSCertificatePairPEM(
 	return pairPEM, nil
 }
 
-func parseTLSCertificatePair(
-	pairPEM tlsCertificatePairPEM,
-	parseCertificatePair tlsCertificatePairParser,
-) (*tls.Certificate, error) {
+func parseTLSCertificatePair(pairPEM *tlsCertificatePairPEM, parseCertificatePair tlsCertificatePairParser) (*tls.Certificate, error) {
+	if pairPEM == nil {
+		return nil, fmt.Errorf("parse h3 certificate pair: nil certificate pair")
+	}
 	cert, err := parseCertificatePair(pairPEM.certPEM, pairPEM.keyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("parse h3 certificate pair: %w", err)

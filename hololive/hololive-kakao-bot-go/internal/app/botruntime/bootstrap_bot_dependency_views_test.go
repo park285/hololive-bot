@@ -61,10 +61,10 @@ func TestBuildBotWebhookRuntimeDependencies(t *testing.T) {
 	})
 
 	t.Run("maps cache", func(t *testing.T) {
-		cache := &cache.Service{}
-		deps := &bot.Dependencies{Cache: cache}
+		cacheService := &cache.Service{}
+		deps := &bot.Dependencies{Cache: cacheService}
 		view := buildBotWebhookRuntimeDependencies(deps)
-		if view.Cache != cache {
+		if view.Cache != cacheService {
 			t.Fatal("cache mapping mismatch")
 		}
 	})
@@ -79,11 +79,11 @@ func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 	})
 
 	t.Run("maps settings and cache", func(t *testing.T) {
-		cache := &cache.Service{}
+		cacheService := &cache.Service{}
 		settingsService := &stubSettingsReadWriter{}
-		deps := &bot.Dependencies{Cache: cache, Settings: settingsService}
+		deps := &bot.Dependencies{Cache: cacheService, Settings: settingsService}
 		view := buildBotConfigSubscriberDependencies(deps)
-		if view.Cache != cache {
+		if view.Cache != cacheService {
 			t.Fatal("cache mapping mismatch")
 		}
 		if view.Settings != settingsService {
@@ -135,22 +135,22 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 	})
 
 	t.Run("maps composed runtime views", func(t *testing.T) {
-		cache := &cache.Service{}
+		cacheService := &cache.Service{}
 		settingsService := &stubSettingsReadWriter{}
 		youtubeService := &stubYouTubeService{}
 		holodexService := &holodex.Service{}
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
-		deps := &bot.Dependencies{Cache: cache, Settings: settingsService, Service: youtubeService}
+		deps := &bot.Dependencies{Cache: cacheService, Settings: settingsService, Service: youtubeService}
 		infra := &appbootstrap.BotInfrastructure{Deps: deps, AlarmCRUD: alarmCRUD, HolodexService: holodexService}
 
 		views := buildBotRuntimeDependencyViews(infra)
 		if views.botDeps != deps {
 			t.Fatal("bot deps mapping mismatch")
 		}
-		if views.webhook.Cache != cache {
+		if views.webhook.Cache != cacheService {
 			t.Fatal("webhook view mapping mismatch")
 		}
-		if views.configSubscriber.Cache != cache || views.configSubscriber.Settings != settingsService {
+		if views.configSubscriber.Cache != cacheService || views.configSubscriber.Settings != settingsService {
 			t.Fatal("config subscriber view mapping mismatch")
 		}
 		if views.configSubscriberRuntime.AlarmCRUD != alarmCRUD || views.configSubscriberRuntime.HolodexService != holodexService {

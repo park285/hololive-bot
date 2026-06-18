@@ -31,7 +31,6 @@ func buildAdminAPIACLService(
 
 func buildAdminAPIAuthService(
 	ctx context.Context,
-	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*authsvc.Service, error) {

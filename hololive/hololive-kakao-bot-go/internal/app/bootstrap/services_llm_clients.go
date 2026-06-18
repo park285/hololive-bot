@@ -13,7 +13,7 @@ import (
 func ResolveLLMSchedulerClients(
 	appConfig *config.Config,
 	logger *slog.Logger,
-) (command.MajorEventRepository, command.MemberNewsService) {
+) (majorEventRepository command.MajorEventRepository, memberNewsService command.MemberNewsService) {
 	if appConfig.LLMSchedulerURL == "" {
 		logger.Warn("LLM scheduler URL not configured; majorevent/membernews commands disabled",
 			slog.String("env", "LLM_SCHEDULER_INTERNAL_URL"),

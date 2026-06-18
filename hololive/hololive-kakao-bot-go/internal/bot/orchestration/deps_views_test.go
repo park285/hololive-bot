@@ -63,7 +63,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	messageAdapter := &adapter.MessageAdapter{}
 	formatter := &adapter.ResponseFormatter{}
-	cache := &cache.Service{}
+	cacheService := &cache.Service{}
 	postgresService := &database.PostgresService{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
@@ -83,7 +83,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 		Client:                &fakeIrisClient{},
 		MessageAdapter:        messageAdapter,
 		Formatter:             formatter,
-		Cache:                 cache,
+		Cache:                 cacheService,
 		Postgres:              postgresService,
 		MemberRepository:      memberRepository,
 		MemberCache:           memberCache,
@@ -106,7 +106,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	}
 
 	data := deps.dataDeps()
-	if data.cache != cache || data.postgres != postgresService || data.memberRepository != memberRepository || data.memberCache != memberCache {
+	if data.cache != cacheService || data.postgres != postgresService || data.memberRepository != memberRepository || data.memberCache != memberCache {
 		t.Fatal("dataDeps mapping mismatch")
 	}
 

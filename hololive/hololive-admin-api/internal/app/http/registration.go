@@ -21,6 +21,7 @@
 package apphttp
 
 import (
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -57,7 +58,11 @@ func registerAPIRoutes(
 	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
 	adminAllowedIPs []*net.IPNet,
-) {
+) error {
+	if domainHandlers == nil {
+		return errors.New("domain handlers must not be nil")
+	}
+
 	domains := domainHandlers
 
 	// OAuth 콜백 프록시 (인증 불필요 - Google에서 직접 호출)
@@ -101,6 +106,8 @@ func registerAPIRoutes(
 	registerMilestoneRoutes(holoAPI, domains.Milestone)
 	registerProfileRoutes(holoAPI, domains.Profile)
 	registerMajorEventRoutes(holoAPI, domains.MajorEvent)
+
+	return nil
 }
 
 func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) gin.HandlerFunc {

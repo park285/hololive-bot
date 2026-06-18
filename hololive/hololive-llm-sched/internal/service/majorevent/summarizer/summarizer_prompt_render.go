@@ -40,9 +40,11 @@ type eventForPrompt struct {
 	Link      string `json:"link"`
 }
 
+const maxEventNoteRunes = 30
+
 func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, periodKey string, searchContext ...string) string {
 	promptEvents := projectPromptEvents(events)
-	eventsJSON, _ := json.Marshal(promptEvents)
+	eventsJSON := marshalPromptJSON(promptEvents, "[]")
 
 	now := time.Now().In(kst)
 	todayStr := fmt.Sprintf("%d년 %d월 %d일 (%s요일)",
@@ -77,6 +79,14 @@ func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, period
 	return base
 }
 
+func marshalPromptJSON(value any, fallback string) []byte {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return []byte(fallback)
+	}
+	return data
+}
+
 func projectPromptEvents(events []domain.MajorEvent) []eventForPrompt {
 	promptEvents := make([]eventForPrompt, 0, len(events))
 	for i := range events {
@@ -92,23 +102,23 @@ func projectPromptEvents(events []domain.MajorEvent) []eventForPrompt {
 	return promptEvents
 }
 
-func truncateNote(s string, maxRunes int) string {
+func truncateNote(s string) string {
 	runes := []rune(s)
-	if len(runes) <= maxRunes {
+	if len(runes) <= maxEventNoteRunes {
 		return s
 	}
-	return string(runes[:maxRunes]) + "…"
+	return string(runes[:maxEventNoteRunes]) + "…"
 }
 
 func normalizeNotes(resp *summaryResponse) {
 	for i := range resp.Highlights {
-		resp.Highlights[i].Note = truncateNote(resp.Highlights[i].Note, 30)
+		resp.Highlights[i].Note = truncateNote(resp.Highlights[i].Note)
 	}
 	for i := range resp.OngoingEvents {
-		resp.OngoingEvents[i].Note = truncateNote(resp.OngoingEvents[i].Note, 30)
+		resp.OngoingEvents[i].Note = truncateNote(resp.OngoingEvents[i].Note)
 	}
 	for i := range resp.DiscoveredEvents {
-		resp.DiscoveredEvents[i].Note = truncateNote(resp.DiscoveredEvents[i].Note, 30)
+		resp.DiscoveredEvents[i].Note = truncateNote(resp.DiscoveredEvents[i].Note)
 	}
 }
 
@@ -150,11 +160,11 @@ func writeHighlights(sb *strings.Builder, highlights []eventHighlight) {
 		if i > 0 {
 			sb.WriteString("\n\n")
 		}
-		writeHighlight(sb, h)
+		writeHighlight(sb, &h)
 	}
 }
 
-func writeHighlight(sb *strings.Builder, h eventHighlight) {
+func writeHighlight(sb *strings.Builder, h *eventHighlight) {
 	sb.WriteString(h.Date)
 	sb.WriteByte(' ')
 	sb.WriteString(h.Name)
@@ -184,7 +194,7 @@ func writeOngoingEvent(sb *strings.Builder, o ongoingEvent) {
 	writeNoteAndLink(sb, o.Note, o.Link)
 }
 
-func writeNoteAndLink(sb *strings.Builder, note string, link string) {
+func writeNoteAndLink(sb *strings.Builder, note, link string) {
 	if note != "" {
 		sb.WriteString("\n- ")
 		sb.WriteString(note)

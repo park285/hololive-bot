@@ -73,7 +73,7 @@ func (s *MonthlyScheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.digest.Start(ctx, schedulerkit.Config{
+	s.digest.Start(ctx, &schedulerkit.Config{
 		Logger:           s.digest.Logger,
 		WaitingLog:       "Member news monthly scheduler waiting",
 		ContextStopLog:   "Member news monthly scheduler stopped by context",
@@ -117,7 +117,7 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 	}
 
 	monthKey := s.getMonthKey()
-	return runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, digestDispatchConfig{
+	return runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
 		periodKey:        monthKey,
 		periodFieldName:  "month_key",
 		resultMessage:    "Member news monthly result",

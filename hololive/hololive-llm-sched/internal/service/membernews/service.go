@@ -136,7 +136,7 @@ func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period
 		return digest
 	}
 
-	digest, err := s.summarizer.Summarize(ctx, model.SummarizeInput{
+	digest, err := s.summarizer.Summarize(ctx, &model.SummarizeInput{
 		Period:      period,
 		Now:         s.now(),
 		RoomID:      roomID,

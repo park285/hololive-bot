@@ -118,7 +118,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		memberNews:            feature.memberNews,
 		commandBuilders:       feature.commandBuilders,
 		membersData:           stream.membersData,
-		memberRepository:      newCelebrationCalendarFinder(data, core),
+		memberRepository:      newCelebrationCalendarFinder(data, &core),
 		calendarImageRenderer: render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(core.calendarImageCacheDir)),
 		workerPool:            support.workerPool,
 		stopCh:                make(chan struct{}),
@@ -145,7 +145,10 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	return bot, nil
 }
 
-func newCelebrationCalendarFinder(data dataDependencies, core coreDependencies) command.CelebrationCalendarFinder {
+func newCelebrationCalendarFinder(data dataDependencies, core *coreDependencies) command.CelebrationCalendarFinder {
+	if core == nil {
+		return nil
+	}
 	if data.memberRepository == nil {
 		return nil
 	}

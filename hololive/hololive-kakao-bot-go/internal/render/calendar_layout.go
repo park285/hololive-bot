@@ -69,7 +69,9 @@ var (
 
 func drawText(img *image.RGBA, face font.Face, x, y int, col color.Color, text string) {
 	defer func() {
-		_ = recover()
+		if recovered := recover(); recovered != nil {
+			return
+		}
 	}()
 	d := &font.Drawer{
 		Dst:  img,
@@ -82,7 +84,9 @@ func drawText(img *image.RGBA, face font.Face, x, y int, col color.Color, text s
 
 func measureText(face font.Face, text string) int {
 	defer func() {
-		_ = recover()
+		if recovered := recover(); recovered != nil {
+			return
+		}
 	}()
 	d := &font.Drawer{Face: face}
 	return d.MeasureString(text).Ceil()
@@ -107,7 +111,10 @@ func fillRoundedRect(img *image.RGBA, rect image.Rectangle, radius int, col colo
 }
 
 func fillCircle(img *image.RGBA, cx, cy, r int, col color.Color) {
-	c := color.RGBAModel.Convert(col).(color.RGBA)
+	c, ok := color.RGBAModel.Convert(col).(color.RGBA)
+	if !ok {
+		c = color.RGBA{}
+	}
 	fcx, fcy, fr := float64(cx)+0.5, float64(cy)+0.5, float64(r)
 	for y := cy - r - 1; y <= cy+r+1; y++ {
 		for x := cx - r - 1; x <= cx+r+1; x++ {
@@ -194,7 +201,7 @@ const avatarSharpenAmount = 0.32
 func sharpenChannel(center, left, right, up, down uint8) uint8 {
 	neighborAvg := float64(int(left)+int(right)+int(up)+int(down)) / 4
 	value := float64(center) + avatarSharpenAmount*(float64(center)-neighborAvg)
-	return uint8(clampI(int(math.Round(value)), 0, 255))
+	return uint8FromClampedInt(clampMax255(int(math.Round(value))))
 }
 
 func blendRGBA(fg, bg color.RGBA, a float64) color.RGBA {
@@ -205,19 +212,39 @@ func blendRGBA(fg, bg color.RGBA, a float64) color.RGBA {
 		a = 1
 	}
 	return color.RGBA{
-		R: uint8(float64(fg.R)*a + float64(bg.R)*(1-a)),
-		G: uint8(float64(fg.G)*a + float64(bg.G)*(1-a)),
-		B: uint8(float64(fg.B)*a + float64(bg.B)*(1-a)),
+		R: uint8FromClampedInt(clampMax255(int(float64(fg.R)*a + float64(bg.R)*(1-a)))),
+		G: uint8FromClampedInt(clampMax255(int(float64(fg.G)*a + float64(bg.G)*(1-a)))),
+		B: uint8FromClampedInt(clampMax255(int(float64(fg.B)*a + float64(bg.B)*(1-a)))),
 		A: 255,
 	}
 }
 
-func clampI(v, lo, hi int) int {
-	if v < lo {
-		return lo
+func clampMax255(v int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return v
+}
+
+func clampI(v, hi int) int {
+	if v < 0 {
+		return 0
 	}
 	if v > hi {
 		return hi
 	}
 	return v
+}
+
+func uint8FromClampedInt(v int) uint8 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
 }

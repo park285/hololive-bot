@@ -67,7 +67,7 @@ func newAmbiguousMatcher() *matcher.Matcher {
 }
 
 // alarm은 이미 동명이인 응답을 보내므로 목표 메시지의 기준점이다.
-func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher, query string) string {
+func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher) string {
 	t.Helper()
 
 	var captured string
@@ -88,7 +88,7 @@ func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher, que
 
 	err := NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"action": "add",
-		"member": query,
+		"member": "Aqua",
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, captured, "alarm should emit ambiguous-member message")
@@ -97,7 +97,7 @@ func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher, que
 }
 
 func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.T) {
-	want := expectedAmbiguousMessage(t, newAmbiguousMatcher(), "Aqua")
+	want := expectedAmbiguousMessage(t, newAmbiguousMatcher())
 
 	var (
 		gotMessage  string
@@ -127,7 +127,7 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 }
 
 func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.T) {
-	want := expectedAmbiguousMessage(t, newAmbiguousMatcher(), "Aqua")
+	want := expectedAmbiguousMessage(t, newAmbiguousMatcher())
 
 	var (
 		gotMessage  string
@@ -157,7 +157,7 @@ func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 }
 
 func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.T) {
-	want := expectedAmbiguousMessage(t, newAmbiguousMatcher(), "Aqua")
+	want := expectedAmbiguousMessage(t, newAmbiguousMatcher())
 
 	var (
 		gotMessage  string
@@ -187,7 +187,7 @@ func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 }
 
 func TestSubscriberCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.T) {
-	want := expectedAmbiguousMessage(t, newAmbiguousMatcher(), "Aqua")
+	want := expectedAmbiguousMessage(t, newAmbiguousMatcher())
 
 	var (
 		gotMessage  string

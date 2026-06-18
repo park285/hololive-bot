@@ -42,7 +42,7 @@ type DBIntegrationRuntime struct {
 
 func BuildDBIntegrationRuntime(
 	ctx context.Context,
-	postgresConfig config.PostgresConfig,
+	postgresConfig *config.PostgresConfig,
 	logger *slog.Logger,
 ) (*DBIntegrationRuntime, error) {
 	if logger == nil {
@@ -50,7 +50,7 @@ func BuildDBIntegrationRuntime(
 	}
 
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, errors.New("context must not be nil")
 	}
 
 	runtime, cleanup, err := InitializeDBIntegrationRuntime(ctx, postgresConfig, logger)

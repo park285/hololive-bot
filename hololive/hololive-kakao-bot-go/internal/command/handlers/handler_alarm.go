@@ -102,8 +102,8 @@ func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *domain.Com
 }
 
 func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
-	subCmd, _ := params["sub_command"].(string)
-	memberName, _ := params["member"].(string)
+	subCmd := stringParam(params, "sub_command")
+	memberName := stringParam(params, "member")
 	c.Deps().Logger.Info("Invalid alarm command received",
 		slog.String("room", cmdCtx.Room),
 		slog.String("sender", cmdCtx.UserName),
@@ -151,7 +151,7 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrGraduatedMemberBlocked)
 	}
 
-	added, err := c.Deps().Alarm.AddAlarm(ctx, domain.AddAlarmRequest{
+	added, err := c.Deps().Alarm.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     cmdCtx.Room,
 		UserID:     cmdCtx.UserID,
 		ChannelID:  channel.ID,
@@ -169,14 +169,17 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrAlarmAddFailed)
 	}
 
-	nextStreamInfo, _ := c.Deps().Alarm.GetNextStreamInfo(ctx, channel.ID)
+	nextStreamInfo, err := c.Deps().Alarm.GetNextStreamInfo(ctx, channel.ID)
+	if err != nil {
+		c.Deps().Logger.Debug("Failed to get next stream info", slog.Any("error", err))
+	}
 
 	message := c.Deps().Formatter.FormatAlarmAdded(ctx, channel.Name, added, nextStreamInfo)
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
-func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room string, memberName string) (*domain.Channel, error) {
+func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName string) (*domain.Channel, error) {
 	channel, err := c.Deps().Matcher.FindBestMatchWithCandidates(ctx, memberName)
 	if err != nil {
 		var ambiguousErr *matcher.AmbiguousMatchError

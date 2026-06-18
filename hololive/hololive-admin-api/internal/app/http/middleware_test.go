@@ -19,7 +19,7 @@ func TestCorsOriginGuard_ForbiddenResponseContract(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/holo/test", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/test", http.NoBody)
 	req.Header.Set("Origin", "https://blocked.example")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

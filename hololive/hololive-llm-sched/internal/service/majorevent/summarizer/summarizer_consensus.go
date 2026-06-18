@@ -60,7 +60,7 @@ func (s *EventSummarizer) reviewConsensusVerdict(
 	periodKey string,
 	primary *summaryResponse,
 ) (*consensus.ReviewVerdict, bool) {
-	reviewCtx, cancel, ok := deriveConsensusBudget(ctx, s.consensus.ReviewTimeout, 250*time.Millisecond)
+	reviewCtx, cancel, ok := deriveConsensusBudget(ctx, s.consensus.ReviewTimeout)
 	if !ok {
 		s.logger.Warn("major event consensus skipped: insufficient budget for review")
 		return nil, false
@@ -96,7 +96,7 @@ func (s *EventSummarizer) applyConsensusAdjudication(
 		return primary, false
 	}
 
-	adjCtx, adjCancel, ok := deriveConsensusBudget(ctx, s.consensus.AdjudicateTimeout, 250*time.Millisecond)
+	adjCtx, adjCancel, ok := deriveConsensusBudget(ctx, s.consensus.AdjudicateTimeout)
 	if !ok {
 		s.logger.Warn("major event consensus skipped: insufficient budget for adjudication")
 		return primary, false
@@ -115,12 +115,10 @@ func (s *EventSummarizer) applyConsensusAdjudication(
 	return adjusted, true
 }
 
-func deriveConsensusBudget(parent context.Context, requested, reserve time.Duration) (context.Context, context.CancelFunc, bool) {
+func deriveConsensusBudget(parent context.Context, requested time.Duration) (context.Context, context.CancelFunc, bool) {
+	const reserve = 250 * time.Millisecond
 	if requested <= 0 {
 		requested = time.Second
-	}
-	if reserve < 0 {
-		reserve = 0
 	}
 
 	if deadline, ok := parent.Deadline(); ok {
@@ -144,7 +142,7 @@ func (s *EventSummarizer) reviewSummary(
 	periodKey string,
 	primary *summaryResponse,
 ) (*consensus.ReviewVerdict, error) {
-	primaryJSON, _ := json.Marshal(primary)
+	primaryJSON := marshalPromptJSON(primary, "null")
 
 	raw, err := s.reviewer.GenerateJSON(
 		ctx,
@@ -175,8 +173,8 @@ func (s *EventSummarizer) adjudicateSummary(
 	primary *summaryResponse,
 	verdict *consensus.ReviewVerdict,
 ) (*summaryResponse, error) {
-	primaryJSON, _ := json.Marshal(primary)
-	verdictJSON, _ := json.Marshal(verdict)
+	primaryJSON := marshalPromptJSON(primary, "null")
+	verdictJSON := marshalPromptJSON(verdict, "null")
 
 	raw, err := s.adjudicator.GenerateJSON(
 		ctx,
@@ -263,7 +261,7 @@ func buildReviewSummaryUserPrompt(
 	summaryType SummaryType,
 	periodKey, primarySummaryJSON string,
 ) string {
-	eventBytes, _ := json.Marshal(events)
+	eventBytes := marshalPromptJSON(events, "[]")
 	return fmt.Sprintf(`summary_type=%s
 period_key=%s
 
@@ -304,7 +302,7 @@ func buildFinalOutputReviewUserPrompt(
 	summaryType SummaryType,
 	periodKey, assembled string,
 ) string {
-	eventBytes, _ := json.Marshal(events)
+	eventBytes := marshalPromptJSON(events, "[]")
 	return fmt.Sprintf(`summary_type=%s
 period_key=%s
 

@@ -21,7 +21,7 @@ func buildAdminAPIYouTubeStack(
 	logger *slog.Logger,
 ) *providers.YouTubeStack {
 	statsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
-	return sharedmodules.BuildYouTubeAPIStack(ctx, sharedmodules.YouTubeAPIStackParams{
+	return sharedmodules.BuildYouTubeAPIStack(ctx, &sharedmodules.YouTubeAPIStackParams{
 		YouTubeConfig:   appConfig.YouTube,
 		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,

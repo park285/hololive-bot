@@ -96,7 +96,7 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 
 type staticResolver map[string][]net.IP
 
-func (r staticResolver) LookupIP(_ context.Context, _ string, host string) ([]net.IP, error) {
+func (r staticResolver) LookupIP(_ context.Context, _, host string) ([]net.IP, error) {
 	ips, ok := r[host]
 	if !ok {
 		return nil, errors.New("host not found")
@@ -110,7 +110,7 @@ type sequentialResolver struct {
 	calls     int
 }
 
-func (r *sequentialResolver) LookupIP(_ context.Context, _ string, host string) ([]net.IP, error) {
+func (r *sequentialResolver) LookupIP(_ context.Context, _, host string) ([]net.IP, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if host == "" {
@@ -253,7 +253,11 @@ func TestLinkCheckerCheckLink_BlockedDNSRebindingBetweenValidationAndDial(t *tes
 		{net.ParseIP("127.0.0.1")},
 	}}
 
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("http.DefaultTransport type = %T, want *http.Transport", http.DefaultTransport)
+	}
+	transport := defaultTransport.Clone()
 	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {

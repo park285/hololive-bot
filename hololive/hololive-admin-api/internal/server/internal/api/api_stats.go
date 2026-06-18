@@ -141,12 +141,14 @@ func (h *StatsHandler) streamSystemStats(ctx context.Context, conn *websocket.Co
 		return
 	}
 
-	_ = lifecycle.RunTickerLoop(ctx, systemStatsStreamInterval, func(ctx context.Context) error {
+	if err := lifecycle.RunTickerLoop(ctx, systemStatsStreamInterval, func(ctx context.Context) error {
 		if !h.writeSystemStats(ctx, conn, "failed to collect system stats", "failed to write system stats") {
 			return errSystemStatsStreamStopped
 		}
 		return nil
-	})
+	}); err != nil && !errors.Is(err, errSystemStatsStreamStopped) {
+		h.safeLogger().Warn("system stats stream stopped", slog.Any("error", err))
+	}
 }
 
 func (h *StatsHandler) writeInitialSystemStats(ctx context.Context, conn *websocket.Conn) bool {

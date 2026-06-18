@@ -268,6 +268,8 @@ func getSystemPrompt(summaryType SummaryType) (string, error) {
 	switch summaryType {
 	case SummaryTypeMonthly:
 		return r.monthly, nil
+	case SummaryTypeWeekly:
+		return r.weekly, nil
 	default:
 		return r.weekly, nil
 	}

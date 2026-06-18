@@ -128,8 +128,8 @@ Rules:
 - Do not guess unknown facts.`
 }
 
-func buildMemberNewsUserPrompt(input model.SummarizeInput, searchContext string) string {
-	payload, _ := json.Marshal(buildPromptCandidates(input))
+func buildMemberNewsUserPrompt(input *model.SummarizeInput, searchContext string) string {
+	payload := marshalPromptJSON(buildPromptCandidates(input), "[]")
 
 	members := append([]string(nil), input.RoomMembers...)
 	sort.Strings(members)
@@ -149,6 +149,14 @@ candidate_events=%s`,
 	}
 
 	return base + "\nexa_search_context=" + searchContext + "\nReturn only schema JSON."
+}
+
+func marshalPromptJSON(value any, fallback string) []byte {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return []byte(fallback)
+	}
+	return data
 }
 
 func buildSearchQuery(period model.Period, roomMembers []string, now time.Time) string {
@@ -193,7 +201,7 @@ func writeSearchContextItem(builder *strings.Builder, index int, item sharedmode
 	writeSearchContextField(builder, "", item.Content)
 }
 
-func writeSearchContextField(builder *strings.Builder, label string, value string) {
+func writeSearchContextField(builder *strings.Builder, label, value string) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return

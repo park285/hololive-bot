@@ -135,7 +135,7 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 		return "", errors.New("openai client is nil")
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return "", errors.New("openai context is nil")
 	}
 	if strings.TrimSpace(c.model) == "" {
 		return "", errors.New("openai model is empty")
@@ -170,15 +170,7 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 		return "", safeErr
 	}
 
-	text, err := c.applyFallbackPostProcess(resp.Text, resp.FallbackUsed)
-	if err != nil {
-		safeErr := safeLLMProviderError(err)
-		failedAttrs := append([]slog.Attr{}, attrs...)
-		failedAttrs = append(failedAttrs, sharedlog.SinceMS(started))
-		failedAttrs = append(failedAttrs, llmProviderErrorAttrs(err)...)
-		sharedlog.Error(ctx, c.logger, "llm.provider.request.failed", "llm provider request failed", failedAttrs...)
-		return "", safeErr
-	}
+	text := c.applyFallbackPostProcess(resp.Text, resp.FallbackUsed)
 
 	successAttrs := append([]slog.Attr{}, attrs...)
 	successAttrs = append(successAttrs, sharedlog.SinceMS(started), slog.Int("result_count", 1))
@@ -188,12 +180,12 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	return text, nil
 }
 
-func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) (string, error) {
+func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) string {
 	if !usedFallback {
-		return text, nil
+		return text
 	}
 	if c.schemaName != "event_summary" {
-		return text, nil
+		return text
 	}
 
 	sanitized, err := suppressFallbackDiscoveredEvents(text)
@@ -202,10 +194,10 @@ func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) 
 			c.logger.Warn("failed to sanitize discovered_events on fallback",
 				slog.String("error_type", llmErrorType(err)))
 		}
-		return text, nil
+		return text
 	}
 
-	return sanitized, nil
+	return sanitized
 }
 
 func llmPromptSummaryAttrs(provider, model, systemPrompt, userPrompt string) []slog.Attr {

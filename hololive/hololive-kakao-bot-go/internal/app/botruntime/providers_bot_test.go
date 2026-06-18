@@ -88,7 +88,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	messageAdapter := &adapter.MessageAdapter{}
 	formatter := &adapter.ResponseFormatter{}
 
-	cache := &cache.Service{}
+	cacheService := &cache.Service{}
 	postgres := &database.PostgresService{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
@@ -110,7 +110,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	t.Cleanup(workerPool.StopAndWait)
 	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command { return nil })
 
-	deps := appbootstrap.ProvideBotDependencies(appbootstrap.BotDependencyModules{
+	deps := appbootstrap.ProvideBotDependencies(&appbootstrap.BotDependencyModules{
 		Core: appbootstrap.BotCoreModule{
 			BotSelfUser:  "bot-self",
 			IrisBaseURL:  "https://iris.internal",
@@ -123,7 +123,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			Formatter:      formatter,
 		},
 		Data: appbootstrap.BotDataModule{
-			Cache:            cache,
+			Cache:            cacheService,
 			Postgres:         postgres,
 			MemberRepository: memberRepository,
 			MemberCache:      memberCache,
@@ -163,7 +163,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	if deps.Formatter != formatter {
 		t.Fatal("Formatter wiring mismatch")
 	}
-	if deps.Cache != cache || deps.Postgres != postgres {
+	if deps.Cache != cacheService || deps.Postgres != postgres {
 		t.Fatal("infra wiring mismatch")
 	}
 	if deps.MemberRepository != memberRepository || deps.MemberCache != memberCache {
@@ -192,7 +192,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 func TestProvideBotDependencies_NilYouTubeStackIsSafe(t *testing.T) {
 	t.Parallel()
 
-	deps := appbootstrap.ProvideBotDependencies(appbootstrap.BotDependencyModules{
+	deps := appbootstrap.ProvideBotDependencies(&appbootstrap.BotDependencyModules{
 		Stream: appbootstrap.BotStreamModule{YTStack: nil},
 	})
 	if deps == nil {

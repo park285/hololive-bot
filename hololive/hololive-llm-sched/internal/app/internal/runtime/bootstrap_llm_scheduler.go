@@ -182,7 +182,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *config.LLMSc
 	}
 	cacheService := cacheResources.Service
 
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, schedulerConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &schedulerConfig.Postgres, logger)
 	if err != nil {
 		cleanupCache()
 		return nil, fmt.Errorf("init database: %w", err)
@@ -221,7 +221,7 @@ func buildLLMSchedulerComponents(
 	templateRenderer := template.NewRenderer(postgresService.GetPool(), logger)
 	formatter := newLLMSchedulerFormatter(schedulerConfig.Bot.Prefix, templateRenderer, logger)
 	majorEventRepository := buildMajorEventRepository(postgresService, logger)
-	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, logger)
+	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, logger)
 
 	deliveryModule := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
 
@@ -238,7 +238,7 @@ func buildLLMSchedulerComponents(
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, logger)
 
 	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
-	httpServers, err := buildLLMSchedulerHTTPServers(ctx, schedulerConfig.Server, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService)
+	httpServers, err := buildLLMSchedulerHTTPServers(ctx, &schedulerConfig.Server, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService)
 	if err != nil {
 		return nil, err
 	}
@@ -320,13 +320,16 @@ func buildLLMSchedulerHTTPServer(
 
 func buildLLMSchedulerHTTPServers(
 	ctx context.Context,
-	serverConfig config.ServerConfig,
+	serverConfig *config.ServerConfig,
 	logger *slog.Logger,
 	triggerHandler *sharedserver.TriggerHandler,
 	apiKey string,
 	majorEventRepository *majorevent.Repository,
 	memberNewsService *membernews.Service,
 ) (*sharedserver.RuntimeHTTPServers, error) {
+	if serverConfig == nil {
+		serverConfig = &config.ServerConfig{}
+	}
 	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepository != nil || memberNewsService != nil) {
 		return nil, fmt.Errorf("build llm scheduler router: API_SECRET_KEY required")
 	}

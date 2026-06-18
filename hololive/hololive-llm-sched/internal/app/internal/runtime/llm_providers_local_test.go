@@ -113,7 +113,7 @@ func TestProvideMemberNewsLLMClient_Disabled(t *testing.T) {
 	var buf bytes.Buffer
 	logger := logging.NewTestLoggerWithOutput(&buf)
 
-	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: false}, config.LLMConfig{}, nil, logger)
+	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: false}, &config.LLMConfig{}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when disabled")
 	}
@@ -126,7 +126,7 @@ func TestProvideMemberNewsLLMClient_NoAPIKey(t *testing.T) {
 	var buf bytes.Buffer
 	logger := logging.NewTestLoggerWithOutput(&buf)
 
-	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: true, APIKey: ""}, config.LLMConfig{}, nil, logger)
+	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: true, APIKey: ""}, &config.LLMConfig{}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when API key missing")
 	}
@@ -145,7 +145,7 @@ func TestProvideMemberNewsLLMClient_EmptyBaseURL(t *testing.T) {
 			APIKey:  "key",
 			BaseURL: "",
 		},
-		config.LLMConfig{
+		&config.LLMConfig{
 			MemberNewsModel: "test-model",
 		},
 		nil, logger,
@@ -169,7 +169,7 @@ func TestProvideMemberNewsLLMClient_ModelFallback(t *testing.T) {
 			BaseURL: "https://example.com/v1",
 			Model:   "default-model",
 		},
-		config.LLMConfig{
+		&config.LLMConfig{
 			MemberNewsModel: "", // 빈값 → Cliproxy.Model fallback
 		},
 		nil, logger,
@@ -193,7 +193,7 @@ func TestProvideMemberNewsLLMClient_DeprecatedModel(t *testing.T) {
 			BaseURL: "https://example.com/v1",
 			Model:   "default-model",
 		},
-		config.LLMConfig{
+		&config.LLMConfig{
 			MemberNewsModel: "old-model",
 		},
 		nil, logger,
@@ -214,7 +214,7 @@ func TestProvideMemberNewsLLMClient_NewModel_NoDeprecationWarn(t *testing.T) {
 			BaseURL: "https://example.com/v1",
 			Model:   "default-model",
 		},
-		config.LLMConfig{
+		&config.LLMConfig{
 			MemberNewsModel: "new-model",
 		},
 		nil, logger,
@@ -241,7 +241,7 @@ func TestProvideMemberNewsLLMClient_TemperatureZero_LogShowsNotApplied(t *testin
 			BaseURL: "https://example.com/v1",
 			Model:   "default-model",
 		},
-		config.LLMConfig{
+		&config.LLMConfig{
 			MemberNewsModel:       "test-model",
 			MemberNewsTemperature: 0,
 		},
@@ -290,7 +290,7 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 				BaseURL: sensitiveURL,
 				Model:   "",
 			},
-			config.LLMConfig{
+			&config.LLMConfig{
 				MemberNewsModel: "", // 빈값 + Cliproxy.Model 빈값 → error 경로
 			},
 			nil, logger,
@@ -331,7 +331,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := logging.NewTestLoggerWithOutput(&buf)
-	client := ProvideMemberNewsLLMClient(appConfig.Cliproxy, appConfig.LLM, nil, logger)
+	client := ProvideMemberNewsLLMClient(appConfig.Cliproxy, &appConfig.LLM, nil, logger)
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
@@ -354,7 +354,9 @@ func newWorkerProfileDisabledIrisServer(t *testing.T) *httptest.Server {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		_, _ = w.Write([]byte(`{"workers":{"webhook":{"webhookPipeline":{"profileEnabled":false}}}}`))
+		if _, err := w.Write([]byte(`{"workers":{"webhook":{"webhookPipeline":{"profileEnabled":false}}}}`)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
 	}))
 	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
 	server.StartTLS()
@@ -376,7 +378,7 @@ func TestProvideMemberNewsReviewerClient_ConsensusDisabled(t *testing.T) {
 
 	client := ProvideMemberNewsReviewerClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "m"},
-		config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: false}},
+		&config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: false}},
 		nil, logger,
 	)
 	if client != nil {
@@ -390,7 +392,7 @@ func TestProvideMemberNewsReviewerClient_Enabled(t *testing.T) {
 
 	client := ProvideMemberNewsReviewerClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "default"},
-		config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, ReviewerModel: "gpt-4.1-mini"}},
+		&config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, ReviewerModel: "gpt-4.1-mini"}},
 		nil, logger,
 	)
 	if client == nil {
@@ -407,7 +409,7 @@ func TestProvideMemberNewsReviewerClient_ModelFallback(t *testing.T) {
 
 	client := ProvideMemberNewsReviewerClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "cliproxy-default"},
-		config.LLMConfig{MemberNewsModel: "news-model", MemberNews: config.ConsensusLLMConfig{Enabled: true, ReviewerModel: ""}},
+		&config.LLMConfig{MemberNewsModel: "news-model", MemberNews: config.ConsensusLLMConfig{Enabled: true, ReviewerModel: ""}},
 		nil, logger,
 	)
 	if client == nil {
@@ -424,7 +426,7 @@ func TestProvideMemberNewsAdjudicatorClient_ConsensusDisabled(t *testing.T) {
 
 	client := ProvideMemberNewsAdjudicatorClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "m"},
-		config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: false}},
+		&config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: false}},
 		nil, logger,
 	)
 	if client != nil {
@@ -438,7 +440,7 @@ func TestProvideMemberNewsAdjudicatorClient_Enabled(t *testing.T) {
 
 	client := ProvideMemberNewsAdjudicatorClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "default"},
-		config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: "gpt-4.1"}},
+		&config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: "gpt-4.1"}},
 		nil, logger,
 	)
 	if client == nil {
@@ -456,7 +458,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 
 		client := ProvideMemberNewsAdjudicatorClient(
 			config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "cliproxy-default"},
-			config.LLMConfig{MemberNewsModel: "news-model", MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
+			&config.LLMConfig{MemberNewsModel: "news-model", MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
 			nil, logger,
 		)
 		if client == nil {
@@ -473,7 +475,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 
 		client := ProvideMemberNewsAdjudicatorClient(
 			config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "cliproxy-default"},
-			config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
+			&config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
 			nil, logger,
 		)
 		if client == nil {
@@ -490,7 +492,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 
 		client := ProvideMemberNewsAdjudicatorClient(
 			config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: ""},
-			config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
+			&config.LLMConfig{MemberNews: config.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
 			nil, logger,
 		)
 		if client != nil {

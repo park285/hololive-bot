@@ -94,7 +94,7 @@ func TestNewAdminAPIRuntimeInitializesServerAndCleanup(t *testing.T) {
 	}
 }
 
-func writeRuntimeTestCertificate(t *testing.T) (string, string) {
+func writeRuntimeTestCertificate(t *testing.T) (certFile, keyFile string) {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -119,8 +119,8 @@ func writeRuntimeTestCertificate(t *testing.T) (string, string) {
 	}
 
 	dir := t.TempDir()
-	certFile := filepath.Join(dir, "cert.pem")
-	keyFile := filepath.Join(dir, "key.pem")
+	certFile = filepath.Join(dir, "cert.pem")
+	keyFile = filepath.Join(dir, "key.pem")
 	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}), 0o600); err != nil {
 		t.Fatalf("write cert: %v", err)
 	}

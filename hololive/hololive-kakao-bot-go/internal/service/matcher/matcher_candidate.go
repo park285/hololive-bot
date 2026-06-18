@@ -165,15 +165,15 @@ func (mm *Matcher) candidateFromDynamic(provider domain.MemberDataProvider, name
 	}
 }
 
-func (mm *Matcher) hydrateChannel(ctx context.Context, candidate *matchCandidate) (*domain.Channel, error) {
+func (mm *Matcher) hydrateChannel(ctx context.Context, candidate *matchCandidate) *domain.Channel {
 	if candidate == nil {
-		return nil, nil
+		return nil
 	}
 
 	fallback := fallbackChannelFromCandidate(candidate)
 
 	if mm.holodex == nil {
-		return fallback, nil
+		return fallback
 	}
 
 	channel, err := mm.holodex.GetChannel(ctx, candidate.channelID)
@@ -186,7 +186,7 @@ func (mm *Matcher) hydrateChannel(ctx context.Context, candidate *matchCandidate
 
 		mm.applyCachedChannelNameFallback(ctx, fallback, candidate)
 
-		return fallback, nil
+		return fallback
 	}
 
 	if channel == nil {
@@ -195,12 +195,12 @@ func (mm *Matcher) hydrateChannel(ctx context.Context, candidate *matchCandidate
 			slog.String("source", candidate.source),
 		)
 
-		return fallback, nil
+		return fallback
 	}
 
 	applyCandidateNameFallback(channel, candidate)
 
-	return channel, nil
+	return channel
 }
 
 func fallbackChannelFromCandidate(candidate *matchCandidate) *domain.Channel {
@@ -241,9 +241,9 @@ func applyCandidateNameFallback(channel *domain.Channel, candidate *matchCandida
 	}
 }
 
-func (mm *Matcher) finalizeCandidate(ctx context.Context, candidate *matchCandidate) (*domain.Channel, error) {
+func (mm *Matcher) finalizeCandidate(ctx context.Context, candidate *matchCandidate) *domain.Channel {
 	if candidate == nil {
-		return nil, nil
+		return nil
 	}
 
 	if candidate.channelID == "" {
@@ -252,14 +252,10 @@ func (mm *Matcher) finalizeCandidate(ctx context.Context, candidate *matchCandid
 			slog.String("source", candidate.source),
 		)
 
-		return nil, nil
+		return nil
 	}
 
-	channel, err := mm.hydrateChannel(ctx, candidate)
-	if err != nil {
-		return nil, err
-	}
-
+	channel := mm.hydrateChannel(ctx, candidate)
 	if channel != nil {
 		mm.logger.Debug("Match candidate resolved",
 			slog.String("channel_id", candidate.channelID),
@@ -268,7 +264,7 @@ func (mm *Matcher) finalizeCandidate(ctx context.Context, candidate *matchCandid
 		)
 	}
 
-	return channel, nil
+	return channel
 }
 
 func toStringPtr(value string) *string {

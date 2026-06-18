@@ -105,7 +105,7 @@ func (s *Scheduler) SetClock(clockFn func() time.Time) {
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
-	s.digest.Start(ctx, schedulerkit.Config{
+	s.digest.Start(ctx, &schedulerkit.Config{
 		Logger:           s.digest.Logger,
 		WaitingLog:       "Major event scheduler waiting",
 		ContextStopLog:   "Scheduler stopped by context",
@@ -220,9 +220,9 @@ func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyColle
 	return nil
 }
 
-func toDomainEventsAndIDs(events []*domain.MajorEvent) ([]domain.MajorEvent, []int) {
-	domainEvents := make([]domain.MajorEvent, len(events))
-	eventIDs := make([]int, len(events))
+func toDomainEventsAndIDs(events []*domain.MajorEvent) (domainEvents []domain.MajorEvent, eventIDs []int) {
+	domainEvents = make([]domain.MajorEvent, len(events))
+	eventIDs = make([]int, len(events))
 	for i, e := range events {
 		domainEvents[i] = *e
 		eventIDs[i] = e.ID

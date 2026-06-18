@@ -119,7 +119,7 @@ func TestSummarizer_SchemaSuccess(t *testing.T) {
 }`}, nil, validator, nil)
 
 	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST), Candidates: sampleCandidates()}
-	digest, err := s.Summarize(context.Background(), input)
+	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestSummarizer_DropsInvalidItemsByValidator(t *testing.T) {
 }`}, nil, validator, nil)
 
 	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST), Candidates: sampleCandidates()}
-	digest, err := s.Summarize(context.Background(), input)
+	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestSummarizer_LLMFailureUsesFallback(t *testing.T) {
 	s := NewSummarizer(&fakeLLM{err: errors.New("llm down")}, nil, validator, nil)
 
 	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST), Candidates: sampleCandidates()}
-	digest, err := s.Summarize(context.Background(), input)
+	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 		Now:        time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
 		Candidates: candidates,
 	}
-	digest, err := s.Summarize(context.Background(), input)
+	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestSummarizer_EmptyCandidatesUsesEmptyResultType(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(&fakeLLM{response: "{}"}, nil, validator, nil)
 
-	digest, err := s.Summarize(context.Background(), model.SummarizeInput{Period: model.PeriodWeekly})
+	digest, err := s.Summarize(context.Background(), &model.SummarizeInput{Period: model.PeriodWeekly})
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}

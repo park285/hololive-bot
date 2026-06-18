@@ -445,7 +445,9 @@ func TestSendWeeklyNotification_EnqueueMarking_AllSuccess_Marks(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	_ = scheduler.SendWeeklyNotification(context.Background())
+	if err := scheduler.SendWeeklyNotification(context.Background()); err != nil {
+		t.Fatalf("SendWeeklyNotification() error = %v", err)
+	}
 
 	if !repository.markedWeekly {
 		t.Error("all enqueue success → should mark events")
@@ -462,7 +464,9 @@ func TestSendWeeklyNotification_EnqueueMarking_PartialFail_NoMark(t *testing.T) 
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	_ = scheduler.SendWeeklyNotification(context.Background())
+	if err := scheduler.SendWeeklyNotification(context.Background()); err != nil {
+		t.Fatalf("SendWeeklyNotification() error = %v", err)
+	}
 
 	if repository.markedWeekly {
 		t.Error("partial enqueue failure → should NOT mark events")

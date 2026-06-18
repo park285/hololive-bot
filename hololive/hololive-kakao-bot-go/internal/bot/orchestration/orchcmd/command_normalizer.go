@@ -33,7 +33,7 @@ const (
 	CommandKeyNewsSubscription = "news_subscription"
 )
 
-func NormalizeCommandKey(cmdType domain.CommandType, params map[string]any) (string, map[string]any) {
+func NormalizeCommandKey(cmdType domain.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
 	typeStr := stringutil.Normalize(cmdType.String())
 
 	if after, ok := strings.CutPrefix(typeStr, "alarm_"); ok {

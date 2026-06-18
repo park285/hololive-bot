@@ -37,6 +37,8 @@ func buildSearchQuery(summaryType SummaryType, periodKey string) string {
 	switch summaryType {
 	case SummaryTypeMonthly:
 		return fmt.Sprintf("hololive production events %s month schedule %s %s %s", periodKey, sourceScope, accountScope, partnerScope)
+	case SummaryTypeWeekly:
+		return fmt.Sprintf("hololive production events schedule %s week %s %s %s", periodKey, sourceScope, accountScope, partnerScope)
 	default:
 		return fmt.Sprintf("hololive production events schedule %s week %s %s %s", periodKey, sourceScope, accountScope, partnerScope)
 	}

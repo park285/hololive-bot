@@ -30,13 +30,13 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
 
-func InitializeBotDependencies(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*bot.Dependencies, func(), error) {
+func InitializeBotDependencies(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (dependencies *bot.Dependencies, cleanup func(), err error) {
 	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, logger)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	cleanup := func() {
+	cleanup = func() {
 		infra.Cleanup()
 	}
 

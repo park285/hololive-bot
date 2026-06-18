@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -23,7 +24,7 @@ func (r *recordingSettingsActivityLogger) Log(string, string, map[string]any) {
 func newGuardTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/holo/settings", http.NoBody)
+	ctx.Request = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/holo/settings", http.NoBody)
 	return ctx, rec
 }
 

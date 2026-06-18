@@ -77,13 +77,13 @@ func parseCalendarParams(c *gin.Context) (month, year int, ok bool) {
 	return month, year, true
 }
 
-func parseIntQuery(c *gin.Context, key string, min, max int) (int, error) {
+func parseIntQuery(c *gin.Context, key string, minValue, maxValue int) (int, error) {
 	s := c.Query(key)
 	if s == "" {
 		return 0, nil
 	}
 	v, err := strconv.Atoi(s)
-	if err != nil || v < min || v > max {
+	if err != nil || v < minValue || v > maxValue {
 		return 0, fmt.Errorf("invalid %s", key)
 	}
 	return v, nil

@@ -43,10 +43,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 
-	resp, err := http.Get(server.URL + "/health")
-	if err != nil {
-		t.Fatalf("GET /health error = %v", err)
-	}
+	resp := getRouterTestResponse(t, server.URL+"/health")
 
 	require.NoError(t, resp.Body.Close())
 
@@ -54,10 +51,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 		t.Fatalf("/health status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	readyResp, err := http.Get(server.URL + "/ready")
-	if err != nil {
-		t.Fatalf("GET /ready error = %v", err)
-	}
+	readyResp := getRouterTestResponse(t, server.URL+"/ready")
 
 	require.NoError(t, readyResp.Body.Close())
 
@@ -65,7 +59,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
 	}
 
-	metricsReq, err := http.NewRequest(http.MethodGet, server.URL+"/metrics", http.NoBody)
+	metricsReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/metrics", http.NoBody)
 	if err != nil {
 		t.Fatalf("new /metrics request error = %v", err)
 	}
@@ -76,6 +70,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /metrics error = %v", err)
 	}
+	require.NotNil(t, metricsResp)
 
 	require.NoError(t, metricsResp.Body.Close())
 
@@ -95,10 +90,7 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 
-	resp, err := http.Get(server.URL + "/health")
-	if err != nil {
-		t.Fatalf("GET /health error = %v", err)
-	}
+	resp := getRouterTestResponse(t, server.URL+"/health")
 
 	require.NoError(t, resp.Body.Close())
 
@@ -106,10 +98,7 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 		t.Fatalf("/health status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	readyResp, err := http.Get(server.URL + "/ready")
-	if err != nil {
-		t.Fatalf("GET /ready error = %v", err)
-	}
+	readyResp := getRouterTestResponse(t, server.URL+"/ready")
 
 	require.NoError(t, readyResp.Body.Close())
 
@@ -134,4 +123,19 @@ func TestProvideBotRouter_FailsClosedWhenTriggerAPIKeyMissing(t *testing.T) {
 	if err.Error() != "API_SECRET_KEY required" {
 		t.Fatalf("ProvideBotRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
 	}
+}
+
+func getRouterTestResponse(t *testing.T, url string) *http.Response {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, http.NoBody)
+	if err != nil {
+		t.Fatalf("new GET request error = %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s error = %v", url, err)
+	}
+	require.NotNil(t, resp)
+	return resp
 }

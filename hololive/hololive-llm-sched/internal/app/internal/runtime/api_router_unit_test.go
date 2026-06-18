@@ -64,7 +64,7 @@ func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
 	assert.Equal(t, constants.ServerTimeout.Idle, server.IdleTimeout)
 	assert.Equal(t, constants.ServerTimeout.MaxHeaderBytes, server.MaxHeaderBytes)
 
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ping", http.NoBody)
 	rr := httptest.NewRecorder()
 	server.Handler.ServeHTTP(rr, req)
 
@@ -86,7 +86,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	assert.Equal(t, gin.PlatformCloudflare, router.TrustedPlatform)
 
 	t.Run("health", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
@@ -98,7 +98,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	})
 
 	t.Run("metrics", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
@@ -111,12 +111,12 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 		protectedRouter, err := buildHealthOnlyRouter(context.Background(), newDiscardLogger(), "test-key")
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)
 		rr := httptest.NewRecorder()
 		protectedRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 
-		reqWithKey := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		reqWithKey := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)
 		reqWithKey.Header.Set(middleware.APIKeyHeader, "test-key")
 		rrWithKey := httptest.NewRecorder()
 		protectedRouter.ServeHTTP(rrWithKey, reqWithKey)
@@ -125,7 +125,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	})
 
 	t.Run("ready", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ready", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
@@ -137,7 +137,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/unknown", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/unknown", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusNotFound, rr.Code)
@@ -188,12 +188,12 @@ func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, server)
 
-	withoutKeyReq := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	withoutKeyReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	withoutKeyRR := httptest.NewRecorder()
 	server.Handler.ServeHTTP(withoutKeyRR, withoutKeyReq)
 	assert.Equal(t, http.StatusUnauthorized, withoutKeyRR.Code)
 
-	withKeyReq := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	withKeyReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	withKeyReq.Header.Set(middleware.APIKeyHeader, "test-key")
 	withKeyRR := httptest.NewRecorder()
 	server.Handler.ServeHTTP(withKeyRR, withKeyReq)

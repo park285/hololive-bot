@@ -161,38 +161,53 @@ func TestMemberToChannelResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := sharedserver.MemberToChannelResponse(tt.member)
-			if tt.expected == nil {
-				if got != nil {
-					t.Errorf("memberToChannelResponse() = %+v, want nil", got)
-				}
-
-				return
-			}
-
-			if got == nil {
-				t.Errorf("memberToChannelResponse() = nil, want %+v", tt.expected)
-				return
-			}
-
-			if got.ID != tt.expected.ID {
-				t.Errorf("ID = %q, want %q", got.ID, tt.expected.ID)
-			}
-
-			if got.Name != tt.expected.Name {
-				t.Errorf("Name = %q, want %q", got.Name, tt.expected.Name)
-			}
-
-			if tt.expected.Photo == nil {
-				if got.Photo != nil {
-					t.Errorf("Photo = %v, want nil", *got.Photo)
-				}
-			} else {
-				if got.Photo == nil {
-					t.Errorf("Photo = nil, want %q", *tt.expected.Photo)
-				} else if *got.Photo != *tt.expected.Photo {
-					t.Errorf("Photo = %q, want %q", *got.Photo, *tt.expected.Photo)
-				}
-			}
+			assertChannelResponse(t, got, tt.expected)
 		})
+	}
+}
+
+func assertChannelResponse(t *testing.T, got, expected *sharedserver.ChannelResponse) {
+	t.Helper()
+
+	if expected == nil {
+		if got != nil {
+			t.Errorf("memberToChannelResponse() = %+v, want nil", got)
+		}
+
+		return
+	}
+
+	if got == nil {
+		t.Errorf("memberToChannelResponse() = nil, want %+v", expected)
+		return
+	}
+
+	if got.ID != expected.ID {
+		t.Errorf("ID = %q, want %q", got.ID, expected.ID)
+	}
+
+	if got.Name != expected.Name {
+		t.Errorf("Name = %q, want %q", got.Name, expected.Name)
+	}
+
+	assertChannelResponsePhoto(t, got.Photo, expected.Photo)
+}
+
+func assertChannelResponsePhoto(t *testing.T, got, expected *string) {
+	t.Helper()
+
+	if expected == nil {
+		if got != nil {
+			t.Errorf("Photo = %v, want nil", *got)
+		}
+		return
+	}
+
+	if got == nil {
+		t.Errorf("Photo = nil, want %q", *expected)
+		return
+	}
+	if *got != *expected {
+		t.Errorf("Photo = %q, want %q", *got, *expected)
 	}
 }

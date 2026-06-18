@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"strings"
 
 	"github.com/gin-contrib/cors"
@@ -69,6 +70,21 @@ func ProvideAPIRouter(
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), appConfig.Server.APIKey)
 	}
 
+	adminAllowedIPs, err := buildAdminAllowedIPs(appConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers, authHandler, adminAllowedIPs); err != nil {
+		return nil, err
+	}
+
+	logger.Info("api_key_auth_enabled")
+
+	return router, nil
+}
+
+func buildAdminAllowedIPs(appConfig *config.Config) ([]*net.IPNet, error) {
 	adminAllowedIPs, err := middleware.NewIPAllowList(appConfig.Server.AdminAllowedIPs)
 	if err != nil {
 		return nil, fmt.Errorf("parse admin allowed IPs: %w", err)
@@ -76,12 +92,7 @@ func ProvideAPIRouter(
 	if strings.EqualFold(strings.TrimSpace(appConfig.Environment), "production") && len(adminAllowedIPs) == 0 {
 		return nil, errors.New("ADMIN_ALLOWED_IPS must be configured in production")
 	}
-
-	registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers, authHandler, adminAllowedIPs)
-
-	logger.Info("api_key_auth_enabled")
-
-	return router, nil
+	return adminAllowedIPs, nil
 }
 
 func validateAPIRouterInputs(
@@ -145,7 +156,7 @@ func newAPIRouter(ctx context.Context, appConfig *config.Config, logger *slog.Lo
 		return nil, err
 	}
 
-	router, err := sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
+	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:       appConfig.Server.APIKey,
 		EnableGzip:   true,
 		SkipLogPaths: []string{"/metrics"},

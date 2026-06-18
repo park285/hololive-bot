@@ -41,7 +41,7 @@ func TestExaMCPClientSearch_SendsAPIKeyViaHeaderNotQuery(t *testing.T) {
 		gotHeaderKey = r.Header.Get("X-Exa-Api-Key")
 		gotRawQuery = r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(buildExaRPCBody(t, []string{
+		if _, err := w.Write(buildExaRPCBody(t, []string{
 			mustJSONString(t, []map[string]any{
 				{
 					"title":         "sample",
@@ -50,7 +50,9 @@ func TestExaMCPClientSearch_SendsAPIKeyViaHeaderNotQuery(t *testing.T) {
 					"publishedDate": "2026-03-04",
 				},
 			}),
-		}))
+		})); err != nil {
+			t.Errorf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

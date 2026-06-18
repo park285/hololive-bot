@@ -37,7 +37,7 @@ func buildAdminHandler(
 	majorEventTriggerClient *triggerclient.Client,
 	logger *slog.Logger,
 ) *server.Handler {
-	return server.NewHandler(server.HandlerDeps{
+	return server.NewHandler(&server.HandlerDeps{
 		Common: server.CommonDeps{
 			Logger:   logger,
 			Activity: activity.NewActivityLogger("", logger),

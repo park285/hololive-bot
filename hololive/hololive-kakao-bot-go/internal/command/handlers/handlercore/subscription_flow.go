@@ -42,10 +42,10 @@ type SubscriptionFlowConfig struct {
 }
 
 type SubscriptionFlow struct {
-	cfg SubscriptionFlowConfig
+	cfg *SubscriptionFlowConfig
 }
 
-func NewSubscriptionFlow(cfg SubscriptionFlowConfig) SubscriptionFlow {
+func NewSubscriptionFlow(cfg *SubscriptionFlowConfig) SubscriptionFlow {
 	return SubscriptionFlow{cfg: cfg}
 }
 

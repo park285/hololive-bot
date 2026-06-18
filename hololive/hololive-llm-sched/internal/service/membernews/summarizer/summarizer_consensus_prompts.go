@@ -23,8 +23,6 @@ package summarizer
 import (
 	"fmt"
 
-	json "github.com/park285/shared-go/pkg/json"
-
 	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
@@ -49,9 +47,9 @@ Rules:
 - severity=info: stylistic suggestions.`
 }
 
-func buildReviewUserPrompt(input model.SummarizeInput, digest *model.Digest) string {
-	candidatesJSON, _ := json.Marshal(buildPromptCandidates(input))
-	digestJSON, _ := json.Marshal(digest)
+func buildReviewUserPrompt(input *model.SummarizeInput, digest *model.Digest) string {
+	candidatesJSON := marshalPromptJSON(buildPromptCandidates(input), "[]")
+	digestJSON := marshalPromptJSON(digest, "null")
 
 	return fmt.Sprintf(`ORIGINAL CANDIDATES:
 %s
@@ -65,7 +63,10 @@ Review the summary against the original candidates. Return only schema JSON.`,
 	)
 }
 
-func buildPromptCandidates(input model.SummarizeInput) []promptCandidate {
+func buildPromptCandidates(input *model.SummarizeInput) []promptCandidate {
+	if input == nil {
+		return nil
+	}
 	candidates := make([]promptCandidate, 0, len(input.Candidates))
 	for i := range input.Candidates {
 		candidate := &input.Candidates[i]
@@ -97,13 +98,13 @@ Rules:
 }
 
 func buildAdjudicatorUserPrompt(
-	input model.SummarizeInput,
+	input *model.SummarizeInput,
 	digest *model.Digest,
 	verdict *consensus.ReviewVerdict,
 ) string {
-	candidatesJSON, _ := json.Marshal(buildPromptCandidates(input))
-	digestJSON, _ := json.Marshal(digest)
-	verdictJSON, _ := json.Marshal(verdict)
+	candidatesJSON := marshalPromptJSON(buildPromptCandidates(input), "[]")
+	digestJSON := marshalPromptJSON(digest, "null")
+	verdictJSON := marshalPromptJSON(verdict, "null")
 
 	return fmt.Sprintf(`ORIGINAL CANDIDATES:
 %s

@@ -187,14 +187,11 @@ func TestFinalizeCandidateFallback(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	mm := &Matcher{logger: logger}
 
-	channel, err := mm.finalizeCandidate(t.Context(), &matchCandidate{
+	channel := mm.finalizeCandidate(t.Context(), &matchCandidate{
 		channelID:  "ch1",
 		memberName: "name",
 		source:     "source",
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 
 	if channel == nil || channel.ID != "ch1" {
 		t.Fatalf("unexpected channel: %+v", channel)
@@ -204,9 +201,9 @@ func TestFinalizeCandidateFallback(t *testing.T) {
 		t.Fatalf("unexpected english name: %+v", channel.EnglishName)
 	}
 
-	channel, err = mm.finalizeCandidate(t.Context(), nil)
-	if err != nil || channel != nil {
-		t.Fatalf("expected nil candidate result, got: %+v, err: %v", channel, err)
+	channel = mm.finalizeCandidate(t.Context(), nil)
+	if channel != nil {
+		t.Fatalf("expected nil candidate result, got: %+v", channel)
 	}
 }
 

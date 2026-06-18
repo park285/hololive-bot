@@ -95,7 +95,7 @@ func (c *MajorEventCommand) dispatchMajorEventAction(ctx context.Context, cmdCtx
 }
 
 func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) handlercore.SubscriptionFlow {
-	return handlercore.NewSubscriptionFlow(handlercore.SubscriptionFlowConfig{
+	return handlercore.NewSubscriptionFlow(&handlercore.SubscriptionFlowConfig{
 		Port: c.repository,
 		OnCheckError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Failed to check subscription", slog.String("error", err.Error()))

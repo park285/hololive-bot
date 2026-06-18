@@ -785,8 +785,8 @@ func TestBuildSummaryCacheKey_ChangesWhenEventsChange(t *testing.T) {
 		},
 	}
 
-	baseKey := mustBuildSummaryCacheKey(t, baseEvents, SummaryTypeWeekly, "2026-03-01")
-	changedKey := mustBuildSummaryCacheKey(t, changedEvents, SummaryTypeWeekly, "2026-03-01")
+	baseKey := mustBuildSummaryCacheKey(t, baseEvents)
+	changedKey := mustBuildSummaryCacheKey(t, changedEvents)
 
 	if baseKey == changedKey {
 		t.Fatalf("cache key should change when input events change: %q", baseKey)
@@ -820,8 +820,8 @@ func TestBuildSummaryCacheKey_IsOrderInsensitive(t *testing.T) {
 		firstOrder[0],
 	}
 
-	firstKey := mustBuildSummaryCacheKey(t, firstOrder, SummaryTypeWeekly, "2026-03-01")
-	secondKey := mustBuildSummaryCacheKey(t, secondOrder, SummaryTypeWeekly, "2026-03-01")
+	firstKey := mustBuildSummaryCacheKey(t, firstOrder)
+	secondKey := mustBuildSummaryCacheKey(t, secondOrder)
 
 	if firstKey != secondKey {
 		t.Fatalf("cache key should be order-insensitive: %q != %q", firstKey, secondKey)
@@ -840,10 +840,10 @@ func TestBuildSummaryCacheKey_ReturnsErrorInsteadOfSentinelOnMarshalFailure(t *t
 	}
 }
 
-func mustBuildSummaryCacheKey(t *testing.T, events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
+func mustBuildSummaryCacheKey(t *testing.T, events []domain.MajorEvent) string {
 	t.Helper()
 
-	key, err := buildSummaryCacheKey(events, summaryType, periodKey)
+	key, err := buildSummaryCacheKey(events, SummaryTypeWeekly, "2026-03-01")
 	if err != nil {
 		t.Fatalf("buildSummaryCacheKey() error = %v", err)
 	}
@@ -978,48 +978,7 @@ func TestSummarize_DualSearch_MergeOrder(t *testing.T) {
 }
 
 func TestRunDualSearch_DirectVerification(t *testing.T) {
-	t.Run("deduplication and cap", func(t *testing.T) {
-		// 1차 5건 + 2차 8건 (중복 2건) → dedupe 11건 → cap 10건
-		primary := make([]sharedmodel.SearchResult, 5)
-		for i := range primary {
-			primary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("P%d", i), URL: fmt.Sprintf("https://p.com/%d", i)}
-		}
-		secondary := make([]sharedmodel.SearchResult, 8)
-		for i := range secondary {
-			if i < 2 {
-				secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("P%d", i), URL: fmt.Sprintf("https://p.com/%d", i)}
-			} else {
-				secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("K%d", i), URL: fmt.Sprintf("https://k.com/%d", i)}
-			}
-		}
-
-		searcher := &mockSearcher{results: primary, krResults: secondary}
-		s := NewEventSummarizer(nil, nil, searcher, testLogger())
-
-		result := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
-
-		if result == "" {
-			t.Fatal("expected non-empty search context")
-		}
-
-		// 1차 결과가 2차보다 앞에 위치해야 함
-		p0Pos := strings.Index(result, "P0")
-		k2Pos := strings.Index(result, "K2")
-		if p0Pos == -1 || k2Pos == -1 {
-			t.Fatalf("expected P0 and K2 in result, got: %s", result)
-		}
-		if p0Pos >= k2Pos {
-			t.Errorf("primary results should precede KR results: P0@%d >= K2@%d", p0Pos, k2Pos)
-		}
-
-		// cap 10 적용 확인: [1]~[10] 존재, [11] 부재
-		if !strings.Contains(result, "[10]") {
-			t.Error("expected [10] marker (10th result)")
-		}
-		if strings.Contains(result, "[11]") {
-			t.Error("should not have [11] marker (cap at 10)")
-		}
-	})
+	t.Run("deduplication and cap", testRunDualSearchDeduplicationAndCap)
 
 	t.Run("nil searcher returns empty", func(t *testing.T) {
 		s := NewEventSummarizer(nil, nil, nil, testLogger())
@@ -1040,6 +999,65 @@ func TestRunDualSearch_DirectVerification(t *testing.T) {
 			t.Errorf("expected empty when both searches fail, got %q", result)
 		}
 	})
+}
+
+func testRunDualSearchDeduplicationAndCap(t *testing.T) {
+	primary := makeSearchResults("P", "https://p.com", 5)
+	secondary := makeDualSearchSecondaryResults()
+
+	searcher := &mockSearcher{results: primary, krResults: secondary}
+	s := NewEventSummarizer(nil, nil, searcher, testLogger())
+
+	result := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+	if result == "" {
+		t.Fatal("expected non-empty search context")
+	}
+	assertPrimarySearchPrecedesKR(t, result)
+	assertDualSearchResultCap(t, result)
+}
+
+func makeSearchResults(prefix, baseURL string, count int) []sharedmodel.SearchResult {
+	results := make([]sharedmodel.SearchResult, count)
+	for i := range results {
+		results[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("%s%d", prefix, i), URL: fmt.Sprintf("%s/%d", baseURL, i)}
+	}
+	return results
+}
+
+func makeDualSearchSecondaryResults() []sharedmodel.SearchResult {
+	secondary := make([]sharedmodel.SearchResult, 8)
+	for i := range secondary {
+		if i < 2 {
+			secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("P%d", i), URL: fmt.Sprintf("https://p.com/%d", i)}
+			continue
+		}
+		secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("K%d", i), URL: fmt.Sprintf("https://k.com/%d", i)}
+	}
+	return secondary
+}
+
+func assertPrimarySearchPrecedesKR(t *testing.T, result string) {
+	t.Helper()
+
+	p0Pos := strings.Index(result, "P0")
+	k2Pos := strings.Index(result, "K2")
+	if p0Pos == -1 || k2Pos == -1 {
+		t.Fatalf("expected P0 and K2 in result, got: %s", result)
+	}
+	if p0Pos >= k2Pos {
+		t.Errorf("primary results should precede KR results: P0@%d >= K2@%d", p0Pos, k2Pos)
+	}
+}
+
+func assertDualSearchResultCap(t *testing.T, result string) {
+	t.Helper()
+
+	if !strings.Contains(result, "[10]") {
+		t.Error("expected [10] marker (10th result)")
+	}
+	if strings.Contains(result, "[11]") {
+		t.Error("should not have [11] marker (cap at 10)")
+	}
 }
 
 func TestSystemPrompt_ContainsDateAuthority(t *testing.T) {
@@ -1116,24 +1134,34 @@ func TestSystemPrompt_IncludesGeneratedMemberFilter(t *testing.T) {
 
 func TestNoteMaxLength(t *testing.T) {
 	schema := summaryResponseSchema()
-	props := schema["properties"].(map[string]any)
-	highlights := props["highlights"].(map[string]any)
-	items := highlights["items"].(map[string]any)
-	itemProps := items["properties"].(map[string]any)
-	note := itemProps["note"].(map[string]any)
+	props := mustMapValue(t, schema["properties"])
+	highlights := mustMapValue(t, props["highlights"])
+	items := mustMapValue(t, highlights["items"])
+	itemProps := mustMapValue(t, items["properties"])
+	note := mustMapValue(t, itemProps["note"])
 	if note["maxLength"] != 30 {
 		t.Errorf("highlight note maxLength should be 30, got %v", note["maxLength"])
 	}
 }
 
+func mustMapValue(t *testing.T, value any) map[string]any {
+	t.Helper()
+
+	result, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any, got %T", value)
+	}
+	return result
+}
+
 func TestNoteTruncation(t *testing.T) {
 	input := "가나다라마바사아자차카타파하가나다라마바사아자차카타파하가나" // 30자
-	if truncateNote(input, 30) != input {
+	if truncateNote(input) != input {
 		t.Error("30-char input should not be truncated")
 	}
 
 	longInput := input + "X" // 31자
-	result := truncateNote(longInput, 30)
+	result := truncateNote(longInput)
 	runes := []rune(result)
 	if len(runes) != 31 { // 30 + "…" (1 rune)
 		t.Errorf("expected 31 runes (30+…), got %d", len(runes))

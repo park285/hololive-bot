@@ -63,8 +63,8 @@ func (r *Runtime) Now() time.Time {
 	return now()
 }
 
-func (r *Runtime) Start(ctx context.Context, config Config) {
-	if r == nil || config.CalculateNextRun == nil || config.OnTick == nil {
+func (r *Runtime) Start(ctx context.Context, config *Config) {
+	if r == nil || config == nil || config.CalculateNextRun == nil || config.OnTick == nil {
 		return
 	}
 	r.init()
@@ -115,7 +115,7 @@ func (r *Runtime) Stop() {
 	r.wg.Wait()
 }
 
-func (r *Runtime) run(ctx context.Context, config Config, logger *slog.Logger, stopCh <-chan struct{}) StopReason {
+func (r *Runtime) run(ctx context.Context, config *Config, logger *slog.Logger, stopCh <-chan struct{}) StopReason {
 	for {
 		nextRun := config.CalculateNextRun(r.Now())
 		logger.Info(config.WaitingLog,
@@ -133,7 +133,7 @@ func (r *Runtime) run(ctx context.Context, config Config, logger *slog.Logger, s
 
 func waitRuntimeTick(
 	ctx context.Context,
-	config Config,
+	config *Config,
 	logger *slog.Logger,
 	stopCh <-chan struct{},
 	timer *time.Timer,

@@ -17,7 +17,7 @@ import (
 
 func InitAlarmDependencies(
 	chzzkConfig config.ChzzkConfig,
-	twitchConfig config.TwitchConfig,
+	twitchConfig *config.TwitchConfig,
 	advanceMinutes []int,
 	scraperProxyEnabled bool,
 	cacheService cache.Client,
@@ -57,7 +57,7 @@ func InitAlarmModeComponents(
 ) (*AlarmModeComponents, error) {
 	alarmDeps, alarmErr := InitAlarmDependencies(
 		appConfig.Chzzk,
-		appConfig.Twitch,
+		&appConfig.Twitch,
 		appConfig.Notification.AdvanceMinutes,
 		appConfig.Scraper.ProxyEnabled,
 		infra.Cache,

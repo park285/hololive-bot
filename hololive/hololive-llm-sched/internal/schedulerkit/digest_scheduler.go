@@ -43,7 +43,7 @@ func (d *DigestScheduler) Clock() time.Time {
 	return d.runtime.Now()
 }
 
-func (d *DigestScheduler) Start(ctx context.Context, cfg Config) {
+func (d *DigestScheduler) Start(ctx context.Context, cfg *Config) {
 	if d == nil {
 		return
 	}
@@ -70,12 +70,9 @@ func RunDigest[C any](ctx context.Context, d *DigestScheduler, op DigestOp[C]) e
 		return fmt.Errorf("acquire lock: %w", err)
 	}
 	if !acquired {
-		if op.OnLockNotAcquired != nil {
-			return op.OnLockNotAcquired()
-		}
-		return nil
+		return handleDigestLockNotAcquired(op.OnLockNotAcquired)
 	}
-	defer func() { _ = d.Locker.Release(ctx, op.LockKey, token) }()
+	defer d.releaseDigestLock(ctx, op.LockKey, token)
 
 	collected, ok, err := op.Collect(ctx)
 	if err != nil {
@@ -86,6 +83,19 @@ func RunDigest[C any](ctx context.Context, d *DigestScheduler, op DigestOp[C]) e
 	}
 
 	return op.Execute(ctx, collected)
+}
+
+func handleDigestLockNotAcquired(onLockNotAcquired func() error) error {
+	if onLockNotAcquired != nil {
+		return onLockNotAcquired()
+	}
+	return nil
+}
+
+func (d *DigestScheduler) releaseDigestLock(ctx context.Context, lockKey, token string) {
+	if releaseErr := d.Locker.Release(ctx, lockKey, token); releaseErr != nil && d.Logger != nil {
+		d.Logger.Warn("release digest lock failed", slog.String("lock_key", lockKey), slog.Any("error", releaseErr))
+	}
 }
 
 func ShouldMark(result delivery.SendResult) (bool, error) {

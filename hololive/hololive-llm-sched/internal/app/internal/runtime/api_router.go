@@ -31,7 +31,7 @@ import (
 )
 
 func buildHealthOnlyRouter(ctx context.Context, logger *slog.Logger, apiKey string) (*gin.Engine, error) {
-	return sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
+	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey: apiKey,
 	})
 }
@@ -42,7 +42,7 @@ func buildTriggerRouter(
 	triggerHandler *sharedserver.TriggerHandler,
 	apiKey string,
 ) (*gin.Engine, error) {
-	return sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
+	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey: apiKey,
 		RegisterRoutes: func(router *gin.Engine) error {
 			if triggerHandler == nil {

@@ -55,15 +55,14 @@ func FilterCandidates(
 
 	result := make([]model.FilteredCandidate, 0, len(periodCandidates))
 	for i := range periodCandidates {
-		item := &periodCandidates[i]
-		filtered, ok := buildFilteredCandidate(*item, profiles, sourceValidator)
+		filtered, ok := buildFilteredCandidate(&periodCandidates[i], profiles, sourceValidator)
 		if ok {
 			result = append(result, filtered)
 		}
 	}
 
 	sort.SliceStable(result, func(i, j int) bool {
-		return lessFilteredCandidate(result[i], result[j])
+		return lessFilteredCandidate(&result[i], &result[j])
 	})
 
 	return result

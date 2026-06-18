@@ -100,5 +100,5 @@ func provideBotDependenciesFromStacks(
 		logger,
 	)
 
-	return ProvideBotDependencies(modules)
+	return ProvideBotDependencies(&modules)
 }

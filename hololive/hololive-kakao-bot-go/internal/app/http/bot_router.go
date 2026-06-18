@@ -42,7 +42,7 @@ func ProvideBotRouter(
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
-	return sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
+	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:         appConfig.Server.APIKey,
 		ReadyResponder: botReadyResponder(appConfig, webhookHandler),
 		RegisterRoutes: botRouteRegistrar(appConfig.Server.APIKey, webhookHandler, triggerHandler),

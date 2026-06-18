@@ -21,18 +21,28 @@
 package membernews_test
 
 import (
+	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/testutil"
+	"github.com/park285/shared-go/pkg/httputil"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/client/membernews"
 )
 
 const testAPIKey = "test-api-key"
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
 
 // sampleDigest: 테스트용 Digest 샘플 데이터.
 func sampleDigest() membernewscontracts.Digest {
@@ -55,19 +65,88 @@ func sampleDigest() membernewscontracts.Digest {
 	}
 }
 
+func TestGenerateRoomDigestRejectsNilHTTPResponse(t *testing.T) {
+	t.Parallel()
+
+	c := membernews.New("https://example.com", testAPIKey)
+	c.HTTPClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
+		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, nil
+		}),
+	})
+
+	got, err := c.GenerateRoomDigest(context.Background(), "room-123", membernewscontracts.PeriodWeekly)
+	if err == nil {
+		t.Fatal("GenerateRoomDigest() error = nil, want nil response error")
+	}
+	if got != nil {
+		t.Fatalf("GenerateRoomDigest() digest = %#v, want nil", got)
+	}
+}
+
+func TestGenerateRoomDigestRejectsNilResponseBody(t *testing.T) {
+	t.Parallel()
+
+	c := membernews.New("https://example.com", testAPIKey)
+	c.HTTPClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       nil,
+				Request:    req,
+			}, nil
+		}),
+	})
+
+	got, err := c.GenerateRoomDigest(context.Background(), "room-123", membernewscontracts.PeriodWeekly)
+	if err == nil {
+		t.Fatal("GenerateRoomDigest() error = nil, want nil body error")
+	}
+	if got != nil {
+		t.Fatalf("GenerateRoomDigest() digest = %#v, want nil", got)
+	}
+}
+
+func TestHandleRoomDigestNotFoundClosesReadableBody(t *testing.T) {
+	t.Parallel()
+
+	c := membernews.New("https://example.com", testAPIKey)
+	c.HTTPClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"error":"no_subscribed_members"}`)),
+				Request:    req,
+			}, nil
+		}),
+	})
+
+	got, err := c.GenerateRoomDigest(context.Background(), "room-123", membernewscontracts.PeriodWeekly)
+	if !errors.Is(err, membernewscontracts.ErrNoSubscribedMembers) {
+		t.Fatalf("GenerateRoomDigest() error = %v, want ErrNoSubscribedMembers", err)
+	}
+	if got != nil {
+		t.Fatalf("GenerateRoomDigest() digest = %#v, want nil", got)
+	}
+}
+
+type memberNewsDigestCase struct {
+	name          string
+	roomID        string
+	period        membernewscontracts.Period
+	statusCode    int
+	responseBody  any
+	wantNilDigest bool
+	wantErr       bool
+	wantSentinel  bool
+}
+
 func TestGenerateRoomDigest(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name          string
-		roomID        string
-		period        membernewscontracts.Period
-		statusCode    int
-		responseBody  any
-		wantNilDigest bool
-		wantErr       bool
-		wantSentinel  bool // membernewscontracts.ErrNoSubscribedMembers 여부
-	}{
+	tests := []memberNewsDigestCase{
 		{
 			name:          "성공 (200 + 유효한 Digest JSON)",
 			roomID:        "room-123",
@@ -119,68 +198,59 @@ func TestGenerateRoomDigest(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			if tc.roomID == "" {
-				c := membernews.New("http://localhost:0", testAPIKey)
-
-				got, err := c.GenerateRoomDigest(t.Context(), tc.roomID, tc.period)
-				if (err != nil) != tc.wantErr {
-					t.Errorf("GenerateRoomDigest() err = %v, wantErr %v", err, tc.wantErr)
-				}
-
-				if (got == nil) != tc.wantNilDigest {
-					t.Errorf("GenerateRoomDigest() digest nil = %v, want nil = %v", got == nil, tc.wantNilDigest)
-				}
-
-				return
-			}
-
-			srv := testutil.NewJSONTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
-				if r.Method != http.MethodPost {
-					t.Errorf("method = %q, want POST", r.Method)
-				}
-
-				if r.URL.Path != membernewscontracts.DigestPath {
-					t.Errorf("path = %q, want %q", r.URL.Path, membernewscontracts.DigestPath)
-				}
-
-				if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-					t.Errorf("Content-Type = %q, want application/json", ct)
-				}
-
-				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
-				}
-			})
-
-			c := membernews.New(srv.URL, testAPIKey)
-			got, err := c.GenerateRoomDigest(t.Context(), tc.roomID, tc.period)
-
-			if (err != nil) != tc.wantErr {
-				t.Errorf("GenerateRoomDigest() err = %v, wantErr %v", err, tc.wantErr)
-			}
-
-			if (got == nil) != tc.wantNilDigest {
-				t.Errorf("GenerateRoomDigest() digest nil = %v, want nil = %v", got == nil, tc.wantNilDigest)
-			}
-
-			if tc.wantSentinel && !errors.Is(err, membernewscontracts.ErrNoSubscribedMembers) {
-				t.Errorf("GenerateRoomDigest() err = %v, want ErrNoSubscribedMembers", err)
-			}
+			assertMemberNewsDigest(t, &tc)
 		})
 	}
+}
+
+func assertMemberNewsDigest(t *testing.T, tc *memberNewsDigestCase) {
+	t.Helper()
+
+	if tc.roomID == "" {
+		c := membernews.New("http://localhost:0", testAPIKey)
+		got, err := c.GenerateRoomDigest(t.Context(), tc.roomID, tc.period)
+		assertMemberNewsDigestResult(t, got, err, tc.wantNilDigest, tc.wantErr, tc.wantSentinel)
+		return
+	}
+
+	srv := testutil.NewJSONTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
+		assertMemberNewsRequest(t, r, http.MethodPost, membernewscontracts.DigestPath)
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", ct)
+		}
+	})
+
+	c := membernews.New(srv.URL, testAPIKey)
+	got, err := c.GenerateRoomDigest(t.Context(), tc.roomID, tc.period)
+	assertMemberNewsDigestResult(t, got, err, tc.wantNilDigest, tc.wantErr, tc.wantSentinel)
+}
+
+func assertMemberNewsDigestResult(t *testing.T, got *membernewscontracts.Digest, err error, wantNilDigest, wantErr, wantSentinel bool) {
+	t.Helper()
+
+	if (err != nil) != wantErr {
+		t.Errorf("GenerateRoomDigest() err = %v, wantErr %v", err, wantErr)
+	}
+	if (got == nil) != wantNilDigest {
+		t.Errorf("GenerateRoomDigest() digest nil = %v, want nil = %v", got == nil, wantNilDigest)
+	}
+	if wantSentinel && !errors.Is(err, membernewscontracts.ErrNoSubscribedMembers) {
+		t.Errorf("GenerateRoomDigest() err = %v, want ErrNoSubscribedMembers", err)
+	}
+}
+
+type memberNewsSubscribeCase struct {
+	name       string
+	roomID     string
+	roomName   string
+	statusCode int
+	wantErr    bool
 }
 
 func TestSubscribeRoom(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		roomID     string
-		roomName   string
-		statusCode int
-		wantErr    bool
-	}{
+	tests := []memberNewsSubscribeCase{
 		{
 			name:       "성공 (200)",
 			roomID:     "room-123",
@@ -214,51 +284,61 @@ func TestSubscribeRoom(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			if tc.roomID == "" {
-				c := membernews.New("http://localhost:0", testAPIKey)
-
-				err := c.SubscribeRoom(t.Context(), tc.roomID, tc.roomName)
-				if (err != nil) != tc.wantErr {
-					t.Errorf("SubscribeRoom() err = %v, wantErr %v", err, tc.wantErr)
-				}
-
-				return
-			}
-
-			srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
-				if r.Method != http.MethodPost {
-					t.Errorf("method = %q, want POST", r.Method)
-				}
-
-				if r.URL.Path != membernewscontracts.SubscriptionsPath {
-					t.Errorf("path = %q, want %q", r.URL.Path, membernewscontracts.SubscriptionsPath)
-				}
-
-				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
-				}
-			})
-
-			c := membernews.New(srv.URL, testAPIKey)
-			err := c.SubscribeRoom(t.Context(), tc.roomID, tc.roomName)
-
-			if (err != nil) != tc.wantErr {
-				t.Errorf("SubscribeRoom() err = %v, wantErr %v", err, tc.wantErr)
-			}
+			assertMemberNewsSubscribe(t, &tc)
 		})
 	}
+}
+
+func assertMemberNewsSubscribe(t *testing.T, tc *memberNewsSubscribeCase) {
+	t.Helper()
+
+	if tc.roomID == "" {
+		c := membernews.New("http://localhost:0", testAPIKey)
+		assertMemberNewsErr(t, "SubscribeRoom", c.SubscribeRoom(t.Context(), tc.roomID, tc.roomName), tc.wantErr)
+		return
+	}
+
+	srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
+		assertMemberNewsRequest(t, r, http.MethodPost, membernewscontracts.SubscriptionsPath)
+	})
+
+	c := membernews.New(srv.URL, testAPIKey)
+	assertMemberNewsErr(t, "SubscribeRoom", c.SubscribeRoom(t.Context(), tc.roomID, tc.roomName), tc.wantErr)
+}
+
+func assertMemberNewsRequest(t *testing.T, r *http.Request, method, path string) {
+	t.Helper()
+
+	if r.Method != method {
+		t.Errorf("method = %q, want %s", r.Method, method)
+	}
+	if r.URL.Path != path {
+		t.Errorf("path = %q, want %q", r.URL.Path, path)
+	}
+	if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
+		t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
+	}
+}
+
+func assertMemberNewsErr(t *testing.T, op string, err error, wantErr bool) {
+	t.Helper()
+
+	if (err != nil) != wantErr {
+		t.Errorf("%s() err = %v, wantErr %v", op, err, wantErr)
+	}
+}
+
+type memberNewsUnsubscribeCase struct {
+	name       string
+	roomID     string
+	statusCode int
+	wantErr    bool
 }
 
 func TestUnsubscribeRoom(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		roomID     string
-		statusCode int
-		wantErr    bool
-	}{
+	tests := []memberNewsUnsubscribeCase{
 		{
 			name:       "성공 (200)",
 			roomID:     "room-123",
@@ -288,54 +368,41 @@ func TestUnsubscribeRoom(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			if tc.roomID == "" {
-				c := membernews.New("http://localhost:0", testAPIKey)
-
-				err := c.UnsubscribeRoom(t.Context(), tc.roomID)
-				if (err != nil) != tc.wantErr {
-					t.Errorf("UnsubscribeRoom() err = %v, wantErr %v", err, tc.wantErr)
-				}
-
-				return
-			}
-
-			srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
-				if r.Method != http.MethodDelete {
-					t.Errorf("method = %q, want DELETE", r.Method)
-				}
-
-				wantPath := membernewscontracts.SubscriptionsPath + "/" + tc.roomID
-				if r.URL.Path != wantPath {
-					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
-				}
-
-				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
-				}
-			})
-
-			c := membernews.New(srv.URL, testAPIKey)
-			err := c.UnsubscribeRoom(t.Context(), tc.roomID)
-
-			if (err != nil) != tc.wantErr {
-				t.Errorf("UnsubscribeRoom() err = %v, wantErr %v", err, tc.wantErr)
-			}
+			assertMemberNewsUnsubscribe(t, &tc)
 		})
 	}
+}
+
+func assertMemberNewsUnsubscribe(t *testing.T, tc *memberNewsUnsubscribeCase) {
+	t.Helper()
+
+	if tc.roomID == "" {
+		c := membernews.New("http://localhost:0", testAPIKey)
+		assertMemberNewsErr(t, "UnsubscribeRoom", c.UnsubscribeRoom(t.Context(), tc.roomID), tc.wantErr)
+		return
+	}
+
+	srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
+		assertMemberNewsRequest(t, r, http.MethodDelete, membernewscontracts.SubscriptionsPath+"/"+tc.roomID)
+	})
+
+	c := membernews.New(srv.URL, testAPIKey)
+	assertMemberNewsErr(t, "UnsubscribeRoom", c.UnsubscribeRoom(t.Context(), tc.roomID), tc.wantErr)
+}
+
+type memberNewsIsSubscribedCase struct {
+	name         string
+	roomID       string
+	statusCode   int
+	responseBody any
+	wantResult   bool
+	wantErr      bool
 }
 
 func TestIsRoomSubscribed(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name         string
-		roomID       string
-		statusCode   int
-		responseBody any
-		wantResult   bool
-		wantErr      bool
-	}{
+	tests := []memberNewsIsSubscribedCase{
 		{
 			name:         "구독 상태 true 반환",
 			roomID:       "room-123",
@@ -372,48 +439,38 @@ func TestIsRoomSubscribed(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			if tc.roomID == "" {
-				c := membernews.New("http://localhost:0", testAPIKey)
-
-				got, err := c.IsRoomSubscribed(t.Context(), tc.roomID)
-				if (err != nil) != tc.wantErr {
-					t.Errorf("IsRoomSubscribed() err = %v, wantErr %v", err, tc.wantErr)
-				}
-
-				if got != tc.wantResult {
-					t.Errorf("IsRoomSubscribed() = %v, want %v", got, tc.wantResult)
-				}
-
-				return
-			}
-
-			srv := testutil.NewJSONTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
-				if r.Method != http.MethodGet {
-					t.Errorf("method = %q, want GET", r.Method)
-				}
-
-				wantPath := membernewscontracts.SubscriptionsPath + "/" + tc.roomID
-				if r.URL.Path != wantPath {
-					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
-				}
-
-				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
-				}
-			})
-
-			c := membernews.New(srv.URL, testAPIKey)
-			got, err := c.IsRoomSubscribed(t.Context(), tc.roomID)
-
-			if (err != nil) != tc.wantErr {
-				t.Errorf("IsRoomSubscribed() err = %v, wantErr %v", err, tc.wantErr)
-			}
-
-			if got != tc.wantResult {
-				t.Errorf("IsRoomSubscribed() = %v, want %v", got, tc.wantResult)
-			}
+			assertMemberNewsIsSubscribed(t, &tc)
 		})
+	}
+}
+
+func assertMemberNewsIsSubscribed(t *testing.T, tc *memberNewsIsSubscribedCase) {
+	t.Helper()
+
+	if tc.roomID == "" {
+		c := membernews.New("http://localhost:0", testAPIKey)
+		got, err := c.IsRoomSubscribed(t.Context(), tc.roomID)
+		assertMemberNewsBoolResult(t, "IsRoomSubscribed", got, err, tc.wantResult, tc.wantErr)
+		return
+	}
+
+	srv := testutil.NewJSONTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
+		assertMemberNewsRequest(t, r, http.MethodGet, membernewscontracts.SubscriptionsPath+"/"+tc.roomID)
+	})
+
+	c := membernews.New(srv.URL, testAPIKey)
+	got, err := c.IsRoomSubscribed(t.Context(), tc.roomID)
+	assertMemberNewsBoolResult(t, "IsRoomSubscribed", got, err, tc.wantResult, tc.wantErr)
+}
+
+func assertMemberNewsBoolResult(t *testing.T, op string, got bool, err error, want, wantErr bool) {
+	t.Helper()
+
+	if (err != nil) != wantErr {
+		t.Errorf("%s() err = %v, wantErr %v", op, err, wantErr)
+	}
+	if got != want {
+		t.Errorf("%s() = %v, want %v", op, got, want)
 	}
 }
 

@@ -90,6 +90,6 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 }
 
 // NormalizeCommand 명령어 타입과 파라미터를 정규화합니다.
-func (r *CommandRouter) NormalizeCommand(cmdType domain.CommandType, params map[string]any) (string, map[string]any) {
+func (r *CommandRouter) NormalizeCommand(cmdType domain.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
 	return NormalizeCommandKey(cmdType, params)
 }

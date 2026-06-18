@@ -23,6 +23,7 @@ package handlercore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -67,18 +68,19 @@ func (f *fakeSubscriptionPort) Unsubscribe(_ context.Context, roomID string) err
 	return nil
 }
 
+type subscriptionFlowTestCase struct {
+	name      string
+	operation string
+	port      *fakeSubscriptionPort
+	wantHook  string
+	wantErr   error
+}
+
 func TestSubscriptionFlow_AllPaths(t *testing.T) {
 	t.Parallel()
 
 	boom := errors.New("boom")
-
-	tests := []struct {
-		name      string
-		operation string
-		port      *fakeSubscriptionPort
-		wantHook  string
-		wantErr   error
-	}{
+	tests := []subscriptionFlowTestCase{
 		{
 			name:      "subscribe check error",
 			operation: "subscribe",
@@ -155,89 +157,119 @@ func TestSubscriptionFlow_AllPaths(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			var (
-				gotHook   string
-				gotErr    error
-				gotStatus bool
-				hasStatus bool
-				sentinel  = errors.New("sentinel")
-				gotRoom   = "room-a"
-				roomName  = "room-name"
-			)
-
-			record := func(hook string) func(context.Context, error) error {
-				return func(_ context.Context, err error) error {
-					gotHook = hook
-					gotErr = err
-					return sentinel
-				}
-			}
-			recordMsg := func(hook string) func(context.Context) error {
-				return func(_ context.Context) error {
-					gotHook = hook
-					return sentinel
-				}
-			}
-
-			flow := NewSubscriptionFlow(SubscriptionFlowConfig{
-				Port:                tc.port,
-				OnCheckError:        record("checkError"),
-				OnAlreadySubscribed: recordMsg("alreadySubscribed"),
-				OnSubscribeError:    record("subscribeError"),
-				OnSubscribed:        recordMsg("subscribed"),
-				OnNotSubscribed:     recordMsg("notSubscribed"),
-				OnUnsubscribeError:  record("unsubscribeError"),
-				OnUnsubscribed:      recordMsg("unsubscribed"),
-				OnStatus: func(_ context.Context, subscribed bool) error {
-					hasStatus = true
-					gotStatus = subscribed
-					if subscribed {
-						gotHook = "statusTrue"
-					} else {
-						gotHook = "statusFalse"
-					}
-					return sentinel
-				},
-			})
-
-			var err error
-			switch tc.operation {
-			case "subscribe":
-				err = flow.Subscribe(context.Background(), gotRoom, roomName)
-			case "unsubscribe":
-				err = flow.Unsubscribe(context.Background(), gotRoom)
-			case "status":
-				err = flow.Status(context.Background(), gotRoom)
-			default:
-				t.Fatalf("unknown operation %q", tc.operation)
-			}
-
-			if gotHook != tc.wantHook {
-				t.Fatalf("hook = %q, want %q", gotHook, tc.wantHook)
-			}
-
-			if err != sentinel {
-				t.Fatalf("flow returned %v, want sentinel hook return value", err)
-			}
-
-			if tc.wantErr != nil && !errors.Is(gotErr, tc.wantErr) {
-				t.Fatalf("error hook received %v, want %v", gotErr, tc.wantErr)
-			}
-
-			if tc.wantHook == "statusTrue" && (!hasStatus || !gotStatus) {
-				t.Fatalf("status hook not invoked with true")
-			}
-			if tc.wantHook == "statusFalse" && (!hasStatus || gotStatus) {
-				t.Fatalf("status hook not invoked with false")
-			}
-
-			if tc.wantHook == "subscribed" && tc.port.subscribedRoomID != gotRoom {
-				t.Fatalf("subscribe room id = %q, want %q", tc.port.subscribedRoomID, gotRoom)
-			}
-			if tc.wantHook == "unsubscribed" && tc.port.unsubscribedRoomID != gotRoom {
-				t.Fatalf("unsubscribe room id = %q, want %q", tc.port.unsubscribedRoomID, gotRoom)
-			}
+			assertSubscriptionFlowCase(t, &tc)
 		})
+	}
+}
+
+type subscriptionFlowCaseRunner struct {
+	gotHook   string
+	gotErr    error
+	gotStatus bool
+	hasStatus bool
+	sentinel  error
+	gotRoom   string
+}
+
+func assertSubscriptionFlowCase(t *testing.T, tc *subscriptionFlowTestCase) {
+	t.Helper()
+
+	runner := &subscriptionFlowCaseRunner{
+		sentinel: errors.New("sentinel"),
+		gotRoom:  "room-a",
+	}
+	flow := NewSubscriptionFlow(runner.config(tc.port))
+	err := runner.run(flow, tc.operation)
+	runner.assertResult(t, tc, err)
+}
+
+func (r *subscriptionFlowCaseRunner) config(port *fakeSubscriptionPort) *SubscriptionFlowConfig {
+	return &SubscriptionFlowConfig{
+		Port:                port,
+		OnCheckError:        r.record("checkError"),
+		OnAlreadySubscribed: r.recordMessage("alreadySubscribed"),
+		OnSubscribeError:    r.record("subscribeError"),
+		OnSubscribed:        r.recordMessage("subscribed"),
+		OnNotSubscribed:     r.recordMessage("notSubscribed"),
+		OnUnsubscribeError:  r.record("unsubscribeError"),
+		OnUnsubscribed:      r.recordMessage("unsubscribed"),
+		OnStatus:            r.recordStatus,
+	}
+}
+
+func (r *subscriptionFlowCaseRunner) record(hook string) func(context.Context, error) error {
+	return func(_ context.Context, err error) error {
+		r.gotHook = hook
+		r.gotErr = err
+		return r.sentinel
+	}
+}
+
+func (r *subscriptionFlowCaseRunner) recordMessage(hook string) func(context.Context) error {
+	return func(context.Context) error {
+		r.gotHook = hook
+		return r.sentinel
+	}
+}
+
+func (r *subscriptionFlowCaseRunner) recordStatus(_ context.Context, subscribed bool) error {
+	r.hasStatus = true
+	r.gotStatus = subscribed
+	if subscribed {
+		r.gotHook = "statusTrue"
+	} else {
+		r.gotHook = "statusFalse"
+	}
+	return r.sentinel
+}
+
+func (r *subscriptionFlowCaseRunner) run(flow SubscriptionFlow, operation string) error {
+	switch operation {
+	case "subscribe":
+		return flow.Subscribe(context.Background(), r.gotRoom, "room-name")
+	case "unsubscribe":
+		return flow.Unsubscribe(context.Background(), r.gotRoom)
+	case "status":
+		return flow.Status(context.Background(), r.gotRoom)
+	default:
+		return fmt.Errorf("unknown operation %q", operation)
+	}
+}
+
+func (r *subscriptionFlowCaseRunner) assertResult(t *testing.T, tc *subscriptionFlowTestCase, err error) {
+	t.Helper()
+
+	if r.gotHook != tc.wantHook {
+		t.Fatalf("hook = %q, want %q", r.gotHook, tc.wantHook)
+	}
+	if !errors.Is(err, r.sentinel) {
+		t.Fatalf("flow returned %v, want sentinel hook return value", err)
+	}
+	if tc.wantErr != nil && !errors.Is(r.gotErr, tc.wantErr) {
+		t.Fatalf("error hook received %v, want %v", r.gotErr, tc.wantErr)
+	}
+	r.assertStatusHook(t, tc.wantHook)
+	r.assertRoomMutation(t, tc)
+}
+
+func (r *subscriptionFlowCaseRunner) assertStatusHook(t *testing.T, wantHook string) {
+	t.Helper()
+
+	if wantHook == "statusTrue" && (!r.hasStatus || !r.gotStatus) {
+		t.Fatalf("status hook not invoked with true")
+	}
+	if wantHook == "statusFalse" && (!r.hasStatus || r.gotStatus) {
+		t.Fatalf("status hook not invoked with false")
+	}
+}
+
+func (r *subscriptionFlowCaseRunner) assertRoomMutation(t *testing.T, tc *subscriptionFlowTestCase) {
+	t.Helper()
+
+	if tc.wantHook == "subscribed" && tc.port.subscribedRoomID != r.gotRoom {
+		t.Fatalf("subscribe room id = %q, want %q", tc.port.subscribedRoomID, r.gotRoom)
+	}
+	if tc.wantHook == "unsubscribed" && tc.port.unsubscribedRoomID != r.gotRoom {
+		t.Fatalf("unsubscribe room id = %q, want %q", tc.port.unsubscribedRoomID, r.gotRoom)
 	}
 }

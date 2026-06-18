@@ -35,7 +35,7 @@ var categoryPriority = map[model.Category]int{
 	model.CategoryOther:        5,
 }
 
-func classifyCategory(candidate model.Candidate) model.Category {
+func classifyCategory(candidate *model.Candidate) model.Category {
 	text := strings.ToLower(candidate.Title + " " + candidate.Description)
 
 	keywordRules := []struct {

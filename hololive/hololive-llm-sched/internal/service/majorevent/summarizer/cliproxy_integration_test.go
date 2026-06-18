@@ -22,13 +22,15 @@ package summarizer
 
 import (
 	"context"
-	json "github.com/park285/shared-go/pkg/json"
+	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-llm-sched/internal/llm"
+	json "github.com/park285/shared-go/pkg/json"
 )
 
 func skipIfNoCliproxy(t *testing.T) {
@@ -36,7 +38,9 @@ func skipIfNoCliproxy(t *testing.T) {
 	if os.Getenv("INTEGRATION_TEST") != "true" {
 		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
 	}
-	_ = loadEnv()
+	if err := loadEnv(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("load env: %v", err)
+	}
 	if os.Getenv("CLIPROXY_API_KEY") == "" {
 		t.Skip("Skipping: CLIPROXY_API_KEY not set")
 	}
@@ -56,7 +60,7 @@ func loadEnv() error {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
-		data, err = os.ReadFile(path)
+		data, err = readFileWithinRoot(path)
 		if err == nil {
 			break
 		}
@@ -71,11 +75,28 @@ func loadEnv() error {
 		}
 		if k, v, ok := strings.Cut(line, "="); ok {
 			if os.Getenv(k) == "" {
-				_ = os.Setenv(k, v)
+				if err := os.Setenv(k, v); err != nil {
+					return err
+				}
 			}
 		}
 	}
 	return nil
+}
+
+func readFileWithinRoot(path string) ([]byte, error) {
+	cleanPath := filepath.Clean(path)
+	rootPath := filepath.Dir(cleanPath)
+	fileName := filepath.Base(cleanPath)
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	data, readErr := root.ReadFile(fileName)
+	if closeErr := root.Close(); closeErr != nil {
+		return data, errors.Join(readErr, closeErr)
+	}
+	return data, readErr
 }
 
 func testCliproxyBaseURL() string {

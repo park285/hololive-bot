@@ -13,6 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	membermocks "github.com/kapu/hololive-shared/pkg/service/member/mocks"
@@ -92,6 +93,25 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	)
 	commandBuilders[0] = stubCommandBuilderThree
 
+	assertBotDependencyModulesWireRuntimeObjects(t, &modules, cacheClient, postgres, memberData, alarmCRUD, irisClient, messageAdapter, formatter)
+
+	deps := ProvideBotDependencies(&modules)
+	assertBotDependenciesWireRuntimeObjects(t, deps, cacheClient, postgres, memberData, alarmCRUD, youTubeService, statsRepository, activityLogger, settingsService)
+}
+
+func assertBotDependencyModulesWireRuntimeObjects(
+	t *testing.T,
+	modules *BotDependencyModules,
+	cacheClient *cachemocks.Client,
+	postgres *databasemocks.Client,
+	memberData *membermocks.DataProvider,
+	alarmCRUD *stubAlarmCRUD,
+	irisClient *stubBotIrisClient,
+	messageAdapter *adapter.MessageAdapter,
+	formatter *adapter.ResponseFormatter,
+) {
+	t.Helper()
+
 	if modules.Core.BotSelfUser != "bot-self" {
 		t.Fatalf("Core.BotSelfUser = %q, want bot-self", modules.Core.BotSelfUser)
 	}
@@ -129,8 +149,22 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 		t.Fatal("Messaging.Formatter did not preserve the formatter")
 	}
 	assertCommandBuilderPointers(t, modules.Feature.CommandBuilders, []bot.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
+}
 
-	deps := ProvideBotDependencies(modules)
+func assertBotDependenciesWireRuntimeObjects(
+	t *testing.T,
+	deps *bot.Dependencies,
+	cacheClient *cachemocks.Client,
+	postgres *databasemocks.Client,
+	memberData *membermocks.DataProvider,
+	alarmCRUD *stubAlarmCRUD,
+	youTubeService *stubYouTubeService,
+	statsRepository *ytstats.StatsRepository,
+	activityLogger *activity.Logger,
+	settingsService *settingsmocks.ReadWriter,
+) {
+	t.Helper()
+
 	if deps.Cache != cacheClient {
 		t.Fatal("Dependencies.Cache did not preserve the module cache client")
 	}
@@ -167,7 +201,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 func TestProvideBotDependenciesAcceptsDisabledYouTubeStack(t *testing.T) {
 	t.Parallel()
 
-	deps := ProvideBotDependencies(BotDependencyModules{
+	deps := ProvideBotDependencies(&BotDependencyModules{
 		Stream: BotStreamModule{YTStack: nil},
 	})
 	if deps.Service != nil {
@@ -280,7 +314,7 @@ type stubAlarmCRUD struct {
 	targetMinutes []int
 }
 
-func (s *stubAlarmCRUD) AddAlarm(context.Context, domain.AddAlarmRequest) (bool, error) {
+func (s *stubAlarmCRUD) AddAlarm(context.Context, *domain.AddAlarmRequest) (bool, error) {
 	return false, nil
 }
 

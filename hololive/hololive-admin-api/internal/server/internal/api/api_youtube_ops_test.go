@@ -30,6 +30,25 @@ func (s *stubYouTubeCommunityShortsOpsRepository) ListPostSendCountsSince(
 func TestStatsHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	handler, secondLatencyMillis := newYouTubeCommunityShortsOpsTestHandler(t)
+	ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/stats/youtube/community-shorts", nil)
+	handler.GetYouTubeCommunityShortsOps(ctx)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var response YouTubeCommunityShortsOpsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	assertYouTubeCommunityShortsOpsResponse(t, &response, secondLatencyMillis)
+}
+
+func newYouTubeCommunityShortsOpsTestHandler(t *testing.T) (handler *StatsHandler, secondLatencyMillis int64) {
+	t.Helper()
+
 	now := time.Now().UTC()
 	withinTarget := false
 	exceeded := true
@@ -39,13 +58,13 @@ func TestStatsHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
 	firstAlarmSentAt := firstPublishedAt.Add(60 * time.Second)
 	thirdAlarmSentAt := thirdPublishedAt.Add(90 * time.Second)
 	firstLatencyMillis := int64(60000)
-	secondLatencyMillis := int64(180000)
+	secondLatencyMillis = int64(180000)
 	thirdLatencyMillis := int64(90000)
 	firstEventAt := firstPublishedAt.Add(45 * time.Second)
 	secondEventAt := secondPublishedAt.Add(2 * time.Minute)
 	thirdEventAt := thirdPublishedAt.Add(70 * time.Second)
 
-	handler := &StatsHandler{Handler: &Handler{
+	handler = &StatsHandler{Handler: &Handler{
 		communityShortsOps: &stubYouTubeCommunityShortsOpsRepository{
 			listPostSendCountsSince: func(_ context.Context, since time.Time) ([]outbox.PostSendCount, error) {
 				if since.IsZero() {
@@ -105,17 +124,15 @@ func TestStatsHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
 		logger: newDiscardLogger(),
 	}}
 
-	ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/stats/youtube/community-shorts", nil)
-	handler.GetYouTubeCommunityShortsOps(ctx)
+	return handler, secondLatencyMillis
+}
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	var response YouTubeCommunityShortsOpsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+func assertYouTubeCommunityShortsOpsResponse(
+	t *testing.T,
+	response *YouTubeCommunityShortsOpsResponse,
+	secondLatencyMillis int64,
+) {
+	t.Helper()
 
 	if response.WindowHours != youtubeCommunityShortsOpsWindowHours {
 		t.Fatalf("windowHours=%d want=%d", response.WindowHours, youtubeCommunityShortsOpsWindowHours)

@@ -28,7 +28,7 @@ var sourceTierPriority = map[model.SourceTier]int{
 	model.SourceTierCommunity: 2,
 }
 
-func lessFilteredCandidate(left, right model.FilteredCandidate) bool {
+func lessFilteredCandidate(left, right *model.FilteredCandidate) bool {
 	if !left.EffectiveDate.Equal(right.EffectiveDate) {
 		return left.EffectiveDate.Before(right.EffectiveDate)
 	}

@@ -73,8 +73,8 @@ func (h *StreamHandler) GetChannelStats(c *gin.Context) {
 	h.sharedStreamHandler().GetChannelStats(c)
 }
 
-func (h *StreamHandler) getActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
-	ids, names, err := h.sharedStreamHandler().GetActiveMemberIndex(ctx)
+func (h *StreamHandler) getActiveMemberIndex(ctx context.Context) (ids []string, names map[string]string, err error) {
+	ids, names, err = h.sharedStreamHandler().GetActiveMemberIndex(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get active member index: %w", err)
 	}

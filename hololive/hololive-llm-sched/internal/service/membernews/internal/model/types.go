@@ -126,7 +126,7 @@ type SubscribedRoom struct {
 }
 
 type Summarizer interface {
-	Summarize(ctx context.Context, input SummarizeInput) (*Digest, error)
+	Summarize(ctx context.Context, input *SummarizeInput) (*Digest, error)
 }
 
 type DigestFormatter interface {
@@ -152,6 +152,8 @@ func DefaultHeadline(period Period) string {
 	switch NormalizePeriod(period) {
 	case PeriodMonthly:
 		return "📅 이번달 구독 멤버 뉴스"
+	case PeriodWeekly:
+		return "🗞️ 이번주 구독 멤버 뉴스"
 	default:
 		return "🗞️ 이번주 구독 멤버 뉴스"
 	}

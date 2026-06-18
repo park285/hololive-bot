@@ -58,7 +58,7 @@ func BuildContainer(ctx context.Context, appConfig *config.Config, logger *slog.
 		return nil, errors.New("initialize bot dependencies hook must not be nil")
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, errors.New("context must not be nil")
 	}
 
 	deps, cleanup, err := hooks.InitializeBotDependencies(ctx, appConfig, logger)

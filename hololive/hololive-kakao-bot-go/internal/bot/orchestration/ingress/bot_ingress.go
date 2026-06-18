@@ -67,29 +67,29 @@ func NewMessageIngress(
 	}
 }
 
-func (i *MessageIngress) Prepare(message *iris.Message) (*Envelope, bool) {
-	if !i.canHandleMessage(message) {
+func (i *MessageIngress) Prepare(ctx context.Context, message *iris.Message) (*Envelope, bool) {
+	if !i.canHandleMessage(ctx, message) {
 		return nil, false
 	}
 
 	chatID, roomName := resolveRoom(message)
 	userID, userName := resolveUser(message)
 
-	if i.shouldSkipSender(message, chatID, userName) {
+	if i.shouldSkipSender(ctx, message, chatID, userName) {
 		return nil, false
 	}
 
-	if i.isRoomBlocked(roomName, chatID, userName) {
+	if i.isRoomBlocked(ctx, roomName, chatID, userName) {
 		return nil, false
 	}
 
-	parsed := i.parseCommand(message, chatID, userName)
+	parsed := i.parseCommand(ctx, message, chatID, userName)
 	if parsed == nil {
 		return nil, false
 	}
 
 	commandType := parsed.Type.String()
-	i.logCommandReceived(parsed, commandType, userID, userName, chatID, roomName)
+	i.logCommandReceived(ctx, parsed, commandType, userID, userName, chatID, roomName)
 
 	return &Envelope{
 		CommandType: commandType,
@@ -101,9 +101,9 @@ func (i *MessageIngress) Prepare(message *iris.Message) (*Envelope, bool) {
 	}, true
 }
 
-func (i *MessageIngress) canHandleMessage(message *iris.Message) bool {
+func (i *MessageIngress) canHandleMessage(ctx context.Context, message *iris.Message) bool {
 	if message == nil {
-		i.logWarn("Nil message received")
+		i.logWarn(ctx, "Nil message received")
 		return false
 	}
 
@@ -112,19 +112,19 @@ func (i *MessageIngress) canHandleMessage(message *iris.Message) bool {
 	}
 
 	if i.messageAdapter == nil {
-		i.logWarn("Message adapter is not configured")
+		i.logWarn(ctx, "Message adapter is not configured")
 		return false
 	}
 
 	return true
 }
 
-func (i *MessageIngress) shouldSkipSender(message *iris.Message, chatID, userName string) bool {
+func (i *MessageIngress) shouldSkipSender(ctx context.Context, message *iris.Message, chatID, userName string) bool {
 	if !i.isSelfSender(userName) {
 		return false
 	}
 
-	i.logDebug(
+	i.logDebug(ctx,
 		"Skipping self-issued message",
 		slog.String("user", userName),
 		slog.String("room", chatID),
@@ -134,12 +134,12 @@ func (i *MessageIngress) shouldSkipSender(message *iris.Message, chatID, userNam
 	return true
 }
 
-func (i *MessageIngress) isRoomBlocked(roomName, chatID, userName string) bool {
+func (i *MessageIngress) isRoomBlocked(ctx context.Context, roomName, chatID, userName string) bool {
 	if i.acl == nil || i.acl.IsRoomAllowed(roomName, chatID) {
 		return false
 	}
 
-	i.logDebug(
+	i.logDebug(ctx,
 		"Room blocked by ACL, ignoring message",
 		slog.String("room", chatID),
 		slog.String("room_name", roomName),
@@ -149,20 +149,22 @@ func (i *MessageIngress) isRoomBlocked(roomName, chatID, userName string) bool {
 	return true
 }
 
-func (i *MessageIngress) parseCommand(message *iris.Message, chatID, userName string) *adapter.ParsedCommand {
+func (i *MessageIngress) parseCommand(ctx context.Context, message *iris.Message, chatID, userName string) *adapter.ParsedCommand {
 	parsed := i.messageAdapter.ParseMessage(message)
 	if parsed == nil {
-		i.logWarn("Parsed command is nil", slog.String("room", chatID))
+		i.logWarn(ctx, "Parsed command is nil", slog.String("room", chatID))
 		return nil
 	}
 
 	if parsed.Type == domain.CommandUnknown {
-		attrs := []slog.Attr{
+		summaryAttrs := messageSummaryAttrs(message.Msg)
+		attrs := make([]slog.Attr, 0, 2+len(summaryAttrs))
+		attrs = append(attrs,
 			slog.String("room", chatID),
 			slog.String("user_name", userName),
-		}
-		attrs = append(attrs, messageSummaryAttrs(message.Msg)...)
-		i.logDebug(
+		)
+		attrs = append(attrs, summaryAttrs...)
+		i.logDebug(ctx,
 			"Unknown command ignored",
 			attrs...,
 		)
@@ -174,6 +176,7 @@ func (i *MessageIngress) parseCommand(message *iris.Message, chatID, userName st
 }
 
 func (i *MessageIngress) logCommandReceived(
+	ctx context.Context,
 	parsed *adapter.ParsedCommand,
 	commandType string,
 	userID string,
@@ -184,7 +187,7 @@ func (i *MessageIngress) logCommandReceived(
 	if i.logger == nil || parsed == nil {
 		return
 	}
-	ctx := sharedlog.WithComponent(sharedlog.WithRuntime(context.Background(), "bot"), "ingress")
+	ctx = sharedlog.WithComponent(sharedlog.WithRuntime(ctx, "bot"), "ingress")
 	sharedlog.Debug(
 		ctx,
 		i.logger,
@@ -203,18 +206,18 @@ func (i *MessageIngress) isSelfSender(sender string) bool {
 	return canonical == i.selfSender
 }
 
-func (i *MessageIngress) logDebug(msg string, attrs ...slog.Attr) {
+func (i *MessageIngress) logDebug(ctx context.Context, msg string, attrs ...slog.Attr) {
 	if i.logger == nil {
 		return
 	}
 
-	i.logger.LogAttrs(context.Background(), slog.LevelDebug, msg, attrs...)
+	i.logger.LogAttrs(ctx, slog.LevelDebug, msg, attrs...)
 }
 
-func (i *MessageIngress) logWarn(msg string, attrs ...slog.Attr) {
+func (i *MessageIngress) logWarn(ctx context.Context, msg string, attrs ...slog.Attr) {
 	if i.logger == nil {
 		return
 	}
 
-	i.logger.LogAttrs(context.Background(), slog.LevelWarn, msg, attrs...)
+	i.logger.LogAttrs(ctx, slog.LevelWarn, msg, attrs...)
 }

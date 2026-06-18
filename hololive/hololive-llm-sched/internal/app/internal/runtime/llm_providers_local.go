@@ -62,7 +62,10 @@ func ProvideMajorEventLLMClient(cliproxy config.CliproxyConfig, tracker llm.Cost
 	return client
 }
 
-func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig *config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+	if llmConfig == nil {
+		llmConfig = &config.LLMConfig{}
+	}
 	if !cliproxy.Enabled || cliproxy.APIKey == "" {
 		logger.Info("Member news LLM disabled")
 		return nil
@@ -130,7 +133,10 @@ func buildConsensusLLMClient(cliproxy config.CliproxyConfig, logger *slog.Logger
 }
 
 // consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
-func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig *config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+	if llmConfig == nil {
+		llmConfig = &config.LLMConfig{}
+	}
 	model := llmConfig.MemberNews.ReviewerModel
 	if model == "" {
 		model = llmConfig.MemberNewsModel
@@ -157,7 +163,10 @@ func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig c
 	})
 }
 
-func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmConfig *config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+	if llmConfig == nil {
+		llmConfig = &config.LLMConfig{}
+	}
 	model := llmConfig.MajorEvent.ReviewerModel
 	if model == "" {
 		model = cliproxy.Model
@@ -176,7 +185,10 @@ func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmConfig c
 	})
 }
 
-func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig *config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+	if llmConfig == nil {
+		llmConfig = &config.LLMConfig{}
+	}
 	model := llmConfig.MajorEvent.AdjudicatorModel
 	if model == "" {
 		model = cliproxy.Model
@@ -196,7 +208,10 @@ func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfi
 }
 
 // consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
-func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfig *config.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+	if llmConfig == nil {
+		llmConfig = &config.LLMConfig{}
+	}
 	model := llmConfig.MemberNews.AdjudicatorModel
 	if model == "" {
 		model = llmConfig.MemberNewsModel

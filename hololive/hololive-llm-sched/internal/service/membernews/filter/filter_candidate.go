@@ -23,16 +23,16 @@ package filter
 import "github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 
 func buildFilteredCandidate(
-	item datedCandidate,
+	item *datedCandidate,
 	profiles []memberProfile,
 	sourceValidator model.SourceURLValidator,
 ) (model.FilteredCandidate, bool) {
-	matchedMembers := matchMembers(item.candidate, profiles)
+	matchedMembers := matchMembers(&item.candidate, profiles)
 	if len(matchedMembers) == 0 {
 		return model.FilteredCandidate{}, false
 	}
 
-	tier, normalizedURL, ok := resolveSource(item.candidate, sourceValidator)
+	tier, normalizedURL, ok := resolveSource(&item.candidate, sourceValidator)
 	if !ok {
 		return model.FilteredCandidate{}, false
 	}
@@ -42,7 +42,7 @@ func buildFilteredCandidate(
 		EffectiveDate:  item.date,
 		MatchedMembers: matchedMembers,
 		MemberText:     formatMemberText(matchedMembers),
-		Category:       classifyCategory(item.candidate),
+		Category:       classifyCategory(&item.candidate),
 		SourceTier:     tier,
 		SourceURL:      normalizedURL,
 	}, true

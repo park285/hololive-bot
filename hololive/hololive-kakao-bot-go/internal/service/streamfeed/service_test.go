@@ -266,10 +266,10 @@ func TestServiceGetUpcomingStreamsByOrg_StelliveScheduleLookupsRunConcurrently(t
 		},
 	)
 
-	done := make(chan struct{})
+	errCh := make(chan error, 1)
 	go func() {
-		defer close(done)
-		_, _ = service.GetUpcomingStreamsByOrg(context.Background(), 24, constants.HolodexAPIParams.OrgStellive)
+		_, err := service.GetUpcomingStreamsByOrg(context.Background(), 24, constants.HolodexAPIParams.OrgStellive)
+		errCh <- err
 	}()
 
 	deadline := time.After(200 * time.Millisecond)
@@ -278,7 +278,9 @@ func TestServiceGetUpcomingStreamsByOrg_StelliveScheduleLookupsRunConcurrently(t
 		case <-deadline:
 			close(chzzkClient.scheduledDelay["cz-1"])
 			close(chzzkClient.scheduledDelay["cz-2"])
-			<-done
+			if err := <-errCh; err != nil {
+				t.Fatalf("GetUpcomingStreamsByOrg error = %v", err)
+			}
 			t.Fatal("expected both Chzzk schedule lookups to start before the first one completed")
 		default:
 			time.Sleep(5 * time.Millisecond)
@@ -287,7 +289,9 @@ func TestServiceGetUpcomingStreamsByOrg_StelliveScheduleLookupsRunConcurrently(t
 
 	close(chzzkClient.scheduledDelay["cz-1"])
 	close(chzzkClient.scheduledDelay["cz-2"])
-	<-done
+	if err := <-errCh; err != nil {
+		t.Fatalf("GetUpcomingStreamsByOrg error = %v", err)
+	}
 
 	if got := chzzkClient.maxInFlight.Load(); got < 2 {
 		t.Fatalf("max concurrent scheduled lookups = %d, want >= 2", got)

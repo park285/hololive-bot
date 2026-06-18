@@ -58,7 +58,9 @@ func (s *Service) mergeStelliveUpcomingStreams(ctx context.Context, org string, 
 			return nil
 		})
 	}
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		s.logger.Warn("stream feed: chzzk upcoming merge failed", slog.Any("error", err))
+	}
 
 	if len(chzzkStreams) == 0 {
 		return upcomingStreams

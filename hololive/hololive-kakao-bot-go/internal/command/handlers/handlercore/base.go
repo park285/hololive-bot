@@ -51,9 +51,5 @@ func (b *BaseCommand) EnsureBaseDeps() error {
 }
 
 func (b *BaseCommand) Deps() *Dependencies {
-	if b == nil {
-		return nil
-	}
-
 	return b.deps
 }

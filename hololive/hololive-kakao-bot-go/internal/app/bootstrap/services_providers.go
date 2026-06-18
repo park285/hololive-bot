@@ -43,7 +43,10 @@ func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
 	return activity.NewActivityLogger("", logger)
 }
 
-func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
+func ProvideBotDependencies(modules *BotDependencyModules) *bot.Dependencies {
+	if modules == nil {
+		return nil
+	}
 	var youTubeStatsRepository stats.StatsCommandRepository
 	if statsRepository := modules.Stream.YTStack.GetStatsRepository(); statsRepository != nil {
 		youTubeStatsRepository = statsRepository

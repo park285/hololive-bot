@@ -27,7 +27,7 @@ import (
 )
 
 func resolveSource(
-	candidate model.Candidate,
+	candidate *model.Candidate,
 	sourceValidator model.SourceURLValidator,
 ) (model.SourceTier, string, bool) {
 	sourceURL := strings.TrimSpace(candidate.SourceURL)

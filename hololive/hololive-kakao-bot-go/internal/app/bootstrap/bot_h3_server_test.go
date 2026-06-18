@@ -195,13 +195,13 @@ func TestBuildBotHTTP3ServerKeepsPreviousCertificateWhenReloadFails(t *testing.T
 	}
 }
 
-func writeLocalhostCertificate(t *testing.T) (string, string) {
+func writeLocalhostCertificate(t *testing.T) (certFile, keyFile string) {
 	t.Helper()
 
 	certPEM, keyPEM := generateLocalhostCertificate(t)
 	dir := t.TempDir()
-	certFile := filepath.Join(dir, "localhost.crt")
-	keyFile := filepath.Join(dir, "localhost.key")
+	certFile = filepath.Join(dir, "localhost.crt")
+	keyFile = filepath.Join(dir, "localhost.key")
 
 	if err := os.WriteFile(certFile, certPEM, 0o600); err != nil {
 		t.Fatalf("write cert: %v", err)
@@ -227,7 +227,7 @@ func overwriteLocalhostCertificate(t *testing.T, certFile, keyFile string) {
 	}
 }
 
-func generateLocalhostCertificate(t *testing.T) ([]byte, []byte) {
+func generateLocalhostCertificate(t *testing.T) (certPEM, keyPEM []byte) {
 	t.Helper()
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)

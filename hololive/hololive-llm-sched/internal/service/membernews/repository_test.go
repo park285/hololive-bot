@@ -53,8 +53,17 @@ func (f *fakeMemberNewsPool) Exec(_ context.Context, sql string, args ...any) er
 	query := strings.ToLower(strings.TrimSpace(sql))
 	switch {
 	case strings.Contains(query, "insert into member_news_subscriptions"):
-		roomID, _ := args[0].(string)
-		roomName, _ := args[1].(string)
+		if len(args) < 2 {
+			return fmt.Errorf("insert args len = %d, want at least 2", len(args))
+		}
+		roomID, ok := args[0].(string)
+		if !ok {
+			return fmt.Errorf("room_id arg type = %T", args[0])
+		}
+		roomName, ok := args[1].(string)
+		if !ok {
+			return fmt.Errorf("room_name arg type = %T", args[1])
+		}
 
 		if existing, ok := f.subscription[roomID]; ok {
 			if strings.TrimSpace(roomName) != "" {
@@ -73,7 +82,13 @@ func (f *fakeMemberNewsPool) Exec(_ context.Context, sql string, args ...any) er
 		return nil
 
 	case strings.Contains(query, "delete from member_news_subscriptions"):
-		roomID, _ := args[0].(string)
+		if len(args) < 1 {
+			return fmt.Errorf("delete args len = %d, want at least 1", len(args))
+		}
+		roomID, ok := args[0].(string)
+		if !ok {
+			return fmt.Errorf("room_id arg type = %T", args[0])
+		}
 		delete(f.subscription, roomID)
 		return nil
 	}
@@ -116,7 +131,13 @@ func (f *fakeMemberNewsPool) QueryRow(_ context.Context, sql string, args ...any
 		return fakeRow{err: fmt.Errorf("unsupported queryrow: %s", query)}
 	}
 
-	roomID, _ := args[0].(string)
+	if len(args) < 1 {
+		return fakeRow{err: fmt.Errorf("queryrow args len = %d, want at least 1", len(args))}
+	}
+	roomID, ok := args[0].(string)
+	if !ok {
+		return fakeRow{err: fmt.Errorf("room_id arg type = %T", args[0])}
+	}
 	_, exists := f.subscription[roomID]
 	return fakeRow{values: []any{exists}}
 }

@@ -174,10 +174,14 @@ type HandlerDeps struct {
 	YouTubeOps YouTubeOpsDeps
 }
 
-func NewHandler(deps HandlerDeps) *Handler {
+func NewHandler(deps *HandlerDeps) *Handler {
+	if deps == nil {
+		deps = &HandlerDeps{}
+	}
+
 	var memberIndexLoader func(context.Context) ([]*domain.Member, error)
 
-	if deps.Member.Repository != nil {
+	if deps != nil && deps.Member.Repository != nil {
 		memberIndexLoader = deps.Member.Repository.GetAllMembers
 	}
 

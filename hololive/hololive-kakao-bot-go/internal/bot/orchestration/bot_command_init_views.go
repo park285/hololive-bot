@@ -85,7 +85,7 @@ func (b *Bot) commandInitView() commandInitView {
 	}
 }
 
-func (v commandInitView) toCommandDependencies(registry *command.Registry) *command.Dependencies {
+func (v *commandInitView) toCommandDependencies(registry *command.Registry) *command.Dependencies {
 	deps := &command.Dependencies{
 		Holodex:          v.holodex,
 		Chzzk:            v.chzzk,
@@ -108,7 +108,7 @@ func (v commandInitView) toCommandDependencies(registry *command.Registry) *comm
 	return deps
 }
 
-func (v commandInitView) buildCommands(deps *command.Dependencies) []command.Command {
+func (v *commandInitView) buildCommands(deps *command.Dependencies) []command.Command {
 	commands := []command.Command{
 		command.NewHelpCommand(deps),
 		command.NewLiveCommand(deps),
@@ -142,7 +142,7 @@ func (v commandInitView) buildCommands(deps *command.Dependencies) []command.Com
 	return compactCommands(commands)
 }
 
-func (v commandInitView) appendExternalCommands(commands []command.Command, deps *command.Dependencies) []command.Command {
+func (v *commandInitView) appendExternalCommands(commands []command.Command, deps *command.Dependencies) []command.Command {
 	if len(v.commandBuilders) == 0 {
 		return commands
 	}
@@ -168,7 +168,7 @@ func compactCommands(commands []command.Command) []command.Command {
 	return compacted
 }
 
-func (v commandInitView) logInfo(msg string, args ...any) {
+func (v *commandInitView) logInfo(msg string, args ...any) {
 	if v.logger == nil {
 		return
 	}

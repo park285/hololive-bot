@@ -64,7 +64,7 @@ func (s *Service) getChzzkScheduleStreams(ctx context.Context, channelID string,
 	}
 
 	member := s.members.FindMemberByChannelID(channelID)
-	if !canLoadChzzkSchedule(member) {
+	if member == nil || !canLoadChzzkSchedule(member) {
 		return nil
 	}
 

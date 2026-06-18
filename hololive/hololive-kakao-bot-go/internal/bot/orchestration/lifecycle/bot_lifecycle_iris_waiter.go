@@ -96,7 +96,7 @@ func (l *BotLifecycle) logIrisReadyAfterRetry(attempt int, startedAt time.Time) 
 	)
 }
 
-func (l *BotLifecycle) logIrisNotReadyRetry(attempt int, retryInterval time.Duration, startedAt time.Time, lastWarnLoggedAt time.Time) (time.Time, bool) {
+func (l *BotLifecycle) logIrisNotReadyRetry(attempt int, retryInterval time.Duration, startedAt, lastWarnLoggedAt time.Time) (time.Time, bool) {
 	now := time.Now()
 	if attempt != 1 && !lastWarnLoggedAt.IsZero() && now.Sub(lastWarnLoggedAt) < time.Minute {
 		return lastWarnLoggedAt, false

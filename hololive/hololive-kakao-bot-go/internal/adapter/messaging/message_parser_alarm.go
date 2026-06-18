@@ -89,7 +89,7 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 	return alarmInvalidCommand(subCmd, restArgs, rawMessage)
 }
 
-func alarmMemberCommand(commandType domain.CommandType, action string, member string, alarmType string, rawMessage string) *ParsedCommand {
+func alarmMemberCommand(commandType domain.CommandType, action, member, alarmType, rawMessage string) *ParsedCommand {
 	return &ParsedCommand{
 		Type: commandType,
 		Params: map[string]any{
@@ -155,7 +155,7 @@ func (ma *MessageAdapter) extractMemberAndType(args []string) (member, alarmType
 }
 
 // 알람 명령 정규화.
-func normalizeCompactAlarmTokens(command string, args []string) (string, []string, bool) {
+func normalizeCompactAlarmTokens(command string, args []string) (normalizedCommand string, normalizedArgs []string, ok bool) {
 	subCmd, ok := compactAlarmCommandMapping[command]
 	if !ok {
 		return command, args, false

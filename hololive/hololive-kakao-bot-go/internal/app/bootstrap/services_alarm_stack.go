@@ -56,7 +56,7 @@ func InitAlarmYouTubeStack(
 		logger,
 	)
 	statsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
-	apiStack := sharedmodules.BuildYouTubeAPIStack(ctx, sharedmodules.YouTubeAPIStackParams{
+	apiStack := sharedmodules.BuildYouTubeAPIStack(ctx, &sharedmodules.YouTubeAPIStackParams{
 		YouTubeConfig:   appConfig.YouTube,
 		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,

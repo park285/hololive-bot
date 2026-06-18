@@ -51,7 +51,14 @@ func newCalendarPhotoHTTPClient() *http.Client {
 }
 
 func newCalendarPhotoTransport() *http.Transport {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Transport{
+			Proxy:       nil,
+			DialContext: dialCalendarPhotoContext,
+		}
+	}
+	transport := baseTransport.Clone()
 	transport.Proxy = nil
 	transport.DialContext = dialCalendarPhotoContext
 	return transport
@@ -97,8 +104,8 @@ func dialCalendarPhotoContext(ctx context.Context, network, address string) (net
 	return dialResolvedCalendarPhotoAddrs(ctx, network, host, port, addrs)
 }
 
-func resolveCalendarPhotoDialTarget(ctx context.Context, address string) (string, string, []netip.Addr, error) {
-	host, port, err := net.SplitHostPort(address)
+func resolveCalendarPhotoDialTarget(ctx context.Context, address string) (host, port string, addrs []netip.Addr, err error) {
+	host, port, err = net.SplitHostPort(address)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("split calendar photo dial address: %w", err)
 	}
@@ -106,7 +113,7 @@ func resolveCalendarPhotoDialTarget(ctx context.Context, address string) (string
 		return "", "", nil, err
 	}
 
-	addrs, err := resolveCalendarPhotoHost(ctx, host)
+	addrs, err = resolveCalendarPhotoHost(ctx, host)
 	if err != nil {
 		return "", "", nil, err
 	}

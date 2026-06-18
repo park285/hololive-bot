@@ -21,10 +21,11 @@
 package llm
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"strconv"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,30 +34,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
-
-// warnCountHandler는 특정 메시지의 WARN 레코드 수를 센다.
-type warnCountHandler struct {
-	mu      sync.Mutex
-	message string
-	count   int
-}
-
-func (h *warnCountHandler) Enabled(context.Context, slog.Level) bool { return true }
-func (h *warnCountHandler) Handle(_ context.Context, r slog.Record) error {
-	if r.Level == slog.LevelWarn && r.Message == h.message {
-		h.mu.Lock()
-		h.count++
-		h.mu.Unlock()
-	}
-	return nil
-}
-func (h *warnCountHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *warnCountHandler) WithGroup(string) slog.Handler      { return h }
-func (h *warnCountHandler) warns() int {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.count
-}
 
 func newMiniredisCache(t *testing.T) cache.Client {
 	t.Helper()
@@ -74,7 +51,7 @@ func newMiniredisCache(t *testing.T) cache.Client {
 		ForceSingleClient: true,
 	}, slog.New(slog.NewTextHandler(noopWriter{}, nil)))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = svc.Close() })
+	t.Cleanup(func() { require.NoError(t, svc.Close()) })
 	return svc
 }
 
@@ -84,8 +61,8 @@ func (noopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 func TestValkeyCostCeiling_AccumulatesMonthlyAndWarnsOnceAtCrossing(t *testing.T) {
 	cacheClient := newMiniredisCache(t)
-	handler := &warnCountHandler{message: "llm monthly token ceiling exceeded"}
-	logger := slog.New(handler)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
 
 	tracker := NewValkeyCostCeiling(cacheClient, 100, logger)
 	require.NotNil(t, tracker)
@@ -95,15 +72,15 @@ func TestValkeyCostCeiling_AccumulatesMonthlyAndWarnsOnceAtCrossing(t *testing.T
 
 	// 60 누적 → 임계(100) 미만, 경고 없음.
 	tracker.RecordUsage(ctx, "openai", "gpt-x", 60)
-	require.Equal(t, 0, handler.warns())
+	require.Equal(t, 0, strings.Count(logs.String(), "llm monthly token ceiling exceeded"))
 
 	// +60 → 120, 이번 호출에서 임계를 넘음 → 경고 1회.
 	tracker.RecordUsage(ctx, "openai", "gpt-x", 60)
-	require.Equal(t, 1, handler.warns())
+	require.Equal(t, 1, strings.Count(logs.String(), "llm monthly token ceiling exceeded"))
 
 	// +10 → 130, 이미 초과 상태 → 추가 경고 없음(crossing-only).
 	tracker.RecordUsage(ctx, "openai", "gpt-x", 10)
-	require.Equal(t, 1, handler.warns())
+	require.Equal(t, 1, strings.Count(logs.String(), "llm monthly token ceiling exceeded"))
 
 	// Valkey 월 카운터가 정확히 누적됐는지 직접 검증.
 	got, found, err := cacheClient.GetString(ctx, "llm:cost:tokens:2026-06")

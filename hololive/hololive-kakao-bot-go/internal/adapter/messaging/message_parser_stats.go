@@ -103,14 +103,14 @@ func applyStatsKeyValueArg(params map[string]any, token string) bool {
 	return true
 }
 
-func splitStatsKeyValueArg(token string) (string, string, bool) {
+func splitStatsKeyValueArg(token string) (key, value string, ok bool) {
 	parts := strings.SplitN(token, "=", 2)
 	if len(parts) != 2 {
 		return "", "", false
 	}
 
-	key := stringutil.TrimSpace(parts[0])
-	value := stringutil.TrimSpace(parts[1])
+	key = stringutil.TrimSpace(parts[0])
+	value = stringutil.TrimSpace(parts[1])
 	if key == "" || value == "" {
 		return "", "", false
 	}

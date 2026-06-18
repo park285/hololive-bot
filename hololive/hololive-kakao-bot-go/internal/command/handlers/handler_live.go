@@ -66,6 +66,9 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 
 func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.CommandContext, memberName string) error {
 	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
+	if memberLookupHandled(err) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to find member %q: %w", memberName, err)
 	}
@@ -158,31 +161,35 @@ func (c *LiveCommand) checkChzzkLive(ctx context.Context, member *domain.Member)
 // getAllChzzkLiveStreams: Chzzk ID를 가진 모든 멤버의 방송 상태를 확인합니다.
 func (c *LiveCommand) getAllChzzkLiveStreams(ctx context.Context) []*domain.Stream {
 	if c.Deps().Chzzk == nil || c.Deps().MembersData == nil {
-		return nil
+		return []*domain.Stream{}
 	}
 
 	if !c.Deps().Chzzk.HasOpenAPICredentials() {
-		return nil
+		return []*domain.Stream{}
 	}
 
 	provider := c.Deps().MembersData.WithContext(ctx)
 	if provider == nil {
-		return nil
+		return []*domain.Stream{}
 	}
 
 	members := provider.GetAllMembers()
 
-	return collectChzzkLiveStreams(
+	streams := collectChzzkLiveStreams(
 		members,
 		func(channelIDs []string) ([]chzzk.LiveData, error) {
 			return c.Deps().Chzzk.GetLivesByChannelIDs(ctx, channelIDs)
 		},
 	)
+	if streams == nil {
+		return []*domain.Stream{}
+	}
+	return streams
 }
 
 func buildChzzkLiveStreams(members []*domain.Member, lives []chzzk.LiveData) []*domain.Stream {
 	if len(members) == 0 || len(lives) == 0 {
-		return nil
+		return []*domain.Stream{}
 	}
 
 	byChzzkChannelID := buildLiveMemberByChzzkChannelID(members)
@@ -194,7 +201,12 @@ func buildChzzkLiveStreams(members []*domain.Member, lives []chzzk.LiveData) []*
 			continue
 		}
 
-		streams = append(streams, newChzzkStream(member, lives[i].LiveTitle))
+		stream := newChzzkStream(member, lives[i].LiveTitle)
+		if stream == nil {
+			continue
+		}
+
+		streams = append(streams, stream)
 	}
 
 	return streams
@@ -231,11 +243,11 @@ func collectChzzkLiveStreams(
 	}
 
 	if len(eligibleMembers) == 0 {
-		return nil
+		return []*domain.Stream{}
 	}
 
 	if fetchBatch == nil {
-		return nil
+		return []*domain.Stream{}
 	}
 
 	lives, err := fetchBatch(channelIDs)

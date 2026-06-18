@@ -68,7 +68,7 @@ func (s *MonthlyScheduler) SetClock(clockFn func() time.Time) {
 }
 
 func (s *MonthlyScheduler) Start(ctx context.Context) {
-	s.digest.Start(ctx, schedulerkit.Config{
+	s.digest.Start(ctx, &schedulerkit.Config{
 		Logger:           s.digest.Logger,
 		WaitingLog:       "Monthly event scheduler waiting",
 		ContextStopLog:   "Monthly scheduler stopped by context",

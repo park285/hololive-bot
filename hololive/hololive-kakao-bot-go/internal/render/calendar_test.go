@@ -173,15 +173,15 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers
 func TestStoreDiskCachedImage_PrunesStaleMonthHashes(t *testing.T) {
 	dir := t.TempDir()
 	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
-	png := tinyPNG(t)
+	pngBytes := tinyPNG(t)
 
 	old := calendarCacheKey{year: 2026, month: 6, entriesHash: "old"}
 	fresh := calendarCacheKey{year: 2026, month: 6, entriesHash: "new"}
 	otherMonth := calendarCacheKey{year: 2026, month: 7, entriesHash: "keep"}
 
-	r.storeDiskCachedImage(old, png)
-	r.storeDiskCachedImage(otherMonth, png)
-	r.storeDiskCachedImage(fresh, png)
+	r.storeDiskCachedImage(old, pngBytes)
+	r.storeDiskCachedImage(otherMonth, pngBytes)
+	r.storeDiskCachedImage(fresh, pngBytes)
 
 	if _, ok := r.diskCachedImage(old); ok {
 		t.Fatal("stale same-month hash should be pruned")
@@ -310,6 +310,9 @@ func TestFetchImageAcceptsLargeThumbnailPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetchImage() error = %v", err)
 	}
+	if img == nil {
+		t.Fatal("fetchImage() returned nil image")
+	}
 	if img.Bounds().Dx() == 0 || img.Bounds().Dy() == 0 {
 		t.Fatalf("image bounds = %v, want non-empty image", img.Bounds())
 	}
@@ -392,7 +395,10 @@ func TestCalendarCardRenderer_CanvasHeightCapped(t *testing.T) {
 		t.Fatalf("RenderCalendarImage() error = %v", err)
 	}
 
-	img, _ := png.Decode(bytes.NewReader(data))
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
 	if img.Bounds().Dy() > maxCanvasH {
 		t.Errorf("canvas height %d exceeds max %d", img.Bounds().Dy(), maxCanvasH)
 	}
@@ -509,7 +515,7 @@ func largePNG(t *testing.T) []byte {
 			offset := img.PixOffset(x, y)
 			img.Pix[offset] = uint8(x)
 			img.Pix[offset+1] = uint8(y)
-			img.Pix[offset+2] = uint8(x ^ y)
+			img.Pix[offset+2] = uint8FromClampedInt((x ^ y) & 0xff)
 			img.Pix[offset+3] = 255
 		}
 	}
@@ -572,17 +578,17 @@ func drawLegacyBilinearCircularImage(dst *image.RGBA, src image.Image, cx, cy, r
 }
 
 func legacyBilinearSample(src image.Image, bounds image.Rectangle, fx, fy float64) color.RGBA {
-	x0 := clampI(int(math.Floor(fx)), 0, bounds.Dx()-1) + bounds.Min.X
-	y0 := clampI(int(math.Floor(fy)), 0, bounds.Dy()-1) + bounds.Min.Y
-	x1 := clampI(int(math.Floor(fx))+1, 0, bounds.Dx()-1) + bounds.Min.X
-	y1 := clampI(int(math.Floor(fy))+1, 0, bounds.Dy()-1) + bounds.Min.Y
+	x0 := clampI(int(math.Floor(fx)), bounds.Dx()-1) + bounds.Min.X
+	y0 := clampI(int(math.Floor(fy)), bounds.Dy()-1) + bounds.Min.Y
+	x1 := clampI(int(math.Floor(fx))+1, bounds.Dx()-1) + bounds.Min.X
+	y1 := clampI(int(math.Floor(fy))+1, bounds.Dy()-1) + bounds.Min.Y
 	xf := fx - math.Floor(fx)
 	yf := fy - math.Floor(fy)
 
-	r00, g00, b00, _ := src.At(x0, y0).RGBA()
-	r10, g10, b10, _ := src.At(x1, y0).RGBA()
-	r01, g01, b01, _ := src.At(x0, y1).RGBA()
-	r11, g11, b11, _ := src.At(x1, y1).RGBA()
+	r00, g00, b00 := legacySampleRGB(src, x0, y0)
+	r10, g10, b10 := legacySampleRGB(src, x1, y0)
+	r01, g01, b01 := legacySampleRGB(src, x0, y1)
+	r11, g11, b11 := legacySampleRGB(src, x1, y1)
 
 	lerp := func(a, b, c, d uint32) uint8 {
 		top := float64(a)*(1-xf) + float64(b)*xf
@@ -590,6 +596,15 @@ func legacyBilinearSample(src image.Image, bounds image.Rectangle, fx, fy float6
 		return uint8((top*(1-yf) + bot*yf) / 256)
 	}
 	return color.RGBA{R: lerp(r00, r10, r01, r11), G: lerp(g00, g10, g01, g11), B: lerp(b00, b10, b01, b11), A: 255}
+}
+
+func legacySampleRGB(src image.Image, x, y int) (red, green, blue uint32) {
+	c := src.At(x, y)
+	if c == nil {
+		return 0, 0, 0
+	}
+	r, g, b, _ := c.RGBA()
+	return r, g, b
 }
 
 func avatarEdgeEnergy(img *image.RGBA) float64 {

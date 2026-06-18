@@ -66,7 +66,7 @@ func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"code": 200,
 			"content": map[string]any{
 				"scheduledLives": []map[string]any{
@@ -76,7 +76,9 @@ func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 					},
 				},
 			},
-		})
+		}); err != nil {
+			t.Fatalf("encode schedule response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -121,7 +123,7 @@ func TestServiceGetChannelSchedule_MergesMatchingHolodexStream(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"code": 200,
 			"content": map[string]any{
 				"scheduledLives": []map[string]any{
@@ -131,7 +133,9 @@ func TestServiceGetChannelSchedule_MergesMatchingHolodexStream(t *testing.T) {
 					},
 				},
 			},
-		})
+		}); err != nil {
+			t.Fatalf("encode schedule response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -187,7 +191,7 @@ func TestServiceGetChannelSchedule_FiltersChzzkSchedulesOutsideHoursWindow(t *te
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"code": 200,
 			"content": map[string]any{
 				"scheduledLives": []map[string]any{
@@ -197,7 +201,9 @@ func TestServiceGetChannelSchedule_FiltersChzzkSchedulesOutsideHoursWindow(t *te
 					},
 				},
 			},
-		})
+		}); err != nil {
+			t.Fatalf("encode schedule response: %v", err)
+		}
 	}))
 	defer server.Close()
 

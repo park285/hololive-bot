@@ -2,7 +2,6 @@ package summarizer
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -26,17 +25,26 @@ func assertPromptMatchesGolden(t *testing.T, summaryType SummaryType, goldenName
 		t.Fatalf("getSystemPrompt(%s) 실패: %v", summaryType, err)
 	}
 
-	goldenPath := filepath.Join("testdata", goldenName)
+	root, err := os.OpenRoot("testdata")
+	if err != nil {
+		t.Fatalf("golden 디렉터리 열기 실패: %v", err)
+	}
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			t.Fatalf("golden 디렉터리 닫기 실패: %v", closeErr)
+		}
+	}()
+
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
+		if err := os.MkdirAll("testdata", 0o750); err != nil {
 			t.Fatalf("golden 디렉터리 생성 실패: %v", err)
 		}
-		if err := os.WriteFile(goldenPath, []byte(prompt), 0o644); err != nil {
+		if err := root.WriteFile(goldenName, []byte(prompt), 0o600); err != nil {
 			t.Fatalf("golden 파일 갱신 실패: %v", err)
 		}
 	}
 
-	golden, err := os.ReadFile(goldenPath)
+	golden, err := root.ReadFile(goldenName)
 	if err != nil {
 		t.Fatalf("golden 파일 읽기 실패: %v", err)
 	}

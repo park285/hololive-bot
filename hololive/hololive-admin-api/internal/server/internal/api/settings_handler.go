@@ -213,7 +213,8 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 	}
 
 	s := h.Settings.Get()
-	runtime := h.ScraperProxyRuntimeState(s.ScraperProxyEnabled).AsMap()
+	runtimeState := h.ScraperProxyRuntimeState(s.ScraperProxyEnabled)
+	runtime := runtimeState.AsMap()
 	ginjson.Respond(c, 200, settingsResponse{Status: "ok", Settings: s, Runtime: runtime})
 }
 
@@ -281,9 +282,11 @@ func (req updateSettingsRequest) applyTo(current *settingssvc.Settings) bool {
 }
 
 func (h *SettingsHandler) applySettingsRuntime(ctx context.Context, current settingssvc.Settings, alarmAdvanceUpdated bool) map[string]any {
-	runtime := h.ApplyScraperProxy(ctx, current.ScraperProxyEnabled).AsMap()
+	scraperProxyResult := h.ApplyScraperProxy(ctx, current.ScraperProxyEnabled)
+	runtime := scraperProxyResult.AsMap()
 	if alarmAdvanceUpdated {
-		maps.Copy(runtime, h.ApplyAlarmAdvanceMinutes(ctx, current.AlarmAdvanceMinutes).AsMap())
+		alarmAdvanceResult := h.ApplyAlarmAdvanceMinutes(ctx, current.AlarmAdvanceMinutes)
+		maps.Copy(runtime, alarmAdvanceResult.AsMap())
 	}
 	return runtime
 }
@@ -341,7 +344,8 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 
 	runtime := map[string]any{}
 	if req.MemberNewsWeeklyRunNow != nil && *req.MemberNewsWeeklyRunNow {
-		runtime[contractssettings.UpdateTypeMemberNewsRunNow] = h.ApplyMemberNewsWeeklyRunNow(ctx).AsMap()
+		memberNewsResult := h.ApplyMemberNewsWeeklyRunNow(ctx)
+		runtime[contractssettings.UpdateTypeMemberNewsRunNow] = memberNewsResult.AsMap()
 	}
 
 	h.logActivity("llm_settings_update", "LLM settings updated", map[string]any{

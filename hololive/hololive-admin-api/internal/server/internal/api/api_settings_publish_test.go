@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -21,6 +22,25 @@ import (
 func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
+
+	handler, receivedMessages, client := newCacheBackedSettingsPublisherTest(t)
+	ctx, rec := newAPITestContext(http.MethodPatch, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":7,"scraperProxyEnabled":true}`))
+	handler.UpdateSettings(ctx)
+
+	assertCacheBackedSettingsUpdateResponse(t, rec)
+	updates := collectPublishedConfigUpdates(t, receivedMessages, 2)
+	assertScraperProxyConfigUpdate(t, updates)
+	assertAlarmAdvanceConfigUpdate(t, updates)
+
+	if err := client.Do(context.Background(), client.B().Ping().Build()).Error(); err != nil {
+		t.Fatalf("valkey client unhealthy after publish path: %v", err)
+	}
+}
+
+func newCacheBackedSettingsPublisherTest(
+	t *testing.T,
+) (*SettingsAPIHandler, <-chan miniredis.PubsubMessage, valkey.Client) {
+	t.Helper()
 
 	mini := miniredis.RunT(t)
 	subscriber := mini.NewSubscriber()
@@ -66,8 +86,11 @@ func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T
 		},
 	}}
 
-	ctx, rec := newAPITestContext(http.MethodPatch, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":7,"scraperProxyEnabled":true}`))
-	handler.UpdateSettings(ctx)
+	return handler, receivedMessages, client
+}
+
+func assertCacheBackedSettingsUpdateResponse(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("UpdateSettings status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
@@ -88,9 +111,17 @@ func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T
 	if got := runtime["config_publish_alarm_advance_minutes"]; got != true {
 		t.Fatalf("config_publish_alarm_advance_minutes=%v want=true", got)
 	}
+}
+
+func collectPublishedConfigUpdates(
+	t *testing.T,
+	receivedMessages <-chan miniredis.PubsubMessage,
+	want int,
+) map[string]configsub.ConfigUpdate {
+	t.Helper()
 
 	updates := map[string]configsub.ConfigUpdate{}
-	for range 2 {
+	for range want {
 		select {
 		case message := <-receivedMessages:
 			var update configsub.ConfigUpdate
@@ -103,6 +134,12 @@ func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T
 		}
 	}
 
+	return updates
+}
+
+func assertScraperProxyConfigUpdate(t *testing.T, updates map[string]configsub.ConfigUpdate) {
+	t.Helper()
+
 	scraperUpdate, ok := updates[contractssettings.UpdateTypeScraperProxy]
 	if !ok {
 		t.Fatalf("missing scraper proxy update: %+v", updates)
@@ -114,6 +151,10 @@ func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T
 	if !scraperPayload.Enabled {
 		t.Fatalf("scraper proxy enabled=%v want=true", scraperPayload.Enabled)
 	}
+}
+
+func assertAlarmAdvanceConfigUpdate(t *testing.T, updates map[string]configsub.ConfigUpdate) {
+	t.Helper()
 
 	alarmUpdate, ok := updates[contractssettings.UpdateTypeAlarmAdvanceMinutes]
 	if !ok {
@@ -125,9 +166,5 @@ func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T
 	}
 	if alarmPayload.Minutes != 7 {
 		t.Fatalf("alarm advance minutes=%d want=7", alarmPayload.Minutes)
-	}
-
-	if err := client.Do(context.Background(), client.B().Ping().Build()).Error(); err != nil {
-		t.Fatalf("valkey client unhealthy after publish path: %v", err)
 	}
 }

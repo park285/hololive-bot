@@ -181,36 +181,24 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			notification := &domain.AlarmNotification{
-				Stream:       tt.stream,
-				MinutesUntil: 5,
-			}
-
-			var urlText string
-
-			switch {
-			case tt.stream.IsIntegrated && tt.stream.HasYouTubeInfo() && tt.stream.ChzzkChannelID != "":
-				urlText = "📺 YouTube: " + tt.stream.GetYouTubeURL() + "\n📺 치지직: " + tt.stream.GetChzzkLiveURL()
-			case tt.stream.IsChzzkOnly || (!tt.stream.HasYouTubeInfo() && tt.stream.ChzzkChannelID != ""):
-				urlText = "📺 치지직: " + tt.stream.GetChzzkLiveURL()
-			default:
-				urlText = tt.stream.GetYouTubeURL()
-			}
-
-			for _, want := range tt.wantContains {
-				if !strings.Contains(urlText, want) {
-					t.Errorf("URL text missing expected string %q\nGot: %s", want, urlText)
-				}
-			}
-
-			for _, notWant := range tt.wantNotContains {
-				if strings.Contains(urlText, notWant) {
-					t.Errorf("URL text contains unexpected string %q\nGot: %s", notWant, urlText)
-				}
-			}
-
-			_ = notification
+			assertAlarmNotificationURLText(t, tt.stream, tt.wantContains, tt.wantNotContains)
 		})
+	}
+}
+
+func assertAlarmNotificationURLText(t *testing.T, stream *domain.Stream, wantContains, wantNotContains []string) {
+	t.Helper()
+
+	urlText := alarmNotificationURLText(stream)
+	for _, want := range wantContains {
+		if !strings.Contains(urlText, want) {
+			t.Errorf("URL text missing expected string %q\nGot: %s", want, urlText)
+		}
+	}
+	for _, notWant := range wantNotContains {
+		if strings.Contains(urlText, notWant) {
+			t.Errorf("URL text contains unexpected string %q\nGot: %s", notWant, urlText)
+		}
 	}
 }
 

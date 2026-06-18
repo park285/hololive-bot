@@ -33,7 +33,9 @@ func buildSummaryInputHash(events []domain.MajorEvent) (string, error) {
 	}
 
 	projected := projectPromptEvents(events)
-	slices.SortFunc(projected, comparePromptEvents)
+	slices.SortFunc(projected, func(a, b eventForPrompt) int {
+		return comparePromptEvents(&a, &b)
+	})
 
 	payload, err := json.Marshal(projected)
 	if err != nil {
@@ -43,7 +45,7 @@ func buildSummaryInputHash(events []domain.MajorEvent) (string, error) {
 	return hex.EncodeToString(checksum[:8]), nil
 }
 
-func comparePromptEvents(a, b eventForPrompt) int {
+func comparePromptEvents(a, b *eventForPrompt) int {
 	if byDate := cmp.Compare(a.DateStr, b.DateStr); byDate != 0 {
 		return byDate
 	}

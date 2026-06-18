@@ -46,7 +46,7 @@ func TestDBIntegrationRuntimeClose_CallsCleanupOnce(t *testing.T) {
 func TestBuildDBIntegrationRuntime_ReturnsErrorOnNilLogger(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := BuildDBIntegrationRuntime(t.Context(), config.PostgresConfig{}, nil)
+	runtime, err := BuildDBIntegrationRuntime(t.Context(), &config.PostgresConfig{}, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "logger must not be nil")
@@ -82,7 +82,7 @@ func TestBuildDBIntegrationRuntime_InitializesContextWhenNil(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	runtime, err := BuildDBIntegrationRuntime(context.Background(), config.PostgresConfig{}, logger)
+	runtime, err := BuildDBIntegrationRuntime(context.Background(), &config.PostgresConfig{}, logger)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to initialize DB integration runtime")

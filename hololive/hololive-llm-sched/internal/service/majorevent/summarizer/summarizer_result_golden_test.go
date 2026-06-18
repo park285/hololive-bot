@@ -3,7 +3,6 @@ package summarizer
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -40,17 +39,26 @@ func TestEventSummarizer_Summarize_MonthlyMatchesGolden(t *testing.T) {
 func assertSummaryGolden(t *testing.T, name, text string) {
 	t.Helper()
 
-	goldenPath := filepath.Join("testdata", name)
+	root, err := os.OpenRoot("testdata")
+	if err != nil {
+		t.Fatalf("golden 디렉터리 열기 실패: %v", err)
+	}
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			t.Fatalf("golden 디렉터리 닫기 실패: %v", closeErr)
+		}
+	}()
+
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
+		if err := os.MkdirAll("testdata", 0o750); err != nil {
 			t.Fatalf("golden 디렉터리 생성 실패: %v", err)
 		}
-		if err := os.WriteFile(goldenPath, []byte(text), 0o644); err != nil {
+		if err := root.WriteFile(name, []byte(text), 0o600); err != nil {
 			t.Fatalf("golden 파일 갱신 실패: %v", err)
 		}
 	}
 
-	golden, err := os.ReadFile(goldenPath)
+	golden, err := root.ReadFile(name)
 	if err != nil {
 		t.Fatalf("golden 파일 읽기 실패: %v", err)
 	}

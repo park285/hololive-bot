@@ -181,6 +181,8 @@ func slogAttrsByKey(attrs []slog.Attr) map[string]any {
 			values[attr.Key] = attr.Value.Bool()
 		case slog.KindInt64:
 			values[attr.Key] = int(attr.Value.Int64())
+		case slog.KindAny, slog.KindDuration, slog.KindFloat64, slog.KindTime, slog.KindUint64, slog.KindGroup, slog.KindLogValuer:
+			values[attr.Key] = attr.Value.Any()
 		default:
 			values[attr.Key] = attr.Value.Any()
 		}

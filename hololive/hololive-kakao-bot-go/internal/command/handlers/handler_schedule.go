@@ -65,6 +65,9 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 
 	days := scheduleDays(params)
 	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
+	if memberLookupHandled(err) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to find member %q: %w", memberName, err)
 	}
@@ -85,7 +88,7 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 }
 
 func popRawScheduleCommandToken(params map[string]any) string {
-	rawCommandToken, _ := params["_raw_command"].(string)
+	rawCommandToken := stringParam(params, "_raw_command")
 	delete(params, "_raw_command")
 
 	return rawCommandToken

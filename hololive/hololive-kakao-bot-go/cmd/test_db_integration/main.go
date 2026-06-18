@@ -42,7 +42,7 @@ func main() {
 
 	postgresConfig := postgresConfigFromEnv()
 	buildCtx, buildCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Build)
-	runtime, err := app.BuildDBIntegrationRuntime(buildCtx, postgresConfig, logger)
+	runtime, err := app.BuildDBIntegrationRuntime(buildCtx, &postgresConfig, logger)
 	buildCancel()
 
 	if err != nil {
@@ -71,12 +71,12 @@ func postgresConfigFromEnv() config.PostgresConfig {
 	}
 }
 
-func runIntegrationChecks(ctx context.Context, runtime *app.DBIntegrationRuntime) (int, int) {
+func runIntegrationChecks(ctx context.Context, runtime *app.DBIntegrationRuntime) (memberCount, channelIDCount int) {
 	testChannelID := "UChAnqc_AY5_I3Px5dig3X1Q" // Korone
 
-	memberCount := runRepositoryChecks(ctx, runtime, testChannelID)
+	memberCount = runRepositoryChecks(ctx, runtime, testChannelID)
 	runCacheCheck(ctx, runtime, testChannelID)
-	channelIDCount := runAdapterChecks(ctx, runtime, testChannelID)
+	channelIDCount = runAdapterChecks(ctx, runtime, testChannelID)
 
 	return memberCount, channelIDCount
 }

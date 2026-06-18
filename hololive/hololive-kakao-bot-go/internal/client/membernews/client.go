@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -36,12 +37,26 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period membernewscontracts.Period) (*membernewscontracts.Digest, error) {
+func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period membernewscontracts.Period) (digest *membernewscontracts.Digest, err error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
 		return nil, errors.New("room id is required")
 	}
 
+	resp, err := c.postRoomDigest(ctx, roomID, period)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := closeBody(resp.Body); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+
+	return c.decodeRoomDigest(resp)
+}
+
+func (c *Client) postRoomDigest(ctx context.Context, roomID string, period membernewscontracts.Period) (*http.Response, error) {
 	req, err := c.HTTPClient.NewJSONRequest(ctx, http.MethodPost, membernewscontracts.DigestPath, digestRequest{
 		RoomID: roomID,
 		Period: string(membernewscontracts.NormalizePeriod(period)),
@@ -54,9 +69,17 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 	if err != nil {
 		return nil, fmt.Errorf("request: %w", err)
 	}
+	if resp == nil {
+		return nil, errors.New("request: empty response")
+	}
+	if resp.Body == nil {
+		return nil, errors.New("request: empty response body")
+	}
 
-	defer func() { _ = resp.Body.Close() }()
+	return resp, nil
+}
 
+func (c *Client) decodeRoomDigest(resp *http.Response) (*membernewscontracts.Digest, error) {
 	if err := handleRoomDigestNotFound(resp); err != nil {
 		return nil, err
 	}
@@ -74,6 +97,12 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 }
 
 func handleRoomDigestNotFound(resp *http.Response) error {
+	if resp == nil {
+		return errors.New("handle room digest not found: response is nil")
+	}
+	if resp.Body == nil {
+		return errors.New("handle room digest not found: response body is nil")
+	}
 	if resp.StatusCode != http.StatusNotFound {
 		return nil
 	}
@@ -87,6 +116,16 @@ func handleRoomDigestNotFound(resp *http.Response) error {
 		return membernewscontracts.ErrNoSubscribedMembers
 	}
 
+	return nil
+}
+
+func closeBody(body io.ReadCloser) error {
+	if body == nil {
+		return nil
+	}
+	if err := body.Close(); err != nil {
+		return fmt.Errorf("close body: %w", err)
+	}
 	return nil
 }
 

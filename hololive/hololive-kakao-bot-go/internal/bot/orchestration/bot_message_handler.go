@@ -47,7 +47,7 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 		}
 	}()
 
-	envelope, ok := b.ensureIngress().Prepare(message)
+	envelope, ok := b.ensureIngress().Prepare(ctx, message)
 	if !ok {
 		return
 	}
@@ -123,11 +123,13 @@ func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandTy
 		return
 	}
 	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
-		attrs := []slog.Attr{
+		errorAttrs := sharedlog.ErrorAttrs(sendErr)
+		attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
+		attrs = append(attrs,
 			slog.String("chat_id", chatID),
 			slog.String("command", commandType),
-		}
-		attrs = append(attrs, sharedlog.ErrorAttrs(sendErr)...)
+		)
+		attrs = append(attrs, errorAttrs...)
 		sharedlog.Error(ctx, b.logger, EventBotCommandErrorResponseFailed, "failed to send command error response", attrs...)
 	}
 }

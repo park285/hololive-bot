@@ -138,7 +138,7 @@ func TestDescribeResponseOutputItemType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, describeResponseOutputItemType(tt.item))
+			assert.Equal(t, tt.want, describeResponseOutputItemType(&tt.item))
 		})
 	}
 }
@@ -149,7 +149,7 @@ func TestResponseOutputItemRefusal(t *testing.T) {
 	t.Run("non-message type returns empty", func(t *testing.T) {
 		t.Parallel()
 
-		got := responseOutputItemRefusal(responses.ResponseOutputItemUnion{
+		item := responses.ResponseOutputItemUnion{
 			Type: "function_call",
 			Content: []responses.ResponseOutputMessageContentUnion{
 				{
@@ -157,7 +157,8 @@ func TestResponseOutputItemRefusal(t *testing.T) {
 					Refusal: "policy refusal",
 				},
 			},
-		})
+		}
+		got := responseOutputItemRefusal(&item)
 
 		assert.Empty(t, got)
 	})
@@ -165,7 +166,8 @@ func TestResponseOutputItemRefusal(t *testing.T) {
 	t.Run("message with refusal content returns refusal text", func(t *testing.T) {
 		t.Parallel()
 
-		got := responseOutputItemRefusal(responseDiagnosticsRefusalItem("  policy refusal  "))
+		item := responseDiagnosticsRefusalItem("  policy refusal  ")
+		got := responseOutputItemRefusal(&item)
 
 		assert.Equal(t, "policy refusal", got)
 	})
@@ -173,7 +175,8 @@ func TestResponseOutputItemRefusal(t *testing.T) {
 	t.Run("message without refusal content returns empty", func(t *testing.T) {
 		t.Parallel()
 
-		got := responseOutputItemRefusal(responseDiagnosticsOutputTextItem("ok"))
+		item := responseDiagnosticsOutputTextItem("ok")
+		got := responseOutputItemRefusal(&item)
 
 		assert.Empty(t, got)
 	})

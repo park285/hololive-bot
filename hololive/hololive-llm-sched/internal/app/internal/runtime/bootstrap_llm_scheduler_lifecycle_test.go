@@ -87,8 +87,11 @@ func TestLLMSchedulerRuntimeShutdown_StopsHTTPServer(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	response, err := server.Client().Get(server.URL)
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
 	require.NoError(t, err)
+	response, err := server.Client().Do(request)
+	require.NoError(t, err)
+	require.NotNil(t, response)
 	require.NoError(t, response.Body.Close())
 	assert.Equal(t, http.StatusNoContent, response.StatusCode)
 
@@ -139,7 +142,7 @@ func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
 	assert.Equal(t, ":32077", server.Addr)
 
 	t.Run("health available", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
 		rr := httptest.NewRecorder()
 		server.Handler.ServeHTTP(rr, req)
 
@@ -147,7 +150,7 @@ func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
 	})
 
 	t.Run("trigger route not registered", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 		rr := httptest.NewRecorder()
 		server.Handler.ServeHTTP(rr, req)
 
@@ -160,12 +163,12 @@ func TestBuildTriggerRouter_NoTriggerHandler(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
-	req := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 
-	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthReq := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
 	healthRR := httptest.NewRecorder()
 	router.ServeHTTP(healthRR, healthReq)
 	assert.Equal(t, http.StatusOK, healthRR.Code)

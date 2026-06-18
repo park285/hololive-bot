@@ -27,6 +27,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 
@@ -73,25 +74,36 @@ func TestFailClosedAuth(t *testing.T) {
 			router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Error("ProvideAPIRouter() expected error, but got nil")
-				} else if err.Error() != tt.expectedErr {
-					t.Errorf("ProvideAPIRouter() expected error %q, but got %q", tt.expectedErr, err.Error())
-				}
-
-				if router != nil {
-					t.Error("ProvideAPIRouter() expected nil router on error, but got non-nil")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("ProvideAPIRouter() unexpected error: %v", err)
-				}
-
-				if router == nil {
-					t.Error("ProvideAPIRouter() expected non-nil router, but got nil")
-				}
+				assertAPIRouterError(t, router, err, tt.expectedErr)
+				return
 			}
+			assertAPIRouterSuccess(t, router, err)
 		})
+	}
+}
+
+func assertAPIRouterError(t *testing.T, router *gin.Engine, err error, expectedErr string) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal("ProvideAPIRouter() expected error, but got nil")
+	}
+	if err.Error() != expectedErr {
+		t.Errorf("ProvideAPIRouter() expected error %q, but got %q", expectedErr, err.Error())
+	}
+	if router != nil {
+		t.Error("ProvideAPIRouter() expected nil router on error, but got non-nil")
+	}
+}
+
+func assertAPIRouterSuccess(t *testing.T, router *gin.Engine, err error) {
+	t.Helper()
+
+	if err != nil {
+		t.Fatalf("ProvideAPIRouter() unexpected error: %v", err)
+	}
+	if router == nil {
+		t.Fatal("ProvideAPIRouter() expected non-nil router, but got nil")
 	}
 }
 

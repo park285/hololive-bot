@@ -33,7 +33,7 @@ func TestRuntimeStartIsGuarded(t *testing.T) {
 	secondRun := make(chan struct{}, 1)
 	var calls atomic.Int32
 
-	rt.Start(ctx, Config{
+	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
 		WaitingLog:     "waiting",
 		ContextStopLog: "context stop",
@@ -51,7 +51,7 @@ func TestRuntimeStartIsGuarded(t *testing.T) {
 			<-release
 		},
 	})
-	rt.Start(ctx, Config{
+	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
 		WaitingLog:     "waiting",
 		ContextStopLog: "context stop",
@@ -88,7 +88,7 @@ func TestRuntimeStopsOnContextCancellation(t *testing.T) {
 	stopped := make(chan struct{}, 1)
 	tickCalled := make(chan struct{}, 1)
 
-	rt.Start(ctx, Config{
+	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
 		WaitingLog:     "waiting",
 		ContextStopLog: "context stop",
@@ -125,7 +125,7 @@ func TestRuntimeCanRestartAfterStop(t *testing.T) {
 	rt := NewRuntime()
 	stopped := make(chan StopReason, 1)
 
-	rt.Start(context.Background(), Config{
+	rt.Start(context.Background(), &Config{
 		Logger:         testLogger(),
 		WaitingLog:     "waiting",
 		ContextStopLog: "context stop",
@@ -155,7 +155,7 @@ func TestRuntimeCanRestartAfterStop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	tickCalled := make(chan struct{}, 1)
 
-	rt.Start(ctx, Config{
+	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
 		WaitingLog:     "waiting",
 		ContextStopLog: "context stop",
@@ -186,7 +186,7 @@ func TestRuntimeCanRestartAfterContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan StopReason, 1)
 
-	rt.Start(ctx, Config{
+	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
 		WaitingLog:     "waiting",
 		ContextStopLog: "context stop",
@@ -216,7 +216,7 @@ func TestRuntimeCanRestartAfterContextCancellation(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	tickCalled := make(chan struct{}, 1)
 
-	rt.Start(ctx2, Config{
+	rt.Start(ctx2, &Config{
 		Logger:         testLogger(),
 		WaitingLog:     "waiting",
 		ContextStopLog: "context stop",

@@ -79,7 +79,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.digest.Start(ctx, schedulerkit.Config{
+	s.digest.Start(ctx, &schedulerkit.Config{
 		Logger:           s.digest.Logger,
 		WaitingLog:       "Member news scheduler waiting",
 		ContextStopLog:   "Member news scheduler stopped by context",
@@ -124,7 +124,7 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 	}
 
 	weekKey := startOfWeek(s.digest.Clock()).Format("2006-01-02")
-	return runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, digestDispatchConfig{
+	return runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
 		periodKey:        weekKey,
 		periodFieldName:  "week_key",
 		resultMessage:    "Member news weekly result",

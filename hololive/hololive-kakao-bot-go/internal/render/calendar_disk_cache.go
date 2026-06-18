@@ -3,6 +3,7 @@ package render
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -24,7 +25,7 @@ func (r *CalendarCardRenderer) diskCachedImage(key calendarCacheKey) ([]byte, bo
 		return nil, false
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := readCalendarDiskCacheFile(path)
 	if err != nil || !isPNGData(data) {
 		return nil, false
 	}
@@ -40,7 +41,7 @@ func (r *CalendarCardRenderer) storeDiskCachedImage(key calendarCacheKey, data [
 		return
 	}
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return
 	}
 
@@ -53,11 +54,11 @@ func (r *CalendarCardRenderer) storeDiskCachedImage(key calendarCacheKey, data [
 	_, writeErr := tmp.Write(data)
 	closeErr := tmp.Close()
 	if writeErr != nil || closeErr != nil {
-		_ = os.Remove(tmpName)
+		removeCalendarDiskCacheFile(tmpName)
 		return
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
+		removeCalendarDiskCacheFile(tmpName)
 		return
 	}
 	r.pruneDiskCacheMonth(path, key)
@@ -72,8 +73,14 @@ func (r *CalendarCardRenderer) pruneDiskCacheMonth(keepPath string, key calendar
 	}
 	for _, match := range matches {
 		if match != keepPath {
-			_ = os.Remove(match)
+			removeCalendarDiskCacheFile(match)
 		}
+	}
+}
+
+func removeCalendarDiskCacheFile(path string) {
+	if err := os.Remove(path); err != nil {
+		return
 	}
 }
 
@@ -87,4 +94,13 @@ func (r *CalendarCardRenderer) diskCachePath(key calendarCacheKey) string {
 
 func isPNGData(data []byte) bool {
 	return bytes.HasPrefix(data, pngSignature)
+}
+
+func readCalendarDiskCacheFile(path string) ([]byte, error) {
+	cleaned := filepath.Clean(path)
+	dir, name := filepath.Split(cleaned)
+	if dir == "" || name == "" || !fs.ValidPath(name) {
+		return nil, fmt.Errorf("invalid calendar disk cache path")
+	}
+	return fs.ReadFile(os.DirFS(dir), name)
 }

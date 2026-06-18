@@ -88,7 +88,7 @@ func (ma *MessageAdapter) extractCommandText(raw string) (normalized, commandTex
 	return text, cmd, true
 }
 
-func NewMessageAdapter(prefix string, mentionPrefix string) *MessageAdapter {
+func NewMessageAdapter(prefix, mentionPrefix string) *MessageAdapter {
 	adapter := &MessageAdapter{
 		prefix:        normalizeCommandPrefix(prefix),
 		mentionPrefix: mentionPrefix,
@@ -128,7 +128,7 @@ func (ma *MessageAdapter) ParseMessage(message *iris.Message) *ParsedCommand {
 	return ma.createUnknownCommand(text)
 }
 
-func (ma *MessageAdapter) commandTextFromMessage(message *iris.Message) (string, string, bool) {
+func (ma *MessageAdapter) commandTextFromMessage(message *iris.Message) (text, commandText string, ok bool) {
 	if message == nil || message.Msg == "" {
 		return "", "", false
 	}
@@ -136,7 +136,7 @@ func (ma *MessageAdapter) commandTextFromMessage(message *iris.Message) (string,
 	return ma.extractCommandText(message.Msg)
 }
 
-func parseCommandParts(commandText string) (string, []string, bool) {
+func parseCommandParts(commandText string) (command string, args []string, ok bool) {
 	parts := strings.Fields(commandText)
 	if len(parts) == 0 {
 		return "", nil, false

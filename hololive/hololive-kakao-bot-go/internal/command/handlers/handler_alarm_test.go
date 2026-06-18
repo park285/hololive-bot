@@ -41,7 +41,7 @@ type alarmListViewerStub struct {
 	entries    []domain.AlarmListView
 }
 
-func (s *alarmListViewerStub) AddAlarm(context.Context, domain.AddAlarmRequest) (bool, error) {
+func (s *alarmListViewerStub) AddAlarm(context.Context, *domain.AddAlarmRequest) (bool, error) {
 	return false, nil
 }
 
@@ -164,7 +164,7 @@ type alarmAddRecorder struct {
 	addCtx context.Context
 }
 
-func (s *alarmAddRecorder) AddAlarm(ctx context.Context, _ domain.AddAlarmRequest) (bool, error) {
+func (s *alarmAddRecorder) AddAlarm(ctx context.Context, _ *domain.AddAlarmRequest) (bool, error) {
 	s.addCtx = ctx
 	return true, nil
 }

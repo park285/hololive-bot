@@ -20,7 +20,7 @@ type stubLocker struct {
 	releaseCalls    []string
 }
 
-func (s *stubLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (string, bool, error) {
+func (s *stubLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (token string, acquired bool, err error) {
 	return s.acquireToken, s.acquireAcquired, s.acquireErr
 }
 
@@ -56,7 +56,7 @@ func TestDigestScheduler_SetClockAndClock(t *testing.T) {
 
 func TestDigestScheduler_NilReceiverSafety(t *testing.T) {
 	var ds *DigestScheduler
-	ds.SetClock(func() time.Time { return time.Now() })
+	ds.SetClock(time.Now)
 	ds.Stop()
 
 	got := ds.Clock()
@@ -242,7 +242,7 @@ func TestRunDigest_LockReleasedOnExecuteError(t *testing.T) {
 	locker := &stubLocker{acquireToken: "tok", acquireAcquired: true}
 	ds := NewDigestScheduler(locker, discardLogger())
 
-	_ = RunDigest(context.Background(), ds, DigestOp[struct{}]{
+	err := RunDigest(context.Background(), ds, DigestOp[struct{}]{
 		LockKey: "test:lock:key",
 		Collect: func(_ context.Context) (struct{}, bool, error) {
 			return struct{}{}, true, nil
@@ -251,6 +251,9 @@ func TestRunDigest_LockReleasedOnExecuteError(t *testing.T) {
 			return errors.New("boom")
 		},
 	})
+	if err == nil {
+		t.Fatal("expected execute error, got nil")
+	}
 
 	if len(locker.releaseCalls) != 1 || locker.releaseCalls[0] != "test:lock:key" {
 		t.Fatalf("lock should be released on execute error, got release calls: %v", locker.releaseCalls)
@@ -281,7 +284,7 @@ func TestDigestScheduler_StartStop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	tickCalled := make(chan struct{}, 1)
 
-	ds.Start(ctx, Config{
+	ds.Start(ctx, &Config{
 		Logger:         discardLogger(),
 		WaitingLog:     "waiting",
 		ContextStopLog: "ctx stop",

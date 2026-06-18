@@ -41,13 +41,16 @@ import (
 func initMemberNewsService(
 	ctx context.Context,
 	cliproxy config.CliproxyConfig,
-	llmConfig config.LLMConfig,
+	llmConfig *config.LLMConfig,
 	exaConfig config.ExaConfig,
 	postgres database.Client,
 	cacheClient cache.Client,
 	membersData member.DataProvider,
 	logger *slog.Logger,
 ) *membernews.Service {
+	if llmConfig == nil {
+		llmConfig = &config.LLMConfig{}
+	}
 	repository := membernews.NewRepository(postgres, cacheClient, logger)
 	costTracker := ProvideLLMCostTracker(cacheClient, llmConfig.MonthlyTokenCeiling, logger)
 	llmClient := ProvideMemberNewsLLMClient(cliproxy, llmConfig, costTracker, logger)
@@ -56,15 +59,7 @@ func initMemberNewsService(
 
 	searcher := provideExaSearcher(exaConfig, logger)
 
-	allowlistPath := resolveMemberNewsXAllowlistPath()
-	validator, err := membernews.NewSourceValidator(allowlistPath, membersData, logger)
-	if err != nil {
-		logger.Warn("Failed to load member news x allowlist, fallback to empty allowlist",
-			slog.String("path", allowlistPath),
-			slog.String("error", err.Error()),
-		)
-		validator, _ = membernews.NewSourceValidator("", membersData, logger)
-	}
+	validator := initMemberNewsSourceValidator(membersData, logger)
 
 	baseSummarizer := mnsummarizer.NewSummarizer(llmClient, searcher, validator, logger)
 
@@ -92,6 +87,26 @@ func initMemberNewsService(
 	}
 
 	return service
+}
+
+func initMemberNewsSourceValidator(membersData member.DataProvider, logger *slog.Logger) *membernews.SourceValidator {
+	allowlistPath := resolveMemberNewsXAllowlistPath()
+	validator, err := membernews.NewSourceValidator(allowlistPath, membersData, logger)
+	if err == nil {
+		return validator
+	}
+
+	logger.Warn("Failed to load member news x allowlist, fallback to empty allowlist",
+		slog.String("path", allowlistPath),
+		slog.String("error", err.Error()),
+	)
+	validator, err = membernews.NewSourceValidator("", membersData, logger)
+	if err != nil {
+		logger.Warn("Failed to initialize empty member news x allowlist",
+			slog.String("error", err.Error()),
+		)
+	}
+	return validator
 }
 
 func resolveMemberNewsXAllowlistPath() string {

@@ -107,7 +107,7 @@ func appendMemberAliasTokens(member *domain.Member, appendToken func(string)) {
 	}
 }
 
-func matchMembers(candidate model.Candidate, profiles []memberProfile) []string {
+func matchMembers(candidate *model.Candidate, profiles []memberProfile) []string {
 	if len(profiles) == 0 {
 		return nil
 	}

@@ -140,8 +140,8 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain
 		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
 	}
 
-	if channel, err := mm.finalizeCandidate(ctx, mm.resolveSnapshotCandidate(snapshot, queryNorm)); err != nil || channel != nil {
-		return channel, err
+	if channel := mm.finalizeCandidate(ctx, mm.resolveSnapshotCandidate(snapshot, queryNorm)); channel != nil {
+		return channel, nil
 	}
 
 	mm.logger.Debug("No match found in internal data", slog.String("query", query))

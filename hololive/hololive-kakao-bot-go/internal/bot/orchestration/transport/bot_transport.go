@@ -92,7 +92,7 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	return nil
 }
 
-func (t *CommandTransport) sendMessage(ctx context.Context, room, message string, clientRequestIDBase string, opts ...iris.SendOption) error {
+func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clientRequestIDBase string, opts ...iris.SendOption) error {
 	acceptedSender, ok := t.irisClient.(acceptedMessageSender)
 	if !ok {
 		return t.irisClient.SendMessage(ctx, room, message, appendReplyClientRequestID(opts, clientRequestIDBase, 1)...)
@@ -144,7 +144,7 @@ func commandReplyIdentity(ctx context.Context) string {
 	return ""
 }
 
-func sendAcceptedMessageAttempt(ctx context.Context, sender acceptedMessageSender, room string, message string, opts ...iris.SendOption) (bool, error) {
+func sendAcceptedMessageAttempt(ctx context.Context, sender acceptedMessageSender, room, message string, opts ...iris.SendOption) (bool, error) {
 	accepted, err := sender.SendMessageAccepted(ctx, room, message, opts...)
 	if err != nil {
 		return false, err

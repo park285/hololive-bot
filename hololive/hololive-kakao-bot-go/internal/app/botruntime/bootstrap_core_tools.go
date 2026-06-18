@@ -35,7 +35,7 @@ import (
 
 // InitializeWarmMemberCache - cmd/tools/warm_member_cache 전용.
 func InitializeWarmMemberCache(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*member.Cache, func(), error) {
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, appConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}
@@ -68,7 +68,10 @@ func InitializeWarmMemberCache(ctx context.Context, appConfig *config.Config, lo
 }
 
 // InitializeDBIntegrationRuntime - cmd/test_db_integration 전용.
-func InitializeDBIntegrationRuntime(ctx context.Context, postgresConfig config.PostgresConfig, logger *slog.Logger) (*DBIntegrationRuntime, func(), error) {
+func InitializeDBIntegrationRuntime(ctx context.Context, postgresConfig *config.PostgresConfig, logger *slog.Logger) (*DBIntegrationRuntime, func(), error) {
+	if postgresConfig == nil {
+		return nil, nil, fmt.Errorf("postgres config is required")
+	}
 	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, postgresConfig, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)

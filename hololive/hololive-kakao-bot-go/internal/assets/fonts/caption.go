@@ -53,7 +53,10 @@ func CaptionFaceSized(size float64) (font.Face, error) {
 
 	cacheKey := fmt.Sprintf("%.2f", size)
 	if face, ok := captionFaceCache.Load(cacheKey); ok {
-		return face.(font.Face), nil
+		cachedFace, ok := face.(font.Face)
+		if ok {
+			return cachedFace, nil
+		}
 	}
 
 	face, err := opentype.NewFace(fontData, &opentype.FaceOptions{
@@ -67,7 +70,12 @@ func CaptionFaceSized(size float64) (font.Face, error) {
 
 	actual, _ := captionFaceCache.LoadOrStore(cacheKey, face)
 
-	return actual.(font.Face), nil
+	actualFace, ok := actual.(font.Face)
+	if !ok {
+		return nil, fmt.Errorf("caption font cache stored %T, want font.Face", actual)
+	}
+
+	return actualFace, nil
 }
 
 func loadCaptionFont() (*opentype.Font, error) {

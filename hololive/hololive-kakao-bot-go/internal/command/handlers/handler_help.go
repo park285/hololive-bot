@@ -45,6 +45,10 @@ func (c *HelpCommand) Description() string {
 }
 
 func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+	if c == nil {
+		return errors.New("help command dependencies not configured")
+	}
+
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}

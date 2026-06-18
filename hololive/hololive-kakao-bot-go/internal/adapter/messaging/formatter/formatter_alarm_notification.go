@@ -54,7 +54,7 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 
 	rendered, err := f.render(ctx, templateKey, data)
 	if err != nil {
-		return alarmNotificationRenderFallback(templateKey, data)
+		return alarmNotificationRenderFallback(templateKey, &data)
 	}
 
 	return rendered
@@ -98,7 +98,10 @@ func alarmNotificationTemplateKey(minutesUntil int) domain.TemplateKey {
 	return domain.TemplateKeyCmdAlarmNotification
 }
 
-func alarmNotificationRenderFallback(templateKey domain.TemplateKey, data alarmNotificationTemplateData) string {
+func alarmNotificationRenderFallback(templateKey domain.TemplateKey, data *alarmNotificationTemplateData) string {
+	if data == nil {
+		return msging.ErrorMessage(msging.ErrDisplayAlarmNotifyFailed)
+	}
 	if templateKey == domain.TemplateKeyCmdAlarmLiveStarted {
 		return fmt.Sprintf("🔴 %s 방송 시작됨\n📺 %s\n🔗 %s", data.ChannelName, data.Title, data.URL)
 	}
@@ -145,9 +148,7 @@ func alarmNotificationGroupEntries(notifications []*domain.AlarmNotification) []
 }
 
 func sortAlarmNotificationGroupEntries(entries []alarmNotificationGroupEntry) {
-	slices.SortStableFunc(entries, func(a, b alarmNotificationGroupEntry) int {
-		return compareAlarmNotificationGroupEntry(a, b)
-	})
+	slices.SortStableFunc(entries, compareAlarmNotificationGroupEntry)
 }
 
 func compareAlarmNotificationGroupEntry(a, b alarmNotificationGroupEntry) int {

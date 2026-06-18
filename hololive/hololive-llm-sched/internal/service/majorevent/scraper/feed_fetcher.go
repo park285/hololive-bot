@@ -65,6 +65,41 @@ func (f *FeedFetcher) Fetch(ctx context.Context, feedURL string) ([]byte, error)
 	if f == nil || f.client == nil {
 		return nil, fmt.Errorf("fetch feed: fetcher is nil")
 	}
+
+	resp, err := f.fetchResponse(ctx, feedURL)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := f.readResponseBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func (f *FeedFetcher) readResponseBody(resp *http.Response) ([]byte, error) {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return nil, fmt.Errorf("fetch feed: close error response body: %w", closeErr)
+		}
+		return nil, fmt.Errorf("fetch feed: unexpected status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, f.maxBodyLen))
+	if err != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			err = fmt.Errorf("%w; close response body: %w", err, closeErr)
+		}
+		return nil, fmt.Errorf("fetch feed: read body: %w", err)
+	}
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		return nil, fmt.Errorf("fetch feed: close response body: %w", closeErr)
+	}
+	return body, nil
+}
+
+func (f *FeedFetcher) fetchResponse(ctx context.Context, feedURL string) (*http.Response, error) {
 	trimmedURL := strings.TrimSpace(feedURL)
 	if trimmedURL == "" {
 		return nil, fmt.Errorf("fetch feed: feed url is empty")
@@ -80,15 +115,15 @@ func (f *FeedFetcher) Fetch(ctx context.Context, feedURL string) ([]byte, error)
 	if err != nil {
 		return nil, fmt.Errorf("fetch feed: do request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	return requireFeedResponse(resp)
+}
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("fetch feed: unexpected status %d", resp.StatusCode)
+func requireFeedResponse(resp *http.Response) (*http.Response, error) {
+	if resp == nil {
+		return nil, fmt.Errorf("fetch feed: response is nil")
 	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, f.maxBodyLen))
-	if err != nil {
-		return nil, fmt.Errorf("fetch feed: read body: %w", err)
+	if resp.Body == nil {
+		return nil, fmt.Errorf("fetch feed: response body is nil")
 	}
-	return body, nil
+	return resp, nil
 }

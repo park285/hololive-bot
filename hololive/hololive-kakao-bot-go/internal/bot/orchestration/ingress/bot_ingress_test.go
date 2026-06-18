@@ -49,7 +49,7 @@ func TestMessageIngressPrepare_SkipsSelfSender(t *testing.T) {
 		Sender: &sender,
 	}
 
-	envelope, ok := ingress.Prepare(msg)
+	envelope, ok := ingress.Prepare(t.Context(), msg)
 	if ok {
 		t.Fatal("expected self message to be skipped")
 	}
@@ -81,7 +81,7 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 		},
 	}
 
-	envelope, ok := ingress.Prepare(msg)
+	envelope, ok := ingress.Prepare(t.Context(), msg)
 	if !ok {
 		t.Fatal("expected command to be accepted")
 	}

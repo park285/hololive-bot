@@ -151,7 +151,7 @@ func TestSummarizerWrappers_BasicContracts(t *testing.T) {
 		},
 	}
 
-	digest, err := sum.Summarize(context.Background(), SummarizeInput{
+	digest, err := sum.Summarize(context.Background(), &SummarizeInput{
 		Period:     PeriodWeekly,
 		Candidates: candidates,
 	})
@@ -177,7 +177,7 @@ func TestSummarizerWrappers_BasicContracts(t *testing.T) {
 		t.Fatalf("NewConsensusSummarizer() returned nil")
 	}
 
-	got, err := consensusSummarizer.Summarize(context.Background(), SummarizeInput{Period: PeriodWeekly})
+	got, err := consensusSummarizer.Summarize(context.Background(), &SummarizeInput{Period: PeriodWeekly})
 	if err != nil {
 		t.Fatalf("ConsensusSummarize() error = %v", err)
 	}
@@ -224,7 +224,7 @@ type fakePrimarySummarizer struct {
 	err    error
 }
 
-func (f fakePrimarySummarizer) Summarize(_ context.Context, _ SummarizeInput) (*Digest, error) {
+func (f fakePrimarySummarizer) Summarize(_ context.Context, _ *SummarizeInput) (*Digest, error) {
 	if f.err != nil {
 		return nil, f.err
 	}

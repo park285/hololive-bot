@@ -79,6 +79,27 @@ func NewExaMCPClient(endpoint, apiKey string, httpClient *http.Client, logger *s
 }
 
 func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]model.SearchResult, error) {
+	req, err := c.newSearchRequest(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, err := c.doSearchRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := parseExaResponse(respBody)
+	if err != nil {
+		return nil, err
+	}
+
+	c.logSearchResults(query, len(results))
+
+	return results, nil
+}
+
+func (c *ExaMCPClient) newSearchRequest(ctx context.Context, query string) (*http.Request, error) {
 	requestBody := map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "tools/call",
@@ -109,11 +130,25 @@ func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]model.Search
 		req.Header.Set("X-Exa-Api-Key", apiKey)
 	}
 
+	return req, nil
+}
+
+func (c *ExaMCPClient) doSearchRequest(req *http.Request) ([]byte, error) {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("exa request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	if resp == nil {
+		return nil, fmt.Errorf("exa request: response is nil")
+	}
+	if resp.Body == nil {
+		return nil, fmt.Errorf("exa request: response body is nil")
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && c.logger != nil {
+			c.logger.Debug("close exa response body failed", slog.Any("error", closeErr))
+		}
+	}()
 
 	if checkErr := httputil.CheckStatus(resp); checkErr != nil {
 		return nil, fmt.Errorf("exa request: %w", checkErr)
@@ -124,18 +159,15 @@ func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]model.Search
 		return nil, fmt.Errorf("read exa response: %w", err)
 	}
 
-	results, err := parseExaResponse(respBody)
-	if err != nil {
-		return nil, err
-	}
+	return respBody, nil
+}
 
+func (c *ExaMCPClient) logSearchResults(query string, resultCount int) {
 	if c.logger != nil {
 		c.logger.Debug("Exa MCP 검색 완료",
 			slog.String("query", query),
-			slog.Int("result_count", len(results)))
+			slog.Int("result_count", resultCount))
 	}
-
-	return results, nil
 }
 
 // parseExaResponse: JSON-RPC 응답을 파싱하여 검색 결과를 추출합니다.

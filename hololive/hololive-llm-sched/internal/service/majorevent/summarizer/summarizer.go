@@ -212,7 +212,7 @@ func (s *EventSummarizer) reviewFinalSummaryOutput(
 	return reviewed
 }
 
-func (s *EventSummarizer) storeSummaryResult(ctx context.Context, cacheKey string, result string) {
+func (s *EventSummarizer) storeSummaryResult(ctx context.Context, cacheKey, result string) {
 	if s.cache == nil || cacheKey == "" {
 		return
 	}
@@ -247,7 +247,7 @@ func shouldRunFinalOutputReview(resp *summaryResponse, assembled string) bool {
 	return len(resp.Highlights) > 0
 }
 
-func (s *EventSummarizer) searchWithTimeout(ctx context.Context, query string, warnMessage string) ([]sharedmodel.SearchResult, bool) {
+func (s *EventSummarizer) searchWithTimeout(ctx context.Context, query, warnMessage string) ([]sharedmodel.SearchResult, bool) {
 	searchCtx, cancel := context.WithTimeout(ctx, searchTimeout)
 	defer cancel()
 

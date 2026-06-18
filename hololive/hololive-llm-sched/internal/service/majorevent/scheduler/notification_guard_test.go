@@ -69,7 +69,7 @@ type mockNotificationLocker struct {
 	releaseCalls []string
 }
 
-func (m *mockNotificationLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (string, bool, error) {
+func (m *mockNotificationLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (token string, acquired bool, err error) {
 	return m.acquireToken, m.acquireAcquired, m.acquireErr
 }
 

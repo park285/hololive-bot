@@ -77,7 +77,7 @@ func TestMonthlyScheduler_CalculateNextRun(t *testing.T) {
 func TestMonthlyScheduler_LifecycleNilGuards(t *testing.T) {
 	var scheduler *MonthlyScheduler
 
-	scheduler.SetClock(func() time.Time { return time.Now() })
+	scheduler.SetClock(time.Now)
 	scheduler.Start(context.Background())
 	scheduler.Stop()
 }

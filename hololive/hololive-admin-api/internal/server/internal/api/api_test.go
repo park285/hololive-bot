@@ -5,7 +5,7 @@ import (
 )
 
 func TestNewAPIHandler_AllFieldsAssigned(t *testing.T) {
-	h := NewHandler(HandlerDeps{
+	h := NewHandler(&HandlerDeps{
 		Common: CommonDeps{Logger: newDiscardLogger()},
 	})
 
@@ -27,7 +27,7 @@ func TestNewAPIHandler_AllFieldsAssigned(t *testing.T) {
 }
 
 func TestNewAPIHandler_MemberIndexLoaderNilWhenRepoNil(t *testing.T) {
-	h := NewHandler(HandlerDeps{
+	h := NewHandler(&HandlerDeps{
 		Common: CommonDeps{Logger: newDiscardLogger()},
 	})
 

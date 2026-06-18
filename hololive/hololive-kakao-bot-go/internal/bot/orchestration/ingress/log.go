@@ -10,14 +10,16 @@ import (
 const EventCommandReceived = "bot.command.received"
 
 func ingressAttrs(commandType, userID, userName, chatID, roomName, rawMessage string) []slog.Attr {
-	attrs := []slog.Attr{
+	summaryAttrs := messageSummaryAttrs(rawMessage)
+	attrs := make([]slog.Attr, 0, 5+len(summaryAttrs))
+	attrs = append(attrs,
 		slog.String("command_type", strings.TrimSpace(commandType)),
 		slog.String("user_id", strings.TrimSpace(userID)),
 		slog.String("user_name", strings.TrimSpace(userName)),
 		slog.String("room_id", strings.TrimSpace(chatID)),
 		slog.String("room_name", strings.TrimSpace(roomName)),
-	}
-	attrs = append(attrs, messageSummaryAttrs(rawMessage)...)
+	)
+	attrs = append(attrs, summaryAttrs...)
 	return attrs
 }
 

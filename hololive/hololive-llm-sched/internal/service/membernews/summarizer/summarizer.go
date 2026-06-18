@@ -80,7 +80,10 @@ func NewSummarizer(
 	}
 }
 
-func (s *SummarizerImpl) Summarize(ctx context.Context, input model.SummarizeInput) (*model.Digest, error) {
+func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeInput) (*model.Digest, error) {
+	if input == nil {
+		return newEmptyDigest(model.PeriodWeekly, 0), nil
+	}
 	if len(input.Candidates) == 0 {
 		return newEmptyDigest(input.Period, 0), nil
 	}
@@ -112,7 +115,7 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input model.SummarizeInp
 	return digest, nil
 }
 
-func (s *SummarizerImpl) searchContext(ctx context.Context, input model.SummarizeInput) string {
+func (s *SummarizerImpl) searchContext(ctx context.Context, input *model.SummarizeInput) string {
 	if s.searcher == nil {
 		return ""
 	}
@@ -141,21 +144,21 @@ func newEmptyDigest(period model.Period, totalCount int) *model.Digest {
 // validateAndBuildDigest: LLM 출력을 재검증합니다.
 // FilterCandidates에서 입력 후보를 사전 검증하지만, LLM이 source_url을 변형하거나
 // 허용 범위 외 항목을 생성할 수 있으므로 출력에 대한 이중 검증이 의도적으로 적용됩니다.
-func (s *SummarizerImpl) validateAndBuildDigest(input model.SummarizeInput, response *summaryResponse) *model.Digest {
+func (s *SummarizerImpl) validateAndBuildDigest(input *model.SummarizeInput, response *summaryResponse) *model.Digest {
 	return validateAndBuildDigestFromResponse(input, response, s.validator)
 }
 
 // validateAndBuildDigestFromResponse: summaryResponse를 검증하여 Digest를 생성한다.
 // SummarizerImpl.validateAndBuildDigest와 ConsensusSummarizer 양쪽에서 재사용.
 func validateAndBuildDigestFromResponse(
-	input model.SummarizeInput,
+	input *model.SummarizeInput,
 	response *summaryResponse,
 	validator model.SourceURLValidator,
 ) *model.Digest {
 	validatedItems := make([]model.SummaryItem, 0, len(response.TopItems))
 
 	for i := range response.TopItems {
-		appendValidatedSummaryItem(&validatedItems, response.TopItems[i], validator)
+		appendValidatedSummaryItem(&validatedItems, &response.TopItems[i], validator)
 	}
 
 	if len(validatedItems) > 5 {
@@ -187,7 +190,7 @@ func validateAndBuildDigestFromResponse(
 	}
 }
 
-func appendValidatedSummaryItem(items *[]model.SummaryItem, item summaryResponseItem, validator model.SourceURLValidator) {
+func appendValidatedSummaryItem(items *[]model.SummaryItem, item *summaryResponseItem, validator model.SourceURLValidator) {
 	if !summaryResponseItemHasRequiredFields(item) {
 		return
 	}
@@ -207,7 +210,7 @@ func appendValidatedSummaryItem(items *[]model.SummaryItem, item summaryResponse
 	})
 }
 
-func summaryResponseItemHasRequiredFields(item summaryResponseItem) bool {
+func summaryResponseItemHasRequiredFields(item *summaryResponseItem) bool {
 	return strings.TrimSpace(item.Member) != "" &&
 		strings.TrimSpace(item.Category) != "" &&
 		strings.TrimSpace(item.Title) != "" &&
@@ -216,7 +219,7 @@ func summaryResponseItemHasRequiredFields(item summaryResponseItem) bool {
 		strings.TrimSpace(item.SourceURL) != ""
 }
 
-func validateSummaryResponseItemSource(item summaryResponseItem, validator model.SourceURLValidator) (string, bool) {
+func validateSummaryResponseItemSource(item *summaryResponseItem, validator model.SourceURLValidator) (string, bool) {
 	normalizedURL := strings.TrimSpace(item.SourceURL)
 	if validator == nil {
 		return normalizedURL, true

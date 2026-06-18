@@ -64,7 +64,7 @@ func newSettingsTestContext(t *testing.T, body []byte) (*gin.Context, *httptest.
 
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
-	ctx.Request = httptest.NewRequest(http.MethodPatch, "/api/holo/settings", bytes.NewReader(body))
+	ctx.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/holo/settings", bytes.NewReader(body))
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	return ctx, rec
 }

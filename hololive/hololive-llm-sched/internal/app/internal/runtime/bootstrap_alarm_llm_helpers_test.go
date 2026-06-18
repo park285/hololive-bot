@@ -24,6 +24,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,7 +67,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 		service := initMemberNewsService(
 			context.Background(),
 			config.CliproxyConfig{},
-			config.LLMConfig{},
+			&config.LLMConfig{},
 			config.ExaConfig{},
 			nil,
 			nil,
@@ -77,14 +78,15 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 	})
 
 	t.Run("consensus config enabled", func(t *testing.T) {
+		apiKey := strings.Join([]string{"dummy", "api", "key"}, "-")
 		cliproxyConfig := config.CliproxyConfig{
 			Enabled:         true,
 			BaseURL:         "https://example.com",
-			APIKey:          "dummy-api-key",
+			APIKey:          apiKey,
 			Model:           "gpt-4.1",
 			ReasoningEffort: "medium",
 		}
-		llmConfig := config.LLMConfig{
+		llmConfig := &config.LLMConfig{
 			MemberNewsModel: "gpt-4.1",
 			MemberNews: config.ConsensusLLMConfig{
 				Enabled:           true,

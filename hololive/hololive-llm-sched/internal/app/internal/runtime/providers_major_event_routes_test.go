@@ -48,7 +48,7 @@ func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {
 
 	registerMajorEventInternalRoutes(engine, "", nil)
 
-	req := httptest.NewRequest(http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", http.NoBody)
 	rr := httptest.NewRecorder()
 	engine.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
@@ -59,12 +59,12 @@ func TestRegisterMajorEventInternalRoutes_AuthMiddleware(t *testing.T) {
 
 	router := newMajorEventRouter(t, "secret", &majorevent.Repository{})
 
-	req := httptest.NewRequest(http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", http.NoBody)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 
-	req = httptest.NewRequest(http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", http.NoBody)
 	req.Header.Set(commoncontracts.APIKeyHeader, "wrong")
 	rr = httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -77,7 +77,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 	router := newMajorEventRouter(t, "", &majorevent.Repository{})
 
 	t.Run("get subscription room_id required", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, majoreventcontracts.SubscriptionsPath+"/%20", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, majoreventcontracts.SubscriptionsPath+"/%20", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
@@ -85,7 +85,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 	})
 
 	t.Run("get subscription repository error", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
@@ -93,7 +93,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 	})
 
 	t.Run("post subscribe invalid body", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, majoreventcontracts.SubscriptionsPath, bytes.NewBufferString("not-json"))
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, majoreventcontracts.SubscriptionsPath, bytes.NewBufferString("not-json"))
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
@@ -102,7 +102,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 	})
 
 	t.Run("post subscribe room_id required", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, majoreventcontracts.SubscriptionsPath, bytes.NewBufferString(`{"room_id":"  ","room_name":"room"}`))
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, majoreventcontracts.SubscriptionsPath, bytes.NewBufferString(`{"room_id":"  ","room_name":"room"}`))
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
@@ -111,7 +111,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 	})
 
 	t.Run("post subscribe repository error", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, majoreventcontracts.SubscriptionsPath, bytes.NewBufferString(`{"room_id":"room-1","room_name":"room"}`))
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, majoreventcontracts.SubscriptionsPath, bytes.NewBufferString(`{"room_id":"room-1","room_name":"room"}`))
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
@@ -120,7 +120,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 	})
 
 	t.Run("delete unsubscribe room_id required", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, majoreventcontracts.SubscriptionsPath+"/%20", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, majoreventcontracts.SubscriptionsPath+"/%20", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
@@ -128,7 +128,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 	})
 
 	t.Run("delete unsubscribe repository error", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, majoreventcontracts.SubscriptionsPath+"/room-1", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, majoreventcontracts.SubscriptionsPath+"/room-1", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)

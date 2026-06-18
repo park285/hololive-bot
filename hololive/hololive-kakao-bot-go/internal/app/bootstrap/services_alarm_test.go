@@ -45,7 +45,7 @@ func TestInitAlarmDependenciesBuildsAlarmDependencies(t *testing.T) {
 
 	deps, err := InitAlarmDependencies(
 		config.ChzzkConfig{},
-		config.TwitchConfig{},
+		&config.TwitchConfig{},
 		[]int{10, 5, 1},
 		false,
 		cachemocks.NewLenientClient(),

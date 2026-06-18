@@ -40,7 +40,7 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 
 	b, reqCh := newReplyCaptureBot(t, 1)
 	threadID := "12345"
-	handleHelpMessage(t, b, "stable-message-1", threadID)
+	handleHelpMessage(t, b, "stable-message-1")
 
 	select {
 	case req := <-reqCh:
@@ -58,8 +58,8 @@ func TestBotHandleMessage_UsesInboundIDForThreadedReplyIdentity(t *testing.T) {
 
 	b, reqCh := newReplyCaptureBot(t, 2)
 	threadID := "12345"
-	handleHelpMessage(t, b, "stable-message-1", threadID)
-	handleHelpMessage(t, b, "stable-message-2", threadID)
+	handleHelpMessage(t, b, "stable-message-1")
+	handleHelpMessage(t, b, "stable-message-2")
 
 	first := receiveReplyRequest(t, reqCh)
 	second := receiveReplyRequest(t, reqCh)
@@ -79,7 +79,7 @@ func TestBotHandleMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T)
 	b, reqCh := newReplyCaptureBot(t, 2)
 	threadID := "12345"
 	for range 2 {
-		handleHelpMessage(t, b, "stable-message-1", threadID)
+		handleHelpMessage(t, b, "stable-message-1")
 	}
 
 	first := receiveReplyRequest(t, reqCh)
@@ -93,7 +93,7 @@ func TestBotHandleMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T)
 	require.Equal(t, *first.ClientRequestID, *second.ClientRequestID)
 }
 
-func newReplyCaptureBot(t *testing.T, capacity int) (*Bot, <-chan iris.ReplyRequest) {
+func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan iris.ReplyRequest) {
 	t.Helper()
 
 	reqCh := make(chan iris.ReplyRequest, capacity)
@@ -107,12 +107,14 @@ func newReplyCaptureBot(t *testing.T, capacity int) (*Bot, <-chan iris.ReplyRequ
 		}
 
 		reqCh <- req
-		_ = json.NewEncoder(w).Encode(iris.ReplyAcceptedResponse{
+		if err := json.NewEncoder(w).Encode(iris.ReplyAcceptedResponse{
 			Success:  true,
 			Delivery: "queued",
 			Room:     req.Room,
 			Type:     req.Type,
-		})
+		}); err != nil {
+			t.Fatalf("encode reply response: %v", err)
+		}
 	})
 
 	srv := httptest.NewUnstartedServer(mux)
@@ -132,9 +134,10 @@ func newReplyCaptureBot(t *testing.T, capacity int) (*Bot, <-chan iris.ReplyRequ
 	return b, reqCh
 }
 
-func handleHelpMessage(t *testing.T, b *Bot, messageID, threadID string) {
+func handleHelpMessage(t *testing.T, b *Bot, messageID string) {
 	t.Helper()
 
+	threadID := "12345"
 	sender := "user"
 	b.HandleMessage(t.Context(), &iris.Message{
 		Msg:    "!help",

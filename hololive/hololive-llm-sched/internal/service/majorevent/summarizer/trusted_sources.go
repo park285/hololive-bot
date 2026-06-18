@@ -24,7 +24,7 @@ func isTrustedDiscoveredSource(source string) bool {
 	return isTrustedTextSource(normalized)
 }
 
-func isTrustedURLSource(source string) (trusted bool, handled bool) {
+func isTrustedURLSource(source string) (trusted, handled bool) {
 	parsed, err := parseSourceURL(source)
 	if err != nil || parsed == nil || parsed.Hostname() == "" {
 		return false, false
@@ -88,7 +88,7 @@ func isTrustedTextSocialSource(source string) bool {
 	return false
 }
 
-func isTrustedTextSocialToken(source string, token string) bool {
+func isTrustedTextSocialToken(source, token string) bool {
 	return source == "@"+token ||
 		source == "x.com/"+token ||
 		source == "twitter.com/"+token ||

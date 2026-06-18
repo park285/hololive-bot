@@ -31,6 +31,20 @@ func TestNoLegacyRuntimeSplitInternalImportsRemain(t *testing.T) {
 	}
 
 	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
+	hits, err := findLegacyRuntimeSplitInternalImports(moduleRoot, forbiddenImports)
+	if err != nil {
+		t.Fatalf("scan module imports: %v", err)
+	}
+
+	if len(hits) == 0 {
+		return
+	}
+
+	sort.Strings(hits)
+	t.Fatalf("legacy runtime split imports remain:\n%s", strings.Join(hits, "\n"))
+}
+
+func findLegacyRuntimeSplitInternalImports(moduleRoot string, forbiddenImports map[string]string) ([]string, error) {
 	fset := token.NewFileSet()
 	var hits []string
 	walkErr := filepath.WalkDir(moduleRoot, func(path string, d fs.DirEntry, err error) error {
@@ -73,14 +87,5 @@ func TestNoLegacyRuntimeSplitInternalImportsRemain(t *testing.T) {
 
 		return nil
 	})
-	if walkErr != nil {
-		t.Fatalf("scan module imports: %v", walkErr)
-	}
-
-	if len(hits) == 0 {
-		return
-	}
-
-	sort.Strings(hits)
-	t.Fatalf("legacy runtime split imports remain:\n%s", strings.Join(hits, "\n"))
+	return hits, walkErr
 }

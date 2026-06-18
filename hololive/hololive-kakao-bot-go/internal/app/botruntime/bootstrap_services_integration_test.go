@@ -83,7 +83,7 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 		integrationServices.WorkerPool,
 		logger,
 	)
-	deps := appbootstrap.ProvideBotDependencies(modules)
+	deps := appbootstrap.ProvideBotDependencies(&modules)
 
 	require.NotNil(t, deps)
 	assert.NotNil(t, deps.CommandBuilders)

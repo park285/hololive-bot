@@ -50,11 +50,11 @@ func (c *StatsCommand) Description() string {
 }
 
 func (c *StatsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
-	if err := c.ensureDeps(cmdCtx); err != nil {
+	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}
 
-	action, _ := params["action"].(string)
+	action := stringParam(params, "action")
 	if action == "" {
 		action = "gainers"
 	}
@@ -68,7 +68,7 @@ func (c *StatsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContex
 }
 
 func (c *StatsCommand) showTopGainers(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
-	periodStr, _ := params["period"].(string)
+	periodStr := stringParam(params, "period")
 	now := time.Now()
 	since, periodLabel := domain.ResolveStatsPeriod(now, periodStr)
 
@@ -87,7 +87,7 @@ func (c *StatsCommand) showTopGainers(ctx context.Context, cmdCtx *domain.Comman
 	return c.deps.SendMessage(ctx, cmdCtx.Room, message)
 }
 
-func (c *StatsCommand) ensureDeps(cmdCtx *domain.CommandContext) error {
+func (c *StatsCommand) ensureDeps() error {
 	if c == nil || c.deps == nil {
 		return errors.New("stats command dependencies not configured")
 	}

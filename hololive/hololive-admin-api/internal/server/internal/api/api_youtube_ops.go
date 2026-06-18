@@ -146,7 +146,7 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 		WindowHours:        youtubeCommunityShortsOpsWindowHours,
 		ObservedAtBasis:    "COALESCE(actual_published_at, detected_at)",
 		SlaThresholdMillis: youtubeCommunityShortsSLAThresholdMillis,
-		Overview:           buildYouTubeCommunityShortsOpsOverview(channelSummaries, latencySummary),
+		Overview:           buildYouTubeCommunityShortsOpsOverview(channelSummaries, &latencySummary),
 		Channels:           buildYouTubeCommunityShortsOpsChannels(channelSummaries, channelLatencySummaries, memberNames),
 	})
 }
@@ -208,8 +208,11 @@ func firstYouTubeCommunityShortsOpsLatencySummary(
 
 func buildYouTubeCommunityShortsOpsOverview(
 	channelSummaries []outbox.ChannelPostDeliverySummary,
-	latencySummary outbox.PostLatencyPeriodSummary,
+	latencySummary *outbox.PostLatencyPeriodSummary,
 ) YouTubeCommunityShortsOpsOverview {
+	if latencySummary == nil {
+		latencySummary = &outbox.PostLatencyPeriodSummary{}
+	}
 	overview := YouTubeCommunityShortsOpsOverview{
 		ChannelCount:               int64(len(channelSummaries)),
 		PendingPostCount:           latencySummary.PendingPostCount,
@@ -287,7 +290,7 @@ func buildYouTubeCommunityShortsChannelLatencySummaries(
 			accumulators[channelID] = accumulator
 		}
 
-		accumulator.add(posts[i])
+		accumulator.add(&posts[i])
 	}
 
 	summaries := make(map[string]youtubeCommunityShortsChannelLatencySummary, len(accumulators))
@@ -297,7 +300,7 @@ func buildYouTubeCommunityShortsChannelLatencySummaries(
 	return summaries, nil
 }
 
-func (a *youtubeCommunityShortsChannelLatencyAccumulator) add(post outbox.PostSendCount) {
+func (a *youtubeCommunityShortsChannelLatencyAccumulator) add(post *outbox.PostSendCount) {
 	if post.AlarmSentAt == nil {
 		a.summary.PendingPostCount++
 	}

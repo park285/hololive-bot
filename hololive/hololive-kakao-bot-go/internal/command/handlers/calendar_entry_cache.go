@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -101,7 +102,7 @@ func (f *cachedCelebrationCalendarFinder) readSnapshot(path string) ([]domain.Ca
 	if err != nil || info.Size() <= 0 || info.Size() > calendarEntryCacheMaxBytes {
 		return nil, false
 	}
-	data, err := os.ReadFile(path)
+	data, err := readCacheFile(path)
 	if err != nil {
 		return nil, false
 	}
@@ -122,7 +123,7 @@ func (f *cachedCelebrationCalendarFinder) readSnapshot(path string) ([]domain.Ca
 }
 
 func (f *cachedCelebrationCalendarFinder) writeSnapshot(path string, entries []domain.CalendarEntry) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return
 	}
 	snapshot := calendarEntriesSnapshot{
@@ -143,11 +144,17 @@ func (f *cachedCelebrationCalendarFinder) writeSnapshot(path string, entries []d
 	_, writeErr := tmp.Write(data)
 	closeErr := tmp.Close()
 	if writeErr != nil || closeErr != nil {
-		_ = os.Remove(tmpName)
+		removeFile(tmpName)
 		return
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
+		removeFile(tmpName)
+	}
+}
+
+func removeFile(path string) {
+	if err := os.Remove(path); err != nil {
+		return
 	}
 }
 
@@ -198,7 +205,38 @@ func isNilCelebrationCalendarFinder(base CelebrationCalendarFinder) bool {
 	switch value.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
 		return value.IsNil()
+	case reflect.Invalid,
+		reflect.Bool,
+		reflect.Int,
+		reflect.Int8,
+		reflect.Int16,
+		reflect.Int32,
+		reflect.Int64,
+		reflect.Uint,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64,
+		reflect.Uintptr,
+		reflect.Float32,
+		reflect.Float64,
+		reflect.Complex64,
+		reflect.Complex128,
+		reflect.Array,
+		reflect.String,
+		reflect.Struct,
+		reflect.UnsafePointer:
+		return false
 	default:
 		return false
 	}
+}
+
+func readCacheFile(path string) ([]byte, error) {
+	cleaned := filepath.Clean(path)
+	dir, name := filepath.Split(cleaned)
+	if dir == "" || name == "" || !fs.ValidPath(name) {
+		return nil, fmt.Errorf("invalid cache path")
+	}
+	return fs.ReadFile(os.DirFS(dir), name)
 }

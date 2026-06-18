@@ -15,7 +15,7 @@ import (
 )
 
 func ProvideChzzkClient(httpClient *http.Client, chzzkConfig config.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
-	return chzzk.NewClientWithConfig(chzzk.ClientConfig{
+	return chzzk.NewClientWithConfig(&chzzk.ClientConfig{
 		HTTPClient:   httpClient,
 		BaseURL:      chzzk.DefaultBaseURL,
 		ClientID:     chzzkConfig.ClientID,
@@ -24,8 +24,11 @@ func ProvideChzzkClient(httpClient *http.Client, chzzkConfig config.ChzzkConfig,
 	})
 }
 
-func ProvideTwitchClient(twitchConfig config.TwitchConfig, logger *slog.Logger) *twitch.Client {
-	return twitch.NewClient(twitch.ClientConfig{
+func ProvideTwitchClient(twitchConfig *config.TwitchConfig, logger *slog.Logger) *twitch.Client {
+	if twitchConfig == nil {
+		return twitch.NewClient(&twitch.ClientConfig{}, logger)
+	}
+	return twitch.NewClient(&twitch.ClientConfig{
 		ClientID:     twitchConfig.ClientID,
 		ClientSecret: twitchConfig.ClientSecret,
 	}, logger)

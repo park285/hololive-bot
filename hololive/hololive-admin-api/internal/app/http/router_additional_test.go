@@ -169,7 +169,7 @@ func TestCorsOriginGuardAllowsNoOriginAndMonitorMode(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	noOriginReq := httptest.NewRequest(http.MethodGet, "/no-origin", http.NoBody)
+	noOriginReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/no-origin", http.NoBody)
 	noOriginRec := httptest.NewRecorder()
 	router.ServeHTTP(noOriginRec, noOriginReq)
 	if noOriginRec.Code != http.StatusOK {
@@ -182,7 +182,7 @@ func TestCorsOriginGuardAllowsNoOriginAndMonitorMode(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	monitorReq := httptest.NewRequest(http.MethodGet, "/monitor", http.NoBody)
+	monitorReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/monitor", http.NoBody)
 	monitorReq.Header.Set("Origin", "https://blocked.example")
 	monitorRec := httptest.NewRecorder()
 	monitorRouter.ServeHTTP(monitorRec, monitorReq)
@@ -256,7 +256,7 @@ func TestAPIRateLimitNilCacheAndAbortResponse(t *testing.T) {
 		c.Status(http.StatusTeapot)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/limited", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/limited", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusTeapot {
@@ -268,7 +268,7 @@ func TestAPIRateLimitNilCacheAndAbortResponse(t *testing.T) {
 		abortWithRateLimitError(c)
 	})
 
-	abortReq := httptest.NewRequest(http.MethodGet, "/limited", http.NoBody)
+	abortReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/limited", http.NoBody)
 	abortRec := httptest.NewRecorder()
 	abortRouter.ServeHTTP(abortRec, abortReq)
 	if abortRec.Code != http.StatusTooManyRequests {
@@ -301,14 +301,14 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/holo/stats", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/stats", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("missing api key status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/holo/stats", http.NoBody)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/stats", http.NoBody)
 	req.Header.Set(middleware.APIKeyHeader, "wrong-key")
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

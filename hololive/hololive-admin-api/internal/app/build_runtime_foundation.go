@@ -74,14 +74,14 @@ func buildAlarmModeComponents(
 ) (*alarmModeComponents, error) {
 	chzzkClient := chzzk.NewClient(nil, "", logger)
 	if strings.TrimSpace(appConfig.Chzzk.ClientID) != "" || strings.TrimSpace(appConfig.Chzzk.ClientSecret) != "" {
-		chzzkClient = chzzk.NewClientWithConfig(chzzk.ClientConfig{
+		chzzkClient = chzzk.NewClientWithConfig(&chzzk.ClientConfig{
 			HTTPClient:   nil,
 			ClientID:     appConfig.Chzzk.ClientID,
 			ClientSecret: appConfig.Chzzk.ClientSecret,
 			Logger:       logger,
 		})
 	}
-	twitchClient := twitch.NewClient(twitch.ClientConfig{
+	twitchClient := twitch.NewClient(&twitch.ClientConfig{
 		HTTPClient:   nil,
 		ClientID:     appConfig.Twitch.ClientID,
 		ClientSecret: appConfig.Twitch.ClientSecret,

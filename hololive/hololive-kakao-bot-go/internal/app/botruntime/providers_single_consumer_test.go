@@ -48,7 +48,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 		}, logger)
 		require.NotNil(t, chzzkClient)
 
-		twitchClient := appbootstrap.ProvideTwitchClient(config.TwitchConfig{
+		twitchClient := appbootstrap.ProvideTwitchClient(&config.TwitchConfig{
 			ClientID:     "tid",
 			ClientSecret: "tsec",
 		}, logger)
@@ -70,7 +70,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 
 	t.Run("alarm service", func(t *testing.T) {
 		t.Cleanup(func() {
-			_ = notification.CloseAllAlarmServices(t.Context())
+			require.NoError(t, notification.CloseAllAlarmServices(t.Context()))
 		})
 
 		service, err := appbootstrap.ProvideAlarmService(

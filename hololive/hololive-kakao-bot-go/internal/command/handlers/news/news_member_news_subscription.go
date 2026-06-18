@@ -91,7 +91,7 @@ func (p memberNewsSubscriptionPort) Unsubscribe(ctx context.Context, roomID stri
 }
 
 func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandContext) handlercore.SubscriptionFlow {
-	return handlercore.NewSubscriptionFlow(handlercore.SubscriptionFlowConfig{
+	return handlercore.NewSubscriptionFlow(&handlercore.SubscriptionFlowConfig{
 		Port: memberNewsSubscriptionPort{service: c.Deps().MemberNews},
 		OnCheckError: func(ctx context.Context, _ error) error {
 			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)

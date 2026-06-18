@@ -78,7 +78,8 @@ func appendResponseStatusDetails(parts []string, resp *responses.Response) []str
 
 func appendResponseOutputDiagnostics(parts []string, output []responses.ResponseOutputItemUnion) []string {
 	outputTypes := make([]string, 0, len(output))
-	for _, item := range output {
+	for i := range output {
+		item := &output[i]
 		outputTypes = append(outputTypes, describeResponseOutputItemType(item))
 		if refusal := responseOutputItemRefusal(item); refusal != "" {
 			parts = append(parts, "refusal=true")
@@ -93,15 +94,18 @@ func appendResponseOutputDiagnostics(parts []string, output []responses.Response
 }
 
 func responsesOutputHasRefusal(output []responses.ResponseOutputItemUnion) bool {
-	for _, item := range output {
-		if responseOutputItemRefusal(item) != "" {
+	for i := range output {
+		if responseOutputItemRefusal(&output[i]) != "" {
 			return true
 		}
 	}
 	return false
 }
 
-func describeResponseOutputItemType(item responses.ResponseOutputItemUnion) string {
+func describeResponseOutputItemType(item *responses.ResponseOutputItemUnion) string {
+	if item == nil {
+		return "unknown"
+	}
 	itemType := strings.TrimSpace(item.Type)
 	if itemType == "" {
 		itemType = "unknown"
@@ -112,11 +116,12 @@ func describeResponseOutputItemType(item responses.ResponseOutputItemUnion) stri
 	return itemType
 }
 
-func responseOutputItemRefusal(item responses.ResponseOutputItemUnion) string {
-	if item.Type != "message" {
+func responseOutputItemRefusal(item *responses.ResponseOutputItemUnion) string {
+	if item == nil || item.Type != "message" {
 		return ""
 	}
-	for _, content := range item.Content {
+	for i := range item.Content {
+		content := &item.Content[i]
 		if content.Type == "refusal" && strings.TrimSpace(content.Refusal) != "" {
 			return strings.TrimSpace(content.Refusal)
 		}

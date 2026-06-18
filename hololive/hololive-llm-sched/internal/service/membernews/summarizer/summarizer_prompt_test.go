@@ -27,8 +27,8 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
 
-func promptFixtureInput() model.SummarizeInput {
-	return model.SummarizeInput{
+func promptFixtureInput() *model.SummarizeInput {
+	return &model.SummarizeInput{
 		Period:      model.PeriodWeekly,
 		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
 		RoomMembers: []string{"호시마치 스이세이", "사쿠라 미코"},

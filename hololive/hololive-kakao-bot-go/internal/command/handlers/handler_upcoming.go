@@ -68,7 +68,7 @@ type upcomingOptions struct {
 
 func parseUpcomingOptions(params map[string]any) upcomingOptions {
 	hours := normalizeUpcomingHours(parseUpcomingIntParam(params, "hours", 24))
-	showAll, _ := params["all"].(bool)
+	showAll := boolParam(params, "all")
 	displayLimit := normalizeUpcomingDisplayLimit(parseUpcomingIntParam(params, "limit", 10), showAll)
 
 	return upcomingOptions{
@@ -123,6 +123,9 @@ func normalizeUpcomingDisplayLimit(displayLimit int, showAll bool) int {
 
 func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, memberName string, hours int) error {
 	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), roomID, memberName)
+	if memberLookupHandled(err) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to find member %q: %w", memberName, err)
 	}
@@ -134,14 +137,11 @@ func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, mem
 	if err != nil {
 		return c.Deps().SendError(ctx, roomID, adapter.ErrUpcomingStreamQueryFailed)
 	}
-
-	memberStreams := make([]*domain.Stream, 0, len(streams))
-	for _, stream := range streams {
-		if stream.ChannelID == channel.ID {
-			memberStreams = append(memberStreams, stream)
-		}
+	if streams == nil {
+		streams = []*domain.Stream{}
 	}
 
+	memberStreams := filterUpcomingStreamsByChannel(streams, channel.ID)
 	if len(memberStreams) == 0 {
 		return c.Deps().SendMessage(ctx, roomID, c.Deps().Formatter.FormatMemberNoUpcoming(channel.Name, hours))
 	}
@@ -151,10 +151,26 @@ func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, mem
 	return c.Deps().SendMessage(ctx, roomID, message)
 }
 
+func filterUpcomingStreamsByChannel(streams []*domain.Stream, channelID string) []*domain.Stream {
+	memberStreams := make([]*domain.Stream, 0, len(streams))
+	for _, stream := range streams {
+		if stream == nil {
+			continue
+		}
+		if stream.ChannelID == channelID {
+			memberStreams = append(memberStreams, stream)
+		}
+	}
+	return memberStreams
+}
+
 func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string, options upcomingOptions) error {
 	streams, err := c.Deps().Holodex.GetUpcomingStreams(ctx, options.hours)
 	if err != nil {
 		return c.Deps().SendError(ctx, roomID, adapter.ErrUpcomingStreamQueryFailed)
+	}
+	if streams == nil {
+		streams = []*domain.Stream{}
 	}
 
 	total := len(streams)

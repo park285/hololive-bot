@@ -97,7 +97,7 @@ func TestProvideBotDependenciesMapsOptionalYouTubeStack(t *testing.T) {
 	t.Run("nil stack leaves YouTube dependencies nil", func(t *testing.T) {
 		t.Parallel()
 
-		deps := ProvideBotDependencies(BotDependencyModules{
+		deps := ProvideBotDependencies(&BotDependencyModules{
 			Stream: BotStreamModule{YTStack: nil},
 		})
 
@@ -112,7 +112,7 @@ func TestProvideBotDependenciesMapsOptionalYouTubeStack(t *testing.T) {
 		youTubeService := &stubYouTubeService{}
 		statsRepository := &ytstats.StatsRepository{}
 
-		deps := ProvideBotDependencies(BotDependencyModules{
+		deps := ProvideBotDependencies(&BotDependencyModules{
 			Stream: BotStreamModule{
 				YTStack: &providers.YouTubeStack{
 					Service:         youTubeService,

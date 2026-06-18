@@ -22,8 +22,10 @@ package summarizer
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -39,7 +41,9 @@ func skipIfNoLLMKey(t *testing.T) {
 	if os.Getenv("INTEGRATION_TEST") != "true" {
 		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
 	}
-	_ = loadEnv()
+	if err := loadEnv(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("load env: %v", err)
+	}
 	if os.Getenv("CLIPROXY_API_KEY") == "" {
 		t.Skip("Skipping: CLIPROXY_API_KEY not set")
 	}
@@ -58,7 +62,7 @@ func loadEnv() error {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
-		data, err = os.ReadFile(path)
+		data, err = readFileWithinRoot(path)
 		if err == nil {
 			break
 		}
@@ -73,11 +77,28 @@ func loadEnv() error {
 		}
 		if k, v, ok := strings.Cut(line, "="); ok {
 			if os.Getenv(k) == "" {
-				_ = os.Setenv(k, v)
+				if err := os.Setenv(k, v); err != nil {
+					return err
+				}
 			}
 		}
 	}
 	return nil
+}
+
+func readFileWithinRoot(path string) ([]byte, error) {
+	cleanPath := filepath.Clean(path)
+	rootPath := filepath.Dir(cleanPath)
+	fileName := filepath.Base(cleanPath)
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	data, readErr := root.ReadFile(fileName)
+	if closeErr := root.Close(); closeErr != nil {
+		return data, errors.Join(readErr, closeErr)
+	}
+	return data, readErr
 }
 
 func testCliproxyBaseURL() string {
@@ -94,18 +115,18 @@ func testCliproxyBaseURL() string {
 
 func newTestMemberNewsClient(t *testing.T) LLMClient {
 	t.Helper()
-	model := os.Getenv("CLIPROXY_TEST_MODEL")
-	if model == "" {
-		model = "gpt-5.4"
+	modelName := os.Getenv("CLIPROXY_TEST_MODEL")
+	if modelName == "" {
+		modelName = "gpt-5.4"
 	}
 	baseURL := testCliproxyBaseURL()
 
-	t.Logf("Model: %s, BaseURL: %s (Chat Completions)", model, baseURL)
+	t.Logf("Model: %s, BaseURL: %s (Chat Completions)", modelName, baseURL)
 
 	return llm.NewClient(
 		baseURL,
 		os.Getenv("CLIPROXY_API_KEY"),
-		model,
+		modelName,
 		slog.New(slog.NewTextHandler(os.Stdout, nil)),
 		llm.WithSchemaName("member_news_summary"),
 		llm.WithTemperature(0.3),
@@ -115,8 +136,8 @@ func newTestMemberNewsClient(t *testing.T) LLMClient {
 }
 
 func integrationCandidates() []model.FilteredCandidate {
-	date := func(y, m, d int) time.Time {
-		return time.Date(y, time.Month(m), d, 12, 0, 0, 0, kst)
+	date := func(m, d int) time.Time {
+		return time.Date(2026, time.Month(m), d, 12, 0, 0, 0, kst)
 	}
 	return []model.FilteredCandidate{
 		{
@@ -124,7 +145,7 @@ func integrationCandidates() []model.FilteredCandidate {
 				Title:       "hololive SUPER EXPO 2026",
 				Description: "마쿠하리 메세에서 개최되는 홀로라이브 최대 규모 행사",
 			},
-			EffectiveDate:  date(2026, 3, 6),
+			EffectiveDate:  date(3, 6),
 			MatchedMembers: []string{"사쿠라 미코", "호시마치 스이세이"},
 			MemberText:     "사쿠라 미코, 호시마치 스이세이",
 			Category:       model.CategoryEvent,
@@ -136,7 +157,7 @@ func integrationCandidates() []model.FilteredCandidate {
 				Title:       "Hoshimachi Suisei Live SuperNova: REBOOT",
 				Description: "호시마치 스이세이 솔로 라이브 콘서트",
 			},
-			EffectiveDate:  date(2026, 2, 20),
+			EffectiveDate:  date(2, 20),
 			MatchedMembers: []string{"호시마치 스이세이"},
 			MemberText:     "호시마치 스이세이",
 			Category:       model.CategorySoloLive,
@@ -148,7 +169,7 @@ func integrationCandidates() []model.FilteredCandidate {
 				Title:       "사쿠라 미코 생일 기념 굿즈",
 				Description: "사쿠라 미코 생일 기념 한정 굿즈 판매",
 			},
-			EffectiveDate:  date(2026, 3, 5),
+			EffectiveDate:  date(3, 5),
 			MatchedMembers: []string{"사쿠라 미코"},
 			MemberText:     "사쿠라 미코",
 			Category:       model.CategoryGoods,
@@ -160,7 +181,7 @@ func integrationCandidates() []model.FilteredCandidate {
 				Title:       "hololive DEV_IS NEW WAVE POP UP STORE",
 				Description: "DEV_IS 소속 멤버 팝업스토어 개최",
 			},
-			EffectiveDate:  date(2026, 2, 14),
+			EffectiveDate:  date(2, 14),
 			MatchedMembers: []string{"사쿠라 미코"},
 			MemberText:     "사쿠라 미코",
 			Category:       model.CategoryOther,
@@ -172,7 +193,7 @@ func integrationCandidates() []model.FilteredCandidate {
 				Title:       "ホロライブ バレンタイン 2026",
 				Description: "HMV&BOOKS SHIBUYA 팝업 이벤트",
 			},
-			EffectiveDate:  date(2026, 2, 7),
+			EffectiveDate:  date(2, 7),
 			MatchedMembers: []string{"호시마치 스이세이"},
 			MemberText:     "호시마치 스이세이",
 			Category:       model.CategoryEvent,
@@ -196,7 +217,7 @@ func TestIntegration_MemberNewsSummarize_Weekly(t *testing.T) {
 		Candidates:  integrationCandidates(),
 	}
 
-	digest, err := s.Summarize(context.Background(), input)
+	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
@@ -235,7 +256,7 @@ func TestIntegration_MemberNewsSummarize_Monthly(t *testing.T) {
 		Candidates:  integrationCandidates(),
 	}
 
-	digest, err := s.Summarize(context.Background(), input)
+	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
@@ -271,7 +292,7 @@ func TestIntegration_MemberNewsSummarize_SchemaCompliance(t *testing.T) {
 		Candidates:  integrationCandidates(),
 	}
 
-	digest, err := s.Summarize(context.Background(), input)
+	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
@@ -351,7 +372,7 @@ func TestIntegration_Consensus_FullPipeline(t *testing.T) {
 		Candidates:  integrationCandidates(),
 	}
 
-	digest, err := cs.Summarize(context.Background(), input)
+	digest, err := cs.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("consensus summarize error: %v", err)
 	}

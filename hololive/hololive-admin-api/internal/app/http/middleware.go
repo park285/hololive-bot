@@ -66,15 +66,12 @@ func newAPICORSConfig(appConfig *config.Config, enforce bool) cors.Config {
 	corsConfig := cors.DefaultConfig()
 
 	origins := normalizedOrigins(appConfig.CORS.AllowedOrigins)
-	if !enforce {
-		// 모니터 모드에서는 guard가 차단하지 않으므로 CORS middleware도
-		// 요청 Origin을 반사하도록 둔다. enforce=true에서는 아래에서 명시 origin만 허용한다.
+	switch {
+	case !enforce:
 		corsConfig.AllowOriginFunc = func(string) bool { return true }
-	} else if len(origins) == 0 || containsWildcard(origins) {
-		// API key와 세션 쿠키를 함께 쓰는 admin API에서는 wildcard CORS와
-		// credentials 조합을 안전한 기본값으로 취급하지 않는다.
+	case len(origins) == 0 || containsWildcard(origins):
 		corsConfig.AllowOriginFunc = func(string) bool { return false }
-	} else {
+	default:
 		corsConfig.AllowOrigins = origins
 	}
 

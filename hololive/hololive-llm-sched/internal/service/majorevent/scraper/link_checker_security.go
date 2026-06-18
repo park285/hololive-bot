@@ -86,7 +86,7 @@ func validateResolvedHost(ctx context.Context, resolver hostResolver, timeout ti
 
 func lookupResolvedIPs(ctx context.Context, resolver hostResolver, timeout time.Duration, host string) ([]net.IP, error) {
 	if resolver == nil {
-		return nil, nil
+		return []net.IP{}, nil
 	}
 
 	lookupCtx := ctx

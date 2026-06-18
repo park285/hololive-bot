@@ -93,7 +93,9 @@ func TestCollector_GetCachedStats_CloneAndExpiry(t *testing.T) {
 
 func TestCollector_FetchServiceGoroutines_MixedEndpoints(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"goroutines": 11})
+		if err := json.NewEncoder(w).Encode(map[string]any{"goroutines": 11}); err != nil {
+			t.Fatalf("encode stats response: %v", err)
+		}
 	}))
 	defer srv.Close()
 

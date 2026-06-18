@@ -1,6 +1,7 @@
 package botruntime
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -54,8 +55,12 @@ func readMigrationSQL(t *testing.T, relativePath string) string {
 		t.Fatal("runtime.Caller failed")
 	}
 
-	path := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", relativePath)
-	content, err := os.ReadFile(path)
+	root := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "scripts", "migrations"))
+	rel, err := filepath.Rel(root, filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", "..", relativePath)))
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) || !fs.ValidPath(filepath.ToSlash(rel)) {
+		t.Fatalf("invalid migration path %s: %v", relativePath, err)
+	}
+	content, err := fs.ReadFile(os.DirFS(root), filepath.ToSlash(rel))
 	if err != nil {
 		t.Fatalf("read migration %s: %v", relativePath, err)
 	}

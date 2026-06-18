@@ -186,7 +186,7 @@ func TestClassifyCategory(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := classifyCategory(model.Candidate{Title: tt.title, Description: tt.description})
+			got := classifyCategory(&model.Candidate{Title: tt.title, Description: tt.description})
 			if got != tt.want {
 				t.Errorf("classifyCategory(title=%q, desc=%q) = %q, want %q",
 					tt.title, tt.description, got, tt.want)
@@ -270,7 +270,7 @@ func TestMatchMembers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchMembers(tt.candidate, tt.profiles)
+			got := matchMembers(&tt.candidate, tt.profiles)
 			if len(got) != tt.wantLen {
 				t.Fatalf("len = %d %v, want %d", len(got), got, tt.wantLen)
 			}
@@ -357,71 +357,9 @@ func TestApplyPeriodFilter(t *testing.T) {
 }
 
 func TestBuildMemberProfiles(t *testing.T) {
-	t.Run("nil membersData → display name token only", func(t *testing.T) {
-		profiles := buildMemberProfiles([]string{"사쿠라 미코"}, nil)
-		if len(profiles) != 1 {
-			t.Fatalf("expected 1 profile, got %d", len(profiles))
-		}
-		if profiles[0].display != "사쿠라 미코" {
-			t.Fatalf("expected display %q, got %q", "사쿠라 미코", profiles[0].display)
-		}
-		if len(profiles[0].tokens) != 1 {
-			t.Fatalf("expected 1 token, got %d: %v", len(profiles[0].tokens), profiles[0].tokens)
-		}
-	})
-
-	t.Run("membersData hit → NameKo/NameJa/Aliases included", func(t *testing.T) {
-		mock := &mockMemberDataForFilter{
-			byName: map[string]*domain.Member{
-				"사쿠라 미코": {
-					Name:   "Sakura Miko",
-					NameKo: "사쿠라 미코",
-					NameJa: "さくらみこ",
-					Aliases: &domain.Aliases{
-						Ko: []string{"미코"},
-						Ja: []string{"みこち"},
-					},
-				},
-			},
-		}
-		profiles := buildMemberProfiles([]string{"사쿠라 미코"}, mock)
-		if len(profiles) != 1 {
-			t.Fatalf("expected 1 profile, got %d", len(profiles))
-		}
-		if profiles[0].display != "사쿠라 미코" {
-			t.Fatalf("expected display %q, got %q", "사쿠라 미코", profiles[0].display)
-		}
-		if len(profiles[0].tokens) <= 1 {
-			t.Fatalf("expected more than 1 token (NameKo/NameJa/Aliases), got %d: %v",
-				len(profiles[0].tokens), profiles[0].tokens)
-		}
-		if !slices.Contains(profiles[0].tokens, "sakuramiko") {
-			t.Fatalf("expected token 'sakuramiko' from Name field, tokens: %v", profiles[0].tokens)
-		}
-	})
-
-	t.Run("FindMemberByName miss → FindMemberByAlias fallback", func(t *testing.T) {
-		mock := &mockMemberDataForFilter{
-			byAlias: map[string]*domain.Member{
-				"미코치": {
-					Name:   "Sakura Miko",
-					NameKo: "사쿠라 미코",
-					NameJa: "さくらみこ",
-				},
-			},
-		}
-		profiles := buildMemberProfiles([]string{"미코치"}, mock)
-		if len(profiles) != 1 {
-			t.Fatalf("expected 1 profile, got %d", len(profiles))
-		}
-		if profiles[0].display != "사쿠라 미코" {
-			t.Fatalf("expected display %q (from NameKo), got %q", "사쿠라 미코", profiles[0].display)
-		}
-		if len(profiles[0].tokens) <= 1 {
-			t.Fatalf("expected additional tokens from alias-matched member, got %d: %v",
-				len(profiles[0].tokens), profiles[0].tokens)
-		}
-	})
+	t.Run("nil membersData → display name token only", testBuildMemberProfilesDisplayOnly)
+	t.Run("membersData hit → NameKo/NameJa/Aliases included", testBuildMemberProfilesDataHit)
+	t.Run("FindMemberByName miss → FindMemberByAlias fallback", testBuildMemberProfilesAliasFallback)
 
 	t.Run("empty roomMembers → empty result", func(t *testing.T) {
 		profiles := buildMemberProfiles(nil, nil)
@@ -429,6 +367,70 @@ func TestBuildMemberProfiles(t *testing.T) {
 			t.Fatalf("expected 0, got %d", len(profiles))
 		}
 	})
+}
+
+func testBuildMemberProfilesDisplayOnly(t *testing.T) {
+	profiles := buildMemberProfiles([]string{"사쿠라 미코"}, nil)
+	requireSingleProfile(t, profiles, "사쿠라 미코")
+	if len(profiles[0].tokens) != 1 {
+		t.Fatalf("expected 1 token, got %d: %v", len(profiles[0].tokens), profiles[0].tokens)
+	}
+}
+
+func testBuildMemberProfilesDataHit(t *testing.T) {
+	mock := &mockMemberDataForFilter{
+		byName: map[string]*domain.Member{
+			"사쿠라 미코": {
+				Name:   "Sakura Miko",
+				NameKo: "사쿠라 미코",
+				NameJa: "さくらみこ",
+				Aliases: &domain.Aliases{
+					Ko: []string{"미코"},
+					Ja: []string{"みこち"},
+				},
+			},
+		},
+	}
+	profiles := buildMemberProfiles([]string{"사쿠라 미코"}, mock)
+	requireSingleProfile(t, profiles, "사쿠라 미코")
+	requireAdditionalTokens(t, profiles)
+	if !slices.Contains(profiles[0].tokens, "sakuramiko") {
+		t.Fatalf("expected token 'sakuramiko' from Name field, tokens: %v", profiles[0].tokens)
+	}
+}
+
+func testBuildMemberProfilesAliasFallback(t *testing.T) {
+	mock := &mockMemberDataForFilter{
+		byAlias: map[string]*domain.Member{
+			"미코치": {
+				Name:   "Sakura Miko",
+				NameKo: "사쿠라 미코",
+				NameJa: "さくらみこ",
+			},
+		},
+	}
+	profiles := buildMemberProfiles([]string{"미코치"}, mock)
+	requireSingleProfile(t, profiles, "사쿠라 미코")
+	requireAdditionalTokens(t, profiles)
+}
+
+func requireSingleProfile(t *testing.T, profiles []memberProfile, wantDisplay string) {
+	t.Helper()
+
+	if len(profiles) != 1 {
+		t.Fatalf("expected 1 profile, got %d", len(profiles))
+	}
+	if profiles[0].display != wantDisplay {
+		t.Fatalf("expected display %q, got %q", wantDisplay, profiles[0].display)
+	}
+}
+
+func requireAdditionalTokens(t *testing.T, profiles []memberProfile) {
+	t.Helper()
+
+	if len(profiles[0].tokens) <= 1 {
+		t.Fatalf("expected additional tokens, got %d: %v", len(profiles[0].tokens), profiles[0].tokens)
+	}
 }
 
 func TestFilterCandidates_EmptySourceURL(t *testing.T) {

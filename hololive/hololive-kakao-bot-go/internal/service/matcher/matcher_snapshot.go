@@ -30,34 +30,51 @@ import (
 )
 
 func (mm *Matcher) getSnapshot(ctx context.Context) (*matcherSnapshot, error) {
-	mm.snapshotMu.RLock()
-
-	snapshot := mm.snapshot
-	mm.snapshotMu.RUnlock()
-
-	if snapshot != nil && time.Since(snapshot.builtAt) < mm.snapshotTTL {
+	if snapshot := mm.cachedSnapshot(); snapshot != nil {
 		return snapshot, nil
 	}
 
 	value, err, _ := mm.snapshotGroup.Do("member-snapshot", func() (any, error) {
-		built, buildErr := mm.buildSnapshot(ctx)
-		if buildErr != nil {
-			return nil, buildErr
-		}
-
-		if built.dynamicLoadErr == nil {
-			mm.snapshotMu.Lock()
-			mm.snapshot = built
-			mm.snapshotMu.Unlock()
-		}
-
-		return built, nil
+		return mm.rebuildSnapshot(ctx)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build member matcher snapshot: %w", err)
 	}
 
-	rebuilt, _ := value.(*matcherSnapshot)
+	return validatedMatcherSnapshot(value)
+}
+
+func (mm *Matcher) cachedSnapshot() *matcherSnapshot {
+	mm.snapshotMu.RLock()
+	snapshot := mm.snapshot
+	mm.snapshotMu.RUnlock()
+
+	if snapshot != nil && time.Since(snapshot.builtAt) < mm.snapshotTTL {
+		return snapshot
+	}
+	return nil
+}
+
+func (mm *Matcher) rebuildSnapshot(ctx context.Context) (*matcherSnapshot, error) {
+	built, err := mm.buildSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if built.dynamicLoadErr == nil {
+		mm.snapshotMu.Lock()
+		mm.snapshot = built
+		mm.snapshotMu.Unlock()
+	}
+
+	return built, nil
+}
+
+func validatedMatcherSnapshot(value any) (*matcherSnapshot, error) {
+	rebuilt, ok := value.(*matcherSnapshot)
+	if !ok {
+		return nil, fmt.Errorf("build member matcher snapshot: unexpected snapshot type %T", value)
+	}
 	if rebuilt == nil {
 		return nil, errors.New("build member matcher snapshot: empty snapshot")
 	}

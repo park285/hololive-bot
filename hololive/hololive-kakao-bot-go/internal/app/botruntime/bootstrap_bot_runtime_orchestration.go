@@ -37,6 +37,10 @@ import (
 )
 
 func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger, infra *appbootstrap.BotInfrastructure) (*BotRuntime, error) {
+	if appConfig == nil {
+		return nil, fmt.Errorf("build bot runtime: app config is nil")
+	}
+
 	runtimeViews := buildBotRuntimeDependencyViews(infra)
 
 	botBot, err := bot.NewBot(runtimeViews.botDeps)

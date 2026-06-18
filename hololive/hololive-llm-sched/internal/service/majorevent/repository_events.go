@@ -83,7 +83,7 @@ func scanRecentExternalIDRow(rows pgx.Rows) (string, *time.Time, error) {
 	return externalID, pubDate, nil
 }
 
-func firstRecentPubDate(current *time.Time, candidate *time.Time) *time.Time {
+func firstRecentPubDate(current, candidate *time.Time) *time.Time {
 	if current != nil || candidate == nil {
 		return current
 	}
@@ -91,7 +91,7 @@ func firstRecentPubDate(current *time.Time, candidate *time.Time) *time.Time {
 	return &normalized
 }
 
-func (r *Repository) queryEvents(ctx context.Context, action string, query string, args ...any) ([]*domain.MajorEvent, error) {
+func (r *Repository) queryEvents(ctx context.Context, action, query string, args ...any) ([]*domain.MajorEvent, error) {
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", action, err)

@@ -36,7 +36,7 @@ import (
 
 func initAlarmDependencies(
 	chzzkConfig config.ChzzkConfig,
-	twitchConfig config.TwitchConfig,
+	twitchConfig *config.TwitchConfig,
 	advanceMinutes []int,
 	scraperProxyEnabled bool,
 	cacheService cache.Client,

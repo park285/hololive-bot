@@ -44,7 +44,7 @@ type stubAlarmCRUDForServer struct {
 	removeAlarm     func(context.Context, string, string, domain.AlarmTypes) (bool, error)
 }
 
-func (s *stubAlarmCRUDForServer) AddAlarm(context.Context, domain.AddAlarmRequest) (bool, error) {
+func (s *stubAlarmCRUDForServer) AddAlarm(context.Context, *domain.AddAlarmRequest) (bool, error) {
 	return false, nil
 }
 
@@ -323,7 +323,7 @@ func TestMajorEventHandler_TriggerEndpoints(t *testing.T) {
 	})
 }
 
-func TestProfileHandler_ValidationAndConverters(t *testing.T) {
+func TestProfileHandler_ValidationBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("get profile requires channelId", func(t *testing.T) {
@@ -363,60 +363,60 @@ func TestProfileHandler_ValidationAndConverters(t *testing.T) {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 		}
 	})
+}
 
-	t.Run("convert profile data", func(t *testing.T) {
-		profile := &domain.TalentProfile{
-			Slug:         "sora",
-			EnglishName:  "Tokino Sora",
-			JapaneseName: "ときのそら",
-			Catchphrase:  "hello",
-			Description:  "idol",
-			DataEntries: []domain.TalentProfileEntry{
-				{Label: "Unit", Value: "JP"},
-			},
-			SocialLinks: []domain.TalentSocialLink{
-				{Label: "X", URL: "https://x.com/sora"},
-			},
-			OfficialURL: "https://example.com/sora",
-		}
+func TestProfileHandler_ConvertProfileData(t *testing.T) {
+	profile := &domain.TalentProfile{
+		Slug:         "sora",
+		EnglishName:  "Tokino Sora",
+		JapaneseName: "ときのそら",
+		Catchphrase:  "hello",
+		Description:  "idol",
+		DataEntries: []domain.TalentProfileEntry{
+			{Label: "Unit", Value: "JP"},
+		},
+		SocialLinks: []domain.TalentSocialLink{
+			{Label: "X", URL: "https://x.com/sora"},
+		},
+		OfficialURL: "https://example.com/sora",
+	}
 
-		got := convertToProfileData(profile)
-		if got == nil {
-			t.Fatal("convertToProfileData returned nil")
-		}
+	got := convertToProfileData(profile)
+	if got == nil {
+		t.Fatal("convertToProfileData returned nil")
+	}
 
-		if got.EnglishName != "Tokino Sora" || got.JapaneseName != "ときのそら" {
-			t.Fatalf("unexpected profile names: %+v", got)
-		}
+	if got.EnglishName != "Tokino Sora" || got.JapaneseName != "ときのそら" {
+		t.Fatalf("unexpected profile names: %+v", got)
+	}
 
-		if len(got.DataEntries) != 1 || got.DataEntries[0].Label != "Unit" {
-			t.Fatalf("unexpected data entries: %+v", got.DataEntries)
-		}
+	if len(got.DataEntries) != 1 || got.DataEntries[0].Label != "Unit" {
+		t.Fatalf("unexpected data entries: %+v", got.DataEntries)
+	}
 
-		if len(got.SocialLinks) != 1 || got.SocialLinks[0].Label != "X" {
-			t.Fatalf("unexpected social links: %+v", got.SocialLinks)
-		}
+	if len(got.SocialLinks) != 1 || got.SocialLinks[0].Label != "X" {
+		t.Fatalf("unexpected social links: %+v", got.SocialLinks)
+	}
 
-		if convertToProfileData(nil) != nil {
-			t.Fatal("convertToProfileData(nil) must return nil")
-		}
-	})
+	if convertToProfileData(nil) != nil {
+		t.Fatal("convertToProfileData(nil) must return nil")
+	}
+}
 
-	t.Run("convert translated rows", func(t *testing.T) {
-		rows := []domain.TranslatedProfileDataRow{
-			{Label: "생일", Value: "5월 15일"},
-			{Label: "소속", Value: "JP"},
-		}
+func TestProfileHandler_ConvertTranslatedRows(t *testing.T) {
+	rows := []domain.TranslatedProfileDataRow{
+		{Label: "생일", Value: "5월 15일"},
+		{Label: "소속", Value: "JP"},
+	}
 
-		got := convertTranslatedRows(rows)
-		if len(got) != 2 {
-			t.Fatalf("len(got)=%d want=2", len(got))
-		}
+	got := convertTranslatedRows(rows)
+	if len(got) != 2 {
+		t.Fatalf("len(got)=%d want=2", len(got))
+	}
 
-		if got[0].Label != "생일" || got[1].Value != "JP" {
-			t.Fatalf("unexpected converted rows: %+v", got)
-		}
-	})
+	if got[0].Label != "생일" || got[1].Value != "JP" {
+		t.Fatalf("unexpected converted rows: %+v", got)
+	}
 }
 
 func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {

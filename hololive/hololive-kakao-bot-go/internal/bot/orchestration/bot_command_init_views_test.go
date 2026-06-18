@@ -248,6 +248,10 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 		t.Fatal("external builder did not receive current command dependencies")
 	}
 
+	if builtDeps == nil {
+		t.Fatal("external builder did not receive command dependencies")
+	}
+
 	if builtDeps.Dispatcher == nil {
 		t.Fatal("external builder dispatcher was not initialized")
 	}

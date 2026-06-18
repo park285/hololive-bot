@@ -65,7 +65,14 @@ func TestStatsHandler_StreamSystemStats_WritesInitialFrameAndStopsAfterRequestCo
 	defer srv.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/holo/stats/system"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		defer func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("response body close error: %v", closeErr)
+			}
+		}()
+	}
 	if err != nil {
 		t.Fatalf("websocket dial error: %v", err)
 	}
@@ -139,11 +146,22 @@ func TestStatsHandler_StreamSystemStats_WritesPeriodicFrame(t *testing.T) {
 	defer srv.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/holo/stats/system"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		defer func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("response body close error: %v", closeErr)
+			}
+		}()
+	}
 	if err != nil {
 		t.Fatalf("websocket dial error: %v", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			t.Errorf("websocket close error: %v", closeErr)
+		}
+	}()
 
 	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
 		t.Fatalf("SetReadDeadline error: %v", err)

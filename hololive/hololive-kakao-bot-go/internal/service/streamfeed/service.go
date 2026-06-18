@@ -76,7 +76,7 @@ func (s *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 
 func shouldMergeStellive(org string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(org))
-	return normalized == strings.ToLower(constants.HolodexAPIParams.OrgStellive) || normalized == constants.HolodexAPIParams.OrgAll
+	return strings.EqualFold(normalized, constants.HolodexAPIParams.OrgStellive) || normalized == constants.HolodexAPIParams.OrgAll
 }
 
 func (s *Service) getActiveStelliveMembers() []*domain.Member {
@@ -138,7 +138,8 @@ func mergeLiveStreams(base []*domain.Stream, members []*domain.Member, lives []c
 	merged := slices.Clone(base)
 	memberByChzzk := membersByChzzkChannelID(members)
 
-	for _, live := range lives {
+	for i := range lives {
+		live := &lives[i]
 		merged = mergeLiveStream(merged, memberByChzzk[live.ChannelID], live)
 	}
 
@@ -153,7 +154,7 @@ func membersByChzzkChannelID(members []*domain.Member) map[string]*domain.Member
 	return memberByChzzk
 }
 
-func mergeLiveStream(merged []*domain.Stream, member *domain.Member, live chzzk.LiveData) []*domain.Stream {
+func mergeLiveStream(merged []*domain.Stream, member *domain.Member, live *chzzk.LiveData) []*domain.Stream {
 	if member == nil {
 		return merged
 	}
@@ -175,7 +176,10 @@ func updateExistingLiveStream(existing *domain.Stream, member *domain.Member) {
 	}
 }
 
-func buildChzzkLiveStream(member *domain.Member, live chzzk.LiveData) *domain.Stream {
+func buildChzzkLiveStream(member *domain.Member, live *chzzk.LiveData) *domain.Stream {
+	if live == nil {
+		return nil
+	}
 	liveURL := member.GetChzzkLiveURL()
 	thumbnail := live.LiveThumbnailImageURL
 	link := liveURL
@@ -245,7 +249,7 @@ func buildUpcomingStreams(member *domain.Member, scheduledLives []chzzk.Schedule
 	return streams
 }
 
-func mergeUpcomingStreams(base []*domain.Stream, additions []*domain.Stream) []*domain.Stream {
+func mergeUpcomingStreams(base, additions []*domain.Stream) []*domain.Stream {
 	merged := slices.Clone(base)
 
 	for _, addition := range additions {
@@ -267,7 +271,7 @@ func mergeUpcomingStream(merged []*domain.Stream, addition *domain.Stream) []*do
 	return append(merged, addition)
 }
 
-func updateExistingUpcomingStream(existing *domain.Stream, addition *domain.Stream) {
+func updateExistingUpcomingStream(existing, addition *domain.Stream) {
 	existing.ChzzkChannelID = addition.ChzzkChannelID
 	existing.ChzzkLiveURL = addition.ChzzkLiveURL
 	if existing.HasYouTubeInfo() {

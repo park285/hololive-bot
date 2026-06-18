@@ -53,7 +53,7 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}
 
-	memberQuery, _ := params["member"].(string)
+	memberQuery := stringParam(params, "member")
 
 	memberQuery = stringutil.TrimSpace(memberQuery)
 
@@ -63,6 +63,9 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	}
 
 	matchedChannel, err := FindMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberQuery)
+	if memberLookupHandled(err) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to find member %q: %w", memberQuery, err)
 	}
@@ -76,6 +79,9 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	}
 
 	if !hasSubscriberCount(channel) {
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.MsgNoSubscriberData)
+	}
+	if *channel.SubscriberCount < 0 {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.MsgNoSubscriberData)
 	}
 

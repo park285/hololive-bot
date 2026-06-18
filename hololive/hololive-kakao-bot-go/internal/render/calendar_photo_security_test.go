@@ -41,6 +41,21 @@ func TestFetchMemberPhotoBlocksHTTPLoopback(t *testing.T) {
 	}
 }
 
+func TestFetchImageRejectsNilHTTPResponse(t *testing.T) {
+	client := newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, nil
+	}))
+	withCalendarPhotoClient(t, client)
+
+	img, err := fetchImageWithContext(context.Background(), "https://yt3.googleusercontent.com/avatar=s88-c")
+	if err == nil {
+		t.Fatal("fetchImageWithContext() error = nil, want nil response error")
+	}
+	if img != nil {
+		t.Fatalf("fetchImageWithContext() image = %#v, want nil", img)
+	}
+}
+
 func TestFetchMemberPhotoBlocksUnsafeURLsBeforeRoundTrip(t *testing.T) {
 	pngData := tinyPNG(t)
 	tests := []struct {

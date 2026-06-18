@@ -118,7 +118,7 @@ func TestInitializeWarmMemberCache_ContextCanceled(t *testing.T) {
 func TestInitializeDBIntegrationRuntime_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
-	runtime, cleanup, err := InitializeDBIntegrationRuntime(canceledContext(), config.PostgresConfig{}, testBootstrapGuardLogger())
+	runtime, cleanup, err := InitializeDBIntegrationRuntime(canceledContext(), &config.PostgresConfig{}, testBootstrapGuardLogger())
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Nil(t, cleanup)
@@ -209,7 +209,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	t.Parallel()
 
 	logger := testBootstrapGuardLogger()
-	cache := &cache.Service{}
+	cacheService := &cache.Service{}
 	postgresService := &database.PostgresService{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
@@ -231,7 +231,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Iris:         config.IrisConfig{BaseURL: "https://iris.example"},
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
-		&sharedmodules.InfraModule{Cache: cache, Postgres: postgresService, MemberRepository: memberRepository, MemberCache: memberCache},
+		&sharedmodules.InfraModule{Cache: cacheService, Postgres: postgresService, MemberRepository: memberRepository, MemberCache: memberCache},
 		&appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},
 		&holodex.Service{},
 		&adapter.MessageAdapter{},
@@ -252,7 +252,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 
 	assert.Equal(t, "self-user", modules.Core.BotSelfUser)
 	assert.Equal(t, "https://iris.example", modules.Core.IrisBaseURL)
-	assert.Same(t, cache, modules.Data.Cache)
+	assert.Same(t, cacheService, modules.Data.Cache)
 	assert.Same(t, postgresService, modules.Data.Postgres)
 	assert.Same(t, memberRepository, modules.Data.MemberRepository)
 	assert.Same(t, memberCache, modules.Data.MemberCache)
@@ -276,7 +276,7 @@ func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 	memberData := &stubMemberDataProvider{}
 	deps, err := initAlarmDependencies(
 		config.ChzzkConfig{},
-		config.TwitchConfig{},
+		&config.TwitchConfig{},
 		[]int{5},
 		false,
 		nil,

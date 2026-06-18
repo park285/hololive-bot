@@ -81,7 +81,7 @@ func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, handler)
 	t.Cleanup(func() {
-		_ = handler.Close()
+		require.NoError(t, handler.Close())
 	})
 
 	router := gin.New()
@@ -100,5 +100,5 @@ func TestBuildBotRuntime_FailsFastWhenBotProvisionFails(t *testing.T) {
 	runtime, err := buildBotRuntime(t.Context(), nil, logger, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
-	assert.Contains(t, err.Error(), "failed to create bot")
+	assert.Contains(t, err.Error(), "app config is nil")
 }

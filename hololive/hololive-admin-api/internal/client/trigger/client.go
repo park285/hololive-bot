@@ -79,11 +79,8 @@ func (c *Client) SendMemberNewsWeekly(ctx context.Context) error {
 }
 
 func (c *Client) postTrigger(ctx context.Context, path string) error {
-	if c == nil {
-		return errors.New("post trigger: client is nil")
-	}
-	if c.httpClient == nil {
-		return errors.New("post trigger: http client is not configured")
+	if err := c.validate(); err != nil {
+		return err
 	}
 
 	req, err := c.httpClient.NewRequest(ctx, http.MethodPost, path)
@@ -95,17 +92,42 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 	if err != nil {
 		return fmt.Errorf("post trigger: request %s: %w", path, err)
 	}
+	if resp == nil {
+		return fmt.Errorf("post trigger: request %s: response is nil", path)
+	}
+	if resp.Body == nil {
+		return fmt.Errorf("post trigger: request %s: response body is nil", path)
+	}
 
-	if resp.StatusCode == http.StatusConflict {
-		_ = resp.Body.Close()
+	return c.handleTriggerResponse(resp, path)
+}
 
-		c.logger.Info("Trigger notification already in progress", slog.String("path", path))
+func (c *Client) validate() error {
+	if c == nil {
+		return errors.New("post trigger: client is nil")
+	}
+	if c.httpClient == nil {
+		return errors.New("post trigger: http client is not configured")
+	}
+	return nil
+}
 
-		return triggercontracts.ErrNotificationInProgress
+func (c *Client) handleTriggerResponse(resp *http.Response, path string) error {
+	if resp == nil {
+		return fmt.Errorf("post trigger: request %s: response is nil", path)
+	}
+	if resp.Body == nil {
+		return fmt.Errorf("post trigger: request %s: response body is nil", path)
+	}
+
+	if handled, err := c.handleTriggerConflict(resp, path); handled || err != nil {
+		return err
 	}
 
 	if err := c.httpClient.CheckStatus(resp); err != nil {
-		_ = resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close response body: %w", closeErr))
+		}
 
 		return fmt.Errorf(
 			"post trigger: request failed %s: %w",
@@ -121,4 +143,23 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 	c.logger.Debug("Trigger request succeeded", slog.String("path", path), slog.Int("status", resp.StatusCode))
 
 	return nil
+}
+
+func (c *Client) handleTriggerConflict(resp *http.Response, path string) (bool, error) {
+	if resp == nil {
+		return true, fmt.Errorf("post trigger: request %s: response is nil", path)
+	}
+	if resp.Body == nil {
+		return true, fmt.Errorf("post trigger: request %s: response body is nil", path)
+	}
+	if resp.StatusCode != http.StatusConflict {
+		return false, nil
+	}
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		return true, fmt.Errorf("post trigger: close conflict response body %s: %w", path, closeErr)
+	}
+
+	c.logger.Info("Trigger notification already in progress", slog.String("path", path))
+
+	return true, triggercontracts.ErrNotificationInProgress
 }

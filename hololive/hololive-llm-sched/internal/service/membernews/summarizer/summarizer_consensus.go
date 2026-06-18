@@ -22,6 +22,7 @@ package summarizer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -62,7 +63,10 @@ func NewConsensusSummarizer(
 	}
 }
 
-func (c *ConsensusSummarizer) Summarize(ctx context.Context, input model.SummarizeInput) (*model.Digest, error) {
+func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.SummarizeInput) (*model.Digest, error) {
+	if input == nil {
+		return nil, errors.New("consensus summarizer input is nil")
+	}
 	pipelineStart := time.Now()
 
 	// Stage 1: Primary
@@ -111,7 +115,7 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input model.Summari
 // runReview: Stage 2 reviewer 호출 및 결과 평가. nil 반환 시 primary 사용.
 func (c *ConsensusSummarizer) runReview(
 	ctx context.Context,
-	input model.SummarizeInput,
+	input *model.SummarizeInput,
 	primaryDigest *model.Digest,
 ) *consensus.ReviewVerdict {
 	reviewStart := time.Now()
@@ -149,7 +153,7 @@ func (c *ConsensusSummarizer) runReview(
 
 // runAdjudication: Stage 3 adjudicator 호출. nil 반환 시 primary 사용.
 func (c *ConsensusSummarizer) runAdjudication(
-	ctx context.Context, input model.SummarizeInput,
+	ctx context.Context, input *model.SummarizeInput,
 	primaryDigest *model.Digest, verdict *consensus.ReviewVerdict,
 	pipelineStart time.Time,
 ) *model.Digest {
@@ -200,7 +204,7 @@ func (c *ConsensusSummarizer) runAdjudication(
 // review: reviewer LLM 호출. verdict 파싱 실패 시 nil, nil 반환.
 func (c *ConsensusSummarizer) review(
 	ctx context.Context,
-	input model.SummarizeInput,
+	input *model.SummarizeInput,
 	digest *model.Digest,
 ) (*consensus.ReviewVerdict, error) {
 	raw, err := c.reviewer.GenerateJSON(
@@ -232,7 +236,7 @@ func (c *ConsensusSummarizer) review(
 // adjudicate: adjudicator LLM 호출. 파싱 실패 시 nil, nil 반환.
 func (c *ConsensusSummarizer) adjudicate(
 	ctx context.Context,
-	input model.SummarizeInput,
+	input *model.SummarizeInput,
 	digest *model.Digest,
 	verdict *consensus.ReviewVerdict,
 ) (*summaryResponse, error) {

@@ -1,6 +1,10 @@
 package handlers
 
-import "github.com/kapu/hololive-kakao-bot-go/internal/command/handlers/handlercore"
+import (
+	"errors"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/command/handlers/handlercore"
+)
 
 var FindMemberOrError = handlercore.FindMemberOrError
 var FindActiveMemberOrError = handlercore.FindActiveMemberOrError
@@ -9,4 +13,8 @@ var FindActiveMemberWithCandidatesOrError = handlercore.FindActiveMemberWithCand
 
 func validateMemberLookupDependencies(deps *Dependencies) error {
 	return handlercore.ValidateMemberLookupDependencies(deps)
+}
+
+func memberLookupHandled(err error) bool {
+	return errors.Is(err, handlercore.ErrMemberLookupHandled)
 }

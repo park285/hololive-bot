@@ -190,7 +190,7 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 		Name:      "Aqua",
 	})
 	var baseCtx context.Context
-	//nolint:staticcheck // nil context path is the behavior under test
+
 	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 
 	deps := &Dependencies{
@@ -262,7 +262,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		Name:      "Aqua",
 	})
 	var baseCtx context.Context
-	//nolint:staticcheck // nil context path is the behavior under test
+
 	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 	streamProvider := &trackedStreamProvider{}
 
@@ -310,7 +310,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 
 	cmd := NewLiveCommand(&Dependencies{
 		Holodex: streamProvider,
-		Chzzk: chzzk.NewClientWithConfig(chzzk.ClientConfig{
+		Chzzk: chzzk.NewClientWithConfig(&chzzk.ClientConfig{
 			ClientID:     "test-client",
 			ClientSecret: "test-secret",
 			Logger:       newCommandTestLogger(),

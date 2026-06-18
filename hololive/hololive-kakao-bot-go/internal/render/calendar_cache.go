@@ -93,11 +93,22 @@ func writeMemberCacheHash(w io.Writer, member *domain.Member) {
 
 func writeCacheInt(w io.Writer, value int) {
 	var buf [8]byte
-	binary.BigEndian.PutUint64(buf[:], uint64(value))
-	_, _ = w.Write(buf[:])
+	binary.BigEndian.PutUint64(buf[:], cacheUint64(value))
+	if _, err := w.Write(buf[:]); err != nil {
+		return
+	}
 }
 
 func writeCacheString(w io.Writer, value string) {
 	writeCacheInt(w, len(value))
-	_, _ = io.WriteString(w, value)
+	if _, err := io.WriteString(w, value); err != nil {
+		return
+	}
+}
+
+func cacheUint64(value int) uint64 {
+	if value < 0 {
+		return 0
+	}
+	return uint64(value)
 }

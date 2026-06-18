@@ -75,7 +75,10 @@ func TestClientSendMemberNewsWeeklyNon2xx(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 
-		_, _ = w.Write([]byte("upstream failed"))
+		_, err := w.Write([]byte("upstream failed"))
+		if err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	t.Cleanup(srv.Close)
 

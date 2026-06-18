@@ -297,15 +297,17 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 		},
 		SendError: func(_ context.Context, _, _ string) error {
 			sendErrorCalled = true
-			return errors.New("member not found")
+			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	_ = cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
+	if err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"member": "존재하지않는멤버",
-	})
+	}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
 
 	if !sendErrorCalled {
 		t.Fatal("expected SendError to be called for unknown member")

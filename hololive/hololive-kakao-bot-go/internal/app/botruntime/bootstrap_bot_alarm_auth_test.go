@@ -35,7 +35,7 @@ import (
 
 type testAlarmCRUD struct{}
 
-func (testAlarmCRUD) AddAlarm(context.Context, domain.AddAlarmRequest) (bool, error) {
+func (testAlarmCRUD) AddAlarm(context.Context, *domain.AddAlarmRequest) (bool, error) {
 	return true, nil
 }
 

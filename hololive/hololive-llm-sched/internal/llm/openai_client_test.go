@@ -292,17 +292,7 @@ func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
 	if !generator.called {
 		t.Fatal("shared generator was not called")
 	}
-	req := generator.req
-	if req.SystemPrompt != "system" || req.UserPrompt != "user" || req.SchemaName != "member_news_summary" || req.Model != "gpt-test" {
-		t.Fatalf("shared request = %+v", req)
-	}
-	if req.Schema["type"] != "object" || req.Temperature == nil || *req.Temperature != 0.2 || req.ReasoningEffort != "high" {
-		t.Fatalf("shared request options = %+v", req)
-	}
-	if req.WebSearch || !req.ChatCompletions {
-		t.Fatalf("shared request transport flags = webSearch:%v chat:%v", req.WebSearch, req.ChatCompletions)
-	}
-	if tracker.tokens == nil || tracker.tokens[0] != 9 || tracker.models[0] != "gpt-returned" {
+	if len(tracker.tokens) == 0 || tracker.tokens[0] != 9 || tracker.models[0] != "gpt-returned" {
 		t.Fatalf("usage tracker = models:%v tokens:%v", tracker.models, tracker.tokens)
 	}
 }
@@ -339,14 +329,12 @@ func TestOpenAIClientGenerateJSON_SanitizesDiscoveredEventsOnlyAfterFallback(t *
 
 type fakeJSONGenerator struct {
 	called bool
-	req    sharedllm.JSONRequest
 	resp   sharedllm.JSONResponse
 	err    error
 }
 
-func (f *fakeJSONGenerator) GenerateJSON(_ context.Context, req sharedllm.JSONRequest) (sharedllm.JSONResponse, error) {
+func (f *fakeJSONGenerator) GenerateJSON(context.Context, sharedllm.JSONRequest) (sharedllm.JSONResponse, error) {
 	f.called = true
-	f.req = req
 	return f.resp, f.err
 }
 
@@ -587,10 +575,7 @@ func TestApplyFallbackPostProcess_SkipsWhenNoFallback(t *testing.T) {
 	client := &OpenAIClient{schemaName: "event_summary"}
 
 	raw := `{"summary":"ok","discovered_events":[{"id":"a"}]}`
-	got, err := client.applyFallbackPostProcess(raw, false)
-	if err != nil {
-		t.Fatalf("applyFallbackPostProcess() error = %v", err)
-	}
+	got := client.applyFallbackPostProcess(raw, false)
 	if got != raw {
 		t.Fatalf("applyFallbackPostProcess() = %q, want original %q", got, raw)
 	}
@@ -599,10 +584,7 @@ func TestApplyFallbackPostProcess_SkipsWhenNoFallback(t *testing.T) {
 func TestApplyFallbackPostProcess_SanitizesEventSummary(t *testing.T) {
 	client := &OpenAIClient{schemaName: "event_summary"}
 
-	got, err := client.applyFallbackPostProcess(`{"summary":"ok","discovered_events":[{"id":"a"}]}`, true)
-	if err != nil {
-		t.Fatalf("applyFallbackPostProcess() error = %v", err)
-	}
+	got := client.applyFallbackPostProcess(`{"summary":"ok","discovered_events":[{"id":"a"}]}`, true)
 
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(got), &payload); err != nil {

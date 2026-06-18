@@ -96,7 +96,7 @@ func processDigestForRoom(
 	return result
 }
 
-func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, config digestDispatchConfig) delivery.SendResult {
+func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, config *digestDispatchConfig) delivery.SendResult {
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
@@ -127,7 +127,7 @@ func runMemberNewsDigest(
 	digest *schedulerkit.DigestScheduler,
 	service model.DigestService,
 	processRoom func(context.Context, string, string) delivery.SendResult,
-	config digestDispatchConfig,
+	config *digestDispatchConfig,
 ) error {
 	config.processRoom = processRoom
 	return schedulerkit.RunDigest(ctx, digest, buildDigestOp(digest, service, config))
@@ -136,7 +136,7 @@ func runMemberNewsDigest(
 func buildDigestOp(
 	digest *schedulerkit.DigestScheduler,
 	service model.DigestService,
-	config digestDispatchConfig,
+	config *digestDispatchConfig,
 ) schedulerkit.DigestOp[[]model.SubscribedRoom] {
 	return schedulerkit.DigestOp[[]model.SubscribedRoom]{
 		LockKey: config.lockKey,
@@ -163,7 +163,7 @@ func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, sk
 	}
 }
 
-func executeDigestDispatch(logger *slog.Logger, config digestDispatchConfig) func(context.Context, []model.SubscribedRoom) error {
+func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig) func(context.Context, []model.SubscribedRoom) error {
 	return func(ctx context.Context, rooms []model.SubscribedRoom) error {
 		result := dispatchDigestRooms(ctx, rooms, config)
 		logDigestResult(logger, config, result)
@@ -174,7 +174,7 @@ func executeDigestDispatch(logger *slog.Logger, config digestDispatchConfig) fun
 	}
 }
 
-func logDigestResult(logger *slog.Logger, config digestDispatchConfig, result delivery.SendResult) {
+func logDigestResult(logger *slog.Logger, config *digestDispatchConfig, result delivery.SendResult) {
 	logger.Info(config.resultMessage,
 		slog.String(config.periodFieldName, config.periodKey),
 		slog.Int("attempted", result.Attempted),

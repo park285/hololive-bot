@@ -108,7 +108,7 @@ func (a *trackingAlarmAdvanceCRUD) callSnapshot() (calls, lastMinutes int) {
 	return a.calls, a.lastMinutes
 }
 
-func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
+func newTestValkeyClient(t *testing.T) (client valkey.Client, address string) {
 	t.Helper()
 
 	client, mini := testutil.NewTestValkeyClient(t)
@@ -155,7 +155,7 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 		},
 	}
 	youtubeService := &trackingYouTubeService{}
-	scheduler := poller.NewScheduler(poller.SchedulerConfig{
+	scheduler := poller.NewScheduler(&poller.SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: time.Millisecond,
 	})
@@ -356,7 +356,7 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	}
 	youtubeService := &trackingYouTubeService{}
 	alarmService := &trackingAlarmAdvanceCRUD{targets: []int{15, 30}}
-	scheduler := poller.NewScheduler(poller.SchedulerConfig{
+	scheduler := poller.NewScheduler(&poller.SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: time.Millisecond,
 	})

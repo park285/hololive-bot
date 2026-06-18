@@ -3,7 +3,11 @@ package bootstrap
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -179,9 +183,17 @@ func newTestReloadingTLSCertificateWithOptions(
 }
 
 func countingTLSCertificateFileReader(readCount *atomic.Int64) tlsCertificateFileReader {
+	root := ""
 	return func(name string) ([]byte, error) {
+		if root == "" {
+			root = filepath.Dir(name)
+		}
+		rel, err := filepath.Rel(root, name)
+		if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+			return nil, fmt.Errorf("read certificate fixture outside temp dir")
+		}
 		readCount.Add(1)
-		return os.ReadFile(name)
+		return fs.ReadFile(os.DirFS(root), filepath.ToSlash(rel))
 	}
 }
 

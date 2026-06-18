@@ -254,32 +254,64 @@ func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, b
 		return 0, false
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-	if err != nil {
-		return 0, false
-	}
-
-	client, ok := c.clientForURL(url)
+	resp, ok := c.fetchHealthResponse(ctx, url)
 	if !ok {
 		return 0, false
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, false
-	}
-	defer resp.Body.Close()
-
-	if err := httputil.CheckStatus(resp); err != nil {
-		return 0, false
-	}
-
-	var hr healthResponse
-	if err := httputil.DecodeJSON(resp, &hr); err != nil {
+	hr, ok := decodeHealthResponse(resp)
+	if !ok {
 		return 0, false
 	}
 
 	return goroutineCountFromHealthResponse(hr)
+}
+
+func (c *Collector) fetchHealthResponse(ctx context.Context, url string) (*http.Response, bool) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, false
+	}
+
+	client, ok := c.clientForURL(url)
+	if !ok {
+		return nil, false
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, false
+	}
+	if resp == nil {
+		return nil, false
+	}
+	if resp.Body == nil {
+		return nil, false
+	}
+
+	return resp, true
+}
+
+func decodeHealthResponse(resp *http.Response) (healthResponse, bool) {
+	if err := httputil.CheckStatus(resp); err != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return healthResponse{}, false
+		}
+		return healthResponse{}, false
+	}
+
+	var hr healthResponse
+	if err := httputil.DecodeJSON(resp, &hr); err != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return healthResponse{}, false
+		}
+		return healthResponse{}, false
+	}
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		return healthResponse{}, false
+	}
+
+	return hr, true
 }
 
 func (c *Collector) clientForURL(rawURL string) (*http.Client, bool) {

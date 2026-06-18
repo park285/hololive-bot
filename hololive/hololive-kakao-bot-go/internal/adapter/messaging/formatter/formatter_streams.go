@@ -211,12 +211,13 @@ func (f *ResponseFormatter) streamTimeInfo(stream *domain.Stream) string {
 	hoursUntil := minutesUntil / 60
 	minutesRem := minutesUntil % 60
 
-	if hoursUntil > 24 {
+	switch {
+	case hoursUntil > 24:
 		daysUntil := hoursUntil / 24
 		return fmt.Sprintf("%s (%d일 후)", kstTime, daysUntil)
-	} else if hoursUntil > 0 {
+	case hoursUntil > 0:
 		return fmt.Sprintf("%s (%d시간 %d분 후)", kstTime, hoursUntil, minutesRem)
-	} else {
+	default:
 		return fmt.Sprintf("%s (%d분 후)", kstTime, minutesRem)
 	}
 }

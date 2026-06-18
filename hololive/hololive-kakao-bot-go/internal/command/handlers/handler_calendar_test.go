@@ -120,6 +120,9 @@ func TestCachedCelebrationCalendarFinder_ReusesSnapshotAcrossInstances(t *testin
 
 	repo := &calendarRepoStub{entries: entries}
 	finder := newCachedCelebrationCalendarFinder(repo, dir, time.Hour, func() time.Time { return now })
+	if finder == nil {
+		t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+	}
 
 	first, err := finder.FindMembersWithCelebrationsInMonth(context.Background(), 6, 2026)
 	if err != nil {
@@ -133,6 +136,9 @@ func TestCachedCelebrationCalendarFinder_ReusesSnapshotAcrossInstances(t *testin
 	cachedFinder := newCachedCelebrationCalendarFinder(cachedRepo, dir, time.Hour, func() time.Time {
 		return now.Add(30 * time.Minute)
 	})
+	if cachedFinder == nil {
+		t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+	}
 
 	second, err := cachedFinder.FindMembersWithCelebrationsInMonth(context.Background(), 6, 2026)
 	if err != nil {
@@ -156,6 +162,9 @@ func TestCachedCelebrationCalendarFinder_RefreshesExpiredSnapshot(t *testing.T) 
 		},
 	}
 	finder := newCachedCelebrationCalendarFinder(repo, dir, time.Hour, func() time.Time { return now })
+	if finder == nil {
+		t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+	}
 	if _, err := finder.FindMembersWithCelebrationsInMonth(context.Background(), 6, 2026); err != nil {
 		t.Fatalf("first FindMembersWithCelebrationsInMonth() error = %v", err)
 	}
@@ -168,6 +177,9 @@ func TestCachedCelebrationCalendarFinder_RefreshesExpiredSnapshot(t *testing.T) 
 	refreshedFinder := newCachedCelebrationCalendarFinder(refreshedRepo, dir, time.Hour, func() time.Time {
 		return now.Add(2 * time.Hour)
 	})
+	if refreshedFinder == nil {
+		t.Fatal("newCachedCelebrationCalendarFinder() returned nil")
+	}
 
 	refreshed, err := refreshedFinder.FindMembersWithCelebrationsInMonth(context.Background(), 6, 2026)
 	if err != nil {

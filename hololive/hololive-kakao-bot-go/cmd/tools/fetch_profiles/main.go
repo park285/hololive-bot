@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -123,7 +124,7 @@ func fetchProfile(ctx context.Context, client *http.Client, url, englishName, sl
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer closeBody(resp.Body)
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
@@ -146,12 +147,27 @@ func fetchProfileResponse(ctx context.Context, client *http.Client, url string) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch URL: %w", err)
 	}
+	if resp == nil {
+		return nil, errors.New("failed to fetch URL: empty response")
+	}
+	if resp.Body == nil {
+		return nil, errors.New("failed to fetch URL: empty response body")
+	}
 
 	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
+		closeBody(resp.Body)
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	return resp, nil
+}
+
+func closeBody(body io.Closer) {
+	if body == nil {
+		return
+	}
+	if err := body.Close(); err != nil {
+		slog.Debug("failed to close response body", slog.Any("error", err))
+	}
 }
 
 func buildTalentProfile(doc *goquery.Document, url, englishName, slug string) (*domain.TalentProfile, error) {

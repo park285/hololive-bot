@@ -31,8 +31,8 @@ import (
 )
 
 func feb2026Events() []domain.MajorEvent {
-	date := func(y, m, d int) *time.Time {
-		t := time.Date(y, time.Month(m), d, 0, 0, 0, 0, time.UTC)
+	date := func(m, d int) *time.Time {
+		t := time.Date(2026, time.Month(m), d, 0, 0, 0, 0, time.UTC)
 		return new(t)
 	}
 
@@ -41,31 +41,31 @@ func feb2026Events() []domain.MajorEvent {
 			ID: 930, Title: "hololive DEV_IS NEW WAVE POP UP STORE in OIOI",
 			Type: domain.MajorEventTypeNews, Link: "https://hololivepro.com/news/930",
 			Members:        []string{"火威青", "儒烏風亭らでん", "一条莉々華", "虎金妃笑虎", "綺々羅々ヴィヴィ", "春先のどか", "輪堂千速", "水宮枢", "響咲リオナ"},
-			EventStartDate: date(2026, 2, 6), EventEndDate: date(2026, 2, 14),
+			EventStartDate: date(2, 6), EventEndDate: date(2, 14),
 		},
 		{
 			ID: 9215, Title: "東京駅と成田空港、2つのお店を巡ってオリジナルポストカードをもらおう！",
 			Type: domain.MajorEventTypeNews, Link: "https://hololivepro.com/news/9215",
-			EventStartDate: date(2026, 2, 12), EventEndDate: date(2026, 3, 8),
+			EventStartDate: date(2, 12), EventEndDate: date(3, 8),
 		},
 		{
 			ID: 13590, Title: "Hoshimachi Suisei Live \"SuperNova: REBOOT\"",
 			Type: domain.MajorEventTypeEvent, Link: "https://hololivepro.com/events/13590",
 			Members:        []string{"星街すいせい"},
-			EventStartDate: date(2026, 2, 21), EventEndDate: date(2026, 2, 21),
+			EventStartDate: date(2, 21), EventEndDate: date(2, 21),
 		},
 		{
 			ID: 8, Title: "秘密結社holoX Live 2026「First MISSION」",
 			Type: domain.MajorEventTypeEvent, Link: "https://hololivepro.com/events/8",
 			Members:        []string{"ラプラス", "鷹嶺ルイ", "博衣こより", "沙花叉クロヱ"},
-			EventStartDate: date(2026, 2, 25), EventEndDate: date(2026, 2, 28),
+			EventStartDate: date(2, 25), EventEndDate: date(2, 28),
 		},
 	}
 }
 
 func mar2026Events() []domain.MajorEvent {
-	date := func(y, m, d int) *time.Time {
-		t := time.Date(y, time.Month(m), d, 0, 0, 0, 0, time.UTC)
+	date := func(d int) *time.Time {
+		t := time.Date(2026, time.March, d, 0, 0, 0, 0, time.UTC)
 		return new(t)
 	}
 
@@ -79,29 +79,29 @@ func mar2026Events() []domain.MajorEvent {
 				"ラプラス", "鷹嶺ルイ", "沙花叉クロヱ", "Calli", "Kiara", "Ina", "IRyS", "Kronii", "Baelz",
 				"FUWAMOCO", "Shiori", "Bijou", "Nerissa", "Elizabeth", "Gigi", "Cecilia", "Raora",
 			},
-			EventStartDate: date(2026, 3, 5), EventEndDate: date(2026, 3, 7),
+			EventStartDate: date(5), EventEndDate: date(7),
 		},
 		{
 			ID: 931, Title: "hololive Dreams (ホロドリ) 全世界同時リリース",
 			Type: domain.MajorEventTypeNews, Link: "https://hololivepro.com/news/931",
-			EventStartDate: date(2026, 3, 5), EventEndDate: date(2026, 3, 5),
+			EventStartDate: date(5), EventEndDate: date(5),
 		},
 		{
 			ID: 932, Title: "常闇トワ アニメタイアップ全国流通シングルCDリリース",
 			Type: domain.MajorEventTypeNews, Link: "https://hololivepro.com/news/932",
 			Members:        []string{"常闇トワ"},
-			EventStartDate: date(2026, 3, 24), EventEndDate: date(2026, 3, 24),
+			EventStartDate: date(24), EventEndDate: date(24),
 		},
 		{
 			ID: 9, Title: "Takanashi Kiara / Ninomae Ina'nis 1st Concert \"Drawn to Dawn\"",
 			Type: domain.MajorEventTypeEvent, Link: "https://hololivepro.com/events/9",
 			Members:        []string{"Kiara", "Ina"},
-			EventStartDate: date(2026, 3, 27), EventEndDate: date(2026, 3, 28),
+			EventStartDate: date(27), EventEndDate: date(28),
 		},
 		{
 			ID: 945, Title: "VTuberグループ「ホロライブ」の公式ファンクラブを開設",
 			Type: domain.MajorEventTypeNews, Link: "https://hololivepro.com/news/945",
-			EventStartDate: date(2026, 3, 30), EventEndDate: date(2026, 3, 30),
+			EventStartDate: date(30), EventEndDate: date(30),
 		},
 	}
 }

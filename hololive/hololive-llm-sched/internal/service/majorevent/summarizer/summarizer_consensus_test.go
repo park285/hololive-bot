@@ -133,7 +133,7 @@ func TestDeriveConsensusBudget_CapsToParentDeadline(t *testing.T) {
 		t.Fatal("parent deadline missing")
 	}
 
-	child, childCancel, ok := deriveConsensusBudget(parent, 10*time.Second, 250*time.Millisecond)
+	child, childCancel, ok := deriveConsensusBudget(parent, 10*time.Second)
 	if !ok {
 		t.Fatal("deriveConsensusBudget() ok = false, want true")
 	}
@@ -154,7 +154,7 @@ func TestDeriveConsensusBudget_ReturnsFalseWhenNoBudgetLeft(t *testing.T) {
 	parent, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
 
-	child, childCancel, ok := deriveConsensusBudget(parent, 10*time.Second, 250*time.Millisecond)
+	child, childCancel, ok := deriveConsensusBudget(parent, 10*time.Second)
 	if ok {
 		t.Fatal("deriveConsensusBudget() ok = true, want false")
 	}

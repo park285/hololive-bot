@@ -154,6 +154,26 @@ func TestCollectChzzkLiveStreams_ReturnsNilOnBatchError(t *testing.T) {
 	}
 }
 
+func TestCollectChzzkLiveStreams_ReturnsEmptySliceWhenNoStreams(t *testing.T) {
+	t.Parallel()
+
+	streams := collectChzzkLiveStreams(
+		[]*domain.Member{
+			{ChannelID: "yt-1", Name: "미코", ChzzkChannelID: "cz-1"},
+		},
+		func([]string) ([]chzzk.LiveData, error) {
+			return nil, nil
+		},
+	)
+
+	if streams == nil {
+		t.Fatal("expected non-nil empty stream slice")
+	}
+	if len(streams) != 0 {
+		t.Fatalf("len(streams) = %d, want 0", len(streams))
+	}
+}
+
 func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T) {
 	t.Parallel()
 

@@ -55,7 +55,7 @@ type fakeSummarizer struct {
 	err    error
 }
 
-func (f *fakeSummarizer) Summarize(_ context.Context, _ model.SummarizeInput) (*model.Digest, error) {
+func (f *fakeSummarizer) Summarize(_ context.Context, _ *model.SummarizeInput) (*model.Digest, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -70,8 +70,8 @@ func defaultConsensusConfig() consensus.Config {
 	}
 }
 
-func defaultTestInput() model.SummarizeInput {
-	return model.SummarizeInput{
+func defaultTestInput() *model.SummarizeInput {
+	return &model.SummarizeInput{
 		Period:      model.PeriodWeekly,
 		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
 		RoomMembers: []string{"사쿠라 미코"},
@@ -105,7 +105,10 @@ func approvedVerdictJSON(confidence float64) string {
 		Issues:     []consensus.ReviewIssue{},
 		Confidence: confidence,
 	}
-	b, _ := json.Marshal(v)
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
 	return string(b)
 }
 
@@ -117,7 +120,10 @@ func criticalVerdictJSON() string {
 		},
 		Confidence: 0.3,
 	}
-	b, _ := json.Marshal(v)
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
 	return string(b)
 }
 
@@ -127,7 +133,10 @@ func lowConfidenceVerdictJSON() string {
 		Issues:     []consensus.ReviewIssue{},
 		Confidence: 0.5,
 	}
-	b, _ := json.Marshal(v)
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
 	return string(b)
 }
 
@@ -139,7 +148,10 @@ func warningOnlyVerdictJSON() string {
 		},
 		Confidence: 0.9,
 	}
-	b, _ := json.Marshal(v)
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
 	return string(b)
 }
 
@@ -153,7 +165,10 @@ func adjudicatorResponseJSON(title string) string {
 		MoreSummary:  "",
 		OmittedCount: 0,
 	}
-	b, _ := json.Marshal(r)
+	b, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
 	return string(b)
 }
 
@@ -325,7 +340,10 @@ func TestConsensus_ValidationRunsOnAdjudicatorOutput(t *testing.T) {
 		MoreSummary:  "",
 		OmittedCount: 0,
 	}
-	badJSON, _ := json.Marshal(badResponse)
+	badJSON, err := json.Marshal(badResponse)
+	if err != nil {
+		t.Fatalf("marshal bad response: %v", err)
+	}
 
 	reviewer := &fakeLLMWithCounter{response: criticalVerdictJSON()}
 	adjudicator := &fakeLLMWithCounter{response: string(badJSON)}
@@ -426,7 +444,10 @@ func TestConsensus_UnknownSeverity_TreatedAsInfo(t *testing.T) {
 		},
 		Confidence: 0.9,
 	}
-	b, _ := json.Marshal(v)
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal verdict: %v", err)
+	}
 
 	reviewer := &fakeLLMWithCounter{response: string(b)}
 	adjudicator := &fakeLLMWithCounter{}
@@ -481,7 +502,10 @@ func TestConsensus_ValidationDropsAllAdjudicatorItems_ReturnsPrimary(t *testing.
 		MoreSummary:  "",
 		OmittedCount: 0,
 	}
-	allBadJSON, _ := json.Marshal(allBadResponse)
+	allBadJSON, err := json.Marshal(allBadResponse)
+	if err != nil {
+		t.Fatalf("marshal all bad response: %v", err)
+	}
 
 	reviewer := &fakeLLMWithCounter{response: criticalVerdictJSON()}
 	adjudicator := &fakeLLMWithCounter{response: string(allBadJSON)}

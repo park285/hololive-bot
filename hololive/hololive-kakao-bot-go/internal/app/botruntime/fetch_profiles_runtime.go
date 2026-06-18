@@ -22,6 +22,7 @@ package botruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -38,7 +39,7 @@ type FetchProfilesRuntime struct {
 
 func BuildFetchProfilesRuntime(ctx context.Context) (*FetchProfilesRuntime, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, errors.New("context must not be nil")
 	}
 
 	runtime, cleanup, err := InitializeFetchProfilesRuntime(ctx)

@@ -162,7 +162,9 @@ func (s *Service) scrapeSources(ctx context.Context) []sourceScrapeResult {
 		})
 	}
 
-	_ = eg.Wait()
+	if err := eg.Wait(); err != nil && s.logger != nil {
+		s.logger.Warn("major event source scrape group failed", slog.Any("error", err))
+	}
 	slices.SortFunc(results, func(a, b sourceScrapeResult) int {
 		return strings.Compare(a.source.Name, b.source.Name)
 	})
@@ -225,9 +227,8 @@ func collectIncrementalEvents(
 	events []*domain.MajorEvent,
 	knownExternalIDs map[string]struct{},
 	latestUTC time.Time,
-) ([]*domain.MajorEvent, int) {
-	filtered := make([]*domain.MajorEvent, 0, len(events))
-	skipped := 0
+) (filtered []*domain.MajorEvent, skipped int) {
+	filtered = make([]*domain.MajorEvent, 0, len(events))
 	for _, event := range events {
 		keep, skipKnown := filterIncrementalEvent(event, knownExternalIDs, latestUTC)
 		if !keep {
@@ -262,7 +263,7 @@ func latestPubDateUTC(latestPubDate *time.Time) time.Time {
 	return latestPubDate.UTC()
 }
 
-func filterIncrementalEvent(event *domain.MajorEvent, knownExternalIDs map[string]struct{}, latestUTC time.Time) (bool, bool) {
+func filterIncrementalEvent(event *domain.MajorEvent, knownExternalIDs map[string]struct{}, latestUTC time.Time) (keep, skipKnown bool) {
 	if event == nil {
 		return false, false
 	}

@@ -41,7 +41,7 @@ func TestNewMatcher_Defaults(t *testing.T) {
 
 	var baseCtx context.Context
 	provider := newStubMemberProvider([]*domain.Member{{ChannelID: "ch1", Name: "m1"}})
-	//nolint:staticcheck // nil context path is the behavior under test
+
 	matcher := NewMatcher(baseCtx, provider, &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			return map[string]string{}, nil
@@ -160,7 +160,7 @@ func TestGetAllMembers_DoesNotInjectBackgroundContext(t *testing.T) {
 
 	var baseCtx context.Context
 	provider := newTrackingMemberProvider([]*domain.Member{{ChannelID: "ch1", Name: "m1"}})
-	//nolint:staticcheck // nil context path is the behavior under test
+
 	matcher := NewMatcher(baseCtx, provider, &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			return map[string]string{}, nil
@@ -177,7 +177,7 @@ func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
 
 	provider := newTrackingMemberProvider([]*domain.Member{{ChannelID: "ch1", Name: "m1"}})
 	var baseCtx context.Context
-	//nolint:staticcheck // nil context path is the behavior under test
+
 	matcher := NewMatcher(baseCtx, provider, &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			return map[string]string{}, nil
@@ -237,11 +237,10 @@ func TestFinalizeCandidate_EmptyChannelID(t *testing.T) {
 
 	matcher := &Matcher{logger: newMatcherTestLogger()}
 
-	channel, err := matcher.finalizeCandidate(t.Context(), &matchCandidate{
+	channel := matcher.finalizeCandidate(t.Context(), &matchCandidate{
 		memberName: "missing-id",
 		source:     "test",
 	})
-	require.NoError(t, err)
 	assert.Nil(t, channel)
 }
 
@@ -444,6 +443,7 @@ func TestFindBestMatchWithCandidates_AmbiguousAndOrgFilter(t *testing.T) {
 
 	var ambiguous *AmbiguousMatchError
 	require.ErrorAs(t, err, &ambiguous)
+	require.NotNil(t, ambiguous)
 	require.Len(t, ambiguous.Candidates, 2)
 
 	filtered, err := matcher.FindBestMatchWithCandidates(t.Context(), "Aqua (Hololive)")

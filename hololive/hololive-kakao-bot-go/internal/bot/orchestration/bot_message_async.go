@@ -60,7 +60,7 @@ func (b *Bot) executeCommandAsync(
 		return
 	}
 
-	b.handleAsyncCommandSubmitError(cancel, commandType, chatID)
+	b.handleAsyncCommandSubmitError(ctx, cancel, commandType, chatID)
 }
 
 func (b *Bot) asyncCommandTask(
@@ -74,7 +74,7 @@ func (b *Bot) asyncCommandTask(
 ) func() {
 	return func() {
 		defer cancel()
-		defer b.recoverAsyncCommandPanic(commandType)
+		defer b.recoverAsyncCommandPanic(ctx, commandType)
 
 		if err := b.executeCommand(ctx, cmdCtx, cmdType, params); err != nil {
 			b.handleAsyncCommandError(ctx, err, commandType, chatID)
@@ -82,10 +82,10 @@ func (b *Bot) asyncCommandTask(
 	}
 }
 
-func (b *Bot) recoverAsyncCommandPanic(commandType string) {
+func (b *Bot) recoverAsyncCommandPanic(ctx context.Context, commandType string) {
 	if r := recover(); r != nil {
 		sharedlog.Error(
-			context.Background(),
+			ctx,
 			b.logger,
 			EventBotCommandPanic,
 			"panic in async command handler",
@@ -95,31 +95,35 @@ func (b *Bot) recoverAsyncCommandPanic(commandType string) {
 	}
 }
 
-func (b *Bot) handleAsyncCommandError(ctx context.Context, err error, commandType string, chatID string) {
+func (b *Bot) handleAsyncCommandError(ctx context.Context, err error, commandType, chatID string) {
 	errorMsg := b.getErrorMessage(err, commandType)
 	if chatID == "" {
 		return
 	}
 
 	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
-		attrs := []slog.Attr{
+		errorAttrs := sharedlog.ErrorAttrs(sendErr)
+		attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
+		attrs = append(attrs,
 			slog.String("chat_id", chatID),
 			slog.String("command", commandType),
-		}
-		attrs = append(attrs, sharedlog.ErrorAttrs(sendErr)...)
+		)
+		attrs = append(attrs, errorAttrs...)
 		sharedlog.Error(ctx, b.logger, EventBotCommandErrorResponseFailed, "failed to send command error response", attrs...)
 	}
 }
 
 func (b *Bot) handleAsyncCommandSubmitError(
+	ctx context.Context,
 	cancel context.CancelFunc,
 	commandType string,
 	chatID string,
 ) {
-	attrs := []slog.Attr{
+	attrs := make([]slog.Attr, 0, 1)
+	attrs = append(attrs,
 		slog.String("command", commandType),
-	}
-	sharedlog.Warn(context.Background(), b.logger, EventBotCommandAsyncRejected, "async command rejected by worker pool", attrs...)
+	)
+	sharedlog.Warn(ctx, b.logger, EventBotCommandAsyncRejected, "async command rejected by worker pool", attrs...)
 
 	cancel()
 
@@ -127,14 +131,15 @@ func (b *Bot) handleAsyncCommandSubmitError(
 		return
 	}
 
-	notifyCtx, notifyCancel := context.WithTimeout(context.Background(), constants.RequestTimeout.WebhookProcessing)
+	notifyCtx, notifyCancel := context.WithTimeout(ctx, constants.RequestTimeout.WebhookProcessing)
 	defer notifyCancel()
 
 	if err := b.sendError(notifyCtx, chatID, asyncCommandBackpressureMessage); err != nil && b.logger != nil {
-		attrs := []slog.Attr{
+		attrs := make([]slog.Attr, 0, 2+len(sharedlog.ErrorAttrs(err)))
+		attrs = append(attrs,
 			slog.String("chat_id", chatID),
 			slog.String("command", commandType),
-		}
+		)
 		attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
 		sharedlog.Error(notifyCtx, b.logger, EventBotCommandErrorResponseFailed, "failed to send async backpressure message", attrs...)
 	}

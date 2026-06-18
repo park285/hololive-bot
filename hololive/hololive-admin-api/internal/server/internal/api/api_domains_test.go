@@ -1,6 +1,7 @@
 package api
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -12,38 +13,28 @@ func TestDomainHandlers_FromValidHandler(t *testing.T) {
 		t.Fatal("DomainHandlers returned nil")
 	}
 
-	if domains.Member == nil || domains.Member.Handler == nil {
-		t.Fatal("Member domain handler not initialized")
+	assertDomainHandlerInitialized(t, "Member", domains.Member)
+	assertDomainHandlerInitialized(t, "Alarm", domains.Alarm)
+	assertDomainHandlerInitialized(t, "Room", domains.Room)
+	assertDomainHandlerInitialized(t, "Stream", domains.Stream)
+	assertDomainHandlerInitialized(t, "Stats", domains.Stats)
+	assertDomainHandlerInitialized(t, "Settings", domains.Settings)
+	assertDomainHandlerInitialized(t, "Template", domains.Template)
+	assertDomainHandlerInitialized(t, "Milestone", domains.Milestone)
+	assertDomainHandlerInitialized(t, "Profile", domains.Profile)
+	assertDomainHandlerInitialized(t, "MajorEvent", domains.MajorEvent)
+	assertDomainHandlerInitialized(t, "OAuth", domains.OAuth)
+}
+
+func assertDomainHandlerInitialized(t *testing.T, name string, domainHandler any) {
+	t.Helper()
+
+	value := reflect.ValueOf(domainHandler)
+	if !value.IsValid() || value.IsNil() {
+		t.Fatalf("%s domain handler not initialized", name)
 	}
-	if domains.Alarm == nil || domains.Alarm.Handler == nil {
-		t.Fatal("Alarm domain handler not initialized")
-	}
-	if domains.Room == nil || domains.Room.Handler == nil {
-		t.Fatal("Room domain handler not initialized")
-	}
-	if domains.Stream == nil || domains.Stream.Handler == nil {
-		t.Fatal("Stream domain handler not initialized")
-	}
-	if domains.Stats == nil || domains.Stats.Handler == nil {
-		t.Fatal("Stats domain handler not initialized")
-	}
-	if domains.Settings == nil || domains.Settings.Handler == nil {
-		t.Fatal("Settings domain handler not initialized")
-	}
-	if domains.Template == nil || domains.Template.Handler == nil {
-		t.Fatal("Template domain handler not initialized")
-	}
-	if domains.Milestone == nil || domains.Milestone.Handler == nil {
-		t.Fatal("Milestone domain handler not initialized")
-	}
-	if domains.Profile == nil || domains.Profile.Handler == nil {
-		t.Fatal("Profile domain handler not initialized")
-	}
-	if domains.MajorEvent == nil || domains.MajorEvent.Handler == nil {
-		t.Fatal("MajorEvent domain handler not initialized")
-	}
-	if domains.OAuth == nil || domains.OAuth.Handler == nil {
-		t.Fatal("OAuth domain handler not initialized")
+	if handler := value.Elem().FieldByName("Handler"); !handler.IsValid() || handler.IsNil() {
+		t.Fatalf("%s domain handler base not initialized", name)
 	}
 }
 

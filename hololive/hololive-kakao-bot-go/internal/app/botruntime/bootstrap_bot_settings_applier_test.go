@@ -248,7 +248,7 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 
 	logger := testAppLogger()
 	youtubeService := &trackingYouTubeService{}
-	scheduler := poller.NewScheduler(poller.SchedulerConfig{
+	scheduler := poller.NewScheduler(&poller.SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: time.Millisecond,
 	})

@@ -73,7 +73,7 @@ type mockNotificationLocker struct {
 	releaseCalls []string
 }
 
-func (m *mockNotificationLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (string, bool, error) {
+func (m *mockNotificationLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (token string, acquired bool, err error) {
 	return m.acquireToken, m.acquireAcquired, m.acquireErr
 }
 
@@ -214,7 +214,7 @@ func TestScheduler_CalculateNextRunMonday0900KST(t *testing.T) {
 func TestScheduler_LifecycleNilGuards(t *testing.T) {
 	var scheduler *Scheduler
 
-	scheduler.SetClock(func() time.Time { return time.Now() })
+	scheduler.SetClock(time.Now)
 	scheduler.Start(context.Background())
 	scheduler.Stop()
 }
@@ -273,7 +273,9 @@ func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })
 
-	_ = scheduler.SendWeeklyDigest(context.Background())
+	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
+		t.Fatalf("SendWeeklyDigest() error = %v", err)
+	}
 
 	if len(locker.releaseCalls) != 1 {
 		t.Errorf("expected 1 Release call, got %d", len(locker.releaseCalls))

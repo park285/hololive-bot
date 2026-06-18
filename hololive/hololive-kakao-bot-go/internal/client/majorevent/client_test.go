@@ -93,7 +93,9 @@ func TestNew(t *testing.T) {
 
 				w.WriteHeader(http.StatusOK)
 
-				_ = json.NewEncoder(w).Encode(map[string]bool{"subscribed": false})
+				if err := json.NewEncoder(w).Encode(map[string]bool{"subscribed": false}); err != nil {
+					t.Fatalf("encode subscription response: %v", err)
+				}
 			}))
 			defer srv.Close()
 
@@ -118,14 +120,19 @@ func TestNew_URLTrimming(t *testing.T) {
 
 		w.WriteHeader(http.StatusOK)
 
-		_ = json.NewEncoder(w).Encode(map[string]bool{"subscribed": false})
+		if err := json.NewEncoder(w).Encode(map[string]bool{"subscribed": false}); err != nil {
+			t.Fatalf("encode subscription response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
 	// 후행 슬래시 포함 URL로 클라이언트 생성
 	c := majorevent.New(srv.URL+"/", testAPIKey)
 
-	_, _ = c.IsSubscribed(t.Context(), "room-1")
+	_, err := c.IsSubscribed(t.Context(), "room-1")
+	if err != nil {
+		t.Fatalf("IsSubscribed() error = %v", err)
+	}
 
 	// 경로에 이중 슬래시가 없어야 합니다
 	wantPath := majoreventcontracts.SubscriptionsPath + "/room-1"
@@ -138,17 +145,19 @@ func TestNew_URLTrimming(t *testing.T) {
 	}
 }
 
+type majorEventIsSubscribedCase struct {
+	name         string
+	roomID       string
+	statusCode   int
+	responseBody any
+	wantResult   bool
+	wantErr      bool
+}
+
 func TestIsSubscribed(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name         string
-		roomID       string
-		statusCode   int
-		responseBody any
-		wantResult   bool
-		wantErr      bool
-	}{
+	tests := []majorEventIsSubscribedCase{
 		{
 			name:         "구독 상태 true 반환",
 			roomID:       "room-123",
@@ -193,62 +202,67 @@ func TestIsSubscribed(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			// 빈 roomID는 서버 없이도 검증
-			if tc.roomID == "" {
-				c := majorevent.New("http://localhost:0", testAPIKey)
-
-				got, err := c.IsSubscribed(t.Context(), tc.roomID)
-				if (err != nil) != tc.wantErr {
-					t.Errorf("IsSubscribed() err = %v, wantErr %v", err, tc.wantErr)
-				}
-
-				if got != tc.wantResult {
-					t.Errorf("IsSubscribed() = %v, want %v", got, tc.wantResult)
-				}
-
-				return
-			}
-
-			srv := testutil.NewJSONTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
-				if r.Method != http.MethodGet {
-					t.Errorf("method = %q, want GET", r.Method)
-				}
-
-				wantPath := majoreventcontracts.SubscriptionsPath + "/" + tc.roomID
-				if r.URL.Path != wantPath {
-					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
-				}
-
-				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
-				}
-			})
-
-			c := majorevent.New(srv.URL, testAPIKey)
-			got, err := c.IsSubscribed(t.Context(), tc.roomID)
-
-			if (err != nil) != tc.wantErr {
-				t.Errorf("IsSubscribed() err = %v, wantErr %v", err, tc.wantErr)
-			}
-
-			if got != tc.wantResult {
-				t.Errorf("IsSubscribed() = %v, want %v", got, tc.wantResult)
-			}
+			assertMajorEventIsSubscribed(t, &tc)
 		})
 	}
+}
+
+func assertMajorEventIsSubscribed(t *testing.T, tc *majorEventIsSubscribedCase) {
+	t.Helper()
+
+	if tc.roomID == "" {
+		c := majorevent.New("http://localhost:0", testAPIKey)
+		got, err := c.IsSubscribed(t.Context(), tc.roomID)
+		assertMajorEventBoolResult(t, "IsSubscribed", got, err, tc.wantResult, tc.wantErr)
+		return
+	}
+
+	srv := testutil.NewJSONTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
+		assertMajorEventRequest(t, r, http.MethodGet, majoreventcontracts.SubscriptionsPath+"/"+tc.roomID)
+	})
+
+	c := majorevent.New(srv.URL, testAPIKey)
+	got, err := c.IsSubscribed(t.Context(), tc.roomID)
+	assertMajorEventBoolResult(t, "IsSubscribed", got, err, tc.wantResult, tc.wantErr)
+}
+
+func assertMajorEventBoolResult(t *testing.T, op string, got bool, err error, want, wantErr bool) {
+	t.Helper()
+
+	if (err != nil) != wantErr {
+		t.Errorf("%s() err = %v, wantErr %v", op, err, wantErr)
+	}
+	if got != want {
+		t.Errorf("%s() = %v, want %v", op, got, want)
+	}
+}
+
+func assertMajorEventRequest(t *testing.T, r *http.Request, method, path string) {
+	t.Helper()
+
+	if r.Method != method {
+		t.Errorf("method = %q, want %s", r.Method, method)
+	}
+	if r.URL.Path != path {
+		t.Errorf("path = %q, want %q", r.URL.Path, path)
+	}
+	if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
+		t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
+	}
+}
+
+type majorEventSubscribeCase struct {
+	name       string
+	roomID     string
+	roomName   string
+	statusCode int
+	wantErr    bool
 }
 
 func TestSubscribe(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		roomID     string
-		roomName   string
-		statusCode int
-		wantErr    bool
-	}{
+	tests := []majorEventSubscribeCase{
 		{
 			name:       "성공 (200)",
 			roomID:     "room-123",
@@ -289,55 +303,50 @@ func TestSubscribe(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			if tc.roomID == "" {
-				c := majorevent.New("http://localhost:0", testAPIKey)
-
-				err := c.Subscribe(t.Context(), tc.roomID, tc.roomName)
-				if (err != nil) != tc.wantErr {
-					t.Errorf("Subscribe() err = %v, wantErr %v", err, tc.wantErr)
-				}
-
-				return
-			}
-
-			srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
-				if r.Method != http.MethodPost {
-					t.Errorf("method = %q, want POST", r.Method)
-				}
-
-				if r.URL.Path != majoreventcontracts.SubscriptionsPath {
-					t.Errorf("path = %q, want %q", r.URL.Path, majoreventcontracts.SubscriptionsPath)
-				}
-
-				if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-					t.Errorf("Content-Type = %q, want application/json", ct)
-				}
-
-				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
-				}
-			})
-
-			c := majorevent.New(srv.URL, testAPIKey)
-			err := c.Subscribe(t.Context(), tc.roomID, tc.roomName)
-
-			if (err != nil) != tc.wantErr {
-				t.Errorf("Subscribe() err = %v, wantErr %v", err, tc.wantErr)
-			}
+			assertMajorEventSubscribe(t, &tc)
 		})
 	}
+}
+
+func assertMajorEventSubscribe(t *testing.T, tc *majorEventSubscribeCase) {
+	t.Helper()
+
+	if tc.roomID == "" {
+		c := majorevent.New("http://localhost:0", testAPIKey)
+		assertMajorEventErr(t, "Subscribe", c.Subscribe(t.Context(), tc.roomID, tc.roomName), tc.wantErr)
+		return
+	}
+
+	srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
+		assertMajorEventRequest(t, r, http.MethodPost, majoreventcontracts.SubscriptionsPath)
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", ct)
+		}
+	})
+
+	c := majorevent.New(srv.URL, testAPIKey)
+	assertMajorEventErr(t, "Subscribe", c.Subscribe(t.Context(), tc.roomID, tc.roomName), tc.wantErr)
+}
+
+func assertMajorEventErr(t *testing.T, op string, err error, wantErr bool) {
+	t.Helper()
+
+	if (err != nil) != wantErr {
+		t.Errorf("%s() err = %v, wantErr %v", op, err, wantErr)
+	}
+}
+
+type majorEventUnsubscribeCase struct {
+	name       string
+	roomID     string
+	statusCode int
+	wantErr    bool
 }
 
 func TestUnsubscribe(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		roomID     string
-		statusCode int
-		wantErr    bool
-	}{
+	tests := []majorEventUnsubscribeCase{
 		{
 			name:       "성공 (200)",
 			roomID:     "room-123",
@@ -367,39 +376,24 @@ func TestUnsubscribe(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			if tc.roomID == "" {
-				c := majorevent.New("http://localhost:0", testAPIKey)
-
-				err := c.Unsubscribe(t.Context(), tc.roomID)
-				if (err != nil) != tc.wantErr {
-					t.Errorf("Unsubscribe() err = %v, wantErr %v", err, tc.wantErr)
-				}
-
-				return
-			}
-
-			srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
-				if r.Method != http.MethodDelete {
-					t.Errorf("method = %q, want DELETE", r.Method)
-				}
-
-				wantPath := majoreventcontracts.SubscriptionsPath + "/" + tc.roomID
-				if r.URL.Path != wantPath {
-					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
-				}
-
-				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
-				}
-			})
-
-			c := majorevent.New(srv.URL, testAPIKey)
-			err := c.Unsubscribe(t.Context(), tc.roomID)
-
-			if (err != nil) != tc.wantErr {
-				t.Errorf("Unsubscribe() err = %v, wantErr %v", err, tc.wantErr)
-			}
+			assertMajorEventUnsubscribe(t, &tc)
 		})
 	}
+}
+
+func assertMajorEventUnsubscribe(t *testing.T, tc *majorEventUnsubscribeCase) {
+	t.Helper()
+
+	if tc.roomID == "" {
+		c := majorevent.New("http://localhost:0", testAPIKey)
+		assertMajorEventErr(t, "Unsubscribe", c.Unsubscribe(t.Context(), tc.roomID), tc.wantErr)
+		return
+	}
+
+	srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
+		assertMajorEventRequest(t, r, http.MethodDelete, majoreventcontracts.SubscriptionsPath+"/"+tc.roomID)
+	})
+
+	c := majorevent.New(srv.URL, testAPIKey)
+	assertMajorEventErr(t, "Unsubscribe", c.Unsubscribe(t.Context(), tc.roomID), tc.wantErr)
 }

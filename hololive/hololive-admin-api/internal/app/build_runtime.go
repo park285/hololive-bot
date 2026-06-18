@@ -2,15 +2,18 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kapu/hololive-admin-api/internal/server"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -41,6 +44,9 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *config.Config, logger 
 	if err != nil {
 		return nil, err
 	}
+	if appConfig == nil {
+		return nil, errors.New("config must not be nil")
+	}
 
 	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig, logger)
 	if err != nil {
@@ -65,7 +71,7 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *config.Config, logger 
 
 	ytStack := buildAdminAPIYouTubeStack(ctx, appConfig, infra, foundation, logger)
 	templateAdmin := buildAdminAPITemplateAdmin(infra, logger)
-	authService, err := buildAdminAPIAuthService(ctx, appConfig, infra, logger)
+	authService, err := buildAdminAPIAuthService(ctx, infra, logger)
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "auth service", err)
 	}
@@ -78,6 +84,22 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *config.Config, logger 
 		communityShortsOpsRepository, settingsApplier, systemCollector,
 		templateAdmin, majorEventTriggerClient, logger,
 	)
+	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, authService, handler, alarmMode, logger)
+	if err != nil {
+		return nil, err
+	}
+	return runtime, nil
+}
+
+func buildAdminAPIHTTPRuntime(
+	ctx context.Context,
+	appConfig *config.Config,
+	infra *sharedmodules.InfraModule,
+	authService *authsvc.Service,
+	handler *server.Handler,
+	alarmMode *alarmModeComponents,
+	logger *slog.Logger,
+) (*AdminAPIRuntime, error) {
 	router, err := buildAdminAPIRouter(ctx, appConfig, infra, authService, handler, logger)
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "provide api router", err)
@@ -103,7 +125,11 @@ func newAdminAPIRuntime(
 	router *gin.Engine,
 	cleanup func(),
 ) (*AdminAPIRuntime, error) {
-	servers, err := sharedserver.NewRuntimeHTTPServers(appConfig.Server, router, "hololive-admin-api.http")
+	if appConfig == nil {
+		return nil, errors.New("config must not be nil")
+	}
+
+	servers, err := sharedserver.NewRuntimeHTTPServers(&appConfig.Server, router, "hololive-admin-api.http")
 	if err != nil {
 		return nil, fmt.Errorf("build admin api http servers: %w", err)
 	}

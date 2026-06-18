@@ -90,13 +90,13 @@ func (h *MilestoneHandler) GetMilestones(c *gin.Context) {
 	})
 }
 
-func parseMilestonePagination(c *gin.Context) (int, int, bool) {
-	limit, ok := parseMilestoneLimit(c)
+func parseMilestonePagination(c *gin.Context) (limit, offset int, ok bool) {
+	limit, ok = parseMilestoneLimit(c)
 	if !ok {
 		return 0, 0, false
 	}
 
-	offset, ok := parseMilestoneOffset(c)
+	offset, ok = parseMilestoneOffset(c)
 	if !ok {
 		return 0, 0, false
 	}
