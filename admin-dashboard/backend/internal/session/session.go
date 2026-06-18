@@ -55,11 +55,11 @@ type Options struct {
 	ForceSingleClient bool
 }
 
-func NewStore(ctx context.Context, valkeyURL string, cfg config.SessionConfig) (*Store, error) {
+func NewStore(ctx context.Context, valkeyURL string, cfg *config.SessionConfig) (*Store, error) {
 	return NewStoreWithOptions(ctx, valkeyURL, cfg, Options{})
 }
 
-func NewStoreWithOptions(ctx context.Context, valkeyURL string, cfg config.SessionConfig, opts Options) (*Store, error) {
+func NewStoreWithOptions(ctx context.Context, valkeyURL string, cfg *config.SessionConfig, opts Options) (*Store, error) {
 	addr, password, err := parseValkeyAddress(valkeyURL)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func NewStoreWithOptions(ctx context.Context, valkeyURL string, cfg config.Sessi
 		client.Close()
 		return nil, fmt.Errorf("valkey ping failed: %w", err)
 	}
-	return &Store{client: client, cfg: cfg}, nil
+	return &Store{client: client, cfg: *cfg}, nil
 }
 
 func (s *Store) Close() {
@@ -121,8 +121,10 @@ func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
 	if sess.LastRotatedAt.IsZero() {
 		sess.LastRotatedAt = sess.CreatedAt
 	}
-	if isAbsolutelyExpiredAt(sess, time.Now().UTC()) {
-		_ = s.Delete(ctx, id)
+	if isAbsolutelyExpiredAt(&sess, time.Now().UTC()) {
+		if err := s.Delete(ctx, id); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 	return &sess, nil
@@ -145,7 +147,7 @@ func (s *Store) buildSession(id string, now time.Time) Session {
 	}
 }
 
-func (s *Store) getRaw(ctx context.Context, id string) (string, bool, error) {
+func (s *Store) getRaw(ctx context.Context, id string) (data string, ok bool, err error) {
 	resp := s.client.Do(ctx, s.client.B().Get().Key(sessionKey(id)).Build())
 	if err := resp.Error(); err != nil {
 		if util.IsValkeyNil(err) {
@@ -163,7 +165,7 @@ func (s *Store) getRaw(ctx context.Context, id string) (string, bool, error) {
 	return value, true, nil
 }
 
-func (s *Store) evalInt(ctx context.Context, script string, keys []string, args []string) (int64, error) {
+func (s *Store) evalInt(ctx context.Context, script string, keys, args []string) (int64, error) {
 	cmd := s.client.B().Eval().Script(script).Numkeys(int64(len(keys))).Key(keys...).Arg(args...).Build()
 	resp := s.client.Do(ctx, cmd)
 	if err := resp.Error(); err != nil {
@@ -190,7 +192,7 @@ func ttlSeconds(expiresAt, now time.Time) int64 {
 	return seconds
 }
 
-func isAbsolutelyExpiredAt(sess Session, now time.Time) bool {
+func isAbsolutelyExpiredAt(sess *Session, now time.Time) bool {
 	return !now.Before(sess.AbsoluteExpiresAt)
 }
 

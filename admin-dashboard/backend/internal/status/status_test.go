@@ -24,7 +24,7 @@ func TestEndpointClientsSelectH3ForHTTPS(t *testing.T) {
 func TestHubSubscribeReplaysCappedHistory(t *testing.T) {
 	hub := NewHub(nil)
 	for i := range historyCap + 5 {
-		hub.Publish(SystemStats{ThreadCount: i})
+		hub.Publish(&SystemStats{ThreadCount: i})
 	}
 
 	history, updates, cancel := hub.Subscribe()
@@ -37,7 +37,7 @@ func TestHubSubscribeReplaysCappedHistory(t *testing.T) {
 		t.Fatalf("latest replayed sample = %d, want %d", got, historyCap+4)
 	}
 
-	hub.Publish(SystemStats{ThreadCount: 999})
+	hub.Publish(&SystemStats{ThreadCount: 999})
 	select {
 	case live := <-updates:
 		if live.ThreadCount != 999 {
@@ -56,7 +56,7 @@ func TestSendDropOldestNeverBlocks(t *testing.T) {
 		}
 		done := make(chan struct{})
 		go func() {
-			sendDropOldest(ch, SystemStats{ThreadCount: 1})
+			sendDropOldest(ch, &SystemStats{ThreadCount: 1})
 			close(done)
 		}()
 		select {
@@ -82,7 +82,7 @@ func TestPublishNeverDeadlocksWithRacingConsumer(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		for range 50000 {
-			hub.Publish(SystemStats{})
+			hub.Publish(&SystemStats{})
 		}
 		close(done)
 	}()

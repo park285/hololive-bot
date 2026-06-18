@@ -1,6 +1,7 @@
 package static
 
 import (
+	"bytes"
 	"embed"
 	"io/fs"
 	"mime"
@@ -59,7 +60,12 @@ func (h Handler) serveFile(w http.ResponseWriter, r *http.Request, path, cacheCo
 	if strings.HasSuffix(path, ".html") {
 		contentType = "text/html; charset=utf-8"
 	}
+	info, err := fs.Stat(h.dist, path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", cacheControl)
-	_, _ = w.Write(data)
+	http.ServeContent(w, r, path, info.ModTime(), bytes.NewReader(data))
 }

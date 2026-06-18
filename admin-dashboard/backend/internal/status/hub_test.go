@@ -10,7 +10,7 @@ func TestSendDropOldestDropsOldestWhenFull(t *testing.T) {
 	ch <- SystemStats{ThreadCount: 1}
 	ch <- SystemStats{ThreadCount: 2}
 
-	sendDropOldest(ch, SystemStats{ThreadCount: 3})
+	sendDropOldest(ch, &SystemStats{ThreadCount: 3})
 
 	if len(ch) != 2 {
 		t.Fatalf("buffer len = %d, want 2 (one dropped, one added)", len(ch))
@@ -33,7 +33,7 @@ func TestSubscribePublishUnsubscribeLifecycle(t *testing.T) {
 		t.Fatalf("initial history = %d, want 0", len(history))
 	}
 
-	hub.Publish(SystemStats{ThreadCount: 7})
+	hub.Publish(&SystemStats{ThreadCount: 7})
 	select {
 	case got := <-updates:
 		if got.ThreadCount != 7 {
@@ -48,7 +48,7 @@ func TestSubscribePublishUnsubscribeLifecycle(t *testing.T) {
 		t.Fatal("channel still open after cancel, want closed")
 	}
 
-	hub.Publish(SystemStats{ThreadCount: 9})
+	hub.Publish(&SystemStats{ThreadCount: 9})
 }
 
 func TestSubscribeIsolatesSubscribers(t *testing.T) {
@@ -58,7 +58,7 @@ func TestSubscribeIsolatesSubscribers(t *testing.T) {
 	_, b, cancelB := hub.Subscribe()
 	defer cancelB()
 
-	hub.Publish(SystemStats{ThreadCount: 5})
+	hub.Publish(&SystemStats{ThreadCount: 5})
 
 	for name, ch := range map[string]chan SystemStats{"a": a, "b": b} {
 		select {
@@ -102,7 +102,7 @@ func TestStopTerminatesRunLoopAndIsIdempotent(t *testing.T) {
 func TestTickStopsOnStopSignal(t *testing.T) {
 	hub := NewHub(nil)
 	close(hub.stop)
-	if hub.tick(make(chan time.Time)) {
+	if hub.tick(t.Context(), make(chan time.Time)) {
 		t.Fatal("tick returned true after stop signal, want false")
 	}
 }
@@ -120,7 +120,7 @@ func TestTickProcessesTimerTickAndPublishes(t *testing.T) {
 
 	ticks := make(chan time.Time, 1)
 	ticks <- time.Now()
-	if !hub.tick(ticks) {
+	if !hub.tick(t.Context(), ticks) {
 		t.Fatal("tick returned false on a real tick, want true")
 	}
 	select {

@@ -32,15 +32,26 @@ func (s *Store) refreshOnce(ctx context.Context, id string, idle bool) (RefreshR
 		return RefreshResult{}, false, err
 	}
 	now := time.Now().UTC()
+	result, done, err := s.refreshExistingSession(ctx, id, &sess, now)
+	if done || err != nil {
+		return result, false, err
+	}
+	return s.refreshCAS(ctx, id, idle, data, &sess, now)
+}
+
+func (s *Store) refreshExistingSession(ctx context.Context, id string, sess *Session, now time.Time) (RefreshResult, bool, error) {
 	if isAbsolutelyExpiredAt(sess, now) {
-		_ = s.Delete(ctx, id)
-		return RefreshResult{Kind: RefreshAbsoluteExpired}, false, nil
+		return RefreshResult{Kind: RefreshAbsoluteExpired}, true, s.Delete(ctx, id)
 	}
 	if sess.RotatedTo != nil {
 		result, err := s.refreshResultForRotatedTo(ctx, *sess.RotatedTo)
-		return result, false, err
+		return result, true, err
 	}
-	refreshed := sess
+	return RefreshResult{}, false, nil
+}
+
+func (s *Store) refreshCAS(ctx context.Context, id string, idle bool, data string, sess *Session, now time.Time) (RefreshResult, bool, error) {
+	refreshed := *sess
 	refreshed.ExpiresAt = cappedExpiresAt(now, s.refreshTTL(idle), sess.AbsoluteExpiresAt)
 	refreshedData, err := json.Marshal(refreshed)
 	if err != nil {
@@ -100,25 +111,32 @@ func (s *Store) Rotate(ctx context.Context, oldID string) (*Session, error) {
 		return nil, err
 	}
 	now := time.Now().UTC()
-	if isAbsolutelyExpiredAt(*old, now) {
-		_ = s.Delete(ctx, oldID)
-		return nil, nil
+	if rotated, done, err := s.currentRotation(ctx, oldID, old, now); done || err != nil {
+		return rotated, err
 	}
-	if old.RotatedTo != nil {
-		return s.Get(ctx, *old.RotatedTo)
-	}
-	if now.Sub(old.LastRotatedAt) < s.cfg.RotationInterval {
-		return nil, nil
-	}
-	newSession, oldMarker, err := s.buildRotation(*old, now)
+	newSession, oldMarker, err := s.buildRotation(old, now)
 	if err != nil {
 		return nil, err
 	}
-	rotated, err := s.rotateExec(ctx, oldID, oldData, newSession, oldMarker, now)
+	rotated, err := s.rotateExec(ctx, oldID, oldData, &newSession, &oldMarker, now)
 	if err != nil || !rotated {
 		return nil, err
 	}
 	return &newSession, nil
+}
+
+func (s *Store) currentRotation(ctx context.Context, oldID string, old *Session, now time.Time) (*Session, bool, error) {
+	if isAbsolutelyExpiredAt(old, now) {
+		return nil, true, s.Delete(ctx, oldID)
+	}
+	if old.RotatedTo != nil {
+		rotated, err := s.Get(ctx, *old.RotatedTo)
+		return rotated, true, err
+	}
+	if now.Sub(old.LastRotatedAt) < s.cfg.RotationInterval {
+		return nil, true, nil
+	}
+	return nil, false, nil
 }
 
 func (s *Store) rotateSource(ctx context.Context, oldID string) (string, *Session, error) {
@@ -133,31 +151,31 @@ func (s *Store) rotateSource(ctx context.Context, oldID string) (string, *Sessio
 	return oldData, &old, nil
 }
 
-func (s *Store) buildRotation(old Session, now time.Time) (Session, Session, error) {
+func (s *Store) buildRotation(old *Session, now time.Time) (newSession, oldMarker Session, err error) {
 	newID, err := auth.GenerateSessionID()
 	if err != nil {
 		return Session{}, Session{}, err
 	}
-	newSession := Session{
+	newSession = Session{
 		ID:                newID,
 		CreatedAt:         old.CreatedAt,
 		ExpiresAt:         cappedExpiresAt(now, s.cfg.ExpiryDuration, old.AbsoluteExpiresAt),
 		AbsoluteExpiresAt: old.AbsoluteExpiresAt,
 		LastRotatedAt:     now,
 	}
-	oldMarker := old
+	oldMarker = *old
 	oldMarker.ExpiresAt = cappedExpiresAt(now, s.cfg.GracePeriod, old.AbsoluteExpiresAt)
 	oldMarker.LastRotatedAt = now
 	oldMarker.RotatedTo = &newID
 	return newSession, oldMarker, nil
 }
 
-func (s *Store) rotateExec(ctx context.Context, oldID, oldData string, newSession, oldMarker Session, now time.Time) (bool, error) {
-	newData, err := json.Marshal(newSession)
+func (s *Store) rotateExec(ctx context.Context, oldID, oldData string, newSession, oldMarker *Session, now time.Time) (bool, error) {
+	newData, err := json.Marshal(*newSession)
 	if err != nil {
 		return false, err
 	}
-	markerData, err := json.Marshal(oldMarker)
+	markerData, err := json.Marshal(*oldMarker)
 	if err != nil {
 		return false, err
 	}
@@ -172,14 +190,14 @@ func (s *Store) rotateExec(ctx context.Context, oldID, oldData string, newSessio
 	return ok && result == 1, nil
 }
 
-func intResultAllowingNil(resp valkey.ValkeyResult) (int64, bool, error) {
+func intResultAllowingNil(resp valkey.ValkeyResult) (value int64, ok bool, err error) {
 	if err := resp.Error(); err != nil {
 		if util.IsValkeyNil(err) {
 			return 0, false, nil
 		}
 		return 0, false, err
 	}
-	value, err := resp.AsInt64()
+	value, err = resp.AsInt64()
 	if err != nil {
 		if util.IsValkeyNil(err) {
 			return 0, false, nil

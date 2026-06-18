@@ -15,17 +15,18 @@ import (
 func newTestStore(t *testing.T) (*Store, *miniredis.Miniredis) {
 	t.Helper()
 	mr := miniredis.RunT(t)
-	store, err := NewStoreWithOptions(context.Background(), mr.Addr(), config.DefaultSessionConfig(), Options{DisableCache: true, ForceSingleClient: true})
+	cfg := config.DefaultSessionConfig()
+	store, err := NewStoreWithOptions(context.Background(), mr.Addr(), &cfg, Options{DisableCache: true, ForceSingleClient: true})
 	require.NoError(t, err)
 	t.Cleanup(store.Close)
 	return store, mr
 }
 
-func seedSession(t *testing.T, mr *miniredis.Miniredis, sess Session) {
+func seedSession(t *testing.T, mr *miniredis.Miniredis, sess *Session) {
 	t.Helper()
 	data, err := json.Marshal(sess)
 	require.NoError(t, err)
-	mr.Set(sessionKey(sess.ID), string(data))
+	require.NoError(t, mr.Set(sessionKey(sess.ID), string(data)))
 	mr.SetTTL(sessionKey(sess.ID), time.Hour)
 }
 
@@ -63,7 +64,7 @@ func TestStoreGetDropsAbsolutelyExpired(t *testing.T) {
 		AbsoluteExpiresAt: now.Add(-time.Minute),
 		LastRotatedAt:     now.Add(-9 * time.Hour),
 	}
-	seedSession(t, mr, expired)
+	seedSession(t, mr, &expired)
 
 	loaded, err := store.Get(context.Background(), expired.ID)
 	require.NoError(t, err)
@@ -131,7 +132,7 @@ func TestStoreRotateAfterIntervalCreatesReplacement(t *testing.T) {
 		AbsoluteExpiresAt: now.Add(7 * time.Hour),
 		LastRotatedAt:     now.Add(-time.Hour),
 	}
-	seedSession(t, mr, old)
+	seedSession(t, mr, &old)
 
 	rotated, err := store.Rotate(ctx, old.ID)
 	require.NoError(t, err)

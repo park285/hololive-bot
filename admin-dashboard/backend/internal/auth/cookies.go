@@ -11,6 +11,7 @@ const (
 )
 
 func SetSessionCookie(w http.ResponseWriter, value string, maxAge time.Duration, secure bool) {
+	// #nosec G124 -- Secure follows FORCE_HTTPS; production defaults to true and local HTTP can disable it.
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    value,
@@ -23,11 +24,12 @@ func SetSessionCookie(w http.ResponseWriter, value string, maxAge time.Duration,
 }
 
 func SetCSRFCookie(w http.ResponseWriter, value string, secure bool) {
+	// #nosec G124 -- Secure follows FORCE_HTTPS; production defaults to true and local HTTP can disable it.
 	http.SetCookie(w, &http.Cookie{
 		Name:     CSRFCookieName,
 		Value:    value,
 		Path:     "/",
-		HttpOnly: false,
+		HttpOnly: true,
 		Secure:   secure,
 		SameSite: http.SameSiteStrictMode,
 	})
@@ -35,10 +37,11 @@ func SetCSRFCookie(w http.ResponseWriter, value string, secure bool) {
 
 func ClearAuthCookies(w http.ResponseWriter, secure bool) {
 	clearCookie(w, SessionCookieName, true, secure)
-	clearCookie(w, CSRFCookieName, false, secure)
+	clearCookie(w, CSRFCookieName, true, secure)
 }
 
 func clearCookie(w http.ResponseWriter, name string, httpOnly, secure bool) {
+	// #nosec G124 -- Secure follows FORCE_HTTPS; production defaults to true and local HTTP can disable it.
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    "",

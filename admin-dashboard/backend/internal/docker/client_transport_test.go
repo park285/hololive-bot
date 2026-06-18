@@ -29,28 +29,43 @@ func TestDockerHTTPTransport(t *testing.T) {
 
 			baseURL, transport, err := dockerHTTPTransport(tt.dockerHost)
 			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("dockerHTTPTransport(%q) err = nil, want error", tt.dockerHost)
-				}
+				requireTransportError(t, tt.dockerHost, err)
 				return
 			}
-			if err != nil {
-				t.Fatalf("dockerHTTPTransport(%q) err = %v", tt.dockerHost, err)
-			}
-			if baseURL != tt.wantBaseURL {
-				t.Fatalf("baseURL = %q, want %q", baseURL, tt.wantBaseURL)
-			}
-			httpTransport, ok := transport.(*http.Transport)
-			if !ok {
-				t.Fatalf("transport = %T, want *http.Transport", transport)
-			}
-			hasCustomDial := httpTransport.DialContext != nil && httpTransport != http.DefaultTransport
-			if tt.wantUnix && !hasCustomDial {
-				t.Fatal("unix host must install a custom DialContext")
-			}
-			if !tt.wantUnix && transport != http.DefaultTransport {
-				t.Fatalf("non-unix host must reuse http.DefaultTransport, got %p", httpTransport)
-			}
+			requireTransportSuccess(t, tt.dockerHost, baseURL, tt.wantBaseURL, transport, tt.wantUnix, err)
 		})
+	}
+}
+
+func requireTransportError(t *testing.T, dockerHost string, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("dockerHTTPTransport(%q) err = nil, want error", dockerHost)
+	}
+}
+
+func requireTransportSuccess(t *testing.T, dockerHost, baseURL, wantBaseURL string, transport http.RoundTripper, wantUnix bool, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("dockerHTTPTransport(%q) err = %v", dockerHost, err)
+	}
+	if baseURL != wantBaseURL {
+		t.Fatalf("baseURL = %q, want %q", baseURL, wantBaseURL)
+	}
+	httpTransport, ok := transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport = %T, want *http.Transport", transport)
+	}
+	requireTransportKind(t, httpTransport, transport, wantUnix)
+}
+
+func requireTransportKind(t *testing.T, httpTransport *http.Transport, transport http.RoundTripper, wantUnix bool) {
+	t.Helper()
+	hasCustomDial := httpTransport.DialContext != nil && httpTransport != http.DefaultTransport
+	if wantUnix && !hasCustomDial {
+		t.Fatal("unix host must install a custom DialContext")
+	}
+	if !wantUnix && transport != http.DefaultTransport {
+		t.Fatalf("non-unix host must reuse http.DefaultTransport, got %p", httpTransport)
 	}
 }

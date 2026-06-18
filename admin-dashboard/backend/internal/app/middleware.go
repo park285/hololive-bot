@@ -21,7 +21,7 @@ func (r *Runtime) auth() gin.HandlerFunc {
 		sessionID, clearCookies, err := r.resolveSession(c.Request)
 		if err != nil {
 			if clearCookies {
-				auth.ClearAuthCookies(c.Writer, r.secureCookie())
+				auth.ClearAuthCookies(c.Writer, r.cfg.Security.ForceHTTPS)
 			}
 			httpx.Abort(c, err)
 			return
@@ -31,7 +31,7 @@ func (r *Runtime) auth() gin.HandlerFunc {
 	}
 }
 
-func (r *Runtime) resolveSession(req *http.Request) (string, bool, error) {
+func (r *Runtime) resolveSession(req *http.Request) (sessionID string, clearCookies bool, err error) {
 	cookie, err := req.Cookie(auth.SessionCookieName)
 	if err != nil {
 		return "", false, httpx.Unauthorized()
@@ -122,7 +122,10 @@ func (w *etagWriter) Write(data []byte) (int, error) {
 }
 
 func (w *etagWriter) WriteString(s string) (int, error) {
-	return w.Write([]byte(s))
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return w.body.WriteString(s)
 }
 
 func (w *etagWriter) Status() int {
@@ -146,11 +149,11 @@ func (w *etagWriter) flush(req *http.Request) {
 	}
 	if w.status != http.StatusOK {
 		w.ResponseWriter.WriteHeader(w.status)
-		_, _ = w.ResponseWriter.Write([]byte(w.body.String()))
+		writeBufferedString(w.ResponseWriter, w.body.String())
 		return
 	}
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(w.body.String()))
+	writeHash(h, w.body.String())
 	etag := `"` + strconv.FormatUint(h.Sum64(), 16) + `"`
 	w.ResponseWriter.Header().Set("ETag", etag)
 	if etagMatches(req.Header.Get("If-None-Match"), etag) {
@@ -158,7 +161,19 @@ func (w *etagWriter) flush(req *http.Request) {
 		return
 	}
 	w.ResponseWriter.WriteHeader(http.StatusOK)
-	_, _ = w.ResponseWriter.Write([]byte(w.body.String()))
+	writeBufferedString(w.ResponseWriter, w.body.String())
+}
+
+func writeBufferedString(w gin.ResponseWriter, body string) {
+	if _, err := w.WriteString(body); err != nil {
+		return
+	}
+}
+
+func writeHash(h interface{ Write([]byte) (int, error) }, body string) {
+	if _, err := h.Write([]byte(body)); err != nil {
+		return
+	}
 }
 
 func (r *Runtime) etag() gin.HandlerFunc {
@@ -223,5 +238,3 @@ func forwardedClientIP(req *http.Request) string {
 	}
 	return ""
 }
-
-func (r *Runtime) secureCookie() bool { return r.cfg.Security.ForceHTTPS }

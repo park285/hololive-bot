@@ -16,7 +16,7 @@ import (
 var Version = "dev"
 
 func main() {
-	os.Exit(bootstrap.Run(bootstrap.Options[config.Config, *app.Runtime]{
+	os.Exit(bootstrap.Run(bootstrap.Options[*config.Config, *app.Runtime]{
 		Version: Version,
 		Initialize: func(string) {
 			automaxprocs.Init(nil)
@@ -24,7 +24,7 @@ func main() {
 		},
 		LoadConfig:             config.Load,
 		LoadConfigErrorMessage: "Failed to load admin dashboard config",
-		LoggerConfig: func(cfg config.Config) sharedlogging.Config {
+		LoggerConfig: func(cfg *config.Config) sharedlogging.Config {
 			return sharedlogging.Config{
 				Level:      cfg.Logging.Level,
 				Dir:        cfg.Logging.Dir,
@@ -35,7 +35,7 @@ func main() {
 			}
 		},
 		LoggerFileName: "admin-dashboard.log",
-		LoggerLevel: func(cfg config.Config) string {
+		LoggerLevel: func(cfg *config.Config) string {
 			return cfg.Logging.Level
 		},
 		StartupMessage:    "Admin dashboard starting...",

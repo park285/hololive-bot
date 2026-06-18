@@ -104,7 +104,7 @@ func (h Handler) ChannelStats(c *gin.Context) {
 const maxRequestBodyBytes = 2 << 20
 
 func readJSONBody(r *http.Request) ([]byte, error) {
-	defer r.Body.Close()
+	defer closeRequestBody(r.Body)
 	data, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodyBytes+1))
 	if err != nil {
 		return nil, httpx.BadRequest("invalid json payload")
@@ -112,7 +112,7 @@ func readJSONBody(r *http.Request) ([]byte, error) {
 	if len(data) > maxRequestBodyBytes {
 		return nil, httpx.NewError(http.StatusRequestEntityTooLarge, "request payload too large")
 	}
-	if len(strings.TrimSpace(string(data))) == 0 {
+	if strings.TrimSpace(string(data)) == "" {
 		data = []byte("{}")
 	}
 	if !json.Valid(data) {
@@ -200,7 +200,9 @@ func topChannelStats(stats map[string]json.RawMessage, limit int) map[string]jso
 		var value struct {
 			SubscriberCount int64 `json:"subscriberCount"`
 		}
-		_ = json.Unmarshal(payload, &value)
+		if err := json.Unmarshal(payload, &value); err != nil {
+			continue
+		}
 		items = append(items, item{key: key, sub: value.SubscriberCount})
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -214,4 +216,12 @@ func topChannelStats(stats map[string]json.RawMessage, limit int) map[string]jso
 		trimmed[item.key] = stats[item.key]
 	}
 	return trimmed
+}
+
+func closeRequestBody(body interface{ Close() error }) func() {
+	return func() {
+		if err := body.Close(); err != nil {
+			return
+		}
+	}
 }

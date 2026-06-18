@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -35,7 +36,9 @@ func TestListContainersFiltersToManagedAndSorts(t *testing.T) {
 		gotPath = r.URL.Path
 		gotMethod = r.Method
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(body))
+		if _, err := w.Write([]byte(body)); err != nil {
+			t.Errorf("write docker response: %v", err)
+		}
 	}))
 
 	containers, err := client.ListContainers(context.Background())
@@ -65,8 +68,8 @@ func TestListContainersMaps5xxToInternal(t *testing.T) {
 	if err == nil {
 		t.Fatal("ListContainers error = nil, want error for upstream 500")
 	}
-	appErr, ok := err.(httpx.AppError)
-	if !ok {
+	var appErr *httpx.AppError
+	if !errors.As(err, &appErr) {
 		t.Fatalf("error type = %T, want httpx.AppError", err)
 	}
 	if appErr.Status != http.StatusInternalServerError {
@@ -108,8 +111,8 @@ func TestRestartContainerRejectsUnmanagedBeforeRequest(t *testing.T) {
 	if err == nil {
 		t.Fatal("RestartContainer on unmanaged name error = nil, want 404 gate")
 	}
-	appErr, ok := err.(httpx.AppError)
-	if !ok || appErr.Status != http.StatusNotFound {
+	var appErr *httpx.AppError
+	if !errors.As(err, &appErr) || appErr.Status != http.StatusNotFound {
 		t.Fatalf("error = %v (%T), want httpx.AppError 404", err, err)
 	}
 	if called {
@@ -125,8 +128,8 @@ func TestRestartContainerMaps404FromDocker(t *testing.T) {
 	if err == nil {
 		t.Fatal("RestartContainer error = nil, want 404 mapped from docker")
 	}
-	appErr, ok := err.(httpx.AppError)
-	if !ok || appErr.Status != http.StatusNotFound {
+	var appErr *httpx.AppError
+	if !errors.As(err, &appErr) || appErr.Status != http.StatusNotFound {
 		t.Fatalf("error = %v (%T), want httpx.AppError 404", err, err)
 	}
 }
@@ -139,8 +142,8 @@ func TestRestartContainerMaps5xxToInternal(t *testing.T) {
 	if err == nil {
 		t.Fatal("RestartContainer error = nil, want error for docker 5xx")
 	}
-	appErr, ok := err.(httpx.AppError)
-	if !ok || appErr.Status != http.StatusInternalServerError {
+	var appErr *httpx.AppError
+	if !errors.As(err, &appErr) || appErr.Status != http.StatusInternalServerError {
 		t.Fatalf("error = %v (%T), want httpx.AppError 500", err, err)
 	}
 }

@@ -23,7 +23,7 @@ type endpointClient struct {
 	err    error
 }
 
-func (e endpointClient) resolve() (*http.Client, string) {
+func (e endpointClient) resolve() (client *http.Client, errMsg string) {
 	if e.err != nil {
 		return nil, e.err.Error()
 	}
@@ -99,7 +99,11 @@ func (c *Collector) collectEndpoint(ctx context.Context, endpoint ServiceEndpoin
 		}
 		return status
 	}
-	defer result.resp.Body.Close()
+	defer func() {
+		if err := result.resp.Body.Close(); err != nil {
+			return
+		}
+	}()
 	return ServiceStatus{Name: endpoint.Name, Available: true, ResponseTimeMS: &result.latencyMS}
 }
 
@@ -155,7 +159,10 @@ func memoryStats() (total, used uint64) {
 			continue
 		}
 		key := strings.TrimSuffix(fields[0], ":")
-		value, _ := strconv.ParseUint(fields[1], 10, 64)
+		value, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
 		values[key] = value * 1024
 	}
 	total = values["MemTotal"]
@@ -166,7 +173,7 @@ func memoryStats() (total, used uint64) {
 	return total, used
 }
 
-func loadAverage() (float64, float64, float64) {
+func loadAverage() (one, five, fifteen float64) {
 	data, err := osReadFile("/proc/loadavg")
 	if err != nil {
 		return 0, 0, 0
@@ -175,9 +182,18 @@ func loadAverage() (float64, float64, float64) {
 	if len(fields) < 3 {
 		return 0, 0, 0
 	}
-	one, _ := strconv.ParseFloat(fields[0], 64)
-	five, _ := strconv.ParseFloat(fields[1], 64)
-	fifteen, _ := strconv.ParseFloat(fields[2], 64)
+	one, err = strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return 0, 0, 0
+	}
+	five, err = strconv.ParseFloat(fields[1], 64)
+	if err != nil {
+		return 0, 0, 0
+	}
+	fifteen, err = strconv.ParseFloat(fields[2], 64)
+	if err != nil {
+		return 0, 0, 0
+	}
 	return one, five, fifteen
 }
 
@@ -187,15 +203,27 @@ func threadCount() int {
 		return 0
 	}
 	for line := range strings.SplitSeq(string(data), "\n") {
-		if strings.HasPrefix(line, "Threads:") {
-			fields := strings.Fields(line)
-			if len(fields) == 2 {
-				value, _ := strconv.Atoi(fields[1])
-				return value
-			}
+		value, ok := parseThreadLine(line)
+		if ok {
+			return value
 		}
 	}
 	return 0
+}
+
+func parseThreadLine(line string) (int, bool) {
+	if !strings.HasPrefix(line, "Threads:") {
+		return 0, false
+	}
+	fields := strings.Fields(line)
+	if len(fields) != 2 {
+		return 0, true
+	}
+	value, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return 0, true
+	}
+	return value, true
 }
 
 type procSampler struct {
@@ -231,14 +259,36 @@ func readCPUSample() (idle, total uint64, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
-	fields := strings.Fields(strings.SplitN(string(data), "\n", 2)[0])
+	lines := strings.SplitN(string(data), "\n", 2)
+	if len(lines) == 0 {
+		return 0, 0, false
+	}
+	fields := strings.Fields(lines[0])
 	if len(fields) < 5 || fields[0] != "cpu" {
 		return 0, 0, false
 	}
-	values := make([]uint64, 0, len(fields)-1)
-	for _, field := range fields[1:] {
-		value, _ := strconv.ParseUint(field, 10, 64)
+	values, ok := parseCPUFields(fields[1:])
+	if !ok {
+		return 0, 0, false
+	}
+	return cpuTotals(values)
+}
+
+func parseCPUFields(fields []string) ([]uint64, bool) {
+	values := make([]uint64, 0, len(fields))
+	for _, field := range fields {
+		value, err := strconv.ParseUint(field, 10, 64)
+		if err != nil {
+			return nil, false
+		}
 		values = append(values, value)
+	}
+	return values, true
+}
+
+func cpuTotals(values []uint64) (idle, total uint64, ok bool) {
+	if len(values) < 4 {
+		return 0, 0, false
 	}
 	idle = values[3]
 	if len(values) > 4 {

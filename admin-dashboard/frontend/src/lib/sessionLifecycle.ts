@@ -1,3 +1,4 @@
+import { clearCSRFToken } from "@/api/client";
 import { authApi, type SessionStatusResponse } from "@/api/core";
 import { broadcastSessionLogout } from "@/hooks/useActivityDetection";
 import { queryClient } from "@/lib/queryClient";
@@ -29,6 +30,7 @@ export const clearClientSession = (broadcast = false): void => {
 		broadcastSessionLogout();
 	}
 
+	clearCSRFToken();
 	useAuthStore.getState().logout();
 	useSessionWarningStore.getState().resetSessionWarnings();
 	queryClient.clear();

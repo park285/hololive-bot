@@ -4,7 +4,7 @@ import type {
 	Container as GeneratedContainer,
 	DockerContainerListResponse as GeneratedDockerContainerListResponse,
 } from "@/api/generated/data-contracts";
-import apiClient from "./client";
+import apiClient, { clearCSRFToken, setCSRFToken } from "./client";
 
 export interface HeartbeatResponse {
 	status?: string;
@@ -12,6 +12,7 @@ export interface HeartbeatResponse {
 	absolute_expires_at?: number | null;
 	idle_rejected?: boolean | null;
 	absolute_expired?: boolean | null;
+	csrf_token?: string | null;
 	error?: string;
 }
 
@@ -153,6 +154,7 @@ export const authApi = {
 			throw new Error(data?.message ?? "인증에 실패했습니다.");
 		}
 
+		setCSRFToken(data.csrf_token);
 		return data;
 	},
 
@@ -162,6 +164,7 @@ export const authApi = {
 		>(
 			"/auth/logout",
 		);
+		clearCSRFToken();
 		return normalizeStatusOnly(data);
 	},
 
@@ -180,10 +183,17 @@ export const authApi = {
 				{ idle },
 				{ signal },
 			);
+			if (response.data.csrf_token !== undefined) {
+				setCSRFToken(response.data.csrf_token);
+			}
 			return response.data;
 		} catch (error) {
 			if (isAxiosError(error) && error.response?.data) {
-				return error.response.data as HeartbeatResponse;
+				const response = error.response.data as HeartbeatResponse;
+				if (response.csrf_token !== undefined) {
+					setCSRFToken(response.csrf_token);
+				}
+				return response;
 			}
 			throw error;
 		}

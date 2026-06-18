@@ -21,7 +21,9 @@ func TestProxyRoundTripOverHTTP(t *testing.T) {
 		gotAPIKey = r.Header.Get("X-API-Key")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Errorf("write upstream response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -64,7 +66,9 @@ func TestProxyRoundTripMapsUpstreamErrorOverHTTP(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":"bad input","code":"E_BAD"}`))
+		if _, err := w.Write([]byte(`{"error":"bad input","code":"E_BAD"}`)); err != nil {
+			t.Errorf("write upstream error response: %v", err)
+		}
 	}))
 	defer server.Close()
 

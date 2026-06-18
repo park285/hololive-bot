@@ -36,32 +36,38 @@ func NewHub(endpoints []ServiceEndpoint) *Hub {
 }
 
 func (h *Hub) Start() {
-	go h.run()
+	h.StartContext(context.Background())
 }
 
-func (h *Hub) run() {
+func (h *Hub) StartContext(ctx context.Context) {
+	go h.run(ctx)
+}
+
+func (h *Hub) run(ctx context.Context) {
 	defer close(h.done)
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-	for h.tick(ticker.C) {
+	for h.tick(ctx, ticker.C) {
 	}
 }
 
-func (h *Hub) tick(tick <-chan time.Time) bool {
+func (h *Hub) tick(ctx context.Context, tick <-chan time.Time) bool {
 	select {
+	case <-ctx.Done():
+		return false
 	case <-h.stop:
 		return false
 	case <-tick:
-		h.broadcastSample()
+		h.broadcastSample(ctx)
 		return true
 	}
 }
 
-func (h *Hub) broadcastSample() {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+func (h *Hub) broadcastSample(parent context.Context) {
+	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
+	defer cancel()
 	stats := h.collect(ctx)
-	cancel()
-	h.Publish(stats)
+	h.Publish(&stats)
 }
 
 func (h *Hub) Stop() {
@@ -74,7 +80,7 @@ func (h *Hub) Stop() {
 	<-h.done
 }
 
-func (h *Hub) Subscribe() ([]SystemStats, chan SystemStats, func()) {
+func (h *Hub) Subscribe() (history []SystemStats, updates chan SystemStats, unsubscribe func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.nextID++
@@ -89,10 +95,10 @@ func (h *Hub) Subscribe() ([]SystemStats, chan SystemStats, func()) {
 	}
 }
 
-func (h *Hub) Publish(stats SystemStats) {
+func (h *Hub) Publish(stats *SystemStats) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.history = append(h.history, stats)
+	h.history = append(h.history, *stats)
 	if len(h.history) > historyCap {
 		h.history = h.history[len(h.history)-historyCap:]
 	}
@@ -101,7 +107,7 @@ func (h *Hub) Publish(stats SystemStats) {
 	}
 }
 
-func sendDropOldest(ch chan SystemStats, stats SystemStats) {
+func sendDropOldest(ch chan SystemStats, stats *SystemStats) {
 	if trySend(ch, stats) {
 		return
 	}
@@ -112,9 +118,9 @@ func sendDropOldest(ch chan SystemStats, stats SystemStats) {
 	trySend(ch, stats)
 }
 
-func trySend(ch chan SystemStats, stats SystemStats) bool {
+func trySend(ch chan SystemStats, stats *SystemStats) bool {
 	select {
-	case ch <- stats:
+	case ch <- *stats:
 		return true
 	default:
 		return false
@@ -126,7 +132,8 @@ func (h *Hub) collect(ctx context.Context) SystemStats {
 	load1, load5, load15 := loadAverage()
 	threadCount := threadCount()
 	adminGoroutines := runtime.NumGoroutine()
-	serviceRuntime := []ServiceRuntimeStats{{Name: "admin-dashboard", Count: adminGoroutines, MetricKind: RuntimeMetricGoroutine, Available: true}}
+	serviceRuntime := make([]ServiceRuntimeStats, 0, len(h.endpoints)+1)
+	serviceRuntime = append(serviceRuntime, ServiceRuntimeStats{Name: "admin-dashboard", Count: adminGoroutines, MetricKind: RuntimeMetricGoroutine, Available: true})
 	serviceRuntime = append(serviceRuntime, h.externalRuntimeStats(ctx)...)
 	totalGo := 0
 	for _, service := range serviceRuntime {
@@ -174,7 +181,11 @@ func (h *Hub) fetchRuntime(ctx context.Context, endpoint ServiceEndpoint) Servic
 	if result.errMsg != "" {
 		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &result.errMsg}
 	}
-	defer result.resp.Body.Close()
+	defer func() {
+		if err := result.resp.Body.Close(); err != nil {
+			return
+		}
+	}()
 	var payload healthPayload
 	if err := json.NewDecoder(result.resp.Body).Decode(&payload); err != nil {
 		msg := "invalid health payload: " + err.Error()

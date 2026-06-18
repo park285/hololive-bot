@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -72,7 +73,7 @@ type Config struct {
 	TrustedForwarders bool
 }
 
-func Load() (Config, error) {
+func Load() (*Config, error) {
 	env := envutil.String("ENV", "production")
 	allowLocalhostInProd := envutil.Bool("ALLOW_LOCALHOST_IN_PROD", false)
 	enableSwagger := envutil.Bool("ENABLE_SWAGGER_UI", env != "production")
@@ -80,23 +81,23 @@ func Load() (Config, error) {
 
 	adminHash, sessionSecret, err := loadCredentials()
 	if err != nil {
-		return Config{}, err
+		return nil, err
 	}
 
 	port, err := parsePort(envutil.Int("PORT", 30190))
 	if err != nil {
-		return Config{}, err
+		return nil, err
 	}
 	valkeyURL, err := validateValkeyURL(envutil.String("VALKEY_URL", "valkey-cache:6379"))
 	if err != nil {
-		return Config{}, err
+		return nil, err
 	}
 	sessionCfg, err := LoadSessionConfig()
 	if err != nil {
-		return Config{}, err
+		return nil, err
 	}
 
-	return Config{
+	return &Config{
 		Port:              port,
 		Env:               env,
 		AdminUser:         envutil.String("ADMIN_USER", "admin"),
@@ -134,8 +135,8 @@ func aliasOrDefault(def string, keys ...string) string {
 	return def
 }
 
-func loadCredentials() (string, string, error) {
-	adminHash, err := requiredAlias("ADMIN_PASS_HASH", "ADMIN_PASS_BCRYPT")
+func loadCredentials() (adminHash, sessionSecret string, err error) {
+	adminHash, err = requiredAlias("ADMIN_PASS_HASH", "ADMIN_PASS_BCRYPT")
 	if err != nil {
 		return "", "", err
 	}
@@ -143,7 +144,7 @@ func loadCredentials() (string, string, error) {
 	if err := bcrypt.CompareHashAndPassword([]byte(adminHash), []byte("")); err != nil && !isBcryptPasswordMismatch(err) {
 		return "", "", fmt.Errorf("invalid ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt hash: %w", err)
 	}
-	sessionSecret, err := requiredAlias("SESSION_SECRET", "ADMIN_SECRET_KEY")
+	sessionSecret, err = requiredAlias("SESSION_SECRET", "ADMIN_SECRET_KEY")
 	if err != nil {
 		return "", "", err
 	}
@@ -153,7 +154,7 @@ func loadCredentials() (string, string, error) {
 	return adminHash, sessionSecret, nil
 }
 
-func (c Config) ListenAddr() string {
+func (c *Config) ListenAddr() string {
 	return net.JoinHostPort("0.0.0.0", strconv.Itoa(int(c.Port)))
 }
 
@@ -180,10 +181,11 @@ func LoadSessionConfig() (SessionConfig, error) {
 	cfg.AbsoluteWarningWindow = millisEnv("SESSION_ABSOLUTE_WARNING_WINDOW_MS", defaults.AbsoluteWarningWindow)
 	cfg.IdleTimeout = millisEnv("SESSION_IDLE_TIMEOUT_MS", defaults.IdleTimeout)
 	cfg.IdleWarningTimeout = millisEnv("SESSION_IDLE_WARNING_TIMEOUT_MS", defaults.IdleWarningTimeout)
-	return cfg, cfg.Validate()
+	err := (&cfg).Validate()
+	return cfg, err
 }
 
-func (c SessionConfig) Validate() error {
+func (c *SessionConfig) Validate() error {
 	if c.HeartbeatInterval < time.Second {
 		return fmt.Errorf("SESSION_HEARTBEAT_INTERVAL_MS must be at least 1000")
 	}
@@ -202,7 +204,7 @@ func (c SessionConfig) Validate() error {
 	return c.validateTTLWindows()
 }
 
-func (c SessionConfig) validateTTLWindows() error {
+func (c *SessionConfig) validateTTLWindows() error {
 	if c.IdleSessionTTL < time.Second {
 		return fmt.Errorf("idle_session_ttl must be at least 1 second")
 	}
@@ -331,7 +333,7 @@ func normalizeEscapedBcryptHash(hash string) string {
 }
 
 func isBcryptPasswordMismatch(err error) bool {
-	return err == bcrypt.ErrMismatchedHashAndPassword
+	return errors.Is(err, bcrypt.ErrMismatchedHashAndPassword)
 }
 
 func validateValkeyURL(value string) (string, error) {

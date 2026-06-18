@@ -61,12 +61,22 @@ func NewClient(dockerHost string) (*Client, error) {
 }
 
 func (c *Client) Available(ctx context.Context) bool {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/_ping", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/_ping", http.NoBody)
+	if err != nil {
+		return false
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	if resp == nil {
+		return false
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			return
+		}
+	}()
 	return resp.StatusCode >= 200 && resp.StatusCode < 300
 }
 
@@ -79,8 +89,8 @@ func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 		return nil, err
 	}
 	containers := make([]Container, 0, len(summaries))
-	for _, summary := range summaries {
-		if mapped, ok := c.mapContainer(summary); ok {
+	for i := range summaries {
+		if mapped, ok := c.mapContainer(&summaries[i]); ok {
 			containers = append(containers, mapped)
 		}
 	}
@@ -99,12 +109,22 @@ func (c *Client) cachedContainers() ([]Container, bool) {
 }
 
 func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummary, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/containers/json?all=true", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/containers/json?all=true", http.NoBody)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
 	}
-	defer resp.Body.Close()
+	if resp == nil {
+		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			return
+		}
+	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, httpx.Internal(fmt.Errorf("docker list containers returned %s", resp.Status))
 	}
@@ -157,12 +177,18 @@ func (c *Client) action(ctx context.Context, name, action string) error {
 	if !c.IsManaged(name) {
 		return httpx.NewError(http.StatusNotFound, "container not found")
 	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/containers/"+url.PathEscape(name)+"/"+action, nil)
-	resp, err := c.http.Do(req)
+	resp, err := c.doAction(ctx, name, action)
 	if err != nil {
+		return err
+	}
+	if resp == nil {
 		return httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			return
+		}
+	}()
 	if resp.StatusCode == http.StatusNotFound {
 		return httpx.NewError(http.StatusNotFound, "container not found")
 	}
@@ -173,6 +199,18 @@ func (c *Client) action(ctx context.Context, name, action string) error {
 	return nil
 }
 
+func (c *Client) doAction(ctx context.Context, name, action string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/containers/"+url.PathEscape(name)+"/"+action, http.NoBody)
+	if err != nil {
+		return nil, httpx.Internal(err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+	}
+	return resp, nil
+}
+
 func (c *Client) clearCache() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -180,7 +218,7 @@ func (c *Client) clearCache() {
 	c.cachedAt = time.Time{}
 }
 
-func (c *Client) mapContainer(summary containerSummary) (Container, bool) {
+func (c *Client) mapContainer(summary *containerSummary) (Container, bool) {
 	if len(summary.Names) == 0 {
 		return Container{}, false
 	}

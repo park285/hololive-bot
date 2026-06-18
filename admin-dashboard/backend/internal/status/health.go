@@ -20,7 +20,7 @@ func doHealthGET(ctx context.Context, ec endpointClient, endpoint ServiceEndpoin
 		return healthResult{errMsg: errMsg}
 	}
 	start := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.URL, "/")+endpoint.HealthPath, http.NoBody)
 	if err != nil {
 		return healthResult{errMsg: err.Error()}
 	}
@@ -28,11 +28,24 @@ func doHealthGET(ctx context.Context, ec endpointClient, endpoint ServiceEndpoin
 	if err != nil {
 		return healthResult{errMsg: err.Error()}
 	}
-	latency := uint64(time.Since(start).Milliseconds())
+	if resp == nil {
+		return healthResult{errMsg: "empty response"}
+	}
+	latency := elapsedMillis(start)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		msg := "status: " + resp.Status
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			return healthResult{latencyMS: latency, measured: true, errMsg: err.Error()}
+		}
 		return healthResult{latencyMS: latency, measured: true, errMsg: msg}
 	}
 	return healthResult{resp: resp, latencyMS: latency, measured: true}
+}
+
+func elapsedMillis(start time.Time) uint64 {
+	elapsed := time.Since(start)
+	if elapsed <= 0 {
+		return 0
+	}
+	return uint64(elapsed / time.Millisecond)
 }

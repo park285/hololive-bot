@@ -138,7 +138,7 @@ func newTestRuntime(t *testing.T, store sessionStore, mutate func(*config.Config
 }
 
 func signedSessionCookie(id string) *http.Cookie {
-	return &http.Cookie{Name: auth.SessionCookieName, Value: auth.SignSessionID(id, testSecret)}
+	return &http.Cookie{Name: auth.SessionCookieName, Value: auth.SignSessionID(id, testSecret), Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
 }
 
 func doRequest(handler http.Handler, req *http.Request) *httptest.ResponseRecorder {
@@ -158,7 +158,7 @@ func TestHealthAndSecurityHeaders(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, func(cfg *config.Config) {
 		cfg.Security.ForceHTTPS = true
 	})
-	rec := doRequest(rt.Handler(), httptest.NewRequest(http.MethodGet, "/health", nil))
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "ok", decodeBody(t, rec)["status"])
@@ -172,16 +172,16 @@ func TestAuthMiddlewareRejections(t *testing.T) {
 	rt := newTestRuntime(t, storeWith(nil), nil)
 	handler := rt.Handler()
 
-	rec := doRequest(handler, httptest.NewRequest(http.MethodGet, "/admin/api/auth/session", nil))
+	rec := doRequest(handler, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody))
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/auth/session", nil)
-	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: "tampered.signature"})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: "tampered.signature", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	rec = doRequest(handler, req)
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 	require.Contains(t, rec.Header().Get("Set-Cookie"), auth.SessionCookieName+"=;")
 
-	req = httptest.NewRequest(http.MethodGet, "/admin/api/auth/session", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie("missing-session"))
 	rec = doRequest(handler, req)
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -194,7 +194,7 @@ func TestAuthMiddlewareStoreError(t *testing.T) {
 		},
 	}, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/auth/session", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie("any"))
 	rec := doRequest(rt.Handler(), req)
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
@@ -204,7 +204,7 @@ func TestSessionStatusAuthenticated(t *testing.T) {
 	sess := liveSession("active-session")
 	rt := newTestRuntime(t, storeWith(sess), nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/auth/session", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	rec := doRequest(rt.Handler(), req)
 
@@ -228,11 +228,11 @@ func TestRotatedSessionOnlyAllowsHeartbeat(t *testing.T) {
 	})
 	handler := rt.Handler()
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/auth/session", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusUnauthorized, doRequest(handler, req).Code)
 
-	req = httptest.NewRequest(http.MethodPost, "/admin/api/auth/heartbeat", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/heartbeat", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -243,11 +243,11 @@ func TestLoginValidation(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
 	handler := rt.Handler()
 
-	rec := doRequest(handler, httptest.NewRequest(http.MethodPost, "/admin/api/auth/login", strings.NewReader("not-json")))
+	rec := doRequest(handler, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/login", strings.NewReader("not-json")))
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 
 	body := strings.NewReader(`{"username":"admin","password":"wrong"}`)
-	rec = doRequest(handler, httptest.NewRequest(http.MethodPost, "/admin/api/auth/login", body))
+	rec = doRequest(handler, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/login", body))
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
@@ -259,7 +259,7 @@ func TestLoginSuccessSetsCookies(t *testing.T) {
 	}, nil)
 
 	body := strings.NewReader(`{"username":"admin","password":"correct-password"}`)
-	rec := doRequest(rt.Handler(), httptest.NewRequest(http.MethodPost, "/admin/api/auth/login", body))
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/login", body))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	payload := decodeBody(t, rec)
@@ -280,7 +280,7 @@ func TestLoginRateLimited(t *testing.T) {
 		rt.rateLimiter.RecordFailure("192.0.2.1")
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/auth/login", strings.NewReader(`{"username":"admin","password":"correct-password"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/login", strings.NewReader(`{"username":"admin","password":"correct-password"}`))
 	req.RemoteAddr = "192.0.2.1:50000"
 	rec := doRequest(rt.Handler(), req)
 
@@ -293,15 +293,15 @@ func TestCSRFEnforcement(t *testing.T) {
 	rt := newTestRuntime(t, storeWith(sess), nil)
 	handler := rt.Handler()
 
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/auth/logout", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusForbidden, doRequest(handler, req).Code)
 
 	csrf, err := auth.NewCSRFToken(sess.ID, testSecret)
 	require.NoError(t, err)
-	req = httptest.NewRequest(http.MethodPost, "/admin/api/auth/logout", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
-	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf})
+	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	req.Header.Set("X-CSRF-Token", csrf)
 	require.Equal(t, http.StatusOK, doRequest(handler, req).Code)
 }
@@ -312,7 +312,7 @@ func TestCSRFMonitorModeAllows(t *testing.T) {
 		cfg.Security.CSRFMode = config.SecurityMonitor
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/auth/logout", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusOK, doRequest(rt.Handler(), req).Code)
 }
@@ -346,7 +346,7 @@ func TestHeartbeatResultContract(t *testing.T) {
 				cfg.Security.CSRFMode = config.SecurityOff
 			})
 
-			req := httptest.NewRequest(http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader(`{"idle":false}`))
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader(`{"idle":false}`))
 			req.AddCookie(signedSessionCookie(sess.ID))
 			rec := doRequest(rt.Handler(), req)
 
@@ -362,7 +362,7 @@ func TestHeartbeatInvalidPayload(t *testing.T) {
 		cfg.Security.CSRFMode = config.SecurityOff
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader("{broken"))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader("{broken"))
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusBadRequest, doRequest(rt.Handler(), req).Code)
 }
@@ -374,17 +374,17 @@ func TestDockerHandlersWithoutDocker(t *testing.T) {
 	})
 	handler := rt.Handler()
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/docker/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/health", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, false, decodeBody(t, rec)["available"])
 
-	req = httptest.NewRequest(http.MethodGet, "/admin/api/docker/containers", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/containers", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusServiceUnavailable, doRequest(handler, req).Code)
 
-	req = httptest.NewRequest(http.MethodPost, "/admin/api/docker/containers/bot/restart", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/docker/containers/bot/restart", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusServiceUnavailable, doRequest(handler, req).Code)
 }
@@ -394,14 +394,14 @@ func TestETagRoundTrip(t *testing.T) {
 	rt := newTestRuntime(t, storeWith(sess), nil)
 	handler := rt.Handler()
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/auth/session", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	etag := rec.Header().Get("ETag")
 	require.NotEmpty(t, etag)
 
-	req = httptest.NewRequest(http.MethodGet, "/admin/api/auth/session", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	req.Header.Set("If-None-Match", etag)
 	rec = doRequest(handler, req)
@@ -415,7 +415,7 @@ func TestSPAFallbackServesIndexWith200(t *testing.T) {
 		"index.html": &fstest.MapFile{Data: []byte("<!doctype html><html lang=\"ko\"></html>")},
 	})
 	for _, path := range []string{"/", "/dashboard/stats", "/login"} {
-		rec := doRequest(rt.Handler(), httptest.NewRequest(http.MethodGet, path, nil))
+		rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, http.NoBody))
 		require.Equal(t, http.StatusOK, rec.Code, "path %s", path)
 		require.Contains(t, rec.Header().Get("Content-Type"), "text/html", "path %s", path)
 		require.Contains(t, rec.Body.String(), "<!doctype html>", "path %s", path)
@@ -424,7 +424,7 @@ func TestSPAFallbackServesIndexWith200(t *testing.T) {
 
 func TestUnknownAdminAPIRouteIs404JSON(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
-	rec := doRequest(rt.Handler(), httptest.NewRequest(http.MethodGet, "/admin/api/does-not-exist", nil))
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/does-not-exist", http.NoBody))
 
 	require.Equal(t, http.StatusNotFound, rec.Code)
 	require.Equal(t, "Not found", decodeBody(t, rec)["error"])
@@ -432,7 +432,7 @@ func TestUnknownAdminAPIRouteIs404JSON(t *testing.T) {
 
 func TestMethodNotAllowedIsJSON(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
-	rec := doRequest(rt.Handler(), httptest.NewRequest(http.MethodPut, "/admin/api/auth/login", nil))
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/admin/api/auth/login", http.NoBody))
 
 	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 	require.Equal(t, "Method not allowed", decodeBody(t, rec)["error"])
@@ -442,7 +442,7 @@ func TestWSOriginRejected(t *testing.T) {
 	sess := liveSession("ws-session")
 	rt := newTestRuntime(t, storeWith(sess), nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/ws/system-stats", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/ws/system-stats", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	req.Header.Set("Origin", "https://evil.test")
 	require.Equal(t, http.StatusForbidden, doRequest(rt.Handler(), req).Code)
@@ -451,8 +451,8 @@ func TestWSOriginRejected(t *testing.T) {
 func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
 	sess := liveSession("ws-replay-session")
 	rt := newTestRuntime(t, storeWith(sess), nil)
-	rt.statsHub.Publish(status.SystemStats{ThreadCount: 1})
-	rt.statsHub.Publish(status.SystemStats{ThreadCount: 2})
+	rt.statsHub.Publish(&status.SystemStats{ThreadCount: 1})
+	rt.statsHub.Publish(&status.SystemStats{ThreadCount: 2})
 
 	server := httptest.NewServer(rt.Handler())
 	defer server.Close()
@@ -464,9 +464,13 @@ func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
 		"ws"+strings.TrimPrefix(server.URL, "http")+"/admin/api/ws/system-stats", header)
 	require.NoError(t, err)
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() {
+			require.NoError(t, resp.Body.Close())
+		}()
 	}
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	for want := 1; want <= 2; want++ {
 		require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
@@ -483,12 +487,12 @@ func TestOpenAPIToggle(t *testing.T) {
 		cfg.EnableSwaggerUI = false
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/openapi.json", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/openapi.json", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusNotFound, doRequest(rt.Handler(), req).Code)
 
 	rt = newTestRuntime(t, storeWith(sess), nil)
-	req = httptest.NewRequest(http.MethodGet, "/admin/api/openapi.json", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/openapi.json", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	rec := doRequest(rt.Handler(), req)
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -499,7 +503,7 @@ func TestClientIPRespectsTrustedForwarders(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, func(cfg *config.Config) {
 		cfg.TrustedForwarders = true
 	})
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
 	req.RemoteAddr = "10.0.0.9:4321"
 	req.Header.Set("X-Forwarded-For", "203.0.113.7, 10.0.0.1")
 	require.Equal(t, "203.0.113.7", rt.clientIP(req))

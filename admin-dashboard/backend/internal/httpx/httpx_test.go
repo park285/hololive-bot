@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -35,7 +36,7 @@ func TestAbortMapsAppErrorAndStopsChain(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", http.NoBody)
 
 	Abort(c, Forbidden())
 
@@ -53,7 +54,7 @@ func TestAppErrorUnwrap(t *testing.T) {
 }
 
 func TestDecodeJSONRejectsUnknownFields(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"known":1,"unknown":2}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"known":1,"unknown":2}`))
 	var dst struct {
 		Known int `json:"known"`
 	}
@@ -62,13 +63,13 @@ func TestDecodeJSONRejectsUnknownFields(t *testing.T) {
 
 func TestDecodeJSONHonorsLimit(t *testing.T) {
 	payload := `{"value":"` + strings.Repeat("x", 100) + `"}`
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(payload))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(payload))
 	var dst struct {
 		Value string `json:"value"`
 	}
 	require.Error(t, DecodeJSON(req, &dst, 10))
 
-	req = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"ok"}`))
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"value":"ok"}`))
 	require.NoError(t, DecodeJSON(req, &dst, 1024))
 	require.Equal(t, "ok", dst.Value)
 }

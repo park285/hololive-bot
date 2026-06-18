@@ -21,7 +21,9 @@ func newStubCollector(name, healthPath string, srv *httptest.Server) *Collector 
 	return c
 }
 
-func newStubHub(name, healthPath string, srv *httptest.Server) *Hub {
+func newStubHub(srv *httptest.Server) *Hub {
+	const name = "svc"
+	const healthPath = "/health"
 	endpoint := ServiceEndpoint{Name: name, URL: srv.URL, HealthPath: healthPath}
 	return &Hub{
 		endpoints: []ServiceEndpoint{endpoint},
@@ -85,11 +87,13 @@ func TestFetchRuntimeSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(healthPayload{Goroutines: 42})
+		if err := json.NewEncoder(w).Encode(healthPayload{Goroutines: 42}); err != nil {
+			t.Errorf("encode health response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
-	h := newStubHub("svc", "/health", srv)
+	h := newStubHub(srv)
 	stat := h.fetchRuntime(t.Context(), h.endpoints[0])
 
 	if gotPath != "/health" {
@@ -118,7 +122,7 @@ func TestFetchRuntimeErrorStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	h := newStubHub("svc", "/health", srv)
+	h := newStubHub(srv)
 	stat := h.fetchRuntime(t.Context(), h.endpoints[0])
 
 	if stat.Available {
@@ -138,15 +142,17 @@ func TestFetchRuntimeErrorStatus(t *testing.T) {
 func TestFetchRuntimeComponentFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(healthPayload{
+		if err := json.NewEncoder(w).Encode(healthPayload{
 			Components: map[string]healthComponent{
 				"app": {Detail: map[string]any{"goroutines": float64(7)}},
 			},
-		})
+		}); err != nil {
+			t.Errorf("encode component health response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
-	h := newStubHub("svc", "/health", srv)
+	h := newStubHub(srv)
 	stat := h.fetchRuntime(t.Context(), h.endpoints[0])
 
 	if !stat.Available {
@@ -160,11 +166,13 @@ func TestFetchRuntimeComponentFallback(t *testing.T) {
 func TestFetchRuntimeInvalidPayload(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("not json"))
+		if _, err := w.Write([]byte("not json")); err != nil {
+			t.Errorf("write invalid health response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
-	h := newStubHub("svc", "/health", srv)
+	h := newStubHub(srv)
 	stat := h.fetchRuntime(t.Context(), h.endpoints[0])
 
 	if stat.Available {

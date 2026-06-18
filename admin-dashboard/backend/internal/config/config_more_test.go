@@ -79,7 +79,8 @@ func TestSessionConfigValidateFailureBranches(t *testing.T) {
 
 func TestSessionConfigValidateDefaultPasses(t *testing.T) {
 	t.Parallel()
-	if err := DefaultSessionConfig().Validate(); err != nil {
+	cfg := DefaultSessionConfig()
+	if err := (&cfg).Validate(); err != nil {
 		t.Fatalf("DefaultSessionConfig().Validate() = %v, want nil", err)
 	}
 }
@@ -108,7 +109,8 @@ func TestValidateTTLWindowsFailureBranches(t *testing.T) {
 
 func TestValidateTTLWindowsDefaultPasses(t *testing.T) {
 	t.Parallel()
-	if err := DefaultSessionConfig().validateTTLWindows(); err != nil {
+	cfg := DefaultSessionConfig()
+	if err := (&cfg).validateTTLWindows(); err != nil {
 		t.Fatalf("validateTTLWindows() = %v, want nil", err)
 	}
 }

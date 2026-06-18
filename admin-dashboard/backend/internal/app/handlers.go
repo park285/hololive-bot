@@ -83,7 +83,7 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 	case r.wsStreams <- struct{}{}:
 		defer func() { <-r.wsStreams }()
 	default:
-		httpx.Abort(c, httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams", Details: map[string]int{"limit": maxSystemStatsStreams}}})
+		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams", Details: map[string]int{"limit": maxSystemStatsStreams}}})
 		return
 	}
 	upgrader := websocket.Upgrader{
@@ -98,7 +98,7 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	defer conn.Close()
+	defer closeConn(conn)
 	r.streamSystemStats(conn)
 }
 
@@ -106,17 +106,34 @@ func (r *Runtime) streamSystemStats(conn *websocket.Conn) {
 	history, updates, unsubscribe := r.statsHub.Subscribe()
 	defer unsubscribe()
 	for _, stats := range history {
-		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if err := conn.WriteJSON(stats); err != nil {
+		if !writeSystemStatsFrame(conn, stats) {
 			return
 		}
 	}
 	for stats := range updates {
-		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if err := conn.WriteJSON(stats); err != nil {
+		if !writeSystemStatsFrame(conn, stats) {
 			return
 		}
 	}
+}
+
+func writeSystemStatsFrame(conn *websocket.Conn, stats any) bool {
+	if err := setWriteDeadline(conn); err != nil {
+		return false
+	}
+	return conn.WriteJSON(stats) == nil
+}
+
+func closeConn(conn *websocket.Conn) func() {
+	return func() {
+		if err := conn.Close(); err != nil {
+			return
+		}
+	}
+}
+
+func setWriteDeadline(conn *websocket.Conn) error {
+	return conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 }
 
 func (r *Runtime) handleOpenAPI(c *gin.Context) {

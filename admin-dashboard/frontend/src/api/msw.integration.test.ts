@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, afterEach, before, test } from "node:test";
+import { http, HttpResponse } from "msw";
 import { adminClient } from "@/api/adminClient";
 import apiClient from "@/api/client";
 import { authApi, dockerApi } from "@/api/core";
@@ -40,6 +41,12 @@ before(() => {
 
 afterEach(() => {
 	server.resetHandlers();
+	Object.defineProperty(globalThis, "document", {
+		value: {
+			cookie: "csrf_token=msw-token",
+		},
+		configurable: true,
+	});
 });
 
 after(() => {
@@ -79,6 +86,34 @@ test("msw serves docker containers through the root api client", async () => {
 	assert.equal(response.status, "ok");
 	assert.equal(response.containers.length, 2);
 	assert.equal(response.containers[0]?.name, "hololive-admin-api");
+});
+
+test("auth login csrf token is reused for unsafe requests without readable cookie", async () => {
+	Object.defineProperty(globalThis, "document", {
+		value: {
+			cookie: "",
+		},
+		configurable: true,
+	});
+
+	server.use(
+		http.post("*/admin/api/auth/login", () =>
+			HttpResponse.json({
+				status: "ok",
+				message: "logged in",
+				csrf_token: "login-body-token",
+			}),
+		),
+		http.post("*/admin/api/docker/containers/:name/restart", ({ request }) => {
+			assert.equal(request.headers.get("x-csrf-token"), "login-body-token");
+			return HttpResponse.json({ status: "ok", message: "restarted" });
+		}),
+	);
+
+	await authApi.login("admin", "password");
+	const response = await dockerApi.restartContainer("hololive-admin-api");
+
+	assert.equal(response.status, "ok");
 });
 
 test("msw serves settings updates through the generated admin client path", async () => {

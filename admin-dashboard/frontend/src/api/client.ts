@@ -10,6 +10,20 @@ import { useAuthStore } from "@/stores/authStore";
 
 const unsafeMethods = new Set(["post", "put", "delete", "patch"]);
 
+let csrfToken: string | null = null;
+
+export function setCSRFToken(token: string | null | undefined): void {
+	csrfToken = token && token !== "" ? token : null;
+}
+
+export function clearCSRFToken(): void {
+	csrfToken = null;
+}
+
+function csrfTokenForRequest(): string | null {
+	return csrfToken ?? getCookie("csrf_token");
+}
+
 // getCookie: document.cookie에서 특정 쿠키 값을 추출
 export function getCookie(name: string): string | null {
 	const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -41,7 +55,7 @@ function attachStandardInterceptors(client: AxiosInstance) {
 
 		const method = (config.method ?? "get").toLowerCase();
 		if (unsafeMethods.has(method)) {
-			const token = getCookie("csrf_token");
+			const token = csrfTokenForRequest();
 			if (token != null && token !== "") {
 				setRequestHeader(config, "X-CSRF-Token", token);
 			}
@@ -55,6 +69,7 @@ function attachStandardInterceptors(client: AxiosInstance) {
 		(error: AxiosError<{ retry_after?: number }>) => {
 			if (axios.isAxiosError(error)) {
 				if (error.response?.status === 401) {
+					clearCSRFToken();
 					useAuthStore.getState().logout();
 					queryClient.clear();
 					if (window.location.pathname !== "/login") {

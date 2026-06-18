@@ -60,7 +60,18 @@ func (c *Client) Proxy(ctx context.Context, method, path string, query url.Value
 	if err != nil {
 		return ProxyResponse{}, httpx.BadGateway()
 	}
-	defer resp.Body.Close()
+	if resp == nil {
+		return ProxyResponse{}, httpx.BadGateway()
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			return
+		}
+	}()
+	return proxyResponseFromHTTP(resp)
+}
+
+func proxyResponseFromHTTP(resp *http.Response) (ProxyResponse, error) {
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxProxyBodyBytes+1))
 	if err != nil {
 		return ProxyResponse{}, httpx.BadGateway()
@@ -108,7 +119,7 @@ func upstreamError(status int, body []byte) error {
 		fallback = "The upstream service rejected the request"
 	}
 	if len(body) == 0 {
-		return httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: fallback}}
+		return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: fallback}}
 	}
 	var raw any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -122,31 +133,37 @@ func rawTextError(status int, body []byte, fallback string) error {
 	if text == "" {
 		text = fallback
 	}
-	return httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: text}}
+	return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: text}}
 }
 
 func decodedUpstreamError(status int, raw any, fallback string) error {
 	switch value := raw.(type) {
 	case string:
-		return httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: value}}
+		return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: value}}
 	case map[string]any:
 		return objectUpstreamError(status, value, fallback)
 	default:
-		return httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: fallback, Details: raw}}
+		return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: fallback, Details: raw}}
 	}
 }
 
 func objectUpstreamError(status int, value map[string]any, fallback string) error {
-	errorText, _ := value["error"].(string)
+	errorText, ok := value["error"].(string)
+	if !ok {
+		errorText = ""
+	}
 	if errorText == "" {
 		errorText = fallback
 	}
-	code, _ := value["code"].(string)
+	code, ok := value["code"].(string)
+	if !ok {
+		code = ""
+	}
 	delete(value, "error")
 	delete(value, "code")
 	var details any
 	if len(value) > 0 {
 		details = value
 	}
-	return httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: errorText, Code: code, Details: details}}
+	return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: errorText, Code: code, Details: details}}
 }

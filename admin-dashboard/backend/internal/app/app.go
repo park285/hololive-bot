@@ -49,8 +49,8 @@ type Runtime struct {
 	openapiJSON     []byte
 }
 
-func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime, error) {
-	store, err := session.NewStore(ctx, cfg.ValkeyURL, cfg.Session)
+func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime, error) {
+	store, err := session.NewStore(ctx, cfg.ValkeyURL, &cfg.Session)
 	if err != nil {
 		return nil, err
 	}
@@ -73,9 +73,9 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 	rateLimiter := auth.NewLoginRateLimiter()
 	rateLimiter.Start()
 	statsHub := status.NewHub(endpoints)
-	statsHub.Start()
+	statsHub.StartContext(ctx)
 	return &Runtime{
-		cfg:             cfg,
+		cfg:             *cfg,
 		logger:          logger,
 		sessions:        store,
 		rateLimiter:     rateLimiter,
