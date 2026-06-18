@@ -98,7 +98,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentSessions(
 
 	sessions := make([]PersistedYouTubeLiveSession, 0, len(rows))
 	for _, row := range rows {
-		stream := streamFromYouTubeLiveSession(row)
+		stream := streamFromYouTubeLiveSession(&row)
 		if stream == nil {
 			continue
 		}
@@ -257,7 +257,7 @@ func sentLiveStreamRoomsByStreamID(rows []sentLiveStreamRoomRow) map[string]map[
 	return result
 }
 
-func streamFromYouTubeLiveSession(row domain.YouTubeLiveSession) *domain.Stream {
+func streamFromYouTubeLiveSession(row *domain.YouTubeLiveSession) *domain.Stream {
 	videoID := strings.TrimSpace(row.VideoID)
 	channelID := strings.TrimSpace(row.ChannelID)
 	if videoID == "" || channelID == "" {
@@ -294,6 +294,8 @@ func persistedLiveStatusToStreamStatus(status domain.LiveStatus) (domain.StreamS
 		return domain.StreamStatusLive, true
 	case domain.LiveStatusUpcoming:
 		return domain.StreamStatusUpcoming, true
+	case domain.LiveStatusEnded:
+		return "", false
 	default:
 		return "", false
 	}

@@ -64,7 +64,9 @@ func newCheckerTestCacheClient(t *testing.T) cache.Client {
 	}
 
 	t.Cleanup(func() {
-		_ = cacheClient.Close()
+		if err := cacheClient.Close(); err != nil {
+			t.Errorf("cacheClient.Close() error = %v", err)
+		}
 		mini.Close()
 	})
 

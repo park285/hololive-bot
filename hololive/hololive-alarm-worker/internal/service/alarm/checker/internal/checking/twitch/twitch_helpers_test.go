@@ -34,7 +34,7 @@ func TestTwitchCheckerCheck_EmptyMappings(t *testing.T) {
 	cache := newCheckerTestCacheClient(t)
 	checker, err := NewTwitchChecker(
 		cache,
-		twitch.NewClient(twitch.ClientConfig{}, newCheckerTestLogger()),
+		twitch.NewClient(&twitch.ClientConfig{}, newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
 	require.NoError(t, err)
@@ -47,10 +47,12 @@ func TestTwitchCheckerCheck_EmptyMappings(t *testing.T) {
 func TestTwitchHelperFunctions(t *testing.T) {
 	t.Parallel()
 
+	spacedLogin := " " + "Aqua" + " "
+	spacedChannelID := " " + "ch1" + " "
 	mappings, channelIDs := normalizeTwitchLoginMappings(map[string]string{
-		" Aqua ": " ch1 ",
-		"":       "ch2",
-		"SuI":    "",
+		spacedLogin: spacedChannelID,
+		"":          "ch2",
+		"SuI":       "",
 	})
 	require.Len(t, mappings, 1)
 	assert.Equal(t, "ch1", mappings["aqua"])
@@ -141,25 +143,21 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 			logger: newCheckerTestLogger(),
 		}
 
-		notifications, err := checker.buildLiveNotifications(
-			t.Context(),
+		notifications := checker.buildLiveNotifications(
 			map[string]string{"aqua": "ch1"},
 			map[string][]string{"ch1": {"room1", "room2"}},
 			map[string]string{"ch1": "아쿠아"},
 			liveResponse,
 		)
-		require.NoError(t, err)
 		require.Len(t, notifications, 2)
 		assert.ElementsMatch(t, []string{"room1", "room2"}, []string{notifications[0].RoomID, notifications[1].RoomID})
 
-		notifications, err = checker.buildLiveNotifications(
-			t.Context(),
+		notifications = checker.buildLiveNotifications(
 			map[string]string{"aqua": "ch1"},
 			map[string][]string{"ch1": {"room1", "room2"}},
 			map[string]string{"ch1": "아쿠아"},
 			liveResponse,
 		)
-		require.NoError(t, err)
 		require.Len(t, notifications, 2)
 		assert.Equal(t, 0, setNXCalls, "checker must not preclaim dedup before queue publish")
 	})

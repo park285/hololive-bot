@@ -17,7 +17,7 @@ func TestCommunityOutboxThumbnailURLFallsBackToAuthorPhoto(t *testing.T) {
 		},
 	}
 
-	got := communityOutboxThumbnailURL(data)
+	got := communityOutboxThumbnailURL(&data)
 
 	assert.Equal(t, "https://yt3.ggpht.com/avatar-large=s800", got)
 }

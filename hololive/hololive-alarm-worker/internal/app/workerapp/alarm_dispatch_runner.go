@@ -38,7 +38,7 @@ type alarmDispatchIdleWaiter interface {
 
 type alarmDispatchSender interface {
 	SendMessage(ctx context.Context, roomID, message string) error
-	SendKaringContentList(ctx context.Context, roomID string, req iris.KaringContentListRequest) error
+	SendKaringContentList(ctx context.Context, roomID string, req *iris.KaringContentListRequest) error
 }
 
 type alarmDispatchClientRequestSender interface {
@@ -59,7 +59,7 @@ type alarmDispatchRunner struct {
 	logger             *slog.Logger
 }
 
-func (r alarmDispatchRunner) runOnce(ctx context.Context) (bool, error) {
+func (r *alarmDispatchRunner) runOnce(ctx context.Context) (bool, error) {
 	envelopes, err := r.consumer.DrainBatch(ctx, r.maxBatch)
 	if err != nil {
 		return false, fmt.Errorf("drain alarm dispatch batch: %w", err)
@@ -70,7 +70,7 @@ func (r alarmDispatchRunner) runOnce(ctx context.Context) (bool, error) {
 	return true, r.dispatchGroups(ctx, groupAlarmDispatchEnvelopesForKaring(envelopes, r.karingEnabled))
 }
 
-func (r alarmDispatchRunner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup) error {
+func (r *alarmDispatchRunner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup) error {
 	for _, group := range groups {
 		if err := r.dispatchGroup(ctx, group); err != nil {
 			return err
@@ -79,7 +79,7 @@ func (r alarmDispatchRunner) dispatchGroups(ctx context.Context, groups []alarmD
 	return nil
 }
 
-func (r alarmDispatchRunner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
+func (r *alarmDispatchRunner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
 	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindCelebration {
 		return r.dispatchMessageGroup(ctx, group)
 	}
@@ -89,7 +89,7 @@ func (r alarmDispatchRunner) dispatchGroup(ctx context.Context, group alarmDispa
 	return r.dispatchKaringContentListGroup(ctx, group)
 }
 
-func (r alarmDispatchRunner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
+func (r *alarmDispatchRunner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
 	message, err := renderAlarmDispatchGroup(ctx, group)
 	if err != nil {
 		return r.persistPreSendFailure(ctx, group.envelopes, err)
@@ -113,7 +113,7 @@ func sendAlarmDispatchMessage(ctx context.Context, sender alarmDispatchSender, g
 	return sender.SendMessage(ctx, group.roomID, message)
 }
 
-func (r alarmDispatchRunner) dispatchKaringContentListGroup(ctx context.Context, group alarmDispatchGroup) error {
+func (r *alarmDispatchRunner) dispatchKaringContentListGroup(ctx context.Context, group alarmDispatchGroup) error {
 	requests, err := buildAlarmDispatchKaringContentListRequests(group)
 	if err != nil {
 		return r.persistPreSendFailure(ctx, group.envelopes, err)
@@ -121,8 +121,8 @@ func (r alarmDispatchRunner) dispatchKaringContentListGroup(ctx context.Context,
 	if err := r.consumer.MarkSending(ctx, group.envelopes); err != nil {
 		return fmt.Errorf("mark alarm dispatch sending: %w", err)
 	}
-	for _, req := range requests {
-		if err := r.sender.SendKaringContentList(ctx, group.roomID, req); err != nil {
+	for i := range requests {
+		if err := r.sender.SendKaringContentList(ctx, group.roomID, &requests[i]); err != nil {
 			return r.persistPostSendingFailure(ctx, group.envelopes, err)
 		}
 	}
@@ -132,7 +132,7 @@ func (r alarmDispatchRunner) dispatchKaringContentListGroup(ctx context.Context,
 	return nil
 }
 
-func (r alarmDispatchRunner) persistPreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *alarmDispatchRunner) persistPreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
 	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(scheduleEnvelopes []domain.AlarmQueueEnvelope) error {
 		if err := r.consumer.ScheduleRetry(ctx, scheduleEnvelopes); err != nil {
@@ -142,7 +142,7 @@ func (r alarmDispatchRunner) persistPreSendFailure(ctx context.Context, envelope
 	})
 }
 
-func (r alarmDispatchRunner) finalizeDispatchFailure(
+func (r *alarmDispatchRunner) finalizeDispatchFailure(
 	ctx context.Context,
 	retryEnvelopes []domain.AlarmQueueEnvelope,
 	dlqEnvelopes []domain.AlarmQueueEnvelope,
@@ -160,7 +160,7 @@ func (r alarmDispatchRunner) finalizeDispatchFailure(
 	return nil
 }
 
-func (r alarmDispatchRunner) persistPostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *alarmDispatchRunner) persistPostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	if isAlarmDispatchRetryablePostSendFailure(cause) {
 		return r.persistSendingRetry(ctx, envelopes, cause)
 	}
@@ -179,7 +179,7 @@ func (r alarmDispatchRunner) persistPostSendingFailure(ctx context.Context, enve
 	return nil
 }
 
-func (r alarmDispatchRunner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *alarmDispatchRunner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	consumer, ok := r.consumer.(alarmDispatchSendingRetryConsumer)
 	if !ok {
 		return r.persistPreSendFailure(ctx, envelopes, cause)
@@ -204,7 +204,7 @@ func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
 	return false
 }
 
-func (r alarmDispatchRunner) preserveAfterPersistenceFailure(
+func (r *alarmDispatchRunner) preserveAfterPersistenceFailure(
 	ctx context.Context,
 	envelopes []domain.AlarmQueueEnvelope,
 	persistErr error,
@@ -220,22 +220,22 @@ func (r alarmDispatchRunner) preserveAfterPersistenceFailure(
 
 func renderAlarmDispatchGroup(ctx context.Context, group alarmDispatchGroup) (string, error) {
 	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindCelebration {
-		return renderCelebrationMessage(group.envelopes[0])
+		return renderCelebrationMessage(&group.envelopes[0])
 	}
 	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return renderAlarmDispatchYouTubeOutbox(ctx, group.envelopes[0])
+		return renderAlarmDispatchYouTubeOutbox(ctx, &group.envelopes[0])
 	}
 	if len(group.notifications) == 1 {
-		return renderAlarmDispatchNotification(group.notifications[0]), nil
+		return renderAlarmDispatchNotification(&group.notifications[0]), nil
 	}
 	return renderAlarmDispatchNotificationGroup(group), nil
 }
 
-func renderAlarmDispatchYouTubeOutbox(ctx context.Context, envelope domain.AlarmQueueEnvelope) (string, error) {
+func renderAlarmDispatchYouTubeOutbox(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (string, error) {
 	if envelope.YouTubeOutbox == nil {
 		return "", fmt.Errorf("render youtube outbox dispatch: payload is nil")
 	}
-	return outbox.FormatYouTubeOutboxPayload(ctx, *envelope.YouTubeOutbox)
+	return outbox.FormatYouTubeOutboxPayload(ctx, envelope.YouTubeOutbox)
 }
 
 func renderAlarmDispatchNotificationGroup(group alarmDispatchGroup) string {
@@ -245,27 +245,28 @@ func renderAlarmDispatchNotificationGroup(group alarmDispatchGroup) string {
 	} else {
 		fmt.Fprintf(&builder, "⏰ 방송 %d분 전 알림", group.minutesUntil)
 	}
-	for _, notification := range group.notifications {
+	for i := range group.notifications {
 		builder.WriteString("\n\n")
-		builder.WriteString(renderAlarmDispatchNotificationInGroup(notification, group.minutesUntil))
+		builder.WriteString(renderAlarmDispatchNotificationInGroup(&group.notifications[i], group.minutesUntil))
 	}
 	return builder.String()
 }
 
-func renderAlarmDispatchNotification(notification domain.AlarmNotification) string {
+func renderAlarmDispatchNotification(notification *domain.AlarmNotification) string {
 	return renderAlarmDispatchNotificationInGroup(notification, -1)
 }
 
-func renderAlarmDispatchNotificationInGroup(notification domain.AlarmNotification, groupMinutesUntil int) string {
+func renderAlarmDispatchNotificationInGroup(notification *domain.AlarmNotification, groupMinutesUntil int) string {
 	memberName := resolveAlarmDispatchMemberName(notification)
 	title := resolveAlarmDispatchTitle(notification)
 	url := resolveAlarmDispatchURL(notification)
 	var builder strings.Builder
-	if notification.MinutesUntil <= 0 {
+	switch {
+	case notification.MinutesUntil <= 0:
 		fmt.Fprintf(&builder, "🔔 %s 방송 시작!\n", memberName)
-	} else if groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil {
+	case groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil:
 		fmt.Fprintf(&builder, "⏰ %s 방송 예정\n", memberName)
-	} else {
+	default:
 		fmt.Fprintf(&builder, "⏰ %s 방송 %d분 전\n", memberName, notification.MinutesUntil)
 	}
 	fmt.Fprintf(&builder, "📺 %s\n", title)
@@ -278,7 +279,7 @@ func renderAlarmDispatchNotificationInGroup(notification domain.AlarmNotificatio
 	return strings.TrimSpace(builder.String())
 }
 
-func resolveAlarmDispatchMemberName(notification domain.AlarmNotification) string {
+func resolveAlarmDispatchMemberName(notification *domain.AlarmNotification) string {
 	if notification.Channel != nil && strings.TrimSpace(notification.Channel.Name) != "" {
 		return strings.TrimSpace(notification.Channel.Name)
 	}
@@ -288,7 +289,7 @@ func resolveAlarmDispatchMemberName(notification domain.AlarmNotification) strin
 	return "알 수 없는 멤버"
 }
 
-func resolveAlarmDispatchTitle(notification domain.AlarmNotification) string {
+func resolveAlarmDispatchTitle(notification *domain.AlarmNotification) string {
 	if notification.Stream == nil {
 		return "방송 정보 없음"
 	}
@@ -298,7 +299,7 @@ func resolveAlarmDispatchTitle(notification domain.AlarmNotification) string {
 	return "제목 없음"
 }
 
-func resolveAlarmDispatchURL(notification domain.AlarmNotification) string {
+func resolveAlarmDispatchURL(notification *domain.AlarmNotification) string {
 	if notification.Stream == nil {
 		return ""
 	}
@@ -335,18 +336,18 @@ func resolveAlarmDispatchIntegratedURL(stream *domain.Stream) string {
 
 func claimKeysForAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) []string {
 	claimKeys := make([]string, 0, len(envelopes))
-	for _, envelope := range envelopes {
-		claimKeys = append(claimKeys, envelope.ClaimKeys...)
+	for i := range envelopes {
+		claimKeys = append(claimKeys, envelopes[i].ClaimKeys...)
 	}
 	return claimKeys
 }
 
-func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) ([]domain.AlarmQueueEnvelope, []domain.AlarmQueueEnvelope) {
-	retryEnvelopes := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
-	dlqEnvelopes := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
-	for _, envelope := range envelopes {
-		updated := envelope
-		updated.Retry = nextAlarmDispatchRetry(envelope, cause)
+func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) (retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) {
+	retryEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	dlqEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	for i := range envelopes {
+		updated := envelopes[i]
+		updated.Retry = nextAlarmDispatchRetry(&envelopes[i], cause)
 		if updated.Retry.Attempt >= 3 {
 			dlqEnvelopes = append(dlqEnvelopes, updated)
 			continue
@@ -356,7 +357,7 @@ func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) 
 	return retryEnvelopes, dlqEnvelopes
 }
 
-func nextAlarmDispatchRetry(envelope domain.AlarmQueueEnvelope, cause error) *domain.AlarmQueueRetryMetadata {
+func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *domain.AlarmQueueRetryMetadata {
 	retry := &domain.AlarmQueueRetryMetadata{}
 	if envelope.Retry != nil {
 		*retry = *envelope.Retry

@@ -15,7 +15,7 @@ import (
 )
 
 type youtubeOutboxKaringCapableSender interface {
-	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload domain.YouTubeOutboxDispatchPayload) error
+	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error
 }
 
 type workerappEgressTestPostgres struct{}
@@ -68,7 +68,8 @@ func TestBuildAlarmDispatchRunnerWiresValkeyMode(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	require.NoError(t, err)
 
 	runner, ok := scheduler.(*alarmDispatchRunner)
 	require.True(t, ok)
@@ -88,7 +89,8 @@ func TestBuildAlarmDispatchRunnerWiresPGMode(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_WAKEUP_ENABLED", "false")
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	require.NoError(t, err)
 
 	runner, ok := scheduler.(*alarmDispatchRunner)
 	require.True(t, ok)
@@ -97,8 +99,9 @@ func TestBuildAlarmDispatchRunnerWiresPGMode(t *testing.T) {
 	assert.Equal(t, 3, runner.maxBatchesPerWake)
 	assert.False(t, runner.karingEnabled)
 	assert.True(t, runner.postSendQuarantine)
-	require.IsType(t, &alarmDispatchWakeupWaiter{}, runner.idleWaiter)
-	assert.False(t, runner.idleWaiter.(*alarmDispatchWakeupWaiter).wakeupEnabled)
+	waiter, ok := runner.idleWaiter.(*alarmDispatchWakeupWaiter)
+	require.True(t, ok)
+	assert.False(t, waiter.wakeupEnabled)
 }
 
 func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
@@ -106,9 +109,38 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "false")
 	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "false")
 
-	assert.Nil(t, buildAlarmDispatchRunner(nil, egress.NewIrisMessageSender(nil), nil))
-	assert.Nil(t, buildDeliveryOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil))
-	assert.Nil(t, buildYouTubeOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil))
+	scheduler, err := buildAlarmDispatchRunner(nil, egress.NewIrisMessageSender(nil), nil)
+	require.NoError(t, err)
+	assert.Nil(t, scheduler)
+
+	scheduler, err = buildDeliveryOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	require.NoError(t, err)
+	assert.Nil(t, scheduler)
+
+	scheduler, err = buildYouTubeOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	require.NoError(t, err)
+	assert.Nil(t, scheduler)
+}
+
+func TestBuildEgressDispatchersRejectMissingInfraWhenEnabled(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
+	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "true")
+	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
+
+	scheduler, err := buildAlarmDispatchRunner(nil, egress.NewIrisMessageSender(nil), nil)
+	require.Error(t, err)
+	assert.Nil(t, scheduler)
+	assert.Contains(t, err.Error(), "infra is required")
+
+	scheduler, err = buildDeliveryOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	require.Error(t, err)
+	assert.Nil(t, scheduler)
+	assert.Contains(t, err.Error(), "postgres is required")
+
+	scheduler, err = buildYouTubeOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	require.Error(t, err)
+	assert.Nil(t, scheduler)
+	assert.Contains(t, err.Error(), "postgres is required")
 }
 
 type claimKeyReleaseRecordingCache struct {
@@ -129,11 +161,12 @@ func TestBuildAlarmDispatchRunnerWiresPGModeClaimKeyReleaser(t *testing.T) {
 	cacheFake := &claimKeyReleaseRecordingCache{}
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}, Cache: cacheFake}
 
-	scheduler := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	require.NoError(t, err)
 	runner, ok := scheduler.(*alarmDispatchRunner)
 	require.True(t, ok)
 
-	err := runner.consumer.ReleaseClaimKeys(context.Background(), []string{
+	err = runner.consumer.ReleaseClaimKeys(context.Background(), []string{
 		"notified:claim:room-1:stream-1:100:live",
 	})
 	require.NoError(t, err)

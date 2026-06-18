@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker"
 )
@@ -67,8 +68,8 @@ func TestRuntimeSchedulerStart_CancellationPath(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		runtimeScheduler.Start(ctx)
-		close(done)
+		defer close(done)
+		require.NoError(t, runtimeScheduler.Start(ctx))
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -104,7 +105,7 @@ func TestRuntimeSchedulerStart_TwitchLoopOptional(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		_ = runtimeScheduler.Start(ctx)
+		require.NoError(t, runtimeScheduler.Start(ctx))
 		close(done)
 	}()
 

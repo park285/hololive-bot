@@ -75,6 +75,7 @@ func TestChzzkHelperFunctions(t *testing.T) {
 	}
 
 	stream = buildChzzkLiveStream("yt2", "chzzk2", "라덴", status, detected)
+	require.NotNil(t, stream)
 	require.NotNil(t, stream.ViewerCount)
 	assert.Equal(t, 777, *stream.ViewerCount)
 	assert.Equal(t, "치지직 타이틀", stream.Title)

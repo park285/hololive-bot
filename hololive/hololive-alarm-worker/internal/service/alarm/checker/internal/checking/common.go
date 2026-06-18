@@ -141,7 +141,7 @@ func ApplyMemberNamesToStreams(streamsByChannel map[string][]*domain.Stream, mem
 	}
 }
 
-func ApplyMemberNameToStream(stream *domain.Stream, channelID string, memberName string) {
+func ApplyMemberNameToStream(stream *domain.Stream, channelID, memberName string) {
 	if stream == nil {
 		return
 	}
@@ -155,7 +155,7 @@ func ApplyMemberNameToStream(stream *domain.Stream, channelID string, memberName
 	stream.Channel.Name = memberName
 }
 
-func ChannelNameForMember(channelID string, memberName string, fallback string) string {
+func ChannelNameForMember(channelID, memberName, fallback string) string {
 	if memberName = strings.TrimSpace(memberName); memberName != "" {
 		return memberName
 	}
@@ -231,7 +231,7 @@ func ShouldSendScheduleChangeNotification(change *dedup.ScheduleChange, schedule
 	return change != nil
 }
 
-func ScheduleChangeNotificationDetails(change *dedup.ScheduleChange) (string, string) {
+func ScheduleChangeNotificationDetails(change *dedup.ScheduleChange) (message, previousScheduled string) {
 	if change == nil {
 		return "", ""
 	}

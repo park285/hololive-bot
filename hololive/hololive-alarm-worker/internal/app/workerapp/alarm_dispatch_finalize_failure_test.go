@@ -75,13 +75,15 @@ func finalizeFailureOps(calls []finalizeFailureCall) []string {
 	return ops
 }
 
-func finalizeFailureRetryEnvelope(roomID string) domain.AlarmQueueEnvelope {
+func finalizeFailureRetryEnvelope() domain.AlarmQueueEnvelope {
+	roomID := "room-1"
 	env := alarmDispatchRunnerTestEnvelope(roomID, nil)
 	env.ClaimKeys = []string{"claim:" + roomID}
 	return env
 }
 
-func finalizeFailureDLQEnvelope(roomID string) domain.AlarmQueueEnvelope {
+func finalizeFailureDLQEnvelope() domain.AlarmQueueEnvelope {
+	roomID := "room-2"
 	env := alarmDispatchRunnerTestEnvelope(roomID, &domain.AlarmQueueRetryMetadata{Attempt: 2})
 	env.ClaimKeys = []string{"claim:" + roomID}
 	return env
@@ -90,7 +92,7 @@ func finalizeFailureDLQEnvelope(roomID string) domain.AlarmQueueEnvelope {
 func TestPersistPreSendFailureCallSequenceHappyPath(t *testing.T) {
 	consumer := &finalizeFailureRecordingConsumer{}
 	runner := alarmDispatchRunner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope("room-1"), finalizeFailureDLQEnvelope("room-2")}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
 
@@ -107,7 +109,7 @@ func TestPersistPreSendFailureScheduleRetryFailureFallsBackToRequeue(t *testing.
 	scheduleErr := errors.New("schedule down")
 	consumer := &finalizeFailureRecordingConsumer{scheduleRetryErr: scheduleErr}
 	runner := alarmDispatchRunner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope("room-1"), finalizeFailureDLQEnvelope("room-2")}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
 
@@ -123,7 +125,7 @@ func TestPersistPreSendFailureMoveDLQFailureFallsBackToRequeue(t *testing.T) {
 	moveErr := errors.New("dlq down")
 	consumer := &finalizeFailureRecordingConsumer{moveDLQErr: moveErr}
 	runner := alarmDispatchRunner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope("room-1"), finalizeFailureDLQEnvelope("room-2")}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
 
@@ -139,7 +141,7 @@ func TestPersistPreSendFailureReleaseClaimKeysFailureWrapPinned(t *testing.T) {
 	releaseErr := errors.New("release down")
 	consumer := &finalizeFailureRecordingConsumer{releaseClaimErr: releaseErr}
 	runner := alarmDispatchRunner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope("room-1"), finalizeFailureDLQEnvelope("room-2")}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
 
@@ -152,7 +154,7 @@ func TestPersistPreSendFailureReleaseClaimKeysFailureWrapPinned(t *testing.T) {
 func TestPersistSendingRetryCallSequenceHappyPath(t *testing.T) {
 	consumer := &finalizeFailureSendingRetryConsumer{finalizeFailureRecordingConsumer: &finalizeFailureRecordingConsumer{}}
 	runner := alarmDispatchRunner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope("room-1"), finalizeFailureDLQEnvelope("room-2")}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
@@ -169,7 +171,7 @@ func TestPersistSendingRetryScheduleFailureFallsBackToRequeueWithPinnedWrap(t *t
 	scheduleErr := errors.New("sending retry down")
 	consumer := &finalizeFailureSendingRetryConsumer{finalizeFailureRecordingConsumer: &finalizeFailureRecordingConsumer{scheduleSendingRetryErr: scheduleErr}}
 	runner := alarmDispatchRunner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope("room-1"), finalizeFailureDLQEnvelope("room-2")}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
@@ -185,7 +187,7 @@ func TestPersistSendingRetryMoveDLQFailureFallsBackToRequeue(t *testing.T) {
 	moveErr := errors.New("dlq down")
 	consumer := &finalizeFailureSendingRetryConsumer{finalizeFailureRecordingConsumer: &finalizeFailureRecordingConsumer{moveDLQErr: moveErr}}
 	runner := alarmDispatchRunner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope("room-1"), finalizeFailureDLQEnvelope("room-2")}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
@@ -201,7 +203,7 @@ func TestPersistSendingRetryReleaseClaimKeysFailureWrapPinned(t *testing.T) {
 	releaseErr := errors.New("release down")
 	consumer := &finalizeFailureSendingRetryConsumer{finalizeFailureRecordingConsumer: &finalizeFailureRecordingConsumer{releaseClaimErr: releaseErr}}
 	runner := alarmDispatchRunner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope("room-1"), finalizeFailureDLQEnvelope("room-2")}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
@@ -214,7 +216,7 @@ func TestPersistSendingRetryReleaseClaimKeysFailureWrapPinned(t *testing.T) {
 func TestPersistSendingRetryCapabilityAbsentFallsBackToPreSendSequence(t *testing.T) {
 	consumer := &finalizeFailureRecordingConsumer{}
 	runner := alarmDispatchRunner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope("room-1"), finalizeFailureDLQEnvelope("room-2")}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 

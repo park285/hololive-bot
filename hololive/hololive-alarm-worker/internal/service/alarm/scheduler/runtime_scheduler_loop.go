@@ -85,7 +85,7 @@ func (s *RuntimeScheduler) runLoopIteration(
 	loopCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	_ = sharedlog.RunOperation(loopCtx, s.logger, sharedlog.OperationOptions{
+	if err := sharedlog.RunOperation(loopCtx, s.logger, sharedlog.OperationOptions{
 		Name:         "alarm.scheduler.loop.iteration",
 		IDPrefix:     "alarm_" + name,
 		Runtime:      "alarm-worker",
@@ -98,7 +98,12 @@ func (s *RuntimeScheduler) runLoopIteration(
 			slog.String("loop", name),
 			slog.Duration("timeout", timeout),
 		},
-	}, run)
+	}, run); err != nil {
+		sharedlog.Warn(loopCtx, s.logger, EventAlarmSchedulerLoopIterationFailed, "alarm scheduler loop iteration failed",
+			slog.String("loop", name),
+			slog.Any("error", err),
+		)
+	}
 }
 
 func nextLoopDelay(now time.Time, interval time.Duration) time.Duration {
@@ -217,13 +222,14 @@ func (s *RuntimeScheduler) dispatchNotifications(
 	sendResult, err := s.notifier.Send(ctx, notifications)
 
 	if err != nil {
-		attrs := []slog.Attr{
+		attrs := make([]slog.Attr, 0, 5)
+		attrs = append(attrs,
 			slog.String("loop", loopName),
 			slog.Int("notifications", len(notifications)),
 			slog.Int("sent", sendResult.Sent),
 			slog.Int("skipped", sendResult.Skipped),
 			slog.Int("failed", sendResult.Failed),
-		}
+		)
 		attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
 		sharedlog.Warn(ctx, s.logger, EventAlarmNotificationDispatchFailed, "alarm notification dispatch failed", attrs...)
 		return fmt.Errorf("dispatch notifications: send notifications partially failed: %w", err)

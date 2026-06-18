@@ -142,7 +142,7 @@ func (s *alarmDispatchMaintenanceTestStore) BacklogSnapshot(ctx context.Context)
 	}, nil
 }
 
-func (s *alarmDispatchMaintenanceTestStore) DeleteTerminal(_ context.Context, status dispatchoutbox.Status, _ int, _ int) (int64, error) {
+func (s *alarmDispatchMaintenanceTestStore) DeleteTerminal(_ context.Context, status dispatchoutbox.Status, _, _ int) (int64, error) {
 	if s.deleteErr != nil {
 		return 0, s.deleteErr
 	}

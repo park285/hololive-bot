@@ -34,7 +34,10 @@ func isCommunityOutboxDecorationLine(value string) bool {
 	return true
 }
 
-func communityOutboxThumbnailURL(data alarmDispatchKaringCommunityPayload) string {
+func communityOutboxThumbnailURL(data *alarmDispatchKaringCommunityPayload) string {
+	if data == nil {
+		return ""
+	}
 	if thumbnail := bestKaringImageURL(data.Images); thumbnail != "" {
 		return thumbnail
 	}

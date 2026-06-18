@@ -141,9 +141,10 @@ func (r notificationEgressRunner) startLeaseProtectedRunners(
 	lease *egress.NotificationEgressLease,
 ) error {
 	if lease == nil {
-		return waitForContextDone(ctx)
+		waitForContextDone(ctx)
+		return nil
 	}
-	defer r.releaseLease(lease)
+	defer r.releaseLease(ctx, lease)
 
 	renewErrCh := r.startLeaseRenewLoop(ctx, lease)
 	runnerErrCh := r.startRunnerGroup(ctx, runners)
@@ -157,9 +158,8 @@ func (r notificationEgressRunner) startLeaseProtectedRunners(
 	}
 }
 
-func waitForContextDone(ctx context.Context) error {
+func waitForContextDone(ctx context.Context) {
 	<-ctx.Done()
-	return nil
 }
 
 func (r notificationEgressRunner) startRunners(ctx context.Context, runners []namedRuntimeScheduler) error {
@@ -225,12 +225,12 @@ func (r notificationEgressRunner) acquireLease(ctx context.Context) (*egress.Not
 	return nil, err
 }
 
-func (r notificationEgressRunner) releaseLease(lease *egress.NotificationEgressLease) {
+func (r notificationEgressRunner) releaseLease(ctx context.Context, lease *egress.NotificationEgressLease) {
 	if !r.leaseEnabled || lease == nil {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := lease.Release(ctx); err != nil && r.logger != nil {
 		r.logger.Warn("Failed to release notification egress lease", slog.Any("error", err))

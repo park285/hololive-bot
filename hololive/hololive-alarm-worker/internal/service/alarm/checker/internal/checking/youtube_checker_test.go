@@ -107,7 +107,8 @@ func TestNewYouTubeChecker_NilDependencies(t *testing.T) {
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, _ := holodex.NewHolodexService("http://unused", "k", cache, nil, logger)
+	holodexService, err := holodex.NewHolodexService("http://unused", "k", cache, nil, logger)
+	require.NoError(t, err)
 
 	tests := map[string]struct {
 		cacheNil   bool
@@ -181,26 +182,7 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 		streamID  = "stream-test-1"
 	)
 
-	type testcase struct {
-		name            string
-		scenario        string
-		ctxTimeout      time.Duration
-		preMarkDedup    bool
-		wantCount       int
-		wantErrContains []string
-	}
-
-	buildUpcomingResponse := func(startScheduled time.Time) string {
-		return fmt.Sprintf(
-			`[{"id":"%s","title":"테스트 방송","channel_id":"%s","status":"upcoming","start_scheduled":"%s","channel":{"id":"%s","name":"테스트 채널","org":"Hololive"}}]`,
-			streamID,
-			channelID,
-			startScheduled.UTC().Format(time.RFC3339),
-			channelID,
-		)
-	}
-
-	tests := []testcase{
+	tests := []youtubeCheckerCheckTestCase{
 		{
 			name:      "정상",
 			scenario:  "ok",
@@ -233,91 +215,119 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			startScheduled := time.Now().UTC().Truncate(time.Second).Add(5*time.Minute + 10*time.Second)
-
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != "/users/live" {
-					http.NotFound(w, r)
-					return
-				}
-
-				if !strings.Contains(r.URL.Query().Get("channels"), channelID) {
-					http.Error(w, "missing channels query", http.StatusBadRequest)
-					return
-				}
-
-				switch tc.scenario {
-				case "ok", "dedup":
-					w.Header().Set("Content-Type", "application/json")
-
-					_, _ = w.Write([]byte(buildUpcomingResponse(startScheduled)))
-				case "not_found":
-					w.Header().Set("Content-Type", "application/json")
-
-					_, _ = w.Write([]byte(`[]`))
-				case "timeout":
-					time.Sleep(150 * time.Millisecond)
-					w.Header().Set("Content-Type", "application/json")
-
-					_, _ = w.Write([]byte(`[]`))
-				case "5xx":
-					w.WriteHeader(http.StatusInternalServerError)
-
-					_, _ = w.Write([]byte(`{"error":"server exploded"}`))
-				default:
-					http.Error(w, "unknown scenario", http.StatusInternalServerError)
-				}
-			}))
-			defer server.Close()
-
-			cache := newCheckerTestCacheClient(t)
-			logger := newCheckerTestLogger()
-			dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
-			tierSched := tier.NewTieredScheduler(logger)
-			holodexService, err := holodex.NewHolodexService(server.URL, "test-key", cache, nil, logger)
-			require.NoError(t, err)
-
-			checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
-			require.NoError(t, err)
-
-			setupCtx := t.Context()
-
-			_, err = cache.SAdd(setupCtx, notification.AlarmChannelRegistryKey, []string{channelID})
-			require.NoError(t, err)
-
-			_, err = cache.SAdd(setupCtx, notification.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
-			require.NoError(t, err)
-
-			if tc.preMarkDedup {
-				err = dedupService.MarkAsNotified(setupCtx, streamID, startScheduled, 5)
-				require.NoError(t, err)
-			}
-
-			runCtx := setupCtx
-
-			if tc.ctxTimeout > 0 {
-				var cancel context.CancelFunc
-
-				runCtx, cancel = context.WithTimeout(setupCtx, tc.ctxTimeout)
-				defer cancel()
-			}
-
-			notifications, checkErr := checker.Check(runCtx)
-
-			if len(tc.wantErrContains) > 0 {
-				require.Error(t, checkErr)
-				for _, wantErrContains := range tc.wantErrContains {
-					assert.Contains(t, checkErr.Error(), wantErrContains)
-				}
-
-				return
-			}
-
-			require.NoError(t, checkErr)
-			assert.Len(t, notifications, tc.wantCount)
+			runYouTubeCheckerCheckCase(t, &tc, channelID, roomID, streamID)
 		})
 	}
+}
+
+type youtubeCheckerCheckTestCase struct {
+	name            string
+	scenario        string
+	ctxTimeout      time.Duration
+	preMarkDedup    bool
+	wantCount       int
+	wantErrContains []string
+}
+
+func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, channelID, roomID, streamID string) {
+	t.Helper()
+
+	startScheduled := time.Now().UTC().Truncate(time.Second).Add(5*time.Minute + 10*time.Second)
+	server := newYouTubeCheckerScenarioServer(t, tc.scenario, channelID, streamID, startScheduled)
+	defer server.Close()
+
+	cache := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexService, err := holodex.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	require.NoError(t, err)
+
+	setupCtx := t.Context()
+	_, err = cache.SAdd(setupCtx, notification.AlarmChannelRegistryKey, []string{channelID})
+	require.NoError(t, err)
+	_, err = cache.SAdd(setupCtx, notification.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	require.NoError(t, err)
+
+	if tc.preMarkDedup {
+		err = dedupService.MarkAsNotified(setupCtx, streamID, startScheduled, 5)
+		require.NoError(t, err)
+	}
+
+	runCtx := setupCtx
+	if tc.ctxTimeout > 0 {
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithTimeout(setupCtx, tc.ctxTimeout)
+		defer cancel()
+	}
+
+	notifications, checkErr := checker.Check(runCtx)
+	if len(tc.wantErrContains) > 0 {
+		require.Error(t, checkErr)
+		for _, wantErrContains := range tc.wantErrContains {
+			assert.Contains(t, checkErr.Error(), wantErrContains)
+		}
+		return
+	}
+
+	require.NoError(t, checkErr)
+	assert.Len(t, notifications, tc.wantCount)
+}
+
+func newYouTubeCheckerScenarioServer(t *testing.T, scenario, channelID, streamID string, startScheduled time.Time) *httptest.Server {
+	t.Helper()
+
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/live" {
+			http.NotFound(w, r)
+			return
+		}
+		if !strings.Contains(r.URL.Query().Get("channels"), channelID) {
+			http.Error(w, "missing channels query", http.StatusBadRequest)
+			return
+		}
+		writeYouTubeCheckerScenarioResponse(t, w, scenario, channelID, streamID, startScheduled)
+	}))
+}
+
+func writeYouTubeCheckerScenarioResponse(t *testing.T, w http.ResponseWriter, scenario, channelID, streamID string, startScheduled time.Time) {
+	t.Helper()
+
+	w.Header().Set("Content-Type", "application/json")
+	switch scenario {
+	case "ok", "dedup":
+		writeYouTubeTestResponse(t, w, buildUpcomingResponse(channelID, streamID, startScheduled))
+	case "not_found":
+		writeYouTubeTestResponse(t, w, `[]`)
+	case "timeout":
+		time.Sleep(150 * time.Millisecond)
+		writeYouTubeTestResponse(t, w, `[]`)
+	case "5xx":
+		w.WriteHeader(http.StatusInternalServerError)
+		writeYouTubeTestResponse(t, w, `{"error":"server exploded"}`)
+	default:
+		http.Error(w, "unknown scenario", http.StatusInternalServerError)
+	}
+}
+
+func buildUpcomingResponse(channelID, streamID string, startScheduled time.Time) string {
+	return fmt.Sprintf(
+		`[{"id":%q,"title":"테스트 방송","channel_id":%q,"status":"upcoming","start_scheduled":%q,"channel":{"id":%q,"name":"테스트 채널","org":"Hololive"}}]`,
+		streamID,
+		channelID,
+		startScheduled.UTC().Format(time.RFC3339),
+		channelID,
+	)
+}
+
+func writeYouTubeTestResponse(t *testing.T, w http.ResponseWriter, body string) {
+	t.Helper()
+
+	_, err := w.Write([]byte(body))
+	require.NoError(t, err)
 }
 
 func TestYouTubeCheckerCheck_RecoversMissedPrimaryReminderFromLiveCatchup(t *testing.T) {
@@ -341,14 +351,14 @@ func TestYouTubeCheckerCheck_RecoversMissedPrimaryReminderFromLiveCatchup(t *tes
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(fmt.Appendf(nil,
+		writeYouTubeTestResponse(t, w, string(fmt.Appendf(nil,
 			`[{"id":"%s","title":"테스트 방송","channel_id":"%s","status":"live","start_scheduled":"%s","start_actual":"%s","channel":{"id":"%s","name":"테스트 채널","org":"Hololive"}}]`,
 			streamID,
 			channelID,
 			startActual.UTC().Format(time.RFC3339),
 			startActual.UTC().Format(time.RFC3339),
 			channelID,
-		))
+		)))
 	}))
 	defer server.Close()
 
@@ -394,7 +404,7 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[]`))
+		writeYouTubeTestResponse(t, w, `[]`)
 	}))
 	defer server.Close()
 
@@ -454,7 +464,7 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[]`))
+		writeYouTubeTestResponse(t, w, `[]`)
 	}))
 	defer server.Close()
 
@@ -840,8 +850,10 @@ func TestYouTubeChecker_DetectRoomScheduleChangesDeduplicatesRoomsAndUsesChannel
 	require.NoError(t, err)
 	require.Len(t, changes, 1)
 	require.Contains(t, changes, "room-1")
-	assert.Equal(t, "일정이 늦춰졌습니다.", changes["room-1"].Message)
-	assert.Equal(t, previousScheduled, changes["room-1"].PreviousScheduled)
+	roomChange := changes["room-1"]
+	require.NotNil(t, roomChange)
+	assert.Equal(t, "일정이 늦춰졌습니다.", roomChange.Message)
+	assert.Equal(t, previousScheduled, roomChange.PreviousScheduled)
 }
 
 func TestUniqueStrings(t *testing.T) {

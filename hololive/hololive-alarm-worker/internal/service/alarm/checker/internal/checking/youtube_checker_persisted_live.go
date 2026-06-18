@@ -70,6 +70,9 @@ func mergePersistedLiveSessionStreams(
 	streamsByChannel map[string][]*domain.Stream,
 	sessions []PersistedYouTubeLiveSession,
 ) map[string]time.Time {
+	if streamsByChannel == nil {
+		streamsByChannel = make(map[string][]*domain.Stream)
+	}
 	liveObservedAtByStreamID := make(map[string]time.Time)
 	for _, session := range sessions {
 		stream, channelID, ok := persistedLiveSessionStreamIdentity(session)

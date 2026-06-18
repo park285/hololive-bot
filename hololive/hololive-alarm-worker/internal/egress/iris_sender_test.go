@@ -17,8 +17,8 @@ func (c *irisSenderTestClient) SendMessage(context.Context, string, string, ...i
 	return nil
 }
 
-func (c *irisSenderTestClient) SendKaringContentList(_ context.Context, req iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
-	c.karingRequests = append(c.karingRequests, req)
+func (c *irisSenderTestClient) SendKaringContentList(_ context.Context, req *iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
+	c.karingRequests = append(c.karingRequests, *req)
 	return &iris.KaringDryRunResponse{}, nil
 }
 
@@ -26,7 +26,7 @@ func TestIrisMessageSenderPreservesReceiverRoomID(t *testing.T) {
 	client := &irisSenderTestClient{}
 	sender := NewIrisMessageSender(client)
 
-	err := sender.SendKaringContentList(t.Context(), "464252100463241", iris.KaringContentListRequest{
+	err := sender.SendKaringContentList(t.Context(), "464252100463241", &iris.KaringContentListRequest{
 		ReceiverRoomID: 464252100463241,
 	})
 
@@ -40,7 +40,7 @@ func TestIrisMessageSenderFallsBackToReceiverName(t *testing.T) {
 	client := &irisSenderTestClient{}
 	sender := NewIrisMessageSender(client)
 
-	err := sender.SendKaringContentList(t.Context(), "room-1", iris.KaringContentListRequest{})
+	err := sender.SendKaringContentList(t.Context(), "room-1", &iris.KaringContentListRequest{})
 
 	require.NoError(t, err)
 	require.Len(t, client.karingRequests, 1)
@@ -53,7 +53,7 @@ func TestIrisMessageSenderPreservesKaringClientRequestID(t *testing.T) {
 	sender := NewIrisMessageSender(client)
 	clientRequestID := "hololive-alarm:request-1"
 
-	err := sender.SendKaringContentList(t.Context(), "room-1", iris.KaringContentListRequest{
+	err := sender.SendKaringContentList(t.Context(), "room-1", &iris.KaringContentListRequest{
 		ClientRequestID: &clientRequestID,
 	})
 

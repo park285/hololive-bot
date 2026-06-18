@@ -120,6 +120,9 @@ func buildYouTubeUpcomingRoomNotifications(
 	selection youtubeUpcomingSelection,
 ) []*domain.AlarmNotification {
 	resolvedStream := EnsureScheduledTime(stream, *stream.StartScheduled)
+	if resolvedStream == nil {
+		return nil
+	}
 	notificationScheduleChanges := selection.scheduleChanges
 	if selection.targetCrossed {
 		notificationScheduleChanges = nil

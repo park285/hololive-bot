@@ -51,11 +51,11 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 		case "/oauth2/token":
 			w.WriteHeader(http.StatusOK)
 
-			_, _ = w.Write([]byte(`{"access_token":"token","expires_in":3600,"token_type":"bearer"}`))
+			writeTwitchTestResponse(t, w, `{"access_token":"token","expires_in":3600,"token_type":"bearer"}`)
 		case "/helix/streams":
 			w.WriteHeader(http.StatusOK)
 
-			_, _ = w.Write([]byte(`{"data":[{"id":"stream-1","user_id":"user-1","user_login":"aqua","user_name":"Aqua","type":"live","title":"live","viewer_count":100,"started_at":"` + startedAt + `"},{"id":"stream-2","user_id":"user-2","user_login":"aqua","user_name":"Aqua","type":"","started_at":"` + startedAt + `"}]}`))
+			writeTwitchTestResponse(t, w, `{"data":[{"id":"stream-1","user_id":"user-1","user_login":"aqua","user_name":"Aqua","type":"live","title":"live","viewer_count":100,"started_at":"`+startedAt+`"},{"id":"stream-2","user_id":"user-2","user_login":"aqua","user_name":"Aqua","type":"","started_at":"`+startedAt+`"}]}`)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -64,7 +64,7 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 
 	checker, err := NewTwitchChecker(
 		cache,
-		twitch.NewClient(twitch.ClientConfig{
+		twitch.NewClient(&twitch.ClientConfig{
 			ClientID:     "client-id",
 			ClientSecret: "client-secret",
 			BaseURL:      server.URL + "/helix",
@@ -98,7 +98,7 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 		_, err := cache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
 		require.NoError(t, err)
 
-		checker, err := NewTwitchChecker(cache, twitch.NewClient(twitch.ClientConfig{}, newCheckerTestLogger()), newCheckerTestLogger())
+		checker, err := NewTwitchChecker(cache, twitch.NewClient(&twitch.ClientConfig{}, newCheckerTestLogger()), newCheckerTestLogger())
 		require.NoError(t, err)
 
 		notifications, checkErr := checker.Check(ctx)
@@ -120,11 +120,11 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 			case "/oauth2/token":
 				w.WriteHeader(http.StatusOK)
 
-				_, _ = w.Write([]byte(`{"access_token":"token","expires_in":3600,"token_type":"bearer"}`))
+				writeTwitchTestResponse(t, w, `{"access_token":"token","expires_in":3600,"token_type":"bearer"}`)
 			case "/helix/streams":
 				w.WriteHeader(http.StatusInternalServerError)
 
-				_, _ = w.Write([]byte(`{"error":"server error"}`))
+				writeTwitchTestResponse(t, w, `{"error":"server error"}`)
 			default:
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -133,7 +133,7 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 
 		checker, err := NewTwitchChecker(
 			cache,
-			twitch.NewClient(twitch.ClientConfig{
+			twitch.NewClient(&twitch.ClientConfig{
 				ClientID:     "client-id",
 				ClientSecret: "client-secret",
 				BaseURL:      server.URL + "/helix",
@@ -148,6 +148,13 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 		assert.Contains(t, checkErr.Error(), "get streams batch")
 		assert.Nil(t, notifications)
 	})
+}
+
+func writeTwitchTestResponse(t *testing.T, w http.ResponseWriter, body string) {
+	t.Helper()
+
+	_, err := w.Write([]byte(body))
+	require.NoError(t, err)
 }
 
 func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
@@ -213,14 +220,12 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 				logger:      newCheckerTestLogger(),
 			}
 
-			notifications, err := checker.buildLiveNotifications(
-				t.Context(),
+			notifications := checker.buildLiveNotifications(
 				tc.loginMappings,
 				tc.subscriberMap,
 				map[string]string{"ch1": "아쿠아"},
 				tc.streamsResponse,
 			)
-			require.NoError(t, err)
 			require.Len(t, notifications, tc.wantLen)
 			assert.Equal(t, 0, setNXInvokes, "checker must not preclaim dedup before queue publish")
 		})

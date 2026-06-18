@@ -27,8 +27,8 @@ func (s *karingSenderStubIrisSender) SendMessage(_ context.Context, roomID, mess
 	return nil
 }
 
-func (s *karingSenderStubIrisSender) SendKaringContentList(_ context.Context, req iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
-	s.karingRequests = append(s.karingRequests, req)
+func (s *karingSenderStubIrisSender) SendKaringContentList(_ context.Context, req *iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
+	s.karingRequests = append(s.karingRequests, *req)
 	return nil, nil
 }
 
@@ -39,7 +39,7 @@ func TestYouTubeOutboxKaringSenderNilInnerReturnsPinnedError(t *testing.T) {
 		"youtube outbox karing sender: sender is nil")
 	require.EqualError(t, sender.SendMessageWithClientRequestID(t.Context(), "room-1", "hi", "req-1"),
 		"youtube outbox karing sender: sender is nil")
-	require.EqualError(t, sender.SendYouTubeOutboxKaring(t.Context(), "room-1", domain.YouTubeOutboxDispatchPayload{}),
+	require.EqualError(t, sender.SendYouTubeOutboxKaring(t.Context(), "room-1", &domain.YouTubeOutboxDispatchPayload{}),
 		"youtube outbox karing sender: sender is nil")
 }
 
@@ -82,7 +82,7 @@ func TestYouTubeOutboxKaringSenderForwardsKaringChunks(t *testing.T) {
 		}},
 	}
 
-	require.NoError(t, sender.SendYouTubeOutboxKaring(t.Context(), "464252100463241", payload))
+	require.NoError(t, sender.SendYouTubeOutboxKaring(t.Context(), "464252100463241", &payload))
 
 	require.Len(t, stub.karingRequests, 1)
 	assert.Equal(t, int64(464252100463241), stub.karingRequests[0].ReceiverRoomID)

@@ -144,8 +144,8 @@ func TestRuntimeSchedulerStart_NilContext(t *testing.T) {
 	}
 
 	var nilCtx context.Context
-	//nolint:staticcheck // nil context path is the behavior under test
-	s.Start(nilCtx)
+
+	require.Error(t, s.Start(nilCtx))
 }
 
 func TestRuntimeSchedulerRunIterations(t *testing.T) {
@@ -521,10 +521,11 @@ func TestRuntimeSchedulerRunLoop_StopsOnContextCancel(t *testing.T) {
 	go func() {
 		defer close(done)
 
-		s.runLoop(ctx, "test", 10*time.Millisecond, 50*time.Millisecond, true, func(context.Context) error {
+		err := s.runLoop(ctx, "test", 10*time.Millisecond, 50*time.Millisecond, true, func(context.Context) error {
 			calls.Add(1)
 			return errors.New("expected failure branch")
 		})
+		require.ErrorIs(t, err, context.Canceled)
 	}()
 
 	require.Eventually(t, func() bool { return calls.Load() >= 2 }, time.Second, 20*time.Millisecond)

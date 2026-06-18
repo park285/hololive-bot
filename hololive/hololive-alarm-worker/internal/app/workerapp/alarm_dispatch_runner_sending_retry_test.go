@@ -88,7 +88,7 @@ func TestNextAlarmDispatchRetryKeepsAttemptDelayWhenHTTPRetryAfterHintIsShorter(
 	cause := &iris.HTTPError{StatusCode: 503, RetryAfter: time.Second}
 	startedAt := time.Now().UTC()
 
-	retry := nextAlarmDispatchRetry(envelope, cause)
+	retry := nextAlarmDispatchRetry(&envelope, cause)
 
 	require.NotNil(t, retry)
 	assert.Equal(t, 2, retry.Attempt)

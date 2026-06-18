@@ -40,12 +40,12 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 	}
 
 	for _, meta := range metas {
-		c.observePersistedLiveGuardrailMeta(meta, evidence, since)
+		c.observePersistedLiveGuardrailMeta(&meta, evidence, since)
 	}
 }
 
 func (c *YouTubeChecker) observePersistedLiveGuardrailMeta(
-	meta persistedLiveGuardrailMeta,
+	meta *persistedLiveGuardrailMeta,
 	evidence recentLiveDispatchEvidence,
 	since time.Time,
 ) {
@@ -75,7 +75,7 @@ func (c *YouTubeChecker) observePersistedLiveGuardrailMeta(
 }
 
 func (c *YouTubeChecker) observeStreamLevelLiveGuardrailMeta(
-	meta persistedLiveGuardrailMeta,
+	meta *persistedLiveGuardrailMeta,
 	evidence recentLiveDispatchEvidence,
 	since time.Time,
 ) {
@@ -91,7 +91,7 @@ func (c *YouTubeChecker) observeStreamLevelLiveGuardrailMeta(
 }
 
 func (c *YouTubeChecker) logPartialLiveDeliveryGuardrail(
-	meta persistedLiveGuardrailMeta,
+	meta *persistedLiveGuardrailMeta,
 	sentRooms map[string]struct{},
 	missingRooms []string,
 	since time.Time,
@@ -108,7 +108,7 @@ func (c *YouTubeChecker) logPartialLiveDeliveryGuardrail(
 	)
 }
 
-func (c *YouTubeChecker) logMissingLiveDeliveryGuardrail(meta persistedLiveGuardrailMeta, since time.Time) {
+func (c *YouTubeChecker) logMissingLiveDeliveryGuardrail(meta *persistedLiveGuardrailMeta, since time.Time) {
 	observeYouTubeLiveGuardrail("missing_recent_delivery")
 	c.logger.Warn("alarm.youtube.live_guardrail.missing_delivery",
 		slog.String("stream_id", meta.streamID),
@@ -119,7 +119,7 @@ func (c *YouTubeChecker) logMissingLiveDeliveryGuardrail(meta persistedLiveGuard
 	)
 }
 
-func (c *YouTubeChecker) logMissingLiveDispatchGuardrail(meta persistedLiveGuardrailMeta, since time.Time) {
+func (c *YouTubeChecker) logMissingLiveDispatchGuardrail(meta *persistedLiveGuardrailMeta, since time.Time) {
 	observeYouTubeLiveGuardrail("missing_recent_dispatch")
 	c.logger.Warn("alarm.youtube.live_guardrail.missing_dispatch",
 		slog.String("stream_id", meta.streamID),
@@ -162,8 +162,8 @@ func (c *YouTubeChecker) recentLiveDispatchEvidence(
 		valkeyNotifiedStreamIDs: make(map[string]struct{}),
 		sentRoomsByStreamID:     make(map[string]map[string]struct{}),
 	}
-	var errs []error
-	var deliveryErrs []error
+	errs := make([]error, 0, 2)
+	deliveryErrs := make([]error, 0, 1)
 
 	c.collectPgLiveDispatchEvidence(ctx, streamIDs, since, &evidence, &errs, &deliveryErrs)
 	c.collectValkeyLiveDispatchEvidence(ctx, streamIDs, &evidence, &errs)
@@ -230,7 +230,7 @@ func (e recentLiveDispatchEvidence) hasAny() bool {
 		len(e.sentRoomsByStreamID) > 0
 }
 
-func mergeStringSet(dst map[string]struct{}, src map[string]struct{}) {
+func mergeStringSet(dst, src map[string]struct{}) {
 	for key := range src {
 		key = strings.TrimSpace(key)
 		if key == "" {

@@ -8,7 +8,7 @@ type chzzkLookupJob struct {
 	subscriberRooms  []string
 }
 
-func newChzzkLookupJob(youtubeChannelID string, chzzkChannelID string, subscriberMap map[string][]string) (chzzkLookupJob, bool) {
+func newChzzkLookupJob(youtubeChannelID, chzzkChannelID string, subscriberMap map[string][]string) (chzzkLookupJob, bool) {
 	job := chzzkLookupJob{
 		youtubeChannelID: strings.TrimSpace(youtubeChannelID),
 		chzzkChannelID:   strings.TrimSpace(chzzkChannelID),

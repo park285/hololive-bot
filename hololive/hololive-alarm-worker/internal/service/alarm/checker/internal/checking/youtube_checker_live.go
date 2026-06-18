@@ -30,6 +30,9 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 
 	minutesUntil := c.targetPolicySnapshot().PrimaryAdvanceMinute()
 	resolvedStream := EnsureScheduledTime(stream, *startAt)
+	if resolvedStream == nil {
+		return nil, nil
+	}
 	notifications, suppressedRooms, err := c.unsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms, minutesUntil)
 	if err != nil {
 		return nil, err

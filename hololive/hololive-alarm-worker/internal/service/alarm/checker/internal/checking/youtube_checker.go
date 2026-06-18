@@ -162,7 +162,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 		if !ok {
 			continue
 		}
-		c.startYouTubeChannelWorker(eg, egCtx, work, liveObservedAtByStreamID, now, &mu, &notifications)
+		c.startYouTubeChannelWorker(eg, egCtx, &work, liveObservedAtByStreamID, now, &mu, &notifications)
 	}
 
 	if err := eg.Wait(); err != nil {
@@ -175,7 +175,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 func (c *YouTubeChecker) startYouTubeChannelWorker(
 	eg *errgroup.Group,
 	ctx context.Context,
-	work youtubeChannelCheckWork,
+	work *youtubeChannelCheckWork,
 	liveObservedAtByStreamID map[string]time.Time,
 	now time.Time,
 	mu *sync.Mutex,

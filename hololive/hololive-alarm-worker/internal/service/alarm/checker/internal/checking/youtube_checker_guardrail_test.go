@@ -249,8 +249,8 @@ func TestRecentLiveDispatchEvidenceTrimsPersistedDispatchIDs(t *testing.T) {
 	checker := &YouTubeChecker{
 		persistedLiveSource: &guardrailEvidenceSource{
 			dispatched: map[string]struct{}{
-				" stream-pg ": {},
-				"":            {},
+				" " + "stream-pg" + " ": {},
+				"":                      {},
 			},
 		},
 		logger: newCheckerTestLogger(),
@@ -328,7 +328,7 @@ func TestObservePersistedLiveGuardrailMetaLogsOnlyRejectedDeliveryStates(t *test
 				logger: slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})),
 			}
 
-			checker.observePersistedLiveGuardrailMeta(meta, tc.evidence, now.Add(-persistedLiveDispatchRecentWindow))
+			checker.observePersistedLiveGuardrailMeta(&meta, tc.evidence, now.Add(-persistedLiveDispatchRecentWindow))
 			if tc.wantLog == "" {
 				assert.Empty(t, buf.String())
 				return

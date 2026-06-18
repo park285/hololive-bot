@@ -93,8 +93,8 @@ func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 			name:          "karing disabled falls back to regular grouping",
 			karingEnabled: false,
 			envelopes: []domain.AlarmQueueEnvelope{
-				alarmDispatchGroupTestScheduledEnvelope("room-1", domain.AlarmTypeLive, 5, firstStart),
-				alarmDispatchGroupTestScheduledEnvelope("room-1", domain.AlarmTypeLive, 5, secondStart),
+				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart),
+				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
 			},
 			want: []alarmDispatchGroupSummary{
 				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
@@ -105,9 +105,9 @@ func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 			name:          "karing enabled groups by alarm type",
 			karingEnabled: true,
 			envelopes: []domain.AlarmQueueEnvelope{
-				alarmDispatchGroupTestScheduledEnvelope("room-1", domain.AlarmTypeLive, 5, firstStart),
-				alarmDispatchGroupTestScheduledEnvelope("room-1", domain.AlarmTypeCommunity, 5, secondStart),
-				alarmDispatchGroupTestScheduledEnvelope("room-1", domain.AlarmTypeLive, 5, secondStart),
+				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart),
+				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeCommunity, 5, secondStart),
+				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
 			},
 			want: []alarmDispatchGroupSummary{
 				{roomID: "room-1", minutesUntil: 5, envelopeCount: 2, notificationCount: 2},
@@ -156,7 +156,7 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 		},
 		{
 			name:     "scheduled stream with StartScheduled",
-			envelope: alarmDispatchGroupTestScheduledEnvelope("room-1", domain.AlarmTypeLive, 10, start),
+			envelope: alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 10, start),
 			want:     fmt.Sprintf("room-1|scheduled|%d", minuteBucket),
 		},
 		{
@@ -170,7 +170,7 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tc.want, alarmDispatchGroupKey(tc.envelope))
+			assert.Equal(t, tc.want, alarmDispatchGroupKey(&tc.envelope))
 		})
 	}
 }
@@ -198,7 +198,7 @@ func TestAlarmDispatchKaringGroupKey(t *testing.T) {
 		{
 			name:     "youtube outbox source delegates to regular key",
 			envelope: youtubeOutbox,
-			want:     alarmDispatchGroupKey(youtubeOutbox),
+			want:     alarmDispatchGroupKey(&youtubeOutbox),
 		},
 		{
 			name:     "non-outbox uses karing format",
@@ -211,7 +211,7 @@ func TestAlarmDispatchKaringGroupKey(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tc.want, alarmDispatchKaringGroupKey(tc.envelope))
+			assert.Equal(t, tc.want, alarmDispatchKaringGroupKey(&tc.envelope))
 		})
 	}
 }
@@ -268,12 +268,11 @@ func alarmDispatchGroupTestEnvelope(roomID string, alarmType domain.AlarmType, m
 }
 
 func alarmDispatchGroupTestScheduledEnvelope(
-	roomID string,
 	alarmType domain.AlarmType,
 	minutesUntil int,
 	start time.Time,
 ) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchGroupTestEnvelope(roomID, alarmType, minutesUntil)
+	envelope := alarmDispatchGroupTestEnvelope("room-1", alarmType, minutesUntil)
 	envelope.Notification.Stream.StartScheduled = &start
 	return envelope
 }

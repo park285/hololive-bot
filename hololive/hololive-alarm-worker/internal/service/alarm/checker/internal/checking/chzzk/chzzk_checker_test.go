@@ -99,7 +99,7 @@ func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
 
 				w.WriteHeader(tc.statusCode)
 
-				_, _ = w.Write([]byte(tc.responseBody))
+				writeChzzkTestResponse(t, w, tc.responseBody)
 			}))
 			t.Cleanup(server.Close)
 
@@ -158,7 +158,7 @@ func TestChzzkCheckerCheck_DoesNotPreclaimDedup(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 
-		_, _ = w.Write([]byte(`{"code":200,"content":{"status":"OPEN"}}`))
+		writeChzzkTestResponse(t, w, `{"code":200,"content":{"status":"OPEN"}}`)
 	}))
 	t.Cleanup(server.Close)
 
@@ -183,7 +183,7 @@ func TestChzzkCheckerCollectNotificationsSkipsInvalidLookupJobs(t *testing.T) {
 		liveStatusCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 
-		_, _ = w.Write([]byte(`{"code":200,"content":{"status":"OPEN","liveTitle":"치지직 라이브","concurrentUserCount":77}}`))
+		writeChzzkTestResponse(t, w, `{"code":200,"content":{"status":"OPEN","liveTitle":"치지직 라이브","concurrentUserCount":77}}`)
 	}))
 	t.Cleanup(server.Close)
 
@@ -215,4 +215,11 @@ func TestChzzkCheckerCollectNotificationsSkipsInvalidLookupJobs(t *testing.T) {
 	assert.Equal(t, "yt-valid", notifications[0].Stream.ChannelID)
 	assert.Equal(t, "chzzk-valid", notifications[0].Stream.ChzzkChannelID)
 	assert.Equal(t, "라덴", notifications[0].Stream.Channel.Name)
+}
+
+func writeChzzkTestResponse(t *testing.T, w http.ResponseWriter, body string) {
+	t.Helper()
+
+	_, err := w.Write([]byte(body))
+	require.NoError(t, err)
 }

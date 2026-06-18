@@ -9,7 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
-func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string, bool, error) {
+func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) (claimKeys []string, claimed bool, err error) {
 	category := keys.NotificationCategory(
 		n.dedupService.TargetMinutesSnapshot(),
 		payload.notification.MinutesUntil,
@@ -44,7 +44,7 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string
 		return nil, false, nil
 	}
 
-	claimKeys := compactClaimKeys(notifyKey, logicalKey)
+	claimKeys = compactClaimKeys(notifyKey, logicalKey)
 	scheduleClaimKeys, scheduleClaimed, err := n.claimScheduleChangeDedup(ctx, payload)
 	if err != nil {
 		n.releaseClaimsBestEffort(ctx, append(claimKeys, scheduleClaimKeys...), "failed to release claims after schedule change claim error")
@@ -58,7 +58,7 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string
 	return append(claimKeys, scheduleClaimKeys...), true, nil
 }
 
-func (n *Notifier) claimScheduleChangeDedup(ctx context.Context, payload *sendInput) ([]string, bool, error) {
+func (n *Notifier) claimScheduleChangeDedup(ctx context.Context, payload *sendInput) (claimKeys []string, claimed bool, err error) {
 	if payload == nil || payload.notification == nil {
 		return nil, true, nil
 	}
@@ -66,7 +66,7 @@ func (n *Notifier) claimScheduleChangeDedup(ctx context.Context, payload *sendIn
 		return nil, true, nil
 	}
 
-	claimKeys, claimed, err := n.dedupService.TryClaimNotificationScheduleChange(
+	claimKeys, claimed, err = n.dedupService.TryClaimNotificationScheduleChange(
 		ctx,
 		payload.notification.RoomID,
 		payload.channelID,
@@ -83,13 +83,13 @@ func (n *Notifier) claimScheduleChangeDedup(ctx context.Context, payload *sendIn
 	return claimKeys, true, nil
 }
 
-func compactClaimKeys(keys ...string) []string {
-	if len(keys) == 0 {
+func compactClaimKeys(rawKeys ...string) []string {
+	if len(rawKeys) == 0 {
 		return nil
 	}
 
-	compacted := make([]string, 0, len(keys))
-	for _, key := range keys {
+	compacted := make([]string, 0, len(rawKeys))
+	for _, key := range rawKeys {
 		if strings.TrimSpace(key) == "" {
 			continue
 		}

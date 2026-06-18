@@ -6,29 +6,27 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-var celebrationMessageRenderers = map[domain.CelebrationKind]func(*domain.CelebrationDispatchPayload) (string, error){
-	domain.CelebrationKindBirthday:    renderBirthdayCelebrationMessage,
-	domain.CelebrationKindAnniversary: renderAnniversaryCelebrationMessage,
-}
-
-func renderCelebrationMessage(envelope domain.AlarmQueueEnvelope) (string, error) {
+func renderCelebrationMessage(envelope *domain.AlarmQueueEnvelope) (string, error) {
 	if envelope.Celebration == nil {
 		return "", fmt.Errorf("render celebration: payload is nil")
 	}
 	p := envelope.Celebration
-	render, ok := celebrationMessageRenderers[p.Kind]
-	if !ok {
+	switch p.Kind {
+	case domain.CelebrationKindBirthday:
+		return renderBirthdayCelebrationMessage(p), nil
+	case domain.CelebrationKindAnniversary:
+		return renderAnniversaryCelebrationMessage(p)
+	default:
 		return "", fmt.Errorf("render celebration: unknown kind %q", p.Kind)
 	}
-	return render(p)
 }
 
-func renderBirthdayCelebrationMessage(p *domain.CelebrationDispatchPayload) (string, error) {
+func renderBirthdayCelebrationMessage(p *domain.CelebrationDispatchPayload) string {
 	msg := fmt.Sprintf("🎂 %s 생일 축하합니다!", p.MemberName)
 	if p.Ordinal > 0 {
 		msg = fmt.Sprintf("🎂 %s %d번째 생일 축하합니다!", p.MemberName, p.Ordinal)
 	}
-	return appendCelebrationChannelLink(msg, p.ChannelID), nil
+	return appendCelebrationChannelLink(msg, p.ChannelID)
 }
 
 func renderAnniversaryCelebrationMessage(p *domain.CelebrationDispatchPayload) (string, error) {

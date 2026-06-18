@@ -9,7 +9,7 @@ require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.17.0
+	github.com/park285/iris-client-go v0.18.0
 	github.com/park285/shared-go v1.9.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1

@@ -177,7 +177,7 @@ func TestAlarmDispatchEnvelopeClientRequestIDParts(t *testing.T) {
 	envelope.Notification.MinutesUntil = 30
 	envelope.ClaimKeys = []string{"claim-a", "claim-b"}
 
-	parts := alarmDispatchEnvelopeClientRequestIDParts(envelope)
+	parts := alarmDispatchEnvelopeClientRequestIDParts(&envelope)
 
 	assert.Equal(t, []string{
 		"42",

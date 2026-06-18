@@ -206,7 +206,7 @@ func validateRuntimeSchedulerDeps(
 	return nil
 }
 
-func runtimeSchedulerYouTubeTiming(checkInterval time.Duration) (time.Duration, time.Duration) {
+func runtimeSchedulerYouTubeTiming(checkInterval time.Duration) (initialDelay, interval time.Duration) {
 	evaluationWindowCap := youtubeEvaluationWindowCap(checkInterval)
 	if checkInterval <= 0 {
 		return defaultYouTubeInterval, evaluationWindowCap

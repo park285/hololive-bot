@@ -77,12 +77,7 @@ func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification,
 		return []*domain.AlarmNotification{}, nil
 	}
 
-	notifications, err := c.buildLiveNotifications(ctx, inputs.loginMappings, inputs.subscriberMap, inputs.memberNames, streamsResponse)
-	if err != nil {
-		return nil, fmt.Errorf("check twitch streams: build live notifications: %w", err)
-	}
-
-	return notifications, nil
+	return c.buildLiveNotifications(inputs.loginMappings, inputs.subscriberMap, inputs.memberNames, streamsResponse), nil
 }
 
 type twitchCheckInputs struct {
@@ -121,14 +116,14 @@ func (c *TwitchChecker) loadCheckInputs(ctx context.Context) (twitchCheckInputs,
 	}, nil
 }
 
-func normalizeTwitchLoginMappings(loginMappingsRaw map[string]string) (map[string]string, []string) {
+func normalizeTwitchLoginMappings(loginMappingsRaw map[string]string) (loginMappings map[string]string, youtubeChannelIDs []string) {
 	if len(loginMappingsRaw) == 0 {
 		return map[string]string{}, []string{}
 	}
 
-	loginMappings := make(map[string]string, len(loginMappingsRaw))
+	loginMappings = make(map[string]string, len(loginMappingsRaw))
 
-	youtubeChannelIDs := make([]string, 0, len(loginMappingsRaw))
+	youtubeChannelIDs = make([]string, 0, len(loginMappingsRaw))
 	for login, channelID := range loginMappingsRaw {
 		normalizedLogin := stringutil.Normalize(login)
 
@@ -158,12 +153,11 @@ func buildTwitchLookupLogins(loginMappings map[string]string, subscriberMap map[
 }
 
 func (c *TwitchChecker) buildLiveNotifications(
-	_ context.Context,
 	loginMappings map[string]string,
 	subscriberMap map[string][]string,
 	memberNames map[string]string,
 	streamsResponse *twitch.StreamsResponse,
-) ([]*domain.AlarmNotification, error) {
+) []*domain.AlarmNotification {
 	notifications := make([]*domain.AlarmNotification, 0)
 
 	for idx := range streamsResponse.Data {
@@ -175,7 +169,7 @@ func (c *TwitchChecker) buildLiveNotifications(
 		notifications = append(notifications, buildTwitchStreamNotifications(streamData, loginMappings, subscriberMap, memberNames)...)
 	}
 
-	return notifications, nil
+	return notifications
 }
 
 func buildTwitchStreamNotifications(
@@ -210,7 +204,7 @@ func buildTwitchLiveDedupKey(userID, streamID string) string {
 	return fmt.Sprintf("%s%s:%s", twitchLiveNotifiedKeyPrefix, userID, streamID)
 }
 
-func buildTwitchLiveStream(youtubeChannelID string, memberName string, streamData *twitch.StreamData) *domain.Stream {
+func buildTwitchLiveStream(youtubeChannelID, memberName string, streamData *twitch.StreamData) *domain.Stream {
 	if streamData == nil {
 		return nil
 	}

@@ -29,6 +29,9 @@ import (
 )
 
 func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend) (int, error) {
+	if items == nil {
+		items = []claimedSend{}
+	}
 	notifications := make([]*domain.AlarmNotification, 0, len(items))
 	claimKeys := make([][]string, 0, len(items))
 	for _, item := range items {
@@ -50,7 +53,7 @@ func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend)
 	return len(items), nil
 }
 
-func clampProcessedDeliveries(processed int, total int) int {
+func clampProcessedDeliveries(processed, total int) int {
 	if processed < 0 {
 		return 0
 	}

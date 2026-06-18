@@ -50,7 +50,9 @@ type alarmFoundation struct {
 }
 
 func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err error) (*AlarmWorkerRuntime, error) {
-	infra.Cleanup()
+	if infra != nil && infra.Cleanup != nil {
+		infra.Cleanup()
+	}
 	return nil, fmt.Errorf("build alarm worker runtime: %s: %w", stage, err)
 }
 
@@ -58,6 +60,9 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
+	}
+	if appConfig == nil {
+		return nil, fmt.Errorf("config must not be nil")
 	}
 
 	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig, logger)
@@ -80,20 +85,9 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		return failAlarmWorkerBuild(infra, "notification egress", err)
 	}
 
-	router, err := sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{APIKey: appConfig.Server.APIKey})
+	servers, celebRunner, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
 	if err != nil {
-		return failAlarmWorkerBuild(infra, "router", err)
-	}
-
-	publishConfig, err := loadAlarmDispatchPublishConfig()
-	if err != nil {
-		return failAlarmWorkerBuild(infra, "celebration publish config", err)
-	}
-	celebRunner := buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger)
-
-	servers, err := sharedserver.NewRuntimeHTTPServers(appConfig.Server, router, "hololive-alarm-worker.http")
-	if err != nil {
-		return failAlarmWorkerBuild(infra, "http servers", err)
+		return failAlarmWorkerBuild(infra, stage, err)
 	}
 
 	return &AlarmWorkerRuntime{
@@ -102,14 +96,41 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		Scheduler:          scheduler,
 		NotificationEgress: notificationEgress,
 		CelebrationRunner:  celebRunner,
-		ConfigSubscriber:   BuildAlarmWorkerConfigSubscriber(infra.Cache, foundation.AlarmCRUD, logger),
+		ConfigSubscriber:   BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, foundation.AlarmCRUD, logger),
 		ServerAddr:         servers.Addr(),
 		HTTPServers:        servers,
 		Managed:            lifecycle.NewManaged(infra.Cleanup),
 	}, nil
 }
 
+func buildAlarmWorkerHTTPRuntime(
+	ctx context.Context,
+	appConfig *config.Config,
+	infra *sharedmodules.InfraModule,
+	foundation *alarmFoundation,
+	logger *slog.Logger,
+) (servers *sharedserver.RuntimeHTTPServers, scheduler runtimeAlarmScheduler, stage string, err error) {
+	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{APIKey: appConfig.Server.APIKey})
+	if err != nil {
+		return nil, nil, "router", err
+	}
+
+	publishConfig, err := loadAlarmDispatchPublishConfig()
+	if err != nil {
+		return nil, nil, "celebration publish config", err
+	}
+	celebRunner := buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger)
+
+	servers, err = sharedserver.NewRuntimeHTTPServers(&appConfig.Server, router, "hololive-alarm-worker.http")
+	if err != nil {
+		return nil, nil, "http servers", err
+	}
+
+	return servers, celebRunner, "", nil
+}
+
 func BuildAlarmWorkerConfigSubscriber(
+	ctx context.Context,
 	cacheClient cache.Client,
 	alarmCRUD domain.AlarmCRUD,
 	logger *slog.Logger,
@@ -120,7 +141,7 @@ func BuildAlarmWorkerConfigSubscriber(
 
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		AlarmAdvanceMinutes: func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
-			ctx, cancel := context.WithTimeout(context.Background(), constants.RequestTimeout.AdminRequest)
+			ctx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.AdminRequest)
 			defer cancel()
 
 			targets := alarmCRUD.UpdateAlarmAdvanceMinutes(ctx, payload.Minutes)
@@ -160,14 +181,10 @@ func buildRuntimeScheduler(
 	logger *slog.Logger,
 	configuredRole string,
 ) (runtimeAlarmScheduler, error) {
-	if !runtimeAllowsAlarmScheduler(runtimeRoleWorker, configuredRole) {
-		if logger != nil {
-			logger.Info(
-				"Alarm runtime scheduler disabled for this runtime",
-				slog.String("runtime_role", runtimeRoleWorker),
-				slog.String("configured_role", strings.TrimSpace(configuredRole)),
-			)
-		}
+	if err := validateRuntimeSchedulerInputs(appConfig, foundation); err != nil {
+		return nil, err
+	}
+	if runtimeSchedulerDisabled(runtimeRoleWorker, configuredRole, logger) {
 		return nil, nil
 	}
 
@@ -196,6 +213,30 @@ func buildRuntimeScheduler(
 	return scheduler, nil
 }
 
+func validateRuntimeSchedulerInputs(appConfig *config.Config, foundation *alarmFoundation) error {
+	if appConfig == nil {
+		return fmt.Errorf("config is required")
+	}
+	if foundation == nil {
+		return fmt.Errorf("alarm foundation is required")
+	}
+	return nil
+}
+
+func runtimeSchedulerDisabled(runtimeRole, configuredRole string, logger *slog.Logger) bool {
+	if runtimeAllowsAlarmScheduler(runtimeRole, configuredRole) {
+		return false
+	}
+	if logger != nil {
+		logger.Info(
+			"Alarm runtime scheduler disabled for this runtime",
+			slog.String("runtime_role", runtimeRole),
+			slog.String("configured_role", strings.TrimSpace(configuredRole)),
+		)
+	}
+	return true
+}
+
 func buildAlarmFoundation(
 	ctx context.Context,
 	appConfig *config.Config,
@@ -220,12 +261,12 @@ func buildAlarmFoundation(
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
-	chzzkClient := chzzk.NewClientWithConfig(chzzk.ClientConfig{
+	chzzkClient := chzzk.NewClientWithConfig(&chzzk.ClientConfig{
 		ClientID:     appConfig.Chzzk.ClientID,
 		ClientSecret: appConfig.Chzzk.ClientSecret,
 		Logger:       logger,
 	})
-	twitchClient := twitch.NewClient(twitch.ClientConfig{
+	twitchClient := twitch.NewClient(&twitch.ClientConfig{
 		ClientID:     appConfig.Twitch.ClientID,
 		ClientSecret: appConfig.Twitch.ClientSecret,
 	}, logger)

@@ -44,14 +44,14 @@ func (r *alarmDispatchRunner) runStep(ctx context.Context) bool {
 	return true
 }
 
-func (r alarmDispatchRunner) yieldAfterBatchLimit(ctx context.Context) bool {
+func (r *alarmDispatchRunner) yieldAfterBatchLimit(ctx context.Context) bool {
 	if r.yield != nil {
 		return r.yield(ctx)
 	}
 	return sleepContext(ctx, 10*time.Millisecond)
 }
 
-func (r alarmDispatchRunner) consumerModeLabel() string {
+func (r *alarmDispatchRunner) consumerModeLabel() string {
 	if r.consumerMode != "" {
 		return r.consumerMode
 	}
@@ -61,7 +61,7 @@ func (r alarmDispatchRunner) consumerModeLabel() string {
 	return "valkey"
 }
 
-func (r alarmDispatchRunner) handleStepError(ctx context.Context, err error) bool {
+func (r *alarmDispatchRunner) handleStepError(ctx context.Context, err error) bool {
 	if ctx.Err() != nil {
 		return false
 	}

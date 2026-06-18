@@ -26,11 +26,12 @@ func groupAlarmDispatchEnvelopesForKaring(envelopes []domain.AlarmQueueEnvelope,
 
 func groupAlarmDispatchEnvelopesByKey(
 	envelopes []domain.AlarmQueueEnvelope,
-	keyFunc func(domain.AlarmQueueEnvelope) string,
+	keyFunc func(*domain.AlarmQueueEnvelope) string,
 ) []alarmDispatchGroup {
 	groups := make([]alarmDispatchGroup, 0, len(envelopes))
 	index := map[string]int{}
-	for _, envelope := range envelopes {
+	for i := range envelopes {
+		envelope := &envelopes[i]
 		key := keyFunc(envelope)
 		groupIndex, ok := index[key]
 		if !ok {
@@ -43,22 +44,31 @@ func groupAlarmDispatchEnvelopesByKey(
 	return groups
 }
 
-func newAlarmDispatchGroup(envelope domain.AlarmQueueEnvelope) alarmDispatchGroup {
+func newAlarmDispatchGroup(envelope *domain.AlarmQueueEnvelope) alarmDispatchGroup {
+	if envelope == nil {
+		return alarmDispatchGroup{}
+	}
 	return alarmDispatchGroup{
 		roomID:        envelope.Notification.RoomID,
 		minutesUntil:  envelope.Notification.MinutesUntil,
-		envelopes:     []domain.AlarmQueueEnvelope{envelope},
+		envelopes:     []domain.AlarmQueueEnvelope{*envelope},
 		notifications: []domain.AlarmNotification{envelope.Notification},
 	}
 }
 
-func appendAlarmDispatchEnvelope(group *alarmDispatchGroup, envelope domain.AlarmQueueEnvelope) {
+func appendAlarmDispatchEnvelope(group *alarmDispatchGroup, envelope *domain.AlarmQueueEnvelope) {
+	if group == nil || envelope == nil {
+		return
+	}
 	group.minutesUntil = minAlarmDispatchMinutes(group.minutesUntil, envelope.Notification.MinutesUntil)
-	group.envelopes = append(group.envelopes, envelope)
+	group.envelopes = append(group.envelopes, *envelope)
 	group.notifications = append(group.notifications, envelope.Notification)
 }
 
-func alarmDispatchGroupKey(envelope domain.AlarmQueueEnvelope) string {
+func alarmDispatchGroupKey(envelope *domain.AlarmQueueEnvelope) string {
+	if envelope == nil {
+		return ""
+	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		return fmt.Sprintf("%s|celebration|%s|%s",
 			envelope.Notification.RoomID,
@@ -82,7 +92,10 @@ func alarmDispatchGroupKey(envelope domain.AlarmQueueEnvelope) string {
 	return fmt.Sprintf("%s|minutes|%d", envelope.Notification.RoomID, envelope.Notification.MinutesUntil)
 }
 
-func alarmDispatchKaringGroupKey(envelope domain.AlarmQueueEnvelope) string {
+func alarmDispatchKaringGroupKey(envelope *domain.AlarmQueueEnvelope) string {
+	if envelope == nil {
+		return ""
+	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		return alarmDispatchGroupKey(envelope)
 	}

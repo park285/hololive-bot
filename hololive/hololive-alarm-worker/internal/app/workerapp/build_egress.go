@@ -25,6 +25,9 @@ func buildNotificationEgress(
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (runtimeAlarmScheduler, error) {
+	if appConfig == nil {
+		return nil, fmt.Errorf("config is required")
+	}
 	if infra == nil || infra.Postgres == nil {
 		return nil, fmt.Errorf("postgres is required")
 	}
@@ -38,11 +41,24 @@ func buildNotificationEgress(
 	}
 	irisSender := egress.NewIrisMessageSender(irisClient)
 
+	alarmDispatchRunner, err := buildAlarmDispatchRunner(infra, irisSender, logger)
+	if err != nil {
+		return nil, err
+	}
+	youtubeOutboxDispatcher, err := buildYouTubeOutboxDispatcher(infra, buildYouTubeOutboxSender(irisSender), logger)
+	if err != nil {
+		return nil, err
+	}
+	deliveryOutboxDispatcher, err := buildDeliveryOutboxDispatcher(infra, irisSender, logger)
+	if err != nil {
+		return nil, err
+	}
+
 	runners := []namedRuntimeScheduler{
-		{name: "alarm-dispatch", scheduler: buildAlarmDispatchRunner(infra, irisSender, logger)},
+		{name: "alarm-dispatch", scheduler: alarmDispatchRunner},
 		{name: "alarm-dispatch-maintenance", scheduler: buildAlarmDispatchMaintenanceRunner(infra, logger)},
-		{name: "youtube-outbox", scheduler: buildYouTubeOutboxDispatcher(infra, buildYouTubeOutboxSender(irisSender), logger)},
-		{name: "notification-delivery-outbox", scheduler: buildDeliveryOutboxDispatcher(infra, irisSender, logger)},
+		{name: "youtube-outbox", scheduler: youtubeOutboxDispatcher},
+		{name: "notification-delivery-outbox", scheduler: deliveryOutboxDispatcher},
 	}
 	return notificationEgressRunner{
 		runners:      runners,
@@ -56,12 +72,15 @@ func buildDeliveryOutboxDispatcher(
 	infra *sharedmodules.InfraModule,
 	sender delivery.MessageSender,
 	logger *slog.Logger,
-) runtimeAlarmScheduler {
+) (runtimeAlarmScheduler, error) {
 	if !parseBoolEnv("DELIVERY_DISPATCHER_ENABLED", true) {
 		if logger != nil {
 			logger.Info("Notification delivery outbox dispatcher disabled")
 		}
-		return nil
+		return nil, nil
+	}
+	if infra == nil || infra.Postgres == nil {
+		return nil, fmt.Errorf("postgres is required")
 	}
 	dispatcher := delivery.NewDispatcher(
 		delivery.NewOutboxRepository(infra.Postgres, logger),
@@ -72,25 +91,31 @@ func buildDeliveryOutboxDispatcher(
 	return deliveryOutboxDispatcherRunner{
 		dispatcher: dispatcher,
 		logger:     logger,
-	}
+	}, nil
 }
 
 func buildAlarmDispatchRunner(
 	infra *sharedmodules.InfraModule,
 	sender alarmDispatchSender,
 	logger *slog.Logger,
-) runtimeAlarmScheduler {
+) (runtimeAlarmScheduler, error) {
 	if !parseBoolEnv("ALARM_DISPATCH_CONSUMER_ENABLED", true) {
 		if logger != nil {
 			logger.Info("Alarm dispatch consumer disabled")
 		}
-		return nil
+		return nil, nil
+	}
+	if infra == nil {
+		return nil, fmt.Errorf("infra is required")
 	}
 
 	consumerMode := strings.ToLower(strings.TrimSpace(os.Getenv("ALARM_DISPATCH_CONSUMER_MODE")))
 	maxBatch := parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50)
 	karingEnabled := parseAlarmDispatchKaringEnabled()
 	if consumerMode == "pg" {
+		if infra.Postgres == nil {
+			return nil, fmt.Errorf("postgres is required")
+		}
 		lease := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_LEASE_SECONDS", 60*time.Second)
 		return &alarmDispatchRunner{
 			consumer: dispatchoutbox.NewConsumer(
@@ -109,7 +134,7 @@ func buildAlarmDispatchRunner(
 			maxBatch:           maxBatch,
 			maxBatchesPerWake:  parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", 20),
 			logger:             logger,
-		}
+		}, nil
 	}
 	return &alarmDispatchRunner{
 		consumer:           queue.NewConsumer(infra.Cache, logger, queue.WithMaxBatch(maxBatch)),
@@ -119,7 +144,7 @@ func buildAlarmDispatchRunner(
 		postSendQuarantine: true,
 		maxBatch:           maxBatch,
 		logger:             logger,
-	}
+	}, nil
 }
 
 func parseAlarmDispatchKaringEnabled() bool {
@@ -137,24 +162,28 @@ func buildYouTubeOutboxDispatcher(
 	infra *sharedmodules.InfraModule,
 	sender delivery.MessageSender,
 	logger *slog.Logger,
-) runtimeAlarmScheduler {
+) (runtimeAlarmScheduler, error) {
 	if !parseBoolEnv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", false) {
 		if logger != nil {
 			logger.Info("YouTube outbox dispatcher disabled")
 		}
-		return nil
+		return nil, nil
+	}
+	if infra == nil || infra.Postgres == nil {
+		return nil, fmt.Errorf("postgres is required")
 	}
 
+	dispatchConfig := youtubeoutbox.DefaultConfig()
 	dispatcher := youtubeoutbox.NewDispatcher(
 		infra.Postgres.GetPool(),
 		infra.Cache,
 		sender,
 		template.NewRenderer(infra.Postgres.GetPool(), logger),
 		logger,
-		youtubeoutbox.DefaultConfig(),
+		&dispatchConfig,
 	)
 	return youtubeOutboxDispatcherRunner{
 		dispatcher: dispatcher,
 		logger:     logger,
-	}
+	}, nil
 }

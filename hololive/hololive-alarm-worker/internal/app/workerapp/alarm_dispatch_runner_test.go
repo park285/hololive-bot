@@ -113,9 +113,11 @@ func (s *alarmDispatchRunnerTestSender) SendMessageWithClientRequestID(_ context
 	return nil
 }
 
-func (s *alarmDispatchRunnerTestSender) SendKaringContentList(_ context.Context, roomID string, req iris.KaringContentListRequest) error {
+func (s *alarmDispatchRunnerTestSender) SendKaringContentList(_ context.Context, roomID string, req *iris.KaringContentListRequest) error {
 	s.karingRoomID = roomID
-	s.karingRequests = append(s.karingRequests, req)
+	if req != nil {
+		s.karingRequests = append(s.karingRequests, *req)
+	}
 	if s.karingErr != nil {
 		return s.karingErr
 	}
@@ -425,7 +427,8 @@ func TestAlarmDispatchKaringRequestChunkTemplatesByItemCount(t *testing.T) {
 }
 
 func TestAlarmDispatchKaringRequestUsesReceiverRoomID(t *testing.T) {
-	group := newAlarmDispatchGroup(alarmDispatchRunnerTestEnvelope("464252100463241", nil))
+	envelope := alarmDispatchRunnerTestEnvelope("464252100463241", nil)
+	group := newAlarmDispatchGroup(&envelope)
 
 	requests, err := buildAlarmDispatchKaringContentListRequests(group)
 
@@ -770,7 +773,7 @@ func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(
 	notification.Stream.StartScheduled = &start
 	notification.Stream.StartActual = &start
 
-	got := renderAlarmDispatchNotification(notification)
+	got := renderAlarmDispatchNotification(&notification)
 
 	assert.Equal(t,
 		"⏰ Member 방송 5분 전\n📺 Live Title\n🔗 https://youtube.com/watch?v=live-1",
@@ -785,8 +788,8 @@ func TestResolveAlarmDispatchURLFallsBackLikeLegacyValkeyRenderer(t *testing.T) 
 	chzzkOnlyWithoutURL := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
 	chzzkOnlyWithoutURL.Stream.IsChzzkOnly = true
 
-	assert.Equal(t, "https://youtube.com/watch?v=stream-1", resolveAlarmDispatchURL(twitchOnlyWithoutURL))
-	assert.Equal(t, "https://youtube.com/watch?v=stream-1", resolveAlarmDispatchURL(chzzkOnlyWithoutURL))
+	assert.Equal(t, "https://youtube.com/watch?v=stream-1", resolveAlarmDispatchURL(&twitchOnlyWithoutURL))
+	assert.Equal(t, "https://youtube.com/watch?v=stream-1", resolveAlarmDispatchURL(&chzzkOnlyWithoutURL))
 }
 
 func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {

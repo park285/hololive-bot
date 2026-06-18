@@ -109,6 +109,9 @@ func observeAlarmDispatchRunnerPostSendQuarantined(rows int) {
 		return
 	}
 	initAlarmDispatchRunnerMetrics()
+	if alarmDispatchRunnerPostSendQuarantinedTotal == nil {
+		return
+	}
 	alarmDispatchRunnerPostSendQuarantinedTotal.Add(float64(rows))
 }
 
@@ -119,16 +122,25 @@ func observeAlarmDispatchRunnerIdleWait(consumerMode, waitMode string, duration 
 
 func observeAlarmDispatchRunnerWakeupConsumed() {
 	initAlarmDispatchRunnerMetrics()
+	if alarmDispatchRunnerWakeupConsumedTotal == nil {
+		return
+	}
 	alarmDispatchRunnerWakeupConsumedTotal.Inc()
 }
 
 func observeAlarmDispatchRunnerWakeupTimeout() {
 	initAlarmDispatchRunnerMetrics()
+	if alarmDispatchRunnerWakeupTimeoutTotal == nil {
+		return
+	}
 	alarmDispatchRunnerWakeupTimeoutTotal.Inc()
 }
 
 func observeAlarmDispatchRunnerWakeupError() {
 	initAlarmDispatchRunnerMetrics()
+	if alarmDispatchRunnerWakeupErrorTotal == nil {
+		return
+	}
 	alarmDispatchRunnerWakeupErrorTotal.Inc()
 }
 
@@ -142,6 +154,9 @@ func observeAlarmDispatchRetentionDeletedRows(status string, rows int64) {
 
 func observeAlarmDispatchRetentionFailure() {
 	initAlarmDispatchRunnerMetrics()
+	if alarmDispatchPGRetentionFailedTotal == nil {
+		return
+	}
 	alarmDispatchPGRetentionFailedTotal.Inc()
 }
 
@@ -152,6 +167,11 @@ func observeAlarmDispatchBacklogStatus(status string, rows int64) {
 
 func observeAlarmDispatchOldestAges(pending, retry, sending float64) {
 	initAlarmDispatchRunnerMetrics()
+	if alarmDispatchPGOldestPendingAgeSeconds == nil ||
+		alarmDispatchPGOldestRetryAgeSeconds == nil ||
+		alarmDispatchPGOldestSendingAgeSeconds == nil {
+		return
+	}
 	alarmDispatchPGOldestPendingAgeSeconds.Set(pending)
 	alarmDispatchPGOldestRetryAgeSeconds.Set(retry)
 	alarmDispatchPGOldestSendingAgeSeconds.Set(sending)
