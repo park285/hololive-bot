@@ -3,11 +3,6 @@ name: security
 # Non-PR security scan. Heavy full verification stays in scripts/ci/pre-push-gate.sh.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-  schedule:
-    - cron: "17 18 * * 0"
 
 permissions:
   contents: read

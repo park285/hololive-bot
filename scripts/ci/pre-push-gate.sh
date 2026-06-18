@@ -46,6 +46,15 @@ case "${PRE_PUSH_MODE}" in
     ;;
 esac
 
+# security.yml 을 dispatch-only 로 내리면서 주기 보안 스캔이 사라져, push 시점 govulncheck 가
+# 유일한 의존성 취약점 방어선이 됐다. fast push 라도 코드 변경이 섞이면 강제하고 docs 전용
+# push 만 면제한다. offline push 는 RUN_DEPENDENCY_HYGIENE=false 로 우회한다.
+# grep -qv 회피: ugrep 는 quiet+invert 조합 exit 코드가 GNU grep 과 달라 필터 결과로 판정한다.
+non_doc_changes="$(grep -vE '^docs/|\.md$' <<<"${changed_files}" || true)"
+if [[ "${dependency_hygiene_default}" == "false" && -n "${non_doc_changes}" ]]; then
+  dependency_hygiene_default="true"
+fi
+
 run_perf_budget_gate() {
   local collect_args=(--policy perf-budget.yaml --candidate artifacts/perf/pr --gate pr)
   if [[ -n "${PERF_GATE_COUNT:-}" ]]; then
@@ -66,6 +75,14 @@ if [[ "${PERF_GATE_ONLY:-false}" == "true" ]]; then
   run_perf_budget_gate
   exit 0
 fi
+
+# 구 ci.yml secret-free-gate 의 로컬 미커버 항목을 이전(gofmt 는 local-ci.sh 가 이미 커버).
+echo "[pre-push] workflow boundary / gate ownership"
+bash scripts/ci/check-workflow-secrets.sh
+echo "[pre-push] shell syntax sweep"
+while IFS= read -r script; do
+  bash -n "${script}"
+done < <(find scripts -type f -name '*.sh' | sort)
 
 admin_touch_guardrail="${RUN_ADMIN_TOUCH_GUARDRAIL:-true}"
 if echo "$changed_files" | grep -q '^admin-dashboard/' && [[ -z "${RUN_ADMIN_TOUCH_GUARDRAIL+x}" ]]; then
