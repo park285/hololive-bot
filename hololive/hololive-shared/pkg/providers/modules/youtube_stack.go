@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory"
 )
 
 type YouTubeStackParams struct {
@@ -44,7 +45,7 @@ func BuildYouTubeStack(ctx context.Context, params YouTubeStackParams) *provider
 		return stack
 	}
 
-	scheduler := youtube.NewScheduler(
+	scheduler := youtubefactory.NewScheduler(
 		stack.Service,
 		params.HolodexService,
 		params.CacheService,

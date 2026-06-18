@@ -20,22 +20,9 @@
 
 package apiservice
 
-import (
-	"fmt"
-	"time"
-)
+import ytcontract "github.com/kapu/hololive-shared/pkg/service/youtube"
 
-type QuotaExceededError struct {
-	Used      int
-	Limit     int
-	Requested int
-	ResetTime time.Time
-}
-
-func (e *QuotaExceededError) Error() string {
-	return fmt.Sprintf("YouTube API quota exceeded: used %d/%d (requested %d more), resets at %s",
-		e.Used, e.Limit, e.Requested, e.ResetTime.Format(time.RFC3339))
-}
+type QuotaExceededError = ytcontract.QuotaExceededError
 
 func shouldReturnFallbackError(currentResults int, failedTargets int, fallbackSuccesses int) bool {
 	return currentResults == 0 && failedTargets > 0 && fallbackSuccesses == 0

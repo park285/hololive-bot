@@ -1,46 +1,11 @@
 package youtube
 
-import (
-	"log/slog"
-
-	"github.com/park285/iris-client-go/iris"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	milestonescheduler "github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
-)
-
-type MilestoneMessageFormatter = milestonescheduler.MilestoneMessageFormatter
-
 const (
-	MilestoneThresholdRatio   = milestonescheduler.MilestoneThresholdRatio
-	ApproachingThresholdRatio = milestonescheduler.ApproachingThresholdRatio
+	MilestoneThresholdRatio   = 0.95
+	ApproachingThresholdRatio = 0.99
 )
 
-var SubscriberMilestones = milestonescheduler.SubscriberMilestones
-
-func NewScheduler(
-	youtubeService Service,
-	holodexService *holodex.Service,
-	cacheClient cache.Client,
-	statsRepository ytstats.StatsSchedulerRepository,
-	membersData domain.MemberDataProvider,
-	alarmService domain.AlarmDispatchState,
-	irisClient iris.Sender,
-	formatter MilestoneMessageFormatter,
-	logger *slog.Logger,
-) Scheduler {
-	return milestonescheduler.NewScheduler(
-		youtubeService,
-		holodexService,
-		cacheClient,
-		statsRepository,
-		membersData,
-		alarmService,
-		irisClient,
-		formatter,
-		logger,
-	)
+var SubscriberMilestones = []uint64{
+	100000, 250000, 500000, 750000, 1000000,
+	1500000, 2000000, 2500000, 3000000, 4000000, 5000000,
 }

@@ -32,16 +32,10 @@ import (
 	"google.golang.org/api/youtube/v3"
 
 	"github.com/kapu/hololive-shared/pkg/service/fallback"
+	ytcontract "github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
-type ChannelStats struct {
-	ChannelID       string
-	ChannelTitle    string
-	SubscriberCount uint64
-	VideoCount      uint64
-	ViewCount       uint64
-	Timestamp       time.Time
-}
+type ChannelStats = ytcontract.ChannelStats
 
 type channelStatsAPIFallbackResult struct {
 	stats             map[string]*ChannelStats

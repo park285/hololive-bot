@@ -1,10 +1,5 @@
 package apiservice
 
-import "context"
+import ytcontract "github.com/kapu/hololive-shared/pkg/service/youtube"
 
-type Service interface {
-	SetScraperProxyEnabled(enabled bool) bool
-	ScraperProxyEnabled() bool
-	GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error)
-	GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error)
-}
+type Service = ytcontract.Service

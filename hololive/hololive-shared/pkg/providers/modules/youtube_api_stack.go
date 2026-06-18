@@ -7,9 +7,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory"
 )
 
 type YouTubeAPIStackParams struct {
@@ -29,7 +29,7 @@ func BuildYouTubeAPIStack(ctx context.Context, params YouTubeAPIStackParams) *pr
 		return &providers.YouTubeStack{StatsRepository: params.StatsRepository}
 	}
 
-	service, err := youtube.NewYouTubeService(ctx, params.YouTubeConfig.APIKey, params.CacheService, scraper.ProxyConfig{
+	service, err := youtubefactory.NewYouTubeService(ctx, params.YouTubeConfig.APIKey, params.CacheService, scraper.ProxyConfig{
 		Enabled: params.ScraperConfig.ProxyEnabled,
 		URL:     params.ScraperConfig.ProxyURL,
 	}, params.SharedRateLimit, params.Logger)

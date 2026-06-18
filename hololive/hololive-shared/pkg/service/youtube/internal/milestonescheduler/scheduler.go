@@ -21,7 +21,6 @@
 package milestonescheduler
 
 import (
-	"context"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -32,23 +31,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	apiservice "github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice"
+	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
-type Service = apiservice.Service
+type Service = youtube.Service
 
-type ChannelStats = apiservice.ChannelStats
+type ChannelStats = youtube.ChannelStats
 
-type Scheduler interface {
-	Start(ctx context.Context)
-	Stop()
-}
+type Scheduler = youtube.Scheduler
 
-type MilestoneMessageFormatter interface {
-	FormatMilestoneAchieved(ctx context.Context, memberName, milestone string) (string, error)
-	FormatMilestoneApproaching(ctx context.Context, memberName, milestone, remaining string) (string, error)
-}
+type MilestoneMessageFormatter = youtube.MilestoneMessageFormatter
 
 type schedulerImpl struct {
 	youtube              Service
@@ -72,8 +65,8 @@ type schedulerImpl struct {
 const (
 	schedulerInterval         = 12 * time.Hour
 	milestoneWatchInterval    = 1 * time.Hour // 마일스톤 직전 멤버 빠른 체크
-	MilestoneThresholdRatio   = 0.95          // 95% 이상이면 마일스톤 직전으로 간주
-	ApproachingThresholdRatio = 0.99          // 99% 이상이면 예고 알람 발송
+	MilestoneThresholdRatio   = youtube.MilestoneThresholdRatio
+	ApproachingThresholdRatio = youtube.ApproachingThresholdRatio
 
 	channelsPerBatch             = 30 // 30 channels × 100 units = 3,000 units per batch
 	batchesPerDay                = 2  // 2 batches × 3,000 = 6,000 units
@@ -81,10 +74,7 @@ const (
 	recentVideosFetchParallelism = 4
 )
 
-var SubscriberMilestones = []uint64{
-	100000, 250000, 500000, 750000, 1000000,
-	1500000, 2000000, 2500000, 3000000, 4000000, 5000000,
-}
+var SubscriberMilestones = youtube.SubscriberMilestones
 
 func NewScheduler(
 	youtubeService Service,

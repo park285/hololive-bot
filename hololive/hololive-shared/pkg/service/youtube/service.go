@@ -1,25 +1,27 @@
 package youtube
 
 import (
-	"context"
-	"log/slog"
-
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	apiservice "github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"fmt"
+	"time"
 )
 
-type ChannelStats = apiservice.ChannelStats
+type ChannelStats struct {
+	ChannelID       string
+	ChannelTitle    string
+	SubscriberCount uint64
+	VideoCount      uint64
+	ViewCount       uint64
+	Timestamp       time.Time
+}
 
-type QuotaExceededError = apiservice.QuotaExceededError
+type QuotaExceededError struct {
+	Used      int
+	Limit     int
+	Requested int
+	ResetTime time.Time
+}
 
-func NewYouTubeService(
-	ctx context.Context,
-	apiKey string,
-	cacheClient cache.Client,
-	scraperProxyConfig scraper.ProxyConfig,
-	sharedRL *scraper.RateLimiter,
-	logger *slog.Logger,
-) (Service, error) {
-	return apiservice.New(ctx, apiKey, cacheClient, scraperProxyConfig, sharedRL, logger)
+func (e *QuotaExceededError) Error() string {
+	return fmt.Sprintf("YouTube API quota exceeded: used %d/%d (requested %d more), resets at %s",
+		e.Used, e.Limit, e.Requested, e.ResetTime.Format(time.RFC3339))
 }
