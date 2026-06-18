@@ -15,7 +15,7 @@ type Snapshot struct {
 	AlarmLatencyExceeded *bool
 }
 
-func Build(actualPublishedAt *time.Time, alarmSentAt *time.Time) Snapshot {
+func Build(actualPublishedAt, alarmSentAt *time.Time) Snapshot {
 	normalizedPublishedAt := yttimestamp.NormalizePtr(actualPublishedAt)
 	normalizedAlarmSentAt := yttimestamp.NormalizePtr(alarmSentAt)
 	latencyMillis, latencyExceeded := CalculateLatency(normalizedPublishedAt, normalizedAlarmSentAt)
@@ -28,7 +28,7 @@ func Build(actualPublishedAt *time.Time, alarmSentAt *time.Time) Snapshot {
 	}
 }
 
-func CalculateLatency(actualPublishedAt *time.Time, alarmSentAt *time.Time) (*int64, *bool) {
+func CalculateLatency(actualPublishedAt, alarmSentAt *time.Time) (result1 *int64, result2 *bool) {
 	if actualPublishedAt == nil || alarmSentAt == nil {
 		return nil, nil
 	}

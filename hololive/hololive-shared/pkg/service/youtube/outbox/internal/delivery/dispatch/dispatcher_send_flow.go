@@ -139,8 +139,7 @@ func deliveryRetryAfter(err error) time.Duration {
 
 func deliveryClientRequestID(roomID string, dedupeKeys []string) string {
 	parts := make([]string, 0, len(dedupeKeys)+2)
-	parts = append(parts, "youtube-outbox-delivery-v1")
-	parts = append(parts, strings.TrimSpace(roomID))
+	parts = append(parts, "youtube-outbox-delivery-v1", strings.TrimSpace(roomID))
 	for i := range dedupeKeys {
 		parts = append(parts, strings.TrimSpace(dedupeKeys[i]))
 	}

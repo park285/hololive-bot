@@ -236,7 +236,7 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	if err := pool.QueryRow(ctx, "SELECT payload_hash FROM alarm_dispatch_events LIMIT 1").Scan(&storedHash); err != nil {
 		t.Fatalf("load payload_hash: %v", err)
 	}
-	firstEvent, _, _ := buildLedgerRows(first, StatusPending)
+	firstEvent, _, _ := buildLedgerRows(&first, StatusPending)
 	if storedHash != firstEvent.PayloadHash {
 		t.Fatalf("payload_hash = %q, want original %q (conflict upsert should not change payload)", storedHash, firstEvent.PayloadHash)
 	}
@@ -249,7 +249,7 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 		t.Fatalf("delivery count = %d, want original row only", deliveryCount)
 	}
 
-	secondEvent, _, _ := buildLedgerRows(second, StatusPending)
+	secondEvent, _, _ := buildLedgerRows(&second, StatusPending)
 	var existingHash, incomingHash string
 	var collisionPayload []byte
 	if err := pool.QueryRow(ctx, `
@@ -429,7 +429,7 @@ func TestPgxRepositoryInsertBatch_SkipsLegacyDedupeKey(t *testing.T) {
 		ClaimKeys: []string{"legacy-category"},
 		Version:   1,
 	}
-	event, delivery, err := buildLedgerRows(envelope, StatusPending)
+	event, delivery, err := buildLedgerRows(&envelope, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}

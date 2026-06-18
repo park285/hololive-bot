@@ -22,6 +22,7 @@ package scraping
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -64,7 +65,10 @@ func (s *testStateStore) Set(_ context.Context, key string, value any, ttl time.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	v, _ := value.(bool)
+	v, ok := value.(bool)
+	if !ok {
+		return fmt.Errorf("state value has type %T, want bool", value)
+	}
 	s.data[key] = stateEntry{
 		value: v,
 		until: time.Now().Add(ttl),

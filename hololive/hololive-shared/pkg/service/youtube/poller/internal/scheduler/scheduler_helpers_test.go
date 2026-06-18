@@ -128,14 +128,16 @@ type schedulerBudgetLimiterStub struct {
 
 func (l *schedulerBudgetLimiterStub) TryReserve(
 	ctx context.Context,
-	job polling.BudgetJob,
+	job *polling.BudgetJob,
 	profile polling.BudgetProfile,
 	ttl time.Duration,
 ) (polling.BudgetReservation, polling.BudgetDecision, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.calls++
-	l.job = job
+	if job != nil {
+		l.job = *job
+	}
 	l.profile = profile
 	l.ttl = ttl
 	l.ctxErr = ctx.Err()

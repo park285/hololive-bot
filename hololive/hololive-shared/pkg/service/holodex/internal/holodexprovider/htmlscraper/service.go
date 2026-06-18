@@ -114,7 +114,7 @@ func (s *Service) FetchChannel(ctx context.Context, channelID string) ([]*domain
 	return s.fetchOfficialChannelSchedule(ctx, cacheKey, channelID)
 }
 
-func (s *Service) finishYouTubeChannelSchedule(ctx context.Context, cacheKey string, channelID string, streams []*domain.Stream, policy fallback.Policy) {
+func (s *Service) finishYouTubeChannelSchedule(ctx context.Context, cacheKey, channelID string, streams []*domain.Stream, policy fallback.Policy) {
 	fallback.ObserveExecution("holodex", "channel_schedule", policy.Trigger, "skipped")
 	s.cache.SetStreams(ctx, cacheKey, streams, config.DefaultOfficialScheduleConfig().CacheExpiry)
 	s.logger.Info("YouTube producer channel schedule resolved",
@@ -122,7 +122,7 @@ func (s *Service) finishYouTubeChannelSchedule(ctx context.Context, cacheKey str
 		slog.Int("streams", len(streams)))
 }
 
-func (s *Service) fetchOfficialChannelSchedule(ctx context.Context, cacheKey string, channelID string) ([]*domain.Stream, error) {
+func (s *Service) fetchOfficialChannelSchedule(ctx context.Context, cacheKey, channelID string) ([]*domain.Stream, error) {
 	s.logger.Info("Fetching from official schedule (FALLBACK MODE)",
 		slog.String("channel", channelID),
 		slog.String("url", s.baseURL))

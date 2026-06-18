@@ -7,7 +7,7 @@ import (
 )
 
 func newShortPublishedAtNotification(
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	video *domain.YouTubeVideo,
 ) *domain.YouTubeNotificationOutbox {
 	return &domain.YouTubeNotificationOutbox{
@@ -20,7 +20,7 @@ func newShortPublishedAtNotification(
 }
 
 func newCommunityPublishedAtNotification(
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	post *domain.YouTubeCommunityPost,
 ) *domain.YouTubeNotificationOutbox {
 	return &domain.YouTubeNotificationOutbox{

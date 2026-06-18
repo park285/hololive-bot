@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -71,7 +72,7 @@ type goscrapyWaitState struct {
 	poll        <-chan time.Time
 }
 
-var goscrapyWaitFinishers = []func(goscrapyWaitState, goscrapyWaitEvent) goscrapyWaitOutcome{
+var goscrapyWaitFinishers = []func(goscrapyWaitState, *goscrapyWaitEvent) goscrapyWaitOutcome{
 	finishGoScrapyResultEvent,
 	finishGoScrapyPollEvent,
 	finishGoScrapyEngineEvent,
@@ -171,7 +172,7 @@ type goscrapyEngineSignals struct {
 	stopContextWatch func() bool
 }
 
-func startGoScrapyEngineSignals(ctx context.Context, appCtx context.Context, start func(context.Context) error) goscrapyEngineSignals {
+func startGoScrapyEngineSignals(ctx, appCtx context.Context, start func(context.Context) error) goscrapyEngineSignals {
 	errCh := make(chan error, 1)
 	eventCh := make(chan goscrapyWaitEvent, 2)
 	go func() {
@@ -188,7 +189,7 @@ func startGoScrapyEngineSignals(ctx context.Context, appCtx context.Context, sta
 func waitForGoScrapyFetch(state goscrapyWaitState) (pageFetchResponse, bool, error) {
 	for {
 		event := nextGoScrapyWaitEvent(state)
-		outcome := goscrapyWaitFinishers[event.kind](state, event)
+		outcome := goscrapyWaitFinishers[event.kind](state, &event)
 		if outcome.done {
 			return outcome.response, outcome.gotResponse, outcome.err
 		}
@@ -206,12 +207,12 @@ func nextGoScrapyWaitEvent(state goscrapyWaitState) goscrapyWaitEvent {
 	}
 }
 
-func finishGoScrapyResultEvent(state goscrapyWaitState, event goscrapyWaitEvent) goscrapyWaitOutcome {
+func finishGoScrapyResultEvent(state goscrapyWaitState, event *goscrapyWaitEvent) goscrapyWaitOutcome {
 	response, gotResponse, err := finishGoScrapyResult(event.result, state.cancel, state.errCh)
 	return goscrapyWaitOutcome{response: response, gotResponse: gotResponse, err: err, done: true}
 }
 
-func finishGoScrapyPollEvent(state goscrapyWaitState, _ goscrapyWaitEvent) goscrapyWaitOutcome {
+func finishGoScrapyPollEvent(state goscrapyWaitState, _ *goscrapyWaitEvent) goscrapyWaitOutcome {
 	if state.activeCount() != 0 {
 		return goscrapyWaitOutcome{}
 	}
@@ -219,12 +220,12 @@ func finishGoScrapyPollEvent(state goscrapyWaitState, _ goscrapyWaitEvent) goscr
 	return goscrapyWaitOutcome{response: response, gotResponse: gotResponse, err: err, done: true}
 }
 
-func finishGoScrapyEngineEvent(state goscrapyWaitState, event goscrapyWaitEvent) goscrapyWaitOutcome {
+func finishGoScrapyEngineEvent(state goscrapyWaitState, event *goscrapyWaitEvent) goscrapyWaitOutcome {
 	response, gotResponse, err := finishGoScrapyEngineError(event.err, state.resultCh)
 	return goscrapyWaitOutcome{response: response, gotResponse: gotResponse, err: err, done: true}
 }
 
-func finishGoScrapyCanceledEvent(state goscrapyWaitState, _ goscrapyWaitEvent) goscrapyWaitOutcome {
+func finishGoScrapyCanceledEvent(state goscrapyWaitState, _ *goscrapyWaitEvent) goscrapyWaitOutcome {
 	response, gotResponse, err := finishCanceledGoScrapy(state)
 	return goscrapyWaitOutcome{response: response, gotResponse: gotResponse, err: err, done: true}
 }
@@ -282,19 +283,47 @@ func readGoScrapyResponse(resp core.IResponseReader) (pageFetchResponse, error) 
 	if body == nil {
 		return out, nil
 	}
-	defer func() { _ = body.Close() }()
 
 	if out.StatusCode != http.StatusOK {
-		_, _ = jsonutil.ReadAllLimit(body, 4*1024)
-		return out, nil
+		return out, drainGoScrapyResponseBody(body)
 	}
 
-	data, err := jsonutil.ReadAllLimit(body, ytDefaults.MaxPageBodyBytes)
+	data, err := readSuccessfulGoScrapyResponseBody(body)
 	if err != nil {
-		return out, responseBodyReadError(err)
+		return out, err
 	}
 	out.Body = data
 	return out, nil
+}
+
+func drainGoScrapyResponseBody(body io.ReadCloser) error {
+	_, readErr := jsonutil.ReadAllLimit(body, 4*1024)
+	closeErr := body.Close()
+	if readErr != nil && !errors.Is(readErr, jsonutil.ErrBodyTooLarge) {
+		if closeErr != nil {
+			return fmt.Errorf("drain goscrapy response body: %w", errors.Join(readErr, fmt.Errorf("close goscrapy response body: %w", closeErr)))
+		}
+		return fmt.Errorf("drain goscrapy response body: %w", readErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close goscrapy response body: %w", closeErr)
+	}
+	return nil
+}
+
+func readSuccessfulGoScrapyResponseBody(body io.ReadCloser) ([]byte, error) {
+	data, err := jsonutil.ReadAllLimit(body, ytDefaults.MaxPageBodyBytes)
+	closeErr := body.Close()
+	if err != nil {
+		if closeErr != nil {
+			return nil, fmt.Errorf("read goscrapy response body: %w", errors.Join(err, fmt.Errorf("close goscrapy response body: %w", closeErr)))
+		}
+		return nil, responseBodyReadError(err)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close goscrapy response body: %w", closeErr)
+	}
+	return data, nil
 }
 
 func waitGoScrapyEngine(errCh <-chan error) {
@@ -336,7 +365,7 @@ func safeFetchError(err error, requestURL string) string {
 	return sanitizeFetchErrorDetail(err.Error(), requestURL, safeFetchURL(requestURL))
 }
 
-func sanitizeFetchErrorDetail(message string, rawURL string, safeURL string) string {
+func sanitizeFetchErrorDetail(message, rawURL, safeURL string) string {
 	if message == "" {
 		return ""
 	}

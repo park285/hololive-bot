@@ -12,7 +12,7 @@ import (
 
 type ReadRepository interface {
 	FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error)
-	ListPendingPublishedAtResolutionsPage(ctx context.Context, referenceNow time.Time, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error)
+	ListPendingPublishedAtResolutionsPage(ctx context.Context, referenceNow, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error)
 	ListPendingPublishedAtResolutions(ctx context.Context, detectedBefore time.Time, limit int) ([]PublishedAtResolutionCandidate, error)
 }
 
@@ -109,7 +109,11 @@ type AlarmSentMark struct {
 }
 
 func NewRepository(db trackingDB) *PgxRepository {
-	hasRetryAfter := hasPublishedAtRetryAfterColumn(db)
+	return NewRepositoryContext(context.Background(), db)
+}
+
+func NewRepositoryContext(ctx context.Context, db trackingDB) *PgxRepository {
+	hasRetryAfter := hasPublishedAtRetryAfterColumn(ctx, db)
 	repo := &PgxRepository{
 		db:                       db,
 		hasPublishedAtRetryAfter: hasRetryAfter,
@@ -134,7 +138,7 @@ func (r *PgxRepository) ListPendingPublishedAtResolutions(ctx context.Context, d
 	return r.alarm.ListPendingPublishedAtResolutions(ctx, detectedBefore, limit)
 }
 
-func (r *PgxRepository) ListPendingPublishedAtResolutionsPage(ctx context.Context, referenceNow time.Time, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error) {
+func (r *PgxRepository) ListPendingPublishedAtResolutionsPage(ctx context.Context, referenceNow, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error) {
 	return r.alarm.ListPendingPublishedAtResolutionsPage(ctx, referenceNow, detectedBefore, cursor, limit)
 }
 
@@ -172,7 +176,7 @@ func (r *PgxRepository) FindCommunityShortsObservationWindow(ctx context.Context
 	return r.window.FindCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt)
 }
 
-func (r *PgxRepository) FindClosedCommunityShortsObservationWindow(ctx context.Context, runtimeName string, bigBangCutoverAt time.Time, now time.Time) (*domain.YouTubeCommunityShortsObservationWindow, error) {
+func (r *PgxRepository) FindClosedCommunityShortsObservationWindow(ctx context.Context, runtimeName string, bigBangCutoverAt, now time.Time) (*domain.YouTubeCommunityShortsObservationWindow, error) {
 	return r.window.FindClosedCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt, now)
 }
 

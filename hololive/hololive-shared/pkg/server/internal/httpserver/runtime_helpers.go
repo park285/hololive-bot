@@ -46,7 +46,7 @@ func NewHealthOnlyRuntimeRouter(
 			opt(&options)
 		}
 	}
-	return NewRuntimeRouter(ctx, logger, options)
+	return NewRuntimeRouter(ctx, logger, &options)
 }
 
 func NewTriggerRuntimeRouter(
@@ -61,7 +61,7 @@ func NewTriggerRuntimeRouter(
 		RegisterRoutes: triggerRuntimeRouteRegistrar(triggerHandler, apiKey),
 	}
 	applyRuntimeRouterOptions(&options, opts)
-	return NewRuntimeRouter(ctx, logger, options)
+	return NewRuntimeRouter(ctx, logger, &options)
 }
 
 func triggerRuntimeRouteRegistrar(triggerHandler *TriggerHandler, apiKey string) func(*gin.Engine) error {
@@ -109,7 +109,10 @@ func newOtelHandler(handler http.Handler, operation string) http.Handler {
 	)
 }
 
-func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts RuntimeRouterOptions) (*gin.Engine, error) {
+func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts *RuntimeRouterOptions) (*gin.Engine, error) {
+	if opts == nil {
+		opts = &RuntimeRouterOptions{}
+	}
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
@@ -165,7 +168,10 @@ func applyRuntimeRouterOptions(options *RuntimeRouterOptions, opts []func(*Runti
 	}
 }
 
-func installRuntimeMiddleware(router *gin.Engine, ctx context.Context, logger *slog.Logger, opts RuntimeRouterOptions) {
+func installRuntimeMiddleware(router *gin.Engine, ctx context.Context, logger *slog.Logger, opts *RuntimeRouterOptions) {
+	if opts == nil {
+		opts = &RuntimeRouterOptions{}
+	}
 	ApplyBaseMiddleware(router, ctx, logger, BaseMiddlewareOptions{
 		SkipLogPaths: append([]string{"/health", "/ready", "/metrics"}, opts.SkipLogPaths...),
 	})

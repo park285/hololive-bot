@@ -56,26 +56,33 @@ func TestWarnRowsAffected_EmitsMetricOnPartial(t *testing.T) {
 	before := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal)
 
 	// exact match — metric 증가 없음
-	_ = warnRowsAffected(3, 3, "mark sent", nil)
+	requireNoError(t, warnRowsAffected(3, 3, "mark sent", nil))
 	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before {
 		t.Errorf("exact match incremented metric: got %v, want %v", got, before)
 	}
 
 	// zero-of-zero — metric 증가 없음
-	_ = warnRowsAffected(0, 0, "mark sending", nil)
+	requireNoError(t, warnRowsAffected(0, 0, "mark sending", nil))
 	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before {
 		t.Errorf("zero-of-zero incremented metric: got %v, want %v", got, before)
 	}
 
 	// partial — metric 1 증가
-	_ = warnRowsAffected(1, 3, "mark sent", nil)
+	requireNoError(t, warnRowsAffected(1, 3, "mark sent", nil))
 	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before+1 {
 		t.Errorf("partial did not increment metric: got %v, want %v", got, before+1)
 	}
 
 	// 0-of-many — metric 또 1 증가
-	_ = warnRowsAffected(0, 5, "mark sending", nil)
+	requireNoError(t, warnRowsAffected(0, 5, "mark sending", nil))
 	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before+2 {
 		t.Errorf("zero-of-many did not increment metric: got %v, want %v", got, before+2)
+	}
+}
+
+func requireNoError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

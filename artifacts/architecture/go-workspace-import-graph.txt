@@ -108,6 +108,7 @@ github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/ka
 github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox
 github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
 github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/kapu/hololive-shared/pkg/util
+github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/park285/shared-go/pkg/ginjson
 github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-admin-api/internal/server/internal/api -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-admin-api/internal/service/system -> github.com/kapu/hololive-shared/pkg/service/internalhttp
@@ -413,6 +414,7 @@ github.com/kapu/hololive-kakao-bot-go/internal/client/membernews -> github.com/k
 github.com/kapu/hololive-kakao-bot-go/internal/client/membernews -> github.com/kapu/hololive-shared/pkg/service/internalhttp
 github.com/kapu/hololive-kakao-bot-go/internal/client/membernews -> github.com/kapu/hololive-shared/pkg/service/subscriptionclient
 github.com/kapu/hololive-kakao-bot-go/internal/client/membernews -> github.com/kapu/hololive-shared/pkg/testutil
+github.com/kapu/hololive-kakao-bot-go/internal/client/membernews -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-kakao-bot-go/internal/client/membernews -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-kakao-bot-go/internal/command -> github.com/kapu/hololive-kakao-bot-go/internal/command/handlers
 github.com/kapu/hololive-kakao-bot-go/internal/command/handlers -> github.com/kapu/hololive-kakao-bot-go/internal/adapter
@@ -623,6 +625,7 @@ github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololiv
 github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololive-shared/pkg/service/youtube
 github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
+github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory
 github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/repository -> github.com/kapu/hololive-shared/internal/dbx
 github.com/kapu/hololive-shared/pkg/repository -> github.com/kapu/hololive-shared/pkg/dbtest
@@ -834,14 +837,9 @@ github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-go/pkg/jsonutil
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-go/pkg/logging
-github.com/kapu/hololive-shared/pkg/service/youtube -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube -> github.com/kapu/hololive-shared/pkg/service/cache
-github.com/kapu/hololive-shared/pkg/service/youtube -> github.com/kapu/hololive-shared/pkg/service/holodex
-github.com/kapu/hololive-shared/pkg/service/youtube -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice
-github.com/kapu/hololive-shared/pkg/service/youtube -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler
 github.com/kapu/hololive-shared/pkg/service/youtube -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/oauthservice
 github.com/kapu/hololive-shared/pkg/service/youtube -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/statscollector
-github.com/kapu/hololive-shared/pkg/service/youtube -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-shared/pkg/service/youtube -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
 github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming -> github.com/kapu/hololive-shared/pkg/service/youtube/timestamp
 github.com/kapu/hololive-shared/pkg/service/youtube/contentid -> github.com/kapu/hololive-shared/pkg/domain
@@ -852,6 +850,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> githu
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/kapu/hololive-shared/pkg/service/fallback
+github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/kapu/hololive-shared/pkg/service/youtube
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice -> github.com/park285/shared-go/pkg/logging
@@ -859,7 +858,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler 
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/service/holodex
-github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice
+github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/service/youtube
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/youtube/internal/oauthservice -> github.com/park285/shared-go/pkg/json
@@ -1001,6 +1000,14 @@ github.com/kapu/hololive-shared/pkg/service/youtube/tracking/internal/observatio
 github.com/kapu/hololive-shared/pkg/service/youtube/tracking/internal/observation -> github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming
 github.com/kapu/hololive-shared/pkg/service/youtube/tracking/internal/observation -> github.com/kapu/hololive-shared/pkg/service/youtube/contentid
 github.com/kapu/hololive-shared/pkg/service/youtube/tracking/internal/observation -> github.com/kapu/hololive-shared/pkg/service/youtube/timestamp
+github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/cache
+github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/holodex
+github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/youtube
+github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice
+github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler
+github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
+github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
 github.com/kapu/hololive-shared/pkg/templateview -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/testutil -> github.com/kapu/hololive-shared/internal/testutil
 github.com/kapu/hololive-shared/pkg/testutil -> github.com/kapu/hololive-shared/internal/testutil/cacheclient
@@ -1100,7 +1107,6 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> gith
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/server/settings
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/cache
-github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/configsub
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates -> github.com/kapu/hololive-shared/pkg/service/settings

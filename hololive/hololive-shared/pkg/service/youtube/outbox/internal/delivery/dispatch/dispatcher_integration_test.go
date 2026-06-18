@@ -50,6 +50,13 @@ type sentMessage struct {
 	Message string
 }
 
+func mustMarshalPayload(t testing.TB, value any) []byte {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	require.NoError(t, err)
+	return payload
+}
+
 func (f *fakeSender) SendMessage(_ context.Context, room, message string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -111,9 +118,9 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
-	payload, _ := json.Marshal(map[string]string{
+	payload := mustMarshalPayload(t, map[string]string{
 		"video_id": "test123",
 		"title":    "Test Video Title",
 	})
@@ -128,11 +135,11 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() {
-		deleteDeliveryTestRows(db, item)
+		deleteDeliveryTestRows(t, db, item)
 	})
 
 	dispatcher.ProcessOnceForTest(ctx)
@@ -185,9 +192,9 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
-	payload, _ := json.Marshal(map[string]string{
+	payload := mustMarshalPayload(t, map[string]string{
 		"video_id": "retry123",
 		"title":    "Retry Test Video",
 	})
@@ -202,11 +209,11 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() {
-		deleteDeliveryTestRows(db, item)
+		deleteDeliveryTestRows(t, db, item)
 	})
 
 	dispatcher.ProcessOnceForTest(ctx)
@@ -254,9 +261,9 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
-	payload, _ := json.Marshal(map[string]string{
+	payload := mustMarshalPayload(t, map[string]string{
 		"video_id": "nosub123",
 		"title":    "No Subscribers Test",
 	})
@@ -271,11 +278,11 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() {
-		deleteDeliveryTestRows(db, item)
+		deleteDeliveryTestRows(t, db, item)
 	})
 
 	dispatcher.ProcessOnceForTest(ctx)
@@ -319,9 +326,9 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 		RetryBackoff: 50 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
-	payload, _ := json.Marshal(map[string]string{
+	payload := mustMarshalPayload(t, map[string]string{
 		"video_id": "perroom_success_video",
 		"title":    "PerRoom Success Video",
 	})
@@ -335,10 +342,10 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
-	t.Cleanup(func() { deleteDeliveryTestRows(db, item) })
+	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
 
 	dispatcher.ProcessOnceForTest(ctx)
 
@@ -391,9 +398,9 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		RetryBackoff: 30 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
-	payload, _ := json.Marshal(map[string]string{
+	payload := mustMarshalPayload(t, map[string]string{
 		"video_id": "perroom_retry_video",
 		"title":    "PerRoom Retry Video",
 	})
@@ -407,10 +414,10 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
-	t.Cleanup(func() { deleteDeliveryTestRows(db, item) })
+	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
 
 	dispatcher.ProcessOnceForTest(ctx)
 
@@ -467,9 +474,9 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 		RetryBackoff: 50 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
-	payload, _ := json.Marshal(map[string]string{
+	payload := mustMarshalPayload(t, map[string]string{
 		"video_id": "perroom_no_sub_video",
 		"title":    "PerRoom No Subscribers Video",
 	})
@@ -483,10 +490,10 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
-	t.Cleanup(func() { deleteDeliveryTestRows(db, item) })
+	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
 
 	dispatcher.ProcessOnceForTest(ctx)
 
@@ -534,9 +541,9 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 		RetryBackoff: 30 * time.Millisecond,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
-	payload, _ := json.Marshal(map[string]string{
+	payload := mustMarshalPayload(t, map[string]string{
 		"video_id": "perroom_terminal_fail_video",
 		"title":    "PerRoom Terminal Fail Video",
 	})
@@ -550,10 +557,10 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
-	t.Cleanup(func() { deleteDeliveryTestRows(db, item) })
+	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
 
 	dispatcher.ProcessOnceForTest(ctx)
 
@@ -573,6 +580,7 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 	sentCount := 0
 	for i := range deliveries {
 		switch deliveries[i].Status {
+		case domain.OutboxStatusPending:
 		case domain.OutboxStatusFailed:
 			failedCount++
 		case domain.OutboxStatusSent:
@@ -612,7 +620,7 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 				return "community:" + contentID
 			},
 			payload: func(contentID string, publishedAt time.Time) string {
-				payload, _ := json.Marshal(map[string]any{
+				payload := mustMarshalPayload(t, map[string]any{
 					"canonical_post_id": "community:" + contentID,
 					"post_id":           contentID,
 					"content_text":      "Concurrent community delivery body",
@@ -633,7 +641,7 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 				return "short:" + contentID
 			},
 			payload: func(contentID string, publishedAt time.Time) string {
-				payload, _ := json.Marshal(map[string]any{
+				payload := mustMarshalPayload(t, map[string]any{
 					"canonical_post_id": "short:" + contentID,
 					"video_id":          contentID,
 					"title":             "Concurrent short delivery title",
@@ -665,8 +673,8 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			}
 
 			dispatchers := []*outbox.Dispatcher{
-				outbox.NewDispatcher(dbPrimary, cacheService, sender, nil, testLogger, config),
-				outbox.NewDispatcher(dbSecondary, cacheService, sender, nil, testLogger, config),
+				outbox.NewDispatcher(dbPrimary, cacheService, sender, nil, testLogger, &config),
+				outbox.NewDispatcher(dbSecondary, cacheService, sender, nil, testLogger, &config),
 			}
 
 			contentID := "test_" + tc.contentPrefix + "_" + time.Now().UTC().Format("150405000000000")
@@ -694,8 +702,8 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 
 			t.Cleanup(func() {
 				deleteDeliveryTestRowsWhere(dbPrimary, &domain.YouTubeCommunityShortsAlarmState{}, "kind = ? AND post_id = ?", tc.kind, postID)
-				deleteDeliveryTestRows(dbPrimary, delivery)
-				deleteDeliveryTestRows(dbPrimary, item)
+				deleteDeliveryTestRows(t, dbPrimary, delivery)
+				deleteDeliveryTestRows(t, dbPrimary, item)
 			})
 
 			start := make(chan struct{})
@@ -761,7 +769,7 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 		CleanupEnabled: false,
 	}
 
-	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, config)
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
 	oldFailed := &domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
@@ -786,10 +794,10 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 		Error:         "recent failed",
 	}
 
-	if err := insertDeliveryTestRows(db, oldFailed).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &oldFailed).Error; err != nil {
 		t.Fatalf("Failed to create old failed outbox item: %v", err)
 	}
-	if err := insertDeliveryTestRows(db, recentFailed).Error; err != nil {
+	if err := insertDeliveryTestRows(db, &recentFailed).Error; err != nil {
 		t.Fatalf("Failed to create recent failed outbox item: %v", err)
 	}
 
@@ -820,13 +828,13 @@ func setupTestDB(t *testing.T) *deliveryTestDB {
 
 func cleanupOutbox(t *testing.T, db *deliveryTestDB) {
 	t.Helper()
-	execDeliveryTestSQL(db, `
+	execDeliveryTestSQL(t, db, `
 		DELETE FROM youtube_notification_delivery
 		WHERE outbox_id IN (
 			SELECT id FROM youtube_notification_outbox WHERE content_id LIKE 'test%'
 		)
 	`)
-	execDeliveryTestSQL(db, "DELETE FROM youtube_notification_outbox WHERE content_id LIKE 'test%'")
+	execDeliveryTestSQL(t, db, "DELETE FROM youtube_notification_outbox WHERE content_id LIKE 'test%'")
 }
 
 func setupCacheService(t *testing.T) *cache.Service {

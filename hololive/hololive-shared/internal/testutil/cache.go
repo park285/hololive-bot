@@ -58,7 +58,9 @@ func NewTestCacheServiceWithMini(t *testing.T, ctx context.Context) (*cache.Serv
 	}
 
 	t.Cleanup(func() {
-		_ = service.Close()
+		if err := service.Close(); err != nil {
+			t.Errorf("close cache service: %v", err)
+		}
 		mini.Close()
 	})
 

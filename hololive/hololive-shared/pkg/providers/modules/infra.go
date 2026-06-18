@@ -29,13 +29,17 @@ func BuildInfraModule(ctx context.Context, appConfig *config.Config, logger *slo
 	if err != nil {
 		return nil, err
 	}
-	defer cleanupInfraOnError(&retErr, cleanupCache)
+	defer func() {
+		cleanupInfraOnError(retErr, cleanupCache)
+	}()
 
 	databaseResources, cleanupDB, err := buildInfraDatabaseResources(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
-	defer cleanupInfraOnError(&retErr, cleanupDB)
+	defer func() {
+		cleanupInfraOnError(retErr, cleanupDB)
+	}()
 
 	cacheService := cacheResources.Service
 	postgresService := databaseResources.Service
@@ -65,7 +69,7 @@ func buildInfraDatabaseResources(
 	appConfig *config.Config,
 	logger *slog.Logger,
 ) (*providers.DatabaseResources, func(), error) {
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, appConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide database resources: %w", err)
 	}
@@ -85,8 +89,8 @@ func buildInfraMemberCache(
 	return memberCache, nil
 }
 
-func cleanupInfraOnError(retErr *error, cleanup func()) {
-	if retErr != nil && *retErr != nil && cleanup != nil {
+func cleanupInfraOnError(retErr error, cleanup func()) {
+	if retErr != nil && cleanup != nil {
 		cleanup()
 	}
 }

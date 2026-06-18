@@ -99,7 +99,7 @@ func channelScheduleParams(channelID string, hours int, statusStr string) url.Va
 	return params
 }
 
-func (h *Service) handleChannelScheduleRequestError(ctx context.Context, channelID string, statusStr string, err error) ([]*domain.Stream, error) {
+func (h *Service) handleChannelScheduleRequestError(ctx context.Context, channelID, statusStr string, err error) ([]*domain.Stream, error) {
 	h.logger.Error("Failed to get channel schedule",
 		slog.String("channel_id", channelID),
 		slog.String("status", statusStr),

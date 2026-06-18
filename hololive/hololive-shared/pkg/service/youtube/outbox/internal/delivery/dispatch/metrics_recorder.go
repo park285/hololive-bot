@@ -30,7 +30,7 @@ func newMetricsRecorder(logger *slog.Logger, auditLogger *AuditLogger, cr claimR
 
 func (mr *MetricsRecorder) recordPerRoomFormatFailure(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
+	row *domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	claimTokens []dispatchstate.ClaimToken,
@@ -49,7 +49,7 @@ func (mr *MetricsRecorder) recordPerRoomFormatFailure(
 
 func (mr *MetricsRecorder) recordPerRoomMissingMessage(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
+	row *domain.YouTubeNotificationDelivery,
 	claimTokens []dispatchstate.ClaimToken,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
@@ -63,8 +63,8 @@ func (mr *MetricsRecorder) recordPerRoomMissingMessage(
 
 func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	claimTokens []dispatchstate.ClaimToken,
@@ -81,7 +81,7 @@ func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
 		slog.String("room_id", row.RoomID),
-		dedupeKeyLogAttrForOutboxes([]domain.YouTubeNotificationOutbox{outbox}),
+		dedupeKeyLogAttrForOutboxes([]domain.YouTubeNotificationOutbox{*outbox}),
 		slog.Any("error", err))
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, "per_room", "failure", "dedupe key", err)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "dedupe key")
@@ -90,7 +90,7 @@ func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 
 func (mr *MetricsRecorder) recordPerRoomSendFailure(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
+	row *domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
@@ -118,7 +118,7 @@ func (mr *MetricsRecorder) recordPerRoomSendFailure(
 
 func (mr *MetricsRecorder) recordPerRoomSuccess(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
+	row *domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
@@ -178,7 +178,7 @@ func (mr *MetricsRecorder) recordDeliveryFailureWithRetryAfter(
 
 func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	claimTokens []dispatchstate.ClaimToken,
@@ -186,15 +186,16 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
+	roomID, channelID, kind := groupedDeliveryFields(group)
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after request build error",
-		slog.String("room_id", group.roomID),
-		slog.String("channel_id", group.channelID),
+		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
 	)
 	failedAt := time.Now()
 	mr.logger.Warn("Failed to build grouped delivery request",
-		slog.String("room_id", group.roomID),
-		slog.String("channel_id", group.channelID),
-		slog.String("kind", string(group.kind)),
+		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
+		slog.String("kind", string(kind)),
 		slog.Int("count", len(validOutboxes)),
 		dedupeKeyLogAttrForOutboxes(validOutboxes),
 		slog.Any("error", err))
@@ -207,7 +208,7 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 
 func (mr *MetricsRecorder) recordGroupedSendFailure(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
@@ -216,15 +217,16 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
+	roomID, channelID, kind := groupedDeliveryFields(group)
 	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after send failure",
-		slog.String("room_id", group.roomID),
-		slog.String("channel_id", group.channelID),
+		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
 	)
 	failedAt := time.Now()
 	reason := deliveryFailureReason(sendErr)
 	mr.logger.Warn("Failed to send grouped delivery",
-		slog.String("room_id", group.roomID),
-		slog.String("kind", string(group.kind)),
+		slog.String("room_id", roomID),
+		slog.String("kind", string(kind)),
 		slog.Int("count", len(validRows)),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
@@ -237,7 +239,7 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 
 func (mr *MetricsRecorder) recordGroupedSuccess(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
@@ -245,11 +247,12 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
+	roomID, channelID, kind := groupedDeliveryFields(group)
 	sentAt := time.Now()
 	mr.logger.Info("Sent grouped delivery",
-		slog.String("room_id", group.roomID),
-		slog.String("channel_id", group.channelID),
-		slog.String("kind", string(group.kind)),
+		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
+		slog.String("kind", string(kind)),
 		slog.Int("count", len(validRows)),
 		dedupeKeyLogAttr(sendReq.dedupeKeys))
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, sentAt, "grouped", "success", "", nil)
@@ -262,6 +265,13 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 	}
 	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)
 	mu.Unlock()
+}
+
+func groupedDeliveryFields(group *deliveryGroup) (result1, result2 string, result3 domain.OutboxKind) {
+	if group == nil {
+		return "", "", ""
+	}
+	return group.roomID, group.channelID, group.kind
 }
 
 func (mr *MetricsRecorder) recordKaringRequestBuildFailure(

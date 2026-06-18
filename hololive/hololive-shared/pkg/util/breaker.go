@@ -21,6 +21,7 @@
 package util
 
 import (
+	"math"
 	"sync/atomic"
 	"time"
 )
@@ -39,11 +40,22 @@ type Breaker struct {
 // NewBreaker는 새 Breaker를 생성합니다.
 func NewBreaker(threshold int, resetTimeout time.Duration) *Breaker {
 	b := &Breaker{
-		threshold:    int32(threshold),
+		threshold:    normalizeBreakerThreshold(threshold),
 		resetTimeout: resetTimeout,
 	}
 	b.openedAt.Store(time.Time{})
 	return b
+}
+
+func normalizeBreakerThreshold(threshold int) int32 {
+	switch {
+	case threshold <= 0:
+		return 1
+	case threshold > math.MaxInt32:
+		return math.MaxInt32
+	default:
+		return int32(threshold)
+	}
 }
 
 // Allow는 요청 허용 여부를 반환하며, timeout 경과 시 reset side-effect를 수행합니다.
@@ -59,7 +71,7 @@ func (b *Breaker) Allow() bool {
 		return true
 	}
 
-	openedAt, _ := b.openedAt.Load().(time.Time)
+	openedAt := b.openedAtTime()
 	if time.Since(openedAt) > b.resetTimeout {
 		// CAS로 reset 전이를 원자화: 단일 goroutine만 failures를 0으로 만든다.
 		if b.open.CompareAndSwap(true, false) {
@@ -113,7 +125,7 @@ func (b *Breaker) IsOpen() bool {
 	if !b.open.Load() {
 		return false
 	}
-	openedAt, _ := b.openedAt.Load().(time.Time)
+	openedAt := b.openedAtTime()
 	return time.Since(openedAt) <= b.resetTimeout
 }
 
@@ -135,7 +147,7 @@ func (b *Breaker) RetryAfter() time.Duration {
 	if !b.open.Load() {
 		return 0
 	}
-	openedAt, _ := b.openedAt.Load().(time.Time)
+	openedAt := b.openedAtTime()
 	remaining := b.resetTimeout - time.Since(openedAt)
 	if remaining < 0 {
 		return 0
@@ -150,4 +162,12 @@ func (b *Breaker) SetOpenedAtForTest(t time.Time) {
 		return
 	}
 	b.openedAt.Store(t)
+}
+
+func (b *Breaker) openedAtTime() time.Time {
+	openedAt, ok := b.openedAt.Load().(time.Time)
+	if !ok {
+		return time.Time{}
+	}
+	return openedAt
 }

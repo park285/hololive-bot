@@ -99,13 +99,13 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 		args = append(args, item.Kind, item.PeriodKey, item.RoomID, contentID, string(payload))
 	}
 
-	sql := `INSERT INTO notification_delivery_outbox (kind, period_key, room_id, content_id, payload, status, attempt_count, next_attempt_at)
+	query := `INSERT INTO notification_delivery_outbox (kind, period_key, room_id, content_id, payload, status, attempt_count, next_attempt_at)
 		VALUES ` + strings.Join(valueExprs, ",") + `
 		ON CONFLICT (kind, content_id) DO UPDATE
 		SET payload = EXCLUDED.payload, status = 'PENDING', attempt_count = 0, next_attempt_at = NOW(), error = NULL
 		WHERE notification_delivery_outbox.status = 'FAILED'`
 
-	if _, err := r.pool.Exec(ctx, sql, args...); err != nil {
+	if _, err := r.pool.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("enqueue batch: %w", err)
 	}
 	return nil
@@ -118,7 +118,7 @@ func (r *OutboxRepository) FetchAndLock(ctx context.Context, batchSize int, lock
 	lockExpiry := time.Now().Add(-lockTimeout)
 	now := time.Now()
 
-	sql := `WITH claim AS (
+	query := `WITH claim AS (
         SELECT id FROM notification_delivery_outbox
         WHERE status = 'PENDING'
           AND (locked_at IS NULL OR locked_at < $1)
@@ -130,7 +130,7 @@ func (r *OutboxRepository) FetchAndLock(ctx context.Context, batchSize int, lock
     FROM claim WHERE o.id = claim.id
     RETURNING o.*`
 
-	rows, err := r.pool.Query(ctx, sql, lockExpiry, now, batchSize, now)
+	rows, err := r.pool.Query(ctx, query, lockExpiry, now, batchSize, now)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock: %w", err)
 	}
@@ -161,7 +161,7 @@ func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, maxRetries 
 		return err
 	}
 	now := time.Now()
-	sql := `UPDATE notification_delivery_outbox
+	query := `UPDATE notification_delivery_outbox
             SET attempt_count = attempt_count + 1,
                 error = $1,
                 status = CASE WHEN attempt_count + 1 >= $2 THEN 'FAILED' ELSE 'PENDING' END,
@@ -169,7 +169,7 @@ func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, maxRetries 
                 locked_at = NULL
             WHERE id = $5`
 
-	_, err := r.pool.Exec(ctx, sql, errMsg, maxRetries, maxRetries, now.Add(backoff), id)
+	_, err := r.pool.Exec(ctx, query, errMsg, maxRetries, maxRetries, now.Add(backoff), id)
 	return err
 }
 

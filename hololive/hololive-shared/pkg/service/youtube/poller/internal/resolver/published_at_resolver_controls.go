@@ -70,7 +70,7 @@ func (r *PendingPublishedAtResolver) resolverFailureBackoffTTL() time.Duration {
 func (r *PendingPublishedAtResolver) markPublishedAtRetryAfter(
 	tracking *trackingrepo.PgxRepository,
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	retryAfter time.Time,
 	forceLive bool,
 ) error {
@@ -88,7 +88,7 @@ func (r *PendingPublishedAtResolver) markPublishedAtRetryAfter(
 	if retryTTL <= 0 || retryTTL > time.Second {
 		retryTTL = time.Second
 	}
-	retryCtx, cancel := context.WithTimeout(context.Background(), retryTTL)
+	retryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), retryTTL)
 	defer cancel()
 
 	if err := tracking.MarkPublishedAtRetryAfter(retryCtx, candidate.Kind, candidate.PostID, retryAfter); err != nil {
@@ -101,7 +101,7 @@ func (r *PendingPublishedAtResolver) markPublishedAtRetryAfter(
 func (r *PendingPublishedAtResolver) markPublishedAtRetryAfterWithReporting(
 	tracking *trackingrepo.PgxRepository,
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	retryAfter time.Time,
 	forceLive bool,
 	reason string,
@@ -122,13 +122,15 @@ func (r *PendingPublishedAtResolver) markPublishedAtRetryAfterWithReporting(
 
 func (r *PendingPublishedAtResolver) resolveCandidatePublishedAt(
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 ) (*time.Time, error) {
 	switch candidate.Kind {
 	case domain.OutboxKindNewShort:
 		return r.resolveShortCandidatePublishedAt(ctx, candidate)
 	case domain.OutboxKindCommunityPost:
 		return r.resolveCommunityCandidatePublishedAt(ctx, candidate)
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return nil, fmt.Errorf("resolve candidate published_at: unsupported kind %s", candidate.Kind)
 	default:
 		return nil, fmt.Errorf("resolve candidate published_at: unsupported kind %s", candidate.Kind)
 	}
@@ -136,12 +138,9 @@ func (r *PendingPublishedAtResolver) resolveCandidatePublishedAt(
 
 func (r *PendingPublishedAtResolver) resolveShortCandidatePublishedAt(
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 ) (*time.Time, error) {
-	videoID := normalizeCandidateResourceID(
-		candidate,
-		polling.NormalizeShortVideoResourceID,
-	)
+	videoID := normalizeCandidateResourceID(candidate, polling.NormalizeShortVideoResourceID)
 	if videoID == "" {
 		return nil, fmt.Errorf("resolve candidate published_at: empty short video id")
 	}
@@ -157,12 +156,9 @@ func (r *PendingPublishedAtResolver) resolveShortCandidatePublishedAt(
 
 func (r *PendingPublishedAtResolver) resolveCommunityCandidatePublishedAt(
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 ) (*time.Time, error) {
-	postID := normalizeCandidateResourceID(
-		candidate,
-		polling.NormalizeCommunityResourceID,
-	)
+	postID := normalizeCandidateResourceID(candidate, polling.NormalizeCommunityResourceID)
 	if postID == "" {
 		return nil, fmt.Errorf("resolve candidate published_at: empty community post id")
 	}
@@ -177,7 +173,7 @@ func (r *PendingPublishedAtResolver) resolveCommunityCandidatePublishedAt(
 }
 
 func normalizeCandidateResourceID(
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	normalize func(string) string,
 ) string {
 	id := normalize(candidate.PostID)

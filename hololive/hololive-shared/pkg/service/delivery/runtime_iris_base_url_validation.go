@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -237,7 +238,11 @@ func validateRuntimeIrisBaseURLFileOwner(info os.FileInfo) error {
 	}
 
 	fileUID := stat.Uid
-	currentUID := uint32(os.Geteuid())
+	euid := os.Geteuid()
+	if euid < 0 || euid > math.MaxUint32 {
+		return fmt.Errorf("current uid %d is outside uint32 range", euid)
+	}
+	currentUID := uint32(euid)
 	if fileUID != 0 && fileUID != currentUID {
 		return fmt.Errorf("file owner uid %d must be root or current uid %d", fileUID, currentUID)
 	}
@@ -280,7 +285,7 @@ func validateRuntimeIrisBaseURLFileParentPath(path string) error {
 	return nil
 }
 
-func runtimeIrisBaseURLParentPathStart(parent string) (string, string) {
+func runtimeIrisBaseURLParentPathStart(parent string) (value0, value1 string) {
 	volume := filepath.VolumeName(parent)
 	rest := strings.TrimPrefix(parent, volume)
 	separator := string(os.PathSeparator)

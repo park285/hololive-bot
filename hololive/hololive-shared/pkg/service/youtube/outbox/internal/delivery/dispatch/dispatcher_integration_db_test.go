@@ -9,6 +9,7 @@ import (
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -37,7 +38,7 @@ func firstDeliveryTestRow(pool *pgxpool.Pool, dest any, conds ...any) deliveryTe
 	return deliveryTestSQLResult{Error: err}
 }
 
-func findDeliveryTestRowsOrderedWhere(pool *pgxpool.Pool, dest any, order string, where string, args ...any) deliveryTestSQLResult {
+func findDeliveryTestRowsOrderedWhere(pool *pgxpool.Pool, dest any, order, where string, args ...any) deliveryTestSQLResult {
 	err := findDeliveryIntegrationRows(context.Background(), pool, dest, where, order, args...)
 	return deliveryTestSQLResult{Error: err}
 }
@@ -55,9 +56,11 @@ func countDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, dest *int64, wher
 	return deliveryTestSQLResult{Error: err}
 }
 
-func execDeliveryTestSQL(pool *pgxpool.Pool, query string, args ...any) deliveryTestSQLResult {
+func execDeliveryTestSQL(t testing.TB, pool *pgxpool.Pool, query string, args ...any) {
+	t.Helper()
 	tag, err := pool.Exec(context.Background(), deliverysql.PostgresPlaceholders(query), args...)
-	return deliveryTestSQLResult{Error: err, RowsAffected: tag.RowsAffected()}
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, tag.RowsAffected(), int64(0))
 }
 
 func deleteDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, where string, args ...any) deliveryTestSQLResult {
@@ -73,12 +76,15 @@ func deleteDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, where string, ar
 	return deliveryTestSQLResult{Error: err, RowsAffected: tag.RowsAffected()}
 }
 
-func deleteDeliveryTestRows(pool *pgxpool.Pool, model any) deliveryTestSQLResult {
+func deleteDeliveryTestRows(t testing.TB, pool *pgxpool.Pool, model any) {
+	t.Helper()
 	id, ok := deliveryIntegrationID(model)
 	if !ok {
-		return deliveryTestSQLResult{Error: fmt.Errorf("delete row: unsupported model or missing id %T", model)}
+		require.Failf(t, "delete delivery test rows", "unsupported model or missing id %T", model)
+		return
 	}
-	return deleteDeliveryTestRowsWhere(pool, model, "id = ?", id)
+	result := deleteDeliveryTestRowsWhere(pool, model, "id = ?", id)
+	require.NoError(t, result.Error)
 }
 
 func firstDeliveryIntegrationRow(ctx context.Context, pool *pgxpool.Pool, dest any, conds ...any) error {
@@ -102,7 +108,7 @@ func firstDeliveryIntegrationRow(ctx context.Context, pool *pgxpool.Pool, dest a
 	return pgxscan.Get(ctx, pool, dest, deliverysql.PostgresPlaceholders(query), args...)
 }
 
-func findDeliveryIntegrationRows(ctx context.Context, pool *pgxpool.Pool, dest any, where string, order string, args ...any) error {
+func findDeliveryIntegrationRows(ctx context.Context, pool *pgxpool.Pool, dest any, where, order string, args ...any) error {
 	table := deliveryIntegrationTableForDest(dest)
 	if table == "" {
 		return fmt.Errorf("find rows: unsupported dest %T", dest)
@@ -183,7 +189,7 @@ func deliveryIntegrationNormalizeTimePtr(value *time.Time) *time.Time {
 	return &normalized
 }
 
-func deliveryIntegrationRequiredTime(value time.Time, fallback time.Time) time.Time {
+func deliveryIntegrationRequiredTime(value, fallback time.Time) time.Time {
 	if value.IsZero() {
 		return fallback
 	}

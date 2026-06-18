@@ -24,14 +24,14 @@ type outboxLockToken struct {
 	lockedAt *time.Time
 }
 
-func newStatusUpdater(db any, logger *slog.Logger, config Config) *StatusUpdater {
+func newStatusUpdater(db any, logger *slog.Logger, config *Config) *StatusUpdater {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &StatusUpdater{
 		db:     deliverysql.AsQuerier(db),
 		logger: logger,
-		config: config,
+		config: *config,
 	}
 }
 

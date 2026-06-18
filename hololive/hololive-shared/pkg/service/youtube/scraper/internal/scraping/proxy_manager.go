@@ -44,9 +44,9 @@ type ProxyConfig struct {
 	URL     string
 }
 
-func WithProxy(config ProxyConfig) ClientOption {
+func WithProxy(proxyConfig ProxyConfig) ClientOption {
 	return func(c *Client) {
-		c.proxyConfig = config
+		c.proxyConfig = proxyConfig
 	}
 }
 
@@ -313,22 +313,32 @@ func newProxyAuth(parsedURL *url.URL) *proxy.Auth {
 
 func newSOCKS5DialContext(dialer proxy.Dialer) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	if contextDialer, ok := dialer.(proxy.ContextDialer); ok {
-		return func(ctx context.Context, network, addr string) (net.Conn, error) {
-			conn, err := contextDialer.DialContext(ctx, network, addr)
-			if err != nil {
-				return nil, fmt.Errorf("proxy dial failed: %w", err)
-			}
-			if ctx.Err() != nil {
-				_ = conn.Close()
-				return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
-			}
-			return conn, nil
-		}
+		return newContextSOCKS5DialContext(contextDialer)
 	}
 
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		return dialSOCKS5WithContextFallback(ctx, dialer, network, addr)
 	}
+}
+
+func newContextSOCKS5DialContext(contextDialer proxy.ContextDialer) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := contextDialer.DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, fmt.Errorf("proxy dial failed: %w", err)
+		}
+		return closeProxyConnWhenCanceled(ctx, conn)
+	}
+}
+
+func closeProxyConnWhenCanceled(ctx context.Context, conn net.Conn) (net.Conn, error) {
+	if ctx.Err() == nil {
+		return conn, nil
+	}
+	if closeErr := conn.Close(); closeErr != nil {
+		return nil, fmt.Errorf("close canceled proxy connection: %w", closeErr)
+	}
+	return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
 }
 
 func instrumentScraperTransport(baseTransport *http.Transport) http.RoundTripper {

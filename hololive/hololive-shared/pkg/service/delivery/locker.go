@@ -22,6 +22,7 @@ package delivery
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -56,10 +57,13 @@ type valkeyNotificationLocker struct {
 	logger *slog.Logger
 }
 
-func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey string, ttl time.Duration) (string, bool, error) {
+func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey string, ttl time.Duration) (value0 string, ok1 bool, err error) {
 	token := uuid.New().String()
 	// json.Marshal로 직렬화 (cache.Get이 json.Unmarshal 사용)
-	tokenJSON, _ := json.Marshal(token)
+	tokenJSON, err := json.Marshal(token)
+	if err != nil {
+		return "", false, fmt.Errorf("marshal lock token: %w", err)
+	}
 	value := string(tokenJSON)
 
 	acquired, err := l.cache.SetNX(ctx, lockKey, value, ttl)
@@ -75,7 +79,10 @@ func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey strin
 
 func (l *valkeyNotificationLocker) Release(ctx context.Context, lockKey, token string) error {
 	// json.Marshal(token) → CompareAndDelete로 원자적 해제
-	tokenJSON, _ := json.Marshal(token)
+	tokenJSON, err := json.Marshal(token)
+	if err != nil {
+		return fmt.Errorf("marshal lock token: %w", err)
+	}
 	value := string(tokenJSON)
 
 	deleted, err := l.cache.CompareAndDelete(ctx, lockKey, value)
@@ -119,7 +126,7 @@ func (l *valkeyNotificationLocker) ReleaseRoomClaims(ctx context.Context, claimK
 // noopNotificationLocker: cache nil 시 fallback (dedup 비활성화)
 type noopNotificationLocker struct{}
 
-func (noopNotificationLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (string, bool, error) {
+func (noopNotificationLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (value0 string, ok1 bool, err error) {
 	return "", true, nil
 }
 

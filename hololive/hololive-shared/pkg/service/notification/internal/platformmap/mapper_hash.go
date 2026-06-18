@@ -63,16 +63,22 @@ func (m *Mapper) replaceHashMappings(
 	}
 
 	if err := m.cache.HMSet(ctx, tmpKey, fields); err != nil {
-		_ = m.cache.Del(context.WithoutCancel(ctx), tmpKey)
+		m.deleteTempMappingKey(ctx, tmpKey)
 		return fmt.Errorf("hmset temp mapping key %s: %w", tmpKey, err)
 	}
 
 	if err := m.renameHashMappingKey(ctx, tmpKey, key, fields); err != nil {
-		_ = m.cache.Del(context.WithoutCancel(ctx), tmpKey)
+		m.deleteTempMappingKey(ctx, tmpKey)
 		return fmt.Errorf("rename mapping key %s from %s: %w", key, tmpKey, err)
 	}
 
 	return nil
+}
+
+func (m *Mapper) deleteTempMappingKey(ctx context.Context, tmpKey string) {
+	if err := m.cache.Del(ctx, tmpKey); err != nil && m.logger != nil {
+		m.logger.Warn("delete temp platform mapping key failed", "key", tmpKey, "error", err)
+	}
 }
 
 func normalizeHashMappingFields(fields map[string]any, mappings map[string]string) {

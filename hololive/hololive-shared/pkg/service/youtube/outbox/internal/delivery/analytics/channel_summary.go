@@ -25,8 +25,8 @@ func BuildChannelPostDeliverySummaries(posts []PostSendCount) ([]ChannelPostDeli
 	}
 
 	sort.SliceStable(summaries, func(i, j int) bool {
-		left := channelPostDeliverySummarySortTime(summaries[i])
-		right := channelPostDeliverySummarySortTime(summaries[j])
+		left := channelPostDeliverySummarySortTime(&summaries[i])
+		right := channelPostDeliverySummarySortTime(&summaries[j])
 		if !left.Equal(right) {
 			return left.After(right)
 		}
@@ -47,7 +47,7 @@ func buildChannelPostDeliverySummaryAccumulators(
 		}
 
 		accumulator := channelPostDeliverySummaryAccumulatorFor(accumulators, channelID)
-		if err := accumulator.add(posts[i]); err != nil {
+		if err := accumulator.add(&posts[i]); err != nil {
 			return nil, fmt.Errorf("post[%d] %s: %w", i, strings.TrimSpace(posts[i].ContentID), err)
 		}
 	}
@@ -74,7 +74,7 @@ type channelPostDeliverySummaryAccumulator struct {
 	summary ChannelPostDeliverySummary
 }
 
-func (a *channelPostDeliverySummaryAccumulator) add(post PostSendCount) error {
+func (a *channelPostDeliverySummaryAccumulator) add(post *PostSendCount) error {
 	observedAt, err := PostLatencyObservedAt(post)
 	if err != nil {
 		return err
@@ -107,13 +107,15 @@ func (a *channelPostDeliverySummaryAccumulator) addDetectedPostType(alarmType do
 		a.summary.CommunityDetectedPostCount++
 	case domain.AlarmTypeShorts:
 		a.summary.ShortsDetectedPostCount++
-	default:
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
 		return fmt.Errorf("unsupported alarm type: %s", alarmType)
+	default:
+		return fmt.Errorf("unknown alarm type: %s", alarmType)
 	}
 	return nil
 }
 
-func (a *channelPostDeliverySummaryAccumulator) addDeliveryResult(post PostSendCount) {
+func (a *channelPostDeliverySummaryAccumulator) addDeliveryResult(post *PostSendCount) {
 	if hasChannelPostDeliverySendActivity(post) {
 		a.summary.AlarmSentPostCount++
 	}
@@ -127,7 +129,7 @@ func (a *channelPostDeliverySummaryAccumulator) addDeliveryResult(post PostSendC
 	}
 }
 
-func hasChannelPostDeliverySendActivity(post PostSendCount) bool {
+func hasChannelPostDeliverySendActivity(post *PostSendCount) bool {
 	return post.OutboxCount > 0 ||
 		post.SuccessSendCount > 0 ||
 		post.FailedAttemptCount > 0 ||
@@ -136,18 +138,18 @@ func hasChannelPostDeliverySendActivity(post PostSendCount) bool {
 		post.LastEventAt != nil
 }
 
-func hasChannelPostDeliverySuccess(post PostSendCount) bool {
+func hasChannelPostDeliverySuccess(post *PostSendCount) bool {
 	return post.AlarmSentAt != nil ||
 		post.SuccessSendCount > 0 ||
 		post.FirstSuccessAt != nil ||
 		post.LastSuccessAt != nil
 }
 
-func hasChannelPostDeliveryFailure(post PostSendCount) bool {
+func hasChannelPostDeliveryFailure(post *PostSendCount) bool {
 	return post.FailedAttemptCount > 0
 }
 
-func channelPostDeliverySummarySortTime(summary ChannelPostDeliverySummary) time.Time {
+func channelPostDeliverySummarySortTime(summary *ChannelPostDeliverySummary) time.Time {
 	if summary.LatestObservedAt != nil {
 		return summary.LatestObservedAt.UTC()
 	}

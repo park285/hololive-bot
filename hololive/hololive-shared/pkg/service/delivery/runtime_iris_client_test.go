@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -19,6 +20,37 @@ import (
 	"github.com/park285/iris-client-go/iris"
 )
 
+func writeRuntimeIrisResponse(t *testing.T, w http.ResponseWriter, body string) {
+	t.Helper()
+	if _, err := w.Write([]byte(body)); err != nil {
+		t.Fatalf("write iris response: %v", err)
+	}
+}
+
+func tlsClientForServers(t *testing.T, servers ...*httptest.Server) *http.Client {
+	t.Helper()
+
+	roots := x509.NewCertPool()
+	for _, server := range servers {
+		if server == nil || server.TLS == nil || len(server.TLS.Certificates) == 0 || len(server.TLS.Certificates[0].Certificate) == 0 {
+			t.Fatalf("httptest TLS server missing certificate")
+		}
+		cert, err := x509.ParseCertificate(server.TLS.Certificates[0].Certificate[0])
+		if err != nil {
+			t.Fatalf("parse httptest TLS certificate: %v", err)
+		}
+		roots.AddCert(cert)
+	}
+
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("http.DefaultTransport type = %T, want *http.Transport", http.DefaultTransport)
+	}
+	transport := defaultTransport.Clone()
+	transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
+	return &http.Client{Transport: transport}
+}
+
 func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *testing.T) {
 	ctx := context.Background()
 	botToken := "bot-token"
@@ -32,7 +64,7 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 		firstCalls++
 		firstMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
 	defer first.Close()
 
@@ -46,7 +78,7 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 		secondCalls++
 		secondMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
 	defer second.Close()
 
@@ -56,12 +88,9 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 		t.Fatalf("write first base url file: %v", err)
 	}
 
-	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", strings.Join([]string{
-		testBaseURLHost(t, first.URL),
-		testBaseURLHost(t, second.URL),
-	}, ","))
+	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testBaseURLHost(t, first.URL)+","+testBaseURLHost(t, second.URL))
 
-	client := NewRuntimeIrisClient(second.URL, botToken, baseURLFilePath, nil, iris.WithHTTPClient(newRuntimeIrisTestHTTPClient()))
+	client := NewRuntimeIrisClient(second.URL, botToken, baseURLFilePath, nil, iris.WithHTTPClient(tlsClientForServers(t, first, second)))
 
 	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
 		t.Fatalf("send via first override: %v", err)
@@ -97,11 +126,11 @@ func TestRuntimeIrisClient_SendMessageDefaultsToReplyRetry(t *testing.T) {
 		}
 		if attempts.Add(1) == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte(`{"error":"rate limited"}`))
+			writeRuntimeIrisResponse(t, w, `{"error":"rate limited"}`)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
 	defer server.Close()
 
@@ -115,19 +144,21 @@ func TestRuntimeIrisClient_SendMessageDefaultsToReplyRetry(t *testing.T) {
 	}
 }
 
+type runtimeIrisBaseURLFileCase struct {
+	name             string
+	fileContent      string
+	fileMode         os.FileMode
+	useSymlink       bool
+	useSymlinkParent bool
+	disableFilePath  bool
+	env              map[string]string
+	wantBaseURL      string
+	wantErrContains  string
+	wantWarnContains string
+}
+
 func TestRuntimeIrisClient_ResolveBaseURLFileOverrideValidation(t *testing.T) {
-	tests := []struct {
-		name             string
-		fileContent      string
-		fileMode         os.FileMode
-		useSymlink       bool
-		useSymlinkParent bool
-		disableFilePath  bool
-		env              map[string]string
-		wantBaseURL      string
-		wantErrContains  string
-		wantWarnContains string
-	}{
+	tests := []runtimeIrisBaseURLFileCase{
 		{
 			name:             "accepts bare IP host when no allowlist is configured",
 			fileContent:      "https://100.100.1.5:3001",
@@ -259,88 +290,126 @@ func TestRuntimeIrisClient_ResolveBaseURLFileOverrideValidation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, key := range []string{
-				"APP_ENV",
-				"IRIS_BASE_URL_ALLOWED_HOSTS",
-				"IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS",
-				"IRIS_H3_SERVER_NAME",
-				"IRIS_TRANSPORT",
-			} {
-				t.Setenv(key, "")
-			}
-			for key, value := range tc.env {
-				t.Setenv(key, value)
-			}
-
-			dir := t.TempDir()
-			baseURLFilePath := filepath.Join(dir, "iris_base_url")
-			if tc.useSymlinkParent {
-				realParent := filepath.Join(dir, "real-parent")
-				if err := os.Mkdir(realParent, 0o755); err != nil {
-					t.Fatalf("mkdir real parent: %v", err)
-				}
-				linkParent := filepath.Join(dir, "link-parent")
-				if err := os.Symlink(realParent, linkParent); err != nil {
-					t.Fatalf("symlink parent: %v", err)
-				}
-				baseURLFilePath = filepath.Join(linkParent, "iris_base_url")
-			}
-			if err := os.WriteFile(baseURLFilePath, []byte(tc.fileContent), 0o600); err != nil {
-				t.Fatalf("write base url file: %v", err)
-			}
-			if tc.fileMode != 0 {
-				if err := os.Chmod(baseURLFilePath, tc.fileMode); err != nil {
-					t.Fatalf("chmod base url file: %v", err)
-				}
-			}
-			if tc.useSymlink {
-				targetPath := baseURLFilePath
-				baseURLFilePath = filepath.Join(dir, "iris_base_url_link")
-				if err := os.Symlink(targetPath, baseURLFilePath); err != nil {
-					t.Fatalf("symlink base url file: %v", err)
-				}
-			}
-			if tc.disableFilePath {
-				baseURLFilePath = ""
-			}
-
+			setRuntimeIrisBaseURLEnv(t, tc.env)
+			baseURLFilePath := writeRuntimeIrisBaseURLFileCase(t, &tc)
 			var logBuffer bytes.Buffer
 			logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
 			client := NewRuntimeIrisClient("http://fallback.example", "bot-token", baseURLFilePath, logger)
-			got, err := client.resolver.resolve()
-			if tc.wantErrContains != "" {
-				if err == nil {
-					t.Fatalf("resolve() error = nil, want containing %q", tc.wantErrContains)
-				}
-				if !strings.Contains(err.Error(), tc.wantErrContains) {
-					t.Fatalf("resolve() error = %v, want containing %q", err, tc.wantErrContains)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("resolve() error = %v, want nil", err)
-			}
-			if got != tc.wantBaseURL {
-				t.Fatalf("resolve() = %q, want %q", got, tc.wantBaseURL)
-			}
-			if tc.wantWarnContains != "" {
-				got, err = client.resolver.resolve()
-				if err != nil {
-					t.Fatalf("second resolve() error = %v, want nil", err)
-				}
-				if got != tc.wantBaseURL {
-					t.Fatalf("second resolve() = %q, want %q", got, tc.wantBaseURL)
-				}
-				logs := logBuffer.String()
-				if strings.Count(logs, tc.wantWarnContains) != 1 {
-					t.Fatalf("warning count for %q in logs = %d, want 1; logs: %s", tc.wantWarnContains, strings.Count(logs, tc.wantWarnContains), logs)
-				}
-				return
-			}
-			if strings.Contains(logBuffer.String(), "host is unvalidated") {
-				t.Fatalf("unexpected unvalidated host warning: %s", logBuffer.String())
-			}
+			assertRuntimeIrisBaseURLResolve(t, client, &logBuffer, &tc)
 		})
+	}
+}
+
+func setRuntimeIrisBaseURLEnv(t *testing.T, env map[string]string) {
+	t.Helper()
+
+	for _, key := range []string{
+		"APP_ENV",
+		"IRIS_BASE_URL_ALLOWED_HOSTS",
+		"IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS",
+		"IRIS_H3_SERVER_NAME",
+		"IRIS_TRANSPORT",
+	} {
+		t.Setenv(key, "")
+	}
+	for key, value := range env {
+		t.Setenv(key, value)
+	}
+}
+
+func writeRuntimeIrisBaseURLFileCase(t *testing.T, tc *runtimeIrisBaseURLFileCase) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	baseURLFilePath := filepath.Join(dir, "iris_base_url")
+	if tc.useSymlinkParent {
+		baseURLFilePath = writeRuntimeIrisBaseURLInSymlinkParent(t, dir, tc.fileContent)
+	} else if err := os.WriteFile(baseURLFilePath, []byte(tc.fileContent), 0o600); err != nil {
+		t.Fatalf("write base url file: %v", err)
+	}
+	if tc.fileMode != 0 {
+		if err := os.Chmod(baseURLFilePath, tc.fileMode); err != nil {
+			t.Fatalf("chmod base url file: %v", err)
+		}
+	}
+	if tc.useSymlink {
+		targetPath := baseURLFilePath
+		baseURLFilePath = filepath.Join(dir, "iris_base_url_link")
+		if err := os.Symlink(targetPath, baseURLFilePath); err != nil {
+			t.Fatalf("symlink base url file: %v", err)
+		}
+	}
+	if tc.disableFilePath {
+		return ""
+	}
+	return baseURLFilePath
+}
+
+func writeRuntimeIrisBaseURLInSymlinkParent(t *testing.T, dir, content string) string {
+	t.Helper()
+
+	realParent := filepath.Join(dir, "real-parent")
+	if err := os.Mkdir(realParent, 0o750); err != nil {
+		t.Fatalf("mkdir real parent: %v", err)
+	}
+	linkParent := filepath.Join(dir, "link-parent")
+	if err := os.Symlink(realParent, linkParent); err != nil {
+		t.Fatalf("symlink parent: %v", err)
+	}
+	baseURLFilePath := filepath.Join(linkParent, "iris_base_url")
+	if err := os.WriteFile(baseURLFilePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write base url file: %v", err)
+	}
+	return baseURLFilePath
+}
+
+func assertRuntimeIrisBaseURLResolve(t *testing.T, client *RuntimeIrisClient, logBuffer *bytes.Buffer, tc *runtimeIrisBaseURLFileCase) {
+	t.Helper()
+
+	got, err := client.resolver.resolve()
+	if tc.wantErrContains != "" {
+		assertRuntimeIrisBaseURLResolveError(t, err, tc.wantErrContains)
+		return
+	}
+	if err != nil {
+		t.Fatalf("resolve() error = %v, want nil", err)
+	}
+	if got != tc.wantBaseURL {
+		t.Fatalf("resolve() = %q, want %q", got, tc.wantBaseURL)
+	}
+	assertRuntimeIrisBaseURLWarning(t, client, logBuffer, tc)
+}
+
+func assertRuntimeIrisBaseURLResolveError(t *testing.T, err error, want string) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("resolve() error = nil, want containing %q", want)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("resolve() error = %v, want containing %q", err, want)
+	}
+}
+
+func assertRuntimeIrisBaseURLWarning(t *testing.T, client *RuntimeIrisClient, logBuffer *bytes.Buffer, tc *runtimeIrisBaseURLFileCase) {
+	t.Helper()
+
+	if tc.wantWarnContains == "" {
+		if strings.Contains(logBuffer.String(), "host is unvalidated") {
+			t.Fatalf("unexpected unvalidated host warning: %s", logBuffer.String())
+		}
+		return
+	}
+	got, err := client.resolver.resolve()
+	if err != nil {
+		t.Fatalf("second resolve() error = %v, want nil", err)
+	}
+	if got != tc.wantBaseURL {
+		t.Fatalf("second resolve() = %q, want %q", got, tc.wantBaseURL)
+	}
+	logs := logBuffer.String()
+	if strings.Count(logs, tc.wantWarnContains) != 1 {
+		t.Fatalf("warning count for %q in logs = %d, want 1; logs: %s", tc.wantWarnContains, strings.Count(logs, tc.wantWarnContains), logs)
 	}
 }
 
@@ -348,7 +417,7 @@ func TestRuntimeIrisClient_ResolveBaseURLFileRejectsUncleanSymlinkTraversalInPro
 	dir := t.TempDir()
 	realParent := filepath.Join(dir, "real-parent")
 	realChild := filepath.Join(realParent, "child")
-	if err := os.MkdirAll(realChild, 0o755); err != nil {
+	if err := os.MkdirAll(realChild, 0o750); err != nil {
 		t.Fatalf("mkdir real child: %v", err)
 	}
 	linkParent := filepath.Join(dir, "symlink")
@@ -357,7 +426,7 @@ func TestRuntimeIrisClient_ResolveBaseURLFileRejectsUncleanSymlinkTraversalInPro
 	}
 
 	cleanTarget := filepath.Join(dir, "target")
-	if err := os.MkdirAll(cleanTarget, 0o755); err != nil {
+	if err := os.MkdirAll(cleanTarget, 0o750); err != nil {
 		t.Fatalf("mkdir clean target: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(cleanTarget, "iris_base_url"), []byte("https://iris.example:3001/"), 0o600); err != nil {
@@ -365,14 +434,14 @@ func TestRuntimeIrisClient_ResolveBaseURLFileRejectsUncleanSymlinkTraversalInPro
 	}
 
 	resolvedTarget := filepath.Join(realParent, "target")
-	if err := os.MkdirAll(resolvedTarget, 0o755); err != nil {
+	if err := os.MkdirAll(resolvedTarget, 0o750); err != nil {
 		t.Fatalf("mkdir resolved target: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(resolvedTarget, "iris_base_url"), []byte("https://iris.example:3001/"), 0o600); err != nil {
 		t.Fatalf("write resolved target base url: %v", err)
 	}
 
-	uncleanPath := linkParent + string(os.PathSeparator) + ".." + string(os.PathSeparator) + "target" + string(os.PathSeparator) + "iris_base_url"
+	uncleanPath := strings.Join([]string{linkParent, "..", "target", "iris_base_url"}, string(os.PathSeparator))
 	tests := []struct {
 		name            string
 		skipStatChecks  string
@@ -392,28 +461,29 @@ func TestRuntimeIrisClient_ResolveBaseURLFileRejectsUncleanSymlinkTraversalInPro
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("APP_ENV", "production")
-			t.Setenv("IRIS_H3_SERVER_NAME", "iris.example")
-			t.Setenv("IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS", tc.skipStatChecks)
-
-			client := NewRuntimeIrisClient("http://fallback.example", "bot-token", uncleanPath, nil)
-			got, err := client.resolver.resolve()
-			if tc.wantErrContains != "" {
-				if err == nil {
-					t.Fatalf("resolve() error = nil, want containing %q", tc.wantErrContains)
-				}
-				if !strings.Contains(err.Error(), tc.wantErrContains) {
-					t.Fatalf("resolve() error = %v, want containing %q", err, tc.wantErrContains)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("resolve() error = %v, want nil", err)
-			}
-			if got != tc.wantBaseURL {
-				t.Fatalf("resolve() = %q, want %q", got, tc.wantBaseURL)
-			}
+			assertUncleanSymlinkTraversalResolution(t, uncleanPath, tc.skipStatChecks, tc.wantBaseURL, tc.wantErrContains)
 		})
+	}
+}
+
+func assertUncleanSymlinkTraversalResolution(t *testing.T, uncleanPath, skipStatChecks, wantBaseURL, wantErrContains string) {
+	t.Helper()
+
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("IRIS_H3_SERVER_NAME", "iris.example")
+	t.Setenv("IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS", skipStatChecks)
+
+	client := NewRuntimeIrisClient("http://fallback.example", "bot-token", uncleanPath, nil)
+	got, err := client.resolver.resolve()
+	if wantErrContains != "" {
+		assertRuntimeIrisBaseURLResolveError(t, err, wantErrContains)
+		return
+	}
+	if err != nil {
+		t.Fatalf("resolve() error = %v, want nil", err)
+	}
+	if got != wantBaseURL {
+		t.Fatalf("resolve() = %q, want %q", got, wantBaseURL)
 	}
 }
 
@@ -432,7 +502,7 @@ func TestRuntimeIrisClient_SendMessage_FailsWhenBaseURLFileMissing(t *testing.T)
 		fallbackCalls++
 		fallbackMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
 	defer fallback.Close()
 
@@ -463,7 +533,7 @@ func TestRuntimeIrisClient_SendMessage_FailsWhenBaseURLFileIsEmpty(t *testing.T)
 		fallbackCalls++
 		fallbackMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
 	defer fallback.Close()
 
@@ -500,7 +570,7 @@ func TestRuntimeIrisClient_SendMessage_FailsWhenBaseURLFileIsInvalid(t *testing.
 		fallbackCalls++
 		fallbackMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
 	defer fallback.Close()
 
@@ -529,7 +599,7 @@ func TestRuntimeIrisClient_SendMessage_FailsWhenH3BaseURLFileUsesHTTP(t *testing
 	botToken := "bot-token"
 	var fallbackMu sync.Mutex
 	fallbackCalls := 0
-	fallback := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != iris.PathReply {
 			t.Fatalf("fallback server path = %q", r.URL.Path)
 		}
@@ -537,7 +607,7 @@ func TestRuntimeIrisClient_SendMessage_FailsWhenH3BaseURLFileUsesHTTP(t *testing
 		fallbackCalls++
 		fallbackMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
 	defer fallback.Close()
 
@@ -712,12 +782,4 @@ func testBaseURLHost(t *testing.T, raw string) string {
 		t.Fatalf("parse test base URL: %v", err)
 	}
 	return parsed.Hostname()
-}
-
-func newRuntimeIrisTestHTTPClient() *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
 }

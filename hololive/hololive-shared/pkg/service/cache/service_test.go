@@ -68,7 +68,9 @@ func newTestCacheService(t *testing.T) (*Service, *miniredis.Miniredis) {
 	service := &Service{client: client, logger: logger}
 
 	t.Cleanup(func() {
-		_ = service.Close()
+		if err := service.Close(); err != nil {
+			t.Errorf("close cache service: %v", err)
+		}
 		mini.Close()
 	})
 
@@ -367,7 +369,7 @@ func TestSetNX(t *testing.T) {
 		{
 			name: "key already exists - should fail",
 			setup: func(service *Service, ctx context.Context) {
-				_ = service.Set(ctx, "lock:existing", "already_set", time.Minute)
+				requireNoError(t, service.Set(ctx, "lock:existing", "already_set", time.Minute))
 			},
 			key:        "lock:existing",
 			value:      "2",
@@ -493,7 +495,8 @@ func TestService_DoMulti(t *testing.T) {
 		}
 	}
 
-	val1, _ := service.GetClient().Do(ctx, service.Builder().Get().Key("multi1").Build()).ToString()
+	val1, err := service.GetClient().Do(ctx, service.Builder().Get().Key("multi1").Build()).ToString()
+	requireNoError(t, err)
 	if val1 != "val1" {
 		t.Errorf("expected val1, got %s", val1)
 	}

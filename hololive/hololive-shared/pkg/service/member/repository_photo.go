@@ -30,7 +30,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (r *Repository) UpdatePhoto(ctx context.Context, channelID string, photoURL string) error {
+func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string) error {
 	now := time.Now()
 	if _, err := r.pool.Exec(ctx, `
 		UPDATE members

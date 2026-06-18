@@ -21,7 +21,7 @@ func BuildPostLatencyPeriodSummaries(posts []PostSendCount, periods []PostLatenc
 	accumulators := newPostLatencyPeriodSummaryAccumulators(normalizedPeriods)
 
 	for i := range posts {
-		if err := addPostToLatencyPeriodSummaries(accumulators, normalizedPeriods, posts[i], i); err != nil {
+		if err := addPostToLatencyPeriodSummaries(accumulators, normalizedPeriods, &posts[i], i); err != nil {
 			return nil, err
 		}
 	}
@@ -52,7 +52,7 @@ func newPostLatencyPeriodSummaryAccumulators(periods []PostLatencyPeriod) []post
 func addPostToLatencyPeriodSummaries(
 	accumulators []postLatencyPeriodSummaryAccumulator,
 	periods []PostLatencyPeriod,
-	post PostSendCount,
+	post *PostSendCount,
 	index int,
 ) error {
 	observedAt, err := PostLatencyObservedAt(post)
@@ -83,7 +83,7 @@ func finalizePostLatencyPeriodSummaries(accumulators []postLatencyPeriodSummaryA
 	return summaries
 }
 
-func (a *postLatencyPeriodSummaryAccumulator) add(post PostSendCount) error {
+func (a *postLatencyPeriodSummaryAccumulator) add(post *PostSendCount) error {
 	a.summary.TotalPostCount++
 
 	if err := a.addAlarmType(post.AlarmType); err != nil {
@@ -101,14 +101,16 @@ func (a *postLatencyPeriodSummaryAccumulator) addAlarmType(alarmType domain.Alar
 		a.summary.CommunityPostCount++
 	case domain.AlarmTypeShorts:
 		a.summary.ShortsPostCount++
-	default:
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
 		return fmt.Errorf("unsupported alarm type: %s", alarmType)
+	default:
+		return fmt.Errorf("unknown alarm type: %s", alarmType)
 	}
 
 	return nil
 }
 
-func (a *postLatencyPeriodSummaryAccumulator) addAlarmSendStatus(post PostSendCount) {
+func (a *postLatencyPeriodSummaryAccumulator) addAlarmSendStatus(post *PostSendCount) {
 	if post.AlarmSentAt != nil {
 		a.summary.AlarmSentPostCount++
 	} else {
@@ -116,7 +118,7 @@ func (a *postLatencyPeriodSummaryAccumulator) addAlarmSendStatus(post PostSendCo
 	}
 }
 
-func (a *postLatencyPeriodSummaryAccumulator) addLatencyResult(post PostSendCount) {
+func (a *postLatencyPeriodSummaryAccumulator) addLatencyResult(post *PostSendCount) {
 	hasLatencyResult := post.AlarmLatencyMillis != nil || post.AlarmLatencyExceeded != nil
 	if hasLatencyResult {
 		a.summary.LatencyMeasuredPostCount++
@@ -125,7 +127,7 @@ func (a *postLatencyPeriodSummaryAccumulator) addLatencyResult(post PostSendCoun
 	a.addLatencyExceeded(post)
 }
 
-func (a *postLatencyPeriodSummaryAccumulator) addLatencyExceeded(post PostSendCount) {
+func (a *postLatencyPeriodSummaryAccumulator) addLatencyExceeded(post *PostSendCount) {
 	if post.AlarmLatencyExceeded == nil {
 		return
 	}
@@ -144,10 +146,12 @@ func (a *postLatencyPeriodSummaryAccumulator) addExceededPost(alarmType domain.A
 		a.summary.CommunityExceededPostCount++
 	case domain.AlarmTypeShorts:
 		a.summary.ShortsExceededPostCount++
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+	default:
 	}
 }
 
-func (a *postLatencyPeriodSummaryAccumulator) addLatencySample(post PostSendCount) {
+func (a *postLatencyPeriodSummaryAccumulator) addLatencySample(post *PostSendCount) {
 	if post.AlarmLatencyMillis != nil {
 		latencyMillis := *post.AlarmLatencyMillis
 		a.latencySumMillis += latencyMillis
@@ -159,7 +163,7 @@ func (a *postLatencyPeriodSummaryAccumulator) addLatencySample(post PostSendCoun
 	}
 }
 
-func (a postLatencyPeriodSummaryAccumulator) finalize() PostLatencyPeriodSummary {
+func (a *postLatencyPeriodSummaryAccumulator) finalize() PostLatencyPeriodSummary {
 	if a.latencyMeasuredCount <= 0 {
 		return a.summary
 	}
@@ -173,7 +177,7 @@ func (a postLatencyPeriodSummaryAccumulator) finalize() PostLatencyPeriodSummary
 	return a.summary
 }
 
-func discretePercentileMillis(samples []int64, numerator int, denominator int) *int64 {
+func discretePercentileMillis(samples []int64, numerator, denominator int) *int64 {
 	if len(samples) == 0 || numerator <= 0 || denominator <= 0 {
 		return nil
 	}
@@ -239,7 +243,7 @@ func EarliestPostLatencyPeriodStart(periods []PostLatencyPeriod) time.Time {
 	return earliest
 }
 
-func PostLatencyObservedAt(post PostSendCount) (time.Time, error) {
+func PostLatencyObservedAt(post *PostSendCount) (time.Time, error) {
 	if post.ActualPublishedAt != nil {
 		return post.ActualPublishedAt.UTC(), nil
 	}

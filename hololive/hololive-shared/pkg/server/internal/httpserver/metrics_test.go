@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,7 +18,7 @@ func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
 		t.Fatalf("Addr = %q, want 127.0.0.1:0", server.Addr)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)
 	req.Header.Set(middleware.APIKeyHeader, "test-key")
 	recorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(recorder, req)
@@ -33,14 +34,14 @@ func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
 func TestNewMetricsServerRejectsMissingAndWrongAPIKey(t *testing.T) {
 	server := NewMetricsServer("127.0.0.1:0", "test-key")
 
-	missing := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	missing := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)
 	missingRecorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(missingRecorder, missing)
 	if missingRecorder.Code != http.StatusUnauthorized {
 		t.Fatalf("missing key status = %d, want %d", missingRecorder.Code, http.StatusUnauthorized)
 	}
 
-	wrong := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	wrong := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)
 	wrong.Header.Set(middleware.APIKeyHeader, "wrong-key")
 	wrongRecorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(wrongRecorder, wrong)
@@ -52,7 +53,7 @@ func TestNewMetricsServerRejectsMissingAndWrongAPIKey(t *testing.T) {
 func TestNewMetricsServerExposesOnlyMetricsRoute(t *testing.T) {
 	server := NewMetricsServer("127.0.0.1:0", "")
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
 	recorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusNotFound {
@@ -62,7 +63,7 @@ func TestNewMetricsServerExposesOnlyMetricsRoute(t *testing.T) {
 
 func TestNewRuntimeHTTPServersBuildsMetricsServerFromConfig(t *testing.T) {
 	certFile, keyFile := writeH3LocalhostCertificate(t)
-	servers, err := NewRuntimeHTTPServers(config.ServerConfig{
+	servers, err := NewRuntimeHTTPServers(&config.ServerConfig{
 		Port:           30001,
 		APIKey:         "test-key",
 		HTTPTransports: []string{"h3"},
@@ -78,7 +79,7 @@ func TestNewRuntimeHTTPServersBuildsMetricsServerFromConfig(t *testing.T) {
 		t.Fatal("Metrics = nil, want server")
 	}
 
-	noMetrics, err := NewRuntimeHTTPServers(config.ServerConfig{
+	noMetrics, err := NewRuntimeHTTPServers(&config.ServerConfig{
 		Port:           30001,
 		APIKey:         "test-key",
 		HTTPTransports: []string{"h3"},

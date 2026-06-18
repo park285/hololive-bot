@@ -24,7 +24,9 @@ func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) e
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				panic(fmt.Errorf("panic during transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
+			}
 			panic(p)
 		}
 	}()

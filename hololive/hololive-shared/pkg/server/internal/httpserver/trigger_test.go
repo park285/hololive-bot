@@ -68,7 +68,7 @@ func newTriggerRouter(h *TriggerHandler) *gin.Engine {
 // postTrigger: 트리거 엔드포인트에 POST 요청을 보내고 응답을 반환합니다.
 func postTrigger(t *testing.T, r *gin.Engine, path string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, http.NoBody)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	return rec
@@ -309,7 +309,7 @@ func TestRegisterInternalRoutesWithAuth(t *testing.T) {
 			r := gin.New()
 			h.RegisterInternalRoutesWithAuth(r.Group("/"), tt.apiKey)
 
-			req := httptest.NewRequest(http.MethodPost, triggercontracts.MajorEventWeeklyPath, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
 			if tt.headerVal != "" {
 				req.Header.Set(middleware.APIKeyHeader, tt.headerVal)
 			}

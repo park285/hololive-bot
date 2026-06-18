@@ -43,7 +43,7 @@ func (r *Repository) PrepareRows(
 	normalized := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, len(rows))
 	now := time.Now().UTC()
 	for i := range rows {
-		if row, ok := prepareDeliveryTelemetryRow(rows[i], now); ok {
+		if row, ok := prepareDeliveryTelemetryRow(&rows[i], now); ok {
 			normalized = append(normalized, row)
 		}
 	}
@@ -58,17 +58,17 @@ func (r *Repository) PrepareRows(
 }
 
 func prepareDeliveryTelemetryRow(
-	row domain.YouTubeNotificationDeliveryTelemetry,
+	row *domain.YouTubeNotificationDeliveryTelemetry,
 	now time.Time,
 ) (domain.YouTubeNotificationDeliveryTelemetry, bool) {
 	if row.DeliveryID <= 0 || row.AttemptOrdinal <= 0 {
 		return domain.YouTubeNotificationDeliveryTelemetry{}, false
 	}
 
-	normalizeDeliveryTelemetryAttemptTimes(&row, now)
-	applyDeliveryTelemetryTiming(&row)
-	applyDeliveryTelemetryDefaults(&row, now)
-	return row, true
+	normalizeDeliveryTelemetryAttemptTimes(row, now)
+	applyDeliveryTelemetryTiming(row)
+	applyDeliveryTelemetryDefaults(row, now)
+	return *row, true
 }
 
 func normalizeDeliveryTelemetryAttemptTimes(row *domain.YouTubeNotificationDeliveryTelemetry, now time.Time) {
@@ -91,7 +91,7 @@ func normalizeDeliveryTelemetryAttemptTimes(row *domain.YouTubeNotificationDeliv
 }
 
 func applyDeliveryTelemetryTiming(row *domain.YouTubeNotificationDeliveryTelemetry) {
-	timing := communityShortsAlarmTimingForTelemetryRow(*row)
+	timing := communityShortsAlarmTimingForTelemetryRow(row)
 	row.ActualPublishedAt = timing.ActualPublishedAt
 	row.AlarmSentAt = timing.AlarmSentAt
 	row.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(timing.AlarmLatencyMillis)
@@ -208,7 +208,7 @@ func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliver
 	return item, err
 }
 
-func (r *Repository) queryTelemetryRows(ctx context.Context, action string, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
+func (r *Repository) queryTelemetryRows(ctx context.Context, action, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
 	rows, err := r.db.Query(ctx, deliverysql.PostgresPlaceholders(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", action, err)
@@ -344,7 +344,7 @@ func (r *Repository) refreshLockedRows(
 	}
 
 	for i := range enriched {
-		if !deliveryTelemetryObservationContextChanged(rows[i], enriched[i]) {
+		if !deliveryTelemetryObservationContextChanged(&rows[i], &enriched[i]) {
 			rows[i] = enriched[i]
 			continue
 		}

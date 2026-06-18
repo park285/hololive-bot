@@ -47,7 +47,7 @@ func observeScraperFetch(engine FetcherEngine, statusCode int, err error, elapse
 	scraperFetchDuration.WithLabelValues(engineLabel, outcome, reason).Observe(elapsed.Seconds())
 }
 
-func observeScraperFetchFallback(fromEngine FetcherEngine, toEngine FetcherEngine, err error) {
+func observeScraperFetchFallback(fromEngine, toEngine FetcherEngine, err error) {
 	ensureScraperFetchMetrics()
 	_, reason := fetchMetricOutcome(err)
 	scraperFetchFallbackTotal.WithLabelValues(
@@ -57,7 +57,7 @@ func observeScraperFetchFallback(fromEngine FetcherEngine, toEngine FetcherEngin
 	).Inc()
 }
 
-func fetchMetricOutcome(err error) (string, string) {
+func fetchMetricOutcome(err error) (result1, result2 string) {
 	if err == nil {
 		return "success", string(FailureReasonNone)
 	}

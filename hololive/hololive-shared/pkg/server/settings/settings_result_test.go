@@ -27,7 +27,7 @@ func TestScraperProxyApplyResultAsMap(t *testing.T) {
 
 	youtubeApplied := true
 	pollersApplied := 3
-	got := (ScraperProxyApplyResult{
+	got := (&ScraperProxyApplyResult{
 		Requested:               true,
 		YoutubeApplied:          &youtubeApplied,
 		SchedulerPollersApplied: &pollersApplied,

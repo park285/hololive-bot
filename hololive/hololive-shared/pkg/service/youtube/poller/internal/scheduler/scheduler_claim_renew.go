@@ -86,12 +86,14 @@ func runJobClaimRenewLoop(
 		cancelLoop()
 	}()
 
-	_ = lifecycle.RunTickerLoop(loopCtx, interval, func(context.Context) error {
+	if err := lifecycle.RunTickerLoop(loopCtx, interval, func(context.Context) error {
 		if !renewJobClaim(pollCtx, pollCancel, claim, pollerName, ttl, errCh, metrics, logger) {
 			return errJobClaimRenewLoopStopped
 		}
 		return nil
-	})
+	}); err != nil {
+		logger.Debug("Job claim renewal loop stopped", slog.Any("error", err))
+	}
 }
 
 func renewJobClaim(

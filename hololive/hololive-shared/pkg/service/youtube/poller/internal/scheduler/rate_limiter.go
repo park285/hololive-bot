@@ -41,7 +41,7 @@ func NewRateLimiter(interval time.Duration) *RateLimiter {
 
 func (r *RateLimiter) Wait(ctx context.Context) error {
 	if ctx == nil {
-		ctx = context.Background()
+		return fmt.Errorf("rate limit wait: context is nil")
 	}
 	if r.disabled() {
 		return nil

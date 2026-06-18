@@ -33,6 +33,28 @@ func isNilPublishedAtResolverDB(db any) bool {
 	switch value.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
 		return value.IsNil()
+	case reflect.Invalid,
+		reflect.Bool,
+		reflect.Int,
+		reflect.Int8,
+		reflect.Int16,
+		reflect.Int32,
+		reflect.Int64,
+		reflect.Uint,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64,
+		reflect.Uintptr,
+		reflect.Float32,
+		reflect.Float64,
+		reflect.Complex64,
+		reflect.Complex128,
+		reflect.Array,
+		reflect.String,
+		reflect.Struct,
+		reflect.UnsafePointer:
+		return false
 	default:
 		return false
 	}
@@ -53,7 +75,9 @@ func inPublishedAtResolverTx(ctx context.Context, db publishedAtResolverDB, fn f
 
 	defer func() {
 		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				panic(fmt.Errorf("panic during transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
+			}
 			panic(p)
 		}
 	}()

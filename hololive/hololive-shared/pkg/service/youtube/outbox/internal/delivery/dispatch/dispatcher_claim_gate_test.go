@@ -48,7 +48,7 @@ func (s *claimGateTestSender) allMessages() []string {
 	return cloned
 }
 
-func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, config Config) (*Dispatcher, *deliveryTestDB) {
+func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, config *Config) (result1 *Dispatcher, result2 *deliveryTestDB) {
 	t.Helper()
 
 	if config.BatchSize <= 0 {
@@ -77,14 +77,13 @@ func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, confi
 		cachemocks.NewLenientClient(),
 		sender,
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		config,
+		slog.New(slog.NewTextHandler(io.Discard, nil)), config,
 	)
 	dispatcher.telemetry = nil
 	return dispatcher, db
 }
 
-func newClaimGateTestDispatcherWithDB(t *testing.T, db *deliveryTestDB, sender *claimGateTestSender, config Config) *Dispatcher {
+func newClaimGateTestDispatcherWithDB(t *testing.T, db *deliveryTestDB, sender *claimGateTestSender, config *Config) *Dispatcher {
 	t.Helper()
 
 	if config.BatchSize <= 0 {
@@ -111,8 +110,7 @@ func newClaimGateTestDispatcherWithDB(t *testing.T, db *deliveryTestDB, sender *
 		cachemocks.NewLenientClient(),
 		sender,
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		config,
+		slog.New(slog.NewTextHandler(io.Discard, nil)), config,
 	)
 	dispatcher.telemetry = nil
 	return dispatcher
@@ -140,7 +138,7 @@ func newCommunityClaimGateFixture(now time.Time, suffix string) (domain.YouTubeN
 			Kind:          domain.OutboxKindCommunityPost,
 			ChannelID:     "UC_COMMUNITY",
 			ContentID:     contentID,
-			Payload:       fmt.Sprintf(`{"canonical_post_id":"%s","post_id":"%s","content_text":"body-%s"}`, postID, contentID, suffix),
+			Payload:       fmt.Sprintf(`{"canonical_post_id":%q,"post_id":%q,"content_text":"body-%s"}`, postID, contentID, suffix),
 			Status:        domain.OutboxStatusPending,
 			AttemptCount:  0,
 			NextAttemptAt: now,
@@ -161,7 +159,7 @@ func newShortClaimGateFixture(now time.Time, suffix string) (domain.YouTubeNotif
 			Kind:          domain.OutboxKindNewShort,
 			ChannelID:     "UC_SHORTS",
 			ContentID:     contentID,
-			Payload:       fmt.Sprintf(`{"canonical_post_id":"%s","video_id":"%s","title":"title-%s"}`, postID, contentID, suffix),
+			Payload:       fmt.Sprintf(`{"canonical_post_id":%q,"video_id":%q,"title":"title-%s"}`, postID, contentID, suffix),
 			Status:        domain.OutboxStatusPending,
 			AttemptCount:  0,
 			NextAttemptAt: now,
@@ -174,7 +172,7 @@ func TestDispatchDeliveryRowsClaimsCommunityPostBeforeSending(t *testing.T) {
 
 	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{})
 	row, outbox, postID := newCommunityClaimGateFixture(now, "claim-win")
 
 	result := dispatcher.send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
@@ -197,7 +195,7 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaim(t *te
 
 	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{LockTimeout: 5 * time.Minute})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{LockTimeout: 5 * time.Minute})
 	row, outbox, postID := newShortClaimGateFixture(now, "recent-claim")
 	authorizedAt := now.Add(-30 * time.Second)
 	detectedAt := now.Add(-2 * time.Minute)
@@ -232,7 +230,7 @@ func TestDispatchDeliveryRowsSkipsAlreadySentDuplicateWithoutSending(t *testing.
 
 	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{})
 	row, outbox, postID := newCommunityClaimGateFixture(now, "already-sent")
 	authorizedAt := now.Add(-2 * time.Minute)
 	alarmSentAt := now.Add(-90 * time.Second)
@@ -262,7 +260,7 @@ func TestDispatchDeliveryRowsSkipsAlreadySentTrackingRowWithoutReclaim(t *testin
 
 	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{})
 	row, outbox, postID := newShortClaimGateFixture(now, "tracking-already-sent")
 	detectedAt := now.Add(-3 * time.Minute)
 	alarmSentAt := now.Add(-90 * time.Second)
@@ -294,7 +292,7 @@ func TestDispatchDeliveryRowsReleasesClaimAfterSendFailure(t *testing.T) {
 
 	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
 	sender := &claimGateTestSender{failRoom: map[string]bool{"room-community": true}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{})
 	row, outbox, postID := newCommunityClaimGateFixture(now, "release-on-fail")
 
 	result := dispatcher.send.dispatchDeliveryRows(context.Background(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
@@ -318,7 +316,7 @@ func TestDispatchDeliveryRowsReclaimsStaleLegacyAuthorizationBeforeSending(t *te
 
 	now := time.Now().UTC().Truncate(time.Second)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{LockTimeout: 2 * time.Minute})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{LockTimeout: 2 * time.Minute})
 	row, outbox, postID := newCommunityClaimGateFixture(now, "stale-claim")
 	staleAuthorizedAt := now.Add(-10 * time.Minute)
 	detectedAt := now.Add(-11 * time.Minute)
@@ -352,7 +350,7 @@ func TestDispatchDeliveryRowsGroupedSendFiltersOutAlreadySentDuplicate(t *testin
 
 	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{})
 	firstRow, firstOutbox, firstPostID := newCommunityClaimGateFixture(now, "group-first")
 	secondRow, secondOutbox, _ := newCommunityClaimGateFixture(now, "group-second")
 	secondRow.ID = firstRow.ID + 1
@@ -404,8 +402,8 @@ func TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOnc
 			sender := &claimGateTestSender{failRoom: map[string]bool{}}
 			db := newSharedClaimGateTestDB(t, 8)
 			dispatchers := []*Dispatcher{
-				newClaimGateTestDispatcherWithDB(t, db, sender, Config{}),
-				newClaimGateTestDispatcherWithDB(t, db, sender, Config{}),
+				newClaimGateTestDispatcherWithDB(t, db, sender, &Config{}),
+				newClaimGateTestDispatcherWithDB(t, db, sender, &Config{}),
 			}
 			row, outbox, postID := tc.fixture(now, "race")
 			results := make([]dispatchstate.DispatchResult, len(dispatchers))
@@ -456,7 +454,7 @@ func TestSelectClaimedDeliveriesTracksRowClaimOwnership(t *testing.T) {
 
 	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, _ := newClaimGateTestDispatcher(t, sender, Config{})
+	dispatcher, _ := newClaimGateTestDispatcher(t, sender, &Config{})
 	firstRow, firstOutbox, _ := newCommunityClaimGateFixture(now, "owned")
 	secondRow, secondOutbox, _ := newCommunityClaimGateFixture(now, "other")
 	duplicateRow, duplicateOutbox, _ := newCommunityClaimGateFixture(now, "owned")
@@ -484,12 +482,32 @@ func TestSelectClaimedDeliveriesTracksRowClaimOwnership(t *testing.T) {
 	require.Empty(t, selection.rowClaimTokens[2])
 }
 
+func TestSelectClaimedDeliveriesHandlesNilInputs(t *testing.T) {
+	t.Parallel()
+
+	dispatcher, _ := newClaimGateTestDispatcher(t, &claimGateTestSender{failRoom: map[string]bool{}}, &Config{})
+
+	selection := dispatcher.claim.selectClaimedDeliveries(
+		context.Background(),
+		nil,
+		nil,
+		claim.NewMemoryDecisionCache(),
+	)
+
+	require.Empty(t, selection.sendRows)
+	require.Empty(t, selection.sendOutboxes)
+	require.Empty(t, selection.claimTokens)
+	require.Empty(t, selection.rowClaimTokens)
+	require.Empty(t, selection.retryDeliveryIDs)
+	require.Empty(t, selection.retryOutboxIDs)
+}
+
 func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
 	sender := &claimGateTestSender{failRoom: map[string]bool{"room-duplicate": true}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{})
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &Config{})
 	firstRow, firstOutbox, firstPostID := newCommunityClaimGateFixture(now, "owned")
 	secondRow, secondOutbox, secondPostID := newCommunityClaimGateFixture(now, "other")
 	duplicateRow, duplicateOutbox, _ := newCommunityClaimGateFixture(now, "owned")

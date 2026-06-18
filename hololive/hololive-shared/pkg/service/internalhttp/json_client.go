@@ -56,7 +56,7 @@ func NewClientForURLStrict(rawURL string, timeout time.Duration, _ *slog.Logger)
 
 func internalURLUsesHTTPS(raw string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
-	return err == nil && parsed.Scheme == "https"
+	return err == nil && parsed != nil && parsed.Scheme == "https"
 }
 
 func firstNonEmptyEnv(keys ...string) string {

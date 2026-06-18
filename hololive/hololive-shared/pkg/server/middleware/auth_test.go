@@ -21,6 +21,7 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -75,7 +76,7 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 				c.Status(http.StatusOK)
 			})
 
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", http.NoBody)
 			if tt.headerVal != "" {
 				req.Header.Set(APIKeyHeader, tt.headerVal)
 			}
@@ -99,7 +100,7 @@ func TestAPIKeyAuthMiddleware_ResponseBodyContract(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -164,7 +165,7 @@ func TestNoRouteAuthHandler(t *testing.T) {
 			// NoRoute 핸들러만 등록 (실제 라우트 없음)
 			router.NoRoute(NoRouteAuthHandler(tt.apiKey))
 
-			req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent", http.NoBody)
 			if tt.headerVal != "" {
 				req.Header.Set(APIKeyHeader, tt.headerVal)
 			}
@@ -185,7 +186,7 @@ func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
 	router := gin.New()
 	router.NoRoute(NoRouteAuthHandler("test-key"))
 
-	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent", http.NoBody)
 	req.Header.Set(APIKeyHeader, "wrong-key")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

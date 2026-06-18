@@ -13,9 +13,9 @@ const (
 	AlarmDispatchSourceKindCelebration   AlarmDispatchSourceKind = "celebration"
 )
 
-var canonicalDispatchValidators = map[AlarmDispatchSourceKind]func(AlarmQueueEnvelope) error{
-	AlarmDispatchSourceKindYouTubeOutbox: AlarmQueueEnvelope.validateYouTubeOutboxDispatch,
-	AlarmDispatchSourceKindCelebration:   AlarmQueueEnvelope.validateCelebrationDispatch,
+var canonicalDispatchValidators = map[AlarmDispatchSourceKind]func(*AlarmQueueEnvelope) error{
+	AlarmDispatchSourceKindYouTubeOutbox: (*AlarmQueueEnvelope).validateYouTubeOutboxDispatch,
+	AlarmDispatchSourceKindCelebration:   (*AlarmQueueEnvelope).validateCelebrationDispatch,
 }
 
 type YouTubeOutboxDispatchPayload struct {
@@ -117,11 +117,14 @@ func (p *YouTubeOutboxDispatchPayload) Identity() string {
 	return strings.Join(p.IdentityParts(), ",")
 }
 
-func (e AlarmQueueEnvelope) HasYouTubeOutboxSource() bool {
-	return e.SourceKind == AlarmDispatchSourceKindYouTubeOutbox
+func (e *AlarmQueueEnvelope) HasYouTubeOutboxSource() bool {
+	return e != nil && e.SourceKind == AlarmDispatchSourceKindYouTubeOutbox
 }
 
-func (e AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
+func (e *AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
+	if e == nil {
+		return fmt.Errorf("canonical alarm dispatch: envelope is nil")
+	}
 	if e.SourceKind == "" {
 		return e.validateLegacyDispatch()
 	}
@@ -132,7 +135,7 @@ func (e AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
 	return validate(e)
 }
 
-func (e AlarmQueueEnvelope) validateLegacyDispatch() error {
+func (e *AlarmQueueEnvelope) validateLegacyDispatch() error {
 	alarmType := e.Notification.AlarmType
 	if alarmType == "" {
 		alarmType = AlarmTypeLive
@@ -140,7 +143,7 @@ func (e AlarmQueueEnvelope) validateLegacyDispatch() error {
 	return validateLegacyRouteAlarmType(alarmType)
 }
 
-func (e AlarmQueueEnvelope) validateCelebrationDispatch() error {
+func (e *AlarmQueueEnvelope) validateCelebrationDispatch() error {
 	if e.Notification.RoomID == "" {
 		return fmt.Errorf("canonical alarm dispatch: celebration room id is empty")
 	}
@@ -157,8 +160,8 @@ func (e AlarmQueueEnvelope) validateCelebrationDispatch() error {
 	return nil
 }
 
-func (e AlarmQueueEnvelope) validateYouTubeOutboxDispatch() error {
-	if err := validateCanonicalNotification(e.Notification); err != nil {
+func (e *AlarmQueueEnvelope) validateYouTubeOutboxDispatch() error {
+	if err := validateCanonicalNotification(&e.Notification); err != nil {
 		return err
 	}
 	if e.YouTubeOutbox == nil {
@@ -167,10 +170,13 @@ func (e AlarmQueueEnvelope) validateYouTubeOutboxDispatch() error {
 	if err := e.YouTubeOutbox.Validate(); err != nil {
 		return fmt.Errorf("canonical alarm dispatch: %w", err)
 	}
-	return validateCanonicalYouTubeOutboxMatch(e.Notification, e.YouTubeOutbox)
+	return validateCanonicalYouTubeOutboxMatch(&e.Notification, e.YouTubeOutbox)
 }
 
-func validateCanonicalNotification(notification AlarmNotification) error {
+func validateCanonicalNotification(notification *AlarmNotification) error {
+	if notification == nil {
+		return fmt.Errorf("canonical alarm dispatch: notification is nil")
+	}
 	switch {
 	case notification.RoomID == "":
 		return fmt.Errorf("canonical alarm dispatch: room id is empty")
@@ -183,7 +189,7 @@ func validateCanonicalNotification(notification AlarmNotification) error {
 	}
 }
 
-func validateCanonicalYouTubeOutboxMatch(notification AlarmNotification, payload *YouTubeOutboxDispatchPayload) error {
+func validateCanonicalYouTubeOutboxMatch(notification *AlarmNotification, payload *YouTubeOutboxDispatchPayload) error {
 	switch {
 	case notification.AlarmType != payload.AlarmType:
 		return fmt.Errorf("canonical alarm dispatch: notification alarm type %q does not match source alarm type %q", notification.AlarmType, payload.AlarmType)

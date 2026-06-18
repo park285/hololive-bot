@@ -102,19 +102,24 @@ func TestRepositoryPGXMutationsPreserveMemberSemantics(t *testing.T) {
 		"InvalidAliasType":  func() error { return repository.AddAlias(ctx, memberID, "en", "phase") },
 		"InvalidRemoveType": func() error { return repository.RemoveAlias(ctx, memberID, "en", "phase") },
 	} {
-		err := run()
-		if err == nil {
-			t.Fatalf("%s error = nil, want error", name)
+		assertMemberMutationError(t, name, run())
+	}
+}
+
+func assertMemberMutationError(t *testing.T, name string, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("%s error = nil, want error", name)
+	}
+	if strings.HasPrefix(name, "Invalid") {
+		if !strings.Contains(err.Error(), "invalid alias type") {
+			t.Fatalf("%s error = %q, want invalid alias type", name, err)
 		}
-		if strings.HasPrefix(name, "Invalid") {
-			if !strings.Contains(err.Error(), "invalid alias type") {
-				t.Fatalf("%s error = %q, want invalid alias type", name, err)
-			}
-			continue
-		}
-		if !strings.Contains(err.Error(), "member -1 not found") {
-			t.Fatalf("%s error = %q, want member -1 not found", name, err)
-		}
+		return
+	}
+	if !strings.Contains(err.Error(), "member -1 not found") {
+		t.Fatalf("%s error = %q, want member -1 not found", name, err)
 	}
 }
 

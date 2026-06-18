@@ -18,7 +18,7 @@ type liveUpcomingSuppressionData struct {
 
 func (g *OutboxGrouper) filterLiveCatchupSuppressedRooms(
 	ctx context.Context,
-	item domain.YouTubeNotificationOutbox,
+	item *domain.YouTubeNotificationOutbox,
 	rooms map[string]bool,
 ) map[string]bool {
 	if !shouldFilterLiveCatchupSuppression(g, item, rooms) {
@@ -34,7 +34,7 @@ func (g *OutboxGrouper) filterLiveCatchupSuppressedRooms(
 		if !selected {
 			continue
 		}
-		suppressed := g.wasLiveCatchupRecentlyCoveredByUpcoming(ctx, roomID, item.ChannelID, payload)
+		suppressed := g.wasLiveCatchupRecentlyCoveredByUpcoming(ctx, roomID, item.ChannelID, &payload)
 		if !suppressed {
 			filtered[roomID] = true
 		}
@@ -42,19 +42,19 @@ func (g *OutboxGrouper) filterLiveCatchupSuppressedRooms(
 	return filtered
 }
 
-func shouldFilterLiveCatchupSuppression(g *OutboxGrouper, item domain.YouTubeNotificationOutbox, rooms map[string]bool) bool {
+func shouldFilterLiveCatchupSuppression(g *OutboxGrouper, item *domain.YouTubeNotificationOutbox, rooms map[string]bool) bool {
 	return g != nil &&
 		g.cache != nil &&
 		item.Kind == domain.OutboxKindLiveStream &&
 		len(rooms) > 0
 }
 
-func liveStreamPayloadForSuppression(item domain.YouTubeNotificationOutbox) (videoPayload, bool) {
+func liveStreamPayloadForSuppression(item *domain.YouTubeNotificationOutbox) (videoPayload, bool) {
 	var payload videoPayload
 	if err := json.Unmarshal([]byte(item.Payload), &payload); err != nil {
 		return videoPayload{}, false
 	}
-	scheduledAt := liveSuppressionScheduledAt(payload)
+	scheduledAt := liveSuppressionScheduledAt(&payload)
 	return payload, payload.VideoID != "" && payload.Title != "" && scheduledAt != nil && !scheduledAt.IsZero()
 }
 
@@ -62,7 +62,7 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 	ctx context.Context,
 	roomID string,
 	channelID string,
-	payload videoPayload,
+	payload *videoPayload,
 ) bool {
 	scheduledAt := liveSuppressionScheduledAt(payload)
 	if scheduledAt == nil || scheduledAt.IsZero() {
@@ -88,7 +88,7 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 	return time.Since(notifiedAt) <= constants.LiveCatchupSuppressWindow
 }
 
-func liveSuppressionScheduledAt(payload videoPayload) *time.Time {
+func liveSuppressionScheduledAt(payload *videoPayload) *time.Time {
 	if payload.ScheduledStartAt != nil && !payload.ScheduledStartAt.IsZero() {
 		return payload.ScheduledStartAt
 	}

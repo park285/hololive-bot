@@ -32,7 +32,7 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 	return true, nil
 }
 
-func (c *Service) GetString(ctx context.Context, key string) (string, bool, error) {
+func (c *Service) GetString(ctx context.Context, key string) (value0 string, ok1 bool, err error) {
 	resp := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
 	if util.IsValkeyNil(resp.Error()) {
 		return "", false, nil

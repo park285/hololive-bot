@@ -28,7 +28,7 @@ type eventPayloadNotification struct {
 	ScheduleChangePreviousStart string           `json:"schedule_change_previous_start,omitempty"`
 }
 
-func buildLedgerRows(envelope domain.AlarmQueueEnvelope, status Status) (eventInsert, deliveryInsert, error) {
+func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventInsert, deliveryInsert, error) {
 	if err := envelope.ValidateCanonicalDispatch(); err != nil {
 		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch ledger rows: validate envelope: %w", err)
 	}
@@ -39,8 +39,8 @@ func buildLedgerRows(envelope domain.AlarmQueueEnvelope, status Status) (eventIn
 		input.AlarmType = alarmType
 		envelope.Notification.AlarmType = alarmType
 	}
-	eventKey := BuildEventKey(input)
-	dedupeKey := BuildDedupeKey(input)
+	eventKey := BuildEventKey(&input)
+	dedupeKey := BuildDedupeKey(&input)
 	payload, err := marshalEventPayload(envelope)
 	if err != nil {
 		return eventInsert{}, deliveryInsert{}, err
@@ -59,7 +59,7 @@ func buildLedgerRows(envelope domain.AlarmQueueEnvelope, status Status) (eventIn
 			AlarmType:   alarmType,
 			ChannelID:   input.ChannelID,
 			StreamID:    input.StreamID,
-			Category:    eventCategory(input),
+			Category:    eventCategory(&input),
 			Payload:     payload,
 		}, deliveryInsert{
 			EventKey:        eventKey,
@@ -72,7 +72,7 @@ func buildLedgerRows(envelope domain.AlarmQueueEnvelope, status Status) (eventIn
 		}, nil
 }
 
-func eventCategory(input DedupeInput) string {
+func eventCategory(input *DedupeInput) string {
 	if input.SourceKind != "" {
 		return string(input.SourceKind)
 	}
@@ -83,7 +83,7 @@ func eventCategory(input DedupeInput) string {
 	return strconv.Itoa(input.MinutesUntil)
 }
 
-func marshalEventPayload(envelope domain.AlarmQueueEnvelope) ([]byte, error) {
+func marshalEventPayload(envelope *domain.AlarmQueueEnvelope) ([]byte, error) {
 	payload := eventPayloadEnvelope{
 		Notification: eventPayloadNotification{
 			AlarmType:                   envelope.Notification.AlarmType,

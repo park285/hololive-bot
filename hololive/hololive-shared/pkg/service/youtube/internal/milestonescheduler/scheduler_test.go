@@ -33,6 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	"github.com/stretchr/testify/require"
 )
 
 // mockMemberDataProvider: 테스트용 MemberDataProvider 구현
@@ -585,7 +586,7 @@ func TestCreateTimestampedStats(t *testing.T) {
 
 // containsStr: 문자열 포함 여부 확인 헬퍼
 func containsStr(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStrHelper(s, substr))
+	return len(s) >= len(substr) && (s == substr || s != "" && containsStrHelper(s, substr))
 }
 
 func containsStrHelper(s, substr string) bool {
@@ -695,6 +696,9 @@ func TestSendMilestoneAlerts_Integration(t *testing.T) {
 	}
 
 	sendMessageFunc := func(room, message string) error {
+		if message == "" {
+			return errors.New("empty message")
+		}
 		sentMessages = append(sentMessages, struct {
 			room    string
 			message string
@@ -707,12 +711,32 @@ func TestSendMilestoneAlerts_Integration(t *testing.T) {
 	// 직접 로직 테스트 (statsRepo가 nil이므로 SendMilestoneAlerts 호출 불가)
 	// 대신 개별 로직 검증
 
-	// 1. 마일스톤 변경사항 - 유의미한 변화로 인식되어야 함
+	assertMilestoneIntegrationMessages(t, scheduler, milestoneChange, largeGainChange, smallChange)
+
+	// 수동 메시지 발송 시뮬레이션
+	for _, change := range []*domain.StatsChange{milestoneChange, largeGainChange} {
+		message := scheduler.formatChangeMessage(change)
+		if message != "" {
+			for _, room := range rooms {
+				require.NoError(t, sendMessageFunc(room, message))
+			}
+		}
+	}
+
+	assertMilestoneIntegrationDispatch(t, sentMessages)
+}
+
+func assertMilestoneIntegrationMessages(
+	t *testing.T,
+	scheduler *schedulerImpl,
+	milestoneChange, largeGainChange, smallChange *domain.StatsChange,
+) {
+	t.Helper()
+
 	if !scheduler.isSignificantChange(milestoneChange) {
 		t.Error("milestone change should be significant")
 	}
 
-	// 2. 마일스톤 메시지 포맷 검증
 	msg := scheduler.formatChangeMessage(milestoneChange)
 	if msg == "" {
 		t.Error("expected milestone message, got empty")
@@ -724,52 +748,33 @@ func TestSendMilestoneAlerts_Integration(t *testing.T) {
 		t.Errorf("milestone message should contain member name, got: %s", msg)
 	}
 
-	// 3. 큰 구독자 증가 메시지 포맷 검증
-	msg2 := scheduler.formatChangeMessage(largeGainChange)
-	if msg2 != "" {
-		t.Errorf("expected no large gain message, got: %s", msg2)
+	if msg := scheduler.formatChangeMessage(largeGainChange); msg != "" {
+		t.Errorf("expected no large gain message, got: %s", msg)
 	}
-
-	// 4. 작은 변화는 메시지 없음
-	msg3 := scheduler.formatChangeMessage(smallChange)
-	if msg3 != "" {
-		t.Errorf("small change should not generate message, got: %s", msg3)
+	if msg := scheduler.formatChangeMessage(smallChange); msg != "" {
+		t.Errorf("small change should not generate message, got: %s", msg)
 	}
-
-	// 5. 작은 변화는 significant하지 않음
 	if scheduler.isSignificantChange(smallChange) {
 		t.Error("small change should not be significant")
 	}
+}
 
-	// 수동 메시지 발송 시뮬레이션
-	for _, change := range []*domain.StatsChange{milestoneChange, largeGainChange} {
-		message := scheduler.formatChangeMessage(change)
-		if message != "" {
-			for _, room := range rooms {
-				_ = sendMessageFunc(room, message)
-			}
-		}
-	}
+func assertMilestoneIntegrationDispatch(t *testing.T, sentMessages []struct {
+	room    string
+	message string
+}) {
+	t.Helper()
 
-	// 6. 메시지가 올바른 방에 발송되었는지 확인
-	// 1개 변경사항(마일스톤) × 2개 방 = 2개 메시지
 	if len(sentMessages) != 2 {
 		t.Errorf("expected 2 messages sent, got %d", len(sentMessages))
 	}
 
-	// 7. 각 방에 2개씩 발송되었는지 확인
-	room1Count := 0
-	room2Count := 0
+	roomCounts := map[string]int{}
 	for _, m := range sentMessages {
-		if m.room == "testRoom1" {
-			room1Count++
-		}
-		if m.room == "testRoom2" {
-			room2Count++
-		}
+		roomCounts[m.room]++
 	}
-	if room1Count != 1 || room2Count != 1 {
-		t.Errorf("expected 1 message per room, got room1=%d, room2=%d", room1Count, room2Count)
+	if roomCounts["testRoom1"] != 1 || roomCounts["testRoom2"] != 1 {
+		t.Errorf("expected 1 message per room, got room1=%d, room2=%d", roomCounts["testRoom1"], roomCounts["testRoom2"])
 	}
 }
 
@@ -838,7 +843,7 @@ func TestMilestoneDetectionFlow(t *testing.T) {
 			// 메시지 생성
 			change := &domain.StatsChange{
 				MemberName:       "TestMember",
-				SubscriberChange: int64(tc.currentSubs) - int64(tc.prevSubs),
+				SubscriberChange: uint64DeltaToInt64(tc.currentSubs, tc.prevSubs),
 				PreviousStats:    &domain.TimestampedStats{SubscriberCount: tc.prevSubs},
 				CurrentStats:     &domain.TimestampedStats{SubscriberCount: tc.currentSubs},
 			}
@@ -965,7 +970,7 @@ func (m *mockTrackAllSubscribersRepository) GetUnnotifiedMilestones(ctx context.
 	return append([]ytstats.MilestoneNotification(nil), m.unnotifiedMilestones...), nil
 }
 
-func (m *mockTrackAllSubscribersRepository) MarkMilestoneNotified(ctx context.Context, channelID string, milestoneType string, value uint64) error {
+func (m *mockTrackAllSubscribersRepository) MarkMilestoneNotified(ctx context.Context, channelID, milestoneType string, value uint64) error {
 	return nil
 }
 

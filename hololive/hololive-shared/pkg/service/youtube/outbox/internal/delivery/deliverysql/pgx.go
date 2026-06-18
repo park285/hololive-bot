@@ -24,12 +24,16 @@ func IsNilDB(db any) bool {
 		return true
 	}
 	value := reflect.ValueOf(db)
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+	kind := value.Kind()
+	if kind == reflect.Chan ||
+		kind == reflect.Func ||
+		kind == reflect.Interface ||
+		kind == reflect.Map ||
+		kind == reflect.Pointer ||
+		kind == reflect.Slice {
 		return value.IsNil()
-	default:
-		return false
 	}
+	return false
 }
 
 func AsQuerier(db any) dbx.Querier {
@@ -42,7 +46,7 @@ func AsQuerier(db any) dbx.Querier {
 	return nil
 }
 
-func ExecDeliverySQL(ctx context.Context, db dbx.Querier, action string, query string, args ...any) (int64, error) {
+func ExecDeliverySQL(ctx context.Context, db dbx.Querier, action, query string, args ...any) (int64, error) {
 	tag, err := db.Exec(ctx, PostgresPlaceholders(query), args...)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", action, err)
@@ -50,14 +54,14 @@ func ExecDeliverySQL(ctx context.Context, db dbx.Querier, action string, query s
 	return tag.RowsAffected(), nil
 }
 
-func SelectDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action string, query string, args ...any) error {
+func SelectDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action, query string, args ...any) error {
 	if err := pgxscan.Select(ctx, db, dest, PostgresPlaceholders(query), args...); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}
 	return nil
 }
 
-func GetDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action string, query string, args ...any) (bool, error) {
+func GetDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action, query string, args ...any) (bool, error) {
 	err := pgxscan.Get(ctx, db, dest, PostgresPlaceholders(query), args...)
 	if err == nil {
 		return true, nil
@@ -131,7 +135,9 @@ func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) er
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				panic(fmt.Errorf("panic during transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
+			}
 			panic(p)
 		}
 	}()

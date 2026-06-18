@@ -53,11 +53,12 @@ func TestPgxTxRollsBackOnPanic(t *testing.T) {
 	pool := newTxTestPool(t)
 
 	require.PanicsWithValue(t, "boom", func() {
-		_ = InPgxTx(ctx, pool, func(tx Tx) error {
+		err := InPgxTx(ctx, pool, func(tx Tx) error {
 			_, err := tx.Exec(ctx, "INSERT INTO dbx_tx_test (value) VALUES ($1)", "panic")
 			require.NoError(t, err)
 			panic("boom")
 		})
+		require.NoError(t, err)
 	})
 
 	var count int

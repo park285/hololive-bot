@@ -84,12 +84,14 @@ func TestDrainBatchReturnsSingleItem(t *testing.T) {
 		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
 		Version:    contractsalarm.QueueEnvelopeVersionV1,
 	}
-	raw, err := json.Marshal(envelope)
+	raw, err := json.Marshal(&envelope)
 	require.NoError(t, err)
 
-	require.NoError(t, cacheClient.DoMulti(context.Background(),
+	results := cacheClient.DoMulti(context.Background(),
 		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(string(raw)).Build(),
-	)[0].Error())
+	)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 5)
 	require.NoError(t, err)
@@ -114,11 +116,13 @@ func TestDrainBatchDrainsMultipleUpToLimit(t *testing.T) {
 			EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
 			Version:    contractsalarm.QueueEnvelopeVersionV1,
 		}
-		raw, err := json.Marshal(envelope)
+		raw, err := json.Marshal(&envelope)
 		require.NoError(t, err)
-		require.NoError(t, cacheClient.DoMulti(context.Background(),
+		results := cacheClient.DoMulti(context.Background(),
 			cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(string(raw)).Build(),
-		)[0].Error())
+		)
+		require.Len(t, results, 1)
+		require.NoError(t, results[0].Error())
 	}
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 3)

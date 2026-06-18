@@ -25,6 +25,7 @@ func TestFetchPagePreflight_RateLimitDenialReturnsAdmissionDeferred(t *testing.T
 
 	var deferred *AdmissionDeferredError
 	require.ErrorAs(t, err, &deferred)
+	require.NotNil(t, deferred)
 	require.Greater(t, deferred.RetryDelay(), time.Duration(0))
 	require.NotEmpty(t, deferred.Bucket)
 }
@@ -50,7 +51,7 @@ func TestIsRetryableFetchPageError_AdmissionDeferredIsNotRetryable(t *testing.T)
 func TestFetchPageAdmissionDeferred_IsNotFetchAttemptTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+		mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 	}))
 	defer server.Close()
 

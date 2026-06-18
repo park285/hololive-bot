@@ -56,7 +56,7 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 	return nil
 }
 
-func normalizeAlarmTypesStrict(input domain.AlarmTypes, fallback domain.AlarmTypes) (domain.AlarmTypes, error) {
+func normalizeAlarmTypesStrict(input, fallback domain.AlarmTypes) (domain.AlarmTypes, error) {
 	if len(input) == 0 {
 		input = fallback
 	}
@@ -115,7 +115,7 @@ func alarmTypeSet(types domain.AlarmTypes) map[domain.AlarmType]struct{} {
 	return result
 }
 
-func mergeAlarmTypes(existing domain.AlarmTypes, requested domain.AlarmTypes) domain.AlarmTypes {
+func mergeAlarmTypes(existing, requested domain.AlarmTypes) domain.AlarmTypes {
 	seen := alarmTypeSet(existing)
 	merged := make(domain.AlarmTypes, 0, len(existing)+len(requested))
 	merged = append(merged, existing...)
@@ -129,7 +129,7 @@ func mergeAlarmTypes(existing domain.AlarmTypes, requested domain.AlarmTypes) do
 	return merged
 }
 
-func subtractAlarmTypes(existing domain.AlarmTypes, remove domain.AlarmTypes) domain.AlarmTypes {
+func subtractAlarmTypes(existing, remove domain.AlarmTypes) domain.AlarmTypes {
 	removeSet := alarmTypeSet(remove)
 	result := make(domain.AlarmTypes, 0, len(existing))
 	for _, alarmType := range existing {
@@ -141,7 +141,7 @@ func subtractAlarmTypes(existing domain.AlarmTypes, remove domain.AlarmTypes) do
 	return result
 }
 
-func intersectAlarmTypes(existing domain.AlarmTypes, requested domain.AlarmTypes) domain.AlarmTypes {
+func intersectAlarmTypes(existing, requested domain.AlarmTypes) domain.AlarmTypes {
 	existingSet := alarmTypeSet(existing)
 	seen := make(map[domain.AlarmType]struct{}, len(requested))
 	result := make(domain.AlarmTypes, 0, len(requested))
@@ -157,7 +157,7 @@ func intersectAlarmTypes(existing domain.AlarmTypes, requested domain.AlarmTypes
 	return result
 }
 
-func buildAlarmRecord(req domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) *domain.Alarm {
+func buildAlarmRecord(req *domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) *domain.Alarm {
 	return &domain.Alarm{
 		RoomID:     req.RoomID,
 		UserID:     req.UserID,
@@ -169,7 +169,7 @@ func buildAlarmRecord(req domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) 
 	}
 }
 
-func (as *AlarmService) logAlarmAdded(req domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) {
+func (as *AlarmService) logAlarmAdded(req *domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) {
 	if as.logger == nil {
 		return
 	}
@@ -218,7 +218,7 @@ func (as *AlarmService) executeSubscriberTypeRemoval(ctx context.Context, builde
 	return nil
 }
 
-func (as *AlarmService) executeSubscriberKeyRemoval(ctx context.Context, builder valkey.Builder, subscriberKeys []string, registryKey string, operation string) error {
+func (as *AlarmService) executeSubscriberKeyRemoval(ctx context.Context, builder valkey.Builder, subscriberKeys []string, registryKey, operation string) error {
 	results := as.cache.DoMulti(ctx, buildSubscriberSRemCommands(builder, subscriberKeys, registryKey)...)
 	if len(results) != len(subscriberKeys) {
 		return fmt.Errorf("%s: unexpected SREM result count: %d", operation, len(results))

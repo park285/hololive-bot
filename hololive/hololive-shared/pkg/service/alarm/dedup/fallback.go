@@ -139,7 +139,7 @@ func (f *LocalFallback) tryStoreNewClaim(key string, newEntry fallbackEntry) boo
 	return true
 }
 
-func (f *LocalFallback) deleteCorruptEntry(key any, value any) {
+func (f *LocalFallback) deleteCorruptEntry(key, value any) {
 	if f.keys.CompareAndDelete(key, value) {
 		f.keyCount.Add(-1)
 	}

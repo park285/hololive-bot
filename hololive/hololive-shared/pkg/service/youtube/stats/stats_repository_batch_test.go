@@ -68,30 +68,12 @@ func TestSaveStatsBatch(t *testing.T) {
 				execFn: func(_ context.Context, query string, args ...any) (pgconn.CommandTag, error) {
 					if strings.Contains(query, "youtube_channel_latest_stats") {
 						latestExecCount++
-
-						wantArgs := min(tc.count-(latestExecCount-1)*saveBatchMaxSize, saveBatchMaxSize) * columnsPerRow
-						if len(args) != wantArgs {
-							t.Fatalf("latest exec %d: got %d args, want %d", latestExecCount, len(args), wantArgs)
-						}
-
+						assertSaveStatsBatchArgs(t, "latest", latestExecCount, tc.count, args)
 						return pgconn.NewCommandTag("INSERT 0 1"), nil
 					}
 					historyExecCount++
-
-					// INSERT VALUES 절이 포함되었는지 검증
-					if !strings.Contains(query, "INSERT INTO youtube_stats_history") {
-						t.Fatalf("unexpected query: %s", query)
-					}
-					if !strings.Contains(query, "ON CONFLICT") {
-						t.Fatalf("missing ON CONFLICT clause: %s", query)
-					}
-
-					// 파라미터 수 검증
-					wantArgs := min(tc.count-(historyExecCount-1)*saveBatchMaxSize, saveBatchMaxSize) * columnsPerRow
-					if len(args) != wantArgs {
-						t.Fatalf("history exec %d: got %d args, want %d", historyExecCount, len(args), wantArgs)
-					}
-
+					assertSaveStatsBatchHistoryQuery(t, query)
+					assertSaveStatsBatchArgs(t, "history", historyExecCount, tc.count, args)
 					return pgconn.NewCommandTag("INSERT 0 1"), nil
 				},
 			}
@@ -109,6 +91,26 @@ func TestSaveStatsBatch(t *testing.T) {
 				t.Fatalf("latest exec count = %d, want %d", latestExecCount, tc.wantExecs)
 			}
 		})
+	}
+}
+
+func assertSaveStatsBatchHistoryQuery(t *testing.T, query string) {
+	t.Helper()
+
+	if !strings.Contains(query, "INSERT INTO youtube_stats_history") {
+		t.Fatalf("unexpected query: %s", query)
+	}
+	if !strings.Contains(query, "ON CONFLICT") {
+		t.Fatalf("missing ON CONFLICT clause: %s", query)
+	}
+}
+
+func assertSaveStatsBatchArgs(t *testing.T, label string, execCount, statsCount int, args []any) {
+	t.Helper()
+
+	wantArgs := min(statsCount-(execCount-1)*saveBatchMaxSize, saveBatchMaxSize) * columnsPerRow
+	if len(args) != wantArgs {
+		t.Fatalf("%s exec %d: got %d args, want %d", label, execCount, len(args), wantArgs)
 	}
 }
 

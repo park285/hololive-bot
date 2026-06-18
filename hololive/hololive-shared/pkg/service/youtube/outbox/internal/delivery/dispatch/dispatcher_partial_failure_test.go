@@ -123,7 +123,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -163,7 +163,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -214,7 +214,7 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 	require.NoError(t, insertDeliveryTestRows(db, &communityItem).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -275,7 +275,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cacheClient, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cacheClient, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

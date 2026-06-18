@@ -1,6 +1,7 @@
 package dbx
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,7 +18,8 @@ func TestLegacyORMRemovalSurfaceDoesNotRegress(t *testing.T) {
 	legacyAcronym := "GO" + "RM"
 	legacySchemaCall := "Auto" + "Migrate("
 	var offenders []string
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+	rootFS := os.DirFS(root)
+	err := fs.WalkDir(rootFS, ".", func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -33,7 +35,7 @@ func TestLegacyORMRemovalSurfaceDoesNotRegress(t *testing.T) {
 			return nil
 		}
 
-		content, err := os.ReadFile(path)
+		content, err := fs.ReadFile(rootFS, path)
 		if err != nil {
 			return err
 		}
@@ -42,11 +44,7 @@ func TestLegacyORMRemovalSurfaceDoesNotRegress(t *testing.T) {
 			strings.Contains(text, legacyIdentifier) ||
 			strings.Contains(text, legacyAcronym) ||
 			strings.Contains(text, legacySchemaCall) {
-			rel, err := filepath.Rel(root, path)
-			if err != nil {
-				rel = path
-			}
-			offenders = append(offenders, rel)
+			offenders = append(offenders, filepath.ToSlash(path))
 		}
 		return nil
 	})

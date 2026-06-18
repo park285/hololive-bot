@@ -41,7 +41,7 @@ func ValidateChannelContentAlarmTargetDefinitions(definitions []ChannelContentAl
 	return errors.New(strings.Join(issues, "; "))
 }
 
-func validateChannelContentAlarmTargetDefinition(idx int, definition ChannelContentAlarmTargetDefinition, seenTargets map[string]string) ([]string, []string) {
+func validateChannelContentAlarmTargetDefinition(idx int, definition ChannelContentAlarmTargetDefinition, seenTargets map[string]string) (validationErrors, warnings []string) {
 	ownerLabel := normalizedTargetDefinitionOwner(definition.OwnerLabel, idx)
 	channelID := strings.TrimSpace(definition.ChannelID)
 	if channelID == "" {

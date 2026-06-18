@@ -155,7 +155,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Respec
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
 
-	rows := []deliveryTelemetryTestBufferModel{}
+	rows := make([]deliveryTelemetryTestBufferModel, 0, 3)
 	for i := range 3 {
 		publishedAt := now.Add(time.Duration(-(i + 1)) * time.Hour)
 		eventAt := publishedAt.Add(time.Minute)

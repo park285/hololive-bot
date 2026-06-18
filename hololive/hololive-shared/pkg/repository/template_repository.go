@@ -171,12 +171,9 @@ func (r *TemplateRepository) DeleteOverride(ctx context.Context, key domain.Temp
 	return nil
 }
 
-func (r *TemplateRepository) GetByKey(ctx context.Context, key domain.TemplateKey) (*domain.NotificationTemplate, []*domain.NotificationTemplate, error) {
-	var defaultTmpl *domain.NotificationTemplate
-	var overrides []*domain.NotificationTemplate
-
+func (r *TemplateRepository) GetByKey(ctx context.Context, key domain.TemplateKey) (defaultTmpl *domain.NotificationTemplate, overrides []*domain.NotificationTemplate, err error) {
 	var tmpl domain.NotificationTemplate
-	err := pgxscan.Get(ctx, r.pool, &tmpl,
+	err = pgxscan.Get(ctx, r.pool, &tmpl,
 		`SELECT id, template_key, channel_id, body, created_at, updated_at
 		 FROM notification_templates
 		 WHERE template_key = $1 AND channel_id IS NULL`,

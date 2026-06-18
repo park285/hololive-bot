@@ -119,7 +119,7 @@ func scanMemberPhotoQueryRow(scanner memberRowScanner) (memberRow, error) {
 	return row, err
 }
 
-func (r *Repository) parseMemberRow(row memberRow) (*domain.Member, error) {
+func (r *Repository) parseMemberRow(row *memberRow) (*domain.Member, error) {
 	member, err := r.scanMember(
 		row.id,
 		row.slug,
@@ -149,7 +149,7 @@ func (r *Repository) parseMemberRow(row memberRow) (*domain.Member, error) {
 	return member, nil
 }
 
-func (r *Repository) parseMemberPhotoRow(row memberRow) (*domain.Member, error) {
+func (r *Repository) parseMemberPhotoRow(row *memberRow) (*domain.Member, error) {
 	member, err := r.scanMemberWithPhoto(
 		row.id,
 		row.channelID,
@@ -186,7 +186,7 @@ func (r *Repository) querySingleMember(ctx context.Context, query string, args .
 		return nil, err
 	}
 
-	return r.parseMemberRow(row)
+	return r.parseMemberRow(&row)
 }
 
 func (r *Repository) querySingleMemberWithPhoto(ctx context.Context, query string, args ...any) (*domain.Member, error) {
@@ -198,7 +198,7 @@ func (r *Repository) querySingleMemberWithPhoto(ctx context.Context, query strin
 		return nil, err
 	}
 
-	return r.parseMemberPhotoRow(row)
+	return r.parseMemberPhotoRow(&row)
 }
 
 func (r *Repository) collectAllMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
@@ -207,7 +207,7 @@ func (r *Repository) collectAllMembersFromRows(rows pgx.Rows) ([]*domain.Member,
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan member row: %w", err)
 		}
-		member, err := r.parseMemberRow(row)
+		member, err := r.parseMemberRow(&row)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
 		}
@@ -245,7 +245,7 @@ func (r *Repository) collectMemberWithPhotoRow(rows pgx.Rows) (*string, *domain.
 		return nil, nil, fmt.Errorf("failed to scan member row: %w", err)
 	}
 
-	member, err := r.parseMemberPhotoRow(row)
+	member, err := r.parseMemberPhotoRow(&row)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
 	}
@@ -335,7 +335,7 @@ func (r *Repository) collectMembersByNameFromRows(rows pgx.Rows) ([]*domain.Memb
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan member row: %w", err)
 		}
-		member, err := r.parseMemberRow(row)
+		member, err := r.parseMemberRow(&row)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
 		}

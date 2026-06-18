@@ -271,7 +271,7 @@ func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPo
 	require.Equal(t, int64(2), summaries[1].ShortsPostCount)
 	require.Equal(t, int64(1), summaries[1].ShortsExceededPostCount)
 	require.NotNil(t, summaries[1].AverageLatencyMillis)
-	require.Equal(t, int64((withinLatencyMillis+exceededLatencyMillis)/2), *summaries[1].AverageLatencyMillis)
+	require.Equal(t, (withinLatencyMillis+exceededLatencyMillis)/2, *summaries[1].AverageLatencyMillis)
 	require.NotNil(t, summaries[1].P95LatencyMillis)
 	require.Equal(t, exceededLatencyMillis, *summaries[1].P95LatencyMillis)
 	require.NotNil(t, summaries[1].MaxLatencyMillis)

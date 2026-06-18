@@ -25,7 +25,7 @@ type Snapshot struct {
 }
 
 type SnapshotSink interface {
-	Capture(ctx context.Context, snapshot Snapshot) error
+	Capture(ctx context.Context, snapshot *Snapshot) error
 }
 
 type SnapshotPolicy struct {
@@ -103,7 +103,7 @@ func sanitizeSnapshotBody(body []byte) []byte {
 	return result
 }
 
-func SnapshotID(snapshot Snapshot) string {
+func SnapshotID(snapshot *Snapshot) string {
 	sum := sha256.Sum256([]byte(snapshot.Operation + "\n" + snapshot.ChannelID + "\n" + snapshot.Stage + "\n" + string(snapshot.Body)))
 	return hex.EncodeToString(sum[:])
 }

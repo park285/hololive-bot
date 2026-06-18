@@ -36,11 +36,16 @@ type Service struct {
 	concurrency  config.HolodexConcurrencyConfig
 }
 
-func NewHolodexService(baseURL string, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
-	return NewHolodexServiceWithConfig(config.DefaultHolodexOperationalConfig(), baseURL, apiKey, cacheClient, scraperService, logger)
+func NewHolodexService(baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
+	cfg := config.DefaultHolodexOperationalConfig()
+	return NewHolodexServiceWithConfig(&cfg, baseURL, apiKey, cacheClient, scraperService, logger)
 }
 
-func NewHolodexServiceWithConfig(holodexCfg config.HolodexConfig, baseURL string, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
+func NewHolodexServiceWithConfig(holodexCfg *config.HolodexConfig, baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
+	if holodexCfg == nil {
+		cfg := config.DefaultHolodexOperationalConfig()
+		holodexCfg = &cfg
+	}
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, fmt.Errorf("holodex api key is required")
 	}
@@ -93,10 +98,9 @@ func (h *Service) Stop() {
 	}
 }
 
-//nolint:contextcheck
 func (h *Service) scheduleRetryIfNeeded(ctx context.Context, key string, fn func(ctx context.Context)) {
 	if h.retry == nil || isRetryContext(ctx) || ctx.Err() != nil {
 		return
 	}
-	h.retry.schedule(key, fn)
+	h.retry.schedule(ctx, key, fn)
 }

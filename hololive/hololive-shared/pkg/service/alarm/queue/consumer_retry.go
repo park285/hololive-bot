@@ -46,7 +46,7 @@ func (c *Consumer) buildRetryCommands(ctx context.Context, envelopes []domain.Al
 	now := time.Now().UTC()
 	batchToken := atomic.AddUint64(&c.retryBatchSeq, 1)
 	for i := range envelopes {
-		cmd, ok, err := c.buildRetryCommand(ctx, envelopes[i], now, batchToken, len(cmds))
+		cmd, ok, err := c.buildRetryCommand(ctx, &envelopes[i], now, batchToken, len(cmds))
 		if err != nil {
 			return nil, err
 		}
@@ -68,7 +68,7 @@ func (c *Consumer) executeRetryCommands(ctx context.Context, cmds []valkey.Compl
 			return fmt.Errorf("schedule retry envelopes: zadd retry queue: %w", err)
 		}
 	}
-	alarmQueueRetryScheduled.Add(float64(len(results)))
+	observeAlarmQueueRetryScheduled(len(results))
 	return nil
 }
 
@@ -87,12 +87,12 @@ func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueE
 
 	elements := make([]string, 0, len(envelopes))
 	for i := range envelopes {
-		jsonBytes, err := json.Marshal(envelopes[i])
+		jsonBytes, err := json.Marshal(&envelopes[i])
 		if err != nil {
 			return fmt.Errorf("move envelopes to dlq: marshal envelope: %w", err)
 		}
 
-		if shouldPreferOriginalPayload(envelopes[i], string(jsonBytes)) {
+		if shouldPreferOriginalPayload(&envelopes[i], string(jsonBytes)) {
 			elements = append(elements, envelopes[i].OriginalPayload())
 			continue
 		}
@@ -108,7 +108,7 @@ func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueE
 		return fmt.Errorf("move envelopes to dlq: lpush dlq: %w", err)
 	}
 
-	alarmQueueDLQMoved.Add(float64(len(elements)))
+	observeAlarmQueueDLQMoved(len(elements))
 	return nil
 }
 
@@ -127,7 +127,7 @@ func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnv
 func (c *Consumer) marshalRequeueEnvelopes(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) ([]string, error) {
 	elements := make([]string, 0, len(envelopes))
 	for i := range envelopes {
-		element, ok, err := c.marshalRequeueEnvelope(ctx, envelopes[i])
+		element, ok, err := c.marshalRequeueEnvelope(ctx, &envelopes[i])
 		if err != nil {
 			return nil, err
 		}
@@ -157,23 +157,23 @@ func (c *Consumer) pushRequeueElements(ctx context.Context, elements []string) e
 
 func (c *Consumer) buildRetryCommand(
 	ctx context.Context,
-	envelope domain.AlarmQueueEnvelope,
+	envelope *domain.AlarmQueueEnvelope,
 	now time.Time,
 	batchToken uint64,
 	batchIndex int,
-) (valkey.Completed, bool, error) {
+) (result0 valkey.Completed, ok1 bool, err error) {
 	normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "schedule_retry")
 	if !accepted {
 		return valkey.Completed{}, false, nil
 	}
 	normalized.EnsureSourcePayloadFromRaw()
 
-	nextVisibleAt, err := resolveRetryVisibleAt(normalized, now)
+	nextVisibleAt, err := resolveRetryVisibleAt(&normalized, now)
 	if err != nil {
 		return valkey.Completed{}, false, fmt.Errorf("schedule retry envelopes: resolve next visible at: %w", err)
 	}
 
-	jsonBytes, err := json.Marshal(normalized)
+	jsonBytes, err := json.Marshal(&normalized)
 	if err != nil {
 		return valkey.Completed{}, false, fmt.Errorf("schedule retry envelopes: marshal envelope: %w", err)
 	}
@@ -187,13 +187,13 @@ func (c *Consumer) buildRetryCommand(
 	return cmd, true, nil
 }
 
-func (c *Consumer) marshalRequeueEnvelope(ctx context.Context, envelope domain.AlarmQueueEnvelope) (string, bool, error) {
+func (c *Consumer) marshalRequeueEnvelope(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (value0 string, ok1 bool, err error) {
 	normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "requeue")
 	if !accepted {
 		return "", false, nil
 	}
 
-	jsonBytes, err := json.Marshal(normalized)
+	jsonBytes, err := json.Marshal(&normalized)
 	if err != nil {
 		return "", false, fmt.Errorf("requeue envelopes: marshal envelope: %w", err)
 	}
@@ -218,6 +218,6 @@ func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) err
 	if _, err := c.cache.DelMany(ctx, filtered); err != nil {
 		return fmt.Errorf("release claim keys: del filtered keys: %w", err)
 	}
-	alarmQueueClaimReleased.Add(float64(len(filtered)))
+	observeAlarmQueueClaimReleased(len(filtered))
 	return nil
 }

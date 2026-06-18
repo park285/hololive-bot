@@ -2,6 +2,7 @@ package dispatchoutbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -52,7 +53,7 @@ type deliveryBatchRow struct {
 	Status          string          `json:"status"`
 }
 
-func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[string]int64, int, error) {
+func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (result0 map[string]int64, result1 int, err error) {
 	eventIDs := make(map[string]int64, len(events))
 	if len(events) == 0 {
 		return eventIDs, 0, nil
@@ -69,7 +70,7 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[str
 	return eventIDs, inserted, nil
 }
 
-func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, map[string]string) {
+func buildEventBatchRows(events []eventInsert) (result0 []eventBatchRow, result1 map[string]string) {
 	rows := make([]eventBatchRow, 0, len(events))
 	expectedHashes := make(map[string]string, len(events))
 	for _, event := range events {
@@ -87,7 +88,7 @@ func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, map[string]stri
 	return rows, expectedHashes
 }
 
-func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (map[string]int64, int, error) {
+func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (result0 map[string]int64, result1 int, err error) {
 	rows, err := tx.Query(ctx, `
 		WITH input AS (
 			SELECT *
@@ -160,7 +161,8 @@ func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInser
 
 func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, error) {
 	rows := make([]deliveryBatchRow, 0, len(deliveries))
-	for _, delivery := range deliveries {
+	for i := range deliveries {
+		delivery := &deliveries[i]
 		if delivery.EventID <= 0 {
 			return nil, fmt.Errorf("insert dispatch deliveries: missing event id for event_key=%s", delivery.EventKey)
 		}
@@ -177,10 +179,8 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 	return rows, nil
 }
 
-func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (int, int, error) {
-	var selected int
-	var inserted int
-	err := tx.QueryRow(ctx, `
+func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected, inserted int, err error) {
+	err = tx.QueryRow(ctx, `
 		WITH input AS (
 			SELECT *
 			FROM jsonb_to_recordset($1::jsonb) AS x(
@@ -222,20 +222,16 @@ func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (int, int, 
 	return selected, inserted, nil
 }
 
-func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status, result PublishBatchResult) ([]eventInsert, []deliveryInsert, []eventCollision, PublishBatchResult, error) {
+func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status, result *PublishBatchResult) ([]eventInsert, []deliveryInsert, []eventCollision, error) {
 	events := make(map[string]eventInsert, len(envelopes))
 	deliveries := make([]deliveryInsert, 0, len(envelopes))
 	var collisions []eventCollision
-	for _, envelope := range envelopes {
-		event, delivery, err := buildLedgerRows(envelope, status)
+	for i := range envelopes {
+		event, delivery, err := buildLedgerRows(&envelopes[i], status)
 		if err != nil {
-			return nil, nil, nil, PublishBatchResult{}, err
+			return nil, nil, nil, err
 		}
-		var collision *eventCollision
-		result, collision, err = addPreparedEvent(events, event, result)
-		if err != nil {
-			return nil, nil, nil, result, err
-		}
+		collision := addPreparedEvent(events, &event, result)
 		if collision != nil {
 			collisions = append(collisions, *collision)
 			continue
@@ -244,55 +240,51 @@ func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status
 	}
 
 	eventRows := make([]eventInsert, 0, len(events))
-	for _, event := range events {
-		eventRows = append(eventRows, event)
+	for key := range events {
+		eventRows = append(eventRows, events[key])
 	}
-	return eventRows, deliveries, collisions, result, nil
+	return eventRows, deliveries, collisions, nil
 }
 
-func addPreparedEvent(events map[string]eventInsert, event eventInsert, result PublishBatchResult) (PublishBatchResult, *eventCollision, error) {
+func addPreparedEvent(events map[string]eventInsert, event *eventInsert, result *PublishBatchResult) *eventCollision {
 	existing, ok := events[event.EventKey]
 	if ok && existing.PayloadHash != event.PayloadHash {
 		result.HashConflictEvents++
-		return result, &eventCollision{
-			Event:               event,
+		return &eventCollision{
+			Event:               *event,
 			ExistingPayloadHash: existing.PayloadHash,
-		}, nil
+		}
 	}
 	if !ok {
-		events[event.EventKey] = event
+		events[event.EventKey] = *event
 		result.RequestedEvents++
 	}
-	return result, nil, nil
+	return nil
 }
 
-func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eventInsert, deliveries []deliveryInsert, preflightCollisions []eventCollision, result PublishBatchResult) (PublishBatchResult, error) {
+func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eventInsert, deliveries []deliveryInsert, preflightCollisions []eventCollision, result *PublishBatchResult) (publishResult PublishBatchResult, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: begin tx: %w", err)
 	}
-	defer rollbackDispatchBatchOnError(ctx, tx, &err)
+	defer func() {
+		err = rollbackDispatchBatchOnError(ctx, tx, err)
+	}()
 
-	var eventIDs map[string]int64
-	var collisions []eventCollision
-	eventIDs, collisions, result, err = insertPreparedEvents(ctx, tx, eventRows, result, r.logger)
+	eventIDs, collisions, deliveries, err := prepareBatchDeliveriesForInsert(ctx, tx, eventRows, deliveries, preflightCollisions, result, r.logger)
 	if err != nil {
-		return result, err
+		return *result, err
 	}
-	collisions = append(preflightCollisions, collisions...)
-	if len(collisions) > 0 {
-		deliveries = filterCollisionDeliveries(deliveries, collisions)
-	}
-	assignDeliveryEventIDs(deliveries, eventIDs)
 
 	insertedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
 	if err != nil {
-		return result, err
+		return *result, err
 	}
 	result.InsertedDeliveries = insertedDeliveries
 	result.DuplicateDeliveries = len(deliveries) - insertedDeliveries
-	if err = recordEventCollisions(ctx, tx, attachCollisionEventIDs(collisions, eventIDs)); err != nil {
-		return result, err
+	if recordErr := recordEventCollisions(ctx, tx, attachCollisionEventIDs(collisions, eventIDs)); recordErr != nil {
+		err = recordErr
+		return *result, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: commit: %w", err)
@@ -300,16 +292,41 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 	return processedPublishBatchResult(result), nil
 }
 
-func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err *error) {
-	if *err != nil {
-		_ = tx.Rollback(ctx)
+func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err error) error {
+	if err == nil {
+		return nil
 	}
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		return errors.Join(err, fmt.Errorf("rollback dispatch batch: %w", rollbackErr))
+	}
+	return err
 }
 
-func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result PublishBatchResult, logger *slog.Logger) (map[string]int64, []eventCollision, PublishBatchResult, error) {
+func prepareBatchDeliveriesForInsert(
+	ctx context.Context,
+	tx pgx.Tx,
+	eventRows []eventInsert,
+	deliveries []deliveryInsert,
+	preflightCollisions []eventCollision,
+	result *PublishBatchResult,
+	logger *slog.Logger,
+) (map[string]int64, []eventCollision, []deliveryInsert, error) {
+	eventIDs, collisions, err := insertPreparedEvents(ctx, tx, eventRows, result, logger)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	collisions = append(preflightCollisions, collisions...)
+	if len(collisions) > 0 {
+		deliveries = filterCollisionDeliveries(deliveries, collisions)
+	}
+	assignDeliveryEventIDs(deliveries, eventIDs)
+	return eventIDs, collisions, deliveries, nil
+}
+
+func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result *PublishBatchResult, logger *slog.Logger) (map[string]int64, []eventCollision, error) {
 	existingRows, err := loadExistingEventRows(ctx, tx, eventRows)
 	if err != nil {
-		return nil, nil, result, err
+		return nil, nil, err
 	}
 	classified := classifyEventPreflight(eventRows, existingRows)
 	eventIDs := classified.EventIDs
@@ -317,7 +334,7 @@ func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInser
 
 	insertedEventIDs, insertedEvents, err := insertEvents(ctx, tx, classified.InsertEvents)
 	if err != nil {
-		return nil, nil, result, err
+		return nil, nil, err
 	}
 	mergeEventIDs(eventIDs, insertedEventIDs)
 
@@ -325,11 +342,11 @@ func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInser
 	if len(missingEvents) > 0 {
 		concurrentRows, err := loadExistingEventRows(ctx, tx, missingEvents)
 		if err != nil {
-			return nil, nil, result, err
+			return nil, nil, err
 		}
 		concurrent := classifyEventPreflight(missingEvents, concurrentRows)
 		if len(concurrent.InsertEvents) > 0 {
-			return nil, nil, result, fmt.Errorf("insert dispatch events: found %d of %d inserted rows", len(insertedEventIDs), len(classified.InsertEvents))
+			return nil, nil, fmt.Errorf("insert dispatch events: found %d of %d inserted rows", len(insertedEventIDs), len(classified.InsertEvents))
 		}
 		mergeEventIDs(eventIDs, concurrent.EventIDs)
 		collisions = append(collisions, concurrent.Collisions...)
@@ -339,7 +356,7 @@ func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInser
 	result.InsertedEvents = insertedEvents
 	result.DuplicateEvents = len(eventRows) - insertedEvents - len(collisions)
 	result.HashConflictEvents += len(collisions)
-	return eventIDs, collisions, result, nil
+	return eventIDs, collisions, nil
 }
 
 func assignDeliveryEventIDs(deliveries []deliveryInsert, eventIDs map[string]int64) {

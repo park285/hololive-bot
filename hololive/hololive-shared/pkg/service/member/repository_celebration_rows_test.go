@@ -7,24 +7,24 @@ import (
 )
 
 func scanFullCelebrationRow(dest []any, id int, name, channelID string, aliases []byte) {
-	*dest[0].(*int) = id
-	*dest[1].(*string) = "slug"
+	assignScanDest[int](dest[0], id)
+	assignScanDest[string](dest[1], "slug")
 	cid := channelID
-	*dest[2].(**string) = &cid
-	*dest[3].(*string) = name
-	*dest[4].(**string) = nil
-	*dest[5].(**string) = nil
-	*dest[6].(**string) = nil
-	*dest[7].(*string) = "active"
-	*dest[8].(*bool) = false
-	*dest[9].(*[]byte) = aliases
-	*dest[10].(**string) = nil
-	*dest[11].(*string) = "hololive"
-	*dest[12].(**string) = nil
-	*dest[13].(*string) = "holodex"
-	*dest[14].(**string) = nil
-	*dest[15].(**time.Time) = nil
-	*dest[16].(**time.Time) = nil
+	assignScanDest[*string](dest[2], &cid)
+	assignScanDest[string](dest[3], name)
+	assignScanDest[*string](dest[4], nil)
+	assignScanDest[*string](dest[5], nil)
+	assignScanDest[*string](dest[6], nil)
+	assignScanDest[string](dest[7], "active")
+	assignScanDest[bool](dest[8], false)
+	assignScanDest[[]byte](dest[9], aliases)
+	assignScanDest[*string](dest[10], nil)
+	assignScanDest[string](dest[11], "hololive")
+	assignScanDest[*string](dest[12], nil)
+	assignScanDest[string](dest[13], "holodex")
+	assignScanDest[*string](dest[14], nil)
+	assignScanDest[*time.Time](dest[15], nil)
+	assignScanDest[*time.Time](dest[16], nil)
 }
 
 func TestCollectCelebrationMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
@@ -81,14 +81,14 @@ func TestCollectCalendarEntriesFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			scanFullCelebrationRow(dest, 1, "Suisei", "UC1", []byte("not-json"))
-			*dest[17].(*string) = "birthday"
-			*dest[18].(*int) = 3
+			assignScanDest[string](dest[17], "birthday")
+			assignScanDest[int](dest[18], 3)
 			return nil
 		}},
 		{scan: func(dest ...any) error {
 			scanFullCelebrationRow(dest, 2, "Miko", "UC2", []byte(`{"ko":["미코"]}`))
-			*dest[17].(*string) = "birthday"
-			*dest[18].(*int) = 4
+			assignScanDest[string](dest[17], "birthday")
+			assignScanDest[int](dest[18], 4)
 			return nil
 		}},
 	}}
@@ -115,8 +115,8 @@ func TestCollectCalendarEntriesFromRows_JoinsRowsErr(t *testing.T) {
 		rows: []fakeMemberRow{
 			{scan: func(dest ...any) error {
 				scanFullCelebrationRow(dest, 1, "Suisei", "UC1", []byte(`{"ko":["스이세이"]}`))
-				*dest[17].(*string) = "birthday"
-				*dest[18].(*int) = 3
+				assignScanDest[string](dest[17], "birthday")
+				assignScanDest[int](dest[18], 3)
 				return nil
 			}},
 		},

@@ -13,7 +13,7 @@ import (
 )
 
 type YouTubeOutboxKaringSender interface {
-	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload domain.YouTubeOutboxDispatchPayload) error
+	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error
 }
 
 func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
@@ -51,7 +51,7 @@ func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
 
 	attemptStartedAt := time.Now().UTC()
 	d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, mode)
-	if err := d.sendYouTubeOutboxKaring(ctx, sender, roomID, payload); err != nil {
+	if err := d.sendYouTubeOutboxKaring(ctx, sender, roomID, &payload); err != nil {
 		d.recordKaringSendFailure(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu)
 		return true
 	}
@@ -63,6 +63,8 @@ func isYouTubeOutboxKaringKind(kind domain.OutboxKind) bool {
 	switch kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream, domain.OutboxKindCommunityPost:
 		return true
+	case domain.OutboxKindMilestone:
+		return false
 	default:
 		return false
 	}
@@ -72,7 +74,7 @@ func (d *SendEngine) sendYouTubeOutboxKaring(
 	ctx context.Context,
 	sender YouTubeOutboxKaringSender,
 	roomID string,
-	payload domain.YouTubeOutboxDispatchPayload,
+	payload *domain.YouTubeOutboxDispatchPayload,
 ) error {
 	sendCtx, cancel := d.karingSendContext(ctx)
 	defer cancel()

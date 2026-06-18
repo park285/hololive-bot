@@ -102,7 +102,7 @@ func isScrapedEventStreamStatus(status string) bool {
 	return status == "LIVE" || status == "UPCOMING"
 }
 
-func (ys *serviceImpl) streamFromScrapedEvent(event *scraper.UpcomingEvent, channelID string, channelName string) *domain.Stream {
+func (ys *serviceImpl) streamFromScrapedEvent(event *scraper.UpcomingEvent, channelID, channelName string) *domain.Stream {
 	stream := &domain.Stream{
 		ID:          event.VideoID,
 		Title:       event.Title,

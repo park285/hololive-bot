@@ -102,6 +102,9 @@ func TestEncodeDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeCursor failed: %v", err)
 	}
+	if data == nil {
+		t.Fatal("DecodeCursor returned nil data")
+	}
 
 	if data.Field != field {
 		t.Errorf("Field = %q, want %q", data.Field, field)

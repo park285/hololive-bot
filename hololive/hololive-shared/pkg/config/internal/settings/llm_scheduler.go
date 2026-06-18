@@ -21,7 +21,9 @@
 package settings
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -53,7 +55,9 @@ func LoadLLMSchedulerRuntime() (*LLMSchedulerConfig, error) {
 }
 
 func loadLLMSchedulerValidated(validate func(*LLMSchedulerConfig) error) (*LLMSchedulerConfig, error) {
-	_ = godotenv.Load()
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("load .env: %w", err)
+	}
 
 	config := buildLLMSchedulerConfig()
 	if err := validate(config); err != nil {
@@ -124,7 +128,7 @@ func (c *LLMSchedulerConfig) validateServerBasics() error {
 	if c.Server.Port == 0 {
 		return fmt.Errorf("LLM_SCHEDULER_PORT is required")
 	}
-	if err := validateServerTransports(c.Server); err != nil {
+	if err := validateServerTransports(&c.Server); err != nil {
 		return err
 	}
 	return validateAPISecretKey(c.Environment, c.Server.APIKey)

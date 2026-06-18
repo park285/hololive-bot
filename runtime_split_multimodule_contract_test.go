@@ -62,7 +62,7 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 
 func readContractFile(t *testing.T, path string) string {
 	t.Helper()
-	data, err := os.ReadFile(path)
+	data, err := readWorkspaceFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}

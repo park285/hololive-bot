@@ -162,14 +162,14 @@ func groupOutboxIDsByAggregateStatus(outboxIDs []int64, counts []deliveryStatusC
 	return grouped
 }
 
-func parseStatusCounts(counts []deliveryStatusCount) (pending int64, sent int64, failed int64) {
+func parseStatusCounts(counts []deliveryStatusCount) (pending, sent, failed int64) {
 	for _, item := range counts {
 		applyStatusCount(item, &pending, &sent, &failed)
 	}
 	return pending, sent, failed
 }
 
-func applyStatusCount(item deliveryStatusCount, pending *int64, sent *int64, failed *int64) {
+func applyStatusCount(item deliveryStatusCount, pending, sent, failed *int64) {
 	switch item.Status {
 	case domain.OutboxStatusPending:
 		*pending = item.Count
@@ -180,7 +180,7 @@ func applyStatusCount(item deliveryStatusCount, pending *int64, sent *int64, fai
 	}
 }
 
-func resolveOutboxStatus(pending int64, sent int64, failed int64) domain.OutboxStatus {
+func resolveOutboxStatus(pending, sent, failed int64) domain.OutboxStatus {
 	switch {
 	case pending > 0:
 		return domain.OutboxStatusPending

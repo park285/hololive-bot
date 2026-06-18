@@ -460,6 +460,7 @@ func TestMergeNormalizedAlarmStateHandlesNilAndTimestampPriority(t *testing.T) {
 	require.Same(t, existing, mergeNormalizedAlarmState(existing, nil))
 
 	merged := mergeNormalizedAlarmState(existing, next)
+	require.NotNil(t, merged)
 
 	require.Equal(t, "merge-helper-updated", merged.ContentID)
 	require.Equal(t, "UC_NEXT", merged.ChannelID)

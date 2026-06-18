@@ -31,6 +31,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -171,12 +172,24 @@ func TestGetLatestStats_FallsBackToHistoryWhenSnapshotTableMissing(t *testing.T)
 					scanFn: func(dest ...any) error {
 						timestamp := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 						memberName := "fallback-member"
-						*dest[0].(*time.Time) = timestamp
-						*dest[1].(*string) = "UC3"
-						*dest[2].(**string) = &memberName
-						*dest[3].(*uint64) = 999_999
-						*dest[4].(*uint64) = 77
-						*dest[5].(*uint64) = 8_888_888
+						timestampDest, ok := dest[0].(*time.Time)
+						require.True(t, ok)
+						channelDest, ok := dest[1].(*string)
+						require.True(t, ok)
+						memberDest, ok := dest[2].(**string)
+						require.True(t, ok)
+						subscriberDest, ok := dest[3].(*uint64)
+						require.True(t, ok)
+						videoDest, ok := dest[4].(*uint64)
+						require.True(t, ok)
+						viewDest, ok := dest[5].(*uint64)
+						require.True(t, ok)
+						*timestampDest = timestamp
+						*channelDest = "UC3"
+						*memberDest = &memberName
+						*subscriberDest = 999_999
+						*videoDest = 77
+						*viewDest = 8_888_888
 						return nil
 					},
 				}

@@ -174,26 +174,21 @@ func TestMajorEvent_SetEventDatesFromParsed(t *testing.T) {
 			event := &MajorEvent{EventDates: tt.eventDates}
 			event.SetEventDatesFromParsed()
 
-			if tt.expectedStart == nil {
-				if event.EventStartDate != nil {
-					t.Errorf("expected nil start date, got %v", event.EventStartDate)
-				}
-			} else {
-				if event.EventStartDate == nil || !event.EventStartDate.Equal(*tt.expectedStart) {
-					t.Errorf("expected start %v, got %v", tt.expectedStart, event.EventStartDate)
-				}
-			}
-
-			if tt.expectedEnd == nil {
-				if event.EventEndDate != nil {
-					t.Errorf("expected nil end date, got %v", event.EventEndDate)
-				}
-			} else {
-				if event.EventEndDate == nil || !event.EventEndDate.Equal(*tt.expectedEnd) {
-					t.Errorf("expected end %v, got %v", tt.expectedEnd, event.EventEndDate)
-				}
-			}
+			assertMajorEventDate(t, "start", event.EventStartDate, tt.expectedStart)
+			assertMajorEventDate(t, "end", event.EventEndDate, tt.expectedEnd)
 		})
+	}
+}
+
+func assertMajorEventDate(t *testing.T, name string, got, want *time.Time) {
+	t.Helper()
+	switch {
+	case want == nil && got != nil:
+		t.Errorf("expected nil %s date, got %v", name, got)
+	case want != nil && got == nil:
+		t.Errorf("expected %s %v, got nil", name, want)
+	case want != nil && !got.Equal(*want):
+		t.Errorf("expected %s %v, got %v", name, want, got)
 	}
 }
 

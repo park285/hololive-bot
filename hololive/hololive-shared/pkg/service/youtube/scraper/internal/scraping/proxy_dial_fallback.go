@@ -2,6 +2,7 @@ package scraping
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 
@@ -34,7 +35,7 @@ func startSOCKS5Dial(ctx context.Context, dialer proxy.Dialer, network, addr str
 func runSOCKS5Dial(ctx context.Context, dialer proxy.Dialer, network, addr string, done chan<- dialResult) {
 	conn, err := dialer.Dial(network, addr)
 	if ctx.Err() != nil {
-		closeConn(conn)
+		closeConnQuietly(conn)
 		return
 	}
 	sendSOCKS5DialResult(done, dialResult{conn: conn, err: err})
@@ -44,14 +45,14 @@ func sendSOCKS5DialResult(done chan<- dialResult, result dialResult) {
 	select {
 	case done <- result:
 	default:
-		closeConn(result.conn)
+		closeConnQuietly(result.conn)
 	}
 }
 
 func finishCanceledSOCKS5Dial(ctx context.Context, done <-chan dialResult) (net.Conn, error) {
 	select {
 	case result := <-done:
-		closeConn(result.conn)
+		closeConnQuietly(result.conn)
 	default:
 	}
 	return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
@@ -62,14 +63,23 @@ func finishSOCKS5DialResult(ctx context.Context, result dialResult) (net.Conn, e
 		return nil, fmt.Errorf("proxy dial failed: %w", result.err)
 	}
 	if ctx.Err() != nil {
-		closeConn(result.conn)
+		if closeErr := closeConn(result.conn); closeErr != nil {
+			return nil, errors.Join(fmt.Errorf("proxy dial canceled: %w", ctx.Err()), fmt.Errorf("close proxy connection: %w", closeErr))
+		}
 		return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
 	}
 	return result.conn, nil
 }
 
-func closeConn(conn net.Conn) {
+func closeConn(conn net.Conn) error {
 	if conn != nil {
-		_ = conn.Close()
+		return conn.Close()
+	}
+	return nil
+}
+
+func closeConnQuietly(conn net.Conn) {
+	if err := closeConn(conn); err != nil {
+		return
 	}
 }

@@ -49,7 +49,7 @@ func TestProcessOnce_RetriesPersistedDeliveriesWithoutNewOutboxClaim(t *testing.
 	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -108,7 +108,7 @@ func TestProcessOnce_ReconcilesOutboxStatusFromPersistedDeliveryRows(t *testing.
 	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -208,7 +208,7 @@ func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherR
 			require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 			firstSender := &testSender{failRoom: map[string]bool{}}
-			firstDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			firstDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,
@@ -252,7 +252,7 @@ func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherR
 			assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, sentState.DeliveryStatus)
 
 			secondSender := &testSender{failRoom: map[string]bool{}}
-			secondDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			secondDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,
@@ -356,10 +356,10 @@ func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactly
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			db := newRecoveryInputFixtureDB(t, "restart_recovery_selective_"+tc.name)
-			fixture := seedCommunityShortsRecoveryInputFixture(t, db, tc.spec)
+			fixture := seedCommunityShortsRecoveryInputFixture(t, db, &tc.spec)
 
 			firstSender := &testSender{failRoom: map[string]bool{}}
-			firstDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			firstDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,
@@ -379,7 +379,7 @@ func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactly
 			assert.NotContains(t, firstMessages[0], tc.sentMarker)
 
 			secondSender := &testSender{failRoom: map[string]bool{}}
-			secondDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			secondDispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,

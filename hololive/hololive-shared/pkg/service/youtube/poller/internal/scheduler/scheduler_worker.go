@@ -50,12 +50,22 @@ func nextWorkerJob(ctx context.Context, jobCh <-chan *Job, stopCh <-chan struct{
 	case <-stopCh:
 		return nil, false
 	case job, ok := <-jobCh:
-		return job, ok
+		return validWorkerJob(job, ok)
 	}
+}
+
+func validWorkerJob(job *Job, ok bool) (*Job, bool) {
+	if !ok || job == nil {
+		return nil, false
+	}
+	return job, true
 }
 
 // executeJob: 작업 실행
 func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
+	if job == nil {
+		return
+	}
 	decision := s.claimJobRun(ctx, job)
 	if decision.err != nil {
 		s.rescheduleJobAfterPoll(job, decision.err)
@@ -137,7 +147,9 @@ func (s *Scheduler) releaseJobReservationIfNotTerminal(ctx context.Context, job 
 	if reservation == nil || *terminal {
 		return
 	}
-	_ = reservation.Release(context.WithoutCancel(ctx))
+	if err := reservation.Release(context.WithoutCancel(ctx)); err != nil {
+		s.logger.Warn("Failed to release poll budget reservation", slog.Any("error", err))
+	}
 	*terminal = true
 	s.metrics.AddBudgetInflight(job.budgetProfile, -1)
 }
@@ -262,7 +274,7 @@ func (s *Scheduler) reserveJobBudget(ctx context.Context, job *Job) (polling.Bud
 		JobKey:     job.key,
 	}
 	start := time.Now()
-	reservation, decision, err := s.budgetLimiter.TryReserve(reserveCtx, budgetJob, job.budgetProfile, s.jobClaimLeaseTTL())
+	reservation, decision, err := s.budgetLimiter.TryReserve(reserveCtx, &budgetJob, job.budgetProfile, s.jobClaimLeaseTTL())
 	elapsed := time.Since(start)
 	s.metrics.ObserveBudgetReserveWait(job.budgetProfile, elapsed)
 	if err != nil {

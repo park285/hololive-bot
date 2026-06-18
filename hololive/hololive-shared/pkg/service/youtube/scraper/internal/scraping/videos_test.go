@@ -49,9 +49,7 @@ func TestParseVideosFromInitialData_Normal(t *testing.T) {
 	data := gjson.ParseBytes(jsonBytes)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"UC1DCedRgGHBdm81E1llLhOQ",
+	videos, err := parseVideosFromInitialData(&data, "UC1DCedRgGHBdm81E1llLhOQ",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -72,9 +70,7 @@ func TestParseVideosFromInitialData_Empty(t *testing.T) {
 	data := gjson.ParseBytes(jsonBytes)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"test-channel",
+	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -88,9 +84,7 @@ func TestParseVideosFromInitialData_NoTab(t *testing.T) {
 	data := gjson.Parse(jsonStr)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"test-channel",
+	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -104,9 +98,7 @@ func TestParseVideosFromInitialData_NoTabsStructure(t *testing.T) {
 	data := gjson.Parse(jsonStr)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"test-channel",
+	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -120,9 +112,7 @@ func TestParseVideosFromInitialData_PartialInitialData(t *testing.T) {
 	data := gjson.Parse(jsonStr)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"test-channel",
+	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -155,9 +145,7 @@ func TestParseVideosFromInitialData_FallbackExtractVideoRenderer(t *testing.T) {
 	data := gjson.Parse(jsonStr)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"test-channel",
+	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -175,9 +163,7 @@ func TestParseVideosFromInitialData_EndpointDetection(t *testing.T) {
 	data := gjson.Parse(jsonStr)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"test-channel",
+	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -192,9 +178,7 @@ func TestParseVideosFromInitialData_ChannelNotExist(t *testing.T) {
 	data := gjson.Parse(jsonStr)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"test-channel",
+	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -209,9 +193,7 @@ func TestParseVideosFromInitialData_ChannelTerminated(t *testing.T) {
 	data := gjson.Parse(jsonStr)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"test-channel",
+	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -229,9 +211,7 @@ func TestParseVideosFromInitialData_ChannelNotFoundInSecondErrorAlert(t *testing
 	data := gjson.Parse(jsonStr)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(
-		data,
-		"test-channel",
+	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
 	)
@@ -247,7 +227,7 @@ func TestCheckAlerts_ExtractsRunsText(t *testing.T) {
 	]}`
 	data := gjson.Parse(jsonStr)
 
-	err := checkAlerts(data)
+	err := checkAlerts(&data)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrChannelNotFound))
 	assert.Contains(t, err.Error(), "has been terminated")
@@ -371,7 +351,7 @@ func TestParseVideosFromInitialData_LockupViewModel(t *testing.T) {
 	}`)
 
 	client := NewClient()
-	videos, err := parseVideosFromInitialData(data, "UC_TEST", 10, client.parseVideoRenderer)
+	videos, err := parseVideosFromInitialData(&data, "UC_TEST", 10, client.parseVideoRenderer)
 	require.NoError(t, err)
 	require.Len(t, videos, 1)
 	assert.Equal(t, "lockup001", videos[0].VideoID)

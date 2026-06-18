@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -60,7 +61,7 @@ func (c *admissionNonDeferrableClaimStub) Release(context.Context) (bool, error)
 }
 
 func TestSchedulerRescheduleJobAfterPoll_AdmissionDeferredDoesNotIncrementFailures(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{RequestInterval: 0, ErrorBackoffMin: time.Second})
+	scheduler := NewScheduler(&SchedulerConfig{RequestInterval: 0, ErrorBackoffMin: time.Second})
 	poller := admissionTestPoller{name: "community"}
 	scheduler.Register("channel-1", poller, PriorityNormal, time.Minute)
 	job := scheduler.jobMap["channel-1:community"]
@@ -86,7 +87,7 @@ func TestSchedulerRescheduleJobAfterPoll_AdmissionDeferredDoesNotIncrementFailur
 }
 
 func TestSchedulerLogPollResult_AdmissionDeferredStatus(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{RequestInterval: 0})
 	job := &Job{ChannelID: "channel-1", Poller: admissionTestPoller{name: "community"}}
 	pollErr := admission.NewDeferredError("test", "bucket", "local_interval", time.Second, nil)
 
@@ -96,15 +97,28 @@ func TestSchedulerLogPollResult_AdmissionDeferredStatus(t *testing.T) {
 	}
 }
 
+func TestNextWorkerJobSkipsNilJob(t *testing.T) {
+	jobCh := make(chan *Job, 1)
+	jobCh <- nil
+
+	job, ok := nextWorkerJob(context.Background(), jobCh, nil)
+	if ok {
+		t.Fatalf("ok = true, want false")
+	}
+	if job != nil {
+		t.Fatalf("job = %#v, want nil", job)
+	}
+}
+
 func TestSchedulerFinishJobClaim_AdmissionDeferredUsesDeferrableClaim(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{RequestInterval: 0, ErrorBackoffMin: time.Second})
+	scheduler := NewScheduler(&SchedulerConfig{RequestInterval: 0, ErrorBackoffMin: time.Second})
 	job := &Job{ChannelID: "channel-1", Poller: admissionTestPoller{name: "community"}, Interval: time.Minute}
 	claim := &admissionDeferredClaimStub{}
 	delay := 4 * time.Second
 	pollErr := admission.NewDeferredError("test", "bucket", "local_interval", delay, nil)
 
 	err := scheduler.finishJobClaim(context.Background(), job, claim, pollErr)
-	if err != pollErr {
+	if !errors.Is(err, pollErr) {
 		t.Fatalf("finishJobClaim err = %v, want original deferred err", err)
 	}
 	if !claim.deferCalled {
@@ -122,13 +136,13 @@ func TestSchedulerFinishJobClaim_AdmissionDeferredUsesDeferrableClaim(t *testing
 }
 
 func TestSchedulerFinishJobClaim_AdmissionDeferredFallsBackToRelease(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{RequestInterval: 0, ErrorBackoffMin: time.Second})
+	scheduler := NewScheduler(&SchedulerConfig{RequestInterval: 0, ErrorBackoffMin: time.Second})
 	job := &Job{ChannelID: "channel-1", Poller: admissionTestPoller{name: "community"}, Interval: time.Minute}
 	claim := &admissionNonDeferrableClaimStub{}
 	pollErr := admission.NewDeferredError("test", "bucket", "local_interval", time.Second, nil)
 
 	err := scheduler.finishJobClaim(context.Background(), job, claim, pollErr)
-	if err != pollErr {
+	if !errors.Is(err, pollErr) {
 		t.Fatalf("finishJobClaim err = %v, want original deferred err", err)
 	}
 	if !claim.releaseCalled {

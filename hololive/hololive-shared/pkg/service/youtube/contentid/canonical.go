@@ -39,6 +39,8 @@ func ForOutboxKind(kind domain.OutboxKind, resourceID string) (string, error) {
 		return ForShort(resourceID)
 	case domain.OutboxKindCommunityPost:
 		return ForCommunity(resourceID)
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return "", fmt.Errorf("canonical youtube content id: unsupported outbox kind %s", kind)
 	default:
 		return "", fmt.Errorf("canonical youtube content id: unsupported outbox kind %s", kind)
 	}

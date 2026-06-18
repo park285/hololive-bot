@@ -48,11 +48,18 @@ type ViewerSampleCleaner struct {
 }
 
 func NewViewerSampleCleaner(db any, config ViewerSampleCleanerConfig) *ViewerSampleCleaner {
-	querier, _ := db.(dbx.Querier)
 	return &ViewerSampleCleaner{
-		db:     querier,
+		db:     asViewerSampleQuerier(db),
 		config: config,
 	}
+}
+
+func asViewerSampleQuerier(db any) dbx.Querier {
+	querier, ok := db.(dbx.Querier)
+	if !ok {
+		return nil
+	}
+	return querier
 }
 
 func (c *ViewerSampleCleaner) Cleanup(ctx context.Context) (int64, error) {

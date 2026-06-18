@@ -94,7 +94,7 @@ func TestParseUpcomingEventsFromInitialData(t *testing.T) {
 		}
 	}`)
 
-	events, err := parseUpcomingEventsFromInitialData(data)
+	events, err := parseUpcomingEventsFromInitialData(&data)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 
@@ -116,7 +116,7 @@ func TestParseUpcomingEventsFromInitialData_Alert(t *testing.T) {
 		}]
 	}`)
 
-	events, err := parseUpcomingEventsFromInitialData(data)
+	events, err := parseUpcomingEventsFromInitialData(&data)
 	require.Error(t, err)
 	assert.Nil(t, events)
 	assert.True(t, errors.Is(err, ErrChannelNotFound))

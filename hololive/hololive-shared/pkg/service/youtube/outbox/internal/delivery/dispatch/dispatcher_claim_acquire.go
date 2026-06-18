@@ -17,8 +17,8 @@ import (
 
 func (d *ClaimManager) tryClaimDelivery(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 ) (deliveryClaimDecision, *dispatchstate.ClaimToken, error) {
 	if shouldSkipDeliveryClaim(d, outbox) {
 		return deliveryClaimDecisionProceed, nil, nil
@@ -56,28 +56,49 @@ func (d *ClaimManager) tryClaimDelivery(
 	return d.acquireAlarmStateClaim(ctx, repository, row, outbox, postID, state, claimAt)
 }
 
-func shouldSkipDeliveryClaim(d *ClaimManager, outbox domain.YouTubeNotificationOutbox) bool {
+func shouldSkipDeliveryClaim(d *ClaimManager, outbox *domain.YouTubeNotificationOutbox) bool {
+	if outbox == nil {
+		return true
+	}
 	return d == nil || deliverysql.IsNilDB(d.db) || !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind)
 }
 
-func resolveDeliveryClaimTime(row domain.YouTubeNotificationDelivery, outbox domain.YouTubeNotificationOutbox) time.Time {
-	switch {
-	case !outbox.NextAttemptAt.IsZero():
-		return normalizeDeliveryClaimTime(outbox.NextAttemptAt)
-	case !row.CreatedAt.IsZero():
-		return normalizeDeliveryClaimTime(row.CreatedAt)
-	case !outbox.CreatedAt.IsZero():
-		return normalizeDeliveryClaimTime(outbox.CreatedAt)
-	default:
-		return normalizeDeliveryClaimTime(time.Now())
+func resolveDeliveryClaimTime(row *domain.YouTubeNotificationDelivery, outbox *domain.YouTubeNotificationOutbox) time.Time {
+	for _, candidate := range deliveryClaimTimeCandidates(row, outbox) {
+		if !candidate.IsZero() {
+			return normalizeDeliveryClaimTime(candidate)
+		}
 	}
+	return normalizeDeliveryClaimTime(time.Now())
+}
+
+func deliveryClaimTimeCandidates(row *domain.YouTubeNotificationDelivery, outbox *domain.YouTubeNotificationOutbox) []time.Time {
+	if outbox == nil {
+		return []time.Time{time.Now()}
+	}
+	return []time.Time{
+		outbox.NextAttemptAt,
+		deliveryRowCreatedAt(row),
+		outbox.CreatedAt,
+		time.Now(),
+	}
+}
+
+func deliveryRowCreatedAt(row *domain.YouTubeNotificationDelivery) time.Time {
+	if row == nil {
+		return time.Time{}
+	}
+	return row.CreatedAt
 }
 
 func normalizeDeliveryClaimTime(value time.Time) time.Time {
 	return yttimestamp.Normalize(value).Truncate(time.Microsecond)
 }
 
-func deliveryClaimIdentityForOutbox(outbox domain.YouTubeNotificationOutbox) (string, error) {
+func deliveryClaimIdentityForOutbox(outbox *domain.YouTubeNotificationOutbox) (string, error) {
+	if outbox == nil {
+		return "", nil
+	}
 	if !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind) {
 		return "", nil
 	}
@@ -93,7 +114,7 @@ func deliveryClaimIdentityForOutbox(outbox domain.YouTubeNotificationOutbox) (st
 func (d *ClaimManager) isCommunityShortsDeliveryAlreadyCompleted(
 	ctx context.Context,
 	repository *trackingrepo.PgxRepository,
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 ) (bool, error) {
 	if communityShortsAlarmStateMarkedSent(state) {
@@ -118,8 +139,8 @@ func communityShortsTrackingRowMarkedSent(row *domain.YouTubeContentAlarmTrackin
 func (d *ClaimManager) buildAlarmStateClaimRecord(
 	ctx context.Context,
 	repository *trackingrepo.PgxRepository,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	postID string,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	claimAt time.Time,
@@ -153,11 +174,14 @@ func (d *ClaimManager) buildAlarmStateClaimRecord(
 func (d *ClaimManager) refreshStaleAlarmStateClaim(
 	ctx context.Context,
 	repository *trackingrepo.PgxRepository,
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 	postID string,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	claimAt time.Time,
 ) (*domain.YouTubeCommunityShortsAlarmState, deliveryClaimDecision, bool, error) {
+	if state == nil {
+		return nil, deliveryClaimDecisionProceed, false, nil
+	}
 	if !isStaleAlarmStateClaim(state, claimAt, d.deliveryClaimTimeout()) {
 		return state, deliveryClaimDecisionProceed, false, nil
 	}
@@ -191,8 +215,8 @@ func isStaleAlarmStateClaim(
 func (d *ClaimManager) acquireAlarmStateClaim(
 	ctx context.Context,
 	repository *trackingrepo.PgxRepository,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	postID string,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	claimAt time.Time,

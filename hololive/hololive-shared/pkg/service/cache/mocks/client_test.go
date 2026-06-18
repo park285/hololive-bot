@@ -15,7 +15,9 @@ func TestZeroValueClientIsStrict(t *testing.T) {
 		}
 	}()
 
-	_, _ = client.Exists(context.Background(), "rooms")
+	if _, err := client.Exists(context.Background(), "rooms"); err != nil {
+		t.Fatalf("Exists() error = %v", err)
+	}
 }
 
 func TestClientCloseDefaultsToNoopWhenNotStrict(t *testing.T) {
@@ -43,7 +45,9 @@ func TestClientClosePanicsWhenStrict(t *testing.T) {
 		}
 	}()
 
-	_ = client.Close()
+	if err := client.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
 }
 
 func TestClientReadMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
@@ -125,7 +129,9 @@ func TestClientReadMethodsPanicWhenStrict(t *testing.T) {
 		}
 	}()
 
-	_, _ = client.SMembers(context.Background(), "rooms")
+	if _, err := client.SMembers(context.Background(), "rooms"); err != nil {
+		t.Fatalf("SMembers() error = %v", err)
+	}
 }
 
 func TestNewLenientClientDoesNotPanicOnUnsetExists(t *testing.T) {

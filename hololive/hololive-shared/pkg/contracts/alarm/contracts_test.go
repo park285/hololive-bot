@@ -282,7 +282,16 @@ func TestAlarmQueueEnvelopeVersionZeroParsesAtDomainLayer(t *testing.T) {
 func readAlarmContractFixture(t *testing.T, name string) []byte {
 	t.Helper()
 
-	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	var raw []byte
+	var err error
+	switch name {
+	case "envelope_unsupported_version.json":
+		raw, err = os.ReadFile(filepath.Join("testdata", "envelope_unsupported_version.json"))
+	case "envelope_v1.json":
+		raw, err = os.ReadFile(filepath.Join("testdata", "envelope_v1.json"))
+	default:
+		t.Fatalf("fixture %s is not allowed", name)
+	}
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", name, err)
 	}

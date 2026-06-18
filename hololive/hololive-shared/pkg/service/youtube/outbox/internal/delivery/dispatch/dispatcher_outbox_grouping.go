@@ -53,7 +53,7 @@ type subscriberLookupResult struct {
 	ok        bool
 }
 
-func roomsForItem(roomsByChannel map[string]channelAlarmRoomTargets, item domain.YouTubeNotificationOutbox) (map[string]bool, bool) {
+func roomsForItem(roomsByChannel map[string]channelAlarmRoomTargets, item *domain.YouTubeNotificationOutbox) (map[string]bool, bool) {
 	alarmTargets, ok := roomsByChannel[item.ChannelID]
 	if !ok {
 		return nil, false
@@ -67,14 +67,14 @@ func roomsForItem(roomsByChannel map[string]channelAlarmRoomTargets, item domain
 	return rooms, true
 }
 
-func outboxItemGroupKey(roomID string, item domain.YouTubeNotificationOutbox) string {
+func outboxItemGroupKey(roomID string, item *domain.YouTubeNotificationOutbox) string {
 	return fmt.Sprintf("%s|%s|%s", roomID, item.ChannelID, item.Kind)
 }
 
-func appendOutboxItemGroup(groups []*outboxItemGroup, index map[string]int, roomID string, item domain.YouTubeNotificationOutbox) []*outboxItemGroup {
+func appendOutboxItemGroup(groups []*outboxItemGroup, index map[string]int, roomID string, item *domain.YouTubeNotificationOutbox) []*outboxItemGroup {
 	key := outboxItemGroupKey(roomID, item)
 	if idx, exists := index[key]; exists {
-		groups[idx].items = append(groups[idx].items, item)
+		groups[idx].items = append(groups[idx].items, *item)
 		return groups
 	}
 
@@ -82,7 +82,7 @@ func appendOutboxItemGroup(groups []*outboxItemGroup, index map[string]int, room
 		roomID:    roomID,
 		channelID: item.ChannelID,
 		kind:      item.Kind,
-		items:     []domain.YouTubeNotificationOutbox{item},
+		items:     []domain.YouTubeNotificationOutbox{*item},
 	})
 	index[key] = len(groups) - 1
 	return groups
@@ -98,13 +98,13 @@ func (g *OutboxGrouper) groupOutboxItems(items []domain.YouTubeNotificationOutbo
 
 	for i := range items {
 		item := &items[i]
-		rooms, ok := roomsForItem(roomsByChannel, *item)
+		rooms, ok := roomsForItem(roomsByChannel, item)
 		if !ok || len(rooms) == 0 {
 			continue
 		}
 
 		for roomID := range rooms {
-			groups = appendOutboxItemGroup(groups, index, roomID, *item)
+			groups = appendOutboxItemGroup(groups, index, roomID, item)
 		}
 	}
 
@@ -156,7 +156,9 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 			return nil
 		})
 	}
-	_ = eg.Wait()
+	if err := eg.Wait(); err != nil {
+		g.logger.Warn("Subscriber room lookup worker failed", slog.Any("error", err))
+	}
 	return results
 }
 

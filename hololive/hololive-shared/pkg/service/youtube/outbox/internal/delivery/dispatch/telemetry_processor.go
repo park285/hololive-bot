@@ -13,7 +13,7 @@ import (
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
-func buildDeliveryAuditLogAttrsWithClassification(row domain.YouTubeNotificationDeliveryTelemetry, classification PostLatencyClassificationResult) []any {
+func buildDeliveryAuditLogAttrsWithClassification(row *domain.YouTubeNotificationDeliveryTelemetry, classification *PostLatencyClassificationResult) []any {
 	attrs := []any{
 		slog.Int64(logschema.FieldDeliveryID, row.DeliveryID),
 		slog.Int64(logschema.FieldOutboxID, row.OutboxID),
@@ -38,7 +38,7 @@ func buildDeliveryAuditLogAttrsWithClassification(row domain.YouTubeNotification
 	return attrs
 }
 
-func appendDeliveryObservationLogAttrs(attrs []any, row domain.YouTubeNotificationDeliveryTelemetry) []any {
+func appendDeliveryObservationLogAttrs(attrs []any, row *domain.YouTubeNotificationDeliveryTelemetry) []any {
 	if row.DetectedAt != nil {
 		attrs = append(attrs, slog.Time(logschema.FieldDetectedAt, row.DetectedAt.UTC()))
 	}
@@ -64,20 +64,22 @@ type TelemetryProcessor struct {
 	config    Config
 }
 
-func newTelemetryProcessor(telemetry *DeliveryTelemetryRepository, logger *slog.Logger, config Config) *TelemetryProcessor {
+func newTelemetryProcessor(telemetryRepo *DeliveryTelemetryRepository, logger *slog.Logger, config *Config) *TelemetryProcessor {
 	return &TelemetryProcessor{
-		telemetry: telemetry,
+		telemetry: telemetryRepo,
 		logger:    logger,
-		config:    config,
+		config:    *config,
 	}
 }
 
 func (tp *TelemetryProcessor) telemetryLoop(ctx context.Context) {
 	tp.processDeliveryTelemetry(ctx)
-	_ = lifecycle.RunTickerLoop(ctx, tp.config.TelemetryPollInterval, func(ctx context.Context) error {
+	if err := lifecycle.RunTickerLoop(ctx, tp.config.TelemetryPollInterval, func(ctx context.Context) error {
 		tp.processDeliveryTelemetry(ctx)
 		return nil
-	})
+	}); err != nil {
+		tp.logger.Warn("Delivery telemetry loop stopped with error", slog.Any("error", err))
+	}
 }
 
 func (tp *TelemetryProcessor) cleanup(ctx context.Context) {
@@ -152,11 +154,12 @@ func (tp *TelemetryProcessor) loadDeliveryTelemetryClassificationsForRows(
 func (tp *TelemetryProcessor) emitDeliveryTelemetryRows(
 	rows []domain.YouTubeNotificationDeliveryTelemetry,
 	classificationsByOutboxID map[int64]PostLatencyClassificationResult,
-) ([]int64, []int64) {
-	loggedIDs := make([]int64, 0, len(rows))
-	failedIDs := make([]int64, 0)
+) (loggedIDs, failedIDs []int64) {
+	loggedIDs = make([]int64, 0, len(rows))
+	failedIDs = make([]int64, 0)
 	for i := range rows {
-		if err := tp.emitDeliveryTelemetry(rows[i], classificationsByOutboxID[rows[i].OutboxID]); err != nil {
+		classification := classificationsByOutboxID[rows[i].OutboxID]
+		if err := tp.emitDeliveryTelemetry(&rows[i], &classification); err != nil {
 			failedIDs = append(failedIDs, rows[i].ID)
 			continue
 		}
@@ -198,13 +201,13 @@ func (tp *TelemetryProcessor) loadDeliveryTelemetryLatencyClassifications(
 }
 
 func (tp *TelemetryProcessor) emitDeliveryTelemetry(
-	row domain.YouTubeNotificationDeliveryTelemetry,
-	classification PostLatencyClassificationResult,
+	row *domain.YouTubeNotificationDeliveryTelemetry,
+	classification *PostLatencyClassificationResult,
 ) error {
 	if strings.TrimSpace(row.RoomID) == "" {
 		return fmt.Errorf("delivery telemetry room id is empty")
 	}
-	telemetry.ApplyTelemetryPostID(&row)
+	telemetry.ApplyTelemetryPostID(row)
 
 	attrs := buildDeliveryAuditLogAttrsWithClassification(row, classification)
 	attrs = append(attrs, slog.String(logschema.FieldTelemetrySource, logschema.TelemetrySourcePersistentBuffer))

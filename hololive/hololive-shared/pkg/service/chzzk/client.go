@@ -91,7 +91,10 @@ func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Cl
 	}
 }
 
-func NewClientWithConfig(cfg ClientConfig) *Client {
+func NewClientWithConfig(cfg *ClientConfig) *Client {
+	if cfg == nil {
+		cfg = &ClientConfig{}
+	}
 	d := config.DefaultChzzkOperationalConfig()
 	mlps := cfg.MaxLivesPageSize
 	if mlps == 0 {

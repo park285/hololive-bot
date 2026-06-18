@@ -132,7 +132,12 @@ func (db *pollerBatchTestDB) queryOne(dest any, conds ...any) *pollerBatchTestDB
 	query := "SELECT " + next.selectColumns(table) + " FROM " + table
 	args := next.args
 	if len(conds) > 0 {
-		query += " WHERE " + conds[0].(string)
+		condition, ok := conds[0].(string)
+		if !ok {
+			next.Error = fmt.Errorf("first condition has type %T, want string", conds[0])
+			return next
+		}
+		query += " WHERE " + condition
 		args = append([]any(nil), conds[1:]...)
 	} else if strings.TrimSpace(next.where) != "" {
 		query += " WHERE " + next.where
@@ -514,16 +519,11 @@ func normalizePollerTestTimeValue(value reflect.Value) {
 		return
 	}
 	if value.Kind() == reflect.Pointer {
-		if value.IsNil() {
-			return
-		}
-		normalizePollerTestTimeValue(value.Elem())
+		normalizePollerTestTimePointer(value)
 		return
 	}
 	if value.Kind() == reflect.Slice {
-		for i := 0; i < value.Len(); i++ {
-			normalizePollerTestTimeValue(value.Index(i))
-		}
+		normalizePollerTestTimeSlice(value)
 		return
 	}
 	if value.Kind() != reflect.Struct {
@@ -532,7 +532,11 @@ func normalizePollerTestTimeValue(value reflect.Value) {
 	timeType := reflect.TypeFor[time.Time]()
 	if value.Type() == timeType {
 		if value.CanSet() {
-			value.Set(reflect.ValueOf(value.Interface().(time.Time).UTC()))
+			timestamp, ok := value.Interface().(time.Time)
+			if !ok {
+				return
+			}
+			value.Set(reflect.ValueOf(timestamp.UTC()))
 		}
 		return
 	}
@@ -541,5 +545,18 @@ func normalizePollerTestTimeValue(value reflect.Value) {
 			continue
 		}
 		normalizePollerTestTimeValue(field)
+	}
+}
+
+func normalizePollerTestTimePointer(value reflect.Value) {
+	if value.IsNil() {
+		return
+	}
+	normalizePollerTestTimeValue(value.Elem())
+}
+
+func normalizePollerTestTimeSlice(value reflect.Value) {
+	for i := 0; i < value.Len(); i++ {
+		normalizePollerTestTimeValue(value.Index(i))
 	}
 }

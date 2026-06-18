@@ -54,7 +54,7 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheEmpty(t *testing.T
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
-	requireAlarmRecord(t, db, domain.Alarm{
+	requireAlarmRecord(t, db, &domain.Alarm{
 		RoomID:     "room-db",
 		ChannelID:  "UC_shorts",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
@@ -91,7 +91,7 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheErrors(t *testing.
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
-	requireAlarmRecord(t, db, domain.Alarm{
+	requireAlarmRecord(t, db, &domain.Alarm{
 		RoomID:     "room-db",
 		ChannelID:  "UC_community",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
@@ -187,7 +187,7 @@ func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFal
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
-	requireAlarmRecord(t, db, domain.Alarm{
+	requireAlarmRecord(t, db, &domain.Alarm{
 		RoomID:     "room-shared",
 		ChannelID:  "UC_batch_channel",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts, domain.AlarmTypeCommunity},
@@ -249,7 +249,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
-	requireAlarmRecord(t, db, domain.Alarm{
+	requireAlarmRecord(t, db, &domain.Alarm{
 		RoomID:     "room-original",
 		ChannelID:  "UC_pointer_channel",
 		MemberName: "Original Member",
@@ -359,7 +359,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharesDeadlineBoundQuery(t *tes
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
-	requireAlarmRecord(t, db, domain.Alarm{
+	requireAlarmRecord(t, db, &domain.Alarm{
 		RoomID:     "room-mixed",
 		ChannelID:  "UC_mixed_context",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
@@ -414,7 +414,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharesDeadlineBoundQuery(t *tes
 
 func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 	db := newAlarmTargetLookupTestDB(t)
-	requireAlarmRecord(t, db, domain.Alarm{
+	requireAlarmRecord(t, db, &domain.Alarm{
 		RoomID:     "room-hit",
 		ChannelID:  "UC_metric",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
@@ -441,7 +441,7 @@ func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 
 func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 	db := newAlarmTargetLookupTestDB(t)
-	requireAlarmRecord(t, db, domain.Alarm{
+	requireAlarmRecord(t, db, &domain.Alarm{
 		RoomID:     "room-shared-metric",
 		ChannelID:  "UC_shared_metric",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
@@ -504,7 +504,7 @@ func newAlarmTargetLookupTestDB(t *testing.T) *alarmTargetLookupTestDB {
 	return &alarmTargetLookupTestDB{Pool: dbtest.NewPool(t)}
 }
 
-func requireAlarmRecord(t *testing.T, db *alarmTargetLookupTestDB, alarmRecord domain.Alarm) {
+func requireAlarmRecord(t *testing.T, db *alarmTargetLookupTestDB, alarmRecord *domain.Alarm) {
 	t.Helper()
 
 	alarmTypesValue, err := alarmRecord.AlarmTypes.Value()

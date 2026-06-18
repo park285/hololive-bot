@@ -6,7 +6,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser"
 )
 
-func parseUpcomingEventsFromInitialData(data gjson.Result) ([]*UpcomingEvent, error) {
+func parseUpcomingEventsFromInitialData(data *gjson.Result) ([]*UpcomingEvent, error) {
 	if err := checkAlerts(data); err != nil {
 		return nil, err
 	}

@@ -232,14 +232,20 @@ func loadYouTubeProducerBudgetCleanupLimit(defaultValue int) int {
 	return value
 }
 
-func loadWorkerPoolConfig(profile workerconfig.IrisBotWebhookWorkerProfile) WorkerPoolConfig {
+func loadWorkerPoolConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) WorkerPoolConfig {
+	if profile == nil {
+		return WorkerPoolConfig{}
+	}
 	return WorkerPoolConfig{
 		Workers:   profile.BotPool.Workers,
 		QueueSize: profile.BotPool.QueueSize,
 	}
 }
 
-func loadWebhookConfig(profile workerconfig.IrisBotWebhookWorkerProfile) WebhookConfig {
+func loadWebhookConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) WebhookConfig {
+	if profile == nil {
+		return WebhookConfig{RequireHTTP2: sharedenv.Bool("WEBHOOK_REQUIRE_HTTP2", false)}
+	}
 	return WebhookConfig{
 		WorkerCount:    profile.Receive.Workers,
 		QueueSize:      profile.Receive.QueueSize,

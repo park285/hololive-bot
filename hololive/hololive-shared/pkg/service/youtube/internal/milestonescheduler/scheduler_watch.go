@@ -88,6 +88,12 @@ func (ys *schedulerImpl) watchNearMilestoneMember(
 		return
 	}
 
+	if *channel.SubscriberCount < 0 {
+		ys.logger.Warn("Skipping near-milestone member with negative subscriber count",
+			slog.String("channel", nm.ChannelID),
+			slog.Int("subscribers", *channel.SubscriberCount))
+		return
+	}
 	currentSubs := uint64(*channel.SubscriberCount)
 	milestones := ys.checkMilestones(nm.CurrentSubs, currentSubs)
 	if len(milestones) > 0 {

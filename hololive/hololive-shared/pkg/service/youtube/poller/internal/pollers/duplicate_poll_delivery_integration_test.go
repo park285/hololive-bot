@@ -184,7 +184,7 @@ func newDuplicatePollTestDispatcher(db *pollerBatchTestDB, cache *cachemocks.Cli
 		sender,
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		outbox.Config{
+		&outbox.Config{
 			BatchSize:           10,
 			LockTimeout:         time.Minute,
 			PollInterval:        time.Second,

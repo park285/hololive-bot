@@ -26,7 +26,7 @@ func TestBuildDedupeKeyAllocationBudget(t *testing.T) {
 	input := benchDedupeInput()
 
 	dedupeAllocs := testing.AllocsPerRun(100, func() {
-		if key := BuildDedupeKey(input); key == "" {
+		if key := BuildDedupeKey(&input); key == "" {
 			t.Fatal("BuildDedupeKey returned empty key")
 		}
 	})
@@ -35,7 +35,7 @@ func TestBuildDedupeKeyAllocationBudget(t *testing.T) {
 	}
 
 	eventAllocs := testing.AllocsPerRun(100, func() {
-		if key := BuildEventKey(input); key == "" {
+		if key := BuildEventKey(&input); key == "" {
 			t.Fatal("BuildEventKey returned empty key")
 		}
 	})
@@ -48,7 +48,7 @@ func BenchmarkBuildDedupeKey(b *testing.B) {
 	input := benchDedupeInput()
 	b.ReportAllocs()
 	for b.Loop() {
-		if key := BuildDedupeKey(input); key == "" {
+		if key := BuildDedupeKey(&input); key == "" {
 			b.Fatal("BuildDedupeKey returned empty key")
 		}
 	}
@@ -58,7 +58,7 @@ func BenchmarkBuildEventKey(b *testing.B) {
 	input := benchDedupeInput()
 	b.ReportAllocs()
 	for b.Loop() {
-		if key := BuildEventKey(input); key == "" {
+		if key := BuildEventKey(&input); key == "" {
 			b.Fatal("BuildEventKey returned empty key")
 		}
 	}

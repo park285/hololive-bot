@@ -40,7 +40,7 @@ func TestCollectRoomsByChannel_PerformsTypedLookupsConcurrently(t *testing.T) {
 		}
 	}
 
-	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{})
 	done := make(chan map[string]channelAlarmRoomTargets, 1)
 	go func() {
 		done <- dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
@@ -85,7 +85,7 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheEmpty(t *testing.T) {
 		return nil, nil
 	}
 
-	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{})
 	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback", Kind: domain.OutboxKindNewShort},
 	})
@@ -110,7 +110,7 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheErrors(t *testing.T) {
 		return nil, errors.New("cache unavailable")
 	}
 
-	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{})
 	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback-error", Kind: domain.OutboxKindCommunityPost},
 	})

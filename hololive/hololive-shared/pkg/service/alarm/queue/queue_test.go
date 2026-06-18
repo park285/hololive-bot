@@ -67,10 +67,10 @@ func queueItemsByKeyOrEmpty(t *testing.T, mini *miniredis.Miniredis, key string)
 	return items
 }
 
-func mustMarshalEnvelope(t *testing.T, envelope domain.AlarmQueueEnvelope) string {
+func mustMarshalEnvelope(t *testing.T, envelope *domain.AlarmQueueEnvelope) string {
 	t.Helper()
 
-	raw, err := json.Marshal(envelope)
+	raw, err := json.Marshal(&envelope)
 	require.NoError(t, err)
 	return string(raw)
 }
@@ -78,12 +78,15 @@ func mustMarshalEnvelope(t *testing.T, envelope domain.AlarmQueueEnvelope) strin
 func readAlarmQueueFixture(t *testing.T, name string) []byte {
 	t.Helper()
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "alarm", "testdata", name))
+	if name != "envelope_unsupported_version.json" {
+		t.Fatalf("unsupported alarm queue fixture: %s", name)
+	}
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "alarm", "testdata", "envelope_unsupported_version.json"))
 	require.NoError(t, err)
 	return raw
 }
 
-func unwrapSingleRetryMember(t *testing.T, retrySet map[string]float64) (string, float64) {
+func unwrapSingleRetryMember(t *testing.T, retrySet map[string]float64) (value0 string, result1 float64) {
 	t.Helper()
 
 	require.Len(t, retrySet, 1)
@@ -222,7 +225,7 @@ func TestParseEnvelopeSupportsV0AndV1(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			raw, err := json.Marshal(domain.AlarmQueueEnvelope{
+			raw, err := json.Marshal(&domain.AlarmQueueEnvelope{
 				Notification: domain.AlarmNotification{
 					AlarmType: domain.AlarmTypeLive,
 					RoomID:    "room",
@@ -239,7 +242,7 @@ func TestParseEnvelopeSupportsV0AndV1(t *testing.T) {
 }
 
 func TestParseEnvelopeSkipsUnsupportedVersion(t *testing.T) {
-	raw, err := json.Marshal(domain.AlarmQueueEnvelope{
+	raw, err := json.Marshal(&domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room",
@@ -257,9 +260,11 @@ func TestQueueConsumerRejectsUnsupportedEnvelopeVersion(t *testing.T) {
 	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 	raw := readAlarmQueueFixture(t, "envelope_unsupported_version.json")
 
-	require.NoError(t, cacheClient.DoMulti(context.Background(),
+	results := cacheClient.DoMulti(context.Background(),
 		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(string(raw)).Build(),
-	)[0].Error())
+	)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 1)
 	require.NoError(t, err)
@@ -280,9 +285,11 @@ func TestQueueConsumerMovesInvalidJSONToDLQ(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
-	require.NoError(t, cacheClient.DoMulti(context.Background(),
+	results := cacheClient.DoMulti(context.Background(),
 		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element("{invalid-json}").Build(),
-	)[0].Error())
+	)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 1)
 	require.NoError(t, err)
@@ -298,9 +305,11 @@ func TestConsumerDrainBatch_InvalidPayloadMovesRawPayloadToDLQ(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
-	require.NoError(t, cacheClient.DoMulti(context.Background(),
+	results := cacheClient.DoMulti(context.Background(),
 		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element("{invalid-json}").Build(),
-	)[0].Error())
+	)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 1)
 	require.NoError(t, err)
@@ -357,7 +366,7 @@ func TestQueueConsumerAcceptsLegacyVersionZero(t *testing.T) {
 	cacheClient, _ := newTestCacheClient(t)
 	consumer := NewConsumer(cacheClient, sharedlogging.NewTestLogger(), WithMaxBatch(5))
 
-	raw, err := json.Marshal(domain.AlarmQueueEnvelope{
+	raw, err := json.Marshal(&domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "legacy-room",
@@ -368,9 +377,11 @@ func TestQueueConsumerAcceptsLegacyVersionZero(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, cacheClient.DoMulti(context.Background(),
+	results := cacheClient.DoMulti(context.Background(),
 		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(string(raw)).Build(),
-	)[0].Error())
+	)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 1)
 	require.NoError(t, err)
@@ -523,7 +534,7 @@ func TestConsumerQueueKeyAlignmentUsesCustomNamespaceForRetryAndDLQ(t *testing.T
 	_, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
 	require.Error(t, err)
 
-	activeRaw := mustMarshalEnvelope(t, domain.AlarmQueueEnvelope{
+	activeRaw := mustMarshalEnvelope(t, &domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "active-custom",
@@ -584,7 +595,7 @@ func TestConsumerScheduleRetryStoresDelayedEnvelope(t *testing.T) {
 	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
 	require.NoError(t, err)
 	payload, score := unwrapSingleRetryMember(t, retrySet)
-	require.Equal(t, mustMarshalEnvelope(t, envelope), payload)
+	require.Equal(t, mustMarshalEnvelope(t, &envelope), payload)
 	assert.Equal(t, float64(nextVisibleAt.UnixMilli()), score)
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
 }
@@ -798,7 +809,7 @@ func TestResolveRetryVisibleAt_Errors(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := resolveRetryVisibleAt(tc.envelope, now)
+			_, err := resolveRetryVisibleAt(&tc.envelope, now)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErr)
 		})
@@ -861,7 +872,7 @@ func TestConsumerDrainBatch_ReturnsDueDelayedRetriesBeforeActiveQueueItems(t *te
 	require.NoError(t, err)
 	require.Len(t, retrySet, 1)
 	payload, _ := unwrapSingleRetryMember(t, retrySet)
-	assert.Equal(t, mustMarshalEnvelope(t, future), payload)
+	assert.Equal(t, mustMarshalEnvelope(t, &future), payload)
 }
 
 func TestConsumerDrainBatch_DoesNotReturnDelayedRetryBeforeNextVisibleAt(t *testing.T) {
@@ -903,7 +914,7 @@ func TestConsumerDrainBatch_DoesNotReturnDelayedRetryBeforeNextVisibleAt(t *test
 	require.NoError(t, err)
 	require.Len(t, retrySet, 1)
 	payload, _ := unwrapSingleRetryMember(t, retrySet)
-	assert.Equal(t, mustMarshalEnvelope(t, future), payload)
+	assert.Equal(t, mustMarshalEnvelope(t, &future), payload)
 }
 
 func TestConsumerMoveToDLQ_PreservesSerializedEnvelope(t *testing.T) {
@@ -931,7 +942,7 @@ func TestConsumerMoveToDLQ_PreservesSerializedEnvelope(t *testing.T) {
 	items, err := mini.List(contractsalarm.DispatchDLQKey)
 	require.NoError(t, err)
 	require.Len(t, items, 1)
-	assert.Equal(t, mustMarshalEnvelope(t, envelope), items[0])
+	assert.Equal(t, mustMarshalEnvelope(t, &envelope), items[0])
 }
 
 func TestConsumerMoveToDLQ_PreservesOriginalLegacyRawPayload(t *testing.T) {
@@ -1091,7 +1102,7 @@ func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T
 	claimKey := "notified:claim:blocked-community"
 	require.NoError(t, mini.Set(claimKey, "1"))
 
-	blockedRaw, err := json.Marshal(domain.AlarmQueueEnvelope{
+	blockedRaw, err := json.Marshal(&domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeCommunity,
 			RoomID:    "room-blocked",

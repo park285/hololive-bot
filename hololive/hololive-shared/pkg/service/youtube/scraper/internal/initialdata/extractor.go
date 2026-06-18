@@ -139,7 +139,7 @@ func scanAnchorCandidates(html, anchor string, collector *ytInitialDataCandidate
 	}
 }
 
-func findNextAnchorCandidate(html, anchor string, searchFrom int) (string, int, bool) {
+func findNextAnchorCandidate(html, anchor string, searchFrom int) (result1 string, result2 int, result3 bool) {
 	idx := strings.Index(html[searchFrom:], anchor)
 	if idx < 0 {
 		return "", len(html), false

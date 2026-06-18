@@ -87,9 +87,12 @@ func WithFetcherEngine(engine FetcherEngine) ClientOption {
 	}
 }
 
-func WithChannelHealthPolicy(policy ChannelHealthPolicy) ClientOption {
+func WithChannelHealthPolicy(policy *ChannelHealthPolicy) ClientOption {
 	return func(c *Client) {
-		c.channelHealthPolicy = policy
+		if policy == nil {
+			return
+		}
+		c.channelHealthPolicy = *policy
 	}
 }
 

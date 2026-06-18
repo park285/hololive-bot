@@ -21,6 +21,7 @@
 package settings
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -100,7 +101,9 @@ func (s *Service) load() {
 		return // 파일이 없으면 기본값 사용함
 	}
 	defer func() {
-		_ = f.Close()
+		if closeErr := f.Close(); closeErr != nil && s.logger != nil {
+			s.logger.Warn("Failed to close settings file", slog.String("error", closeErr.Error()))
+		}
 	}()
 
 	var disk settingsDisk
@@ -111,6 +114,10 @@ func (s *Service) load() {
 		return
 	}
 
+	s.applyDiskSettings(disk)
+}
+
+func (s *Service) applyDiskSettings(disk settingsDisk) {
 	if disk.AlarmAdvanceMinutes != nil && *disk.AlarmAdvanceMinutes > 0 {
 		s.cache.AlarmAdvanceMinutes = *disk.AlarmAdvanceMinutes
 	}
@@ -133,7 +140,7 @@ func (s *Service) applyDiskTargetMinutes(targetMinutes []int) {
 	s.persistHealedSettings()
 }
 
-func (s *Service) logHealedTargetMinutes(from []int, to []int) {
+func (s *Service) logHealedTargetMinutes(from, to []int) {
 	if s.logger != nil {
 		s.logger.Info("Healing persisted target minutes", slog.Any("from", from), slog.Any("to", to))
 	}
@@ -177,13 +184,15 @@ func (s *Service) Update(newSettings Settings) error {
 	return s.persistCache()
 }
 
-func (s *Service) persistCache() error {
+func (s *Service) persistCache() (err error) {
 	f, err := os.Create(s.filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create settings file: %w", err)
 	}
 	defer func() {
-		_ = f.Close()
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to close settings file: %w", closeErr))
+		}
 	}()
 
 	if err := json.NewEncoder(f).Encode(s.cache); err != nil {

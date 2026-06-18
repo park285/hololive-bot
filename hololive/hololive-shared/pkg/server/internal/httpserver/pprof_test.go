@@ -1,6 +1,8 @@
 package httpserver
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -11,22 +13,42 @@ import (
 )
 
 func TestNewPprofServerServesProfile(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	ctx := context.Background()
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 
 	server := NewPprofServer(listener.Addr().String())
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(func() { _ = server.Close() })
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+			t.Errorf("serve pprof: %v", err)
+		}
+	}()
+	t.Cleanup(func() {
+		if err := server.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+			t.Errorf("close pprof server: %v", err)
+		}
+	})
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	url := "http://" + listener.Addr().String() + "/debug/pprof/profile?seconds=1"
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		t.Fatalf("new request %s: %v", url, err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	if resp == nil {
+		t.Fatalf("GET %s returned nil response", url)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -44,7 +66,7 @@ func TestNewPprofServerServesProfile(t *testing.T) {
 func TestNewRuntimeHTTPServersPprofGate(t *testing.T) {
 	certFile, keyFile := writeH3LocalhostCertificate(t)
 
-	withPprof, err := NewRuntimeHTTPServers(config.ServerConfig{
+	withPprof, err := NewRuntimeHTTPServers(&config.ServerConfig{
 		Port:           30001,
 		HTTPTransports: []string{"h3"},
 		H3Addr:         "127.0.0.1:0",
@@ -59,7 +81,7 @@ func TestNewRuntimeHTTPServersPprofGate(t *testing.T) {
 		t.Fatal("Pprof = nil, want server")
 	}
 
-	noPprof, err := NewRuntimeHTTPServers(config.ServerConfig{
+	noPprof, err := NewRuntimeHTTPServers(&config.ServerConfig{
 		Port:           30001,
 		HTTPTransports: []string{"h3"},
 		H3Addr:         "127.0.0.1:0",

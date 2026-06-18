@@ -33,7 +33,10 @@ type ScraperProxyApplyResult struct {
 	SchedulerKnown          *bool  `json:"scheduler_known,omitempty"`
 }
 
-func (r ScraperProxyApplyResult) AsMap() map[string]any {
+func (r *ScraperProxyApplyResult) AsMap() map[string]any {
+	if r == nil {
+		return map[string]any{}
+	}
 	out := map[string]any{
 		"requested": r.Requested,
 	}
@@ -112,7 +115,10 @@ type ScraperProxyRuntimeStateResult struct {
 	AlarmTargetMinutes []int  `json:"alarm_target_minutes,omitempty"`
 }
 
-func (r ScraperProxyRuntimeStateResult) AsMap() map[string]any {
+func (r *ScraperProxyRuntimeStateResult) AsMap() map[string]any {
+	if r == nil {
+		return map[string]any{}
+	}
 	out := map[string]any{
 		"requested": r.Requested,
 	}

@@ -13,7 +13,7 @@ func TestParseVideosFromInitialData_HappyPath(t *testing.T) {
 	raw, err := os.ReadFile("testdata/videos_tab.json")
 	require.NoError(t, err)
 
-	videos, err := ParseVideosFromInitialData(gjson.ParseBytes(raw), "UC_X", 10, testVideoParser)
+	videos, err := ParseVideosFromInitialData(parseGJSONBytesResultPtr(raw), "UC_X", 10, testVideoParser)
 	require.NoError(t, err)
 	require.Len(t, videos, 2)
 	assert.Equal(t, "vid_aaa", videos[0].VideoID)
@@ -26,7 +26,7 @@ func TestParseVideosFromInitialData_MaxResultsLimit(t *testing.T) {
 	raw, err := os.ReadFile("testdata/videos_tab.json")
 	require.NoError(t, err)
 
-	videos, err := ParseVideosFromInitialData(gjson.ParseBytes(raw), "UC_X", 1, testVideoParser)
+	videos, err := ParseVideosFromInitialData(parseGJSONBytesResultPtr(raw), "UC_X", 1, testVideoParser)
 	require.NoError(t, err)
 	require.Len(t, videos, 1)
 	assert.Equal(t, "vid_aaa", videos[0].VideoID)
@@ -34,7 +34,7 @@ func TestParseVideosFromInitialData_MaxResultsLimit(t *testing.T) {
 
 func TestParseVideosFromInitialData_NoVideosTab(t *testing.T) {
 	data := gjson.Parse(`{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Home"}}]}}}`)
-	videos, err := ParseVideosFromInitialData(data, "UC_X", 10, testVideoParser)
+	videos, err := ParseVideosFromInitialData(&data, "UC_X", 10, testVideoParser)
 	require.NoError(t, err)
 	assert.Empty(t, videos)
 	assert.NotNil(t, videos)
@@ -42,13 +42,13 @@ func TestParseVideosFromInitialData_NoVideosTab(t *testing.T) {
 
 func TestParseVideosFromInitialData_GarbageInput(t *testing.T) {
 	data := gjson.Parse(`{"totally":"unexpected"}`)
-	videos, err := ParseVideosFromInitialData(data, "UC_X", 10, testVideoParser)
+	videos, err := ParseVideosFromInitialData(&data, "UC_X", 10, testVideoParser)
 	require.NoError(t, err)
 	assert.Empty(t, videos)
 }
 
 func TestParseVideosFromInitialData_EmptyInput(t *testing.T) {
-	videos, err := ParseVideosFromInitialData(gjson.Parse(`{}`), "UC_X", 10, testVideoParser)
+	videos, err := ParseVideosFromInitialData(parseGJSONResultPtr(`{}`), "UC_X", 10, testVideoParser)
 	require.NoError(t, err)
 	assert.Empty(t, videos)
 }
@@ -59,7 +59,7 @@ func TestParseVideosFromInitialData_EndpointURLDetection(t *testing.T) {
 			{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"ep1","title":{"runs":[{"text":"Endpoint Video"}]}}}}}
 		]}}}}
 	]}}}`)
-	videos, err := ParseVideosFromInitialData(data, "UC_X", 10, testVideoParser)
+	videos, err := ParseVideosFromInitialData(&data, "UC_X", 10, testVideoParser)
 	require.NoError(t, err)
 	require.Len(t, videos, 1)
 	assert.Equal(t, "ep1", videos[0].VideoID)
@@ -69,7 +69,7 @@ func TestParseVideosFromInitialData_ContentsFallback(t *testing.T) {
 	data := gjson.Parse(`{"contents":{"singleColumnBrowseResultsRenderer":{"items":[
 		{"videoRenderer":{"videoId":"fb1","title":{"runs":[{"text":"Fallback"}]}}}
 	]}}}`)
-	videos, err := ParseVideosFromInitialData(data, "UC_X", 10, testVideoParser)
+	videos, err := ParseVideosFromInitialData(&data, "UC_X", 10, testVideoParser)
 	require.NoError(t, err)
 	require.Len(t, videos, 1)
 	assert.Equal(t, "fb1", videos[0].VideoID)
@@ -77,19 +77,19 @@ func TestParseVideosFromInitialData_ContentsFallback(t *testing.T) {
 
 func TestParseVideosFromInitialDataWithoutTabs_ResponseContextOnly(t *testing.T) {
 	data := gjson.Parse(`{"responseContext":{"visitorData":"x"}}`)
-	videos := ParseVideosFromInitialDataWithoutTabs(data, "UC_X", 10, testVideoParser)
+	videos := ParseVideosFromInitialDataWithoutTabs(&data, "UC_X", 10, testVideoParser)
 	assert.Empty(t, videos)
 	assert.NotNil(t, videos)
 }
 
 func TestParseVideosFromInitialDataWithoutTabs_ContentsNoRecovery(t *testing.T) {
 	data := gjson.Parse(`{"contents":{"unknownRenderer":{}}}`)
-	videos := ParseVideosFromInitialDataWithoutTabs(data, "UC_X", 10, testVideoParser)
+	videos := ParseVideosFromInitialDataWithoutTabs(&data, "UC_X", 10, testVideoParser)
 	assert.Empty(t, videos)
 }
 
 func TestParseVideosFromInitialDataWithoutTabs_EmptyInput(t *testing.T) {
-	videos := ParseVideosFromInitialDataWithoutTabs(gjson.Parse(`{}`), "UC_X", 10, testVideoParser)
+	videos := ParseVideosFromInitialDataWithoutTabs(parseGJSONResultPtr(`{}`), "UC_X", 10, testVideoParser)
 	assert.Empty(t, videos)
 }
 
@@ -98,7 +98,7 @@ func TestFindVideosTabContent_MatchByTitle(t *testing.T) {
 		{"tabRenderer":{"title":"Home"}},
 		{"tabRenderer":{"title":"동영상","content":{"marker":"here"}}}
 	]`)
-	content, titles := FindVideosTabContent(tabs)
+	content, titles := FindVideosTabContent(&tabs)
 	assert.True(t, content.Exists())
 	assert.Equal(t, "here", content.Get("marker").String())
 	assert.Equal(t, []string{"Home", "동영상"}, titles)
@@ -106,20 +106,20 @@ func TestFindVideosTabContent_MatchByTitle(t *testing.T) {
 
 func TestFindVideosTabContent_NoMatch(t *testing.T) {
 	tabs := gjson.Parse(`[{"tabRenderer":{"title":"Home"}},{"tabRenderer":{"title":"About"}}]`)
-	content, titles := FindVideosTabContent(tabs)
+	content, titles := FindVideosTabContent(&tabs)
 	assert.False(t, content.Exists())
 	assert.Equal(t, []string{"Home", "About"}, titles)
 }
 
 func TestFindVideosTabContent_EmptyInput(t *testing.T) {
-	content, titles := FindVideosTabContent(gjson.Parse(`[]`))
+	content, titles := FindVideosTabContent(parseGJSONResultPtr(`[]`))
 	assert.False(t, content.Exists())
 	assert.Nil(t, titles)
 }
 
 func TestCollectVideoRenderers_NestedDedup(t *testing.T) {
 	root := gjson.Parse(`{"a":{"videoRenderer":{"videoId":"x"}},"b":[{"videoRenderer":{"videoId":"x"}},{"videoRenderer":{"videoId":"y"}}]}`)
-	results := CollectVideoRenderers(root, 5)
+	results := CollectVideoRenderers(&root, 5)
 	require.Len(t, results, 2)
 	ids := []string{results[0].Get("videoId").String(), results[1].Get("videoId").String()}
 	assert.ElementsMatch(t, []string{"x", "y"}, ids)
@@ -127,24 +127,24 @@ func TestCollectVideoRenderers_NestedDedup(t *testing.T) {
 
 func TestCollectVideoRenderers_SkipsEmptyVideoID(t *testing.T) {
 	root := gjson.Parse(`{"a":{"videoRenderer":{"title":"no id"}}}`)
-	results := CollectVideoRenderers(root, 5)
+	results := CollectVideoRenderers(&root, 5)
 	assert.Empty(t, results)
 }
 
 func TestCollectVideoRenderers_MaxResultsZeroReturnsNil(t *testing.T) {
 	root := gjson.Parse(`{"videoRenderer":{"videoId":"x"}}`)
-	results := CollectVideoRenderers(root, 0)
+	results := CollectVideoRenderers(&root, 0)
 	assert.Nil(t, results)
 }
 
 func TestCollectVideoRenderers_GarbageInput(t *testing.T) {
-	results := CollectVideoRenderers(gjson.Parse(`"a string"`), 5)
+	results := CollectVideoRenderers(parseGJSONResultPtr(`"a string"`), 5)
 	assert.Empty(t, results)
 }
 
 func TestCollectVideoRenderers_RespectsMaxResults(t *testing.T) {
 	root := gjson.Parse(`{"list":[{"videoRenderer":{"videoId":"a"}},{"videoRenderer":{"videoId":"b"}},{"videoRenderer":{"videoId":"c"}}]}`)
-	results := CollectVideoRenderers(root, 2)
+	results := CollectVideoRenderers(&root, 2)
 	require.Len(t, results, 2)
 }
 
@@ -164,7 +164,7 @@ func TestParseLockupVideoViewModel_HappyPath(t *testing.T) {
 			]}]}}
 		}}
 	}`)
-	video := ParseLockupVideoViewModel(lockup, "UC_X")
+	video := ParseLockupVideoViewModel(&lockup, "UC_X")
 	require.NotNil(t, video)
 	assert.Equal(t, "lk1", video.VideoID)
 	assert.Equal(t, "Lockup Title", video.Title)
@@ -181,23 +181,23 @@ func TestParseLockupVideoViewModel_VideoIDFromWatchEndpoint(t *testing.T) {
 		"contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
 		"rendererContext":{"commandContext":{"onTap":{"innertubeCommand":{"watchEndpoint":{"videoId":"watch99"}}}}}
 	}`)
-	video := ParseLockupVideoViewModel(lockup, "UC_X")
+	video := ParseLockupVideoViewModel(&lockup, "UC_X")
 	require.NotNil(t, video)
 	assert.Equal(t, "watch99", video.VideoID)
 }
 
 func TestParseLockupVideoViewModel_WrongContentType(t *testing.T) {
 	lockup := gjson.Parse(`{"contentId":"x","contentType":"LOCKUP_CONTENT_TYPE_PLAYLIST"}`)
-	assert.Nil(t, ParseLockupVideoViewModel(lockup, "UC_X"))
+	assert.Nil(t, ParseLockupVideoViewModel(&lockup, "UC_X"))
 }
 
 func TestParseLockupVideoViewModel_NoVideoID(t *testing.T) {
 	lockup := gjson.Parse(`{"contentType":"LOCKUP_CONTENT_TYPE_VIDEO"}`)
-	assert.Nil(t, ParseLockupVideoViewModel(lockup, "UC_X"))
+	assert.Nil(t, ParseLockupVideoViewModel(&lockup, "UC_X"))
 }
 
 func TestParseLockupVideoViewModel_EmptyInput(t *testing.T) {
-	assert.Nil(t, ParseLockupVideoViewModel(gjson.Parse(`{}`), "UC_X"))
+	assert.Nil(t, ParseLockupVideoViewModel(parseGJSONResultPtr(`{}`), "UC_X"))
 }
 
 func TestParseVideosFromInitialData_LockupViewModelInRichGrid(t *testing.T) {
@@ -210,7 +210,7 @@ func TestParseVideosFromInitialData_LockupViewModelInRichGrid(t *testing.T) {
 			}}}}
 		]}}}}
 	]}}}`)
-	videos, err := ParseVideosFromInitialData(data, "UC_X", 10, testVideoParser)
+	videos, err := ParseVideosFromInitialData(&data, "UC_X", 10, testVideoParser)
 	require.NoError(t, err)
 	require.Len(t, videos, 1)
 	assert.Equal(t, "lk2", videos[0].VideoID)

@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -35,10 +36,24 @@ func repoRootFromHelper(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
-func readRepoFile(t *testing.T, root string, rel string) string {
+func repoFS(root string) fs.FS {
+	return os.DirFS(root)
+}
+
+func cleanRepoRel(t *testing.T, rel string) string {
 	t.Helper()
 
-	data, err := os.ReadFile(filepath.Join(root, rel))
+	cleaned := filepath.ToSlash(filepath.Clean(rel))
+	if cleaned == "." || strings.HasPrefix(cleaned, "../") || filepath.IsAbs(cleaned) {
+		t.Fatalf("invalid repo-relative path %q", rel)
+	}
+	return cleaned
+}
+
+func readRepoFile(t *testing.T, root, rel string) string {
+	t.Helper()
+
+	data, err := fs.ReadFile(repoFS(root), cleanRepoRel(t, rel))
 	if err != nil {
 		t.Fatalf("read %s: %v", rel, err)
 	}
@@ -46,7 +61,7 @@ func readRepoFile(t *testing.T, root string, rel string) string {
 	return string(data)
 }
 
-func assertFileMissingToken(t *testing.T, root string, rel string, token string) {
+func assertFileMissingToken(t *testing.T, root, rel, token string) {
 	t.Helper()
 
 	if strings.Contains(readRepoFile(t, root, rel), token) {
@@ -54,10 +69,10 @@ func assertFileMissingToken(t *testing.T, root string, rel string, token string)
 	}
 }
 
-func assertOptionalFileMissingToken(t *testing.T, root string, rel string, token string) {
+func assertOptionalFileMissingToken(t *testing.T, root, rel, token string) {
 	t.Helper()
 
-	data, err := os.ReadFile(filepath.Join(root, rel))
+	data, err := fs.ReadFile(repoFS(root), cleanRepoRel(t, rel))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return

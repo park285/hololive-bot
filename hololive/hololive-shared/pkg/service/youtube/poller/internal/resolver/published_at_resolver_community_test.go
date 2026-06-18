@@ -111,7 +111,7 @@ func TestPendingPublishedAtResolver_BackfillsCommunityMetadataWithoutDuplicateWh
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	authorizedAt := time.Now().UTC().Add(-10 * time.Second)
 	publishedAt := detectedAt.Add(-time.Minute)
-	seedPendingCommunityResolution(t, db, "channel-community", "post-claim", detectedAt)
+	seedPendingCommunityResolution(t, db, "post-claim", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
 		Where("kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-claim").
 		Updates(map[string]any{
@@ -150,7 +150,7 @@ func TestPendingPublishedAtResolver_ReEnqueuesWhenStaleCommunityClaimHasNoOutbox
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	authorizedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	publishedAt := detectedAt.Add(-time.Minute)
-	seedPendingCommunityResolution(t, db, "channel-community", "post-stale-claim", detectedAt)
+	seedPendingCommunityResolution(t, db, "post-stale-claim", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
 		Where("kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-stale-claim").
 		Updates(map[string]any{
@@ -214,7 +214,7 @@ func TestPendingPublishedAtResolver_DoesNotDuplicateWhenStaleCommunityClaimHasOu
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	authorizedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	publishedAt := detectedAt.Add(-time.Minute)
-	seedPendingCommunityResolution(t, db, "channel-community", "post-stale-outbox", detectedAt)
+	seedPendingCommunityResolution(t, db, "post-stale-outbox", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
 		Where("kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-stale-outbox").
 		Updates(map[string]any{
@@ -270,7 +270,7 @@ func TestPendingPublishedAtResolver_BackfillsCommunityMetadataForAlreadySentCont
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	sentAt := detectedAt.Add(3 * time.Minute)
 	publishedAt := detectedAt.Add(-time.Minute)
-	seedPendingCommunityResolution(t, db, "channel-community", "post-sent", detectedAt)
+	seedPendingCommunityResolution(t, db, "post-sent", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeContentAlarmTracking{}).
 		Where("kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:post-sent").
 		Updates(map[string]any{
@@ -316,7 +316,7 @@ func TestPendingPublishedAtResolver_ClearsRetryAfterAfterCommunityMetadataOnlyBa
 	authorizedAt := time.Now().UTC().Add(-10 * time.Second)
 	publishedAt := detectedAt.Add(-time.Minute)
 	retryAfter := detectedAt.Add(5 * time.Minute)
-	seedPendingCommunityResolution(t, db, "channel-community", "post-clear", detectedAt)
+	seedPendingCommunityResolution(t, db, "post-clear", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
 		Where("kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-clear").
 		Updates(map[string]any{

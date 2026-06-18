@@ -57,7 +57,7 @@ func (as *AlarmService) removeAlarmFromCache(
 	return removedRoomChannel > 0 || len(alarmTypes) > 0, nil
 }
 
-func (as *AlarmService) removeRoomAlarmMember(ctx context.Context, alarmKey string, channelID string, removeRoomChannel bool) (int64, error) {
+func (as *AlarmService) removeRoomAlarmMember(ctx context.Context, alarmKey, channelID string, removeRoomChannel bool) (int64, error) {
 	if !removeRoomChannel {
 		return 0, nil
 	}
@@ -70,7 +70,7 @@ func (as *AlarmService) removeRoomAlarmMember(ctx context.Context, alarmKey stri
 	return removed, nil
 }
 
-func (as *AlarmService) cleanupRoomRegistryAfterRemoval(ctx context.Context, roomID string, alarmKey string, registryKey string, removeRoomChannel bool) error {
+func (as *AlarmService) cleanupRoomRegistryAfterRemoval(ctx context.Context, roomID, alarmKey, registryKey string, removeRoomChannel bool) error {
 	if !removeRoomChannel {
 		return nil
 	}

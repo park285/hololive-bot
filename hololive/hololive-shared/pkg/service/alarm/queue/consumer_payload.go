@@ -43,7 +43,7 @@ func (c *Consumer) appendAcceptedPayloads(
 			c.moveRawPayloadsToDLQ(ctx, source+"_invalid_payload", []string{raw})
 			continue
 		}
-		if normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, source); accepted {
+		if normalized, accepted := c.acceptLegacyEnvelope(ctx, &envelope, source); accepted {
 			envelopes = append(envelopes, normalized)
 		}
 	}
@@ -81,7 +81,7 @@ func (c *Consumer) moveRawPayloadsToDLQ(ctx context.Context, source string, payl
 		return
 	}
 
-	alarmQueueDLQMoved.Add(float64(len(filtered)))
+	observeAlarmQueueDLQMoved(len(filtered))
 	c.logger.Warn("preserved raw alarm queue payloads to DLQ",
 		slog.String("source", source),
 		slog.Int("count", len(filtered)),
@@ -90,14 +90,14 @@ func (c *Consumer) moveRawPayloadsToDLQ(ctx context.Context, source string, payl
 
 func (c *Consumer) acceptLegacyEnvelope(
 	ctx context.Context,
-	envelope domain.AlarmQueueEnvelope,
+	envelope *domain.AlarmQueueEnvelope,
 	source string,
 ) (domain.AlarmQueueEnvelope, bool) {
 	if envelope.SourceKind != "" {
 		if c.rejectInvalidCanonicalEnvelope(ctx, envelope, source) {
 			return domain.AlarmQueueEnvelope{}, false
 		}
-		return envelope, true
+		return *envelope, true
 	}
 	if envelope.Notification.AlarmType == "" {
 		envelope.Notification.AlarmType = domain.AlarmTypeLive
@@ -106,10 +106,10 @@ func (c *Consumer) acceptLegacyEnvelope(
 		return domain.AlarmQueueEnvelope{}, false
 	}
 
-	return envelope, true
+	return *envelope, true
 }
 
-func (c *Consumer) rejectInvalidCanonicalEnvelope(ctx context.Context, envelope domain.AlarmQueueEnvelope, source string) bool {
+func (c *Consumer) rejectInvalidCanonicalEnvelope(ctx context.Context, envelope *domain.AlarmQueueEnvelope, source string) bool {
 	err := envelope.ValidateCanonicalDispatch()
 	if err == nil {
 		return false
@@ -126,7 +126,7 @@ func (c *Consumer) rejectInvalidCanonicalEnvelope(ctx context.Context, envelope 
 	return true
 }
 
-func (c *Consumer) rejectInvalidLegacyEnvelope(ctx context.Context, envelope domain.AlarmQueueEnvelope, source string) bool {
+func (c *Consumer) rejectInvalidLegacyEnvelope(ctx context.Context, envelope *domain.AlarmQueueEnvelope, source string) bool {
 	err := envelope.Notification.ValidateLegacyRoute()
 	if err == nil {
 		return false
@@ -143,7 +143,7 @@ func (c *Consumer) rejectInvalidLegacyEnvelope(ctx context.Context, envelope dom
 	return true
 }
 
-func (c *Consumer) releaseDroppedEnvelopeClaims(ctx context.Context, envelope domain.AlarmQueueEnvelope, source string) {
+func (c *Consumer) releaseDroppedEnvelopeClaims(ctx context.Context, envelope *domain.AlarmQueueEnvelope, source string) {
 	if releaseErr := c.ReleaseClaimKeys(ctx, envelope.ClaimKeys); releaseErr != nil {
 		c.logger.Warn("failed to release claim keys for dropped alarm queue envelope",
 			slog.String("source", source),

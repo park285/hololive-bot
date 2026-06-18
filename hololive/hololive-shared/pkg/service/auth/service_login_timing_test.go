@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"testing"
@@ -66,7 +67,7 @@ func TestLogin_UnknownEmailRunsBcryptComparison(t *testing.T) {
 	if cost, costErr := bcrypt.Cost(gotHash); costErr != nil || cost != cfg.BcryptCost {
 		t.Fatalf("dummy hash cost = %d (err=%v), want %d", cost, costErr, cfg.BcryptCost)
 	}
-	if string(gotHash) != string(service.loginDummyHash) {
+	if !bytes.Equal(gotHash, service.loginDummyHash) {
 		t.Fatalf("unknown-email path must compare against the precomputed dummy hash")
 	}
 }

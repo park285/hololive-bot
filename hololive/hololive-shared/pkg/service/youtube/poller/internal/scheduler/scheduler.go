@@ -134,7 +134,10 @@ func (s *Scheduler) WorkerCount() int {
 	return s.workerCount
 }
 
-func applySchedulerWorkerDefaults(config, defaults SchedulerConfig) SchedulerConfig {
+func applySchedulerWorkerDefaults(config, defaults *SchedulerConfig) *SchedulerConfig {
+	if config == nil {
+		config = cloneSchedulerConfig(defaults)
+	}
 	if config.WorkerCount <= 0 {
 		config.WorkerCount = defaults.WorkerCount
 	}
@@ -153,7 +156,10 @@ func applySchedulerWorkerDefaults(config, defaults SchedulerConfig) SchedulerCon
 	return config
 }
 
-func applySchedulerClaimBudgetDefaults(config, defaults SchedulerConfig) SchedulerConfig {
+func applySchedulerClaimBudgetDefaults(config, defaults *SchedulerConfig) *SchedulerConfig {
+	if config == nil {
+		config = cloneSchedulerConfig(defaults)
+	}
 	if config.BudgetAcquireTimeout <= 0 {
 		config.BudgetAcquireTimeout = defaults.BudgetAcquireTimeout
 	}
@@ -166,10 +172,18 @@ func applySchedulerClaimBudgetDefaults(config, defaults SchedulerConfig) Schedul
 	return config
 }
 
-func NewScheduler(config SchedulerConfig) *Scheduler {
+func cloneSchedulerConfig(config *SchedulerConfig) *SchedulerConfig {
+	if config == nil {
+		return &SchedulerConfig{}
+	}
+	clone := *config
+	return &clone
+}
+
+func NewScheduler(config *SchedulerConfig) *Scheduler {
 	defaults := DefaultSchedulerConfig()
-	config = applySchedulerWorkerDefaults(config, defaults)
-	config = applySchedulerClaimBudgetDefaults(config, defaults)
+	config = applySchedulerWorkerDefaults(config, &defaults)
+	config = applySchedulerClaimBudgetDefaults(config, &defaults)
 	// RequestInterval이 0이면 NewRateLimiter(0)이 생성되어 Wait()가 즉시 반환.
 	// 외부 RateLimiter에 rate limiting을 위임하는 경우에 사용.
 	metrics := config.Metrics

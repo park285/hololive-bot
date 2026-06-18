@@ -148,8 +148,8 @@ func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
 		}
 	}
 
-	if max := atomic.LoadInt32(&maxInFlight); max > 5 {
-		t.Fatalf("fallback max concurrency = %d, want <= 5", max)
+	if observedMax := atomic.LoadInt32(&maxInFlight); observedMax > 5 {
+		t.Fatalf("fallback max concurrency = %d, want <= 5", observedMax)
 	}
 
 	if gotReqs := atomic.LoadInt32(&channelReqsCnt); int(gotReqs) != len(channelIDs) {

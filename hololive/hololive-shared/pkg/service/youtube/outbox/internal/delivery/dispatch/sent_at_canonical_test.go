@@ -36,7 +36,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

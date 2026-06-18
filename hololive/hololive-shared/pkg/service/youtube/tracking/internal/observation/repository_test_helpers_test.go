@@ -46,7 +46,8 @@ func selectTrackingRowsForTest(t *testing.T, db trackingDB) []domain.YouTubeCont
 func insertAlarmStatesForTest(t *testing.T, db trackingDB, rows []domain.YouTubeCommunityShortsAlarmState) {
 	t.Helper()
 	now := time.Now().UTC()
-	for _, row := range rows {
+	for i := range rows {
+		row := rows[i]
 		if row.CreatedAt.IsZero() {
 			row.CreatedAt = now
 		}
@@ -65,7 +66,7 @@ func insertAlarmStatesForTest(t *testing.T, db trackingDB, rows []domain.YouTube
 	}
 }
 
-func ensureObservationWindowForBaselineTest(t *testing.T, db trackingDB, row domain.YouTubeCommunityShortsObservationPostBaseline) {
+func ensureObservationWindowForBaselineTest(t *testing.T, db trackingDB, row *domain.YouTubeCommunityShortsObservationPostBaseline) {
 	t.Helper()
 	observationEndedAt := row.FinalizedAt
 	if observationEndedAt.IsZero() {
@@ -106,8 +107,9 @@ func ensureObservationWindowForBaselineTest(t *testing.T, db trackingDB, row dom
 func insertObservationBaselinesForTest(t *testing.T, db trackingDB, rows []domain.YouTubeCommunityShortsObservationPostBaseline) {
 	t.Helper()
 	now := time.Now().UTC()
-	for _, row := range rows {
-		ensureObservationWindowForBaselineTest(t, db, row)
+	for i := range rows {
+		row := rows[i]
+		ensureObservationWindowForBaselineTest(t, db, &row)
 		if row.CreatedAt.IsZero() {
 			row.CreatedAt = now
 		}

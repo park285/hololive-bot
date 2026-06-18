@@ -21,16 +21,16 @@ func TestEventKeyIgnoresRoomAndDeliveryDedupeIncludesRoom(t *testing.T) {
 	room2 := base
 	room2.RoomID = "room-2"
 
-	if got, want := BuildEventKey(room1), BuildEventKey(room2); got != want {
+	if got, want := BuildEventKey(&room1), BuildEventKey(&room2); got != want {
 		t.Fatalf("BuildEventKey differs by room: %q != %q", got, want)
 	}
-	if got, want := BuildDedupeKey(room1), BuildDedupeKey(room2); got == want {
+	if got, want := BuildDedupeKey(&room1), BuildDedupeKey(&room2); got == want {
 		t.Fatalf("BuildDedupeKey should include room, got same key %q", got)
 	}
 }
 
 func TestMarshalEventPayloadOmitsRoomSpecificFields(t *testing.T) {
-	payload, err := marshalEventPayload(domain.AlarmQueueEnvelope{
+	payload, err := marshalEventPayload(&domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       "room-1",
@@ -58,7 +58,7 @@ func TestBuildLedgerRowsEventKeyIgnoresRoomSpecificClaimKeys(t *testing.T) {
 	stream := &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start}
 	channel := &domain.Channel{ID: "channel-1"}
 
-	event1, delivery1, err := buildLedgerRows(domain.AlarmQueueEnvelope{
+	firstEnvelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       "room-1",
@@ -69,12 +69,13 @@ func TestBuildLedgerRowsEventKeyIgnoresRoomSpecificClaimKeys(t *testing.T) {
 		},
 		ClaimKeys: []string{"claim:room-1:stream-1"},
 		Version:   1,
-	}, StatusPending)
+	}
+	event1, delivery1, err := buildLedgerRows(&firstEnvelope, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows room1 error = %v", err)
 	}
 
-	event2, delivery2, err := buildLedgerRows(domain.AlarmQueueEnvelope{
+	secondEnvelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       "room-2",
@@ -85,7 +86,8 @@ func TestBuildLedgerRowsEventKeyIgnoresRoomSpecificClaimKeys(t *testing.T) {
 		},
 		ClaimKeys: []string{"claim:room-2:stream-1"},
 		Version:   1,
-	}, StatusPending)
+	}
+	event2, delivery2, err := buildLedgerRows(&secondEnvelope, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows room2 error = %v", err)
 	}
@@ -118,11 +120,11 @@ func TestBuildLedgerRowsEventPayloadHashIgnoresEnqueuedAt(t *testing.T) {
 	second := base
 	second.EnqueuedAt = "2026-05-12T00:00:05Z"
 
-	event1, _, err := buildLedgerRows(first, StatusPending)
+	event1, _, err := buildLedgerRows(&first, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows first error = %v", err)
 	}
-	event2, _, err := buildLedgerRows(second, StatusPending)
+	event2, _, err := buildLedgerRows(&second, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows second error = %v", err)
 	}
@@ -160,7 +162,7 @@ func TestBuildLedgerRowsYouTubeOutboxUsesSourceIdentity(t *testing.T) {
 		Version: 1,
 	}
 
-	event, delivery, err := buildLedgerRows(envelope, StatusPending)
+	event, delivery, err := buildLedgerRows(&envelope, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}

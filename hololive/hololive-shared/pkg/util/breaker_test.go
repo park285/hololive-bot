@@ -204,7 +204,7 @@ func TestBreaker_RecordFailure_OpenedAtFixedOnceOpen(t *testing.T) {
 	b := newTestBreaker(1, 30*time.Second)
 	b.RecordFailure()
 
-	openedAt1, _ := b.openedAt.Load().(time.Time)
+	openedAt1 := b.openedAtTime()
 	if openedAt1.IsZero() {
 		t.Fatal("openedAt must be set after first open")
 	}
@@ -216,7 +216,7 @@ func TestBreaker_RecordFailure_OpenedAtFixedOnceOpen(t *testing.T) {
 	b.RecordFailure()
 	b.RecordFailure()
 
-	openedAt2, _ := b.openedAt.Load().(time.Time)
+	openedAt2 := b.openedAtTime()
 	if !openedAt1.Equal(openedAt2) {
 		t.Fatalf("openedAt must not change while circuit is open: before=%v after=%v", openedAt1, openedAt2)
 	}

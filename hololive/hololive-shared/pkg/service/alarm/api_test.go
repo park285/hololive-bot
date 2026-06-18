@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	json "github.com/park285/shared-go/pkg/json"
@@ -54,8 +55,8 @@ type mockAlarmCRUD struct {
 	warmCacheFromDBFn           func(ctx context.Context) error
 }
 
-func (m *mockAlarmCRUD) AddAlarm(ctx context.Context, req domain.AddAlarmRequest) (bool, error) {
-	return m.addAlarmFn(ctx, req)
+func (m *mockAlarmCRUD) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
+	return m.addAlarmFn(ctx, *req)
 }
 
 func (m *mockAlarmCRUD) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
@@ -107,7 +108,7 @@ func (m *mockAlarmCRUD) WarmCacheFromDB(ctx context.Context) error {
 }
 
 // newTestHandler: 테스트용 핸들러와 gin.Engine을 생성합니다.
-func newTestHandler(t *testing.T, mock *mockAlarmCRUD) (*Handler, *gin.Engine) {
+func newTestHandler(t *testing.T, mock *mockAlarmCRUD) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -116,12 +117,14 @@ func newTestHandler(t *testing.T, mock *mockAlarmCRUD) (*Handler, *gin.Engine) {
 
 	r := gin.New()
 	h.RegisterRoutes(&r.RouterGroup)
-	return h, r
+	return r
 }
 
 // jsonBody: 구조체를 JSON 바이트 버퍼로 변환합니다.
-func jsonBody(v any) *bytes.Buffer {
-	b, _ := json.Marshal(v)
+func jsonBody(t *testing.T, v any) *bytes.Buffer {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
 	return bytes.NewBuffer(b)
 }
 
@@ -185,10 +188,10 @@ func TestAddAlarm(t *testing.T) {
 			if tt.mockFn != nil {
 				mock.addAlarmFn = tt.mockFn
 			}
-			_, r := newTestHandler(t, mock)
+			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/internal/alarm/add", jsonBody(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/alarm/add", jsonBody(t, tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			r.ServeHTTP(rec, req)
 
@@ -237,10 +240,10 @@ func TestRemoveAlarm(t *testing.T) {
 			if tt.mockFn != nil {
 				mock.removeAlarmFn = tt.mockFn
 			}
-			_, r := newTestHandler(t, mock)
+			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/internal/alarm/remove", jsonBody(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/alarm/remove", jsonBody(t, tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			r.ServeHTTP(rec, req)
 
@@ -288,10 +291,10 @@ func TestGetRoomAlarmsWithTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockAlarmCRUD{getRoomAlarmsWithTypesFn: tt.mockFn}
-			_, r := newTestHandler(t, mock)
+			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/internal/alarm/room/"+tt.roomID, nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/room/"+tt.roomID, http.NoBody)
 			r.ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
@@ -340,10 +343,10 @@ func TestGetRoomAlarmsView(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockAlarmCRUD{listRoomAlarmsViewFn: tt.mockFn}
-			_, r := newTestHandler(t, mock)
+			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/internal/alarm/room/"+tt.roomID+"/view", nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/room/"+tt.roomID+"/view", http.NoBody)
 			r.ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
@@ -379,10 +382,10 @@ func TestClearRoomAlarms(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockAlarmCRUD{clearRoomAlarmsFn: tt.mockFn}
-			_, r := newTestHandler(t, mock)
+			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/internal/alarm/clear", jsonBody(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/alarm/clear", jsonBody(t, tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			r.ServeHTTP(rec, req)
 
@@ -444,10 +447,10 @@ func TestGetNextStreamInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockAlarmCRUD{getNextStreamInfoFn: tt.mockFn}
-			_, r := newTestHandler(t, mock)
+			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/internal/alarm/next-stream/"+tt.channelID, nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/next-stream/"+tt.channelID, http.NoBody)
 			r.ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
@@ -493,10 +496,10 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 			if tt.mockFn != nil {
 				mock.updateAlarmAdvanceMinutesFn = tt.mockFn
 			}
-			_, r := newTestHandler(t, mock)
+			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPut, "/internal/alarm/settings", jsonBody(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/internal/alarm/settings", jsonBody(t, tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			r.ServeHTTP(rec, req)
 
@@ -533,10 +536,10 @@ func TestGetAllAlarmKeys(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockAlarmCRUD{getAllAlarmKeysFn: tt.mockFn}
-			_, r := newTestHandler(t, mock)
+			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/internal/alarm/keys", nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/keys", http.NoBody)
 			r.ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
@@ -552,7 +555,7 @@ func TestGetAllAlarmKeys(t *testing.T) {
 
 func TestHealthAndReady(t *testing.T) {
 	mock := &mockAlarmCRUD{}
-	_, r := newTestHandler(t, mock)
+	r := newTestHandler(t, mock)
 
 	tests := []struct {
 		name string
@@ -565,7 +568,7 @@ func TestHealthAndReady(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.path, http.NoBody)
 			r.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {

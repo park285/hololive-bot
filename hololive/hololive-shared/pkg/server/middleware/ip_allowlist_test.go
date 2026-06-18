@@ -21,6 +21,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -140,7 +141,7 @@ func TestAdminIPAllowMiddleware(t *testing.T) {
 				c.Status(http.StatusOK)
 			})
 
-			req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin", http.NoBody)
 			req.RemoteAddr = tt.remoteAddr
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)

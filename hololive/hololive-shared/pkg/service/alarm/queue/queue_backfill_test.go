@@ -43,7 +43,7 @@ func TestConsumerDrainBatchDropsInvalidCanonicalEnvelopeAndReleasesClaims(t *tes
 	require.NoError(t, mini.Set(claimKey, "1"))
 
 	beforeRejected := testutil.ToFloat64(alarmQueueEnvelopeTotal.WithLabelValues("rejected_canonical_source"))
-	raw, err := json.Marshal(domain.AlarmQueueEnvelope{
+	raw, err := json.Marshal(&domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeShorts,
 			RoomID:    "room-canonical-invalid",
@@ -72,12 +72,13 @@ func TestConsumerDrainBatchDropsInvalidCanonicalEnvelopeAndReleasesClaims(t *tes
 func TestResolveRetryVisibleAtUsesRetryAfterWhenNextVisibleAtBlank(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 123000000, time.UTC)
 
-	got, err := resolveRetryVisibleAt(domain.AlarmQueueEnvelope{
+	envelope := domain.AlarmQueueEnvelope{
 		Retry: &domain.AlarmQueueRetryMetadata{
 			RetryAfterMS:  1500,
 			NextVisibleAt: " \t ",
 		},
-	}, now)
+	}
+	got, err := resolveRetryVisibleAt(&envelope, now)
 	require.NoError(t, err)
 
 	assert.Equal(t, now.Add(1500*time.Millisecond), got)

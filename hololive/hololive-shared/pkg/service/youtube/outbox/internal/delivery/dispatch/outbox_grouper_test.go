@@ -35,7 +35,7 @@ func TestOutboxGrouperCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.
 		}
 	}
 
-	grouper := newOutboxGrouper(nil, cache, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	grouper := newOutboxGrouper(nil, cache, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{})
 	roomsByChannel := grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCtarget", Kind: domain.OutboxKindNewShort},
 		{ChannelID: "UCtarget", Kind: domain.OutboxKindCommunityPost},
@@ -78,9 +78,9 @@ func TestOutboxGrouperFilterLiveCatchupSuppressedRoomsSkipsRecentUpcomingRooms(t
 		}
 		return nil
 	}
-	grouper := newOutboxGrouper(nil, cache, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	grouper := newOutboxGrouper(nil, cache, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{})
 
-	filtered := grouper.filterLiveCatchupSuppressedRooms(context.Background(), item, map[string]bool{
+	filtered := grouper.filterLiveCatchupSuppressedRooms(context.Background(), &item, map[string]bool{
 		"room-suppressed": true,
 		"room-live-only":  true,
 	})

@@ -42,11 +42,11 @@ func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*Channe
 	}
 
 	data := gjson.Parse(jsonStr)
-	if err := checkAlerts(data); err != nil {
+	if err := checkAlerts(&data); err != nil {
 		return nil, err
 	}
 
-	stats := parseChannelStatsFromInitialData(data, channelID)
+	stats := parseChannelStatsFromInitialData(&data, channelID)
 	if looksEmptyChannelStats(stats) {
 		logStructureWarning("channel_stats", channelID, "parsed stats are empty")
 	}
@@ -70,10 +70,10 @@ func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*Chan
 	}
 
 	data := gjson.Parse(jsonStr)
-	if err := checkAlerts(data); err != nil {
+	if err := checkAlerts(&data); err != nil {
 		return nil, err
 	}
-	snippet := parseChannelSnippetFromInitialData(data)
+	snippet := parseChannelSnippetFromInitialData(&data)
 
 	if len(snippet.Avatar) == 0 || len(snippet.Banner) == 0 {
 		logStructureWarning("channel_snippet", channelID, "page header images missing",

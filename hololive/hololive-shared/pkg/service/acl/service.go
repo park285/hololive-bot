@@ -264,9 +264,11 @@ func (s *Service) IsRoomAllowed(roomName, chatID string) bool {
 	case ACLModeBlacklist:
 		// 블랙리스트: 목록에 있으면 차단, 없으면 허용
 		return !isInRoomSet(s.blacklistRooms, roomName, chatID)
-	default:
+	case ACLModeWhitelist:
 		// 화이트리스트: 목록에 있으면 허용, 없으면 차단
 		return isInRoomSet(s.whitelistRooms, roomName, chatID)
+	default:
+		return false
 	}
 }
 

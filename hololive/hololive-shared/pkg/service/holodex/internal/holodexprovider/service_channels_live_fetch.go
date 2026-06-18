@@ -54,7 +54,7 @@ func (h *Service) fetchHololiveChannelListPages(ctx context.Context) ([]*domain.
 	return allChannels, nil
 }
 
-func (h *Service) fetchHololiveChannelListPage(ctx context.Context, pageSize int, offset int) ([]*domain.Channel, int, error) {
+func (h *Service) fetchHololiveChannelListPage(ctx context.Context, pageSize, offset int) ([]*domain.Channel, int, error) {
 	params := url.Values{}
 	params.Set("org", constants.HolodexAPIParams.OrgHololive)
 	params.Set("type", constants.HolodexAPIParams.TypeVtuber)

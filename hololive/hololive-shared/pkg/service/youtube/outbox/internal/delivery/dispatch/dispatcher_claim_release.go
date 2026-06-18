@@ -80,8 +80,8 @@ func (d *ClaimManager) deliveryClaimTimeout() time.Duration {
 
 func (d *ClaimManager) logClaimIssue(
 	message string,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	level slog.Level,
 	attrs ...any,
 ) {
@@ -89,6 +89,15 @@ func (d *ClaimManager) logClaimIssue(
 		return
 	}
 
+	baseAttrs := deliveryClaimLogAttrs(row, outbox, attrs...)
+	logClaimIssueAtLevel(d.logger, level, message, baseAttrs...)
+}
+
+func deliveryClaimLogAttrs(
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+	attrs ...any,
+) []any {
 	baseAttrs := make([]any, 0, 7+len(attrs))
 	baseAttrs = append(baseAttrs,
 		slog.Int64(logschema.FieldDeliveryID, row.ID),
@@ -99,14 +108,18 @@ func (d *ClaimManager) logClaimIssue(
 		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
 		slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
 	)
-	baseAttrs = append(baseAttrs, attrs...)
+	return append(baseAttrs, attrs...)
+}
 
+func logClaimIssueAtLevel(logger *slog.Logger, level slog.Level, message string, attrs ...any) {
 	switch level {
+	case slog.LevelDebug, slog.LevelInfo:
+		logger.Info(message, attrs...)
 	case slog.LevelWarn:
-		d.logger.Warn(message, baseAttrs...)
+		logger.Warn(message, attrs...)
 	case slog.LevelError:
-		d.logger.Error(message, baseAttrs...)
+		logger.Error(message, attrs...)
 	default:
-		d.logger.Info(message, baseAttrs...)
+		logger.Info(message, attrs...)
 	}
 }

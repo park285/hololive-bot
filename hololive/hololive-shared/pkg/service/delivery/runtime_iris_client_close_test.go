@@ -15,7 +15,7 @@ func TestRuntimeIrisClientCloseRejectsSendAfterClose(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		writeRuntimeIrisResponse(t, w, `{"ok":true}`)
 	}))
 	defer server.Close()
 

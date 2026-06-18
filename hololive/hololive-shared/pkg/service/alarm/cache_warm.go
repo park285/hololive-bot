@@ -231,7 +231,7 @@ func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheClient cache.Client
 	return warmData.finish(), nil
 }
 
-func normalizedWarmAlarmIdentity(alarmRecord *domain.Alarm) (string, string, bool) {
+func normalizedWarmAlarmIdentity(alarmRecord *domain.Alarm) (normalizedRoomID, normalizedChannelID string, ok bool) {
 	if alarmRecord == nil {
 		return "", "", false
 	}

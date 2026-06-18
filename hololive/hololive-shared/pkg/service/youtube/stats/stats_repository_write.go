@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"strconv"
 	"strings"
 
@@ -185,7 +186,7 @@ func (r *StatsRepository) upsertLatestStatsBatch(ctx context.Context, stats []*d
 	return nil
 }
 
-func writeValuePlaceholders(sb *strings.Builder, rowIndex int, columns int, suffix string) {
+func writeValuePlaceholders(sb *strings.Builder, rowIndex, columns int, suffix string) {
 	if rowIndex > 0 {
 		sb.WriteByte(',')
 	}
@@ -202,6 +203,21 @@ func writeValuePlaceholders(sb *strings.Builder, rowIndex int, columns int, suff
 	sb.WriteByte(')')
 }
 
+func int64PtrFromUint64(value uint64) (*int64, error) {
+	if value > math.MaxInt64 {
+		return nil, fmt.Errorf("value %d exceeds int64 range", value)
+	}
+	converted := int64(value)
+	return &converted, nil
+}
+
+func nonNegativeInt64ToUint64(value int64) (uint64, bool) {
+	if value < 0 {
+		return 0, false
+	}
+	return uint64(value), true
+}
+
 func (r *StatsRepository) RecordChange(ctx context.Context, change *domain.StatsChange) error {
 	query := `
 		INSERT INTO youtube_stats_changes
@@ -210,23 +226,12 @@ func (r *StatsRepository) RecordChange(ctx context.Context, change *domain.Stats
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
-	var prevSubs, currSubs, prevVideos, currVideos *int64
-
-	if change.PreviousStats != nil {
-		v := int64(change.PreviousStats.SubscriberCount)
-		prevSubs = &v
-		v2 := int64(change.PreviousStats.VideoCount)
-		prevVideos = &v2
+	prevSubs, currSubs, prevVideos, currVideos, err := statsChangePreviousCurrentValues(change)
+	if err != nil {
+		return err
 	}
 
-	if change.CurrentStats != nil {
-		v := int64(change.CurrentStats.SubscriberCount)
-		currSubs = &v
-		v2 := int64(change.CurrentStats.VideoCount)
-		currVideos = &v2
-	}
-
-	_, err := r.pool.Exec(ctx, query,
+	_, err = r.pool.Exec(ctx, query,
 		change.ChannelID,
 		change.MemberName,
 		change.SubscriberChange,
@@ -270,7 +275,10 @@ func (r *StatsRepository) recordChangeBatchChunk(ctx context.Context, changes []
 	args := make([]any, 0, len(changes)*recordChangeColumnsPerRow)
 	for i, change := range changes {
 		writeValuePlaceholders(&sb, i, recordChangeColumnsPerRow, "")
-		prevSubs, currSubs, prevVideos, currVideos := changeBatchPreviousCurrentValues(change)
+		prevSubs, currSubs, prevVideos, currVideos, err := changeBatchPreviousCurrentValues(change)
+		if err != nil {
+			return err
+		}
 
 		args = append(args,
 			change.ChannelID, change.MemberName,
@@ -287,18 +295,33 @@ func (r *StatsRepository) recordChangeBatchChunk(ctx context.Context, changes []
 	return nil
 }
 
-func changeBatchPreviousCurrentValues(change *domain.StatsChange) (prevSubs, currSubs, prevVideos, currVideos *int64) {
-	if change.PreviousStats != nil {
-		v := int64(change.PreviousStats.SubscriberCount)
-		prevSubs = &v
-		v2 := int64(change.PreviousStats.VideoCount)
-		prevVideos = &v2
+func changeBatchPreviousCurrentValues(change *domain.StatsChange) (prevSubs, currSubs, prevVideos, currVideos *int64, err error) {
+	return statsChangePreviousCurrentValues(change)
+}
+
+func statsChangePreviousCurrentValues(change *domain.StatsChange) (prevSubs, currSubs, prevVideos, currVideos *int64, err error) {
+	prevSubs, prevVideos, err = statsSnapshotSubscriberVideoCounts("previous", change.PreviousStats)
+	if err != nil {
+		return nil, nil, nil, nil, err
 	}
-	if change.CurrentStats != nil {
-		v := int64(change.CurrentStats.SubscriberCount)
-		currSubs = &v
-		v2 := int64(change.CurrentStats.VideoCount)
-		currVideos = &v2
+	currSubs, currVideos, err = statsSnapshotSubscriberVideoCounts("current", change.CurrentStats)
+	if err != nil {
+		return nil, nil, nil, nil, err
 	}
-	return prevSubs, currSubs, prevVideos, currVideos
+	return prevSubs, currSubs, prevVideos, currVideos, nil
+}
+
+func statsSnapshotSubscriberVideoCounts(label string, stats *domain.TimestampedStats) (subscriberCount, videoCount *int64, err error) {
+	if stats == nil {
+		return nil, nil, nil
+	}
+	subscriberCount, err = int64PtrFromUint64(stats.SubscriberCount)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s subscriber count: %w", label, err)
+	}
+	videoCount, err = int64PtrFromUint64(stats.VideoCount)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s video count: %w", label, err)
+	}
+	return subscriberCount, videoCount, nil
 }

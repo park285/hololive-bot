@@ -27,6 +27,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -253,13 +254,69 @@ type temporaryError interface {
 }
 
 func isTimeoutOrTemporaryError(err error) bool {
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
+	if isTimeoutNetError(err) {
 		return true
 	}
 
+	return isTemporaryNetError(err)
+}
+
+func isTimeoutNetError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
+		if urlErr.Err == nil {
+			return false
+		}
+		return isTimeoutNetError(urlErr.Err)
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) && !isNilInterfaceValue(netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
+}
+
+func isTemporaryNetError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
+		if urlErr.Err == nil {
+			return false
+		}
+		return isTemporaryNetError(urlErr.Err)
+	}
+
 	var tempErr temporaryError
-	return errors.As(err, &tempErr) && tempErr.Temporary()
+	if !errors.As(err, &tempErr) {
+		return false
+	}
+	if isNilInterfaceValue(tempErr) {
+		return false
+	}
+	return tempErr.Temporary()
+}
+
+func isNilInterfaceValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	kind := reflected.Kind()
+	if kind == reflect.Chan ||
+		kind == reflect.Func ||
+		kind == reflect.Interface ||
+		kind == reflect.Map ||
+		kind == reflect.Pointer ||
+		kind == reflect.Slice {
+		return reflected.IsNil()
+	}
+	return false
 }
 
 var transientTransportSignatures = []string{

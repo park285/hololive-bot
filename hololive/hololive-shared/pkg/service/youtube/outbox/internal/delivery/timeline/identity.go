@@ -40,6 +40,8 @@ func normalizePostTrackingIdentity(identity PostTrackingIdentity) (PostTrackingI
 	switch identity.Kind {
 	case domain.OutboxKindCommunityPost, domain.OutboxKindNewShort:
 		return PostTrackingIdentity{Kind: identity.Kind, ContentID: contentID}, true, nil
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return PostTrackingIdentity{}, false, fmt.Errorf("unsupported tracking identity kind: %s", identity.Kind)
 	default:
 		return PostTrackingIdentity{}, false, fmt.Errorf("unsupported tracking identity kind: %s", identity.Kind)
 	}

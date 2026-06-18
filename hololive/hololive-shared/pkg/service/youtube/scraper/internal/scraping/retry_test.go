@@ -72,6 +72,23 @@ func (e *flakyNetError) Temporary() bool {
 	return true
 }
 
+func TestIsTimeoutOrTemporaryErrorTypedNil(t *testing.T) {
+	var typedNil *flakyNetError
+
+	require.NotPanics(t, func() {
+		assert.False(t, isTimeoutOrTemporaryError(typedNil))
+	})
+}
+
+func TestIsTimeoutFailureNestedTypedNil(t *testing.T) {
+	var typedNil *flakyNetError
+	err := &url.Error{Op: "Get", URL: "https://youtube.example", Err: typedNil}
+
+	require.NotPanics(t, func() {
+		assert.False(t, isTimeoutFailure(err))
+	})
+}
+
 type stubDialer struct {
 	delay time.Duration
 	conn  net.Conn
@@ -113,7 +130,7 @@ func TestFetchPage_Retry5xx(t *testing.T) {
 		name           string
 		statusSequence []int
 		expectSuccess  bool
-		expectAttempts int
+		expectAttempts int32
 	}{
 		{
 			name:           "504 then 200 succeeds",
@@ -159,7 +176,7 @@ func TestFetchPage_Retry5xx(t *testing.T) {
 				status := tt.statusSequence[idx]
 				if status == 200 {
 					w.WriteHeader(http.StatusOK)
-					_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+					mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 				} else {
 					w.WriteHeader(status)
 				}
@@ -177,7 +194,7 @@ func TestFetchPage_Retry5xx(t *testing.T) {
 
 			result, err := client.fetchPage(ctx, server.URL)
 
-			assert.Equal(t, int32(tt.expectAttempts), attempts.Load())
+			assert.Equal(t, tt.expectAttempts, attempts.Load())
 
 			if tt.expectSuccess {
 				require.NoError(t, err)
@@ -197,7 +214,7 @@ func TestNetHTTPPageFetcher_StatusBodyAndHeaders(t *testing.T) {
 		receivedHeaders = r.Header.Clone()
 		w.Header().Set("X-Test-Header", "ok")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+		mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 	}))
 	defer server.Close()
 
@@ -547,8 +564,8 @@ func TestDialSOCKS5WithContextFallback_CancelClosesConn(t *testing.T) {
 	clientSide, peerSide := net.Pipe()
 	tracking := newTrackingConn(clientSide)
 	t.Cleanup(func() {
-		_ = tracking.Close()
-		_ = peerSide.Close()
+		mustClose(t, tracking)
+		mustClose(t, peerSide)
 	})
 
 	dialer := &stubDialer{
@@ -575,8 +592,8 @@ func TestDialSOCKS5WithContextFallback_SuccessKeepsConnOpen(t *testing.T) {
 	clientSide, peerSide := net.Pipe()
 	tracking := newTrackingConn(clientSide)
 	t.Cleanup(func() {
-		_ = tracking.Close()
-		_ = peerSide.Close()
+		mustClose(t, tracking)
+		mustClose(t, peerSide)
 	})
 
 	dialer := &stubDialer{
@@ -750,7 +767,7 @@ func TestFetchPage_504RetryNotBlockedByTransientCooldown(t *testing.T) {
 			w.WriteHeader(http.StatusGatewayTimeout) // 504
 		} else {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+			mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 		}
 	}))
 	defer server.Close()
@@ -773,7 +790,7 @@ func TestFetchPage_504RetryNotBlockedByTransientCooldown(t *testing.T) {
 func TestFetchPageOnce_HardCooldownOnly(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("<html>ok</html>"))
+		mustWriteResponse(t, w, "<html>ok</html>")
 	}))
 	defer server.Close()
 
@@ -805,7 +822,7 @@ func TestRateLimiter_ConcurrentSlots(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			_ = rl.Wait(ctx)
+			require.NoError(t, rl.Wait(ctx))
 			completionTimes[idx] = time.Now()
 		}(i)
 	}
@@ -935,14 +952,20 @@ func TestFetchPage_ConcurrentTransientErrors_NoAmplification(t *testing.T) {
 	defer cancel()
 
 	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
 	wg.Add(2)
 	for range 2 {
 		go func() {
 			defer wg.Done()
-			_, _ = client.fetchPage(ctx, server.URL)
+			_, err := client.fetchPage(ctx, server.URL)
+			errCh <- err
 		}()
 	}
 	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.Error(t, err)
+	}
 
 	actualErrors := client.backoffState.TransientErrors()
 
@@ -984,7 +1007,7 @@ func TestFetchPageOnce_Headers(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHeaders = r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+		mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 	}))
 	defer server.Close()
 
@@ -1023,7 +1046,7 @@ func TestFetchPageOnce_ClientHintsHeaders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHeaders = r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+		mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 	}))
 	defer server.Close()
 

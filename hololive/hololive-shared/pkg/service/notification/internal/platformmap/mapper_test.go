@@ -335,6 +335,7 @@ func TestSyncForChannel_PropagatesRegistryError(t *testing.T) {
 	}, logger)
 
 	err := mapper.SyncForChannel(context.Background(), "UC_alpha")
+	require.Error(t, err)
 	require.ErrorIs(t, err, sentinel)
 	require.Contains(t, err.Error(), "check channel registry membership")
 }

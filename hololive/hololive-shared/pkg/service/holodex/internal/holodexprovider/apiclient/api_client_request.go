@@ -29,7 +29,7 @@ func (c *APIClient) DoRequest(ctx context.Context, method, path string, params u
 	return c.doRequestWithRetry(ctx, method, path, params, state)
 }
 
-func (c *APIClient) doRequestWithRetry(ctx context.Context, method string, path string, params url.Values, state holodexRequestRetryState) ([]byte, error) {
+func (c *APIClient) doRequestWithRetry(ctx context.Context, method, path string, params url.Values, state holodexRequestRetryState) ([]byte, error) {
 	for attempt := range state.maxAttempts {
 		body, done, err := c.runHolodexRequestAttempt(ctx, method, path, params, attempt, state.maxAttempts)
 		if done {
@@ -51,7 +51,7 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, method string, path 
 	return nil, fmt.Errorf("holodex request failed after %d attempts", state.maxAttempts)
 }
 
-func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method string, path string, params url.Values, attempt int, maxAttempts int) ([]byte, bool, error) {
+func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
 	if err := c.waitForRateLimiter(ctx, path); err != nil {
 		return nil, true, err
 	}
@@ -73,7 +73,7 @@ func (c *APIClient) finishHolodexRequestAttempt(body []byte, err error) ([]byte,
 	return body, nil
 }
 
-func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) ([]byte, bool, error) {
+func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
 	attemptCtx, cancel := context.WithTimeout(ctx, c.perAttemptTimeout)
 	defer cancel()
 
@@ -85,19 +85,55 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		if c.retryAfterNetworkFailure(ctx, err, attempt, maxAttempts) {
-			return nil, false, fmt.Errorf("HTTP request failed (retrying): %w", err)
-		}
-		return nil, true, fmt.Errorf("HTTP request failed: %w", err)
+		done, err := c.handleHolodexRequestError(ctx, err, resp == nil, attempt, maxAttempts)
+		return nil, done, err
 	}
+	if resp == nil {
+		return nil, true, fmt.Errorf("nil Holodex response")
+	}
+	if err := validateHolodexResponse(resp); err != nil {
+		return nil, true, err
+	}
+	defer c.closeHolodexResponse(resp)
 
 	body, readErr := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
-	_ = resp.Body.Close()
 	if readErr != nil {
 		return nil, false, fmt.Errorf("failed to read response: %w", readErr)
 	}
 
 	return c.processHolodexResponse(ctx, resp.StatusCode, body, reqURL, attempt, maxAttempts)
+}
+
+func (c *APIClient) closeHolodexResponse(resp *http.Response) {
+	if closeErr := resp.Body.Close(); closeErr != nil && c.logger != nil {
+		c.logger.Warn("Failed to close Holodex response body", "error", closeErr)
+	}
+}
+
+func (c *APIClient) handleHolodexRequestError(
+	ctx context.Context,
+	err error,
+	nilResponse bool,
+	attempt int,
+	maxAttempts int,
+) (bool, error) {
+	if nilResponse {
+		err = fmt.Errorf("nil response: %w", err)
+	}
+	if c.retryAfterNetworkFailure(ctx, err, attempt, maxAttempts) {
+		return false, fmt.Errorf("HTTP request failed (retrying): %w", err)
+	}
+	return true, fmt.Errorf("HTTP request failed: %w", err)
+}
+
+func validateHolodexResponse(resp *http.Response) error {
+	if resp == nil {
+		return fmt.Errorf("HTTP request failed: nil response")
+	}
+	if resp.Body == nil {
+		return fmt.Errorf("HTTP request failed: nil response body")
+	}
+	return nil
 }
 
 func (c *APIClient) buildRequestURL(path string, params url.Values) string {
@@ -108,7 +144,7 @@ func (c *APIClient) buildRequestURL(path string, params url.Values) string {
 	return reqURL
 }
 
-func (c *APIClient) newRequest(ctx context.Context, method, reqURL string, apiKey string) (*http.Request, error) {
+func (c *APIClient) newRequest(ctx context.Context, method, reqURL, apiKey string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, reqURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)

@@ -41,7 +41,7 @@ type Config struct {
 	Port        int    // TCP 포트 (예: 5432)
 	SocketPath  string // UDS 경로 (비어있으면 TCP 사용)
 	User        string
-	Password    string //nolint:gosec // 설정 구조체 필드명이며 시크릿 값 자체를 로그/출력하지 않는다.
+	Password    string
 	Name        string // 데이터베이스 이름
 	SSLMode     string // sslmode (기본: "verify-full")
 	SSLRootCert string
@@ -50,15 +50,21 @@ type Config struct {
 	QueryExecMode string
 }
 
-func (c Config) SafeDSN() string {
-	masked := c
+func (c *Config) SafeDSN() string {
+	if c == nil {
+		return ""
+	}
+	masked := *c
 	if masked.Password != "" {
 		masked.Password = "***"
 	}
 	return masked.DSN()
 }
 
-func (c Config) DSN() string {
+func (c *Config) DSN() string {
+	if c == nil {
+		return ""
+	}
 	sslmode := c.SSLMode
 	if sslmode == "" {
 		sslmode = "verify-full"

@@ -171,13 +171,85 @@ func initAlarmDispatchWakeupMetrics() {
 	})
 }
 
-func observeAlarmDispatchPublishBatch(duration time.Duration, mode PublishMode, result dispatchoutbox.PublishBatchResult) {
+func observeAlarmDispatchPublishBatch(duration time.Duration, mode PublishMode, result *dispatchoutbox.PublishBatchResult) {
 	initQueueMetrics()
 	modeLabel := string(normalizePublishMode(mode))
+	if alarmDispatchPublishBatchDuration == nil ||
+		alarmDispatchPublishRequestedTotal == nil ||
+		alarmDispatchPublishProcessedTotal == nil ||
+		alarmDispatchPublishInsertedTotal == nil ||
+		alarmDispatchPublishDuplicateTotal == nil ||
+		alarmDispatchPublishHashConflictTotal == nil {
+		return
+	}
 	alarmDispatchPublishBatchDuration.Observe(duration.Seconds())
 	alarmDispatchPublishRequestedTotal.WithLabelValues(modeLabel).Add(float64(result.RequestedDeliveries))
 	alarmDispatchPublishProcessedTotal.WithLabelValues(modeLabel).Add(float64(result.ProcessedDeliveries))
 	alarmDispatchPublishInsertedTotal.WithLabelValues(modeLabel).Add(float64(result.InsertedDeliveries))
 	alarmDispatchPublishDuplicateTotal.WithLabelValues(modeLabel).Add(float64(result.DuplicateDeliveries))
 	alarmDispatchPublishHashConflictTotal.WithLabelValues(modeLabel).Add(float64(result.HashConflictEvents))
+}
+
+func observeAlarmQueueClaimReleased(n int) {
+	initQueueMetrics()
+	if alarmQueueClaimReleased == nil || n <= 0 {
+		return
+	}
+	alarmQueueClaimReleased.Add(float64(n))
+}
+
+func observeAlarmQueueRetryScheduled(n int) {
+	initQueueMetrics()
+	if alarmQueueRetryScheduled == nil || n <= 0 {
+		return
+	}
+	alarmQueueRetryScheduled.Add(float64(n))
+}
+
+func observeAlarmQueueRetryDrained(n int) {
+	initQueueMetrics()
+	if alarmQueueRetryDrained == nil || n <= 0 {
+		return
+	}
+	alarmQueueRetryDrained.Add(float64(n))
+}
+
+func observeAlarmQueueDLQMoved(n int) {
+	initQueueMetrics()
+	if alarmQueueDLQMoved == nil || n <= 0 {
+		return
+	}
+	alarmQueueDLQMoved.Add(float64(n))
+}
+
+func observeAlarmDispatchWakeupSent() {
+	initQueueMetrics()
+	if alarmDispatchWakeupSentTotal == nil {
+		return
+	}
+	alarmDispatchWakeupSentTotal.Inc()
+}
+
+func observeAlarmDispatchWakeupSuppressed() {
+	initQueueMetrics()
+	if alarmDispatchWakeupSuppressedTotal == nil {
+		return
+	}
+	alarmDispatchWakeupSuppressedTotal.Inc()
+}
+
+func observeAlarmDispatchWakeupFailed() {
+	initQueueMetrics()
+	if alarmDispatchWakeupFailedTotal == nil {
+		return
+	}
+	alarmDispatchWakeupFailedTotal.Inc()
+}
+
+func observeAlarmDispatchWakeupExpireFailed() {
+	initQueueMetrics()
+	if alarmDispatchWakeupExpireFailedTotal == nil {
+		return
+	}
+	alarmDispatchWakeupExpireFailedTotal.Inc()
 }

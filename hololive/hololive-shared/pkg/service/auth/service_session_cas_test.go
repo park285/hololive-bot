@@ -10,7 +10,7 @@ import (
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
-func newRefreshTestService(t *testing.T) (*Service, string) {
+func newRefreshTestService(t *testing.T) (result0 *Service, value1 string) {
 	t.Helper()
 
 	db := newTestDB(t)

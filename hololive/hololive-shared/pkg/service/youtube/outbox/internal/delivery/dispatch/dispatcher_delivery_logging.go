@@ -13,12 +13,12 @@ import (
 func dedupeKeyLogAttrForOutboxes(outboxes []domain.YouTubeNotificationOutbox) slog.Attr {
 	dedupeKeys := make([]string, 0, len(outboxes))
 	for i := range outboxes {
-		dedupeKeys = append(dedupeKeys, telemetry.DedupeKeyLogValue(outboxes[i]))
+		dedupeKeys = append(dedupeKeys, telemetry.DedupeKeyLogValue(&outboxes[i]))
 	}
 	return dedupeKeyLogAttr(dedupeKeys)
 }
 
-func deliveryAttemptOrdinal(row domain.YouTubeNotificationDelivery) int {
+func deliveryAttemptOrdinal(row *domain.YouTubeNotificationDelivery) int {
 	attemptOrdinal := row.AttemptCount + 1
 	if attemptOrdinal <= 0 {
 		return 1
@@ -26,7 +26,7 @@ func deliveryAttemptOrdinal(row domain.YouTubeNotificationDelivery) int {
 	return attemptOrdinal
 }
 
-func deliveryAttemptStartedAt(row domain.YouTubeNotificationDelivery) *time.Time {
+func deliveryAttemptStartedAt(row *domain.YouTubeNotificationDelivery) *time.Time {
 	if row.LockedAt == nil || row.LockedAt.IsZero() {
 		return nil
 	}
@@ -60,7 +60,7 @@ func summarizeCommunityShortsDeliveryResult(
 	}
 
 	for i := range outboxes {
-		collectCommunityShortsDeliveryResultSummary(&summary, rows[i], outboxes[i])
+		collectCommunityShortsDeliveryResultSummary(&summary, &rows[i], &outboxes[i])
 	}
 
 	return summary
@@ -68,8 +68,8 @@ func summarizeCommunityShortsDeliveryResult(
 
 func collectCommunityShortsDeliveryResultSummary(
 	summary *communityShortsDeliveryResultSummary,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 ) {
 	if !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind) {
 		return
@@ -89,7 +89,7 @@ func collectCommunityShortsDeliveryResultSummary(
 	}
 }
 
-func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (int, int, int, int) {
+func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (result1, result2, result3, result4 int) {
 	switch strings.TrimSpace(sendResult) {
 	case "success":
 		return alarmCount, 0, roomCount, 0
@@ -114,10 +114,7 @@ func buildCommunityShortsDeliveryAuditEvents(
 		if !telemetry.IsCommunityShortsDeliveryAuditKind(outboxes[i].Kind) {
 			continue
 		}
-		events = append(events, buildCommunityShortsDeliveryAuditEvent(
-			rows[i],
-			outboxes[i],
-			sentAt,
+		events = append(events, buildCommunityShortsDeliveryAuditEvent(&rows[i], &outboxes[i], sentAt,
 			deliveryPath,
 			deliveryMode,
 			sendResult,
@@ -128,8 +125,8 @@ func buildCommunityShortsDeliveryAuditEvents(
 }
 
 func buildCommunityShortsDeliveryAuditEvent(
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	sentAt time.Time,
 	deliveryPath string,
 	deliveryMode string,

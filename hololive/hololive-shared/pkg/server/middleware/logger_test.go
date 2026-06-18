@@ -157,7 +157,7 @@ func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
 		c.Status(http.StatusUnauthorized)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/inspect", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inspect", http.NoBody)
 	req.RemoteAddr = "10.10.0.5:4321"
 	req.Header.Set("User-Agent", "curl/8.5.0")
 	req.Header.Set("X-Forwarded-For", "203.0.113.10")

@@ -16,7 +16,7 @@ func TestBuildEventKeyCelebrationUsesIdentity(t *testing.T) {
 		Category:       string(domain.AlarmDispatchSourceKindCelebration),
 	}
 
-	got := BuildEventKey(input)
+	got := BuildEventKey(&input)
 	want := "celebration:birthday:UC_test:2026-05-26"
 	if got != want {
 		t.Fatalf("BuildEventKey() = %q, want %q", got, want)
@@ -33,8 +33,8 @@ func TestBuildEventKeyCelebrationIncludesDate(t *testing.T) {
 		SourceIdentity: "birthday:UC_test:2027-05-26",
 	}
 
-	key1 := BuildEventKey(day1)
-	key2 := BuildEventKey(day2)
+	key1 := BuildEventKey(&day1)
+	key2 := BuildEventKey(&day2)
 	if key1 == key2 {
 		t.Fatalf("same event key across years: %q", key1)
 	}
@@ -55,7 +55,7 @@ func TestEnvelopeDedupeInputCelebration(t *testing.T) {
 		},
 	}
 
-	input := EnvelopeDedupeInput(envelope)
+	input := EnvelopeDedupeInput(&envelope)
 
 	if input.SourceKind != domain.AlarmDispatchSourceKindCelebration {
 		t.Fatalf("SourceKind = %q, want %q", input.SourceKind, domain.AlarmDispatchSourceKindCelebration)
@@ -88,7 +88,7 @@ func TestBuildLedgerRowsCelebrationEventKey(t *testing.T) {
 		Version: 1,
 	}
 
-	event, delivery, err := buildLedgerRows(envelope, StatusPending)
+	event, delivery, err := buildLedgerRows(&envelope, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}
@@ -135,11 +135,13 @@ func TestBuildLedgerRowsCelebrationSameEventKeyAcrossRooms(t *testing.T) {
 		}
 	}
 
-	event1, delivery1, err := buildLedgerRows(makeEnvelope("room-1"), StatusPending)
+	room1 := makeEnvelope("room-1")
+	event1, delivery1, err := buildLedgerRows(&room1, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows room1: %v", err)
 	}
-	event2, delivery2, err := buildLedgerRows(makeEnvelope("room-2"), StatusPending)
+	room2 := makeEnvelope("room-2")
+	event2, delivery2, err := buildLedgerRows(&room2, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows room2: %v", err)
 	}

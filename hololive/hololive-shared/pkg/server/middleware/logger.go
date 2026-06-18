@@ -91,16 +91,25 @@ func (m *skipPathMatcher) add(pattern string) {
 func logHTTPRequest(ctx context.Context, logger *slog.Logger, c *gin.Context, path string, latency time.Duration) {
 	status := c.Writer.Status()
 	level := httpLogLevel(status)
-	reqCtx := c.Request.Context()
-	if reqCtx == nil {
-		reqCtx = ctx
-	}
+	reqCtx := requestLogContext(ctx, c)
 	if !logger.Enabled(reqCtx, level) {
 		return
 	}
 
 	attrs := httpLogAttrs(c, path, status, latency)
 	sharedlog.Log(reqCtx, logger, level, "http.request.completed", "HTTP", attrs...)
+}
+
+func requestLogContext(ctx context.Context, c *gin.Context) context.Context {
+	if c != nil && c.Request != nil {
+		if reqCtx := c.Request.Context(); reqCtx != nil {
+			return reqCtx
+		}
+	}
+	if ctx != nil {
+		return ctx
+	}
+	return context.Background()
 }
 
 func httpLogLevel(status int) slog.Level {
@@ -129,13 +138,14 @@ func httpLogAttrs(c *gin.Context, path string, status int, latency time.Duration
 }
 
 func requestDeviceInfo(c *gin.Context) string {
-	if deviceInfo := ParseClientHints(c).Summary(); deviceInfo != "" {
+	clientHints := ParseClientHints(c)
+	if deviceInfo := clientHints.Summary(); deviceInfo != "" {
 		return deviceInfo
 	}
 	return truncateUA(c.Request.UserAgent())
 }
 
-func appendOptionalHeaderAttr(attrs []slog.Attr, key string, value string) []slog.Attr {
+func appendOptionalHeaderAttr(attrs []slog.Attr, key, value string) []slog.Attr {
 	if value := strings.TrimSpace(value); value != "" {
 		return append(attrs, slog.String(key, value))
 	}

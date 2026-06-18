@@ -42,7 +42,7 @@ func buildCommunityShortsObservationPostBaselines(
 func buildObservationPostBaselineUpsert(
 	normalized []*domain.YouTubeCommunityShortsObservationPostBaseline,
 	now time.Time,
-) (string, []any) {
+) (result1 string, result2 []any) {
 	args := make([]any, 0, len(normalized)*10)
 	var sb strings.Builder
 	sb.WriteString(`
@@ -153,7 +153,7 @@ func normalizeCommunityShortsObservationPostBaselineFinalizedArgs(
 	bigBangCutoverAt time.Time,
 	finalizedAt time.Time,
 	finalizedCount int,
-) (string, time.Time, *time.Time, error) {
+) (result1 string, result2 time.Time, result3 *time.Time, result4 error) {
 	if finalizedCount < 0 {
 		return "", time.Time{}, nil, fmt.Errorf("mark community shorts observation post baseline finalized: finalized count must not be negative")
 	}

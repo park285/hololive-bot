@@ -202,7 +202,7 @@ func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGaps(
 		return time.Now().Add(r.resolverFailureBackoffTTL())
 	}
 	for i := range gaps {
-		r.recoverResolvedPublishedAtDispatchGap(ctx, repository, tracking, gaps[i], retryAfter)
+		r.recoverResolvedPublishedAtDispatchGap(ctx, repository, tracking, &gaps[i], retryAfter)
 	}
 
 	return nil
@@ -212,30 +212,30 @@ func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGap(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.PgxRepository,
-	gap resolvedPublishedAtDispatchGap,
+	gap *resolvedPublishedAtDispatchGap,
 	retryAfter func() time.Time,
 ) {
 	m := r.ensureMetrics()
 	candidate := gap.candidate
 	m.ObservePublishedAtResolverScanned(candidate.Kind)
-	finalizeResult, err := repository.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, gap.publishedAt, r.routeDecider)
+	finalizeResult, err := repository.FinalizePublishedAtAndMaybeEnqueue(ctx, &candidate, gap.publishedAt, r.routeDecider)
 	if err != nil {
-		r.reportResolvedPublishedAtDispatchGapRecoveryFailure(tracking, ctx, candidate, gap.publishedAt, retryAfter(), err)
+		r.reportResolvedPublishedAtDispatchGapRecoveryFailure(tracking, ctx, &candidate, gap.publishedAt, retryAfter(), err)
 		return
 	}
 	if finalizeResult.enqueued && finalizeResult.reason == "resolved" {
 		finalizeResult.reason = "resolved_dispatch_gap"
 	}
-	r.reportPendingPublishedAtCandidateResult(candidate, &gap.publishedAt, finalizeResult)
+	r.reportPendingPublishedAtCandidateResult(&candidate, &gap.publishedAt, finalizeResult)
 	if !finalizeResult.enqueued && finalizeResult.reason != "already_claimed" && finalizeResult.reason != "already_sent" {
-		r.markPublishedAtRetryAfterWithReporting(tracking, ctx, candidate, retryAfter(), false, "dispatch_gap_"+finalizeResult.reason)
+		r.markPublishedAtRetryAfterWithReporting(tracking, ctx, &candidate, retryAfter(), false, "dispatch_gap_"+finalizeResult.reason)
 	}
 }
 
 func (r *PendingPublishedAtResolver) reportResolvedPublishedAtDispatchGapRecoveryFailure(
 	tracking *trackingrepo.PgxRepository,
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	retryAfter time.Time,
 	err error,
@@ -260,15 +260,12 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidates(
 	runDeadline time.Time,
 	resolveTimeout time.Duration,
 	failureBackoffTTL time.Duration,
-) (int, bool, error) {
-	processed := 0
+) (processed int, deadlineReached bool, err error) {
 	for i := range candidates {
 		result, err := r.processPendingPublishedAtCandidate(
 			ctx,
 			repository,
-			tracking,
-			candidates[i],
-			runDeadline,
+			tracking, &candidates[i], runDeadline,
 			resolveTimeout,
 			failureBackoffTTL,
 		)

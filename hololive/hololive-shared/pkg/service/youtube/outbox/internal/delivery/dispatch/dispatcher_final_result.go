@@ -12,7 +12,7 @@ func (d *ClaimManager) logFinalizedCommunityShortsOutboxResults(ctx context.Cont
 	return d.auditLogger.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs)
 }
 
-func appendLatencyClassificationLogAttr(attrs []any, classification PostLatencyClassificationResult) []any {
+func appendLatencyClassificationLogAttr(attrs []any, classification *PostLatencyClassificationResult) []any {
 	if classification.Status == "" {
 		return attrs
 	}

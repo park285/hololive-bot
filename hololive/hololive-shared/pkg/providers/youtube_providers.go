@@ -96,7 +96,7 @@ func ProvideScraperScheduler(
 ) *poller.Scheduler {
 	log := schedulerLogger(logger)
 	resolvedOpts := resolveScraperSchedulerOptions(opts...)
-	scheduler := newScraperScheduler(resolvedOpts, log)
+	scheduler := newScraperScheduler(&resolvedOpts, log)
 	channelPollerRegistrations := resolvedOpts.channelPollerRegistrations
 	if len(channelPollerRegistrations) == 0 {
 		log.Warn("Scraper scheduler initialized without poller registrations")
@@ -104,7 +104,7 @@ func ProvideScraperScheduler(
 	}
 
 	allExplicit := allRegistrationsExplicit(channelPollerRegistrations)
-	defaultChannelIDs, defaultTargetChannels := resolveDefaultScraperSchedulerChannels(membersData, log, resolvedOpts, allExplicit)
+	defaultChannelIDs, defaultTargetChannels := resolveDefaultScraperSchedulerChannels(membersData, log, &resolvedOpts, allExplicit)
 	if hasExplicitAndImplicitRegistrations(channelPollerRegistrations) {
 		log.Warn("scraper scheduler has mixed explicit and default-backed registrations",
 			slog.Int("poller_templates", len(channelPollerRegistrations)),
@@ -142,7 +142,10 @@ func ProvideScraperScheduler(
 	return scheduler
 }
 
-func newScraperScheduler(opts scraperSchedulerOptions, logger *slog.Logger) *poller.Scheduler {
+func newScraperScheduler(opts *scraperSchedulerOptions, logger *slog.Logger) *poller.Scheduler {
+	if opts == nil {
+		opts = &scraperSchedulerOptions{}
+	}
 	schedulerConfig := poller.DefaultSchedulerConfig()
 	schedulerConfig.RequestInterval = 0
 	schedulerConfig.Logger = logger
@@ -164,15 +167,18 @@ func newScraperScheduler(opts scraperSchedulerOptions, logger *slog.Logger) *pol
 	if opts.budgetAcquireTimeout > 0 {
 		schedulerConfig.BudgetAcquireTimeout = opts.budgetAcquireTimeout
 	}
-	return poller.NewScheduler(schedulerConfig)
+	return poller.NewScheduler(&schedulerConfig)
 }
 
 func resolveDefaultScraperSchedulerChannels(
 	membersData domain.MemberDataProvider,
 	logger *slog.Logger,
-	opts scraperSchedulerOptions,
+	opts *scraperSchedulerOptions,
 	allExplicit bool,
-) ([]string, int) {
+) (result0 []string, result1 int) {
+	if opts == nil {
+		opts = &scraperSchedulerOptions{}
+	}
 	defaultChannelIDs := uniqueChannelIDs(opts.channelIDs)
 	defaultTargetChannels := len(defaultChannelIDs)
 	if allExplicit || len(defaultChannelIDs) > 0 {
@@ -203,12 +209,13 @@ func registerScraperSchedulerPollers(
 	registrations []ChannelPollerRegistration,
 	defaultChannelIDs []string,
 	distinctTargets map[string]struct{},
-) (int, float64, float64) {
+) (result0 int, result1, result2 float64) {
 	totalJobs := 0
 	var totalRPM float64
 	var totalRetryAmplifiedRPM float64
 
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}
@@ -255,7 +262,8 @@ func registerScraperSchedulerPollers(
 }
 
 func allRegistrationsExplicit(registrations []ChannelPollerRegistration) bool {
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}
@@ -270,7 +278,8 @@ func hasExplicitAndImplicitRegistrations(registrations []ChannelPollerRegistrati
 	const explicitAndImplicitRegistrations = 3
 
 	observedRegistrations := 0
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		registrationMode := explicitImplicitRegistrationMode(registration)
 		if registrationMode == 0 {
 			continue
@@ -283,7 +292,10 @@ func hasExplicitAndImplicitRegistrations(registrations []ChannelPollerRegistrati
 	return false
 }
 
-func explicitImplicitRegistrationMode(registration ChannelPollerRegistration) int {
+func explicitImplicitRegistrationMode(registration *ChannelPollerRegistration) int {
+	if registration == nil {
+		return 0
+	}
 	if registration.Poller == nil || registration.Interval <= 0 {
 		return 0
 	}
@@ -293,7 +305,10 @@ func explicitImplicitRegistrationMode(registration ChannelPollerRegistration) in
 	return 2
 }
 
-func estimatedRegistrationRequestUnitsPerRun(registration ChannelPollerRegistration) float64 {
+func estimatedRegistrationRequestUnitsPerRun(registration *ChannelPollerRegistration) float64 {
+	if registration == nil {
+		return 0
+	}
 	requests := registration.RequestsPerRun
 	if requests <= 0 {
 		requests = 1
@@ -302,7 +317,10 @@ func estimatedRegistrationRequestUnitsPerRun(registration ChannelPollerRegistrat
 	return float64(requests)
 }
 
-func estimatedRegistrationWorstCaseRequestUnitsPerRun(registration ChannelPollerRegistration) float64 {
+func estimatedRegistrationWorstCaseRequestUnitsPerRun(registration *ChannelPollerRegistration) float64 {
+	if registration == nil {
+		return 0
+	}
 	if registration.WorstCaseRequestUnitsPerRun > 0 {
 		return registration.WorstCaseRequestUnitsPerRun
 	}
@@ -315,7 +333,10 @@ func estimatedRegistrationWorstCaseRequestUnitsPerRun(registration ChannelPoller
 	return estimatedRegistrationRequestUnitsPerRun(registration) * float64(attempts)
 }
 
-func estimatedRegistrationRPM(registration ChannelPollerRegistration, targetCount int) float64 {
+func estimatedRegistrationRPM(registration *ChannelPollerRegistration, targetCount int) float64 {
+	if registration == nil {
+		return 0
+	}
 	if registration.Interval <= 0 || targetCount <= 0 {
 		return 0
 	}
@@ -323,7 +344,10 @@ func estimatedRegistrationRPM(registration ChannelPollerRegistration, targetCoun
 	return float64(targetCount) * (60.0 / registration.Interval.Seconds()) * estimatedRegistrationRequestUnitsPerRun(registration)
 }
 
-func estimatedRegistrationWorstCaseRPM(registration ChannelPollerRegistration, targetCount int) float64 {
+func estimatedRegistrationWorstCaseRPM(registration *ChannelPollerRegistration, targetCount int) float64 {
+	if registration == nil {
+		return 0
+	}
 	if registration.Interval <= 0 || targetCount <= 0 {
 		return 0
 	}
@@ -333,7 +357,8 @@ func estimatedRegistrationWorstCaseRPM(registration ChannelPollerRegistration, t
 
 func estimatedRequestsPerMinute(registrations []ChannelPollerRegistration) float64 {
 	var rpm float64
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		targetCount := 1
 		if registration.HasExplicitChannelIDs {
 			targetCount = len(uniqueChannelIDs(registration.ChannelIDs))

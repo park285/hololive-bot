@@ -200,5 +200,5 @@ func (c *Client) initStateManagers() {
 		c.channelHealth = nil
 		return
 	}
-	c.channelHealth = NewChannelHealthStore(c.stateStore, c.channelHealthPolicy)
+	c.channelHealth = NewChannelHealthStore(c.stateStore, &c.channelHealthPolicy)
 }

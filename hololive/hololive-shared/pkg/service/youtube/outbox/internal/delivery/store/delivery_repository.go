@@ -329,19 +329,7 @@ func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outbox
 		return nil
 	}
 
-	sentAt := dispatchstate.CanonicalSentAtNow()
-	errorText := ""
-	switch status {
-	case domain.OutboxStatusSent:
-	case domain.OutboxStatusFailed:
-		errorText = "per-room delivery failed"
-	}
-
-	args := []any{
-		status,
-		status, domain.OutboxStatusSent, sentAt,
-		status, domain.OutboxStatusFailed, errorText,
-	}
+	args := outboxAggregateStatusUpdateArgs(status)
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
 	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "update outbox aggregate statuses: apply update", `
 		UPDATE youtube_notification_outbox
@@ -355,6 +343,25 @@ func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outbox
 	}
 
 	return nil
+}
+
+func outboxAggregateStatusUpdateArgs(status domain.OutboxStatus) []any {
+	return []any{
+		status,
+		status, domain.OutboxStatusSent, dispatchstate.CanonicalSentAtNow(),
+		status, domain.OutboxStatusFailed, outboxAggregateStatusErrorText(status),
+	}
+}
+
+func outboxAggregateStatusErrorText(status domain.OutboxStatus) string {
+	switch status {
+	case domain.OutboxStatusFailed:
+		return "per-room delivery failed"
+	case domain.OutboxStatusPending, domain.OutboxStatusSent:
+		return ""
+	default:
+		return ""
+	}
 }
 
 func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Context, batchSize int) ([]int64, error) {

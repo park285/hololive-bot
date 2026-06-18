@@ -2,9 +2,11 @@ package delivery
 
 import (
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -37,7 +39,7 @@ func (r *runtimeIrisBaseURLResolver) resolveFromFile() (string, error) {
 		}
 	}
 
-	raw, err := os.ReadFile(baseURLFilePath)
+	raw, err := readRuntimeIrisBaseURLFile(baseURLFilePath)
 	if err != nil {
 		return "", fmt.Errorf("read IRIS_BASE_URL_FILE: %w", err)
 	}
@@ -48,6 +50,14 @@ func (r *runtimeIrisBaseURLResolver) resolveFromFile() (string, error) {
 	}
 
 	return baseURL, nil
+}
+
+func readRuntimeIrisBaseURLFile(path string) ([]byte, error) {
+	dir, name := filepath.Split(path)
+	if name == "" || strings.ContainsRune(name, os.PathSeparator) {
+		return nil, fmt.Errorf("invalid IRIS_BASE_URL_FILE basename")
+	}
+	return fs.ReadFile(os.DirFS(dir), name)
 }
 
 func (r *runtimeIrisBaseURLResolver) warnBaseURLHostUnvalidated(host string) {

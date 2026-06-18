@@ -61,7 +61,7 @@ func TestScheduleRetryAddsToSortedSet(t *testing.T) {
 	require.Len(t, retrySet, 1)
 
 	payload, score := unwrapSingleRetryMember(t, retrySet)
-	assert.Equal(t, mustMarshalEnvelope(t, envelope), payload)
+	assert.Equal(t, mustMarshalEnvelope(t, &envelope), payload)
 	assert.Equal(t, float64(nextVisibleAt.UnixMilli()), score)
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
 }
@@ -90,7 +90,7 @@ func TestScheduleRetryDLQOnMaxAttempts(t *testing.T) {
 	dlqItems, err := mini.List(contractsalarm.DispatchDLQKey)
 	require.NoError(t, err)
 	require.Len(t, dlqItems, 1)
-	assert.JSONEq(t, mustMarshalEnvelope(t, envelope), dlqItems[0])
+	assert.JSONEq(t, mustMarshalEnvelope(t, &envelope), dlqItems[0])
 
 	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
 	if err == nil {

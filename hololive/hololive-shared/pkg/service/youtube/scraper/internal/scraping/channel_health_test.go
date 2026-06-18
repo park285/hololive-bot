@@ -51,7 +51,7 @@ func (s *channelHealthTestStore) Del(_ context.Context, key string) error {
 func TestChannelHealthStoreRecordsParserDriftCooldownPerSource(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
-	store := NewChannelHealthStore(newChannelHealthTestStore(), ChannelHealthPolicy{
+	store := NewChannelHealthStore(newChannelHealthTestStore(), &ChannelHealthPolicy{
 		Enforce:         true,
 		TTL:             time.Hour,
 		ParserDriftBase: 10 * time.Minute,
@@ -75,7 +75,7 @@ func TestChannelHealthStoreRecordsParserDriftCooldownPerSource(t *testing.T) {
 func TestChannelHealthStoreDryRunRecordsWithoutSkipping(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
-	store := NewChannelHealthStore(newChannelHealthTestStore(), ChannelHealthPolicy{
+	store := NewChannelHealthStore(newChannelHealthTestStore(), &ChannelHealthPolicy{
 		ParserDriftBase: 10 * time.Minute,
 		ParserDriftMax:  time.Hour,
 	})
@@ -94,7 +94,8 @@ func TestChannelHealthStoreDryRunRecordsWithoutSkipping(t *testing.T) {
 func TestChannelHealthStoreIgnoresRateLimitedGlobalFailures(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
-	store := NewChannelHealthStore(newChannelHealthTestStore(), DefaultChannelHealthPolicy())
+	policy := DefaultChannelHealthPolicy()
+	store := NewChannelHealthStore(newChannelHealthTestStore(), &policy)
 
 	delay := store.RecordFailure(ctx, "UC_TEST", FailureDetail{
 		Reason:     FailureReasonRateLimited,
@@ -110,7 +111,7 @@ func TestChannelHealthStoreIgnoresRateLimitedGlobalFailures(t *testing.T) {
 func TestChannelHealthStoreSuccessClearsCooldown(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
-	store := NewChannelHealthStore(newChannelHealthTestStore(), ChannelHealthPolicy{
+	store := NewChannelHealthStore(newChannelHealthTestStore(), &ChannelHealthPolicy{
 		Enforce:         true,
 		TTL:             time.Hour,
 		ParserDriftBase: 10 * time.Minute,
@@ -129,7 +130,7 @@ func TestRecordParserDriftReturnsRetryDelayOnFirstFailure(t *testing.T) {
 	ctx := context.Background()
 	client := NewClient(
 		WithStateStore(newChannelHealthTestStore()),
-		WithChannelHealthPolicy(ChannelHealthPolicy{
+		WithChannelHealthPolicy(&ChannelHealthPolicy{
 			TTL:             time.Hour,
 			ParserDriftBase: 10 * time.Minute,
 			ParserDriftMax:  time.Hour,

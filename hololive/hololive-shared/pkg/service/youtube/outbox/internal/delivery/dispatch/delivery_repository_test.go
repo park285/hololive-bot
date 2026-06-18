@@ -49,7 +49,7 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 
 	dispatcher := NewDispatcher(nil, cache, &testSender{
 		failRoom: map[string]bool{"room-fail": true},
-	}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		DeliveryParallelism: 1,
 	})
 
@@ -184,7 +184,7 @@ func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
 		FailureRetryAfter: map[string]time.Duration{"rate-limited": 12 * time.Second},
 	}
 
-	manager.markRetryDispatchFailureBucket(ctx, []domain.YouTubeNotificationDelivery{row}, result, "rate-limited", []int64{row.ID})
+	manager.markRetryDispatchFailureBucket(ctx, []domain.YouTubeNotificationDelivery{row}, &result, "rate-limited", []int64{row.ID})
 
 	var got domain.YouTubeNotificationDelivery
 	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)

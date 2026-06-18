@@ -72,7 +72,7 @@ func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx batchDB
 	return nil
 }
 
-func collectTrackingIdentityClauses(trackingRows []*domain.YouTubeContentAlarmTracking) ([]string, []any) {
+func collectTrackingIdentityClauses(trackingRows []*domain.YouTubeContentAlarmTracking) (result1 []string, result2 []any) {
 	clauses := make([]string, 0, len(trackingRows))
 	args := make([]any, 0, len(trackingRows)*2)
 	identitySeen := make(map[string]struct{}, len(trackingRows))
@@ -114,7 +114,7 @@ func loadPersistedOutboxSentState(
 
 func buildPersistedSentStateMaps(
 	outboxRows []persistedOutboxSentStateRow,
-) (map[string]time.Time, map[int64]string, []int64) {
+) (result1 map[string]time.Time, result2 map[int64]string, result3 []int64) {
 	sentAtByIdentity := make(map[string]time.Time, len(outboxRows))
 	identityByOutboxID := make(map[int64]string, len(outboxRows))
 	outboxIDs := make([]int64, 0, len(outboxRows))
@@ -223,6 +223,8 @@ func isCommunityShortsOutboxKind(kind domain.OutboxKind) bool {
 	switch kind {
 	case domain.OutboxKindCommunityPost, domain.OutboxKindNewShort:
 		return true
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return false
 	default:
 		return false
 	}

@@ -82,9 +82,9 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 
 func idsFromEnvelopes(envelopes []domain.AlarmQueueEnvelope) []int64 {
 	ids := make([]int64, 0, len(envelopes))
-	for _, envelope := range envelopes {
-		if envelope.DispatchOutboxID > 0 {
-			ids = append(ids, envelope.DispatchOutboxID)
+	for i := range envelopes {
+		if envelopes[i].DispatchOutboxID > 0 {
+			ids = append(ids, envelopes[i].DispatchOutboxID)
 		}
 	}
 	return ids

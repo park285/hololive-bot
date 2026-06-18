@@ -14,10 +14,10 @@ var (
 const maxVideoRendererFallbackNodes = parser.MaxVideoRendererFallbackNodes
 
 func parseVideosFromInitialData(
-	data gjson.Result,
+	data *gjson.Result,
 	channelID string,
 	maxResults int,
-	videoParser func(gjson.Result, string) *Video,
+	videoParser func(*gjson.Result, string) *Video,
 ) ([]*Video, error) {
 	if err := checkAlerts(data); err != nil {
 		return nil, err

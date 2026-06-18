@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -36,8 +35,6 @@ type LivePoller struct {
 	client             *scraper.Client
 	liveStatusProvider LiveStatusProvider
 	db                 pollerDB
-	baselineMu         sync.Mutex
-	baselinedChannels  map[string]struct{}
 }
 
 type LiveStatusProvider interface {
@@ -58,7 +55,6 @@ func NewLivePollerWithStatusProvider(provider LiveStatusProvider, scraperClient 
 		client:             scraperClient,
 		liveStatusProvider: provider,
 		db:                 normalizePollerDB(db),
-		baselinedChannels:  make(map[string]struct{}),
 	}
 }
 
@@ -166,14 +162,12 @@ func (p *LivePoller) pollLiveStreams(ctx context.Context, channelID string, stre
 		return err
 	}
 
-	baselinePoll := p.isBaselinePoll(channelID)
 	for _, stream := range streams {
-		if err := p.pollStream(ctx, channelID, stream, now, baselinePoll); err != nil {
+		if err := p.pollStream(ctx, channelID, stream, now); err != nil {
 			return err
 		}
 	}
 	p.markEndedSessions(ctx, channelID, streams)
-	p.markBaselineComplete(channelID)
 	return nil
 }
 
@@ -232,21 +226,6 @@ func liveBatchErrorForAll(channelIDs []string, err error) map[string]error {
 	return errs
 }
 
-func (p *LivePoller) isBaselinePoll(channelID string) bool {
-	p.baselineMu.Lock()
-	defer p.baselineMu.Unlock()
-
-	_, exists := p.baselinedChannels[channelID]
-	return !exists
-}
-
-func (p *LivePoller) markBaselineComplete(channelID string) {
-	p.baselineMu.Lock()
-	defer p.baselineMu.Unlock()
-
-	p.baselinedChannels[channelID] = struct{}{}
-}
-
 func (p *LivePoller) fetchLiveStreams(ctx context.Context, channelID string) ([]*domain.Stream, error) {
 	if p.liveStatusProvider != nil {
 		return p.liveStatusProvider.GetChannelsLiveStatus(ctx, []string{channelID})
@@ -262,13 +241,13 @@ func (p *LivePoller) fetchLiveStreams(ctx context.Context, channelID string) ([]
 	return streamsFromUpcomingEvents(channelID, events), nil
 }
 
-func (p *LivePoller) pollStream(ctx context.Context, channelID string, stream *domain.Stream, now time.Time, baselinePoll bool) error {
+func (p *LivePoller) pollStream(ctx context.Context, channelID string, stream *domain.Stream, now time.Time) error {
 	status, ok := liveStatusFromStream(stream)
 	if !ok {
 		return nil
 	}
 
-	if err := p.saveLiveSession(ctx, channelID, stream, status, now, baselinePoll); err != nil {
+	if err := p.saveLiveSession(ctx, channelID, stream, status, now); err != nil {
 		return fmt.Errorf("poll live stream %s: %w", stream.ID, err)
 	}
 
@@ -288,6 +267,8 @@ func liveStatusFromStream(stream *domain.Stream) (domain.LiveStatus, bool) {
 		return domain.LiveStatusLive, true
 	case domain.StreamStatusUpcoming:
 		return domain.LiveStatusUpcoming, true
+	case domain.StreamStatusPast:
+		return "", false
 	default:
 		return "", false
 	}

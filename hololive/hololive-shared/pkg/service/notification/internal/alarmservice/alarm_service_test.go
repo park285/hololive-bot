@@ -49,7 +49,7 @@ func TestAddAlarm_CacheWrite(t *testing.T) {
 		UserName:   "테스트 사용자",
 	}
 
-	added, err := as.AddAlarm(ctx, req)
+	added, err := as.AddAlarm(ctx, &req)
 	require.NoError(t, err)
 	assert.True(t, added)
 
@@ -81,7 +81,7 @@ func TestAddAlarm_CacheWriteUsesShortKoreanMemberName(t *testing.T) {
 		ShortKoreanName: "라덴",
 	}}}
 
-	added, err := as.AddAlarm(t.Context(), domain.AddAlarmRequest{
+	added, err := as.AddAlarm(t.Context(), &domain.AddAlarmRequest{
 		RoomID:     "room1",
 		UserID:     "user1",
 		ChannelID:  "UC_TEST",
@@ -106,7 +106,7 @@ func TestAddAlarm_ClearsEmptySubscriberCacheMarker(t *testing.T) {
 	ctx := t.Context()
 	require.NoError(t, as.cache.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
 
-	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:    "room1",
 		UserID:    "user1",
 		ChannelID: "UC_FIRST",
@@ -134,11 +134,11 @@ func TestAddAlarm_DuplicateReturnsNotAdded(t *testing.T) {
 		MemberName: "멤버",
 	}
 
-	added1, err := as.AddAlarm(ctx, req)
+	added1, err := as.AddAlarm(ctx, &req)
 	require.NoError(t, err)
 	assert.True(t, added1)
 
-	added2, err := as.AddAlarm(ctx, req)
+	added2, err := as.AddAlarm(ctx, &req)
 	require.NoError(t, err)
 	assert.False(t, added2)
 }
@@ -157,7 +157,7 @@ func TestRemoveAlarm_Success(t *testing.T) {
 		ChannelID:  "UC_TEST",
 		MemberName: "멤버",
 	}
-	_, err := as.AddAlarm(ctx, req)
+	_, err := as.AddAlarm(ctx, &req)
 	require.NoError(t, err)
 
 	removed, err := as.RemoveAlarm(ctx, "room1", "UC_TEST", nil)
@@ -193,7 +193,7 @@ func TestGetRoomAlarms_WithAlarms(t *testing.T) {
 	ctx := t.Context()
 
 	for _, ch := range []string{"UC_A", "UC_B", "UC_C"} {
-		_, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+		_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 			RoomID:    "room1",
 			ChannelID: ch,
 		})
@@ -226,7 +226,7 @@ func TestClearRoomAlarms_ClearsAll(t *testing.T) {
 	ctx := t.Context()
 
 	for _, ch := range []string{"UC_A", "UC_B"} {
-		_, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+		_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 			RoomID:    "room1",
 			ChannelID: ch,
 		})
@@ -372,7 +372,7 @@ func TestGetAllAlarmKeys(t *testing.T) {
 
 	ctx := t.Context()
 
-	_, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+	_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room1",
 		ChannelID:  "UC_A",
 		MemberName: "멤버A",
@@ -391,7 +391,7 @@ func TestAddAlarmClearsSubscriberCacheEmptyMarkerAndBumpsChannelRegistryVersion(
 	ctx := t.Context()
 	require.NoError(t, as.cache.Set(ctx, AlarmSubscriberCacheEmptyKey, "1", 0))
 
-	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:    "room-1",
 		UserID:    "user-1",
 		ChannelID: "UC_TEST",
@@ -420,8 +420,10 @@ func TestGetDistinctRooms(t *testing.T) {
 
 	ctx := t.Context()
 
-	_, _ = as.AddAlarm(ctx, domain.AddAlarmRequest{RoomID: "room1", ChannelID: "UC_A"})
-	_, _ = as.AddAlarm(ctx, domain.AddAlarmRequest{RoomID: "room2", ChannelID: "UC_B"})
+	_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "room1", ChannelID: "UC_A"})
+	require.NoError(t, err)
+	_, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "room2", ChannelID: "UC_B"})
+	require.NoError(t, err)
 
 	rooms, err := as.GetDistinctRooms(ctx)
 	require.NoError(t, err)

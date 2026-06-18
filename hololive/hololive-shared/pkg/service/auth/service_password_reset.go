@@ -49,7 +49,9 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 		return "", nil
 	}
 
-	_, _ = s.db.Exec(ctx, `DELETE FROM auth_password_reset_tokens WHERE user_id = $1 AND used_at IS NULL`, user.ID)
+	if _, err := s.db.Exec(ctx, `DELETE FROM auth_password_reset_tokens WHERE user_id = $1 AND used_at IS NULL`, user.ID); err != nil {
+		return "", newError(CodeInternal, "failed to clear existing reset tokens", err)
+	}
 
 	rawToken, err := generateToken(resetTokenPrefix, 32)
 	if err != nil {
@@ -116,7 +118,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 		return newError(CodeInternal, "password hash failed", err)
 	}
 
-	if err := s.applyPasswordReset(ctx, reset, string(passwordHash), now); err != nil {
+	if err := s.applyPasswordReset(ctx, &reset, string(passwordHash), now); err != nil {
 		return err
 	}
 	s.warnIfPasswordResetSessionRevokeFails(ctx, reset.UserID)
@@ -152,7 +154,7 @@ func scanPasswordResetToken(row rowScanner) (passwordResetTokenModel, error) {
 
 func (s *Service) applyPasswordReset(
 	ctx context.Context,
-	reset passwordResetTokenModel,
+	reset *passwordResetTokenModel,
 	passwordHash string,
 	now time.Time,
 ) error {
@@ -187,7 +189,6 @@ func (s *Service) applyPasswordReset(
 
 func (s *Service) warnIfPasswordResetSessionRevokeFails(ctx context.Context, userID string) {
 	if s.logger == nil {
-		_ = s.revokeAllSessions(ctx, userID)
 		return
 	}
 	if err := s.revokeAllSessions(ctx, userID); err != nil {

@@ -7,6 +7,7 @@ import (
 )
 
 func benchDeliveryLockTokens(n int) []LockToken {
+	//nolint:gosec // G404: benchmark fixture needs deterministic pseudo-random values, not cryptographic randomness.
 	rng := rand.New(rand.NewSource(0x5eed))
 	base := time.Date(2026, time.June, 12, 12, 0, 0, 0, time.UTC)
 	tokens := make([]LockToken, 0, n)

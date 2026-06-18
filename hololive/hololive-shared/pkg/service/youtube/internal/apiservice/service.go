@@ -220,7 +220,7 @@ func (ys *serviceImpl) consumeQuota(cost int) {
 	}
 }
 
-func (ys *serviceImpl) GetQuotaStatus() (used int, remaining int, resetTime time.Time) {
+func (ys *serviceImpl) GetQuotaStatus() (used, remaining int, resetTime time.Time) {
 	ys.quotaMu.Lock()
 	defer ys.quotaMu.Unlock()
 

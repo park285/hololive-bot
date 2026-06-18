@@ -96,11 +96,15 @@ func TestClient_RefreshToken_Success(t *testing.T) {
 		t.Fatalf("refreshToken error: %v", err)
 	}
 
-	if token, _ := c.token.Load().(string); token != "tok-1" {
+	token, ok := c.token.Load().(string)
+	if !ok || token != "tok-1" {
 		t.Fatalf("token=%q want=%q", token, "tok-1")
 	}
 
-	expiry, _ := c.tokenExpiry.Load().(time.Time)
+	expiry, ok := c.tokenExpiry.Load().(time.Time)
+	if !ok {
+		t.Fatal("token expiry has unexpected type")
+	}
 	if time.Until(expiry) < 59*time.Minute {
 		t.Fatalf("expiry should be around 1 hour, got %s", expiry)
 	}
@@ -119,6 +123,21 @@ func TestClient_RefreshToken_FailureStatus(t *testing.T) {
 	}
 
 	if !strings.Contains(err.Error(), "token request failed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestClient_RefreshTokenNilResponse(t *testing.T) {
+	c := newTestClient("id", "secret")
+	c.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, nil
+	})
+
+	err := c.refreshToken(t.Context())
+	if err == nil {
+		t.Fatal("expected error for nil HTTP response")
+	}
+	if !strings.Contains(err.Error(), "nil response") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -164,6 +183,23 @@ func TestClient_GetStreams_CoreBranches(t *testing.T) {
 			t.Fatalf("status=%d want=%d", apiErr.StatusCode, http.StatusServiceUnavailable)
 		}
 	})
+}
+
+func TestClient_GetStreamsNilResponse(t *testing.T) {
+	c := newTestClient("client-id", "secret")
+	c.token.Store("valid-token")
+	c.tokenExpiry.Store(time.Now().Add(time.Hour))
+	c.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, nil
+	})
+
+	_, err := c.GetStreams(t.Context(), []string{"tokoyami"})
+	if err == nil {
+		t.Fatal("expected error for nil HTTP response")
+	}
+	if !strings.Contains(err.Error(), "nil response") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestClient_GetStreams_SuccessAndHeaders(t *testing.T) {
@@ -240,7 +276,7 @@ func TestClient_GetStreams_ChunksLargeUserLoginSets(t *testing.T) {
 		}
 		mu.Unlock()
 
-		body := fmt.Sprintf(`{"data":[{"id":"%s","user_login":"%s","type":"live","title":"Live now"}],"pagination":{}}`, logins[0], logins[0])
+		body := fmt.Sprintf(`{"data":[{"id":%q,"user_login":%q,"type":"live","title":"Live now"}],"pagination":{}}`, logins[0], logins[0])
 		return httpResponse(http.StatusOK, body), nil
 	})
 
@@ -269,6 +305,9 @@ func TestClient_GetStreams_ChunksLargeUserLoginSets(t *testing.T) {
 	}
 
 	wantFirstLogins := []string{"user-000", "user-100", "user-200"}
+	if len(seenFirstLogins) != len(wantFirstLogins) {
+		t.Fatalf("seenFirstLogins=%v want %v", seenFirstLogins, wantFirstLogins)
+	}
 	for i := range wantFirstLogins {
 		if seenFirstLogins[i] != wantFirstLogins[i] {
 			t.Fatalf("seenFirstLogins[%d]=%q want=%q (all=%v)", i, seenFirstLogins[i], wantFirstLogins[i], seenFirstLogins)
@@ -291,35 +330,7 @@ func TestClient_GetStreams_401RefreshAndRetry(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		switch {
-		case req.URL.String() == config.DefaultTwitchOperationalConfig().AuthURL:
-			tokenCalls++
-			if tokenCalls == 1 {
-				return httpResponse(http.StatusOK, `{"access_token":"tok-1","expires_in":3600,"token_type":"bearer"}`), nil
-			}
-
-			return httpResponse(http.StatusOK, `{"access_token":"tok-2","expires_in":3600,"token_type":"bearer"}`), nil
-		case strings.Contains(req.URL.String(), config.DefaultTwitchOperationalConfig().BaseURL+"/streams"):
-			streamCalls++
-
-			auth := req.Header.Get("Authorization")
-
-			if streamCalls == 1 {
-				if auth != "Bearer tok-1" {
-					t.Fatalf("first stream auth=%q want Bearer tok-1", auth)
-				}
-
-				return httpResponse(http.StatusUnauthorized, `{"error":"unauthorized"}`), nil
-			}
-
-			if auth != "Bearer tok-2" {
-				t.Fatalf("second stream auth=%q want Bearer tok-2", auth)
-			}
-
-			return httpResponse(http.StatusOK, `{"data":[],"pagination":{}}`), nil
-		default:
-			return nil, fmt.Errorf("unexpected URL: %s", req.URL.String())
-		}
+		return handle401RefreshRetryRequest(t, req, &tokenCalls, &streamCalls)
 	})
 
 	res, err := c.GetStreams(t.Context(), []string{"user-a"})
@@ -339,9 +350,48 @@ func TestClient_GetStreams_401RefreshAndRetry(t *testing.T) {
 		t.Fatalf("streamCalls=%d want=2", streamCalls)
 	}
 
-	if token, _ := c.token.Load().(string); token != "tok-2" {
+	token, ok := c.token.Load().(string)
+	if !ok || token != "tok-2" {
 		t.Fatalf("token=%q want=tok-2", token)
 	}
+}
+
+func handle401RefreshRetryRequest(t *testing.T, req *http.Request, tokenCalls, streamCalls *int) (*http.Response, error) {
+	t.Helper()
+
+	switch {
+	case req.URL.String() == config.DefaultTwitchOperationalConfig().AuthURL:
+		return twitchRefreshTokenResponse(tokenCalls), nil
+	case strings.Contains(req.URL.String(), config.DefaultTwitchOperationalConfig().BaseURL+"/streams"):
+		return twitchRefreshStreamResponse(t, req, streamCalls), nil
+	default:
+		return nil, fmt.Errorf("unexpected URL: %s", req.URL.String())
+	}
+}
+
+func twitchRefreshTokenResponse(tokenCalls *int) *http.Response {
+	(*tokenCalls)++
+	if *tokenCalls == 1 {
+		return httpResponse(http.StatusOK, `{"access_token":"tok-1","expires_in":3600,"token_type":"bearer"}`)
+	}
+	return httpResponse(http.StatusOK, `{"access_token":"tok-2","expires_in":3600,"token_type":"bearer"}`)
+}
+
+func twitchRefreshStreamResponse(t *testing.T, req *http.Request, streamCalls *int) *http.Response {
+	t.Helper()
+
+	(*streamCalls)++
+	auth := req.Header.Get("Authorization")
+	if *streamCalls == 1 {
+		if auth != "Bearer tok-1" {
+			t.Fatalf("first stream auth=%q want Bearer tok-1", auth)
+		}
+		return httpResponse(http.StatusUnauthorized, `{"error":"unauthorized"}`)
+	}
+	if auth != "Bearer tok-2" {
+		t.Fatalf("second stream auth=%q want Bearer tok-2", auth)
+	}
+	return httpResponse(http.StatusOK, `{"data":[],"pagination":{}}`)
 }
 
 func TestClient_GetStreams_Repeated401StopsAfterSingleRefresh(t *testing.T) {
@@ -394,14 +444,14 @@ func TestClient_GetStreams_Repeated401StopsAfterSingleRefresh(t *testing.T) {
 func TestNewClient_UsesProvidedHTTPClient(t *testing.T) {
 	provided := &http.Client{Timeout: 2 * time.Second}
 
-	client := NewClient(ClientConfig{ClientID: "id", ClientSecret: "secret", HTTPClient: provided}, newTestLogger())
+	client := NewClient(&ClientConfig{ClientID: "id", ClientSecret: "secret", HTTPClient: provided}, newTestLogger())
 	if client.httpClient != provided {
 		t.Fatal("httpClient pointer mismatch")
 	}
 }
 
 func TestNewClient_UsesSharedHTTPClientWhenConfigOmitsOne(t *testing.T) {
-	client := NewClient(ClientConfig{ClientID: "id", ClientSecret: "secret"}, newTestLogger())
+	client := NewClient(&ClientConfig{ClientID: "id", ClientSecret: "secret"}, newTestLogger())
 	if client.httpClient == nil {
 		t.Fatal("httpClient is nil")
 	}

@@ -14,7 +14,7 @@ import (
 func TestFetchPageOnceRecordsFetcherSuccessMetrics(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+		mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 	}))
 	defer server.Close()
 

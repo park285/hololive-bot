@@ -44,7 +44,7 @@ type PhotoSyncService struct {
 type photoSyncMemberRepository interface {
 	GetAllChannelIDs(ctx context.Context) ([]string, error)
 	GetMembersNeedingPhotoSync(ctx context.Context, staleThreshold time.Duration) ([]string, error)
-	UpdatePhoto(ctx context.Context, channelID string, photoURL string) error
+	UpdatePhoto(ctx context.Context, channelID, photoURL string) error
 }
 
 func NewPhotoSyncService(
@@ -176,7 +176,7 @@ func (ps *PhotoSyncService) fetchPhotoMap(ctx context.Context) (map[string]strin
 	return photoMap, nil
 }
 
-func (ps *PhotoSyncService) updateMemberPhotos(ctx context.Context, channelIDs []string, photoMap map[string]string) (int, int) {
+func (ps *PhotoSyncService) updateMemberPhotos(ctx context.Context, channelIDs []string, photoMap map[string]string) (result0, result1 int) {
 	successCount := 0
 	failCount := 0
 

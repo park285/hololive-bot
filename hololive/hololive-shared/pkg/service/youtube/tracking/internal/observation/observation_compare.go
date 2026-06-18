@@ -169,7 +169,10 @@ func appendObservationPostComparisonMatchedRows(
 ) []observationPostComparisonKey {
 	unmatchedBaselineKeys := make([]observationPostComparisonKey, 0, len(baselineKeys))
 	for _, key := range baselineKeys {
-		baseline := baselineIndex[key]
+		baseline, ok := baselineIndex[key]
+		if !ok || baseline == nil {
+			continue
+		}
 		sent, ok := sentIndex[key]
 		if appendObservationPostComparisonKnownBaselineRow(result, baseline, sent, ok) {
 			unmatchedBaselineKeys = append(unmatchedBaselineKeys, key)
@@ -185,6 +188,9 @@ func appendObservationPostComparisonKnownBaselineRow(
 	sentExists bool,
 ) bool {
 	if !sentExists {
+		return true
+	}
+	if sent == nil {
 		return true
 	}
 	if sent.count > 1 {
@@ -219,7 +225,11 @@ func appendObservationPostComparisonUnsentRows(
 		if _, ok := consumedBaseline[key]; ok {
 			continue
 		}
-		result.UnsentRows = append(result.UnsentRows, buildObservationPostComparisonRow(baselineIndex[key], nil))
+		baseline, ok := baselineIndex[key]
+		if !ok || baseline == nil {
+			continue
+		}
+		result.UnsentRows = append(result.UnsentRows, buildObservationPostComparisonRow(baseline, nil))
 	}
 }
 
@@ -233,7 +243,11 @@ func appendObservationPostComparisonUnexpectedSentRows(
 		if _, ok := consumedSent[key]; ok {
 			continue
 		}
-		result.UnexpectedSentRows = append(result.UnexpectedSentRows, buildObservationPostComparisonRow(nil, sentIndex[key]))
+		sent, ok := sentIndex[key]
+		if !ok || sent == nil {
+			continue
+		}
+		result.UnexpectedSentRows = append(result.UnexpectedSentRows, buildObservationPostComparisonRow(nil, sent))
 	}
 }
 
@@ -249,5 +263,5 @@ func finalizeObservationPostComparisonResult(result *ObservationPostComparisonRe
 	result.Summary.DuplicateSentPostCount = len(result.DuplicateSentRows)
 	result.Summary.UnexpectedSentPostCount = len(result.UnexpectedSentRows)
 	result.Summary.IdentifierMismatchCandidateCount = len(result.IdentifierMismatchCandidates)
-	result.VerdictRows = buildObservationPostComparisonVerdictRows(*result)
+	result.VerdictRows = buildObservationPostComparisonVerdictRows(result)
 }

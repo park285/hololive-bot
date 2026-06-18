@@ -9,37 +9,37 @@ import (
 
 func TestPickLockupMetadataTexts_ViewCountAndPublished(t *testing.T) {
 	parts := gjson.Parse(`[{"text":{"content":"69万回視聴"}},{"text":{"content":"1 month ago"}}]`)
-	viewCount, published := PickLockupMetadataTexts(parts)
+	viewCount, published := PickLockupMetadataTexts(&parts)
 	assert.Equal(t, int64(690000), viewCount)
 	assert.Equal(t, "1 month ago", published)
 }
 
 func TestPickLockupMetadataTexts_NoParsableViewCountFallsBack(t *testing.T) {
 	parts := gjson.Parse(`[{"text":{"content":"Streamed live"}},{"text":{"content":"2 hours ago"}}]`)
-	viewCount, published := PickLockupMetadataTexts(parts)
+	viewCount, published := PickLockupMetadataTexts(&parts)
 	assert.Equal(t, int64(0), viewCount)
 	assert.Equal(t, "2 hours ago", published)
 }
 
 func TestPickLockupMetadataTexts_EmptyInput(t *testing.T) {
-	viewCount, published := PickLockupMetadataTexts(gjson.Parse(`[]`))
+	viewCount, published := PickLockupMetadataTexts(parseGJSONResultPtr(`[]`))
 	assert.Equal(t, int64(0), viewCount)
 	assert.Empty(t, published)
 }
 
 func TestCollectLockupTexts_SkipsEmpty(t *testing.T) {
 	parts := gjson.Parse(`[{"text":{"content":"a"}},{"text":{"content":""}},{"text":{"content":"b"}}]`)
-	texts := CollectLockupTexts(parts)
+	texts := CollectLockupTexts(&parts)
 	assert.Equal(t, []string{"a", "b"}, texts)
 }
 
 func TestCollectLockupTexts_GarbageInput(t *testing.T) {
-	texts := CollectLockupTexts(gjson.Parse(`"not an array"`))
+	texts := CollectLockupTexts(parseGJSONResultPtr(`"not an array"`))
 	assert.Empty(t, texts)
 }
 
 func TestCollectLockupTexts_EmptyInput(t *testing.T) {
-	texts := CollectLockupTexts(gjson.Parse(`[]`))
+	texts := CollectLockupTexts(parseGJSONResultPtr(`[]`))
 	assert.Empty(t, texts)
 }
 

@@ -32,7 +32,7 @@ var newTestLogger = sharedlogging.NewLogger
 
 // newTestClient: 테스트용 Client를 생성합니다.
 func newTestClient(clientID, clientSecret string) *Client {
-	return NewClient(ClientConfig{ClientID: clientID, ClientSecret: clientSecret}, newTestLogger())
+	return NewClient(&ClientConfig{ClientID: clientID, ClientSecret: clientSecret}, newTestLogger())
 }
 
 func TestClient_IsConfigured(t *testing.T) {

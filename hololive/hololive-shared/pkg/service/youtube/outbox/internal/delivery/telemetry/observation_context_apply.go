@@ -19,7 +19,7 @@ func applyDeliveryTelemetryObservationContext(
 		return
 	}
 
-	timing := communityShortsAlarmTimingForTelemetryRow(*row)
+	timing := communityShortsAlarmTimingForTelemetryRow(row)
 	row.ActualPublishedAt = timing.ActualPublishedAt
 	row.AlarmSentAt = timing.AlarmSentAt
 	row.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(timing.AlarmLatencyMillis)
@@ -76,7 +76,7 @@ func findMatchingObservationWindow(
 
 	for i := range windows {
 		window := windows[i]
-		if !observationWindowMatches(publishedAt, detectedAt, window) {
+		if !observationWindowMatches(publishedAt, detectedAt, &window) {
 			continue
 		}
 		return window, true
@@ -84,7 +84,7 @@ func findMatchingObservationWindow(
 	return domain.YouTubeCommunityShortsObservationWindow{}, false
 }
 
-func snapshotObservationTimes(snapshot deliveryTelemetryTrackingSnapshot) (time.Time, time.Time, bool) {
+func snapshotObservationTimes(snapshot deliveryTelemetryTrackingSnapshot) (result1, result2 time.Time, result3 bool) {
 	if snapshot.actualPublishedAt == nil || snapshot.actualPublishedAt.IsZero() {
 		return time.Time{}, time.Time{}, false
 	}
@@ -97,7 +97,7 @@ func snapshotObservationTimes(snapshot deliveryTelemetryTrackingSnapshot) (time.
 func observationWindowMatches(
 	publishedAt time.Time,
 	detectedAt time.Time,
-	window domain.YouTubeCommunityShortsObservationWindow,
+	window *domain.YouTubeCommunityShortsObservationWindow,
 ) bool {
 	if publishedAt.Before(window.ObservationStartedAt.UTC()) {
 		return false
@@ -108,7 +108,7 @@ func observationWindowMatches(
 	return detectedAt.Before(observationWindowDetectionCutoff(window))
 }
 
-func observationWindowDetectionCutoff(window domain.YouTubeCommunityShortsObservationWindow) time.Time {
+func observationWindowDetectionCutoff(window *domain.YouTubeCommunityShortsObservationWindow) time.Time {
 	if window.ClosedAt != nil && !window.ClosedAt.IsZero() {
 		return window.ClosedAt.UTC()
 	}

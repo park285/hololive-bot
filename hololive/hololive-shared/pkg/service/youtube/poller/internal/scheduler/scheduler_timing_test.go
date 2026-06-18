@@ -51,10 +51,10 @@ func TestAdvanceNextRunAt_PreservesAnchorAcrossBacklog(t *testing.T) {
 }
 
 func TestSchedulerRescheduleJobReanchorsAfterImmediateFirstRun(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	p := &togglePollerStub{name: "videos"}
 
-	scheduler.SyncPollerTargets(PollerTargetSync{
+	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:                 p,
 		Priority:               PriorityNormal,
 		Interval:               time.Hour,
@@ -78,7 +78,7 @@ func TestSchedulerRescheduleJobReanchorsAfterImmediateFirstRun(t *testing.T) {
 }
 
 func TestSchedulerRescheduleJobBacksOffAfterPollFailure(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
 		ErrorBackoffMin: 10 * time.Second,
@@ -104,7 +104,7 @@ func TestSchedulerRescheduleJobBacksOffAfterPollFailure(t *testing.T) {
 }
 
 func TestSchedulerRescheduleJobReanchorsAfterFailureRecovery(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
 		ErrorBackoffMin: 10 * time.Second,
@@ -135,7 +135,7 @@ func TestSchedulerRescheduleJobReanchorsAfterFailureRecovery(t *testing.T) {
 }
 
 func TestSchedulerSyncPollerTargetsIntervalIncreaseRecalculatesOffsetAndClearsFailureBackoffSchedule(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
 		ErrorBackoffMin: 10 * time.Second,
@@ -159,7 +159,7 @@ func TestSchedulerSyncPollerTargetsIntervalIncreaseRecalculatesOffsetAndClearsFa
 	wantOffset := calculateOffset(job.key, newInterval)
 
 	before := time.Now()
-	scheduler.SyncPollerTargets(PollerTargetSync{
+	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:     p,
 		Priority:   PriorityHigh,
 		Interval:   newInterval,
@@ -180,7 +180,7 @@ func TestSchedulerSyncPollerTargetsIntervalIncreaseRecalculatesOffsetAndClearsFa
 }
 
 func TestSchedulerUpdatePriorityIntervalDecreaseRecalculatesOffsetAndAnchor(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	p := &togglePollerStub{name: "videos"}
 
 	scheduler.Register("channel-priority", p, PriorityNormal, 2*time.Hour)

@@ -47,20 +47,20 @@ func (r *compareMetadataRepository) EnrichObservationPostComparisonInputs(
 
 	enriched := make([]ObservationPostComparisonInput, 0, len(inputs))
 	for i := range inputs {
-		normalized := normalizeObservationPostComparisonComparableInput(inputs[i])
-		enriched = append(enriched, enrichObservationPostComparisonInput(normalized, metadataByKey))
+		normalized := normalizeObservationPostComparisonComparableInput(&inputs[i])
+		enriched = append(enriched, enrichObservationPostComparisonInput(&normalized, metadataByKey))
 	}
 
 	return enriched, nil
 }
 
 func enrichObservationPostComparisonInput(
-	input ObservationPostComparisonInput,
+	input *ObservationPostComparisonInput,
 	metadataByKey map[string]observationComparisonMetadata,
 ) ObservationPostComparisonInput {
 	metadata, ok := metadataByKey[observationComparisonMetadataKey(input.Kind, input.CanonicalPostID, input.ContentID)]
 	if !ok {
-		return input
+		return *input
 	}
 	if strings.TrimSpace(input.TitleHint) == "" {
 		input.TitleHint = metadata.titleHint
@@ -68,7 +68,7 @@ func enrichObservationPostComparisonInput(
 	if input.ActualPublishedAt == nil && metadata.actualPublishedAt != nil {
 		input.ActualPublishedAt = cloneObservationComparisonTime(metadata.actualPublishedAt)
 	}
-	return input
+	return *input
 }
 
 func (r *compareMetadataRepository) loadObservationComparisonMetadata(
@@ -93,7 +93,7 @@ func (r *compareMetadataRepository) loadObservationComparisonMetadata(
 	return metadataByKey, nil
 }
 
-func collectObservationComparisonCanonicalIDs(inputs []ObservationPostComparisonInput) ([]string, []string) {
+func collectObservationComparisonCanonicalIDs(inputs []ObservationPostComparisonInput) (result1, result2 []string) {
 	communitySeen := make(map[string]struct{}, len(inputs))
 	shortSeen := make(map[string]struct{}, len(inputs))
 	communityCanonicalIDs := make([]string, 0, len(inputs))
@@ -125,12 +125,14 @@ func appendObservationComparisonCanonicalID(
 	shortSeen map[string]struct{},
 	communityCanonicalIDs []string,
 	shortCanonicalIDs []string,
-) ([]string, []string) {
+) (result1, result2 []string) {
 	switch kind {
 	case domain.OutboxKindCommunityPost:
 		return appendUniqueObservationComparisonID(communitySeen, communityCanonicalIDs, canonicalID), shortCanonicalIDs
 	case domain.OutboxKindNewShort:
 		return communityCanonicalIDs, appendUniqueObservationComparisonID(shortSeen, shortCanonicalIDs, canonicalID)
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return communityCanonicalIDs, shortCanonicalIDs
 	default:
 		return communityCanonicalIDs, shortCanonicalIDs
 	}
@@ -212,7 +214,7 @@ func (r *compareMetadataRepository) loadObservationShortMetadata(
 	return metadataByKey, nil
 }
 
-func observationComparisonMetadataKey(kind domain.OutboxKind, canonicalPostID string, contentID string) string {
+func observationComparisonMetadataKey(kind domain.OutboxKind, canonicalPostID, contentID string) string {
 	resolvedCanonicalID := normalizeObservationComparisonCanonicalPostID(kind, canonicalPostID, contentID)
 	if resolvedCanonicalID == "" {
 		resolvedCanonicalID = strings.TrimSpace(canonicalPostID)
@@ -243,14 +245,20 @@ func observationComparisonRawIDs(kind domain.OutboxKind, canonicalIDs []string) 
 func observationComparisonRawID(kind domain.OutboxKind, candidate string) (string, bool) {
 	switch kind {
 	case domain.OutboxKindCommunityPost:
-		rawID, err := ytcontentid.NormalizeCommunityPostID(candidate)
-		return strings.TrimSpace(rawID), err == nil && strings.TrimSpace(rawID) != ""
+		return normalizeObservationComparisonRawID(candidate, ytcontentid.NormalizeCommunityPostID)
 	case domain.OutboxKindNewShort:
-		rawID, err := ytcontentid.NormalizeShortVideoID(candidate)
-		return strings.TrimSpace(rawID), err == nil && strings.TrimSpace(rawID) != ""
+		return normalizeObservationComparisonRawID(candidate, ytcontentid.NormalizeShortVideoID)
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return "", false
 	default:
 		return "", false
 	}
+}
+
+func normalizeObservationComparisonRawID(candidate string, normalize func(string) (string, error)) (string, bool) {
+	rawID, err := normalize(candidate)
+	rawID = strings.TrimSpace(rawID)
+	return rawID, err == nil && rawID != ""
 }
 
 func observationComparisonNormalizeTitleHint(value string) string {

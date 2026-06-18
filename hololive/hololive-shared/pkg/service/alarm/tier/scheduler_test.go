@@ -236,7 +236,9 @@ func TestMarkRecentlyNotified_AffectsCompute(t *testing.T) {
 	ts.MarkChannelRecentlyNotified("UC_A")
 
 	ts.mu.RLock()
-	st := ts.states["UC_A"]
+	st, ok := ts.states["UC_A"]
+	require.True(t, ok)
+	require.NotNil(t, st)
 	lastNotified := st.lastNotifiedAt
 	ts.mu.RUnlock()
 

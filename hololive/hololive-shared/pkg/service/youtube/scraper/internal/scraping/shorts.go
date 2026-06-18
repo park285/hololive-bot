@@ -46,11 +46,11 @@ func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int
 	}
 
 	data := gjson.Parse(jsonStr)
-	if err := checkAlerts(data); err != nil {
+	if err := checkAlerts(&data); err != nil {
 		return nil, err
 	}
 
-	shortItems := extractShortsLockupViewModels(data)
+	shortItems := extractShortsLockupViewModels(&data)
 	shorts := c.parseShortsLockupViewModels(shortItems, maxResults)
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 	return shorts, nil
@@ -84,19 +84,20 @@ func (c *Client) enrichShortsPublishedAt(ctx context.Context, channelID string, 
 	}
 }
 
-func extractShortsLockupViewModels(data gjson.Result) []gjson.Result {
+func extractShortsLockupViewModels(data *gjson.Result) []gjson.Result {
 	var shortItems []gjson.Result
 	data.Get("contents.twoColumnBrowseResultsRenderer.tabs").ForEach(func(_, tab gjson.Result) bool {
 		if tab.Get("tabRenderer.title").String() != "Shorts" {
 			return true
 		}
-		appendShortsLockupViewModels(&shortItems, tab.Get("tabRenderer.content.richGridRenderer.contents"))
+		contents := tab.Get("tabRenderer.content.richGridRenderer.contents")
+		appendShortsLockupViewModels(&shortItems, &contents)
 		return false
 	})
 	return shortItems
 }
 
-func appendShortsLockupViewModels(shortItems *[]gjson.Result, contents gjson.Result) {
+func appendShortsLockupViewModels(shortItems *[]gjson.Result, contents *gjson.Result) {
 	contents.ForEach(func(_, item gjson.Result) bool {
 		shortsRenderer := item.Get("richItemRenderer.content.shortsLockupViewModel")
 		if shortsRenderer.Exists() {
@@ -112,7 +113,7 @@ func (c *Client) parseShortsLockupViewModels(shortItems []gjson.Result, maxResul
 		if i >= maxResults {
 			break
 		}
-		short := c.parseShortsLockupViewModel(item)
+		short := c.parseShortsLockupViewModel(&item)
 		if short != nil {
 			shorts = append(shorts, short)
 		}
@@ -138,7 +139,7 @@ func rssVideoPublishedAt(video *Video) (*time.Time, bool) {
 }
 
 // parseShortsLockupViewModel: shortsLockupViewModel JSON을 Short 구조체로 변환
-func (c *Client) parseShortsLockupViewModel(short gjson.Result) *Short {
+func (c *Client) parseShortsLockupViewModel(short *gjson.Result) *Short {
 	videoID := short.Get("onTap.innertubeCommand.reelWatchEndpoint.videoId").String()
 	if videoID == "" {
 		return nil

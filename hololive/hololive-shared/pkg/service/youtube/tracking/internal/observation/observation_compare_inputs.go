@@ -60,7 +60,10 @@ func BuildObservationPostComparisonInputsFromSentHistories(
 	return inputs
 }
 
-func (input ObservationPostComparisonInput) ToObservationAlarmSentHistoryRow() ObservationAlarmSentHistoryRow {
+func (input *ObservationPostComparisonInput) ToObservationAlarmSentHistoryRow() ObservationAlarmSentHistoryRow {
+	if input == nil {
+		return ObservationAlarmSentHistoryRow{}
+	}
 	return ObservationAlarmSentHistoryRow{
 		PostID:            strings.TrimSpace(input.CanonicalPostID),
 		ContentID:         strings.TrimSpace(input.ContentID),

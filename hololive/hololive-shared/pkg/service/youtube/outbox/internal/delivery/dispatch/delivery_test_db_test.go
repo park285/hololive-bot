@@ -80,7 +80,7 @@ func findDeliveryTestRowsOrdered(pool *pgxpool.Pool, dest any, order string) del
 	return deliveryTestSQLResult{Error: err}
 }
 
-func findDeliveryTestRowsOrderedWhere(pool *pgxpool.Pool, dest any, order string, where string, args ...any) deliveryTestSQLResult {
+func findDeliveryTestRowsOrderedWhere(pool *pgxpool.Pool, dest any, order, where string, args ...any) deliveryTestSQLResult {
 	err := findDeliveryTestRowsContext(context.Background(), pool, dest, where, order, args...)
 	return deliveryTestSQLResult{Error: err}
 }
@@ -148,7 +148,7 @@ func firstDeliveryTestRowContext(ctx context.Context, pool *pgxpool.Pool, dest a
 	return pgxscan.Get(ctx, pool, dest, deliverysql.PostgresPlaceholders(query), args...)
 }
 
-func findDeliveryTestRowsContext(ctx context.Context, pool *pgxpool.Pool, dest any, where string, order string, args ...any) error {
+func findDeliveryTestRowsContext(ctx context.Context, pool *pgxpool.Pool, dest any, where, order string, args ...any) error {
 	table := deliveryTestTableForDest(dest)
 	if table == "" {
 		return fmt.Errorf("find rows: unsupported dest %T", dest)
@@ -164,187 +164,223 @@ func findDeliveryTestRowsContext(ctx context.Context, pool *pgxpool.Pool, dest a
 }
 
 func insertDeliveryTestRowsContext(ctx context.Context, pool *pgxpool.Pool, value any) (int64, error) {
+	if affected, ok, err := insertDeliveryTestOutboxRowsContext(ctx, pool, value); ok {
+		return affected, err
+	}
+	if affected, ok, err := insertDeliveryTestDeliveryRowsContext(ctx, pool, value); ok {
+		return affected, err
+	}
+	if affected, ok, err := insertDeliveryTestTrackingRowsContext(ctx, pool, value); ok {
+		return affected, err
+	}
+	if affected, ok, err := insertDeliveryTestAlarmStateRowsContext(ctx, pool, value); ok {
+		return affected, err
+	}
+	if affected, ok, err := insertDeliveryTestTelemetryRowsContext(ctx, pool, value); ok {
+		return affected, err
+	}
+	if affected, ok, err := insertDeliveryTestAlarmRowsContext(ctx, pool, value); ok {
+		return affected, err
+	}
+	return insertDeliveryTestRowsGeneric(ctx, pool, value)
+}
+
+func insertDeliveryTestOutboxRowsContext(ctx context.Context, pool *pgxpool.Pool, value any) (affected int64, matched bool, err error) {
 	switch rows := value.(type) {
 	case *domain.YouTubeNotificationOutbox:
-		return insertDomainOutbox(ctx, pool, rows)
+		affected, err := insertDomainOutbox(ctx, pool, rows)
+		return affected, true, err
 	case domain.YouTubeNotificationOutbox:
 		row := rows
-		return insertDomainOutbox(ctx, pool, &row)
+		affected, err := insertDomainOutbox(ctx, pool, &row)
+		return affected, true, err
 	case []domain.YouTubeNotificationOutbox:
-		return insertDomainOutboxSlice(ctx, pool, rows)
+		affected, err := insertDomainOutboxSlice(ctx, pool, rows)
+		return affected, true, err
 	case *[]domain.YouTubeNotificationOutbox:
-		return insertDomainOutboxSlice(ctx, pool, *rows)
+		affected, err := insertDomainOutboxSlice(ctx, pool, *rows)
+		return affected, true, err
 	case []*domain.YouTubeNotificationOutbox:
-		var affected int64
-		for _, row := range rows {
-			n, err := insertDomainOutbox(ctx, pool, row)
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
+		affected, err := insertDeliveryTestPtrSlice(ctx, pool, rows, insertDomainOutbox)
+		return affected, true, err
 	case *deliveryTestOutboxModel:
-		return insertTestOutboxModel(ctx, pool, rows)
+		affected, err := insertTestOutboxModel(ctx, pool, rows)
+		return affected, true, err
 	case deliveryTestOutboxModel:
 		row := rows
-		return insertTestOutboxModel(ctx, pool, &row)
+		affected, err := insertTestOutboxModel(ctx, pool, &row)
+		return affected, true, err
 	case []deliveryTestOutboxModel:
-		var affected int64
-		for i := range rows {
-			n, err := insertTestOutboxModel(ctx, pool, &rows[i])
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, rows, insertTestOutboxModel)
+		return affected, true, err
 	case *[]deliveryTestOutboxModel:
-		return insertDeliveryTestRowsContext(ctx, pool, *rows)
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, *rows, insertTestOutboxModel)
+		return affected, true, err
+	default:
+		return 0, false, nil
+	}
+}
 
+func insertDeliveryTestDeliveryRowsContext(ctx context.Context, pool *pgxpool.Pool, value any) (affected int64, matched bool, err error) {
+	switch rows := value.(type) {
 	case *domain.YouTubeNotificationDelivery:
-		return insertDomainDelivery(ctx, pool, rows)
+		affected, err := insertDomainDelivery(ctx, pool, rows)
+		return affected, true, err
 	case domain.YouTubeNotificationDelivery:
 		row := rows
-		return insertDomainDelivery(ctx, pool, &row)
+		affected, err := insertDomainDelivery(ctx, pool, &row)
+		return affected, true, err
 	case []domain.YouTubeNotificationDelivery:
-		var affected int64
-		for i := range rows {
-			n, err := insertDomainDelivery(ctx, pool, &rows[i])
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, rows, insertDomainDelivery)
+		return affected, true, err
 	case *[]domain.YouTubeNotificationDelivery:
-		return insertDeliveryTestRowsContext(ctx, pool, *rows)
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, *rows, insertDomainDelivery)
+		return affected, true, err
 	case []*domain.YouTubeNotificationDelivery:
-		var affected int64
-		for _, row := range rows {
-			n, err := insertDomainDelivery(ctx, pool, row)
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
+		affected, err := insertDeliveryTestPtrSlice(ctx, pool, rows, insertDomainDelivery)
+		return affected, true, err
 	case *deliveryTestDeliveryModel:
-		return insertTestDeliveryModel(ctx, pool, rows)
+		affected, err := insertTestDeliveryModel(ctx, pool, rows)
+		return affected, true, err
 	case deliveryTestDeliveryModel:
 		row := rows
-		return insertTestDeliveryModel(ctx, pool, &row)
+		affected, err := insertTestDeliveryModel(ctx, pool, &row)
+		return affected, true, err
 	case []deliveryTestDeliveryModel:
-		var affected int64
-		for i := range rows {
-			n, err := insertTestDeliveryModel(ctx, pool, &rows[i])
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, rows, insertTestDeliveryModel)
+		return affected, true, err
 	case *[]deliveryTestDeliveryModel:
-		return insertDeliveryTestRowsContext(ctx, pool, *rows)
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, *rows, insertTestDeliveryModel)
+		return affected, true, err
+	default:
+		return 0, false, nil
+	}
+}
 
+func insertDeliveryTestTrackingRowsContext(ctx context.Context, pool *pgxpool.Pool, value any) (affected int64, matched bool, err error) {
+	switch rows := value.(type) {
 	case *domain.YouTubeContentAlarmTracking:
-		return insertDomainTracking(ctx, pool, rows)
+		affected, err := insertDomainTracking(ctx, pool, rows)
+		return affected, true, err
 	case domain.YouTubeContentAlarmTracking:
 		row := rows
-		return insertDomainTracking(ctx, pool, &row)
+		affected, err := insertDomainTracking(ctx, pool, &row)
+		return affected, true, err
 	case []domain.YouTubeContentAlarmTracking:
-		var affected int64
-		for i := range rows {
-			n, err := insertDomainTracking(ctx, pool, &rows[i])
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, rows, insertDomainTracking)
+		return affected, true, err
 	case *[]domain.YouTubeContentAlarmTracking:
-		return insertDeliveryTestRowsContext(ctx, pool, *rows)
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, *rows, insertDomainTracking)
+		return affected, true, err
 	case *deliveryTestTrackingModel:
-		return insertTestTrackingModel(ctx, pool, rows)
+		affected, err := insertTestTrackingModel(ctx, pool, rows)
+		return affected, true, err
 	case deliveryTestTrackingModel:
 		row := rows
-		return insertTestTrackingModel(ctx, pool, &row)
+		affected, err := insertTestTrackingModel(ctx, pool, &row)
+		return affected, true, err
 	case []deliveryTestTrackingModel:
-		var affected int64
-		for i := range rows {
-			n, err := insertTestTrackingModel(ctx, pool, &rows[i])
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, rows, insertTestTrackingModel)
+		return affected, true, err
 	case *[]deliveryTestTrackingModel:
-		return insertDeliveryTestRowsContext(ctx, pool, *rows)
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, *rows, insertTestTrackingModel)
+		return affected, true, err
+	default:
+		return 0, false, nil
+	}
+}
 
+func insertDeliveryTestAlarmStateRowsContext(ctx context.Context, pool *pgxpool.Pool, value any) (affected int64, matched bool, err error) {
+	switch rows := value.(type) {
 	case *domain.YouTubeCommunityShortsAlarmState:
-		return insertDomainAlarmState(ctx, pool, rows)
+		affected, err := insertDomainAlarmState(ctx, pool, rows)
+		return affected, true, err
 	case domain.YouTubeCommunityShortsAlarmState:
 		row := rows
-		return insertDomainAlarmState(ctx, pool, &row)
+		affected, err := insertDomainAlarmState(ctx, pool, &row)
+		return affected, true, err
 	case []domain.YouTubeCommunityShortsAlarmState:
-		var affected int64
-		for i := range rows {
-			n, err := insertDomainAlarmState(ctx, pool, &rows[i])
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, rows, insertDomainAlarmState)
+		return affected, true, err
 	case *[]domain.YouTubeCommunityShortsAlarmState:
-		return insertDeliveryTestRowsContext(ctx, pool, *rows)
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, *rows, insertDomainAlarmState)
+		return affected, true, err
+	default:
+		return 0, false, nil
+	}
+}
 
+func insertDeliveryTestTelemetryRowsContext(ctx context.Context, pool *pgxpool.Pool, value any) (affected int64, matched bool, err error) {
+	switch rows := value.(type) {
 	case *domain.YouTubeNotificationDeliveryTelemetry:
-		return insertDomainTelemetry(ctx, pool, rows)
+		affected, err := insertDomainTelemetry(ctx, pool, rows)
+		return affected, true, err
 	case domain.YouTubeNotificationDeliveryTelemetry:
 		row := rows
-		return insertDomainTelemetry(ctx, pool, &row)
+		affected, err := insertDomainTelemetry(ctx, pool, &row)
+		return affected, true, err
 	case []domain.YouTubeNotificationDeliveryTelemetry:
-		var affected int64
-		for i := range rows {
-			n, err := insertDomainTelemetry(ctx, pool, &rows[i])
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, rows, insertDomainTelemetry)
+		return affected, true, err
 	case *[]domain.YouTubeNotificationDeliveryTelemetry:
-		return insertDeliveryTestRowsContext(ctx, pool, *rows)
-
-	case *domain.Alarm:
-		return insertDeliveryTestAlarm(ctx, pool, rows)
-	case []*domain.Alarm:
-		var affected int64
-		for _, row := range rows {
-			n, err := insertDeliveryTestAlarm(ctx, pool, row)
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
-	case []domain.Alarm:
-		var affected int64
-		for i := range rows {
-			n, err := insertDeliveryTestAlarm(ctx, pool, &rows[i])
-			if err != nil {
-				return affected, err
-			}
-			affected += n
-		}
-		return affected, nil
-	case *[]domain.Alarm:
-		return insertDeliveryTestRowsContext(ctx, pool, *rows)
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, *rows, insertDomainTelemetry)
+		return affected, true, err
 	default:
-		return insertDeliveryTestRowsGeneric(ctx, pool, value)
+		return 0, false, nil
 	}
+}
+
+func insertDeliveryTestAlarmRowsContext(ctx context.Context, pool *pgxpool.Pool, value any) (affected int64, matched bool, err error) {
+	switch rows := value.(type) {
+	case *domain.Alarm:
+		affected, err := insertDeliveryTestAlarm(ctx, pool, rows)
+		return affected, true, err
+	case []*domain.Alarm:
+		affected, err := insertDeliveryTestPtrSlice(ctx, pool, rows, insertDeliveryTestAlarm)
+		return affected, true, err
+	case []domain.Alarm:
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, rows, insertDeliveryTestAlarm)
+		return affected, true, err
+	case *[]domain.Alarm:
+		affected, err := insertDeliveryTestValueSlice(ctx, pool, *rows, insertDeliveryTestAlarm)
+		return affected, true, err
+	default:
+		return 0, false, nil
+	}
+}
+
+func insertDeliveryTestValueSlice[T any](
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	rows []T,
+	insert func(context.Context, *pgxpool.Pool, *T) (int64, error),
+) (int64, error) {
+	var affected int64
+	for i := range rows {
+		n, err := insert(ctx, pool, &rows[i])
+		if err != nil {
+			return affected, err
+		}
+		affected += n
+	}
+	return affected, nil
+}
+
+func insertDeliveryTestPtrSlice[T any](
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	rows []*T,
+	insert func(context.Context, *pgxpool.Pool, *T) (int64, error),
+) (int64, error) {
+	var affected int64
+	for _, row := range rows {
+		n, err := insert(ctx, pool, row)
+		if err != nil {
+			return affected, err
+		}
+		affected += n
+	}
+	return affected, nil
 }
 
 func insertDomainOutboxSlice(ctx context.Context, pool *pgxpool.Pool, rows []domain.YouTubeNotificationOutbox) (int64, error) {
@@ -367,7 +403,7 @@ func normalizeTimePtr(value *time.Time) *time.Time {
 	return &normalized
 }
 
-func normalizeRequiredTime(value time.Time, fallback time.Time) time.Time {
+func normalizeRequiredTime(value, fallback time.Time) time.Time {
 	if value.IsZero() {
 		return fallback
 	}
@@ -607,35 +643,12 @@ func deliveryTestSelectColumns(table string) string {
 // not enumerate. It mirrors the read path's scany reflection: column names come
 // from `db`/`json` tags (snake_case fallback) and the table from TableName().
 func insertDeliveryTestRowsGeneric(ctx context.Context, pool *pgxpool.Pool, value any) (int64, error) {
-	v := reflect.ValueOf(value)
-	if !v.IsValid() {
+	v, ok := deliveryTestCreateValue(value)
+	if !ok {
 		return 0, nil
 	}
-	if v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return 0, nil
-		}
-		v = v.Elem()
-	}
 	if v.Kind() == reflect.Slice {
-		var rows int64
-		for i := 0; i < v.Len(); i++ {
-			item := v.Index(i)
-			if item.Kind() == reflect.Pointer {
-				affected, err := insertDeliveryTestRowsGeneric(ctx, pool, item.Interface())
-				if err != nil {
-					return rows, err
-				}
-				rows += affected
-				continue
-			}
-			affected, err := insertDeliveryTestRowsGeneric(ctx, pool, item.Addr().Interface())
-			if err != nil {
-				return rows, err
-			}
-			rows += affected
-		}
-		return rows, nil
+		return insertDeliveryTestGenericSlice(ctx, pool, v)
 	}
 	if v.Kind() != reflect.Struct {
 		return 0, fmt.Errorf("unsupported create value: %T", value)
@@ -647,48 +660,96 @@ func insertDeliveryTestRowsGeneric(ctx context.Context, pool *pgxpool.Pool, valu
 		return 0, fmt.Errorf("unsupported create table for %T", value)
 	}
 
-	columns := make([]string, 0, v.NumField())
-	placeholders := make([]string, 0, v.NumField())
-	args := make([]any, 0, v.NumField())
-	var idField reflect.Value
-	omitID := false
-
-	for i := 0; i < v.NumField(); i++ {
-		field := v.Type().Field(i)
-		valueField := v.Field(i)
-		if field.PkgPath != "" || field.Anonymous {
-			continue
-		}
-		column, ok := deliveryTestColumnName(field)
-		if !ok {
-			continue
-		}
-		if strings.EqualFold(column, "id") && valueField.IsZero() {
-			idField = valueField
-			omitID = true
-			continue
-		}
-		columns = append(columns, column)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)+1))
-		args = append(args, valueField.Interface())
-	}
-	if len(columns) == 0 {
+	insert := buildDeliveryTestGenericInsert(v)
+	if len(insert.columns) == 0 {
 		return 0, fmt.Errorf("no insert columns for %T", value)
 	}
 
-	query := "INSERT INTO " + table + " (" + strings.Join(columns, ", ") + ") VALUES (" + strings.Join(placeholders, ", ") + ")"
-	if omitID && idField.IsValid() && idField.CanSet() {
+	query := "INSERT INTO " + table + " (" + strings.Join(insert.columns, ", ") + ") VALUES (" + strings.Join(insert.placeholders, ", ") + ")"
+	if insert.omitID && insert.idField.IsValid() && insert.idField.CanSet() {
 		query += " RETURNING id"
-		if err := pool.QueryRow(ctx, query, args...).Scan(idField.Addr().Interface()); err != nil {
+		if err := pool.QueryRow(ctx, query, insert.args...).Scan(insert.idField.Addr().Interface()); err != nil {
 			return 0, err
 		}
 		return 1, nil
 	}
-	tag, err := pool.Exec(ctx, query, args...)
+	tag, err := pool.Exec(ctx, query, insert.args...)
 	if err != nil {
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
+}
+
+func deliveryTestCreateValue(value any) (reflect.Value, bool) {
+	v := reflect.ValueOf(value)
+	if !v.IsValid() {
+		return reflect.Value{}, false
+	}
+	if v.Kind() != reflect.Pointer {
+		return v, true
+	}
+	if v.IsNil() {
+		return reflect.Value{}, false
+	}
+	return v.Elem(), true
+}
+
+func insertDeliveryTestGenericSlice(ctx context.Context, pool *pgxpool.Pool, v reflect.Value) (int64, error) {
+	var rows int64
+	for i := 0; i < v.Len(); i++ {
+		affected, err := insertDeliveryTestGenericSliceItem(ctx, pool, v.Index(i))
+		if err != nil {
+			return rows, err
+		}
+		rows += affected
+	}
+	return rows, nil
+}
+
+func insertDeliveryTestGenericSliceItem(ctx context.Context, pool *pgxpool.Pool, item reflect.Value) (int64, error) {
+	if item.Kind() == reflect.Pointer {
+		return insertDeliveryTestRowsGeneric(ctx, pool, item.Interface())
+	}
+	return insertDeliveryTestRowsGeneric(ctx, pool, item.Addr().Interface())
+}
+
+type deliveryTestGenericInsert struct {
+	columns      []string
+	placeholders []string
+	args         []any
+	idField      reflect.Value
+	omitID       bool
+}
+
+func buildDeliveryTestGenericInsert(v reflect.Value) deliveryTestGenericInsert {
+	insert := deliveryTestGenericInsert{
+		columns:      make([]string, 0, v.NumField()),
+		placeholders: make([]string, 0, v.NumField()),
+		args:         make([]any, 0, v.NumField()),
+	}
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Type().Field(i)
+		insert.addField(&field, v.Field(i))
+	}
+	return insert
+}
+
+func (insert *deliveryTestGenericInsert) addField(field *reflect.StructField, valueField reflect.Value) {
+	if field.PkgPath != "" || field.Anonymous {
+		return
+	}
+	column, ok := deliveryTestColumnName(field)
+	if !ok {
+		return
+	}
+	if strings.EqualFold(column, "id") && valueField.IsZero() {
+		insert.idField = valueField
+		insert.omitID = true
+		return
+	}
+	insert.columns = append(insert.columns, column)
+	insert.placeholders = append(insert.placeholders, fmt.Sprintf("$%d", len(insert.args)+1))
+	insert.args = append(insert.args, valueField.Interface())
 }
 
 func deliveryTestApplyCreateDefaults(v reflect.Value) {
@@ -696,30 +757,44 @@ func deliveryTestApplyCreateDefaults(v reflect.Value) {
 	timeType := reflect.TypeFor[time.Time]()
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Type().Field(i)
-		value := v.Field(i)
-		if field.PkgPath != "" || !value.CanSet() {
-			continue
-		}
-		if value.Type() == timeType {
-			if t, ok := value.Interface().(time.Time); ok && !t.IsZero() {
-				value.Set(reflect.ValueOf(t.UTC()))
-			}
-		}
-		if value.Kind() == reflect.Pointer && value.Type().Elem() == timeType && !value.IsNil() {
-			t := value.Elem().Interface().(time.Time).UTC()
-			value.Set(reflect.ValueOf(&t))
-		}
-		if field.Name == "CreatedAt" || field.Name == "UpdatedAt" {
-			if t, ok := value.Interface().(time.Time); ok && t.IsZero() {
-				value.Set(reflect.ValueOf(now))
-			}
-		}
-		if field.Name == "NextAttemptAt" {
-			if t, ok := value.Interface().(time.Time); ok && t.IsZero() {
-				value.Set(reflect.ValueOf(now))
-			}
+		deliveryTestApplyFieldCreateDefault(&field, v.Field(i), timeType, now)
+	}
+	deliveryTestApplyIdentityCreateDefaults(v)
+	deliveryTestApplyStatusCreateDefaults(v)
+}
+
+func deliveryTestApplyFieldCreateDefault(field *reflect.StructField, value reflect.Value, timeType reflect.Type, now time.Time) {
+	if field.PkgPath != "" || !value.CanSet() {
+		return
+	}
+	deliveryTestNormalizeTimeField(value, timeType)
+	deliveryTestApplyNamedTimeDefault(field.Name, value, now)
+}
+
+func deliveryTestNormalizeTimeField(value reflect.Value, timeType reflect.Type) {
+	if value.Type() == timeType {
+		if t, ok := value.Interface().(time.Time); ok && !t.IsZero() {
+			value.Set(reflect.ValueOf(t.UTC()))
 		}
 	}
+	if value.Kind() == reflect.Pointer && value.Type().Elem() == timeType && !value.IsNil() {
+		if t, ok := value.Elem().Interface().(time.Time); ok {
+			utc := t.UTC()
+			value.Set(reflect.ValueOf(&utc))
+		}
+	}
+}
+
+func deliveryTestApplyNamedTimeDefault(name string, value reflect.Value, now time.Time) {
+	if name != "CreatedAt" && name != "UpdatedAt" && name != "NextAttemptAt" {
+		return
+	}
+	if t, ok := value.Interface().(time.Time); ok && t.IsZero() {
+		value.Set(reflect.ValueOf(now))
+	}
+}
+
+func deliveryTestApplyIdentityCreateDefaults(v reflect.Value) {
 	contentID := v.FieldByName("ContentID")
 	canonicalContentID := v.FieldByName("CanonicalContentID")
 	if contentID.IsValid() && canonicalContentID.IsValid() &&
@@ -727,6 +802,9 @@ func deliveryTestApplyCreateDefaults(v reflect.Value) {
 		canonicalContentID.CanSet() && canonicalContentID.String() == "" {
 		canonicalContentID.SetString(contentID.String())
 	}
+}
+
+func deliveryTestApplyStatusCreateDefaults(v reflect.Value) {
 	deliveryStatus := v.FieldByName("DeliveryStatus")
 	if deliveryStatus.IsValid() && deliveryStatus.CanSet() && deliveryStatus.Kind() == reflect.String && deliveryStatus.String() == "" {
 		deliveryStatus.SetString("PENDING")
@@ -769,7 +847,7 @@ func deliveryTestTableName(model any) string {
 	return deliveryTestSnakeCase(t.Name())
 }
 
-func deliveryTestColumnName(field reflect.StructField) (string, bool) {
+func deliveryTestColumnName(field *reflect.StructField) (string, bool) {
 	if dbTag := field.Tag.Get("db"); dbTag != "" {
 		name := strings.Split(dbTag, ",")[0]
 		return name, name != "-" && name != ""

@@ -32,33 +32,56 @@ import (
 // 스키마 마이그레이션이 완료되기 전 앱이 시작되는 Race Condition 방어용.
 func OpenWithRetry(
 	ctx context.Context,
-	config Config,
-	opt OpenOptions,
+	config *Config,
+	opt *OpenOptions,
 ) (*Client, error) {
+	if config == nil {
+		return nil, fmt.Errorf("postgres config is required")
+	}
+	if opt == nil {
+		opt = &OpenOptions{}
+	}
 	retry := normalizeOpenRetryConfig(opt.Retry)
 	logger := openRetryLogger(opt.Logger)
 
 	var lastErr error
 	for attempt := range retry.MaxAttempts {
-		client, err := Open(ctx, config, opt)
+		client, err, retrying := tryOpenRetryAttempt(ctx, config, opt, logger, retry, attempt)
 		if err == nil {
-			logOpenRetrySuccess(logger, attempt)
 			return client, nil
 		}
-
 		lastErr = err
-		if attempt >= retry.MaxAttempts-1 {
+		if !retrying {
 			break
-		}
-
-		delay := backoff.ComputeExponentialBackoff(attempt, retry.BaseDelay, retry.MaxDelay, 0)
-		logOpenRetryAttempt(logger, retry, attempt, delay, err)
-		if waitErr := waitOpenRetryDelay(ctx, delay); waitErr != nil {
-			return nil, waitErr
 		}
 	}
 
 	return nil, fmt.Errorf("postgres connect failed after %d attempts: %w", retry.MaxAttempts, lastErr)
+}
+
+func tryOpenRetryAttempt(
+	ctx context.Context,
+	config *Config,
+	opt *OpenOptions,
+	logger *slog.Logger,
+	retry RetryConfig,
+	attempt int,
+) (*Client, error, bool) {
+	client, err := open(ctx, config, opt)
+	if err == nil {
+		logOpenRetrySuccess(logger, attempt)
+		return client, nil, false
+	}
+	if attempt >= retry.MaxAttempts-1 {
+		return nil, err, false
+	}
+
+	delay := backoff.ComputeExponentialBackoff(attempt, retry.BaseDelay, retry.MaxDelay, 0)
+	logOpenRetryAttempt(logger, retry, attempt, delay, err)
+	if waitErr := waitOpenRetryDelay(ctx, delay); waitErr != nil {
+		return nil, waitErr, false
+	}
+	return nil, err, true
 }
 
 func normalizeOpenRetryConfig(retry RetryConfig) RetryConfig {

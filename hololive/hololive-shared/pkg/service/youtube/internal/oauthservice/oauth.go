@@ -22,6 +22,7 @@ package oauthservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -147,31 +148,35 @@ func (ys *OAuthService) GetService() *youtube.Service {
 	return ys.service
 }
 
-func loadToken(file string) (*oauth2.Token, error) {
+func loadToken(file string) (token *oauth2.Token, err error) {
 	// #nosec G304 -- token file path is controlled by service configuration.
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open token file: %w", err)
 	}
 	defer func() {
-		_ = f.Close()
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close token file: %w", closeErr))
+		}
 	}()
 
-	token := &oauth2.Token{}
+	token = &oauth2.Token{}
 	if err = json.NewDecoder(f).Decode(token); err != nil {
 		return nil, fmt.Errorf("failed to decode token: %w", err)
 	}
 	return token, nil
 }
 
-func saveToken(file string, token *oauth2.Token) error {
+func saveToken(file string, token *oauth2.Token) (err error) {
 	// #nosec G304 -- token file path is controlled by service configuration.
-	f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to open token file: %w", err)
 	}
 	defer func() {
-		_ = f.Close()
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close token file: %w", closeErr))
+		}
 	}()
 
 	if err := json.NewEncoder(f).Encode(token); err != nil {

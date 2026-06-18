@@ -74,22 +74,22 @@ func (s *Service) fetchAllStreamsFromOrigin(ctx context.Context) ([]*domain.Stre
 }
 
 func (s *Service) loadOfficialScheduleDocument(ctx context.Context) (*goquery.Document, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL+"/lives/hololive", http.NoBody)
+	req, err := s.newOfficialScheduleRequest(ctx)
 	if err != nil {
-		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonUnknown, fmt.Errorf("failed to create scraper request: %w", err))
+		return nil, err
 	}
-
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; HololiveBot/1.0)")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("HTTP request failed: %w", err))
+		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, officialScheduleRequestError(err, resp == nil))
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("unexpected status code: %d", resp.StatusCode))
+	if resp == nil {
+		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("HTTP request failed: nil response"))
 	}
+	if err := validateOfficialScheduleResponse(resp); err != nil {
+		return nil, err
+	}
+	defer s.closeOfficialScheduleResponse(resp)
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
@@ -98,7 +98,42 @@ func (s *Service) loadOfficialScheduleDocument(ctx context.Context) (*goquery.Do
 	return doc, nil
 }
 
-func (s *Service) parseOfficialScheduleDocument(doc *goquery.Document) ([]*domain.Stream, int) {
+func (s *Service) closeOfficialScheduleResponse(resp *http.Response) {
+	if closeErr := resp.Body.Close(); closeErr != nil && s.logger != nil {
+		s.logger.Warn("Failed to close official schedule response body", "error", closeErr)
+	}
+}
+
+func (s *Service) newOfficialScheduleRequest(ctx context.Context) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL+"/lives/hololive", http.NoBody)
+	if err != nil {
+		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonUnknown, fmt.Errorf("failed to create scraper request: %w", err))
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; HololiveBot/1.0)")
+	return req, nil
+}
+
+func officialScheduleRequestError(err error, nilResponse bool) error {
+	if nilResponse {
+		err = fmt.Errorf("nil response: %w", err)
+	}
+	return fmt.Errorf("HTTP request failed: %w", err)
+}
+
+func validateOfficialScheduleResponse(resp *http.Response) error {
+	if resp == nil {
+		return wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("HTTP request failed: nil response"))
+	}
+	if resp.Body == nil {
+		return wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("HTTP request failed: nil response body"))
+	}
+	if resp.StatusCode != http.StatusOK {
+		return wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("unexpected status code: %d", resp.StatusCode))
+	}
+	return nil
+}
+
+func (s *Service) parseOfficialScheduleDocument(doc *goquery.Document) (result0 []*domain.Stream, result1 int) {
 	streams := make([]*domain.Stream, 0)
 	parseErrors := 0
 	currentDate := ""
@@ -128,7 +163,7 @@ func (s *Service) appendOfficialScheduleContainerStreams(
 	parseErrors int,
 	container *goquery.Selection,
 	currentDate string,
-) ([]*domain.Stream, int) {
+) (result0 []*domain.Stream, result1 int) {
 	container.Find("a.thumbnail").Each(func(j int, sel *goquery.Selection) {
 		stream, err := s.parseStreamElement(sel, currentDate)
 		if err != nil {

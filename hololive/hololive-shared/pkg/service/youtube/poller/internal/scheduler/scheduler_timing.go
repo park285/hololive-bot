@@ -43,7 +43,7 @@ func errorRetryDelay(interval time.Duration, consecutiveFailures int, minBackoff
 	return delay
 }
 
-func normalizeRetryBackoffBounds(minBackoff, maxBackoff time.Duration) (time.Duration, time.Duration) {
+func normalizeRetryBackoffBounds(minBackoff, maxBackoff time.Duration) (result1, result2 time.Duration) {
 	if minBackoff <= 0 {
 		minBackoff = 30 * time.Second
 	}

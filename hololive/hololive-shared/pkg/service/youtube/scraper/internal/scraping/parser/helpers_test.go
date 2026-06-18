@@ -2,7 +2,7 @@ package parser
 
 import "github.com/tidwall/gjson"
 
-func testVideoParser(renderer gjson.Result, channelID string) *Video {
+func testVideoParser(renderer *gjson.Result, channelID string) *Video {
 	videoID := renderer.Get("videoId").String()
 	if videoID == "" {
 		return nil

@@ -61,27 +61,27 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 	}
 
 	data := gjson.Parse(jsonStr)
-	if err := c.checkCommunityPostAlerts(ctx, channelID, data); err != nil {
+	if err := c.checkCommunityPostAlerts(ctx, channelID, &data); err != nil {
 		return nil, err
 	}
 
-	postsContent := extractCommunityPostsContent(data)
+	postsContent := extractCommunityPostsContent(&data)
 	if !postsContent.Exists() {
 		c.markCommunityMissing(ctx, channelID)
 		return nil, nil
 	}
 
-	posts := c.parseCommunityPosts(postsContent, maxResults)
+	posts := c.parseCommunityPosts(&postsContent, maxResults)
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 	return posts, nil
 }
 
-func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) (string, bool, error) {
+func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) (html string, missing bool, err error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
 	if err := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); err != nil {
 		return "", false, err
 	}
-	html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
+	html, err = c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
 	if statusCode, ok := extractHTTPStatusCode(err); ok && statusCode == http.StatusNotFound {
 		c.markCommunityMissing(ctx, channelID)
 		slog.Info("community posts endpoint missing; channel temporarily skipped",
@@ -103,7 +103,7 @@ func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) 
 	return html, false, nil
 }
 
-func (c *Client) checkCommunityPostAlerts(ctx context.Context, channelID string, data gjson.Result) error {
+func (c *Client) checkCommunityPostAlerts(ctx context.Context, channelID string, data *gjson.Result) error {
 	if err := checkAlerts(data); err != nil {
 		if errors.Is(err, ErrChannelNotFound) {
 			c.markCommunityMissing(ctx, channelID)
@@ -113,7 +113,7 @@ func (c *Client) checkCommunityPostAlerts(ctx context.Context, channelID string,
 	return nil
 }
 
-func extractCommunityPostsContent(data gjson.Result) gjson.Result {
+func extractCommunityPostsContent(data *gjson.Result) gjson.Result {
 	tabPath := "contents.twoColumnBrowseResultsRenderer.tabs"
 	var postsContent gjson.Result
 	data.Get(tabPath).ForEach(func(_, tab gjson.Result) bool {
@@ -127,7 +127,7 @@ func extractCommunityPostsContent(data gjson.Result) gjson.Result {
 	return postsContent
 }
 
-func (c *Client) parseCommunityPosts(postsContent gjson.Result, maxResults int) []*CommunityPost {
+func (c *Client) parseCommunityPosts(postsContent *gjson.Result, maxResults int) []*CommunityPost {
 	posts := make([]*CommunityPost, 0, maxResults)
 	postsContent.ForEach(func(_, content gjson.Result) bool {
 		if len(posts) >= maxResults {
@@ -138,7 +138,7 @@ func (c *Client) parseCommunityPosts(postsContent gjson.Result, maxResults int) 
 			return true
 		}
 
-		post := c.parseBackstagePost(postThread)
+		post := c.parseBackstagePost(&postThread)
 		if post != nil {
 			posts = append(posts, post)
 		}
@@ -148,23 +148,26 @@ func (c *Client) parseCommunityPosts(postsContent gjson.Result, maxResults int) 
 }
 
 // parseBackstagePost: backstagePostRenderer JSON을 CommunityPost 구조체로 변환
-func (c *Client) parseBackstagePost(post gjson.Result) *CommunityPost {
+func (c *Client) parseBackstagePost(post *gjson.Result) *CommunityPost {
 	upstreamPostID := extractCommunityPostID(post)
 	if upstreamPostID == "" {
 		return nil
 	}
 
-	authorPhoto := extractThumbnails(post.Get("authorThumbnail.thumbnails"))
+	authorThumbnails := post.Get("authorThumbnail.thumbnails")
+	authorPhoto := extractThumbnails(&authorThumbnails)
 
 	// 본문 텍스트 추출
-	contentText := extractRunText(post.Get("contentText.runs"))
+	contentRuns := post.Get("contentText.runs")
+	contentText := extractRunText(&contentRuns)
 
 	// 좋아요 수 파싱
 	likeCountText := post.Get("voteCount.simpleText").String()
 	likeCount := parseShortNumber(likeCountText)
 
 	// 이미지 첨부
-	images := extractThumbnails(post.Get("backstageAttachment.backstageImageRenderer.image.thumbnails"))
+	imageThumbnails := post.Get("backstageAttachment.backstageImageRenderer.image.thumbnails")
+	images := extractThumbnails(&imageThumbnails)
 
 	// 첨부 비디오
 	videoID := post.Get("backstageAttachment.videoRenderer.videoId").String()
@@ -190,7 +193,7 @@ func (c *Client) parseBackstagePost(post gjson.Result) *CommunityPost {
 	}
 }
 
-func extractThumbnails(thumbnails gjson.Result) []Thumbnail {
+func extractThumbnails(thumbnails *gjson.Result) []Thumbnail {
 	var extracted []Thumbnail
 	thumbnails.ForEach(func(_, t gjson.Result) bool {
 		extracted = append(extracted, Thumbnail{
@@ -203,7 +206,7 @@ func extractThumbnails(thumbnails gjson.Result) []Thumbnail {
 	return extracted
 }
 
-func extractRunText(runs gjson.Result) string {
+func extractRunText(runs *gjson.Result) string {
 	var contentBuilder strings.Builder
 	runs.ForEach(func(_, run gjson.Result) bool {
 		contentBuilder.WriteString(run.Get("text").String())
@@ -212,7 +215,7 @@ func extractRunText(runs gjson.Result) string {
 	return contentBuilder.String()
 }
 
-func extractCommunityPostID(post gjson.Result) string {
+func extractCommunityPostID(post *gjson.Result) string {
 	for _, candidate := range []string{
 		post.Get("postId").String(),
 		post.Get("navigationEndpoint.commandMetadata.webCommandMetadata.url").String(),

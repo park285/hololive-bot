@@ -10,14 +10,14 @@ import (
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
-func storedPasswordHash(t *testing.T, service *Service, email string) string {
+func storedPasswordHash(t *testing.T, service *Service) string {
 	t.Helper()
 
 	var passwordHash string
 	if err := service.db.QueryRow(
 		context.Background(),
 		`SELECT password_hash FROM auth_users WHERE email = $1`,
-		normalizeEmail(email),
+		normalizeEmail("user@example.com"),
 	).Scan(&passwordHash); err != nil {
 		t.Fatalf("load user: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestRegister_UsesConfiguredBcryptCost(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	hash := storedPasswordHash(t, service, "user@example.com")
+	hash := storedPasswordHash(t, service)
 	cost, err := bcrypt.Cost([]byte(hash))
 	if err != nil {
 		t.Fatalf("bcrypt.Cost: %v", err)
@@ -92,7 +92,7 @@ func TestResetPassword_UsesConfiguredBcryptCost(t *testing.T) {
 		t.Fatalf("reset failed: %v", err)
 	}
 
-	hash := storedPasswordHash(t, service, "user@example.com")
+	hash := storedPasswordHash(t, service)
 	cost, err := bcrypt.Cost([]byte(hash))
 	if err != nil {
 		t.Fatalf("bcrypt.Cost: %v", err)

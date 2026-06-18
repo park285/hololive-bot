@@ -67,7 +67,7 @@ func (s *Service) parseStreamElement(sel *goquery.Selection, currentDate string)
 	return buildStream(videoID, videoURL, memberName, channelID, startTime), nil
 }
 
-func (s *Service) parseStreamVideo(sel *goquery.Selection) (string, string, error) {
+func (s *Service) parseStreamVideo(sel *goquery.Selection) (value0, value1 string, err error) {
 	videoURL, exists := sel.Attr("href")
 	if !exists || !strings.Contains(videoURL, "youtube.com/watch?v=") {
 		return "", "", fmt.Errorf("invalid video URL")

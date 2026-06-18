@@ -94,9 +94,9 @@ type PublishBatchResult struct {
 	PromotedShadowedCount int
 }
 
-func processedPublishBatchResult(result PublishBatchResult) PublishBatchResult {
+func processedPublishBatchResult(result *PublishBatchResult) PublishBatchResult {
 	result.ProcessedDeliveries = result.RequestedDeliveries
-	return result
+	return *result
 }
 
 type RetryUpdate struct {
@@ -112,8 +112,8 @@ type TerminalUpdate struct {
 }
 
 type Writer interface {
-	InsertShadowed(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*Record, error)
-	InsertPending(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*Record, InsertResult, error)
+	InsertShadowed(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, error)
+	InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error)
 	InsertBatch(ctx context.Context, input PublishBatchInput) (PublishBatchResult, error)
 }
 

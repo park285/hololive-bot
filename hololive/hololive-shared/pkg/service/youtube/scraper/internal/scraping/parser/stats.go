@@ -10,7 +10,7 @@ import (
 
 const aboutChannelViewModelPath = "onResponseReceivedEndpoints.0.showEngagementPanelEndpoint.engagementPanel.engagementPanelSectionListRenderer.content.sectionListRenderer.contents.0.itemSectionRenderer.contents.0.aboutChannelRenderer.metadata.aboutChannelViewModel"
 
-func ParseChannelStatsFromInitialData(data gjson.Result, channelID string) *ChannelStats {
+func ParseChannelStatsFromInitialData(data *gjson.Result, channelID string) *ChannelStats {
 	stats := &ChannelStats{
 		ChannelID: channelID,
 	}
@@ -34,22 +34,24 @@ func ParseChannelStatsFromInitialData(data gjson.Result, channelID string) *Chan
 	return stats
 }
 
-func ParseChannelSnippetFromInitialData(data gjson.Result) *ChannelSnippet {
+func ParseChannelSnippetFromInitialData(data *gjson.Result) *ChannelSnippet {
+	avatarSources := data.Get("header.pageHeaderRenderer.content.pageHeaderViewModel.image.decoratedAvatarViewModel.avatar.avatarViewModel.image.sources")
+	bannerSources := data.Get("header.pageHeaderRenderer.content.pageHeaderViewModel.banner.imageBannerViewModel.image.sources")
 	return &ChannelSnippet{
-		Avatar: ParseThumbnailSources(data.Get("header.pageHeaderRenderer.content.pageHeaderViewModel.image.decoratedAvatarViewModel.avatar.avatarViewModel.image.sources")),
-		Banner: ParseThumbnailSources(data.Get("header.pageHeaderRenderer.content.pageHeaderViewModel.banner.imageBannerViewModel.image.sources")),
+		Avatar: ParseThumbnailSources(&avatarSources),
+		Banner: ParseThumbnailSources(&bannerSources),
 	}
 }
 
-func ParseChannelHandle(data gjson.Result) string {
+func ParseChannelHandle(data *gjson.Result) string {
 	handle := data.Get("contents.twoColumnBrowseResultsRenderer.tabs.0.tabRenderer.endpoint.browseEndpoint.canonicalBaseUrl").String()
-	if len(handle) > 0 && handle[0] == '/' {
+	if handle != "" && handle[0] == '/' {
 		return handle[1:]
 	}
 	return handle
 }
 
-func ParseThumbnailSources(sources gjson.Result) []Thumbnail {
+func ParseThumbnailSources(sources *gjson.Result) []Thumbnail {
 	thumbnails := make([]Thumbnail, 0)
 	if !sources.IsArray() {
 		return thumbnails
@@ -82,7 +84,7 @@ func ParseShortNumber(text string) int64 {
 	return int64(val * float64(multiplier))
 }
 
-func shortNumberBaseAndMultiplier(text string) (string, int64) {
+func shortNumberBaseAndMultiplier(text string) (result1 string, result2 int64) {
 	units := []struct {
 		suffix     string
 		multiplier int64
@@ -137,7 +139,10 @@ func ParseViewCount(text string) int64 {
 
 	text = strings.ReplaceAll(text, ",", "")
 	text = strings.TrimSpace(text)
-	val, _ := strconv.ParseFloat(text, 64)
+	val, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0
+	}
 	return int64(val * multiplier)
 }
 
@@ -145,7 +150,10 @@ func ParseVideoCount(text string) int64 {
 	text = strings.TrimSuffix(text, " videos")
 	text = strings.TrimSuffix(text, " video")
 	text = strings.ReplaceAll(text, ",", "")
-	val, _ := strconv.ParseInt(text, 10, 64)
+	val, err := strconv.ParseInt(text, 10, 64)
+	if err != nil {
+		return 0
+	}
 	return val
 }
 

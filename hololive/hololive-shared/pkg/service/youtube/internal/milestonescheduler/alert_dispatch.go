@@ -107,7 +107,9 @@ func runAlertDispatchWorks[T any, W any](
 		}
 	}
 
-	_ = eg.Wait()
+	if err := eg.Wait(); err != nil {
+		logger.Warn("Alert dispatch worker failed", slog.Any("error", err))
+	}
 }
 
 func collectSentAlertNotifications[T any](

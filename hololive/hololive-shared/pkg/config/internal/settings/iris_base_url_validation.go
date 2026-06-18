@@ -17,7 +17,7 @@ const (
 
 var settingsIrisBaseURLUnvalidatedHostWarnOnce sync.Once
 
-func resolveIrisBaseURL(config IrisConfig) (string, error) {
+func resolveIrisBaseURL(config *IrisConfig) (string, error) {
 	if baseURL := strings.TrimSpace(config.BaseURL); baseURL != "" {
 		return validateSettingsIrisBaseURL(baseURL, "IRIS_BASE_URL")
 	}

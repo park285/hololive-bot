@@ -90,7 +90,7 @@ func (r *Repository) loadObservationWindows(
 
 func observationWindowPublishedRange(
 	trackingByIdentity map[deliveryTelemetryIdentity]deliveryTelemetryTrackingSnapshot,
-) (time.Time, time.Time, bool) {
+) (result1, result2 time.Time, result3 bool) {
 	var earliest time.Time
 	var latest time.Time
 	for _, snapshot := range trackingByIdentity {
@@ -99,7 +99,7 @@ func observationWindowPublishedRange(
 	return earliest, latest, !earliest.IsZero() && !latest.IsZero()
 }
 
-func includePublishedAtInRange(actualPublishedAt *time.Time, earliest time.Time, latest time.Time) (time.Time, time.Time) {
+func includePublishedAtInRange(actualPublishedAt *time.Time, earliest, latest time.Time) (result1, result2 time.Time) {
 	if actualPublishedAt == nil || actualPublishedAt.IsZero() {
 		return earliest, latest
 	}

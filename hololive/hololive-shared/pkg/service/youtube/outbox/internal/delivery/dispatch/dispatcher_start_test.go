@@ -52,7 +52,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -90,7 +90,7 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 	probe := newDispatcherTickProbe(2)
 	db := openDispatcherStartTestDB(t, "dispatcher_run_tick")
 
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        10 * time.Millisecond,
@@ -130,7 +130,7 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 	probe := newDispatcherTickProbe(2)
 	db := openDispatcherStartTestDB(t, "dispatcher_aggregate_tick")
 
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:             10,
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
@@ -174,7 +174,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	probe := newDispatcherTickProbe(1)
 	db := openDispatcherStartTestDB(t, "dispatcher_cleanup_tick")
 
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:      10,
 		LockTimeout:    time.Minute,
 		PollInterval:   time.Hour,

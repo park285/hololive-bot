@@ -209,9 +209,9 @@ type AlarmQueueEnvelope struct {
 	EnqueuedAt        string                        `json:"enqueued_at"`
 	Version           uint8                         `json:"version"`
 	Retry             *AlarmQueueRetryMetadata      `json:"retry,omitempty"`
-	rawPayload        string
-	normalizedPayload string
-	sourcePayload     string
+	SourcePayloadRaw  string                        `json:"source_payload,omitempty"`
+	rawPayload        string                        `json:"-"`
+	normalizedPayload string                        `json:"-"`
 }
 
 type AlarmQueueRetryMetadata struct {
@@ -245,48 +245,33 @@ type alarmQueueEnvelopeWire struct {
 	SourcePayload    string                             `json:"source_payload,omitempty"`
 }
 
-func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
-	return json.Marshal(alarmQueueEnvelopeWire{
-		DispatchOutboxID: e.DispatchOutboxID,
-		Notification: alarmQueueEnvelopeNotificationWire{
-			AlarmType:                   e.Notification.AlarmType,
-			RoomID:                      e.Notification.RoomID,
-			Channel:                     e.Notification.Channel,
-			Stream:                      e.Notification.Stream,
-			MinutesUntil:                e.Notification.MinutesUntil,
-			Users:                       e.Notification.Users,
-			ScheduleChangeMessage:       e.Notification.ScheduleChangeMessage,
-			ScheduleChangePreviousStart: e.Notification.ScheduleChangePreviousStart,
-		},
-		SourceKind:    e.SourceKind,
-		YouTubeOutbox: e.YouTubeOutbox,
-		Celebration:   e.Celebration,
-		ClaimKeys:     e.ClaimKeys,
-		EnqueuedAt:    e.EnqueuedAt,
-		Version:       e.Version,
-		Retry:         e.Retry,
-		SourcePayload: e.sourcePayload,
-	})
-}
-
-func (e AlarmQueueEnvelope) OriginalPayload() string {
+func (e *AlarmQueueEnvelope) OriginalPayload() string {
+	if e == nil {
+		return ""
+	}
 	return e.rawPayload
 }
 
-func (e AlarmQueueEnvelope) NormalizedPayload() string {
+func (e *AlarmQueueEnvelope) NormalizedPayload() string {
+	if e == nil {
+		return ""
+	}
 	return e.normalizedPayload
 }
 
-func (e AlarmQueueEnvelope) SourcePayload() string {
-	return e.sourcePayload
+func (e *AlarmQueueEnvelope) SourcePayload() string {
+	if e == nil {
+		return ""
+	}
+	return e.SourcePayloadRaw
 }
 
 func (e *AlarmQueueEnvelope) EnsureSourcePayloadFromRaw() {
 	if e == nil {
 		return
 	}
-	if e.sourcePayload == "" && e.rawPayload != "" {
-		e.sourcePayload = e.rawPayload
+	if e.SourcePayloadRaw == "" && e.rawPayload != "" {
+		e.SourcePayloadRaw = e.rawPayload
 	}
 }
 
@@ -313,15 +298,15 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 			ScheduleChangeMessage:       wire.Notification.ScheduleChangeMessage,
 			ScheduleChangePreviousStart: wire.Notification.ScheduleChangePreviousStart,
 		},
-		SourceKind:    wire.SourceKind,
-		YouTubeOutbox: wire.YouTubeOutbox,
-		Celebration:   wire.Celebration,
-		ClaimKeys:     wire.ClaimKeys,
-		EnqueuedAt:    wire.EnqueuedAt,
-		Version:       wire.Version,
-		Retry:         wire.Retry,
-		rawPayload:    string(data),
-		sourcePayload: wire.SourcePayload,
+		SourceKind:       wire.SourceKind,
+		YouTubeOutbox:    wire.YouTubeOutbox,
+		Celebration:      wire.Celebration,
+		ClaimKeys:        wire.ClaimKeys,
+		EnqueuedAt:       wire.EnqueuedAt,
+		Version:          wire.Version,
+		Retry:            wire.Retry,
+		SourcePayloadRaw: wire.SourcePayload,
+		rawPayload:       string(data),
 	}
 
 	normalizedPayload, err := json.Marshal(*e)

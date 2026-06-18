@@ -68,7 +68,7 @@ func (s *Service) DetectNotificationScheduleChange(ctx context.Context, roomID, 
 	return s.detectLogicalScheduleChange(ctx, roomID, channelID, stream)
 }
 
-func (s *Service) TryClaimNotificationScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream, previousScheduled string) ([]string, bool, error) {
+func (s *Service) TryClaimNotificationScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream, previousScheduled string) (result0 []string, ok1 bool, err error) {
 	if stream == nil || stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
 		return nil, false, nil
 	}
@@ -105,7 +105,7 @@ func (s *Service) resolvePreviousNotificationSchedule(ctx context.Context, roomI
 	return change.PreviousScheduled, true, nil
 }
 
-func (s *Service) tryClaimNotificationScheduleTransitions(ctx context.Context, roomID, channelID string, stream *domain.Stream, oldScheduled, newScheduled time.Time) ([]string, bool, error) {
+func (s *Service) tryClaimNotificationScheduleTransitions(ctx context.Context, roomID, channelID string, stream *domain.Stream, oldScheduled, newScheduled time.Time) (result0 []string, ok1 bool, err error) {
 	claimKeys := make([]string, 0, 2)
 	streamKey, streamClaimed, err := s.TryClaimRoomScheduleTransition(ctx, roomID, stream.ID, oldScheduled, newScheduled)
 	if err != nil {

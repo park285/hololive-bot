@@ -35,7 +35,7 @@ func TestFetchAndLockForPerRoomReturnsByNextAttemptBeforeCreated(t *testing.T) {
 	require.NotEqual(t, createdFirstID, rows[0].ID)
 }
 
-func insertClaimOrderOutboxForDispatch(t *testing.T, ctx context.Context, pool *pgxpool.Pool, contentID string, createdAt time.Time, nextAttemptAt time.Time) int64 {
+func insertClaimOrderOutboxForDispatch(t *testing.T, ctx context.Context, pool *pgxpool.Pool, contentID string, createdAt, nextAttemptAt time.Time) int64 {
 	t.Helper()
 	var id int64
 	err := pool.QueryRow(ctx, `

@@ -125,6 +125,8 @@ func NewPublisher(c cache.Client, logger *slog.Logger, opts ...PublisherOption) 
 
 func normalizePublishMode(mode PublishMode) PublishMode {
 	switch mode {
+	case PublishModeValkeyOnly:
+		return PublishModeValkeyOnly
 	case PublishModeShadow, PublishModePGFirst:
 		return mode
 	default:
@@ -151,7 +153,7 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 
 	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
 	defer func() {
-		observeAlarmDispatchPublishBatch(time.Since(startedAt), p.publishConfig.Mode, result)
+		observeAlarmDispatchPublishBatch(time.Since(startedAt), p.publishConfig.Mode, &result)
 	}()
 
 	result, err = p.publishEnvelopes(ctx, envelopes)
@@ -177,7 +179,7 @@ func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain
 
 	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
 	defer func() {
-		observeAlarmDispatchPublishBatch(time.Since(startedAt), p.publishConfig.Mode, result)
+		observeAlarmDispatchPublishBatch(time.Since(startedAt), p.publishConfig.Mode, &result)
 	}()
 
 	result, err := p.publishEnvelopes(ctx, envelopes)
@@ -221,6 +223,8 @@ func (p *Publisher) publishEnvelopes(
 	envelopes []domain.AlarmQueueEnvelope,
 ) (dispatchoutbox.PublishBatchResult, error) {
 	switch p.publishConfig.Mode {
+	case PublishModeValkeyOnly:
+		return p.publishValkeyBatch(ctx, envelopes)
 	case PublishModeShadow:
 		return p.publishShadowBatch(ctx, envelopes)
 	case PublishModePGFirst:
@@ -292,7 +296,7 @@ func (p *Publisher) publishValkeyBatch(ctx context.Context, envelopes []domain.A
 func (p *Publisher) buildValkeyLpushCmds(envelopes []domain.AlarmQueueEnvelope) ([]valkey.Completed, error) {
 	cmds := make([]valkey.Completed, 0, len(envelopes))
 	for i := range envelopes {
-		jsonBytes, err := json.Marshal(envelopes[i])
+		jsonBytes, err := json.Marshal(&envelopes[i])
 		if err != nil {
 			return nil, fmt.Errorf("publish alarm queue batch: marshal envelope %d: %w", i, err)
 		}
@@ -343,29 +347,29 @@ func (p *Publisher) publishWakeup(ctx context.Context) {
 	}
 	acquired, err := p.cache.SetNX(ctx, alarmDispatchWakeupGuardKey, "1", 3*time.Second)
 	if err != nil {
-		alarmDispatchWakeupFailedTotal.Inc()
+		observeAlarmDispatchWakeupFailed()
 		p.logger.Warn("Alarm outbox wakeup guard failed", slog.Any("error", err))
 		return
 	}
 	if !acquired {
-		alarmDispatchWakeupSuppressedTotal.Inc()
+		observeAlarmDispatchWakeupSuppressed()
 		return
 	}
 	cmd := p.cache.B().Lpush().Key(AlarmDispatchWakeupQueue).Element("1").Build()
 	results := p.cache.DoMulti(ctx, cmd)
 	if len(results) != 1 {
-		alarmDispatchWakeupFailedTotal.Inc()
+		observeAlarmDispatchWakeupFailed()
 		p.logger.Warn("Alarm outbox wakeup failed", slog.Int("result_count", len(results)))
 		return
 	}
 	if err := results[0].Error(); err != nil {
-		alarmDispatchWakeupFailedTotal.Inc()
+		observeAlarmDispatchWakeupFailed()
 		p.logger.Warn("Alarm outbox wakeup failed", slog.Any("error", err))
 		return
 	}
-	alarmDispatchWakeupSentTotal.Inc()
+	observeAlarmDispatchWakeupSent()
 	if err := p.cache.Expire(ctx, AlarmDispatchWakeupQueue, 5*time.Second); err != nil {
-		alarmDispatchWakeupExpireFailedTotal.Inc()
+		observeAlarmDispatchWakeupExpireFailed()
 		p.logger.Warn("Alarm outbox wakeup expire failed", slog.Any("error", err))
 	}
 }

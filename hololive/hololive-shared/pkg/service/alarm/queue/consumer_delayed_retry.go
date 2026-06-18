@@ -48,7 +48,7 @@ func (c *Consumer) drainDelayedRetries(ctx context.Context, count int, now time.
 		return nil, err
 	}
 	if len(values) > 0 {
-		alarmQueueRetryDrained.Add(float64(len(values)))
+		observeAlarmQueueRetryDrained(len(values))
 	}
 	return c.retryPayloadsFromMembers(ctx, values), nil
 }

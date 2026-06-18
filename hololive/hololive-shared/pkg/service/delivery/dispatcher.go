@@ -121,10 +121,12 @@ func (d *Dispatcher) Start(ctx context.Context) {
 func (d *Dispatcher) run(ctx context.Context) {
 	d.processOnce(ctx)
 
-	_ = lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(ctx context.Context) error {
+	if err := lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(ctx context.Context) error {
 		d.processOnce(ctx)
 		return nil
-	})
+	}); err != nil && d.logger != nil {
+		d.logger.Warn("Delivery dispatcher ticker stopped with error", slog.String("error", err.Error()))
+	}
 	d.logger.Info("Delivery dispatcher stopped")
 }
 
@@ -145,7 +147,12 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 }
 
 func (d *Dispatcher) logAccumulatedFailures(ctx context.Context) {
-	if cnt, _ := d.repository.CountByStatus(ctx, domain.DeliveryStatusFailed); cnt > 5 {
+	cnt, err := d.repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
+	if err != nil {
+		d.logger.Warn("Failed to count delivery outbox failures", slog.String("error", err.Error()))
+		return
+	}
+	if cnt > 5 {
 		d.logger.Error("delivery outbox accumulated failures", slog.Int64("count", cnt))
 	}
 }
@@ -211,8 +218,12 @@ func (d *Dispatcher) processBatchConcurrent(ctx context.Context, items []domain.
 func (d *Dispatcher) acquireBatchSlot(ctx context.Context, sem chan<- struct{}, wg *sync.WaitGroup) bool {
 	select {
 	case <-ctx.Done():
+		errText := "context canceled"
+		if err := ctx.Err(); err != nil {
+			errText = err.Error()
+		}
 		d.logger.Warn("Delivery batch canceled before completion",
-			slog.String("error", ctx.Err().Error()))
+			slog.String("error", errText))
 		wg.Wait()
 		return false
 	case sem <- struct{}{}:
@@ -234,7 +245,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		d.logger.Error("Failed to unmarshal outbox payload",
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))
-		_ = d.repository.MarkFailed(ctx, item.ID, d.config.MaxRetries, d.config.RetryBackoff, "payload unmarshal: "+err.Error())
+		d.markItemFailed(ctx, item.ID, "payload unmarshal: "+err.Error())
 		return
 	}
 
@@ -243,7 +254,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 			slog.Int64("id", item.ID),
 			slog.String("room_id", item.RoomID),
 			slog.String("error", err.Error()))
-		_ = d.repository.MarkFailed(ctx, item.ID, d.config.MaxRetries, d.config.RetryBackoff, err.Error())
+		d.markItemFailed(ctx, item.ID, err.Error())
 		return
 	}
 
@@ -251,6 +262,12 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		d.logger.Error("Failed to mark outbox item as sent",
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))
+	}
+}
+
+func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, reason string) {
+	if err := d.repository.MarkFailed(ctx, id, d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
+		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", id), slog.String("error", err.Error()))
 	}
 }
 

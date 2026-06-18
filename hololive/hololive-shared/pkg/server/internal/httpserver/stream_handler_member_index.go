@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
+func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) (result0 []string, result1 map[string]string, err error) {
 	state := h.ensureState()
 	if snapshot, ok := state.cachedMemberIndexSnapshot(time.Now()); ok {
 		return snapshot.channelIDs, snapshot.channelNames, nil
@@ -103,7 +103,7 @@ func (h *StreamHandler) fetchAllMembers(ctx context.Context) ([]*domain.Member, 
 	return members, nil
 }
 
-func BuildActiveMemberIndex(members []*domain.Member) ([]string, map[string]string) {
+func BuildActiveMemberIndex(members []*domain.Member) (result0 []string, result1 map[string]string) {
 	channelIDs := make([]string, 0, len(members))
 	channelToName := make(map[string]string, len(members))
 	for _, member := range members {

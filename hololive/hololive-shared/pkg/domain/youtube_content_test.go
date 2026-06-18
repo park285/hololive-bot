@@ -237,7 +237,7 @@ func TestThumbnailsJSON_Value(t *testing.T) {
 			if !ok {
 				t.Fatalf("Value() 타입 = %T, want string", val)
 			}
-			if len(s) == 0 {
+			if s == "" {
 				t.Error("Value() 반환 JSON 문자열이 비어있음")
 			}
 		})

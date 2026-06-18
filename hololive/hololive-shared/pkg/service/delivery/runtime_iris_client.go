@@ -38,8 +38,7 @@ func NewRuntimeIrisClient(
 	}
 
 	clientOpts := make([]iris.ClientOption, 0, len(opts)+2)
-	clientOpts = append(clientOpts, iris.WithLogger(logger))
-	clientOpts = append(clientOpts, iris.WithReplyRetry(runtimeIrisReplyRetryMax))
+	clientOpts = append(clientOpts, iris.WithLogger(logger), iris.WithReplyRetry(runtimeIrisReplyRetryMax))
 	clientOpts = append(clientOpts, opts...)
 
 	resolver := &runtimeIrisBaseURLResolver{

@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -80,7 +81,9 @@ func LoadYouTubeProducerRuntime() (*Config, error) {
 }
 
 func loadConfigValidated(validate func(*Config) error) (*Config, error) {
-	_ = godotenv.Load()
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("load .env: %w", err)
+	}
 
 	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
 	config, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction)
@@ -102,7 +105,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		return nil, err
 	}
 	irisConfig := loadIrisConfig(webhookToken, botToken)
-	workerProfile, err := fetchIrisBotWebhookWorkerProfile(irisConfig)
+	workerProfile, err := fetchIrisBotWebhookWorkerProfile(&irisConfig)
 	if err != nil && !errors.Is(err, workerconfig.ErrWorkerProfileDisabled) {
 		return nil, fmt.Errorf("fetch Iris bot webhook worker profile: %w", err)
 	}
@@ -127,8 +130,8 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Services:     loadServicesConfig(),
 		Environment:  loadAppEnvironment(),
 		Scraper:      loadScraperConfig(),
-		Webhook:      loadWebhookConfig(workerProfile),
-		WorkerPool:   loadWorkerPoolConfig(workerProfile),
+		Webhook:      loadWebhookConfig(&workerProfile),
+		WorkerPool:   loadWorkerPoolConfig(&workerProfile),
 		WorkerProfile: WorkerProfileConfig{
 			Version: workerProfile.Version,
 			Hash:    workerProfile.ProfileHash(),
@@ -174,13 +177,13 @@ func loadIrisConfig(webhookToken, botToken string) IrisConfig {
 	}
 }
 
-func fetchIrisBotWebhookWorkerProfile(config IrisConfig) (workerconfig.IrisBotWebhookWorkerProfile, error) {
+func fetchIrisBotWebhookWorkerProfile(config *IrisConfig) (profile workerconfig.IrisBotWebhookWorkerProfile, err error) {
 	if strings.TrimSpace(config.BotToken) == "" {
 		return workerconfig.LegacyIrisBotWebhookWorkerProfile(), workerconfig.ErrWorkerProfileDisabled
 	}
 	baseURL, err := resolveIrisBaseURL(config)
 	if err != nil {
-		return workerconfig.IrisBotWebhookWorkerProfile{}, err
+		return profile, err
 	}
 	irisClient, err := iris.NewClient(
 		iris.WithBaseURL(baseURL),
@@ -191,16 +194,20 @@ func fetchIrisBotWebhookWorkerProfile(config IrisConfig) (workerconfig.IrisBotWe
 		iris.WithResponseHeaderTimeout(config.HTTPResponseHeaderTimeout),
 	)
 	if err != nil {
-		return workerconfig.IrisBotWebhookWorkerProfile{}, err
+		return profile, err
 	}
-	defer irisClient.Close()
+	defer func() {
+		if closeErr := irisClient.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close Iris client: %w", closeErr))
+		}
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), config.HTTPTimeout)
 	defer cancel()
 
 	diagnostics, err := irisClient.GetRuntimeDiagnostics(ctx)
 	if err != nil {
-		return workerconfig.IrisBotWebhookWorkerProfile{}, err
+		return profile, err
 	}
 	return workerconfig.DecodeIrisBotWebhookWorkerProfileFromRuntimeDiagnostics(bytes.NewReader(diagnostics))
 }

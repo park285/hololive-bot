@@ -21,6 +21,7 @@
 package scraping
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -71,4 +72,19 @@ func TestCreateHTTPClient_RejectsInvalidProxyURL(t *testing.T) {
 			assert.Nil(t, transport)
 		})
 	}
+}
+
+type nilResponseTransport struct{}
+
+func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, nil
+}
+
+func TestNetHTTPPageFetcherNilResponse(t *testing.T) {
+	client := NewClient(WithHTTPClient(&http.Client{Transport: nilResponseTransport{}}))
+	fetcher := netHTTPPageFetcher{client: client}
+
+	_, err := fetcher.FetchPage(t.Context(), pageFetchRequest{URL: "https://youtube.example/@test/videos"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil response")
 }

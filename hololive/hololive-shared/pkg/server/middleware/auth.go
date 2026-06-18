@@ -32,7 +32,7 @@ import (
 
 const (
 	// APIKeyHeader: 하위 호환성을 위한 재수출. 실제 정의는 contracts/common 패키지에 있습니다.
-	APIKeyHeader = common.APIKeyHeader //nolint:gosec // G101: 헤더 이름일 뿐 실제 credentials가 아님
+	APIKeyHeader = common.APIKeyHeader
 )
 
 func errorPayload(code, message string) gin.H {
@@ -51,7 +51,7 @@ func respondError(c *gin.Context, status int, code, message string) {
 	c.JSON(status, errorPayload(code, message))
 }
 
-func constantTimeEqualSecret(provided string, expected string) bool {
+func constantTimeEqualSecret(provided, expected string) bool {
 	providedHash := sha256.Sum256([]byte(provided))
 	expectedHash := sha256.Sum256([]byte(expected))
 

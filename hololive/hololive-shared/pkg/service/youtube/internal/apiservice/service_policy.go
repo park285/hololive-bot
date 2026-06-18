@@ -24,6 +24,6 @@ import ytcontract "github.com/kapu/hololive-shared/pkg/service/youtube"
 
 type QuotaExceededError = ytcontract.QuotaExceededError
 
-func shouldReturnFallbackError(currentResults int, failedTargets int, fallbackSuccesses int) bool {
+func shouldReturnFallbackError(currentResults, failedTargets, fallbackSuccesses int) bool {
 	return currentResults == 0 && failedTargets > 0 && fallbackSuccesses == 0
 }

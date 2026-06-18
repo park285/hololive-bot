@@ -16,6 +16,8 @@ func normalizeContentID(kind domain.OutboxKind, id string) string {
 			return trimmed
 		}
 		return normalized
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return trimmed
 	default:
 		return trimmed
 	}

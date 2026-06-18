@@ -21,6 +21,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -38,7 +39,7 @@ func TestSecurityHeadersMiddleware_RemovesXXSSProtection(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 

@@ -58,14 +58,12 @@ func TestAddPreparedEvent_DetectsSameBatchHashConflict(t *testing.T) {
 	first := eventInsert{EventKey: "key1", PayloadHash: "hash1"}
 	result := PublishBatchResult{}
 
-	result, collision, err := addPreparedEvent(events, first, result)
-	require.NoError(t, err)
+	collision := addPreparedEvent(events, &first, &result)
 	require.Nil(t, collision)
 	require.Equal(t, 1, result.RequestedEvents)
 
 	conflict := eventInsert{EventKey: "key1", PayloadHash: "hash2"}
-	result, collision, err = addPreparedEvent(events, conflict, result)
-	require.NoError(t, err)
+	collision = addPreparedEvent(events, &conflict, &result)
 	require.NotNil(t, collision)
 	require.Equal(t, conflict, collision.Event)
 	require.Equal(t, "hash1", collision.ExistingPayloadHash)
@@ -74,13 +72,11 @@ func TestAddPreparedEvent_DetectsSameBatchHashConflict(t *testing.T) {
 	events2 := make(map[string]eventInsert)
 	result2 := PublishBatchResult{}
 	orig := eventInsert{EventKey: "key1", PayloadHash: "hash1"}
-	result2, collision, err = addPreparedEvent(events2, orig, result2)
-	require.NoError(t, err)
+	collision = addPreparedEvent(events2, &orig, &result2)
 	require.Nil(t, collision)
 
 	duplicate := eventInsert{EventKey: "key1", PayloadHash: "hash1"}
-	result2, collision, err = addPreparedEvent(events2, duplicate, result2)
-	require.NoError(t, err)
+	collision = addPreparedEvent(events2, &duplicate, &result2)
 	require.Nil(t, collision)
 	require.Equal(t, 1, result2.RequestedEvents)
 	require.Len(t, events2, 1)
@@ -139,10 +135,11 @@ func TestClassifyEventPreflight_SplitsNewDuplicateAndConflict(t *testing.T) {
 func TestProcessedPublishBatchResult_TreatsConflictRecordAsProcessed(t *testing.T) {
 	t.Parallel()
 
-	result := processedPublishBatchResult(PublishBatchResult{
+	input := PublishBatchResult{
 		RequestedDeliveries: 2,
 		HashConflictEvents:  1,
-	})
+	}
+	result := processedPublishBatchResult(&input)
 
 	require.Equal(t, 2, result.ProcessedDeliveries)
 }

@@ -29,7 +29,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -70,7 +70,7 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 	db := newDeliveryPool(t)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,

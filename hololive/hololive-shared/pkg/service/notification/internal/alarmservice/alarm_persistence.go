@@ -43,7 +43,7 @@ type alarmUpsertWriter interface {
 }
 
 type alarmTypesUpdater interface {
-	UpdateTypes(ctx context.Context, roomID string, channelID string, alarmTypes domain.AlarmTypes) error
+	UpdateTypes(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) error
 }
 
 func (as *AlarmService) persistAlarm(ctx context.Context, alarm *domain.Alarm) error {
@@ -51,11 +51,7 @@ func (as *AlarmService) persistAlarm(ctx context.Context, alarm *domain.Alarm) e
 		return nil
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	persistCtx, cancel := context.WithTimeout(ctx, alarmPersistTaskTimeout)
+	persistCtx, cancel := alarmPersistenceContext(ctx)
 	defer cancel()
 
 	if writer, ok := as.alarmWriter.(alarmUpsertWriter); ok {
@@ -78,11 +74,7 @@ func (as *AlarmService) updateAlarmTypes(ctx context.Context, alarm *domain.Alar
 		return nil
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	persistCtx, cancel := context.WithTimeout(ctx, alarmPersistTaskTimeout)
+	persistCtx, cancel := alarmPersistenceContext(ctx)
 	defer cancel()
 
 	if writer, ok := as.alarmWriter.(alarmTypesUpdater); ok {
@@ -121,11 +113,7 @@ func (as *AlarmService) deleteAlarm(ctx context.Context, roomID, channelID strin
 		return nil
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	persistCtx, cancel := context.WithTimeout(ctx, alarmPersistTaskTimeout)
+	persistCtx, cancel := alarmPersistenceContext(ctx)
 	defer cancel()
 
 	if err := as.alarmWriter.Remove(persistCtx, roomID, channelID); err != nil {
@@ -140,11 +128,7 @@ func (as *AlarmService) deleteRoomAlarms(ctx context.Context, roomID string) err
 		return nil
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	persistCtx, cancel := context.WithTimeout(ctx, alarmPersistTaskTimeout)
+	persistCtx, cancel := alarmPersistenceContext(ctx)
 	defer cancel()
 
 	if _, err := as.alarmWriter.ClearByRoom(persistCtx, roomID); err != nil {
@@ -152,6 +136,13 @@ func (as *AlarmService) deleteRoomAlarms(ctx context.Context, roomID string) err
 	}
 
 	return nil
+}
+
+func alarmPersistenceContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		return context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
+	}
+	return context.WithTimeout(ctx, alarmPersistTaskTimeout)
 }
 
 func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, operation string, mutationErr error) error {

@@ -76,7 +76,8 @@ func recordEventCollisions(ctx context.Context, tx pgx.Tx, collisions []eventCol
 
 func buildEventCollisionBatchRows(collisions []eventCollision) []eventCollisionBatchRow {
 	rows := make([]eventCollisionBatchRow, 0, len(collisions))
-	for _, collision := range collisions {
+	for i := range collisions {
+		collision := &collisions[i]
 		var existingEventID *int64
 		if collision.ExistingEventID > 0 {
 			id := collision.ExistingEventID

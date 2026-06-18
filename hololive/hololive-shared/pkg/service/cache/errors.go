@@ -47,7 +47,7 @@ func (e *CacheError) Unwrap() error { return e.Err }
 // NewCacheError는 cache 에러를 생성합니다.
 //
 // message 파라미터는 레거시 호환을 위해 유지합니다(현재 Error() 문자열에는 포함하지 않음).
-func NewCacheError(_ string, operation, key string, cause error) *CacheError {
+func NewCacheError(_, operation, key string, cause error) *CacheError {
 	return &CacheError{
 		Operation: operation,
 		Key:       key,

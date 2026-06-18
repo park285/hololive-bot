@@ -222,7 +222,7 @@ func TestConsumerMarkSendingPassesWorkerID(t *testing.T) {
 func TestConsumerDrainBatchLoadsDistinctEventsAndRehydratesDeliveryContext(t *testing.T) {
 	t.Parallel()
 
-	eventPayload := mustMarshalTestEnvelope(t, domain.AlarmQueueEnvelope{
+	eventPayload := mustMarshalTestEnvelope(t, &domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			Channel:      &domain.Channel{ID: "channel-1"},
@@ -271,7 +271,7 @@ func TestConsumerDrainBatchLoadsDistinctEventsAndRehydratesDeliveryContext(t *te
 func TestConsumerDrainBatchRestoresAttemptCountForRetryRows(t *testing.T) {
 	t.Parallel()
 
-	eventPayload := mustMarshalTestEnvelope(t, domain.AlarmQueueEnvelope{
+	eventPayload := mustMarshalTestEnvelope(t, &domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,
 			Channel:      &domain.Channel{ID: "channel-1"},
@@ -307,10 +307,10 @@ func TestConsumerDrainBatchRestoresAttemptCountForRetryRows(t *testing.T) {
 	}
 }
 
-func mustMarshalTestEnvelope(t *testing.T, envelope domain.AlarmQueueEnvelope) []byte {
+func mustMarshalTestEnvelope(t *testing.T, envelope *domain.AlarmQueueEnvelope) []byte {
 	t.Helper()
 
-	payload, err := json.Marshal(envelope)
+	payload, err := json.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("marshal test envelope: %v", err)
 	}
@@ -333,11 +333,11 @@ type consumerTestRepository struct {
 	markSentWorkerID            string
 }
 
-func (r *consumerTestRepository) InsertShadowed(context.Context, domain.AlarmQueueEnvelope) (*Record, error) {
+func (r *consumerTestRepository) InsertShadowed(context.Context, *domain.AlarmQueueEnvelope) (*Record, error) {
 	return nil, nil
 }
 
-func (r *consumerTestRepository) InsertPending(context.Context, domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
+func (r *consumerTestRepository) InsertPending(context.Context, *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
 	return nil, "", nil
 }
 

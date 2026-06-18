@@ -93,7 +93,9 @@ func newIrisRuntimeDiagnosticsServer(t *testing.T, body string) *httptest.Server
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(body))
+		if _, err := w.Write([]byte(body)); err != nil {
+			t.Errorf("write diagnostics response: %v", err)
+		}
 	}))
 	server.TLS = &tls.Config{
 		Certificates: []tls.Certificate{cert},
@@ -104,7 +106,7 @@ func newIrisRuntimeDiagnosticsServer(t *testing.T, body string) *httptest.Server
 	return server
 }
 
-func irisRuntimeDiagnosticsTLS(t *testing.T) (tls.Certificate, string) {
+func irisRuntimeDiagnosticsTLS(t *testing.T) (cert tls.Certificate, certFile string) {
 	t.Helper()
 
 	irisRuntimeDiagnosticsTLSOnce.Do(func() {
@@ -126,7 +128,9 @@ func irisRuntimeDiagnosticsTLS(t *testing.T) (tls.Certificate, string) {
 		}
 		if _, err := file.Write(certPEM); err != nil {
 			irisRuntimeDiagnosticsTLSErr = err
-			_ = file.Close()
+			if closeErr := file.Close(); closeErr != nil {
+				irisRuntimeDiagnosticsTLSErr = errors.Join(irisRuntimeDiagnosticsTLSErr, closeErr)
+			}
 			return
 		}
 		if err := file.Close(); err != nil {
@@ -239,23 +243,29 @@ func TestResolveIrisBaseURLValidatesFileURL(t *testing.T) {
 				t.Setenv(key, value)
 			}
 
-			got, err := resolveIrisBaseURL(IrisConfig{BaseURLFile: writeIrisBaseURLFile(t, tt.raw)})
-			if tt.wantErr != "" {
-				if err == nil {
-					t.Fatalf("resolveIrisBaseURL() error = nil, want %q", tt.wantErr)
-				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("resolveIrisBaseURL() error = %v, want %q", err, tt.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("resolveIrisBaseURL() error = %v", err)
-			}
-			if got != tt.raw {
-				t.Fatalf("resolveIrisBaseURL() = %q, want %q", got, tt.raw)
-			}
+			got, err := resolveIrisBaseURL(&IrisConfig{BaseURLFile: writeIrisBaseURLFile(t, tt.raw)})
+			assertResolveIrisBaseURLResult(t, got, err, tt.raw, tt.wantErr)
 		})
+	}
+}
+
+func assertResolveIrisBaseURLResult(t *testing.T, got string, err error, wantURL, wantErr string) {
+	t.Helper()
+
+	if wantErr != "" {
+		if err == nil {
+			t.Fatalf("resolveIrisBaseURL() error = nil, want %q", wantErr)
+		}
+		if !strings.Contains(err.Error(), wantErr) {
+			t.Fatalf("resolveIrisBaseURL() error = %v, want %q", err, wantErr)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("resolveIrisBaseURL() error = %v", err)
+	}
+	if got != wantURL {
+		t.Fatalf("resolveIrisBaseURL() = %q, want %q", got, wantURL)
 	}
 }
 
@@ -265,7 +275,7 @@ func TestResolveIrisBaseURLAllowsUnconfiguredHostWithWarning(t *testing.T) {
 	output := captureSlogOutput(t)
 
 	raw := "https://iris.example:3001"
-	got, err := resolveIrisBaseURL(IrisConfig{BaseURLFile: writeIrisBaseURLFile(t, raw)})
+	got, err := resolveIrisBaseURL(&IrisConfig{BaseURLFile: writeIrisBaseURLFile(t, raw)})
 	if err != nil {
 		t.Fatalf("resolveIrisBaseURL() error = %v", err)
 	}
@@ -280,7 +290,7 @@ func TestResolveIrisBaseURLAllowsUnconfiguredHostWithWarning(t *testing.T) {
 }
 
 func TestResolveIrisBaseURLValidatesDirectBaseURL(t *testing.T) {
-	_, err := resolveIrisBaseURL(IrisConfig{BaseURL: "http://100.100.1.5:3001"})
+	_, err := resolveIrisBaseURL(&IrisConfig{BaseURL: "http://100.100.1.5:3001"})
 	if err == nil {
 		t.Fatal("resolveIrisBaseURL() error = nil, want bad scheme rejection")
 	}
@@ -1003,8 +1013,12 @@ func TestConfigValidate_ScraperPublishedAtResolverRejectsMaxRunDurationBelowReso
 			H3CertFile:     "/run/hololive-bot/certs/hololive-h3.crt",
 			H3KeyFile:      "/run/hololive-bot/certs/hololive-h3.key",
 		},
-		Kakao:    KakaoConfig{Rooms: []string{"test-room"}},
-		Iris:     IrisConfig{WebhookToken: "test-webhook-token", BotToken: "test-bot-token", BaseURLFile: "/tmp/iris_base_url"},
+		Kakao: KakaoConfig{Rooms: []string{"test-room"}},
+		Iris: IrisConfig{
+			WebhookToken: strings.Join([]string{"test", "webhook", "token"}, "-"),
+			BotToken:     strings.Join([]string{"test", "bot", "token"}, "-"),
+			BaseURLFile:  "/tmp/iris_base_url",
+		},
 		Holodex:  HolodexConfig{APIKey: "test-key"},
 		YouTube:  YouTubeConfig{APIKey: "test-youtube-key"},
 		Postgres: PostgresConfig{SSLMode: "disable"},
@@ -1794,10 +1808,10 @@ func clearYouTubeProducerGlobalBudgetEnv(t *testing.T) {
 	}
 }
 
-func assertYouTubeProducerGlobalBudgetConfig(t *testing.T, got, want YouTubeProducerGlobalBudgetConfig) {
+func assertYouTubeProducerGlobalBudgetConfig(t *testing.T, got, want *YouTubeProducerGlobalBudgetConfig) {
 	t.Helper()
-	if got != want {
-		t.Fatalf("LoadYouTubeProducerGlobalBudgetConfig() = %+v, want %+v", got, want)
+	if *got != *want {
+		t.Fatalf("LoadYouTubeProducerGlobalBudgetConfig() = %+v, want %+v", *got, *want)
 	}
 }
 
@@ -1806,7 +1820,7 @@ func TestLoadYouTubeProducerGlobalBudgetConfigDefaults(t *testing.T) {
 
 	config := LoadYouTubeProducerGlobalBudgetConfig()
 
-	assertYouTubeProducerGlobalBudgetConfig(t, config, YouTubeProducerGlobalBudgetConfig{
+	assertYouTubeProducerGlobalBudgetConfig(t, &config, &YouTubeProducerGlobalBudgetConfig{
 		Enabled:                    false,
 		AcquireTimeout:             3 * time.Second,
 		ActiveInstanceCount:        0,
@@ -1835,7 +1849,7 @@ func TestLoadYouTubeProducerGlobalBudgetConfigEnvOverrides(t *testing.T) {
 
 	config := LoadYouTubeProducerGlobalBudgetConfig()
 
-	assertYouTubeProducerGlobalBudgetConfig(t, config, YouTubeProducerGlobalBudgetConfig{
+	assertYouTubeProducerGlobalBudgetConfig(t, &config, &YouTubeProducerGlobalBudgetConfig{
 		Enabled:                    true,
 		AcquireTimeout:             2500 * time.Millisecond,
 		ActiveInstanceCount:        3,

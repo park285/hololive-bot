@@ -31,14 +31,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, baselinePoll bool) error {
+func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time) error {
 	return inPollerTx(ctx, p.db, func(tx dbx.Querier) error {
 		existing, _, err := loadExistingLiveSession(ctx, tx, stream.ID)
 		if err != nil {
 			return err
 		}
 
-		session := buildLiveSession(channelID, stream, status, now, existing)
+		session := buildLiveSession(channelID, stream, status, now, &existing)
 		session.LastSeenAt = now.UTC().Truncate(time.Microsecond)
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO youtube_live_sessions
@@ -119,7 +119,7 @@ func normalizeLiveSessionTimes(session *domain.YouTubeLiveSession) {
 	}
 }
 
-func buildLiveSession(channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, existing domain.YouTubeLiveSession) *domain.YouTubeLiveSession {
+func buildLiveSession(channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, existing *domain.YouTubeLiveSession) *domain.YouTubeLiveSession {
 	session := &domain.YouTubeLiveSession{
 		VideoID:            stream.ID,
 		ChannelID:          firstNonEmpty(stream.ChannelID, channelID),
@@ -136,7 +136,7 @@ func buildLiveSession(channelID string, stream *domain.Stream, status domain.Liv
 	return session
 }
 
-func liveFirstSeenAt(status domain.LiveStatus, now time.Time, existing domain.YouTubeLiveSession) *time.Time {
+func liveFirstSeenAt(status domain.LiveStatus, now time.Time, existing *domain.YouTubeLiveSession) *time.Time {
 	if existing.LiveFirstSeenAt != nil && !existing.LiveFirstSeenAt.IsZero() {
 		value := existing.LiveFirstSeenAt.UTC()
 		return &value
@@ -148,14 +148,14 @@ func liveFirstSeenAt(status domain.LiveStatus, now time.Time, existing domain.Yo
 	return &value
 }
 
-func firstNonEmpty(primary string, fallback string) string {
+func firstNonEmpty(primary, fallback string) string {
 	if primary != "" {
 		return primary
 	}
 	return fallback
 }
 
-func liveStartedAt(stream *domain.Stream, now time.Time, existing domain.YouTubeLiveSession) *time.Time {
+func liveStartedAt(stream *domain.Stream, now time.Time, existing *domain.YouTubeLiveSession) *time.Time {
 	if existing.StartedAt != nil && !existing.StartedAt.IsZero() {
 		startedAt := existing.StartedAt.UTC()
 		return &startedAt

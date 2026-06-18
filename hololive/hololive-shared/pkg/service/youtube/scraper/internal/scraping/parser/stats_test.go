@@ -22,7 +22,7 @@ const aboutChannelData = `{
 }`
 
 func TestParseChannelStatsFromInitialData_HappyPath(t *testing.T) {
-	stats := ParseChannelStatsFromInitialData(gjson.Parse(aboutChannelData), "UC_X")
+	stats := ParseChannelStatsFromInitialData(parseGJSONResultPtr(aboutChannelData), "UC_X")
 	require.NotNil(t, stats)
 	assert.Equal(t, "UC_X", stats.ChannelID)
 	assert.Equal(t, int64(2_760_000), stats.SubscriberCount)
@@ -35,7 +35,7 @@ func TestParseChannelStatsFromInitialData_HappyPath(t *testing.T) {
 }
 
 func TestParseChannelStatsFromInitialData_EmptyInput(t *testing.T) {
-	stats := ParseChannelStatsFromInitialData(gjson.Parse(`{}`), "UC_X")
+	stats := ParseChannelStatsFromInitialData(parseGJSONResultPtr(`{}`), "UC_X")
 	require.NotNil(t, stats)
 	assert.Equal(t, "UC_X", stats.ChannelID)
 	assert.Equal(t, int64(0), stats.SubscriberCount)
@@ -47,7 +47,7 @@ func TestParseChannelStatsFromInitialData_EmptyInput(t *testing.T) {
 }
 
 func TestParseChannelStatsFromInitialData_GarbageInput(t *testing.T) {
-	stats := ParseChannelStatsFromInitialData(gjson.Parse(`{"random":"junk"}`), "UC_X")
+	stats := ParseChannelStatsFromInitialData(parseGJSONResultPtr(`{"random":"junk"}`), "UC_X")
 	require.NotNil(t, stats)
 	assert.Equal(t, int64(0), stats.SubscriberCount)
 	assert.Empty(t, stats.Handle)
@@ -58,7 +58,7 @@ func TestParseChannelSnippetFromInitialData_HappyPath(t *testing.T) {
 		"image":{"decoratedAvatarViewModel":{"avatar":{"avatarViewModel":{"image":{"sources":[{"url":"https://a/avatar.jpg","width":100,"height":100}]}}}}},
 		"banner":{"imageBannerViewModel":{"image":{"sources":[{"url":"https://a/banner.jpg","width":1280,"height":351}]}}}
 	}}}}}`)
-	snippet := ParseChannelSnippetFromInitialData(data)
+	snippet := ParseChannelSnippetFromInitialData(&data)
 	require.Len(t, snippet.Avatar, 1)
 	require.Len(t, snippet.Banner, 1)
 	assert.Equal(t, "https://a/avatar.jpg", snippet.Avatar[0].URL)
@@ -66,7 +66,7 @@ func TestParseChannelSnippetFromInitialData_HappyPath(t *testing.T) {
 }
 
 func TestParseChannelSnippetFromInitialData_EmptyInput(t *testing.T) {
-	snippet := ParseChannelSnippetFromInitialData(gjson.Parse(`{}`))
+	snippet := ParseChannelSnippetFromInitialData(parseGJSONResultPtr(`{}`))
 	assert.Empty(t, snippet.Avatar)
 	assert.Empty(t, snippet.Banner)
 	assert.NotNil(t, snippet.Avatar)
@@ -86,38 +86,38 @@ func TestParseChannelHandle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, ParseChannelHandle(gjson.Parse(tt.json)))
+			assert.Equal(t, tt.want, ParseChannelHandle(parseGJSONResultPtr(tt.json)))
 		})
 	}
 }
 
 func TestParseThumbnailSources(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
-		thumbs := ParseThumbnailSources(gjson.Parse(`[{"url":"u1","width":120,"height":90},{"url":"u2","width":480,"height":360}]`))
+		thumbs := ParseThumbnailSources(parseGJSONResultPtr(`[{"url":"u1","width":120,"height":90},{"url":"u2","width":480,"height":360}]`))
 		require.Len(t, thumbs, 2)
 		assert.Equal(t, Thumbnail{URL: "u1", Width: 120, Height: 90}, thumbs[0])
 		assert.Equal(t, Thumbnail{URL: "u2", Width: 480, Height: 360}, thumbs[1])
 	})
 
 	t.Run("empty array", func(t *testing.T) {
-		thumbs := ParseThumbnailSources(gjson.Parse(`[]`))
+		thumbs := ParseThumbnailSources(parseGJSONResultPtr(`[]`))
 		assert.Empty(t, thumbs)
 		assert.NotNil(t, thumbs)
 	})
 
 	t.Run("non-existent source returns empty", func(t *testing.T) {
-		thumbs := ParseThumbnailSources(gjson.Result{})
+		thumbs := ParseThumbnailSources(&gjson.Result{})
 		assert.Empty(t, thumbs)
 	})
 
 	t.Run("null literal yields empty slice", func(t *testing.T) {
-		thumbs := ParseThumbnailSources(gjson.Parse(`null`))
+		thumbs := ParseThumbnailSources(parseGJSONResultPtr(`null`))
 		assert.Empty(t, thumbs)
 		assert.NotNil(t, thumbs)
 	})
 
 	t.Run("scalar yields empty slice", func(t *testing.T) {
-		thumbs := ParseThumbnailSources(gjson.Parse(`42`))
+		thumbs := ParseThumbnailSources(parseGJSONResultPtr(`42`))
 		assert.Empty(t, thumbs)
 		assert.NotNil(t, thumbs)
 	})

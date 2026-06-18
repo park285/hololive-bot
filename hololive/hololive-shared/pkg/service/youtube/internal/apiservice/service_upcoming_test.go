@@ -94,7 +94,7 @@ func TestCompleteUpcomingAPIFallback_QuotaBlockedReturnsPartialResults(t *testin
 	}
 
 	wantStreams := []*domain.Stream{{ID: "scraped"}}
-	got, err := service.completeUpcomingAPIFallback(context.Background(), "cache-key", upcomingScrapeResult{
+	got, err := service.completeUpcomingAPIFallback(context.Background(), "cache-key", &upcomingScrapeResult{
 		streams:   wantStreams,
 		failedIDs: []string{"UC1"},
 	})
@@ -123,7 +123,7 @@ func TestCompleteUpcomingAPIFallback_QuotaBlockedWithoutPartialResultsReturnsErr
 		channelToName: make(map[string]string),
 	}
 
-	_, err := service.completeUpcomingAPIFallback(context.Background(), "cache-key", upcomingScrapeResult{
+	_, err := service.completeUpcomingAPIFallback(context.Background(), "cache-key", &upcomingScrapeResult{
 		failedIDs: []string{"UC1"},
 	})
 	if err == nil {

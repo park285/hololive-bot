@@ -47,8 +47,8 @@ func TestNewScraperTransport_UsesSharedConnectionProfile(t *testing.T) {
 func TestNewSOCKS5DialContext_PrefersContextDialer(t *testing.T) {
 	clientSide, peerSide := net.Pipe()
 	t.Cleanup(func() {
-		_ = clientSide.Close()
-		_ = peerSide.Close()
+		mustClose(t, clientSide)
+		mustClose(t, peerSide)
 	})
 
 	dialer := &contextAwareStubDialer{conn: clientSide}

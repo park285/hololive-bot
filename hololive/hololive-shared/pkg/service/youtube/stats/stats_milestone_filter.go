@@ -31,7 +31,7 @@ type MilestoneResult struct {
 	Offset     int              `json:"offset"`
 }
 
-func buildMilestoneWhereClause(filter MilestoneFilter) (string, []any, int) {
+func buildMilestoneWhereClause(filter MilestoneFilter) (result1 string, result2 []any, result3 int) {
 	var whereClauses []string
 	args := make([]any, 0, 2)
 	argIdx := 1
@@ -66,7 +66,6 @@ func (r *StatsRepository) GetAllMilestones(ctx context.Context, filter Milestone
 	}
 
 	// 2. Select Data
-	// nolint:gosec // G201: 동적 WHERE 절은 파라미터화된 값만 사용하므로 안전
 	query := fmt.Sprintf(`
 		SELECT channel_id, member_name, type, value, achieved_at, notified
 		FROM youtube_milestones

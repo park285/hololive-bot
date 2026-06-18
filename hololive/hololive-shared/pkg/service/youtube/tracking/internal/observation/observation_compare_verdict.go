@@ -3,7 +3,7 @@ package observation
 import "strings"
 
 func buildObservationPostComparisonVerdictRows(
-	result ObservationPostComparisonResult,
+	result *ObservationPostComparisonResult,
 ) []ObservationPostComparisonVerdictRow {
 	rows := make([]ObservationPostComparisonVerdictRow, 0,
 		len(result.MatchedRows)+
@@ -14,42 +14,34 @@ func buildObservationPostComparisonVerdictRows(
 	)
 
 	for i := range result.MatchedRows {
-		rows = append(rows, buildObservationPostComparisonVerdictRowFromRow(
-			result.MatchedRows[i],
-			ObservationPostComparisonVerdictMatched,
+		rows = append(rows, buildObservationPostComparisonVerdictRowFromRow(&result.MatchedRows[i], ObservationPostComparisonVerdictMatched,
 			ObservationPostComparisonVerdictReasonCanonicalIdentifierMatched,
 		))
 	}
 	for i := range result.UnsentRows {
-		rows = append(rows, buildObservationPostComparisonVerdictRowFromRow(
-			result.UnsentRows[i],
-			ObservationPostComparisonVerdictUnsent,
+		rows = append(rows, buildObservationPostComparisonVerdictRowFromRow(&result.UnsentRows[i], ObservationPostComparisonVerdictUnsent,
 			ObservationPostComparisonVerdictReasonBaselineWithoutSentHistory,
 		))
 	}
 	for i := range result.DuplicateSentRows {
-		rows = append(rows, buildObservationPostComparisonVerdictRowFromRow(
-			result.DuplicateSentRows[i],
-			ObservationPostComparisonVerdictDuplicateSent,
+		rows = append(rows, buildObservationPostComparisonVerdictRowFromRow(&result.DuplicateSentRows[i], ObservationPostComparisonVerdictDuplicateSent,
 			ObservationPostComparisonVerdictReasonMultipleSentRowsForCanonicalPost,
 		))
 	}
 	for i := range result.UnexpectedSentRows {
-		rows = append(rows, buildObservationPostComparisonVerdictRowFromRow(
-			result.UnexpectedSentRows[i],
-			ObservationPostComparisonVerdictUnexpectedSent,
+		rows = append(rows, buildObservationPostComparisonVerdictRowFromRow(&result.UnexpectedSentRows[i], ObservationPostComparisonVerdictUnexpectedSent,
 			ObservationPostComparisonVerdictReasonSentHistoryWithoutBaseline,
 		))
 	}
 	for i := range result.IdentifierMismatchCandidates {
-		rows = append(rows, buildObservationPostComparisonVerdictRowFromCandidate(result.IdentifierMismatchCandidates[i]))
+		rows = append(rows, buildObservationPostComparisonVerdictRowFromCandidate(&result.IdentifierMismatchCandidates[i]))
 	}
 
 	return rows
 }
 
 func buildObservationPostComparisonVerdictRowFromRow(
-	row ObservationPostComparisonRow,
+	row *ObservationPostComparisonRow,
 	verdict ObservationPostComparisonVerdict,
 	reason ObservationPostComparisonVerdictReason,
 ) ObservationPostComparisonVerdictRow {
@@ -71,7 +63,7 @@ func buildObservationPostComparisonVerdictRowFromRow(
 }
 
 func buildObservationPostComparisonVerdictRowFromCandidate(
-	candidate ObservationIdentifierMismatchCandidate,
+	candidate *ObservationIdentifierMismatchCandidate,
 ) ObservationPostComparisonVerdictRow {
 	return ObservationPostComparisonVerdictRow{
 		Verdict:                ObservationPostComparisonVerdictIdentifierMismatchCandidate,

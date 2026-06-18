@@ -40,7 +40,7 @@ const upcomingData = `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"t
 ]}}]}}}}]}}}`
 
 func TestParseUpcomingEventsFromInitialData_HappyPath(t *testing.T) {
-	events := ParseUpcomingEventsFromInitialData(gjson.Parse(upcomingData))
+	events := ParseUpcomingEventsFromInitialData(parseGJSONResultPtr(upcomingData))
 	require.Len(t, events, 2)
 
 	assert.Equal(t, "live123", events[0].VideoID)
@@ -64,7 +64,7 @@ func TestParseUpcomingEventsFromInitialData_FiltersNonLiveUpcoming(t *testing.T)
 			{"videoRenderer":{"videoId":"vod1","title":{"runs":[{"text":"Past Stream"}]}}}
 		]}}
 	]}}]}}}}]}}}`)
-	events := ParseUpcomingEventsFromInitialData(data)
+	events := ParseUpcomingEventsFromInitialData(&data)
 	assert.Empty(t, events)
 	assert.NotNil(t, events)
 }
@@ -75,7 +75,7 @@ func TestParseUpcomingEventsFromInitialData_UpcomingEventDataImpliesUpcoming(t *
 			{"videoRenderer":{"videoId":"up1","title":{"runs":[{"text":"Scheduled"}]},"upcomingEventData":{"startTime":1772755200}}}
 		]}}
 	]}}]}}}}]}}}`)
-	events := ParseUpcomingEventsFromInitialData(data)
+	events := ParseUpcomingEventsFromInitialData(&data)
 	require.Len(t, events, 1)
 	assert.Equal(t, "UPCOMING", events[0].Status)
 	require.NotNil(t, events[0].StartTime)
@@ -93,7 +93,7 @@ func TestParseUpcomingEventsFromInitialData_TitleAndViewCountRunsFallback(t *tes
 			}}
 		]}}
 	]}}]}}}}]}}}`)
-	events := ParseUpcomingEventsFromInitialData(data)
+	events := ParseUpcomingEventsFromInitialData(&data)
 	require.Len(t, events, 1)
 	assert.Equal(t, "Runs Title", events[0].Title)
 	assert.Equal(t, "UPCOMING", events[0].Status)
@@ -106,18 +106,18 @@ func TestParseUpcomingEventsFromInitialData_VideoWithoutID(t *testing.T) {
 			{"videoRenderer":{"title":{"runs":[{"text":"No ID"}]},"thumbnailOverlays":[{"thumbnailOverlayTimeStatusRenderer":{"style":"LIVE"}}]}}
 		]}}
 	]}}]}}}}]}}}`)
-	events := ParseUpcomingEventsFromInitialData(data)
+	events := ParseUpcomingEventsFromInitialData(&data)
 	assert.Empty(t, events)
 }
 
 func TestParseUpcomingEventsFromInitialData_GarbageInput(t *testing.T) {
-	events := ParseUpcomingEventsFromInitialData(gjson.Parse(`{"unexpected":[1,2,3]}`))
+	events := ParseUpcomingEventsFromInitialData(parseGJSONResultPtr(`{"unexpected":[1,2,3]}`))
 	assert.Empty(t, events)
 	assert.NotNil(t, events)
 }
 
 func TestParseUpcomingEventsFromInitialData_EmptyInput(t *testing.T) {
-	events := ParseUpcomingEventsFromInitialData(gjson.Parse(`{}`))
+	events := ParseUpcomingEventsFromInitialData(parseGJSONResultPtr(`{}`))
 	assert.Empty(t, events)
 	assert.NotNil(t, events)
 }

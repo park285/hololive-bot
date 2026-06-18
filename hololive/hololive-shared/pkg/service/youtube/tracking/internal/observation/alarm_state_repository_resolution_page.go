@@ -79,7 +79,7 @@ func (r *alarmStateRepository) loadPendingPublishedAtResolutionRows(
 func buildPublishedAtResolutionCandidates(rows []pendingResolutionRow) ([]PublishedAtResolutionCandidate, error) {
 	candidates := make([]PublishedAtResolutionCandidate, 0, len(rows))
 	for i := range rows {
-		candidate, err := buildPublishedAtResolutionCandidate(rows[i])
+		candidate, err := buildPublishedAtResolutionCandidate(&rows[i])
 		if err != nil {
 			return nil, fmt.Errorf("list pending published_at resolutions page: row %d: %w", i, err)
 		}
@@ -88,7 +88,7 @@ func buildPublishedAtResolutionCandidates(rows []pendingResolutionRow) ([]Publis
 	return candidates, nil
 }
 
-func buildPublishedAtResolutionCandidate(row pendingResolutionRow) (PublishedAtResolutionCandidate, error) {
+func buildPublishedAtResolutionCandidate(row *pendingResolutionRow) (PublishedAtResolutionCandidate, error) {
 	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(row.Kind, row.PostID)
 	if err != nil {
 		return PublishedAtResolutionCandidate{}, fmt.Errorf("normalize post id: %w", err)
@@ -116,6 +116,9 @@ func buildPendingPublishedAtResolutionCursor(
 	limit int,
 ) *PublishedAtResolutionCursor {
 	if len(candidates) == 0 || len(candidates) < limit {
+		return nil
+	}
+	if len(rows) == 0 {
 		return nil
 	}
 	last := candidates[len(candidates)-1]

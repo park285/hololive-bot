@@ -59,10 +59,10 @@ func NewBackoffState(opts ...BackoffOption) *BackoffState {
 func newBackoffJitterRNG() *rand.Rand {
 	var seed [8]byte
 	if _, err := crand.Read(seed[:]); err != nil {
-		//nolint:gosec
+		//nolint:gosec // G404: fallback jitter only spreads retry timing when crypto seed generation fails.
 		return rand.New(rand.NewSource(time.Now().UnixNano()))
 	}
-	//nolint:gosec
+	//nolint:gosec // G404: crypto seed feeds deterministic PRNG for retry jitter, not cryptographic output.
 	return rand.New(rand.NewSource(int64(binary.LittleEndian.Uint64(seed[:]))))
 }
 

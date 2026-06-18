@@ -107,7 +107,7 @@ func normalizePrefixedStatsPeriodToken(lower string) string {
 	return ""
 }
 
-func normalizeStatsPeriodPrefix(lower string, prefix string, length int, unit string) string {
+func normalizeStatsPeriodPrefix(lower, prefix string, length int, unit string) string {
 	if !strings.HasPrefix(lower, prefix) {
 		return ""
 	}
@@ -135,7 +135,7 @@ func normalizeNumericStatsPeriodToken(token string) string {
 }
 
 // 기본값은 "최근 10일"이다.
-func ResolveStatsPeriod(now time.Time, raw string) (time.Time, string) {
+func ResolveStatsPeriod(now time.Time, raw string) (start time.Time, label string) {
 	normalized := NormalizeStatsPeriodToken(raw)
 	if normalized == "" {
 		normalized = "days:10"

@@ -62,7 +62,7 @@ func (cm *CacheManager) SetLiveStreams(ctx context.Context, streams []*domain.St
 }
 
 func (cm *CacheManager) SetLiveStreamsByOrg(ctx context.Context, org string, streams []*domain.Stream) {
-	_ = cm.cache.Set(ctx, buildLiveStreamsCacheKey(org), streams, constants.CacheTTL.LiveStreams)
+	cm.set(ctx, buildLiveStreamsCacheKey(org), streams, constants.CacheTTL.LiveStreams)
 }
 
 func (cm *CacheManager) GetUpcomingStreams(ctx context.Context, hours int) ([]*domain.Stream, bool) {
@@ -84,7 +84,7 @@ func (cm *CacheManager) SetUpcomingStreams(ctx context.Context, hours int, strea
 
 func (cm *CacheManager) SetUpcomingStreamsByOrg(ctx context.Context, org string, hours int, streams []*domain.Stream) {
 	cacheKey := buildUpcomingStreamsCacheKey(org, hours)
-	_ = cm.cache.Set(ctx, cacheKey, streams, constants.CacheTTL.UpcomingStreams)
+	cm.set(ctx, cacheKey, streams, constants.CacheTTL.UpcomingStreams)
 }
 
 func (cm *CacheManager) GetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, bool) {
@@ -98,7 +98,7 @@ func (cm *CacheManager) GetChannelSchedule(ctx context.Context, channelID string
 
 func (cm *CacheManager) SetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool, streams []*domain.Stream, ttl time.Duration) {
 	cacheKey := fmt.Sprintf("channel_schedule_%s_%d_%v", channelID, hours, includeLive)
-	_ = cm.cache.Set(ctx, cacheKey, streams, ttl)
+	cm.set(ctx, cacheKey, streams, ttl)
 }
 
 func (cm *CacheManager) GetSearchChannels(ctx context.Context, query string) ([]*domain.Channel, bool) {
@@ -112,7 +112,7 @@ func (cm *CacheManager) GetSearchChannels(ctx context.Context, query string) ([]
 
 func (cm *CacheManager) SetSearchChannels(ctx context.Context, query string, channels []*domain.Channel) {
 	cacheKey := buildSearchChannelsCacheKey(query)
-	_ = cm.cache.Set(ctx, cacheKey, channels, constants.CacheTTL.ChannelSearch)
+	cm.set(ctx, cacheKey, channels, constants.CacheTTL.ChannelSearch)
 }
 
 func (cm *CacheManager) GetChannel(ctx context.Context, channelID string) (*domain.Channel, bool) {
@@ -126,7 +126,7 @@ func (cm *CacheManager) GetChannel(ctx context.Context, channelID string) (*doma
 
 func (cm *CacheManager) SetChannel(ctx context.Context, channelID string, channel *domain.Channel) {
 	cacheKey := fmt.Sprintf("channel_%s", channelID)
-	_ = cm.cache.Set(ctx, cacheKey, channel, constants.CacheTTL.ChannelInfo)
+	cm.set(ctx, cacheKey, channel, constants.CacheTTL.ChannelInfo)
 }
 
 func (cm *CacheManager) GetChannels(ctx context.Context) ([]*domain.Channel, bool) {
@@ -138,7 +138,7 @@ func (cm *CacheManager) GetChannels(ctx context.Context) ([]*domain.Channel, boo
 }
 
 func (cm *CacheManager) SetChannels(ctx context.Context, channels []*domain.Channel) {
-	_ = cm.cache.Set(ctx, "hololive_channels", channels, constants.CacheTTL.ChannelInfo)
+	cm.set(ctx, "hololive_channels", channels, constants.CacheTTL.ChannelInfo)
 }
 
 func (cm *CacheManager) GetChannelsLiveStatus(ctx context.Context) (map[string]bool, bool) {
@@ -150,7 +150,7 @@ func (cm *CacheManager) GetChannelsLiveStatus(ctx context.Context) (map[string]b
 }
 
 func (cm *CacheManager) SetChannelsLiveStatus(ctx context.Context, status map[string]bool) {
-	_ = cm.cache.Set(ctx, "channels_live_status", status, constants.CacheTTL.LiveStreams)
+	cm.set(ctx, "channels_live_status", status, constants.CacheTTL.LiveStreams)
 }
 
 func (cm *CacheManager) GetChannelsLiveStatusStreams(ctx context.Context, channelIDs []string) ([]*domain.Stream, bool) {
@@ -164,7 +164,7 @@ func (cm *CacheManager) GetChannelsLiveStatusStreams(ctx context.Context, channe
 
 func (cm *CacheManager) SetChannelsLiveStatusStreams(ctx context.Context, channelIDs []string, streams []*domain.Stream, ttl time.Duration) {
 	cacheKey := fmt.Sprintf("channels_live_status_%s", canonicalizeChannelIDsForCache(channelIDs))
-	_ = cm.cache.Set(ctx, cacheKey, streams, ttl)
+	cm.set(ctx, cacheKey, streams, ttl)
 }
 
 func (cm *CacheManager) GetHololiveChannelList(ctx context.Context) ([]*domain.Channel, bool) {
@@ -176,7 +176,13 @@ func (cm *CacheManager) GetHololiveChannelList(ctx context.Context) ([]*domain.C
 }
 
 func (cm *CacheManager) SetHololiveChannelList(ctx context.Context, channels []*domain.Channel, ttl time.Duration) {
-	_ = cm.cache.Set(ctx, "hololive_channel_list", channels, ttl)
+	cm.set(ctx, "hololive_channel_list", channels, ttl)
+}
+
+func (cm *CacheManager) set(ctx context.Context, key string, value any, ttl time.Duration) {
+	if err := cm.cache.Set(ctx, key, value, ttl); err != nil && cm.logger != nil {
+		cm.logger.Warn("holodex cache set failed", slog.String("key", key), slog.Any("error", err))
+	}
 }
 
 func buildLiveStreamsCacheKey(org string) string {

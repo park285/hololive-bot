@@ -55,7 +55,7 @@ func (r *baselineRepository) ensureCommunityShortsObservationPostBaselines(
 	}
 
 	if err := inPgxTx(ctx, r.db, func(tx trackingDB) error {
-		txRepo := NewRepository(tx)
+		txRepo := NewRepositoryContext(ctx, tx)
 		return ensureCommunityShortsObservationPostBaselinesInTx(ctx, txRepo, normalizedWindow)
 	}); err != nil {
 		return fmt.Errorf("ensure community shorts observation post baselines: %w", err)

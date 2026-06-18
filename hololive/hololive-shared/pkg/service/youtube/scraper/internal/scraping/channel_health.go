@@ -53,12 +53,16 @@ type ChannelHealthStore struct {
 	policy ChannelHealthPolicy
 }
 
-func NewChannelHealthStore(store stateStore, policy ChannelHealthPolicy) *ChannelHealthStore {
-	policy = normalizeChannelHealthPolicy(policy)
-	return &ChannelHealthStore{store: store, policy: policy}
+func NewChannelHealthStore(store stateStore, policy *ChannelHealthPolicy) *ChannelHealthStore {
+	if policy == nil {
+		defaults := DefaultChannelHealthPolicy()
+		policy = &defaults
+	}
+	normalizeChannelHealthPolicy(policy)
+	return &ChannelHealthStore{store: store, policy: *policy}
 }
 
-func normalizeChannelHealthPolicy(policy ChannelHealthPolicy) ChannelHealthPolicy {
+func normalizeChannelHealthPolicy(policy *ChannelHealthPolicy) {
 	defaults := DefaultChannelHealthPolicy()
 	fillPolicyDuration(&policy.TTL, defaults.TTL)
 	fillPolicyDuration(&policy.ParserDriftBase, defaults.ParserDriftBase)
@@ -72,7 +76,6 @@ func normalizeChannelHealthPolicy(policy ChannelHealthPolicy) ChannelHealthPolic
 	if policy.SuccessDecaySteps <= 0 {
 		policy.SuccessDecaySteps = defaults.SuccessDecaySteps
 	}
-	return policy
 }
 
 func fillPolicyDuration(value *time.Duration, fallback time.Duration) {
@@ -114,7 +117,7 @@ func (s *ChannelHealthStore) RecordSuccess(ctx context.Context, channelID string
 	if health.ConsecutiveFailures == 0 {
 		health.LastFailureReason = FailureReasonNone
 	}
-	s.persist(ctx, channelID, source, health, "success")
+	s.persist(ctx, channelID, source, &health, "success")
 }
 
 func (s *ChannelHealthStore) RecordFailure(ctx context.Context, channelID string, detail FailureDetail, now time.Time) time.Duration {
@@ -137,7 +140,7 @@ func (s *ChannelHealthStore) RecordFailure(ctx context.Context, channelID string
 	health.LastFailureAt = now
 	delay = max(detail.RetryAfter, s.delayFor(detail.Reason, health.ConsecutiveFailures))
 	health.NextAllowedAt = now.Add(delay)
-	s.persist(ctx, channelID, source, health, "failure")
+	s.persist(ctx, channelID, source, &health, "failure")
 	return delay
 }
 
@@ -152,7 +155,7 @@ func (s *ChannelHealthStore) Get(ctx context.Context, channelID string, source F
 	return health, strings.TrimSpace(health.ChannelID) != ""
 }
 
-func (s *ChannelHealthStore) persist(ctx context.Context, channelID string, source FailureSource, health ChannelSourceHealth, operation string) {
+func (s *ChannelHealthStore) persist(ctx context.Context, channelID string, source FailureSource, health *ChannelSourceHealth, operation string) {
 	if err := s.store.Set(ctx, channelHealthStateKey(channelID, source), health, s.policy.TTL); err != nil {
 		slog.Warn("failed to persist youtube producer channel health",
 			"operation", operation,
@@ -180,7 +183,7 @@ func (s *ChannelHealthStore) delayFor(reason FailureReason, failures int) time.D
 	return delay
 }
 
-func (s *ChannelHealthStore) delayBounds(reason FailureReason) (time.Duration, time.Duration, bool) {
+func (s *ChannelHealthStore) delayBounds(reason FailureReason) (base, maxDelay time.Duration, ok bool) {
 	bounds := map[FailureReason][2]time.Duration{
 		FailureReasonParserDrift:      {s.policy.ParserDriftBase, s.policy.ParserDriftMax},
 		FailureReasonTransport:        {s.policy.TransportBase, s.policy.TransportMax},

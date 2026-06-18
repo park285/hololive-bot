@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -11,10 +12,32 @@ import (
 )
 
 func calculateStatsChanges(prev *domain.TimestampedStats, current *ChannelStats) (subChange, vidChange, viewChange int64) {
-	subChange = int64(current.SubscriberCount) - int64(prev.SubscriberCount)
-	vidChange = int64(current.VideoCount) - int64(prev.VideoCount)
-	viewChange = int64(current.ViewCount) - int64(prev.ViewCount)
+	subChange = uint64DeltaToInt64(current.SubscriberCount, prev.SubscriberCount)
+	vidChange = uint64DeltaToInt64(current.VideoCount, prev.VideoCount)
+	viewChange = uint64DeltaToInt64(current.ViewCount, prev.ViewCount)
 	return
+}
+
+func uint64DeltaToInt64(current, previous uint64) int64 {
+	if current >= previous {
+		delta := current - previous
+		if delta > math.MaxInt64 {
+			return math.MaxInt64
+		}
+		return int64(delta)
+	}
+	delta := previous - current
+	if delta > math.MaxInt64 {
+		return math.MinInt64
+	}
+	return -int64(delta)
+}
+
+func formatMilestoneNumber(value uint64) string {
+	if value > math.MaxInt64 {
+		return util.FormatKoreanNumber(math.MaxInt64)
+	}
+	return util.FormatKoreanNumber(int64(value))
 }
 
 func buildMilestoneSet(values []uint64) map[uint64]struct{} {
@@ -37,7 +60,7 @@ func (ys *schedulerImpl) processMilestones(
 	achievedMilestones []uint64,
 	milestonePreloadAvailable bool,
 	now time.Time,
-) (achieved int, checkErrors int, saveErrors int) {
+) (achieved, checkErrors, saveErrors int) {
 	achievedSet := buildMilestoneSet(achievedMilestones)
 	for _, milestone := range milestones {
 		alreadyAchieved, checkErr := ys.milestoneAlreadyAchieved(ctx, channelID, member, milestone, achievedSet, milestonePreloadAvailable)
@@ -64,7 +87,7 @@ func (ys *schedulerImpl) milestoneAlreadyAchieved(
 	milestone uint64,
 	achievedSet map[uint64]struct{},
 	preloadAvailable bool,
-) (bool, bool) {
+) (alreadyAchieved, checkErr bool) {
 	if preloadAvailable {
 		_, exists := achievedSet[milestone]
 		if exists {
@@ -149,12 +172,12 @@ func (ys *schedulerImpl) formatChangeMessageWithContext(ctx context.Context, cha
 		if ys.formatter == nil {
 			return fmt.Sprintf("🎉 %s님이 구독자 %s명을 달성했습니다!\n축하합니다! 🎊",
 				change.MemberName,
-				util.FormatKoreanNumber(int64(milestone)))
+				formatMilestoneNumber(milestone))
 		}
 		msg, err := ys.formatter.FormatMilestoneAchieved(
 			context.WithoutCancel(ctx),
 			change.MemberName,
-			util.FormatKoreanNumber(int64(milestone)),
+			formatMilestoneNumber(milestone),
 		)
 		if err != nil {
 			ys.logger.Warn("마일스톤 달성 메시지 포맷 오류", slog.Any("error", err))

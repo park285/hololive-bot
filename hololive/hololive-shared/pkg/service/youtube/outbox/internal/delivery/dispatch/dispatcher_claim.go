@@ -155,7 +155,7 @@ func (d *ClaimManager) enqueueDelivery(
 	item *domain.YouTubeNotificationOutbox,
 	roomsByChannel map[string]channelAlarmRoomTargets,
 ) outboxEnqueueStats {
-	rooms, ok := roomsForItem(roomsByChannel, *item)
+	rooms, ok := roomsForItem(roomsByChannel, item)
 	if !ok {
 		d.markFailed(ctx, item.ID, item.LockedAt, "subscriber lookup failed")
 		return outboxEnqueueStats{subscriberLookupFailures: 1}
@@ -166,7 +166,7 @@ func (d *ClaimManager) enqueueDelivery(
 		return outboxEnqueueStats{noSubscriberOutboxes: 1}
 	}
 
-	rooms = d.filterLiveCatchupSuppressedRooms(ctx, *item, rooms)
+	rooms = d.filterLiveCatchupSuppressedRooms(ctx, item, rooms)
 	if len(rooms) == 0 {
 		d.markSent(ctx, item.ID, item.LockedAt)
 		return outboxEnqueueStats{noSubscriberOutboxes: 1}
@@ -204,12 +204,12 @@ func (d *ClaimManager) recordOutboxEnqueueStats(claimed int, stats outboxEnqueue
 			slog.Int("target_rooms", stats.totalTargetRooms))
 	}
 
-	outboxEnqueueOutboxesTotal.WithLabelValues("claimed").Add(float64(claimed))
-	outboxEnqueueOutboxesTotal.WithLabelValues("enqueued").Add(float64(stats.enqueuedOutboxes))
-	outboxEnqueueOutboxesTotal.WithLabelValues("no_subscribers").Add(float64(stats.noSubscriberOutboxes))
-	outboxEnqueueOutboxesTotal.WithLabelValues("subscriber_lookup_failures").Add(float64(stats.subscriberLookupFailures))
-	outboxEnqueueOutboxesTotal.WithLabelValues("enqueue_failures").Add(float64(stats.enqueueFailures))
-	outboxEnqueueTargetRoomsTotal.Add(float64(stats.totalTargetRooms))
+	observeOutboxEnqueueOutboxes("claimed", claimed)
+	observeOutboxEnqueueOutboxes("enqueued", stats.enqueuedOutboxes)
+	observeOutboxEnqueueOutboxes("no_subscribers", stats.noSubscriberOutboxes)
+	observeOutboxEnqueueOutboxes("subscriber_lookup_failures", stats.subscriberLookupFailures)
+	observeOutboxEnqueueOutboxes("enqueue_failures", stats.enqueueFailures)
+	observeOutboxEnqueueTargetRooms(stats.totalTargetRooms)
 }
 
 func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
@@ -224,31 +224,33 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 
 	startedAt := time.Now()
 	defer func() {
-		outboxDispatchDuration.Observe(time.Since(startedAt).Seconds())
+		observeOutboxDispatchDuration(time.Since(startedAt))
 	}()
 
-	outboxDeliveryClaimedTotal.Add(float64(len(rows)))
-	outboxDispatchBatchSize.Observe(float64(len(rows)))
+	observeOutboxDeliveryClaimed(len(rows))
+	observeOutboxDispatchBatchSize(len(rows))
 
 	outboxByID, err := d.loadOutboxItemsByIDs(ctx, collectDeliveryOutboxIDs(rows))
 	if err != nil {
 		d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
-		outboxDeliveryProcessedTotal.WithLabelValues("failed").Add(float64(len(rows)))
-		_ = d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, collectDeliveryIDs(rows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows")
+		observeOutboxDeliveryProcessed("failed", len(rows))
+		if markErr := d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, collectDeliveryIDs(rows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows"); markErr != nil {
+			d.logger.Error("Failed to mark delivery rows failed after outbox load failure", slog.Any("error", markErr))
+		}
 		return len(rows)
 	}
 
 	result := d.dispatchDeliveryRows(ctx, rows, outboxByID)
-	d.markDispatchResult(ctx, rows, result)
+	d.markDispatchResult(ctx, rows, &result)
 
 	touchedOutboxIDs := deliverysql.UniqueInt64s(result.TouchedOutboxIDs)
 	aggregateFailures := d.reconcileTouchedOutboxes(ctx, touchedOutboxIDs)
-	d.recordOutboxDispatchResult(len(rows), result, touchedOutboxIDs, aggregateFailures)
+	d.recordOutboxDispatchResult(len(rows), &result, touchedOutboxIDs, aggregateFailures)
 
 	return len(rows)
 }
 
-func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result dispatchstate.DispatchResult) {
+func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result *dispatchstate.DispatchResult) {
 	if err := d.delivery.MarkSentBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, result.SuccessDeliveryIDs), result.SuccessClaimTokens...); err != nil {
 		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
 		if recoverErr := d.recoverSuccessfulCommunityShortsSentState(ctx, result.SuccessDeliveryIDs); recoverErr != nil {
@@ -262,7 +264,7 @@ func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.You
 	}
 }
 
-func (d *ClaimManager) markFailedDispatchBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result dispatchstate.DispatchResult, reason string, ids []int64) {
+func (d *ClaimManager) markFailedDispatchBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result *dispatchstate.DispatchResult, reason string, ids []int64) {
 	if deliveryFailureReasonIsPermanent(reason) {
 		d.markPermanentDispatchFailureBucket(ctx, rows, reason, ids)
 		return
@@ -278,7 +280,7 @@ func (d *ClaimManager) markPermanentDispatchFailureBucket(ctx context.Context, r
 	}
 }
 
-func (d *ClaimManager) markRetryDispatchFailureBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result dispatchstate.DispatchResult, reason string, ids []int64) {
+func (d *ClaimManager) markRetryDispatchFailureBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result *dispatchstate.DispatchResult, reason string, ids []int64) {
 	backoff := d.config.RetryBackoff
 	if retryAfter := result.FailureRetryAfter[reason]; retryAfter > backoff {
 		backoff = retryAfter
@@ -304,13 +306,13 @@ func (d *ClaimManager) reconcileTouchedOutboxes(ctx context.Context, touchedOutb
 
 func (d *ClaimManager) recordOutboxDispatchResult(
 	claimed int,
-	result dispatchstate.DispatchResult,
+	result *dispatchstate.DispatchResult,
 	touchedOutboxIDs []int64,
 	aggregateFailures int,
 ) {
-	outboxDeliveryProcessedTotal.WithLabelValues("sent").Add(float64(len(result.SuccessDeliveryIDs)))
-	outboxDeliveryProcessedTotal.WithLabelValues("failed").Add(float64(result.FailedDeliveries))
-	outboxDispatchTouchedOutboxes.Observe(float64(len(touchedOutboxIDs)))
+	observeOutboxDeliveryProcessed("sent", len(result.SuccessDeliveryIDs))
+	observeOutboxDeliveryProcessed("failed", result.FailedDeliveries)
+	observeOutboxDispatchTouchedOutboxes(len(touchedOutboxIDs))
 
 	d.logger.Info("Outbox per-room dispatch completed",
 		slog.Int("delivery_claimed", claimed),

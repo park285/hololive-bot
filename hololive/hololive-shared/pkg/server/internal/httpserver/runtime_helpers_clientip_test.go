@@ -21,7 +21,7 @@ func newClientIPProbeRouter(t *testing.T, trustRemoteAddrOnly bool) *gin.Engine 
 	t.Helper()
 
 	logger := slog.New(slog.DiscardHandler)
-	router, err := NewRuntimeRouter(t.Context(), logger, RuntimeRouterOptions{
+	router, err := NewRuntimeRouter(t.Context(), logger, &RuntimeRouterOptions{
 		APIKey:              "probe-key",
 		TrustRemoteAddrOnly: trustRemoteAddrOnly,
 		RegisterRoutes:      echoClientIPRoute,

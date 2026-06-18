@@ -62,7 +62,11 @@ func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOpt
 	if logger == nil {
 		logger = slog.Default()
 	}
-	host, _ := os.Hostname()
+	host, err := os.Hostname()
+	if err != nil {
+		logger.Warn("dispatch outbox hostname lookup failed", slog.Any("error", err))
+		host = "unknown"
+	}
 	consumer := &Consumer{
 		repository:        repository,
 		workerID:          "dispatcher-" + host,
@@ -82,9 +86,7 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	if c == nil || c.repository == nil {
 		return nil, fmt.Errorf("drain outbox batch: repository is nil")
 	}
-	if err := c.maybeRecover(ctx); err != nil {
-		return nil, err
-	}
+	c.maybeRecover(ctx)
 	records, err := c.claimDue(ctx, maxItems)
 	if err != nil {
 		return nil, err
@@ -160,7 +162,7 @@ func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
 	}
 }
 
-func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events map[int64]EventRecord) ([]byte, bool, error) {
+func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events map[int64]EventRecord) (result0 []byte, ok1 bool, err error) {
 	if record.EventID <= 0 {
 		return record.Payload, true, nil
 	}
@@ -183,7 +185,7 @@ func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error
 	return records, nil
 }
 
-func (c *Consumer) moveRecordToDLQ(ctx context.Context, id int64, terminalError string, action string) error {
+func (c *Consumer) moveRecordToDLQ(ctx context.Context, id int64, terminalError, action string) error {
 	if err := c.repository.MoveToDLQ(ctx, []TerminalUpdate{{ID: id, Error: terminalError}}, c.workerID); err != nil {
 		return fmt.Errorf("drain outbox batch: %s: %w", action, err)
 	}
@@ -191,10 +193,10 @@ func (c *Consumer) moveRecordToDLQ(ctx context.Context, id int64, terminalError 
 	return nil
 }
 
-func (c *Consumer) maybeRecover(ctx context.Context) error {
+func (c *Consumer) maybeRecover(ctx context.Context) {
 	now := c.now()
 	if !c.lastRecoveryAt.IsZero() && c.recoveryInterval > 0 && now.Sub(c.lastRecoveryAt) < c.recoveryInterval {
-		return nil
+		return
 	}
 	c.lastRecoveryAt = now
 	recoveredLeased, leasedErr := c.repository.RecoverExpiredLeased(ctx, c.recoveryBatchSize)
@@ -214,7 +216,6 @@ func (c *Consumer) maybeRecover(ctx context.Context) error {
 	if leasedErr == nil && sendingErr == nil {
 		observeRecoverySuccess(now)
 	}
-	return nil
 }
 
 func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
@@ -244,8 +245,8 @@ func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQ
 func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	updates := make([]RetryUpdate, 0, len(envelopes))
 	now := time.Now().UTC()
-	for _, envelope := range envelopes {
-		update, ok := retryUpdateFromEnvelope(envelope, now)
+	for i := range envelopes {
+		update, ok := retryUpdateFromEnvelope(&envelopes[i], now)
 		if !ok {
 			continue
 		}
@@ -261,8 +262,8 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 func (c *Consumer) ScheduleSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	updates := make([]RetryUpdate, 0, len(envelopes))
 	now := time.Now().UTC()
-	for _, envelope := range envelopes {
-		update, ok := retryUpdateFromEnvelope(envelope, now)
+	for i := range envelopes {
+		update, ok := retryUpdateFromEnvelope(&envelopes[i], now)
 		if !ok {
 			continue
 		}
@@ -275,7 +276,7 @@ func (c *Consumer) ScheduleSendingRetry(ctx context.Context, envelopes []domain.
 	return nil
 }
 
-func retryUpdateFromEnvelope(envelope domain.AlarmQueueEnvelope, now time.Time) (RetryUpdate, bool) {
+func retryUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, now time.Time) (RetryUpdate, bool) {
 	if envelope.DispatchOutboxID <= 0 {
 		return RetryUpdate{}, false
 	}
@@ -293,7 +294,8 @@ func retryUpdateFromEnvelope(envelope domain.AlarmQueueEnvelope, now time.Time) 
 
 func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	updates := make([]TerminalUpdate, 0, len(envelopes))
-	for _, envelope := range envelopes {
+	for i := range envelopes {
+		envelope := &envelopes[i]
 		if envelope.DispatchOutboxID <= 0 {
 			continue
 		}
@@ -316,7 +318,8 @@ func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnv
 
 func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
 	updates := make([]TerminalUpdate, 0, len(envelopes))
-	for _, envelope := range envelopes {
+	for i := range envelopes {
+		envelope := &envelopes[i]
 		if envelope.DispatchOutboxID > 0 {
 			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, Error: reason})
 		}
@@ -353,10 +356,10 @@ func rehydrateDeliveryContext(envelope *domain.AlarmQueueEnvelope, record *Recor
 	if len(record.DeliveryContext) == 0 {
 		return nil
 	}
-	var context deliveryContext
-	if err := json.Unmarshal(record.DeliveryContext, &context); err != nil {
+	var deliveryCtx deliveryContext
+	if err := json.Unmarshal(record.DeliveryContext, &deliveryCtx); err != nil {
 		return err
 	}
-	envelope.Notification.Users = context.Users
+	envelope.Notification.Users = deliveryCtx.Users
 	return nil
 }

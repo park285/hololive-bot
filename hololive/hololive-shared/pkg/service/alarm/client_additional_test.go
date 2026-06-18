@@ -15,10 +15,10 @@ func TestClient_UpdateAlarmAdvanceMinutes_NilContextSkipsRequest(t *testing.T) {
 		requestCount++
 		w.WriteHeader(http.StatusOK)
 	})
-	client, _ := newTestClient(t, mux)
+	client := newTestClient(t, mux)
 
 	var nilCtx context.Context
-	//nolint:staticcheck // nil context path is the behavior under test
+
 	got := client.UpdateAlarmAdvanceMinutes(nilCtx, 5)
 	if len(got) != 0 {
 		t.Fatalf("len(got) = %d, want 0", len(got))

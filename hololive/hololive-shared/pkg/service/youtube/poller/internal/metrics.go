@@ -73,6 +73,9 @@ func NewMetrics() *Metrics {
 		defaultMetrics = m
 	})
 
+	if defaultMetrics == nil {
+		panic("youtube poller metrics initialization failed")
+	}
 	return defaultMetrics
 }
 

@@ -64,11 +64,11 @@ func (r *Repository) persistPostLatencyClassifications(ctx context.Context, rows
 	updatedAt := time.Now().UTC()
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
-		contentID, ok := markPostLatencyClassificationRowSeen(rows[i], seen)
+		contentID, ok := markPostLatencyClassificationRowSeen(&rows[i], seen)
 		if !ok {
 			continue
 		}
-		if err := r.updatePostLatencyClassification(ctx, rows[i], contentID, updatedAt); err != nil {
+		if err := r.updatePostLatencyClassification(ctx, &rows[i], contentID, updatedAt); err != nil {
 			return fmt.Errorf("update persisted latency classification: kind=%s content_id=%s: %w", rows[i].OutboxKind, contentID, err)
 		}
 	}
@@ -76,7 +76,7 @@ func (r *Repository) persistPostLatencyClassifications(ctx context.Context, rows
 	return nil
 }
 
-func markPostLatencyClassificationRowSeen(row PostDeliveryTimeline, seen map[string]struct{}) (string, bool) {
+func markPostLatencyClassificationRowSeen(row *PostDeliveryTimeline, seen map[string]struct{}) (string, bool) {
 	if !IsCommunityShortsDeliveryAuditKind(row.OutboxKind) {
 		return "", false
 	}
@@ -97,7 +97,7 @@ func markPostLatencyClassificationRowSeen(row PostDeliveryTimeline, seen map[str
 
 func (r *Repository) updatePostLatencyClassification(
 	ctx context.Context,
-	row PostDeliveryTimeline,
+	row *PostDeliveryTimeline,
 	contentID string,
 	updatedAt time.Time,
 ) error {
@@ -114,8 +114,8 @@ func (r *Repository) updatePostLatencyClassification(
 }
 
 func normalizedPostLatencyClassificationPersistenceValues(
-	row PostDeliveryTimeline,
-) (PostLatencyClassificationStatus, PostDelaySource, PostInternalDelayCause) {
+	row *PostDeliveryTimeline,
+) (result1 PostLatencyClassificationStatus, result2 PostDelaySource, result3 PostInternalDelayCause) {
 	status := row.LatencyClassification.Status
 	if status == "" {
 		status = PostLatencyClassificationStatusInsufficientEvidence

@@ -18,7 +18,7 @@ func normalizeDeliveryTelemetryObservationStatus(status string) string {
 	return normalized
 }
 
-func deliveryTelemetryIdentityForRow(row domain.YouTubeNotificationDeliveryTelemetry) (deliveryTelemetryIdentity, bool) {
+func deliveryTelemetryIdentityForRow(row *domain.YouTubeNotificationDeliveryTelemetry) (deliveryTelemetryIdentity, bool) {
 	kind, ok := deliveryTelemetryKindForAlarmType(row.AlarmType)
 	if !ok {
 		return deliveryTelemetryIdentity{}, false
@@ -38,6 +38,8 @@ func deliveryTelemetryKindForAlarmType(alarmType domain.AlarmType) (domain.Outbo
 		return domain.OutboxKindCommunityPost, true
 	case domain.AlarmTypeShorts:
 		return domain.OutboxKindNewShort, true
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+		return "", false
 	default:
 		return "", false
 	}

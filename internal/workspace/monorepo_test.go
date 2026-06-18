@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,7 +14,15 @@ func TestMonorepoModuleSuites(t *testing.T) {
 		t.Skip("already running monorepo workspace suite")
 	}
 
-	cmd := exec.Command(
+	ctx := context.Background()
+	if deadline, ok := t.Deadline(); ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, deadline)
+		defer cancel()
+	}
+
+	cmd := exec.CommandContext(
+		ctx,
 		"go",
 		"test",
 		"../shared-go/...",

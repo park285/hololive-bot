@@ -8,16 +8,16 @@ import (
 	"time"
 )
 
-func (c *Client) captureSnapshot(ctx context.Context, snapshot Snapshot) {
+func (c *Client) captureSnapshot(ctx context.Context, snapshot *Snapshot) {
 	c.captureSnapshotWithInterval(ctx, snapshot, true)
 }
 
-func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot Snapshot, checkInterval bool) {
+func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot *Snapshot, checkInterval bool) {
 	policy := c.snapshotPolicy
 	if !c.shouldCaptureSnapshot(snapshot, policy) {
 		return
 	}
-	snapshot = normalizeSnapshotPayload(snapshot, policy)
+	normalizeSnapshotPayload(snapshot, policy)
 	if len(snapshot.Body) == 0 {
 		return
 	}
@@ -35,7 +35,7 @@ func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot Snaps
 	}
 }
 
-func normalizeSnapshotPayload(snapshot Snapshot, policy SnapshotPolicy) Snapshot {
+func normalizeSnapshotPayload(snapshot *Snapshot, policy SnapshotPolicy) *Snapshot {
 	if snapshot.CapturedAt.IsZero() {
 		snapshot.CapturedAt = time.Now().UTC()
 	}
@@ -48,14 +48,14 @@ func normalizeSnapshotPayload(snapshot Snapshot, policy SnapshotPolicy) Snapshot
 	return snapshot
 }
 
-func (c *Client) shouldCaptureSnapshot(snapshot Snapshot, policy SnapshotPolicy) bool {
+func (c *Client) shouldCaptureSnapshot(snapshot *Snapshot, policy SnapshotPolicy) bool {
 	if c == nil || c.snapshotSink == nil {
 		return false
 	}
 	return policy.allows(snapshot.Reason)
 }
 
-func (c *Client) allowSnapshotInterval(ctx context.Context, snapshot Snapshot, interval time.Duration) bool {
+func (c *Client) allowSnapshotInterval(ctx context.Context, snapshot *Snapshot, interval time.Duration) bool {
 	if interval <= 0 || c == nil || c.stateStore == nil {
 		return true
 	}
@@ -70,11 +70,11 @@ func (c *Client) allowSnapshotInterval(ctx context.Context, snapshot Snapshot, i
 	return true
 }
 
-func (c *Client) reserveSnapshotInterval(ctx context.Context, snapshot Snapshot) bool {
+func (c *Client) reserveSnapshotInterval(ctx context.Context, snapshot *Snapshot) bool {
 	return c.allowSnapshotInterval(ctx, snapshot, c.snapshotPolicy.MinInterval)
 }
 
-func snapshotIntervalStateKey(snapshot Snapshot) string {
+func snapshotIntervalStateKey(snapshot *Snapshot) string {
 	return fmt.Sprintf("youtube:producer:snapshot-interval:%s:%s:%s:%s",
 		strings.TrimSpace(snapshot.Operation),
 		strings.TrimSpace(snapshot.ChannelID),

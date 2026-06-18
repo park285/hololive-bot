@@ -34,6 +34,7 @@ func TestCloneObservationPostComparisonMatchBasis_ClonesAndTrims(t *testing.T) {
 
 	original := []string{" actual_published_at ", "title_hint"}
 	result := cloneObservationPostComparisonMatchBasis(original)
+	require.NotNil(t, result)
 	require.Equal(t, []string{"actual_published_at", "title_hint"}, result)
 
 	original[0] = "mutated"
@@ -74,9 +75,7 @@ func TestBuildObservationPostComparisonVerdictRowFromRow_MapsFieldsCorrectly(t *
 		SentCount:         1,
 	}
 
-	verdict := buildObservationPostComparisonVerdictRowFromRow(
-		row,
-		ObservationPostComparisonVerdictMatched,
+	verdict := buildObservationPostComparisonVerdictRowFromRow(&row, ObservationPostComparisonVerdictMatched,
 		ObservationPostComparisonVerdictReasonCanonicalIdentifierMatched,
 	)
 
@@ -120,7 +119,7 @@ func TestBuildObservationPostComparisonVerdictRowFromCandidate_MapsFieldsCorrect
 		},
 	}
 
-	verdict := buildObservationPostComparisonVerdictRowFromCandidate(candidate)
+	verdict := buildObservationPostComparisonVerdictRowFromCandidate(&candidate)
 
 	require.Equal(t, ObservationPostComparisonVerdictIdentifierMismatchCandidate, verdict.Verdict)
 	require.Equal(t, ObservationPostComparisonVerdictReasonAuxiliaryMetadataPendingReview, verdict.Reason)
@@ -162,7 +161,7 @@ func TestBuildObservationPostComparisonVerdictRows_ConcatenatesAllCategories(t *
 		UnsentRows:  []ObservationPostComparisonRow{unsentRow},
 	}
 
-	verdicts := buildObservationPostComparisonVerdictRows(result)
+	verdicts := buildObservationPostComparisonVerdictRows(&result)
 	require.Len(t, verdicts, 2)
 	require.Equal(t, ObservationPostComparisonVerdictMatched, verdicts[0].Verdict)
 	require.Equal(t, "community:matched", verdicts[0].CanonicalPostID)

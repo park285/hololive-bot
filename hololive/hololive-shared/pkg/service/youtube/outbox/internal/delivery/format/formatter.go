@@ -40,11 +40,11 @@ type MessageFormatter struct {
 	Logger   *slog.Logger
 }
 
-func NewMessageFormatter(renderer *template.Renderer, cache cache.Client, logger *slog.Logger) *MessageFormatter {
+func NewMessageFormatter(renderer *template.Renderer, cacheClient cache.Client, logger *slog.Logger) *MessageFormatter {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &MessageFormatter{Renderer: renderer, Cache: cache, Logger: logger}
+	return &MessageFormatter{Renderer: renderer, Cache: cacheClient, Logger: logger}
 }
 
 func (mf *MessageFormatter) logger() *slog.Logger {
@@ -54,7 +54,10 @@ func (mf *MessageFormatter) logger() *slog.Logger {
 	return slog.Default()
 }
 
-func (mf *MessageFormatter) FormatMessage(ctx context.Context, item domain.YouTubeNotificationOutbox) (string, error) {
+func (mf *MessageFormatter) FormatMessage(ctx context.Context, item *domain.YouTubeNotificationOutbox) (string, error) {
+	if item == nil {
+		return "", fmt.Errorf("notification outbox item is nil")
+	}
 	memberName, err := mf.GetMemberName(ctx, item.ChannelID)
 	if err != nil {
 		mf.logger().Warn("Failed to get member name, using fallback",
@@ -74,7 +77,7 @@ func (mf *MessageFormatter) FormatMessage(ctx context.Context, item domain.YouTu
 	if mf.Renderer != nil {
 		msg, renderErr := mf.Renderer.Render(ctx, templateKey, item.ChannelID, data)
 		if renderErr == nil {
-			return mf.PrependSingleMessageHeader(msg, item.Kind, data), nil
+			return mf.PrependSingleMessageHeader(msg, item.Kind, &data), nil
 		}
 		mf.logger().Warn("Template render failed, using fallback",
 			slog.String("template_key", string(templateKey)),
@@ -94,9 +97,15 @@ type TemplateData struct {
 	PostID      string
 }
 
-func (mf *MessageFormatter) BuildTemplateData(memberName string, item domain.YouTubeNotificationOutbox) (TemplateData, error) {
+func (mf *MessageFormatter) BuildTemplateData(memberName string, item *domain.YouTubeNotificationOutbox) (TemplateData, error) {
 	data := TemplateData{MemberName: memberName}
+	if err := populateTemplateData(&data, item); err != nil {
+		return TemplateData{}, err
+	}
+	return data, nil
+}
 
+func populateTemplateData(data *TemplateData, item *domain.YouTubeNotificationOutbox) error {
 	switch item.Kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
 		return buildVideoTemplateData(data, item)
@@ -104,20 +113,20 @@ func (mf *MessageFormatter) BuildTemplateData(memberName string, item domain.You
 		return buildCommunityTemplateData(data, item.Payload)
 	case domain.OutboxKindMilestone:
 		return buildMilestoneTemplateData(data, item.Payload)
+	default:
+		return nil
 	}
-
-	return data, nil
 }
 
-func buildVideoTemplateData(data TemplateData, item domain.YouTubeNotificationOutbox) (TemplateData, error) {
+func buildVideoTemplateData(data *TemplateData, item *domain.YouTubeNotificationOutbox) error {
 	var p VideoPayload
 	if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
-		return data, fmt.Errorf("unmarshal video payload: %w", err)
+		return fmt.Errorf("unmarshal video payload: %w", err)
 	}
 	data.Title = p.Title
 	data.VideoID = p.VideoID
 	data.URL = VideoTemplateURL(item.Kind, p.VideoID)
-	return data, nil
+	return nil
 }
 
 func VideoTemplateURL(kind domain.OutboxKind, videoID string) string {
@@ -127,24 +136,24 @@ func VideoTemplateURL(kind domain.OutboxKind, videoID string) string {
 	return fmt.Sprintf("https://youtu.be/%s", videoID)
 }
 
-func buildCommunityTemplateData(data TemplateData, payload string) (TemplateData, error) {
+func buildCommunityTemplateData(data *TemplateData, payload string) error {
 	var p CommunityPayload
 	if err := json.Unmarshal([]byte(payload), &p); err != nil {
-		return data, fmt.Errorf("unmarshal community payload: %w", err)
+		return fmt.Errorf("unmarshal community payload: %w", err)
 	}
 	data.ContentText = p.ContentText
 	data.PostID = p.PostID
 	data.URL = fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID)
-	return data, nil
+	return nil
 }
 
-func buildMilestoneTemplateData(data TemplateData, payload string) (TemplateData, error) {
+func buildMilestoneTemplateData(data *TemplateData, payload string) error {
 	var p MilestonePayload
 	if err := json.Unmarshal([]byte(payload), &p); err != nil {
-		return data, fmt.Errorf("unmarshal milestone payload: %w", err)
+		return fmt.Errorf("unmarshal milestone payload: %w", err)
 	}
 	data.Milestone = p.Milestone
-	return data, nil
+	return nil
 }
 
 var singleMessageHeaderFormats = map[domain.OutboxKind]string{
@@ -155,7 +164,7 @@ var singleMessageHeaderFormats = map[domain.OutboxKind]string{
 	domain.OutboxKindMilestone:     "🎉 %s 마일스톤 알림",
 }
 
-func (mf *MessageFormatter) PrependSingleMessageHeader(msg string, kind domain.OutboxKind, data TemplateData) string {
+func (mf *MessageFormatter) PrependSingleMessageHeader(msg string, kind domain.OutboxKind, data *TemplateData) string {
 	header, ok := SingleMessageHeader(kind, data.MemberName)
 	if !ok {
 		return msg
@@ -171,7 +180,7 @@ func SingleMessageHeader(kind domain.OutboxKind, memberName string) (string, boo
 	return fmt.Sprintf(format, memberName), true
 }
 
-func (mf *MessageFormatter) FormatMessageFallback(memberName string, item domain.YouTubeNotificationOutbox) (string, error) {
+func (mf *MessageFormatter) FormatMessageFallback(memberName string, item *domain.YouTubeNotificationOutbox) (string, error) {
 	if item.Kind == domain.OutboxKindNewVideo || item.Kind == domain.OutboxKindNewShort || item.Kind == domain.OutboxKindLiveStream {
 		return mf.FormatVideoMessage(memberName, item.Payload, item.Kind)
 	}
@@ -292,7 +301,7 @@ func (mf *MessageFormatter) FormatGroupedMessage(ctx context.Context, memberName
 	return header + "\n" + msg, nil
 }
 
-func (mf *MessageFormatter) GetGroupedTemplateKeyAndHeader(memberName string, kind domain.OutboxKind, count int) (domain.TemplateKey, string) {
+func (mf *MessageFormatter) GetGroupedTemplateKeyAndHeader(memberName string, kind domain.OutboxKind, count int) (templateKey domain.TemplateKey, header string) {
 	config, ok := groupedTemplateConfigs[kind]
 	if !ok {
 		config = defaultGroupedTemplateConfig
@@ -325,24 +334,26 @@ func (mf *MessageFormatter) BuildGroupedTemplateData(memberName string, kind dom
 	}
 
 	for i := range items {
-		data.Items = append(data.Items, BuildGroupedItemData(items[i]))
+		data.Items = append(data.Items, BuildGroupedItemData(&items[i]))
 	}
 
 	return data
 }
 
-func BuildGroupedItemData(item domain.YouTubeNotificationOutbox) GroupedItemData {
+func BuildGroupedItemData(item *domain.YouTubeNotificationOutbox) GroupedItemData {
 	switch item.Kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
 		return buildGroupedVideoItemData(item)
 	case domain.OutboxKindCommunityPost:
 		return buildGroupedCommunityItemData(item.Payload)
+	case domain.OutboxKindMilestone:
+		return GroupedItemData{}
 	default:
 		return GroupedItemData{}
 	}
 }
 
-func buildGroupedVideoItemData(item domain.YouTubeNotificationOutbox) GroupedItemData {
+func buildGroupedVideoItemData(item *domain.YouTubeNotificationOutbox) GroupedItemData {
 	var p VideoPayload
 	if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
 		return GroupedItemData{}

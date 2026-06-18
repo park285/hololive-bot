@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -26,12 +25,7 @@ func loadRepositoryAST(t *testing.T) *ast.File {
 			continue
 		}
 
-		src, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read repository source %s: %v", path, err)
-		}
-
-		file, err := parser.ParseFile(token.NewFileSet(), path, src, parser.SkipObjectResolution)
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
 		if err != nil {
 			t.Fatalf("parse repository source %s: %v", path, err)
 		}
@@ -145,40 +139,48 @@ func assignedMemberFields(fn *ast.FuncDecl) map[string]bool {
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.CompositeLit:
-			sel, ok := node.Type.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			pkg, ok := sel.X.(*ast.Ident)
-			if !ok || pkg.Name != "domain" || sel.Sel.Name != "Member" {
-				return true
-			}
-			for _, elt := range node.Elts {
-				kv, ok := elt.(*ast.KeyValueExpr)
-				if !ok {
-					continue
-				}
-				key, ok := kv.Key.(*ast.Ident)
-				if ok {
-					fields[key.Name] = true
-				}
-			}
+			recordMemberCompositeFields(fields, node)
 		case *ast.AssignStmt:
-			for _, lhs := range node.Lhs {
-				sel, ok := lhs.(*ast.SelectorExpr)
-				if !ok {
-					continue
-				}
-				target, ok := sel.X.(*ast.Ident)
-				if ok && target.Name == "member" {
-					fields[sel.Sel.Name] = true
-				}
-			}
+			recordMemberAssignmentFields(fields, node)
 		}
 		return true
 	})
 
 	return fields
+}
+
+func recordMemberCompositeFields(fields map[string]bool, node *ast.CompositeLit) {
+	sel, ok := node.Type.(*ast.SelectorExpr)
+	if !ok {
+		return
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok || pkg.Name != "domain" || sel.Sel.Name != "Member" {
+		return
+	}
+	for _, elt := range node.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if ok {
+			fields[key.Name] = true
+		}
+	}
+}
+
+func recordMemberAssignmentFields(fields map[string]bool, node *ast.AssignStmt) {
+	for _, lhs := range node.Lhs {
+		sel, ok := lhs.(*ast.SelectorExpr)
+		if !ok {
+			continue
+		}
+		target, ok := sel.X.(*ast.Ident)
+		if ok && target.Name == "member" {
+			fields[sel.Sel.Name] = true
+		}
+	}
 }
 
 func TestRepositorySource_GetAllMembersQuerySelectsPhoto(t *testing.T) {

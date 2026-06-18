@@ -27,13 +27,13 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func checkAlerts(data gjson.Result) error {
+func checkAlerts(data *gjson.Result) error {
 	alerts := data.Get("alerts")
 	if !alerts.Exists() {
 		return nil
 	}
 
-	selected := selectAlertError(alerts)
+	selected := selectAlertError(&alerts)
 	if !selected.found {
 		return nil
 	}
@@ -53,16 +53,16 @@ type selectedAlertError struct {
 	notFound bool
 }
 
-func selectAlertError(alerts gjson.Result) selectedAlertError {
+func selectAlertError(alerts *gjson.Result) selectedAlertError {
 	selected := selectedAlertError{}
 	alerts.ForEach(func(_, alert gjson.Result) bool {
-		selected = selectAlertCandidate(selected, alert)
+		selected = selectAlertCandidate(selected, &alert)
 		return !selected.notFound
 	})
 	return selected
 }
 
-func selectAlertCandidate(selected selectedAlertError, alert gjson.Result) selectedAlertError {
+func selectAlertCandidate(selected selectedAlertError, alert *gjson.Result) selectedAlertError {
 	if alert.Get("alertRenderer.type").String() != "ERROR" {
 		return selected
 	}
@@ -94,7 +94,7 @@ func alertTextMeansNotFound(alertText string) bool {
 		strings.Contains(lowerText, "been terminated")
 }
 
-func extractAlertText(alert gjson.Result) string {
+func extractAlertText(alert *gjson.Result) string {
 	alertText := strings.TrimSpace(alert.Get("alertRenderer.text.simpleText").String())
 	if alertText != "" {
 		return alertText

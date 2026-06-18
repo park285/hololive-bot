@@ -43,33 +43,33 @@ var (
 const maxRevisions = 5
 
 type AdminService struct {
-	repository *repository.TemplateRepository
-	renderer   *Renderer
-	logger     *slog.Logger
+	repo     *repository.TemplateRepository
+	renderer *Renderer
+	logger   *slog.Logger
 }
 
-func NewAdminService(repository *repository.TemplateRepository, renderer *Renderer, logger *slog.Logger) *AdminService {
+func NewAdminService(repo *repository.TemplateRepository, renderer *Renderer, logger *slog.Logger) *AdminService {
 	return &AdminService{
-		repository: repository,
-		renderer:   renderer,
-		logger:     logger,
+		repo:     repo,
+		renderer: renderer,
+		logger:   logger,
 	}
 }
 
 func (s *AdminService) List(ctx context.Context, key *domain.TemplateKey, channelID *string) ([]*domain.NotificationTemplate, error) {
-	templates, err := s.repository.List(ctx, key, channelID)
+	templates, err := s.repo.List(ctx, key, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("list templates: %w", err)
 	}
 	return templates, nil
 }
 
-func (s *AdminService) GetByKey(ctx context.Context, key domain.TemplateKey) (*domain.NotificationTemplate, []*domain.NotificationTemplate, error) {
+func (s *AdminService) GetByKey(ctx context.Context, key domain.TemplateKey) (result0 *domain.NotificationTemplate, result1 []*domain.NotificationTemplate, err error) {
 	if !domain.IsValidTemplateKey(key) {
 		return nil, nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}
 
-	defaultTmpl, overrides, err := s.repository.GetByKey(ctx, key)
+	defaultTmpl, overrides, err := s.repo.GetByKey(ctx, key)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get template by key %s: %w", key, err)
 	}
@@ -90,7 +90,7 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 		return nil, err
 	}
 
-	existing, err := s.repository.FindByKeyAndChannel(ctx, key, channelID)
+	existing, err := s.repo.FindByKeyAndChannel(ctx, key, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("find template: %w", err)
 	}
@@ -99,7 +99,7 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 		s.createRevision(ctx, existing)
 	}
 
-	result, err := s.repository.Upsert(ctx, key, channelID, body)
+	result, err := s.repo.Upsert(ctx, key, channelID, body)
 	if err != nil {
 		return nil, fmt.Errorf("upsert template: %w", err)
 	}
@@ -110,10 +110,10 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 }
 
 func (s *AdminService) createRevision(ctx context.Context, existing *domain.NotificationTemplate) {
-	if revErr := s.repository.CreateRevision(ctx, existing.ID, existing.Body); revErr != nil {
+	if revErr := s.repo.CreateRevision(ctx, existing.ID, existing.Body); revErr != nil {
 		s.logger.Warn("failed to create revision", slog.Any("error", revErr))
 	}
-	if pruneErr := s.repository.PruneOldRevisions(ctx, existing.ID, maxRevisions); pruneErr != nil {
+	if pruneErr := s.repo.PruneOldRevisions(ctx, existing.ID, maxRevisions); pruneErr != nil {
 		s.logger.Warn("failed to prune revisions", slog.Any("error", pruneErr))
 	}
 }
@@ -131,7 +131,7 @@ func (s *AdminService) DeleteOverride(ctx context.Context, key domain.TemplateKe
 		return ErrChannelIDRequired
 	}
 
-	if err := s.repository.DeleteOverride(ctx, key, channelID); err != nil {
+	if err := s.repo.DeleteOverride(ctx, key, channelID); err != nil {
 		return fmt.Errorf("delete template override: %w", err)
 	}
 
@@ -139,7 +139,7 @@ func (s *AdminService) DeleteOverride(ctx context.Context, key domain.TemplateKe
 	return nil
 }
 
-func (s *AdminService) Preview(ctx context.Context, key domain.TemplateKey, body string) (string, any, error) {
+func (s *AdminService) Preview(ctx context.Context, key domain.TemplateKey, body string) (value0 string, result1 any, err error) {
 	if !domain.IsValidTemplateKey(key) {
 		return "", nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}
@@ -163,7 +163,7 @@ func (s *AdminService) Preview(ctx context.Context, key domain.TemplateKey, body
 }
 
 func (s *AdminService) GetRevisions(ctx context.Context, key domain.TemplateKey, channelID *string) ([]*domain.NotificationTemplateRevision, error) {
-	tmpl, err := s.repository.FindByKeyAndChannel(ctx, key, channelID)
+	tmpl, err := s.repo.FindByKeyAndChannel(ctx, key, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("find template: %w", err)
 	}
@@ -171,7 +171,7 @@ func (s *AdminService) GetRevisions(ctx context.Context, key domain.TemplateKey,
 		return nil, nil
 	}
 
-	revisions, err := s.repository.GetRevisions(ctx, tmpl.ID, maxRevisions)
+	revisions, err := s.repo.GetRevisions(ctx, tmpl.ID, maxRevisions)
 	if err != nil {
 		return nil, fmt.Errorf("get revisions: %w", err)
 	}
@@ -179,7 +179,7 @@ func (s *AdminService) GetRevisions(ctx context.Context, key domain.TemplateKey,
 }
 
 func (s *AdminService) GetRevisionByID(ctx context.Context, id int64) (*domain.NotificationTemplateRevision, error) {
-	rev, err := s.repository.GetRevisionByID(ctx, id)
+	rev, err := s.repo.GetRevisionByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get revision %d: %w", id, err)
 	}

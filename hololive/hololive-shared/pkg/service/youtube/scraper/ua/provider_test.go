@@ -177,11 +177,9 @@ func TestRotatingProvider_Headers_Atomicity(t *testing.T) {
 			if snap.SecChUAPlatform == "" {
 				t.Errorf("Chromium UA should have SecChUAPlatform: UA=%q", snap.UserAgent)
 			}
-		} else {
+		} else if snap.SecChUA != "" {
 			// Firefox/Safari는 SecChUA가 비어야 함
-			if snap.SecChUA != "" {
-				t.Errorf("Non-Chromium UA should not have SecChUA: UA=%q, SecChUA=%q", snap.UserAgent, snap.SecChUA)
-			}
+			t.Errorf("Non-Chromium UA should not have SecChUA: UA=%q, SecChUA=%q", snap.UserAgent, snap.SecChUA)
 		}
 	}
 }

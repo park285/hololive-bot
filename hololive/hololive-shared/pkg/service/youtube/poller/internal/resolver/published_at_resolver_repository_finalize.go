@@ -15,7 +15,7 @@ func (r *publishedAtResolverRepository) completeFinalizePublishedAt(
 	ctx context.Context,
 	tx dbx.Querier,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	notification *domain.YouTubeNotificationOutbox,
 	result *publishedAtFinalizeResult,
 ) error {
@@ -40,7 +40,7 @@ func (r *publishedAtResolverRepository) finalizeShort(
 	ctx context.Context,
 	tx dbx.Querier,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider polling.NotificationRouteDecider,
 	enqueueAllowed bool,
@@ -60,19 +60,12 @@ func (r *publishedAtResolverRepository) finalizeShort(
 	if err != nil {
 		return nil, "", fmt.Errorf("load short row for notification: %w", err)
 	}
-	proceed, reason, err := maybeAuthorizePublishedAtNotification(
-		ctx,
-		txRepository,
-		candidate,
-		publishedAt,
+	proceed, reason := maybeAuthorizePublishedAtNotification(
+		candidate, publishedAt,
 		enqueueAllowed,
 		routeDecider,
 		domain.AlarmTypeShorts,
-		"short",
 	)
-	if err != nil {
-		return nil, "", err
-	}
 	if !proceed {
 		return nil, reason, nil
 	}
@@ -84,7 +77,7 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 	ctx context.Context,
 	tx dbx.Querier,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider polling.NotificationRouteDecider,
 	enqueueAllowed bool,
@@ -104,19 +97,12 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 	if err != nil {
 		return nil, "", fmt.Errorf("load community row for notification: %w", err)
 	}
-	proceed, reason, err := maybeAuthorizePublishedAtNotification(
-		ctx,
-		txRepository,
-		candidate,
-		publishedAt,
+	proceed, reason := maybeAuthorizePublishedAtNotification(
+		candidate, publishedAt,
 		enqueueAllowed,
 		routeDecider,
 		domain.AlarmTypeCommunity,
-		"community",
 	)
-	if err != nil {
-		return nil, "", err
-	}
 	if !proceed {
 		return nil, reason, nil
 	}
@@ -124,7 +110,7 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 	return newCommunityPublishedAtNotification(candidate, post), "", nil
 }
 
-func resolveShortFinalizeVideoID(candidate trackingrepo.PublishedAtResolutionCandidate) (string, error) {
+func resolveShortFinalizeVideoID(candidate *trackingrepo.PublishedAtResolutionCandidate) (string, error) {
 	videoID := polling.NormalizeShortVideoResourceID(candidate.PostID)
 	if videoID == "" {
 		videoID = polling.NormalizeShortVideoResourceID(candidate.ContentID)
@@ -135,7 +121,7 @@ func resolveShortFinalizeVideoID(candidate trackingrepo.PublishedAtResolutionCan
 	return videoID, nil
 }
 
-func resolveCommunityFinalizePostID(candidate trackingrepo.PublishedAtResolutionCandidate) (string, error) {
+func resolveCommunityFinalizePostID(candidate *trackingrepo.PublishedAtResolutionCandidate) (string, error) {
 	postID := polling.NormalizeContentID(candidate.Kind, candidate.PostID)
 	if postID == "" {
 		postID = polling.NormalizeContentID(candidate.Kind, candidate.ContentID)
@@ -183,7 +169,7 @@ func updateCommunityPublishedAt(ctx context.Context, tx dbx.Querier, postID stri
 func upsertResolvedPublishedAtState(
 	ctx context.Context,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	scope string,
 ) error {
@@ -225,21 +211,18 @@ func upsertResolvedPublishedAtState(
 }
 
 func maybeAuthorizePublishedAtNotification(
-	ctx context.Context,
-	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	enqueueAllowed bool,
 	routeDecider polling.NotificationRouteDecider,
 	alarmType domain.AlarmType,
-	scope string,
-) (bool, string, error) {
+) (result1 bool, result2 string) {
 	if !enqueueAllowed {
-		return false, "", nil
+		return false, ""
 	}
 	if !polling.ShouldEnqueueRoutedNotification(routeDecider, alarmType, candidate.ChannelID, publishedAt) {
-		return false, "route_decider_rejected", nil
+		return false, "route_decider_rejected"
 	}
 
-	return true, "", nil
+	return true, ""
 }

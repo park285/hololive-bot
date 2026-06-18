@@ -26,7 +26,7 @@ type DedupeInput struct {
 	SourceOutboxKind            domain.OutboxKind
 }
 
-func BuildDedupeKey(input DedupeInput) string {
+func BuildDedupeKey(input *DedupeInput) string {
 	eventKey := BuildEventKey(input)
 	dedupeKey := fmt.Sprintf("v2:room:%s:event:%s", input.RoomID, eventKey)
 	if len(dedupeKey) <= 768 {
@@ -36,7 +36,7 @@ func BuildDedupeKey(input DedupeInput) string {
 	return fmt.Sprintf("v2:room:%s:event_sha:%s", input.RoomID, hex.EncodeToString(sum[:]))
 }
 
-func buildLegacyDedupeKey(input DedupeInput) string {
+func buildLegacyDedupeKey(input *DedupeInput) string {
 	alarmType := input.AlarmType
 	if alarmType == "" {
 		alarmType = domain.AlarmTypeLive
@@ -71,7 +71,7 @@ func buildLegacyDedupeKey(input DedupeInput) string {
 	)
 }
 
-func BuildEventKey(input DedupeInput) string {
+func BuildEventKey(input *DedupeInput) string {
 	if input.SourceKind == domain.AlarmDispatchSourceKindCelebration {
 		return fmt.Sprintf("celebration:%s", input.SourceIdentity)
 	}
@@ -110,14 +110,14 @@ func BuildEventKey(input DedupeInput) string {
 	)
 }
 
-func EnvelopeDedupeInput(envelope domain.AlarmQueueEnvelope) DedupeInput {
-	input := envelopeNotificationDedupeInput(envelope.Notification)
+func EnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) DedupeInput {
+	input := envelopeNotificationDedupeInput(&envelope.Notification)
 	applyCelebrationDedupeSource(&input, envelope)
 	applyYouTubeOutboxDedupeSource(&input, envelope)
 	return input
 }
 
-func envelopeNotificationDedupeInput(notification domain.AlarmNotification) DedupeInput {
+func envelopeNotificationDedupeInput(notification *domain.AlarmNotification) DedupeInput {
 	channelID := ""
 	streamID := ""
 	title := ""
@@ -147,7 +147,7 @@ func envelopeNotificationDedupeInput(notification domain.AlarmNotification) Dedu
 	}
 }
 
-func applyCelebrationDedupeSource(input *DedupeInput, envelope domain.AlarmQueueEnvelope) {
+func applyCelebrationDedupeSource(input *DedupeInput, envelope *domain.AlarmQueueEnvelope) {
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		input.SourceKind = envelope.SourceKind
 		input.SourceIdentity = envelope.Celebration.Identity()
@@ -157,7 +157,7 @@ func applyCelebrationDedupeSource(input *DedupeInput, envelope domain.AlarmQueue
 	}
 }
 
-func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope domain.AlarmQueueEnvelope) {
+func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope *domain.AlarmQueueEnvelope) {
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		input.SourceKind = envelope.SourceKind
 		input.SourceIdentity = envelope.YouTubeOutbox.Identity()
@@ -168,14 +168,15 @@ func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope domain.AlarmQue
 	}
 }
 
-func BuildDedupeKeyFromEnvelope(envelope domain.AlarmQueueEnvelope) string {
-	return BuildDedupeKey(EnvelopeDedupeInput(envelope))
+func BuildDedupeKeyFromEnvelope(envelope *domain.AlarmQueueEnvelope) string {
+	input := EnvelopeDedupeInput(envelope)
+	return BuildDedupeKey(&input)
 }
 
-func BuildLegacyDedupeKeyFromEnvelope(envelope domain.AlarmQueueEnvelope) string {
+func BuildLegacyDedupeKeyFromEnvelope(envelope *domain.AlarmQueueEnvelope) string {
 	input := EnvelopeDedupeInput(envelope)
 	if len(envelope.ClaimKeys) > 0 {
 		input.Category = envelope.ClaimKeys[len(envelope.ClaimKeys)-1]
 	}
-	return buildLegacyDedupeKey(input)
+	return buildLegacyDedupeKey(&input)
 }

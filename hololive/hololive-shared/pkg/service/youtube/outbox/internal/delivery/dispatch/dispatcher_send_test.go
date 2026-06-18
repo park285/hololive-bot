@@ -26,7 +26,7 @@ func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
 
 	cache := cachemocks.NewLenientClient()
 
-	return NewDispatcher(nil, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	return NewDispatcher(nil, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -56,7 +56,7 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 		}
 	}
 
-	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{})
 	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCtarget", Kind: domain.OutboxKindNewShort},
 		{ChannelID: "UCtarget", Kind: domain.OutboxKindCommunityPost},
@@ -117,7 +117,7 @@ func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) 
 		}
 	}
 
-	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		SubscriberLookupParallelism: 1,
 	})
 
@@ -296,7 +296,7 @@ func TestValidateOutboxPayload(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := validateOutboxPayload(tt.item); got != tt.wantOK {
+			if got := validateOutboxPayload(&tt.item); got != tt.wantOK {
 				t.Fatalf("validateOutboxPayload() = %v, want %v", got, tt.wantOK)
 			}
 		})
@@ -848,7 +848,7 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsCommunityShortsResult(t *testing
 	assertSendLogIntField(t, entry, logschema.FieldTargetRoomCount, 1)
 	assertSendLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 1)
 	assertSendLogIntField(t, entry, logschema.FieldFailedRoomCount, 0)
-	assertSendLogTimeField(t, entry, deliveryAuditSentAtLogField)
+	assertSendLogSentAtField(t, entry)
 }
 
 func TestDispatchDeliveryRows_PerRoomFailureLogsCommunityShortsResult(t *testing.T) {
@@ -882,7 +882,7 @@ func TestDispatchDeliveryRows_PerRoomFailureLogsCommunityShortsResult(t *testing
 	assertSendLogIntField(t, entry, logschema.FieldTargetRoomCount, 1)
 	assertSendLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 0)
 	assertSendLogIntField(t, entry, logschema.FieldFailedRoomCount, 1)
-	assertSendLogTimeField(t, entry, deliveryAuditSentAtLogField)
+	assertSendLogSentAtField(t, entry)
 }
 
 func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsResult(t *testing.T) {
@@ -938,7 +938,7 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAudit(t *testing.
 	assertSendLogStringField(t, entries[0], deliveryAuditModeLogField, "per_room")
 	assertSendLogStringField(t, entries[0], deliveryDedupeKeyLogField, "youtube-notification:NEW_SHORT:short-1")
 	assertSendLogStringField(t, entries[0], logschema.FieldRoomID, "room1")
-	assertSendLogTimeField(t, entries[0], deliveryAuditSentAtLogField)
+	assertSendLogSentAtField(t, entries[0])
 }
 
 func TestDispatchDeliveryRows_AuditUsesDetectionPostIDFieldSchema(t *testing.T) {
@@ -1008,7 +1008,7 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAudit(t *testing.
 		assertSendLogStringField(t, entries[i], deliveryAuditFailureReasonLogField, "send message")
 		assertSendLogStringField(t, entries[i], deliveryAuditPathLogField, communityShortsDeliveryPath)
 		assertSendLogStringField(t, entries[i], deliveryAuditModeLogField, "grouped")
-		assertSendLogTimeField(t, entries[i], deliveryAuditSentAtLogField)
+		assertSendLogSentAtField(t, entries[i])
 
 		contentID := readSendLogStringField(t, entries[i], deliveryAuditContentIDLogField)
 		contentIDs = append(contentIDs, contentID)
@@ -1078,7 +1078,7 @@ func newLoggedTestDispatcherForSend(t *testing.T, sender *testSender, renderer *
 	logBuffer := &safeBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	return NewDispatcher(nil, cache, sender, renderer, logger, Config{
+	return NewDispatcher(nil, cache, sender, renderer, logger, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -1198,10 +1198,10 @@ func assertSendLogStringField(t *testing.T, entry map[string]any, field, want st
 	}
 }
 
-func assertSendLogTimeField(t *testing.T, entry map[string]any, field string) {
+func assertSendLogSentAtField(t *testing.T, entry map[string]any) {
 	t.Helper()
 
-	_ = readSendLogTimeField(t, entry, field)
+	_ = readSendLogTimeField(t, entry, deliveryAuditSentAtLogField)
 }
 
 func assertSendLogIntField(t *testing.T, entry map[string]any, field string, want int) {
@@ -1268,8 +1268,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
 		cachemocks.NewLenientClient(),
 		&blockingSender{},
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Config{DeliverySendTimeout: 5 * time.Millisecond},
+		slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
 
 	err := dispatcher.send.sendDeliveryMessage(context.Background(), deliverySendRequest{
@@ -1296,8 +1295,7 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 		cachemocks.NewLenientClient(),
 		&blockingSender{},
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Config{DeliverySendTimeout: 100 * time.Millisecond},
+		slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{DeliverySendTimeout: 100 * time.Millisecond},
 	)
 
 	parentCtx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
@@ -1331,8 +1329,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 		cachemocks.NewLenientClient(),
 		sender,
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Config{DeliverySendTimeout: 5 * time.Millisecond},
+		slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
 
 	err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
@@ -1362,8 +1359,7 @@ func TestNewDispatcherAppliesDeliveryDefaults(t *testing.T) {
 		cachemocks.NewLenientClient(),
 		&testSender{failRoom: map[string]bool{}},
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Config{},
+		slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{},
 	)
 
 	defaults := DefaultConfig()

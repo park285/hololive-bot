@@ -19,7 +19,9 @@ func NewJSONTestServer(t *testing.T, statusCode int, responseBody any, assertFn 
 		w.WriteHeader(statusCode)
 
 		if responseBody != nil {
-			_ = json.NewEncoder(w).Encode(responseBody)
+			if err := json.NewEncoder(w).Encode(responseBody); err != nil {
+				t.Errorf("encode JSON response: %v", err)
+			}
 		}
 	}))
 

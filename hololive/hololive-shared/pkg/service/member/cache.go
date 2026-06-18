@@ -100,83 +100,13 @@ func (c *Cache) cacheEnabled() bool {
 	return c != nil && c.cache != nil
 }
 
-// 병렬 처리를 통해 대량의 데이터도 빠르게 처리한다.
-func (c *Cache) WarmUpCache(ctx context.Context) error {
-	members, err := c.repository.GetAllMembers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to load all members: %w", err)
-	}
-
-	chunkSize := c.warmUpChunkSize
-	chunks := chunkMembers(members, chunkSize)
-
-	maxWorkers := max(1, c.warmUpMaxGoroutines)
-	semaphore := make(chan struct{}, maxWorkers)
-	var wg sync.WaitGroup
-
-	for _, chunk := range chunks {
-		wg.Go(func() {
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-			c.cacheChunk(ctx, chunk)
-		})
-	}
-	wg.Wait()
-
-	for _, member := range members {
-		if member.ChannelID != "" {
-			c.byChannelID.Store(member.ChannelID, member)
-		}
-		c.byName.Store(member.Name, member)
-	}
-
-	c.logger.Info("Member cache warmed up",
-		slog.Int("total_members", len(members)),
-		slog.Int("chunks", len(chunks)),
-	)
-
-	return nil
-}
-
-func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member) {
-	if len(members) == 0 {
-		return
-	}
-	if !c.cacheEnabled() {
-		return
-	}
-
-	pairs := make(map[string]any, len(members)*2)
-
-	for _, member := range members {
-		if member.ChannelID != "" {
-			channelKey := memberChannelKeyPrefix + member.ChannelID
-			pairs[channelKey] = member
-		}
-
-		nameKey := memberNameKeyPrefix + member.Name
-		pairs[nameKey] = member
-	}
-
-	if err := c.cache.MSet(ctx, pairs, c.cacheTTL); err != nil {
-		c.logger.Warn("Failed to batch cache members",
-			slog.Int("count", len(members)),
-			slog.Any("error", err))
-	}
-}
-
 func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
-	if val, ok := c.byChannelID.Load(channelID); ok {
-		return val.(*domain.Member), nil
+	if member, ok := c.loadChannelFromMemory(channelID); ok {
+		return member, nil
 	}
 
-	if c.cacheEnabled() {
-		cacheKey := memberChannelKeyPrefix + channelID
-		var member domain.Member
-		if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-			c.byChannelID.Store(channelID, &member)
-			return &member, nil
-		}
+	if member := c.loadChannelFromDistributedCache(ctx, channelID); member != nil {
+		return member, nil
 	}
 
 	dbMember, err := c.repository.FindByChannelID(ctx, channelID)
@@ -193,17 +123,12 @@ func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.M
 }
 
 func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, error) {
-	if val, ok := c.byName.Load(name); ok {
-		return val.(*domain.Member), nil
+	if member, ok := c.loadNameFromMemory(name); ok {
+		return member, nil
 	}
 
-	if c.cacheEnabled() {
-		cacheKey := memberNameKeyPrefix + name
-		var member domain.Member
-		if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-			c.byName.Store(name, &member)
-			return &member, nil
-		}
+	if member := c.loadNameFromDistributedCache(ctx, name); member != nil {
+		return member, nil
 	}
 
 	dbMember, err := c.repository.FindByName(ctx, name)
@@ -216,6 +141,58 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 
 	c.cacheMember(ctx, dbMember)
 	return dbMember, nil
+}
+
+func (c *Cache) loadChannelFromMemory(channelID string) (*domain.Member, bool) {
+	val, ok := c.byChannelID.Load(channelID)
+	if !ok {
+		return nil, false
+	}
+	member, ok := val.(*domain.Member)
+	if ok {
+		return member, true
+	}
+	c.byChannelID.Delete(channelID)
+	return nil, false
+}
+
+func (c *Cache) loadNameFromMemory(name string) (*domain.Member, bool) {
+	val, ok := c.byName.Load(name)
+	if !ok {
+		return nil, false
+	}
+	member, ok := val.(*domain.Member)
+	if ok {
+		return member, true
+	}
+	c.byName.Delete(name)
+	return nil, false
+}
+
+func (c *Cache) loadChannelFromDistributedCache(ctx context.Context, channelID string) *domain.Member {
+	if !c.cacheEnabled() {
+		return nil
+	}
+	cacheKey := memberChannelKeyPrefix + channelID
+	var member domain.Member
+	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
+		c.byChannelID.Store(channelID, &member)
+		return &member
+	}
+	return nil
+}
+
+func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string) *domain.Member {
+	if !c.cacheEnabled() {
+		return nil
+	}
+	cacheKey := memberNameKeyPrefix + name
+	var member domain.Member
+	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
+		c.byName.Store(name, &member)
+		return &member
+	}
+	return nil
 }
 
 // 별명 조회 성공 시 해당 멤버 정보를 캐시에 등록한다.
@@ -236,7 +213,11 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 
 	if c.cacheEnabled() {
 		cacheKey := memberAliasKeyPrefix + alias
-		_ = c.cache.Set(ctx, cacheKey, dbMember, c.cacheTTL)
+		if err := c.cache.Set(ctx, cacheKey, dbMember, c.cacheTTL); err != nil && c.logger != nil {
+			c.logger.Warn("Failed to cache member alias",
+				slog.String("alias", alias),
+				slog.Any("error", err))
+		}
 	}
 
 	return dbMember, nil
@@ -260,7 +241,10 @@ func (c *Cache) getAliasFromCache(ctx context.Context, alias string) *domain.Mem
 
 func (c *Cache) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	if val, ok := c.allMembers.Load(allChannelIDsKey); ok {
-		return val.([]string), nil
+		if channelIDs, ok := val.([]string); ok {
+			return channelIDs, nil
+		}
+		c.allMembers.Delete(allChannelIDsKey)
 	}
 
 	channelIDs, err := c.repository.GetAllChannelIDs(ctx)
@@ -353,14 +337,4 @@ func (c *Cache) InvalidateAliasCache(ctx context.Context, alias string) error {
 
 	c.logger.Info("Alias cache invalidated", slog.String("alias", alias))
 	return nil
-}
-
-// 청크 분할 헬퍼
-func chunkMembers(members []*domain.Member, chunkSize int) [][]*domain.Member {
-	var chunks [][]*domain.Member
-	for i := 0; i < len(members); i += chunkSize {
-		end := min(i+chunkSize, len(members))
-		chunks = append(chunks, members[i:end])
-	}
-	return chunks
 }

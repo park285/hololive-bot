@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body []byte, reqURL string, attempt, maxAttempts int) ([]byte, bool, error) {
+func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body []byte, reqURL string, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
 	if status == http.StatusTooManyRequests {
 		return c.handleRateLimitedResponse(status, reqURL, attempt, maxAttempts)
 	}
@@ -24,7 +24,7 @@ func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body
 	return body, true, nil
 }
 
-func (c *APIClient) handleRateLimitedResponse(status int, reqURL string, attempt int, maxAttempts int) ([]byte, bool, error) {
+func (c *APIClient) handleRateLimitedResponse(status int, reqURL string, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
 	c.logger.Warn("Holodex rate limited, retrying",
 		slog.Int("status", status),
 		slog.Int("attempt", attempt+1),
@@ -38,7 +38,7 @@ func (c *APIClient) handleRateLimitedResponse(status int, reqURL string, attempt
 	})
 }
 
-func (c *APIClient) handleForbiddenResponse(status int, body []byte, reqURL string, attempt int) ([]byte, bool, error) {
+func (c *APIClient) handleForbiddenResponse(status int, body []byte, reqURL string, attempt int) (result0 []byte, ok1 bool, err error) {
 	c.logger.Error("Holodex forbidden response",
 		slog.Int("status", status),
 		slog.Int("attempt", attempt+1),
@@ -56,7 +56,7 @@ func holodexClientError(status int, reqURL string) error {
 	})
 }
 
-func (c *APIClient) handleServerError(_ context.Context, status, attempt, maxAttempts int) ([]byte, bool, error) {
+func (c *APIClient) handleServerError(_ context.Context, status, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
 	c.openCircuit()
 	c.logger.Warn("Server error",
 		slog.Int("status", status),

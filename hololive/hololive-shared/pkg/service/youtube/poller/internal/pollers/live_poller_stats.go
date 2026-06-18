@@ -152,7 +152,7 @@ func (p *LivePoller) finalizeStreamStats(ctx context.Context, videoID, channelID
 		return
 	}
 
-	p.saveStreamStats(ctx, videoID, channelID, session, result)
+	p.saveStreamStats(ctx, videoID, channelID, &session, result)
 }
 
 func (p *LivePoller) aggregateLiveViewerStats(ctx context.Context, videoID string) (liveViewerStatsResult, bool) {
@@ -172,7 +172,7 @@ func (p *LivePoller) aggregateLiveViewerStats(ctx context.Context, videoID strin
 	return result, true
 }
 
-func (p *LivePoller) saveStreamStats(ctx context.Context, videoID, channelID string, session domain.YouTubeLiveSession, result liveViewerStatsResult) {
+func (p *LivePoller) saveStreamStats(ctx context.Context, videoID, channelID string, session *domain.YouTubeLiveSession, result liveViewerStatsResult) {
 	stats := &domain.YouTubeStreamStats{
 		VideoID:              videoID,
 		ChannelID:            channelID,

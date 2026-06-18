@@ -23,6 +23,7 @@ package holodexprovider
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 
@@ -55,7 +56,7 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 		return nil, err
 	}
 
-	return h.getStreamsByOrgWithFallback(ctx, streamFetchPlan{
+	return h.getStreamsByOrgWithFallback(ctx, &streamFetchPlan{
 		resolvedOrg: resolvedOrg,
 		status:      constants.HolodexAPIParams.StatusLive,
 		operation:   "live_streams",
@@ -73,7 +74,9 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 		},
 		retryKey: fmt.Sprintf("live_streams_%s", strings.ToLower(resolvedOrg)),
 		retry: func(retryCtx context.Context, org string, _ int) {
-			_, _ = h.GetLiveStreamsByOrg(retryCtx, org)
+			if _, err := h.GetLiveStreamsByOrg(retryCtx, org); err != nil && h.logger != nil {
+				h.logger.Warn("holodex live streams retry failed", slog.String("org", org), slog.Any("error", err))
+			}
 		},
 		fallbackLogMessage: "Primary org fetch returned no live streams, using scraper fallback",
 	})
@@ -90,7 +93,7 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 		return nil, err
 	}
 
-	return h.getStreamsByOrgWithFallback(ctx, streamFetchPlan{
+	return h.getStreamsByOrgWithFallback(ctx, &streamFetchPlan{
 		resolvedOrg: resolvedOrg,
 		status:      constants.HolodexAPIParams.StatusUpcoming,
 		hours:       hours,
@@ -109,7 +112,9 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 		},
 		retryKey: fmt.Sprintf("upcoming_%s_%d", strings.ToLower(resolvedOrg), hours),
 		retry: func(retryCtx context.Context, org string, hours int) {
-			_, _ = h.GetUpcomingStreamsByOrg(retryCtx, hours, org)
+			if _, err := h.GetUpcomingStreamsByOrg(retryCtx, hours, org); err != nil && h.logger != nil {
+				h.logger.Warn("holodex upcoming streams retry failed", slog.String("org", org), slog.Int("hours", hours), slog.Any("error", err))
+			}
 		},
 		fallbackLogMessage: "Primary org fetch returned no upcoming streams, using scraper fallback",
 	})

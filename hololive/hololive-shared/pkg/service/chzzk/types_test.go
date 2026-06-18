@@ -258,31 +258,31 @@ func TestParseScheduledStartAt(t *testing.T) {
 				return
 			}
 
-			// KST 타임존 검증
-			if got.Location().String() != "Asia/Seoul" {
-				t.Errorf("Location = %s, want Asia/Seoul", got.Location())
-			}
-
-			if got.Year() != tt.wantYear {
-				t.Errorf("Year = %d, want %d", got.Year(), tt.wantYear)
-			}
-
-			if got.Month() != tt.wantMonth {
-				t.Errorf("Month = %v, want %v", got.Month(), tt.wantMonth)
-			}
-
-			if got.Day() != tt.wantDay {
-				t.Errorf("Day = %d, want %d", got.Day(), tt.wantDay)
-			}
-
-			if got.Hour() != tt.wantHour {
-				t.Errorf("Hour = %d, want %d", got.Hour(), tt.wantHour)
-			}
-
-			if got.Minute() != tt.wantMin {
-				t.Errorf("Minute = %d, want %d", got.Minute(), tt.wantMin)
-			}
+			assertScheduledStartAt(t, got, tt.wantYear, tt.wantMonth, tt.wantDay, tt.wantHour, tt.wantMin)
 		})
+	}
+}
+
+func assertScheduledStartAt(t *testing.T, got time.Time, wantYear int, wantMonth time.Month, wantDay, wantHour, wantMin int) {
+	t.Helper()
+
+	if got.Location().String() != "Asia/Seoul" {
+		t.Errorf("Location = %s, want Asia/Seoul", got.Location())
+	}
+	if got.Year() != wantYear {
+		t.Errorf("Year = %d, want %d", got.Year(), wantYear)
+	}
+	if got.Month() != wantMonth {
+		t.Errorf("Month = %v, want %v", got.Month(), wantMonth)
+	}
+	if got.Day() != wantDay {
+		t.Errorf("Day = %d, want %d", got.Day(), wantDay)
+	}
+	if got.Hour() != wantHour {
+		t.Errorf("Hour = %d, want %d", got.Hour(), wantHour)
+	}
+	if got.Minute() != wantMin {
+		t.Errorf("Minute = %d, want %d", got.Minute(), wantMin)
 	}
 }
 

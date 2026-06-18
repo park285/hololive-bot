@@ -33,35 +33,35 @@ type routeAuditCache struct {
 }
 
 func newRouteAuditCacheClient() (*cachemocks.Client, *routeAuditCache) {
-	store := &routeAuditCache{
+	auditStore := &routeAuditCache{
 		sets:   make(map[string]map[string]struct{}),
 		hashes: make(map[string]map[string]string),
 	}
 
 	client := cachemocks.NewStrictClient()
 	client.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
-		return store.addSetMembers(key, members), nil
+		return auditStore.addSetMembers(key, members), nil
 	}
 	client.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		return store.members(key), nil
+		return auditStore.members(key), nil
 	}
 	client.HSetFunc = func(_ context.Context, key, field, value string) error {
-		store.setHash(key, field, value)
+		auditStore.setHash(key, field, value)
 		return nil
 	}
 	client.HGetFunc = func(_ context.Context, key, field string) (string, error) {
-		return store.getHash(key, field), nil
+		return auditStore.getHash(key, field), nil
 	}
 	client.DelFunc = func(_ context.Context, key string) error {
-		store.deleteKey(key)
+		auditStore.deleteKey(key)
 		return nil
 	}
 	client.SetFunc = func(_ context.Context, key string, value any, _ time.Duration) error {
-		store.setHash("__strings__", key, fmt.Sprintf("%v", value))
+		auditStore.setHash("__strings__", key, fmt.Sprintf("%v", value))
 		return nil
 	}
 
-	return client, store
+	return client, auditStore
 }
 
 func (c *routeAuditCache) addSetMembers(key string, members []string) int64 {
@@ -175,7 +175,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	require.NoError(t, insertDeliveryTestRows(db, &trackingRows).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -278,9 +278,10 @@ func buildRouteAuditOutboxItems(targets map[routeAuditTarget][]string) []domain.
 
 		switch target.alarmType {
 		case domain.AlarmTypeShorts:
-			item.Payload = fmt.Sprintf(`{"video_id":"%s","title":"short-%s"}`, contentID, target.channelID)
+			item.Payload = fmt.Sprintf(`{"video_id":%q,"title":"short-%s"}`, contentID, target.channelID)
 		case domain.AlarmTypeCommunity:
-			item.Payload = fmt.Sprintf(`{"post_id":"%s","content_text":"community-%s"}`, contentID, target.channelID)
+			item.Payload = fmt.Sprintf(`{"post_id":%q,"content_text":"community-%s"}`, contentID, target.channelID)
+		case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
 		}
 
 		items = append(items, item)
@@ -295,6 +296,8 @@ func routeAuditOutboxKind(alarmType domain.AlarmType) domain.OutboxKind {
 		return domain.OutboxKindNewShort
 	case domain.AlarmTypeCommunity:
 		return domain.OutboxKindCommunityPost
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+		panic("unsupported route audit alarm type: " + string(alarmType))
 	default:
 		panic("unexpected route audit alarm type: " + string(alarmType))
 	}
@@ -325,7 +328,8 @@ func expectedRouteAuditLookupKeys(targets map[routeAuditTarget][]string) []strin
 
 func expectedRouteAuditRoomsByOutbox(items []domain.YouTubeNotificationOutbox, targets map[routeAuditTarget][]string) map[int64][]string {
 	roomsByOutbox := make(map[int64][]string, len(items))
-	for _, item := range items {
+	for i := range items {
+		item := &items[i]
 		target := routeAuditTarget{channelID: item.ChannelID, alarmType: item.Kind.ToAlarmType()}
 		rooms := append([]string(nil), targets[target]...)
 		slices.Sort(rooms)

@@ -73,7 +73,7 @@ func newFakeACLStore() *fakeACLStore {
 	}
 }
 
-func (f *fakeACLStore) GetSetting(_ context.Context, key string) (string, bool, error) {
+func (f *fakeACLStore) GetSetting(_ context.Context, key string) (value0 string, ok1 bool, err error) {
 	if f.getSettingHook != nil {
 		if err := f.getSettingHook(key); err != nil {
 			return "", false, err
@@ -205,10 +205,13 @@ func (f *fakeACLStore) CountRooms(_ context.Context, roomID, listType string) (i
 	return count, nil
 }
 
-func (f *fakeACLStore) settingValue(key string) (string, bool) {
+func (f *fakeACLStore) settingValue(key string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	v, ok := f.settings[key]
-	return v, ok
+	if !ok {
+		return ""
+	}
+	return v
 }

@@ -31,7 +31,7 @@ func TestProvideYouTubeProducerRateLimiter_DisabledDistributed_AllowsNilCache(t 
 	ytCfg := config.DefaultYouTubeOperationalConfig()
 	ytCfg.ProducerDistributedRateLimit.Enabled = false
 
-	limiter, err := ProvideYouTubeProducerRateLimiterWithConfig(ytCfg, nil, nil)
+	limiter, err := ProvideYouTubeProducerRateLimiterWithConfig(&ytCfg, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideYouTubeProducerRateLimiterWithConfig() error = %v, want nil", err)
 	}
@@ -44,7 +44,7 @@ func TestProvideYouTubeProducerRateLimiter_EnabledDistributed_RequiresCache(t *t
 	ytCfg := config.DefaultYouTubeOperationalConfig()
 	ytCfg.ProducerDistributedRateLimit.Enabled = true
 
-	limiter, err := ProvideYouTubeProducerRateLimiterWithConfig(ytCfg, nil, nil)
+	limiter, err := ProvideYouTubeProducerRateLimiterWithConfig(&ytCfg, nil, nil)
 	if err == nil {
 		t.Fatal("ProvideYouTubeProducerRateLimiterWithConfig() expected error, got nil")
 	}

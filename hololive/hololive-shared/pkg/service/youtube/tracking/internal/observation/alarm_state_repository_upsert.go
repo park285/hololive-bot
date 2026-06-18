@@ -78,7 +78,7 @@ func buildAlarmStateUpsertQuery(
 	finalAuthorizedExpr string,
 	finalAlarmSentExpr string,
 	deliveryStatusExpr string,
-) (string, []any) {
+) (result1 string, result2 []any) {
 	args := make([]any, 0, len(normalized)*11)
 	var sb strings.Builder
 	sb.WriteString(`
@@ -198,7 +198,7 @@ func alarmStateCanonicalKey(kind domain.OutboxKind, postID string) string {
 	return string(kind) + "\x00" + strings.TrimSpace(postID)
 }
 
-func mergeNormalizedAlarmState(existing *domain.YouTubeCommunityShortsAlarmState, next *domain.YouTubeCommunityShortsAlarmState) *domain.YouTubeCommunityShortsAlarmState {
+func mergeNormalizedAlarmState(existing, next *domain.YouTubeCommunityShortsAlarmState) *domain.YouTubeCommunityShortsAlarmState {
 	if existing == nil {
 		return next
 	}
@@ -226,7 +226,7 @@ func mergeNormalizedAlarmState(existing *domain.YouTubeCommunityShortsAlarmState
 	return &merged
 }
 
-func earliestAlarmStateTimestamp(existing *time.Time, next *time.Time) *time.Time {
+func earliestAlarmStateTimestamp(existing, next *time.Time) *time.Time {
 	if existing == nil {
 		return next
 	}
@@ -236,7 +236,7 @@ func earliestAlarmStateTimestamp(existing *time.Time, next *time.Time) *time.Tim
 	return existing
 }
 
-func buildAlarmStateDeliveryStatusExpr(authorizedExpr string, alarmSentExpr string) string {
+func buildAlarmStateDeliveryStatusExpr(authorizedExpr, alarmSentExpr string) string {
 	return fmt.Sprintf(`CASE
                 WHEN (%s) IS NOT NULL THEN '%s'
                 WHEN (%s) IS NOT NULL THEN '%s'

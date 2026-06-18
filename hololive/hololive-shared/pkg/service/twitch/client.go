@@ -69,7 +69,10 @@ type Client struct {
 	breaker *util.Breaker
 }
 
-func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
+func NewClient(cfg *ClientConfig, logger *slog.Logger) *Client {
+	if cfg == nil {
+		cfg = &ClientConfig{}
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -126,7 +129,7 @@ func (c *Client) IsConfigured() bool {
 }
 
 func (c *Client) ensureValidToken(ctx context.Context) error {
-	expiry, _ := c.tokenExpiry.Load().(time.Time)
+	expiry := c.currentTokenExpiry()
 	if time.Now().Before(expiry.Add(-c.tokenRefreshSkew)) {
 		return nil
 	}
@@ -142,12 +145,20 @@ func (c *Client) refreshToken(ctx context.Context) error {
 	c.tokenMu.Lock()
 	defer c.tokenMu.Unlock()
 
-	// Double-check: 다른 고루틴이 이미 갱신했을 수 있음
-	expiry, _ := c.tokenExpiry.Load().(time.Time)
+	expiry := c.currentTokenExpiry()
 	if time.Now().Before(expiry.Add(-c.tokenRefreshSkew)) {
 		return nil
 	}
 
+	tokenResp, err := c.requestToken(ctx)
+	if err != nil {
+		return err
+	}
+
+	return c.storeTokenResponse(tokenResp)
+}
+
+func (c *Client) requestToken(ctx context.Context) (TokenResponse, error) {
 	params := url.Values{}
 	params.Set("client_id", c.clientID)
 	params.Set("client_secret", c.clientSecret)
@@ -155,32 +166,62 @@ func (c *Client) refreshToken(ctx context.Context) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.authURL, strings.NewReader(params.Encode()))
 	if err != nil {
-		return fmt.Errorf("create token request: %w", err)
+		return TokenResponse{}, fmt.Errorf("create token request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("do token request: %w", err)
+		return TokenResponse{}, fmt.Errorf("do token request: %w", twitchTokenRequestError(err, resp == nil))
+	}
+	if resp == nil {
+		return TokenResponse{}, fmt.Errorf("do token request: nil response")
+	}
+	if err := validateTokenResponse(resp); err != nil {
+		return TokenResponse{}, err
 	}
 
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("token request failed: status %d", resp.StatusCode)
-	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.logger.Warn("Failed to close Twitch token response body", slog.Any("error", closeErr))
+		}
+	}()
 
 	body, err := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
 	if err != nil {
-		return fmt.Errorf("read token response: %w", err)
+		return TokenResponse{}, fmt.Errorf("read token response: %w", err)
 	}
 
 	var tokenResp TokenResponse
 	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return fmt.Errorf("unmarshal token response: %w", err)
+		return TokenResponse{}, fmt.Errorf("unmarshal token response: %w", err)
 	}
 
+	return tokenResp, nil
+}
+
+func twitchTokenRequestError(err error, nilResponse bool) error {
+	if nilResponse {
+		return fmt.Errorf("nil response: %w", err)
+	}
+	return err
+}
+
+func validateTokenResponse(resp *http.Response) error {
+	if resp == nil {
+		return fmt.Errorf("do token request: nil response")
+	}
+	if resp.Body == nil {
+		return fmt.Errorf("do token request: nil response body")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("token request failed: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *Client) storeTokenResponse(tokenResp TokenResponse) error {
 	accessToken := strings.TrimSpace(tokenResp.AccessToken)
 	if accessToken == "" {
 		return fmt.Errorf("twitch token response missing access_token")
@@ -201,6 +242,22 @@ func (c *Client) refreshToken(ctx context.Context) error {
 
 func (c *Client) invalidateToken() {
 	c.tokenExpiry.Store(time.Time{})
+}
+
+func (c *Client) currentTokenExpiry() time.Time {
+	expiry, ok := c.tokenExpiry.Load().(time.Time)
+	if !ok {
+		return time.Time{}
+	}
+	return expiry
+}
+
+func (c *Client) currentToken() string {
+	token, ok := c.token.Load().(string)
+	if !ok {
+		return ""
+	}
+	return token
 }
 
 func (c *Client) isCircuitOpen() bool {

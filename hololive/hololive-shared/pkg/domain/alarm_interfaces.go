@@ -50,7 +50,7 @@ type AlarmListView struct {
 }
 
 type AlarmRepository interface {
-	AddAlarm(ctx context.Context, req AddAlarmRequest) (bool, error)
+	AddAlarm(ctx context.Context, req *AddAlarmRequest) (bool, error)
 	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes AlarmTypes) (bool, error)
 	GetRoomAlarms(ctx context.Context, roomID string) ([]string, error)
 	GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*Alarm, error)

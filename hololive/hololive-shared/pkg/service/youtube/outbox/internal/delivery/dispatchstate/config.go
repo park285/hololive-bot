@@ -70,15 +70,19 @@ func DefaultConfig() Config {
 	}
 }
 
-func NormalizeDispatcherConfig(config Config) Config {
+func NormalizeDispatcherConfig(config *Config) Config {
+	if config == nil {
+		defaults := DefaultConfig()
+		config = &defaults
+	}
 	defaults := DefaultConfig()
-	config = normalizeDispatcherCoreConfig(config, defaults)
-	config = normalizeDispatcherDeliveryConfig(config, defaults)
-	config = normalizeDispatcherTelemetryConfig(config, defaults)
-	return config
+	normalizeDispatcherCoreConfig(config, &defaults)
+	normalizeDispatcherDeliveryConfig(config, &defaults)
+	normalizeDispatcherTelemetryConfig(config, &defaults)
+	return *config
 }
 
-func normalizeDispatcherCoreConfig(config Config, defaults Config) Config {
+func normalizeDispatcherCoreConfig(config, defaults *Config) {
 	if config.BatchSize <= 0 {
 		config.BatchSize = defaults.BatchSize
 	}
@@ -97,10 +101,9 @@ func normalizeDispatcherCoreConfig(config Config, defaults Config) Config {
 	if config.ReviveFreshnessWindow <= 0 {
 		config.ReviveFreshnessWindow = defaults.ReviveFreshnessWindow
 	}
-	return config
 }
 
-func normalizeDispatcherDeliveryConfig(config Config, defaults Config) Config {
+func normalizeDispatcherDeliveryConfig(config, defaults *Config) {
 	if config.DeliveryParallelism <= 0 {
 		config.DeliveryParallelism = defaults.DeliveryParallelism
 	}
@@ -110,10 +113,9 @@ func normalizeDispatcherDeliveryConfig(config Config, defaults Config) Config {
 	if config.SubscriberLookupParallelism <= 0 {
 		config.SubscriberLookupParallelism = defaults.SubscriberLookupParallelism
 	}
-	return config
 }
 
-func normalizeDispatcherTelemetryConfig(config Config, defaults Config) Config {
+func normalizeDispatcherTelemetryConfig(config, defaults *Config) {
 	if config.TelemetryBackfillBatch <= 0 {
 		config.TelemetryBackfillBatch = defaults.TelemetryBackfillBatch
 	}
@@ -129,5 +131,4 @@ func normalizeDispatcherTelemetryConfig(config Config, defaults Config) Config {
 	if config.TelemetryRetention <= 0 {
 		config.TelemetryRetention = defaults.TelemetryRetention
 	}
-	return config
 }

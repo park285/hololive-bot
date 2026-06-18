@@ -87,7 +87,7 @@ func (s *Scheduler) RegisterCheckedWithBudgetProfile(channelID string, poller Po
 	return nil
 }
 
-func (s *Scheduler) UpdatePriority(channelID string, pollerName string, priority Priority, interval time.Duration) {
+func (s *Scheduler) UpdatePriority(channelID, pollerName string, priority Priority, interval time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -108,7 +108,10 @@ func (s *Scheduler) UpdatePriority(channelID string, pollerName string, priority
 	s.notifyDispatcher()
 }
 
-func (s *Scheduler) SyncPollerTargets(targetSync PollerTargetSync) {
+func (s *Scheduler) SyncPollerTargets(targetSync *PollerTargetSync) {
+	if targetSync == nil {
+		return
+	}
 	if targetSync.Poller == nil || targetSync.Interval <= 0 {
 		return
 	}
@@ -145,11 +148,11 @@ func (s *Scheduler) SyncPollerTargetGroups(targetSyncs []PollerTargetSync) {
 	s.notifyDispatcher()
 }
 
-func buildGroupedPollerTargetSyncs(targetSyncs []PollerTargetSync) (string, map[string]PollerTargetSync) {
+func buildGroupedPollerTargetSyncs(targetSyncs []PollerTargetSync) (result1 string, result2 map[string]PollerTargetSync) {
 	desired := make(map[string]PollerTargetSync)
 	var pollerName string
 	for _, targetSync := range targetSyncs {
-		name, ok := validPollerTargetSyncName(targetSync, pollerName)
+		name, ok := validPollerTargetSyncName(&targetSync, pollerName)
 		if !ok {
 			continue
 		}
@@ -164,7 +167,7 @@ func buildGroupedPollerTargetSyncs(targetSyncs []PollerTargetSync) (string, map[
 	return pollerName, desired
 }
 
-func validPollerTargetSyncName(targetSync PollerTargetSync, expected string) (string, bool) {
+func validPollerTargetSyncName(targetSync *PollerTargetSync, expected string) (string, bool) {
 	if targetSync.Poller == nil || targetSync.Interval <= 0 {
 		return "", false
 	}
@@ -183,7 +186,7 @@ func desiredPollerTargetChannels(channelIDs []string) map[string]struct{} {
 	return desired
 }
 
-func (s *Scheduler) syncExistingPollerTargetJobs(pollerName string, targetSync PollerTargetSync, desired map[string]struct{}) {
+func (s *Scheduler) syncExistingPollerTargetJobs(pollerName string, targetSync *PollerTargetSync, desired map[string]struct{}) {
 	for key, job := range s.jobMap {
 		if !pollerTargetJobMatches(job, pollerName) {
 			continue
@@ -207,7 +210,7 @@ func (s *Scheduler) syncExistingGroupedPollerTargetJobs(pollerName string, desir
 			s.removePollerTargetJob(key, job)
 			continue
 		}
-		s.updatePollerTargetJob(job, targetSync)
+		s.updatePollerTargetJob(job, &targetSync)
 		delete(desired, job.ChannelID)
 	}
 }
@@ -215,7 +218,7 @@ func (s *Scheduler) syncExistingGroupedPollerTargetJobs(pollerName string, desir
 func (s *Scheduler) addMissingGroupedPollerTargetJobs(pollerName string, desired map[string]PollerTargetSync) {
 	now := time.Now()
 	for channelID, targetSync := range desired {
-		job := newPollerTargetJob(channelID, pollerName, targetSync, now)
+		job := newPollerTargetJob(channelID, pollerName, &targetSync, now)
 		heap.Push(&s.jobs, job)
 		s.jobMap[job.key] = job
 	}
@@ -233,7 +236,7 @@ func (s *Scheduler) removePollerTargetJob(key string, job *Job) {
 	delete(s.jobMap, key)
 }
 
-func (s *Scheduler) updatePollerTargetJob(job *Job, targetSync PollerTargetSync) {
+func (s *Scheduler) updatePollerTargetJob(job *Job, targetSync *PollerTargetSync) {
 	job.Poller = targetSync.Poller
 	job.Priority = targetSync.Priority
 	job.budgetProfile = targetSync.BudgetProfile
@@ -246,7 +249,7 @@ func (s *Scheduler) updatePollerTargetJob(job *Job, targetSync PollerTargetSync)
 	}
 }
 
-func (s *Scheduler) addMissingPollerTargetJobs(pollerName string, targetSync PollerTargetSync, desired map[string]struct{}) {
+func (s *Scheduler) addMissingPollerTargetJobs(pollerName string, targetSync *PollerTargetSync, desired map[string]struct{}) {
 	now := time.Now()
 	for channelID := range desired {
 		job := newPollerTargetJob(channelID, pollerName, targetSync, now)
@@ -255,7 +258,7 @@ func (s *Scheduler) addMissingPollerTargetJobs(pollerName string, targetSync Pol
 	}
 }
 
-func newPollerTargetJob(channelID string, pollerName string, targetSync PollerTargetSync, now time.Time) *Job {
+func newPollerTargetJob(channelID, pollerName string, targetSync *PollerTargetSync, now time.Time) *Job {
 	key := channelID + ":" + pollerName
 	offset := calculateOffset(key, targetSync.Interval)
 	nextRunAt := nextPollAt(now, targetSync.Interval, offset)

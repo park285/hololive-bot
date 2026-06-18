@@ -70,7 +70,7 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 		},
 	}
 
-	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room-1",
 		UserID:     "user-1",
 		ChannelID:  "ch-1",
@@ -83,7 +83,7 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	assertPlatformMappings(ctx, t, as, "ch-1", "chzzk-1", "miko_live")
 
 	// 중복 등록은 false여야 한다.
-	added, err = as.AddAlarm(ctx, domain.AddAlarmRequest{
+	added, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room-1",
 		UserID:     "user-1",
 		ChannelID:  "ch-1",
@@ -139,7 +139,7 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 
-	_, err = as.AddAlarm(ctx, domain.AddAlarmRequest{
+	_, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room-1",
 		UserID:     "user-1",
 		ChannelID:  "ch-1",
@@ -147,7 +147,7 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = as.AddAlarm(ctx, domain.AddAlarmRequest{
+	_, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room-1",
 		UserID:     "user-1",
 		ChannelID:  "ch-2",
@@ -235,14 +235,14 @@ func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {
 		rebuildSubscriberCacheFromRepository = original
 	})
 
-	before := counterValueForLabels(t, alarmCacheRebuildMetricName, map[string]string{
+	before := counterValueForLabels(t, map[string]string{
 		"operation": "warm",
 		"result":    "error",
 	})
 
 	err := as.WarmCacheFromDB(t.Context())
 	require.Error(t, err)
-	assert.InDelta(t, before+1, counterValueForLabels(t, alarmCacheRebuildMetricName, map[string]string{
+	assert.InDelta(t, before+1, counterValueForLabels(t, map[string]string{
 		"operation": "warm",
 		"result":    "error",
 	}), 0.000001)
@@ -267,25 +267,25 @@ func TestWarmCacheFromDB_SuccessRecordsDurationAndSummaryMetrics(t *testing.T) {
 		rebuildSubscriberCacheFromRepository = original
 	})
 
-	beforeDurationCount := histogramCountForLabels(t, alarmCacheRebuildDurationMetricName, map[string]string{
+	beforeDurationCount := histogramCountForLabels(t, map[string]string{
 		"operation": "warm",
 		"result":    "ok",
 	})
 
 	require.NoError(t, as.WarmCacheFromDB(t.Context()))
-	assert.Equal(t, beforeDurationCount+1, histogramCountForLabels(t, alarmCacheRebuildDurationMetricName, map[string]string{
+	assert.Equal(t, beforeDurationCount+1, histogramCountForLabels(t, map[string]string{
 		"operation": "warm",
 		"result":    "ok",
 	}))
-	assert.InDelta(t, 5.0, gaugeValueForLabels(t, alarmCacheRebuildLoadedMetricName, map[string]string{
+	assert.InDelta(t, 5.0, gaugeValueForLabels(t, map[string]string{
 		"operation": "warm",
 		"resource":  "alarms",
 	}), 0.000001)
-	assert.InDelta(t, 3.0, gaugeValueForLabels(t, alarmCacheRebuildLoadedMetricName, map[string]string{
+	assert.InDelta(t, 3.0, gaugeValueForLabels(t, map[string]string{
 		"operation": "warm",
 		"resource":  "rooms",
 	}), 0.000001)
-	assert.InDelta(t, 2.0, gaugeValueForLabels(t, alarmCacheRebuildLoadedMetricName, map[string]string{
+	assert.InDelta(t, 2.0, gaugeValueForLabels(t, map[string]string{
 		"operation": "warm",
 		"resource":  "channels",
 	}), 0.000001)
@@ -295,7 +295,7 @@ func TestAlarmService_AddAlarmMergesTypesForExistingChannel(t *testing.T) {
 	ctx := t.Context()
 	as := newTestAlarmService(t)
 
-	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room-type-1",
 		ChannelID:  "ch-type-1",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
@@ -303,7 +303,7 @@ func TestAlarmService_AddAlarmMergesTypesForExistingChannel(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, added)
 
-	added, err = as.AddAlarm(ctx, domain.AddAlarmRequest{
+	added, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room-type-1",
 		ChannelID:  "ch-type-1",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
@@ -325,7 +325,7 @@ func TestAlarmService_RemoveAlarmTypeKeepsRemainingTypes(t *testing.T) {
 	ctx := t.Context()
 	as := newTestAlarmService(t)
 
-	_, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+	_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:    "room-type-2",
 		ChannelID: "ch-type-2",
 		AlarmTypes: domain.AlarmTypes{
@@ -355,7 +355,7 @@ func TestAlarmService_RemoveAlarmTypeKeepsRemainingTypes(t *testing.T) {
 func TestAlarmService_RejectsUnknownAlarmType(t *testing.T) {
 	as := newTestAlarmService(t)
 
-	_, err := as.AddAlarm(t.Context(), domain.AddAlarmRequest{
+	_, err := as.AddAlarm(t.Context(), &domain.AddAlarmRequest{
 		RoomID:     "room-type-3",
 		ChannelID:  "ch-type-3",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmType("unknown")},

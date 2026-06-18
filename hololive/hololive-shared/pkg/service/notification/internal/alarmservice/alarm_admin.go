@@ -23,6 +23,7 @@ package alarmservice
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -34,10 +35,22 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 	}
 
 	// 이름 맵 미리 로드
-	roomNamesMap, _ := as.cache.HGetAll(ctx, RoomNamesCacheKey)
+	roomNamesMap, err := as.cache.HGetAll(ctx, RoomNamesCacheKey)
+	if err != nil {
+		if as.logger != nil {
+			as.logger.Warn("failed to load cached room names", slog.Any("error", err))
+		}
+		roomNamesMap = map[string]string{}
+	}
 
 	alarms, channelIDsForNames := as.collectAlarmEntries(ctx, registryKeys, roomNamesMap)
-	memberNames, _ := as.getMemberNamesBatch(ctx, channelIDsForNames)
+	memberNames, err := as.getMemberNamesBatch(ctx, channelIDsForNames)
+	if err != nil {
+		if as.logger != nil {
+			as.logger.Warn("failed to load member names", slog.Any("error", err))
+		}
+		memberNames = map[string]string{}
+	}
 	for _, alarm := range alarms {
 		alarm.MemberName = memberNames[alarm.ChannelID]
 	}
@@ -49,7 +62,7 @@ func (as *AlarmService) collectAlarmEntries(
 	ctx context.Context,
 	registryKeys []string,
 	roomNamesMap map[string]string,
-) ([]*domain.AlarmEntry, []string) {
+) (result0 []*domain.AlarmEntry, result1 []string) {
 	alarms := make([]*domain.AlarmEntry, 0)
 	channelIDsForNames := make([]string, 0)
 
@@ -73,7 +86,7 @@ func (as *AlarmService) collectAlarmEntries(
 	return alarms, channelIDsForNames
 }
 
-func buildRoomAlarmEntries(roomID string, roomName string, channelIDs []string) []*domain.AlarmEntry {
+func buildRoomAlarmEntries(roomID, roomName string, channelIDs []string) []*domain.AlarmEntry {
 	if roomName == "" {
 		roomName = roomID
 	}

@@ -34,14 +34,14 @@ import (
 )
 
 func partitionGroupedDeliveries(
-	group deliveryGroup,
-) ([]domain.YouTubeNotificationDelivery, []domain.YouTubeNotificationOutbox, []domain.YouTubeNotificationDelivery) {
-	var validRows []domain.YouTubeNotificationDelivery
-	var validOutboxes []domain.YouTubeNotificationOutbox
-	var invalidRows []domain.YouTubeNotificationDelivery
+	group *deliveryGroup,
+) (result1 []domain.YouTubeNotificationDelivery, result2 []domain.YouTubeNotificationOutbox, result3 []domain.YouTubeNotificationDelivery) {
+	validRows := make([]domain.YouTubeNotificationDelivery, 0, len(group.rows))
+	validOutboxes := make([]domain.YouTubeNotificationOutbox, 0, len(group.outboxes))
+	invalidRows := make([]domain.YouTubeNotificationDelivery, 0)
 
 	for i := range group.outboxes {
-		if validateOutboxPayload(group.outboxes[i]) {
+		if validateOutboxPayload(&group.outboxes[i]) {
 			validOutboxes = append(validOutboxes, group.outboxes[i])
 			validRows = append(validRows, group.rows[i])
 			continue
@@ -64,16 +64,22 @@ func (d *SendEngine) dispatchRowsIndividually(
 	mu *sync.Mutex,
 ) {
 	for i := range rows {
-		d.dispatchDeliveryRow(ctx, rows[i], outboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
+		d.dispatchDeliveryRow(ctx, &rows[i], outboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
 	}
 }
 
 func (d *SendEngine) formatGroupedMessage(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 ) (string, bool) {
+	if group == nil {
+		d.logger.Warn("Grouped format skipped because delivery group is missing",
+			slog.Int("count", len(validRows)))
+		return "", false
+	}
+
 	memberName, err := d.formatter.getMemberName(ctx, group.channelID)
 	if err != nil || memberName == "" {
 		memberName = "VTuber"
@@ -108,15 +114,15 @@ func (d *SendEngine) dispatchClaimedRowsIndividually(
 		if i < len(rowClaimTokens) {
 			claims = rowClaimTokens[i]
 		}
-		d.dispatchClaimedDeliveryRow(ctx, rows[i], outboxes[i], formattedMessages, formatFailures, claims, result, mu)
+		d.dispatchClaimedDeliveryRow(ctx, &rows[i], &outboxes[i], formattedMessages, formatFailures, claims, result, mu)
 	}
 }
 
 func singleDeliveryBatch(
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 ) ([]domain.YouTubeNotificationDelivery, []domain.YouTubeNotificationOutbox) {
-	return []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}
+	return []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{*outbox}
 }
 
 func (d *ClaimManager) releaseDeliveryClaimsWithWarning(
@@ -136,7 +142,7 @@ func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64
 	failures = make(map[int64]bool)
 	for id := range outboxByID {
 		item := outboxByID[id]
-		msg, err := d.formatter.formatMessage(ctx, item)
+		msg, err := d.formatter.formatMessage(ctx, &item)
 		if err != nil {
 			d.logger.Warn("Failed to pre-format outbox message",
 				slog.Int64("outbox_id", id),

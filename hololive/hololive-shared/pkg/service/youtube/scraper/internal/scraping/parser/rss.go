@@ -50,7 +50,7 @@ func ParseVideosFromRSSFeed(feedXML, channelID string, maxResults int) ([]*Video
 		if len(videos) >= maxResults {
 			break
 		}
-		video, ok := parseVideoFromRSSEntry(entry, channelID, seen)
+		video, ok := parseVideoFromRSSEntry(&entry, channelID, seen)
 		if !ok {
 			continue
 		}
@@ -60,7 +60,7 @@ func ParseVideosFromRSSFeed(feedXML, channelID string, maxResults int) ([]*Video
 	return videos, nil
 }
 
-func parseVideoFromRSSEntry(entry rssEntry, channelID string, seen map[string]struct{}) (*Video, bool) {
+func parseVideoFromRSSEntry(entry *rssEntry, channelID string, seen map[string]struct{}) (*Video, bool) {
 	videoID := strings.TrimSpace(entry.VideoID)
 	title := strings.TrimSpace(entry.Title)
 	if videoID == "" || title == "" {
@@ -89,7 +89,7 @@ func formatRSSPublishedText(published string) string {
 	return publishedText
 }
 
-func rssEntryThumbnails(entry rssEntry) []Thumbnail {
+func rssEntryThumbnails(entry *rssEntry) []Thumbnail {
 	thumbnails := entry.MediaGroup.Thumbnails
 	if len(thumbnails) == 0 && len(entry.MediaThumbs) > 0 {
 		thumbnails = entry.MediaThumbs

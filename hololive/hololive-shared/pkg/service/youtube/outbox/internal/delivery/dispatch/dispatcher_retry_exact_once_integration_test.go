@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +17,16 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 )
+
+type retryFinalizeOnceTestCase struct {
+	name                  string
+	kind                  domain.OutboxKind
+	channelID             string
+	contentID             string
+	roomID                string
+	payload               string
+	expectedMessageMarker string
+}
 
 func TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce(t *testing.T) {
 	t.Parallel()
@@ -84,7 +95,7 @@ func TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce(t *tes
 			require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 			sender := &testSender{failRoom: map[string]bool{tc.roomID: true}}
-			dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,
@@ -205,15 +216,7 @@ func (s *postSendFinalizeFailureSender) hookError() error {
 func TestProcessOnce_RetryAfterCommunityShortsPostSendFinalizeFailureKeepsSingleDeliveredAlarm(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name                  string
-		kind                  domain.OutboxKind
-		channelID             string
-		contentID             string
-		roomID                string
-		payload               string
-		expectedMessageMarker string
-	}{
+	testCases := []retryFinalizeOnceTestCase{
 		{
 			name:                  "community",
 			kind:                  domain.OutboxKindCommunityPost,
@@ -237,124 +240,186 @@ func TestProcessOnce_RetryAfterCommunityShortsPostSendFinalizeFailureKeepsSingle
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			ctx := context.Background()
-			db := newDeliveryPool(t)
-
-			now := time.Now().UTC()
-			item := domain.YouTubeNotificationOutbox{
-				Kind:          tc.kind,
-				ChannelID:     tc.channelID,
-				ContentID:     tc.contentID,
-				Payload:       tc.payload,
-				Status:        domain.OutboxStatusPending,
-				AttemptCount:  0,
-				NextAttemptAt: now,
-			}
-			require.NoError(t, insertDeliveryTestRows(db, &item).Error)
-			require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
-				Kind:       string(item.Kind),
-				ContentID:  item.ContentID,
-				ChannelID:  item.ChannelID,
-				DetectedAt: now,
-			}).Error)
-
-			delivery := domain.YouTubeNotificationDelivery{
-				OutboxID:      item.ID,
-				RoomID:        tc.roomID,
-				Status:        domain.OutboxStatusPending,
-				AttemptCount:  0,
-				NextAttemptAt: now,
-			}
-			require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
-
-			postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
-			staleAuthorizedAt := now.Add(-10 * time.Minute)
-			var mutateOnce sync.Once
-			sender := &postSendFinalizeFailureSender{
-				afterSend: func(_ string, _ string) error {
-					var hookErr error
-					mutateOnce.Do(func() {
-						deadline := time.Now().Add(2 * time.Second)
-						for {
-							result := updateDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, map[string]any{
-								"authorized_at": staleAuthorizedAt,
-								"updated_at":    time.Now().UTC(),
-							}, "kind = ? AND post_id = ?", item.Kind, postID)
-							if result.Error != nil {
-								hookErr = result.Error
-								return
-							}
-							if result.RowsAffected > 0 {
-								return
-							}
-							if time.Now().After(deadline) {
-								hookErr = fmt.Errorf("post-send finalize hook: claim row not found for %s", postID)
-								return
-							}
-							time.Sleep(10 * time.Millisecond)
-						}
-					})
-					return hookErr
-				},
-			}
-			dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
-				BatchSize:           10,
-				LockTimeout:         time.Minute,
-				PollInterval:        time.Second,
-				MaxRetries:          3,
-				RetryBackoff:        time.Minute,
-				DeliveryParallelism: 1,
-			})
-
-			dispatcher.ProcessOnceForTest(ctx)
-			require.NoError(t, sender.hookError())
-			require.Len(t, sender.sentMessages(), 1)
-
-			var pendingDelivery deliveryTestDeliveryModel
-			require.NoError(t, firstDeliveryTestRow(db, &pendingDelivery, delivery.ID).Error)
-			assert.Equal(t, string(domain.OutboxStatusPending), pendingDelivery.Status)
-			assert.Nil(t, pendingDelivery.SentAt)
-
-			var pendingOutbox deliveryTestOutboxModel
-			require.NoError(t, firstDeliveryTestRow(db, &pendingOutbox, item.ID).Error)
-			assert.Equal(t, string(domain.OutboxStatusPending), pendingOutbox.Status)
-			assert.Nil(t, pendingOutbox.SentAt)
-
-			retryAt := time.Now().UTC().Add(-time.Second)
-			require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{"next_attempt_at": retryAt, "locked_at": nil}, "id = ?", delivery.ID).Error)
-
-			dispatcher.ProcessOnceForTest(ctx)
-
-			var sentDelivery deliveryTestDeliveryModel
-			require.NoError(t, firstDeliveryTestRow(db, &sentDelivery, delivery.ID).Error)
-			assert.Equal(t, string(domain.OutboxStatusSent), sentDelivery.Status)
-			require.NotNil(t, sentDelivery.SentAt)
-
-			var sentOutbox deliveryTestOutboxModel
-			require.NoError(t, firstDeliveryTestRow(db, &sentOutbox, item.ID).Error)
-			assert.Equal(t, string(domain.OutboxStatusSent), sentOutbox.Status)
-			require.NotNil(t, sentOutbox.SentAt)
-
-			var sentTracking deliveryTestTrackingModel
-			require.NoError(t, firstDeliveryTestRowWhere(db, &sentTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
-			require.NotNil(t, sentTracking.AlarmSentAt)
-			assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), sentTracking.DeliveryStatus)
-
-			var sentState domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, firstDeliveryTestRow(db, &sentState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
-			assert.Nil(t, sentState.AuthorizedAt)
-			require.NotNil(t, sentState.AlarmSentAt)
-			assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, sentState.DeliveryStatus)
-
-			var deliveryRows []deliveryTestDeliveryModel
-			require.NoError(t, findDeliveryTestRowsOrderedWhere(db, &deliveryRows, "id ASC", "outbox_id = ?", item.ID).Error)
-			require.Len(t, deliveryRows, 1)
-
-			messages := sender.sentMessages()
-			require.Len(t, messages, 1)
-			assert.Contains(t, messages[0], tc.roomID+":")
-			assert.Contains(t, messages[0], tc.expectedMessageMarker)
+			runRetryAfterPostSendFinalizeFailureKeepsSingleDeliveredAlarm(t, &tc)
 		})
 	}
+}
+
+func runRetryAfterPostSendFinalizeFailureKeepsSingleDeliveredAlarm(
+	t *testing.T,
+	tc *retryFinalizeOnceTestCase,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+	db := newDeliveryPool(t)
+
+	now := time.Now().UTC()
+	item, delivery := insertRetryFinalizeOnceRows(t, db, tc, now)
+
+	postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
+	sender := newPostSendFinalizeFailureSender(db, item.Kind, postID, now.Add(-10*time.Minute))
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
+		BatchSize:           10,
+		LockTimeout:         time.Minute,
+		PollInterval:        time.Second,
+		MaxRetries:          3,
+		RetryBackoff:        time.Minute,
+		DeliveryParallelism: 1,
+	})
+
+	dispatcher.ProcessOnceForTest(ctx)
+	require.NoError(t, sender.hookError())
+	require.Len(t, sender.sentMessages(), 1)
+
+	assertRetryFinalizeOncePendingState(t, db, item.ID, delivery.ID)
+
+	retryAt := time.Now().UTC().Add(-time.Second)
+	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{"next_attempt_at": retryAt, "locked_at": nil}, "id = ?", delivery.ID).Error)
+
+	dispatcher.ProcessOnceForTest(ctx)
+
+	assertRetryFinalizeOnceSentState(t, db, &item, delivery.ID, postID)
+	assertRetryFinalizeOnceMessages(t, sender, tc)
+}
+
+func insertRetryFinalizeOnceRows(
+	t *testing.T,
+	db *pgxpool.Pool,
+	tc *retryFinalizeOnceTestCase,
+	now time.Time,
+) (domain.YouTubeNotificationOutbox, domain.YouTubeNotificationDelivery) {
+	t.Helper()
+
+	item := domain.YouTubeNotificationOutbox{
+		Kind:          tc.kind,
+		ChannelID:     tc.channelID,
+		ContentID:     tc.contentID,
+		Payload:       tc.payload,
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: now,
+	}
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
+		Kind:       string(item.Kind),
+		ContentID:  item.ContentID,
+		ChannelID:  item.ChannelID,
+		DetectedAt: now,
+	}).Error)
+
+	delivery := domain.YouTubeNotificationDelivery{
+		OutboxID:      item.ID,
+		RoomID:        tc.roomID,
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: now,
+	}
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
+	return item, delivery
+}
+
+func newPostSendFinalizeFailureSender(
+	db *pgxpool.Pool,
+	kind domain.OutboxKind,
+	postID string,
+	staleAuthorizedAt time.Time,
+) *postSendFinalizeFailureSender {
+	var mutateOnce sync.Once
+	return &postSendFinalizeFailureSender{
+		afterSend: func(_ string, _ string) error {
+			var hookErr error
+			mutateOnce.Do(func() {
+				hookErr = staleRetryFinalizeOnceClaim(db, kind, postID, staleAuthorizedAt)
+			})
+			return hookErr
+		},
+	}
+}
+
+func staleRetryFinalizeOnceClaim(
+	db *pgxpool.Pool,
+	kind domain.OutboxKind,
+	postID string,
+	staleAuthorizedAt time.Time,
+) error {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		result := updateDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, map[string]any{
+			"authorized_at": staleAuthorizedAt,
+			"updated_at":    time.Now().UTC(),
+		}, "kind = ? AND post_id = ?", kind, postID)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected > 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("post-send finalize hook: claim row not found for %s", postID)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func assertRetryFinalizeOncePendingState(t *testing.T, db *pgxpool.Pool, outboxID, deliveryID int64) {
+	t.Helper()
+
+	var pendingDelivery deliveryTestDeliveryModel
+	require.NoError(t, firstDeliveryTestRow(db, &pendingDelivery, deliveryID).Error)
+	assert.Equal(t, string(domain.OutboxStatusPending), pendingDelivery.Status)
+	assert.Nil(t, pendingDelivery.SentAt)
+
+	var pendingOutbox deliveryTestOutboxModel
+	require.NoError(t, firstDeliveryTestRow(db, &pendingOutbox, outboxID).Error)
+	assert.Equal(t, string(domain.OutboxStatusPending), pendingOutbox.Status)
+	assert.Nil(t, pendingOutbox.SentAt)
+}
+
+func assertRetryFinalizeOnceSentState(
+	t *testing.T,
+	db *pgxpool.Pool,
+	item *domain.YouTubeNotificationOutbox,
+	deliveryID int64,
+	postID string,
+) {
+	t.Helper()
+
+	var sentDelivery deliveryTestDeliveryModel
+	require.NoError(t, firstDeliveryTestRow(db, &sentDelivery, deliveryID).Error)
+	assert.Equal(t, string(domain.OutboxStatusSent), sentDelivery.Status)
+	require.NotNil(t, sentDelivery.SentAt)
+
+	var sentOutbox deliveryTestOutboxModel
+	require.NoError(t, firstDeliveryTestRow(db, &sentOutbox, item.ID).Error)
+	assert.Equal(t, string(domain.OutboxStatusSent), sentOutbox.Status)
+	require.NotNil(t, sentOutbox.SentAt)
+
+	var sentTracking deliveryTestTrackingModel
+	require.NoError(t, firstDeliveryTestRowWhere(db, &sentTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
+	require.NotNil(t, sentTracking.AlarmSentAt)
+	assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), sentTracking.DeliveryStatus)
+
+	var sentState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, firstDeliveryTestRow(db, &sentState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
+	assert.Nil(t, sentState.AuthorizedAt)
+	require.NotNil(t, sentState.AlarmSentAt)
+	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, sentState.DeliveryStatus)
+
+	var deliveryRows []deliveryTestDeliveryModel
+	require.NoError(t, findDeliveryTestRowsOrderedWhere(db, &deliveryRows, "id ASC", "outbox_id = ?", item.ID).Error)
+	require.Len(t, deliveryRows, 1)
+}
+
+func assertRetryFinalizeOnceMessages(
+	t *testing.T,
+	sender *postSendFinalizeFailureSender,
+	tc *retryFinalizeOnceTestCase,
+) {
+	t.Helper()
+
+	messages := sender.sentMessages()
+	require.Len(t, messages, 1)
+	assert.Contains(t, messages[0], tc.roomID+":")
+	assert.Contains(t, messages[0], tc.expectedMessageMarker)
 }

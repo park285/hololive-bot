@@ -100,7 +100,7 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 		Version:    1,
 	}
 
-	data, err := json.Marshal(envelope)
+	data, err := json.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}

@@ -24,9 +24,9 @@
 package dbtest
 
 import (
-	"bufio"
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,7 +65,7 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 
 	for _, filename := range entries {
-		if err := applyMigrationFile(ctx, pool, filepath.Join(dir, filename), filename); err != nil {
+		if err := applyMigrationFile(ctx, pool, dir, filename); err != nil {
 			return err
 		}
 	}
@@ -79,8 +79,8 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 // simple query protocol이 암묵 트랜잭션 블록으로 감싸 CREATE INDEX CONCURRENTLY가
 // "cannot run inside a transaction block"으로 실패한다(019/060/061). statement
 // 단위로 보내면 각 statement가 autocommit으로 실행되어 CONCURRENTLY가 동작한다.
-func applyMigrationFile(ctx context.Context, pool *pgxpool.Pool, path, filename string) error {
-	sql, readErr := os.ReadFile(path)
+func applyMigrationFile(ctx context.Context, pool *pgxpool.Pool, dir, filename string) error {
+	sql, readErr := fs.ReadFile(os.DirFS(dir), filename)
 	if readErr != nil {
 		return fmt.Errorf("apply migrations: read %s: %w", filename, readErr)
 	}
@@ -133,17 +133,16 @@ func findRepoRoot() (string, error) {
 // readManifest는 manifest.txt를 읽어 적용 순서대로 .sql 파일명 슬라이스를 반환한다.
 // 각 라인은 "NNN filename.sql" 형식이며, 빈 줄과 '#' 주석은 무시한다.
 func readManifest(path string) ([]string, error) {
-	file, err := os.Open(path)
+	dir, name := filepath.Split(path)
+	content, err := fs.ReadFile(os.DirFS(dir), name)
 	if err != nil {
-		return nil, fmt.Errorf("open manifest: %w", err)
+		return nil, fmt.Errorf("read manifest: %w", err)
 	}
-	defer func() { _ = file.Close() }()
 
 	var filenames []string
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		name, skip, parseErr := parseManifestLine(scanner.Text())
+	for line := range strings.SplitSeq(string(content), "\n") {
+		name, skip, parseErr := parseManifestLine(line)
 		if parseErr != nil {
 			return nil, parseErr
 		}
@@ -152,10 +151,6 @@ func readManifest(path string) ([]string, error) {
 		}
 
 		filenames = append(filenames, name)
-	}
-
-	if scanErr := scanner.Err(); scanErr != nil {
-		return nil, fmt.Errorf("scan manifest: %w", scanErr)
 	}
 
 	if len(filenames) == 0 {

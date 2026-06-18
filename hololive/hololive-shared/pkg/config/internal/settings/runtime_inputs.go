@@ -6,13 +6,13 @@ import (
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 )
 
-func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
-	webhookToken := strings.TrimSpace(sharedenv.String("IRIS_WEBHOOK_TOKEN", ""))
-	botToken := strings.TrimSpace(sharedenv.String("IRIS_BOT_TOKEN", ""))
+func loadRuntimeTokensAndCORS() (webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) {
+	webhookToken = strings.TrimSpace(sharedenv.String("IRIS_WEBHOOK_TOKEN", ""))
+	botToken = strings.TrimSpace(sharedenv.String("IRIS_BOT_TOKEN", ""))
 
 	runtimeEnv := loadAppEnvironment()
 	isProduction := strings.EqualFold(runtimeEnv, "production")
-	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
+	corsAllowedOrigins, corsMissingInProduction = parseCORSAllowedOrigins(
 		sharedenv.String("CORS_ALLOWED_ORIGINS", ""),
 		isProduction,
 	)

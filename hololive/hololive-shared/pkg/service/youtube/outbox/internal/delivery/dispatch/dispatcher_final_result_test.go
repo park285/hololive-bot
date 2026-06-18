@@ -119,7 +119,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 		NextAttemptAt: now,
 	}).Error)
 
-	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, Config{
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -130,7 +130,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 
 	dispatcher.claim.processPendingDeliveries(ctx)
 
-	entry := findAuditLogEntryByTelemetrySource(t, logBuffer, logschema.TelemetrySourceOutboxFinalResult)
+	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "short-final-success")
 	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "short-final-success")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
@@ -145,7 +145,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 	assertLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 1)
 	assertLogIntField(t, entry, logschema.FieldFailedRoomCount, 0)
 	assertLogTimeField(t, entry, deliveryAuditSentAtLogField)
-	classification := readLogObjectField(t, entry, logschema.FieldLatencyClassification)
+	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(PostLatencyClassificationStatusExceeded))
 	assertLogObjectIntField(t, classification, "threshold_millis", int(postLatencyExceededThresholdMillis))
 	assertLogObjectStringField(t, classification, "delay_source", string(PostDelaySourceInternalDelivery))
@@ -185,7 +185,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 		NextAttemptAt: now,
 	}).Error)
 
-	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, Config{
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -196,7 +196,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 
 	dispatcher.claim.processPendingDeliveries(ctx)
 
-	entry := findAuditLogEntryByTelemetrySource(t, logBuffer, logschema.TelemetrySourceOutboxFinalResult)
+	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-community-success")
 	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "post-final-community-success")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
@@ -210,7 +210,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 	assertLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 1)
 	assertLogIntField(t, entry, logschema.FieldFailedRoomCount, 0)
 	assertLogTimeField(t, entry, deliveryAuditSentAtLogField)
-	classification := readLogObjectField(t, entry, logschema.FieldLatencyClassification)
+	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(PostLatencyClassificationStatusExceeded))
 	assertLogObjectIntField(t, classification, "threshold_millis", int(postLatencyExceededThresholdMillis))
 	assertLogObjectStringField(t, classification, "delay_source", string(PostDelaySourceInternalDelivery))
@@ -250,7 +250,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCod
 		NextAttemptAt: now,
 	}).Error)
 
-	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, Config{
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -261,8 +261,8 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCod
 
 	dispatcher.claim.processPendingDeliveries(ctx)
 
-	entry := findAuditLogEntryByTelemetrySource(t, logBuffer, logschema.TelemetrySourceOutboxFinalResult)
-	classification := readLogObjectField(t, entry, logschema.FieldLatencyClassification)
+	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
+	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(PostLatencyClassificationStatusExceeded))
 	assertLogObjectStringField(t, classification, "delay_source", string(PostDelaySourceExternalCollection))
 	assertLogObjectStringField(t, classification, "internal_delay_cause", string(PostInternalDelayCauseQueueWait))
@@ -301,7 +301,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 		NextAttemptAt: now,
 	}).Error)
 
-	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{"room-failure": true}}, Config{
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{"room-failure": true}}, &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -312,7 +312,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 
 	dispatcher.claim.processPendingDeliveries(ctx)
 
-	entry := findAuditLogEntryByTelemetrySource(t, logBuffer, logschema.TelemetrySourceOutboxFinalResult)
+	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-failure")
 	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "post-final-failure")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
@@ -324,7 +324,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 0)
 	assertLogIntField(t, entry, logschema.FieldFailedRoomCount, 1)
 	assertLogTimeField(t, entry, deliveryAuditSentAtLogField)
-	classification := readLogObjectField(t, entry, logschema.FieldLatencyClassification)
+	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(PostLatencyClassificationStatusExceeded))
 	assertLogObjectIntField(t, classification, "threshold_millis", int(postLatencyExceededThresholdMillis))
 	assertLogObjectStringField(t, classification, "delay_source", string(PostDelaySourceNone))
@@ -332,7 +332,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogObjectStringField(t, classification, "reason_code", string(PostLatencyReasonCodeJobFailure))
 }
 
-func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *deliveryTestDB, sender *finalResultTestSender, config Config) (*Dispatcher, *bytes.Buffer) {
+func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *deliveryTestDB, sender *finalResultTestSender, config *Config) (*Dispatcher, *bytes.Buffer) {
 	t.Helper()
 
 	logBuffer := &bytes.Buffer{}
@@ -341,7 +341,7 @@ func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *deliveryTestD
 	return NewDispatcher(db, cache, sender, nil, logger, config), logBuffer
 }
 
-func findAuditLogEntryByTelemetrySource(t *testing.T, logBuffer *bytes.Buffer, source string) map[string]any {
+func findOutboxFinalResultAuditLogEntry(t *testing.T, logBuffer *bytes.Buffer) map[string]any {
 	t.Helper()
 
 	entries := findAllLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage)
@@ -354,12 +354,12 @@ func findAuditLogEntryByTelemetrySource(t *testing.T, logBuffer *bytes.Buffer, s
 		if !ok {
 			t.Fatalf("telemetry_source type = %T, want string", raw)
 		}
-		if value == source {
+		if value == logschema.TelemetrySourceOutboxFinalResult {
 			return entries[i]
 		}
 	}
 
-	t.Fatalf("audit log with telemetry_source=%q not found in %s", source, logBuffer.String())
+	t.Fatalf("audit log with telemetry_source=%q not found in %s", logschema.TelemetrySourceOutboxFinalResult, logBuffer.String())
 	return nil
 }
 
@@ -397,9 +397,10 @@ func readLogStringField(t *testing.T, entry map[string]any, field string) string
 	return value
 }
 
-func readLogObjectField(t *testing.T, entry map[string]any, field string) map[string]any {
+func readLatencyClassificationField(t *testing.T, entry map[string]any) map[string]any {
 	t.Helper()
 
+	field := logschema.FieldLatencyClassification
 	raw, ok := entry[field]
 	if !ok {
 		t.Fatalf("log entry missing %q: %#v", field, entry)

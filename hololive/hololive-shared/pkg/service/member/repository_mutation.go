@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType string, alias string) error {
+func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType, alias string) error {
 	if aliasType != "ko" && aliasType != "ja" {
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}
@@ -58,7 +58,7 @@ func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType strin
 	return nil
 }
 
-func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType string, alias string) error {
+func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, alias string) error {
 	if aliasType != "ko" && aliasType != "ja" {
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}

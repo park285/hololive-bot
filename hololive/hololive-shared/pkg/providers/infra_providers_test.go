@@ -27,7 +27,9 @@ func TestProvideIrisClient_UsesRuntimeBaseURLFile(t *testing.T) {
 		primaryCalls++
 		primaryMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Fatalf("write primary response: %v", err)
+		}
 	}))
 	defer primary.Close()
 
@@ -41,7 +43,9 @@ func TestProvideIrisClient_UsesRuntimeBaseURLFile(t *testing.T) {
 		fallbackCalls++
 		fallbackMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Fatalf("write fallback response: %v", err)
+		}
 	}))
 	defer fallback.Close()
 
@@ -105,7 +109,9 @@ func TestProvideIrisClient_AllowsBaseURLFileWithoutFallbackURL(t *testing.T) {
 			t.Fatalf("server path = %q", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Fatalf("write server response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -151,7 +157,9 @@ func TestProvideIrisClient_UsesExplicitOptionsOverEnvironment(t *testing.T) {
 		explicitCalls++
 		explicitMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Fatalf("write explicit response: %v", err)
+		}
 	}))
 	defer explicit.Close()
 
@@ -165,7 +173,9 @@ func TestProvideIrisClient_UsesExplicitOptionsOverEnvironment(t *testing.T) {
 		envCalls++
 		envMu.Unlock()
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Fatalf("write env response: %v", err)
+		}
 	}))
 	defer envServer.Close()
 

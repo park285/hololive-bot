@@ -30,7 +30,7 @@ type fakeOutboxRepository struct {
 	batchErr            error
 }
 
-func (r *fakeOutboxRepository) InsertShadowed(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, error) {
+func (r *fakeOutboxRepository) InsertShadowed(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, error) {
 	r.insertShadowedCalls++
 	if r.shadowedErr != nil {
 		return nil, r.shadowedErr
@@ -38,7 +38,7 @@ func (r *fakeOutboxRepository) InsertShadowed(ctx context.Context, envelope doma
 	return &dispatchoutbox.Record{ID: 11, Status: dispatchoutbox.StatusShadowed}, nil
 }
 
-func (r *fakeOutboxRepository) InsertPending(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, dispatchoutbox.InsertResult, error) {
+func (r *fakeOutboxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, dispatchoutbox.InsertResult, error) {
 	r.insertPendingCalls++
 	if r.pendingErr != nil {
 		return nil, "", r.pendingErr

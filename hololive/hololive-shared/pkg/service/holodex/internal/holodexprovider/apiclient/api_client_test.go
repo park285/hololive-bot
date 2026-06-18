@@ -28,6 +28,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -42,11 +43,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
+func writeAPIResponse(t *testing.T, w http.ResponseWriter, body string) {
+	t.Helper()
+	if _, err := w.Write([]byte(body)); err != nil {
+		t.Fatalf("write api response: %v", err)
+	}
+}
+
 func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing.T) {
 	t.Parallel()
 
 	holodexCfg := config.DefaultHolodexOperationalConfig()
-	client := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", "test-key", slog.Default(), nil, holodexCfg)
+	client := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", "test-key", slog.Default(), nil, &holodexCfg)
 	if client == nil {
 		t.Fatal("NewHolodexAPIClient() returned nil")
 	}
@@ -126,6 +134,36 @@ func TestHolodexAPIClientDoRequestNoKeys(t *testing.T) {
 	}
 }
 
+type nilResponseTransport struct{}
+
+func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, nil
+}
+
+func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
+	client := &APIClient{
+		httpClient:        &http.Client{Transport: nilResponseTransport{}},
+		baseURL:           "https://holodex.example/api/v2",
+		apiKey:            "test-key",
+		logger:            slog.Default(),
+		rateLimiter:       rate.NewLimiter(rate.Inf, 1),
+		semaphore:         make(chan struct{}, 5),
+		perAttemptTimeout: time.Second,
+		breaker: util.NewBreaker(
+			constants.CircuitBreakerConfig.FailureThreshold,
+			constants.CircuitBreakerConfig.ResetTimeout,
+		),
+	}
+
+	_, err := client.DoRequest(context.Background(), http.MethodGet, "/live", nil)
+	if err == nil {
+		t.Fatal("expected error for nil HTTP response")
+	}
+	if got := err.Error(); !strings.Contains(got, "nil response") {
+		t.Fatalf("error = %q, want nil response context", got)
+	}
+}
+
 // newTestClient: Mock 서버 테스트용 APIClient 생성
 // baseURL 오버라이드가 불가하므로, buildRequestURL을 우회하는 대신
 // 실제 요청 URL을 인터셉트하는 RoundTripper를 사용
@@ -147,7 +185,7 @@ func TestAPIClientWithMockServer_Success(t *testing.T) {
 	client, server := newTestClientWithHandler(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(expectedBody))
+		writeAPIResponse(t, w, expectedBody)
 	}, "test-key-1")
 	defer server.Close()
 
@@ -291,7 +329,7 @@ func TestPerAttemptTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(500 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{}`))
+		writeAPIResponse(t, w, `{}`)
 	}))
 	defer server.Close()
 

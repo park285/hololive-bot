@@ -67,7 +67,9 @@ func newTestLimiter(t *testing.T) *SlidingWindowLimiter {
 	}
 
 	t.Cleanup(func() {
-		_ = cacheClient.Close()
+		if err := cacheClient.Close(); err != nil {
+			t.Errorf("close cache client: %v", err)
+		}
 		mini.Close()
 	})
 

@@ -58,7 +58,7 @@ func (r *Repository) collectCalendarEntriesFromRows(rows pgx.Rows, referenceYear
 		if err != nil {
 			return domain.CalendarEntry{}, fmt.Errorf("scan calendar row: %w", err)
 		}
-		member, err := r.parseMemberRow(row)
+		member, err := r.parseMemberRow(&row)
 		if err != nil {
 			return domain.CalendarEntry{}, fmt.Errorf("parse calendar member row %q: %w", row.englishName, err)
 		}
@@ -133,7 +133,7 @@ func (r *Repository) collectCelebrationMembersFromRows(rows pgx.Rows) ([]*domain
 		if err != nil {
 			return nil, fmt.Errorf("scan celebration member row: %w", err)
 		}
-		member, err := r.parseMemberRow(row)
+		member, err := r.parseMemberRow(&row)
 		if err != nil {
 			return nil, fmt.Errorf("parse celebration member row %q: %w", row.englishName, err)
 		}

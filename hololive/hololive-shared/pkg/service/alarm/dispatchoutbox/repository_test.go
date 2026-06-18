@@ -27,11 +27,11 @@ func TestBuildLedgerRows_DedupeKeyDoesNotDependOnClaimKeys(t *testing.T) {
 	second := base
 	second.ClaimKeys = []string{"claim:new"}
 
-	_, firstDelivery, err := buildLedgerRows(first, StatusPending)
+	_, firstDelivery, err := buildLedgerRows(&first, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(first) error = %v", err)
 	}
-	_, secondDelivery, err := buildLedgerRows(second, StatusPending)
+	_, secondDelivery, err := buildLedgerRows(&second, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(second) error = %v", err)
 	}
@@ -63,7 +63,7 @@ func TestBuildLedgerRows_DefaultsEmptyAlarmTypeToLive(t *testing.T) {
 		Version: 1,
 	}
 
-	event, _, err := buildLedgerRows(envelope, StatusPending)
+	event, _, err := buildLedgerRows(&envelope, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}
@@ -76,7 +76,7 @@ func TestBuildLedgerRows_DefaultsEmptyAlarmTypeToLive(t *testing.T) {
 func TestMarshalEventPayload_RemainsRoomAgnostic(t *testing.T) {
 	t.Parallel()
 
-	payload, err := marshalEventPayload(domain.AlarmQueueEnvelope{
+	payload, err := marshalEventPayload(&domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-1",

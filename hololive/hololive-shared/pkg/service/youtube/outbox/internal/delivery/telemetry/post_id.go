@@ -19,6 +19,8 @@ func ResolveTelemetryPostID(kind domain.OutboxKind, contentID, payload string) s
 		return resolveVideoTelemetryPostID(contentID, payload)
 	case domain.OutboxKindCommunityPost:
 		return resolveCommunityTelemetryPostID(contentID, payload)
+	case domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return normalizeTelemetryPostID(contentID)
 	}
 
 	return normalizeTelemetryPostID(contentID)

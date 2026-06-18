@@ -27,7 +27,7 @@ import (
 )
 
 // nearestStart가 nil이면 예정 없음 로직을 적용한다.
-func ComputeNextCheckAt(nearestStart *time.Time, lastNotifiedAt *time.Time) time.Time {
+func ComputeNextCheckAt(nearestStart, lastNotifiedAt *time.Time) time.Time {
 	now := time.Now()
 
 	if nearestStart == nil {

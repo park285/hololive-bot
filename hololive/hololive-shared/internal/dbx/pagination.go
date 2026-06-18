@@ -96,7 +96,7 @@ func DecodeCursor(token string) (*CursorData, error) {
 	return &data, nil
 }
 
-func BuildKeysetCondition(cursor *CursorData, paramIndex int) (string, []any) {
+func BuildKeysetCondition(cursor *CursorData, paramIndex int) (condition string, args []any) {
 	if cursor == nil {
 		return "", nil
 	}

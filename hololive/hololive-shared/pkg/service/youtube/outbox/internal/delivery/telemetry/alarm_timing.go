@@ -9,11 +9,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline"
 )
 
-func communityShortsAlarmTimingForTelemetryRow(row domain.YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
+func communityShortsAlarmTimingForTelemetryRow(row *domain.YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
 	return CommunityShortsAlarmTimingForTelemetryRow(row)
 }
 
-func CommunityShortsAlarmTimingForTelemetryRow(row domain.YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
+func CommunityShortsAlarmTimingForTelemetryRow(row *domain.YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
 	alarmSentAt := row.AlarmSentAt
 	if alarmSentAt == nil && strings.EqualFold(strings.TrimSpace(row.SendResult), "success") && !row.EventAt.IsZero() {
 		eventAt := row.EventAt.UTC()

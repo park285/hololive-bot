@@ -12,7 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest) (bool, error) {
+func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
 	startedAt := time.Now()
 
 	var opErr error
@@ -21,19 +21,19 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 		observeAlarmServiceOperation("add", startedAt, opErr)
 	}()
 
-	req, err := normalizeAddAlarmRequest(req)
+	normalizedReq, err := normalizeAddAlarmRequest(req)
 	if err != nil {
 		opErr = err
 		return false, err
 	}
 
-	requestedTypes, err := normalizeAlarmTypesStrict(req.AlarmTypes, domain.DefaultAlarmTypes)
+	requestedTypes, err := normalizeAlarmTypesStrict(normalizedReq.AlarmTypes, domain.DefaultAlarmTypes)
 	if err != nil {
 		opErr = err
 		return false, err
 	}
 
-	mutation, shouldAdd, err := as.prepareAddAlarmMutation(ctx, req, requestedTypes)
+	mutation, shouldAdd, err := as.prepareAddAlarmMutation(ctx, normalizedReq, requestedTypes)
 	if err != nil {
 		opErr = err
 		return false, err
@@ -42,22 +42,22 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 		return false, nil
 	}
 
-	if err := as.persistAddAlarmMutation(ctx, mutation); err != nil {
+	if err := as.persistAddAlarmMutation(ctx, &mutation); err != nil {
 		opErr = err
 		return false, err
 	}
-	added, err := as.cacheAddAlarmMutation(ctx, mutation)
+	added, err := as.cacheAddAlarmMutation(ctx, &mutation)
 	if err != nil {
 		opErr = err
 		return false, err
 	}
 
-	as.afterAddAlarm(ctx, req, mutation.newlyAddedTypes)
+	as.afterAddAlarm(ctx, normalizedReq, mutation.newlyAddedTypes)
 
 	return added > 0 || mutation.existing, nil
 }
 
-func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation addAlarmMutation) (int64, error) {
+func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation *addAlarmMutation) (int64, error) {
 	added, err := as.cacheAlarm(ctx, &mutation.cacheRecord)
 	if err == nil {
 		return added, nil
@@ -66,20 +66,21 @@ func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation addA
 	return 0, sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild add cache from repository", opErr)
 }
 
-func normalizeAddAlarmRequest(req domain.AddAlarmRequest) (domain.AddAlarmRequest, error) {
-	req.RoomID = strings.TrimSpace(req.RoomID)
-	req.UserID = strings.TrimSpace(req.UserID)
-	req.ChannelID = strings.TrimSpace(req.ChannelID)
-	req.MemberName = strings.TrimSpace(req.MemberName)
-	req.RoomName = strings.TrimSpace(req.RoomName)
-	req.UserName = strings.TrimSpace(req.UserName)
-	if req.RoomID == "" || req.ChannelID == "" {
-		return req, fmt.Errorf("room_id and channel_id are required")
+func normalizeAddAlarmRequest(req *domain.AddAlarmRequest) (*domain.AddAlarmRequest, error) {
+	normalized := *req
+	normalized.RoomID = strings.TrimSpace(normalized.RoomID)
+	normalized.UserID = strings.TrimSpace(normalized.UserID)
+	normalized.ChannelID = strings.TrimSpace(normalized.ChannelID)
+	normalized.MemberName = strings.TrimSpace(normalized.MemberName)
+	normalized.RoomName = strings.TrimSpace(normalized.RoomName)
+	normalized.UserName = strings.TrimSpace(normalized.UserName)
+	if normalized.RoomID == "" || normalized.ChannelID == "" {
+		return nil, fmt.Errorf("room_id and channel_id are required")
 	}
-	return req, nil
+	return &normalized, nil
 }
 
-func (as *AlarmService) prepareAddAlarmMutation(ctx context.Context, req domain.AddAlarmRequest, requestedTypes domain.AlarmTypes) (addAlarmMutation, bool, error) {
+func (as *AlarmService) prepareAddAlarmMutation(ctx context.Context, req *domain.AddAlarmRequest, requestedTypes domain.AlarmTypes) (addAlarmMutation, bool, error) {
 	existing, err := as.findAlarmRecordForMutation(ctx, req.RoomID, req.ChannelID)
 	if err != nil {
 		return addAlarmMutation{}, false, err
@@ -101,7 +102,7 @@ func (as *AlarmService) prepareAddAlarmMutation(ctx context.Context, req domain.
 	return addAlarmMutation{record: record, cacheRecord: cacheRecord, newlyAddedTypes: newlyAddedTypes, existing: existing != nil}, true, nil
 }
 
-func addAlarmTypeMutation(existing *domain.Alarm, requestedTypes domain.AlarmTypes) (domain.AlarmTypes, domain.AlarmTypes, error) {
+func addAlarmTypeMutation(existing *domain.Alarm, requestedTypes domain.AlarmTypes) (merged, newlyAdded domain.AlarmTypes, err error) {
 	if existing == nil {
 		return requestedTypes, requestedTypes, nil
 	}
@@ -113,7 +114,7 @@ func addAlarmTypeMutation(existing *domain.Alarm, requestedTypes domain.AlarmTyp
 	return mergedTypes, subtractAlarmTypes(mergedTypes, existingTypes), nil
 }
 
-func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation addAlarmMutation) error {
+func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation *addAlarmMutation) error {
 	var err error
 	if mutation.existing {
 		err = as.updateAlarmTypes(ctx, mutation.record)
@@ -126,7 +127,7 @@ func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation ad
 	return nil
 }
 
-func (as *AlarmService) afterAddAlarm(ctx context.Context, req domain.AddAlarmRequest, newlyAddedTypes domain.AlarmTypes) {
+func (as *AlarmService) afterAddAlarm(ctx context.Context, req *domain.AddAlarmRequest, newlyAddedTypes domain.AlarmTypes) {
 	as.logAlarmAdded(req, newlyAddedTypes)
 	if syncErr := as.syncPlatformMappingForChannel(ctx, req.ChannelID); syncErr != nil && as.logger != nil {
 		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,

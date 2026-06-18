@@ -34,6 +34,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
 
 	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/park285/shared-go/pkg/stringutil"
@@ -43,6 +44,13 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	ytscraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
+
+func writeHTMLResponse(t *testing.T, w http.ResponseWriter, html string) {
+	t.Helper()
+	if _, err := w.Write([]byte(html)); err != nil {
+		t.Fatalf("write html response: %v", err)
+	}
+}
 
 type testMemberDataProvider struct {
 	members []*domain.Member
@@ -66,7 +74,7 @@ func newTestScraper(t *testing.T, html string, memberMap map[string]string) *Ser
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(html))
+		writeHTMLResponse(t, w, html)
 	}))
 	t.Cleanup(server.Close)
 
@@ -97,7 +105,7 @@ func (r errorReadCloser) Close() error {
 	return nil
 }
 
-func counterValueByLabels(t *testing.T, name string, labels map[string]string) float64 {
+func counterValueByLabels(t *testing.T, labels map[string]string) float64 {
 	t.Helper()
 
 	families, err := prometheus.DefaultGatherer.Gather()
@@ -106,13 +114,13 @@ func counterValueByLabels(t *testing.T, name string, labels map[string]string) f
 	}
 
 	for _, family := range families {
-		if family.GetName() != name {
+		if family.GetName() != "hololive_holodex_official_schedule_fallback_total" {
 			continue
 		}
 		for _, metric := range family.GetMetric() {
 			if metricLabelsMatch(metric, labels) {
 				if metric.Counter == nil {
-					t.Fatalf("metric %s with labels %#v is not a counter", name, labels)
+					t.Fatalf("metric hololive_holodex_official_schedule_fallback_total with labels %#v is not a counter", labels)
 				}
 				return metric.Counter.GetValue()
 			}
@@ -264,7 +272,7 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonMatched(t *test
 		"outcome":   "hit",
 		"reason":    "matched",
 	}
-	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	before := counterValueByLabels(t, labels)
 
 	streams, err := service.FetchAllStreams(context.Background())
 	if err != nil {
@@ -274,7 +282,7 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonMatched(t *test
 		t.Fatalf("len(streams) = %d, want 1", len(streams))
 	}
 
-	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	after := counterValueByLabels(t, labels)
 	if after != before+1 {
 		t.Fatalf("fallback metric delta = %v, want 1", after-before)
 	}
@@ -289,14 +297,14 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonStructureDrift(
 		"outcome":   "error",
 		"reason":    "structure_drift",
 	}
-	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	before := counterValueByLabels(t, labels)
 
 	_, err := service.FetchAllStreams(context.Background())
 	if err == nil {
 		t.Fatal("FetchAllStreams() error = nil, want non-nil")
 	}
 
-	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	after := counterValueByLabels(t, labels)
 	if after != before+1 {
 		t.Fatalf("fallback metric delta = %v, want 1", after-before)
 	}
@@ -322,14 +330,14 @@ func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonParseError(t *t
 		"outcome":   "error",
 		"reason":    "parse",
 	}
-	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	before := counterValueByLabels(t, labels)
 
 	_, err := service.FetchAllStreams(context.Background())
 	if err == nil {
 		t.Fatal("FetchAllStreams() error = nil, want non-nil")
 	}
 
-	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	after := counterValueByLabels(t, labels)
 	if after != before+1 {
 		t.Fatalf("fallback metric delta = %v, want 1", after-before)
 	}
@@ -370,7 +378,8 @@ func TestScraperParseDatetimeWithContext(t *testing.T) {
 		t.Fatalf("expected error for empty date/time")
 	}
 
-	jst, _ := time.LoadLocation("Asia/Tokyo")
+	jst, err := time.LoadLocation("Asia/Tokyo")
+	require.NoError(t, err)
 	now := time.Now().In(jst)
 	dateStr := now.Format("01/02")
 	timeStr := now.Format("15:04")
@@ -453,7 +462,7 @@ func TestScraperFetchChannel_FallbacksToOfficialOnYouTubeError(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(html))
+		writeHTMLResponse(t, w, html)
 	}))
 	t.Cleanup(server.Close)
 
@@ -510,14 +519,14 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonStructureDrift(t *test
 		"outcome":   "error",
 		"reason":    "structure_drift",
 	}
-	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	before := counterValueByLabels(t, labels)
 
 	_, err := service.FetchChannel(context.Background(), "channel-1")
 	if err == nil {
 		t.Fatal("FetchChannel() error = nil, want non-nil")
 	}
 
-	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	after := counterValueByLabels(t, labels)
 	if after != before+1 {
 		t.Fatalf("fallback metric delta = %v, want 1", after-before)
 	}
@@ -552,14 +561,14 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonParseError(t *testing.
 		"outcome":   "error",
 		"reason":    "parse",
 	}
-	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	before := counterValueByLabels(t, labels)
 
 	_, err := service.FetchChannel(context.Background(), "channel-1")
 	if err == nil {
 		t.Fatal("FetchChannel() error = nil, want non-nil")
 	}
 
-	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	after := counterValueByLabels(t, labels)
 	if after != before+1 {
 		t.Fatalf("fallback metric delta = %v, want 1", after-before)
 	}
@@ -590,14 +599,14 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonNetworkError(t *testin
 		"outcome":   "error",
 		"reason":    "network",
 	}
-	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	before := counterValueByLabels(t, labels)
 
 	_, err := service.FetchChannel(context.Background(), "channel-1")
 	if err == nil {
 		t.Fatal("FetchChannel() error = nil, want non-nil")
 	}
 
-	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	after := counterValueByLabels(t, labels)
 	if after != before+1 {
 		t.Fatalf("fallback metric delta = %v, want 1", after-before)
 	}
@@ -637,7 +646,7 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonEmptyMiss(t *testing.T
 		"outcome":   "miss",
 		"reason":    "empty",
 	}
-	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	before := counterValueByLabels(t, labels)
 
 	streams, err := service.FetchChannel(context.Background(), "channel-1")
 	if err != nil {
@@ -647,7 +656,7 @@ func TestScraperFetchChannel_RecordsOfficialFallbackReasonEmptyMiss(t *testing.T
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
 
-	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	after := counterValueByLabels(t, labels)
 	if after != before+1 {
 		t.Fatalf("fallback metric delta = %v, want 1", after-before)
 	}
@@ -675,7 +684,7 @@ func TestScraperFetchAllStreams_DeduplicatesConcurrentRequests(t *testing.T) {
 		officialRequests.Add(1)
 		time.Sleep(25 * time.Millisecond)
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(html))
+		writeHTMLResponse(t, w, html)
 	}))
 	t.Cleanup(server.Close)
 
@@ -740,7 +749,7 @@ func TestScraperFetchAllStreams_UsesShortTTLCacheAndClonesResults(t *testing.T) 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		officialRequests.Add(1)
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(html))
+		writeHTMLResponse(t, w, html)
 	}))
 	t.Cleanup(server.Close)
 

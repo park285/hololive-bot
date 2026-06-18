@@ -39,6 +39,27 @@ import (
 	"github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
+func writeJSONResponse(t testing.TB, w http.ResponseWriter, response any) {
+	t.Helper()
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		t.Fatalf("write json response: %v", err)
+	}
+}
+
+func writeBody(t testing.TB, w http.ResponseWriter, body []byte) {
+	t.Helper()
+	if _, err := w.Write(body); err != nil {
+		t.Fatalf("write response body: %v", err)
+	}
+}
+
+func requireGetLiveStatusError(t *testing.T, client *Client, ctx context.Context) {
+	t.Helper()
+	if _, err := client.GetLiveStatus(ctx, "test-channel"); err == nil {
+		t.Fatal("GetLiveStatus() error = nil, want error")
+	}
+}
+
 func TestNewClient(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, DefaultBaseURL, logger)
@@ -68,7 +89,7 @@ func TestClientConstructors_DefaultHTTPClientAndBaseURLWhenUnset(t *testing.T) {
 		{
 			name: "NewClientWithConfig",
 			build: func() *Client {
-				return NewClientWithConfig(ClientConfig{})
+				return NewClientWithConfig(&ClientConfig{})
 			},
 		},
 	}
@@ -93,6 +114,28 @@ func TestClientConstructors_DefaultHTTPClientAndBaseURLWhenUnset(t *testing.T) {
 	}
 }
 
+type nilResponseTransport struct{}
+
+func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, nil
+}
+
+func TestClientDoRequestNilResponse(t *testing.T) {
+	client := NewClient(&http.Client{Transport: nilResponseTransport{}}, "https://chzzk.example", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://chzzk.example/live", http.NoBody)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	_, err = client.doRequest(chzzkGetLiveStatusOp, req, "read live status")
+	if err == nil {
+		t.Fatal("expected error for nil HTTP response")
+	}
+	if got := err.Error(); !strings.Contains(got, "nil response") {
+		t.Fatalf("error = %q, want nil response context", got)
+	}
+}
+
 func TestGetLiveStatus_Success_Open(t *testing.T) {
 	// OPEN 상태 테스트 데이터
 	response := LiveStatusResponse{
@@ -113,7 +156,7 @@ func TestGetLiveStatus_Success_Open(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
@@ -156,7 +199,7 @@ func TestGetLiveStatus_Success_Close(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
@@ -184,7 +227,7 @@ func TestGetLiveStatus_NotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 
-		_, _ = w.Write([]byte(`{"code":404,"message":"Channel not found"}`))
+		writeBody(t, w, []byte(`{"code":404,"message":"Channel not found"}`))
 	}))
 	defer server.Close()
 
@@ -225,7 +268,7 @@ func TestGetLiveStatus_RateLimit_TriggersCircuitBreaker(t *testing.T) {
 
 		w.WriteHeader(http.StatusTooManyRequests)
 
-		_, _ = w.Write([]byte(`{"code":429,"message":"Rate limit exceeded"}`))
+		writeBody(t, w, []byte(`{"code":429,"message":"Rate limit exceeded"}`))
 	}))
 	defer server.Close()
 
@@ -316,7 +359,7 @@ func TestGetScheduledLives_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
@@ -355,7 +398,7 @@ func TestGetScheduledLives_EmptyArray(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
@@ -397,7 +440,7 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
@@ -408,7 +451,7 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 
 	// Step 1: 3회 연속 실패로 Circuit OPEN
 	for range 3 {
-		_, _ = client.GetLiveStatus(ctx, "test-channel")
+		requireGetLiveStatusError(t, client, ctx)
 	}
 
 	// Step 2: Circuit OPEN 상태 확인
@@ -449,7 +492,7 @@ func TestGetLiveStatus_ServerError_IncreasesFailureCount(t *testing.T) {
 
 		w.WriteHeader(http.StatusInternalServerError)
 
-		_, _ = w.Write([]byte(`{"code":500,"message":"Internal server error"}`))
+		writeBody(t, w, []byte(`{"code":500,"message":"Internal server error"}`))
 	}))
 	defer server.Close()
 
@@ -466,8 +509,8 @@ func TestGetLiveStatus_ServerError_IncreasesFailureCount(t *testing.T) {
 
 	// 실패 카운트 확인 (내부 필드는 직접 접근 불가하므로 행동으로 검증)
 	// 2번 더 실패 시 Circuit OPEN
-	_, _ = client.GetLiveStatus(ctx, "test-channel")
-	_, _ = client.GetLiveStatus(ctx, "test-channel")
+	requireGetLiveStatusError(t, client, ctx)
+	requireGetLiveStatusError(t, client, ctx)
 
 	if !client.IsCircuitOpen() {
 		t.Error("Circuit should be open after 3 consecutive 500 errors")
@@ -484,7 +527,7 @@ func TestGetScheduledLives_NilContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
@@ -547,7 +590,7 @@ func TestClient_UserAgent(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
@@ -572,7 +615,7 @@ func TestGetLiveStatus_MalformedJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		_, _ = w.Write([]byte(`{"code":200,"content":`)) // Incomplete JSON
+		writeBody(t, w, []byte(`{"code":200,"content":`)) // Incomplete JSON
 	}))
 	defer server.Close()
 
@@ -593,7 +636,7 @@ func TestNewClientWithConfig_UsesDefaultLoggerWhenNil(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClientWithConfig(ClientConfig{
+	client := NewClientWithConfig(&ClientConfig{
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
@@ -652,11 +695,11 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
-	client := NewClientWithConfig(ClientConfig{
+	client := NewClientWithConfig(&ClientConfig{
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
@@ -698,11 +741,11 @@ func TestGetLivesByChannelIDs_PageScanStopsOnRepeatedCursor(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
-	client := NewClientWithConfig(ClientConfig{
+	client := NewClientWithConfig(&ClientConfig{
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
@@ -748,11 +791,11 @@ func TestGetLivesByChannelIDs_PageScanStopsAfterPageCap(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
-	client := NewClientWithConfig(ClientConfig{
+	client := NewClientWithConfig(&ClientConfig{
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
@@ -810,7 +853,7 @@ func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 
-			_ = json.NewEncoder(w).Encode(response)
+			writeJSONResponse(t, w, response)
 		case r.URL.Path == "/open/v1/lives":
 			pageCalls.Add(1)
 			t.Fatal("unexpected page scan request for small target set")
@@ -820,7 +863,7 @@ func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClientWithConfig(ClientConfig{
+	client := NewClientWithConfig(&ClientConfig{
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
@@ -875,14 +918,14 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 
-			_ = json.NewEncoder(w).Encode(response)
+			writeJSONResponse(t, w, response)
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 	}))
 	defer server.Close()
 
-	client := NewClientWithConfig(ClientConfig{
+	client := NewClientWithConfig(&ClientConfig{
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
@@ -938,11 +981,11 @@ func TestGetLivesByChannelIDs_PageScanReturnsDeterministicTargetOrder(t *testing
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(t, w, response)
 	}))
 	defer server.Close()
 
-	client := NewClientWithConfig(ClientConfig{
+	client := NewClientWithConfig(&ClientConfig{
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
@@ -966,7 +1009,7 @@ func TestGetLivesByChannelIDs_PageScanReturnsDeterministicTargetOrder(t *testing
 }
 
 func TestGetLivesByChannelIDs_EmptyTargets(t *testing.T) {
-	client := NewClientWithConfig(ClientConfig{
+	client := NewClientWithConfig(&ClientConfig{
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      DefaultBaseURL,
 		ClientID:     "id",
@@ -990,7 +1033,7 @@ func TestGetLives_HTTPError_Normalized(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClientWithConfig(ClientConfig{
+	client := NewClientWithConfig(&ClientConfig{
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
@@ -1040,7 +1083,7 @@ func TestCircuitBreaker_AfterReset_ThresholdRequiredToReopen(t *testing.T) {
 
 	// threshold 도달 → circuit open
 	for range 3 {
-		_, _ = client.GetLiveStatus(ctx, "test-channel")
+		requireGetLiveStatusError(t, client, ctx)
 	}
 	if !client.IsCircuitOpen() {
 		t.Fatal("circuit should be open after threshold failures")
@@ -1055,7 +1098,7 @@ func TestCircuitBreaker_AfterReset_ThresholdRequiredToReopen(t *testing.T) {
 	}
 
 	// 1회 실패 후 즉시 재open 금지
-	_, _ = client.GetLiveStatus(ctx, "test-channel")
+	requireGetLiveStatusError(t, client, ctx)
 
 	if client.IsCircuitOpen() {
 		t.Fatal("single failure after reset must not re-open circuit (threshold=3)")
@@ -1073,7 +1116,7 @@ func BenchmarkGetLiveStatus(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		_ = json.NewEncoder(w).Encode(response)
+		writeJSONResponse(b, w, response)
 	}))
 	defer server.Close()
 

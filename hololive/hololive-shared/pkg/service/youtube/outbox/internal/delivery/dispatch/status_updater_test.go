@@ -45,7 +45,7 @@ func TestStatusUpdaterMarkSentBatchUpdatesPendingRowsOnly(t *testing.T) {
 	require.NoError(t, insertDeliveryTestRows(db, &pending).Error)
 	require.NoError(t, insertDeliveryTestRows(db, &failed).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markSentBatch(ctx, []int64{pending.ID, pending.ID, failed.ID})
 
 	var gotPending domain.YouTubeNotificationOutbox
@@ -82,7 +82,7 @@ func TestStatusUpdaterMarkFailedSchedulesRetryBeforeMaxRetries(t *testing.T) {
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	before := time.Now().UTC()
 	updater.markFailed(ctx, item.ID, "temporary failure")
 
@@ -115,7 +115,7 @@ func TestStatusUpdaterMarkFailedMarksPermanentAtMaxRetriesAndTruncatesReason(t *
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markFailed(ctx, item.ID, strings.Repeat("가", 600))
 
 	var got domain.YouTubeNotificationOutbox
@@ -147,7 +147,7 @@ func TestStatusUpdaterMarkSentIfLockedSkipsRowsRelockedByAnotherWorker(t *testin
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markSentIfLocked(ctx, item.ID, &staleLockedAt)
 
 	var got domain.YouTubeNotificationOutbox
@@ -178,7 +178,7 @@ func TestStatusUpdaterMarkFailedIfLockedSkipsRowsCompletedByAnotherWorker(t *tes
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markFailedIfLocked(ctx, item.ID, &staleLockedAt, "stale failure")
 
 	var got domain.YouTubeNotificationOutbox

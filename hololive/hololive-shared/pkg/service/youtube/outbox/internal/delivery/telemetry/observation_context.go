@@ -67,7 +67,7 @@ func normalizeRowsAndCollectDeliveryTelemetryIdentities(
 	identities := make(map[deliveryTelemetryIdentity]struct{}, len(rows))
 	for i := range rows {
 		rows[i].ObservationStatus = normalizeDeliveryTelemetryObservationStatus(rows[i].ObservationStatus)
-		if identity, ok := deliveryTelemetryIdentityForRow(rows[i]); ok {
+		if identity, ok := deliveryTelemetryIdentityForRow(&rows[i]); ok {
 			identities[identity] = struct{}{}
 		}
 	}
@@ -80,7 +80,7 @@ func applyDeliveryTelemetryObservationContexts(
 	observationWindows []domain.YouTubeCommunityShortsObservationWindow,
 ) {
 	for i := range rows {
-		identity, ok := deliveryTelemetryIdentityForRow(rows[i])
+		identity, ok := deliveryTelemetryIdentityForRow(&rows[i])
 		if !ok {
 			rows[i].ObservationStatus = normalizeDeliveryTelemetryObservationStatus(rows[i].ObservationStatus)
 			continue

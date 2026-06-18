@@ -514,6 +514,27 @@ func (c *countingWarmCacheClient) HMSet(ctx context.Context, key string, fields 
 func newMemoryCacheClient(t *testing.T) cache.Client {
 	t.Helper()
 
+	mini, rawClient := newMemoryValkeyClient(t)
+	client := cachemocks.NewStrictClient()
+	configureMemoryCacheCore(client, rawClient)
+	configureMemoryCacheSets(client, rawClient)
+	configureMemoryCacheHashes(client, rawClient)
+	configureMemoryCacheStrings(client, rawClient)
+	configureMemoryCacheKeys(client, rawClient)
+
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close cache client: %v", err)
+		}
+		mini.Close()
+	})
+
+	return client
+}
+
+func newMemoryValkeyClient(t *testing.T) (*miniredis.Miniredis, valkey.Client) {
+	t.Helper()
+
 	mini := miniredis.RunT(t)
 	rawClient, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{mini.Addr()},
@@ -533,7 +554,10 @@ func newMemoryCacheClient(t *testing.T) cache.Client {
 		t.Fatalf("Ping() error = %v", err)
 	}
 
-	client := cachemocks.NewStrictClient()
+	return mini, rawClient
+}
+
+func configureMemoryCacheCore(client *cachemocks.Client, rawClient valkey.Client) {
 	client.CloseFunc = func() error {
 		rawClient.Close()
 		return nil
@@ -544,6 +568,9 @@ func newMemoryCacheClient(t *testing.T) cache.Client {
 	client.DoMultiFunc = func(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
 		return rawClient.DoMulti(ctx, cmds...)
 	}
+}
+
+func configureMemoryCacheSets(client *cachemocks.Client, rawClient valkey.Client) {
 	client.SAddFunc = func(ctx context.Context, key string, members []string) (int64, error) {
 		if len(members) == 0 {
 			return 0, nil
@@ -564,6 +591,9 @@ func newMemoryCacheClient(t *testing.T) cache.Client {
 
 		return resp.AsStrSlice()
 	}
+}
+
+func configureMemoryCacheHashes(client *cachemocks.Client, rawClient valkey.Client) {
 	client.HSetFunc = func(ctx context.Context, key, field, value string) error {
 		return rawClient.Do(ctx, rawClient.B().Hset().Key(key).FieldValue().FieldValue(field, value).Build()).Error()
 	}
@@ -590,6 +620,9 @@ func newMemoryCacheClient(t *testing.T) cache.Client {
 
 		return resp.ToString()
 	}
+}
+
+func configureMemoryCacheStrings(client *cachemocks.Client, rawClient valkey.Client) {
 	client.SetFunc = func(ctx context.Context, key string, value any, ttl time.Duration) error {
 		builder := rawClient.B().Set().Key(key).Value(fmt.Sprintf("%v", value))
 		if ttl > 0 {
@@ -611,6 +644,9 @@ func newMemoryCacheClient(t *testing.T) cache.Client {
 
 		return count > 0, nil
 	}
+}
+
+func configureMemoryCacheKeys(client *cachemocks.Client, rawClient valkey.Client) {
 	client.ScanKeysFunc = func(ctx context.Context, pattern string, batchSize int64) ([]string, error) {
 		if batchSize <= 0 {
 			batchSize = 100
@@ -652,11 +688,4 @@ func newMemoryCacheClient(t *testing.T) cache.Client {
 	client.DelFunc = func(ctx context.Context, key string) error {
 		return rawClient.Do(ctx, rawClient.B().Del().Key(key).Build()).Error()
 	}
-
-	t.Cleanup(func() {
-		_ = client.Close()
-		mini.Close()
-	})
-
-	return client
 }

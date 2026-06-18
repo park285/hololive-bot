@@ -38,7 +38,7 @@ func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults 
 		return nil, err
 	}
 
-	return c.playlistsFromBrowseData(data, channelID, maxResults), nil
+	return c.playlistsFromBrowseData(&data, channelID, maxResults), nil
 }
 
 func (c *Client) fetchPlaylistBrowseData(ctx context.Context, channelID string) (gjson.Result, error) {
@@ -57,14 +57,14 @@ func (c *Client) fetchPlaylistBrowseData(ctx context.Context, channelID string) 
 	}
 
 	data := gjson.Parse(jsonStr)
-	if err := checkAlerts(data); err != nil {
+	if err := checkAlerts(&data); err != nil {
 		return gjson.Result{}, err
 	}
 
 	return data, nil
 }
 
-func (c *Client) playlistsFromBrowseData(data gjson.Result, channelID string, maxResults int) []*Playlist {
+func (c *Client) playlistsFromBrowseData(data *gjson.Result, channelID string, maxResults int) []*Playlist {
 	playlistItems := collectPlaylistItemsFromBrowseData(data)
 
 	playlists := make([]*Playlist, 0, min(len(playlistItems), maxResults))
@@ -72,7 +72,7 @@ func (c *Client) playlistsFromBrowseData(data gjson.Result, channelID string, ma
 		if i >= maxResults {
 			break
 		}
-		playlist := c.parseGridPlaylistRenderer(item, channelID)
+		playlist := c.parseGridPlaylistRenderer(&item, channelID)
 		if playlist != nil {
 			playlists = append(playlists, playlist)
 		}
@@ -81,7 +81,7 @@ func (c *Client) playlistsFromBrowseData(data gjson.Result, channelID string, ma
 	return playlists
 }
 
-func collectPlaylistItemsFromBrowseData(data gjson.Result) []gjson.Result {
+func collectPlaylistItemsFromBrowseData(data *gjson.Result) []gjson.Result {
 	tabPath := "contents.twoColumnBrowseResultsRenderer.tabs"
 	playlistItems := make([]gjson.Result, 0)
 
@@ -92,14 +92,10 @@ func collectPlaylistItemsFromBrowseData(data gjson.Result) []gjson.Result {
 
 		content := tab.Get("tabRenderer.content")
 		content.Get("sectionListRenderer.contents").ForEach(func(_, section gjson.Result) bool {
-			appendGridPlaylistRenderers(
-				&playlistItems,
-				section.Get("itemSectionRenderer.contents.0.gridRenderer.items"),
-			)
-			appendGridPlaylistRenderers(
-				&playlistItems,
-				section.Get("itemSectionRenderer.contents.0.shelfRenderer.content.horizontalListRenderer.items"),
-			)
+			gridItems := section.Get("itemSectionRenderer.contents.0.gridRenderer.items")
+			appendGridPlaylistRenderers(&playlistItems, &gridItems)
+			shelfItems := section.Get("itemSectionRenderer.contents.0.shelfRenderer.content.horizontalListRenderer.items")
+			appendGridPlaylistRenderers(&playlistItems, &shelfItems)
 			return true
 		})
 		return false
@@ -108,7 +104,7 @@ func collectPlaylistItemsFromBrowseData(data gjson.Result) []gjson.Result {
 	return playlistItems
 }
 
-func appendGridPlaylistRenderers(target *[]gjson.Result, items gjson.Result) {
+func appendGridPlaylistRenderers(target *[]gjson.Result, items *gjson.Result) {
 	if !items.Exists() {
 		return
 	}
@@ -123,7 +119,7 @@ func appendGridPlaylistRenderers(target *[]gjson.Result, items gjson.Result) {
 }
 
 // parseGridPlaylistRenderer: gridPlaylistRenderer JSON을 Playlist 구조체로 변환
-func (c *Client) parseGridPlaylistRenderer(playlist gjson.Result, channelID string) *Playlist {
+func (c *Client) parseGridPlaylistRenderer(playlist *gjson.Result, channelID string) *Playlist {
 	playlistID := playlist.Get("playlistId").String()
 	if playlistID == "" {
 		return nil

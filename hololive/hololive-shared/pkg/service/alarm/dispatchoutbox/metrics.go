@@ -116,47 +116,64 @@ func observeRecoveryFailure(recoveryType string) {
 }
 
 func observeRecoverySuccess(at time.Time) {
+	if alarmDispatchRecoveryLastSuccessTimestamp == nil {
+		return
+	}
 	alarmDispatchRecoveryLastSuccessTimestamp.Set(float64(at.Unix()))
 }
 
 func observePGClaimed(rows int) {
-	if rows > 0 {
-		alarmDispatchPGClaimedTotal.Add(float64(rows))
+	if alarmDispatchPGClaimedTotal == nil || rows <= 0 {
+		return
 	}
+	alarmDispatchPGClaimedTotal.Add(float64(rows))
 }
 
 func observePGMarkSendingFailure() {
+	if alarmDispatchPGMarkSendingFailedTotal == nil {
+		return
+	}
 	alarmDispatchPGMarkSendingFailedTotal.Inc()
 }
 
 func observePGMarkSentFailure() {
+	if alarmDispatchPGMarkSentFailedTotal == nil {
+		return
+	}
 	alarmDispatchPGMarkSentFailedTotal.Inc()
 }
 
 func observePGQuarantined(rows int) {
-	if rows > 0 {
-		alarmDispatchPGQuarantinedTotal.Add(float64(rows))
+	if alarmDispatchPGQuarantinedTotal == nil || rows <= 0 {
+		return
 	}
+	alarmDispatchPGQuarantinedTotal.Add(float64(rows))
 }
 
 func observePGDLQ(rows int) {
-	if rows > 0 {
-		alarmDispatchPGDLQTotal.Add(float64(rows))
+	if alarmDispatchPGDLQTotal == nil || rows <= 0 {
+		return
 	}
+	alarmDispatchPGDLQTotal.Add(float64(rows))
 }
 
 func observePGRetryScheduled(rows int) {
-	if rows > 0 {
-		alarmDispatchPGRetryScheduledTotal.Add(float64(rows))
+	if alarmDispatchPGRetryScheduledTotal == nil || rows <= 0 {
+		return
 	}
+	alarmDispatchPGRetryScheduledTotal.Add(float64(rows))
 }
 
 func observePGTransitionPartial() {
+	if alarmDispatchPGTransitionPartialTotal == nil {
+		return
+	}
 	alarmDispatchPGTransitionPartialTotal.Inc()
 }
 
 func observePGClaimReleased(keys int) {
-	if keys > 0 {
-		alarmDispatchPGClaimReleasedTotal.Add(float64(keys))
+	if alarmDispatchPGClaimReleasedTotal == nil || keys <= 0 {
+		return
 	}
+	alarmDispatchPGClaimReleasedTotal.Add(float64(keys))
 }

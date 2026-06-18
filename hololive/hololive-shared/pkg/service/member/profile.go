@@ -72,7 +72,7 @@ func NewProfileService(cacheClient cache.KeyValueCache, membersData domain.Membe
 	return service, nil
 }
 
-func loadProfileServiceData(membersData domain.MemberDataProvider) (map[string]*domain.TalentProfile, map[string]*domain.Translated, []*domain.Member, error) {
+func loadProfileServiceData(membersData domain.MemberDataProvider) (result0 map[string]*domain.TalentProfile, result1 map[string]*domain.Translated, result2 []*domain.Member, err error) {
 	profiles, err := domain.LoadProfiles()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load official profiles dataset: %w", err)

@@ -8,18 +8,20 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func validateOutboxPayload(item domain.YouTubeNotificationOutbox) bool {
+func validateOutboxPayload(item *domain.YouTubeNotificationOutbox) bool {
 	switch item.Kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
 		return validateVideoOutboxPayload(item)
 	case domain.OutboxKindCommunityPost:
 		return validateCommunityOutboxPayload(item)
+	case domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return true
 	default:
 		return true
 	}
 }
 
-func validateVideoOutboxPayload(item domain.YouTubeNotificationOutbox) bool {
+func validateVideoOutboxPayload(item *domain.YouTubeNotificationOutbox) bool {
 	raw, ok := decodeOutboxPayloadMap(item.Payload)
 	return ok &&
 		payloadString(raw, "title") != "" &&
@@ -28,7 +30,7 @@ func validateVideoOutboxPayload(item domain.YouTubeNotificationOutbox) bool {
 			strings.TrimSpace(item.ContentID) != "")
 }
 
-func validateCommunityOutboxPayload(item domain.YouTubeNotificationOutbox) bool {
+func validateCommunityOutboxPayload(item *domain.YouTubeNotificationOutbox) bool {
 	raw, ok := decodeOutboxPayloadMap(item.Payload)
 	return ok &&
 		(payloadString(raw, "content_text") != "" || payloadString(raw, "url") != "") &&

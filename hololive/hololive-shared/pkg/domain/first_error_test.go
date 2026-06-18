@@ -10,7 +10,7 @@ func TestFirstErrorReturnsFirstNonNilAndIgnoresRest(t *testing.T) {
 	second := errors.New("second")
 
 	got := firstError(nil, first, second)
-	if got != first {
+	if !errors.Is(got, first) {
 		t.Fatalf("firstError returned %v, want first error %v", got, first)
 	}
 	if errors.Is(got, second) {

@@ -26,7 +26,7 @@ func (state *holodexRequestRetryState) recordAttemptError(logger *slog.Logger, p
 	return true
 }
 
-func (c *APIClient) waitHolodexRequestBackoff(ctx context.Context, attempt int, maxAttempts int) error {
+func (c *APIClient) waitHolodexRequestBackoff(ctx context.Context, attempt, maxAttempts int) error {
 	if attempt >= maxAttempts-1 {
 		return nil
 	}

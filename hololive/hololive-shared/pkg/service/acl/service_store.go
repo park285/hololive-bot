@@ -61,23 +61,23 @@ func newPgxACLStore(pool *pgxpool.Pool) *pgxACLStore {
 	return &pgxACLStore{pool: pool}
 }
 
-func (s *pgxACLStore) GetSetting(ctx context.Context, key string) (string, bool, error) {
-	var value *string
+func (s *pgxACLStore) GetSetting(ctx context.Context, key string) (value string, ok bool, err error) {
+	var stored *string
 
-	err := pgxscan.Get(ctx, s.pool, &value, `SELECT value FROM acl_settings WHERE key = $1`, key)
-	if err != nil {
-		if stdErrors.Is(err, pgx.ErrNoRows) {
+	scanErr := pgxscan.Get(ctx, s.pool, &stored, `SELECT value FROM acl_settings WHERE key = $1`, key)
+	if scanErr != nil {
+		if stdErrors.Is(scanErr, pgx.ErrNoRows) {
 			return "", false, nil
 		}
 
-		return "", false, fmt.Errorf("get acl setting %q: %w", key, err)
+		return "", false, fmt.Errorf("get acl setting %q: %w", key, scanErr)
 	}
 
-	if value == nil {
+	if stored == nil {
 		return "", true, nil
 	}
 
-	return *value, true, nil
+	return *stored, true, nil
 }
 
 func (s *pgxACLStore) CreateSetting(ctx context.Context, key, value string) error {

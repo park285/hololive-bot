@@ -87,13 +87,16 @@ func initializeMemberDatabase(
 
 // ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성
 func ProvideMemberServiceAdapter(ctx context.Context, memberCache *member.Cache, logger *slog.Logger) member.DataProvider {
-	if ctx == nil {
-		ctx = context.Background()
-	} else {
-		ctx = context.WithoutCancel(ctx)
-	}
+	ctx = memberAdapterContext(ctx)
 
 	return member.NewMemberServiceAdapter(ctx, memberCache, logger)
+}
+
+func memberAdapterContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return context.Background()
 }
 
 // ProvideProfileService - 프로필 서비스 생성 (번역 사전 로드 포함)

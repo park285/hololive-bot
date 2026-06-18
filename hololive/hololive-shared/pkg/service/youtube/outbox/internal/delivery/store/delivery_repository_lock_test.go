@@ -75,7 +75,7 @@ func readDeliveryStatusAndLocks(
 	ctx context.Context,
 	db *pgxpool.Pool,
 	deliveryID int64,
-) (domain.OutboxStatus, *time.Time, *time.Time) {
+) (result1 domain.OutboxStatus, result2, result3 *time.Time) {
 	t.Helper()
 
 	var status domain.OutboxStatus

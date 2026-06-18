@@ -137,7 +137,7 @@ func (m *Client) GetJSON(ctx context.Context, key string, dest any) (bool, error
 	return false, nil
 }
 
-func (m *Client) GetString(ctx context.Context, key string) (string, bool, error) {
+func (m *Client) GetString(ctx context.Context, key string) (value0 string, ok1 bool, err error) {
 	if m.GetStringFunc != nil {
 		return m.GetStringFunc(ctx, key)
 	}

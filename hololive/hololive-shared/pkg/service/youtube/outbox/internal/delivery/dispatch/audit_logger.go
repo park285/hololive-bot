@@ -23,17 +23,17 @@ type AuditLogger struct {
 }
 
 func newAuditLogger(
-	telemetry *DeliveryTelemetryRepository,
+	telemetryRepo *DeliveryTelemetryRepository,
 	deliveryRepo *store.DeliveryRepository,
 	logger *slog.Logger,
-	config Config,
+	config *Config,
 	telemetryProcessor *TelemetryProcessor,
 ) *AuditLogger {
 	return &AuditLogger{
-		telemetry:          telemetry,
+		telemetry:          telemetryRepo,
 		delivery:           deliveryRepo,
 		logger:             logger,
-		config:             config,
+		config:             *config,
 		telemetryProcessor: telemetryProcessor,
 	}
 }
@@ -69,10 +69,10 @@ func (al *AuditLogger) logCommunityShortsDeliveryAttemptStarted(
 			slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
 			slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
 			slog.Time(deliveryAttemptStartedAtLogField, attemptStartedAt),
-			slog.Int(logschema.FieldAttemptOrdinal, deliveryAttemptOrdinal(limitedRows[i])),
+			slog.Int(logschema.FieldAttemptOrdinal, deliveryAttemptOrdinal(&limitedRows[i])),
 			slog.String(deliveryAuditPathLogField, deliveryPath),
 			slog.String(deliveryAuditModeLogField, deliveryMode),
-			slog.String(deliveryDedupeKeyLogField, telemetry.DedupeKeyLogValue(outbox)),
+			slog.String(deliveryDedupeKeyLogField, telemetry.DedupeKeyLogValue(&outbox)),
 		)
 	}
 }
@@ -220,7 +220,8 @@ func (al *AuditLogger) logCommunityShortsDeliveryAuditFallback(
 	}
 
 	for i := range preparedEvents {
-		attrs := buildDeliveryAuditLogAttrsWithClassification(preparedEvents[i], fallbackClassificationsByOutboxID[preparedEvents[i].OutboxID])
+		classification := fallbackClassificationsByOutboxID[preparedEvents[i].OutboxID]
+		attrs := buildDeliveryAuditLogAttrsWithClassification(&preparedEvents[i], &classification)
 		attrs = append(attrs, slog.String(logschema.FieldTelemetrySource, "direct_fallback"))
 		if sendErr != nil {
 			attrs = append(attrs, slog.String("error", sendErr.Error()))
@@ -250,7 +251,7 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResults(ctx context.Cont
 
 	finalizedAt := time.Now().UTC()
 	for i := range results {
-		al.logFinalizedCommunityShortsOutboxResultWithTimeline(results[i], timelinesByOutboxID, finalizedAt)
+		al.logFinalizedCommunityShortsOutboxResultWithTimeline(&results[i], timelinesByOutboxID, finalizedAt)
 	}
 
 	return nil
@@ -280,20 +281,20 @@ func (al *AuditLogger) loadFinalizedCommunityShortsTimelines(
 }
 
 func (al *AuditLogger) logFinalizedCommunityShortsOutboxResultWithTimeline(
-	result store.TerminalCommunityShortsOutboxResult,
+	result *store.TerminalCommunityShortsOutboxResult,
 	timelinesByOutboxID map[int64]PostDeliveryTimeline,
 	finalizedAt time.Time,
 ) {
 	timing := alarmtiming.Build(nil, result.SentAt)
 	if timeline, ok := timelinesByOutboxID[result.OutboxID]; ok {
 		result.LatencyClassification = timeline.LatencyClassification
-		timing = communityShortsAlarmTimingForTimeline(timeline)
+		timing = communityShortsAlarmTimingForTimeline(&timeline)
 	}
 	al.logFinalizedCommunityShortsOutboxResult(result, finalizedAt, timing)
 }
 
 func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
-	result store.TerminalCommunityShortsOutboxResult,
+	result *store.TerminalCommunityShortsOutboxResult,
 	finalizedAt time.Time,
 	timing alarmtiming.Snapshot,
 ) {
@@ -324,7 +325,7 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
 		slog.String(deliveryAuditSendResultLogField, sendResult),
 		slog.String(deliveryAuditPathLogField, telemetry.NormalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)),
 		slog.String(deliveryAuditModeLogField, logschema.DeliveryModeFinalResult),
-		slog.String(deliveryDedupeKeyLogField, telemetry.DedupeKeyLogValue(outbox)),
+		slog.String(deliveryDedupeKeyLogField, telemetry.DedupeKeyLogValue(&outbox)),
 		slog.String(logschema.FieldTelemetrySource, logschema.TelemetrySourceOutboxFinalResult),
 		slog.Int(logschema.FieldTargetRoomCount, result.TargetRoomCount),
 		slog.Int(logschema.FieldSuccessfulRoomCount, result.SuccessfulRoomCount),
@@ -334,7 +335,7 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
 	if result.AggregatedFailReason != "" {
 		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, result.AggregatedFailReason))
 	}
-	attrs = appendLatencyClassificationLogAttr(attrs, result.LatencyClassification)
+	attrs = appendLatencyClassificationLogAttr(attrs, &result.LatencyClassification)
 
 	al.logger.Info(deliveryAuditLogMessage, attrs...)
 }

@@ -55,7 +55,7 @@ func newRetryScheduler(delay, timeout time.Duration, maxSize int, logger *slog.L
 	}
 }
 
-func (s *retryScheduler) schedule(key string, fn func(ctx context.Context)) {
+func (s *retryScheduler) schedule(ctx context.Context, key string, fn func(ctx context.Context)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -74,14 +74,14 @@ func (s *retryScheduler) schedule(key string, fn func(ctx context.Context)) {
 		key: key,
 	}
 	task.timer = time.AfterFunc(s.delay, func() {
-		s.execute(task.key, fn)
+		s.execute(ctx, task.key, fn)
 	})
 	s.pending[key] = task
 
 	s.logger.Info("캐시 워밍 재시도 예약", slog.String("key", key))
 }
 
-func (s *retryScheduler) execute(key string, fn func(ctx context.Context)) {
+func (s *retryScheduler) execute(parentCtx context.Context, key string, fn func(ctx context.Context)) {
 	s.mu.Lock()
 	if s.stopped {
 		s.mu.Unlock()
@@ -93,7 +93,7 @@ func (s *retryScheduler) execute(key string, fn func(ctx context.Context)) {
 
 	defer s.wg.Done()
 
-	ctx := context.WithValue(context.Background(), retryContextKey{}, true)
+	ctx := context.WithValue(parentCtx, retryContextKey{}, true)
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 

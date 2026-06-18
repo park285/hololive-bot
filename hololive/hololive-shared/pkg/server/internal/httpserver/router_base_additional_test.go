@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
@@ -27,7 +28,7 @@ func TestApplyBaseMiddleware_PreservesIncomingRequestID(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ping", http.NoBody)
 	req.Header.Set("X-Request-ID", "worker-2-request-id")
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -62,7 +63,7 @@ func TestApplyBaseMiddleware_RecoversHandlerPanic(t *testing.T) {
 		panic("boom")
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/panic", http.NoBody)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -84,13 +85,13 @@ func TestApplyBaseMiddleware_RecoversPanicOutsideLogger(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
-	logger := slog.New(panicOnRequestLogHandler{})
+	logger := slog.New(slog.NewTextHandler(panicOnRequestLogWriter{}, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	ApplyBaseMiddleware(router, context.Background(), logger, BaseMiddlewareOptions{})
 	router.GET("/panic-outside-logger", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/panic-outside-logger", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/panic-outside-logger", http.NoBody)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -102,26 +103,11 @@ func TestApplyBaseMiddleware_RecoversPanicOutsideLogger(t *testing.T) {
 	}
 }
 
-type panicOnRequestLogHandler struct{}
+type panicOnRequestLogWriter struct{}
 
-func (panicOnRequestLogHandler) Enabled(context.Context, slog.Level) bool {
-	return true
-}
-
-func (panicOnRequestLogHandler) Handle(_ context.Context, record slog.Record) error {
-	record.Attrs(func(attr slog.Attr) bool {
-		if attr.Key == "event" && attr.Value.String() == "http.request.completed" {
-			panic("logger post-next panic")
-		}
-		return true
-	})
-	return nil
-}
-
-func (panicOnRequestLogHandler) WithAttrs([]slog.Attr) slog.Handler {
-	return panicOnRequestLogHandler{}
-}
-
-func (panicOnRequestLogHandler) WithGroup(string) slog.Handler {
-	return panicOnRequestLogHandler{}
+func (panicOnRequestLogWriter) Write(p []byte) (int, error) {
+	if bytes.Contains(p, []byte("http.request.completed")) {
+		panic("logger post-next panic")
+	}
+	return len(p), nil
 }

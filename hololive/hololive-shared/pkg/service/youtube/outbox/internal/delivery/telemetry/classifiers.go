@@ -9,7 +9,7 @@ import (
 
 const CommunityShortsDeliveryPath = "youtube_outbox_dispatcher"
 
-func DedupeKeyLogValue(outbox domain.YouTubeNotificationOutbox) string {
+func DedupeKeyLogValue(outbox *domain.YouTubeNotificationOutbox) string {
 	dedupeKey, err := outbox.DedupeKey()
 	if err == nil {
 		return dedupeKey
@@ -33,6 +33,8 @@ func IsCommunityShortsDeliveryAuditKind(kind domain.OutboxKind) bool {
 	switch kind {
 	case domain.OutboxKindNewShort, domain.OutboxKindCommunityPost:
 		return true
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return false
 	default:
 		return false
 	}

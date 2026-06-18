@@ -101,7 +101,7 @@ func TestRunJobClaimRenewLoop_RenewFailureCancelsPollAndReportsError(t *testing.
 }
 
 func TestSchedulerExecuteJobSkipsPeerOwnedWithoutPolling(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 200 * time.Millisecond,
 		JobClaimer: &schedulerClaimStub{
@@ -127,7 +127,7 @@ func TestSchedulerExecuteJobSkipsPeerOwnedWithoutPolling(t *testing.T) {
 }
 
 func TestSchedulerExecuteJobSkipsAlreadyCompletedWithoutPolling(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
 		JobClaimer: &schedulerClaimStub{
@@ -153,12 +153,12 @@ func TestSchedulerActiveActiveSharedClaimerAllowsOnlyOnePoll(t *testing.T) {
 		entered: make(chan struct{}),
 		release: make(chan struct{}),
 	}
-	schedulerA := NewScheduler(SchedulerConfig{
+	schedulerA := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
 		JobClaimer:      claimer,
 	})
-	schedulerB := NewScheduler(SchedulerConfig{
+	schedulerB := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 200 * time.Millisecond,
 		JobClaimer:      claimer,
@@ -222,7 +222,7 @@ func TestSchedulerExecuteJobFailsClosedWhenClaimUnavailable(t *testing.T) {
 		status: polling.JobClaimStatus{Result: polling.JobClaimUnavailable},
 		err:    fmt.Errorf("valkey unavailable"),
 	}
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
 		JobClaimer:      claimer,
@@ -243,7 +243,7 @@ func TestSchedulerExecuteJobFailsClosedWhenClaimUnavailable(t *testing.T) {
 }
 
 func TestSchedulerExecuteJobWithoutClaimerKeepsPolling(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
 	})
@@ -280,7 +280,7 @@ func TestSchedulerExecuteJobCompletesOrReleasesClaim(t *testing.T) {
 				status: polling.JobClaimStatus{Result: polling.JobClaimAcquired},
 				claim:  claim,
 			}
-			scheduler := NewScheduler(SchedulerConfig{
+			scheduler := NewScheduler(&SchedulerConfig{
 				WorkerCount:     1,
 				RequestInterval: 0,
 				JobClaimer:      claimer,
@@ -309,7 +309,7 @@ func TestSchedulerJobClaimLeaseTTLIncludesBudgetAndCompletionWindows(t *testing.
 	require.Equal(t, 5*time.Second, defaults.ClaimCompletionTimeout)
 	require.Equal(t, 15*time.Second, defaults.ClaimLeaseSafetyMargin)
 
-	minScheduler := NewScheduler(SchedulerConfig{
+	minScheduler := NewScheduler(&SchedulerConfig{
 		PollTimeout:            2 * time.Second,
 		BudgetAcquireTimeout:   3 * time.Second,
 		ClaimCompletionTimeout: 4 * time.Second,
@@ -317,7 +317,7 @@ func TestSchedulerJobClaimLeaseTTLIncludesBudgetAndCompletionWindows(t *testing.
 	})
 	require.Equal(t, time.Minute, minScheduler.jobClaimLeaseTTL())
 
-	base := NewScheduler(SchedulerConfig{
+	base := NewScheduler(&SchedulerConfig{
 		PollTimeout:            2 * time.Minute,
 		BudgetAcquireTimeout:   3 * time.Second,
 		ClaimCompletionTimeout: 4 * time.Second,
@@ -325,7 +325,7 @@ func TestSchedulerJobClaimLeaseTTLIncludesBudgetAndCompletionWindows(t *testing.
 	})
 	require.Equal(t, 2*time.Minute+12*time.Second, base.jobClaimLeaseTTL())
 
-	corrected := NewScheduler(SchedulerConfig{
+	corrected := NewScheduler(&SchedulerConfig{
 		PollTimeout:            2 * time.Minute,
 		BudgetAcquireTimeout:   0,
 		ClaimCompletionTimeout: -time.Second,
@@ -333,7 +333,7 @@ func TestSchedulerJobClaimLeaseTTLIncludesBudgetAndCompletionWindows(t *testing.
 	})
 	require.Equal(t, 2*time.Minute+23*time.Second, corrected.jobClaimLeaseTTL())
 
-	increasedBudget := NewScheduler(SchedulerConfig{
+	increasedBudget := NewScheduler(&SchedulerConfig{
 		PollTimeout:            2 * time.Minute,
 		BudgetAcquireTimeout:   20 * time.Second,
 		ClaimCompletionTimeout: 4 * time.Second,
@@ -341,7 +341,7 @@ func TestSchedulerJobClaimLeaseTTLIncludesBudgetAndCompletionWindows(t *testing.
 	})
 	require.Greater(t, increasedBudget.jobClaimLeaseTTL(), base.jobClaimLeaseTTL())
 
-	noClamp := NewScheduler(SchedulerConfig{
+	noClamp := NewScheduler(&SchedulerConfig{
 		PollTimeout:            90 * time.Minute,
 		BudgetAcquireTimeout:   time.Minute,
 		ClaimCompletionTimeout: time.Minute,
@@ -351,7 +351,7 @@ func TestSchedulerJobClaimLeaseTTLIncludesBudgetAndCompletionWindows(t *testing.
 }
 
 func TestSchedulerFinishJobClaimDetachesCompletionFromCanceledParentContext(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
 	})

@@ -51,7 +51,7 @@ type shortIdentityRow struct {
 func collectShortIdentityAliases(
 	notifications []*domain.YouTubeNotificationOutbox,
 	trackingRows []*domain.YouTubeContentAlarmTracking,
-) ([]string, []string) {
+) (result1, result2 []string) {
 	canonicalIDs := make([]string, 0, len(notifications)+len(trackingRows))
 	aliasSet := make(map[string]struct{}, (len(notifications)+len(trackingRows))*2)
 	canonicalIDs = collectNotificationShortIdentityAliases(notifications, aliasSet, canonicalIDs)
@@ -144,7 +144,8 @@ func mergeResolvedShortContentIDs(
 	}
 
 	var rows []shortIdentityRow
-	args := []any{domain.OutboxKindNewShort}
+	args := make([]any, 0, 1+len(aliases))
+	args = append(args, domain.OutboxKindNewShort)
 	args = append(args, dbx.AnyArgs(aliases)...)
 	if err := dbx.SelectSQL(ctx, tx, &rows, action, `
 		SELECT content_id

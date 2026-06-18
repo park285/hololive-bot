@@ -168,31 +168,7 @@ func TestMemoryDecisionCache_ResolveClaimConcurrentMissComputesOnce(t *testing.T
 
 	for range workers {
 		wg.Go(func() {
-			<-start
-			result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
-				computeCalls.Add(1)
-				time.Sleep(10 * time.Millisecond)
-				return Decision{AuthorizedAt: authorizedAt, Value: "proceed"}, &Token{AuthorizedAt: authorizedAt}, nil
-			})
-			if err != nil {
-				errs <- err
-				return
-			}
-			if !result.Decision.AuthorizedAt.Equal(authorizedAt) {
-				errs <- errors.New("unexpected authorized_at")
-				return
-			}
-			if result.Hit {
-				hitCount.Add(1)
-				if result.Token != nil {
-					errs <- errors.New("hit returned token")
-				}
-				return
-			}
-			missCount.Add(1)
-			if result.Token == nil {
-				errs <- errors.New("miss returned nil token")
-			}
+			resolveConcurrentClaim(start, cache, authorizedAt, &computeCalls, &hitCount, &missCount, errs)
 		})
 	}
 
@@ -211,6 +187,34 @@ func TestMemoryDecisionCache_ResolveClaimConcurrentMissComputesOnce(t *testing.T
 	}
 	if hitCount.Load() != workers-1 {
 		t.Fatalf("ResolveClaim() hits = %d, want %d", hitCount.Load(), workers-1)
+	}
+}
+
+func resolveConcurrentClaim(start <-chan struct{}, cache *MemoryDecisionCache, authorizedAt time.Time, computeCalls, hitCount, missCount *atomic.Int64, errs chan<- error) {
+	<-start
+	result, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(ctx context.Context) (Decision, *Token, error) {
+		computeCalls.Add(1)
+		time.Sleep(10 * time.Millisecond)
+		return Decision{AuthorizedAt: authorizedAt, Value: "proceed"}, &Token{AuthorizedAt: authorizedAt}, nil
+	})
+	if err != nil {
+		errs <- err
+		return
+	}
+	if !result.Decision.AuthorizedAt.Equal(authorizedAt) {
+		errs <- errors.New("unexpected authorized_at")
+		return
+	}
+	if result.Hit {
+		hitCount.Add(1)
+		if result.Token != nil {
+			errs <- errors.New("hit returned token")
+		}
+		return
+	}
+	missCount.Add(1)
+	if result.Token == nil {
+		errs <- errors.New("miss returned nil token")
 	}
 }
 

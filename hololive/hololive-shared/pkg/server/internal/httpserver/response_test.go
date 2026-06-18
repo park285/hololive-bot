@@ -22,6 +22,7 @@ package httpserver
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -44,7 +45,7 @@ func TestRespondError(t *testing.T) {
 		})
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/error", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/error", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -84,7 +85,7 @@ func TestRespondInternalError(t *testing.T) {
 		)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/internal", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/internal", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 

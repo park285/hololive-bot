@@ -31,7 +31,7 @@ import (
 )
 
 func TestScheduler_SetProxyEnabled(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{RequestInterval: 0})
 	poller := &togglePollerStub{name: "toggle"}
 
 	scheduler.Register("channel-1", poller, PriorityNormal, time.Minute)
@@ -46,7 +46,7 @@ func TestScheduler_SetProxyEnabled(t *testing.T) {
 }
 
 func TestSchedulerRegisterSignalsWakeChannel(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 
 	scheduler.Register("channel-1", &togglePollerStub{name: "videos"}, PriorityNormal, time.Minute)
 
@@ -58,7 +58,7 @@ func TestSchedulerRegisterSignalsWakeChannel(t *testing.T) {
 }
 
 func TestSchedulerNudgeAllJobsResetsBackoffAndWakesDispatcher(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	poller := &togglePollerStub{name: "videos"}
 
 	require.NoError(t, scheduler.RegisterChecked("channel-1", poller, PriorityNormal, time.Minute))
@@ -92,11 +92,11 @@ func TestSchedulerNudgeAllJobsResetsBackoffAndWakesDispatcher(t *testing.T) {
 }
 
 func TestSchedulerSyncPollerTargetsAddsAndRemovesJobs(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	p := &togglePollerStub{name: "videos"}
 	scheduler.Register("channel-old", p, PriorityNormal, time.Minute)
 
-	scheduler.SyncPollerTargets(PollerTargetSync{
+	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:     p,
 		Priority:   PriorityHigh,
 		Interval:   2 * time.Minute,
@@ -105,12 +105,15 @@ func TestSchedulerSyncPollerTargetsAddsAndRemovesJobs(t *testing.T) {
 
 	require.NotContains(t, scheduler.jobMap, "channel-old:videos")
 	require.Contains(t, scheduler.jobMap, "channel-new:videos")
-	assert.Equal(t, PriorityHigh, scheduler.jobMap["channel-new:videos"].Priority)
-	assert.Equal(t, 2*time.Minute, scheduler.jobMap["channel-new:videos"].Interval)
+	newJob, ok := scheduler.jobMap["channel-new:videos"]
+	require.True(t, ok)
+	require.NotNil(t, newJob)
+	assert.Equal(t, PriorityHigh, newJob.Priority)
+	assert.Equal(t, 2*time.Minute, newJob.Interval)
 }
 
 func TestSchedulerSyncPollerTargetsRetiresInflightJobWithoutRequeue(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	p := &togglePollerStub{name: "videos"}
 	scheduler.Register("channel-old", p, PriorityNormal, time.Minute)
 
@@ -119,7 +122,7 @@ func TestSchedulerSyncPollerTargetsRetiresInflightJobWithoutRequeue(t *testing.T
 	heap.Pop(&scheduler.jobs)
 	require.Equal(t, -1, job.index)
 
-	scheduler.SyncPollerTargets(PollerTargetSync{
+	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:     p,
 		Priority:   PriorityNormal,
 		Interval:   time.Minute,
@@ -133,7 +136,7 @@ func TestSchedulerSyncPollerTargetsRetiresInflightJobWithoutRequeue(t *testing.T
 }
 
 func TestSchedulerSyncPollerTargetsForceImmediateFirstRunOnlyForNewJobs(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	p := &togglePollerStub{name: "videos"}
 	scheduler.Register("channel-existing", p, PriorityNormal, time.Hour)
 
@@ -142,7 +145,7 @@ func TestSchedulerSyncPollerTargetsForceImmediateFirstRunOnlyForNewJobs(t *testi
 	existingNextRunAt := existing.NextRunAt
 
 	before := time.Now()
-	scheduler.SyncPollerTargets(PollerTargetSync{
+	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:                 p,
 		Priority:               PriorityHigh,
 		Interval:               time.Hour,
@@ -152,54 +155,67 @@ func TestSchedulerSyncPollerTargetsForceImmediateFirstRunOnlyForNewJobs(t *testi
 	after := time.Now()
 
 	require.Contains(t, scheduler.jobMap, "channel-new:videos")
-	assert.Equal(t, existingNextRunAt, scheduler.jobMap["channel-existing:videos"].NextRunAt)
+	existingJob, ok := scheduler.jobMap["channel-existing:videos"]
+	require.True(t, ok)
+	require.NotNil(t, existingJob)
+	assert.Equal(t, existingNextRunAt, existingJob.NextRunAt)
 
-	newJob := scheduler.jobMap["channel-new:videos"]
+	newJob, ok := scheduler.jobMap["channel-new:videos"]
+	require.True(t, ok)
 	require.NotNil(t, newJob)
 	assert.False(t, newJob.NextRunAt.Before(before))
 	assert.False(t, newJob.NextRunAt.After(after))
 }
 
 func TestSchedulerRegisterAndSyncPropagateBudgetProfile(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	p := &togglePollerStub{name: "videos"}
 	profile := testBudgetProfile()
 
 	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-direct", p, PriorityHigh, time.Hour, profile))
 
-	require.Equal(t, profile, scheduler.jobMap["channel-direct:videos"].budgetProfile)
+	directJob, ok := scheduler.jobMap["channel-direct:videos"]
+	require.True(t, ok)
+	require.NotNil(t, directJob)
+	require.Equal(t, profile, directJob.budgetProfile)
 
 	syncProfile := polling.BudgetProfile{
 		SourceUnits: map[polling.BudgetSource]float64{polling.BudgetSourceHolodexLive: 2},
 		BurstClass:  polling.BudgetBurstBackfill,
 		Priority:    polling.BudgetPriorityLow,
 	}
-	scheduler.SyncPollerTargets(PollerTargetSync{
+	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:        p,
 		Priority:      PriorityLow,
 		Interval:      2 * time.Hour,
 		ChannelIDs:    []string{"channel-sync"},
 		BudgetProfile: syncProfile,
 	})
-	require.Equal(t, syncProfile, scheduler.jobMap["channel-sync:videos"].budgetProfile)
+	syncJob, ok := scheduler.jobMap["channel-sync:videos"]
+	require.True(t, ok)
+	require.NotNil(t, syncJob)
+	require.Equal(t, syncProfile, syncJob.budgetProfile)
 
 	updatedProfile := polling.BudgetProfile{
 		SourceUnits: map[polling.BudgetSource]float64{polling.BudgetSourceBrowserSnapshot: 3},
 		BurstClass:  polling.BudgetBurstFallback,
 		Priority:    polling.BudgetPriorityNormal,
 	}
-	scheduler.SyncPollerTargets(PollerTargetSync{
+	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:        p,
 		Priority:      PriorityNormal,
 		Interval:      3 * time.Hour,
 		ChannelIDs:    []string{"channel-sync"},
 		BudgetProfile: updatedProfile,
 	})
-	require.Equal(t, updatedProfile, scheduler.jobMap["channel-sync:videos"].budgetProfile)
+	updatedJob, ok := scheduler.jobMap["channel-sync:videos"]
+	require.True(t, ok)
+	require.NotNil(t, updatedJob)
+	require.Equal(t, updatedProfile, updatedJob.budgetProfile)
 }
 
 func TestSchedulerCanRestartAfterStop(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
 		PollTimeout:     50 * time.Millisecond,
@@ -223,7 +239,7 @@ func TestSchedulerCanRestartAfterStop(t *testing.T) {
 }
 
 func TestSchedulerRegisterCheckedRejectsInvalidInput(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 
 	require.Error(t, scheduler.RegisterChecked("", &togglePollerStub{name: "videos"}, PriorityNormal, time.Minute))
 	require.Error(t, scheduler.RegisterChecked("channel-1", nil, PriorityNormal, time.Minute))

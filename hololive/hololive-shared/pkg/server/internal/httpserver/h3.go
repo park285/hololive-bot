@@ -21,7 +21,10 @@ type RuntimeHTTPServers struct {
 	Pprof   *http.Server
 }
 
-func NewRuntimeHTTPServers(serverConfig config.ServerConfig, handler http.Handler, operation string) (*RuntimeHTTPServers, error) {
+func NewRuntimeHTTPServers(serverConfig *config.ServerConfig, handler http.Handler, operation string) (*RuntimeHTTPServers, error) {
+	if serverConfig == nil {
+		return nil, fmt.Errorf("server config is nil")
+	}
 	servers := &RuntimeHTTPServers{}
 	if serverConfig.TransportEnabled("h3") {
 		h3Server, err := NewH3Server(runtimeH3Addr(serverConfig), handler, serverConfig.H3CertFile, serverConfig.H3KeyFile, operation)
@@ -96,7 +99,10 @@ func ShutdownH3Server(ctx context.Context, server *http3.Server) error {
 	return runtimehttpserver.Shutdown(ctx, server, "HTTP/3 server shutdown failed")
 }
 
-func runtimeH3Addr(serverConfig config.ServerConfig) string {
+func runtimeH3Addr(serverConfig *config.ServerConfig) string {
+	if serverConfig == nil {
+		return ""
+	}
 	if strings.TrimSpace(serverConfig.H3Addr) != "" {
 		return serverConfig.H3Addr
 	}

@@ -75,7 +75,7 @@ func TestParseChannelStatsFromInitialData(t *testing.T) {
 		}
 	}`)
 
-	stats := parseChannelStatsFromInitialData(data, "UC_TEST")
+	stats := parseChannelStatsFromInitialData(&data, "UC_TEST")
 
 	assert.Equal(t, "UC_TEST", stats.ChannelID)
 	assert.Equal(t, int64(2_760_000), stats.SubscriberCount)
@@ -121,7 +121,7 @@ func TestParseChannelSnippetFromInitialData(t *testing.T) {
 		}
 	}`)
 
-	snippet := parseChannelSnippetFromInitialData(data)
+	snippet := parseChannelSnippetFromInitialData(&data)
 
 	assert.Len(t, snippet.Avatar, 1)
 	assert.Len(t, snippet.Banner, 1)

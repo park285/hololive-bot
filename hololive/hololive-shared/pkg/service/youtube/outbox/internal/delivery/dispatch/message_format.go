@@ -9,6 +9,6 @@ import (
 
 type DispatchPayloadFormatter = format.DispatchPayloadFormatter
 
-func FormatYouTubeOutboxPayload(ctx context.Context, payload domain.YouTubeOutboxDispatchPayload) (string, error) {
+func FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
 	return format.FormatYouTubeOutboxPayload(ctx, payload)
 }

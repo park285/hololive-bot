@@ -454,16 +454,16 @@ func TestObservationPostComparisonRowSortingAndComparators(t *testing.T) {
 		AlarmSentAt:     testObservationMismatchTimePtr(earlyAlarmSentAt),
 		TitleHint:       "A",
 	}
-	require.Zero(t, compareObservationPostComparisonRows(base, base))
-	require.Negative(t, compareObservationPostComparisonRowKind(base, ObservationPostComparisonRow{Kind: domain.OutboxKindNewShort}))
-	require.Negative(t, compareObservationPostComparisonRowChannelID(base, ObservationPostComparisonRow{ChannelID: "UC_B"}))
-	require.Negative(t, compareObservationPostComparisonRowCanonicalPostID(base, ObservationPostComparisonRow{CanonicalPostID: "community:b"}))
-	require.Negative(t, compareObservationPostComparisonRowDetectedAt(base, ObservationPostComparisonRow{DetectedAt: testObservationMismatchTimePtr(laterDetectedAt)}))
-	require.Negative(t, compareObservationPostComparisonRowAlarmSentAt(base, ObservationPostComparisonRow{AlarmSentAt: testObservationMismatchTimePtr(laterAlarmSentAt)}))
-	require.Negative(t, compareObservationPostComparisonRowContentID(base, ObservationPostComparisonRow{ContentID: "b"}))
-	require.Negative(t, compareObservationPostComparisonRowTitleHint(base, ObservationPostComparisonRow{TitleHint: "B"}))
-	require.Negative(t, compareObservationPostComparisonRows(base, ObservationPostComparisonRow{Kind: domain.OutboxKindNewShort}))
-	require.Negative(t, compareObservationPostComparisonRows(base, ObservationPostComparisonRow{
+	require.Zero(t, compareObservationPostComparisonRows(&base, &base))
+	require.Negative(t, compareObservationPostComparisonRowKind(&base, &ObservationPostComparisonRow{Kind: domain.OutboxKindNewShort}))
+	require.Negative(t, compareObservationPostComparisonRowChannelID(&base, &ObservationPostComparisonRow{ChannelID: "UC_B"}))
+	require.Negative(t, compareObservationPostComparisonRowCanonicalPostID(&base, &ObservationPostComparisonRow{CanonicalPostID: "community:b"}))
+	require.Negative(t, compareObservationPostComparisonRowDetectedAt(&base, &ObservationPostComparisonRow{DetectedAt: testObservationMismatchTimePtr(laterDetectedAt)}))
+	require.Negative(t, compareObservationPostComparisonRowAlarmSentAt(&base, &ObservationPostComparisonRow{AlarmSentAt: testObservationMismatchTimePtr(laterAlarmSentAt)}))
+	require.Negative(t, compareObservationPostComparisonRowContentID(&base, &ObservationPostComparisonRow{ContentID: "b"}))
+	require.Negative(t, compareObservationPostComparisonRowTitleHint(&base, &ObservationPostComparisonRow{TitleHint: "B"}))
+	require.Negative(t, compareObservationPostComparisonRows(&base, &ObservationPostComparisonRow{Kind: domain.OutboxKindNewShort}))
+	require.Negative(t, compareObservationPostComparisonRows(&base, &ObservationPostComparisonRow{
 		Kind:            domain.OutboxKindCommunityPost,
 		ChannelID:       "UC_A",
 		CanonicalPostID: "community:a",

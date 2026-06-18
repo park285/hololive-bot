@@ -33,7 +33,7 @@ func (c *Client) GetUpcomingEvents(ctx context.Context, channelID string) ([]*Up
 	}
 
 	data := gjson.Parse(jsonStr)
-	events, err := parseUpcomingEventsFromInitialData(data)
+	events, err := parseUpcomingEventsFromInitialData(&data)
 	if err != nil {
 		logStructureWarning("upcoming_events", channelID, "failed to parse initial data", "error", err)
 		return nil, c.recordParserDrift(ctx, "upcoming_events", "parse_initial_data", channelID, url, FailureSourceHTML, html, err)
@@ -126,7 +126,7 @@ func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID
 	}
 
 	data := gjson.Parse(jsonStr)
-	videos, err := parseVideosFromInitialData(data, channelID, maxResults, c.parseVideoRenderer)
+	videos, err := parseVideosFromInitialData(&data, channelID, maxResults, c.parseVideoRenderer)
 	if err != nil {
 		logStructureWarning("recent_videos", channelID, "failed to parse initial data", "error", err)
 		return nil, c.recordParserDrift(ctx, "recent_videos", "parse_initial_data", channelID, pageURL, FailureSourceHTML, html, err)
@@ -166,39 +166,39 @@ func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResu
 	}
 
 	data := gjson.Parse(jsonStr)
-	if err := checkAlerts(data); err != nil {
+	if err := checkAlerts(&data); err != nil {
 		return nil, err
 	}
 
-	popularItems := findPopularGridVideoRenderers(data)
+	popularItems := findPopularGridVideoRenderers(&data)
 	videos := c.parsePopularGridVideos(popularItems, channelID, maxResults)
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 	return videos, nil
 }
 
-func findPopularGridVideoRenderers(data gjson.Result) []gjson.Result {
+func findPopularGridVideoRenderers(data *gjson.Result) []gjson.Result {
 	var popularItems []gjson.Result
 	popularSections(data).ForEach(func(_, section gjson.Result) bool {
-		if !isPopularVideosShelf(section) {
+		if !isPopularVideosShelf(&section) {
 			return true
 		}
-		popularItems = collectGridVideoRenderers(section)
+		popularItems = collectGridVideoRenderers(&section)
 		return false
 	})
 	return popularItems
 }
 
-func popularSections(data gjson.Result) gjson.Result {
+func popularSections(data *gjson.Result) gjson.Result {
 	sectionsPath := "contents.twoColumnBrowseResultsRenderer.tabs.0.tabRenderer.content.sectionListRenderer.contents"
 	return data.Get(sectionsPath)
 }
 
-func isPopularVideosShelf(section gjson.Result) bool {
+func isPopularVideosShelf(section *gjson.Result) bool {
 	shelfTitle := section.Get("itemSectionRenderer.contents.0.shelfRenderer.title.runs.0.text").String()
 	return shelfTitle == "Popular videos" || shelfTitle == "Popular"
 }
 
-func collectGridVideoRenderers(section gjson.Result) []gjson.Result {
+func collectGridVideoRenderers(section *gjson.Result) []gjson.Result {
 	var gridVideos []gjson.Result
 	gridItems := section.Get("itemSectionRenderer.contents.0.shelfRenderer.content.gridRenderer.items")
 	gridItems.ForEach(func(_, item gjson.Result) bool {
@@ -216,7 +216,7 @@ func (c *Client) parsePopularGridVideos(popularItems []gjson.Result, channelID s
 		if i >= maxResults {
 			break
 		}
-		video := c.parseGridVideoRenderer(item, channelID)
+		video := c.parseGridVideoRenderer(&item, channelID)
 		if video != nil {
 			videos = append(videos, video)
 		}
@@ -225,7 +225,7 @@ func (c *Client) parsePopularGridVideos(popularItems []gjson.Result, channelID s
 	return videos
 }
 
-func (c *Client) parseVideoCommon(video gjson.Result, channelID, durationPath, channelTitlePath, channelHandlePath string) *Video {
+func (c *Client) parseVideoCommon(video *gjson.Result, channelID, durationPath, channelTitlePath, channelHandlePath string) *Video {
 	videoID := video.Get("videoId").String()
 	if videoID == "" {
 		return nil
@@ -262,20 +262,16 @@ func (c *Client) parseVideoCommon(video gjson.Result, channelID, durationPath, c
 	}
 }
 
-func (c *Client) parseVideoRenderer(video gjson.Result, channelID string) *Video {
-	return c.parseVideoCommon(
-		video,
-		channelID,
+func (c *Client) parseVideoRenderer(video *gjson.Result, channelID string) *Video {
+	return c.parseVideoCommon(video, channelID,
 		"lengthText.simpleText",
 		"ownerText.runs.0.text",
 		"ownerText.runs.0.navigationEndpoint.browseEndpoint.canonicalBaseUrl",
 	)
 }
 
-func (c *Client) parseGridVideoRenderer(video gjson.Result, channelID string) *Video {
-	return c.parseVideoCommon(
-		video,
-		channelID,
+func (c *Client) parseGridVideoRenderer(video *gjson.Result, channelID string) *Video {
+	return c.parseVideoCommon(video, channelID,
 		"thumbnailOverlays.0.thumbnailOverlayTimeStatusRenderer.text.simpleText",
 		"shortBylineText.runs.0.text",
 		"shortBylineText.runs.0.navigationEndpoint.browseEndpoint.canonicalBaseUrl",

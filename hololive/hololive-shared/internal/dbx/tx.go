@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -55,14 +56,19 @@ func InPgxTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) error) erro
 		return fmt.Errorf("begin pgx transaction: %w", err)
 	}
 
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
-			panic(p)
-		}
-	}()
+	defer rollbackPgxTxOnPanic(ctx, tx)
 
 	return finishPgxTx(ctx, tx, fn(tx))
+}
+
+func rollbackPgxTxOnPanic(ctx context.Context, tx Tx) {
+	if p := recover(); p != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			slog.Default().Warn("pgx transaction rollback after panic failed", slog.Any("error", rollbackErr))
+		}
+		panic(p)
+	}
 }
 
 // finishPgxTx는 fn 실행 결과에 따라 트랜잭션을 커밋하거나 롤백한다.

@@ -28,7 +28,10 @@ import (
 )
 
 func TestTemplateFuncs_Add(t *testing.T) {
-	addFn := templateFuncs["add"].(func(int, int) int)
+	addFn, ok := templateFuncs["add"].(func(int, int) int)
+	if !ok {
+		t.Fatalf("template func add has type %T", templateFuncs["add"])
+	}
 	tests := []struct {
 		a, b     int
 		expected int
@@ -48,7 +51,10 @@ func TestTemplateFuncs_Add(t *testing.T) {
 }
 
 func TestTemplateFuncs_Dict(t *testing.T) {
-	dictFn := templateFuncs["dict"].(func(...any) (map[string]any, error))
+	dictFn, ok := templateFuncs["dict"].(func(...any) (map[string]any, error))
+	if !ok {
+		t.Fatalf("template func dict has type %T", templateFuncs["dict"])
+	}
 
 	t.Run("valid dict", func(t *testing.T) {
 		result, err := dictFn("key1", "value1", "key2", 42)
@@ -79,7 +85,10 @@ func TestTemplateFuncs_Dict(t *testing.T) {
 }
 
 func TestTemplateFuncs_Truncate(t *testing.T) {
-	truncateFn := templateFuncs["truncate"].(func(int, string) string)
+	truncateFn, ok := templateFuncs["truncate"].(func(int, string) string)
+	if !ok {
+		t.Fatalf("template func truncate has type %T", templateFuncs["truncate"])
+	}
 	tests := []struct {
 		maxLen   int
 		input    string

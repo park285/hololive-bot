@@ -63,6 +63,15 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 	}
 
 	client := cachemocks.NewStrictClient()
+	configureMockDedupClaimCache(client, state)
+	configureMockDedupKeyDeletion(client, state)
+	configureMockDedupHashCache(client, state)
+	configureMockDedupStringCache(client, state)
+
+	return client, state
+}
+
+func configureMockDedupClaimCache(client *cachemocks.Client, state *mockDedupCacheState) {
 	client.SetNXFunc = func(_ context.Context, key, _ string, ttl time.Duration) (bool, error) {
 		state.mu.Lock()
 		defer state.mu.Unlock()
@@ -79,26 +88,16 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 		}
 		return true, nil
 	}
+}
+
+func configureMockDedupKeyDeletion(client *cachemocks.Client, state *mockDedupCacheState) {
 	client.DelManyFunc = func(_ context.Context, keys []string) (int64, error) {
 		state.mu.Lock()
 		defer state.mu.Unlock()
 
 		var removed int64
 		for _, key := range keys {
-			existed := false
-			if _, ok := state.setNX[key]; ok {
-				delete(state.setNX, key)
-				existed = true
-			}
-			if _, ok := state.hashes[key]; ok {
-				delete(state.hashes, key)
-				existed = true
-			}
-			if _, ok := state.strings[key]; ok {
-				delete(state.strings, key)
-				existed = true
-			}
-			if existed {
+			if deleteMockDedupKey(state, key) {
 				removed++
 			}
 		}
@@ -128,6 +127,26 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 		}
 		return matches, nil
 	}
+}
+
+func deleteMockDedupKey(state *mockDedupCacheState, key string) bool {
+	existed := false
+	if _, ok := state.setNX[key]; ok {
+		delete(state.setNX, key)
+		existed = true
+	}
+	if _, ok := state.hashes[key]; ok {
+		delete(state.hashes, key)
+		existed = true
+	}
+	if _, ok := state.strings[key]; ok {
+		delete(state.strings, key)
+		existed = true
+	}
+	return existed
+}
+
+func configureMockDedupHashCache(client *cachemocks.Client, state *mockDedupCacheState) {
 	client.HGetFunc = func(_ context.Context, key, field string) (string, error) {
 		state.mu.Lock()
 		defer state.mu.Unlock()
@@ -190,6 +209,9 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 	client.ExpireFunc = func(_ context.Context, _ string, _ time.Duration) error {
 		return nil
 	}
+}
+
+func configureMockDedupStringCache(client *cachemocks.Client, state *mockDedupCacheState) {
 	client.SetFunc = func(_ context.Context, key string, value any, _ time.Duration) error {
 		state.mu.Lock()
 		defer state.mu.Unlock()
@@ -228,8 +250,6 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 		}
 		return nil
 	}
-
-	return client, state
 }
 
 func (s *mockDedupCacheState) setRawString(key, value string) {
@@ -787,6 +807,22 @@ func TestService_TryClaimPair_SetNXMultiError_Fallback(t *testing.T) {
 	assert.True(t, a2, "fallback grants first claim")
 
 	a1, a2 = service.TryClaimPair(t.Context(), "fb:k1", "fb:k2", 5*time.Minute)
+	assert.False(t, a1, "fallback dedup blocks second claim")
+	assert.False(t, a2, "fallback dedup blocks second claim")
+}
+
+func TestService_TryClaimPair_NilSetNXMultiResults_Fallback(t *testing.T) {
+	cacheMock, _ := newMockDedupCache(t)
+	cacheMock.SetNXMultiFunc = func(_ context.Context, _ []cache.SetNXEntry) ([]cache.SetNXResult, error) {
+		return nil, nil
+	}
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	a1, a2 := service.TryClaimPair(t.Context(), "nil:k1", "nil:k2", 5*time.Minute)
+	assert.True(t, a1, "nil pipeline result falls back and grants first claim")
+	assert.True(t, a2, "nil pipeline result falls back and grants first claim")
+
+	a1, a2 = service.TryClaimPair(t.Context(), "nil:k1", "nil:k2", 5*time.Minute)
 	assert.False(t, a1, "fallback dedup blocks second claim")
 	assert.False(t, a2, "fallback dedup blocks second claim")
 }

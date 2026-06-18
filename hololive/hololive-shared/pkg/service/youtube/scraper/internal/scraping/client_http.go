@@ -23,6 +23,7 @@ package scraping
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -42,16 +43,22 @@ func (c *Client) currentPageFetcher() pageFetcher {
 func (c *Client) currentPageFetcherWithEngine() (pageFetcher, FetcherEngine) {
 	netHTTPFetcher := netHTTPPageFetcher{client: c}
 	switch normalizeFetcherEngine(c.fetcherEngine) {
+	case FetcherEngineNetHTTP:
+		return netHTTPFetcher, FetcherEngineNetHTTP
 	case FetcherEngineGoScrapy:
 		return goscrapyPageFetcher{client: c, fallback: netHTTPFetcher}, FetcherEngineGoScrapy
 	case FetcherEngineBrowserSnapshot:
-		if c.browserSnapshotFetcher != nil {
-			return c.browserSnapshotFetcher, FetcherEngineBrowserSnapshot
-		}
-		return netHTTPFetcher, FetcherEngineNetHTTP
+		return c.browserSnapshotPageFetcher(netHTTPFetcher)
 	default:
 		return netHTTPFetcher, FetcherEngineNetHTTP
 	}
+}
+
+func (c *Client) browserSnapshotPageFetcher(fallback pageFetcher) (pageFetcher, FetcherEngine) {
+	if c.browserSnapshotFetcher != nil {
+		return c.browserSnapshotFetcher, FetcherEngineBrowserSnapshot
+	}
+	return fallback, FetcherEngineNetHTTP
 }
 
 func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string, err error) {
@@ -196,12 +203,15 @@ func clampRetryAfter(delay time.Duration) time.Duration {
 	return delay
 }
 
-func drainResponseBody(resp *http.Response) {
+func drainResponseBody(resp *http.Response) error {
 	if resp == nil || resp.Body == nil {
-		return
+		return nil
 	}
 
-	_, _ = io.CopyN(io.Discard, resp.Body, 4*1024)
+	if _, err := io.CopyN(io.Discard, resp.Body, 4*1024); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	return nil
 }
 
 const successfulBodySignatureScanLimit = 64 * 1024

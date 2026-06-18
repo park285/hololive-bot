@@ -60,7 +60,7 @@ func (c *Config) validateWithRequired(validateRequired func() error) error {
 	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return err
 	}
-	if err := validateScraperConfig(c.Scraper); err != nil {
+	if err := validateScraperConfig(&c.Scraper); err != nil {
 		return err
 	}
 	if err := validateCORSConfig(c.Environment, c.CORS); err != nil {
@@ -117,7 +117,7 @@ func (c *Config) validateRequiredConfig() error {
 	return nil
 }
 
-func validateScraperConfig(config ScraperConfig) error {
+func validateScraperConfig(config *ScraperConfig) error {
 	if err := validateScraperSchedulerConfig(config.Scheduler); err != nil {
 		return err
 	}

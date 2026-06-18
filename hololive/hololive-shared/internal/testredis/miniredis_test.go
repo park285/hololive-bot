@@ -21,6 +21,7 @@
 package testredis
 
 import (
+	"context"
 	"net"
 	"strconv"
 	"testing"
@@ -48,9 +49,14 @@ func TestStartMiniRedis(t *testing.T) {
 	}
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
-	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	dialer := net.Dialer{}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		t.Fatalf("dial miniredis %s: %v", addr, err)
 	}
-	_ = conn.Close()
+	if err := conn.Close(); err != nil {
+		t.Fatalf("close miniredis connection: %v", err)
+	}
 }

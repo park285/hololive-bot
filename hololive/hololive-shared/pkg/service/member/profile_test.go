@@ -129,7 +129,9 @@ func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
 		t.Fatalf("failed to change dir: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = os.Chdir(wd)
+		if err := os.Chdir(wd); err != nil {
+			t.Errorf("restore working dir: %v", err)
+		}
 	})
 
 	profiles, err := domain.LoadProfiles()
@@ -203,7 +205,9 @@ func TestNewProfileService_ReturnsMemberLoadError(t *testing.T) {
 		t.Fatalf("failed to change dir: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = os.Chdir(wd)
+		if err := os.Chdir(wd); err != nil {
+			t.Errorf("restore working dir: %v", err)
+		}
 	})
 
 	provider := &erroringMemberProvider{

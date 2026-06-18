@@ -20,6 +20,8 @@
 
 package scheduler
 
+import "fmt"
+
 type jobHeap []*Job
 
 func (h jobHeap) Len() int { return len(h) }
@@ -39,7 +41,13 @@ func (h jobHeap) Swap(i, j int) {
 
 func (h *jobHeap) Push(x any) {
 	n := len(*h)
-	job := x.(*Job)
+	job, ok := x.(*Job)
+	if !ok {
+		panic(fmt.Sprintf("jobHeap.Push got %T, want *Job", x))
+	}
+	if job == nil {
+		panic("jobHeap.Push got nil *Job")
+	}
 	job.index = n
 	*h = append(*h, job)
 }
@@ -48,7 +56,6 @@ func (h *jobHeap) Pop() any {
 	old := *h
 	n := len(old)
 	job := old[n-1]
-	old[n-1] = nil
 	job.index = -1
 	*h = old[0 : n-1]
 	return job

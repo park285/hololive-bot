@@ -14,7 +14,7 @@ type OutboxGrouper struct {
 	config Config
 }
 
-func newOutboxGrouper(db dbx.Querier, cacheClient cache.Client, logger *slog.Logger, config Config) *OutboxGrouper {
+func newOutboxGrouper(db dbx.Querier, cacheClient cache.Client, logger *slog.Logger, config *Config) *OutboxGrouper {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -22,7 +22,7 @@ func newOutboxGrouper(db dbx.Querier, cacheClient cache.Client, logger *slog.Log
 		db:     db,
 		cache:  cacheClient,
 		logger: logger,
-		config: config,
+		config: *config,
 	}
 }
 

@@ -86,7 +86,7 @@ func TestSeedCommunityShortsRecoveryInputFixtureCreatesSentAndPendingPosts(t *te
 			t.Parallel()
 
 			db := newRecoveryInputFixtureDB(t, "recovery_input_fixture_"+tc.name)
-			fixture := seedCommunityShortsRecoveryInputFixture(t, db, tc.spec)
+			fixture := seedCommunityShortsRecoveryInputFixture(t, db, &tc.spec)
 
 			var outboxes []deliveryTestOutboxModel
 			require.NoError(t, findDeliveryTestRowsOrdered(db, &outboxes, "content_id ASC").Error)
@@ -144,7 +144,7 @@ func newRecoveryInputFixtureDB(t *testing.T, _ string) *deliveryTestDB {
 	return db
 }
 
-func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, spec recoveryInputFixtureSpec) recoveryInputFixture {
+func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, spec *recoveryInputFixtureSpec) recoveryInputFixture {
 	t.Helper()
 
 	sentItem := domain.YouTubeNotificationOutbox{

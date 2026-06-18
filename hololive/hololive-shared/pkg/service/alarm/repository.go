@@ -63,8 +63,11 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 		    alarm_types = EXCLUDED.alarm_types
 	`
 
-	typesValue, _ := alarmTypes.Value()
-	_, err := r.pool.Exec(ctx, query,
+	typesValue, err := alarmTypes.Value()
+	if err != nil {
+		return fmt.Errorf("encode alarm types: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, query,
 		alarm.RoomID, alarm.UserID, alarm.ChannelID,
 		alarm.MemberName, alarm.RoomName, alarm.UserName,
 		typesValue,
@@ -277,7 +280,9 @@ func scanAlarmRow(rows pgx.Rows) (*domain.Alarm, error) {
 	}
 
 	applyAlarmNullableFields(&alarm, memberName, roomName, userName)
-	applyAlarmTypes(&alarm, alarmTypesStr)
+	if err := applyAlarmTypes(&alarm, alarmTypesStr); err != nil {
+		return nil, err
+	}
 	return &alarm, nil
 }
 
@@ -293,11 +298,14 @@ func applyAlarmNullableFields(alarm *domain.Alarm, memberName, roomName, userNam
 	}
 }
 
-func applyAlarmTypes(alarm *domain.Alarm, alarmTypesStr *string) {
+func applyAlarmTypes(alarm *domain.Alarm, alarmTypesStr *string) error {
 	if alarmTypesStr != nil {
-		_ = alarm.AlarmTypes.Scan(*alarmTypesStr)
+		if err := alarm.AlarmTypes.Scan(*alarmTypesStr); err != nil {
+			return fmt.Errorf("scan alarm types: %w", err)
+		}
 	}
 	if len(alarm.AlarmTypes) == 0 {
 		alarm.AlarmTypes = domain.DefaultAlarmTypes
 	}
+	return nil
 }

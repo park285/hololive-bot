@@ -18,7 +18,7 @@ import (
 func (d *ClaimManager) finalizeClaimSuccess(
 	ctx context.Context,
 	repository *trackingrepo.PgxRepository,
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 	postID string,
 	claimAt time.Time,
 ) (deliveryClaimDecision, *dispatchstate.ClaimToken, error) {
@@ -43,7 +43,7 @@ func (d *ClaimManager) finalizeClaimSuccess(
 func (d *ClaimManager) finalizeClaimMiss(
 	ctx context.Context,
 	repository *trackingrepo.PgxRepository,
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 	postID string,
 ) (deliveryClaimDecision, *dispatchstate.ClaimToken, error) {
 	_, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repository, outbox, postID, "reload alarm state after claim miss")
@@ -60,7 +60,7 @@ func (d *ClaimManager) finalizeClaimMiss(
 func (d *ClaimManager) reloadAlarmStateClaimStatus(
 	ctx context.Context,
 	repository *trackingrepo.PgxRepository,
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 	postID string,
 	action string,
 ) (*domain.YouTubeCommunityShortsAlarmState, bool, error) {
@@ -80,7 +80,7 @@ func (d *ClaimManager) reloadAlarmStateClaimStatus(
 func (d *ClaimManager) loadClaimTrackingRow(
 	ctx context.Context,
 	repository *trackingrepo.PgxRepository,
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 ) (*domain.YouTubeContentAlarmTracking, error) {
 	if !claimNeedsTrackingRow(state) {
@@ -104,7 +104,7 @@ func claimNeedsTrackingRow(state *domain.YouTubeCommunityShortsAlarmState) bool 
 }
 
 func resolveClaimContentID(
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	trackingRow *domain.YouTubeContentAlarmTracking,
 ) string {
@@ -119,7 +119,7 @@ func resolveClaimContentID(
 }
 
 func resolveClaimChannelID(
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	trackingRow *domain.YouTubeContentAlarmTracking,
 ) string {
@@ -134,8 +134,8 @@ func resolveClaimChannelID(
 }
 
 func resolveClaimDetectedAt(
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	trackingRow *domain.YouTubeContentAlarmTracking,
 	claimAt time.Time,
@@ -149,8 +149,8 @@ func resolveClaimDetectedAt(
 }
 
 func claimDetectedAtCandidates(
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	state *domain.YouTubeCommunityShortsAlarmState,
 	trackingRow *domain.YouTubeContentAlarmTracking,
 	claimAt time.Time,
@@ -162,13 +162,19 @@ func claimDetectedAtCandidates(
 	if trackingRow != nil {
 		candidates = append(candidates, trackingRow.DetectedAt)
 	}
-	return append(candidates, outbox.CreatedAt, row.CreatedAt, claimAt)
+	if outbox != nil {
+		candidates = append(candidates, outbox.CreatedAt)
+	}
+	if row != nil {
+		candidates = append(candidates, row.CreatedAt)
+	}
+	return append(candidates, claimAt)
 }
 
 func resolveClaimActualPublishedAt(
 	state *domain.YouTubeCommunityShortsAlarmState,
 	trackingRow *domain.YouTubeContentAlarmTracking,
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 ) *time.Time {
 	switch {
 	case state != nil && state.ActualPublishedAt != nil:
@@ -180,19 +186,24 @@ func resolveClaimActualPublishedAt(
 	}
 }
 
-func resolveOutboxPublishedAt(outbox domain.YouTubeNotificationOutbox) *time.Time {
+func resolveOutboxPublishedAt(outbox *domain.YouTubeNotificationOutbox) *time.Time {
+	if outbox == nil {
+		return nil
+	}
 	switch outbox.Kind {
 	case domain.OutboxKindNewShort, domain.OutboxKindNewVideo:
 		return resolveVideoPayloadPublishedAt(outbox.Payload)
 	case domain.OutboxKindCommunityPost:
 		return resolveCommunityPayloadPublishedAt(outbox.Payload)
+	case domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return nil
 	}
 	return nil
 }
 
 func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
 	var payload videoPayload
-	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+	if err := json.Unmarshal([]byte(rawPayload), payload); err != nil {
 		return nil
 	}
 	return yttimestamp.NormalizePtr(payload.PublishedAt)
@@ -200,7 +211,7 @@ func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
 
 func resolveCommunityPayloadPublishedAt(rawPayload string) *time.Time {
 	var payload communityPayload
-	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+	if err := json.Unmarshal([]byte(rawPayload), payload); err != nil {
 		return nil
 	}
 	return yttimestamp.NormalizePtr(payload.PublishedAt)

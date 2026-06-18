@@ -33,7 +33,7 @@ func TestRetryScheduler_ExecutesAfterDelay(t *testing.T) {
 	defer scheduler.stop()
 
 	done := make(chan struct{})
-	scheduler.schedule("k1", func(ctx context.Context) {
+	scheduler.schedule(context.Background(), "k1", func(ctx context.Context) {
 		close(done)
 	})
 
@@ -56,8 +56,8 @@ func TestRetryScheduler_Dedup(t *testing.T) {
 	scheduler := newRetryScheduler(50*time.Millisecond, 50*time.Millisecond, 10, slog.Default())
 	defer scheduler.stop()
 
-	scheduler.schedule("same-key", func(ctx context.Context) {})
-	scheduler.schedule("same-key", func(ctx context.Context) {})
+	scheduler.schedule(context.Background(), "same-key", func(ctx context.Context) {})
+	scheduler.schedule(context.Background(), "same-key", func(ctx context.Context) {})
 
 	if got := scheduler.pendingCount(); got != 1 {
 		t.Fatalf("pending count mismatch: got %d want 1", got)
@@ -68,10 +68,10 @@ func TestRetryScheduler_MaxSizeOverflow(t *testing.T) {
 	scheduler := newRetryScheduler(50*time.Millisecond, 50*time.Millisecond, 2, slog.Default())
 	defer scheduler.stop()
 
-	scheduler.schedule("k1", func(ctx context.Context) {})
-	scheduler.schedule("k2", func(ctx context.Context) {})
+	scheduler.schedule(context.Background(), "k1", func(ctx context.Context) {})
+	scheduler.schedule(context.Background(), "k2", func(ctx context.Context) {})
 	before := scheduler.pendingCount()
-	scheduler.schedule("k3", func(ctx context.Context) {})
+	scheduler.schedule(context.Background(), "k3", func(ctx context.Context) {})
 
 	if before != 2 {
 		t.Fatalf("unexpected initial pending count: got %d want 2", before)
@@ -85,7 +85,7 @@ func TestRetryScheduler_Stop_CancelsPending(t *testing.T) {
 	scheduler := newRetryScheduler(50*time.Millisecond, 50*time.Millisecond, 10, slog.Default())
 
 	var called atomic.Int32
-	scheduler.schedule("k1", func(ctx context.Context) {
+	scheduler.schedule(context.Background(), "k1", func(ctx context.Context) {
 		called.Add(1)
 	})
 
@@ -107,7 +107,7 @@ func TestRetryScheduler_Stop_WaitsExecuting(t *testing.T) {
 	release := make(chan struct{})
 	stopped := make(chan struct{})
 
-	scheduler.schedule("k1", func(ctx context.Context) {
+	scheduler.schedule(context.Background(), "k1", func(ctx context.Context) {
 		close(started)
 		<-release
 	})
@@ -157,7 +157,7 @@ func TestRetryScheduler_Execute_HasTimeout(t *testing.T) {
 	var deadlineSet atomic.Bool
 	var retryMarked atomic.Bool
 
-	scheduler.execute("k1", func(ctx context.Context) {
+	scheduler.execute(context.Background(), "k1", func(ctx context.Context) {
 		_, ok := ctx.Deadline()
 		deadlineSet.Store(ok)
 		retryMarked.Store(isRetryContext(ctx))
@@ -183,7 +183,7 @@ func TestRetryScheduler_SkipAfterStopped(t *testing.T) {
 
 	var called atomic.Int32
 	scheduler.stop()
-	scheduler.schedule("k1", func(ctx context.Context) {
+	scheduler.schedule(context.Background(), "k1", func(ctx context.Context) {
 		called.Add(1)
 	})
 

@@ -61,15 +61,20 @@ func ProvideCacheResources(ctx context.Context, valkeyConfig config.ValkeyConfig
 	resources := &CacheResources{
 		Service: cacheClient,
 		Close: func() {
-			_ = cacheClient.Close()
+			if err := cacheClient.Close(); err != nil && logger != nil {
+				logger.Warn("close cache resources failed", slog.Any("error", err))
+			}
 		},
 	}
 	return resources, resources.Close, nil
 }
 
 // ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함)
-func ProvideDatabaseResources(ctx context.Context, postgresConfig config.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
-	dbService, err := database.NewPostgresService(ctx, database.PostgresConfig{
+func ProvideDatabaseResources(ctx context.Context, postgresConfig *config.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
+	if postgresConfig == nil {
+		return nil, nil, fmt.Errorf("postgres config is nil")
+	}
+	dbService, err := database.NewPostgresService(ctx, &database.PostgresConfig{
 		Host:          postgresConfig.Host,
 		Port:          postgresConfig.Port,
 		SocketPath:    postgresConfig.SocketPath,
@@ -88,7 +93,9 @@ func ProvideDatabaseResources(ctx context.Context, postgresConfig config.Postgre
 	resources := &DatabaseResources{
 		Service: dbService,
 		Close: func() {
-			_ = dbService.Close()
+			if err := dbService.Close(); err != nil && logger != nil {
+				logger.Warn("close database resources failed", slog.Any("error", err))
+			}
 		},
 	}
 	return resources, resources.Close, nil

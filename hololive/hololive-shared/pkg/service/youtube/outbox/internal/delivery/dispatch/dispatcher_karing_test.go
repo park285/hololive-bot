@@ -30,13 +30,13 @@ func (s *youtubeOutboxKaringTestSender) SendMessage(_ context.Context, roomID, m
 	return nil
 }
 
-func (s *youtubeOutboxKaringTestSender) SendYouTubeOutboxKaring(_ context.Context, _ string, payload domain.YouTubeOutboxDispatchPayload) error {
+func (s *youtubeOutboxKaringTestSender) SendYouTubeOutboxKaring(_ context.Context, _ string, payload *domain.YouTubeOutboxDispatchPayload) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.failErr != nil {
 		return s.failErr
 	}
-	s.payloads = append(s.payloads, payload)
+	s.payloads = append(s.payloads, *payload)
 	return nil
 }
 
@@ -44,7 +44,7 @@ func TestDispatcherUsesKaringForSupportedYouTubeOutboxKind(t *testing.T) {
 	t.Parallel()
 
 	sender := &youtubeOutboxKaringTestSender{}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})
@@ -84,7 +84,7 @@ func TestDispatcherFallsBackToTextForUnsupportedKaringKind(t *testing.T) {
 	t.Parallel()
 
 	sender := &youtubeOutboxKaringTestSender{}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})
@@ -110,7 +110,7 @@ func TestDispatcherKaringFailureDoesNotFallBackToDuplicateText(t *testing.T) {
 	t.Parallel()
 
 	sender := &youtubeOutboxKaringTestSender{failErr: errors.New("karing failed")}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})
@@ -134,7 +134,7 @@ func TestDispatcherKaringFailureDoesNotFallBackToDuplicateText(t *testing.T) {
 
 func TestDispatcherSerializesKaringSends(t *testing.T) {
 	sender := newBlockingKaringSender()
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		DeliveryParallelism: 2,
 		DeliverySendTimeout: time.Second,
 	})
@@ -171,14 +171,14 @@ func TestDispatcherSerializesKaringSends(t *testing.T) {
 
 func TestSendEngineKaringMutexWaitUsesDeliverySendTimeout(t *testing.T) {
 	sender := &youtubeOutboxKaringTestSender{}
-	engine := newSendEngine(sender, &MessageFormatter{}, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	engine := newSendEngine(sender, &MessageFormatter{}, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		DeliverySendTimeout: 20 * time.Millisecond,
-	}, nil, newAuditLogger(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{}, nil), nil)
+	}, nil, newAuditLogger(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{}, nil), nil)
 	engine.karingMu.Lock()
 
 	done := make(chan error, 1)
 	go func() {
-		done <- engine.sendYouTubeOutboxKaring(context.Background(), sender, "room-timeout", domain.YouTubeOutboxDispatchPayload{
+		done <- engine.sendYouTubeOutboxKaring(context.Background(), sender, "room-timeout", &domain.YouTubeOutboxDispatchPayload{
 			OutboxIDs:  []int64{1},
 			Kind:       domain.OutboxKindNewVideo,
 			AlarmType:  domain.AlarmTypeLive,
@@ -220,11 +220,11 @@ func newBlockingKaringSender() *blockingKaringSender {
 	}
 }
 
-func (s *blockingKaringSender) SendMessage(_ context.Context, _ string, _ string) error {
+func (s *blockingKaringSender) SendMessage(_ context.Context, _, _ string) error {
 	return nil
 }
 
-func (s *blockingKaringSender) SendYouTubeOutboxKaring(ctx context.Context, _ string, _ domain.YouTubeOutboxDispatchPayload) error {
+func (s *blockingKaringSender) SendYouTubeOutboxKaring(ctx context.Context, _ string, _ *domain.YouTubeOutboxDispatchPayload) error {
 	active := atomic.AddInt32(&s.active, 1)
 	defer atomic.AddInt32(&s.active, -1)
 	for {

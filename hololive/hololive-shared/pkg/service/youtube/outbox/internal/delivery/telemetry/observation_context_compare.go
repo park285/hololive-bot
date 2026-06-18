@@ -30,16 +30,16 @@ func sameInt64Ptr(left, right *int64) bool {
 }
 
 func deliveryTelemetryObservationContextChanged(
-	left domain.YouTubeNotificationDeliveryTelemetry,
-	right domain.YouTubeNotificationDeliveryTelemetry,
+	left *domain.YouTubeNotificationDeliveryTelemetry,
+	right *domain.YouTubeNotificationDeliveryTelemetry,
 ) bool {
 	return deliveryTelemetryObservationTimingChanged(left, right) ||
 		deliveryTelemetryObservationWindowChanged(left, right)
 }
 
 func deliveryTelemetryObservationTimingChanged(
-	left domain.YouTubeNotificationDeliveryTelemetry,
-	right domain.YouTubeNotificationDeliveryTelemetry,
+	left *domain.YouTubeNotificationDeliveryTelemetry,
+	right *domain.YouTubeNotificationDeliveryTelemetry,
 ) bool {
 	if !sameUTCTimePtr(left.ActualPublishedAt, right.ActualPublishedAt) {
 		return true
@@ -57,8 +57,8 @@ func deliveryTelemetryObservationTimingChanged(
 }
 
 func deliveryTelemetryObservationWindowChanged(
-	left domain.YouTubeNotificationDeliveryTelemetry,
-	right domain.YouTubeNotificationDeliveryTelemetry,
+	left *domain.YouTubeNotificationDeliveryTelemetry,
+	right *domain.YouTubeNotificationDeliveryTelemetry,
 ) bool {
 	if normalizeDeliveryTelemetryObservationStatus(left.ObservationStatus) != normalizeDeliveryTelemetryObservationStatus(right.ObservationStatus) {
 		return true

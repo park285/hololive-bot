@@ -35,12 +35,12 @@ const (
 	alarmCacheRebuildLoadedMetricName   = "hololive_alarm_cache_rebuild_loaded"
 )
 
-func counterValueForLabels(t *testing.T, metricName string, labels map[string]string) float64 {
+func counterValueForLabels(t *testing.T, labels map[string]string) float64 {
 	t.Helper()
 
 	metricFamilies := gatherMetrics(t)
 	for _, metricFamily := range metricFamilies {
-		if metricFamily.GetName() != metricName {
+		if metricFamily.GetName() != alarmCacheRebuildMetricName {
 			continue
 		}
 
@@ -54,12 +54,12 @@ func counterValueForLabels(t *testing.T, metricName string, labels map[string]st
 	return 0
 }
 
-func gaugeValueForLabels(t *testing.T, metricName string, labels map[string]string) float64 {
+func gaugeValueForLabels(t *testing.T, labels map[string]string) float64 {
 	t.Helper()
 
 	metricFamilies := gatherMetrics(t)
 	for _, metricFamily := range metricFamilies {
-		if metricFamily.GetName() != metricName {
+		if metricFamily.GetName() != alarmCacheRebuildLoadedMetricName {
 			continue
 		}
 
@@ -73,12 +73,12 @@ func gaugeValueForLabels(t *testing.T, metricName string, labels map[string]stri
 	return 0
 }
 
-func histogramCountForLabels(t *testing.T, metricName string, labels map[string]string) uint64 {
+func histogramCountForLabels(t *testing.T, labels map[string]string) uint64 {
 	t.Helper()
 
 	metricFamilies := gatherMetrics(t)
 	for _, metricFamily := range metricFamilies {
-		if metricFamily.GetName() != metricName {
+		if metricFamily.GetName() != alarmCacheRebuildDurationMetricName {
 			continue
 		}
 

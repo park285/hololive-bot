@@ -13,8 +13,8 @@ type captureSink struct {
 	snapshots []Snapshot
 }
 
-func (s *captureSink) Capture(_ context.Context, snapshot Snapshot) error {
-	s.snapshots = append(s.snapshots, snapshot)
+func (s *captureSink) Capture(_ context.Context, snapshot *Snapshot) error {
+	s.snapshots = append(s.snapshots, *snapshot)
 	return nil
 }
 

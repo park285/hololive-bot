@@ -22,6 +22,7 @@ package dispatch
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -59,20 +60,22 @@ func (d *SendEngine) dispatchDeliveryRows(
 	eg.SetLimit(d.deliveryParallelism())
 
 	for i := range groups {
-		group := groups[i]
+		group := &groups[i]
 		eg.Go(func() error {
 			d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, reuseCache, &result, &mu)
 			return nil
 		})
 	}
-	_ = eg.Wait()
+	if err := eg.Wait(); err != nil {
+		d.logger.Warn("Delivery dispatch worker failed", slog.Any("error", err))
+	}
 
 	return result
 }
 
 func (d *SendEngine) dispatchGroup(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
 	reuseCache claim.DecisionCache,
@@ -86,7 +89,7 @@ func (d *SendEngine) dispatchGroup(
 
 	// 단건 그룹: 기존 개별 dispatch 경로
 	if len(group.rows) == 1 {
-		d.dispatchDeliveryRow(ctx, group.rows[0], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
+		d.dispatchDeliveryRow(ctx, &group.rows[0], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
 		return
 	}
 
@@ -100,24 +103,24 @@ func (d *SendEngine) dispatchGroup(
 	}
 
 	claimSelection := d.claims.selectClaimedDeliveries(ctx, validRows, validOutboxes, reuseCache)
-	d.claims.applyClaimSelection(result, mu, claimSelection)
+	d.claims.applyClaimSelection(result, mu, &claimSelection)
 	validRows = claimSelection.sendRows
 	validOutboxes = claimSelection.sendOutboxes
 	if len(validRows) == 0 {
 		return
 	}
 
-	d.dispatchClaimedGroup(ctx, group, validRows, validOutboxes, formattedMessages, formatFailures, claimSelection, result, mu)
+	d.dispatchClaimedGroup(ctx, group, validRows, validOutboxes, formattedMessages, formatFailures, &claimSelection, result, mu)
 }
 
 func (d *SendEngine) dispatchClaimedGroup(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	claimSelection deliveryClaimSelection,
+	claimSelection *deliveryClaimSelection,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -125,7 +128,7 @@ func (d *SendEngine) dispatchClaimedGroup(
 		if d.dispatchClaimedRowsWithKaringIfSupported(ctx, group.roomID, group.channelID, group.kind, validRows, validOutboxes, claimSelection.claimTokens, "per_room", result, mu) {
 			return
 		}
-		d.dispatchClaimedDeliveryRow(ctx, validRows[0], validOutboxes[0], formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
+		d.dispatchClaimedDeliveryRow(ctx, &validRows[0], &validOutboxes[0], formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
 		return
 	}
 
@@ -144,7 +147,7 @@ func (d *SendEngine) dispatchClaimedGroup(
 
 func (d *SendEngine) dispatchDeliveryRow(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
+	row *domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
@@ -158,8 +161,8 @@ func (d *SendEngine) dispatchDeliveryRow(
 		return
 	}
 
-	claimSelection := d.claims.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, reuseCache)
-	d.claims.applyClaimSelection(result, mu, claimSelection)
+	claimSelection := d.claims.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{outbox}, reuseCache)
+	d.claims.applyClaimSelection(result, mu, &claimSelection)
 	if len(claimSelection.sendRows) == 0 {
 		return
 	}
@@ -167,13 +170,13 @@ func (d *SendEngine) dispatchDeliveryRow(
 		return
 	}
 
-	d.dispatchClaimedDeliveryRow(ctx, claimSelection.sendRows[0], claimSelection.sendOutboxes[0], formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
+	d.dispatchClaimedDeliveryRow(ctx, &claimSelection.sendRows[0], &claimSelection.sendOutboxes[0], formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
 }
 
 func (d *SendEngine) dispatchClaimedDeliveryRow(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
 	claimTokens []dispatchstate.ClaimToken,
@@ -192,7 +195,7 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 		return
 	}
 
-	sendReq, err := buildDeliverySendRequest(row.RoomID, message, []domain.YouTubeNotificationOutbox{outbox})
+	sendReq, err := buildDeliverySendRequest(row.RoomID, message, []domain.YouTubeNotificationOutbox{*outbox})
 	if err != nil {
 		d.recordPerRoomRequestBuildFailure(ctx, row, outbox, rows, outboxes, claimTokens, err, result, mu)
 		return
@@ -210,7 +213,7 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 
 func (d *SendEngine) dispatchGroupedClaimedRows(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	message string,

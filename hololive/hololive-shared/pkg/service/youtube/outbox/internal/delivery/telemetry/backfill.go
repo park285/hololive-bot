@@ -100,7 +100,7 @@ func (r *Repository) loadBackfillCandidates(
 func buildBackfillEvents(candidates []deliveryTelemetryBackfillCandidate) []domain.YouTubeNotificationDeliveryTelemetry {
 	events := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, len(candidates))
 	for i := range candidates {
-		event, ok := buildBackfillEvent(candidates[i])
+		event, ok := buildBackfillEvent(&candidates[i])
 		if !ok {
 			continue
 		}
@@ -110,7 +110,7 @@ func buildBackfillEvents(candidates []deliveryTelemetryBackfillCandidate) []doma
 	return events
 }
 
-func buildBackfillEvent(candidate deliveryTelemetryBackfillCandidate) (*domain.YouTubeNotificationDeliveryTelemetry, bool) {
+func buildBackfillEvent(candidate *deliveryTelemetryBackfillCandidate) (*domain.YouTubeNotificationDeliveryTelemetry, bool) {
 	attemptOrdinal, sendResult, failureReason := backfillAttemptMetadata(candidate)
 	if attemptOrdinal <= 0 {
 		return nil, false
@@ -119,7 +119,7 @@ func buildBackfillEvent(candidate deliveryTelemetryBackfillCandidate) (*domain.Y
 	eventAt := backfillCandidateEventAt(candidate)
 	dedupeKey, dedupeErr := domain.BuildYouTubeNotificationDedupeKey(candidate.Kind, candidate.ContentID)
 	if dedupeErr != nil {
-		dedupeKey = DedupeKeyLogValue(domain.YouTubeNotificationOutbox{Kind: candidate.Kind, ContentID: candidate.ContentID})
+		dedupeKey = DedupeKeyLogValue(&domain.YouTubeNotificationOutbox{Kind: candidate.Kind, ContentID: candidate.ContentID})
 	}
 	attemptStartedAt := deliverysql.CloneUTCTimePtr(candidate.DeliveryLockedAt)
 	attemptFinishedAt := eventAt
@@ -145,7 +145,7 @@ func buildBackfillEvent(candidate deliveryTelemetryBackfillCandidate) (*domain.Y
 	}, true
 }
 
-func backfillAttemptMetadata(candidate deliveryTelemetryBackfillCandidate) (int, string, string) {
+func backfillAttemptMetadata(candidate *deliveryTelemetryBackfillCandidate) (result1 int, result2, result3 string) {
 	attemptOrdinal := candidate.AttemptCount
 	sendResult := "failure"
 	failureReason := strings.TrimSpace(candidate.DeliveryError)
@@ -158,7 +158,7 @@ func backfillAttemptMetadata(candidate deliveryTelemetryBackfillCandidate) (int,
 	return attemptOrdinal, sendResult, failureReason
 }
 
-func backfillCandidateEventAt(candidate deliveryTelemetryBackfillCandidate) time.Time {
+func backfillCandidateEventAt(candidate *deliveryTelemetryBackfillCandidate) time.Time {
 	eventAt := candidate.DeliveryCreatedAt.UTC()
 	if candidate.DeliverySentAt != nil {
 		return candidate.DeliverySentAt.UTC()

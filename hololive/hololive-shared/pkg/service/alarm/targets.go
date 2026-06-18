@@ -90,7 +90,7 @@ func resolveChannelSubscribersFromCache(
 	channelID string,
 	alarmType domain.AlarmType,
 	requireCacheSuccess bool,
-) ([]string, bool, error) {
+) (result0 []string, ok1 bool, err error) {
 	subscribers, err := LookupChannelSubscribersByType(ctx, cacheClient, channelID, alarmType)
 	if err != nil {
 		if requireCacheSuccess {
@@ -144,15 +144,21 @@ func markEmptyChannelSubscriberCache(ctx context.Context, cacheClient cache.Clie
 	if cacheClient == nil {
 		return
 	}
-	_ = cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType), "1", emptyChannelSubscriberCacheTTL)
+	if err := cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType), "1", emptyChannelSubscriberCacheTTL); err != nil {
+		observeAlarmSubscriberCacheError("mark_empty")
+	}
 }
 
 func warmChannelSubscriberCache(ctx context.Context, cacheClient cache.Client, alarms []*domain.Alarm, channelID string, alarmType domain.AlarmType) {
 	if cacheClient == nil {
 		return
 	}
-	_, _ = WarmSubscriberCacheFromAlarms(ctx, cacheClient, alarms)
-	_ = cacheClient.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType))
+	if _, err := WarmSubscriberCacheFromAlarms(ctx, cacheClient, alarms); err != nil {
+		observeAlarmSubscriberCacheError("warm")
+	}
+	if err := cacheClient.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)); err != nil {
+		observeAlarmSubscriberCacheError("clear_empty")
+	}
 }
 
 func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string) ([]*domain.Alarm, error) {
@@ -199,10 +205,7 @@ func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID
 }
 
 func waitForChannelSubscriberAlarms(ctx context.Context, resultCh <-chan singleflight.Result) ([]*domain.Alarm, error) {
-	waitCtx := ctx
-	if waitCtx == nil {
-		waitCtx = context.Background()
-	}
+	waitCtx := channelSubscriberWaitContext(ctx)
 
 	select {
 	case <-waitCtx.Done():
@@ -210,6 +213,13 @@ func waitForChannelSubscriberAlarms(ctx context.Context, resultCh <-chan singlef
 	case result := <-resultCh:
 		return resolveChannelSubscriberLoadResult(result)
 	}
+}
+
+func channelSubscriberWaitContext(ctx context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	return context.Background()
 }
 
 func resolveChannelSubscriberLoadResult(result singleflight.Result) ([]*domain.Alarm, error) {

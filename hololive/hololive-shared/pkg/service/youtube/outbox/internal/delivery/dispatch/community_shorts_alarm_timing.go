@@ -24,6 +24,6 @@ func appendCommunityShortsAlarmTimingLogAttrs(attrs []any, timing alarmtiming.Sn
 	return attrs
 }
 
-func communityShortsAlarmTimingForTimeline(row PostDeliveryTimeline) alarmtiming.Snapshot {
+func communityShortsAlarmTimingForTimeline(row *PostDeliveryTimeline) alarmtiming.Snapshot {
 	return telemetry.CommunityShortsAlarmTimingForTracking(row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis)
 }

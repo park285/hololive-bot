@@ -167,8 +167,8 @@ func execPublishedAtResolverTestSQL(ctx context.Context, db *pgxpool.Pool, query
 	if strings.HasPrefix(strings.ToUpper(trimmed), "PRAGMA ") {
 		return 0, nil
 	}
-	if handled, affected, err := execPublishedAtResolverTestTrigger(ctx, db, trimmed); handled {
-		return affected, err
+	if handled, err := execPublishedAtResolverTestTrigger(ctx, db, trimmed); handled {
+		return 0, err
 	}
 	tag, err := db.Exec(ctx, publishedAtResolverTestPlaceholders(query), args...)
 	if err != nil {
@@ -177,23 +177,23 @@ func execPublishedAtResolverTestSQL(ctx context.Context, db *pgxpool.Pool, query
 	return tag.RowsAffected(), nil
 }
 
-func execPublishedAtResolverTestTrigger(ctx context.Context, db *pgxpool.Pool, query string) (bool, int64, error) {
+func execPublishedAtResolverTestTrigger(ctx context.Context, db *pgxpool.Pool, query string) (bool, error) {
 	upper := strings.ToUpper(query)
 	switch {
 	case strings.Contains(upper, "CREATE TRIGGER FAIL_OUTBOX_INSERT_KEEP_RETRY_AFTER"):
-		return true, 0, createPublishedAtResolverTestTrigger(ctx, db, "fail_outbox_insert_keep_retry_after", "youtube_notification_outbox", "BEFORE INSERT", "outbox blocked")
+		return true, createPublishedAtResolverTestTrigger(ctx, db, "fail_outbox_insert_keep_retry_after", "youtube_notification_outbox", "BEFORE INSERT", "outbox blocked")
 	case strings.Contains(upper, "CREATE TRIGGER FAIL_OUTBOX_INSERT_FOR_RETRY_AFTER"):
-		return true, 0, createPublishedAtResolverTestTrigger(ctx, db, "fail_outbox_insert_for_retry_after", "youtube_notification_outbox", "BEFORE INSERT", "outbox blocked")
+		return true, createPublishedAtResolverTestTrigger(ctx, db, "fail_outbox_insert_for_retry_after", "youtube_notification_outbox", "BEFORE INSERT", "outbox blocked")
 	case strings.Contains(upper, "CREATE TRIGGER FAIL_OUTBOX_INSERT"):
-		return true, 0, createPublishedAtResolverTestTrigger(ctx, db, "fail_outbox_insert", "youtube_notification_outbox", "BEFORE INSERT", "outbox blocked")
+		return true, createPublishedAtResolverTestTrigger(ctx, db, "fail_outbox_insert", "youtube_notification_outbox", "BEFORE INSERT", "outbox blocked")
 	case strings.Contains(upper, "CREATE TRIGGER FAIL_RETRY_AFTER_UPDATE"):
-		return true, 0, createPublishedAtResolverTestTrigger(ctx, db, "fail_retry_after_update", "youtube_community_shorts_alarm_states", "BEFORE UPDATE OF published_at_retry_after", "retry_after blocked")
+		return true, createPublishedAtResolverTestTrigger(ctx, db, "fail_retry_after_update", "youtube_community_shorts_alarm_states", "BEFORE UPDATE OF published_at_retry_after", "retry_after blocked")
 	default:
-		return false, 0, nil
+		return false, nil
 	}
 }
 
-func createPublishedAtResolverTestTrigger(ctx context.Context, db *pgxpool.Pool, name string, table string, timing string, message string) error {
+func createPublishedAtResolverTestTrigger(ctx context.Context, db *pgxpool.Pool, name, table, timing, message string) error {
 	functionName := name + "_fn"
 	if _, err := db.Exec(ctx, fmt.Sprintf(`
 		CREATE OR REPLACE FUNCTION %s()

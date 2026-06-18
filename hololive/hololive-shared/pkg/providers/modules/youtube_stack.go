@@ -32,8 +32,11 @@ type YouTubeStackParams struct {
 	Logger          *slog.Logger
 }
 
-func BuildYouTubeStack(ctx context.Context, params YouTubeStackParams) *providers.YouTubeStack {
-	stack := BuildYouTubeAPIStack(ctx, YouTubeAPIStackParams{
+func BuildYouTubeStack(ctx context.Context, params *YouTubeStackParams) *providers.YouTubeStack {
+	if params == nil {
+		return &providers.YouTubeStack{}
+	}
+	stack := BuildYouTubeAPIStack(ctx, &YouTubeAPIStackParams{
 		YouTubeConfig:   params.YouTubeConfig,
 		ScraperConfig:   params.ScraperConfig,
 		CacheService:    params.CacheService,

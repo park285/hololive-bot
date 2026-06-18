@@ -67,10 +67,28 @@ func fetchLockedIDs(t *testing.T, repository *OutboxRepository, ctx context.Cont
 		t.Fatalf("fetch and lock: %v", err)
 	}
 	ids := make([]int64, 0, len(locked))
-	for _, item := range locked {
-		ids = append(ids, item.ID)
+	for i := range locked {
+		ids = append(ids, locked[i].ID)
 	}
 	return ids
+}
+
+func fetchAndLockItems(t *testing.T, repository *OutboxRepository, ctx context.Context, batchSize int) []domain.NotificationDeliveryOutbox {
+	t.Helper()
+	items, err := repository.FetchAndLock(ctx, batchSize, 5*time.Minute)
+	if err != nil {
+		t.Fatalf("fetch and lock: %v", err)
+	}
+	return items
+}
+
+func countByStatus(t *testing.T, repository *OutboxRepository, ctx context.Context, status domain.DeliveryOutboxStatus) int64 {
+	t.Helper()
+	count, err := repository.CountByStatus(ctx, status)
+	if err != nil {
+		t.Fatalf("count by status %s: %v", status, err)
+	}
+	return count
 }
 
 func TestEnqueue_Idempotent_PendingNoOp(t *testing.T) {
@@ -88,7 +106,7 @@ func TestEnqueue_Idempotent_PendingNoOp(t *testing.T) {
 	}
 
 	// payload가 변경되지 않아야 함 (ON CONFLICT 조건: status=FAILED만 갱신)
-	cnt, _ := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
+	cnt := countByStatus(t, repository, ctx, domain.DeliveryStatusPending)
 	if cnt != 1 {
 		t.Fatalf("expected 1 pending, got %d", cnt)
 	}
@@ -111,7 +129,7 @@ func TestEnqueue_FailedRetry(t *testing.T) {
 		t.Fatalf("retry enqueue: %v", err)
 	}
 
-	cnt, _ := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
+	cnt := countByStatus(t, repository, ctx, domain.DeliveryStatusPending)
 	if cnt != 1 {
 		t.Fatalf("expected 1 pending after retry, got %d", cnt)
 	}
@@ -181,7 +199,7 @@ func TestMarkSent(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items, _ := repository.FetchAndLock(ctx, 1, 5*time.Minute)
+	items := fetchAndLockItems(t, repository, ctx, 1)
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
@@ -190,7 +208,7 @@ func TestMarkSent(t *testing.T) {
 		t.Fatalf("mark sent: %v", err)
 	}
 
-	cnt, _ := repository.CountByStatus(ctx, domain.DeliveryStatusSent)
+	cnt := countByStatus(t, repository, ctx, domain.DeliveryStatusSent)
 	if cnt != 1 {
 		t.Fatalf("expected 1 sent, got %d", cnt)
 	}
@@ -204,7 +222,7 @@ func TestMarkFailed_WithBackoff(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items, _ := repository.FetchAndLock(ctx, 1, 5*time.Minute)
+	items := fetchAndLockItems(t, repository, ctx, 1)
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
@@ -214,7 +232,7 @@ func TestMarkFailed_WithBackoff(t *testing.T) {
 		t.Fatalf("mark failed: %v", err)
 	}
 
-	pending, _ := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
+	pending := countByStatus(t, repository, ctx, domain.DeliveryStatusPending)
 	if pending != 1 {
 		t.Fatalf("expected 1 pending after first failure, got %d", pending)
 	}
@@ -235,28 +253,13 @@ func TestMarkSentBatch(t *testing.T) {
 			repository := testRepository(t)
 			ctx := context.Background()
 
-			ids := make([]int64, 0)
-			if tc.count > 0 {
-				if err := repository.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
-					t.Fatalf("enqueue batch: %v", err)
-				}
-				ids = fetchLockedIDs(t, repository, ctx, tc.count+1)
-				if len(ids) != tc.count {
-					t.Fatalf("locked ids = %d, want %d", len(ids), tc.count)
-				}
-			}
+			ids := enqueueAndFetchLockedIDs(t, repository, ctx, tc.count)
 
 			if err := repository.MarkSentBatch(ctx, ids); err != nil {
 				t.Fatalf("mark sent batch: %v", err)
 			}
 
-			sent, err := repository.CountByStatus(ctx, domain.DeliveryStatusSent)
-			if err != nil {
-				t.Fatalf("count sent: %v", err)
-			}
-			if sent != int64(tc.count) {
-				t.Fatalf("sent count = %d, want %d", sent, tc.count)
-			}
+			assertStatusCount(t, repository, ctx, domain.DeliveryStatusSent, tc.count)
 		})
 	}
 }
@@ -277,29 +280,42 @@ func TestMarkFailedBatch(t *testing.T) {
 			ctx := context.Background()
 			reason := "batch send failed"
 
-			ids := make([]int64, 0)
-			if tc.count > 0 {
-				if err := repository.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
-					t.Fatalf("enqueue batch: %v", err)
-				}
-				ids = fetchLockedIDs(t, repository, ctx, tc.count+1)
-				if len(ids) != tc.count {
-					t.Fatalf("locked ids = %d, want %d", len(ids), tc.count)
-				}
-			}
+			ids := enqueueAndFetchLockedIDs(t, repository, ctx, tc.count)
 
 			if err := repository.MarkFailedBatch(ctx, ids, reason); err != nil {
 				t.Fatalf("mark failed batch: %v", err)
 			}
 
-			failed, err := repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
-			if err != nil {
-				t.Fatalf("count failed: %v", err)
-			}
-			if failed != int64(tc.count) {
-				t.Fatalf("failed count = %d, want %d", failed, tc.count)
-			}
+			assertStatusCount(t, repository, ctx, domain.DeliveryStatusFailed, tc.count)
 		})
+	}
+}
+
+func enqueueAndFetchLockedIDs(t *testing.T, repository *OutboxRepository, ctx context.Context, count int) []int64 {
+	t.Helper()
+
+	if count == 0 {
+		return nil
+	}
+	if err := repository.EnqueueBatch(ctx, buildOutboxBatchItems(count)); err != nil {
+		t.Fatalf("enqueue batch: %v", err)
+	}
+	ids := fetchLockedIDs(t, repository, ctx, count+1)
+	if len(ids) != count {
+		t.Fatalf("locked ids = %d, want %d", len(ids), count)
+	}
+	return ids
+}
+
+func assertStatusCount(t *testing.T, repository *OutboxRepository, ctx context.Context, status domain.DeliveryOutboxStatus, want int) {
+	t.Helper()
+
+	got, err := repository.CountByStatus(ctx, status)
+	if err != nil {
+		t.Fatalf("count %s: %v", status, err)
+	}
+	if got != int64(want) {
+		t.Fatalf("%s count = %d, want %d", status, got, want)
 	}
 }
 
@@ -311,7 +327,7 @@ func TestCleanup(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items, _ := repository.FetchAndLock(ctx, 1, 5*time.Minute)
+	items := fetchAndLockItems(t, repository, ctx, 1)
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
@@ -350,7 +366,7 @@ func TestCleanup_FailedItems(t *testing.T) {
 		t.Fatalf("set old failed status: %v", err)
 	}
 
-	failed, _ := repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
+	failed := countByStatus(t, repository, ctx, domain.DeliveryStatusFailed)
 	if failed != 1 {
 		t.Fatalf("expected 1 failed, got %d", failed)
 	}
@@ -363,7 +379,7 @@ func TestCleanup_FailedItems(t *testing.T) {
 		t.Fatalf("expected 1 failed item cleaned, got %d", cleaned)
 	}
 
-	remaining, _ := repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
+	remaining := countByStatus(t, repository, ctx, domain.DeliveryStatusFailed)
 	if remaining != 0 {
 		t.Fatalf("expected 0 failed after cleanup, got %d", remaining)
 	}

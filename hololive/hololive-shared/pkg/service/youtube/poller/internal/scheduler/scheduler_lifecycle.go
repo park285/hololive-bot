@@ -28,7 +28,8 @@ import (
 
 func (s *Scheduler) Start(ctx context.Context) {
 	if ctx == nil {
-		ctx = context.Background()
+		s.logger.Error("Scheduler start skipped", "error", "context is nil")
+		return
 	}
 
 	s.mu.Lock()

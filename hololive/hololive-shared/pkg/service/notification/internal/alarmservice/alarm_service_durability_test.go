@@ -120,7 +120,7 @@ func newLenientAlarmCacheMock(
 func assertRebuildLoadedMetric(t *testing.T, operation, resource string, want float64) {
 	t.Helper()
 
-	assert.InDelta(t, want, gaugeValueForLabels(t, alarmCacheRebuildLoadedMetricName, map[string]string{
+	assert.InDelta(t, want, gaugeValueForLabels(t, map[string]string{
 		"operation": operation,
 		"resource":  resource,
 	}), 0.000001)
@@ -148,7 +148,7 @@ func TestAddAlarm_PersistFailureDoesNotPolluteCache(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room-1",
 		UserID:     "user-1",
 		ChannelID:  "ch-1",
@@ -186,7 +186,7 @@ func TestAddAlarm_PersistFailureLogsWrappedEvent(t *testing.T) {
 		},
 	}
 
-	added, err := as.AddAlarm(t.Context(), domain.AddAlarmRequest{
+	added, err := as.AddAlarm(t.Context(), &domain.AddAlarmRequest{
 		RoomID:     "room-1",
 		UserID:     "user-1",
 		ChannelID:  "ch-1",
@@ -227,14 +227,15 @@ func TestCacheAddAlarmMutationFailureLogsWrappedEvent(t *testing.T) {
 	as.platformMapper = platformmap.NewMapper(cacheMock, memberDataFn, logger)
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }
 
-	_, err := as.cacheAddAlarmMutation(ctx, addAlarmMutation{
+	mutation := addAlarmMutation{
 		cacheRecord: domain.Alarm{
 			RoomID:     "room-1",
 			ChannelID:  "ch-1",
 			MemberName: "Miko",
 			AlarmTypes: domain.DefaultAlarmTypes,
 		},
-	})
+	}
+	_, err := as.cacheAddAlarmMutation(ctx, &mutation)
 	require.Error(t, err)
 
 	logRecord := decodeSingleJSONLog(t, &logBuffer)
@@ -458,7 +459,7 @@ func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
 		{
 			name: "after_add_sync_platform_mapping",
 			run: func(ctx context.Context, as *AlarmService) {
-				as.afterAddAlarm(ctx, domain.AddAlarmRequest{
+				as.afterAddAlarm(ctx, &domain.AddAlarmRequest{
 					RoomID:    "room-1",
 					ChannelID: "ch-1",
 				}, domain.AlarmTypes{domain.AlarmTypeLive})
@@ -548,7 +549,7 @@ func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
 
 	ctx := t.Context()
-	_, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+	_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room-1",
 		ChannelID:  "ch-1",
 		MemberName: "Miko",
@@ -601,11 +602,11 @@ func TestClearRoomAlarms_UsesRepositoryAsAuthorityWhenConfigured(t *testing.T) {
 
 func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 	ctx := t.Context()
-	before := counterValueForLabels(t, alarmCacheRebuildMetricName, map[string]string{
+	before := counterValueForLabels(t, map[string]string{
 		"operation": "add",
 		"result":    "ok",
 	})
-	beforeDurationCount := histogramCountForLabels(t, alarmCacheRebuildDurationMetricName, map[string]string{
+	beforeDurationCount := histogramCountForLabels(t, map[string]string{
 		"operation": "add",
 		"result":    "ok",
 	})
@@ -653,7 +654,7 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 		findRoomAlarmsFromRepository = originalFindRoomAlarms
 	})
 
-	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     "room-1",
 		UserID:     "user-1",
 		ChannelID:  "ch-1",
@@ -662,11 +663,11 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, added)
 	assert.True(t, rebuildCalled)
-	assert.InDelta(t, before+1, counterValueForLabels(t, alarmCacheRebuildMetricName, map[string]string{
+	assert.InDelta(t, before+1, counterValueForLabels(t, map[string]string{
 		"operation": "add",
 		"result":    "ok",
 	}), 0.000001)
-	assert.Equal(t, beforeDurationCount+1, histogramCountForLabels(t, alarmCacheRebuildDurationMetricName, map[string]string{
+	assert.Equal(t, beforeDurationCount+1, histogramCountForLabels(t, map[string]string{
 		"operation": "add",
 		"result":    "ok",
 	}))

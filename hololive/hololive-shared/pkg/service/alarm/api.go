@@ -87,7 +87,7 @@ func (h *Handler) AddAlarm(c *gin.Context) {
 		AlarmTypes: alarmTypes,
 	}
 
-	added, err := h.alarm.AddAlarm(ctx, domainReq)
+	added, err := h.alarm.AddAlarm(ctx, &domainReq)
 	if err != nil {
 		h.logger.Error("알람 추가 실패", slog.Any("error", err))
 		c.JSON(http.StatusInternalServerError, alarmAPIError("alarm_add_failed", "alarm add failed"))

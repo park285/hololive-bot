@@ -50,7 +50,9 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	if err := s.cacheClient.Del(ctx, key); err != nil {
 		return newError(CodeInternal, "failed to delete session", err)
 	}
-	_, _ = s.cacheClient.SRem(ctx, userSessionsKeyPrefix+data.UserID, []string{sessionHash})
+	if _, err := s.cacheClient.SRem(ctx, userSessionsKeyPrefix+data.UserID, []string{sessionHash}); err != nil && s.logger != nil {
+		s.logger.Warn("Failed to remove logged out session from user index", slog.String("user_id", data.UserID), slog.Any("error", err))
+	}
 
 	return nil
 }
@@ -138,9 +140,13 @@ func (s *Service) removeSessionIndex(ctx context.Context, userID, sessionHash st
 }
 
 func (s *Service) deleteExpiredSession(ctx context.Context, key, sessionHash, userID string) {
-	_ = s.cacheClient.Del(ctx, key)
+	if err := s.cacheClient.Del(ctx, key); err != nil && s.logger != nil {
+		s.logger.Warn("Failed to delete expired session", slog.Any("error", err))
+	}
 	if userID != "" {
-		_, _ = s.cacheClient.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash})
+		if _, err := s.cacheClient.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash}); err != nil && s.logger != nil {
+			s.logger.Warn("Failed to remove expired session from user index", slog.String("user_id", userID), slog.Any("error", err))
+		}
 	}
 }
 
@@ -223,7 +229,7 @@ func (s *Service) createSession(ctx context.Context, userID string) (*Session, e
 	}, nil
 }
 
-func (s *Service) allocateSessionToken(ctx context.Context, payload string) (string, string, error) {
+func (s *Service) allocateSessionToken(ctx context.Context, payload string) (value0, value1 string, err error) {
 	for range 3 {
 		raw, err := generateToken(sessionTokenPrefix, 32)
 		if err != nil {
@@ -246,13 +252,13 @@ func (s *Service) allocateSessionToken(ctx context.Context, payload string) (str
 func (s *Service) addSessionIndex(ctx context.Context, userID, sessionHash string) error {
 	userSessionsKey := userSessionsKeyPrefix + userID
 	if _, err := s.cacheClient.SAdd(ctx, userSessionsKey, []string{sessionHash}); err != nil {
-		_ = s.cacheClient.Del(ctx, sessionKeyPrefix+sessionHash)
-		return newError(CodeInternal, "failed to update session index", err)
+		cleanupErr := s.cacheClient.Del(ctx, sessionKeyPrefix+sessionHash)
+		return newError(CodeInternal, "failed to update session index", stdErrors.Join(err, cleanupErr))
 	}
 	if err := s.cacheClient.Expire(ctx, userSessionsKey, s.config.UserSessionsTTL); err != nil {
-		_, _ = s.cacheClient.SRem(ctx, userSessionsKey, []string{sessionHash})
-		_ = s.cacheClient.Del(ctx, sessionKeyPrefix+sessionHash)
-		return newError(CodeInternal, "failed to expire session index", err)
+		_, removeErr := s.cacheClient.SRem(ctx, userSessionsKey, []string{sessionHash})
+		deleteErr := s.cacheClient.Del(ctx, sessionKeyPrefix+sessionHash)
+		return newError(CodeInternal, "failed to expire session index", stdErrors.Join(err, removeErr, deleteErr))
 	}
 	return nil
 }

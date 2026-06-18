@@ -37,15 +37,15 @@ type alarmCacheScenario struct {
 	assert func(t *testing.T, service *AlarmService, ctx context.Context, changed bool)
 }
 
-func alarmAddRemoveCacheScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+func alarmAddRemoveCacheScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScenario {
 	return append(alarmAddScenarios(baseReq), alarmRemoveScenarios(baseReq)...)
 }
 
-func alarmAddScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+func alarmAddScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScenario {
 	return append(alarmAddRegistryScenarios(baseReq), alarmAddDuplicateScenarios(baseReq)...)
 }
 
-func alarmAddRegistryScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+func alarmAddRegistryScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScenario {
 	return []alarmCacheScenario{
 		{
 			name: "add 신규 알람은 cache/registry를 갱신한다",
@@ -76,11 +76,11 @@ func alarmAddRegistryScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScena
 			run: func(t *testing.T, service *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
 
-				req := baseReq
+				req := *baseReq
 
 				req.AlarmTypes = domain.AlarmTypes{domain.AlarmTypeCommunity}
 
-				return service.AddAlarm(ctx, req)
+				return service.AddAlarm(ctx, &req)
 			},
 			assert: func(t *testing.T, service *AlarmService, ctx context.Context, changed bool) {
 				t.Helper()
@@ -102,7 +102,7 @@ func alarmAddRegistryScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScena
 	}
 }
 
-func alarmAddDuplicateScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+func alarmAddDuplicateScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScenario {
 	return []alarmCacheScenario{
 		{
 			name: "duplicate add는 false를 반환하고 channel set 크기를 유지한다",
@@ -130,11 +130,11 @@ func alarmAddDuplicateScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScen
 	}
 }
 
-func alarmRemoveScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+func alarmRemoveScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScenario {
 	return append(alarmRemovePartialScenarios(baseReq), alarmRemoveTerminalScenarios(baseReq)...)
 }
 
-func alarmRemovePartialScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+func alarmRemovePartialScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScenario {
 	return []alarmCacheScenario{
 		{
 			name: "다중 채널 구독에서 한 채널 제거 시 room registry와 나머지 채널 구독은 유지된다",
@@ -145,12 +145,12 @@ func alarmRemovePartialScenarios(baseReq domain.AddAlarmRequest) []alarmCacheSce
 				require.NoError(t, err)
 				require.True(t, added)
 
-				secondReq := baseReq
+				secondReq := *baseReq
 
 				secondReq.ChannelID = "UC_TEST_2"
 				secondReq.MemberName = "두번째 멤버"
 
-				added, err = service.AddAlarm(ctx, secondReq)
+				added, err = service.AddAlarm(ctx, &secondReq)
 				require.NoError(t, err)
 				require.True(t, added)
 			},
@@ -180,7 +180,7 @@ func alarmRemovePartialScenarios(baseReq domain.AddAlarmRequest) []alarmCacheSce
 	}
 }
 
-func alarmRemoveTerminalScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+func alarmRemoveTerminalScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheScenario {
 	return []alarmCacheScenario{
 		{
 			name: "remove existing alarm은 room 알람과 registry를 정리한다",
@@ -236,7 +236,7 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 		UserName:   "테스트 사용자",
 	}
 
-	for _, tc := range alarmAddRemoveCacheScenarios(baseReq) {
+	for _, tc := range alarmAddRemoveCacheScenarios(&baseReq) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

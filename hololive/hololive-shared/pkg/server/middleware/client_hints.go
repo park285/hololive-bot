@@ -76,7 +76,10 @@ func unquote(s string) string {
 	return s
 }
 
-func (ch ClientHints) HasClientHints() bool {
+func (ch *ClientHints) HasClientHints() bool {
+	if ch == nil {
+		return false
+	}
 	return ch.Platform != "" || ch.Model != "" || ch.PlatformVersion != ""
 }
 
@@ -91,7 +94,7 @@ func (ch ClientHints) HasClientHints() bool {
 //   - platformVersion 13+ → Windows 11
 //   - platformVersion 1-10 → Windows 10
 //   - (Client Hints에서 Windows 버전은 NT 커널 버전이 아닌 마케팅 버전으로 매핑됨)
-func (ch ClientHints) Summary() string {
+func (ch *ClientHints) Summary() string {
 	if !ch.HasClientHints() {
 		return ""
 	}
@@ -116,7 +119,7 @@ func (ch ClientHints) Summary() string {
 	return strings.Join(parts, " ")
 }
 
-func (ch ClientHints) platformSummary() string {
+func (ch *ClientHints) platformSummary() string {
 	if ch.PlatformVersion == "" {
 		return ch.Platform
 	}
@@ -128,7 +131,7 @@ func (ch ClientHints) platformSummary() string {
 	return ch.Platform + " " + majorVersion
 }
 
-func (ch ClientHints) deviceSummary() string {
+func (ch *ClientHints) deviceSummary() string {
 	if ch.Model != "" {
 		return "(" + ch.Model + ")"
 	}

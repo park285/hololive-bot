@@ -6,10 +6,10 @@ import (
 )
 
 func (c *Config) validateServerTransports() error {
-	return validateServerTransports(c.Server)
+	return validateServerTransports(&c.Server)
 }
 
-func validateServerTransports(server ServerConfig) error {
+func validateServerTransports(server *ServerConfig) error {
 	if err := validateServerHTTPTransportNames(server); err != nil {
 		return err
 	}
@@ -19,7 +19,7 @@ func validateServerTransports(server ServerConfig) error {
 	return validateH3TransportFiles(server)
 }
 
-func validateServerHTTPTransportNames(server ServerConfig) error {
+func validateServerHTTPTransportNames(server *ServerConfig) error {
 	for _, rawTransport := range server.HTTPTransports {
 		if _, ok := normalizeServerHTTPTransport(rawTransport); !ok {
 			return fmt.Errorf("unsupported HOLOLIVE_HTTP_TRANSPORTS value: %s", rawTransport)
@@ -28,7 +28,7 @@ func validateServerHTTPTransportNames(server ServerConfig) error {
 	return nil
 }
 
-func validateH3TransportFiles(server ServerConfig) error {
+func validateH3TransportFiles(server *ServerConfig) error {
 	if strings.TrimSpace(server.H3Addr) == "" {
 		return fmt.Errorf("HOLOLIVE_H3_ADDR is required when h3 transport is enabled")
 	}
@@ -48,7 +48,7 @@ func (c *Config) ServerTransportEnabled(name string) bool {
 	return c.Server.TransportEnabled(name)
 }
 
-func (s ServerConfig) TransportEnabled(name string) bool {
+func (s *ServerConfig) TransportEnabled(name string) bool {
 	target, ok := normalizeServerHTTPTransport(name)
 	if !ok || target == "" {
 		return false

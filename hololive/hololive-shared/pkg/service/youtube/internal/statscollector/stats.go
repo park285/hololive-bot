@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -144,7 +145,7 @@ func (ys *StatsService) saveCurrentStats(ctx context.Context, item *youtube.Chan
 
 	var subscriberChange int64
 	if prevStats != nil {
-		subscriberChange = int64(item.Statistics.SubscriberCount) - int64(prevStats.SubscriberCount)
+		subscriberChange = safeSubscriberDelta(item.Statistics.SubscriberCount, prevStats.SubscriberCount)
 	}
 
 	if ys.statsRepository != nil {
@@ -157,10 +158,29 @@ func (ys *StatsService) saveCurrentStats(ctx context.Context, item *youtube.Chan
 
 	if ys.cache != nil {
 		cacheKey := channelStatsCachePrefix + item.Id
-		_ = ys.cache.Set(ctx, cacheKey, currentStats, channelStatsCacheTTL)
+		if err := ys.cache.Set(ctx, cacheKey, currentStats, channelStatsCacheTTL); err != nil {
+			ys.logger.Warn("Failed to cache current stats snapshot",
+				slog.String("channel", item.Id),
+				slog.Any("error", err))
+		}
 	}
 
 	return subscriberChange
+}
+
+func safeSubscriberDelta(current, previous uint64) int64 {
+	if current >= previous {
+		delta := current - previous
+		if delta > math.MaxInt64 {
+			return math.MaxInt64
+		}
+		return int64(delta)
+	}
+	delta := previous - current
+	if delta > math.MaxInt64 {
+		return math.MinInt64
+	}
+	return -int64(delta)
 }
 
 // 개별 채널 아이템 처리

@@ -62,7 +62,7 @@ func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []stri
 	}
 
 	scrapeResult := ys.scrapeUpcomingStreams(ctx, channelIDs)
-	allStreams, err := ys.completeUpcomingAPIFallback(ctx, cacheKey, scrapeResult)
+	allStreams, err := ys.completeUpcomingAPIFallback(ctx, cacheKey, &scrapeResult)
 	if err != nil {
 		return nil, err
 	}

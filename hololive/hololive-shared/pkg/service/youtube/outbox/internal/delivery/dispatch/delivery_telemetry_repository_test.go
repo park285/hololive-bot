@@ -410,7 +410,7 @@ func TestDispatcher_Cleanup_RemovesOnlyLoggedTelemetryOlderThanRetention(t *test
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &rows).Error)
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		CleanupAfter:       7 * 24 * time.Hour,
 		CleanupEnabled:     false,
 		TelemetryRetention: 24 * time.Hour,
@@ -475,7 +475,7 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, logger, Config{
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, logger, &Config{
 		LockTimeout:            time.Minute,
 		TelemetryBackfillBatch: 10,
 		TelemetryFlushBatch:    10,

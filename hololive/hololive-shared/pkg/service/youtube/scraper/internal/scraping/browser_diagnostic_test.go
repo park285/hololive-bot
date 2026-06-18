@@ -52,7 +52,7 @@ func TestCaptureBrowserDiagnosticSnapshotRequiresSnapshotEnabled(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serverCalled = true
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status_code":200,"html":"<html>rendered</html>"}`))
+		mustWriteResponse(t, w, `{"status_code":200,"html":"<html>rendered</html>"}`)
 	}))
 	defer server.Close()
 
@@ -79,7 +79,7 @@ func TestCaptureBrowserDiagnosticSnapshotReservesIntervalBeforeFetch(t *testing.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serverCalls++
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status_code":200,"html":"<html>rendered</html>"}`))
+		mustWriteResponse(t, w, `{"status_code":200,"html":"<html>rendered</html>"}`)
 	}))
 	defer server.Close()
 	client := NewClient(
@@ -107,7 +107,7 @@ func TestBrowserSnapshotFetcherPostsSnapshotRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status_code":200,"html":"<html>rendered</html>"}`))
+		mustWriteResponse(t, w, `{"status_code":200,"html":"<html>rendered</html>"}`)
 	}))
 	defer server.Close()
 	fetcher := NewBrowserSnapshotFetcher(server.URL, time.Second)

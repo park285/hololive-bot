@@ -21,16 +21,16 @@ type observationPostComparisonAccumulator struct {
 
 func indexObservationPostComparisonInputs(
 	inputs []ObservationPostComparisonInput,
-) (map[observationPostComparisonKey]*observationPostComparisonAccumulator, []observationPostComparisonKey, int) {
+) (result1 map[observationPostComparisonKey]*observationPostComparisonAccumulator, result2 []observationPostComparisonKey, result3 int) {
 	index := make(map[observationPostComparisonKey]*observationPostComparisonAccumulator, len(inputs))
 	keys := make([]observationPostComparisonKey, 0, len(inputs))
 	duplicateInputCount := 0
 
 	for i := range inputs {
-		normalized := normalizeObservationPostComparisonComparableInput(inputs[i])
-		key := buildObservationPostComparisonKey(normalized, i)
+		normalized := normalizeObservationPostComparisonComparableInput(&inputs[i])
+		key := buildObservationPostComparisonKey(&normalized, i)
 		if accumulator, ok := index[key]; ok {
-			accumulator.representative = mergeObservationPostComparisonInputs(accumulator.representative, normalized)
+			accumulator.representative = mergeObservationPostComparisonInputs(&accumulator.representative, &normalized)
 			accumulator.count++
 			duplicateInputCount++
 			continue
@@ -56,7 +56,7 @@ func indexObservationPostComparisonInputs(
 	return index, keys, duplicateInputCount
 }
 
-func normalizeObservationPostComparisonComparableInput(input ObservationPostComparisonInput) ObservationPostComparisonInput {
+func normalizeObservationPostComparisonComparableInput(input *ObservationPostComparisonInput) ObservationPostComparisonInput {
 	normalizedKind := input.Kind
 	normalizedAlarmType := normalizedKind.ToAlarmType()
 	if normalizedKind == "" && input.AlarmType.IsValid() {
@@ -89,7 +89,7 @@ func normalizeObservationPostComparisonComparableInput(input ObservationPostComp
 }
 
 func buildObservationPostComparisonKey(
-	input ObservationPostComparisonInput,
+	input *ObservationPostComparisonInput,
 	index int,
 ) observationPostComparisonKey {
 	canonicalPostID := strings.TrimSpace(input.CanonicalPostID)
@@ -117,8 +117,8 @@ func buildObservationPostComparisonKey(
 }
 
 func mergeObservationPostComparisonInputs(
-	left ObservationPostComparisonInput,
-	right ObservationPostComparisonInput,
+	left *ObservationPostComparisonInput,
+	right *ObservationPostComparisonInput,
 ) ObservationPostComparisonInput {
 	merged := left
 	merged.Kind = firstNonZeroObservationPostComparisonValue(merged.Kind, right.Kind)
@@ -130,10 +130,10 @@ func mergeObservationPostComparisonInputs(
 	merged.ActualPublishedAt = earliestObservationPostComparisonTime(merged.ActualPublishedAt, right.ActualPublishedAt)
 	merged.DetectedAt = earliestObservationPostComparisonTime(merged.DetectedAt, right.DetectedAt)
 	merged.AlarmSentAt = earliestObservationPostComparisonTime(merged.AlarmSentAt, right.AlarmSentAt)
-	return merged
+	return *merged
 }
 
-func firstNonZeroObservationPostComparisonValue[T comparable](left T, right T) T {
+func firstNonZeroObservationPostComparisonValue[T comparable](left, right T) T {
 	var zero T
 	if left == zero && right != zero {
 		return right
@@ -141,21 +141,21 @@ func firstNonZeroObservationPostComparisonValue[T comparable](left T, right T) T
 	return left
 }
 
-func firstNonBlankObservationPostComparisonString(left string, right string) string {
+func firstNonBlankObservationPostComparisonString(left, right string) string {
 	if strings.TrimSpace(left) != "" || strings.TrimSpace(right) == "" {
 		return left
 	}
 	return strings.TrimSpace(right)
 }
 
-func firstNonBlankObservationPostComparisonTitleHint(left string, right string) string {
+func firstNonBlankObservationPostComparisonTitleHint(left, right string) string {
 	if strings.TrimSpace(left) != "" || strings.TrimSpace(right) == "" {
 		return left
 	}
 	return observationComparisonNormalizeTitleHint(right)
 }
 
-func earliestObservationPostComparisonTime(left *time.Time, right *time.Time) *time.Time {
+func earliestObservationPostComparisonTime(left, right *time.Time) *time.Time {
 	if left == nil {
 		return cloneObservationComparisonTime(right)
 	}
@@ -177,7 +177,7 @@ func buildObservationPostComparisonRow(
 		merged = baseline.representative
 	}
 	if sent != nil {
-		merged = mergeObservationPostComparisonInputs(merged, sent.representative)
+		merged = mergeObservationPostComparisonInputs(&merged, &sent.representative)
 	}
 
 	row := ObservationPostComparisonRow{

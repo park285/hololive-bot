@@ -18,7 +18,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	runDeadline time.Time,
 	resolveTimeout time.Duration,
 	failureBackoffTTL time.Duration,
@@ -46,9 +46,7 @@ func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
 	result, completed, err := r.processClaimedPendingPublishedAtCandidate(
 		ctx,
 		repository,
-		tracking,
-		candidate,
-		resolveTimeout,
+		tracking, candidate, resolveTimeout,
 		failureBackoffTTL,
 		claim,
 	)
@@ -62,7 +60,7 @@ func (r *PendingPublishedAtResolver) processClaimedPendingPublishedAtCandidate(
 	ctx context.Context,
 	repository *publishedAtResolverRepository,
 	tracking *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	resolveTimeout time.Duration,
 	failureBackoffTTL time.Duration,
 	claim polling.JobClaim,
@@ -74,9 +72,7 @@ func (r *PendingPublishedAtResolver) processClaimedPendingPublishedAtCandidate(
 	if err != nil {
 		result, err := r.handlePendingPublishedAtResolveError(
 			ctx,
-			tracking,
-			candidate,
-			result,
+			tracking, candidate, result,
 			err,
 			resolveTimeout,
 			failureBackoffTTL,
@@ -104,7 +100,7 @@ func (r *PendingPublishedAtResolver) processClaimedPendingPublishedAtCandidate(
 
 func (r *PendingPublishedAtResolver) tryClaimPendingPublishedAtCandidate(
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	resolveTimeout time.Duration,
 	failureBackoffTTL time.Duration,
 ) (polling.JobClaim, bool, error) {
@@ -130,7 +126,7 @@ func (r *PendingPublishedAtResolver) tryClaimPendingPublishedAtCandidate(
 }
 
 func (r *PendingPublishedAtResolver) resolvePendingPublishedAtCandidateClaimStatus(
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	status polling.JobClaimStatus,
 	claim polling.JobClaim,
 ) (polling.JobClaim, bool, error) {
@@ -155,7 +151,7 @@ func requirePendingPublishedAtCandidateClaimHandle(claim polling.JobClaim) (poll
 	return claim, true, nil
 }
 
-func publishedAtCandidateClaimID(candidate trackingrepo.PublishedAtResolutionCandidate) string {
+func publishedAtCandidateClaimID(candidate *trackingrepo.PublishedAtResolutionCandidate) string {
 	contentID := strings.TrimSpace(candidate.ContentID)
 	if contentID == "" {
 		contentID = strings.TrimSpace(candidate.PostID)
@@ -168,7 +164,7 @@ func publishedAtCandidateClaimID(candidate trackingrepo.PublishedAtResolutionCan
 
 func (r *PendingPublishedAtResolver) completePendingPublishedAtCandidateClaim(
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	claim polling.JobClaim,
 	cooldownTTL time.Duration,
 ) error {
@@ -194,7 +190,7 @@ func (r *PendingPublishedAtResolver) completePendingPublishedAtCandidateClaim(
 
 func (r *PendingPublishedAtResolver) releasePendingPublishedAtCandidateClaim(
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	claim polling.JobClaim,
 ) {
 	m := r.ensureMetrics()
@@ -220,7 +216,7 @@ func (r *PendingPublishedAtResolver) releasePendingPublishedAtCandidateClaim(
 
 func checkPendingPublishedAtCandidateBudget(
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	runDeadline time.Time,
 	resolveTimeout time.Duration,
 	m *polling.Metrics,
@@ -246,7 +242,7 @@ func checkPendingPublishedAtCandidateBudget(
 func (r *PendingPublishedAtResolver) handlePendingPublishedAtResolveError(
 	ctx context.Context,
 	tracking *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	result publishedAtResolverCandidateResult,
 	err error,
 	resolveTimeout time.Duration,
@@ -264,9 +260,7 @@ func (r *PendingPublishedAtResolver) handlePendingPublishedAtResolveError(
 	isResolveTimeout := errors.Is(err, context.DeadlineExceeded)
 	r.markPublishedAtRetryAfterWithReporting(
 		tracking,
-		ctx,
-		candidate,
-		time.Now().Add(failureBackoffTTL),
+		ctx, candidate, time.Now().Add(failureBackoffTTL),
 		isResolveTimeout,
 		"resolve_failed",
 	)
@@ -286,15 +280,13 @@ func (r *PendingPublishedAtResolver) handlePendingPublishedAtResolveError(
 func (r *PendingPublishedAtResolver) handleEmptyPendingPublishedAt(
 	ctx context.Context,
 	tracking *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	failureBackoffTTL time.Duration,
 ) {
 	m := r.ensureMetrics()
 	r.markPublishedAtRetryAfterWithReporting(
 		tracking,
-		ctx,
-		candidate,
-		time.Now().Add(failureBackoffTTL),
+		ctx, candidate, time.Now().Add(failureBackoffTTL),
 		false,
 		"published_at_empty",
 	)
@@ -304,15 +296,13 @@ func (r *PendingPublishedAtResolver) handleEmptyPendingPublishedAt(
 func (r *PendingPublishedAtResolver) handlePendingPublishedAtFinalizeError(
 	ctx context.Context,
 	tracking *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	err error,
 	failureBackoffTTL time.Duration,
 ) {
 	r.markPublishedAtRetryAfterWithReporting(
 		tracking,
-		ctx,
-		candidate,
-		time.Now().Add(failureBackoffTTL),
+		ctx, candidate, time.Now().Add(failureBackoffTTL),
 		false,
 		"finalize_failed",
 	)
@@ -325,7 +315,7 @@ func (r *PendingPublishedAtResolver) handlePendingPublishedAtFinalizeError(
 }
 
 func (r *PendingPublishedAtResolver) reportPendingPublishedAtCandidateResult(
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt *time.Time,
 	result publishedAtFinalizeResult,
 ) {
@@ -354,7 +344,7 @@ func (r *PendingPublishedAtResolver) reportPendingPublishedAtCandidateResult(
 
 func (r *PendingPublishedAtResolver) resolveCandidateWithTimeout(
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	resolveTimeout time.Duration,
 ) (*time.Time, error) {
 	resolveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolveTimeout)

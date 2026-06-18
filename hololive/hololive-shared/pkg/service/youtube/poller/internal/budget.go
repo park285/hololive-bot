@@ -79,7 +79,7 @@ type BudgetReservation interface {
 }
 
 type GlobalBudgetLimiter interface {
-	TryReserve(ctx context.Context, job BudgetJob, profile BudgetProfile, ttl time.Duration) (BudgetReservation, BudgetDecision, error)
+	TryReserve(ctx context.Context, job *BudgetJob, profile BudgetProfile, ttl time.Duration) (BudgetReservation, BudgetDecision, error)
 }
 
 type SourceCooldownReporter interface {

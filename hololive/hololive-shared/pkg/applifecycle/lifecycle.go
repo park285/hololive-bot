@@ -52,10 +52,6 @@ type ShutdownHooks struct {
 }
 
 func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	startAlarmScheduler(ctx, errCh, hooks)
 
 	if hooks.RunConfigSubscriber != nil {

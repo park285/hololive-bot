@@ -50,7 +50,7 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 
 	t.Run("applies to youtube service and scheduler", func(t *testing.T) {
 		youtubeService := &scraperProxyTestYouTubeService{}
-		scheduler := poller.NewScheduler(poller.SchedulerConfig{
+		scheduler := poller.NewScheduler(&poller.SchedulerConfig{
 			WorkerCount:     1,
 			RequestInterval: 0,
 		})

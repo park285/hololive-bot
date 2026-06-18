@@ -55,7 +55,7 @@ func (c *Client) recordChannelSourceFailure(ctx context.Context, channelID strin
 func (c *Client) recordParserDrift(ctx context.Context, operation, stage, channelID, pageURL string, source FailureSource, html string, cause error) error {
 	err := NewParserDriftError(operation, stage, cause)
 	detail := ClassifyFailure(err, source)
-	c.captureSnapshot(ctx, Snapshot{
+	c.captureSnapshot(ctx, &Snapshot{
 		Operation:     operation,
 		ChannelID:     channelID,
 		URL:           pageURL,

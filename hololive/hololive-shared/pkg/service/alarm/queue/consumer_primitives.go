@@ -73,7 +73,7 @@ func (c *Consumer) rpopMany(ctx context.Context, count int) ([]string, error) {
 	return values, nil
 }
 
-func resolveRetryVisibleAt(envelope domain.AlarmQueueEnvelope, now time.Time) (time.Time, error) {
+func resolveRetryVisibleAt(envelope *domain.AlarmQueueEnvelope, now time.Time) (time.Time, error) {
 	if envelope.Retry == nil {
 		return time.Time{}, fmt.Errorf("retry metadata is required")
 	}
@@ -112,7 +112,10 @@ func deriveDLQKey(queueKey string) string {
 	return base + ":dlq"
 }
 
-func shouldPreferOriginalPayload(envelope domain.AlarmQueueEnvelope, currentPayload string) bool {
+func shouldPreferOriginalPayload(envelope *domain.AlarmQueueEnvelope, currentPayload string) bool {
+	if envelope == nil {
+		return false
+	}
 	originalPayload := envelope.OriginalPayload()
 	if originalPayload == "" {
 		return false

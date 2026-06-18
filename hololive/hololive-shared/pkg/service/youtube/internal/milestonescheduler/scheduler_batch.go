@@ -158,7 +158,11 @@ func (ys *schedulerImpl) fetchRecentVideosRotation(ctx context.Context, batchNum
 			return ys.fetchAndCacheRecentVideos(egCtx, channelID, stats)
 		})
 	}
-	_ = eg.Wait()
+	if err := eg.Wait(); err != nil {
+		ys.logger.Warn("Recent videos batch worker failed",
+			slog.Int("batch", batchNum),
+			slog.Any("error", err))
+	}
 
 	ys.logger.Info("Recent videos batch completed",
 		slog.Int("batch", batchNum),
@@ -195,7 +199,7 @@ func (stats *recentVideosBatchStats) recordSuccess() {
 	stats.successCount++
 }
 
-func (ys *schedulerImpl) getRotatingBatch(batchNum int, size int) []string {
+func (ys *schedulerImpl) getRotatingBatch(batchNum, size int) []string {
 	allChannels := make([]string, 0, len(ys.membersData.GetAllMembers()))
 	for _, member := range ys.membersData.GetAllMembers() {
 		allChannels = append(allChannels, member.ChannelID)

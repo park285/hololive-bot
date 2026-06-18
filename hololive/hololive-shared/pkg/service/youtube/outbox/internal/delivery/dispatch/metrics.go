@@ -22,6 +22,7 @@ package dispatch
 
 import (
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -146,4 +147,60 @@ func observeOutboxReviveError() {
 		return
 	}
 	outboxReviveErrorsTotal.Inc()
+}
+
+func observeOutboxEnqueueOutboxes(result string, n int) {
+	initOutboxMetrics()
+	if outboxEnqueueOutboxesTotal == nil || n <= 0 {
+		return
+	}
+	outboxEnqueueOutboxesTotal.WithLabelValues(result).Add(float64(n))
+}
+
+func observeOutboxEnqueueTargetRooms(n int) {
+	initOutboxMetrics()
+	if outboxEnqueueTargetRoomsTotal == nil || n <= 0 {
+		return
+	}
+	outboxEnqueueTargetRoomsTotal.Add(float64(n))
+}
+
+func observeOutboxDispatchDuration(duration time.Duration) {
+	initOutboxMetrics()
+	if outboxDispatchDuration == nil {
+		return
+	}
+	outboxDispatchDuration.Observe(duration.Seconds())
+}
+
+func observeOutboxDeliveryClaimed(n int) {
+	initOutboxMetrics()
+	if outboxDeliveryClaimedTotal == nil || n <= 0 {
+		return
+	}
+	outboxDeliveryClaimedTotal.Add(float64(n))
+}
+
+func observeOutboxDispatchBatchSize(n int) {
+	initOutboxMetrics()
+	if outboxDispatchBatchSize == nil || n <= 0 {
+		return
+	}
+	outboxDispatchBatchSize.Observe(float64(n))
+}
+
+func observeOutboxDeliveryProcessed(result string, n int) {
+	initOutboxMetrics()
+	if outboxDeliveryProcessedTotal == nil || n <= 0 {
+		return
+	}
+	outboxDeliveryProcessedTotal.WithLabelValues(result).Add(float64(n))
+}
+
+func observeOutboxDispatchTouchedOutboxes(n int) {
+	initOutboxMetrics()
+	if outboxDispatchTouchedOutboxes == nil || n <= 0 {
+		return
+	}
+	outboxDispatchTouchedOutboxes.Observe(float64(n))
 }

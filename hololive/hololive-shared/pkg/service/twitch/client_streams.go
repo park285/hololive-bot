@@ -59,7 +59,7 @@ func (c *Client) getStreamChunks(ctx context.Context, targets []string) (*Stream
 	return merged, nil
 }
 
-func appendStreamData(merged *StreamsResponse, streams *StreamsResponse) {
+func appendStreamData(merged, streams *StreamsResponse) {
 	if streams != nil {
 		merged.Data = append(merged.Data, streams.Data...)
 	}
@@ -106,24 +106,8 @@ func (c *Client) getStreams(
 	userLogins []string,
 	allowRefreshRetry bool,
 ) (*StreamsResponse, error) {
-	if !c.IsConfigured() {
-		return nil, errors.New("twitch client not configured")
-	}
-
-	if len(userLogins) == 0 {
-		return &StreamsResponse{Data: []StreamData{}}, nil
-	}
-
-	if c.isCircuitOpen() {
-		return nil, &apperrors.APIError{
-			Operation:  "twitch_get_streams",
-			StatusCode: 503,
-			Err:        errors.New("circuit breaker open"),
-		}
-	}
-
-	if err := c.ensureValidToken(ctx); err != nil {
-		return nil, fmt.Errorf("ensure token: %w", err)
+	if streams, done, err := c.prepareGetStreams(ctx, userLogins); done {
+		return streams, err
 	}
 
 	req, err := c.newStreamsRequest(ctx, userLogins)
@@ -136,13 +120,37 @@ func (c *Client) getStreams(
 		return nil, fmt.Errorf("do streams request: %w", err)
 	}
 
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.logger.Warn("Failed to close Twitch streams response body", slog.Any("error", closeErr))
+		}
+	}()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return c.retryUnauthorizedStreamsWithContext(ctx, userLogins, allowRefreshRetry)
 	}
 
 	return c.decodeStreamsHTTPResponse(resp)
+}
+
+func (c *Client) prepareGetStreams(ctx context.Context, userLogins []string) (*StreamsResponse, bool, error) {
+	if !c.IsConfigured() {
+		return nil, true, errors.New("twitch client not configured")
+	}
+	if len(userLogins) == 0 {
+		return &StreamsResponse{Data: []StreamData{}}, true, nil
+	}
+	if c.isCircuitOpen() {
+		return nil, true, &apperrors.APIError{
+			Operation:  "twitch_get_streams",
+			StatusCode: 503,
+			Err:        errors.New("circuit breaker open"),
+		}
+	}
+	if err := c.ensureValidToken(ctx); err != nil {
+		return nil, true, fmt.Errorf("ensure token: %w", err)
+	}
+	return nil, false, nil
 }
 
 func (c *Client) retryUnauthorizedStreamsWithContext(
@@ -178,7 +186,18 @@ func (c *Client) doStreamsRequest(req *http.Request) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.recordFailure()
+		if resp == nil {
+			err = fmt.Errorf("nil response: %w", err)
+		}
 		return nil, fmt.Errorf("do request: %w", err)
+	}
+	if resp == nil {
+		c.recordFailure()
+		return nil, fmt.Errorf("do request: nil response")
+	}
+	if resp.Body == nil {
+		c.recordFailure()
+		return nil, fmt.Errorf("do request: nil response body")
 	}
 
 	return resp, nil
@@ -278,7 +297,7 @@ func (c *Client) newStreamsRequest(ctx context.Context, userLogins []string) (*h
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	token, _ := c.token.Load().(string)
+	token := c.currentToken()
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Client-Id", c.clientID)
 

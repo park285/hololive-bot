@@ -92,6 +92,8 @@ func NormalizeContentID(kind domain.OutboxKind, id string) string {
 			return trimmed
 		}
 		return normalized
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return trimmed
 	default:
 		return trimmed
 	}
@@ -144,7 +146,7 @@ func NormalizeCollectedShortsByCanonicalPostID(shorts []*scraper.Short) []*scrap
 	return normalized
 }
 
-func mergeCollectedShort(dst *scraper.Short, src *scraper.Short) {
+func mergeCollectedShort(dst, src *scraper.Short) {
 	if dst == nil || src == nil {
 		return
 	}
@@ -158,13 +160,13 @@ func mergeCollectedShort(dst *scraper.Short, src *scraper.Short) {
 	mergeShortPublishedAt(dst, src)
 }
 
-func mergeShortThumbnail(dst *scraper.Short, src *scraper.Short) {
+func mergeShortThumbnail(dst, src *scraper.Short) {
 	if len(dst.Thumbnail) == 0 && len(src.Thumbnail) > 0 {
 		dst.Thumbnail = append([]scraper.Thumbnail(nil), src.Thumbnail...)
 	}
 }
 
-func mergeShortPublishedAt(dst *scraper.Short, src *scraper.Short) {
+func mergeShortPublishedAt(dst, src *scraper.Short) {
 	if dst.PublishedAt == nil && src.PublishedAt != nil {
 		publishedAt := *src.PublishedAt
 		dst.PublishedAt = &publishedAt
@@ -202,7 +204,7 @@ func NormalizeCollectedCommunityPostsByCanonicalPostID(posts []*scraper.Communit
 	return normalized
 }
 
-func mergeCollectedCommunityPost(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
+func mergeCollectedCommunityPost(dst, src *scraper.CommunityPost) {
 	if dst == nil || src == nil {
 		return
 	}
@@ -212,7 +214,7 @@ func mergeCollectedCommunityPost(dst *scraper.CommunityPost, src *scraper.Commun
 	mergeCommunityPostAttachmentFields(dst, src)
 }
 
-func mergeCommunityPostIdentityFields(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
+func mergeCommunityPostIdentityFields(dst, src *scraper.CommunityPost) {
 	if dst.UpstreamPostID == "" {
 		dst.UpstreamPostID = src.UpstreamPostID
 	}
@@ -227,7 +229,7 @@ func mergeCommunityPostIdentityFields(dst *scraper.CommunityPost, src *scraper.C
 	}
 }
 
-func mergeCommunityPostTextFields(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
+func mergeCommunityPostTextFields(dst, src *scraper.CommunityPost) {
 	if dst.ContentText == "" {
 		dst.ContentText = src.ContentText
 	}
@@ -240,7 +242,7 @@ func mergeCommunityPostTextFields(dst *scraper.CommunityPost, src *scraper.Commu
 	}
 }
 
-func mergeCommunityPostStatsFields(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
+func mergeCommunityPostStatsFields(dst, src *scraper.CommunityPost) {
 	if dst.LikeCount == 0 && src.LikeCount != 0 {
 		dst.LikeCount = src.LikeCount
 	}
@@ -249,7 +251,7 @@ func mergeCommunityPostStatsFields(dst *scraper.CommunityPost, src *scraper.Comm
 	}
 }
 
-func mergeCommunityPostAttachmentFields(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
+func mergeCommunityPostAttachmentFields(dst, src *scraper.CommunityPost) {
 	if len(dst.Images) == 0 && len(src.Images) > 0 {
 		dst.Images = append([]scraper.Thumbnail(nil), src.Images...)
 	}

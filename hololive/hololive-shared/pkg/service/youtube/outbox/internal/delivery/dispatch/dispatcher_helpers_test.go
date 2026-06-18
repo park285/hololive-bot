@@ -91,7 +91,7 @@ func TestBuildTemplateData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := mf.buildTemplateData("멤버", tt.item)
+			got, err := mf.buildTemplateData("멤버", &tt.item)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
@@ -113,11 +113,11 @@ func TestFormatMessageFallbackFailures(t *testing.T) {
 
 	mf := &MessageFormatter{}
 
-	if _, err := mf.formatMessageFallback("멤버", domain.YouTubeNotificationOutbox{Kind: domain.OutboxKind("UNKNOWN")}); err == nil {
+	if _, err := mf.formatMessageFallback("멤버", &domain.YouTubeNotificationOutbox{Kind: domain.OutboxKind("UNKNOWN")}); err == nil {
 		t.Fatalf("expected unknown kind error")
 	}
 
-	if _, err := mf.formatMessageFallback("멤버", domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: "{"}); err == nil {
+	if _, err := mf.formatMessageFallback("멤버", &domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: "{"}); err == nil {
 		t.Fatalf("expected invalid payload error")
 	}
 }
@@ -133,12 +133,12 @@ func TestFormatYouTubeOutboxPayloadMatchesSingleFallbackFormatter(t *testing.T) 
 		ContentID: "short:abc",
 		Payload:   `{"video_id":"abc","title":"테스트 쇼츠"}`,
 	}
-	want, err := formatter.formatMessageFallback("멤버", item)
+	want, err := formatter.formatMessageFallback("멤버", &item)
 	if err != nil {
 		t.Fatalf("formatMessageFallback() error = %v", err)
 	}
 
-	got, err := FormatYouTubeOutboxPayload(context.Background(), domain.YouTubeOutboxDispatchPayload{
+	got, err := FormatYouTubeOutboxPayload(context.Background(), &domain.YouTubeOutboxDispatchPayload{
 		OutboxIDs:  []int64{1},
 		Kind:       domain.OutboxKindNewShort,
 		AlarmType:  domain.AlarmTypeShorts,
@@ -161,7 +161,7 @@ func TestFormatYouTubeOutboxPayloadMatchesSingleFallbackFormatter(t *testing.T) 
 func TestFormatYouTubeOutboxPayloadGroupedFallback(t *testing.T) {
 	t.Parallel()
 
-	got, err := FormatYouTubeOutboxPayload(context.Background(), domain.YouTubeOutboxDispatchPayload{
+	got, err := FormatYouTubeOutboxPayload(context.Background(), &domain.YouTubeOutboxDispatchPayload{
 		OutboxIDs:  []int64{1, 2},
 		Kind:       domain.OutboxKindCommunityPost,
 		AlarmType:  domain.AlarmTypeCommunity,
@@ -270,7 +270,7 @@ func TestBuildGroupedTemplateData(t *testing.T) {
 func TestGroupOutboxItems(t *testing.T) {
 	t.Parallel()
 
-	grouper := newOutboxGrouper(nil, nil, nil, Config{})
+	grouper := newOutboxGrouper(nil, nil, nil, &Config{})
 	items := []domain.YouTubeNotificationOutbox{
 		{ID: 1, ChannelID: "ch1", Kind: domain.OutboxKindNewVideo},
 		{ID: 2, ChannelID: "ch1", Kind: domain.OutboxKindNewVideo},

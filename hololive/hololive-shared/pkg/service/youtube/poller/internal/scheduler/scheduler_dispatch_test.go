@@ -30,7 +30,7 @@ import (
 )
 
 func TestScheduler_ZeroRequestInterval_NoopRL(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{RequestInterval: 0})
 	ctx := context.Background()
 
 	// 첫 호출은 초기화 역할을 하고, 두 번째 호출이 실제 무대기 경로를 검증한다.
@@ -45,7 +45,7 @@ func TestScheduler_ZeroRequestInterval_NoopRL(t *testing.T) {
 }
 
 func TestDispatchDueJobs_WorkerChannelFullKeepsAnchoredNextRunAt(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	scheduledAt := time.Now().Add(-time.Second).UTC().Truncate(time.Second)
 	job := &Job{
 		ChannelID: "channel-1",
@@ -66,7 +66,7 @@ func TestDispatchDueJobs_WorkerChannelFullKeepsAnchoredNextRunAt(t *testing.T) {
 }
 
 func TestSchedulerNextDispatchDelay_UsesShortRetryWhenWorkerChannelFull(t *testing.T) {
-	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 
 	delay := scheduler.nextDispatchDelay(true)
 	assert.Equal(t, 50*time.Millisecond, delay)

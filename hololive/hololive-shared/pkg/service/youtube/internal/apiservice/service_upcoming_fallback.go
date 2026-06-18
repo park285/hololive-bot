@@ -17,7 +17,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
-func (ys *serviceImpl) completeUpcomingAPIFallback(ctx context.Context, cacheKey string, scrapeResult upcomingScrapeResult) ([]*domain.Stream, error) {
+func (ys *serviceImpl) completeUpcomingAPIFallback(ctx context.Context, cacheKey string, scrapeResult *upcomingScrapeResult) ([]*domain.Stream, error) {
 	allStreams := scrapeResult.streams
 	if len(scrapeResult.failedIDs) == 0 {
 		ys.recordUpcomingFallbackSkipped(ctx)
@@ -40,17 +40,19 @@ func (ys *serviceImpl) completeUpcomingAPIFallback(ctx context.Context, cacheKey
 }
 
 func (ys *serviceImpl) recordUpcomingFallbackSkipped(ctx context.Context) {
-	_, _ = fallback.RunSecondary(ctx, fallback.SecondaryPlan{
+	if _, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
 		Service:   "youtube",
 		Operation: "upcoming_streams",
 		Trigger:   fallback.TriggerOnFailures,
 		ShouldRun: false,
-	})
+	}); err != nil {
+		ys.logger.Warn("Failed to record upcoming fallback skip", slog.Any("error", err))
+	}
 }
 
 func (ys *serviceImpl) runUpcomingAPIFallback(
 	ctx context.Context,
-	scrapeResult upcomingScrapeResult,
+	scrapeResult *upcomingScrapeResult,
 	estimatedCost int,
 	quotaErr error,
 	allStreams *[]*domain.Stream,
@@ -66,10 +68,13 @@ func (ys *serviceImpl) runUpcomingAPIFallback(
 				slog.Int("channels", len(scrapeResult.failedIDs)),
 				slog.Int("estimatedCost", estimatedCost))
 
-			apiResult := ys.fetchUpcomingFromAPI(runCtx, scrapeResult.failedIDs)
+			apiResult, err := ys.fetchUpcomingFromAPI(runCtx, scrapeResult.failedIDs)
+			if err != nil {
+				return fallback.SecondaryResult{}, err
+			}
 			*allStreams = append(*allStreams, apiResult.streams...)
 			ys.consumeQuota(apiResult.quotaCost)
-			ys.observeUpcomingFallbackRecoveries(scrapeResult, apiResult)
+			ys.observeUpcomingFallbackRecoveries(scrapeResult, &apiResult)
 
 			return fallback.SecondaryResult{
 				Items:     len(apiResult.streams),
@@ -99,7 +104,7 @@ func (ys *serviceImpl) handleUpcomingFallbackBlocked(
 	return true, nil, fmt.Errorf("get upcoming streams: api fallback blocked after scraper failures: %w", quotaErr)
 }
 
-func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []string) upcomingAPIFallbackResult {
+func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []string) (upcomingAPIFallbackResult, error) {
 	result := upcomingAPIFallbackResult{
 		streams: make([]*domain.Stream, 0, len(channelIDs)),
 	}
@@ -149,12 +154,14 @@ func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []st
 		})
 	}
 
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		return result, err
+	}
 
-	return result
+	return result, nil
 }
 
-func (ys *serviceImpl) observeUpcomingFallbackRecoveries(scrapeResult upcomingScrapeResult, apiResult upcomingAPIFallbackResult) {
+func (ys *serviceImpl) observeUpcomingFallbackRecoveries(scrapeResult *upcomingScrapeResult, apiResult *upcomingAPIFallbackResult) {
 	failuresByChannel := upcomingFailureByChannel(scrapeResult.failures)
 	for _, channelID := range apiResult.successfulIDs {
 		failure, ok := failuresByChannel[channelID]
@@ -181,6 +188,9 @@ func (ys *serviceImpl) getChannelUpcomingStreams(ctx context.Context, channelID 
 	response, err := ys.fetchChannelUpcomingSearch(ctx, channelID)
 	if err != nil {
 		return nil, err
+	}
+	if response == nil {
+		return nil, fmt.Errorf("YouTube API error: nil search response")
 	}
 
 	streams := make([]*domain.Stream, 0, len(response.Items))
@@ -252,7 +262,7 @@ func applyUpcomingAPIStreamPublishedAt(stream *domain.Stream, publishedAt string
 	}
 }
 
-func applyUpcomingAPIStreamChannel(stream *domain.Stream, channelID string, channelTitle string) {
+func applyUpcomingAPIStreamChannel(stream *domain.Stream, channelID, channelTitle string) {
 	if channelTitle == "" {
 		return
 	}

@@ -38,7 +38,7 @@ func TestSchedulerExecuteJobBudgetAllowedPollsAndCommits(t *testing.T) {
 		reservation: reservation,
 	}
 	claim := &schedulerClaimHandleStub{}
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:            1,
 		RequestInterval:        0,
 		PollTimeout:            2 * time.Second,
@@ -83,7 +83,7 @@ func TestSchedulerExecuteJobBudgetDeniedSkipsPollAndUsesRetryAfter(t *testing.T)
 	limiter := &schedulerBudgetLimiterStub{
 		decision: polling.BudgetDecision{Allowed: false, RetryAfter: retryAfter, Reason: string(JobSkipBudgetExhausted)},
 	}
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:          1,
 		RequestInterval:      0,
 		JobClaimer:           &schedulerClaimStub{status: polling.JobClaimStatus{Result: polling.JobClaimAcquired}, claim: claim},
@@ -116,7 +116,7 @@ func TestSchedulerExecuteJobBudgetDeniedSkipsPollAndUsesRetryAfter(t *testing.T)
 func TestSchedulerExecuteJobBudgetLimiterErrorReleasesClaimAndBacksOff(t *testing.T) {
 	claim := &schedulerClaimHandleStub{}
 	limiter := &schedulerBudgetLimiterStub{err: assert.AnError}
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:          1,
 		RequestInterval:      0,
 		JobClaimer:           &schedulerClaimStub{status: polling.JobClaimStatus{Result: polling.JobClaimAcquired}, claim: claim},
@@ -167,7 +167,7 @@ func TestBudgetLimiterDisabledOrEmptyProfileSkipsReserve(t *testing.T) {
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			scheduler := NewScheduler(SchedulerConfig{
+			scheduler := NewScheduler(&SchedulerConfig{
 				WorkerCount:          1,
 				RequestInterval:      0,
 				BudgetLimiter:        tc.limiter,
@@ -194,7 +194,7 @@ func TestBudgetLimiterDisabledOrEmptyProfileSkipsReserve(t *testing.T) {
 func TestSchedulerExecuteJobPollFailureReleasesBudgetReservation(t *testing.T) {
 	reservation := &schedulerBudgetReservationStub{}
 	claim := &schedulerClaimHandleStub{}
-	scheduler := NewScheduler(SchedulerConfig{
+	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:          1,
 		RequestInterval:      0,
 		JobClaimer:           &schedulerClaimStub{status: polling.JobClaimStatus{Result: polling.JobClaimAcquired}, claim: claim},

@@ -102,7 +102,7 @@ func currentTargetIfConfigured(resolvedTargets []int, current int) (int, bool) {
 	return 0, false
 }
 
-func highestDescendingCrossedTarget(resolvedTargets []int, current int, previous int) (int, bool) {
+func highestDescendingCrossedTarget(resolvedTargets []int, current, previous int) (int, bool) {
 	for _, target := range resolvedTargets {
 		if current == target || (current < target && target <= previous) {
 			return target, true

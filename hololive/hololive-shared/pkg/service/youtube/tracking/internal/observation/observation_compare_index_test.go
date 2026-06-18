@@ -77,7 +77,7 @@ func TestMergeObservationPostComparisonInputs_PreservesEarliestTimes(t *testing.
 		AlarmSentAt: &early,
 	}
 
-	merged := mergeObservationPostComparisonInputs(left, right)
+	merged := mergeObservationPostComparisonInputs(&left, &right)
 	require.Equal(t, domain.OutboxKindCommunityPost, merged.Kind)
 	require.Equal(t, "community:post-1", merged.CanonicalPostID)
 	require.Equal(t, "UC_TEST", merged.ChannelID)
@@ -103,7 +103,7 @@ func TestMergeObservationPostComparisonInputs_FillsBlanks(t *testing.T) {
 		DetectedAt: &detected,
 	}
 
-	merged := mergeObservationPostComparisonInputs(left, right)
+	merged := mergeObservationPostComparisonInputs(&left, &right)
 	require.Equal(t, "UC_FILLED", merged.ChannelID)
 	require.Equal(t, "content-1", merged.ContentID)
 	require.Equal(t, domain.OutboxKindNewShort, merged.Kind)
@@ -119,7 +119,7 @@ func TestBuildObservationPostComparisonKey_MissingPostIDGeneratesFallback(t *tes
 		DetectedAt: &detected,
 	}
 
-	key := buildObservationPostComparisonKey(input, 0)
+	key := buildObservationPostComparisonKey(&input, 0)
 	require.Equal(t, domain.OutboxKindCommunityPost, key.kind)
 	require.Equal(t, "UC_TEST", key.channelID)
 	require.Contains(t, key.canonicalPostID, "__missing_post_id__:")
@@ -135,7 +135,7 @@ func TestBuildObservationPostComparisonKey_UsesCanonicalPostID(t *testing.T) {
 		ChannelID:       "UC_TEST",
 	}
 
-	key := buildObservationPostComparisonKey(input, 0)
+	key := buildObservationPostComparisonKey(&input, 0)
 	require.Equal(t, "community:post-1", key.canonicalPostID)
 	require.Equal(t, "UC_TEST", key.channelID)
 }

@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -115,7 +116,12 @@ func (db *batchTestDB) First(dest any, conds ...any) *batchTestDB {
 	query := "SELECT " + publishedAtResolverTestSelectColumns(table) + " FROM " + table
 	args := next.args
 	if len(conds) > 0 {
-		query += " WHERE " + conds[0].(string)
+		condition, ok := conds[0].(string)
+		if !ok {
+			next.Error = fmt.Errorf("first condition has type %T, want string", conds[0])
+			return next
+		}
+		query += " WHERE " + condition
 		args = append([]any(nil), conds[1:]...)
 	} else if strings.TrimSpace(next.where) != "" {
 		query += " WHERE " + next.where

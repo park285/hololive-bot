@@ -105,7 +105,7 @@ func readEmbeddedProfiles[T any](
 	return profiles, nil
 }
 
-func readEmbeddedProfileEntries(fsys fs.FS, dir string, collectionLabel string, allowEmpty bool) ([]fs.DirEntry, error) {
+func readEmbeddedProfileEntries(fsys fs.FS, dir, collectionLabel string, allowEmpty bool) ([]fs.DirEntry, error) {
 	files, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read embedded %s: %w", collectionLabel, err)
@@ -122,15 +122,14 @@ func readEmbeddedProfile[T any](
 	itemLabel string,
 	filename string,
 	after func(slug string, profile *T),
-) (string, T, error) {
-	slug := strings.TrimSuffix(filename, path.Ext(filename))
+) (slug string, profile T, err error) {
+	slug = strings.TrimSuffix(filename, path.Ext(filename))
 	data, err := fs.ReadFile(fsys, path.Join(dir, filename))
 	if err != nil {
 		var zero T
 		return "", zero, fmt.Errorf("failed to read %s %s: %w", itemLabel, filename, err)
 	}
 
-	var profile T
 	if err := json.Unmarshal(data, &profile); err != nil {
 		return "", profile, fmt.Errorf("failed to parse %s %s: %w", itemLabel, filename, err)
 	}

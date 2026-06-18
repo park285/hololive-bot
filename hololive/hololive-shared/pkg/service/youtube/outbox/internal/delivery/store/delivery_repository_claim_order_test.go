@@ -46,7 +46,7 @@ func insertClaimOrderOutbox(t *testing.T, ctx context.Context, db *pgxpool.Pool,
 	return id
 }
 
-func insertClaimOrderDelivery(t *testing.T, ctx context.Context, db *pgxpool.Pool, outboxID int64, roomID string, createdAt time.Time, nextAttemptAt time.Time) int64 {
+func insertClaimOrderDelivery(t *testing.T, ctx context.Context, db *pgxpool.Pool, outboxID int64, roomID string, createdAt, nextAttemptAt time.Time) int64 {
 	t.Helper()
 	var id int64
 	err := db.QueryRow(ctx, `

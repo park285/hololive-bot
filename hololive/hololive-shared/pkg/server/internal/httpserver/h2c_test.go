@@ -42,7 +42,9 @@ func healthHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+			panic(err)
+		}
 	})
 }
 
@@ -64,10 +66,7 @@ func TestH2CProtocolDetection(t *testing.T) {
 	}
 	h2cClient := &http.Client{Transport: h2cTransport}
 
-	resp, err := h2cClient.Get(ts.URL + "/health")
-	if err != nil {
-		t.Fatalf("H2C 요청 실패: %v", err)
-	}
+	resp := testClientGet(t, h2cClient, ts.URL+"/health")
 	t.Cleanup(func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			t.Errorf("응답 바디 닫기 실패: %v", closeErr)
@@ -81,7 +80,10 @@ func TestH2CProtocolDetection(t *testing.T) {
 		t.Logf("✅ H2C 프로토콜 확인: HTTP/%d.%d", resp.ProtoMajor, resp.ProtoMinor)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("응답 읽기 실패: %v", err)
+	}
 	t.Logf("응답: %s", string(body))
 }
 
@@ -98,10 +100,7 @@ func TestHTTP1Fallback(t *testing.T) {
 	}
 	h1Client := &http.Client{Transport: h1Transport}
 
-	resp, err := h1Client.Get(ts.URL + "/health")
-	if err != nil {
-		t.Fatalf("HTTP/1.1 요청 실패: %v", err)
-	}
+	resp := testClientGet(t, h1Client, ts.URL+"/health")
 	t.Cleanup(func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			t.Errorf("응답 바디 닫기 실패: %v", closeErr)
@@ -131,11 +130,10 @@ func BenchmarkHTTP1(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		resp, err := client.Get(ts.URL + "/health")
-		if err != nil {
+		resp := benchClientGet(b, client, ts.URL+"/health")
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 			b.Fatal(err)
 		}
-		_, _ = io.Copy(io.Discard, resp.Body)
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			b.Fatal(closeErr)
 		}
@@ -160,12 +158,13 @@ func BenchmarkH2C(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		resp, err := client.Get(ts.URL + "/health")
-		if err != nil {
+		resp := benchClientGet(b, client, ts.URL+"/health")
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 			b.Fatal(err)
 		}
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			b.Fatal(closeErr)
+		}
 	}
 }
 
@@ -185,12 +184,13 @@ func BenchmarkHTTP1Concurrent(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			resp, err := client.Get(ts.URL + "/health")
-			if err != nil {
+			resp := benchClientGet(b, client, ts.URL+"/health")
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 				b.Fatal(err)
 			}
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				b.Fatal(closeErr)
+			}
 		}
 	})
 }
@@ -214,12 +214,13 @@ func BenchmarkH2CConcurrent(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			resp, err := client.Get(ts.URL + "/health")
-			if err != nil {
+			resp := benchClientGet(b, client, ts.URL+"/health")
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 				b.Fatal(err)
 			}
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				b.Fatal(closeErr)
+			}
 		}
 	})
 }
@@ -267,9 +268,9 @@ func TestLatencyComparison(t *testing.T) {
 
 	t.Logf("\n=== 레이턴시 비교 (요청 %d개, 동시성 %d) ===", requests, concurrency)
 	t.Logf("HTTP/1.1: 평균 %.3fms, 최소 %.3fms, 최대 %.3fms",
-		avg(h1Latencies), min(h1Latencies), max(h1Latencies))
+		avg(h1Latencies), minFloat(h1Latencies), maxFloat(h1Latencies))
 	t.Logf("H2C:      평균 %.3fms, 최소 %.3fms, 최대 %.3fms",
-		avg(h2cLatencies), min(h2cLatencies), max(h2cLatencies))
+		avg(h2cLatencies), minFloat(h2cLatencies), maxFloat(h2cLatencies))
 
 	improvement := (avg(h1Latencies) - avg(h2cLatencies)) / avg(h1Latencies) * 100
 	t.Logf("H2C 개선율: %.1f%%", improvement)
@@ -292,13 +293,19 @@ func measureLatency(t *testing.T, client *http.Client, url string, requests, con
 			defer func() { <-sem }()
 
 			start := time.Now()
-			resp, err := client.Get(url)
+			resp, err := testClientGetResult(client, url)
 			if err != nil {
 				t.Logf("요청 실패: %v", err)
 				return
 			}
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+				t.Logf("응답 비우기 실패: %v", err)
+				return
+			}
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Logf("응답 닫기 실패: %v", closeErr)
+				return
+			}
 
 			latency := float64(time.Since(start).Microseconds()) / 1000.0
 			mu.Lock()
@@ -321,7 +328,7 @@ func avg(vals []float64) float64 {
 	return sum / float64(len(vals))
 }
 
-func min(vals []float64) float64 {
+func minFloat(vals []float64) float64 {
 	if len(vals) == 0 {
 		return 0
 	}
@@ -334,7 +341,7 @@ func min(vals []float64) float64 {
 	return m
 }
 
-func max(vals []float64) float64 {
+func maxFloat(vals []float64) float64 {
 	if len(vals) == 0 {
 		return 0
 	}
@@ -372,13 +379,19 @@ func TestMultiplexingBenefit(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			resp, err := client.Get(fmt.Sprintf("%s/health?req=%d", ts.URL, idx))
+			resp, err := testClientGetResult(client, fmt.Sprintf("%s/health?req=%d", ts.URL, idx))
 			if err != nil {
 				t.Logf("요청 %d 실패: %v", idx, err)
 				return
 			}
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+				t.Logf("요청 %d 응답 비우기 실패: %v", idx, err)
+				return
+			}
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Logf("요청 %d 응답 닫기 실패: %v", idx, closeErr)
+				return
+			}
 		}(i)
 	}
 
@@ -387,4 +400,43 @@ func TestMultiplexingBenefit(t *testing.T) {
 
 	t.Logf("✅ H2C 멀티플렉싱: %d개 동시 요청 완료 in %v", numRequests, elapsed)
 	t.Logf("   평균 요청 시간: %.3fms", float64(elapsed.Microseconds())/float64(numRequests)/1000.0)
+}
+
+func testClientGet(t *testing.T, client *http.Client, url string) *http.Response {
+	t.Helper()
+	resp, err := testClientGetResult(client, url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	if resp == nil {
+		t.Fatalf("GET %s returned nil response", url)
+	}
+	return resp
+}
+
+func benchClientGet(b *testing.B, client *http.Client, url string) *http.Response {
+	b.Helper()
+	resp, err := testClientGetResult(client, url)
+	if err != nil {
+		b.Fatalf("GET %s: %v", url, err)
+	}
+	if resp == nil {
+		b.Fatalf("GET %s returned nil response", url)
+	}
+	return resp
+}
+
+func testClientGetResult(client *http.Client, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("nil response")
+	}
+	return resp, nil
 }

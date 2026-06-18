@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -66,12 +67,56 @@ func DefaultOpenOptions() OpenOptions {
 	}
 }
 
-func Open(ctx context.Context, config Config, opt OpenOptions) (*Client, error) {
-	client := NewLazy(config, opt)
+func Open[C Config | *Config, O OpenOptions | *OpenOptions](ctx context.Context, config C, opt O) (*Client, error) {
+	cfg, err := openConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	openOpt, err := openOptions(opt)
+	if err != nil {
+		return nil, err
+	}
+	return open(ctx, cfg, openOpt)
+}
+
+func open(ctx context.Context, config *Config, opt *OpenOptions) (*Client, error) {
+	client, err := NewLazy(config, opt)
+	if err != nil {
+		return nil, err
+	}
 	if err := client.Connect(ctx); err != nil {
 		return nil, err
 	}
 	return client, nil
+}
+
+func openConfig[T Config | *Config](config T) (*Config, error) {
+	switch cfg := any(config).(type) {
+	case Config:
+		return &cfg, nil
+	case *Config:
+		if cfg == nil {
+			return nil, fmt.Errorf("postgres config is nil")
+		}
+		return cfg, nil
+	default:
+		return nil, fmt.Errorf("unsupported postgres config type %T", config)
+	}
+}
+
+func openOptions[T OpenOptions | *OpenOptions](opt T) (*OpenOptions, error) {
+	switch openOpt := any(opt).(type) {
+	case OpenOptions:
+		return &openOpt, nil
+	case *OpenOptions:
+		if openOpt == nil {
+			defaults := DefaultOpenOptions()
+			return &defaults, nil
+		}
+		return openOpt, nil
+	default:
+		return nil, fmt.Errorf("unsupported postgres open options type %T", opt)
+	}
 }
 
 func (c *Client) Pool() *pgxpool.Pool {
@@ -107,14 +152,21 @@ func (c *Client) Close() error {
 }
 
 // 실제 연결은 Connect() 호출 시 수행
-func NewLazy(config Config, opt OpenOptions) *Client {
+func NewLazy(config *Config, opt *OpenOptions) (*Client, error) {
+	if config == nil {
+		return nil, fmt.Errorf("postgres config is nil")
+	}
+	if opt == nil {
+		defaults := DefaultOpenOptions()
+		opt = &defaults
+	}
 	if opt.Logger == nil {
 		opt.Logger = slog.Default()
 	}
 	return &Client{
-		config: config,
-		opt:    opt,
-	}
+		config: *config,
+		opt:    *opt,
+	}, nil
 }
 
 // 이미 연결된 경우 즉시 반환, 실패 시 다음 호출에서 재시도 가능
@@ -135,7 +187,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		retry.PingTimeout = 5 * time.Second
 	}
 
-	client, connectErr := c.connectWithOptionalDNSFallback(ctx, config, opt, pool, retry)
+	client, connectErr := c.connectWithOptionalDNSFallback(ctx, &config, &opt, &pool, &retry)
 	if connectErr != nil {
 		return connectErr
 	}
@@ -160,19 +212,19 @@ func (c *Client) Connect(ctx context.Context) error {
 
 func (c *Client) connectWithOptionalDNSFallback(
 	ctx context.Context,
-	config Config,
-	opt OpenOptions,
-	pool PoolConfig,
-	retry RetryConfig,
+	config *Config,
+	opt *OpenOptions,
+	pool *PoolConfig,
+	retry *RetryConfig,
 ) (*Client, error) {
 	client, connectErr := c.tryConnect(ctx, config, pool, retry)
 	if connectErr == nil || !opt.DNSFallback || !ShouldFallbackToLocalhost(connectErr, config.Host) {
 		return client, connectErr
 	}
 
-	fallbackConfig := config
+	fallbackConfig := *config
 	fallbackConfig.Host = "127.0.0.1"
-	client, connectErr = c.tryConnect(ctx, fallbackConfig, pool, retry)
+	client, connectErr = c.tryConnect(ctx, &fallbackConfig, pool, retry)
 	if connectErr == nil {
 		opt.Logger.Warn("postgres_host_fallback",
 			slog.String("configured_host", config.Host),
@@ -189,27 +241,16 @@ func (c *Client) Connected() bool {
 	return c.pool != nil
 }
 
-func (c *Client) tryConnect(ctx context.Context, config Config, pool PoolConfig, retry RetryConfig) (*Client, error) {
-	// ParseConfig 에러 문자열에 DSN이 포함될 수 있으므로,
-	// 파싱 단계에서는 마스킹된 DSN을 사용하고 실제 비밀번호는 이후에 주입한다.
-	poolConfig, err := pgxpool.ParseConfig(config.SafeDSN())
+func (c *Client) tryConnect(ctx context.Context, config *Config, pool *PoolConfig, retry *RetryConfig) (*Client, error) {
+	config, pool, retry, err := normalizeTryConnectInput(config, pool, retry)
 	if err != nil {
-		return nil, fmt.Errorf("parse postgres config: %w", err)
-	}
-	poolConfig.ConnConfig.Password = config.Password
-	if config.QueryExecMode != "" {
-		mode, modeErr := parseQueryExecMode(config.QueryExecMode)
-		if modeErr != nil {
-			return nil, fmt.Errorf("invalid query exec mode: %w", modeErr)
-		}
-		poolConfig.ConnConfig.DefaultQueryExecMode = mode
+		return nil, err
 	}
 
-	poolConfig.MinConns = int32(pool.MinConns)
-	poolConfig.MaxConns = int32(pool.MaxConns)
-	poolConfig.MaxConnLifetime = pool.ConnMaxLifetime
-	poolConfig.MaxConnLifetimeJitter = pool.ConnMaxLifetimeJitter
-	poolConfig.MaxConnIdleTime = pool.ConnMaxIdleTime
+	poolConfig, err := buildPgxPoolConfig(config, pool)
+	if err != nil {
+		return nil, err
+	}
 
 	pgxPool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
@@ -227,6 +268,62 @@ func (c *Client) tryConnect(ctx context.Context, config Config, pool PoolConfig,
 	return &Client{
 		pool: pgxPool,
 	}, nil
+}
+
+func normalizeTryConnectInput(config *Config, pool *PoolConfig, retry *RetryConfig) (*Config, *PoolConfig, *RetryConfig, error) {
+	if config == nil {
+		return nil, nil, nil, fmt.Errorf("postgres config is nil")
+	}
+	if pool == nil {
+		defaults := DefaultPoolConfig()
+		pool = &defaults
+	}
+	if retry == nil {
+		defaults := DefaultRetryConfig()
+		retry = &defaults
+	}
+	return config, pool, retry, nil
+}
+
+func buildPgxPoolConfig(config *Config, pool *PoolConfig) (*pgxpool.Config, error) {
+	// ParseConfig 에러 문자열에 DSN이 포함될 수 있으므로,
+	// 파싱 단계에서는 마스킹된 DSN을 사용하고 실제 비밀번호는 이후에 주입한다.
+	poolConfig, err := pgxpool.ParseConfig(config.SafeDSN())
+	if err != nil {
+		return nil, fmt.Errorf("parse postgres config: %w", err)
+	}
+	poolConfig.ConnConfig.Password = config.Password
+	if err := applyQueryExecMode(poolConfig, config.QueryExecMode); err != nil {
+		return nil, err
+	}
+	if err := applyPoolConfig(poolConfig, pool); err != nil {
+		return nil, err
+	}
+	return poolConfig, nil
+}
+
+func applyQueryExecMode(poolConfig *pgxpool.Config, queryExecMode string) error {
+	if queryExecMode == "" {
+		return nil
+	}
+	mode, err := parseQueryExecMode(queryExecMode)
+	if err != nil {
+		return fmt.Errorf("invalid query exec mode: %w", err)
+	}
+	poolConfig.ConnConfig.DefaultQueryExecMode = mode
+	return nil
+}
+
+func applyPoolConfig(poolConfig *pgxpool.Config, pool *PoolConfig) error {
+	if pool.MinConns < 0 || pool.MaxConns < 0 || pool.MinConns > math.MaxInt32 || pool.MaxConns > math.MaxInt32 {
+		return fmt.Errorf("postgres pool connection count exceeds int32: min=%d max=%d", pool.MinConns, pool.MaxConns)
+	}
+	poolConfig.MinConns = int32(pool.MinConns)
+	poolConfig.MaxConns = int32(pool.MaxConns)
+	poolConfig.MaxConnLifetime = pool.ConnMaxLifetime
+	poolConfig.MaxConnLifetimeJitter = pool.ConnMaxLifetimeJitter
+	poolConfig.MaxConnIdleTime = pool.ConnMaxIdleTime
+	return nil
 }
 
 func parseQueryExecMode(mode string) (pgx.QueryExecMode, error) {

@@ -47,7 +47,10 @@ func TestNewLazy(t *testing.T) {
 	}
 	opt := DefaultOpenOptions()
 
-	client := NewLazy(config, opt)
+	client, err := NewLazy(&config, &opt)
+	if err != nil {
+		t.Fatalf("NewLazy error: %v", err)
+	}
 
 	if client == nil {
 		t.Fatal("NewLazy returned nil")
@@ -64,7 +67,10 @@ func TestNewLazy_NilLogger(t *testing.T) {
 	config := Config{Host: "postgres", Port: 5432}
 	opt := OpenOptions{}
 
-	client := NewLazy(config, opt)
+	client, err := NewLazy(&config, &opt)
+	if err != nil {
+		t.Fatalf("NewLazy error: %v", err)
+	}
 
 	if client == nil {
 		t.Fatal("NewLazy returned nil")
@@ -255,7 +261,8 @@ func TestConfigDSNQuotesKeywordValues(t *testing.T) {
 }
 
 func TestTryConnect_ParseConfigError_MasksPassword(t *testing.T) {
-	client := &Client{opt: DefaultOpenOptions()}
+	opt := DefaultOpenOptions()
+	client := &Client{opt: opt}
 	config := Config{
 		Host:     "localhost",
 		Port:     5432,
@@ -265,7 +272,9 @@ func TestTryConnect_ParseConfigError_MasksPassword(t *testing.T) {
 		SSLMode:  "invalid",
 	}
 
-	_, err := client.tryConnect(context.Background(), config, DefaultPoolConfig(), DefaultRetryConfig())
+	poolConfig := DefaultPoolConfig()
+	retryConfig := DefaultRetryConfig()
+	_, err := client.tryConnect(context.Background(), &config, &poolConfig, &retryConfig)
 	if err == nil {
 		t.Fatal("expected parse config error, got nil")
 	}

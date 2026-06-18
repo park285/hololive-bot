@@ -45,7 +45,7 @@ func TestApplyBaseMiddlewareAndRegisterHealthRoutes(t *testing.T) {
 	RegisterHealthRoutes(router)
 
 	for _, path := range []string{"/health", "/ready"} {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 

@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valkey-io/valkey-go"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,6 +48,7 @@ type failingCacheClient struct {
 	failDelMany   error
 	failSRemKey   string
 	failSRemErr   error
+	nilDoMulti    bool
 	// casKeyConflict가 지정되면 해당 키의 CompareAndDelete가 (false, nil)을 반환해
 	// 동시 회전(다른 요청이 먼저 claim)을 시뮬레이션한다.
 	casKeyConflict string
@@ -92,6 +94,13 @@ func (c *failingCacheClient) SRem(ctx context.Context, key string, members []str
 		return 0, c.failSRemErr
 	}
 	return c.Client.SRem(ctx, key, members)
+}
+
+func (c *failingCacheClient) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
+	if c.nilDoMulti {
+		return nil
+	}
+	return c.Client.DoMulti(ctx, cmds...)
 }
 
 func newTestDB(t *testing.T) *pgxpool.Pool {
@@ -447,7 +456,7 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 		t.Fatalf("find reset token: %v", err)
 	}
 
-	oldHash := storedPasswordHash(t, service, "user@example.com")
+	oldHash := storedPasswordHash(t, service)
 	if _, err := db.Exec(ctx, `
 		CREATE OR REPLACE FUNCTION auth_reset_token_sleep()
 		RETURNS trigger AS $$
@@ -470,13 +479,13 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 	timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 
-	err = service.applyPasswordReset(timeoutCtx, reset, "new-hash", time.Now().UTC())
+	err = service.applyPasswordReset(timeoutCtx, &reset, "new-hash", time.Now().UTC())
 	if err == nil {
 		t.Fatalf("expected applyPasswordReset to fail")
 	}
 	assertAuthCode(t, err, CodeInternal)
 
-	if got := storedPasswordHash(t, service, "user@example.com"); got != oldHash {
+	if got := storedPasswordHash(t, service); got != oldHash {
 		t.Fatalf("password hash should roll back, got=%q want=%q", got, oldHash)
 	}
 
@@ -752,5 +761,15 @@ func TestIncrWithTTL_HealsCounterWithoutTTLOnNextIncrement(t *testing.T) {
 	}
 	if ttl := mini.TTL(key); ttl != 2*time.Second {
 		t.Fatalf("healed ttl=%v want=2s", ttl)
+	}
+}
+
+func TestIncrWithTTL_ReturnsErrorOnNilPipelineResults(t *testing.T) {
+	baseCache := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := &failingCacheClient{Client: baseCache, nilDoMulti: true}
+
+	_, err := incrWithTTL(context.Background(), cacheClient, "auth:test:nil-results", time.Minute)
+	if err == nil {
+		t.Fatalf("expected error for nil pipeline results")
 	}
 }

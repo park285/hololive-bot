@@ -96,14 +96,14 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 
 	results := make([]TerminalCommunityShortsOutboxResult, 0, len(outboxes))
 	for i := range outboxes {
-		results = append(results, summarizeTerminalCommunityShortsOutbox(outboxes[i], deliveriesByOutbox[outboxes[i].ID]))
+		results = append(results, summarizeTerminalCommunityShortsOutbox(&outboxes[i], deliveriesByOutbox[outboxes[i].ID]))
 	}
 
 	return results, nil
 }
 
 func summarizeTerminalCommunityShortsOutbox(
-	outbox domain.YouTubeNotificationOutbox,
+	outbox *domain.YouTubeNotificationOutbox,
 	deliveries []domain.YouTubeNotificationDelivery,
 ) TerminalCommunityShortsOutboxResult {
 	result := TerminalCommunityShortsOutboxResult{
@@ -126,7 +126,7 @@ func summarizeTerminalCommunityShortsOutbox(
 	return result
 }
 
-func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotificationDelivery) (int, int, string) {
+func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotificationDelivery) (result1, result2 int, result3 string) {
 	reasons := make([]string, 0)
 	seenReasons := make(map[string]struct{}, len(deliveries))
 	successfulRoomCount := 0
@@ -149,12 +149,14 @@ func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotif
 	return successfulRoomCount, failedRoomCount, ""
 }
 
-func terminalCommunityShortsDeliveryStatusCounts(status domain.OutboxStatus) (int, int) {
+func terminalCommunityShortsDeliveryStatusCounts(status domain.OutboxStatus) (result1, result2 int) {
 	switch status {
 	case domain.OutboxStatusSent:
 		return 1, 0
 	case domain.OutboxStatusFailed:
 		return 0, 1
+	case domain.OutboxStatusPending:
+		return 0, 0
 	default:
 		return 0, 0
 	}

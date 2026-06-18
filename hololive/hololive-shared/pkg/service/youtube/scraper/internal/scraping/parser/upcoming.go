@@ -4,7 +4,7 @@ import "github.com/tidwall/gjson"
 
 const upcomingSectionsPath = "contents.twoColumnBrowseResultsRenderer.tabs.0.tabRenderer.content.sectionListRenderer.contents"
 
-func ParseUpcomingEventsFromInitialData(data gjson.Result) []*UpcomingEvent {
+func ParseUpcomingEventsFromInitialData(data *gjson.Result) []*UpcomingEvent {
 	events := make([]*UpcomingEvent, 0)
 	seen := make(map[string]bool)
 
@@ -12,8 +12,10 @@ func ParseUpcomingEventsFromInitialData(data gjson.Result) []*UpcomingEvent {
 		contents := section.Get("itemSectionRenderer.contents")
 
 		contents.ForEach(func(_, content gjson.Result) bool {
-			appendUpcomingEventsFromFeaturedItems(&events, seen, content.Get("channelFeaturedContentRenderer.items"))
-			appendUpcomingEventsFromShelfItems(&events, seen, content.Get("shelfRenderer.content.horizontalListRenderer.items"))
+			featuredItems := content.Get("channelFeaturedContentRenderer.items")
+			appendUpcomingEventsFromFeaturedItems(&events, seen, &featuredItems)
+			shelfItems := content.Get("shelfRenderer.content.horizontalListRenderer.items")
+			appendUpcomingEventsFromShelfItems(&events, seen, &shelfItems)
 			return true
 		})
 		return true
@@ -22,25 +24,26 @@ func ParseUpcomingEventsFromInitialData(data gjson.Result) []*UpcomingEvent {
 	return events
 }
 
-func appendUpcomingEventsFromFeaturedItems(events *[]*UpcomingEvent, seen map[string]bool, items gjson.Result) {
+func appendUpcomingEventsFromFeaturedItems(events *[]*UpcomingEvent, seen map[string]bool, items *gjson.Result) {
 	items.ForEach(func(_, item gjson.Result) bool {
-		appendUpcomingEvent(events, seen, item.Get("videoRenderer"))
+		video := item.Get("videoRenderer")
+		appendUpcomingEvent(events, seen, &video)
 		return true
 	})
 }
 
-func appendUpcomingEventsFromShelfItems(events *[]*UpcomingEvent, seen map[string]bool, items gjson.Result) {
+func appendUpcomingEventsFromShelfItems(events *[]*UpcomingEvent, seen map[string]bool, items *gjson.Result) {
 	items.ForEach(func(_, item gjson.Result) bool {
 		video := item.Get("videoRenderer")
 		if !video.Exists() {
 			video = item.Get("gridVideoRenderer")
 		}
-		appendUpcomingEvent(events, seen, video)
+		appendUpcomingEvent(events, seen, &video)
 		return true
 	})
 }
 
-func appendUpcomingEvent(events *[]*UpcomingEvent, seen map[string]bool, video gjson.Result) {
+func appendUpcomingEvent(events *[]*UpcomingEvent, seen map[string]bool, video *gjson.Result) {
 	if !video.Exists() {
 		return
 	}
@@ -57,16 +60,17 @@ func appendUpcomingEvent(events *[]*UpcomingEvent, seen map[string]bool, video g
 	*events = append(*events, event)
 }
 
-func parseVideoToEvent(video gjson.Result) *UpcomingEvent {
+func parseVideoToEvent(video *gjson.Result) *UpcomingEvent {
 	videoID := video.Get("videoId").String()
 	if videoID == "" {
 		return nil
 	}
 
+	thumbnails := video.Get("thumbnail.thumbnails")
 	return &UpcomingEvent{
 		VideoID:       videoID,
 		Title:         videoTitleText(video),
-		Thumbnail:     ParseThumbnailSources(video.Get("thumbnail.thumbnails")),
+		Thumbnail:     ParseThumbnailSources(&thumbnails),
 		Status:        videoEventStatus(video),
 		StartTime:     videoEventStartTime(video),
 		ViewCountText: videoViewCountText(video),
@@ -74,7 +78,7 @@ func parseVideoToEvent(video gjson.Result) *UpcomingEvent {
 	}
 }
 
-func videoEventStatus(video gjson.Result) string {
+func videoEventStatus(video *gjson.Result) string {
 	status := thumbnailOverlayEventStatus(video)
 	if status != "DEFAULT" {
 		return status
@@ -85,7 +89,7 @@ func videoEventStatus(video gjson.Result) string {
 	return status
 }
 
-func thumbnailOverlayEventStatus(video gjson.Result) string {
+func thumbnailOverlayEventStatus(video *gjson.Result) string {
 	status := "DEFAULT"
 	video.Get("thumbnailOverlays").ForEach(func(_, overlay gjson.Result) bool {
 		style := overlay.Get("thumbnailOverlayTimeStatusRenderer.style").String()
@@ -98,7 +102,7 @@ func thumbnailOverlayEventStatus(video gjson.Result) string {
 	return status
 }
 
-func videoEventStartTime(video gjson.Result) *int64 {
+func videoEventStartTime(video *gjson.Result) *int64 {
 	st := video.Get("upcomingEventData.startTime").Int()
 	if st <= 0 {
 		return nil
@@ -106,14 +110,14 @@ func videoEventStartTime(video gjson.Result) *int64 {
 	return &st
 }
 
-func videoTitleText(video gjson.Result) string {
+func videoTitleText(video *gjson.Result) string {
 	if title := video.Get("title.simpleText").String(); title != "" {
 		return title
 	}
 	return video.Get("title.runs.0.text").String()
 }
 
-func videoViewCountText(video gjson.Result) string {
+func videoViewCountText(video *gjson.Result) string {
 	if text := video.Get("viewCountText.simpleText").String(); text != "" {
 		return text
 	}

@@ -51,7 +51,10 @@ type PostgresConfig struct {
 }
 
 // hololive-shared/internal/dbx.Client를 사용하여 pgxpool 기반 PostgreSQL 연결을 제공한다.
-func NewPostgresService(ctx context.Context, config PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
+func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
+	if config == nil {
+		return nil, fmt.Errorf("postgres config is nil")
+	}
 	dbxConfig := dbx.Config{
 		Host:          config.Host,
 		Port:          config.Port,

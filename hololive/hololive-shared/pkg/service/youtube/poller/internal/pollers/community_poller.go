@@ -115,7 +115,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 	if err != nil {
 		return err
 	}
-	newPosts := collectNewCommunityPosts(posts, watermark, isInitialized)
+	newPosts := collectNewCommunityPosts(posts, &watermark, isInitialized)
 	detectedAt := yttimestamp.Normalize(time.Now()).Truncate(time.Microsecond)
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt, p.ensureMetrics())
 	batch := p.buildCommunityBatch(ctx, channelID, newPosts, isInitialized, detectedAt)
@@ -237,7 +237,7 @@ func (p *CommunityPoller) buildCommunityNotification(
 
 func collectNewCommunityPosts(
 	posts []*scraper.CommunityPost,
-	watermark domain.YouTubeContentWatermark,
+	watermark *domain.YouTubeContentWatermark,
 	isInitialized bool,
 ) []*scraper.CommunityPost {
 	newPosts := make([]*scraper.CommunityPost, 0, len(posts))

@@ -64,7 +64,7 @@ func (s *Service) markLegacyNotified(ctx context.Context, key string, existing *
 	return nil
 }
 
-func (s *Service) writeNotifiedHashFields(ctx context.Context, key string, scheduledStr string, minutesUntil int) error {
+func (s *Service) writeNotifiedHashFields(ctx context.Context, key, scheduledStr string, minutesUntil int) error {
 	fields := map[string]any{
 		"start_scheduled":          scheduledStr,
 		strconv.Itoa(minutesUntil): "1",

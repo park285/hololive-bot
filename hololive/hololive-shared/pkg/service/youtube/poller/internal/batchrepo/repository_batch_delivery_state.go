@@ -53,7 +53,8 @@ func loadFailedNotificationOutboxRows(ctx context.Context, tx batchDB, notificat
 	}
 
 	var rows []failedNotificationOutboxRow
-	queryArgs := []any{domain.OutboxStatusFailed}
+	queryArgs := make([]any, 0, 1+len(args))
+	queryArgs = append(queryArgs, domain.OutboxStatusFailed)
 	queryArgs = append(queryArgs, args...)
 	if err := dbx.SelectSQL(ctx, tx, &rows, "query failed outbox rows", `
 		SELECT id, kind, content_id
@@ -65,7 +66,7 @@ func loadFailedNotificationOutboxRows(ctx context.Context, tx batchDB, notificat
 	return rows, nil
 }
 
-func failedNotificationOutboxQueryArgs(notifications []*domain.YouTubeNotificationOutbox) ([]string, []any) {
+func failedNotificationOutboxQueryArgs(notifications []*domain.YouTubeNotificationOutbox) (result1 []string, result2 []any) {
 	clauses := make([]string, 0, len(notifications))
 	args := make([]any, 0, len(notifications)*2)
 	seen := make(map[string]struct{}, len(notifications))
@@ -177,7 +178,7 @@ func recordCompletedNotificationAlarmStateSentAt(completed map[string]time.Time,
 	completed[identityKey] = selectEarlierSentAt(completed[identityKey], yttimestamp.Normalize(*row.AlarmSentAt))
 }
 
-func partitionFailedNotificationOutboxRows(rows []failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) ([]failedNotificationOutboxRow, []failedNotificationOutboxRow) {
+func partitionFailedNotificationOutboxRows(rows []failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) (result1, result2 []failedNotificationOutboxRow) {
 	completed := make([]failedNotificationOutboxRow, 0, len(rows))
 	reactivations := make([]failedNotificationOutboxRow, 0, len(rows))
 	for i := range rows {
@@ -302,6 +303,8 @@ func resolveNotificationReactivationPostID(kind domain.OutboxKind, contentID, pa
 		return resolveShortNotificationReactivationPostID(contentID, payload)
 	case domain.OutboxKindCommunityPost:
 		return resolveCommunityNotificationReactivationPostID(contentID, payload)
+	case domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return strings.TrimSpace(contentID)
 	}
 
 	return strings.TrimSpace(contentID)
@@ -336,7 +339,7 @@ func notificationIdentityKey(kind domain.OutboxKind, contentID string) string {
 	return fmt.Sprintf("%s::%s", kind, strings.TrimSpace(contentID))
 }
 
-func selectEarlierSentAt(current time.Time, candidate time.Time) time.Time {
+func selectEarlierSentAt(current, candidate time.Time) time.Time {
 	if current.IsZero() {
 		return candidate
 	}
@@ -354,7 +357,8 @@ func rearmFailedDeliveryRows(ctx context.Context, tx batchDB, outboxIDs []int64,
 		return nil
 	}
 
-	args := []any{domain.OutboxStatusPending, nextAttemptAt}
+	args := make([]any, 0, 3+len(outboxIDs))
+	args = append(args, domain.OutboxStatusPending, nextAttemptAt)
 	args = append(args, dbx.AnyArgs(outboxIDs)...)
 	args = append(args, domain.OutboxStatusFailed)
 	if _, err := dbx.ExecSQL(ctx, tx, "update delivery rows", `

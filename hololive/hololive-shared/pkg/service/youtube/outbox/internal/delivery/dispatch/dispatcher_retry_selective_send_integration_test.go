@@ -70,10 +70,10 @@ func TestProcessOnce_RetrySkipsAlreadySentCommunityShortsPostAndResendsOnlyPendi
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			db := newRecoveryInputFixtureDB(t, "retry_selective_send_"+tc.name)
-			fixture := seedCommunityShortsRecoveryInputFixture(t, db, tc.spec)
+			fixture := seedCommunityShortsRecoveryInputFixture(t, db, &tc.spec)
 
 			sender := &testSender{failRoom: map[string]bool{}}
-			dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+			dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 				BatchSize:           10,
 				LockTimeout:         time.Minute,
 				PollInterval:        time.Second,

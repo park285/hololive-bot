@@ -51,7 +51,8 @@ func TestFindVideosTabContentMatchesAdditionalLocales(t *testing.T) {
 			input := `{"tabs":[{"tabRenderer":{"title":` + jsonQuote(tc.tabTitle) +
 				`,"endpoint":{"commandMetadata":{"webCommandMetadata":{"url":` + jsonQuote(tc.tabURL) +
 				`}}},"content":{"richGridRenderer":{"contents":[]}}}}]}`
-			content, _ := findVideosTabContent(gjson.Parse(input).Get("tabs"))
+			tabs := parseGJSONResultPtr(input).Get("tabs")
+			content, _ := findVideosTabContent(gjsonResultPtr(&tabs))
 			assert.Equal(t, tc.shouldHit, content.Exists(), "tab=%q url=%q", tc.tabTitle, tc.tabURL)
 		})
 	}
@@ -90,7 +91,7 @@ func TestParseLockupVideoViewModelHandlesSwappedMetadataParts(t *testing.T) {
             }}
         }}
     }`
-	got := parseLockupVideoViewModel(gjson.Parse(lockupOrdered), "UC_X")
+	got := parseLockupVideoViewModel(parseGJSONResultPtr(lockupOrdered), "UC_X")
 	assert.NotNil(t, got)
 	assert.Equal(t, int64(12_000), got.ViewCount)
 	assert.Equal(t, "2 days ago", got.PublishedText)
@@ -110,7 +111,7 @@ func TestParseLockupVideoViewModelHandlesSwappedMetadataParts(t *testing.T) {
             }}
         }}
     }`
-	got = parseLockupVideoViewModel(gjson.Parse(lockupSwapped), "UC_X")
+	got = parseLockupVideoViewModel(parseGJSONResultPtr(lockupSwapped), "UC_X")
 	assert.NotNil(t, got)
 	assert.Equal(t, int64(1_200_000), got.ViewCount, "viewCount는 위치와 무관하게 숫자 패턴으로 식별되어야 함")
 	assert.Equal(t, "3 weeks ago", got.PublishedText)
@@ -128,6 +129,7 @@ func TestCollectVideoRenderers_BoundedScan(t *testing.T) {
 	}
 	builder.WriteString(`}`)
 
-	renderers := collectVideoRenderers(gjson.Parse(builder.String()).Get("contents"), 1)
+	contents := gjson.Parse(builder.String()).Get("contents")
+	renderers := collectVideoRenderers(gjsonResultPtr(&contents), 1)
 	assert.Empty(t, renderers)
 }

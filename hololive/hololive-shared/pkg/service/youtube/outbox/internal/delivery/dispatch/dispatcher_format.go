@@ -34,8 +34,8 @@ type MessageFormatter struct {
 	f *format.MessageFormatter
 }
 
-func newMessageFormatter(renderer *template.Renderer, cache cache.Client, logger *slog.Logger) *MessageFormatter {
-	return &MessageFormatter{f: format.NewMessageFormatter(renderer, cache, logger)}
+func newMessageFormatter(renderer *template.Renderer, cacheClient cache.Client, logger *slog.Logger) *MessageFormatter {
+	return &MessageFormatter{f: format.NewMessageFormatter(renderer, cacheClient, logger)}
 }
 
 func (mf *MessageFormatter) inner() *format.MessageFormatter {
@@ -45,15 +45,15 @@ func (mf *MessageFormatter) inner() *format.MessageFormatter {
 	return &format.MessageFormatter{}
 }
 
-func (mf *MessageFormatter) formatMessage(ctx context.Context, item domain.YouTubeNotificationOutbox) (string, error) {
+func (mf *MessageFormatter) formatMessage(ctx context.Context, item *domain.YouTubeNotificationOutbox) (string, error) {
 	return mf.inner().FormatMessage(ctx, item)
 }
 
-func (mf *MessageFormatter) buildTemplateData(memberName string, item domain.YouTubeNotificationOutbox) (format.TemplateData, error) {
+func (mf *MessageFormatter) buildTemplateData(memberName string, item *domain.YouTubeNotificationOutbox) (format.TemplateData, error) {
 	return mf.inner().BuildTemplateData(memberName, item)
 }
 
-func (mf *MessageFormatter) formatMessageFallback(memberName string, item domain.YouTubeNotificationOutbox) (string, error) {
+func (mf *MessageFormatter) formatMessageFallback(memberName string, item *domain.YouTubeNotificationOutbox) (string, error) {
 	return mf.inner().FormatMessageFallback(memberName, item)
 }
 
@@ -69,11 +69,11 @@ func (mf *MessageFormatter) formatGroupedMessage(ctx context.Context, memberName
 	return mf.inner().FormatGroupedMessage(ctx, memberName, channelID, kind, items)
 }
 
-func (mf *MessageFormatter) getGroupedTemplateKeyAndHeader(memberName string, kind domain.OutboxKind, count int) (domain.TemplateKey, string) {
+func (mf *MessageFormatter) getGroupedTemplateKeyAndHeader(memberName string, kind domain.OutboxKind, count int) (templateKey domain.TemplateKey, header string) {
 	return mf.inner().GetGroupedTemplateKeyAndHeader(memberName, kind, count)
 }
 
-func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payload domain.YouTubeOutboxDispatchPayload) (string, error) {
+func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
 	return mf.inner().FormatYouTubeOutboxPayload(ctx, payload)
 }
 

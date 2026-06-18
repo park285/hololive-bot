@@ -86,8 +86,12 @@ func NewHolodexAPIClient(
 	apiKey string,
 	logger *slog.Logger,
 	distributed distributedRateLimiter,
-	holodexCfg config.HolodexConfig,
+	holodexCfg *config.HolodexConfig,
 ) *APIClient {
+	if holodexCfg == nil {
+		cfg := config.DefaultHolodexOperationalConfig()
+		holodexCfg = &cfg
+	}
 	if httpClient == nil {
 		httpClient = httputil.NewExternalAPIClient(holodexCfg.Timeout)
 	}

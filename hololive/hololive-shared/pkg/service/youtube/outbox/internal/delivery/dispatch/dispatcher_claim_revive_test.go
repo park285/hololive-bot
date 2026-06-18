@@ -141,7 +141,7 @@ func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
 
 	sender := &testSender{failRoom: map[string]bool{}}
 	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+		slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 			BatchSize:             10,
 			LockTimeout:           time.Minute,
 			PollInterval:          time.Second,

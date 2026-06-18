@@ -89,7 +89,7 @@ func scanUnnotifiedChangeRow(rows interface {
 	return &change, nil
 }
 
-func restoreChangeSubscriberStats(change *domain.StatsChange, prevSubs *int64, currSubs *int64) {
+func restoreChangeSubscriberStats(change *domain.StatsChange, prevSubs, currSubs *int64) {
 	if prevSubs != nil {
 		change.PreviousStats = buildChangeSubscriberStats(change, *prevSubs)
 	}
@@ -99,10 +99,14 @@ func restoreChangeSubscriberStats(change *domain.StatsChange, prevSubs *int64, c
 }
 
 func buildChangeSubscriberStats(change *domain.StatsChange, subscribers int64) *domain.TimestampedStats {
+	subscriberCount, ok := nonNegativeInt64ToUint64(subscribers)
+	if !ok {
+		return nil
+	}
 	return &domain.TimestampedStats{
 		ChannelID:       change.ChannelID,
 		MemberName:      change.MemberName,
-		SubscriberCount: uint64(subscribers),
+		SubscriberCount: subscriberCount,
 	}
 }
 
@@ -257,7 +261,7 @@ func (r *StatsRepository) GetUnnotifiedMilestones(ctx context.Context, limit int
 	return notifications, nil
 }
 
-func (r *StatsRepository) MarkMilestoneNotified(ctx context.Context, channelID string, milestoneType string, value uint64) error {
+func (r *StatsRepository) MarkMilestoneNotified(ctx context.Context, channelID, milestoneType string, value uint64) error {
 	query := `
 		UPDATE youtube_milestones
 		SET notified = true

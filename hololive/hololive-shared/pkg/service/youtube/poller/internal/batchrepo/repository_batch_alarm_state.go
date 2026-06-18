@@ -58,7 +58,7 @@ func communityShortsAlarmStateKey(state *domain.YouTubeCommunityShortsAlarmState
 	return string(state.Kind) + "\x00" + state.PostID
 }
 
-func mergeCommunityShortsAlarmState(existing *domain.YouTubeCommunityShortsAlarmState, state *domain.YouTubeCommunityShortsAlarmState) {
+func mergeCommunityShortsAlarmState(existing, state *domain.YouTubeCommunityShortsAlarmState) {
 	if strings.TrimSpace(state.ContentID) != "" {
 		existing.ContentID = state.ContentID
 	}
@@ -74,7 +74,7 @@ func mergeCommunityShortsAlarmState(existing *domain.YouTubeCommunityShortsAlarm
 	mergeCommunityShortsAlarmSentAt(existing, state)
 }
 
-func mergeCommunityShortsAlarmSentAt(existing *domain.YouTubeCommunityShortsAlarmState, state *domain.YouTubeCommunityShortsAlarmState) {
+func mergeCommunityShortsAlarmSentAt(existing, state *domain.YouTubeCommunityShortsAlarmState) {
 	switch {
 	case existing.AlarmSentAt == nil:
 		existing.AlarmSentAt = state.AlarmSentAt

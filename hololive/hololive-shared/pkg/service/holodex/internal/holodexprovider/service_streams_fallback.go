@@ -15,7 +15,7 @@ type streamFetchState struct {
 	seen       map[string]bool
 }
 
-func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan streamFetchPlan) ([]*domain.Stream, error) {
+func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan *streamFetchPlan) ([]*domain.Stream, error) {
 	if cached, found := getCachedStreamsByOrg(ctx, plan); found {
 		return cached, nil
 	}
@@ -41,14 +41,14 @@ func newStreamFetchState() *streamFetchState {
 	return &streamFetchState{seen: make(map[string]bool)}
 }
 
-func getCachedStreamsByOrg(ctx context.Context, plan streamFetchPlan) ([]*domain.Stream, bool) {
+func getCachedStreamsByOrg(ctx context.Context, plan *streamFetchPlan) ([]*domain.Stream, bool) {
 	if plan.cacheGet == nil {
 		return nil, false
 	}
 	return plan.cacheGet(ctx, plan.resolvedOrg, plan.hours)
 }
 
-func (h *Service) runStreamPrimaryFetches(ctx context.Context, plan streamFetchPlan, targetOrgs []string, state *streamFetchState) fallback.PrimaryResult[string] {
+func (h *Service) runStreamPrimaryFetches(ctx context.Context, plan *streamFetchPlan, targetOrgs []string, state *streamFetchState) fallback.PrimaryResult[string] {
 	return fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{
 		Parallelism: holodexOrgFetchParallelism(plan.resolvedOrg, h.concurrency.OrgAllParallelism),
 	}, func(fetchCtx context.Context, targetOrg string) error {
@@ -56,7 +56,7 @@ func (h *Service) runStreamPrimaryFetches(ctx context.Context, plan streamFetchP
 	})
 }
 
-func (h *Service) fetchAndStoreStreamsForOrg(ctx context.Context, targetOrg string, plan streamFetchPlan, state *streamFetchState) error {
+func (h *Service) fetchAndStoreStreamsForOrg(ctx context.Context, targetOrg string, plan *streamFetchPlan, state *streamFetchState) error {
 	streams, err := h.fetchStreamsByOrg(ctx, targetOrg, plan.status, plan.hours)
 	if err != nil {
 		h.logger.Warn("Failed to get streams for org",
@@ -99,7 +99,7 @@ func (state *streamFetchState) streams() []*domain.Stream {
 	return state.allStreams
 }
 
-func (h *Service) scheduleStreamRetryIfNeeded(ctx context.Context, plan streamFetchPlan, primary fallback.PrimaryResult[string]) {
+func (h *Service) scheduleStreamRetryIfNeeded(ctx context.Context, plan *streamFetchPlan, primary fallback.PrimaryResult[string]) {
 	if !primary.HasFailures() || plan.retry == nil {
 		return
 	}
@@ -108,7 +108,7 @@ func (h *Service) scheduleStreamRetryIfNeeded(ctx context.Context, plan streamFe
 	})
 }
 
-func (h *Service) runStreamScraperFallback(ctx context.Context, plan streamFetchPlan, primary fallback.PrimaryResult[string], state *streamFetchState) (fallback.SecondaryExecution, error) {
+func (h *Service) runStreamScraperFallback(ctx context.Context, plan *streamFetchPlan, primary fallback.PrimaryResult[string], state *streamFetchState) (fallback.SecondaryExecution, error) {
 	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
 	return fallback.RunSecondary(ctx, fallback.SecondaryPlan{
 		Service:   "holodex",
@@ -121,12 +121,12 @@ func (h *Service) runStreamScraperFallback(ctx context.Context, plan streamFetch
 	})
 }
 
-func (h *Service) shouldRunStreamScraperFallback(plan streamFetchPlan, primary fallback.PrimaryResult[string], policy fallback.Policy, state *streamFetchState) bool {
+func (h *Service) shouldRunStreamScraperFallback(plan *streamFetchPlan, primary fallback.PrimaryResult[string], policy fallback.Policy, state *streamFetchState) bool {
 	return h.scraper != nil && supportsScraperFallback(plan.resolvedOrg) &&
 		policy.ShouldRun(len(state.streams()), len(primary.Failed))
 }
 
-func (h *Service) runStreamScraperFallbackFetch(ctx context.Context, plan streamFetchPlan, primary fallback.PrimaryResult[string], state *streamFetchState) (fallback.SecondaryResult, error) {
+func (h *Service) runStreamScraperFallbackFetch(ctx context.Context, plan *streamFetchPlan, primary fallback.PrimaryResult[string], state *streamFetchState) (fallback.SecondaryResult, error) {
 	h.logger.Warn(plan.fallbackLogMessage,
 		slog.Int("failed_orgs", len(primary.Failed)),
 	)
@@ -145,7 +145,7 @@ func (h *Service) runStreamScraperFallbackFetch(ctx context.Context, plan stream
 	}, nil
 }
 
-func cacheStreamsByOrg(ctx context.Context, plan streamFetchPlan, streams []*domain.Stream) {
+func cacheStreamsByOrg(ctx context.Context, plan *streamFetchPlan, streams []*domain.Stream) {
 	if plan.cacheSet != nil {
 		plan.cacheSet(ctx, plan.resolvedOrg, plan.hours, streams)
 	}

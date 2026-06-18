@@ -21,7 +21,10 @@ type YouTubeAPIStackParams struct {
 	Logger          *slog.Logger
 }
 
-func BuildYouTubeAPIStack(ctx context.Context, params YouTubeAPIStackParams) *providers.YouTubeStack {
+func BuildYouTubeAPIStack(ctx context.Context, params *YouTubeAPIStackParams) *providers.YouTubeStack {
+	if params == nil {
+		return &providers.YouTubeStack{}
+	}
 	if !params.YouTubeConfig.EnableQuotaBuilding || params.YouTubeConfig.APIKey == "" {
 		if params.Logger != nil {
 			params.Logger.Info("YouTube quota building disabled; stats repository only")

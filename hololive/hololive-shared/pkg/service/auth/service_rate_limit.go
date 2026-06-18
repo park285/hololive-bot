@@ -85,8 +85,12 @@ func (s *Service) onLoginFailed(ctx context.Context, email string) {
 
 	if count >= s.config.LoginFailLimit {
 		lockKey := accountLockKeyPrefix + email
-		_ = s.cacheClient.Set(ctx, lockKey, "1", s.config.LoginLockDuration)
-		_ = s.cacheClient.Del(ctx, key)
+		if err := s.cacheClient.Set(ctx, lockKey, "1", s.config.LoginLockDuration); err != nil {
+			s.logger.Warn("account_lock_set_failed", slog.Any("error", err))
+		}
+		if err := s.cacheClient.Del(ctx, key); err != nil {
+			s.logger.Warn("login_fail_counter_delete_failed", slog.Any("error", err))
+		}
 	}
 }
 
@@ -94,8 +98,12 @@ func (s *Service) onLoginSucceeded(ctx context.Context, email string) {
 	if s.cacheClient == nil {
 		return
 	}
-	_ = s.cacheClient.Del(ctx, loginFailKeyPrefix+email)
-	_ = s.cacheClient.Del(ctx, accountLockKeyPrefix+email)
+	if err := s.cacheClient.Del(ctx, loginFailKeyPrefix+email); err != nil {
+		s.logger.Warn("login_fail_counter_delete_failed", slog.Any("error", err))
+	}
+	if err := s.cacheClient.Del(ctx, accountLockKeyPrefix+email); err != nil {
+		s.logger.Warn("account_lock_delete_failed", slog.Any("error", err))
+	}
 }
 
 func incrWithTTL(ctx context.Context, cacheClient cache.Client, key string, ttl time.Duration) (int64, error) {
@@ -104,6 +112,9 @@ func incrWithTTL(ctx context.Context, cacheClient cache.Client, key string, ttl 
 	cmds := incrWithTTLCommands(builder, key, ttlSeconds)
 
 	results := cacheClient.DoMulti(ctx, cmds...)
+	if len(results) == 0 {
+		return 0, fmt.Errorf("increment with ttl: empty pipeline results")
+	}
 	if err := validateIncrWithTTLResults(key, results, len(cmds), ttlSeconds > 0); err != nil {
 		return 0, err
 	}
@@ -130,7 +141,8 @@ func ceilTTLSeconds(ttl time.Duration) int64 {
 }
 
 func incrWithTTLCommands(builder valkey.Builder, key string, ttlSeconds int64) []valkey.Completed {
-	cmds := []valkey.Completed{builder.Incr().Key(key).Build()}
+	cmds := make([]valkey.Completed, 0, 2)
+	cmds = append(cmds, builder.Incr().Key(key).Build())
 	if ttlSeconds <= 0 {
 		return cmds
 	}

@@ -40,15 +40,16 @@ func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalU
 	return expectRowsAffected(tag.RowsAffected(), len(updates), "mark dispatch deliveries terminal")
 }
 
-func terminalStatusSQL(status Status) (string, string) {
-	switch status {
-	case StatusDLQ:
-		return "dlq_at", "status = 'leased'"
-	case StatusQuarantined:
-		return "quarantined_at", "status = 'sending'"
-	case StatusCancelled:
-		return "cancelled_at", "status NOT IN ('sent','dlq','quarantined','cancelled')"
-	default:
-		return "sent_at", "status NOT IN ('sent','dlq','quarantined','cancelled')"
+func terminalStatusSQL(status Status) (statusColumn, timestampColumn string) {
+	overrides := map[Status][2]string{
+		StatusDLQ:         {"dlq_at", "status = 'leased'"},
+		StatusQuarantined: {"quarantined_at", "status = 'sending'"},
+		StatusCancelled:   {"cancelled_at", terminalNonFinalStatusFilter},
 	}
+	if sql, ok := overrides[status]; ok {
+		return sql[0], sql[1]
+	}
+	return "sent_at", terminalNonFinalStatusFilter
 }
+
+const terminalNonFinalStatusFilter = "status NOT IN ('sent','dlq','quarantined','cancelled')"

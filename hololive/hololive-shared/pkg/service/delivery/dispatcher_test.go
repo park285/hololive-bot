@@ -101,7 +101,10 @@ func (m *mockSender) SendMessageWithClientRequestID(ctx context.Context, roomID,
 
 func makePayload(t *testing.T, msg string) string {
 	t.Helper()
-	b, _ := json.Marshal(outboxPayload{Message: msg})
+	b, err := json.Marshal(outboxPayload{Message: msg})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
 	return string(b)
 }
 

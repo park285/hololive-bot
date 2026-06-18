@@ -172,7 +172,7 @@ const (
 	YouTubeCommunityShortsAlarmStateStatusSent     YouTubeCommunityShortsAlarmStateStatus = "SENT"
 )
 
-func ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt *time.Time, alarmSentAt *time.Time) YouTubeCommunityShortsAlarmStateStatus {
+func ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt, alarmSentAt *time.Time) YouTubeCommunityShortsAlarmStateStatus {
 	if alarmSentAt != nil && !alarmSentAt.IsZero() {
 		return YouTubeCommunityShortsAlarmStateStatusSent
 	}
@@ -262,6 +262,8 @@ var outboxKindTemplateKeys = map[OutboxKind]TemplateKey{
 
 func (k OutboxKind) ToAlarmType() AlarmType {
 	switch k {
+	case OutboxKindNewVideo, OutboxKindLiveStream, OutboxKindMilestone:
+		return AlarmTypeLive
 	case OutboxKindNewShort:
 		return AlarmTypeShorts
 	case OutboxKindCommunityPost:
@@ -321,7 +323,10 @@ func BuildYouTubeNotificationDedupeKey(kind OutboxKind, contentID string) (strin
 }
 
 // DedupeKey는 outbox row의 dedupe key를 반환한다.
-func (o YouTubeNotificationOutbox) DedupeKey() (string, error) {
+func (o *YouTubeNotificationOutbox) DedupeKey() (string, error) {
+	if o == nil {
+		return "", fmt.Errorf("build youtube notification dedupe key: outbox is nil")
+	}
 	return BuildYouTubeNotificationDedupeKey(o.Kind, o.ContentID)
 }
 

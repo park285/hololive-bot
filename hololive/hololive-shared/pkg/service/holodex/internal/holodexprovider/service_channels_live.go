@@ -70,7 +70,7 @@ func (h *Service) GetChannels(ctx context.Context, channelIDs []string) (map[str
 	return result, nil
 }
 
-func (h *Service) collectCachedChannels(ctx context.Context, channelIDs []string) (map[string]*domain.Channel, []string) {
+func (h *Service) collectCachedChannels(ctx context.Context, channelIDs []string) (result0 map[string]*domain.Channel, result1 []string) {
 	result := make(map[string]*domain.Channel, len(channelIDs))
 	var missedIDs []string
 
@@ -319,7 +319,7 @@ func (h *Service) hydrateIndieStreamChannel(stream *domain.Stream, indieRequeste
 	}
 }
 
-func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelIDs []string) ([]*domain.Stream, map[string]error) {
+func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelIDs []string) (result0 []*domain.Stream, result1 map[string]error) {
 	allStreams := make([]*domain.Stream, 0, len(channelIDs))
 	var failed map[string]error
 

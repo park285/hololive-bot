@@ -26,7 +26,7 @@ func (r *deliveryStateRepository) MarkAlarmSentBatch(ctx context.Context, marks 
 	}
 
 	if err := inPgxTx(ctx, r.db, func(tx trackingDB) error {
-		txRepo := NewRepository(tx)
+		txRepo := NewRepositoryContext(ctx, tx)
 		return txRepo.delivery.applyAlarmSentMarks(ctx, normalized)
 	}); err != nil {
 		return fmt.Errorf("mark alarm sent batch transaction: %w", err)
@@ -145,7 +145,7 @@ func (r *deliveryStateRepository) applyExistingAlarmStateSentMark(ctx context.Co
 	return nil
 }
 
-func (r *deliveryStateRepository) applyMissingAlarmStateSentMark(ctx context.Context, mark AlarmSentMark, postID string, targetContentID string, trackingRow *domain.YouTubeContentAlarmTracking) error {
+func (r *deliveryStateRepository) applyMissingAlarmStateSentMark(ctx context.Context, mark AlarmSentMark, postID, targetContentID string, trackingRow *domain.YouTubeContentAlarmTracking) error {
 	if trackingRow == nil {
 		if mark.AuthorizedAt != nil {
 			return fmt.Errorf("finalize claimed alarm state: tracking row missing")
@@ -169,7 +169,7 @@ func (r *deliveryStateRepository) applyMissingAlarmStateSentMark(ctx context.Con
 	return nil
 }
 
-func (r *deliveryStateRepository) updateAlarmStateSentRow(ctx context.Context, kind domain.OutboxKind, postID string, alarmSentAt time.Time, updatedAt time.Time) error {
+func (r *deliveryStateRepository) updateAlarmStateSentRow(ctx context.Context, kind domain.OutboxKind, postID string, alarmSentAt, updatedAt time.Time) error {
 	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(kind, postID)
 	if err != nil {
 		return err
@@ -281,12 +281,14 @@ func isCommunityShortsAlarmStateKind(kind domain.OutboxKind) bool {
 	switch kind {
 	case domain.OutboxKindCommunityPost, domain.OutboxKindNewShort:
 		return true
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return false
 	default:
 		return false
 	}
 }
 
-func calculateLatencyResult(start *time.Time, end *time.Time) (*int64, *bool) {
+func calculateLatencyResult(start, end *time.Time) (result1 *int64, result2 *bool) {
 	return alarmtiming.CalculateLatency(start, end)
 }
 

@@ -16,7 +16,10 @@ func NewFileSnapshotSink(dir string) FileSnapshotSink {
 	return FileSnapshotSink{Dir: dir}
 }
 
-func (s FileSnapshotSink) Capture(ctx context.Context, snapshot Snapshot) error {
+func (s FileSnapshotSink) Capture(ctx context.Context, snapshot *Snapshot) error {
+	if snapshot == nil {
+		return nil
+	}
 	if strings.TrimSpace(s.Dir) == "" || snapshot.CapturedAt.IsZero() {
 		return nil
 	}
@@ -29,10 +32,10 @@ func (s FileSnapshotSink) Capture(ctx context.Context, snapshot Snapshot) error 
 	date := snapshot.CapturedAt.UTC().Format("20060102")
 	name := fmt.Sprintf("%s_%s_%s_%s_%s.html", date, safeFilePart(snapshot.Operation), safeFilePart(snapshot.ChannelID), safeFilePart(snapshot.Stage), id[:12])
 	dir := filepath.Join(s.Dir, date)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, name), snapshot.Body, 0o644)
+	return os.WriteFile(filepath.Join(dir, name), snapshot.Body, 0o600)
 }
 
 func safeFilePart(value string) string {

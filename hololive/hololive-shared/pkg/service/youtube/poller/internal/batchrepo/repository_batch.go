@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"reflect"
 
 	"github.com/jackc/pgx/v5"
 
@@ -49,22 +50,79 @@ type batchTxBeginner interface {
 }
 
 func NewBatchRepository(db any) BatchRepository {
-	return &PgxBatchRepository{DB: normalizeBatchDB(db)}
+	return &PgxBatchRepository{DB: requireBatchDB(db)}
 }
 
 func NewPgxBatchRepositoryWithPersister(db any, persister PostLatencyClassificationPersister) *PgxBatchRepository {
-	return &PgxBatchRepository{DB: normalizeBatchDB(db), latencyPersister: persister}
+	return &PgxBatchRepository{DB: requireBatchDB(db), latencyPersister: persister}
 }
 
 func normalizeBatchDB(db any) batchTxBeginner {
-	switch typed := db.(type) {
-	case batchTxBeginner:
-		return typed
-	case interface{ batchPool() batchTxBeginner }:
-		return typed.batchPool()
-	default:
+	if isNilBatchDB(db) {
 		return nil
 	}
+	if typed, ok := db.(batchTxBeginner); ok {
+		return typed
+	}
+	return normalizeBatchPoolAdapter(db)
+}
+
+func isNilBatchDB(db any) bool {
+	if db == nil {
+		return true
+	}
+	value := reflect.ValueOf(db)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	case reflect.Invalid,
+		reflect.Bool,
+		reflect.Int,
+		reflect.Int8,
+		reflect.Int16,
+		reflect.Int32,
+		reflect.Int64,
+		reflect.Uint,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64,
+		reflect.Uintptr,
+		reflect.Float32,
+		reflect.Float64,
+		reflect.Complex64,
+		reflect.Complex128,
+		reflect.Array,
+		reflect.String,
+		reflect.Struct,
+		reflect.UnsafePointer:
+		return false
+	default:
+		return false
+	}
+}
+
+func requireBatchDB(db any) batchTxBeginner {
+	normalized := normalizeBatchDB(db)
+	if normalized == nil {
+		panic("batch repository db is nil")
+	}
+	return normalized
+}
+
+func normalizeBatchPoolAdapter(db any) batchTxBeginner {
+	if isNilBatchDB(db) {
+		return nil
+	}
+	typed, ok := db.(interface{ batchPool() batchTxBeginner })
+	if !ok {
+		return nil
+	}
+	pool := typed.batchPool()
+	if pool == nil {
+		return nil
+	}
+	return pool
 }
 
 func (r *PgxBatchRepository) PersistVideos(ctx context.Context, videos []*domain.YouTubeVideo, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking, watermark *domain.YouTubeContentWatermark) error {

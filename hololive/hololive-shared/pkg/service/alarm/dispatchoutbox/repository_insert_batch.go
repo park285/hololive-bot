@@ -7,8 +7,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (r *PgxRepository) InsertShadowed(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*Record, error) {
-	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusShadowed})
+func (r *PgxRepository) InsertShadowed(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, error) {
+	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}, Status: StatusShadowed})
 	if err != nil {
 		return nil, err
 	}
@@ -18,8 +18,8 @@ func (r *PgxRepository) InsertShadowed(ctx context.Context, envelope domain.Alar
 	return r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
 }
 
-func (r *PgxRepository) InsertPending(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
-	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
+func (r *PgxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
+	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}, Status: StatusPending})
 	if err != nil {
 		return nil, "", err
 	}
@@ -30,13 +30,27 @@ func (r *PgxRepository) InsertPending(ctx context.Context, envelope domain.Alarm
 	if result.InsertedDeliveries > 0 {
 		return record, Inserted, nil
 	}
-	switch record.Status {
+	return record, insertDuplicateResult(record.Status), nil
+}
+
+func insertDuplicateResult(status Status) InsertResult {
+	terminal := map[Status]struct{}{
+		StatusSent:        {},
+		StatusDLQ:         {},
+		StatusQuarantined: {},
+		StatusCancelled:   {},
+	}
+	if _, ok := terminal[status]; ok {
+		return DuplicateTerminal
+	}
+
+	switch status {
 	case StatusShadowed:
-		return record, DuplicateShadowed, nil
-	case StatusSent, StatusDLQ, StatusQuarantined, StatusCancelled:
-		return record, DuplicateTerminal, nil
+		return DuplicateShadowed
+	case StatusPending, StatusLeased, StatusRetry, StatusSending, StatusSent, StatusDLQ, StatusQuarantined, StatusCancelled:
+		return DuplicateActive
 	default:
-		return record, DuplicateActive, nil
+		return DuplicateActive
 	}
 }
 
@@ -56,9 +70,9 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 		return result, nil
 	}
 
-	eventRows, deliveries, preflightCollisions, result, err := prepareInsertBatchRows(input.Envelopes, status, result)
+	eventRows, deliveries, preflightCollisions, err := prepareInsertBatchRows(input.Envelopes, status, &result)
 	if err != nil {
 		return result, err
 	}
-	return r.insertPreparedBatch(ctx, eventRows, deliveries, preflightCollisions, result)
+	return r.insertPreparedBatch(ctx, eventRows, deliveries, preflightCollisions, &result)
 }

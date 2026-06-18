@@ -65,7 +65,7 @@ func (r *fakeBatchResults) Close() error {
 }
 
 func newBatchTestStatusUpdater(db any) *StatusUpdater {
-	return newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{})
+	return newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{})
 }
 
 func batchTestTokens(count int) []outboxLockToken {

@@ -84,7 +84,7 @@ func (a *publishedAtResolverLatencyPersisterAdapter) PersistPostLatencyClassific
 
 func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 	ctx context.Context,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider polling.NotificationRouteDecider,
 ) (publishedAtFinalizeResult, error) {
@@ -107,9 +107,7 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 		notification, reason, err := r.finalizeCandidateState(
 			ctx,
 			tx,
-			txRepository,
-			candidate,
-			normalizedPublishedAt,
+			txRepository, candidate, normalizedPublishedAt,
 			routeDecider,
 			eligibility.enqueuable,
 		)
@@ -130,7 +128,7 @@ func (r *publishedAtResolverRepository) finalizeCandidateState(
 	ctx context.Context,
 	tx dbx.Querier,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider polling.NotificationRouteDecider,
 	enqueueAllowed bool,
@@ -140,6 +138,8 @@ func (r *publishedAtResolverRepository) finalizeCandidateState(
 		return r.finalizeShort(ctx, tx, txRepository, candidate, publishedAt, routeDecider, enqueueAllowed)
 	case domain.OutboxKindCommunityPost:
 		return r.finalizeCommunity(ctx, tx, txRepository, candidate, publishedAt, routeDecider, enqueueAllowed)
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return nil, "", fmt.Errorf("finalize published_at: unsupported kind %s", candidate.Kind)
 	default:
 		return nil, "", fmt.Errorf("finalize published_at: unsupported kind %s", candidate.Kind)
 	}
@@ -149,7 +149,7 @@ func (r *publishedAtResolverRepository) loadFinalizeEligibility(
 	ctx context.Context,
 	tx dbx.Querier,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 ) (publishedAtFinalizeEligibility, error) {
 	eligibility := publishedAtFinalizeEligibility{enqueuable: true}
 
@@ -176,7 +176,7 @@ func (r *publishedAtResolverRepository) loadFinalizeAlarmStateEligibility(
 	ctx context.Context,
 	tx dbx.Querier,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 ) (publishedAtFinalizeEligibility, bool, error) {
 	stateRow, err := txRepository.FindAlarmStateByPostID(ctx, candidate.Kind, candidate.PostID)
 	if err != nil {
@@ -207,7 +207,7 @@ func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibilit
 	ctx context.Context,
 	tx dbx.Querier,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 	authorizedAt time.Time,
 ) (publishedAtFinalizeEligibility, bool, error) {
 	if isPublishedAtClaimFresh(authorizedAt) {
@@ -236,7 +236,7 @@ func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibilit
 func loadFinalizeTrackingEligibility(
 	ctx context.Context,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 ) (publishedAtFinalizeEligibility, bool, error) {
 	trackingRow, err := txRepository.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
 	if err != nil {
@@ -265,7 +265,7 @@ func (r *publishedAtResolverRepository) outboxExistsForCandidate(
 	ctx context.Context,
 	tx dbx.Querier,
 	txRepository *trackingrepo.PgxRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
+	candidate *trackingrepo.PublishedAtResolutionCandidate,
 ) (bool, error) {
 	trackingRow, err := txRepository.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
 	if err != nil {
@@ -288,14 +288,14 @@ func (r *publishedAtResolverRepository) outboxExistsForCandidate(
 	return exists, nil
 }
 
-func selectPublishedAtFinalizeReason(primary string, fallback string) string {
+func selectPublishedAtFinalizeReason(primary, fallback string) string {
 	if primary != "" {
 		return primary
 	}
 	return fallback
 }
 
-func (r *publishedAtResolverRepository) ListResolvedPublishedAtDispatchGaps(ctx context.Context, referenceNow time.Time, detectedBefore time.Time, limit int) ([]resolvedPublishedAtDispatchGap, error) {
+func (r *publishedAtResolverRepository) ListResolvedPublishedAtDispatchGaps(ctx context.Context, referenceNow, detectedBefore time.Time, limit int) ([]resolvedPublishedAtDispatchGap, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("list resolved published_at dispatch gaps: db is nil")
 	}
@@ -336,7 +336,7 @@ func (r *publishedAtResolverRepository) ListResolvedPublishedAtDispatchGaps(ctx 
 	return buildResolvedPublishedAtDispatchGaps(rows), nil
 }
 
-func validateResolvedPublishedAtDispatchGapRequest(referenceNow time.Time, detectedBefore time.Time, limit int) error {
+func validateResolvedPublishedAtDispatchGapRequest(referenceNow, detectedBefore time.Time, limit int) error {
 	if referenceNow.IsZero() {
 		return fmt.Errorf("list resolved published_at dispatch gaps: reference now is empty")
 	}

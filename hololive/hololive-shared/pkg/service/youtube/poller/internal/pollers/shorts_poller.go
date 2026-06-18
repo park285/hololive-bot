@@ -113,7 +113,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	if err != nil {
 		return err
 	}
-	newShorts := collectNewShorts(shorts, watermark, isInitialized)
+	newShorts := collectNewShorts(shorts, &watermark, isInitialized)
 	if isInitialized && len(newShorts) > 0 && p.inlinePublishedAtFallbackEnabled && shortsNeedPublishedAtLookup(newShorts) {
 		p.client.EnrichShortsPublishedAtFromRSS(ctx, channelID, newShorts)
 	}
@@ -235,7 +235,7 @@ func (p *ShortsPoller) buildShortNotification(
 
 func collectNewShorts(
 	shorts []*scraper.Short,
-	watermark domain.YouTubeContentWatermark,
+	watermark *domain.YouTubeContentWatermark,
 	isInitialized bool,
 ) []*scraper.Short {
 	newShorts := make([]*scraper.Short, 0, len(shorts))

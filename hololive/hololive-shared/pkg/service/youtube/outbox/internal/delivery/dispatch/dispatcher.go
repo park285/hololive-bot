@@ -57,13 +57,13 @@ type Dispatcher struct {
 	testHooks dispatcherTestHooks
 }
 
-func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, config Config) *Dispatcher {
+func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, config *Config) *Dispatcher {
 	initOutboxMetrics()
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	config = dispatchstate.NormalizeDispatcherConfig(config)
+	normalizedConfig := dispatchstate.NormalizeDispatcherConfig(config)
 	querier := deliverysql.AsQuerier(db)
 	deliveryDB := store.AsDeliveryDB(db)
 
@@ -73,15 +73,15 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 	}
 
 	deliveryRepo := store.NewDeliveryRepository(deliveryDB, logger)
-	tp := newTelemetryProcessor(telemetryRepository, logger, config)
-	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, config, tp)
-	grouper := newOutboxGrouper(querier, cacheClient, logger, config)
-	status := newStatusUpdater(querier, logger, config)
+	tp := newTelemetryProcessor(telemetryRepository, logger, &normalizedConfig)
+	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &normalizedConfig, tp)
+	grouper := newOutboxGrouper(querier, cacheClient, logger, &normalizedConfig)
+	status := newStatusUpdater(querier, logger, &normalizedConfig)
 	formatter := newMessageFormatter(renderer, cacheClient, logger)
 
-	claimManager := newClaimManager(deliveryDB, logger, config, deliveryRepo, nil, status, grouper, al)
+	claimManager := newClaimManager(deliveryDB, logger, &normalizedConfig, deliveryRepo, nil, status, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al, claimManager)
-	sendEngine := newSendEngine(sender, formatter, logger, config, claimManager, al, metricsRecorder)
+	sendEngine := newSendEngine(sender, formatter, logger, &normalizedConfig, claimManager, al, metricsRecorder)
 	claimManager.setExecutor(sendEngine)
 	claimManager.setMetricsRecorder(metricsRecorder)
 
@@ -94,7 +94,7 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 		grouper:   grouper,
 		status:    status,
 		logger:    logger,
-		config:    config,
+		config:    normalizedConfig,
 	}
 	return d
 }
@@ -132,10 +132,12 @@ func (d *Dispatcher) startBackgroundLoops(ctx context.Context) {
 
 func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
 	d.aggregateSyncOnce(ctx)
-	_ = lifecycle.RunTickerLoop(ctx, d.config.AggregateSyncInterval, func(context.Context) error {
+	if err := lifecycle.RunTickerLoop(ctx, d.config.AggregateSyncInterval, func(context.Context) error {
 		d.aggregateSyncOnce(ctx)
 		return nil
-	})
+	}); err != nil {
+		d.logger.Warn("Aggregate sync loop stopped with error", slog.Any("error", err))
+	}
 }
 
 func (d *Dispatcher) aggregateSyncOnce(ctx context.Context) {
@@ -153,10 +155,12 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("subscriber_lookup_parallelism", d.grouper.subscriberLookupParallelism()))
 
 	d.processOnce(ctx)
-	_ = lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(context.Context) error {
+	if err := lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(context.Context) error {
 		d.processOnce(ctx)
 		return nil
-	})
+	}); err != nil {
+		d.logger.Warn("Outbox dispatcher loop stopped with error", slog.Any("error", err))
+	}
 	d.logger.Info("Outbox dispatcher stopped")
 }
 
@@ -179,7 +183,7 @@ func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
 	}
 }
 
-func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (bool, bool) {
+func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (processed, ok bool) {
 	outboxItems, err := d.claim.claimOutboxBatch(ctx)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
@@ -203,11 +207,13 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 
 // reviveLoop: 전송 실패로 영구 FAILED된 미발송 알람을 주기적으로 PENDING으로 되살리는 루프.
 func (d *Dispatcher) reviveLoop(ctx context.Context) {
-	_ = lifecycle.RunTickerLoop(ctx, d.config.ReviveInterval, func(context.Context) error {
+	if err := lifecycle.RunTickerLoop(ctx, d.config.ReviveInterval, func(context.Context) error {
 		d.reviveOnce(ctx)
 		d.testHooks.fireRevive()
 		return nil
-	})
+	}); err != nil {
+		d.logger.Warn("Outbox revive loop stopped with error", slog.Any("error", err))
+	}
 }
 
 func (d *Dispatcher) reviveOnce(ctx context.Context) {
@@ -228,11 +234,13 @@ func (d *Dispatcher) reviveOnce(ctx context.Context) {
 
 // cleanupLoop: 오래된 완료 알림 정리 루프
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
-	_ = lifecycle.RunTickerLoop(ctx, outboxCleanupLoopInterval, func(context.Context) error {
+	if err := lifecycle.RunTickerLoop(ctx, outboxCleanupLoopInterval, func(context.Context) error {
 		d.cleanup(ctx)
 		d.testHooks.fireCleanup()
 		return nil
-	})
+	}); err != nil {
+		d.logger.Warn("Outbox cleanup loop stopped with error", slog.Any("error", err))
+	}
 }
 
 // cleanup: 오래된 완료 알림 삭제

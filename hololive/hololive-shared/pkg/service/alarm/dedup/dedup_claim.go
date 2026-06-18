@@ -12,7 +12,7 @@ import (
 )
 
 // startScheduled가 zero이면 ("", false, nil) 반환
-func (s *Service) TryClaimNotification(ctx context.Context, roomID, streamID string, startScheduled time.Time, minutesUntil int) (string, bool, error) {
+func (s *Service) TryClaimNotification(ctx context.Context, roomID, streamID string, startScheduled time.Time, minutesUntil int) (value0 string, ok1 bool, err error) {
 	if startScheduled.IsZero() {
 		return "", false, nil
 	}
@@ -23,7 +23,7 @@ func (s *Service) TryClaimNotification(ctx context.Context, roomID, streamID str
 	return key, acquired, nil
 }
 
-func (s *Service) TryClaimLogicalEvent(ctx context.Context, roomID, channelID string, stream *domain.Stream, minutesUntil int) (string, bool, error) {
+func (s *Service) TryClaimLogicalEvent(ctx context.Context, roomID, channelID string, stream *domain.Stream, minutesUntil int) (value0 string, ok1 bool, err error) {
 	if stream == nil {
 		return "", false, nil
 	}
@@ -47,6 +47,11 @@ func (s *Service) TryClaimPair(ctx context.Context, key1, key2 string, ttl time.
 		return s.fallback.TryClaimOnOutage(key1, ttl, err),
 			s.fallback.TryClaimOnOutage(key2, ttl, err)
 	}
+	if len(results) != 2 {
+		err := fmt.Errorf("setnx multi: unexpected result count: %d", len(results))
+		return s.fallback.TryClaimOnOutage(key1, ttl, err),
+			s.fallback.TryClaimOnOutage(key2, ttl, err)
+	}
 	return s.resolveClaimResult(key1, ttl, results[0]),
 		s.resolveClaimResult(key2, ttl, results[1])
 }
@@ -58,19 +63,19 @@ func (s *Service) resolveClaimResult(key string, ttl time.Duration, r cache.SetN
 	return r.Acquired
 }
 
-func (s *Service) TryClaimScheduleTransition(ctx context.Context, streamID string, oldScheduled, newScheduled time.Time) (string, bool, error) {
+func (s *Service) TryClaimScheduleTransition(ctx context.Context, streamID string, oldScheduled, newScheduled time.Time) (value0 string, ok1 bool, err error) {
 	key := keys.BuildScheduleTransitionKey(streamID, oldScheduled, newScheduled)
 	acquired := s.tryClaimKey(ctx, key, constants.CacheTTL.NotificationSent)
 	return key, acquired, nil
 }
 
-func (s *Service) TryClaimRoomScheduleTransition(ctx context.Context, roomID, streamID string, oldScheduled, newScheduled time.Time) (string, bool, error) {
+func (s *Service) TryClaimRoomScheduleTransition(ctx context.Context, roomID, streamID string, oldScheduled, newScheduled time.Time) (value0 string, ok1 bool, err error) {
 	key := keys.BuildRoomScheduleTransitionKey(roomID, streamID, oldScheduled, newScheduled)
 	acquired := s.tryClaimKey(ctx, key, constants.CacheTTL.NotificationSent)
 	return key, acquired, nil
 }
 
-func (s *Service) TryClaimLogicalScheduleTransition(ctx context.Context, roomID, channelID string, stream *domain.Stream, oldScheduled, newScheduled time.Time) (string, bool, error) {
+func (s *Service) TryClaimLogicalScheduleTransition(ctx context.Context, roomID, channelID string, stream *domain.Stream, oldScheduled, newScheduled time.Time) (value0 string, ok1 bool, err error) {
 	if stream == nil {
 		return "", false, nil
 	}

@@ -147,7 +147,7 @@ func TestLivePollerSaveLiveSessionPreservesExistingLiveFirstSeenAtOnConflict(t *
 		Status:    domain.StreamStatusLive,
 	}
 
-	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, laterSeenAt, false))
+	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, laterSeenAt))
 
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "race-live").Error)

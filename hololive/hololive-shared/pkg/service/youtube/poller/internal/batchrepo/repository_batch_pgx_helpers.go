@@ -30,7 +30,9 @@ func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) erro
 
 	defer func() {
 		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				panic(fmt.Errorf("panic during pgx transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
+			}
 			panic(p)
 		}
 	}()

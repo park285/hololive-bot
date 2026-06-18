@@ -215,7 +215,7 @@ func notificationChunksByKind(notifications []*domain.YouTubeNotificationOutbox)
 		idx, ok := chunkByKind[notification.Kind]
 		if !ok {
 			chunkByKind[notification.Kind] = len(chunks)
-			chunks = append(chunks, nil)
+			chunks = append(chunks, make([]*domain.YouTubeNotificationOutbox, 0, 1))
 			idx = len(chunks) - 1
 		}
 		chunks[idx] = append(chunks[idx], notification)

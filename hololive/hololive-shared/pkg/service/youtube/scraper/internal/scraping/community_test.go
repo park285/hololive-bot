@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tidwall/gjson"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
@@ -88,7 +87,7 @@ func TestGetCommunityPosts_404DoesNotRecordHTMLCooldown(t *testing.T) {
 		WithRateLimiter(NewRateLimiter(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 		WithStateStore(newChannelHealthTestStore()),
-		WithChannelHealthPolicy(ChannelHealthPolicy{
+		WithChannelHealthPolicy(&ChannelHealthPolicy{
 			HTTPStatusBase: time.Hour,
 			HTTPStatusMax:  time.Hour,
 		}),
@@ -118,7 +117,7 @@ func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *t
 		WithRateLimiter(NewRateLimiter(time.Hour)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 		WithStateStore(newChannelHealthTestStore()),
-		WithChannelHealthPolicy(ChannelHealthPolicy{
+		WithChannelHealthPolicy(&ChannelHealthPolicy{
 			Enforce:     true,
 			TimeoutBase: time.Hour,
 			TimeoutMax:  time.Hour,
@@ -142,7 +141,7 @@ func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *t
 
 func TestParseBackstagePostIncludesUpstreamPostID(t *testing.T) {
 	client := &Client{}
-	post := client.parseBackstagePost(gjson.Parse(`{
+	post := client.parseBackstagePost(parseGJSONResultPtr(`{
 		"postId": "UgkxDirect123",
 		"publishedTimeText": {"simpleText": "2026-04-10T10:11:12+09:00"}
 	}`))
@@ -154,7 +153,7 @@ func TestParseBackstagePostIncludesUpstreamPostID(t *testing.T) {
 
 func TestParseBackstagePostFallsBackToPostURLForUpstreamPostID(t *testing.T) {
 	client := &Client{}
-	post := client.parseBackstagePost(gjson.Parse(`{
+	post := client.parseBackstagePost(parseGJSONResultPtr(`{
 		"actionButtons": {
 			"commentActionButtonsRenderer": {
 				"replyButton": {

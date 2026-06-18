@@ -39,7 +39,7 @@ func (s *Scheduler) SetProxyEnabled(enabled bool) int {
 }
 
 // known=false이면 프록시 토글 지원 폴러가 없음을 의미합니다.
-func (s *Scheduler) ProxyEnabled() (enabled bool, known bool) {
+func (s *Scheduler) ProxyEnabled() (enabled, known bool) {
 	pollers := s.collectProxyTogglePollers()
 	if len(pollers) == 0 {
 		return false, false

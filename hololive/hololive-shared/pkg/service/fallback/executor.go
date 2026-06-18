@@ -39,7 +39,7 @@ type Policy struct {
 	Trigger Trigger
 }
 
-func (p Policy) ShouldRun(primaryResults int, failedTargets int) bool {
+func (p Policy) ShouldRun(primaryResults, failedTargets int) bool {
 	switch p.Trigger {
 	case TriggerOnEmptyPrimary:
 		return primaryResults == 0
@@ -54,7 +54,7 @@ func (p Policy) ShouldRun(primaryResults int, failedTargets int) bool {
 
 // 현재는 제한 병렬성과 성공 callback만 공통화하고, 호출자는 후속 fallback 실행을 직접 담당한다.
 // OnSuccess는 Parallelism > 1일 때 동시 호출될 수 있으므로, 호출자 측에서 필요한 동기화를 해야 한다.
-type FetchPlan[K any, V any] struct {
+type FetchPlan[K, V any] struct {
 	Targets     []K
 	Parallelism int
 	Fetch       func(context.Context, K) (V, error)
@@ -76,7 +76,7 @@ func (s Summary[K]) AllFailed(totalTargets int) bool {
 }
 
 // 개별 key 실패는 전체 실행을 중단하지 않고 후속 fallback 후보로 남긴다.
-func Execute[K any, V any](
+func Execute[K, V any](
 	ctx context.Context,
 	plan FetchPlan[K, V],
 ) Summary[K] {
@@ -95,7 +95,7 @@ func Execute[K any, V any](
 	return summarizeFailures(plan.Targets, failed, successCount)
 }
 
-func executeSequential[K any, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
+func executeSequential[K, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
 	successCount := 0
 	for i := range plan.Targets {
 		value, err := plan.Fetch(ctx, plan.Targets[i])
@@ -111,7 +111,7 @@ func executeSequential[K any, V any](ctx context.Context, plan FetchPlan[K, V], 
 	return successCount
 }
 
-func executeParallel[K any, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
+func executeParallel[K, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(plan.Parallelism)
 
@@ -137,7 +137,9 @@ func executeParallel[K any, V any](ctx context.Context, plan FetchPlan[K, V], fa
 			return nil
 		})
 	}
-	_ = eg.Wait()
+	if err := eg.Wait(); err != nil {
+		return successCount
+	}
 	return successCount
 }
 

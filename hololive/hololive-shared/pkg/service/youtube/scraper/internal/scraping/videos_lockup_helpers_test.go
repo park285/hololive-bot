@@ -15,7 +15,7 @@ func TestCollectLockupTexts_SkipsEmptyEntries(t *testing.T) {
 		{"text":{"content":"2 hours ago"}}
 	]`)
 
-	got := collectLockupTexts(parts)
+	got := collectLockupTexts(&parts)
 
 	want := []string{"3.2K views", "2 hours ago"}
 	if len(got) != len(want) {
@@ -33,7 +33,7 @@ func TestCollectLockupTexts_HandlesEmptyArray(t *testing.T) {
 
 	parts := gjson.Parse(`[]`)
 
-	if got := collectLockupTexts(parts); len(got) != 0 {
+	if got := collectLockupTexts(&parts); len(got) != 0 {
 		t.Fatalf("want empty slice, got %v", got)
 	}
 }
@@ -117,7 +117,7 @@ func TestPickLockupMetadataTexts_PrefersViewCountFromAnyPosition(t *testing.T) {
 		{"text":{"content":"3.2K views"}}
 	]`)
 
-	viewCount, published := pickLockupMetadataTexts(parts)
+	viewCount, published := pickLockupMetadataTexts(&parts)
 
 	if viewCount != 3200 {
 		t.Fatalf("viewCount want 3200, got %d", viewCount)
@@ -135,7 +135,7 @@ func TestPickLockupMetadataTexts_FallbackWhenNoViewCount(t *testing.T) {
 		{"text":{"content":"5 days ago"}}
 	]`)
 
-	viewCount, published := pickLockupMetadataTexts(parts)
+	viewCount, published := pickLockupMetadataTexts(&parts)
 
 	if viewCount != 0 {
 		t.Fatalf("viewCount want 0, got %d", viewCount)

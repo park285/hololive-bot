@@ -10,7 +10,7 @@ import (
 
 func (d *SendEngine) recordPerRoomFormatFailure(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
+	row *domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	claimTokens []dispatchstate.ClaimToken,
@@ -22,7 +22,7 @@ func (d *SendEngine) recordPerRoomFormatFailure(
 
 func (d *SendEngine) recordPerRoomMissingMessage(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
+	row *domain.YouTubeNotificationDelivery,
 	claimTokens []dispatchstate.ClaimToken,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
@@ -32,8 +32,8 @@ func (d *SendEngine) recordPerRoomMissingMessage(
 
 func (d *SendEngine) recordPerRoomRequestBuildFailure(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	claimTokens []dispatchstate.ClaimToken,
@@ -46,7 +46,7 @@ func (d *SendEngine) recordPerRoomRequestBuildFailure(
 
 func (d *SendEngine) recordPerRoomSendFailure(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
+	row *domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
@@ -60,7 +60,7 @@ func (d *SendEngine) recordPerRoomSendFailure(
 
 func (d *SendEngine) recordPerRoomSuccess(
 	ctx context.Context,
-	row domain.YouTubeNotificationDelivery,
+	row *domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
@@ -82,7 +82,7 @@ func (d *SendEngine) recordDeliveryFailure(
 
 func (d *SendEngine) recordGroupedRequestBuildFailure(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	claimTokens []dispatchstate.ClaimToken,
@@ -95,7 +95,7 @@ func (d *SendEngine) recordGroupedRequestBuildFailure(
 
 func (d *SendEngine) recordGroupedSendFailure(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
@@ -109,7 +109,7 @@ func (d *SendEngine) recordGroupedSendFailure(
 
 func (d *SendEngine) recordGroupedSuccess(
 	ctx context.Context,
-	group deliveryGroup,
+	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,

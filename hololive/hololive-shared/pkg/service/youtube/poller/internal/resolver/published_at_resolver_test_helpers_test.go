@@ -50,7 +50,7 @@ func seedPendingShortResolution(t *testing.T, db *batchTestDB, channelID, videoI
 	}).Error)
 }
 
-func seedResolvedShortDispatchGap(t *testing.T, db *batchTestDB, channelID, videoID string, detectedAt time.Time, publishedAt time.Time, authorizedAt *time.Time) {
+func seedResolvedShortDispatchGap(t *testing.T, db *batchTestDB, channelID, videoID string, detectedAt, publishedAt time.Time, authorizedAt *time.Time) {
 	t.Helper()
 
 	postID := "short:" + videoID
@@ -94,8 +94,9 @@ func seedResolvedShortDispatchGap(t *testing.T, db *batchTestDB, channelID, vide
 	}).Error)
 }
 
-func seedPendingCommunityResolution(t *testing.T, db *batchTestDB, channelID, postID string, detectedAt time.Time) {
+func seedPendingCommunityResolution(t *testing.T, db *batchTestDB, postID string, detectedAt time.Time) {
 	t.Helper()
+	const channelID = "channel-community"
 
 	require.NoError(t, db.Create(&domain.YouTubeCommunityPost{
 		PostID:       "community:" + postID,
@@ -231,7 +232,7 @@ func assertCommunityMetadataBackfilledWithoutEnqueue(
 	}
 }
 
-func assertPersistedTimeEqual(t *testing.T, expected time.Time, actual time.Time) {
+func assertPersistedTimeEqual(t *testing.T, expected, actual time.Time) {
 	t.Helper()
 
 	assert.Equal(t, expected.UTC().Truncate(time.Microsecond), actual.UTC().Truncate(time.Microsecond))
@@ -256,7 +257,7 @@ func newCommunityPublishedAtResolverTestClient(t *testing.T, publishedAt time.Ti
 			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if strings.HasPrefix(req.URL.Path, "/post/") {
 					if resolveCalls != nil {
-						*resolveCalls = *resolveCalls + 1
+						(*resolveCalls)++
 					}
 					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(postHTML)), Header: make(http.Header), Request: req}, nil
 				}
@@ -277,7 +278,7 @@ func newShortPublishedAtResolverHTTPClient(t *testing.T, watchHTML string, resol
 			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if req.URL.Path == "/watch" {
 					if len(resolveCalls) > 0 && resolveCalls[0] != nil {
-						*resolveCalls[0] = *resolveCalls[0] + 1
+						(*resolveCalls[0])++
 					}
 					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(watchHTML)), Header: make(http.Header), Request: req}, nil
 				}
@@ -299,7 +300,7 @@ func newShortPublishedAtResolverDelayedHTTPClient(t *testing.T, watchHTML string
 
 	return newShortPublishedAtResolverDelayedHTTPClientWithCallback(t, watchHTML, delay, func() {
 		if resolveCalls != nil {
-			*resolveCalls = *resolveCalls + 1
+			(*resolveCalls)++
 		}
 	})
 }

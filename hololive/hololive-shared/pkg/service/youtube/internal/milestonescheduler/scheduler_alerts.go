@@ -26,7 +26,6 @@ import (
 	"log/slog"
 
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type milestoneAlertWork struct {
@@ -121,7 +120,7 @@ func (ys *schedulerImpl) buildMilestoneAlertWorks(
 }
 
 func (ys *schedulerImpl) formatMilestoneAchievedMessage(ctx context.Context, memberName string, value uint64) (string, bool) {
-	formattedValue := util.FormatKoreanNumber(int64(value))
+	formattedValue := formatMilestoneNumber(value)
 	if ys.formatter == nil {
 		return fmt.Sprintf("🎉 %s님이 구독자 %s명을 달성했습니다!\n축하합니다! 🎊", memberName, formattedValue), true
 	}
@@ -218,21 +217,21 @@ func (ys *schedulerImpl) formatApproachingMessage(ctx context.Context, memberNam
 	if ys.formatter == nil {
 		return fmt.Sprintf("📍 %s님이 구독자 %s명까지 %s명 남았습니다!\n곧 마일스톤 달성이 예상됩니다! 🎯",
 			memberName,
-			util.FormatKoreanNumber(int64(milestone)),
-			util.FormatKoreanNumber(int64(remaining)))
+			formatMilestoneNumber(milestone),
+			formatMilestoneNumber(remaining))
 	}
 
 	msg, err := ys.formatter.FormatMilestoneApproaching(
 		ctx,
 		memberName,
-		util.FormatKoreanNumber(int64(milestone)),
-		util.FormatKoreanNumber(int64(remaining)),
+		formatMilestoneNumber(milestone),
+		formatMilestoneNumber(remaining),
 	)
 	if err != nil {
 		return fmt.Sprintf("📍 %s님이 구독자 %s명까지 %s명 남았습니다!\n곧 마일스톤 달성이 예상됩니다! 🎯",
 			memberName,
-			util.FormatKoreanNumber(int64(milestone)),
-			util.FormatKoreanNumber(int64(remaining)))
+			formatMilestoneNumber(milestone),
+			formatMilestoneNumber(remaining))
 	}
 	return msg
 }

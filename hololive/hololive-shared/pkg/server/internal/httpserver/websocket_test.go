@@ -21,6 +21,7 @@
 package httpserver
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -110,7 +111,10 @@ func TestCheckOrigin(t *testing.T) {
 			wsAllowedOrigins = tt.origins
 			defer func() { wsAllowedOrigins = orig }()
 
-			r, _ := http.NewRequest(http.MethodGet, "http://localhost/ws", nil)
+			r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost/ws", http.NoBody)
+			if err != nil {
+				t.Fatalf("new request: %v", err)
+			}
 			if tt.origin != "" {
 				r.Header.Set("Origin", tt.origin)
 			}
@@ -149,7 +153,10 @@ func TestInitWSUpgrader_EmptyDeniesAll(t *testing.T) {
 		t.Fatalf("wsAllowedOrigins should be empty, got %d", len(wsAllowedOrigins))
 	}
 
-	r, _ := http.NewRequest(http.MethodGet, "http://localhost/ws", nil)
+	r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost/ws", http.NoBody)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
 	r.Header.Set("Origin", "https://anything.com")
 
 	if checkOrigin(r) {
@@ -167,7 +174,9 @@ func TestWSUpgrader_DisallowedOriginReturns403(t *testing.T) {
 		if err != nil {
 			return
 		}
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			t.Errorf("close websocket connection: %v", err)
+		}
 	})
 
 	srv := httptest.NewServer(mux)
@@ -177,8 +186,17 @@ func TestWSUpgrader_DisallowedOriginReturns403(t *testing.T) {
 	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, http.Header{
 		"Origin": []string{"https://evil.example.com"},
 	})
+	if resp != nil && resp.Body != nil {
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				t.Errorf("close handshake response body: %v", err)
+			}
+		}()
+	}
 	if conn != nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			t.Errorf("close websocket connection: %v", err)
+		}
 	}
 	if err == nil {
 		t.Fatal("expected websocket handshake failure for disallowed origin")

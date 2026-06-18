@@ -203,10 +203,10 @@ func (ys *schedulerImpl) processAndRecordChanges(
 	return cr
 }
 
-func (ys *schedulerImpl) buildChannelMaps() ([]string, map[string]*domain.Member) {
+func (ys *schedulerImpl) buildChannelMaps() (channelIDs []string, channelToMember map[string]*domain.Member) {
 	allMembers := ys.membersData.GetAllMembers()
-	channelIDs := make([]string, 0, len(allMembers))
-	channelToMember := make(map[string]*domain.Member)
+	channelIDs = make([]string, 0, len(allMembers))
+	channelToMember = make(map[string]*domain.Member)
 
 	for _, member := range allMembers {
 		if member.IsGraduated {

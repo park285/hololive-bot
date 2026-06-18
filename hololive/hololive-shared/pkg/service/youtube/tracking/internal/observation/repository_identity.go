@@ -160,7 +160,7 @@ func buildTrackingUpsertQuery(
 	latencyMillisExpr string,
 	latencyExceededExpr string,
 	deliveryStatusExpr string,
-) (string, []any) {
+) (result1 string, result2 []any) {
 	args := make([]any, 0, len(normalized)*12)
 	var sb strings.Builder
 	sb.WriteString(`

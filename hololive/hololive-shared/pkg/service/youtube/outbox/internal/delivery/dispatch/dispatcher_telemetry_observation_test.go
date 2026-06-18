@@ -47,7 +47,7 @@ func TestBuildDeliveryAuditLogAttrsIncludesObservationWindowFields(t *testing.T)
 
 	buffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(buffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrs(row)...)
+	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrs(&row)...)
 
 	logLine := buffer.String()
 	require.Contains(t, logLine, `"actual_published_at":`)
@@ -93,7 +93,7 @@ func TestBuildDeliveryAuditLogAttrsIncludesCommunityTimingFields(t *testing.T) {
 
 	buffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(buffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrs(row)...)
+	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrs(&row)...)
 
 	logLine := buffer.String()
 	require.Contains(t, logLine, `"alarm_type":"COMMUNITY"`)
@@ -138,7 +138,7 @@ func TestBuildDeliveryAuditLogAttrsWithClassificationIncludesLatencyClassificati
 
 	buffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(buffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrsWithClassification(row, classification)...)
+	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrsWithClassification(&row, &classification)...)
 
 	logLine := buffer.String()
 	require.Contains(t, logLine, `"latency_classification":{"status":"exceeded"`)
@@ -176,7 +176,7 @@ func TestBuildDeliveryAuditLogAttrsWithClassificationIncludesExternalDelayReason
 
 	buffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(buffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrsWithClassification(row, classification)...)
+	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrsWithClassification(&row, &classification)...)
 
 	logLine := buffer.String()
 	require.Contains(t, logLine, `"delay_source":"external_collection"`)

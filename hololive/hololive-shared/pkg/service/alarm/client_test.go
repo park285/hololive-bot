@@ -24,26 +24,55 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	json "github.com/park285/shared-go/pkg/json"
+	"github.com/stretchr/testify/require"
 )
 
 // newTestClient: httptest.Server 기반 테스트 클라이언트 생성 헬퍼
-func newTestClient(t *testing.T, mux *http.ServeMux) (*Client, *httptest.Server) {
+func newTestClient(t *testing.T, mux *http.ServeMux) *Client {
 	t.Helper()
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return NewClient(srv.URL, nil), srv
+	return NewClient(srv.URL, nil)
 }
 
 // writeJSON: 테스트 서버 핸들러용 JSON 응답 헬퍼
-func writeJSON(w http.ResponseWriter, status int, v any) {
+func writeJSON(t *testing.T, w http.ResponseWriter, status int, v any) {
+	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	require.NoError(t, json.NewEncoder(w).Encode(v))
+}
+
+type nilResponseTransport struct{}
+
+func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, nil
+}
+
+func TestClientDoRequestNilResponse(t *testing.T) {
+	client := NewClient("https://alarm.example", nil)
+	client.httpClient.Transport = nilResponseTransport{}
+
+	resp, err := client.doRequest(t.Context(), http.MethodGet, "/alarms", http.NoBody, false)
+	if resp != nil && resp.Body != nil {
+		t.Cleanup(func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Fatalf("close response body: %v", closeErr)
+			}
+		})
+	}
+	if err == nil {
+		t.Fatal("expected error for nil HTTP response")
+	}
+	if got := err.Error(); !strings.Contains(got, "nil response") {
+		t.Fatalf("error = %q, want nil response context", got)
+	}
 }
 
 func TestClient_AddAlarm(t *testing.T) {
@@ -92,11 +121,11 @@ func TestClient_AddAlarm(t *testing.T) {
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %s, want POST", r.Method)
 				}
-				writeJSON(w, tt.serverCode, tt.serverResp)
+				writeJSON(t, w, tt.serverCode, tt.serverResp)
 			})
-			client, _ := newTestClient(t, mux)
+			client := newTestClient(t, mux)
 
-			got, err := client.AddAlarm(context.Background(), tt.req)
+			got, err := client.AddAlarm(context.Background(), &tt.req)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("error를 기대했지만 nil이 반환됨")
@@ -144,9 +173,9 @@ func TestClient_RemoveAlarm(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/internal/alarm/remove", func(w http.ResponseWriter, r *http.Request) {
-				writeJSON(w, tt.serverCode, tt.serverResp)
+				writeJSON(t, w, tt.serverCode, tt.serverResp)
 			})
-			client, _ := newTestClient(t, mux)
+			client := newTestClient(t, mux)
 
 			got, err := client.RemoveAlarm(context.Background(), "room1", "ch1", domain.AllAlarmTypes)
 			if tt.wantErr {
@@ -200,9 +229,9 @@ func TestClient_GetRoomAlarmsWithTypes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/internal/alarm/room/room1", func(w http.ResponseWriter, r *http.Request) {
-				writeJSON(w, tt.serverCode, tt.serverResp)
+				writeJSON(t, w, tt.serverCode, tt.serverResp)
 			})
-			client, _ := newTestClient(t, mux)
+			client := newTestClient(t, mux)
 
 			got, err := client.GetRoomAlarmsWithTypes(context.Background(), "room1")
 			if tt.wantErr {
@@ -225,12 +254,12 @@ func TestClient_GetRoomAlarms(t *testing.T) {
 	// GetRoomAlarms는 GetRoomAlarmsWithTypes를 호출해 channelID만 추출
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/alarm/room/room1", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, []*domain.Alarm{
+		writeJSON(t, w, http.StatusOK, []*domain.Alarm{
 			{ChannelID: "ch1"},
 			{ChannelID: "ch2"},
 		})
 	})
-	client, _ := newTestClient(t, mux)
+	client := newTestClient(t, mux)
 
 	got, err := client.GetRoomAlarms(context.Background(), "room1")
 	if err != nil {
@@ -248,7 +277,7 @@ func TestClient_ListRoomAlarmsView(t *testing.T) {
 	now := time.Now()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/alarm/room/room1/view", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, APIResponse{
+		writeJSON(t, w, http.StatusOK, APIResponse{
 			Success: true,
 			Data: []domain.AlarmListView{{
 				ChannelID:  "ch1",
@@ -263,7 +292,7 @@ func TestClient_ListRoomAlarmsView(t *testing.T) {
 			}},
 		})
 	})
-	client, _ := newTestClient(t, mux)
+	client := newTestClient(t, mux)
 
 	got, err := client.ListRoomAlarmsView(context.Background(), "room1")
 	if err != nil {
@@ -285,7 +314,7 @@ func TestClient_ListRoomAlarmsView_RequiresViewEndpoint(t *testing.T) {
 	mux.HandleFunc("/internal/alarm/room/room1/view", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
-	client, _ := newTestClient(t, mux)
+	client := newTestClient(t, mux)
 
 	if _, err := client.ListRoomAlarmsView(context.Background(), "room1"); err == nil {
 		t.Fatal("error를 기대했지만 nil이 반환됨")
@@ -312,7 +341,7 @@ func TestClient_ListRoomAlarmsView_WithHandler(t *testing.T) {
 			}}, nil
 		},
 	}
-	_, router := newTestHandler(t, mock)
+	router := newTestHandler(t, mock)
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 	client := NewClient(srv.URL, nil)
@@ -363,9 +392,9 @@ func TestClient_ClearRoomAlarms(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/internal/alarm/clear", func(w http.ResponseWriter, r *http.Request) {
-				writeJSON(w, tt.serverCode, tt.serverResp)
+				writeJSON(t, w, tt.serverCode, tt.serverResp)
 			})
-			client, _ := newTestClient(t, mux)
+			client := newTestClient(t, mux)
 
 			got, err := client.ClearRoomAlarms(context.Background(), "room1")
 			if tt.wantErr {
@@ -390,14 +419,14 @@ func TestClient_AddAlarm_WithAPIKeyHeader(t *testing.T) {
 		if got, want := r.Header.Get("X-API-Key"), "secret-key"; got != want {
 			t.Fatalf("X-API-Key = %q, want %q", got, want)
 		}
-		writeJSON(w, http.StatusOK, boolResp{Result: true})
+		writeJSON(t, w, http.StatusOK, boolResp{Result: true})
 	})
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	client := NewClientWithAPIKey(srv.URL, "secret-key", nil)
 
-	got, err := client.AddAlarm(context.Background(), domain.AddAlarmRequest{
+	got, err := client.AddAlarm(context.Background(), &domain.AddAlarmRequest{
 		RoomID:    "room1",
 		UserID:    "user1",
 		ChannelID: "ch1",
@@ -412,16 +441,25 @@ func TestClient_AddAlarm_WithAPIKeyHeader(t *testing.T) {
 
 func TestClient_GetNextStreamInfo(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
-	nowStr := now.Format(time.RFC3339)
 
-	tests := []struct {
-		name       string
-		serverCode int
-		serverResp any
-		wantNil    bool
-		wantStatus domain.NextStreamStatus
-		wantErr    bool
-	}{
+	for _, tt := range nextStreamInfoClientCases(now) {
+		t.Run(tt.name, func(t *testing.T) {
+			runNextStreamInfoClientCase(t, tt)
+		})
+	}
+}
+
+type nextStreamInfoClientCase struct {
+	name       string
+	serverCode int
+	serverResp any
+	wantNil    bool
+	wantStatus domain.NextStreamStatus
+	wantErr    bool
+}
+
+func nextStreamInfoClientCases(now time.Time) []nextStreamInfoClientCase {
+	return []nextStreamInfoClientCase{
 		{
 			name:       "성공 - upcoming 방송 있음",
 			serverCode: http.StatusOK,
@@ -429,7 +467,7 @@ func TestClient_GetNextStreamInfo(t *testing.T) {
 				"Status":         "upcoming",
 				"VideoID":        "vid1",
 				"Title":          "테스트 방송",
-				"StartScheduled": nowStr,
+				"StartScheduled": now.Format(time.RFC3339),
 			},
 			wantStatus: domain.NextStreamStatusUpcoming,
 		},
@@ -456,38 +494,44 @@ func TestClient_GetNextStreamInfo(t *testing.T) {
 			wantNil:    true,
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mux := http.NewServeMux()
-			mux.HandleFunc("/internal/alarm/next-stream/ch1", func(w http.ResponseWriter, r *http.Request) {
-				writeJSON(w, tt.serverCode, tt.serverResp)
-			})
-			client, _ := newTestClient(t, mux)
+func runNextStreamInfoClientCase(t *testing.T, tt nextStreamInfoClientCase) {
+	t.Helper()
 
-			got, err := client.GetNextStreamInfo(context.Background(), "ch1")
-			if tt.wantErr {
-				if err == nil {
-					t.Error("error를 기대했지만 nil이 반환됨")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if tt.wantNil {
-				if got != nil {
-					t.Errorf("nil을 기대했지만 %+v 반환됨", got)
-				}
-				return
-			}
-			if got == nil {
-				t.Fatal("non-nil을 기대했지만 nil 반환됨")
-			}
-			if got.Status != tt.wantStatus {
-				t.Errorf("status = %s, want %s", got.Status, tt.wantStatus)
-			}
-		})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/alarm/next-stream/ch1", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, tt.serverCode, tt.serverResp)
+	})
+	client := newTestClient(t, mux)
+
+	got, err := client.GetNextStreamInfo(context.Background(), "ch1")
+	assertNextStreamInfoClientResult(t, got, err, tt)
+}
+
+func assertNextStreamInfoClientResult(t *testing.T, got *domain.NextStreamInfo, err error, tt nextStreamInfoClientCase) {
+	t.Helper()
+
+	if tt.wantErr {
+		if err == nil {
+			t.Error("error를 기대했지만 nil이 반환됨")
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tt.wantNil {
+		if got != nil {
+			t.Errorf("nil을 기대했지만 %+v 반환됨", got)
+		}
+		return
+	}
+	if got == nil {
+		t.Fatal("non-nil을 기대했지만 nil 반환됨")
+	}
+	if got.Status != tt.wantStatus {
+		t.Errorf("status = %s, want %s", got.Status, tt.wantStatus)
 	}
 }
 
@@ -522,9 +566,9 @@ func TestClient_UpdateAlarmAdvanceMinutes(t *testing.T) {
 				if r.Method != http.MethodPut {
 					t.Errorf("method = %s, want PUT", r.Method)
 				}
-				writeJSON(w, tt.serverCode, tt.serverResp)
+				writeJSON(t, w, tt.serverCode, tt.serverResp)
 			})
-			client, _ := newTestClient(t, mux)
+			client := newTestClient(t, mux)
 
 			got := client.UpdateAlarmAdvanceMinutes(context.Background(), tt.inputMin)
 			if len(got) != len(tt.wantMinutes) {
@@ -544,9 +588,9 @@ func TestClient_GetTargetMinutes(t *testing.T) {
 	// UpdateAlarmAdvanceMinutes 호출 전후 캐싱 동작 확인
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/alarm/settings", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, minutesResp{Minutes: []int{5, 3, 1}})
+		writeJSON(t, w, http.StatusOK, minutesResp{Minutes: []int{5, 3, 1}})
 	})
-	client, _ := newTestClient(t, mux)
+	client := newTestClient(t, mux)
 
 	// 초기에는 빈 슬라이스
 	initial := client.GetTargetMinutes()
@@ -581,7 +625,7 @@ func TestClient_SetRoomName(t *testing.T) {
 				}
 				w.WriteHeader(tt.serverCode)
 			})
-			client, _ := newTestClient(t, mux)
+			client := newTestClient(t, mux)
 
 			err := client.SetRoomName(context.Background(), "room1", "방 이름")
 			if tt.wantErr && err == nil {
@@ -613,7 +657,7 @@ func TestClient_SetUserName(t *testing.T) {
 				}
 				w.WriteHeader(tt.serverCode)
 			})
-			client, _ := newTestClient(t, mux)
+			client := newTestClient(t, mux)
 
 			err := client.SetUserName(context.Background(), "user1", "사용자 이름")
 			if tt.wantErr && err == nil {
@@ -660,9 +704,9 @@ func TestClient_GetAllAlarmKeys(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/internal/alarm/keys", func(w http.ResponseWriter, r *http.Request) {
-				writeJSON(w, tt.serverCode, tt.serverResp)
+				writeJSON(t, w, tt.serverCode, tt.serverResp)
 			})
-			client, _ := newTestClient(t, mux)
+			client := newTestClient(t, mux)
 
 			got, err := client.GetAllAlarmKeys(context.Background())
 			if tt.wantErr {

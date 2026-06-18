@@ -48,7 +48,7 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 		},
 	}
 
-	data, err := json.Marshal(envelope)
+	data, err := json.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("Marshal 실패: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestAlarmQueueEnvelope_JSONRoundtripYouTubeOutboxSource(t *testing.T) {
 		Version:    1,
 	}
 
-	data, err := json.Marshal(envelope)
+	data, err := json.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("Marshal 실패: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 		Version:    1,
 	}
 
-	data, err := json.Marshal(envelope)
+	data, err := json.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("Marshal 실패: %v", err)
 	}

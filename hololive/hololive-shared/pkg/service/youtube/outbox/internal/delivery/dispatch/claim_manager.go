@@ -19,7 +19,7 @@ type DeliveryExecutor interface {
 
 type ClaimResolver interface {
 	selectClaimedDeliveries(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, reuseCache claim.DecisionCache) deliveryClaimSelection
-	applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection deliveryClaimSelection)
+	applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection *deliveryClaimSelection)
 	releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error
 	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []dispatchstate.ClaimToken, message string, attrs ...any)
 }
@@ -39,7 +39,7 @@ type ClaimManager struct {
 func newClaimManager(
 	db deliverysql.DeliveryDB,
 	logger *slog.Logger,
-	config Config,
+	config *Config,
 	deliveryRepo *store.DeliveryRepository,
 	executor DeliveryExecutor,
 	status *StatusUpdater,
@@ -51,7 +51,7 @@ func newClaimManager(
 	}
 	return &ClaimManager{
 		db:          db,
-		config:      config,
+		config:      *config,
 		logger:      logger,
 		delivery:    deliveryRepo,
 		executor:    executor,
@@ -75,12 +75,12 @@ func (c *ClaimManager) setMetricsRecorder(metrics *MetricsRecorder) {
 
 func (c *ClaimManager) statusUpdater() *StatusUpdater {
 	if c == nil {
-		return newStatusUpdater(nil, nil, Config{})
+		return newStatusUpdater(nil, nil, &Config{})
 	}
 	if c.status != nil {
 		return c.status
 	}
-	return newStatusUpdater(c.db, c.logger, c.config)
+	return newStatusUpdater(c.db, c.logger, &c.config)
 }
 
 func (c *ClaimManager) markSent(ctx context.Context, id int64, lockedAt *time.Time) {
@@ -93,12 +93,12 @@ func (c *ClaimManager) markFailed(ctx context.Context, id int64, lockedAt *time.
 
 func (c *ClaimManager) outboxGrouper() *OutboxGrouper {
 	if c == nil {
-		return newOutboxGrouper(nil, nil, nil, Config{})
+		return newOutboxGrouper(nil, nil, nil, &Config{})
 	}
 	if c.grouper != nil {
 		return c.grouper
 	}
-	return newOutboxGrouper(c.db, nil, c.logger, c.config)
+	return newOutboxGrouper(c.db, nil, c.logger, &c.config)
 }
 
 func (c *ClaimManager) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
@@ -107,7 +107,7 @@ func (c *ClaimManager) collectRoomsByChannel(ctx context.Context, items []domain
 
 func (c *ClaimManager) filterLiveCatchupSuppressedRooms(
 	ctx context.Context,
-	item domain.YouTubeNotificationOutbox,
+	item *domain.YouTubeNotificationOutbox,
 	rooms map[string]bool,
 ) map[string]bool {
 	return c.outboxGrouper().filterLiveCatchupSuppressedRooms(ctx, item, rooms)

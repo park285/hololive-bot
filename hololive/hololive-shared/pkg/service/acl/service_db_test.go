@@ -233,7 +233,7 @@ func TestSettingsAndRoom_TableName(t *testing.T) {
 
 func TestNewACLService_FirstInitUsesDefaults(t *testing.T) {
 	pool, cacheMock, calls := newACLServiceWithPgx(t)
-	service := newACLServiceFromPool(t, pool, cacheMock, true, ACLModeWhitelist, []string{"room-a", "room-b"})
+	service := newACLServiceFromPool(t, pool, cacheMock, true, []string{"room-a", "room-b"})
 
 	assertACLStatus(t, service, true, ACLModeWhitelist, 2, []string{"room-a", "room-b"})
 	assertACLSettingValue(t, pool, dbKeyEnabled, "true")
@@ -340,7 +340,7 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 
 func TestACLService_SetEnabledAddRemoveRoom(t *testing.T) {
 	pool, cacheMock, calls := newACLServiceWithPgx(t)
-	service := newACLServiceFromPool(t, pool, cacheMock, false, ACLModeWhitelist, nil)
+	service := newACLServiceFromPool(t, pool, cacheMock, false, nil)
 
 	baselineSet := calls.setCalls
 	baselineSAdd := calls.saddCalls
@@ -357,7 +357,6 @@ func newACLServiceFromPool(
 	pool *pgxpool.Pool,
 	cacheMock *cachemocks.Client,
 	defaultEnabled bool,
-	defaultMode ACLMode,
 	defaultRooms []string,
 ) *Service {
 	t.Helper()
@@ -370,7 +369,7 @@ func newACLServiceFromPool(
 		cacheMock,
 		slog.New(slog.DiscardHandler),
 		defaultEnabled,
-		defaultMode,
+		ACLModeWhitelist,
 		defaultRooms,
 	)
 	if err != nil {
@@ -382,7 +381,7 @@ func newACLServiceFromPool(
 
 // newACLServiceFromFakeStore는 fake store를 주입한 Service를 직접 구성한다.
 // DB fault-injection이 필요한 테스트에 쓴다.
-func newACLServiceFromFakeStore(t *testing.T, store aclStore, cacheClient *cachemocks.Client, enabled bool, mode ACLMode) *Service {
+func newACLServiceFromFakeStore(t *testing.T, store aclStore, cacheClient *cachemocks.Client, enabled bool) *Service {
 	t.Helper()
 
 	return &Service{
@@ -390,7 +389,7 @@ func newACLServiceFromFakeStore(t *testing.T, store aclStore, cacheClient *cache
 		cache:          cacheClient,
 		logger:         slog.New(slog.DiscardHandler),
 		enabled:        enabled,
-		mode:           mode,
+		mode:           ACLModeWhitelist,
 		whitelistRooms: make(map[string]struct{}),
 		blacklistRooms: make(map[string]struct{}),
 	}
@@ -537,7 +536,7 @@ func assertACLSetMode(t *testing.T, service *Service, mode ACLMode) {
 
 func TestACLService_SetMode(t *testing.T) {
 	pool, cacheMock, _ := newACLServiceWithPgx(t)
-	service := newACLServiceFromPool(t, pool, cacheMock, true, ACLModeWhitelist, []string{"wl-room"})
+	service := newACLServiceFromPool(t, pool, cacheMock, true, []string{"wl-room"})
 
 	assertACLStatus(t, service, true, ACLModeWhitelist, 1, []string{"wl-room"})
 	assertACLSetMode(t, service, ACLModeBlacklist)
@@ -550,7 +549,7 @@ func TestACLService_SetMode(t *testing.T) {
 
 func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 	pool, cacheMock, _ := newACLServiceWithPgx(t)
-	service := newACLServiceFromPool(t, pool, cacheMock, true, ACLModeWhitelist, nil)
+	service := newACLServiceFromPool(t, pool, cacheMock, true, nil)
 
 	// 화이트리스트 모드에서 방 추가
 	if added, addErr := service.AddRoom(t.Context(), "shared-room"); addErr != nil || !added {
@@ -714,7 +713,7 @@ func TestACLService_SetEnabledRollsBackStateOnCacheSyncError(t *testing.T) {
 		},
 	}
 
-	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false)
 
 	err := service.SetEnabled(t.Context(), true)
 	if err == nil {
@@ -730,7 +729,7 @@ func TestACLService_SetEnabledRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatal("expected in-memory enabled=false after rollback")
 	}
 
-	if v, _ := store.settingValue(dbKeyEnabled); v != "false" {
+	if v := store.settingValue(dbKeyEnabled); v != "false" {
 		t.Fatalf("enabled setting value=%q want=false", v)
 	}
 }
@@ -751,7 +750,7 @@ func TestACLService_SetModeRollsBackStateOnCacheSyncError(t *testing.T) {
 		},
 	}
 
-	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false)
 
 	err := service.SetMode(t.Context(), ACLModeBlacklist)
 	if err == nil {
@@ -767,7 +766,7 @@ func TestACLService_SetModeRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected in-memory mode=whitelist after rollback, got %s", mode)
 	}
 
-	if v, _ := store.settingValue(dbKeyMode); v != "whitelist" {
+	if v := store.settingValue(dbKeyMode); v != "whitelist" {
 		t.Fatalf("mode setting value=%q want=whitelist", v)
 	}
 }
@@ -787,7 +786,7 @@ func TestACLService_AddRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		},
 	}
 
-	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false)
 
 	added, err := service.AddRoom(t.Context(), "room-x")
 	if added {
@@ -807,7 +806,10 @@ func TestACLService_AddRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
 
-	count, _ := store.CountRooms(t.Context(), "room-x", listTypeWhitelist)
+	count, err := store.CountRooms(t.Context(), "room-x", listTypeWhitelist)
+	if err != nil {
+		t.Fatalf("count rooms: %v", err)
+	}
 	if count != 0 {
 		t.Fatalf("expected room rollback in store, count=%d", count)
 	}
@@ -829,7 +831,7 @@ func TestACLService_RemoveRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		},
 	}
 
-	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false)
 	service.whitelistRooms["room-x"] = struct{}{}
 
 	removed, err := service.RemoveRoom(t.Context(), "room-x")
@@ -850,7 +852,10 @@ func TestACLService_RemoveRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
 
-	count, _ := store.CountRooms(t.Context(), "room-x", listTypeWhitelist)
+	count, err := store.CountRooms(t.Context(), "room-x", listTypeWhitelist)
+	if err != nil {
+		t.Fatalf("count rooms: %v", err)
+	}
 	if count != 1 {
 		t.Fatalf("expected room restored in store, count=%d", count)
 	}
@@ -984,7 +989,7 @@ func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 	}
 
 	cacheMock := newACLRoomSetStatefulCacheForLoad()
-	service := newACLServiceFromFakeStore(t, store, cacheMock, false, ACLModeWhitelist)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, false)
 
 	err := service.SetEnabled(t.Context(), true)
 	if err == nil {
@@ -1000,7 +1005,7 @@ func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatal("expected in-memory enabled=false after DB failure")
 	}
 
-	if v, _ := store.settingValue(dbKeyEnabled); v != "false" {
+	if v := store.settingValue(dbKeyEnabled); v != "false" {
 		t.Fatalf("enabled setting value=%q want=false", v)
 	}
 }
@@ -1019,7 +1024,7 @@ func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 	}
 
 	cacheMock := newACLRoomSetStatefulCacheForLoad()
-	service := newACLServiceFromFakeStore(t, store, cacheMock, true, ACLModeWhitelist)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, true)
 
 	err := service.SetMode(t.Context(), ACLModeBlacklist)
 	if err == nil {
@@ -1035,7 +1040,7 @@ func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatalf("expected in-memory mode=whitelist after DB failure, got %s", mode)
 	}
 
-	if v, _ := store.settingValue(dbKeyMode); v != "whitelist" {
+	if v := store.settingValue(dbKeyMode); v != "whitelist" {
 		t.Fatalf("mode setting value=%q want=whitelist", v)
 	}
 }
@@ -1057,7 +1062,7 @@ func TestACLService_AddRoom_UsesCapturedModeForValkeySync(t *testing.T) {
 		},
 	}
 
-	service := newACLServiceFromFakeStore(t, store, cacheMock, true, ACLModeWhitelist)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, true)
 
 	store.afterCreateRoom = func(string, string) {
 		service.mu.Lock()
@@ -1096,7 +1101,7 @@ func TestACLService_RemoveRoom_UsesCapturedModeForValkeySync(t *testing.T) {
 		},
 	}
 
-	service := newACLServiceFromFakeStore(t, store, cacheMock, true, ACLModeWhitelist)
+	service := newACLServiceFromFakeStore(t, store, cacheMock, true)
 	service.whitelistRooms["room-x"] = struct{}{}
 
 	store.afterDeleteRoom = func(string, string) {

@@ -113,7 +113,7 @@ type minutesResp struct {
 	Minutes []int `json:"minutes"`
 }
 
-func (c *Client) AddAlarm(ctx context.Context, req domain.AddAlarmRequest) (bool, error) {
+func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
 	body := addAlarmReq{
 		RoomID:     req.RoomID,
 		UserID:     req.UserID,
@@ -178,7 +178,7 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer c.closeResponseBody(resp, path)
 
 	return decodeAlarmListViewEnvelope(path, resp.Body)
 }
@@ -290,7 +290,7 @@ func (c *Client) WarmCacheFromDB(_ context.Context) error {
 	return nil
 }
 
-func (c *Client) postJSON(ctx context.Context, path string, body any, out any) error {
+func (c *Client) postJSON(ctx context.Context, path string, body, out any) error {
 	return c.doJSON(ctx, http.MethodPost, path, body, out)
 }
 
@@ -298,11 +298,11 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 	return c.doJSON(ctx, http.MethodGet, path, nil, out)
 }
 
-func (c *Client) putJSON(ctx context.Context, path string, body any, out any) error {
+func (c *Client) putJSON(ctx context.Context, path string, body, out any) error {
 	return c.doJSON(ctx, http.MethodPut, path, body, out)
 }
 
-func (c *Client) doJSON(ctx context.Context, method, path string, body any, out any) error {
+func (c *Client) doJSON(ctx context.Context, method, path string, body, out any) error {
 	bodyReader, err := encodeJSONRequestBody(path, body)
 	if err != nil {
 		return err
@@ -312,10 +312,12 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer c.closeResponseBody(resp, path)
 
 	if out == nil {
-		_, _ = io.Copy(io.Discard, resp.Body)
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			return fmt.Errorf("alarm-api: %s: discard response: %w", path, err)
+		}
 		return nil
 	}
 
@@ -343,13 +345,43 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if resp == nil {
+			err = fmt.Errorf("nil response: %w", err)
+		}
 		return nil, fmt.Errorf("alarm-api: %s: %w", path, err)
 	}
-	if err := httputil.CheckStatus(resp); err != nil {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("alarm-api: %s: check status: %w", path, err)
+	if resp == nil {
+		return nil, fmt.Errorf("alarm-api: %s: nil response", path)
+	}
+	if err := c.validateResponse(path, resp); err != nil {
+		return nil, err
 	}
 	return resp, nil
+}
+
+func (c *Client) validateResponse(path string, resp *http.Response) error {
+	if resp == nil {
+		return fmt.Errorf("alarm-api: %s: nil response", path)
+	}
+	if resp.Body == nil {
+		return fmt.Errorf("alarm-api: %s: nil response body", path)
+	}
+	if err := httputil.CheckStatus(resp); err != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.logger.Warn("Failed to close alarm API response body", slog.String("path", path), slog.Any("error", closeErr))
+		}
+		return fmt.Errorf("alarm-api: %s: check status: %w", path, err)
+	}
+	return nil
+}
+
+func (c *Client) closeResponseBody(resp *http.Response, path string) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+	if err := resp.Body.Close(); err != nil {
+		c.logger.Warn("Failed to close alarm API response body", slog.String("path", path), slog.Any("error", err))
+	}
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader, hasJSONBody bool) (*http.Request, error) {

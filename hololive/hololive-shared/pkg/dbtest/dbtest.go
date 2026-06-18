@@ -91,7 +91,7 @@ func NewPool(t testing.TB) *pgxpool.Pool {
 	pool := openTestPool(t, ctx, baseDSN, dbName)
 
 	t.Cleanup(func() {
-		if dropErr := dropDatabase(baseDSN, dbName); dropErr != nil {
+		if dropErr := dropDatabase(ctx, baseDSN, dbName); dropErr != nil {
 			t.Errorf("dbtest: drop database %s: %v", dbName, dropErr)
 		}
 	})
@@ -128,7 +128,7 @@ func openTestPool(t testing.TB, ctx context.Context, baseDSN, dbName string) *pg
 
 	pool, err := poolForDatabase(ctx, baseDSN, dbName)
 	if err != nil {
-		if dropErr := dropDatabase(baseDSN, dbName); dropErr != nil {
+		if dropErr := dropDatabase(ctx, baseDSN, dbName); dropErr != nil {
 			t.Errorf("dbtest: drop database %s after test pool failure: %v", dbName, dropErr)
 		}
 
@@ -198,8 +198,8 @@ func startPostgresContainer(ctx context.Context, image string) (*postgres.Postgr
 // 우선 DROP DATABASE ... WITH (FORCE)(PG 13+)로 잔여 연결까지 끊고 제거한다. FORCE가
 // 실패하면(PG<13 syntax 미지원 또는 그 외) 잔여 연결을 pg_terminate_backend로 정리한 뒤
 // 일반 DROP DATABASE를 시도한다.
-func dropDatabase(baseDSN, dbName string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func dropDatabase(ctx context.Context, baseDSN, dbName string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	pool, err := poolForDatabase(ctx, baseDSN, "")

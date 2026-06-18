@@ -120,7 +120,12 @@ func (db *batchTestDB) First(dest any, conds ...any) *batchTestDB {
 	query := "SELECT " + selectColumns(table) + " FROM " + table
 	args := next.args
 	if len(conds) > 0 {
-		query += " WHERE " + conds[0].(string)
+		condition, ok := conds[0].(string)
+		if !ok {
+			next.Error = fmt.Errorf("first condition has type %T, want string", conds[0])
+			return next
+		}
+		query += " WHERE " + condition
 		args = append([]any(nil), conds[1:]...)
 	} else if strings.TrimSpace(next.where) != "" {
 		query += " WHERE " + next.where
@@ -164,19 +169,11 @@ func (db *batchTestDB) Exec(query string, args ...any) *batchTestDB {
 
 func insertBatchTestValue(ctx context.Context, db *pgxpool.Pool, value any) (int64, error) {
 	v := reflect.ValueOf(value)
-	if v.Kind() == reflect.Pointer {
+	if isReflectPointer(v) {
 		v = v.Elem()
 	}
-	if v.Kind() == reflect.Slice {
-		var rows int64
-		for i := 0; i < v.Len(); i++ {
-			affected, err := insertBatchTestValue(ctx, db, v.Index(i).Addr().Interface())
-			if err != nil {
-				return rows, err
-			}
-			rows += affected
-		}
-		return rows, nil
+	if isReflectSlice(v) {
+		return insertBatchTestSlice(ctx, db, v)
 	}
 
 	switch row := value.(type) {
@@ -223,6 +220,26 @@ func insertBatchTestValue(ctx context.Context, db *pgxpool.Pool, value any) (int
 	default:
 		return 0, fmt.Errorf("unsupported create value: %T", value)
 	}
+}
+
+func insertBatchTestSlice(ctx context.Context, db *pgxpool.Pool, values reflect.Value) (int64, error) {
+	var rows int64
+	for i := 0; i < values.Len(); i++ {
+		affected, err := insertBatchTestValue(ctx, db, values.Index(i).Addr().Interface())
+		if err != nil {
+			return rows, err
+		}
+		rows += affected
+	}
+	return rows, nil
+}
+
+func isReflectPointer(value reflect.Value) bool {
+	return value.IsValid() && value.Kind() == reflect.Pointer
+}
+
+func isReflectSlice(value reflect.Value) bool {
+	return value.IsValid() && value.Kind() == reflect.Slice
 }
 
 func insertOutbox(ctx context.Context, db *pgxpool.Pool, row *domain.YouTubeNotificationOutbox) (int64, error) {

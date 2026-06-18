@@ -84,7 +84,9 @@ func readPersistedSettings(settingsPath string) (persistedSettings, error) {
 		return persistedSettings{}, fmt.Errorf("open settings file: %w", err)
 	}
 	defer func() {
-		_ = file.Close()
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close settings file: %w", closeErr)
+		}
 	}()
 
 	var persisted persistedSettings

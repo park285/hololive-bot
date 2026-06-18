@@ -81,7 +81,7 @@ func (as *AlarmService) afterClearRoomAlarms(ctx context.Context, roomID string,
 	}
 }
 
-func (as *AlarmService) cleanupClearedRoomAlarmChannel(ctx context.Context, roomID string, channelID string) {
+func (as *AlarmService) cleanupClearedRoomAlarmChannel(ctx context.Context, roomID, channelID string) {
 	if err := as.cleanupChannelRegistryIfEmpty(ctx, channelID); err != nil && as.logger != nil {
 		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
 			"cleanup channel registry during room alarm clear.failed",

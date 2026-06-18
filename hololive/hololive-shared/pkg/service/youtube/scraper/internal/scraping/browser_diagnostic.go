@@ -10,7 +10,7 @@ import (
 
 const browserDiagnosticMinParserDriftFailures = 3
 
-func (c *Client) CaptureBrowserDiagnosticSnapshot(ctx context.Context, channelID string, pageURL string) error {
+func (c *Client) CaptureBrowserDiagnosticSnapshot(ctx context.Context, channelID, pageURL string) error {
 	if !c.shouldCaptureBrowserDiagnostic(ctx, channelID) {
 		return nil
 	}
@@ -23,7 +23,7 @@ func (c *Client) CaptureBrowserDiagnosticSnapshot(ctx context.Context, channelID
 		Stage:      "rendered_html",
 		CapturedAt: time.Now().UTC(),
 	}
-	if !c.reserveSnapshotInterval(ctx, snapshot) {
+	if !c.reserveSnapshotInterval(ctx, &snapshot) {
 		return nil
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
@@ -38,7 +38,7 @@ func (c *Client) CaptureBrowserDiagnosticSnapshot(ctx context.Context, channelID
 	}
 	snapshot.StatusCode = resp.StatusCode
 	snapshot.Body = resp.Body
-	c.captureSnapshotWithInterval(ctx, snapshot, false)
+	c.captureSnapshotWithInterval(ctx, &snapshot, false)
 	return nil
 }
 

@@ -31,9 +31,14 @@ func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) 
 	if err != nil {
 		return false, fmt.Errorf("request: %w", err)
 	}
+	if resp == nil {
+		return false, fmt.Errorf("request: nil response")
+	}
 
 	if err := c.HTTPClient.CheckStatus(resp); err != nil {
-		defer func() { _ = resp.Body.Close() }()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return false, errors.Join(fmt.Errorf("check status: %w", err), fmt.Errorf("close response body: %w", closeErr))
+		}
 		return false, fmt.Errorf("check status: %w", err)
 	}
 
@@ -64,9 +69,14 @@ func (c *Client) Subscribe(ctx context.Context, roomID, roomName string) error {
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}
+	if resp == nil {
+		return fmt.Errorf("request: nil response")
+	}
 
 	if err := c.HTTPClient.CheckStatus(resp); err != nil {
-		defer func() { _ = resp.Body.Close() }()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return errors.Join(fmt.Errorf("check status: %w", err), fmt.Errorf("close response body: %w", closeErr))
+		}
 		return fmt.Errorf("check status: %w", err)
 	}
 
@@ -92,9 +102,14 @@ func (c *Client) Unsubscribe(ctx context.Context, roomID string) error {
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}
+	if resp == nil {
+		return fmt.Errorf("request: nil response")
+	}
 
 	if err := c.HTTPClient.CheckStatus(resp); err != nil {
-		defer func() { _ = resp.Body.Close() }()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return errors.Join(fmt.Errorf("check status: %w", err), fmt.Errorf("close response body: %w", closeErr))
+		}
 		return fmt.Errorf("check status: %w", err)
 	}
 

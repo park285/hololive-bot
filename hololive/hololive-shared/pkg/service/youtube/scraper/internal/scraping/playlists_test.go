@@ -30,7 +30,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tidwall/gjson"
 )
 
 // -- parseGridPlaylistRenderer 단위 테스트 --
@@ -49,7 +48,7 @@ func TestParseGridPlaylistRenderer_Normal(t *testing.T) {
 	}`
 
 	client := NewClient()
-	playlist := client.parseGridPlaylistRenderer(gjson.Parse(jsonStr), "UC_TEST")
+	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 
 	require.NotNil(t, playlist)
 	assert.Equal(t, "PLtest123", playlist.PlaylistID)
@@ -68,7 +67,7 @@ func TestParseGridPlaylistRenderer_EmptyPlaylistID(t *testing.T) {
 
 	jsonStr := `{"playlistId": ""}`
 	client := NewClient()
-	playlist := client.parseGridPlaylistRenderer(gjson.Parse(jsonStr), "UC_TEST")
+	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 	assert.Nil(t, playlist)
 }
 
@@ -82,7 +81,7 @@ func TestParseGridPlaylistRenderer_SimpleTextTitle(t *testing.T) {
 	}`
 
 	client := NewClient()
-	playlist := client.parseGridPlaylistRenderer(gjson.Parse(jsonStr), "UC_TEST")
+	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 
 	require.NotNil(t, playlist)
 	assert.Equal(t, "Simple Title", playlist.Title)
@@ -97,7 +96,7 @@ func TestParseGridPlaylistRenderer_NoThumbnails(t *testing.T) {
 	}`
 
 	client := NewClient()
-	playlist := client.parseGridPlaylistRenderer(gjson.Parse(jsonStr), "UC_TEST")
+	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 
 	require.NotNil(t, playlist)
 	assert.Empty(t, playlist.Thumbnail)
@@ -116,7 +115,7 @@ func TestParseGridPlaylistRenderer_MultipleThumbnails(t *testing.T) {
 	}`
 
 	client := NewClient()
-	playlist := client.parseGridPlaylistRenderer(gjson.Parse(jsonStr), "UC_TEST")
+	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 
 	require.NotNil(t, playlist)
 	assert.Len(t, playlist.Thumbnail, 2)
@@ -144,7 +143,7 @@ func TestParseGridPlaylistRenderer_VideoCountFormats(t *testing.T) {
 				"videoCountText": {"runs": [{"text": "` + tc.countText + `"}]}
 			}`
 			client := NewClient()
-			playlist := client.parseGridPlaylistRenderer(gjson.Parse(jsonStr), "UC_TEST")
+			playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 			require.NotNil(t, playlist)
 			assert.Equal(t, tc.want, playlist.VideoCount)
 		})

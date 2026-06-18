@@ -46,16 +46,23 @@ func (d *ClaimManager) selectClaimedDeliveries(
 	outboxes []domain.YouTubeNotificationOutbox,
 	reuseCache claim.DecisionCache,
 ) deliveryClaimSelection {
+	safeRows := make([]domain.YouTubeNotificationDelivery, len(rows))
+	copy(safeRows, rows)
+	safeOutboxes := make([]domain.YouTubeNotificationOutbox, len(outboxes))
+	copy(safeOutboxes, outboxes)
 	selection := deliveryClaimSelection{
-		sendRows:       make([]domain.YouTubeNotificationDelivery, 0, len(rows)),
-		sendOutboxes:   make([]domain.YouTubeNotificationOutbox, 0, len(outboxes)),
-		claimTokens:    make([]dispatchstate.ClaimToken, 0, len(outboxes)),
-		rowClaimTokens: make([][]dispatchstate.ClaimToken, 0, len(rows)),
+		sendRows:       make([]domain.YouTubeNotificationDelivery, 0, len(safeRows)),
+		sendOutboxes:   make([]domain.YouTubeNotificationOutbox, 0, len(safeOutboxes)),
+		claimTokens:    make([]dispatchstate.ClaimToken, 0, len(safeOutboxes)),
+		rowClaimTokens: make([][]dispatchstate.ClaimToken, 0, len(safeRows)),
 	}
-	limit := min(len(outboxes), len(rows))
+	limit := min(len(safeOutboxes), len(safeRows))
+	if limit == 0 {
+		return selection
+	}
 
 	for i := range limit {
-		d.applyDeliveryClaimSelection(ctx, &selection, rows[i], outboxes[i], reuseCache)
+		d.applyDeliveryClaimSelection(ctx, &selection, &safeRows[i], &safeOutboxes[i], reuseCache)
 	}
 
 	return selection
@@ -64,8 +71,8 @@ func (d *ClaimManager) selectClaimedDeliveries(
 func (d *ClaimManager) applyDeliveryClaimSelection(
 	ctx context.Context,
 	selection *deliveryClaimSelection,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	reuseCache claim.DecisionCache,
 ) {
 	claimIdentity, err := deliveryClaimIdentityForOutbox(outbox)
@@ -95,14 +102,18 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 		return
 	}
 
-	cr := result.Decision.Value.(claimResult)
+	cr, ok := result.Decision.Value.(claimResult)
+	if !ok {
+		d.retryDeliveryClaimSelection(selection, row, outbox, "Unexpected community/shorts claim result type before send", fmt.Errorf("claim result type %T", result.Decision.Value))
+		return
+	}
 	d.applyDeliveryClaimDecision(selection, row, outbox, cr.decision, cr.claimToken, result.Hit)
 }
 
 func (d *ClaimManager) retryDeliveryClaimSelection(
 	selection *deliveryClaimSelection,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	message string,
 	err error,
 ) {
@@ -113,8 +124,8 @@ func (d *ClaimManager) retryDeliveryClaimSelection(
 
 func (d *ClaimManager) applyDeliveryClaimDecision(
 	selection *deliveryClaimSelection,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	decision deliveryClaimDecision,
 	claimToken *dispatchstate.ClaimToken,
 	reused bool,
@@ -135,8 +146,8 @@ func (d *ClaimManager) applyDeliveryClaimDecision(
 
 func appendProceedingDeliveryClaim(
 	selection *deliveryClaimSelection,
-	row domain.YouTubeNotificationDelivery,
-	outbox domain.YouTubeNotificationOutbox,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
 	claimToken *dispatchstate.ClaimToken,
 	reused bool,
 ) {
@@ -146,12 +157,12 @@ func appendProceedingDeliveryClaim(
 		selection.claimTokens = append(selection.claimTokens, token)
 		rowClaimTokens = []dispatchstate.ClaimToken{token}
 	}
-	selection.sendRows = append(selection.sendRows, row)
-	selection.sendOutboxes = append(selection.sendOutboxes, outbox)
+	selection.sendRows = append(selection.sendRows, *row)
+	selection.sendOutboxes = append(selection.sendOutboxes, *outbox)
 	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
 }
 
-func (d *ClaimManager) applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection deliveryClaimSelection) {
+func (d *ClaimManager) applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection *deliveryClaimSelection) {
 	if len(selection.alreadySentDeliveryIDs) > 0 {
 		mu.Lock()
 		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, selection.alreadySentDeliveryIDs...)

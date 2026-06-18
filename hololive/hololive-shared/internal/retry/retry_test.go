@@ -196,7 +196,7 @@ func TestWithRetry_ContextCancelled(t *testing.T) {
 func TestWithRetry_OnRetryCallback(t *testing.T) {
 	retryAttempts := []int{}
 
-	_ = WithRetry(context.Background(), RetryOptions{
+	err := WithRetry(context.Background(), RetryOptions{
 		MaxAttempts: 3,
 		BaseDelay:   time.Millisecond,
 		OnRetry: func(attempt int, _ error, _ time.Duration) {
@@ -208,6 +208,9 @@ func TestWithRetry_OnRetryCallback(t *testing.T) {
 	}, func(_ context.Context) error {
 		return errors.New("error")
 	})
+	if err == nil {
+		t.Fatal("expected retry exhaustion error")
+	}
 
 	if len(retryAttempts) != 2 {
 		t.Errorf("expected 2 OnRetry calls, got %d", len(retryAttempts))

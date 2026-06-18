@@ -142,12 +142,12 @@ func (r *alarmStateRepository) FindAlarmStateByPostID(ctx context.Context, kind 
 	return &row, nil
 }
 
-func hasPublishedAtRetryAfterColumn(db trackingDB) bool {
+func hasPublishedAtRetryAfterColumn(ctx context.Context, db trackingDB) bool {
 	if db == nil {
 		return false
 	}
 	var exists bool
-	err := db.QueryRow(context.Background(), `
+	err := db.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1
 			FROM information_schema.columns

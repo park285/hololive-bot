@@ -217,16 +217,37 @@ func dereferenceValue(v any) (reflect.Value, bool) {
 }
 
 func reflectValueToInt64(rv reflect.Value) (int64, bool) {
-	switch rv.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+	kind := rv.Kind()
+	if isReflectSignedInt(kind) {
 		return rv.Int(), true
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return uintToInt64(rv.Uint())
-	case reflect.Float32, reflect.Float64:
-		return floatToInt64(rv.Float())
-	default:
-		return 0, false
 	}
+	if isReflectUnsignedInt(kind) {
+		return uintToInt64(rv.Uint())
+	}
+	if isReflectFloat(kind) {
+		return floatToInt64(rv.Float())
+	}
+	return 0, false
+}
+
+func isReflectSignedInt(kind reflect.Kind) bool {
+	return kind == reflect.Int ||
+		kind == reflect.Int8 ||
+		kind == reflect.Int16 ||
+		kind == reflect.Int32 ||
+		kind == reflect.Int64
+}
+
+func isReflectUnsignedInt(kind reflect.Kind) bool {
+	return kind == reflect.Uint ||
+		kind == reflect.Uint8 ||
+		kind == reflect.Uint16 ||
+		kind == reflect.Uint32 ||
+		kind == reflect.Uint64
+}
+
+func isReflectFloat(kind reflect.Kind) bool {
+	return kind == reflect.Float32 || kind == reflect.Float64
 }
 
 func uintToInt64(u uint64) (int64, bool) {

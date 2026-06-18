@@ -38,10 +38,10 @@ func setupTestService(t *testing.T) (*template.AdminService, *repository.Templat
 	t.Helper()
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	repository := repository.NewTemplateRepository(pool, logger)
+	templateRepo := repository.NewTemplateRepository(pool, logger)
 	renderer := template.NewRenderer(pool, logger)
-	service := template.NewAdminService(repository, renderer, logger)
-	return service, repository
+	service := template.NewAdminService(templateRepo, renderer, logger)
+	return service, templateRepo
 }
 
 func TestAdminService_List(t *testing.T) {
@@ -71,7 +71,7 @@ func TestAdminService_GetByKey(t *testing.T) {
 }
 
 func TestAdminService_Save(t *testing.T) {
-	service, repository := setupTestService(t)
+	service, templateRepo := setupTestService(t)
 	ctx := context.Background()
 
 	t.Run("valid template update", func(t *testing.T) {
@@ -91,13 +91,14 @@ func TestAdminService_Save(t *testing.T) {
 	})
 
 	t.Run("creates revision on update", func(t *testing.T) {
-		existing, _ := repository.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, nil)
+		existing, err := templateRepo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, nil)
+		require.NoError(t, err)
 		oldBody := existing.Body
 
-		_, err := service.Save(ctx, domain.TemplateKeyOutboxShorts, nil, "[{{.MemberName}}] v2")
+		_, err = service.Save(ctx, domain.TemplateKeyOutboxShorts, nil, "[{{.MemberName}}] v2")
 		require.NoError(t, err)
 
-		revisions, err := repository.GetRevisions(ctx, existing.ID, 5)
+		revisions, err := templateRepo.GetRevisions(ctx, existing.ID, 5)
 		require.NoError(t, err)
 		assert.NotEmpty(t, revisions)
 		assert.Equal(t, oldBody, revisions[0].Body)
@@ -110,7 +111,7 @@ func TestAdminService_Save(t *testing.T) {
 }
 
 func TestAdminService_DeleteOverride(t *testing.T) {
-	service, repository := setupTestService(t)
+	service, templateRepo := setupTestService(t)
 	ctx := context.Background()
 
 	channelID := "room_123"
@@ -126,7 +127,8 @@ func TestAdminService_DeleteOverride(t *testing.T) {
 		err := service.DeleteOverride(ctx, domain.TemplateKeyOutboxShorts, channelID)
 		require.NoError(t, err)
 
-		found, _ := repository.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, &channelID)
+		found, err := templateRepo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, &channelID)
+		require.NoError(t, err)
 		assert.Nil(t, found)
 	})
 }
@@ -158,7 +160,8 @@ func TestAdminService_GetRevisions(t *testing.T) {
 	ctx := context.Background()
 
 	for i := range 3 {
-		_, _ = service.Save(ctx, domain.TemplateKeyOutboxShorts, nil, "[{{.MemberName}}] v"+string(rune('0'+i)))
+		_, err := service.Save(ctx, domain.TemplateKeyOutboxShorts, nil, "[{{.MemberName}}] v"+string(rune('0'+i)))
+		require.NoError(t, err)
 	}
 
 	revisions, err := service.GetRevisions(ctx, domain.TemplateKeyOutboxShorts, nil)
@@ -170,9 +173,11 @@ func TestAdminService_GetRevisionByID(t *testing.T) {
 	service, _ := setupTestService(t)
 	ctx := context.Background()
 
-	_, _ = service.Save(ctx, domain.TemplateKeyOutboxShorts, nil, "[{{.MemberName}}] updated")
+	_, err := service.Save(ctx, domain.TemplateKeyOutboxShorts, nil, "[{{.MemberName}}] updated")
+	require.NoError(t, err)
 
-	revisions, _ := service.GetRevisions(ctx, domain.TemplateKeyOutboxShorts, nil)
+	revisions, err := service.GetRevisions(ctx, domain.TemplateKeyOutboxShorts, nil)
+	require.NoError(t, err)
 	if len(revisions) > 0 {
 		rev, err := service.GetRevisionByID(ctx, revisions[0].ID)
 		require.NoError(t, err)

@@ -55,7 +55,7 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 	return removed, nil
 }
 
-func normalizeRemoveAlarmRequest(roomID string, channelID string, alarmTypes domain.AlarmTypes) (string, string, domain.AlarmTypes, error) {
+func normalizeRemoveAlarmRequest(roomID, channelID string, alarmTypes domain.AlarmTypes) (normalizedRoomID, normalizedChannelID string, removalTypes domain.AlarmTypes, err error) {
 	roomID = strings.TrimSpace(roomID)
 	channelID = strings.TrimSpace(channelID)
 	if roomID == "" || channelID == "" {
@@ -65,7 +65,7 @@ func normalizeRemoveAlarmRequest(roomID string, channelID string, alarmTypes dom
 	return roomID, channelID, requestedRemovalTypes, err
 }
 
-func (as *AlarmService) prepareRemoveAlarmMutation(ctx context.Context, roomID string, channelID string, requestedRemovalTypes domain.AlarmTypes) (removeAlarmMutation, bool, error) {
+func (as *AlarmService) prepareRemoveAlarmMutation(ctx context.Context, roomID, channelID string, requestedRemovalTypes domain.AlarmTypes) (removeAlarmMutation, bool, error) {
 	existing, err := as.findAlarmRecordForMutation(ctx, roomID, channelID)
 	if err != nil {
 		return removeAlarmMutation{}, false, err
@@ -94,14 +94,14 @@ func (as *AlarmService) prepareRemoveAlarmMutation(ctx context.Context, roomID s
 	}, true, nil
 }
 
-func (as *AlarmService) persistRemoveAlarmMutation(ctx context.Context, roomID string, channelID string, mutation removeAlarmMutation) error {
+func (as *AlarmService) persistRemoveAlarmMutation(ctx context.Context, roomID, channelID string, mutation removeAlarmMutation) error {
 	if mutation.removeRoomChannel {
 		return as.deleteAlarmBeforeCacheRemoval(ctx, roomID, channelID)
 	}
 	return as.updateAlarmTypesBeforeCacheRemoval(ctx, mutation.updatedRecord)
 }
 
-func (as *AlarmService) deleteAlarmBeforeCacheRemoval(ctx context.Context, roomID string, channelID string) error {
+func (as *AlarmService) deleteAlarmBeforeCacheRemoval(ctx context.Context, roomID, channelID string) error {
 	if err := as.deleteAlarm(ctx, roomID, channelID); err != nil {
 		return sharedlogging.LogAndWrapError(ctx, as.logger, "delete alarm before cache removal", err)
 	}
@@ -115,7 +115,7 @@ func (as *AlarmService) updateAlarmTypesBeforeCacheRemoval(ctx context.Context, 
 	return nil
 }
 
-func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID string, channelID string, mutation removeAlarmMutation) (bool, error) {
+func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID, channelID string, mutation removeAlarmMutation) (bool, error) {
 	removed, err := as.removeAlarmFromCache(ctx, roomID, channelID, mutation.effectiveRemovalTypes, mutation.removeRoomChannel)
 	if err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "remove", fmt.Errorf("remove alarm: %w", err))
@@ -128,7 +128,7 @@ func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID str
 	return removed, nil
 }
 
-func (as *AlarmService) afterRemoveAlarm(ctx context.Context, roomID string, channelID string, mutation removeAlarmMutation) {
+func (as *AlarmService) afterRemoveAlarm(ctx context.Context, roomID, channelID string, mutation removeAlarmMutation) {
 	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
 		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
 			"sync platform alarm mapping after remove.failed",

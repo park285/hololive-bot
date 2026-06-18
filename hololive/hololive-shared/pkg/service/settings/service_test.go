@@ -22,6 +22,7 @@ package settings
 
 import (
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -124,7 +125,7 @@ func TestSettingsService_RewritesHealedLegacyTargetMinutesOnReload(t *testing.T)
 
 	_ = NewSettingsService(filePath, Settings{}, logger)
 
-	raw, err := os.ReadFile(filePath)
+	raw, err := fs.ReadFile(os.DirFS(dir), "settings.json")
 	if err != nil {
 		t.Fatalf("read settings: %v", err)
 	}

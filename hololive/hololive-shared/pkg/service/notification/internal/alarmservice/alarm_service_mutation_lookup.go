@@ -42,7 +42,7 @@ func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, 
 	return as.findAlarmRecordForMutationFromCache(ctx, roomID, channelID)
 }
 
-func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Context, roomID string, channelID string) (*domain.Alarm, error) {
+func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Context, roomID, channelID string) (*domain.Alarm, error) {
 	alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepository, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("find room alarms: %w", err)
@@ -59,7 +59,7 @@ func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Con
 	return nil, nil
 }
 
-func (as *AlarmService) findAlarmRecordForMutationFromCache(ctx context.Context, roomID string, channelID string) (*domain.Alarm, error) {
+func (as *AlarmService) findAlarmRecordForMutationFromCache(ctx context.Context, roomID, channelID string) (*domain.Alarm, error) {
 	exists, err := as.cache.SIsMember(ctx, as.getAlarmKey(roomID), channelID)
 	if err != nil {
 		return nil, fmt.Errorf("check room alarm membership: %w", err)
@@ -81,7 +81,7 @@ func (as *AlarmService) findAlarmRecordForMutationFromCache(ctx context.Context,
 	}, nil
 }
 
-func (as *AlarmService) currentCachedAlarmTypes(ctx context.Context, channelID string, registryKey string) (domain.AlarmTypes, error) {
+func (as *AlarmService) currentCachedAlarmTypes(ctx context.Context, channelID, registryKey string) (domain.AlarmTypes, error) {
 	currentTypes := make(domain.AlarmTypes, 0, len(domain.AllAlarmTypes))
 	for _, alarmType := range domain.AllAlarmTypes {
 		subscriberKey := as.channelSubscribersKeyByType(channelID, alarmType)

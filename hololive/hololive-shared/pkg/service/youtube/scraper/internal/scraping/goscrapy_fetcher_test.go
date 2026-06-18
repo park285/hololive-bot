@@ -26,7 +26,7 @@ func TestGoScrapyPageFetcher_ReturnsStatusHeadersAndBody(t *testing.T) {
 		assert.Equal(t, "test-agent", r.Header.Get("User-Agent"))
 		w.Header().Set("X-Goscrapy-Test", "ok")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+		mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 	}))
 	defer server.Close()
 
@@ -51,7 +51,7 @@ func TestGoScrapyPageFetcher_ReturnsStatusHeadersAndBody(t *testing.T) {
 func TestGoScrapyFetchAppRegistersDiscardPipeline(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+		mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 	}))
 	defer server.Close()
 
@@ -71,7 +71,8 @@ func TestGoScrapyFetchAppRegistersDiscardPipeline(t *testing.T) {
 	appReq := app.Request(ctx)
 	appReq.Url(server.URL).Method(http.MethodGet)
 	app.Parse(appReq, func(_ context.Context, resp core.IResponseReader) {
-		_, _ = readGoScrapyResponse(resp)
+		_, readErr := readGoScrapyResponse(resp)
+		require.NoError(t, readErr)
 		cancel()
 	})
 
@@ -105,7 +106,7 @@ func TestGoScrapyFetchPageOnce_DoesNotFallbackOn429(t *testing.T) {
 func TestGoScrapyPageFetcher_FallsBackOnlyBeforeResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("fallback body"))
+		mustWriteResponse(t, w, "fallback body")
 	}))
 	defer server.Close()
 

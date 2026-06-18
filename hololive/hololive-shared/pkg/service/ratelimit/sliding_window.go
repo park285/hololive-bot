@@ -163,7 +163,7 @@ func (l *SlidingWindowLimiter) allowByScript(
 	limit int,
 	member string,
 	ttlSeconds int64,
-) (bool, int, time.Duration, error) {
+) (ok0 bool, result1 int, result2 time.Duration, err error) {
 	cmd := l.cacheClient.B().
 		Eval().
 		Script(allowScript).
@@ -187,7 +187,7 @@ func (l *SlidingWindowLimiter) allowByScript(
 	return parseAllowScriptResult(results[0])
 }
 
-func parseAllowScriptResult(result valkey.ValkeyResult) (bool, int, time.Duration, error) {
+func parseAllowScriptResult(result valkey.ValkeyResult) (ok0 bool, result1 int, result2 time.Duration, err error) {
 	values, err := result.ToArray()
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("parse allow script result: %w", err)
@@ -211,7 +211,7 @@ func parseAllowScriptResult(result valkey.ValkeyResult) (bool, int, time.Duratio
 	return flag == 1, int(count), time.Duration(retryAfterMS) * time.Millisecond, nil
 }
 
-func parseNonNegativeScriptInt(message valkey.ValkeyMessage, name string, resultName string) (int64, error) {
+func parseNonNegativeScriptInt(message valkey.ValkeyMessage, name, resultName string) (int64, error) {
 	value, err := message.AsInt64()
 	if err != nil {
 		return 0, fmt.Errorf("parse %s: %w", name, err)

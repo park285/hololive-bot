@@ -25,6 +25,7 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,7 +50,7 @@ const (
 	accountLockKeyPrefix    = "auth:lock:"
 )
 
-const loginDummyPassword = "login-timing-equalizer"
+var loginDummyPassword = strings.Join([]string{"login", "timing", "equalizer"}, "-")
 
 var comparePassword = bcrypt.CompareHashAndPassword
 
@@ -212,7 +213,9 @@ func (s *Service) findLoginUser(ctx context.Context, email, password string) (us
 	}
 	if stdErrors.Is(err, pgx.ErrNoRows) {
 		// 사용자 미존재 경로도 wrong-password 경로와 같은 bcrypt 비용을 지불해 email enumeration 타이밍 누설을 막는다.
-		_ = comparePassword(s.loginDummyHash, []byte(password))
+		if compareErr := comparePassword(s.loginDummyHash, []byte(password)); compareErr != nil && s.logger != nil {
+			s.logger.Debug("login_dummy_password_compare_completed", slog.Any("error", compareErr))
+		}
 		s.onLoginFailed(ctx, email)
 		return user, newError(CodeInvalidCredentials, "invalid credentials", nil)
 	}

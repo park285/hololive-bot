@@ -148,8 +148,8 @@ func TestExecuteRespectsParallelismLimit(t *testing.T) {
 	if summary.SuccessCount != 6 {
 		t.Fatalf("SuccessCount = %d, want 6", summary.SuccessCount)
 	}
-	if max := atomic.LoadInt32(&maxInFlight); max > 2 {
-		t.Fatalf("maxInFlight = %d, want <= 2", max)
+	if observedMax := atomic.LoadInt32(&maxInFlight); observedMax > 2 {
+		t.Fatalf("maxInFlight = %d, want <= 2", observedMax)
 	}
 }
 

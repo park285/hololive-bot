@@ -117,7 +117,7 @@ func (m *Mapper) SyncForChannel(ctx context.Context, channelID string) error {
 	return m.syncRegisteredMappingForChannel(ctx, channelID)
 }
 
-func (m *Mapper) collectPlatformMappings(memberData domain.MemberDataProvider, channelIDs []string) (map[string]string, map[string]string, map[string]string) {
+func (m *Mapper) collectPlatformMappings(memberData domain.MemberDataProvider, channelIDs []string) (chzzk, twitch, twitchChannels map[string]string) {
 	chzzkMappings := make(map[string]string, len(channelIDs))
 	twitchMappings := make(map[string]string, len(channelIDs))
 	twitchChannelMappings := make(map[string]string, len(channelIDs))
@@ -200,7 +200,11 @@ func (m *Mapper) removeStaleMappingsForChannel(ctx context.Context, channelID st
 }
 
 func (m *Mapper) syncRegisteredMappingForChannel(ctx context.Context, channelID string) error {
-	member := m.memberData().FindMemberByChannelID(channelID)
+	memberData := m.memberData()
+	if memberData == nil {
+		return errors.New("member data provider not configured")
+	}
+	member := memberData.FindMemberByChannelID(channelID)
 	if member == nil {
 		return m.removeUnknownMappingsForChannel(ctx, channelID)
 	}

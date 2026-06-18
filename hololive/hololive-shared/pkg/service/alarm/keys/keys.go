@@ -116,6 +116,8 @@ type ChannelContentAlarmTargetKeys struct {
 
 func BuildChannelSubscriberKey(channelID string, alarmType domain.AlarmType) string {
 	switch alarmType {
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+		return ChannelSubscribersKeyPrefix + channelID
 	case domain.AlarmTypeCommunity:
 		return ChannelSubscribersCommunityPrefix + channelID
 	case domain.AlarmTypeShorts:
@@ -139,6 +141,8 @@ func BuildChannelSubscriberEmptyKey(channelID string, alarmType domain.AlarmType
 
 func (k ChannelContentAlarmTargetKeys) KeyFor(alarmType domain.AlarmType) string {
 	switch alarmType {
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+		return ""
 	case domain.AlarmTypeCommunity:
 		return k.CommunitySubscribersKey
 	case domain.AlarmTypeShorts:

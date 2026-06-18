@@ -180,17 +180,25 @@ func isTimeoutFailure(err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return true
-	}
+	return isTimeoutURLFailure(err) || isTimeoutNetFailure(err)
+}
+
+func isTimeoutURLFailure(err error) bool {
 	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		if errors.Is(urlErr.Err, context.DeadlineExceeded) {
-			return true
-		}
-		var nestedNetErr net.Error
-		return errors.As(urlErr.Err, &nestedNetErr) && nestedNetErr.Timeout()
+	if !errors.As(err, &urlErr) || isNilInterfaceValue(urlErr) || isNilInterfaceValue(urlErr.Err) {
+		return false
 	}
-	return false
+	return errors.Is(urlErr.Err, context.DeadlineExceeded) || isTimeoutNetError(urlErr.Err)
+}
+
+func isTimeoutNetFailure(err error) bool {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
+		return false
+	}
+	var netErr net.Error
+	if !errors.As(err, &netErr) || isNilInterfaceValue(netErr) {
+		return false
+	}
+	return netErr.Timeout()
 }

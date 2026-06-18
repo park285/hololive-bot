@@ -100,7 +100,7 @@ func (p ScraperPoll) EstimatedRequestsPerMinute() float64 {
 	return rpm
 }
 
-func (c ScraperConfig) PollOrDefault() ScraperPoll {
+func (c *ScraperConfig) PollOrDefault() ScraperPoll {
 	poll := DefaultScraperPoll()
 
 	if c.Poll.Videos > 0 {
@@ -122,7 +122,7 @@ func (c ScraperConfig) PollOrDefault() ScraperPoll {
 	return poll
 }
 
-func (c ScraperConfig) SchedulerOrDefault() ScraperSchedulerConfig {
+func (c *ScraperConfig) SchedulerOrDefault() ScraperSchedulerConfig {
 	defaults := DefaultScraperSchedulerConfig()
 	cfg := c.Scheduler
 
@@ -142,7 +142,7 @@ func (c ScraperConfig) SchedulerOrDefault() ScraperSchedulerConfig {
 	return cfg
 }
 
-func (c ScraperConfig) SnapshotOrDefault() ScraperSnapshotConfig {
+func (c *ScraperConfig) SnapshotOrDefault() ScraperSnapshotConfig {
 	defaults := DefaultScraperSnapshotConfig()
 	cfg := c.Snapshot
 	if strings.TrimSpace(cfg.Dir) == "" {
@@ -157,7 +157,7 @@ func (c ScraperConfig) SnapshotOrDefault() ScraperSnapshotConfig {
 	return cfg
 }
 
-func (c ScraperConfig) ChannelHealthOrDefault() ScraperChannelHealthConfig {
+func (c *ScraperConfig) ChannelHealthOrDefault() ScraperChannelHealthConfig {
 	defaults := DefaultScraperChannelHealthConfig()
 	cfg := c.ChannelHealth
 	fillDefaultDuration(&cfg.TTL, defaults.TTL)
@@ -181,7 +181,7 @@ func fillDefaultDuration(value *time.Duration, fallback time.Duration) {
 	}
 }
 
-func (c ScraperConfig) BrowserDiagnosticOrDefault() ScraperBrowserDiagnosticConfig {
+func (c *ScraperConfig) BrowserDiagnosticOrDefault() ScraperBrowserDiagnosticConfig {
 	defaults := DefaultScraperBrowserDiagnosticConfig()
 	cfg := c.BrowserDiagnostic
 	if cfg.Timeout <= 0 {
@@ -190,7 +190,7 @@ func (c ScraperConfig) BrowserDiagnosticOrDefault() ScraperBrowserDiagnosticConf
 	return cfg
 }
 
-func (c ScraperConfig) WorkerCountOrDefault() int {
+func (c *ScraperConfig) WorkerCountOrDefault() int {
 	if c.WorkerCount > 0 {
 		return c.WorkerCount
 	}

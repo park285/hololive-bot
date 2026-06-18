@@ -304,7 +304,7 @@ func postDeliveryTimelineTrackGroupColumns() []string {
 	}
 }
 
-func postTrackingIdentityWhere(identities []PostTrackingIdentity) (string, []any) {
+func postTrackingIdentityWhere(identities []PostTrackingIdentity) (result1 string, result2 []any) {
 	clauses := make([]string, 0, len(identities))
 	args := make([]any, 0, len(identities)*2)
 	for i := range identities {
