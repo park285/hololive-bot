@@ -31,7 +31,7 @@ type RequiredObservationCommand[Options any, Report any] struct {
 	Timeout            time.Duration
 	BuildOptions       func(ObservationQuery) Options
 	Collect            func(context.Context, *config.Config, *slog.Logger, time.Time, Options) (Report, error)
-	RenderMarkdown     func(Report) string
+	RenderMarkdown     func(*Report) string
 	LoadConfigError    string
 	CollectError       string
 	MarkdownWriteError string
@@ -117,7 +117,7 @@ func writeFormattedReport[Report any](
 	stdout io.Writer,
 	format string,
 	report Report,
-	renderMarkdown func(Report) string,
+	renderMarkdown func(*Report) string,
 	markdownWriteError string,
 	jsonWriteError string,
 ) error {
@@ -137,10 +137,10 @@ func writeFormattedReport[Report any](
 func writeMarkdownReport[Report any](
 	stdout io.Writer,
 	report Report,
-	renderMarkdown func(Report) string,
+	renderMarkdown func(*Report) string,
 	markdownWriteError string,
 ) error {
-	if _, err := fmt.Fprint(stdout, renderMarkdown(report)); err != nil {
+	if _, err := fmt.Fprint(stdout, renderMarkdown(&report)); err != nil {
 		return fmt.Errorf("%s: %w", markdownWriteError, err)
 	}
 	return nil

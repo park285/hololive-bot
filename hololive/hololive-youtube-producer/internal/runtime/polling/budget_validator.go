@@ -16,7 +16,8 @@ type BudgetEstimate struct {
 
 func validateRegistrationBudgetProfiles(registrations []providers.ChannelPollerRegistration) error {
 	missing := make([]string, 0)
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}
@@ -40,19 +41,20 @@ func estimateYouTubeProducerSourceBudget(registrations []providers.ChannelPoller
 		BurstInflightBySource: make(map[poller.BudgetSource]int),
 	}
 	burstInflight := activeAPCount * perAPWorkerCount
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}
 		if len(registration.BudgetProfile.SourceUnits) == 0 {
 			continue
 		}
-		accumulateRegistrationSourceBudget(estimate, registration, burstInflight)
+		accumulateRegistrationSourceBudget(&estimate, registration, burstInflight)
 	}
 	return estimate
 }
 
-func accumulateRegistrationSourceBudget(estimate BudgetEstimate, registration providers.ChannelPollerRegistration, burstInflight int) {
+func accumulateRegistrationSourceBudget(estimate *BudgetEstimate, registration *providers.ChannelPollerRegistration, burstInflight int) {
 	channelCount := resolvedRegistrationChannelCount(registration)
 	for source, units := range registration.BudgetProfile.SourceUnits {
 		if channelCount > 0 {

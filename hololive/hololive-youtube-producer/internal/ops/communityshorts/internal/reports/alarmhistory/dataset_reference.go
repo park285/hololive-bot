@@ -22,9 +22,9 @@ func buildDatasetReferenceRows(
 	rowsByKey := make(map[string]DatasetReferenceRow, len(verdictRows))
 	orderKeys := make([]string, 0, len(verdictRows))
 	for i := range verdictRows {
-		candidates := buildReferenceCandidateRows(verdictRows[i])
+		candidates := buildReferenceCandidateRows(&verdictRows[i])
 		for j := range candidates {
-			orderKeys = addReferenceRow(rowsByKey, orderKeys, candidates[j])
+			orderKeys = addReferenceRow(rowsByKey, orderKeys, &candidates[j])
 		}
 	}
 
@@ -37,15 +37,18 @@ func buildDatasetReferenceRows(
 		rows = append(rows, rowsByKey[orderKeys[i]])
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
-		return compareReferenceRows(rows[i], rows[j]) < 0
+		return compareReferenceRows(&rows[i], &rows[j]) < 0
 	})
 
 	return rows
 }
 
 func buildReferenceCandidateRows(
-	verdict trackingrepo.ObservationPostComparisonVerdictRow,
+	verdict *trackingrepo.ObservationPostComparisonVerdictRow,
 ) []DatasetReferenceRow {
+	if verdict == nil {
+		return nil
+	}
 	if verdict.Verdict == trackingrepo.ObservationPostComparisonVerdictUnexpectedSent {
 		return nil
 	}
@@ -66,10 +69,13 @@ func buildReferenceCandidateRows(
 }
 
 func buildReferenceCandidateRow(
-	verdict trackingrepo.ObservationPostComparisonVerdictRow,
+	verdict *trackingrepo.ObservationPostComparisonVerdictRow,
 	channelID string,
 	postID string,
 ) (DatasetReferenceRow, bool) {
+	if verdict == nil {
+		return DatasetReferenceRow{}, false
+	}
 	postID = strings.TrimSpace(postID)
 	channelPostKey := buildChannelPostKey(channelID, postID)
 	if channelPostKey == "" {
@@ -93,19 +99,25 @@ func buildReferenceCandidateRow(
 func addReferenceRow(
 	rowsByKey map[string]DatasetReferenceRow,
 	orderKeys []string,
-	candidate DatasetReferenceRow,
+	candidate *DatasetReferenceRow,
 ) []string {
-	if existing, ok := rowsByKey[candidate.ChannelPostKey]; ok {
-		rowsByKey[candidate.ChannelPostKey] = mergeReferenceRow(existing, candidate)
+	if candidate == nil {
 		return orderKeys
 	}
-	rowsByKey[candidate.ChannelPostKey] = candidate
+	if existing, ok := rowsByKey[candidate.ChannelPostKey]; ok {
+		rowsByKey[candidate.ChannelPostKey] = mergeReferenceRow(&existing, candidate)
+		return orderKeys
+	}
+	rowsByKey[candidate.ChannelPostKey] = *candidate
 	return append(orderKeys, candidate.ChannelPostKey)
 }
 
 func referencePostIDs(
-	verdict trackingrepo.ObservationPostComparisonVerdictRow,
+	verdict *trackingrepo.ObservationPostComparisonVerdictRow,
 ) []string {
+	if verdict == nil {
+		return nil
+	}
 	if canonicalPostID := strings.TrimSpace(verdict.CanonicalPostID); canonicalPostID != "" {
 		return []string{canonicalPostID}
 	}
@@ -113,10 +125,19 @@ func referencePostIDs(
 }
 
 func mergeReferenceRow(
-	current DatasetReferenceRow,
-	next DatasetReferenceRow,
+	current *DatasetReferenceRow,
+	next *DatasetReferenceRow,
 ) DatasetReferenceRow {
-	merged := current
+	if current == nil {
+		if next == nil {
+			return DatasetReferenceRow{}
+		}
+		return *next
+	}
+	if next == nil {
+		return *current
+	}
+	merged := *current
 	merged.AlarmType = firstNonEmpty(merged.AlarmType, next.AlarmType)
 	merged.ChannelID = firstNonEmptyString(merged.ChannelID, next.ChannelID)
 	merged.ChannelPostKey = firstNonEmptyString(merged.ChannelPostKey, next.ChannelPostKey)
@@ -135,21 +156,21 @@ func mergeReferenceRow(
 	return merged
 }
 
-func firstNonEmpty[T ~string](current T, next T) T {
+func firstNonEmpty[T ~string](current, next T) T {
 	if current == "" {
 		return next
 	}
 	return current
 }
 
-func firstNonEmptyString(current string, next string) string {
+func firstNonEmptyString(current, next string) string {
 	if current == "" {
 		return next
 	}
 	return current
 }
 
-func lastNonEmpty[T ~string](current T, next T) T {
+func lastNonEmpty[T ~string](current, next T) T {
 	if next != "" {
 		return next
 	}
@@ -176,7 +197,10 @@ func referenceVerdictPriority(
 	return referenceVerdictPriorities[verdict]
 }
 
-func referenceSortTime(row DatasetReferenceRow) time.Time {
+func referenceSortTime(row *DatasetReferenceRow) time.Time {
+	if row == nil {
+		return time.Time{}
+	}
 	for _, candidate := range []*time.Time{row.ActualPublishedAt, row.DetectedAt} {
 		if candidate != nil {
 			return candidate.UTC()
@@ -185,9 +209,12 @@ func referenceSortTime(row DatasetReferenceRow) time.Time {
 	return time.Time{}
 }
 
-func compareReferenceRows(left DatasetReferenceRow, right DatasetReferenceRow) int {
+func compareReferenceRows(left, right *DatasetReferenceRow) int {
 	leftTime := referenceSortTime(left)
 	rightTime := referenceSortTime(right)
+	if left == nil || right == nil {
+		return compareTimes(leftTime, rightTime)
+	}
 	return cmp.Or(
 		compareTimes(leftTime, rightTime),
 		cmp.Compare(left.ChannelID, right.ChannelID),
@@ -196,7 +223,7 @@ func compareReferenceRows(left DatasetReferenceRow, right DatasetReferenceRow) i
 	)
 }
 
-func earlierTime(left *time.Time, right *time.Time) *time.Time {
+func earlierTime(left, right *time.Time) *time.Time {
 	if left == nil {
 		return shared.CloneSendCountTime(right)
 	}
@@ -232,14 +259,14 @@ func uniqueStrings(values []string) []string {
 	return unique
 }
 
-func mergeUniqueStrings(left []string, right []string) []string {
+func mergeUniqueStrings(left, right []string) []string {
 	merged := make([]string, 0, len(left)+len(right))
 	merged = append(merged, left...)
 	merged = append(merged, right...)
 	return uniqueStrings(merged)
 }
 
-func buildChannelPostKey(channelID string, postID string) string {
+func buildChannelPostKey(channelID, postID string) string {
 	trimmedChannelID := strings.TrimSpace(channelID)
 	trimmedPostID := strings.TrimSpace(postID)
 	if trimmedChannelID == "" || trimmedPostID == "" {
@@ -282,15 +309,18 @@ func buildDatasetVerificationRows(
 	}
 
 	sort.SliceStable(rows, func(i, j int) bool {
-		return compareVerificationRows(rows[i], rows[j]) < 0
+		return compareVerificationRows(&rows[i], &rows[j]) < 0
 	})
 
 	return rows
 }
 
-func compareVerificationRows(left DatasetVerificationRow, right DatasetVerificationRow) int {
+func compareVerificationRows(left, right *DatasetVerificationRow) int {
 	leftTime := verificationSortTime(left)
 	rightTime := verificationSortTime(right)
+	if left == nil || right == nil {
+		return compareTimes(leftTime, rightTime)
+	}
 	return cmp.Or(
 		compareTimes(leftTime, rightTime),
 		cmp.Compare(left.AlarmType, right.AlarmType),
@@ -302,7 +332,10 @@ func compareVerificationRows(left DatasetVerificationRow, right DatasetVerificat
 	)
 }
 
-func verificationSortTime(row DatasetVerificationRow) time.Time {
+func verificationSortTime(row *DatasetVerificationRow) time.Time {
+	if row == nil {
+		return time.Time{}
+	}
 	for _, candidate := range []*time.Time{row.ActualPublishedAt, row.MatchPublishedAt, row.DetectedAt, row.AlarmSentAt} {
 		if candidate != nil {
 			return candidate.UTC()
@@ -311,7 +344,7 @@ func verificationSortTime(row DatasetVerificationRow) time.Time {
 	return time.Time{}
 }
 
-func compareTimes(left time.Time, right time.Time) int {
+func compareTimes(left, right time.Time) int {
 	if left.Equal(right) {
 		return 0
 	}
@@ -339,7 +372,7 @@ func cloneStrings(values []string) []string {
 	return cloned
 }
 
-func buildObservationPostKey(alarmType domain.AlarmType, channelID string, postID string) string {
+func buildObservationPostKey(alarmType domain.AlarmType, channelID, postID string) string {
 	trimmedChannelID := strings.TrimSpace(channelID)
 	trimmedPostID := strings.TrimSpace(postID)
 	if !alarmType.IsValid() || trimmedChannelID == "" || trimmedPostID == "" {

@@ -7,7 +7,10 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/shared"
 )
 
-func writeDatasetMetadata(builder *strings.Builder, report DatasetReport) {
+func writeDatasetMetadata(builder *strings.Builder, report *DatasetReport) {
+	if report == nil {
+		return
+	}
 	md.WriteKV(builder, "generated at", md.Code(shared.FormatSendCountTime(report.GeneratedAt)))
 	md.WriteKV(
 		builder,
@@ -23,10 +26,13 @@ func writeDatasetMetadata(builder *strings.Builder, report DatasetReport) {
 			" -> "+
 			md.Code(shared.FormatSendCountTimePtr(report.Query.WindowEnd)),
 	)
-	md.WriteKV(builder, "summary", buildDatasetSummaryMarkdown(report.Summary))
+	md.WriteKV(builder, "summary", buildDatasetSummaryMarkdown(&report.Summary))
 }
 
-func writeDatasetResults(builder *strings.Builder, results DatasetResults) {
+func writeDatasetResults(builder *strings.Builder, results *DatasetResults) {
+	if results == nil {
+		return
+	}
 	md.WriteHeading(builder, 2, "Results")
 	md.WriteKV(builder, "missing alarm aggregation", buildMissingAlarmAggregation(results))
 	if results.MissingAlarmEvaluated {

@@ -152,7 +152,7 @@ func buildChannelIDSet(channelIDs []string) map[string]struct{} {
 	return set
 }
 
-func includeDiffChannelID(channelID string, seen map[string]struct{}, rightSet map[string]struct{}) bool {
+func includeDiffChannelID(channelID string, seen, rightSet map[string]struct{}) bool {
 	if channelID == "" {
 		return false
 	}

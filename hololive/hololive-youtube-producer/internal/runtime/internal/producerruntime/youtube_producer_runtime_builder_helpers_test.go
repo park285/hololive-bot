@@ -12,7 +12,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
@@ -117,14 +116,14 @@ func TestBuildYouTubeProducerYouTubeComponents_FailsWhenCombinedBudgetExceedsRat
 	t.Parallel()
 
 	resolver := publishedat.BuildPendingResolver(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 				Enabled:          true,
 				Interval:         time.Second,
 				MaxResolvePerRun: 1,
 			},
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		scraper.NewClient(),
 		func(poller.NotificationRouteRequest) bool { return true },
 		testLogger(),
@@ -132,7 +131,7 @@ func TestBuildYouTubeProducerYouTubeComponents_FailsWhenCombinedBudgetExceedsRat
 	require.NotNil(t, resolver)
 
 	_, _, err := polling.BuildComponents(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    15 * time.Minute,
 				Shorts:    6 * time.Minute,
@@ -146,10 +145,10 @@ func TestBuildYouTubeProducerYouTubeComponents_FailsWhenCombinedBudgetExceedsRat
 				MaxResolvePerRun: 1,
 			},
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
-		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
+		polling.BuildSharedClient(&config.ScraperConfig{}, nil, nil),
 		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		resolver,
@@ -165,11 +164,11 @@ func TestBuildYouTubeProducerYouTubeComponents_AllowsBudgetSafeDefaultPollConfig
 	t.Parallel()
 
 	scheduler, registrations, err := polling.BuildComponents(
-		config.ScraperConfig{},
-		&databasemocks.Client{},
+		&config.ScraperConfig{},
+		newPollerRegistrationTestDB(t),
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
-		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
+		polling.BuildSharedClient(&config.ScraperConfig{}, nil, nil),
 		nil,
 		nil,
 		nil,
@@ -188,10 +187,10 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWith
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
 	resolver := publishedat.BuildPendingResolver(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		scraper.NewClient(),
 		func(poller.NotificationRouteRequest) bool { return true },
 		logger,
@@ -199,7 +198,7 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWith
 	require.NotNil(t, resolver)
 
 	_, _, err := polling.BuildComponentsWithJobClaimer(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    15 * time.Minute,
 				Shorts:    2 * time.Minute,
@@ -210,11 +209,11 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWith
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
 		nil,
-		polling.GlobalBudgetWiring{BudgetRPM: 30},
-		&databasemocks.Client{},
+		&polling.GlobalBudgetWiring{BudgetRPM: 30},
+		newPollerRegistrationTestDB(t),
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
-		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
+		polling.BuildSharedClient(&config.ScraperConfig{}, nil, nil),
 		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		resolver,
@@ -235,7 +234,7 @@ func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
 	resolver := publishedat.BuildPendingResolver(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 				Enabled:           true,
 				Interval:          12 * time.Second,
@@ -247,7 +246,7 @@ func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {
 				FailureBackoffTTL: 7 * time.Minute,
 			},
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		scraper.NewClient(),
 		func(poller.NotificationRouteRequest) bool { return true },
 		logger,

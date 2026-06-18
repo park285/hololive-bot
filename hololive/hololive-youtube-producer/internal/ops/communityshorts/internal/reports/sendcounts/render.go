@@ -9,7 +9,14 @@ import (
 	md "github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/internal/markdown"
 )
 
-func RenderMarkdown(report Report) string {
+func RenderMarkdown(report *Report) string {
+	if report == nil {
+		return renderMarkdown(&Report{})
+	}
+	return renderMarkdown(report)
+}
+
+func renderMarkdown(report *Report) string {
 	var builder strings.Builder
 
 	md.WriteHeading(&builder, 1, "YouTube Community/Shorts Post Send Counts Report")
@@ -33,7 +40,7 @@ func RenderMarkdown(report Report) string {
 				md.Code(shared.FormatSendCountTimePtr(report.Query.ObservationBigBangCutoverAt)),
 		)
 	}
-	md.WriteKV(&builder, "summary", buildSummaryMarkdown(report.Summary))
+	md.WriteKV(&builder, "summary", buildSummaryMarkdown(&report.Summary))
 	md.WriteKV(&builder, "duplicate alarm verdict", buildVerificationMarkdown(report.Verification))
 
 	if len(report.Rows) == 0 {
@@ -70,7 +77,10 @@ var markdownColumns = []md.Column{
 	{Header: "failed_attempt_count", AlignRight: true},
 }
 
-func buildSummaryMarkdown(summary Summary) string {
+func buildSummaryMarkdown(summary *Summary) string {
+	if summary == nil {
+		return ""
+	}
 	parts := []string{
 		"posts=" + md.Code(strconv.Itoa(summary.PostCount)),
 		"successful_posts=" + md.Code(strconv.Itoa(summary.SuccessfulPostCount)),
@@ -99,7 +109,7 @@ func buildVerificationMarkdown(verification Verification) string {
 func buildMarkdownRows(rows []Row) [][]string {
 	markdownRows := make([][]string, 0, len(rows))
 	for i := range rows {
-		row := rows[i]
+		row := &rows[i]
 		markdownRows = append(markdownRows, []string{
 			md.Code(resolveStatus(row)),
 			md.Code(string(row.AlarmType)),
@@ -116,7 +126,7 @@ func buildMarkdownRows(rows []Row) [][]string {
 			shared.FormatSendCountInt64Ptr(row.RetryAccumulationMillis),
 			md.Code(shared.FormatSendCountBool(row.JobFailureDetected)),
 			md.Code(string(row.LatencyClassification.Status)),
-			md.Code(shared.RenderLatencyClassificationEvidence(row.LatencyClassification)),
+			md.Code(shared.RenderLatencyClassificationEvidence(&row.LatencyClassification)),
 			strconv.FormatInt(row.OutboxCount, 10),
 			strconv.FormatInt(row.SuccessSendCount, 10),
 			strconv.FormatInt(row.SuccessRoomCount, 10),
@@ -127,7 +137,10 @@ func buildMarkdownRows(rows []Row) [][]string {
 	return markdownRows
 }
 
-func buildVerification(summary Summary) Verification {
+func buildVerification(summary *Summary) Verification {
+	if summary == nil {
+		return Verification{DuplicateAlarmStatus: VerificationStatusPass, DuplicateAlarmRule: DuplicateAlarmRule}
+	}
 	status := VerificationStatusPass
 	if summary.DuplicateSuccessPostCount > 0 {
 		status = VerificationStatusFail
@@ -140,7 +153,7 @@ func buildVerification(summary Summary) Verification {
 	}
 }
 
-func resolveStatus(row Row) string {
+func resolveStatus(row *Row) string {
 	for _, status := range statusChecks(row) {
 		if status.match {
 			return status.value
@@ -154,7 +167,10 @@ type statusCheck struct {
 	value string
 }
 
-func statusChecks(row Row) []statusCheck {
+func statusChecks(row *Row) []statusCheck {
+	if row == nil {
+		return nil
+	}
 	return []statusCheck{
 		{match: row.OutboxCount == 0, value: "outbox_missing"},
 		{match: row.DuplicateSuccessCount > 0, value: "duplicate_success"},

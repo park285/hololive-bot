@@ -38,14 +38,15 @@ func captureWarnRecords(t *testing.T, fn func()) []map[string]any {
 func TestPauseReporterLeaseWarnContract(t *testing.T) {
 	state := readiness.New("youtube-producer", readiness.Features{YouTubeEnabled: true, ActiveActiveEnabled: true})
 	state.MarkRunning()
-	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+	claimer := newReadinessReportingJobClaimer(&readinessClaimStub{
 		status: poller.JobClaimStatus{Result: poller.JobClaimUnavailable},
 		err:    fmt.Errorf("valkey unavailable"),
 	}, state)
 
 	records := captureWarnRecords(t, func() {
 		for range 3 {
-			claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+			_, _, err := claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+			require.Error(t, err)
 		}
 	})
 
@@ -61,12 +62,13 @@ func TestPauseReporterLeaseWarnContract(t *testing.T) {
 func TestPauseReporterLeaseWarnOmitsErrorWhenNil(t *testing.T) {
 	state := readiness.New("youtube-producer", readiness.Features{YouTubeEnabled: true, ActiveActiveEnabled: true})
 	state.MarkRunning()
-	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+	claimer := newReadinessReportingJobClaimer(&readinessClaimStub{
 		status: poller.JobClaimStatus{Result: poller.JobClaimUnavailable},
 	}, state)
 
 	records := captureWarnRecords(t, func() {
-		claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+		_, _, err := claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+		require.NoError(t, err)
 	})
 
 	require.Len(t, records, 1)
@@ -87,14 +89,18 @@ func TestPauseReporterLeaseResetsAfterAvailable(t *testing.T) {
 	}
 	available := readinessClaimStub{status: poller.JobClaimStatus{Result: poller.JobClaimAcquired}}
 
-	c := readinessReportingJobClaimer{inner: stub, readiness: state, pauseLogger: &pauseTransitionLogger{}}
-	cAvail := readinessReportingJobClaimer{inner: available, readiness: state, pauseLogger: c.pauseLogger}
+	c := readinessReportingJobClaimer{inner: &stub, readiness: state, pauseLogger: &pauseTransitionLogger{}}
+	cAvail := readinessReportingJobClaimer{inner: &available, readiness: state, pauseLogger: c.pauseLogger}
 
 	records := captureWarnRecords(t, func() {
-		c.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
-		c.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
-		cAvail.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
-		c.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+		_, _, err := c.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+		require.Error(t, err)
+		_, _, err = c.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+		require.Error(t, err)
+		_, _, err = cAvail.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+		require.NoError(t, err)
+		_, _, err = c.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
+		require.Error(t, err)
 	})
 
 	require.Len(t, records, 2)
@@ -112,7 +118,8 @@ func TestPauseReporterBudgetWarnContract(t *testing.T) {
 
 	records := captureWarnRecords(t, func() {
 		for range 3 {
-			limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+			_, _, err := limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+			require.Error(t, err)
 		}
 	})
 
@@ -132,12 +139,16 @@ func TestPauseReporterBudgetResetsAfterAvailable(t *testing.T) {
 	limiter := newReadinessReportingBudgetLimiter(stub, state)
 
 	records := captureWarnRecords(t, func() {
-		limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
-		limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+		_, _, err := limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+		require.Error(t, err)
+		_, _, err = limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+		require.Error(t, err)
 		stub.err = nil
-		limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+		_, _, err = limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+		require.NoError(t, err)
 		stub.err = fmt.Errorf("valkey unavailable again")
-		limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+		_, _, err = limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+		require.Error(t, err)
 	})
 
 	require.Len(t, records, 2)

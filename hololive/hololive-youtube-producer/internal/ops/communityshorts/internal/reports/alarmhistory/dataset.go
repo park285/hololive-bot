@@ -24,7 +24,7 @@ func CollectDataset(
 	options DatasetCollectOptions,
 ) (DatasetReport, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return DatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: context is nil")
 	}
 	if appConfig == nil {
 		return DatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: config is nil")
@@ -99,8 +99,9 @@ func collectDatasetWithSession(
 		return DatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: build comparison: %w", err)
 	}
 
-	report := BuildDataset(collected.CommunityRows, collected.ShortsRows, comparison, query, now)
-	return attachDatasetMissingAlarmRows(report, collected.SendStateRows), nil
+	report := BuildDataset(collected.CommunityRows, collected.ShortsRows, &comparison, query, now)
+	attachDatasetMissingAlarmRows(&report, collected.SendStateRows)
+	return report, nil
 }
 
 type datasetRawRows struct {
@@ -165,7 +166,7 @@ func collectDatasetRows(
 func BuildDataset(
 	communityRows []trackingrepo.CommunityAlarmSentHistoryRow,
 	shortsRows []trackingrepo.ShortsAlarmSentHistoryRow,
-	comparison trackingrepo.ObservationPostComparisonResult,
+	comparison *trackingrepo.ObservationPostComparisonResult,
 	query DatasetQuery,
 	generatedAt time.Time,
 ) DatasetReport {
@@ -178,23 +179,27 @@ func BuildDataset(
 	finalizedCommunity := finalizeCommunityAlarmSentHistoryRows(communityRows)
 	finalizedShorts := finalizeShortsAlarmSentHistoryRows(shortsRows)
 	rows := buildDatasetRows(finalizedCommunity.Rows, finalizedShorts.Rows)
-	verificationRows := buildDatasetVerificationRows(comparison.VerdictRows)
-	referenceRows := buildDatasetReferenceRows(comparison.VerdictRows)
+	comparisonValue := trackingrepo.ObservationPostComparisonResult{}
+	if comparison != nil {
+		comparisonValue = *comparison
+	}
+	verificationRows := buildDatasetVerificationRows(comparisonValue.VerdictRows)
+	referenceRows := buildDatasetReferenceRows(comparisonValue.VerdictRows)
 	summary := buildDatasetSummary(
 		finalizedCommunity,
 		finalizedShorts,
 		rows,
 		verificationRows,
 		referenceRows,
-		comparison.Summary,
+		&comparisonValue.Summary,
 	)
 
 	return DatasetReport{
 		GeneratedAt:      generatedAt,
 		Query:            query,
 		Summary:          summary,
-		Results:          buildDatasetResults(rows, verificationRows, referenceRows, nil, summary, false),
-		Comparison:       comparison,
+		Results:          buildDatasetResults(rows, verificationRows, referenceRows, nil, &summary, false),
+		Comparison:       comparisonValue,
 		Rows:             rows,
 		VerificationRows: verificationRows,
 		ReferenceRows:    referenceRows,
@@ -255,22 +260,24 @@ func buildDatasetSummary(
 	rows []DatasetRow,
 	verificationRows []DatasetVerificationRow,
 	referenceRows []DatasetReferenceRow,
-	comparison trackingrepo.ObservationPostComparisonSummary,
+	comparison *trackingrepo.ObservationPostComparisonSummary,
 ) DatasetSummary {
 	summary := DatasetSummary{
-		CollectedRowCount:                finalizedCommunity.CollectedRowCount + finalizedShorts.CollectedRowCount,
-		DuplicateRowCount:                finalizedCommunity.DuplicateRowCount + finalizedShorts.DuplicateRowCount,
-		SentPostCount:                    len(rows),
-		CommunitySentPostCount:           len(finalizedCommunity.Rows),
-		ShortsSentPostCount:              len(finalizedShorts.Rows),
-		BaselinePostCount:                comparison.BaselineUniquePostCount,
-		MatchedPostCount:                 comparison.MatchedPostCount,
-		UnsentPostCount:                  comparison.UnsentPostCount,
-		DuplicateSentPostCount:           comparison.DuplicateSentPostCount,
-		UnexpectedSentPostCount:          comparison.UnexpectedSentPostCount,
-		IdentifierMismatchCandidateCount: comparison.IdentifierMismatchCandidateCount,
-		VerificationRowCount:             len(verificationRows),
-		ReferenceRowCount:                len(referenceRows),
+		CollectedRowCount:      finalizedCommunity.CollectedRowCount + finalizedShorts.CollectedRowCount,
+		DuplicateRowCount:      finalizedCommunity.DuplicateRowCount + finalizedShorts.DuplicateRowCount,
+		SentPostCount:          len(rows),
+		CommunitySentPostCount: len(finalizedCommunity.Rows),
+		ShortsSentPostCount:    len(finalizedShorts.Rows),
+		VerificationRowCount:   len(verificationRows),
+		ReferenceRowCount:      len(referenceRows),
+	}
+	if comparison != nil {
+		summary.BaselinePostCount = comparison.BaselineUniquePostCount
+		summary.MatchedPostCount = comparison.MatchedPostCount
+		summary.UnsentPostCount = comparison.UnsentPostCount
+		summary.DuplicateSentPostCount = comparison.DuplicateSentPostCount
+		summary.UnexpectedSentPostCount = comparison.UnexpectedSentPostCount
+		summary.IdentifierMismatchCandidateCount = comparison.IdentifierMismatchCandidateCount
 	}
 	for i := range rows {
 		row := rows[i]

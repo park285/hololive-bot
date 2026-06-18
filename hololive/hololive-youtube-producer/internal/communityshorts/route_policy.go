@@ -87,6 +87,8 @@ func (p Policy) ShouldUseNewPath(req RouteRequest) bool {
 
 	switch req.AlarmType {
 	case domain.AlarmTypeCommunity, domain.AlarmTypeShorts:
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+		return false
 	default:
 		return false
 	}

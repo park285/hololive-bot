@@ -99,19 +99,19 @@ func initYouTubeProducerInfrastructure(ctx context.Context, appConfig *config.Co
 
 func buildYouTubeProducerResources(ctx context.Context, appConfig *config.Config, logger *slog.Logger, infra *sharedmodules.InfraModule) (*youtubeProducerYouTubeResources, error) {
 	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-	sharedRL, err := sharedproviders.ProvideYouTubeProducerRateLimiterWithConfig(appConfig.YouTube, infra.Cache, logger)
+	sharedRL, err := sharedproviders.ProvideYouTubeProducerRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}
 
-	scraperClient := polling.BuildSharedClient(appConfig.Scraper, infra.Cache, sharedRL)
+	scraperClient := polling.BuildSharedClient(&appConfig.Scraper, infra.Cache, sharedRL)
 	scraperService := sharedproviders.ProvideScraperServiceWithYouTubeProducer(infra.Cache, memberServiceAdapter, scraperClient, logger)
 	holodexService, err := sharedproviders.ProvideHolodexService(appConfig.Holodex.BaseURL, appConfig.Holodex.APIKey, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
-	youTubeStack := sharedmodules.BuildYouTubeStack(ctx, sharedmodules.YouTubeStackParams{
+	youTubeStack := sharedmodules.BuildYouTubeStack(ctx, &sharedmodules.YouTubeStackParams{
 		YouTubeConfig:   appConfig.YouTube,
 		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,

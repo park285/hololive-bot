@@ -13,9 +13,9 @@ import (
 )
 
 func renderContinuousObservationOutput(
-	report opsapp.CommunityShortsContinuousObservationReport,
+	report *opsapp.CommunityShortsContinuousObservationReport,
 	format string,
-) ([]byte, string, error) {
+) (payload []byte, ext string, err error) {
 	switch format {
 	case "markdown":
 		return []byte(opsapp.RenderCommunityShortsContinuousObservationMarkdown(report)), ".md", nil
@@ -34,16 +34,16 @@ func renderContinuousObservationOutput(
 func writeContinuousObservationSnapshot(
 	dir string,
 	ext string,
-	report opsapp.CommunityShortsContinuousObservationReport,
+	report *opsapp.CommunityShortsContinuousObservationReport,
 	payload []byte,
 ) (continuousObservationOutputPaths, error) {
 	timestamp := report.GeneratedAt.UTC().Format("20060102-150405")
 	snapshotPath := filepath.Join(dir, fmt.Sprintf("snapshot-%s%s", timestamp, ext))
 	latestPath := filepath.Join(dir, fmt.Sprintf("latest%s", ext))
-	if err := os.WriteFile(snapshotPath, payload, 0o644); err != nil {
+	if err := os.WriteFile(snapshotPath, payload, 0o600); err != nil {
 		return continuousObservationOutputPaths{}, err
 	}
-	if err := os.WriteFile(latestPath, payload, 0o644); err != nil {
+	if err := os.WriteFile(latestPath, payload, 0o600); err != nil {
 		return continuousObservationOutputPaths{}, err
 	}
 	return continuousObservationOutputPaths{latest: latestPath, snapshot: snapshotPath}, nil
@@ -65,7 +65,7 @@ func parseContinuousObservationCutover(raw string) (time.Time, error) {
 	}
 	parsed, err := time.Parse(time.RFC3339, trimmed)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid observation-cutover %q: %v", raw, err)
+		return time.Time{}, fmt.Errorf("invalid observation-cutover %q: %w", raw, err)
 	}
 	return parsed.UTC(), nil
 }

@@ -81,7 +81,7 @@ type alarmActivationKey struct {
 
 func CollectTargetBaseline(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (TargetBaseline, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return TargetBaseline{}, fmt.Errorf("collect community shorts target baseline: context is nil")
 	}
 	if appConfig == nil {
 		return TargetBaseline{}, fmt.Errorf("collect community shorts target baseline: config is nil")
@@ -90,7 +90,7 @@ func CollectTargetBaseline(ctx context.Context, appConfig *config.Config, logger
 		logger = slog.Default()
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, appConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
 	if err != nil {
 		return TargetBaseline{}, fmt.Errorf("collect community shorts target baseline: provide database resources: %w", err)
 	}

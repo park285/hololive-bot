@@ -39,7 +39,7 @@ type registrationSpec struct {
 	BudgetProfile         poller.BudgetProfile
 }
 
-func buildRegistration(spec registrationSpec) providers.ChannelPollerRegistration {
+func buildRegistration(spec *registrationSpec) providers.ChannelPollerRegistration {
 	return providers.NewChannelPollerRegistration(spec.Poller, spec.Priority, spec.Interval).
 		WithChannelIDs(spec.ChannelIDs).
 		WithTargetGroup(spec.TargetGroup).
@@ -49,7 +49,7 @@ func buildRegistration(spec registrationSpec) providers.ChannelPollerRegistratio
 }
 
 func buildStatsRegistration(statsPoller poller.Poller, interval time.Duration, channelIDs []string) providers.ChannelPollerRegistration {
-	return buildRegistration(registrationSpec{
+	return buildRegistration(&registrationSpec{
 		Poller:                statsPoller,
 		Priority:              poller.PriorityLow,
 		Interval:              interval,

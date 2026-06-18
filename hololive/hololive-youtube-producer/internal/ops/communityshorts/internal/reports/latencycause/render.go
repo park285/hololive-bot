@@ -11,7 +11,14 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/shared"
 )
 
-func RenderMarkdown(report Report) string {
+func RenderMarkdown(report *Report) string {
+	if report == nil {
+		return renderMarkdown(&Report{})
+	}
+	return renderMarkdown(report)
+}
+
+func renderMarkdown(report *Report) string {
 	var builder strings.Builder
 
 	md.WriteHeading(&builder, 1, "YouTube Community/Shorts Latency Cause Report")
@@ -23,13 +30,13 @@ func RenderMarkdown(report Report) string {
 	}
 
 	for i := range report.Periods {
-		writePeriod(&builder, report.Periods[i], report.Verification)
+		writePeriod(&builder, &report.Periods[i], &report.Verification)
 	}
 
 	return builder.String()
 }
 
-func writeReportMetadata(builder *strings.Builder, report Report) {
+func writeReportMetadata(builder *strings.Builder, report *Report) {
 	md.WriteKV(builder, "generated at", md.Code(shared.FormatSendCountTime(report.GeneratedAt)))
 	md.WriteKV(builder, "mode", md.Code(string(report.Query.Mode)))
 	if report.Query.WindowStart != nil || report.Query.WindowEnd != nil {
@@ -62,9 +69,12 @@ func writeReportMetadata(builder *strings.Builder, report Report) {
 
 func writePeriod(
 	builder *strings.Builder,
-	period PeriodView,
-	verification Verification,
+	period *PeriodView,
+	verification *Verification,
 ) {
+	if period == nil || verification == nil {
+		return
+	}
 	builder.WriteString("\n")
 	md.WriteHeading(builder, 2, md.Code(strings.TrimSpace(period.Summary.Label)))
 	md.WriteKV(
@@ -74,8 +84,8 @@ func writePeriod(
 			" -> "+
 			md.Code(shared.FormatSendCountTime(period.Summary.EndAt)),
 	)
-	md.WriteKV(builder, "latency summary", buildPeriodSummaryMarkdown(period.Summary))
-	md.WriteKV(builder, "cause summary", buildCauseSummaryMarkdown(period.CauseSummary))
+	md.WriteKV(builder, "latency summary", buildPeriodSummaryMarkdown(&period.Summary))
+	md.WriteKV(builder, "cause summary", buildCauseSummaryMarkdown(&period.CauseSummary))
 	md.WriteKV(
 		builder,
 		"excluded external reference",
@@ -114,7 +124,10 @@ var markdownColumns = []md.Column{
 	{Header: "cause_classification_evidence"},
 }
 
-func buildPeriodSummaryMarkdown(summary outbox.PostLatencyPeriodSummary) string {
+func buildPeriodSummaryMarkdown(summary *outbox.PostLatencyPeriodSummary) string {
+	if summary == nil {
+		return ""
+	}
 	return strings.Join([]string{
 		"total_posts=" + md.Code(strconv.FormatInt(summary.TotalPostCount, 10)),
 		"alarm_sent_posts=" + md.Code(strconv.FormatInt(summary.AlarmSentPostCount, 10)),
@@ -127,7 +140,10 @@ func buildPeriodSummaryMarkdown(summary outbox.PostLatencyPeriodSummary) string 
 	}, ", ")
 }
 
-func buildCauseSummaryMarkdown(summary Summary) string {
+func buildCauseSummaryMarkdown(summary *Summary) string {
+	if summary == nil {
+		return ""
+	}
 	return strings.Join([]string{
 		"exceeded_posts=" + md.Code(strconv.FormatInt(summary.ExceededPostCount, 10)),
 		"internal_system_cause_posts=" + md.Code(strconv.FormatInt(summary.InternalSystemCausePostCount, 10)),
@@ -151,7 +167,7 @@ func buildCauseSummaryMarkdown(summary Summary) string {
 func buildMarkdownRows(rows []Row) [][]string {
 	markdownRows := make([][]string, 0, len(rows))
 	for i := range rows {
-		row := rows[i]
+		row := &rows[i]
 		markdownRows = append(markdownRows, []string{
 			md.Code(string(row.AlarmType)),
 			md.Code(shared.FallbackSendCountValue(row.ChannelID)),
@@ -172,7 +188,7 @@ func buildMarkdownRows(rows []Row) [][]string {
 			shared.FormatSendCountInt64Ptr(row.RetryAccumulationMillis),
 			md.Code(shared.FormatSendCountBool(row.JobFailureDetected)),
 			md.Code(string(row.LatencyClassification.Status)),
-			md.Code(shared.RenderLatencyClassificationEvidence(row.LatencyClassification)),
+			md.Code(shared.RenderLatencyClassificationEvidence(&row.LatencyClassification)),
 		})
 	}
 	return markdownRows
@@ -181,13 +197,13 @@ func buildMarkdownRows(rows []Row) [][]string {
 func buildCauseSummary(rows []Row) Summary {
 	summary := Summary{}
 	for i := range rows {
-		accumulateCauseSummaryRow(&summary, rows[i])
+		accumulateCauseSummaryRow(&summary, &rows[i])
 	}
 	return summary
 }
 
-func accumulateCauseSummaryRow(summary *Summary, row Row) {
-	if summary == nil {
+func accumulateCauseSummaryRow(summary *Summary, row *Row) {
+	if summary == nil || row == nil {
 		return
 	}
 	summary.ExceededPostCount++
@@ -199,7 +215,10 @@ func accumulateCauseSummaryRow(summary *Summary, row Row) {
 	}
 }
 
-func accumulateJudgment(summary *Summary, row Row) {
+func accumulateJudgment(summary *Summary, row *Row) {
+	if row == nil {
+		return
+	}
 	if row.InternalCauseJudgment != InternalCauseJudgmentInternalSystem {
 		summary.NonInternalSystemCausePostCount++
 		return
@@ -215,6 +234,8 @@ func accumulateAlarmType(summary *Summary, alarmType domain.AlarmType) {
 		summary.CommunityExceededPostCount++
 	case domain.AlarmTypeShorts:
 		summary.ShortsExceededPostCount++
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+		return
 	}
 }
 

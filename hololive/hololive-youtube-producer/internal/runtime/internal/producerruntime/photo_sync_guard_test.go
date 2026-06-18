@@ -32,13 +32,13 @@ func (s *blockingPhotoSyncService) Start(ctx context.Context) {
 func TestLeasedPhotoSyncServiceAllowsOnlyOneOwner(t *testing.T) {
 	ctx := t.Context()
 
-	cache := sharedtestutil.NewTestCacheService(t, ctx)
+	cacheService := sharedtestutil.NewTestCacheService(t, ctx)
 	started := atomic.Int32{}
 	serviceA := countedPhotoSyncService(newBlockingPhotoSyncService(), &started)
 	serviceB := countedPhotoSyncService(newBlockingPhotoSyncService(), &started)
 
-	go testLeasedPhotoSyncService(cache, "ap-a", serviceA).Start(ctx)
-	go testLeasedPhotoSyncService(cache, "ap-b", serviceB).Start(ctx)
+	go testLeasedPhotoSyncService(cacheService, "ap-a", serviceA).Start(ctx)
+	go testLeasedPhotoSyncService(cacheService, "ap-b", serviceB).Start(ctx)
 
 	require.Eventually(t, func() bool {
 		return started.Load() == 1

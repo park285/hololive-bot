@@ -7,7 +7,7 @@ import (
 )
 
 func photoSyncGuardTreatsAsAvailable(result JobClaimResult) bool {
-	return !(result != JobClaimAcquired)
+	return result == JobClaimAcquired
 }
 
 func TestIngestionLeaseAvailabilityTruthTablePinsCurrentSites(t *testing.T) {

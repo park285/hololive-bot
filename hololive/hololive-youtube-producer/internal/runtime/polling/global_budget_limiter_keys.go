@@ -78,7 +78,7 @@ func sortBudgetSources(sources []poller.BudgetSource) {
 	}
 }
 
-func (l *globalBudgetLimiter) newOwnerToken(job poller.BudgetJob) (string, error) {
+func (l *globalBudgetLimiter) newOwnerToken(job *poller.BudgetJob) (string, error) {
 	var randomBytes [16]byte
 	if _, err := rand.Read(randomBytes[:]); err != nil {
 		return "", err

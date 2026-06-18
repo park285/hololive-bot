@@ -25,6 +25,10 @@ type youtubeTieredPollTargets struct {
 }
 
 func classifyYouTubePollTargetsByActivity(ctx context.Context, pool *pgxpool.Pool, targets youtubePollTargets, now time.Time) (youtubeTieredPollTargets, error) {
+	if err := ctx.Err(); err != nil {
+		return youtubeTieredPollTargets{}, err
+	}
+
 	out := youtubeTieredPollTargets{
 		NotificationChannelIDs: targets.NotificationChannelIDs,
 		StatsChannelIDs:        targets.StatsChannelIDs,
@@ -46,7 +50,7 @@ func classifyYouTubePollTargetsByActivity(ctx context.Context, pool *pgxpool.Poo
 	return out, nil
 }
 
-func appendClassifiedYouTubePollTarget(out *youtubeTieredPollTargets, channelID string, lastActivity map[string]time.Time, activeCutoff time.Time, warmCutoff time.Time) {
+func appendClassifiedYouTubePollTarget(out *youtubeTieredPollTargets, channelID string, lastActivity map[string]time.Time, activeCutoff, warmCutoff time.Time) {
 	channelID = strings.TrimSpace(channelID)
 	if channelID == "" {
 		return
@@ -56,12 +60,12 @@ func appendClassifiedYouTubePollTarget(out *youtubeTieredPollTargets, channelID 
 		out.ActiveNotificationChannelIDs = append(out.ActiveNotificationChannelIDs, channelID)
 	case youtubePollTierWarm:
 		out.WarmNotificationChannelIDs = append(out.WarmNotificationChannelIDs, channelID)
-	default:
+	case youtubePollTierCold:
 		out.ColdNotificationChannelIDs = append(out.ColdNotificationChannelIDs, channelID)
 	}
 }
 
-func classifyYouTubePollTier(channelID string, lastActivity map[string]time.Time, activeCutoff time.Time, warmCutoff time.Time) youtubePollTier {
+func classifyYouTubePollTier(channelID string, lastActivity map[string]time.Time, activeCutoff, warmCutoff time.Time) youtubePollTier {
 	activityAt, ok := lastActivity[channelID]
 	switch {
 	case ok && !activityAt.Before(activeCutoff):

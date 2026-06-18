@@ -2,8 +2,8 @@ package producerruntime
 
 import "github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
 
-func newReadinessState(runtimeName string, features ingestionRuntimeFeatures) *readiness.State {
-	return newReadinessStateWithFetcherEngine(runtimeName, features, "")
+func newReadinessState(features ingestionRuntimeFeatures) *readiness.State {
+	return newReadinessStateWithFetcherEngine(youtubeProducerRuntimeName, features, "")
 }
 
 func newReadinessStateWithFetcherEngine(runtimeName string, features ingestionRuntimeFeatures, scraperFetcherEngine string) *readiness.State {

@@ -158,7 +158,7 @@ func (s *State) MarkLeaseUnavailable(reason string) {
 	s.leaseReason.Store(reason)
 }
 
-func (s *State) Response() (int, map[string]any) {
+func (s *State) Response() (statusCode int, payload map[string]any) {
 	base := health.Get()
 	if s == nil {
 		return http.StatusServiceUnavailable, nilReadinessPayload(base)
@@ -190,14 +190,14 @@ func nilReadinessPayload(base health.Response) map[string]any {
 	}
 }
 
-func (s *State) ready(leaseEnabled bool, leaseAvailable bool, budgetEnabled bool, budgetBackendAvailable bool) bool {
+func (s *State) ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable bool) bool {
 	return s.httpServerStarted.Load() &&
 		!s.shuttingDown.Load() &&
 		(!leaseEnabled || leaseAvailable) &&
 		(!budgetEnabled || budgetBackendAvailable)
 }
 
-func readinessHTTPStatus(ready bool) (int, string) {
+func readinessHTTPStatus(ready bool) (statusCode int, status string) {
 	if ready {
 		return http.StatusOK, "ready"
 	}
@@ -241,9 +241,9 @@ func (s *State) responsePayload(
 	}
 }
 
-func (s *State) addLeaseReason(response map[string]any, leaseEnabled bool, leaseAvailable bool) {
+func (s *State) addLeaseReason(response map[string]any, leaseEnabled, leaseAvailable bool) {
 	if leaseEnabled && !leaseAvailable {
-		if reason, _ := s.leaseReason.Load().(string); reason != "" {
+		if reason, ok := s.leaseReason.Load().(string); ok && reason != "" {
 			response["reason"] = reason
 		}
 	}
@@ -260,7 +260,10 @@ func (s *State) currentScraperFetcherEngine() string {
 	if s == nil {
 		return defaultScraperFetcherEngine
 	}
-	engine, _ := s.scraperFetcherEngine.Load().(string)
+	engine, ok := s.scraperFetcherEngine.Load().(string)
+	if !ok {
+		return defaultScraperFetcherEngine
+	}
 	return normalizeScraperFetcherEngine(engine)
 }
 

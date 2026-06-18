@@ -234,19 +234,19 @@ func parseGlobalBudgetReserveResult(values []valkey.ValkeyMessage) (poller.Budge
 	}
 }
 
-func parseGlobalBudgetReserveValues(values []valkey.ValkeyMessage) (int64, int64, string, error) {
+func parseGlobalBudgetReserveValues(values []valkey.ValkeyMessage) (code, retryAfterMS int64, reason string, err error) {
 	if len(values) != 3 {
 		return 0, 0, "", fmt.Errorf("reserve global budget: unexpected result length: %d", len(values))
 	}
-	code, err := values[0].AsInt64()
+	code, err = values[0].AsInt64()
 	if err != nil {
 		return 0, 0, "", fmt.Errorf("reserve global budget: parse result code: %w", err)
 	}
-	retryAfterMS, err := values[1].AsInt64()
+	retryAfterMS, err = values[1].AsInt64()
 	if err != nil {
 		return 0, 0, "", fmt.Errorf("reserve global budget: parse retry after: %w", err)
 	}
-	reason, err := values[2].ToString()
+	reason, err = values[2].ToString()
 	if err != nil {
 		return 0, 0, "", fmt.Errorf("reserve global budget: parse reason: %w", err)
 	}

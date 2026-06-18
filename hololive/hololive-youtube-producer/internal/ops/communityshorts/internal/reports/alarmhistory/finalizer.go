@@ -46,29 +46,28 @@ func finalizeAlarmSentHistoryRows(
 
 func finalizeInputs(
 	inputs []trackingrepo.ObservationPostComparisonInput,
-) ([]trackingrepo.ObservationPostComparisonInput, int) {
+) (finalInputs []trackingrepo.ObservationPostComparisonInput, duplicateRowCount int) {
 	rowsByPostID := make(map[string]trackingrepo.ObservationPostComparisonInput, len(inputs))
 	orderedKeys := make([]string, 0, len(inputs))
-	duplicateRowCount := 0
 
 	for i := range inputs {
-		row := inputs[i]
+		row := &inputs[i]
 		key := strings.TrimSpace(row.CanonicalPostID)
 		if key == "" {
 			key = buildFallbackKey(row, i)
 		}
 
 		if existing, ok := rowsByPostID[key]; ok {
-			rowsByPostID[key] = mergeInputs(existing, row)
+			rowsByPostID[key] = mergeInputs(&existing, row)
 			duplicateRowCount++
 			continue
 		}
 
-		rowsByPostID[key] = row
+		rowsByPostID[key] = *row
 		orderedKeys = append(orderedKeys, key)
 	}
 
-	finalInputs := orderedInputs(rowsByPostID, orderedKeys)
+	finalInputs = orderedInputs(rowsByPostID, orderedKeys)
 	sortInputs(finalInputs)
 	return finalInputs, duplicateRowCount
 }
@@ -109,10 +108,19 @@ func buildFinalizedRows(
 }
 
 func mergeInputs(
-	existing trackingrepo.ObservationPostComparisonInput,
-	next trackingrepo.ObservationPostComparisonInput,
+	existing *trackingrepo.ObservationPostComparisonInput,
+	next *trackingrepo.ObservationPostComparisonInput,
 ) trackingrepo.ObservationPostComparisonInput {
-	merged := existing
+	if existing == nil {
+		if next == nil {
+			return trackingrepo.ObservationPostComparisonInput{}
+		}
+		return *next
+	}
+	if next == nil {
+		return *existing
+	}
+	merged := *existing
 	if merged.Kind == "" && next.Kind != "" {
 		merged.Kind = next.Kind
 	}
@@ -128,14 +136,14 @@ func mergeInputs(
 	return merged
 }
 
-func mergeString(existing string, next string) string {
+func mergeString(existing, next string) string {
 	if strings.TrimSpace(existing) == "" && strings.TrimSpace(next) != "" {
 		return next
 	}
 	return existing
 }
 
-func earliestTime(left *time.Time, right *time.Time) *time.Time {
+func earliestTime(left, right *time.Time) *time.Time {
 	if left == nil {
 		return shared.CloneSendCountTime(right)
 	}
@@ -148,7 +156,10 @@ func earliestTime(left *time.Time, right *time.Time) *time.Time {
 	return shared.CloneSendCountTime(left)
 }
 
-func buildFallbackKey(row trackingrepo.ObservationPostComparisonInput, index int) string {
+func buildFallbackKey(row *trackingrepo.ObservationPostComparisonInput, index int) string {
+	if row == nil {
+		return fmt.Sprintf("__row__:%d", index)
+	}
 	return fmt.Sprintf("__row__:%d:%s:%s", index, strings.TrimSpace(row.ChannelID), timeValue(row.AlarmSentAt).Format(time.RFC3339Nano))
 }
 

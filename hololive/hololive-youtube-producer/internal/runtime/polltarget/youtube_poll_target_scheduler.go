@@ -25,16 +25,17 @@ func (s *youTubePollSchedulerSyncer) SyncAt(ctx context.Context, targets youtube
 	}
 	tieredTargets, hasTieredTargets := s.classifyTargetsForTieredRegistrations(ctx, targets, now)
 	tieredSyncs := make(map[string][]poller.PollerTargetSync)
-	for _, registration := range s.registrations {
+	for i := range s.registrations {
+		registration := &s.registrations[i]
 		if !shouldSyncYouTubePollRegistration(registration) {
 			continue
 		}
-		sync := youtubePollRegistrationTargetSync(registration, targets, tieredTargets, hasTieredTargets)
+		sync := youtubePollRegistrationTargetSync(registration, targets, &tieredTargets, hasTieredTargets)
 		if isTieredNotificationTargetGroup(registration.TargetGroup) {
 			tieredSyncs[registration.Poller.Name()] = append(tieredSyncs[registration.Poller.Name()], sync)
 			continue
 		}
-		s.scheduler.SyncPollerTargets(sync)
+		s.scheduler.SyncPollerTargets(&sync)
 	}
 	for _, syncs := range tieredSyncs {
 		s.scheduler.SyncPollerTargetGroups(syncs)
@@ -71,19 +72,23 @@ func (s *youTubePollSchedulerSyncer) hasTieredRegistrations() bool {
 	return s != nil && hasTieredNotificationRegistration(s.registrations)
 }
 
-func shouldSyncYouTubePollRegistration(registration providers.ChannelPollerRegistration) bool {
-	return registration.Poller != nil &&
+func shouldSyncYouTubePollRegistration(registration *providers.ChannelPollerRegistration) bool {
+	return registration != nil &&
+		registration.Poller != nil &&
 		registration.Interval > 0 &&
 		registration.HasExplicitChannelIDs
 }
 
 func youtubePollRegistrationTargetSync(
-	registration providers.ChannelPollerRegistration,
+	registration *providers.ChannelPollerRegistration,
 	targets youtubePollTargets,
-	tieredTargets youtubeTieredPollTargets,
+	tieredTargets *youtubeTieredPollTargets,
 	hasTieredTargets bool,
 ) poller.PollerTargetSync {
-	updated := registration
+	if registration == nil {
+		return poller.PollerTargetSync{}
+	}
+	updated := cloneYouTubePollRegistration(registration)
 	updated.ChannelIDs = youtubePollRegistrationChannelIDs(registration, targets, tieredTargets, hasTieredTargets)
 
 	sync := updated.ToTargetSync()
@@ -93,10 +98,23 @@ func youtubePollRegistrationTargetSync(
 	return sync
 }
 
+func cloneYouTubePollRegistration(registration *providers.ChannelPollerRegistration) providers.ChannelPollerRegistration {
+	if registration == nil {
+		return providers.ChannelPollerRegistration{}
+	}
+	clone := *registration
+	if registration.ChannelPollerRegistrationOptions != nil {
+		options := *registration.ChannelPollerRegistrationOptions
+		options.ChannelIDs = append([]string(nil), registration.ChannelIDs...)
+		clone.ChannelPollerRegistrationOptions = &options
+	}
+	return clone
+}
+
 func youtubePollRegistrationChannelIDs(
-	registration providers.ChannelPollerRegistration,
+	registration *providers.ChannelPollerRegistration,
 	targets youtubePollTargets,
-	tieredTargets youtubeTieredPollTargets,
+	tieredTargets *youtubeTieredPollTargets,
 	hasTieredTargets bool,
 ) []string {
 	if registration.TargetGroup == providers.ChannelTargetGroupStats {
@@ -115,17 +133,20 @@ func youtubePollRegistrationChannelIDs(
 }
 
 func tieredRegistrationChannelIDs(
-	registration providers.ChannelPollerRegistration,
-	targets youtubeTieredPollTargets,
+	registration *providers.ChannelPollerRegistration,
+	targets *youtubeTieredPollTargets,
 	hasTargets bool,
 ) []string {
-	if !hasTargets {
+	if !hasTargets || targets == nil {
 		return append([]string(nil), registration.ChannelIDs...)
 	}
 	return append([]string(nil), channelIDsForTierGroup(registration.TargetGroup, targets)...)
 }
 
-func channelIDsForTierGroup(group providers.ChannelTargetGroup, targets youtubeTieredPollTargets) []string {
+func channelIDsForTierGroup(group providers.ChannelTargetGroup, targets *youtubeTieredPollTargets) []string {
+	if targets == nil {
+		return nil
+	}
 	if group == providers.ChannelTargetGroupActive {
 		return targets.ActiveNotificationChannelIDs
 	}
@@ -139,8 +160,8 @@ func channelIDsForTierGroup(group providers.ChannelTargetGroup, targets youtubeT
 }
 
 func hasTieredNotificationRegistration(registrations []providers.ChannelPollerRegistration) bool {
-	for _, registration := range registrations {
-		if isTieredNotificationTargetGroup(registration.TargetGroup) {
+	for i := range registrations {
+		if isTieredNotificationTargetGroup(registrations[i].TargetGroup) {
 			return true
 		}
 	}

@@ -52,6 +52,7 @@ func TestBuildJobRunGuardClaimerMapsDefer(t *testing.T) {
 		InstanceID: "ap-a",
 	})
 	require.NoError(t, err)
+	require.NotNil(t, claimer)
 
 	status, claim, err := claimer.TryClaim(ctx, "videos", "UC_DEFER", testLeaseTTL, testCooldownTTL)
 	require.NoError(t, err)

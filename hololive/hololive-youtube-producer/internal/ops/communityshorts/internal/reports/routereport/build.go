@@ -14,12 +14,15 @@ import (
 )
 
 func Build(
-	baseline communityshorts.TargetBaseline,
+	baseline *communityshorts.TargetBaseline,
 	pathUsageRows []outbox.PostDeliveryPathUsage,
 	sendCountRows []outbox.PostSendCount,
 	generatedAt time.Time,
 	since time.Time,
 ) Report {
+	if baseline == nil {
+		baseline = &communityshorts.TargetBaseline{}
+	}
 	generatedAt = resolveGeneratedAt(generatedAt, baseline.GeneratedAt)
 	since = shared.NormalizeSendCountTime(since)
 	pathUsageIndex := indexPathUsage(pathUsageRows)
@@ -27,13 +30,13 @@ func Build(
 	report := newReport(baseline, generatedAt, since)
 
 	for i := range baseline.Channels {
-		channel := buildChannel(baseline.Channels[i], sendCountIndex, pathUsageIndex, &report.Summary)
+		channel := buildChannel(&baseline.Channels[i], sendCountIndex, pathUsageIndex, &report.Summary)
 		report.Channels = append(report.Channels, channel)
 	}
 	return report
 }
 
-func resolveGeneratedAt(generatedAt time.Time, baselineGeneratedAt time.Time) time.Time {
+func resolveGeneratedAt(generatedAt, baselineGeneratedAt time.Time) time.Time {
 	generatedAt = shared.NormalizeSendCountTime(generatedAt)
 	if generatedAt.IsZero() {
 		return shared.NormalizeSendCountTime(baselineGeneratedAt)
@@ -89,10 +92,13 @@ func isRouteAlarmType(alarmType domain.AlarmType) bool {
 }
 
 func newReport(
-	baseline communityshorts.TargetBaseline,
+	baseline *communityshorts.TargetBaseline,
 	generatedAt time.Time,
 	since time.Time,
 ) Report {
+	if baseline == nil {
+		baseline = &communityshorts.TargetBaseline{}
+	}
 	return Report{
 		GeneratedAt: generatedAt,
 		WindowStart: since,
@@ -109,11 +115,14 @@ func newReport(
 }
 
 func buildChannel(
-	channel communityshorts.TargetBaselineChannel,
+	channel *communityshorts.TargetBaselineChannel,
 	sendCountIndex map[routeKey][]outbox.PostSendCount,
 	pathUsageIndex map[contentKey][]outbox.PostDeliveryPathUsage,
 	summary *Summary,
 ) Channel {
+	if channel == nil {
+		return Channel{}
+	}
 	channelReport := Channel{
 		OwnerLabel: strings.TrimSpace(channel.OwnerLabel),
 		ChannelID:  strings.TrimSpace(channel.ChannelID),
@@ -122,29 +131,32 @@ func buildChannel(
 	for i := range channel.Routes {
 		baseRoute := channel.Routes[i]
 		key := routeKey{channelID: channelReport.ChannelID, alarmType: baseRoute.AlarmType}
-		route := buildRoute(baseRoute, sendCountIndex[key], pathUsageIndex)
+		route := buildRoute(&baseRoute, sendCountIndex[key], pathUsageIndex)
 		channelReport.Routes = append(channelReport.Routes, route)
-		applySummary(summary, route)
+		applySummary(summary, &route)
 	}
 	return channelReport
 }
 
 func buildRoute(
-	baseRoute communityshorts.TargetBaselineChannelRoute,
+	baseRoute *communityshorts.TargetBaselineChannelRoute,
 	sendCounts []outbox.PostSendCount,
 	pathUsageIndex map[contentKey][]outbox.PostDeliveryPathUsage,
 ) Route {
 	route := newRoute(baseRoute)
 	observedPathSet := make(map[string]struct{})
 	for i := range sendCounts {
-		applyPost(&route, sendCounts[i], pathUsageIndex, observedPathSet)
+		applyPost(&route, &sendCounts[i], pathUsageIndex, observedPathSet)
 	}
 	route.ObservedPaths = sortedPaths(observedPathSet)
-	route.ActualUsageState = resolveActualUsageState(route)
+	route.ActualUsageState = resolveActualUsageState(&route)
 	return route
 }
 
-func newRoute(baseRoute communityshorts.TargetBaselineChannelRoute) Route {
+func newRoute(baseRoute *communityshorts.TargetBaselineChannelRoute) Route {
+	if baseRoute == nil {
+		return Route{ExpectedTelemetryPath: communityshorts.NewDeliveryPath, ObservedPaths: make([]string, 0)}
+	}
 	return Route{
 		AlarmType:             baseRoute.AlarmType,
 		ActivationState:       strings.TrimSpace(baseRoute.EffectiveDeliveryMode),
@@ -159,10 +171,13 @@ func newRoute(baseRoute communityshorts.TargetBaselineChannelRoute) Route {
 
 func applyPost(
 	route *Route,
-	sendCount outbox.PostSendCount,
+	sendCount *outbox.PostSendCount,
 	pathUsageIndex map[contentKey][]outbox.PostDeliveryPathUsage,
 	observedPathSet map[string]struct{},
 ) {
+	if route == nil || sendCount == nil {
+		return
+	}
 	route.ObservedPostCount++
 	if sendCount.SuccessSendCount > 0 {
 		route.SuccessfulPostCount++
@@ -191,14 +206,20 @@ func applyPostUsage(route *Route, usageState string) {
 	}
 }
 
-func latestPublishedAt(current *time.Time, sendCount outbox.PostSendCount) *time.Time {
+func latestPublishedAt(current *time.Time, sendCount *outbox.PostSendCount) *time.Time {
+	if sendCount == nil {
+		return shared.CloneSendCountTime(current)
+	}
 	if sendCount.ActualPublishedAt != nil {
 		return laterTime(current, sendCount.ActualPublishedAt)
 	}
 	return laterTime(current, sendCount.DetectedAt)
 }
 
-func latestSuccessAt(current *time.Time, sendCount outbox.PostSendCount) *time.Time {
+func latestSuccessAt(current *time.Time, sendCount *outbox.PostSendCount) *time.Time {
+	if sendCount == nil {
+		return shared.CloneSendCountTime(current)
+	}
 	candidates := []*time.Time{sendCount.LastSuccessAt, sendCount.AlarmSentAt, sendCount.FirstSuccessAt}
 	for i := range candidates {
 		current = laterTime(current, candidates[i])
@@ -206,7 +227,7 @@ func latestSuccessAt(current *time.Time, sendCount outbox.PostSendCount) *time.T
 	return current
 }
 
-func applySummary(summary *Summary, route Route) {
+func applySummary(summary *Summary, route *Route) {
 	if summary == nil {
 		return
 	}
@@ -215,7 +236,10 @@ func applySummary(summary *Summary, route Route) {
 	applyUsageSummary(summary, route)
 }
 
-func applyRouteStateSummary(summary *Summary, route Route) {
+func applyRouteStateSummary(summary *Summary, route *Route) {
+	if route == nil {
+		return
+	}
 	if route.AlarmEnabled {
 		summary.ActiveRouteCount++
 	} else {
@@ -226,7 +250,10 @@ func applyRouteStateSummary(summary *Summary, route Route) {
 	}
 }
 
-func applyUsageSummary(summary *Summary, route Route) {
+func applyUsageSummary(summary *Summary, route *Route) {
+	if route == nil {
+		return
+	}
 	if !route.AlarmEnabled {
 		return
 	}
@@ -254,28 +281,34 @@ func applyPathIssueSummary(summary *Summary, actualUsageState string) {
 	}
 }
 
-func RenderMarkdown(report Report) string {
+func RenderMarkdown(report *Report) string {
+	if report == nil {
+		report = &Report{}
+	}
 	var builder strings.Builder
 
 	writeMetadata(&builder, report)
 	for i := range report.Channels {
-		writeChannel(&builder, report.Channels[i])
+		writeChannel(&builder, &report.Channels[i])
 	}
 
 	return builder.String()
 }
 
-func writeMetadata(builder *strings.Builder, report Report) {
+func writeMetadata(builder *strings.Builder, report *Report) {
 	md.WriteHeading(builder, 1, "YouTube Community/Shorts Channel Route Verification Report")
 	md.WriteKV(builder, "generated at", md.Code(shared.FormatSendCountTime(report.GeneratedAt)))
 	md.WriteKV(builder, "window", md.Code(shared.FormatSendCountTime(report.WindowStart))+" -> "+md.Code(shared.FormatSendCountTime(report.WindowEnd)))
 	md.WriteKV(builder, "runtime final owner", codeValue(report.Runtime.FinalDeliveryOwner))
 	md.WriteKV(builder, "big-bang enabled", md.Code(strconv.FormatBool(report.Runtime.CommunityShortsBigBangEnabled)))
 	md.WriteKV(builder, "telemetry path expectation", md.Code(report.Runtime.ExpectedTelemetryPath))
-	md.WriteKV(builder, "summary", summaryMarkdown(report.Summary))
+	md.WriteKV(builder, "summary", summaryMarkdown(&report.Summary))
 }
 
-func summaryMarkdown(summary Summary) string {
+func summaryMarkdown(summary *Summary) string {
+	if summary == nil {
+		return ""
+	}
 	return strings.Join([]string{
 		"target_channels=" + codeInt(summary.TargetChannelCount),
 		"routes=" + codeInt(summary.RouteCount),
@@ -290,22 +323,31 @@ func summaryMarkdown(summary Summary) string {
 	}, ", ")
 }
 
-func writeChannel(builder *strings.Builder, channel Channel) {
+func writeChannel(builder *strings.Builder, channel *Channel) {
+	if channel == nil {
+		return
+	}
 	builder.WriteString("\n")
 	md.WriteHeading(builder, 2, channelTitle(channel))
 	for i := range channel.Routes {
-		builder.WriteString(routeMarkdown(channel.Routes[i]))
+		builder.WriteString(routeMarkdown(&channel.Routes[i]))
 	}
 }
 
-func channelTitle(channel Channel) string {
+func channelTitle(channel *Channel) string {
+	if channel == nil {
+		return md.Code("")
+	}
 	if channel.OwnerLabel != "" {
 		return channel.OwnerLabel + " (" + md.Code(channel.ChannelID) + ")"
 	}
 	return md.Code(channel.ChannelID)
 }
 
-func routeMarkdown(route Route) string {
+func routeMarkdown(route *Route) string {
+	if route == nil {
+		return ""
+	}
 	fields := []string{
 		"activation=" + codeValue(route.ActivationState),
 		"deployment=" + codeValue(route.DeploymentTargetPath),

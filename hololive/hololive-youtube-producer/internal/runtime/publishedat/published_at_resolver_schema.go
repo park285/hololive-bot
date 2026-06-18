@@ -79,7 +79,7 @@ func publishedAtResolverIndexExists(ctx context.Context, db publishedAtResolverS
 
 func validatePublishedAtResolverSchemaIfEnabled(
 	ctx context.Context,
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	postgresService database.Client,
 	logger *slog.Logger,
 ) error {

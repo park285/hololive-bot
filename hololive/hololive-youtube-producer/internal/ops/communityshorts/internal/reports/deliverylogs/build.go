@@ -25,7 +25,7 @@ func Build(
 
 	normalizedRows, summary := buildRows(rows)
 	sort.SliceStable(normalizedRows, func(i, j int) bool {
-		return rowLess(normalizedRows[i], normalizedRows[j])
+		return rowLess(&normalizedRows[i], &normalizedRows[j])
 	})
 
 	return Report{
@@ -43,7 +43,7 @@ func buildRows(rows []domain.YouTubeNotificationDeliveryTelemetry) ([]Row, Summa
 	summary := Summary{}
 
 	for i := range rows {
-		row := normalizeRow(rows[i])
+		row := normalizeRow(&rows[i])
 		row.PublishToEventMillis = durationMillisToEvent(row.ActualPublishedAt, row.EventAt)
 		row.DetectToEventMillis = durationMillisToEvent(row.DetectedAt, row.EventAt)
 		normalizedRows = append(normalizedRows, row)
@@ -54,7 +54,7 @@ func buildRows(rows []domain.YouTubeNotificationDeliveryTelemetry) ([]Row, Summa
 		} else {
 			summary.FailureLogCount++
 		}
-		postSet[buildPostKey(row)] = struct{}{}
+		postSet[buildPostKey(&row)] = struct{}{}
 		if roomID := strings.TrimSpace(row.RoomID); roomID != "" {
 			roomSet[roomID] = struct{}{}
 		}
@@ -65,7 +65,7 @@ func buildRows(rows []domain.YouTubeNotificationDeliveryTelemetry) ([]Row, Summa
 	return normalizedRows, summary
 }
 
-func rowLess(left Row, right Row) bool {
+func rowLess(left, right *Row) bool {
 	leftSortTime := rowSortTime(left)
 	rightSortTime := rowSortTime(right)
 	if !leftSortTime.Equal(rightSortTime) {
@@ -82,7 +82,10 @@ func rowLess(left Row, right Row) bool {
 	return left.ID < right.ID
 }
 
-func RenderMarkdown(report Report) string {
+func RenderMarkdown(report *Report) string {
+	if report == nil {
+		report = &Report{}
+	}
 	var builder strings.Builder
 
 	md.WriteHeading(&builder, 1, "YouTube Community/Shorts Delivery Logs Report")
@@ -155,7 +158,7 @@ func buildMarkdownRows(rows []Row) [][]string {
 		markdownRows = append(markdownRows, []string{
 			md.Code(string(row.AlarmType)),
 			md.Code(shared.FallbackSendCountValue(strings.TrimSpace(row.ChannelID))),
-			md.Code(shared.FallbackSendCountValue(resolvePostID(row))),
+			md.Code(shared.FallbackSendCountValue(resolvePostID(&row))),
 			md.Code(shared.FallbackSendCountValue(strings.TrimSpace(row.RoomID))),
 			fmt.Sprintf("%d", row.AttemptOrdinal),
 			md.Code(shared.FormatSendCountTimePtr(row.ActualPublishedAt)),

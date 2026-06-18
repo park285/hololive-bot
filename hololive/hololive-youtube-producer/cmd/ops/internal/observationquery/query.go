@@ -15,7 +15,7 @@ type Query struct {
 	CutoverAt time.Time
 }
 
-func ParseRequired(runtime string, cutover string) (Query, error) {
+func ParseRequired(runtime, cutover string) (Query, error) {
 	query, ok, err := ParseOptional(runtime, cutover)
 	if err != nil {
 		return Query{}, err
@@ -26,7 +26,7 @@ func ParseRequired(runtime string, cutover string) (Query, error) {
 	return query, nil
 }
 
-func ParseOptional(runtime string, cutover string) (Query, bool, error) {
+func ParseOptional(runtime, cutover string) (Query, bool, error) {
 	trimmedRuntime := strings.TrimSpace(runtime)
 	trimmedCutover := strings.TrimSpace(cutover)
 

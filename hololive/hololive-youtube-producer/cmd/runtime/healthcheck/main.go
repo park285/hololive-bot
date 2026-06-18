@@ -41,7 +41,10 @@ func runBody(url string) {
 		os.Exit(1)
 	}
 
-	_, _ = os.Stdout.Write(body)
+	if _, err := os.Stdout.Write(body); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 func runBodyWithAPIKeyEnv(envName, url string) {
@@ -51,7 +54,10 @@ func runBodyWithAPIKeyEnv(envName, url string) {
 		os.Exit(1)
 	}
 
-	_, _ = os.Stdout.Write(body)
+	if _, err := os.Stdout.Write(body); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 func fetchBodyWithAPIKeyEnv(envName, url string) ([]byte, error) {
@@ -86,5 +92,8 @@ func runSmoke() {
 		os.Exit(1)
 	}
 
-	fmt.Fprintln(os.Stdout, "smoke ok")
+	if _, err := fmt.Fprintln(os.Stdout, "smoke ok"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

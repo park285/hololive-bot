@@ -130,7 +130,7 @@ func TestBuild(t *testing.T) {
 	require.NotNil(t, report.Rows[2].PublishToEventMillis)
 	require.Equal(t, int64(communitySecondEventAt.Sub(communityPublishedAt)/time.Millisecond), *report.Rows[2].PublishToEventMillis)
 
-	markdown := RenderMarkdown(report)
+	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Community/Shorts Delivery Logs Report")
 	require.Contains(t, markdown, "mode: `observation_window`")
 	require.Contains(t, markdown, "truncated=`true`")
@@ -162,7 +162,7 @@ func TestRenderMarkdown_EmptyRows(t *testing.T) {
 	require.Equal(t, 0, report.Summary.LogCount)
 	require.Empty(t, report.Rows)
 
-	markdown := RenderMarkdown(report)
+	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "mode: `recent_window`")
 	require.Contains(t, markdown, "조회된 community/shorts 발송 로그가 없습니다.")
 }
@@ -188,7 +188,7 @@ func TestRenderMarkdown_ObservationMetadata(t *testing.T) {
 		generatedAt,
 	)
 
-	markdown := RenderMarkdown(report)
+	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "observation runtime: `youtube-producer`, cutover: `2026-04-10T00:00:00Z`")
 	require.Contains(t, markdown, "window: `2026-04-10T01:00:00Z` -> `2026-04-11T01:00:00Z`")
 }

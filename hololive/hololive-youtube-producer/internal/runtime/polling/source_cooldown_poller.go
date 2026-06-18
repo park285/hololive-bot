@@ -32,6 +32,9 @@ func wrapYouTubeProducerSourceCooldownPollers(
 	limiter poller.GlobalBudgetLimiter,
 	logger *slog.Logger,
 ) []providers.ChannelPollerRegistration {
+	if registrations == nil {
+		registrations = []providers.ChannelPollerRegistration{}
+	}
 	reporter, ok := limiter.(poller.SourceCooldownReporter)
 	if !ok || reporter == nil {
 		return registrations
@@ -39,15 +42,18 @@ func wrapYouTubeProducerSourceCooldownPollers(
 	wrapped := make([]providers.ChannelPollerRegistration, len(registrations))
 	copy(wrapped, registrations)
 	for i := range wrapped {
-		if !registrationUsesSource(wrapped[i], poller.BudgetSourceYouTubeScraper) {
+		if !registrationUsesSource(&wrapped[i], poller.BudgetSourceYouTubeScraper) {
 			continue
 		}
-		wrapped[i].Poller = newSourceCooldownReportingPoller(wrapped[i].Poller, reporter, poller.BudgetSourceYouTubeScraper, logger)
+		wrapped[i].Poller = newSourceCooldownReportingPoller(wrapped[i].Poller, reporter, logger)
 	}
 	return wrapped
 }
 
-func registrationUsesSource(registration providers.ChannelPollerRegistration, source poller.BudgetSource) bool {
+func registrationUsesSource(registration *providers.ChannelPollerRegistration, source poller.BudgetSource) bool {
+	if registration == nil {
+		return false
+	}
 	if registration.Poller == nil {
 		return false
 	}
@@ -58,16 +64,15 @@ func registrationUsesSource(registration providers.ChannelPollerRegistration, so
 func newSourceCooldownReportingPoller(
 	inner poller.Poller,
 	reporter poller.SourceCooldownReporter,
-	source poller.BudgetSource,
 	logger *slog.Logger,
 ) poller.Poller {
-	if inner == nil || reporter == nil || source == "" {
+	if inner == nil || reporter == nil {
 		return inner
 	}
 	return &sourceCooldownReportingPoller{
 		inner:         inner,
 		reporter:      reporter,
-		source:        source,
+		source:        poller.BudgetSourceYouTubeScraper,
 		logger:        logger,
 		reportTimeout: defaultSourceCooldownReportTimeout,
 	}

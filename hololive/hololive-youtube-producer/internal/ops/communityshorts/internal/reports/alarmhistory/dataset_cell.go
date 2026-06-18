@@ -8,7 +8,10 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/shared"
 )
 
-func buildDatasetSummaryMarkdown(summary DatasetSummary) string {
+func buildDatasetSummaryMarkdown(summary *DatasetSummary) string {
+	if summary == nil {
+		return ""
+	}
 	return strings.Join([]string{
 		"collected_rows=" + md.Code(strconv.Itoa(summary.CollectedRowCount)),
 		"duplicates_removed=" + md.Code(strconv.Itoa(summary.DuplicateRowCount)),
@@ -33,7 +36,10 @@ func buildDatasetSummaryMarkdown(summary DatasetSummary) string {
 	}, ", ")
 }
 
-func buildMissingAlarmAggregation(results DatasetResults) string {
+func buildMissingAlarmAggregation(results *DatasetResults) string {
+	if results == nil {
+		return "finalized send-state comparison pending"
+	}
 	if !results.MissingAlarmEvaluated {
 		return "finalized send-state comparison pending"
 	}
@@ -45,7 +51,10 @@ func buildMissingAlarmAggregation(results DatasetResults) string {
 	}, ", ")
 }
 
-func buildOmissionCloseout(results DatasetResults) string {
+func buildOmissionCloseout(results *DatasetResults) string {
+	if results == nil {
+		return ""
+	}
 	if results.MissingAlarmZero {
 		return "누락 0건입니다."
 	}

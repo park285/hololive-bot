@@ -21,7 +21,6 @@ type ObservationQueryState struct {
 }
 
 type ObservationQueryRequest struct {
-	Context          context.Context
 	RuntimeName      string
 	BigBangCutoverAt time.Time
 	Now              time.Time
@@ -39,7 +38,7 @@ func ResolveObservationQueryState(
 		return ObservationQueryState{}, err
 	}
 
-	window, err := repository.FindCommunityShortsObservationWindow(request.Context, request.RuntimeName, request.BigBangCutoverAt)
+	window, err := repository.FindCommunityShortsObservationWindow(ctx, request.RuntimeName, request.BigBangCutoverAt)
 	if err != nil {
 		return ObservationQueryState{}, fmt.Errorf("load observation window: %w", err)
 	}
@@ -48,7 +47,7 @@ func ResolveObservationQueryState(
 	}
 
 	if observationWindowNeedsFinalization(window, request.Now) {
-		return resolveFinalizedObservationQueryState(repository, request)
+		return resolveFinalizedObservationQueryState(ctx, repository, &request)
 	}
 	return activeObservationQueryState(window, request.Now)
 }
@@ -61,7 +60,7 @@ func newObservationQueryRequest(
 	now time.Time,
 ) (ObservationQueryRequest, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return ObservationQueryRequest{}, fmt.Errorf("observation query context is nil")
 	}
 	runtimeName = strings.TrimSpace(runtimeName)
 	if err := validateObservationQueryInputs(repository, runtimeName, bigBangCutoverAt); err != nil {
@@ -72,7 +71,6 @@ func newObservationQueryRequest(
 		now = time.Now().UTC()
 	}
 	return ObservationQueryRequest{
-		Context:          ctx,
 		RuntimeName:      runtimeName,
 		BigBangCutoverAt: bigBangCutoverAt.UTC(),
 		Now:              now,
@@ -97,11 +95,12 @@ func validateObservationQueryInputs(
 }
 
 func resolveFinalizedObservationQueryState(
+	ctx context.Context,
 	repository ObservationWindowRepository,
-	request ObservationQueryRequest,
+	request *ObservationQueryRequest,
 ) (ObservationQueryState, error) {
 	window, err := repository.FindClosedCommunityShortsObservationWindow(
-		request.Context,
+		ctx,
 		request.RuntimeName,
 		request.BigBangCutoverAt,
 		request.Now,

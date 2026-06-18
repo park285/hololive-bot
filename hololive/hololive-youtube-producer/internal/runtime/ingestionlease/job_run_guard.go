@@ -210,15 +210,15 @@ func parseAcquireJobRunResult(values []valkey.ValkeyMessage) (JobClaimResult, ti
 	}
 }
 
-func parseAcquireJobRunValues(values []valkey.ValkeyMessage) (int64, int64, error) {
+func parseAcquireJobRunValues(values []valkey.ValkeyMessage) (code, retryAfterMS int64, err error) {
 	if len(values) != 2 {
 		return 0, 0, fmt.Errorf("acquire job run: unexpected result length: %d", len(values))
 	}
-	code, err := values[0].AsInt64()
+	code, err = values[0].AsInt64()
 	if err != nil {
 		return 0, 0, fmt.Errorf("acquire job run: parse result code: %w", err)
 	}
-	retryAfterMS, err := values[1].AsInt64()
+	retryAfterMS, err = values[1].AsInt64()
 	if err != nil {
 		return 0, 0, fmt.Errorf("acquire job run: parse retry ttl: %w", err)
 	}

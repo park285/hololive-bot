@@ -40,7 +40,7 @@ func CollectPeriodReport(
 	specs []PeriodSpec,
 ) (PeriodReport, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return PeriodReport{}, fmt.Errorf("collect community shorts latency period report: context is nil")
 	}
 	if appConfig == nil {
 		return PeriodReport{}, fmt.Errorf("collect community shorts latency period report: config is nil")
@@ -99,7 +99,7 @@ func BuildPeriodReport(
 
 	normalizedRows := make([]outbox.PostLatencyPeriodSummary, 0, len(rows))
 	for i := range rows {
-		normalizedRows = append(normalizedRows, clonePeriodSummary(rows[i]))
+		normalizedRows = append(normalizedRows, clonePeriodSummary(&rows[i]))
 	}
 	if len(normalizedRows) > 1 {
 		sort.SliceStable(normalizedRows, func(i, j int) bool {
@@ -116,7 +116,10 @@ func BuildPeriodReport(
 	}
 }
 
-func RenderPeriodMarkdown(report PeriodReport) string {
+func RenderPeriodMarkdown(report *PeriodReport) string {
+	if report == nil {
+		report = &PeriodReport{}
+	}
 	var builder strings.Builder
 
 	builder.WriteString("# YouTube Community/Shorts Latency Period Report\n\n")
@@ -135,13 +138,16 @@ func RenderPeriodMarkdown(report PeriodReport) string {
 	builder.WriteString("\n| period | window_start | window_end | total_posts | alarm_sent_posts | pending_posts | measured_posts | avg_latency_ms | p95_latency_ms | max_latency_ms | over_2m_posts | community_over_2m_posts | shorts_over_2m_posts |\n")
 	builder.WriteString("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
 	for i := range report.Periods {
-		writePeriodRow(&builder, report.Periods[i])
+		writePeriodRow(&builder, &report.Periods[i])
 	}
 
 	return builder.String()
 }
 
-func writePeriodRow(builder *strings.Builder, row outbox.PostLatencyPeriodSummary) {
+func writePeriodRow(builder *strings.Builder, row *outbox.PostLatencyPeriodSummary) {
+	if row == nil {
+		return
+	}
 	builder.WriteString("| `")
 	builder.WriteString(strings.TrimSpace(row.Label))
 	builder.WriteString("` | `")
@@ -219,12 +225,16 @@ func validatePeriodSpec(
 	return label, nil
 }
 
-func clonePeriodSummary(row outbox.PostLatencyPeriodSummary) outbox.PostLatencyPeriodSummary {
-	row.Label = strings.TrimSpace(row.Label)
-	row.StartAt = shared.NormalizeSendCountTime(row.StartAt)
-	row.EndAt = shared.NormalizeSendCountTime(row.EndAt)
-	row.AverageLatencyMillis = shared.CloneSendCountInt64(row.AverageLatencyMillis)
-	row.P95LatencyMillis = shared.CloneSendCountInt64(row.P95LatencyMillis)
-	row.MaxLatencyMillis = shared.CloneSendCountInt64(row.MaxLatencyMillis)
-	return row
+func clonePeriodSummary(row *outbox.PostLatencyPeriodSummary) outbox.PostLatencyPeriodSummary {
+	if row == nil {
+		return outbox.PostLatencyPeriodSummary{}
+	}
+	normalized := *row
+	normalized.Label = strings.TrimSpace(normalized.Label)
+	normalized.StartAt = shared.NormalizeSendCountTime(normalized.StartAt)
+	normalized.EndAt = shared.NormalizeSendCountTime(normalized.EndAt)
+	normalized.AverageLatencyMillis = shared.CloneSendCountInt64(normalized.AverageLatencyMillis)
+	normalized.P95LatencyMillis = shared.CloneSendCountInt64(normalized.P95LatencyMillis)
+	normalized.MaxLatencyMillis = shared.CloneSendCountInt64(normalized.MaxLatencyMillis)
+	return normalized
 }

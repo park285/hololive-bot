@@ -76,8 +76,8 @@ func (c readinessReportingJobClaimer) TryClaim(
 	channelID string,
 	leaseTTL time.Duration,
 	cooldownTTL time.Duration,
-) (poller.JobClaimStatus, poller.JobClaim, error) {
-	status, claim, err := c.inner.TryClaim(ctx, pollerName, channelID, leaseTTL, cooldownTTL)
+) (status poller.JobClaimStatus, claim poller.JobClaim, err error) {
+	status, claim, err = c.inner.TryClaim(ctx, pollerName, channelID, leaseTTL, cooldownTTL)
 	if err != nil || status.Result == poller.JobClaimUnavailable {
 		return c.markLeaseUnavailable(status, claim, pollerName, err)
 	}
@@ -90,13 +90,13 @@ func (c readinessReportingJobClaimer) markLeaseUnavailable(
 	claim poller.JobClaim,
 	pollerName string,
 	err error,
-) (poller.JobClaimStatus, poller.JobClaim, error) {
+) (statusResult poller.JobClaimStatus, claimResult poller.JobClaim, errResult error) {
 	c.readiness.MarkLeaseUnavailable("valkey_unavailable_active_active_fail_closed")
 	if status.Result == "" {
 		status.Result = poller.JobClaimUnavailable
 	}
 	c.logLeaseUnavailable(pollerName, err)
-	return status, claim, nil
+	return status, claim, err
 }
 
 func (c readinessReportingJobClaimer) leasePauseReporter() pauseReporter {
@@ -144,13 +144,17 @@ func (l *pauseTransitionLogger) markAvailable() {
 
 func (l readinessReportingBudgetLimiter) TryReserve(
 	ctx context.Context,
-	job poller.BudgetJob,
+	job *poller.BudgetJob,
 	profile poller.BudgetProfile,
 	ttl time.Duration,
-) (poller.BudgetReservation, poller.BudgetDecision, error) {
-	reservation, decision, err := l.inner.TryReserve(ctx, job, profile, ttl)
+) (reservation poller.BudgetReservation, decision poller.BudgetDecision, err error) {
+	reservation, decision, err = l.inner.TryReserve(ctx, job, profile, ttl)
 	if err != nil {
-		l.markBudgetBackendUnavailable(job.PollerName, err)
+		pollerName := ""
+		if job != nil {
+			pollerName = job.PollerName
+		}
+		l.markBudgetBackendUnavailable(pollerName, err)
 		return reservation, decision, err
 	}
 	l.markBudgetBackendAvailable()

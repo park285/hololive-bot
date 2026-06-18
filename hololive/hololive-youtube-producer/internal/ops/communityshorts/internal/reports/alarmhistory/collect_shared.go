@@ -93,8 +93,8 @@ func collectWithDefinition[Report any](
 	logger *slog.Logger,
 	now time.Time,
 	options CommunityCollectOptions,
-	definition variantDefinition,
-	buildReport func([]trackingrepo.ObservationAlarmSentHistoryRow, trackingrepo.ObservationPostComparisonResult, variantQuery, time.Time) Report,
+	definition *variantDefinition,
+	buildReport func([]trackingrepo.ObservationAlarmSentHistoryRow, *trackingrepo.ObservationPostComparisonResult, variantQuery, time.Time) Report,
 ) (Report, error) {
 	var zero Report
 
@@ -136,16 +136,16 @@ func collectWithDefinition[Report any](
 		return zero, fmt.Errorf("collect %s: build comparison: %w", definition.reportName, err)
 	}
 
-	return buildReport(rows, comparison, query, now), nil
+	return buildReport(rows, &comparison, query, now), nil
 }
 
 func buildWithDefinition[Report any](
 	rows []trackingrepo.ObservationAlarmSentHistoryRow,
-	comparison trackingrepo.ObservationPostComparisonResult,
+	comparison *trackingrepo.ObservationPostComparisonResult,
 	query variantQuery,
 	generatedAt time.Time,
-	definition variantDefinition,
-	buildReport func(time.Time, variantQuery, variantSummary, trackingrepo.ObservationPostComparisonResult, []trackingrepo.ObservationAlarmSentHistoryRow) Report,
+	definition *variantDefinition,
+	buildReport func(time.Time, variantQuery, variantSummary, *trackingrepo.ObservationPostComparisonResult, []trackingrepo.ObservationAlarmSentHistoryRow) Report,
 ) Report {
 	generatedAt = shared.NormalizeSendCountTime(generatedAt)
 	if generatedAt.IsZero() {
@@ -164,13 +164,13 @@ func buildWithDefinition[Report any](
 	)
 }
 
-func renderVariantMarkdown(report variantReport, definition variantDefinition) string {
+func renderVariantMarkdown(report *variantReport, definition *variantDefinition) string {
 	return renderVariantAlarmSentHistoryMarkdown(
 		definition.title,
 		report.GeneratedAt,
 		report.Query,
 		report.Summary,
-		report.Comparison,
+		&report.Comparison,
 		report.Rows,
 		definition.emptyMessage,
 	)
@@ -181,7 +181,7 @@ func renderVariantAlarmSentHistoryMarkdown(
 	generatedAt time.Time,
 	query variantQuery,
 	summary variantSummary,
-	comparison trackingrepo.ObservationPostComparisonResult,
+	comparison *trackingrepo.ObservationPostComparisonResult,
 	rows []trackingrepo.ObservationAlarmSentHistoryRow,
 	emptyMessage string,
 ) string {

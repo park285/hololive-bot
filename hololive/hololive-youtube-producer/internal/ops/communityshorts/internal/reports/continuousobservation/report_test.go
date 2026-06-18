@@ -125,7 +125,7 @@ func TestRenderMarkdownIncludes24HCloseout(t *testing.T) {
 		},
 	}
 
-	markdown := RenderMarkdown(report)
+	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Community/Shorts Continuous Observation Report")
 	require.Contains(t, markdown, "## 24h Closeout")
 	require.Contains(t, markdown, "scope: `all_operational_channels`, target_channels=`2`, observed_posts=`2`, period_label=`observation_window`")
@@ -148,7 +148,7 @@ func TestRenderMarkdownPromotesEmbeddedDatasetSections(t *testing.T) {
 	observationEnd := observationStart.Add(24 * time.Hour)
 	generatedAt := observationEnd
 
-	markdown := RenderMarkdown(Report{
+	markdown := RenderMarkdown(&Report{
 		GeneratedAt: generatedAt,
 		Observation: Window{
 			RuntimeName:           "youtube-producer",
@@ -217,27 +217,26 @@ func TestBuildCloseout24HPendingUntilFinalized(t *testing.T) {
 	observationStart := time.Date(2026, 4, 11, 0, 2, 0, 0, time.UTC)
 	observationEnd := observationStart.Add(24 * time.Hour)
 
-	closeout := buildCloseout24H(
-		Window{
-			TargetChannelCount:   2,
-			ObservationStartedAt: observationStart,
-			ObservationEndsAt:    observationEnd,
-			ObservedUntil:        observationStart.Add(30 * time.Minute),
-			Status:               StatusActive,
+	observation := Window{
+		TargetChannelCount:   2,
+		ObservationStartedAt: observationStart,
+		ObservationEndsAt:    observationEnd,
+		ObservedUntil:        observationStart.Add(30 * time.Minute),
+		Status:               StatusActive,
+	}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
+	sendCounts := sendcounts.Report{Summary: sendcounts.Summary{PostCount: 5}}
+	latencyCause := latencycause.Report{Periods: []latencycause.PeriodView{{
+		Summary: outbox.PostLatencyPeriodSummary{Label: observationPeriodLabel},
+		CauseSummary: latencycause.Summary{
+			ExceededPostCount:                 3,
+			InternalSystemCausePostCount:      2,
+			NonInternalSystemCausePostCount:   1,
+			ExcludedExternalDelayPostCount:    1,
+			ExternalCollectionSourcePostCount: 1,
 		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
-		sendcounts.Report{Summary: sendcounts.Summary{PostCount: 5}},
-		latencycause.Report{Periods: []latencycause.PeriodView{{
-			Summary: outbox.PostLatencyPeriodSummary{Label: observationPeriodLabel},
-			CauseSummary: latencycause.Summary{
-				ExceededPostCount:                 3,
-				InternalSystemCausePostCount:      2,
-				NonInternalSystemCausePostCount:   1,
-				ExcludedExternalDelayPostCount:    1,
-				ExternalCollectionSourcePostCount: 1,
-			},
-		}}},
-	)
+	}}}
+	closeout := buildCloseout24H(&observation, &baseline, &sendCounts, &latencyCause)
 
 	require.Equal(t, CloseoutStatusPending, closeout.Status)
 	require.Equal(t, "all_operational_channels", closeout.AggregationScope)
@@ -255,24 +254,20 @@ func TestBuildCloseout24HPendingUntilFinalized(t *testing.T) {
 func TestBuildCloseout24HFinalizedPassExcludesExternalCollectionPosts(t *testing.T) {
 	t.Parallel()
 
-	closeout := buildCloseout24H(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusFinalized,
+	observation := Window{TargetChannelCount: 2, Status: StatusFinalized}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
+	sendCounts := sendcounts.Report{Summary: sendcounts.Summary{PostCount: 4}}
+	latencyCause := latencycause.Report{Periods: []latencycause.PeriodView{{
+		Summary: outbox.PostLatencyPeriodSummary{Label: observationPeriodLabel},
+		CauseSummary: latencycause.Summary{
+			ExceededPostCount:                 2,
+			InternalSystemCausePostCount:      0,
+			NonInternalSystemCausePostCount:   2,
+			ExcludedExternalDelayPostCount:    2,
+			ExternalCollectionSourcePostCount: 2,
 		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
-		sendcounts.Report{Summary: sendcounts.Summary{PostCount: 4}},
-		latencycause.Report{Periods: []latencycause.PeriodView{{
-			Summary: outbox.PostLatencyPeriodSummary{Label: observationPeriodLabel},
-			CauseSummary: latencycause.Summary{
-				ExceededPostCount:                 2,
-				InternalSystemCausePostCount:      0,
-				NonInternalSystemCausePostCount:   2,
-				ExcludedExternalDelayPostCount:    2,
-				ExternalCollectionSourcePostCount: 2,
-			},
-		}}},
-	)
+	}}}
+	closeout := buildCloseout24H(&observation, &baseline, &sendCounts, &latencyCause)
 
 	require.Equal(t, CloseoutStatusPass, closeout.Status)
 	require.Equal(t, int64(2), closeout.TotalExceededPostCount)
@@ -286,15 +281,11 @@ func TestBuildCloseout24HFinalizedPassExcludesExternalCollectionPosts(t *testing
 func TestBuildCloseout24HUsesInsufficientEvidenceWhenFinalizedSummaryMissing(t *testing.T) {
 	t.Parallel()
 
-	closeout := buildCloseout24H(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusFinalized,
-		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
-		sendcounts.Report{Summary: sendcounts.Summary{PostCount: 1}},
-		latencycause.Report{},
-	)
+	observation := Window{TargetChannelCount: 2, Status: StatusFinalized}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
+	sendCounts := sendcounts.Report{Summary: sendcounts.Summary{PostCount: 1}}
+	latencyCause := latencycause.Report{}
+	closeout := buildCloseout24H(&observation, &baseline, &sendCounts, &latencyCause)
 
 	require.Equal(t, CloseoutStatusInsufficientEvidence, closeout.Status)
 	require.Equal(t, int64(0), closeout.InternalExceededPostCount)
@@ -304,12 +295,11 @@ func TestBuildCloseout24HUsesInsufficientEvidenceWhenFinalizedSummaryMissing(t *
 func TestBuildMissingAlarmCloseoutPendingUntilFinalized(t *testing.T) {
 	t.Parallel()
 
+	observation := Window{TargetChannelCount: 2, Status: StatusActive}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
 	closeout := buildMissingAlarmCloseout(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusActive,
-		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
+		&observation,
+		&baseline,
 		&alarmhistory.DatasetReport{Summary: alarmhistory.DatasetSummary{MissingAlarmPostCount: 1}},
 		nil,
 	)
@@ -325,12 +315,11 @@ func TestBuildMissingAlarmCloseoutPendingUntilFinalized(t *testing.T) {
 func TestBuildMissingAlarmCloseoutFinalizedPass(t *testing.T) {
 	t.Parallel()
 
+	observation := Window{TargetChannelCount: 2, Status: StatusFinalized}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
 	closeout := buildMissingAlarmCloseout(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusFinalized,
-		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
+		&observation,
+		&baseline,
 		&alarmhistory.DatasetReport{Summary: alarmhistory.DatasetSummary{
 			ReferenceRowCount:  4,
 			SendStatePostCount: 4,
@@ -349,12 +338,11 @@ func TestBuildMissingAlarmCloseoutFinalizedPass(t *testing.T) {
 func TestBuildMissingAlarmCloseoutFinalizedFail(t *testing.T) {
 	t.Parallel()
 
+	observation := Window{TargetChannelCount: 2, Status: StatusFinalized}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
 	closeout := buildMissingAlarmCloseout(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusFinalized,
-		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
+		&observation,
+		&baseline,
 		&alarmhistory.DatasetReport{Summary: alarmhistory.DatasetSummary{
 			ReferenceRowCount:         5,
 			SendStatePostCount:        4,
@@ -375,12 +363,11 @@ func TestBuildMissingAlarmCloseoutFinalizedFail(t *testing.T) {
 func TestBuildMissingAlarmCloseoutUsesInsufficientEvidenceWhenDatasetMissing(t *testing.T) {
 	t.Parallel()
 
+	observation := Window{TargetChannelCount: 2, Status: StatusFinalized}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
 	closeout := buildMissingAlarmCloseout(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusFinalized,
-		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
+		&observation,
+		&baseline,
 		nil,
 		fmt.Errorf("dataset unavailable"),
 	)
@@ -393,12 +380,11 @@ func TestBuildMissingAlarmCloseoutUsesInsufficientEvidenceWhenDatasetMissing(t *
 func TestBuildStateConsistencyCloseoutPendingUntilFinalized(t *testing.T) {
 	t.Parallel()
 
+	observation := Window{TargetChannelCount: 2, Status: StatusActive}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
 	closeout := buildStateConsistencyCloseout(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusActive,
-		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
+		&observation,
+		&baseline,
 		&alarmhistory.DatasetReport{Summary: alarmhistory.DatasetSummary{
 			ReferenceRowCount:         3,
 			SendStatePostCount:        2,
@@ -424,12 +410,11 @@ func TestBuildStateConsistencyCloseoutPendingUntilFinalized(t *testing.T) {
 func TestBuildStateConsistencyCloseoutFinalizedPass(t *testing.T) {
 	t.Parallel()
 
+	observation := Window{TargetChannelCount: 2, Status: StatusFinalized}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
 	closeout := buildStateConsistencyCloseout(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusFinalized,
-		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
+		&observation,
+		&baseline,
 		&alarmhistory.DatasetReport{Summary: alarmhistory.DatasetSummary{
 			ReferenceRowCount:      4,
 			SendStatePostCount:     4,
@@ -452,12 +437,11 @@ func TestBuildStateConsistencyCloseoutFinalizedPass(t *testing.T) {
 func TestBuildStateConsistencyCloseoutFinalizedFail(t *testing.T) {
 	t.Parallel()
 
+	observation := Window{TargetChannelCount: 2, Status: StatusFinalized}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
 	closeout := buildStateConsistencyCloseout(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusFinalized,
-		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
+		&observation,
+		&baseline,
 		&alarmhistory.DatasetReport{Summary: alarmhistory.DatasetSummary{
 			ReferenceRowCount:         5,
 			SendStatePostCount:        4,
@@ -483,12 +467,11 @@ func TestBuildStateConsistencyCloseoutFinalizedFail(t *testing.T) {
 func TestBuildStateConsistencyCloseoutUsesInsufficientEvidenceWhenDatasetMissing(t *testing.T) {
 	t.Parallel()
 
+	observation := Window{TargetChannelCount: 2, Status: StatusFinalized}
+	baseline := communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}}
 	closeout := buildStateConsistencyCloseout(
-		Window{
-			TargetChannelCount: 2,
-			Status:             StatusFinalized,
-		},
-		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
+		&observation,
+		&baseline,
 		nil,
 		fmt.Errorf("dataset unavailable"),
 	)
@@ -568,9 +551,10 @@ func TestCollectArtifactsCollectsFinalizedDataset(t *testing.T) {
 				require.Equal(t, cutoverAt, *query.ObservationBigBangCutoverAt)
 				return expectedSendCounts, nil
 			},
-			buildChannelSummary: func(report sendcounts.Report) (channelsummary.Report, error) {
+			buildChannelSummary: func(report *sendcounts.Report) (channelsummary.Report, error) {
 				callLog = append(callLog, "channel-summary")
-				require.Equal(t, expectedSendCounts, report)
+				require.NotNil(t, report)
+				require.Equal(t, expectedSendCounts, *report)
 				return expectedChannelSummary, nil
 			},
 			collectDeliveryLogs: func(ctx context.Context, session *shared.OpsSession, query deliverylogs.Query, now time.Time) (deliverylogs.Report, error) {
@@ -664,7 +648,7 @@ func TestCollectArtifactsSkipsDatasetUntilFinalized(t *testing.T) {
 			collectSendCounts: func(ctx context.Context, session *shared.OpsSession, query sendcounts.Query, now time.Time) (sendcounts.Report, error) {
 				return sendcounts.Report{}, nil
 			},
-			buildChannelSummary: func(report sendcounts.Report) (channelsummary.Report, error) {
+			buildChannelSummary: func(report *sendcounts.Report) (channelsummary.Report, error) {
 				return channelsummary.Report{}, nil
 			},
 			collectDeliveryLogs: func(ctx context.Context, session *shared.OpsSession, query deliverylogs.Query, now time.Time) (deliverylogs.Report, error) {

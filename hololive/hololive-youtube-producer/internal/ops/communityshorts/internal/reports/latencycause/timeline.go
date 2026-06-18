@@ -26,7 +26,7 @@ func buildTimelineKey(channelID string, alarmType domain.AlarmType, contentID st
 func buildTimelineIndex(timelineRows []outbox.PostDeliveryTimeline) map[timelineKey]outbox.PostDeliveryTimeline {
 	index := make(map[timelineKey]outbox.PostDeliveryTimeline, len(timelineRows))
 	for i := range timelineRows {
-		timeline := normalizeDeliveryTimeline(timelineRows[i])
+		timeline := normalizeDeliveryTimeline(&timelineRows[i])
 		key := buildTimelineKey(timeline.ChannelID, timeline.AlarmType, timeline.ContentID)
 		if key.contentID == "" {
 			continue
@@ -36,38 +36,49 @@ func buildTimelineIndex(timelineRows []outbox.PostDeliveryTimeline) map[timeline
 	return index
 }
 
-func normalizePostSendCount(row outbox.PostSendCount) outbox.PostSendCount {
-	row.ChannelID = strings.TrimSpace(row.ChannelID)
-	row.PostID = strings.TrimSpace(row.PostID)
-	row.ContentID = strings.TrimSpace(row.ContentID)
-	row.ActualPublishedAt = shared.CloneSendCountTime(row.ActualPublishedAt)
-	row.DetectedAt = shared.CloneSendCountTime(row.DetectedAt)
-	row.AlarmSentAt = shared.CloneSendCountTime(row.AlarmSentAt)
-	row.FirstEventAt = shared.CloneSendCountTime(row.FirstEventAt)
-	row.LastEventAt = shared.CloneSendCountTime(row.LastEventAt)
-	row.FirstSuccessAt = shared.CloneSendCountTime(row.FirstSuccessAt)
-	row.LastSuccessAt = shared.CloneSendCountTime(row.LastSuccessAt)
-	return row
+func normalizePostSendCount(row *outbox.PostSendCount) outbox.PostSendCount {
+	if row == nil {
+		return outbox.PostSendCount{}
+	}
+	normalized := *row
+	normalized.ChannelID = strings.TrimSpace(normalized.ChannelID)
+	normalized.PostID = strings.TrimSpace(normalized.PostID)
+	normalized.ContentID = strings.TrimSpace(normalized.ContentID)
+	normalized.ActualPublishedAt = shared.CloneSendCountTime(normalized.ActualPublishedAt)
+	normalized.DetectedAt = shared.CloneSendCountTime(normalized.DetectedAt)
+	normalized.AlarmSentAt = shared.CloneSendCountTime(normalized.AlarmSentAt)
+	normalized.FirstEventAt = shared.CloneSendCountTime(normalized.FirstEventAt)
+	normalized.LastEventAt = shared.CloneSendCountTime(normalized.LastEventAt)
+	normalized.FirstSuccessAt = shared.CloneSendCountTime(normalized.FirstSuccessAt)
+	normalized.LastSuccessAt = shared.CloneSendCountTime(normalized.LastSuccessAt)
+	return normalized
 }
 
-func normalizeDeliveryTimeline(row outbox.PostDeliveryTimeline) outbox.PostDeliveryTimeline {
-	row.ChannelID = strings.TrimSpace(row.ChannelID)
-	row.PostID = strings.TrimSpace(row.PostID)
-	row.ContentID = strings.TrimSpace(row.ContentID)
-	row.PublishToDetectMillis = shared.CloneSendCountInt64(row.PublishToDetectMillis)
-	if row.DelaySource == "" {
-		row.DelaySource = outbox.PostDelaySourceNone
+func normalizeDeliveryTimeline(row *outbox.PostDeliveryTimeline) outbox.PostDeliveryTimeline {
+	if row == nil {
+		return outbox.PostDeliveryTimeline{}
 	}
-	row.QueueWaitMillis = shared.CloneSendCountInt64(row.QueueWaitMillis)
-	row.RetryAccumulationMillis = shared.CloneSendCountInt64(row.RetryAccumulationMillis)
-	if row.InternalDelayCause == "" {
-		row.InternalDelayCause = outbox.PostInternalDelayCauseNone
+	normalized := *row
+	normalized.ChannelID = strings.TrimSpace(normalized.ChannelID)
+	normalized.PostID = strings.TrimSpace(normalized.PostID)
+	normalized.ContentID = strings.TrimSpace(normalized.ContentID)
+	normalized.PublishToDetectMillis = shared.CloneSendCountInt64(normalized.PublishToDetectMillis)
+	if normalized.DelaySource == "" {
+		normalized.DelaySource = outbox.PostDelaySourceNone
 	}
-	row.LatencyClassification = shared.CloneLatencyClassification(row.LatencyClassification)
-	return row
+	normalized.QueueWaitMillis = shared.CloneSendCountInt64(normalized.QueueWaitMillis)
+	normalized.RetryAccumulationMillis = shared.CloneSendCountInt64(normalized.RetryAccumulationMillis)
+	if normalized.InternalDelayCause == "" {
+		normalized.InternalDelayCause = outbox.PostInternalDelayCauseNone
+	}
+	normalized.LatencyClassification = shared.CloneLatencyClassification(&normalized.LatencyClassification)
+	return normalized
 }
 
-func resolvePostID(sendCount outbox.PostSendCount) string {
+func resolvePostID(sendCount *outbox.PostSendCount) string {
+	if sendCount == nil {
+		return ""
+	}
 	postID := strings.TrimSpace(sendCount.PostID)
 	if postID != "" {
 		return postID

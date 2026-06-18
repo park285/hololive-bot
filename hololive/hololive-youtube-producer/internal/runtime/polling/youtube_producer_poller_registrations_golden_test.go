@@ -1,6 +1,7 @@
 package polling
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func goldenScraperConfig(tiering bool, backfill bool) config.ScraperConfig {
+func goldenScraperConfig(tiering, backfill bool) config.ScraperConfig {
 	cfg := config.ScraperConfig{
 		Poll: config.ScraperPoll{
 			Videos:    15 * time.Minute,
@@ -40,11 +41,13 @@ func goldenScraperConfig(tiering bool, backfill bool) config.ScraperConfig {
 	return cfg
 }
 
-func goldenBuildRegistrations(tiering bool, backfill bool, liveStatusProvider poller.LiveStatusProvider) []providers.ChannelPollerRegistration {
+func goldenBuildRegistrations(tiering, backfill bool, liveStatusProvider poller.LiveStatusProvider) []providers.ChannelPollerRegistration {
 	postgres := &databasemocks.Client{}
+	scraperConfig := goldenScraperConfig(tiering, backfill)
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
+		context.Background(),
 		postgres,
-		goldenScraperConfig(tiering, backfill),
+		&scraperConfig,
 		nil,
 		liveStatusProvider,
 		nil,
@@ -69,7 +72,7 @@ func serializeBudgetSourceUnits(units map[poller.BudgetSource]float64) string {
 	return "{" + strings.Join(parts, ",") + "}"
 }
 
-func serializeRegistration(r providers.ChannelPollerRegistration) string {
+func serializeRegistration(r *providers.ChannelPollerRegistration) string {
 	name := "<nil>"
 	if r.Poller != nil {
 		name = r.Poller.Name()
@@ -94,8 +97,8 @@ func serializeRegistration(r providers.ChannelPollerRegistration) string {
 
 func serializeRegistrations(registrations []providers.ChannelPollerRegistration) []string {
 	lines := make([]string, 0, len(registrations))
-	for _, r := range registrations {
-		lines = append(lines, serializeRegistration(r))
+	for i := range registrations {
+		lines = append(lines, serializeRegistration(&registrations[i]))
 	}
 	return lines
 }

@@ -134,7 +134,7 @@ func TestFlatAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 }
 
 func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
-	pollers := newYouTubeProducerPollerSet(nil, nil, nil, defaultChannelPollerMaxResults, []string{}, nil, false)
+	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{}, nil, false)
 	poll := config.ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
@@ -143,9 +143,9 @@ func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 		Live:      2 * time.Minute,
 	}
 	registrations := buildTieredYouTubeProducerChannelPollerRegistrations(
-		pollers,
+		&pollers,
 		poll,
-		polltarget.TieredTargets{
+		&polltarget.TieredTargets{
 			NotificationChannelIDs:       []string{"UC_A", "UC_B", "UC_C"},
 			ActiveNotificationChannelIDs: []string{"UC_A"},
 			WarmNotificationChannelIDs:   []string{"UC_B"},
@@ -155,7 +155,7 @@ func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 		false,
 		defaultChannelPollerMaxResults,
 	)
-	registrations = appendBackfillChannelPollerRegistrations(registrations, pollers, config.ScraperBackfillConfig{
+	registrations = appendBackfillChannelPollerRegistrations(registrations, &pollers, config.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -170,7 +170,7 @@ func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 }
 
 func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
-	pollers := newYouTubeProducerPollerSet(nil, nil, nil, defaultChannelPollerMaxResults, []string{}, nil, false)
+	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{}, nil, false)
 	videosName := pollers.videos.Name()
 	shortsName := pollers.shorts.Name()
 	poll := config.ScraperPoll{
@@ -181,9 +181,9 @@ func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
 		Live:      2 * time.Minute,
 	}
 	registrations := buildTieredYouTubeProducerChannelPollerRegistrations(
-		pollers,
+		&pollers,
 		poll,
-		polltarget.TieredTargets{
+		&polltarget.TieredTargets{
 			NotificationChannelIDs:       []string{"UC_A", "UC_B", "UC_C"},
 			ActiveNotificationChannelIDs: []string{"UC_A"},
 			WarmNotificationChannelIDs:   []string{"UC_B"},
@@ -212,7 +212,7 @@ func TestPrimaryCommunityRegistrationUsesShortsInterval(t *testing.T) {
 }
 
 func TestTieredCommunityRegistrationsUseShortsInterval(t *testing.T) {
-	pollers := newYouTubeProducerPollerSet(nil, nil, nil, defaultChannelPollerMaxResults, []string{}, nil, false)
+	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{}, nil, false)
 	poll := config.ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
@@ -221,9 +221,9 @@ func TestTieredCommunityRegistrationsUseShortsInterval(t *testing.T) {
 		Live:      2 * time.Minute,
 	}
 	registrations := buildTieredYouTubeProducerChannelPollerRegistrations(
-		pollers,
+		&pollers,
 		poll,
-		polltarget.TieredTargets{
+		&polltarget.TieredTargets{
 			NotificationChannelIDs:       []string{"UC_A", "UC_B", "UC_C"},
 			ActiveNotificationChannelIDs: []string{"UC_A"},
 			WarmNotificationChannelIDs:   []string{"UC_B"},
@@ -296,7 +296,7 @@ func TestPublishedAtResolverRegistrationHasBudgetProfile(t *testing.T) {
 		time.Minute,
 		nil,
 	)
-	registration := publishedat.BuildRegistration(resolver, config.ScraperConfig{
+	registration := publishedat.BuildRegistration(resolver, &config.ScraperConfig{
 		PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 			Enabled:          true,
 			Interval:         20 * time.Second,
@@ -397,8 +397,9 @@ func buildBackfillTestRegistrationsWithLiveBatch(backfill config.ScraperBackfill
 func buildBackfillTestRegistrationsWithLiveStatusProvider(backfill config.ScraperBackfillConfig, notificationChannelIDs []string, liveStatusProvider poller.LiveStatusProvider) []providers.ChannelPollerRegistration {
 	postgres := &databasemocks.Client{}
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
+		context.Background(),
 		postgres,
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    15 * time.Minute,
 				Shorts:    6 * time.Minute,
@@ -418,7 +419,8 @@ func buildBackfillTestRegistrationsWithLiveStatusProvider(backfill config.Scrape
 
 func assertBackfillRegistration(t *testing.T, registrations []providers.ChannelPollerRegistration, name string, interval time.Duration) {
 	t.Helper()
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		if registration.Poller == nil || registration.Poller.Name() != name {
 			continue
 		}
@@ -434,7 +436,8 @@ func assertBackfillRegistration(t *testing.T, registrations []providers.ChannelP
 
 func assertAllBudgetProfiles(t *testing.T, registrations []providers.ChannelPollerRegistration) {
 	t.Helper()
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		require.NotNil(t, registration.Poller)
 		require.True(t, registration.HasBudgetProfile, registration.Poller.Name())
 		require.NotEmpty(t, registration.BudgetProfile.SourceUnits, registration.Poller.Name())
@@ -443,9 +446,10 @@ func assertAllBudgetProfiles(t *testing.T, registrations []providers.ChannelPoll
 
 func requireRegistration(t *testing.T, registrations []providers.ChannelPollerRegistration, name string) providers.ChannelPollerRegistration {
 	t.Helper()
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		if registration.Poller != nil && registration.Poller.Name() == name {
-			return registration
+			return *registration
 		}
 	}
 	t.Fatalf("missing registration %s", name)
@@ -454,9 +458,10 @@ func requireRegistration(t *testing.T, registrations []providers.ChannelPollerRe
 
 func requireRegistrationForTargetGroup(t *testing.T, registrations []providers.ChannelPollerRegistration, name string, targetGroup providers.ChannelTargetGroup) providers.ChannelPollerRegistration {
 	t.Helper()
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		if registration.Poller != nil && registration.Poller.Name() == name && registration.TargetGroup == targetGroup {
-			return registration
+			return *registration
 		}
 	}
 	t.Fatalf("missing registration %s for target group %s", name, targetGroup)

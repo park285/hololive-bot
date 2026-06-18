@@ -34,7 +34,6 @@ type Totals struct {
 }
 
 type request struct {
-	ctx    context.Context
 	logger *slog.Logger
 	now    time.Time
 	since  time.Time
@@ -52,7 +51,7 @@ func Collect(
 		return Report{}, err
 	}
 
-	session, cleanupDB, err := shared.OpenOpsSession(req.ctx, appConfig, req.logger)
+	session, cleanupDB, err := shared.OpenOpsSession(ctx, appConfig, req.logger)
 	if err != nil {
 		return Report{}, fmt.Errorf("collect community shorts channel summary report: %w", err)
 	}
@@ -64,7 +63,7 @@ func Collect(
 		return Report{}, fmt.Errorf("collect community shorts channel summary report: session is nil")
 	}
 
-	rows, err := session.TelemetryRepository.ListChannelPostDeliverySummariesSince(req.ctx, req.since)
+	rows, err := session.TelemetryRepository.ListChannelPostDeliverySummariesSince(ctx, req.since)
 	if err != nil {
 		return Report{}, fmt.Errorf("collect community shorts channel summary report: list channel summaries: %w", err)
 	}
@@ -83,7 +82,7 @@ func normalizeRequest(
 		return request{}, fmt.Errorf("collect community shorts channel summary report: config is nil")
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return request{}, fmt.Errorf("collect community shorts channel summary report: context is nil")
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -102,7 +101,6 @@ func normalizeRequest(
 	}
 
 	return request{
-		ctx:    ctx,
 		logger: logger,
 		now:    now,
 		since:  since,
@@ -139,8 +137,8 @@ func Build(
 	}
 
 	sort.SliceStable(normalizedRows, func(i, j int) bool {
-		left := sortTime(normalizedRows[i])
-		right := sortTime(normalizedRows[j])
+		left := sortTime(&normalizedRows[i])
+		right := sortTime(&normalizedRows[j])
 		if !left.Equal(right) {
 			return left.After(right)
 		}
@@ -156,7 +154,14 @@ func Build(
 	}
 }
 
-func RenderMarkdown(report Report) string {
+func RenderMarkdown(report *Report) string {
+	if report == nil {
+		return renderMarkdown(&Report{})
+	}
+	return renderMarkdown(report)
+}
+
+func renderMarkdown(report *Report) string {
 	var builder strings.Builder
 
 	builder.WriteString(renderMetadataMarkdown(report))
@@ -170,7 +175,7 @@ func RenderMarkdown(report Report) string {
 	return builder.String()
 }
 
-func renderMetadataMarkdown(report Report) string {
+func renderMetadataMarkdown(report *Report) string {
 	var builder strings.Builder
 
 	builder.WriteString("# YouTube Community/Shorts Channel Delivery Summary\n\n")
@@ -211,7 +216,7 @@ func renderTableMarkdown(rows []outbox.ChannelPostDeliverySummary) string {
 	for i := range rows {
 		row := rows[i]
 		builder.WriteString("| `")
-		builder.WriteString(resolveStatus(row))
+		builder.WriteString(resolveStatus(&row))
 		builder.WriteString("` | `")
 		builder.WriteString(shared.FallbackSendCountValue(row.ChannelID))
 		builder.WriteString("` | `")
@@ -238,13 +243,22 @@ func renderTableMarkdown(rows []outbox.ChannelPostDeliverySummary) string {
 	return builder.String()
 }
 
-func resolveStatus(row outbox.ChannelPostDeliverySummary) string {
+func resolveStatus(row *outbox.ChannelPostDeliverySummary) string {
+	if row == nil {
+		return "ok"
+	}
+	return resolveStatusCounts(row.DetectedUnsentPostCount, row.FailedPostCount)
+}
+
+func resolveStatusCounts(detectedUnsentPostCount, failedPostCount int64) string {
+	hasUnsent := detectedUnsentPostCount > 0
+	hasFailures := failedPostCount > 0
 	switch {
-	case row.DetectedUnsentPostCount > 0 && row.FailedPostCount > 0:
+	case hasUnsent && hasFailures:
 		return "unsent_with_failures"
-	case row.DetectedUnsentPostCount > 0:
+	case hasUnsent:
 		return "unsent_pending"
-	case row.FailedPostCount > 0:
+	case hasFailures:
 		return "failures_observed"
 	default:
 		return "ok"
@@ -259,7 +273,10 @@ func normalizeTimePtr(value *time.Time) *time.Time {
 	return &normalized
 }
 
-func sortTime(row outbox.ChannelPostDeliverySummary) time.Time {
+func sortTime(row *outbox.ChannelPostDeliverySummary) time.Time {
+	if row == nil {
+		return time.Time{}
+	}
 	if row.LatestObservedAt != nil {
 		return row.LatestObservedAt.UTC()
 	}

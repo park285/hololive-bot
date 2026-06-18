@@ -16,34 +16,37 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/shared"
 )
 
-func RenderMarkdown(report Report) string {
+func RenderMarkdown(report *Report) string {
+	if report == nil {
+		report = &Report{}
+	}
 	var builder strings.Builder
 	closeout, missingAlarmCloseout, stateConsistencyCloseout := resolveCloseouts(report)
 
 	md.WriteHeading(&builder, 1, "YouTube Community/Shorts Continuous Observation Report")
 	writeMetadata(&builder, report)
-	writeCloseoutSection(&builder, closeout, missingAlarmCloseout, stateConsistencyCloseout)
+	writeCloseoutSection(&builder, &closeout, &missingAlarmCloseout, &stateConsistencyCloseout)
 	writeEmbeddedSections(&builder, report)
 
 	return builder.String()
 }
 
 func resolveCloseouts(
-	report Report,
+	report *Report,
 ) (Closeout24H, MissingAlarmCloseout, StateConsistencyCloseout) {
 	closeout := report.Closeout24H
 	if closeout.Status == "" {
-		closeout = buildCloseout24H(report.Observation, report.TargetBaseline, report.SendCounts, report.LatencyCause)
+		closeout = buildCloseout24H(&report.Observation, &report.TargetBaseline, &report.SendCounts, &report.LatencyCause)
 	}
 
 	missingAlarmCloseout := report.MissingAlarmCloseout24H
 	if missingAlarmCloseout.Status == "" {
-		missingAlarmCloseout = buildMissingAlarmCloseout(report.Observation, report.TargetBaseline, report.AlarmSentHistoryDataset, nil)
+		missingAlarmCloseout = buildMissingAlarmCloseout(&report.Observation, &report.TargetBaseline, report.AlarmSentHistoryDataset, nil)
 	}
 
 	stateConsistencyCloseout := report.StateConsistencyCloseout24H
 	if stateConsistencyCloseout.Status == "" {
-		stateConsistencyCloseout = buildStateConsistencyCloseout(report.Observation, report.TargetBaseline, report.AlarmSentHistoryDataset, nil)
+		stateConsistencyCloseout = buildStateConsistencyCloseout(&report.Observation, &report.TargetBaseline, report.AlarmSentHistoryDataset, nil)
 	}
 
 	return closeout, missingAlarmCloseout, stateConsistencyCloseout
@@ -51,7 +54,7 @@ func resolveCloseouts(
 
 func writeMetadata(
 	builder *strings.Builder,
-	report Report,
+	report *Report,
 ) {
 	md.WriteKV(builder, "generated at", md.Code(shared.FormatSendCountTime(report.GeneratedAt)))
 	md.WriteKV(
@@ -87,9 +90,9 @@ func writeMetadata(
 
 func writeCloseoutSection(
 	builder *strings.Builder,
-	closeout Closeout24H,
-	missingAlarmCloseout MissingAlarmCloseout,
-	stateConsistencyCloseout StateConsistencyCloseout,
+	closeout *Closeout24H,
+	missingAlarmCloseout *MissingAlarmCloseout,
+	stateConsistencyCloseout *StateConsistencyCloseout,
 ) {
 	md.WriteHeading(builder, 2, "24h Closeout")
 	md.WriteKV(builder, "scope", buildCloseoutScopeMarkdown(closeout))
@@ -103,18 +106,18 @@ func writeCloseoutSection(
 
 func writeEmbeddedSections(
 	builder *strings.Builder,
-	report Report,
+	report *Report,
 ) {
 	md.WriteHeading(builder, 2, "Target Baseline")
-	builder.WriteString(renderTargetBaseline(report.TargetBaseline))
-	appendSection(builder, channelsummary.RenderMarkdown(report.ChannelSummary))
-	appendSection(builder, sendcounts.RenderMarkdown(report.SendCounts))
+	builder.WriteString(renderTargetBaseline(&report.TargetBaseline))
+	appendSection(builder, channelsummary.RenderMarkdown(&report.ChannelSummary))
+	appendSection(builder, sendcounts.RenderMarkdown(&report.SendCounts))
 	if report.AlarmSentHistoryDataset != nil {
-		appendSection(builder, alarmhistory.RenderDatasetMarkdown(*report.AlarmSentHistoryDataset))
+		appendSection(builder, alarmhistory.RenderDatasetMarkdown(report.AlarmSentHistoryDataset))
 	}
-	appendSection(builder, deliverylogs.RenderMarkdown(report.DeliveryLogs))
-	appendSection(builder, latencycause.RenderPeriodMarkdown(report.LatencyPeriods))
-	appendSection(builder, latencycause.RenderMarkdown(report.LatencyCause))
+	appendSection(builder, deliverylogs.RenderMarkdown(&report.DeliveryLogs))
+	appendSection(builder, latencycause.RenderPeriodMarkdown(&report.LatencyPeriods))
+	appendSection(builder, latencycause.RenderMarkdown(&report.LatencyCause))
 }
 
 func appendSection(builder *strings.Builder, markdown string) {
@@ -127,7 +130,7 @@ func appendSection(builder *strings.Builder, markdown string) {
 }
 
 func buildCloseoutScopeMarkdown(
-	closeout Closeout24H,
+	closeout *Closeout24H,
 ) string {
 	return md.Code(shared.FallbackSendCountValue(closeout.AggregationScope)) +
 		", target_channels=" + md.Code(strconv.Itoa(closeout.TargetChannelCount)) +
@@ -136,7 +139,7 @@ func buildCloseoutScopeMarkdown(
 }
 
 func buildCloseout24HMarkdown(
-	closeout Closeout24H,
+	closeout *Closeout24H,
 ) string {
 	return "status=" + md.Code(string(closeout.Status)) +
 		", internal_system_cause_posts=" + md.Code(strconv.FormatInt(closeout.InternalExceededPostCount, 10)) +
@@ -147,7 +150,7 @@ func buildCloseout24HMarkdown(
 }
 
 func buildMissingAlarmCloseoutMarkdown(
-	closeout MissingAlarmCloseout,
+	closeout *MissingAlarmCloseout,
 ) string {
 	return "status=" + md.Code(string(closeout.Status)) +
 		", reference_posts=" + md.Code(strconv.Itoa(closeout.ReferencePostCount)) +
@@ -160,7 +163,7 @@ func buildMissingAlarmCloseoutMarkdown(
 }
 
 func buildStateConsistencyCloseoutMarkdown(
-	closeout StateConsistencyCloseout,
+	closeout *StateConsistencyCloseout,
 ) string {
 	return "status=" + md.Code(string(closeout.Status)) +
 		", reference_posts=" + md.Code(strconv.Itoa(closeout.ReferencePostCount)) +
@@ -174,7 +177,7 @@ func buildStateConsistencyCloseoutMarkdown(
 }
 
 func renderTargetBaseline(
-	baseline communityshorts.TargetBaseline,
+	baseline *communityshorts.TargetBaseline,
 ) string {
 	var builder strings.Builder
 

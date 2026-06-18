@@ -47,7 +47,7 @@ func TestBuildDataset(t *testing.T) {
 			DetectedAt:        shortsDetectedAt,
 			AlarmSentAt:       shortsAlarmSentAt,
 		}},
-		trackingrepo.ObservationPostComparisonResult{
+		&trackingrepo.ObservationPostComparisonResult{
 			Summary: trackingrepo.ObservationPostComparisonSummary{
 				BaselineUniquePostCount: 3,
 				MatchedPostCount:        2,
@@ -152,7 +152,7 @@ func TestBuildDataset(t *testing.T) {
 	require.Equal(t, "UC_COMMUNITY", report.Results.ChannelComparisons[0].ChannelID)
 	require.Equal(t, 1, report.Results.ChannelComparisons[0].MatchedPostCount)
 
-	markdown := RenderDatasetMarkdown(report)
+	markdown := RenderDatasetMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Community/Shorts Alarm Sent History Dataset")
 	require.Contains(t, markdown, "baseline_posts=`3`")
 	require.Contains(t, markdown, "unsent_posts=`1`")
@@ -187,7 +187,7 @@ func TestAttachDatasetMissingAlarmRows(t *testing.T) {
 	report := BuildDataset(
 		nil,
 		nil,
-		trackingrepo.ObservationPostComparisonResult{
+		&trackingrepo.ObservationPostComparisonResult{
 			Summary: trackingrepo.ObservationPostComparisonSummary{
 				BaselineUniquePostCount: 4,
 				MatchedPostCount:        1,
@@ -247,7 +247,7 @@ func TestAttachDatasetMissingAlarmRows(t *testing.T) {
 		windowEnd,
 	)
 
-	report = attachDatasetMissingAlarmRows(report, []outbox.PostSendCount{
+	attachDatasetMissingAlarmRows(&report, []outbox.PostSendCount{
 		{
 			AlarmType:         domain.AlarmTypeCommunity,
 			ChannelID:         "UC_SENT",
@@ -299,7 +299,7 @@ func TestAttachDatasetMissingAlarmRows(t *testing.T) {
 	require.Empty(t, report.MissingAlarmRows[2].SendState)
 	require.Equal(t, "COMMUNITY|UC_MISSING_STATE|community:post-missing-state", report.MissingAlarmRows[2].PostKey)
 
-	markdown := RenderDatasetMarkdown(report)
+	markdown := RenderDatasetMarkdown(&report)
 	require.Contains(t, markdown, "missing_alarm_posts=`3`")
 	require.Contains(t, markdown, "Missing Alarm Rows")
 	require.Contains(t, markdown, "send_state_missing")
@@ -355,7 +355,7 @@ func TestBuildDatasetDeduplicatesPerAlarmType(t *testing.T) {
 				AlarmSentAt:       shortsAlarmSentAt,
 			},
 		},
-		trackingrepo.ObservationPostComparisonResult{},
+		&trackingrepo.ObservationPostComparisonResult{},
 		DatasetQuery{
 			ObservationRuntimeName:      "youtube-producer",
 			ObservationBigBangCutoverAt: &cutoverAt,
@@ -447,7 +447,7 @@ func TestBuildDatasetKeepsIdentifierMismatchCandidatesReviewable(t *testing.T) {
 			AlarmSentAt:       alarmSentAt,
 		}},
 		nil,
-		trackingrepo.ObservationPostComparisonResult{
+		&trackingrepo.ObservationPostComparisonResult{
 			Summary: trackingrepo.ObservationPostComparisonSummary{
 				BaselineUniquePostCount:          1,
 				IdentifierMismatchCandidateCount: 1,
@@ -490,7 +490,7 @@ func TestBuildDatasetKeepsIdentifierMismatchCandidatesReviewable(t *testing.T) {
 	require.Equal(t, []string{"community:post-baseline"}, row.RelatedBaselinePostIDs)
 	require.Equal(t, []string{"community:post-sent"}, row.RelatedSentPostIDs)
 
-	markdown := RenderDatasetMarkdown(report)
+	markdown := RenderDatasetMarkdown(&report)
 	require.Contains(t, markdown, "pending_review")
 	require.Contains(t, markdown, "same title hint")
 	require.Contains(t, markdown, "community:post-baseline")
@@ -527,7 +527,7 @@ func TestRenderDatasetMarkdownIncludesMissingZeroCloseoutResults(t *testing.T) {
 			DetectedAt:        shortsDetectedAt,
 			AlarmSentAt:       shortsAlarmSentAt,
 		}},
-		trackingrepo.ObservationPostComparisonResult{
+		&trackingrepo.ObservationPostComparisonResult{
 			Summary: trackingrepo.ObservationPostComparisonSummary{
 				BaselineUniquePostCount: 2,
 				MatchedPostCount:        2,
@@ -570,7 +570,7 @@ func TestRenderDatasetMarkdownIncludesMissingZeroCloseoutResults(t *testing.T) {
 		windowEnd,
 	)
 
-	report = attachDatasetMissingAlarmRows(report, []outbox.PostSendCount{
+	attachDatasetMissingAlarmRows(&report, []outbox.PostSendCount{
 		{
 			AlarmType:         domain.AlarmTypeCommunity,
 			ChannelID:         "UC_COMMUNITY",
@@ -613,7 +613,7 @@ func TestRenderDatasetMarkdownIncludesMissingZeroCloseoutResults(t *testing.T) {
 	require.Equal(t, 1, report.Results.ChannelComparisons[0].MatchedPostCount)
 	require.Zero(t, report.Results.ChannelComparisons[0].MissingAlarmPostCount)
 
-	markdown := RenderDatasetMarkdown(report)
+	markdown := RenderDatasetMarkdown(&report)
 	require.Contains(t, markdown, "## Results")
 	require.Contains(t, markdown, "### By Alarm Type")
 	require.Contains(t, markdown, "### By Channel")
@@ -630,7 +630,7 @@ func TestRenderDatasetMarkdownKeepsEmptySectionScaffold(t *testing.T) {
 	windowStart := cutoverAt
 	windowEnd := cutoverAt.Add(24 * time.Hour)
 
-	markdown := RenderDatasetMarkdown(DatasetReport{
+	markdown := RenderDatasetMarkdown(&DatasetReport{
 		GeneratedAt: generatedAt,
 		Query: DatasetQuery{
 			ObservationRuntimeName:      "youtube-producer",
@@ -695,7 +695,7 @@ func TestBuildCommunity(t *testing.T) {
 				AlarmSentAt:       firstAlarmSentAt,
 			},
 		},
-		trackingrepo.ObservationPostComparisonResult{},
+		&trackingrepo.ObservationPostComparisonResult{},
 		CommunityQuery{
 			ObservationRuntimeName:      "youtube-producer",
 			ObservationBigBangCutoverAt: &cutoverAt,
@@ -728,7 +728,7 @@ func TestBuildCommunity(t *testing.T) {
 	require.Equal(t, "community:post-2", report.Rows[1].PostID)
 	require.Equal(t, secondAlarmSentAt, report.Rows[1].AlarmSentAt.UTC())
 
-	markdown := RenderCommunityMarkdown(report)
+	markdown := RenderCommunityMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Community Alarm Sent History")
 	require.Contains(t, markdown, "collected_rows=`2`")
 	require.Contains(t, markdown, "duplicates_removed=`0`")
@@ -781,7 +781,7 @@ func TestBuildCommunityDeduplicatesCanonicalPostID(t *testing.T) {
 				AlarmSentAt:       secondAlarmSentAt,
 			},
 		},
-		trackingrepo.ObservationPostComparisonResult{},
+		&trackingrepo.ObservationPostComparisonResult{},
 		CommunityQuery{
 			ObservationRuntimeName:      "youtube-producer",
 			ObservationBigBangCutoverAt: &cutoverAt,
@@ -800,7 +800,7 @@ func TestBuildCommunityDeduplicatesCanonicalPostID(t *testing.T) {
 	require.Equal(t, duplicateAlarmSentAt, report.Rows[0].AlarmSentAt.UTC())
 	require.Equal(t, "community:post-ok", report.Rows[1].PostID)
 
-	markdown := RenderCommunityMarkdown(report)
+	markdown := RenderCommunityMarkdown(&report)
 	require.Contains(t, markdown, "duplicates_removed=`1`")
 	require.Contains(t, markdown, "`community:post-duplicate`")
 	require.NotContains(t, markdown, "`post-duplicate` | `UC_DUP` | `post-duplicate` | `2026-")
@@ -826,7 +826,7 @@ func TestRenderCommunityMarkdownIdentifierMismatchCandidates(t *testing.T) {
 			DetectedAt:        detectedAt,
 			AlarmSentAt:       alarmSentAt,
 		}},
-		trackingrepo.ObservationPostComparisonResult{
+		&trackingrepo.ObservationPostComparisonResult{
 			Summary: trackingrepo.ObservationPostComparisonSummary{
 				BaselineUniquePostCount:          1,
 				IdentifierMismatchCandidateCount: 1,
@@ -869,7 +869,7 @@ func TestRenderCommunityMarkdownIdentifierMismatchCandidates(t *testing.T) {
 		generatedAt,
 	)
 
-	markdown := RenderCommunityMarkdown(report)
+	markdown := RenderCommunityMarkdown(&report)
 	require.Contains(t, markdown, "Comparison Verdicts")
 	require.Contains(t, markdown, "auxiliary_metadata_match_pending_review")
 	require.Contains(t, markdown, "Identifier Mismatch Candidates")
@@ -912,7 +912,7 @@ func TestBuildShorts(t *testing.T) {
 				AlarmSentAt:       firstAlarmSentAt,
 			},
 		},
-		trackingrepo.ObservationPostComparisonResult{},
+		&trackingrepo.ObservationPostComparisonResult{},
 		ShortsQuery{
 			ObservationRuntimeName:      "youtube-producer",
 			ObservationBigBangCutoverAt: &cutoverAt,
@@ -945,7 +945,7 @@ func TestBuildShorts(t *testing.T) {
 	require.Equal(t, "short:post-2", report.Rows[1].PostID)
 	require.Equal(t, secondAlarmSentAt, report.Rows[1].AlarmSentAt.UTC())
 
-	markdown := RenderShortsMarkdown(report)
+	markdown := RenderShortsMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Shorts Alarm Sent History")
 	require.Contains(t, markdown, "collected_rows=`2`")
 	require.Contains(t, markdown, "duplicates_removed=`0`")
@@ -998,7 +998,7 @@ func TestBuildShortsDeduplicatesCanonicalPostID(t *testing.T) {
 				AlarmSentAt:       secondAlarmSentAt,
 			},
 		},
-		trackingrepo.ObservationPostComparisonResult{},
+		&trackingrepo.ObservationPostComparisonResult{},
 		ShortsQuery{
 			ObservationRuntimeName:      "youtube-producer",
 			ObservationBigBangCutoverAt: &cutoverAt,
@@ -1017,7 +1017,7 @@ func TestBuildShortsDeduplicatesCanonicalPostID(t *testing.T) {
 	require.Equal(t, duplicateAlarmSentAt, report.Rows[0].AlarmSentAt.UTC())
 	require.Equal(t, "short:post-ok", report.Rows[1].PostID)
 
-	markdown := RenderShortsMarkdown(report)
+	markdown := RenderShortsMarkdown(&report)
 	require.Contains(t, markdown, "duplicates_removed=`1`")
 	require.Contains(t, markdown, "`short:post-duplicate`")
 	require.NotContains(t, markdown, "`post-duplicate` | `UC_DUP` | `post-duplicate` | `2026-")
@@ -1043,7 +1043,7 @@ func TestRenderShortsMarkdownComparisonVerdicts(t *testing.T) {
 			DetectedAt:        detectedAt,
 			AlarmSentAt:       alarmSentAt,
 		}},
-		trackingrepo.ObservationPostComparisonResult{
+		&trackingrepo.ObservationPostComparisonResult{
 			Summary: trackingrepo.ObservationPostComparisonSummary{
 				BaselineUniquePostCount: 1,
 				MatchedPostCount:        1,
@@ -1069,7 +1069,7 @@ func TestRenderShortsMarkdownComparisonVerdicts(t *testing.T) {
 		generatedAt,
 	)
 
-	markdown := RenderShortsMarkdown(report)
+	markdown := RenderShortsMarkdown(&report)
 	require.Contains(t, markdown, "Comparison Verdicts")
 	require.Contains(t, markdown, "canonical_identifier_matched")
 	require.Contains(t, markdown, "short:post-sent")

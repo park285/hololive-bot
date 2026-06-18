@@ -78,7 +78,10 @@ func FormatSendCountBool(value bool) string {
 	return "false"
 }
 
-func CloneLatencyClassification(result outbox.PostLatencyClassificationResult) outbox.PostLatencyClassificationResult {
+func CloneLatencyClassification(result *outbox.PostLatencyClassificationResult) outbox.PostLatencyClassificationResult {
+	if result == nil {
+		return outbox.PostLatencyClassificationResult{}
+	}
 	cloned := outbox.PostLatencyClassificationResult{
 		Status:             result.Status,
 		ThresholdMillis:    result.ThresholdMillis,
@@ -104,7 +107,10 @@ func CloneLatencyClassification(result outbox.PostLatencyClassificationResult) o
 	return cloned
 }
 
-func RenderLatencyClassificationEvidence(result outbox.PostLatencyClassificationResult) string {
+func RenderLatencyClassificationEvidence(result *outbox.PostLatencyClassificationResult) string {
+	if result == nil {
+		return NoneValue
+	}
 	if len(result.Evidence) == 0 {
 		return NoneValue
 	}

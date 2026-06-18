@@ -19,19 +19,19 @@ const (
 )
 
 func buildCloseout24H(
-	observation Window,
-	baseline communityshorts.TargetBaseline,
-	sendCounts sendcounts.Report,
-	latencyCause latencycause.Report,
+	observation *Window,
+	baseline *communityshorts.TargetBaseline,
+	sendCounts *sendcounts.Report,
+	latencyCause *latencycause.Report,
 ) Closeout24H {
 	closeout := newCloseout24H(observation, baseline, sendCounts)
 
 	period, ok := findObservationLatencyCausePeriod(latencyCause)
 	if !ok {
-		return withMissingLatencyCause(closeout, observation.Status)
+		return withMissingLatencyCause(&closeout, observation.Status)
 	}
 
-	applyLatencyCausePeriod(&closeout, period)
+	applyLatencyCausePeriod(&closeout, &period)
 
 	if observation.Status != StatusFinalized {
 		closeout.Statement = fmt.Sprintf(
@@ -61,9 +61,9 @@ func buildCloseout24H(
 }
 
 func newCloseout24H(
-	observation Window,
-	baseline communityshorts.TargetBaseline,
-	sendCounts sendcounts.Report,
+	observation *Window,
+	baseline *communityshorts.TargetBaseline,
+	sendCounts *sendcounts.Report,
 ) Closeout24H {
 	closeout := Closeout24H{
 		Status:             CloseoutStatusPending,
@@ -80,19 +80,19 @@ func newCloseout24H(
 }
 
 func withMissingLatencyCause(
-	closeout Closeout24H,
+	closeout *Closeout24H,
 	status Status,
 ) Closeout24H {
 	if status == StatusFinalized {
 		closeout.Status = CloseoutStatusInsufficientEvidence
 		closeout.Statement = "Finalized 24h closeout is blocked because the observation_window latency cause summary is missing."
 	}
-	return closeout
+	return *closeout
 }
 
 func applyLatencyCausePeriod(
 	closeout *Closeout24H,
-	period latencycause.PeriodView,
+	period *latencycause.PeriodView,
 ) {
 	closeout.ObservationPeriodLabel = strings.TrimSpace(period.Summary.Label)
 	closeout.TotalExceededPostCount = period.CauseSummary.ExceededPostCount
@@ -105,8 +105,8 @@ func applyLatencyCausePeriod(
 }
 
 func buildMissingAlarmCloseout(
-	observation Window,
-	baseline communityshorts.TargetBaseline,
+	observation *Window,
+	baseline *communityshorts.TargetBaseline,
 	dataset *alarmhistory.DatasetReport,
 	datasetErr error,
 ) MissingAlarmCloseout {
@@ -122,7 +122,7 @@ func buildMissingAlarmCloseout(
 	}
 
 	if dataset == nil {
-		return withMissingAlarmDatasetMissing(closeout, datasetErr)
+		return withMissingAlarmDatasetMissing(&closeout, datasetErr)
 	}
 
 	if closeout.MissingAlarmPostCount == 0 {
@@ -144,8 +144,8 @@ func buildMissingAlarmCloseout(
 }
 
 func newMissingAlarmCloseout(
-	observation Window,
-	baseline communityshorts.TargetBaseline,
+	observation *Window,
+	baseline *communityshorts.TargetBaseline,
 ) MissingAlarmCloseout {
 	closeout := MissingAlarmCloseout{
 		Status:             CloseoutStatusPending,
@@ -176,7 +176,7 @@ func applyMissingAlarmDataset(
 }
 
 func withMissingAlarmDatasetMissing(
-	closeout MissingAlarmCloseout,
+	closeout *MissingAlarmCloseout,
 	datasetErr error,
 ) MissingAlarmCloseout {
 	closeout.Status = CloseoutStatusInsufficientEvidence
@@ -188,12 +188,12 @@ func withMissingAlarmDatasetMissing(
 	} else {
 		closeout.Statement = "Finalized 24h missing-alarm closeout is blocked because the sent-history dataset is missing."
 	}
-	return closeout
+	return *closeout
 }
 
 func buildStateConsistencyCloseout(
-	observation Window,
-	baseline communityshorts.TargetBaseline,
+	observation *Window,
+	baseline *communityshorts.TargetBaseline,
 	dataset *alarmhistory.DatasetReport,
 	datasetErr error,
 ) StateConsistencyCloseout {
@@ -210,7 +210,7 @@ func buildStateConsistencyCloseout(
 	}
 
 	if dataset == nil {
-		return withStateConsistencyDatasetMissing(closeout, datasetErr)
+		return withStateConsistencyDatasetMissing(&closeout, datasetErr)
 	}
 
 	if closeout.DuplicateSentPostCount == 0 && closeout.MissingAlarmPostCount == 0 {
@@ -229,8 +229,8 @@ func buildStateConsistencyCloseout(
 }
 
 func newStateConsistencyCloseout(
-	observation Window,
-	baseline communityshorts.TargetBaseline,
+	observation *Window,
+	baseline *communityshorts.TargetBaseline,
 ) StateConsistencyCloseout {
 	closeout := StateConsistencyCloseout{
 		Status:             CloseoutStatusPending,
@@ -262,7 +262,7 @@ func applyStateConsistencyDataset(
 }
 
 func withStateConsistencyDatasetMissing(
-	closeout StateConsistencyCloseout,
+	closeout *StateConsistencyCloseout,
 	datasetErr error,
 ) StateConsistencyCloseout {
 	closeout.Status = CloseoutStatusInsufficientEvidence
@@ -274,11 +274,11 @@ func withStateConsistencyDatasetMissing(
 	} else {
 		closeout.Statement = "Finalized 24h state-consistency closeout is blocked because the sent-history dataset is missing."
 	}
-	return closeout
+	return *closeout
 }
 
 func findObservationLatencyCausePeriod(
-	report latencycause.Report,
+	report *latencycause.Report,
 ) (latencycause.PeriodView, bool) {
 	for i := range report.Periods {
 		if strings.TrimSpace(report.Periods[i].Summary.Label) == observationPeriodLabel {

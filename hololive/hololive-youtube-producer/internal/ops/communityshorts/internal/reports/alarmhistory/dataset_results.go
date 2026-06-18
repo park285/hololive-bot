@@ -39,7 +39,7 @@ func buildDatasetResults(
 	verificationRows []DatasetVerificationRow,
 	referenceRows []DatasetReferenceRow,
 	missingAlarmRows []DatasetMissingAlarmRow,
-	summary DatasetSummary,
+	summary *DatasetSummary,
 	missingAlarmEvaluated bool,
 ) DatasetResults {
 	alarmTypeAccumulators := make(map[domain.AlarmType]*comparisonAccumulator)
@@ -109,9 +109,12 @@ func accumulateMissingAlarmRows(
 }
 
 func buildResultSummary(
-	summary DatasetSummary,
+	summary *DatasetSummary,
 	missingAlarmEvaluated bool,
 ) DatasetResults {
+	if summary == nil {
+		return DatasetResults{MissingAlarmEvaluated: missingAlarmEvaluated}
+	}
 	return DatasetResults{
 		MissingAlarmEvaluated:     missingAlarmEvaluated,
 		MissingAlarmPostCount:     summary.MissingAlarmPostCount,
@@ -198,6 +201,9 @@ func buildAlarmTypeComparisons(
 	comparisons := make([]DatasetAlarmTypeComparison, 0, len(keys))
 	for i := range keys {
 		a := accumulators[keys[i]]
+		if a == nil {
+			continue
+		}
 		comparisons = append(comparisons, DatasetAlarmTypeComparison{
 			AlarmType:                        keys[i],
 			BaselinePostCount:                a.BaselinePostCount,
@@ -227,6 +233,9 @@ func buildChannelComparisons(
 	comparisons := make([]DatasetChannelComparison, 0, len(keys))
 	for i := range keys {
 		a := accumulators[keys[i]]
+		if a == nil {
+			continue
+		}
 		comparisons = append(comparisons, DatasetChannelComparison{
 			ChannelID:                        keys[i],
 			BaselinePostCount:                a.BaselinePostCount,

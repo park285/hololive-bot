@@ -345,8 +345,8 @@ func testAllowedReservation(t *testing.T, ctx context.Context, limiter poller.Gl
 	return reservation
 }
 
-func testBudgetJob(jobKey string) poller.BudgetJob {
-	return poller.BudgetJob{
+func testBudgetJob(jobKey string) *poller.BudgetJob {
+	return &poller.BudgetJob{
 		Namespace:  testBudgetNamespace,
 		InstanceID: "ap-a",
 		PollerName: "videos",

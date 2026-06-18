@@ -77,12 +77,17 @@ func listSentHistoryRowsWithinWindow(
 		return repository.ListCommunityAlarmSentHistoriesWithinObservationWindow(ctx, windowStart, windowEnd, detectedBefore)
 	case domain.OutboxKindNewShort:
 		return repository.ListShortsAlarmSentHistoriesWithinObservationWindow(ctx, windowStart, windowEnd, detectedBefore)
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return nil, fmt.Errorf("unsupported kind: %s", kind)
 	default:
 		return nil, fmt.Errorf("unsupported kind: %s", kind)
 	}
 }
 
-func renderComparisonSummaryMarkdown(comparison trackingrepo.ObservationPostComparisonResult) string {
+func renderComparisonSummaryMarkdown(comparison *trackingrepo.ObservationPostComparisonResult) string {
+	if comparison == nil {
+		return ""
+	}
 	summary := comparison.Summary
 	return fmt.Sprintf(
 		"- comparison: baseline_posts=`%d`, matched_posts=`%d`, unsent_posts=`%d`, duplicate_sent_posts=`%d`, unexpected_sent_posts=`%d`, identifier_mismatch_candidates=`%d`\n",
@@ -95,7 +100,10 @@ func renderComparisonSummaryMarkdown(comparison trackingrepo.ObservationPostComp
 	)
 }
 
-func renderComparisonVerdictsMarkdown(comparison trackingrepo.ObservationPostComparisonResult) string {
+func renderComparisonVerdictsMarkdown(comparison *trackingrepo.ObservationPostComparisonResult) string {
+	if comparison == nil {
+		return ""
+	}
 	if len(comparison.VerdictRows) == 0 {
 		return ""
 	}
@@ -105,7 +113,7 @@ func renderComparisonVerdictsMarkdown(comparison trackingrepo.ObservationPostCom
 	builder.WriteString("| verdict | reason | alarm_type | channel_id | canonical_post_id | baseline_count | sent_count | actual_published_at | alarm_sent_at | match_basis | review_status | related_baseline_post_ids | related_sent_post_ids |\n")
 	builder.WriteString("| --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- | --- | --- | --- |\n")
 	for i := range comparison.VerdictRows {
-		row := comparison.VerdictRows[i]
+		row := &comparison.VerdictRows[i]
 		builder.WriteString("| `")
 		builder.WriteString(string(row.Verdict))
 		builder.WriteString("` | `")
@@ -138,7 +146,10 @@ func renderComparisonVerdictsMarkdown(comparison trackingrepo.ObservationPostCom
 	return builder.String()
 }
 
-func renderVerdictCanonicalPostID(row trackingrepo.ObservationPostComparisonVerdictRow) string {
+func renderVerdictCanonicalPostID(row *trackingrepo.ObservationPostComparisonVerdictRow) string {
+	if row == nil {
+		return ""
+	}
 	if canonicalPostID := strings.TrimSpace(row.CanonicalPostID); canonicalPostID != "" {
 		return canonicalPostID
 	}
@@ -151,14 +162,20 @@ func renderVerdictCanonicalPostID(row trackingrepo.ObservationPostComparisonVerd
 	return ""
 }
 
-func renderVerdictPublishedAt(row trackingrepo.ObservationPostComparisonVerdictRow) *time.Time {
+func renderVerdictPublishedAt(row *trackingrepo.ObservationPostComparisonVerdictRow) *time.Time {
+	if row == nil {
+		return nil
+	}
 	if row.ActualPublishedAt != nil {
 		return row.ActualPublishedAt
 	}
 	return row.MatchPublishedAt
 }
 
-func renderIdentifierMismatchCandidatesMarkdown(comparison trackingrepo.ObservationPostComparisonResult) string {
+func renderIdentifierMismatchCandidatesMarkdown(comparison *trackingrepo.ObservationPostComparisonResult) string {
+	if comparison == nil {
+		return ""
+	}
 	if len(comparison.IdentifierMismatchCandidates) == 0 {
 		return ""
 	}

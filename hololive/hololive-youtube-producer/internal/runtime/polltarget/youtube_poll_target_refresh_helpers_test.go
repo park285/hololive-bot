@@ -5,9 +5,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"reflect"
 	"testing"
-	"unsafe"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,49 +23,52 @@ func newBufferedYouTubePollTargetTestLogger() (*slog.Logger, *bytes.Buffer) {
 func schedulerJobKeys(t *testing.T, scheduler any) []string {
 	t.Helper()
 
-	field := reflect.ValueOf(scheduler).Elem().FieldByName("jobMap")
-	require.True(t, field.IsValid(), "jobMap field must exist")
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-
-	keys := make([]string, 0, field.Len())
-	iterator := field.MapRange()
-	for iterator.Next() {
-		keys = append(keys, iterator.Key().String())
-	}
-
-	return keys
+	inspector := requireSchedulerInspector(t, scheduler)
+	return inspector.JobKeys()
 }
 
-func schedulerWakeCh(t *testing.T, scheduler any) chan struct{} {
+type schedulerWakeSignal struct {
+	scheduler schedulerInspector
+}
+
+func schedulerWakeCh(t *testing.T, scheduler any) schedulerWakeSignal {
 	t.Helper()
 
-	field := reflect.ValueOf(scheduler).Elem().FieldByName("wakeCh")
-	require.True(t, field.IsValid(), "wakeCh field must exist")
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-
-	wakeCh, ok := field.Interface().(chan struct{})
-	require.True(t, ok, "wakeCh must be chan struct{}")
-	return wakeCh
+	return schedulerWakeSignal{scheduler: requireSchedulerInspector(t, scheduler)}
 }
 
-func drainSchedulerWakeCh(ch chan struct{}) {
-	for {
-		select {
-		case <-ch:
-		default:
-			return
-		}
-	}
+type schedulerInspector interface {
+	JobKeys() []string
+	JobInterval(string) (time.Duration, bool)
+	DrainWakeSignal() bool
 }
 
-func requireNoSchedulerWakeSignal(t *testing.T, ch chan struct{}) {
+func requireSchedulerInspector(t *testing.T, scheduler any) schedulerInspector {
 	t.Helper()
 
-	select {
-	case <-ch:
+	inspector, ok := scheduler.(schedulerInspector)
+	require.True(t, ok, "scheduler must expose inspection methods")
+	return inspector
+}
+
+func drainSchedulerWakeCh(ch schedulerWakeSignal) {
+	ch.scheduler.DrainWakeSignal()
+}
+
+func requireNoSchedulerWakeSignal(t *testing.T, ch schedulerWakeSignal) {
+	t.Helper()
+
+	if ch.scheduler.DrainWakeSignal() {
 		t.Fatal("expected no scheduler wake signal")
-	default:
 	}
+}
+
+func schedulerJobInterval(t *testing.T, scheduler any, key string) time.Duration {
+	t.Helper()
+
+	interval, ok := requireSchedulerInspector(t, scheduler).JobInterval(key)
+	require.True(t, ok, "job %s must exist", key)
+	return interval
 }
 
 type refreshTestPoller struct {

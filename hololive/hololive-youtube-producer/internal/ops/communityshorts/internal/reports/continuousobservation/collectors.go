@@ -41,7 +41,7 @@ type collectorWiring struct {
 	collectObservation             func(context.Context, *shared.OpsSession, time.Time, CollectOptions) (Window, error)
 	collectTargetBaseline          func(context.Context, *shared.OpsSession, *config.Config, *slog.Logger, time.Time) (communityshorts.TargetBaseline, error)
 	collectSendCounts              func(context.Context, *shared.OpsSession, sendcounts.Query, time.Time) (sendcounts.Report, error)
-	buildChannelSummary            func(sendcounts.Report) (channelsummary.Report, error)
+	buildChannelSummary            func(*sendcounts.Report) (channelsummary.Report, error)
 	collectDeliveryLogs            func(context.Context, *shared.OpsSession, deliverylogs.Query, time.Time) (deliverylogs.Report, error)
 	collectLatencyCause            func(context.Context, *shared.OpsSession, latencycause.Query, time.Time, []outbox.PostLatencyPeriod) (latencycause.Report, error)
 	buildLatencyPeriods            func(time.Time, []latencycause.PeriodSpec) ([]outbox.PostLatencyPeriod, error)
@@ -73,7 +73,7 @@ func collectArtifacts(
 		return artifacts{}, fmt.Errorf("send counts: %w", err)
 	}
 
-	channelSummary, err := wiring.buildChannelSummary(sendCountReport)
+	channelSummary, err := wiring.buildChannelSummary(&sendCountReport)
 	if err != nil {
 		return artifacts{}, fmt.Errorf("channel summary: %w", err)
 	}
@@ -94,7 +94,7 @@ func collectArtifacts(
 	}
 
 	alarmSentHistoryDataset, alarmSentHistoryDatasetErr := collectAlarmSentHistoryDataset(
-		ctx, session, now, options, observation, wiring,
+		ctx, session, now, options, &observation, wiring,
 	)
 
 	return artifacts{
@@ -179,10 +179,10 @@ func collectAlarmSentHistoryDataset(
 	session *shared.OpsSession,
 	now time.Time,
 	options CollectOptions,
-	observation Window,
+	observation *Window,
 	wiring collectorWiring,
 ) (*alarmhistory.DatasetReport, error) {
-	if observation.Status != StatusFinalized {
+	if observation == nil || observation.Status != StatusFinalized {
 		return nil, nil
 	}
 
@@ -275,8 +275,11 @@ func collectObservationWindow(
 }
 
 func buildChannelSummary(
-	report sendcounts.Report,
+	report *sendcounts.Report,
 ) (channelsummary.Report, error) {
+	if report == nil {
+		return channelsummary.Report{}, fmt.Errorf("send count report is nil")
+	}
 	posts := make([]outbox.PostSendCount, 0, len(report.Rows))
 	for i := range report.Rows {
 		posts = append(posts, report.Rows[i].PostSendCount)

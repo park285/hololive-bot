@@ -17,7 +17,9 @@ func TestFetchBodyWithAPIKeyEnvSendsAPIKeyHeader(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		_, _ = w.Write([]byte(`metrics body`))
+		if _, err := w.Write([]byte(`metrics body`)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

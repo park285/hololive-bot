@@ -124,7 +124,7 @@ func CollectWithOptions(
 	options CollectOptions,
 ) (Report, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return Report{}, fmt.Errorf("collect community shorts send count report: context is nil")
 	}
 	if appConfig == nil {
 		return Report{}, fmt.Errorf("collect community shorts send count report: config is nil")
@@ -180,6 +180,8 @@ func collectRows(
 	switch query.Mode {
 	case QueryModeObservation:
 		return collectObservationRows(ctx, session, query, now)
+	case QueryModeRecent:
+		return collectRecentRows(ctx, session, query)
 	default:
 		return collectRecentRows(ctx, session, query)
 	}

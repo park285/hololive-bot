@@ -1,6 +1,7 @@
 package polling
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -13,9 +14,10 @@ import (
 )
 
 func buildYouTubeProducerComponents(
-	scraperConfig config.ScraperConfig,
+	ctx context.Context,
+	scraperConfig *config.ScraperConfig,
 	jobClaimer poller.JobClaimer,
-	budgetWiring GlobalBudgetWiring,
+	budgetWiring *GlobalBudgetWiring,
 	postgresService database.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -25,7 +27,11 @@ func buildYouTubeProducerComponents(
 	publishedAtResolver *poller.PendingPublishedAtResolver,
 	logger *slog.Logger,
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
+	if scraperConfig == nil {
+		scraperConfig = &config.ScraperConfig{}
+	}
 	pollerRegistrations := buildYouTubeProducerChannelPollerRegistrationsWithClient(
+		ctx,
 		postgresService,
 		scraperConfig,
 		scraperClient,
@@ -36,6 +42,9 @@ func buildYouTubeProducerComponents(
 	)
 	if resolverRegistration := publishedat.BuildRegistration(publishedAtResolver, scraperConfig, logger); resolverRegistration != nil {
 		pollerRegistrations = append(pollerRegistrations, *resolverRegistration)
+	}
+	if budgetWiring == nil {
+		budgetWiring = &GlobalBudgetWiring{}
 	}
 	pollerRegistrations = wrapYouTubeProducerSourceCooldownPollers(pollerRegistrations, budgetWiring.Limiter, logger)
 	if err := validateYouTubeProducerRegistrationsAndBudgets(pollerRegistrations, scraperConfig, budgetWiring, logger); err != nil {
@@ -50,8 +59,8 @@ func buildYouTubeProducerComponents(
 
 func validateYouTubeProducerRegistrationsAndBudgets(
 	pollerRegistrations []providers.ChannelPollerRegistration,
-	scraperConfig config.ScraperConfig,
-	budgetWiring GlobalBudgetWiring,
+	scraperConfig *config.ScraperConfig,
+	budgetWiring *GlobalBudgetWiring,
 	logger *slog.Logger,
 ) error {
 	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
@@ -74,9 +83,9 @@ func validateYouTubeProducerRegistrationsAndBudgets(
 
 func buildYouTubeProducerSchedulerOptions(
 	pollerRegistrations []providers.ChannelPollerRegistration,
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	jobClaimer poller.JobClaimer,
-	budgetWiring GlobalBudgetWiring,
+	budgetWiring *GlobalBudgetWiring,
 ) []providers.ScraperSchedulerOption {
 	schedulerConfig := scraperConfig.SchedulerOrDefault()
 	schedulerOptions := []providers.ScraperSchedulerOption{
@@ -100,10 +109,13 @@ func buildYouTubeProducerSchedulerOptions(
 }
 
 func buildSharedYouTubeProducerClient(
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	cacheService cache.Client,
 	sharedRL *scraper.RateLimiter,
 ) *scraper.Client {
+	if scraperConfig == nil {
+		scraperConfig = &config.ScraperConfig{}
+	}
 	proxyConfig := scraper.ProxyConfig{
 		Enabled: scraperConfig.ProxyEnabled,
 		URL:     scraperConfig.ProxyURL,
@@ -130,7 +142,7 @@ func buildSharedYouTubeProducerClient(
 		}),
 	}
 	if channelHealthConfig.Enabled {
-		opts = append(opts, scraper.WithChannelHealthPolicy(scraper.ChannelHealthPolicy{
+		opts = append(opts, scraper.WithChannelHealthPolicy(&scraper.ChannelHealthPolicy{
 			Enforce:           channelHealthConfig.Enforce,
 			TTL:               channelHealthConfig.TTL,
 			ParserDriftBase:   channelHealthConfig.ParserDriftBase,

@@ -1,6 +1,7 @@
 package polling
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -23,7 +24,7 @@ type GlobalBudgetWiring struct {
 }
 
 func BuildComponents(
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	postgresService database.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -33,10 +34,11 @@ func BuildComponents(
 	publishedAtResolver *poller.PendingPublishedAtResolver,
 	logger *slog.Logger,
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
-	return BuildComponentsWithJobClaimer(
+	return BuildComponentsWithJobClaimerContext(
+		context.Background(),
 		scraperConfig,
 		nil,
-		GlobalBudgetWiring{},
+		&GlobalBudgetWiring{},
 		postgresService,
 		notificationChannelIDs,
 		statsChannelIDs,
@@ -49,9 +51,39 @@ func BuildComponents(
 }
 
 func BuildComponentsWithJobClaimer(
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	jobClaimer poller.JobClaimer,
-	budgetWiring GlobalBudgetWiring,
+	budgetWiring *GlobalBudgetWiring,
+	postgresService database.Client,
+	notificationChannelIDs []string,
+	statsChannelIDs []string,
+	scraperClient *scraper.Client,
+	liveStatusProvider poller.LiveStatusProvider,
+	routeDecider poller.NotificationRouteDecider,
+	publishedAtResolver *poller.PendingPublishedAtResolver,
+	logger *slog.Logger,
+) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
+	return BuildComponentsWithJobClaimerContext(
+		context.Background(),
+		scraperConfig,
+		jobClaimer,
+		budgetWiring,
+		postgresService,
+		notificationChannelIDs,
+		statsChannelIDs,
+		scraperClient,
+		liveStatusProvider,
+		routeDecider,
+		publishedAtResolver,
+		logger,
+	)
+}
+
+func BuildComponentsWithJobClaimerContext(
+	ctx context.Context,
+	scraperConfig *config.ScraperConfig,
+	jobClaimer poller.JobClaimer,
+	budgetWiring *GlobalBudgetWiring,
 	postgresService database.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -62,6 +94,7 @@ func BuildComponentsWithJobClaimer(
 	logger *slog.Logger,
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
 	return buildYouTubeProducerComponents(
+		ctx,
 		scraperConfig,
 		jobClaimer,
 		budgetWiring,
@@ -77,7 +110,7 @@ func BuildComponentsWithJobClaimer(
 }
 
 func BuildSharedClient(
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	cacheClient cache.Client,
 	sharedRL *scraper.RateLimiter,
 ) *scraper.Client {
@@ -86,7 +119,7 @@ func BuildSharedClient(
 
 func BuildRegistrations(
 	postgres database.Client,
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	sharedRL *scraper.RateLimiter,
 	cacheClient cache.Client,
 	routeDecider poller.NotificationRouteDecider,
@@ -94,6 +127,7 @@ func BuildRegistrations(
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	return buildYouTubeProducerChannelPollerRegistrations(
+		context.Background(),
 		postgres,
 		scraperConfig,
 		sharedRL,
@@ -106,7 +140,7 @@ func BuildRegistrations(
 
 func BuildRegistrationsWithClient(
 	postgres database.Client,
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
 	routeDecider poller.NotificationRouteDecider,
@@ -114,6 +148,7 @@ func BuildRegistrationsWithClient(
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
+		context.Background(),
 		postgres,
 		scraperConfig,
 		scraperClient,

@@ -19,9 +19,6 @@ func startRecoveryLoop(
 	logger *slog.Logger,
 	onResume func(),
 ) (stop func()) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if baseInterval <= 0 {
 		baseInterval = 5 * time.Second
 	}
@@ -93,7 +90,7 @@ func recoveryLoopIteration(
 	backoff time.Duration,
 	logger *slog.Logger,
 	onResume func(),
-) (time.Duration, time.Duration) {
+) (waitDuration, nextBackoff time.Duration) {
 	if state.LeaseAvailable() {
 		return baseInterval, baseInterval
 	}
@@ -116,20 +113,32 @@ func handleRecoveryLoopClaim(
 ) bool {
 	switch status.Result {
 	case poller.JobClaimAcquired:
-		if claim != nil {
-			releaseReadinessProbeClaim(ctx, claim, logger)
-		}
-		state.MarkLeaseAvailable()
-		logRecoveryLoopInfo(logger, "active_active_resumed", readinessProbePollerName)
-		return true
+		return handleAcquiredRecoveryLoopClaim(ctx, claim, state, logger)
 	case poller.JobClaimPeerOwned, poller.JobClaimAlreadyCompleted:
 		state.MarkLeaseAvailable()
 		logRecoveryLoopDebug(logger, "active_active_recovery_probe_available", nil, status.Result)
 		return true
+	case poller.JobClaimUnavailable:
+		logRecoveryLoopDebug(logger, "active_active_recovery_probe_unavailable", nil, status.Result)
+		return false
 	default:
 		logRecoveryLoopDebug(logger, "active_active_recovery_probe_unexpected_result", nil, status.Result)
 		return false
 	}
+}
+
+func handleAcquiredRecoveryLoopClaim(
+	ctx context.Context,
+	claim poller.JobClaim,
+	state *readiness.State,
+	logger *slog.Logger,
+) bool {
+	if claim != nil {
+		releaseReadinessProbeClaim(ctx, claim, logger)
+	}
+	state.MarkLeaseAvailable()
+	logRecoveryLoopInfo(logger, "active_active_resumed", readinessProbePollerName)
+	return true
 }
 
 func notifyRecoveryResume(available bool, onResume func()) {
@@ -138,7 +147,7 @@ func notifyRecoveryResume(available bool, onResume func()) {
 	}
 }
 
-func nextRecoveryBackoff(current time.Duration, maxInterval time.Duration) time.Duration {
+func nextRecoveryBackoff(current, maxInterval time.Duration) time.Duration {
 	if current <= 0 {
 		return maxInterval
 	}
@@ -166,7 +175,7 @@ func sleepRecoveryLoop(ctx context.Context, duration time.Duration) bool {
 	}
 }
 
-func logRecoveryLoopInfo(logger *slog.Logger, message string, pollerName string) {
+func logRecoveryLoopInfo(logger *slog.Logger, message, pollerName string) {
 	if logger != nil {
 		logger.Info(message, slog.String("poller", pollerName))
 	}

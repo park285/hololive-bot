@@ -23,7 +23,7 @@ func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
 
 	specs, err := parseLatencyPeriodSpecs(periods)
 	if err != nil {
-		return fmt.Errorf("invalid period flag: %v", err)
+		return fmt.Errorf("invalid period flag: %w", err)
 	}
 
 	appConfig, err := config.Load()
@@ -56,7 +56,7 @@ func writeLatencyPeriodReport(ctx commandContext, format string, report opsapp.C
 }
 
 func writeLatencyPeriodMarkdown(ctx commandContext, report opsapp.CommunityShortsLatencyPeriodReport) error {
-	if _, err := fmt.Fprint(ctx.stdout, opsapp.RenderCommunityShortsLatencyPeriodMarkdown(report)); err != nil {
+	if _, err := fmt.Fprint(ctx.stdout, opsapp.RenderCommunityShortsLatencyPeriodMarkdown(&report)); err != nil {
 		return fmt.Errorf("failed to write community/shorts latency period markdown: %w", err)
 	}
 	return nil

@@ -128,7 +128,7 @@ func Collect(
 	options CollectOptions,
 ) (Report, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return Report{}, fmt.Errorf("collect community shorts continuous observation report: context is nil")
 	}
 	if appConfig == nil {
 		return Report{}, fmt.Errorf("collect community shorts continuous observation report: config is nil")
@@ -183,19 +183,19 @@ func collectWithSession(
 		return Report{}, fmt.Errorf("collect community shorts continuous observation report: %w", err)
 	}
 
-	return buildReport(now, artifacts), nil
+	return buildReport(now, &artifacts), nil
 }
 
 func buildReport(
 	now time.Time,
-	artifacts artifacts,
+	artifacts *artifacts,
 ) Report {
 	return Report{
 		GeneratedAt:                 now,
 		Observation:                 artifacts.Observation,
-		Closeout24H:                 buildCloseout24H(artifacts.Observation, artifacts.TargetBaseline, artifacts.SendCounts, artifacts.LatencyCause),
-		MissingAlarmCloseout24H:     buildMissingAlarmCloseout(artifacts.Observation, artifacts.TargetBaseline, artifacts.AlarmSentHistoryDataset, artifacts.AlarmSentHistoryDatasetErr),
-		StateConsistencyCloseout24H: buildStateConsistencyCloseout(artifacts.Observation, artifacts.TargetBaseline, artifacts.AlarmSentHistoryDataset, artifacts.AlarmSentHistoryDatasetErr),
+		Closeout24H:                 buildCloseout24H(&artifacts.Observation, &artifacts.TargetBaseline, &artifacts.SendCounts, &artifacts.LatencyCause),
+		MissingAlarmCloseout24H:     buildMissingAlarmCloseout(&artifacts.Observation, &artifacts.TargetBaseline, artifacts.AlarmSentHistoryDataset, artifacts.AlarmSentHistoryDatasetErr),
+		StateConsistencyCloseout24H: buildStateConsistencyCloseout(&artifacts.Observation, &artifacts.TargetBaseline, artifacts.AlarmSentHistoryDataset, artifacts.AlarmSentHistoryDatasetErr),
 		TargetBaseline:              artifacts.TargetBaseline,
 		ChannelSummary:              artifacts.ChannelSummary,
 		SendCounts:                  artifacts.SendCounts,

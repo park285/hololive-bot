@@ -28,7 +28,7 @@ func TestNextContinuousObservationIntervalUsesFirstHourCadence(t *testing.T) {
 			ObservedUntil:        time.Date(2026, 4, 11, 0, 20, 0, 0, time.UTC),
 		},
 	}
-	require.Equal(t, 5*time.Minute, nextContinuousObservationInterval(report))
+	require.Equal(t, 5*time.Minute, nextContinuousObservationInterval(&report))
 }
 
 func TestNextContinuousObservationIntervalCapsAtWindowEnd(t *testing.T) {
@@ -42,5 +42,5 @@ func TestNextContinuousObservationIntervalCapsAtWindowEnd(t *testing.T) {
 			ObservedUntil:        time.Date(2026, 4, 11, 23, 58, 0, 0, time.UTC),
 		},
 	}
-	require.Equal(t, 2*time.Minute, nextContinuousObservationInterval(report))
+	require.Equal(t, 2*time.Minute, nextContinuousObservationInterval(&report))
 }

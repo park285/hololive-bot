@@ -47,7 +47,7 @@ func resolveAlarmChannelIDsFromCache(
 	cacheErr error,
 	now time.Time,
 	lastNonEmptyCacheAt time.Time,
-) (alarmChannelIDs []string, candidateFromCache bool, nextLastNonEmptyCacheAt time.Time, ok bool, resolved bool) {
+) (alarmChannelIDs []string, candidateFromCache bool, nextLastNonEmptyCacheAt time.Time, ok, resolved bool) {
 	nextLastNonEmptyCacheAt = lastNonEmptyCacheAt
 	if cacheErr != nil {
 		return nil, false, nextLastNonEmptyCacheAt, false, false
@@ -61,7 +61,7 @@ func resolveAlarmChannelIDsFromCache(
 	return nil, false, nextLastNonEmptyCacheAt, false, false
 }
 
-func isWithinYouTubePollTargetEmptyCacheGracePeriod(now time.Time, lastNonEmptyCacheAt time.Time) bool {
+func isWithinYouTubePollTargetEmptyCacheGracePeriod(now, lastNonEmptyCacheAt time.Time) bool {
 	return !lastNonEmptyCacheAt.IsZero() && now.Sub(lastNonEmptyCacheAt) < youtubePollTargetEmptyCacheGracePeriod
 }
 

@@ -36,7 +36,7 @@ type liveBatchPoller struct {
 
 func appendLivePollerRegistrations(
 	registrations []providers.ChannelPollerRegistration,
-	spec livePollerRegistrationSpec,
+	spec *livePollerRegistrationSpec,
 ) []providers.ChannelPollerRegistration {
 	channelIDs := uniqueLiveRegistrationChannelIDs(spec.ChannelIDs)
 	if spec.Base == nil || spec.Interval <= 0 {
@@ -58,7 +58,7 @@ func appendLivePollerRegistrations(
 
 func appendLiveBatchPollerRegistrations(
 	registrations []providers.ChannelPollerRegistration,
-	spec livePollerRegistrationSpec,
+	spec *livePollerRegistrationSpec,
 	channelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	chunks := chunkLiveRegistrationChannelIDs(channelIDs, defaultLiveBatchChannelChunkSize)

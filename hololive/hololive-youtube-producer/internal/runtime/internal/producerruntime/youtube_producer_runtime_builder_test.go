@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -34,6 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
@@ -56,11 +58,11 @@ func TestBuildYouTubeProducerHTTPServer_Success(t *testing.T) {
 		},
 	}
 
-	readiness := newReadinessState(youtubeProducerRuntimeName, ingestionRuntimeFeatures{
+	readiness := newReadinessState(ingestionRuntimeFeatures{
 		youtubeEnabled:   false,
 		photoSyncEnabled: true,
 	})
-	server, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), youtubeProducerRuntimeName, readiness)
+	server, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), readiness)
 	require.NoError(t, err)
 	require.NotNil(t, server)
 	assert.Equal(t, ":30123", server.Addr)
@@ -80,11 +82,11 @@ func TestBuildYouTubeProducerHTTPServer_ReturnsErrorWhenTrustedProxyConfigInvali
 		},
 	}
 
-	readiness := newReadinessState(youtubeProducerRuntimeName, ingestionRuntimeFeatures{
+	readiness := newReadinessState(ingestionRuntimeFeatures{
 		youtubeEnabled:   false,
 		photoSyncEnabled: true,
 	})
-	server, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), youtubeProducerRuntimeName, readiness)
+	server, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), readiness)
 	require.Error(t, err)
 	assert.Nil(t, server)
 	assert.Contains(t, err.Error(), "build youtube producer router: set trusted proxies")
@@ -321,9 +323,10 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			}
 
 			cleanupCalls := 0
+			pool := dbtest.NewPool(t)
 			infra := &youtubeProducerInfrastructure{
 				cacheService:    cacheService,
-				postgresService: &databasemocks.Client{},
+				postgresService: &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }},
 				settingsService: settingsService,
 				holodexService:  &holodex.Service{},
 				ytStack: &providers.YouTubeStack{
@@ -337,11 +340,11 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			operationalChannels := mustResolveCommunityShortsOperationalChannels(t, memberData)
 
 			scraperScheduler, registrations, err := polling.BuildComponents(
-				ingestionConfig.Scraper,
+				&ingestionConfig.Scraper,
 				infra.postgresService,
 				communityshorts.EnabledChannelIDs(operationalChannels),
 				communityshorts.EnabledChannelIDs(operationalChannels),
-				polling.BuildSharedClient(ingestionConfig.Scraper, infra.cacheService, infra.sharedRL),
+				polling.BuildSharedClient(&ingestionConfig.Scraper, infra.cacheService, infra.sharedRL),
 				nil,
 				nil,
 				nil,
@@ -376,7 +379,13 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			if tc.updatedProxyEnabled {
 				updatePayload = []byte(`{"enabled":true}`)
 			}
-			applyFn := extractSubscriberApplyFn(t, configSubscriber)
+			applyFn := newTestYouTubeProducerConfigApplyFn(
+				t,
+				settingsService,
+				&providers.YouTubeStack{Service: youtubeService},
+				scraperScheduler,
+				testLogger(),
+			)
 			applyFn(configsub.ConfigUpdate{
 				Type:    contractssettings.UpdateTypeScraperProxy,
 				Payload: updatePayload,
@@ -386,11 +395,11 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			assert.Equal(t, tc.updatedProxyEnabled, currentSettings.ScraperProxyEnabled)
 			assert.Equal(t, tc.updatedProxyEnabled, youtubeService.ScraperProxyEnabled())
 
-			readiness := newReadinessState(youtubeProducerRuntimeName, ingestionRuntimeFeatures{
+			readiness := newReadinessState(ingestionRuntimeFeatures{
 				youtubeEnabled:   true,
 				photoSyncEnabled: true,
 			})
-			httpServer, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), youtubeProducerRuntimeName, readiness)
+			httpServer, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), readiness)
 			require.NoError(t, err)
 			require.NotNil(t, httpServer)
 
@@ -436,20 +445,15 @@ func TestBuildYouTubeProducerConfigSubscriber_ScraperProxyUpdateFailure(t *testi
 			return errors.New("write failed")
 		},
 	}
-	cacheService := &cachemocks.Client{
-		GetClientFunc: func() valkey.Client { return nil },
-	}
 	youtubeService := &fakeYouTubeService{}
 
-	subscriber := configupdates.BuildSubscriber(
-		cacheService,
+	applyFn := newTestYouTubeProducerConfigApplyFn(
+		t,
 		settingsService,
-		nil,
 		&providers.YouTubeStack{Service: youtubeService},
 		nil,
 		testLogger(),
 	)
-	applyFn := extractSubscriberApplyFn(t, subscriber)
 	applyFn(configsub.ConfigUpdate{
 		Type:    contractssettings.UpdateTypeScraperProxy,
 		Payload: []byte(`{"enabled":true}`),

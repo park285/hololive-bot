@@ -12,7 +12,7 @@ import (
 )
 
 func BuildPendingResolver(
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	postgresService database.Client,
 	scraperClient *scraper.Client,
 	routeDecider poller.NotificationRouteDecider,
@@ -23,19 +23,19 @@ func BuildPendingResolver(
 
 func BuildRegistration(
 	resolver *poller.PendingPublishedAtResolver,
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	logger *slog.Logger,
 ) *providers.ChannelPollerRegistration {
 	return buildPublishedAtResolverRegistration(resolver, scraperConfig, logger)
 }
 
-func EffectiveConfig(scraperConfig config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
+func EffectiveConfig(scraperConfig *config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
 	return effectivePublishedAtResolverConfig(scraperConfig)
 }
 
 func ValidateSchemaIfEnabled(
 	ctx context.Context,
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	postgresService database.Client,
 	logger *slog.Logger,
 ) error {

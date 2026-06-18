@@ -49,7 +49,7 @@ type sourceCooldownTestLimiter struct {
 	sourceCooldownTestReporter
 }
 
-func (l *sourceCooldownTestLimiter) TryReserve(context.Context, poller.BudgetJob, poller.BudgetProfile, time.Duration) (poller.BudgetReservation, poller.BudgetDecision, error) {
+func (l *sourceCooldownTestLimiter) TryReserve(context.Context, *poller.BudgetJob, poller.BudgetProfile, time.Duration) (reservation poller.BudgetReservation, decision poller.BudgetDecision, err error) {
 	return nil, poller.BudgetDecision{Allowed: true}, nil
 }
 
@@ -58,7 +58,6 @@ func TestSourceCooldownReportingPollerReportsOnlySourceLevelYouTubeErrors(t *tes
 	wrapped := newSourceCooldownReportingPoller(
 		sourceCooldownTestPoller{err: scraper.ErrRateLimited},
 		reporter,
-		poller.BudgetSourceYouTubeScraper,
 		nil,
 	)
 
@@ -73,7 +72,6 @@ func TestSourceCooldownReportingPollerReportsOnlySourceLevelYouTubeErrors(t *tes
 	wrapped = newSourceCooldownReportingPoller(
 		sourceCooldownTestPoller{err: scraper.ErrAdmissionDeferred},
 		reporter,
-		poller.BudgetSourceYouTubeScraper,
 		nil,
 	)
 	require.Error(t, wrapped.Poll(context.Background(), "UC_TEST"))
@@ -83,7 +81,6 @@ func TestSourceCooldownReportingPollerReportsOnlySourceLevelYouTubeErrors(t *tes
 	wrapped = newSourceCooldownReportingPoller(
 		sourceCooldownTestPoller{err: errors.New("parser drift")},
 		reporter,
-		poller.BudgetSourceYouTubeScraper,
 		nil,
 	)
 	require.Error(t, wrapped.Poll(context.Background(), "UC_TEST"))
@@ -114,13 +111,14 @@ func TestSourceCooldownReportingPollerBoundsReportContext(t *testing.T) {
 	wrapped := newSourceCooldownReportingPoller(
 		sourceCooldownTestPoller{err: scraper.ErrForbidden},
 		reporter,
-		poller.BudgetSourceYouTubeScraper,
 		nil,
 	)
-	wrapped.(*sourceCooldownReportingPoller).reportTimeout = 10 * time.Millisecond
+	reportingPoller, ok := wrapped.(*sourceCooldownReportingPoller)
+	require.True(t, ok, "wrapped poller must report source cooldowns")
+	reportingPoller.reportTimeout = 10 * time.Millisecond
 
 	startedAt := time.Now()
-	err := wrapped.Poll(context.Background(), "UC_TEST")
+	err := reportingPoller.Poll(context.Background(), "UC_TEST")
 
 	require.ErrorIs(t, err, scraper.ErrForbidden)
 	require.Equal(t, 1, reporter.calls)

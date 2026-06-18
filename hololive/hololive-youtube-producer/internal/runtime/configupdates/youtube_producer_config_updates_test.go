@@ -23,15 +23,12 @@ package configupdates
 import (
 	"context"
 	"errors"
-	"reflect"
 	"sync"
 	"testing"
-	"unsafe"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	svcsettings "github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
@@ -39,7 +36,6 @@ import (
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
 )
 
 var testLogger = sharedlogging.NewLogger
@@ -118,14 +114,13 @@ func TestBuildSubscriber_ApplyScraperProxyPersistsSettingAndUpdatesYouTube(t *te
 	}
 	youtubeService := &fakeYouTubeService{}
 
-	applyFn := extractConfigUpdateApplyFn(t, BuildSubscriber(
-		testConfigUpdateCacheClient(),
+	applyFn := buildYouTubeProducerConfigApplyFn(
 		settingsService,
 		nil,
 		&providers.YouTubeStack{Service: youtubeService},
 		nil,
 		testLogger(),
-	))
+	)
 
 	applyFn(configsub.ConfigUpdate{
 		Type:    contractssettings.UpdateTypeScraperProxy,
@@ -157,14 +152,13 @@ func TestBuildSubscriber_IgnoresAlarmAdvanceMinutesAndInvalidPayload(t *testing.
 		},
 	}
 
-	applyFn := extractConfigUpdateApplyFn(t, BuildSubscriber(
-		testConfigUpdateCacheClient(),
+	applyFn := buildYouTubeProducerConfigApplyFn(
 		settingsService,
 		nil,
 		nil,
 		nil,
 		testLogger(),
-	))
+	)
 
 	applyFn(configsub.ConfigUpdate{
 		Type:    contractssettings.UpdateTypeScraperProxy,
@@ -200,14 +194,13 @@ func TestBuildSubscriber_ApplyScraperProxyLogsPersistError(t *testing.T) {
 		},
 	}
 
-	applyFn := extractConfigUpdateApplyFn(t, BuildSubscriber(
-		testConfigUpdateCacheClient(),
+	applyFn := buildYouTubeProducerConfigApplyFn(
 		settingsService,
 		nil,
 		nil,
 		nil,
 		testLogger(),
-	))
+	)
 
 	require.NotPanics(t, func() {
 		applyFn(configsub.ConfigUpdate{
@@ -216,23 +209,4 @@ func TestBuildSubscriber_ApplyScraperProxyLogsPersistError(t *testing.T) {
 		})
 	})
 	assert.True(t, currentSettings.ScraperProxyEnabled)
-}
-
-func testConfigUpdateCacheClient() *cachemocks.Client {
-	return &cachemocks.Client{
-		GetClientFunc: func() valkey.Client { return nil },
-	}
-}
-
-func extractConfigUpdateApplyFn(t *testing.T, subscriber *configsub.Subscriber) func(configsub.ConfigUpdate) {
-	t.Helper()
-
-	require.NotNil(t, subscriber)
-	field := reflect.ValueOf(subscriber).Elem().FieldByName("applyFn")
-	require.True(t, field.IsValid(), "applyFn field must exist")
-
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	applyFn, ok := field.Interface().(func(configsub.ConfigUpdate))
-	require.True(t, ok, "applyFn must be func(configsub.ConfigUpdate)")
-	return applyFn
 }

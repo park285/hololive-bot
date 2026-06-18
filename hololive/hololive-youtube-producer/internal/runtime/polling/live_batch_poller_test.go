@@ -18,7 +18,7 @@ func TestAppendLivePollerRegistrationsBatchesWhenProviderEnabled(t *testing.T) {
 		ids = append(ids, fmt.Sprintf("UC_TEST_%02d", i))
 	}
 
-	registrations := appendLivePollerRegistrations(nil, livePollerRegistrationSpec{
+	registrations := appendLivePollerRegistrations(nil, &livePollerRegistrationSpec{
 		Name:           "live",
 		Base:           base,
 		BatchBase:      base,

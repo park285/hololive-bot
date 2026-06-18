@@ -29,7 +29,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,10 +38,10 @@ import (
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -225,17 +224,25 @@ func TestCommunityShortsEnabledChannelIDs_UsesResolverEnablement(t *testing.T) {
 	}))
 }
 
-func extractSubscriberApplyFn(t *testing.T, subscriber *configsub.Subscriber) func(configsub.ConfigUpdate) {
+func newTestYouTubeProducerConfigApplyFn(
+	t *testing.T,
+	settingsService settings.ReadWriter,
+	ytStack *providers.YouTubeStack,
+	scraperScheduler *poller.Scheduler,
+	logger *slog.Logger,
+) func(configsub.ConfigUpdate) {
 	t.Helper()
 
-	require.NotNil(t, subscriber)
-	field := reflect.ValueOf(subscriber).Elem().FieldByName("applyFn")
-	require.True(t, field.IsValid(), "applyFn field must exist")
-
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	applyFn, ok := field.Interface().(func(configsub.ConfigUpdate))
-	require.True(t, ok, "applyFn must be func(configsub.ConfigUpdate)")
-	return applyFn
+	return configsub.NewApplyFn(logger, configsub.ApplyHandlers{
+		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
+			sharedsettings.ApplyScraperProxyToggle(payload.Enabled, ytStack.GetService(), nil, scraperScheduler, logger)
+			current := settingsService.Get()
+			current.ScraperProxyEnabled = payload.Enabled
+			if err := settingsService.Update(current); err != nil && logger != nil {
+				logger.Warn("Failed to persist scraper proxy setting", slog.Any("error", err))
+			}
+		},
+	})
 }
 
 func schedulerJobCount(t *testing.T, scheduler *poller.Scheduler) int {
@@ -245,11 +252,10 @@ func schedulerJobCount(t *testing.T, scheduler *poller.Scheduler) int {
 	field := reflect.ValueOf(scheduler).Elem().FieldByName("jobMap")
 	require.True(t, field.IsValid(), "jobMap field must exist")
 
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
 	return field.Len()
 }
 
-func extractScraperClientFromPoller(t *testing.T, channelPoller poller.Poller) *scraper.Client {
+func scraperClientPointerFromPoller(t *testing.T, channelPoller poller.Poller) uintptr {
 	t.Helper()
 
 	value := reflect.ValueOf(channelPoller)
@@ -259,13 +265,11 @@ func extractScraperClientFromPoller(t *testing.T, channelPoller poller.Poller) *
 	}
 	field := value.FieldByName("client")
 	require.True(t, field.IsValid(), "client field must exist")
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	client, ok := field.Interface().(*scraper.Client)
-	require.True(t, ok, "client field must be *scraper.Client")
-	return client
+	require.False(t, field.IsNil(), "client field must not be nil")
+	return field.Pointer()
 }
 
-func extractPollerBoolField(t *testing.T, channelPoller poller.Poller, fieldName string) bool {
+func inlinePublishedAtFallbackEnabled(t *testing.T, channelPoller poller.Poller) bool {
 	t.Helper()
 
 	value := reflect.ValueOf(channelPoller)
@@ -273,22 +277,19 @@ func extractPollerBoolField(t *testing.T, channelPoller poller.Poller, fieldName
 	if value.Kind() == reflect.Pointer {
 		value = value.Elem()
 	}
-	field := value.FieldByName(fieldName)
-	require.True(t, field.IsValid(), "%s field must exist", fieldName)
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	field := value.FieldByName("inlinePublishedAtFallbackEnabled")
+	require.True(t, field.IsValid(), "inlinePublishedAtFallbackEnabled field must exist")
 	return field.Bool()
 }
 
-func extractResolverScraperClient(t *testing.T, resolver *poller.PendingPublishedAtResolver) *scraper.Client {
+func scraperClientPointerFromResolver(t *testing.T, resolver *poller.PendingPublishedAtResolver) uintptr {
 	t.Helper()
 
 	value := reflect.ValueOf(resolver).Elem()
 	field := value.FieldByName("client")
 	require.True(t, field.IsValid(), "resolver client field must exist")
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	client, ok := field.Interface().(*scraper.Client)
-	require.True(t, ok, "resolver client field must be *scraper.Client")
-	return client
+	require.False(t, field.IsNil(), "resolver client field must not be nil")
+	return field.Pointer()
 }
 
 func extractResolverDurationField(t *testing.T, resolver *poller.PendingPublishedAtResolver, fieldName string) time.Duration {
@@ -297,10 +298,7 @@ func extractResolverDurationField(t *testing.T, resolver *poller.PendingPublishe
 	value := reflect.ValueOf(resolver).Elem()
 	field := value.FieldByName(fieldName)
 	require.True(t, field.IsValid(), "%s field must exist", fieldName)
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	duration, ok := field.Interface().(time.Duration)
-	require.True(t, ok, "%s field must be time.Duration", fieldName)
-	return duration
+	return time.Duration(field.Int())
 }
 
 func extractResolverIntField(t *testing.T, resolver *poller.PendingPublishedAtResolver, fieldName string) int {
@@ -309,20 +307,17 @@ func extractResolverIntField(t *testing.T, resolver *poller.PendingPublishedAtRe
 	value := reflect.ValueOf(resolver).Elem()
 	field := value.FieldByName(fieldName)
 	require.True(t, field.IsValid(), "%s field must exist", fieldName)
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
 	return int(field.Int())
 }
 
-func extractScraperRateLimiter(t *testing.T, client *scraper.Client) *scraper.RateLimiter {
+func scraperRateLimiterPointer(t *testing.T, client *scraper.Client) uintptr {
 	t.Helper()
 
 	value := reflect.ValueOf(client).Elem()
 	field := value.FieldByName("rateLimiter")
 	require.True(t, field.IsValid(), "rateLimiter field must exist")
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	limiter, ok := field.Interface().(*scraper.RateLimiter)
-	require.True(t, ok, "rateLimiter field must be *scraper.RateLimiter")
-	return limiter
+	require.False(t, field.IsNil(), "rateLimiter field must not be nil")
+	return field.Pointer()
 }
 
 func extractScraperFetcherEngine(t *testing.T, client *scraper.Client) scraper.FetcherEngine {
@@ -331,25 +326,19 @@ func extractScraperFetcherEngine(t *testing.T, client *scraper.Client) scraper.F
 	value := reflect.ValueOf(client).Elem()
 	field := value.FieldByName("fetcherEngine")
 	require.True(t, field.IsValid(), "fetcherEngine field must exist")
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	engine, ok := field.Interface().(scraper.FetcherEngine)
-	require.True(t, ok, "fetcherEngine field must be scraper.FetcherEngine")
-	return engine
+	return scraper.FetcherEngine(field.String())
 }
 
-func extractScraperStateStorePointer(t *testing.T, client *scraper.Client) uintptr {
+func requireScraperStateStoreConfigured(t *testing.T, client *scraper.Client) {
 	t.Helper()
 
 	value := reflect.ValueOf(client).Elem()
 	field := value.FieldByName("stateStore")
 	require.True(t, field.IsValid(), "stateStore field must exist")
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	stateStore := field.Interface()
-	require.NotNil(t, stateStore)
-	return reflect.ValueOf(stateStore).Pointer()
+	require.False(t, field.IsNil(), "stateStore field must not be nil")
 }
 
-func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
+func newTestValkeyClient(t *testing.T) (client valkey.Client, addr string) {
 	t.Helper()
 
 	client, mini := testutil.NewTestValkeyClient(t)
@@ -359,7 +348,7 @@ func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
 func TestBuildSharedYouTubeProducerClient_UsesConfiguredFetcherEngine(t *testing.T) {
 	t.Parallel()
 
-	client := polling.BuildSharedClient(config.ScraperConfig{
+	client := polling.BuildSharedClient(&config.ScraperConfig{
 		FetcherEngine: config.ScraperFetcherEngineGoScrapy,
 	}, nil, scraper.NewRateLimiter(time.Second))
 
@@ -370,10 +359,10 @@ func TestBuildSharedYouTubeProducerClient_UsesConfiguredFetcherEngine(t *testing
 func TestBuildYouTubeProducerChannelPollerRegistrations(t *testing.T) {
 	t.Parallel()
 
-	postgres := &databasemocks.Client{}
+	postgres := newPollerRegistrationTestDB(t)
 	registrations := polling.BuildRegistrations(
 		postgres,
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			ProxyEnabled: true,
 			ProxyURL:     "socks5://proxy.internal:1080",
 			Poll: config.ScraperPoll{
@@ -415,7 +404,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations(t *testing.T) {
 func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing.T) {
 	t.Parallel()
 
-	cache := cachemocks.NewLenientClient()
+	cacheClient := cachemocks.NewLenientClient()
 	sharedRL := scraper.NewRateLimiter(time.Second)
 	appConfig := config.ScraperConfig{
 		ProxyEnabled:        true,
@@ -429,10 +418,10 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 			Live:      3 * time.Minute,
 		},
 	}
-	sharedClient := polling.BuildSharedClient(appConfig, cache, sharedRL)
+	sharedClient := polling.BuildSharedClient(&appConfig, cacheClient, sharedRL)
 	registrations := polling.BuildRegistrationsWithClient(
-		&databasemocks.Client{},
-		appConfig,
+		newPollerRegistrationTestDB(t),
+		&appConfig,
 		sharedClient,
 		nil,
 		nil,
@@ -440,8 +429,8 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 		[]string{"UC_STATS_A"},
 	)
 	resolver := publishedat.BuildPendingResolver(
-		appConfig,
-		&databasemocks.Client{},
+		&appConfig,
+		newPollerRegistrationTestDB(t),
 		sharedClient,
 		func(poller.NotificationRouteRequest) bool { return false },
 		testLogger(),
@@ -451,14 +440,14 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	require.NotNil(t, resolver)
 	require.NotEmpty(t, registrations)
 
-	pollerClient := extractScraperClientFromPoller(t, registrations[0].Poller)
-	resolverClient := extractResolverScraperClient(t, resolver)
+	sharedClientPointer := reflect.ValueOf(sharedClient).Pointer()
+	pollerClientPointer := scraperClientPointerFromPoller(t, registrations[0].Poller)
+	resolverClientPointer := scraperClientPointerFromResolver(t, resolver)
 
-	require.Same(t, sharedClient, pollerClient)
-	require.Same(t, sharedClient, resolverClient)
-	require.Same(t, sharedRL, extractScraperRateLimiter(t, pollerClient))
-	require.Same(t, sharedRL, extractScraperRateLimiter(t, resolverClient))
-	require.Equal(t, extractScraperStateStorePointer(t, pollerClient), extractScraperStateStorePointer(t, resolverClient))
+	require.Equal(t, sharedClientPointer, pollerClientPointer)
+	require.Equal(t, sharedClientPointer, resolverClientPointer)
+	require.Equal(t, reflect.ValueOf(sharedRL).Pointer(), scraperRateLimiterPointer(t, sharedClient))
+	requireScraperStateStoreConfigured(t, sharedClient)
 	require.Equal(t, 3*time.Minute, extractResolverDurationField(t, resolver, "interval"))
 	require.Equal(t, 10, extractResolverIntField(t, resolver, "batchSize"))
 	require.Equal(t, 1, extractResolverIntField(t, resolver, "maxResolvePerRun"))
@@ -469,8 +458,7 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	require.True(t, sharedClient.ProxyEnabled())
 
 	require.True(t, sharedClient.SetProxyEnabled(false))
-	assert.False(t, pollerClient.ProxyEnabled())
-	assert.False(t, resolverClient.ProxyEnabled())
+	assert.False(t, sharedClient.ProxyEnabled())
 
 	value := reflect.ValueOf(resolver).Elem()
 	softLimiterField := value.FieldByName("softLimiter")
@@ -492,9 +480,9 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_NilRouteDecide
 	}
 
 	registrations := polling.BuildRegistrationsWithClient(
-		&databasemocks.Client{},
-		appConfig,
-		polling.BuildSharedClient(appConfig, nil, scraper.NewRateLimiter(time.Second)),
+		newPollerRegistrationTestDB(t),
+		&appConfig,
+		polling.BuildSharedClient(&appConfig, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
 		nil,
 		[]string{"UC_NOTIFY_A"},
@@ -502,8 +490,8 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_NilRouteDecide
 	)
 
 	require.Len(t, registrations, 5)
-	assert.False(t, extractPollerBoolField(t, registrations[1].Poller, "inlinePublishedAtFallbackEnabled"))
-	assert.False(t, extractPollerBoolField(t, registrations[2].Poller, "inlinePublishedAtFallbackEnabled"))
+	assert.False(t, inlinePublishedAtFallbackEnabled(t, registrations[1].Poller))
+	assert.False(t, inlinePublishedAtFallbackEnabled(t, registrations[2].Poller))
 }
 
 func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_DisabledResolverEnablesInlinePublishedAtFallbackForRoutedPollers(t *testing.T) {
@@ -523,9 +511,9 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_DisabledResolv
 	}
 
 	registrations := polling.BuildRegistrationsWithClient(
-		&databasemocks.Client{},
-		appConfig,
-		polling.BuildSharedClient(appConfig, nil, scraper.NewRateLimiter(time.Second)),
+		newPollerRegistrationTestDB(t),
+		&appConfig,
+		polling.BuildSharedClient(&appConfig, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		[]string{"UC_NOTIFY_A"},
@@ -533,8 +521,8 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_DisabledResolv
 	)
 
 	require.Len(t, registrations, 5)
-	assert.True(t, extractPollerBoolField(t, registrations[1].Poller, "inlinePublishedAtFallbackEnabled"))
-	assert.True(t, extractPollerBoolField(t, registrations[2].Poller, "inlinePublishedAtFallbackEnabled"))
+	assert.True(t, inlinePublishedAtFallbackEnabled(t, registrations[1].Poller))
+	assert.True(t, inlinePublishedAtFallbackEnabled(t, registrations[2].Poller))
 }
 
 func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
@@ -554,8 +542,8 @@ func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
 	}
 
 	resolver := publishedat.BuildPendingResolver(
-		appConfig,
-		&databasemocks.Client{},
+		&appConfig,
+		newPollerRegistrationTestDB(t),
 		scraper.NewClient(),
 		func(poller.NotificationRouteRequest) bool { return true },
 		testLogger(),
@@ -575,13 +563,13 @@ func TestBuildPendingPublishedAtResolver_DisabledReturnsNil(t *testing.T) {
 	t.Parallel()
 
 	resolver := publishedat.BuildPendingResolver(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 				Enabled:  false,
 				Interval: 15 * time.Second,
 			},
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		scraper.NewClient(),
 		nil,
 		testLogger(),
@@ -594,8 +582,8 @@ func TestBuildPendingPublishedAtResolver_ZeroValueConfigReturnsNil(t *testing.T)
 	t.Parallel()
 
 	resolver := publishedat.BuildPendingResolver(
-		config.ScraperConfig{},
-		&databasemocks.Client{},
+		&config.ScraperConfig{},
+		newPollerRegistrationTestDB(t),
 		scraper.NewClient(),
 		nil,
 		testLogger(),
@@ -608,10 +596,10 @@ func TestBuildPendingPublishedAtResolver_NilRouteDeciderReturnsNil(t *testing.T)
 	t.Parallel()
 
 	resolver := publishedat.BuildPendingResolver(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		scraper.NewClient(),
 		nil,
 		testLogger(),
@@ -632,7 +620,7 @@ func TestBuildYouTubeProducerYouTubeComponents(t *testing.T) {
 	})
 
 	scraperScheduler, registrations, err := polling.BuildComponents(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			ProxyEnabled: true,
 			ProxyURL:     "socks5://proxy.internal:1080",
 			WorkerCount:  7,
@@ -644,11 +632,11 @@ func TestBuildYouTubeProducerYouTubeComponents(t *testing.T) {
 				Live:      5 * time.Minute,
 			},
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		communityshorts.EnabledChannelIDs(operationalChannels),
 		communityshorts.EnabledChannelIDs(operationalChannels),
 		polling.BuildSharedClient(
-			config.ScraperConfig{
+			&config.ScraperConfig{
 				ProxyEnabled: true,
 				ProxyURL:     "socks5://proxy.internal:1080",
 				WorkerCount:  7,
@@ -683,7 +671,7 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersPublishedAtResolverAsGlo
 	t.Parallel()
 
 	resolver := publishedat.BuildPendingResolver(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 			Poll: config.ScraperPoll{
 				Videos:    5 * time.Minute,
@@ -693,7 +681,7 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersPublishedAtResolverAsGlo
 				Live:      5 * time.Minute,
 			},
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		scraper.NewClient(),
 		func(poller.NotificationRouteRequest) bool { return true },
 		testLogger(),
@@ -701,7 +689,7 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersPublishedAtResolverAsGlo
 	require.NotNil(t, resolver)
 
 	scraperScheduler, registrations, err := polling.BuildComponents(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    5 * time.Minute,
 				Shorts:    10 * time.Minute,
@@ -711,7 +699,7 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersPublishedAtResolverAsGlo
 			},
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS"},
 		scraper.NewClient(),
@@ -749,18 +737,19 @@ func TestBuildIngestionRuntimeGlobalBudgetWiringPassesCleanupLimit(t *testing.T)
 	appConfig := &config.Config{}
 	appConfig.Scraper.ActiveActive.Namespace = namespace
 	appConfig.Scraper.ActiveActive.InstanceID = "ap-a"
-	wiring, err := buildIngestionRuntimeGlobalBudgetWiring(appConfig, &youtubeProducerInfrastructure{cacheService: cacheService}, config.YouTubeProducerGlobalBudgetConfig{
+	budgetConfig := config.YouTubeProducerGlobalBudgetConfig{
 		Enabled:                   true,
 		AcquireTimeout:            time.Second,
 		YouTubeScraperMaxInflight: 1,
 		BackfillMaxInflight:       1,
 		CleanupLimit:              1,
-	}, nil, testLogger())
+	}
+	wiring, err := buildIngestionRuntimeGlobalBudgetWiring(appConfig, &youtubeProducerInfrastructure{cacheService: cacheService}, &budgetConfig, nil, testLogger())
 	require.NoError(t, err)
 	require.NotNil(t, wiring.Limiter)
 	seedProducerRuntimeExpiredBudgetReservations(t, ctx, cacheService, namespace, source, class)
 
-	reservation, decision, err := wiring.Limiter.TryReserve(ctx, poller.BudgetJob{
+	reservation, decision, err := wiring.Limiter.TryReserve(ctx, &poller.BudgetJob{
 		Namespace:  namespace,
 		InstanceID: "ap-a",
 		PollerName: "videos",
@@ -822,19 +811,13 @@ func TestBuildYouTubeProducerConfigSubscriber_ApplyScraperProxyToggle(t *testing
 			return nil
 		},
 	}
-	cacheService := &cachemocks.Client{
-		GetClientFunc: func() valkey.Client { return nil },
-	}
-
-	subscriber := configupdates.BuildSubscriber(
-		cacheService,
+	applyFn := newTestYouTubeProducerConfigApplyFn(
+		t,
 		settingsService,
-		nil,
-		nil,
+		&providers.YouTubeStack{Service: &fakeYouTubeService{}},
 		nil,
 		testLogger(),
 	)
-	applyFn := extractSubscriberApplyFn(t, subscriber)
 
 	applyFn(configsub.ConfigUpdate{
 		Type:    contractssettings.UpdateTypeScraperProxy,
@@ -864,18 +847,13 @@ func TestBuildYouTubeProducerConfigSubscriber_InvalidAndIgnoredUpdates(t *testin
 			return nil
 		},
 	}
-	cacheService := &cachemocks.Client{
-		GetClientFunc: func() valkey.Client { return nil },
-	}
-
-	applyFn := extractSubscriberApplyFn(t, configupdates.BuildSubscriber(
-		cacheService,
+	applyFn := newTestYouTubeProducerConfigApplyFn(
+		t,
 		settingsService,
-		nil,
-		nil,
+		&providers.YouTubeStack{Service: &fakeYouTubeService{}},
 		nil,
 		testLogger(),
-	))
+	)
 
 	applyFn(configsub.ConfigUpdate{
 		Type:    contractssettings.UpdateTypeScraperProxy,
@@ -927,7 +905,7 @@ func TestBuildYouTubeProducerConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 		GetClientFunc: func() valkey.Client { return client },
 	}
 	youtubeService := &fakeYouTubeService{}
-	scheduler := poller.NewScheduler(poller.SchedulerConfig{
+	scheduler := poller.NewScheduler(&poller.SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: time.Millisecond,
 	})

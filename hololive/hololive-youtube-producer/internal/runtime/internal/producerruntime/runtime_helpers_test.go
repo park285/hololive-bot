@@ -28,7 +28,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"unsafe"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
@@ -85,8 +84,6 @@ func schedulerJobKeys(t *testing.T, scheduler any) []string {
 	if !field.IsValid() {
 		t.Fatal("jobMap field must exist")
 	}
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-
 	keys := make([]string, 0, field.Len())
 	iterator := field.MapRange()
 	for iterator.Next() {
@@ -181,7 +178,7 @@ func TestYouTubeProducerRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 	t.Parallel()
 
 	scheduler := &fakeScheduler{}
-	readiness := newReadinessState(youtubeProducerRuntimeName, ingestionRuntimeFeatures{
+	readiness := newReadinessState(ingestionRuntimeFeatures{
 		youtubeEnabled:   true,
 		photoSyncEnabled: false,
 	})
@@ -206,10 +203,7 @@ func TestYouTubeProducerRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 	if statusCode != http.StatusServiceUnavailable {
 		t.Fatalf("readiness status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
 	}
-	status, _ := payload["status"].(string)
-	if status != "not_ready" {
-		t.Fatalf("readiness status = %q, want %q", status, "not_ready")
-	}
+	requirePayloadString(t, payload, "status", "not_ready")
 	if _, exists := payload["last_error"]; exists {
 		t.Fatal("last_error should be hidden from readiness payload")
 	}

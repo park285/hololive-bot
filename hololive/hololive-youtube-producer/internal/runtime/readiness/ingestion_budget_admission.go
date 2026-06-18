@@ -126,7 +126,7 @@ func (s *State) ClearBudgetAdmission(sources []string) {
 	}
 }
 
-func (s *State) budgetAdmissionPayload(budgetEnabled bool) (bool, bool, bool, []string) {
+func (s *State) budgetAdmissionPayload(budgetEnabled bool) (budgetExhausted, sourceCooldown, budgetCleanupIncomplete bool, affectedSources []string) {
 	if !budgetEnabled {
 		return false, false, false, []string{}
 	}

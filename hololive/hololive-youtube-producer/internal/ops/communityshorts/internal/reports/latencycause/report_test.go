@@ -214,7 +214,7 @@ func TestBuild(t *testing.T) {
 	require.Equal(t, int64(2), lastDay.CauseSummary.ExceededPostCount)
 	require.Len(t, lastDay.Rows, 2)
 
-	markdown := RenderMarkdown(report)
+	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Community/Shorts Latency Cause Report")
 	require.Contains(t, markdown, "- mode: `recent_window`")
 	require.Contains(t, markdown, "observed at basis: `COALESCE(actual_published_at, detected_at)`")
@@ -313,7 +313,7 @@ func TestBuildWithQuery_ObservationWindow(t *testing.T) {
 	require.Equal(t, int64(1), report.Periods[0].CauseSummary.QueueWaitCausePostCount)
 	require.Equal(t, internalCauseRule, report.Verification.InternalCauseRule)
 
-	markdown := RenderMarkdown(report)
+	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "- mode: `observation_window`")
 	require.Contains(t, markdown, "- observation runtime: `youtube-producer`, cutover: `2026-04-10T00:00:00Z`")
 	require.Contains(t, markdown, "## `observation_window`")
@@ -472,7 +472,7 @@ func TestRenderMarkdown_OutputStability(t *testing.T) {
 		"| alarm_type | channel_id | post_id | observed_at | actual_published_at | detected_at | alarm_sent_at | alarm_latency_ms | internal_cause_judgment | internal_cause_basis | cause_evidence_fields | delay_source | internal_delay_cause | publish_to_detect_ms | internal_latency_ms | queue_wait_ms | retry_accumulation_ms | job_failure_detected | cause_classification_status | cause_classification_evidence |",
 		"| --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |",
 		"| `COMMUNITY` | `UC_TEST` | `community-post` | `2026-04-15T11:44:56Z` | `2026-04-15T11:44:56Z` | `2026-04-15T11:45:16Z` | `2026-04-15T11:47:56Z` | 180000 | `internal_system` | `delay_source=internal_delivery` | `delay_source, internal_delay_cause, internal_latency_millis, queue_wait_millis` | `internal_delivery` | `queue_wait` | 20000 | 160000 | 80000 |  | `false` | `exceeded` | `queue_wait=80000[selected]` |",
-	}, "\n")+"\n", RenderMarkdown(report))
+	}, "\n")+"\n", RenderMarkdown(&report))
 }
 
 func TestBuild_ExternalCollectionOverridesInternalCauseForFailureAggregation(t *testing.T) {
@@ -580,7 +580,7 @@ func TestNormalizeCollectOptions(t *testing.T) {
 func TestBuildEvidence(t *testing.T) {
 	t.Parallel()
 
-	got := buildEvidence(Row{
+	row := Row{
 		DelaySource:        outbox.PostDelaySourceMixed,
 		InternalDelayCause: outbox.PostInternalDelayCauseRetryAccumulation,
 		LatencyClassification: outbox.PostLatencyClassificationResult{
@@ -590,7 +590,8 @@ func TestBuildEvidence(t *testing.T) {
 				{Key: outbox.PostLatencyClassificationEvidenceKeyRetryAccumulation, Selected: true},
 			},
 		},
-	})
+	}
+	got := buildEvidence(&row)
 
 	require.Equal(t, Evidence{
 		Fields: []string{
@@ -660,7 +661,7 @@ func TestClassifyInternalJudgment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			gotJudgment, gotBasis := classifyInternalJudgment(tt.row)
+			gotJudgment, gotBasis := classifyInternalJudgment(&tt.row)
 			require.Equal(t, tt.wantJudgment, gotJudgment)
 			require.Equal(t, tt.wantBasis, gotBasis)
 		})
@@ -721,7 +722,7 @@ func TestBuildPeriodReport(t *testing.T) {
 	require.NotNil(t, report.Periods[1].P95LatencyMillis)
 	require.Equal(t, p95Hour, *report.Periods[1].P95LatencyMillis)
 
-	markdown := RenderPeriodMarkdown(report)
+	markdown := RenderPeriodMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Community/Shorts Latency Period Report")
 	require.Contains(t, markdown, "p95_latency_ms")
 	require.Contains(t, markdown, "`last_24h`")

@@ -124,7 +124,7 @@ func Collect(
 		return Report{}, err
 	}
 
-	return Build(baseline, pathUsageRows, sendCountRows, now, since), nil
+	return Build(&baseline, pathUsageRows, sendCountRows, now, since), nil
 }
 
 func normalizeCollectInputs(
@@ -133,7 +133,7 @@ func normalizeCollectInputs(
 	logger *slog.Logger,
 	now time.Time,
 	since time.Time,
-) (context.Context, *slog.Logger, time.Time, time.Time, error) {
+) (normalizedCtx context.Context, normalizedLogger *slog.Logger, normalizedNow, normalizedSince time.Time, err error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -190,13 +190,13 @@ func loadRows(
 	ctx context.Context,
 	session *shared.OpsSession,
 	since time.Time,
-) ([]outbox.PostDeliveryPathUsage, []outbox.PostSendCount, error) {
-	pathUsageRows, err := session.TelemetryRepository.ListPostDeliveryPathUsageSince(ctx, since)
+) (pathUsageRows []outbox.PostDeliveryPathUsage, sendCountRows []outbox.PostSendCount, err error) {
+	pathUsageRows, err = session.TelemetryRepository.ListPostDeliveryPathUsageSince(ctx, since)
 	if err != nil {
 		return nil, nil, fmt.Errorf("collect community shorts route verification report: list delivery path usage: %w", err)
 	}
 
-	sendCountRows, err := session.TelemetryRepository.ListPostSendCountsSince(ctx, since)
+	sendCountRows, err = session.TelemetryRepository.ListPostSendCountsSince(ctx, since)
 	if err != nil {
 		return nil, nil, fmt.Errorf("collect community shorts route verification report: list send counts: %w", err)
 	}
@@ -241,7 +241,10 @@ func resolvePostPathState(paths []string) string {
 	}
 }
 
-func resolveActualUsageState(route Route) string {
+func resolveActualUsageState(route *Route) string {
+	if route == nil {
+		return routeUsageNoRecentPosts
+	}
 	if route.ObservedPostCount == 0 {
 		return routeUsageNoRecentPosts
 	}

@@ -27,13 +27,13 @@ func Build(
 	normalizedRows := make([]Row, 0, len(sendStateRows))
 	summary := Summary{}
 	for i := range sendStateRows {
-		row := buildRow(sendStateRows[i])
+		row := buildRow(&sendStateRows[i])
 		normalizedRows = append(normalizedRows, row)
-		accumulateSummary(&summary, row)
+		accumulateSummary(&summary, &row)
 	}
 
 	sort.SliceStable(normalizedRows, func(i, j int) bool {
-		return rowsLess(normalizedRows[i], normalizedRows[j])
+		return rowsLess(&normalizedRows[i], &normalizedRows[j])
 	})
 
 	return Report{
@@ -44,7 +44,14 @@ func Build(
 	}
 }
 
-func RenderMarkdown(report Report) string {
+func RenderMarkdown(report *Report) string {
+	if report == nil {
+		return renderMarkdown(&Report{})
+	}
+	return renderMarkdown(report)
+}
+
+func renderMarkdown(report *Report) string {
 	var builder strings.Builder
 
 	writeMetadata(&builder, report)
@@ -58,13 +65,13 @@ func RenderMarkdown(report Report) string {
 	return builder.String()
 }
 
-func buildRow(sendStateRow outbox.PostSendCount) Row {
+func buildRow(sendStateRow *outbox.PostSendCount) Row {
 	normalized := normalizePostSendCount(sendStateRow)
-	alarmSentAt := resolveAlarmSentAt(normalized)
-	postID := resolvePostID(normalized)
+	alarmSentAt := resolveAlarmSentAt(&normalized)
+	postID := resolvePostID(&normalized)
 	return Row{
 		PostSendCount:           normalized,
-		SendState:               resolvePerPostState(normalized),
+		SendState:               resolvePerPostState(&normalized),
 		PostKey:                 buildPostKey(normalized.AlarmType, normalized.ChannelID, postID),
 		ReportAlarmType:         normalized.AlarmType,
 		ReportChannelID:         normalized.ChannelID,
@@ -75,7 +82,7 @@ func buildRow(sendStateRow outbox.PostSendCount) Row {
 	}
 }
 
-func accumulateSummary(summary *Summary, row Row) {
+func accumulateSummary(summary *Summary, row *Row) {
 	if summary == nil {
 		return
 	}
@@ -85,7 +92,7 @@ func accumulateSummary(summary *Summary, row Row) {
 	updateSummaryTimes(summary, resolveObservedAt(row), row.ReportAlarmSentAt)
 }
 
-func rowsLess(leftRow, rightRow Row) bool {
+func rowsLess(leftRow, rightRow *Row) bool {
 	left := sortTime(leftRow)
 	right := sortTime(rightRow)
 	if !left.Equal(right) {
@@ -103,20 +110,31 @@ func rowsLess(leftRow, rightRow Row) bool {
 	return leftRow.ContentID < rightRow.ContentID
 }
 
-func accumulateStatusCounts(summary *Summary, row Row) {
-	switch row.SendState {
+func accumulateStatusCounts(summary *Summary, row *Row) {
+	if row == nil {
+		return
+	}
+	accumulateSendStateCount(summary, row.SendState)
+	accumulatePositiveCount(&summary.DuplicateSuccessPostCount, row.DuplicateSuccessCount)
+	accumulatePositiveCount(&summary.FailedAttemptPostCount, row.FailedAttemptCount)
+}
+
+func accumulateSendStateCount(summary *Summary, state PerPostState) {
+	switch state {
 	case PerPostStateSent:
 		summary.SentPostCount++
 	case PerPostStateAttemptedWithoutSuccess:
 		summary.AttemptedWithoutSuccessPostCount++
+	case PerPostStateNotSent:
+		summary.NotSentPostCount++
 	default:
 		summary.NotSentPostCount++
 	}
-	if row.DuplicateSuccessCount > 0 {
-		summary.DuplicateSuccessPostCount++
-	}
-	if row.FailedAttemptCount > 0 {
-		summary.FailedAttemptPostCount++
+}
+
+func accumulatePositiveCount(counter *int, value int64) {
+	if value > 0 {
+		(*counter)++
 	}
 }
 
@@ -126,10 +144,12 @@ func accumulateAlarmTypeCounts(summary *Summary, alarmType domain.AlarmType) {
 		summary.CommunityPostCount++
 	case domain.AlarmTypeShorts:
 		summary.ShortsPostCount++
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+		return
 	}
 }
 
-func updateSummaryTimes(summary *Summary, observedAt *time.Time, alarmSentAt *time.Time) {
+func updateSummaryTimes(summary *Summary, observedAt, alarmSentAt *time.Time) {
 	if summary == nil {
 		return
 	}
@@ -139,7 +159,7 @@ func updateSummaryTimes(summary *Summary, observedAt *time.Time, alarmSentAt *ti
 	summary.LatestAlarmSentAt = laterTime(summary.LatestAlarmSentAt, alarmSentAt)
 }
 
-func earlierTime(current *time.Time, candidate *time.Time) *time.Time {
+func earlierTime(current, candidate *time.Time) *time.Time {
 	if candidate == nil {
 		return current
 	}
@@ -149,7 +169,7 @@ func earlierTime(current *time.Time, candidate *time.Time) *time.Time {
 	return current
 }
 
-func laterTime(current *time.Time, candidate *time.Time) *time.Time {
+func laterTime(current, candidate *time.Time) *time.Time {
 	if candidate == nil {
 		return current
 	}
@@ -159,7 +179,7 @@ func laterTime(current *time.Time, candidate *time.Time) *time.Time {
 	return current
 }
 
-func writeMetadata(builder *strings.Builder, report Report) {
+func writeMetadata(builder *strings.Builder, report *Report) {
 	md.WriteHeading(builder, 1, "YouTube Community/Shorts Send State Report")
 	md.WriteKV(builder, "generated at", md.Code(shared.FormatSendCountTime(report.GeneratedAt)))
 	md.WriteKV(
@@ -177,10 +197,13 @@ func writeMetadata(builder *strings.Builder, report Report) {
 			md.Code(shared.FormatSendCountTimePtr(report.Query.WindowEnd)),
 	)
 	md.WriteKV(builder, "finalized", md.Code(fmt.Sprintf("%t", report.Query.Finalized)))
-	md.WriteKV(builder, "summary", buildSummaryMarkdown(report.Summary))
+	md.WriteKV(builder, "summary", buildSummaryMarkdown(&report.Summary))
 }
 
-func buildSummaryMarkdown(summary Summary) string {
+func buildSummaryMarkdown(summary *Summary) string {
+	if summary == nil {
+		return ""
+	}
 	parts := []string{
 		"post_states=" + md.Code(fmt.Sprintf("%d", summary.PostStateCount)),
 		"sent_posts=" + md.Code(fmt.Sprintf("%d", summary.SentPostCount)),
@@ -220,7 +243,7 @@ var markdownColumns = []md.Column{
 func buildMarkdownRows(rows []Row) [][]string {
 	markdownRows := make([][]string, 0, len(rows))
 	for i := range rows {
-		row := rows[i]
+		row := &rows[i]
 		markdownRows = append(markdownRows, []string{
 			md.Code(string(row.SendState)),
 			md.Code(string(row.ReportAlarmType)),

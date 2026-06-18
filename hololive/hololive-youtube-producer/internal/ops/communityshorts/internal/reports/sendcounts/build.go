@@ -38,19 +38,19 @@ func BuildWithQuery(
 	normalizedRows := make([]Row, 0, len(sendCountRows))
 	summary := Summary{}
 	for i := range sendCountRows {
-		row := buildRow(sendCountRows[i], timelineIndex)
+		row := buildRow(&sendCountRows[i], timelineIndex)
 		normalizedRows = append(normalizedRows, row)
-		accumulateSummary(&summary, row)
+		accumulateSummary(&summary, &row)
 	}
 
 	sortRows(normalizedRows)
-	return assembleReport(generatedAt, query, summary, normalizedRows)
+	return assembleReport(generatedAt, query, &summary, normalizedRows)
 }
 
 func sortRows(normalizedRows []Row) {
 	sort.SliceStable(normalizedRows, func(i, j int) bool {
-		left := rowSortTime(normalizedRows[i])
-		right := rowSortTime(normalizedRows[j])
+		left := rowSortTime(&normalizedRows[i])
+		right := rowSortTime(&normalizedRows[j])
 		if !left.Equal(right) {
 			return left.After(right)
 		}
@@ -70,9 +70,12 @@ func sortRows(normalizedRows []Row) {
 func assembleReport(
 	generatedAt time.Time,
 	query Query,
-	summary Summary,
+	summary *Summary,
 	normalizedRows []Row,
 ) Report {
+	if summary == nil {
+		summary = &Summary{}
+	}
 	windowStart := shared.NormalizeSendCountTimePtrValue(query.WindowStart)
 	windowEnd := shared.NormalizeSendCountTimePtrValue(query.WindowEnd)
 	return Report{
@@ -80,7 +83,7 @@ func assembleReport(
 		Query:        query,
 		WindowStart:  windowStart,
 		WindowEnd:    windowEnd,
-		Summary:      summary,
+		Summary:      *summary,
 		Verification: buildVerification(summary),
 		Rows:         normalizedRows,
 	}
@@ -105,29 +108,30 @@ func resolveReportInputs(
 }
 
 func buildRow(
-	sendCountRow outbox.PostSendCount,
+	sendCountRow *outbox.PostSendCount,
 	timelineIndex map[sendCountKey]outbox.PostDeliveryTimeline,
 ) Row {
 	row := Row{PostSendCount: normalizePostSendCount(sendCountRow)}
 	row.ReportAlarmType = row.AlarmType
 	row.ReportChannelID = row.ChannelID
-	row.ReportPostID = resolvePostID(row)
+	row.ReportPostID = resolvePostID(&row)
 	row.ReportActualPublishedAt = shared.CloneSendCountTime(row.ActualPublishedAt)
-	row.ReportAlarmSentAt = resolveAlarmSentAt(row)
+	row.ReportAlarmSentAt = resolveAlarmSentAt(&row)
 	row.ReportDelaySeconds = buildDelaySeconds(
 		row.AlarmLatencyMillis,
 		row.ReportActualPublishedAt,
 		row.ReportAlarmSentAt,
 	)
-	applyTimeline(&row, timelineIndex[buildKey(row.ChannelID, row.AlarmType, row.ContentID)])
+	timeline := timelineIndex[buildKey(row.ChannelID, row.AlarmType, row.ContentID)]
+	applyTimeline(&row, &timeline)
 	return row
 }
 
 func applyTimeline(
 	row *Row,
-	timeline outbox.PostDeliveryTimeline,
+	timeline *outbox.PostDeliveryTimeline,
 ) {
-	if row == nil {
+	if row == nil || timeline == nil {
 		return
 	}
 	row.PublishToDetectMillis = shared.CloneSendCountInt64(timeline.PublishToDetectMillis)
@@ -136,7 +140,7 @@ func applyTimeline(
 	row.RetryAccumulationMillis = shared.CloneSendCountInt64(timeline.RetryAccumulationMillis)
 	row.JobFailureDetected = timeline.JobFailureDetected
 	row.InternalDelayCause = timeline.InternalDelayCause
-	row.LatencyClassification = shared.CloneLatencyClassification(timeline.LatencyClassification)
+	row.LatencyClassification = shared.CloneLatencyClassification(&timeline.LatencyClassification)
 	if row.DelaySource == "" {
 		row.DelaySource = outbox.PostDelaySourceNone
 	}
@@ -145,10 +149,7 @@ func applyTimeline(
 	}
 }
 
-func accumulateSummary(
-	summary *Summary,
-	row Row,
-) {
+func accumulateSummary(summary *Summary, row *Row) {
 	if summary == nil {
 		return
 	}
@@ -158,10 +159,10 @@ func accumulateSummary(
 	accumulateInternalDelayCause(summary, row.InternalDelayCause)
 }
 
-func accumulateSendOutcome(
-	summary *Summary,
-	row Row,
-) {
+func accumulateSendOutcome(summary *Summary, row *Row) {
+	if row == nil {
+		return
+	}
 	if row.SuccessSendCount > 0 {
 		summary.SuccessfulPostCount++
 	} else {
@@ -203,7 +204,7 @@ func accumulateInternalDelayCause(summary *Summary, internalDelayCause outbox.Po
 func buildDeliveryTimelineIndex(timelineRows []outbox.PostDeliveryTimeline) map[sendCountKey]outbox.PostDeliveryTimeline {
 	timelineIndex := make(map[sendCountKey]outbox.PostDeliveryTimeline, len(timelineRows))
 	for i := range timelineRows {
-		timeline := normalizeDeliveryTimeline(timelineRows[i])
+		timeline := normalizeDeliveryTimeline(&timelineRows[i])
 		key := buildKey(timeline.ChannelID, timeline.AlarmType, timeline.ContentID)
 		if key.contentID == "" {
 			continue
@@ -221,35 +222,43 @@ func buildKey(channelID string, alarmType domain.AlarmType, contentID string) se
 	}
 }
 
-func normalizePostSendCount(row outbox.PostSendCount) outbox.PostSendCount {
-	row.ChannelID = strings.TrimSpace(row.ChannelID)
-	row.PostID = strings.TrimSpace(row.PostID)
-	row.ContentID = strings.TrimSpace(row.ContentID)
-	row.ActualPublishedAt = shared.CloneSendCountTime(row.ActualPublishedAt)
-	row.DetectedAt = shared.CloneSendCountTime(row.DetectedAt)
-	row.AlarmSentAt = shared.CloneSendCountTime(row.AlarmSentAt)
-	row.FirstEventAt = shared.CloneSendCountTime(row.FirstEventAt)
-	row.LastEventAt = shared.CloneSendCountTime(row.LastEventAt)
-	row.FirstSuccessAt = shared.CloneSendCountTime(row.FirstSuccessAt)
-	row.LastSuccessAt = shared.CloneSendCountTime(row.LastSuccessAt)
-	return row
+func normalizePostSendCount(row *outbox.PostSendCount) outbox.PostSendCount {
+	if row == nil {
+		return outbox.PostSendCount{}
+	}
+	normalized := *row
+	normalized.ChannelID = strings.TrimSpace(normalized.ChannelID)
+	normalized.PostID = strings.TrimSpace(normalized.PostID)
+	normalized.ContentID = strings.TrimSpace(normalized.ContentID)
+	normalized.ActualPublishedAt = shared.CloneSendCountTime(normalized.ActualPublishedAt)
+	normalized.DetectedAt = shared.CloneSendCountTime(normalized.DetectedAt)
+	normalized.AlarmSentAt = shared.CloneSendCountTime(normalized.AlarmSentAt)
+	normalized.FirstEventAt = shared.CloneSendCountTime(normalized.FirstEventAt)
+	normalized.LastEventAt = shared.CloneSendCountTime(normalized.LastEventAt)
+	normalized.FirstSuccessAt = shared.CloneSendCountTime(normalized.FirstSuccessAt)
+	normalized.LastSuccessAt = shared.CloneSendCountTime(normalized.LastSuccessAt)
+	return normalized
 }
 
-func normalizeDeliveryTimeline(row outbox.PostDeliveryTimeline) outbox.PostDeliveryTimeline {
-	row.ChannelID = strings.TrimSpace(row.ChannelID)
-	row.PostID = strings.TrimSpace(row.PostID)
-	row.ContentID = strings.TrimSpace(row.ContentID)
-	row.PublishToDetectMillis = shared.CloneSendCountInt64(row.PublishToDetectMillis)
-	if row.DelaySource == "" {
-		row.DelaySource = outbox.PostDelaySourceNone
+func normalizeDeliveryTimeline(row *outbox.PostDeliveryTimeline) outbox.PostDeliveryTimeline {
+	if row == nil {
+		return outbox.PostDeliveryTimeline{}
 	}
-	row.QueueWaitMillis = shared.CloneSendCountInt64(row.QueueWaitMillis)
-	row.RetryAccumulationMillis = shared.CloneSendCountInt64(row.RetryAccumulationMillis)
-	if row.InternalDelayCause == "" {
-		row.InternalDelayCause = outbox.PostInternalDelayCauseNone
+	normalized := *row
+	normalized.ChannelID = strings.TrimSpace(normalized.ChannelID)
+	normalized.PostID = strings.TrimSpace(normalized.PostID)
+	normalized.ContentID = strings.TrimSpace(normalized.ContentID)
+	normalized.PublishToDetectMillis = shared.CloneSendCountInt64(normalized.PublishToDetectMillis)
+	if normalized.DelaySource == "" {
+		normalized.DelaySource = outbox.PostDelaySourceNone
 	}
-	row.LatencyClassification = shared.CloneLatencyClassification(row.LatencyClassification)
-	return row
+	normalized.QueueWaitMillis = shared.CloneSendCountInt64(normalized.QueueWaitMillis)
+	normalized.RetryAccumulationMillis = shared.CloneSendCountInt64(normalized.RetryAccumulationMillis)
+	if normalized.InternalDelayCause == "" {
+		normalized.InternalDelayCause = outbox.PostInternalDelayCauseNone
+	}
+	normalized.LatencyClassification = shared.CloneLatencyClassification(&normalized.LatencyClassification)
+	return normalized
 }
 
 func normalizeQuery(query Query) Query {
@@ -261,7 +270,10 @@ func normalizeQuery(query Query) Query {
 	return query
 }
 
-func rowSortTime(row Row) time.Time {
+func rowSortTime(row *Row) time.Time {
+	if row == nil {
+		return time.Time{}
+	}
 	for _, candidate := range []*time.Time{row.LastSuccessAt, row.LastEventAt, row.AlarmSentAt, row.ActualPublishedAt, row.DetectedAt} {
 		if candidate != nil {
 			return candidate.UTC()
@@ -270,7 +282,10 @@ func rowSortTime(row Row) time.Time {
 	return time.Time{}
 }
 
-func resolveAlarmSentAt(row Row) *time.Time {
+func resolveAlarmSentAt(row *Row) *time.Time {
+	if row == nil {
+		return nil
+	}
 	for _, candidate := range []*time.Time{row.AlarmSentAt, row.FirstSuccessAt, row.LastSuccessAt} {
 		if candidate != nil {
 			return shared.CloneSendCountTime(candidate)
@@ -279,7 +294,10 @@ func resolveAlarmSentAt(row Row) *time.Time {
 	return nil
 }
 
-func resolvePostID(row Row) string {
+func resolvePostID(row *Row) string {
+	if row == nil {
+		return ""
+	}
 	if strings.TrimSpace(row.PostID) != "" {
 		return strings.TrimSpace(row.PostID)
 	}

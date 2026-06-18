@@ -224,7 +224,7 @@ func normalizeQuery(query Query) Query {
 	return query
 }
 
-func resolvePerPostState(row outbox.PostSendCount) PerPostState {
+func resolvePerPostState(row *outbox.PostSendCount) PerPostState {
 	if hasSuccess(row) {
 		return PerPostStateSent
 	}
@@ -234,22 +234,34 @@ func resolvePerPostState(row outbox.PostSendCount) PerPostState {
 	return PerPostStateNotSent
 }
 
-func hasSuccess(row outbox.PostSendCount) bool {
+func hasSuccess(row *outbox.PostSendCount) bool {
+	if row == nil {
+		return false
+	}
 	return row.SuccessSendCount > 0 || row.AlarmSentAt != nil || row.FirstSuccessAt != nil || row.LastSuccessAt != nil
 }
 
-func hasAttempt(row outbox.PostSendCount) bool {
+func hasAttempt(row *outbox.PostSendCount) bool {
+	if row == nil {
+		return false
+	}
 	return row.OutboxCount > 0 || row.FailedAttemptCount > 0 || row.FirstEventAt != nil || row.LastEventAt != nil
 }
 
-func resolvePostID(row outbox.PostSendCount) string {
+func resolvePostID(row *outbox.PostSendCount) string {
+	if row == nil {
+		return ""
+	}
 	if strings.TrimSpace(row.PostID) != "" {
 		return strings.TrimSpace(row.PostID)
 	}
 	return strings.TrimSpace(row.ContentID)
 }
 
-func resolveAlarmSentAt(row outbox.PostSendCount) *time.Time {
+func resolveAlarmSentAt(row *outbox.PostSendCount) *time.Time {
+	if row == nil {
+		return nil
+	}
 	for _, candidate := range []*time.Time{row.AlarmSentAt, row.FirstSuccessAt, row.LastSuccessAt} {
 		if candidate != nil {
 			return shared.CloneSendCountTime(candidate)
@@ -258,7 +270,10 @@ func resolveAlarmSentAt(row outbox.PostSendCount) *time.Time {
 	return nil
 }
 
-func resolveObservedAt(row Row) *time.Time {
+func resolveObservedAt(row *Row) *time.Time {
+	if row == nil {
+		return nil
+	}
 	for _, candidate := range []*time.Time{row.ReportActualPublishedAt, row.ReportDetectedAt, row.LastEventAt, row.ReportAlarmSentAt} {
 		if candidate != nil {
 			return shared.CloneSendCountTime(candidate)
@@ -267,14 +282,14 @@ func resolveObservedAt(row Row) *time.Time {
 	return nil
 }
 
-func sortTime(row Row) time.Time {
+func sortTime(row *Row) time.Time {
 	if observedAt := resolveObservedAt(row); observedAt != nil {
 		return observedAt.UTC()
 	}
 	return time.Time{}
 }
 
-func buildPostKey(alarmType domain.AlarmType, channelID string, postID string) string {
+func buildPostKey(alarmType domain.AlarmType, channelID, postID string) string {
 	trimmedChannelID := strings.TrimSpace(channelID)
 	trimmedPostID := strings.TrimSpace(postID)
 	if !alarmType.IsValid() || trimmedChannelID == "" || trimmedPostID == "" {
@@ -283,16 +298,20 @@ func buildPostKey(alarmType domain.AlarmType, channelID string, postID string) s
 	return strings.Join([]string{string(alarmType), trimmedChannelID, trimmedPostID}, "|")
 }
 
-func normalizePostSendCount(row outbox.PostSendCount) outbox.PostSendCount {
-	row.ChannelID = strings.TrimSpace(row.ChannelID)
-	row.PostID = strings.TrimSpace(row.PostID)
-	row.ContentID = strings.TrimSpace(row.ContentID)
-	row.ActualPublishedAt = shared.CloneSendCountTime(row.ActualPublishedAt)
-	row.DetectedAt = shared.CloneSendCountTime(row.DetectedAt)
-	row.AlarmSentAt = shared.CloneSendCountTime(row.AlarmSentAt)
-	row.FirstEventAt = shared.CloneSendCountTime(row.FirstEventAt)
-	row.LastEventAt = shared.CloneSendCountTime(row.LastEventAt)
-	row.FirstSuccessAt = shared.CloneSendCountTime(row.FirstSuccessAt)
-	row.LastSuccessAt = shared.CloneSendCountTime(row.LastSuccessAt)
-	return row
+func normalizePostSendCount(row *outbox.PostSendCount) outbox.PostSendCount {
+	if row == nil {
+		return outbox.PostSendCount{}
+	}
+	normalized := *row
+	normalized.ChannelID = strings.TrimSpace(normalized.ChannelID)
+	normalized.PostID = strings.TrimSpace(normalized.PostID)
+	normalized.ContentID = strings.TrimSpace(normalized.ContentID)
+	normalized.ActualPublishedAt = shared.CloneSendCountTime(normalized.ActualPublishedAt)
+	normalized.DetectedAt = shared.CloneSendCountTime(normalized.DetectedAt)
+	normalized.AlarmSentAt = shared.CloneSendCountTime(normalized.AlarmSentAt)
+	normalized.FirstEventAt = shared.CloneSendCountTime(normalized.FirstEventAt)
+	normalized.LastEventAt = shared.CloneSendCountTime(normalized.LastEventAt)
+	normalized.FirstSuccessAt = shared.CloneSendCountTime(normalized.FirstSuccessAt)
+	normalized.LastSuccessAt = shared.CloneSendCountTime(normalized.LastSuccessAt)
+	return normalized
 }

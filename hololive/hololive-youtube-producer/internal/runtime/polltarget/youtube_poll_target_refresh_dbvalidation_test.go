@@ -31,7 +31,7 @@ func TestYouTubePollTargetRefresher_ExpiredCacheOnlyAdditionDoesNotForceDBValida
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -101,7 +101,7 @@ func TestYouTubePollTargetRefresher_UnexpiredCacheOnlyAdditionStillForcesValidat
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -179,7 +179,7 @@ func TestYouTubePollTargetRefresher_ClearsCacheOnlyStateWhenCandidateDisappears(
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -246,7 +246,7 @@ func TestYouTubePollTargetRefresher_ValidatesRemovalAgainstDB(t *testing.T) {
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -309,7 +309,7 @@ func TestYouTubePollTargetRefresher_DBValidationFailureKeepsPreviousTargets(t *t
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -375,7 +375,7 @@ func TestYouTubePollTargetRefresher_DBFallbackShrinkDoesNotRevalidate(t *testing
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -436,7 +436,7 @@ func TestYouTubePollTargetRefresher_DBValidationValidatedMetricAndLog(t *testing
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -497,7 +497,7 @@ func TestYouTubePollTargetRefresher_DBValidationFailureMetric(t *testing.T) {
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -552,7 +552,7 @@ func TestYouTubePollTargetRefresher_DBValidationSkippedMetric(t *testing.T) {
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,

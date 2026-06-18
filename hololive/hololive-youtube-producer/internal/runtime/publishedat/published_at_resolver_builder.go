@@ -11,7 +11,7 @@ import (
 )
 
 func buildPendingPublishedAtResolver(
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	postgresService database.Client,
 	scraperClient *scraper.Client,
 	routeDecider poller.NotificationRouteDecider,
@@ -61,7 +61,7 @@ func buildPendingPublishedAtResolver(
 
 func buildPublishedAtResolverRegistration(
 	resolver *poller.PendingPublishedAtResolver,
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	logger *slog.Logger,
 ) *providers.ChannelPollerRegistration {
 	if resolver == nil {
@@ -100,13 +100,23 @@ func buildPublishedAtResolverRegistration(
 	return &registration
 }
 
-func effectivePublishedAtResolverConfig(scraperConfig config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
+func effectivePublishedAtResolverConfig(scraperConfig *config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
+	if scraperConfig == nil {
+		return config.ScraperPublishedAtResolverConfig{}
+	}
 	resolverConfig := scraperConfig.PublishedAtResolver
 	if !resolverConfig.Enabled {
 		return resolverConfig
 	}
 
 	defaults := config.DefaultScraperPublishedAtResolverConfig()
+	return fillPublishedAtResolverDefaults(resolverConfig, defaults)
+}
+
+func fillPublishedAtResolverDefaults(
+	resolverConfig config.ScraperPublishedAtResolverConfig,
+	defaults config.ScraperPublishedAtResolverConfig,
+) config.ScraperPublishedAtResolverConfig {
 	if resolverConfig.Interval <= 0 {
 		resolverConfig.Interval = defaults.Interval
 	}

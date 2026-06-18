@@ -85,15 +85,18 @@ func NewGlobalBudgetLimiter(cacheClient cache.Client, cfg GlobalBudgetLimiterCon
 
 func (l *globalBudgetLimiter) TryReserve(
 	ctx context.Context,
-	job poller.BudgetJob,
+	job *poller.BudgetJob,
 	profile poller.BudgetProfile,
 	ttl time.Duration,
-) (poller.BudgetReservation, poller.BudgetDecision, error) {
+) (reservation poller.BudgetReservation, decision poller.BudgetDecision, err error) {
 	if len(profile.SourceUnits) == 0 {
 		return nil, poller.BudgetDecision{Allowed: true}, nil
 	}
 	if ttl <= 0 {
 		return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: ttl must be positive")
+	}
+	if job == nil {
+		return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: job must not be nil")
 	}
 	profile = normalizeGlobalBudgetProfile(profile)
 
@@ -148,7 +151,11 @@ func (l *globalBudgetLimiter) MarkSourceCooldown(ctx context.Context, source pol
 		ExSeconds(globalBudgetCooldownSeconds(ttl)).
 		Build()
 
-	if err := l.cacheClient.GetClient().Do(ctx, cmd).Error(); err != nil {
+	client := l.cacheClient.GetClient()
+	if client == nil {
+		return fmt.Errorf("mark source cooldown %s: cache client is nil", source)
+	}
+	if err := client.Do(ctx, cmd).Error(); err != nil {
 		return fmt.Errorf("mark source cooldown %s: %w", source, err)
 	}
 	return nil
@@ -179,7 +186,7 @@ func (l *globalBudgetLimiter) reserveProfileSources(
 	ownerToken string,
 	reservationMember string,
 	ttl time.Duration,
-) ([]poller.BudgetSource, poller.BudgetDecision, error) {
+) (acquiredSources []poller.BudgetSource, decision poller.BudgetDecision, err error) {
 	sources := sortedBudgetSources(profile.SourceUnits)
 	acquired := make([]poller.BudgetSource, 0, len(sources))
 	nowMS := time.Now().UnixMilli()
@@ -187,19 +194,49 @@ func (l *globalBudgetLimiter) reserveProfileSources(
 	for _, source := range sources {
 		decision, err := l.reserveSource(ctx, source, profile, reservationMember, nowMS, ttlMS)
 		if err != nil {
-			_ = l.releaseSourcesForClass(ctx, ownerToken, reservationMember, profile.BurstClass, acquired)
-			return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: source %s: %w", source, err)
+			return nil, poller.BudgetDecision{}, l.wrapReserveSourceError(ctx, ownerToken, reservationMember, profile.BurstClass, acquired, source, err)
 		}
 		if !decision.Allowed {
-			if rollbackErr := l.releaseSourcesForClass(ctx, ownerToken, reservationMember, profile.BurstClass, acquired); rollbackErr != nil {
-				return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: rollback source %s: %w", source, rollbackErr)
+			decision, err = l.rollbackDeniedReserveSource(ctx, ownerToken, reservationMember, profile.BurstClass, acquired, source, decision)
+			if err != nil {
+				return nil, poller.BudgetDecision{}, err
 			}
-			decision.AffectedSource = string(source)
 			return nil, decision, nil
 		}
 		acquired = append(acquired, source)
 	}
 	return acquired, poller.BudgetDecision{Allowed: true}, nil
+}
+
+func (l *globalBudgetLimiter) wrapReserveSourceError(
+	ctx context.Context,
+	ownerToken string,
+	reservationMember string,
+	burstClass poller.BudgetBurstClass,
+	acquired []poller.BudgetSource,
+	source poller.BudgetSource,
+	err error,
+) error {
+	if rollbackErr := l.releaseSourcesForClass(ctx, ownerToken, reservationMember, burstClass, acquired); rollbackErr != nil {
+		return fmt.Errorf("try reserve global budget: source %s: %w; rollback: %w", source, err, rollbackErr)
+	}
+	return fmt.Errorf("try reserve global budget: source %s: %w", source, err)
+}
+
+func (l *globalBudgetLimiter) rollbackDeniedReserveSource(
+	ctx context.Context,
+	ownerToken string,
+	reservationMember string,
+	burstClass poller.BudgetBurstClass,
+	acquired []poller.BudgetSource,
+	source poller.BudgetSource,
+	decision poller.BudgetDecision,
+) (poller.BudgetDecision, error) {
+	if rollbackErr := l.releaseSourcesForClass(ctx, ownerToken, reservationMember, burstClass, acquired); rollbackErr != nil {
+		return poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: rollback source %s: %w", source, rollbackErr)
+	}
+	decision.AffectedSource = string(source)
+	return decision, nil
 }
 
 func (l *globalBudgetLimiter) reserveSource(

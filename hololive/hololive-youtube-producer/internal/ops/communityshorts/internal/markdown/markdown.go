@@ -20,7 +20,7 @@ func WriteHeading(builder *strings.Builder, level int, title string) {
 	builder.WriteString("\n\n")
 }
 
-func WriteKV(builder *strings.Builder, key string, value string) {
+func WriteKV(builder *strings.Builder, key, value string) {
 	if builder == nil {
 		return
 	}
@@ -134,7 +134,7 @@ func PromoteHeadings(markdown string, depth int) string {
 	return strings.Join(lines, "\n")
 }
 
-func splitHeading(line string) (string, string, bool) {
+func splitHeading(line string) (indent, heading string, ok bool) {
 	trimmed := strings.TrimLeft(line, " ")
 	if !strings.HasPrefix(trimmed, "#") {
 		return "", "", false
@@ -145,7 +145,7 @@ func splitHeading(line string) (string, string, bool) {
 		return "", "", false
 	}
 
-	indent := line[:len(line)-len(trimmed)]
+	indent = line[:len(line)-len(trimmed)]
 	return indent, trimmed, true
 }
 

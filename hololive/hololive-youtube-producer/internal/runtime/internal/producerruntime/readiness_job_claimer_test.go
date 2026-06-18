@@ -22,13 +22,13 @@ type readinessClaimStub struct {
 	err    error
 }
 
-func (s readinessClaimStub) TryClaim(
+func (s *readinessClaimStub) TryClaim(
 	context.Context,
 	string,
 	string,
 	time.Duration,
 	time.Duration,
-) (poller.JobClaimStatus, poller.JobClaim, error) {
+) (status poller.JobClaimStatus, claim poller.JobClaim, err error) {
 	return s.status, s.claim, s.err
 }
 
@@ -43,10 +43,10 @@ type readinessBudgetLimiterStub struct {
 
 func (s *readinessBudgetLimiterStub) TryReserve(
 	context.Context,
-	poller.BudgetJob,
+	*poller.BudgetJob,
 	poller.BudgetProfile,
 	time.Duration,
-) (poller.BudgetReservation, poller.BudgetDecision, error) {
+) (reservation poller.BudgetReservation, decision poller.BudgetDecision, err error) {
 	s.calls++
 	return s.reservation, s.decision, s.err
 }
@@ -79,15 +79,18 @@ func TestReadinessReportingJobClaimerMarksLeaseUnavailable(t *testing.T) {
 		ActiveActiveEnabled: true,
 	})
 	state.MarkRunning()
-	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+	claimer := newReadinessReportingJobClaimer(&readinessClaimStub{
 		status: poller.JobClaimStatus{Result: poller.JobClaimUnavailable},
 		err:    fmt.Errorf("valkey unavailable"),
 	}, state)
+	if claimer == nil {
+		t.Fatal("newReadinessReportingJobClaimer returned nil")
+	}
 
 	status, _, err := claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
 
-	if err != nil {
-		t.Fatalf("TryClaim error = %v, want nil unavailable status", err)
+	if err == nil {
+		t.Fatal("TryClaim error = nil, want backend error")
 	}
 	if status.Result != poller.JobClaimUnavailable {
 		t.Fatalf("status.Result = %s, want %s", status.Result, poller.JobClaimUnavailable)
@@ -107,10 +110,13 @@ func TestReadinessReportingJobClaimerCoalescesUnavailableWarnings(t *testing.T) 
 		ActiveActiveEnabled: true,
 	})
 	state.MarkRunning()
-	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+	claimer := newReadinessReportingJobClaimer(&readinessClaimStub{
 		status: poller.JobClaimStatus{Result: poller.JobClaimUnavailable},
 		err:    fmt.Errorf("valkey unavailable"),
 	}, state)
+	if claimer == nil {
+		t.Fatal("newReadinessReportingJobClaimer returned nil")
+	}
 	var logBuffer bytes.Buffer
 	previousLogger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn})))
@@ -118,8 +124,8 @@ func TestReadinessReportingJobClaimerCoalescesUnavailableWarnings(t *testing.T) 
 
 	for range 2 {
 		status, _, err := claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
-		if err != nil {
-			t.Fatalf("TryClaim error = %v, want nil unavailable status", err)
+		if err == nil {
+			t.Fatal("TryClaim error = nil, want backend error")
 		}
 		if status.Result != poller.JobClaimUnavailable {
 			t.Fatalf("status.Result = %s, want %s", status.Result, poller.JobClaimUnavailable)
@@ -138,9 +144,12 @@ func TestReadinessReportingJobClaimerMarksLeaseAvailable(t *testing.T) {
 	})
 	state.MarkRunning()
 	state.MarkLeaseUnavailable("")
-	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+	claimer := newReadinessReportingJobClaimer(&readinessClaimStub{
 		status: poller.JobClaimStatus{Result: poller.JobClaimPeerOwned},
 	}, state)
+	if claimer == nil {
+		t.Fatal("newReadinessReportingJobClaimer returned nil")
+	}
 
 	_, _, err := claimer.TryClaim(context.Background(), "videos", "channel-1", time.Minute, time.Minute)
 
@@ -156,7 +165,7 @@ func TestReadinessReportingJobClaimerMarksLeaseAvailable(t *testing.T) {
 	}
 }
 
-func countJSONLogMessage(logs string, message string) int {
+func countJSONLogMessage(logs, message string) int {
 	count := 0
 	for line := range strings.SplitSeq(strings.TrimSpace(logs), "\n") {
 		if strings.TrimSpace(line) == "" {
@@ -180,7 +189,7 @@ func TestProbeReadinessJobClaimerMarksLeaseAvailableAndReleasesSyntheticClaim(t 
 	})
 	state.MarkRunning()
 	claim := &readinessProbeClaimStub{}
-	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+	claimer := newReadinessReportingJobClaimer(&readinessClaimStub{
 		status: poller.JobClaimStatus{Result: poller.JobClaimAcquired},
 		claim:  claim,
 	}, state)
@@ -205,7 +214,7 @@ func TestProbeReadinessJobClaimerKeepsLeaseUnavailableOnFailure(t *testing.T) {
 		ActiveActiveEnabled: true,
 	})
 	state.MarkRunning()
-	claimer := newReadinessReportingJobClaimer(readinessClaimStub{
+	claimer := newReadinessReportingJobClaimer(&readinessClaimStub{
 		status: poller.JobClaimStatus{Result: poller.JobClaimUnavailable},
 		err:    fmt.Errorf("valkey unavailable"),
 	}, state)
@@ -231,7 +240,7 @@ func TestReadinessReportingBudgetLimiterMarksBackendUnavailableOnError(t *testin
 		err: fmt.Errorf("valkey unavailable"),
 	}, state)
 
-	_, _, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+	_, _, err := limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
 
 	if err == nil {
 		t.Fatal("TryReserve error = nil, want error")
@@ -262,18 +271,18 @@ func TestReadinessReportingBudgetLimiterCoalescesBackendWarnings(t *testing.T) {
 	defer slog.SetDefault(previousLogger)
 
 	for range 2 {
-		_, _, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+		_, _, err := limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
 		if err == nil {
 			t.Fatal("TryReserve error = nil, want error")
 		}
 	}
 	stub.err = nil
-	_, _, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+	_, _, err := limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
 	if err != nil {
 		t.Fatalf("TryReserve recovery error = %v, want nil", err)
 	}
 	stub.err = fmt.Errorf("valkey unavailable again")
-	_, _, err = limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+	_, _, err = limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
 	if err == nil {
 		t.Fatal("TryReserve second outage error = nil, want error")
 	}
@@ -293,7 +302,7 @@ func TestReadinessReportingBudgetLimiterMarksBudgetExhausted(t *testing.T) {
 		decision: poller.BudgetDecision{Allowed: false, Reason: "budget_exhausted"},
 	}, state)
 
-	_, decision, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetSourceHolodexLive), time.Minute)
+	_, decision, err := limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetSourceHolodexLive), time.Minute)
 
 	if err != nil {
 		t.Fatalf("TryReserve error = %v, want nil", err)
@@ -330,7 +339,7 @@ func TestReadinessReportingBudgetLimiterMarksSourceCooldown(t *testing.T) {
 		decision: poller.BudgetDecision{Allowed: false, Reason: "source_cooldown"},
 	}, state)
 
-	_, _, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "live"}, readinessBudgetProfile(poller.BudgetSourceHolodexLive), time.Minute)
+	_, _, err := limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "live"}, readinessBudgetProfile(poller.BudgetSourceHolodexLive), time.Minute)
 
 	if err != nil {
 		t.Fatalf("TryReserve error = %v, want nil", err)
@@ -397,7 +406,7 @@ func TestReadinessReportingBudgetLimiterAllowedClearsAdmissionAndBackend(t *test
 		decision: poller.BudgetDecision{Allowed: true},
 	}, state)
 
-	_, decision, err := limiter.TryReserve(context.Background(), poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
+	_, decision, err := limiter.TryReserve(context.Background(), &poller.BudgetJob{PollerName: "videos"}, readinessBudgetProfile(poller.BudgetSourceYouTubeScraper), time.Minute)
 
 	if err != nil {
 		t.Fatalf("TryReserve error = %v, want nil", err)

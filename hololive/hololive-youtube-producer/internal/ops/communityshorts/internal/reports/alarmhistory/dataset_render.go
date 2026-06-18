@@ -6,12 +6,15 @@ import (
 	md "github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/internal/markdown"
 )
 
-func RenderDatasetMarkdown(report DatasetReport) string {
+func RenderDatasetMarkdown(report *DatasetReport) string {
+	if report == nil {
+		report = &DatasetReport{}
+	}
 	var builder strings.Builder
 
 	md.WriteHeading(&builder, 1, "YouTube Community/Shorts Alarm Sent History Dataset")
 	writeDatasetMetadata(&builder, report)
-	writeDatasetResults(&builder, report.Results)
+	writeDatasetResults(&builder, &report.Results)
 	md.WriteSectionTableOrMessage(
 		&builder,
 		2,

@@ -34,7 +34,10 @@ var (
 	}
 )
 
-func classifyInternalJudgment(row Row) (InternalCauseJudgment, string) {
+func classifyInternalJudgment(row *Row) (judgment InternalCauseJudgment, basis string) {
+	if row == nil {
+		return InternalCauseJudgmentNonInternal, "delay_source=none"
+	}
 	if row.DelaySource == outbox.PostDelaySourceExternalCollection {
 		return InternalCauseJudgmentNonInternal, "delay_source=external_collection"
 	}
@@ -75,7 +78,10 @@ func buildInternalCauseBasis(
 	return strings.Join(parts, ",")
 }
 
-func buildEvidence(row Row) Evidence {
+func buildEvidence(row *Row) Evidence {
+	if row == nil {
+		return Evidence{}
+	}
 	evidence := Evidence{}
 	seenFields := make(map[string]struct{}, 6)
 

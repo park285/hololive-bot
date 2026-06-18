@@ -43,7 +43,17 @@ func buildYouTubeProducerConfigSubscriber(
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
-	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
+	return configsub.New(cacheService.GetClient(), buildYouTubeProducerConfigApplyFn(settingsService, holodexService, ytStack, scraperScheduler, logger), logger)
+}
+
+func buildYouTubeProducerConfigApplyFn(
+	settingsService settings.ReadWriter,
+	holodexService *holodex.Service,
+	ytStack *providers.YouTubeStack,
+	scraperScheduler *poller.Scheduler,
+	logger *slog.Logger,
+) func(configsub.ConfigUpdate) {
+	return configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
 			sharedsettings.ApplyScraperProxyToggle(payload.Enabled, ytStack.GetService(), holodexService, scraperScheduler, logger)
 			current := settingsService.Get()
@@ -57,6 +67,4 @@ func buildYouTubeProducerConfigSubscriber(
 			logger.Debug("Ignoring alarm_advance_minutes config update (youtube-producer)")
 		},
 	})
-
-	return configsub.New(cacheService.GetClient(), applyFn, logger)
 }

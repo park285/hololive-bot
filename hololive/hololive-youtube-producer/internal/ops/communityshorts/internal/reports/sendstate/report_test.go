@@ -111,7 +111,7 @@ func TestBuild(t *testing.T) {
 	require.NotNil(t, report.Rows[2].ReportAlarmSentAt)
 	require.Equal(t, sentAlarmSentAt, report.Rows[2].ReportAlarmSentAt.UTC())
 
-	markdown := RenderMarkdown(report)
+	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Community/Shorts Send State Report")
 	require.Contains(t, markdown, "post_states=`3`")
 	require.Contains(t, markdown, "attempted_without_success_posts=`1`")

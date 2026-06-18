@@ -22,8 +22,8 @@ func CollectCommunity(
 		logger,
 		now,
 		options,
-		communityDefinition,
-		func(rows []trackingrepo.ObservationAlarmSentHistoryRow, comparison trackingrepo.ObservationPostComparisonResult, query variantQuery, generatedAt time.Time) CommunityReport {
+		&communityDefinition,
+		func(rows []trackingrepo.ObservationAlarmSentHistoryRow, comparison *trackingrepo.ObservationPostComparisonResult, query variantQuery, generatedAt time.Time) CommunityReport {
 			return BuildCommunity(rows, comparison, CommunityQuery(query), generatedAt)
 		},
 	)
@@ -31,7 +31,7 @@ func CollectCommunity(
 
 func BuildCommunity(
 	rows []trackingrepo.CommunityAlarmSentHistoryRow,
-	comparison trackingrepo.ObservationPostComparisonResult,
+	comparison *trackingrepo.ObservationPostComparisonResult,
 	query CommunityQuery,
 	generatedAt time.Time,
 ) CommunityReport {
@@ -40,31 +40,38 @@ func BuildCommunity(
 		comparison,
 		variantQuery(query),
 		generatedAt,
-		communityDefinition,
+		&communityDefinition,
 		func(
 			generatedAt time.Time,
 			query variantQuery,
 			summary variantSummary,
-			comparison trackingrepo.ObservationPostComparisonResult,
+			comparison *trackingrepo.ObservationPostComparisonResult,
 			rows []trackingrepo.ObservationAlarmSentHistoryRow,
 		) CommunityReport {
+			reportComparison := trackingrepo.ObservationPostComparisonResult{}
+			if comparison != nil {
+				reportComparison = *comparison
+			}
 			return CommunityReport{
 				GeneratedAt: generatedAt,
 				Query:       CommunityQuery(query),
 				Summary:     CommunitySummary(summary),
-				Comparison:  comparison,
+				Comparison:  reportComparison,
 				Rows:        rows,
 			}
 		},
 	)
 }
 
-func RenderCommunityMarkdown(report CommunityReport) string {
-	return renderVariantMarkdown(variantReport{
+func RenderCommunityMarkdown(report *CommunityReport) string {
+	if report == nil {
+		return ""
+	}
+	return renderVariantMarkdown(&variantReport{
 		GeneratedAt: report.GeneratedAt,
 		Query:       variantQuery(report.Query),
 		Summary:     variantSummary(report.Summary),
 		Comparison:  report.Comparison,
 		Rows:        report.Rows,
-	}, communityDefinition)
+	}, &communityDefinition)
 }

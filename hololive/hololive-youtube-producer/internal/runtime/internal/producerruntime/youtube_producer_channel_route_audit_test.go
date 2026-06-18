@@ -5,13 +5,11 @@ import (
 	"slices"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
@@ -30,7 +28,7 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersCommunityAndShortsForEve
 	})
 
 	scraperScheduler, registrations, err := polling.BuildComponents(
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			WorkerCount: 2,
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
@@ -40,10 +38,10 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersCommunityAndShortsForEve
 				Live:      3 * time.Minute,
 			},
 		},
-		&databasemocks.Client{},
+		newPollerRegistrationTestDB(t),
 		communityshorts.EnabledChannelIDs(operationalChannels),
 		communityshorts.EnabledChannelIDs(operationalChannels),
-		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
+		polling.BuildSharedClient(&config.ScraperConfig{}, nil, nil),
 		nil,
 		nil,
 		nil,
@@ -71,7 +69,6 @@ func contentPollerJobKeys(t *testing.T, scheduler *poller.Scheduler) []string {
 	field := reflect.ValueOf(scheduler).Elem().FieldByName("jobMap")
 	require.True(t, field.IsValid(), "jobMap field must exist")
 
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
 	keys := make([]string, 0, field.Len())
 	iterator := field.MapRange()
 	for iterator.Next() {

@@ -36,6 +36,7 @@ type youTubePollTargetRefresher struct {
 	initialJitter              time.Duration
 	timeNow                    func() time.Time
 	logger                     *slog.Logger
+	disabled                   bool
 }
 
 func newYouTubePollTargetRefresher(
@@ -47,7 +48,7 @@ func newYouTubePollTargetRefresher(
 	logger *slog.Logger,
 ) *youTubePollTargetRefresher {
 	if cacheService == nil || scheduler == nil || len(registrations) == 0 || loadAlarmChannelIDs == nil {
-		return nil
+		return newDisabledYouTubePollTargetRefresher(logger)
 	}
 	snapshot := append([]communityShortsOperationalChannel(nil), operationalChannels...)
 
@@ -80,8 +81,17 @@ func newYouTubePollTargetRefresher(
 	}
 }
 
+func newDisabledYouTubePollTargetRefresher(logger *slog.Logger) *youTubePollTargetRefresher {
+	return &youTubePollTargetRefresher{
+		cacheOnlyFirstSeen: make(map[string]time.Time),
+		timeNow:            time.Now,
+		logger:             logger,
+		disabled:           true,
+	}
+}
+
 func (r *youTubePollTargetRefresher) withTieringDB(pool *pgxpool.Pool) *youTubePollTargetRefresher {
-	if r == nil || r.schedulerSyncer == nil {
+	if r == nil || r.disabled || r.schedulerSyncer == nil {
 		return r
 	}
 	r.schedulerSyncer.tieringDB = pool
@@ -91,7 +101,7 @@ func (r *youTubePollTargetRefresher) withTieringDB(pool *pgxpool.Pool) *youTubeP
 func (r *youTubePollTargetRefresher) withOperationalChannelLoader(
 	loadOperationalChannels func(context.Context) ([]communityShortsOperationalChannel, error),
 ) *youTubePollTargetRefresher {
-	if r == nil || loadOperationalChannels == nil {
+	if r == nil || r.disabled || loadOperationalChannels == nil {
 		return r
 	}
 	r.loadOperationalChannels = loadOperationalChannels
@@ -99,7 +109,7 @@ func (r *youTubePollTargetRefresher) withOperationalChannelLoader(
 }
 
 func (r *youTubePollTargetRefresher) withInitialJitter(jitter time.Duration) *youTubePollTargetRefresher {
-	if r == nil || jitter <= 0 {
+	if r == nil || r.disabled || jitter <= 0 {
 		return r
 	}
 	r.initialJitter = jitter
@@ -107,6 +117,9 @@ func (r *youTubePollTargetRefresher) withInitialJitter(jitter time.Duration) *yo
 }
 
 func (r *youTubePollTargetRefresher) Start(ctx context.Context) {
+	if r == nil || r.disabled {
+		return
+	}
 	ticker := time.NewTicker(youtubePollTargetRefreshInterval)
 	defer ticker.Stop()
 
@@ -150,7 +163,7 @@ func (r *youTubePollTargetRefresher) waitRefreshTick(ctx context.Context, ticker
 }
 
 func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
-	if !r.readyToRefresh() {
+	if !r.canRefresh() {
 		return
 	}
 
@@ -164,11 +177,8 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 	}
 
 	now := r.now()
-	candidate, ok := r.resolveAlarmTargetCandidate(ctx, now)
+	candidate, ok := r.resolveUsableAlarmTargetCandidate(ctx, now, operational)
 	if !ok {
-		return
-	}
-	if r.reuseTargetsForEmptyCacheCandidate(ctx, candidate, operational) {
 		return
 	}
 
@@ -179,12 +189,27 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 	r.finishRefresh(ctx, targets, operational, registry, candidate.fromCache)
 }
 
-func (r *youTubePollTargetRefresher) readyToRefresh() bool {
-	return r != nil && r.cacheService != nil && r.scheduler != nil
+func (r *youTubePollTargetRefresher) canRefresh() bool {
+	return r != nil && !r.disabled && r.cacheService != nil && r.scheduler != nil
+}
+
+func (r *youTubePollTargetRefresher) resolveUsableAlarmTargetCandidate(
+	ctx context.Context,
+	now time.Time,
+	operational operationalChannelResolution,
+) (alarmTargetCandidate, bool) {
+	candidate, ok := r.resolveAlarmTargetCandidate(ctx, now)
+	if !ok {
+		return alarmTargetCandidate{}, false
+	}
+	if r.reuseTargetsForEmptyCacheCandidate(ctx, candidate, operational) {
+		return alarmTargetCandidate{}, false
+	}
+	return candidate, true
 }
 
 func (r *youTubePollTargetRefresher) now() time.Time {
-	if r.timeNow != nil {
+	if r != nil && r.timeNow != nil {
 		return r.timeNow()
 	}
 	return time.Now()

@@ -170,7 +170,7 @@ func TestBuild(t *testing.T) {
 	require.Contains(t, string(rowJSON), "\"alarm_sent_at\":\"2026-04-10T10:10:00Z\"")
 	require.Contains(t, string(rowJSON), "\"delay_seconds\":600")
 
-	markdown := RenderMarkdown(report)
+	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Community/Shorts Post Send Counts Report")
 	require.Contains(t, markdown, "mode: `recent_window`")
 	require.Contains(t, markdown, "duplicate_success_posts=`1`")
@@ -224,7 +224,7 @@ func TestBuildWithQuery_ObservationWindow(t *testing.T) {
 	require.Equal(t, 0, report.Verification.DuplicateAlarmPostCount)
 	require.Equal(t, DuplicateAlarmRule, report.Verification.DuplicateAlarmRule)
 
-	markdown := RenderMarkdown(report)
+	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "mode: `observation_window`")
 	require.Contains(t, markdown, "observation runtime: `youtube-producer`, cutover: `2026-04-10T00:00:00Z`")
 	require.Contains(t, markdown, "duplicate alarm verdict: status=`pass`, duplicate_posts=`0`, rule=`duplicate_success_posts == 0`")
@@ -313,5 +313,5 @@ func TestRenderMarkdown_OutputStability(t *testing.T) {
 		"| status | alarm_type | channel_id | post_id | actual_published_at | detected_at | alarm_sent_at | delay_seconds | delay_source | publish_to_detect_ms | internal_delay_cause | queue_wait_ms | retry_accumulation_ms | job_failure_detected | latency_classification_status | latency_classification_evidence | outbox_count | success_send_count | success_room_count | duplicate_success_count | failed_attempt_count |",
 		"| --- | --- | --- | --- | --- | --- | --- | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
 		"| `ok` | `COMMUNITY` | `UC_TEST` | `community-post` | `2026-04-15T10:59:56Z` | `2026-04-15T11:00:21Z` | `2026-04-15T11:02:56Z` | 180.000 | `internal_delivery` | 25000 | `queue_wait` | 90000 |  | `false` | `exceeded` | `queue_wait=90000[selected]` | 1 | 1 | 1 | 0 | 0 |",
-	}, "\n")+"\n", RenderMarkdown(report))
+	}, "\n")+"\n", RenderMarkdown(&report))
 }

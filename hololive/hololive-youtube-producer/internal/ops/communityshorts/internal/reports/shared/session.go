@@ -29,7 +29,7 @@ func OpenOpsSession(
 		return nil, nil, fmt.Errorf("config is nil")
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, appConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}

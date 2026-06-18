@@ -42,7 +42,7 @@ func newTestCacheForLock(t *testing.T) *cache.Service {
 func TestAcquireExclusive(t *testing.T) {
 	var held bool
 	var owner string
-	cache := &cachemocks.Client{
+	cacheClient := &cachemocks.Client{
 		SetNXFunc: func(_ context.Context, key, value string, _ time.Duration) (bool, error) {
 			if key != Key {
 				return false, errors.New("unexpected key")
@@ -71,12 +71,12 @@ func TestAcquireExclusive(t *testing.T) {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	first, err := Acquire(context.Background(), cache, "bot", logger)
+	first, err := Acquire(context.Background(), cacheClient, "bot", logger)
 	if err != nil {
 		t.Fatalf("first lease: %v", err)
 	}
 
-	if _, err := Acquire(context.Background(), cache, "youtube-producer", logger); err == nil {
+	if _, err := Acquire(context.Background(), cacheClient, "youtube-producer", logger); err == nil {
 		t.Fatalf("expected second acquisition to fail")
 	}
 
@@ -84,24 +84,24 @@ func TestAcquireExclusive(t *testing.T) {
 		t.Fatalf("release first lease: %v", err)
 	}
 
-	if _, err := Acquire(context.Background(), cache, "youtube-producer", logger); err != nil {
+	if _, err := Acquire(context.Background(), cacheClient, "youtube-producer", logger); err != nil {
 		t.Fatalf("lease after release should succeed: %v", err)
 	}
 }
 
 func TestLeaseRenewLoop(t *testing.T) {
-	cache := newTestCacheForLock(t)
+	cacheService := newTestCacheForLock(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := context.Background()
 
-	lease, err := Acquire(ctx, cache, "bot", logger)
+	lease, err := Acquire(ctx, cacheService, "bot", logger)
 	if err != nil {
 		t.Fatalf("acquire lease: %v", err)
 	}
 
 	lease.ttl = time.Second
 	lease.renewInterval = 200 * time.Millisecond
-	if err := cache.Expire(ctx, Key, lease.ttl); err != nil {
+	if err := cacheService.Expire(ctx, Key, lease.ttl); err != nil {
 		t.Fatalf("shorten ttl: %v", err)
 	}
 
@@ -110,7 +110,7 @@ func TestLeaseRenewLoop(t *testing.T) {
 
 	time.Sleep(1300 * time.Millisecond)
 
-	exists, err := cache.Exists(ctx, Key)
+	exists, err := cacheService.Exists(ctx, Key)
 	if err != nil {
 		t.Fatalf("exists check: %v", err)
 	}
@@ -120,16 +120,16 @@ func TestLeaseRenewLoop(t *testing.T) {
 }
 
 func TestLeaseRenewOwnershipLost(t *testing.T) {
-	cache := newTestCacheForLock(t)
+	cacheService := newTestCacheForLock(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := context.Background()
 
-	lease, err := Acquire(ctx, cache, "bot", logger)
+	lease, err := Acquire(ctx, cacheService, "bot", logger)
 	if err != nil {
 		t.Fatalf("acquire lease: %v", err)
 	}
 
-	if err := cache.GetClient().Do(ctx, cache.B().Set().Key(Key).Value("other-owner").Build()).Error(); err != nil {
+	if err := cacheService.GetClient().Do(ctx, cacheService.B().Set().Key(Key).Value("other-owner").Build()).Error(); err != nil {
 		t.Fatalf("override lock owner: %v", err)
 	}
 
@@ -143,11 +143,11 @@ func TestLeaseRenewOwnershipLost(t *testing.T) {
 }
 
 func TestLeaseRenewTransientFailure(t *testing.T) {
-	cache, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
+	cacheService, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := context.Background()
 
-	lease, err := Acquire(ctx, cache, "bot", logger)
+	lease, err := Acquire(ctx, cacheService, "bot", logger)
 	if err != nil {
 		t.Fatalf("acquire lease: %v", err)
 	}
@@ -173,11 +173,11 @@ func TestLeaseRenewTransientFailure(t *testing.T) {
 }
 
 func TestLeaseRenewTransientExhausted(t *testing.T) {
-	cache, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
+	cacheService, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := context.Background()
 
-	lease, err := Acquire(ctx, cache, "bot", logger)
+	lease, err := Acquire(ctx, cacheService, "bot", logger)
 	if err != nil {
 		t.Fatalf("acquire lease: %v", err)
 	}
@@ -195,11 +195,11 @@ func TestLeaseRenewTransientExhausted(t *testing.T) {
 }
 
 func TestLeaseRenewLoopReportsOwnershipLost(t *testing.T) {
-	cache := newTestCacheForLock(t)
+	cacheService := newTestCacheForLock(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx := context.Background()
 
-	lease, err := Acquire(ctx, cache, "bot", logger)
+	lease, err := Acquire(ctx, cacheService, "bot", logger)
 	if err != nil {
 		t.Fatalf("acquire lease: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestLeaseRenewLoopReportsOwnershipLost(t *testing.T) {
 	renewCtx := t.Context()
 	go lease.StartRenewLoop(renewCtx, errCh)
 
-	if err := cache.GetClient().Do(ctx, cache.B().Set().Key(Key).Value("other-owner").Build()).Error(); err != nil {
+	if err := cacheService.GetClient().Do(ctx, cacheService.B().Set().Key(Key).Value("other-owner").Build()).Error(); err != nil {
 		t.Fatalf("override lock owner: %v", err)
 	}
 

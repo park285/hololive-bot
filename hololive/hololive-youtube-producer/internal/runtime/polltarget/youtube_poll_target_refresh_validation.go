@@ -144,7 +144,7 @@ func filterGracefulCacheOnlyAdditions(
 	additions []string,
 	state map[string]time.Time,
 	grace time.Duration,
-) (allowed []string, expired []string) {
+) (allowed, expired []string) {
 	if state == nil {
 		return nil, nil
 	}

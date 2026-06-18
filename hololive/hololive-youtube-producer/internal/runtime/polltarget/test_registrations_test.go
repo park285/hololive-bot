@@ -2,10 +2,7 @@ package polltarget
 
 import (
 	"context"
-	"reflect"
-	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/providers"
@@ -13,12 +10,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/stretchr/testify/require"
 )
 
 func buildYouTubeProducerChannelPollerRegistrations(
 	postgres database.Client,
-	scraperConfig config.ScraperConfig,
+	scraperConfig *config.ScraperConfig,
 	_ *scraper.RateLimiter,
 	_ cache.Client,
 	_ poller.NotificationRouteDecider,
@@ -37,11 +33,11 @@ func buildYouTubeProducerChannelPollerRegistrations(
 		targets := Targets{NotificationChannelIDs: notificationChannelIDs, StatsChannelIDs: statsChannelIDs}
 		if postgres != nil {
 			if tiered, err := ClassifyByActivity(context.Background(), postgres.GetPool(), targets, time.Now()); err == nil {
-				return buildTestTieredRegistrations(pollers, poll, tiered)
+				return buildTestTieredRegistrations(&pollers, poll, &tiered)
 			}
 		}
 	}
-	return buildTestFlatRegistrations(pollers, poll, notificationChannelIDs, statsChannelIDs)
+	return buildTestFlatRegistrations(&pollers, poll, notificationChannelIDs, statsChannelIDs)
 }
 
 type testPollerSet struct {
@@ -53,7 +49,7 @@ type testPollerSet struct {
 }
 
 func buildTestFlatRegistrations(
-	pollers testPollerSet,
+	pollers *testPollerSet,
 	poll config.ScraperPoll,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -71,18 +67,20 @@ func buildTestFlatRegistrations(
 }
 
 func buildTestTieredRegistrations(
-	pollers testPollerSet,
+	pollers *testPollerSet,
 	poll config.ScraperPoll,
-	targets TieredTargets,
+	targets *TieredTargets,
 ) []providers.ChannelPollerRegistration {
 	registrations := make([]providers.ChannelPollerRegistration, 0, 11)
 	registrations = appendTestTieredNotificationRegistrations(registrations, pollers.videos, poll.Videos, poller.PriorityNormal, targets)
 	registrations = appendTestTieredNotificationRegistrations(registrations, pollers.shorts, poll.Shorts, poller.PriorityLow, targets)
 	registrations = appendTestTieredNotificationRegistrations(registrations, pollers.community, testCommunityPrimaryPollInterval(poll), poller.PriorityLow, targets)
-	registrations = append(registrations, providers.NewChannelPollerRegistration(pollers.stats, poller.PriorityLow, poll.Stats).
-		WithChannelIDs(targets.StatsChannelIDs).
-		WithTargetGroup(providers.ChannelTargetGroupStats))
-	registrations = append(registrations, testNotificationRegistration(pollers.live, poller.PriorityHigh, poll.Live, targets.NotificationChannelIDs))
+	registrations = append(registrations,
+		providers.NewChannelPollerRegistration(pollers.stats, poller.PriorityLow, poll.Stats).
+			WithChannelIDs(targets.StatsChannelIDs).
+			WithTargetGroup(providers.ChannelTargetGroupStats),
+		testNotificationRegistration(pollers.live, poller.PriorityHigh, poll.Live, targets.NotificationChannelIDs),
+	)
 	return registrations
 }
 
@@ -98,7 +96,7 @@ func appendTestTieredNotificationRegistrations(
 	pollerInstance poller.Poller,
 	baseInterval time.Duration,
 	basePriority poller.Priority,
-	targets TieredTargets,
+	targets *TieredTargets,
 ) []providers.ChannelPollerRegistration {
 	warmPriority := poller.PriorityNormal
 	if basePriority == poller.PriorityLow {
@@ -133,16 +131,4 @@ func testTieredNotificationRegistration(
 	return providers.NewChannelPollerRegistration(pollerInstance, priority, interval).
 		WithChannelIDs(channelIDs).
 		WithTargetGroup(targetGroup)
-}
-
-func schedulerJobInterval(t *testing.T, scheduler any, key string) time.Duration {
-	t.Helper()
-
-	field := reflect.ValueOf(scheduler).Elem().FieldByName("jobMap")
-	require.True(t, field.IsValid(), "jobMap field must exist")
-	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	jobValue := field.MapIndex(reflect.ValueOf(key))
-	require.True(t, jobValue.IsValid(), "job %s must exist", key)
-	job := jobValue.Interface().(*poller.Job)
-	return job.Interval
 }

@@ -20,11 +20,13 @@ type command struct {
 	run  func(commandContext, []string) error
 }
 
-func Run(args []string, stdout io.Writer, stderr io.Writer) int {
+func Run(args []string, stdout, stderr io.Writer) int {
 	ctx := newCommandContext(stdout, stderr)
 	commands := commandRegistry()
-	if isUsageRequest(args) {
-		writeUsage(ctx.stderr, commands)
+	if len(args) == 0 || isUsageRequest(args[0]) {
+		if err := writeUsage(ctx.stderr, commands); err != nil {
+			return 1
+		}
 		return 0
 	}
 
@@ -36,7 +38,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	return runSelectedCommand(ctx, selected, args[1:])
 }
 
-func newCommandContext(stdout io.Writer, stderr io.Writer) commandContext {
+func newCommandContext(stdout, stderr io.Writer) commandContext {
 	ctx := commandContext{stdout: stdout, stderr: stderr}
 	if ctx.stdout == nil {
 		ctx.stdout = os.Stdout
@@ -47,13 +49,17 @@ func newCommandContext(stdout io.Writer, stderr io.Writer) commandContext {
 	return ctx
 }
 
-func isUsageRequest(args []string) bool {
-	return len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help"
+func isUsageRequest(arg string) bool {
+	return arg == "help" || arg == "-h" || arg == "--help"
 }
 
 func writeUnknownCommand(ctx commandContext, commands map[string]command, name string) int {
-	fmt.Fprintf(ctx.stderr, "unknown command %q\n\n", name)
-	writeUsage(ctx.stderr, commands)
+	if _, err := fmt.Fprintf(ctx.stderr, "unknown command %q\n\n", name); err != nil {
+		return 1
+	}
+	if err := writeUsage(ctx.stderr, commands); err != nil {
+		return 1
+	}
 	return 2
 }
 
@@ -62,7 +68,9 @@ func runSelectedCommand(ctx commandContext, selected command, args []string) int
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
-		fmt.Fprintln(ctx.stderr, err.Error())
+		if _, writeErr := fmt.Fprintln(ctx.stderr, err.Error()); writeErr != nil {
+			return 1
+		}
 		return 1
 	}
 	return 0
@@ -90,19 +98,28 @@ func commandRegistry() map[string]command {
 	return indexed
 }
 
-func writeUsage(w io.Writer, commands map[string]command) {
+func writeUsage(w io.Writer, commands map[string]command) error {
 	names := make([]string, 0, len(commands))
 	for name := range commands {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
-	fmt.Fprintln(w, "usage: youtube-community-shorts <command> [flags]")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "commands:")
-	for _, name := range names {
-		fmt.Fprintf(w, "  %s\n", name)
+	if _, err := fmt.Fprintln(w, "usage: youtube-community-shorts <command> [flags]"); err != nil {
+		return err
 	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w, "commands:"); err != nil {
+		return err
+	}
+	for _, name := range names {
+		if _, err := fmt.Fprintf(w, "  %s\n", name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newFlagSet(ctx commandContext, name string) *flag.FlagSet {

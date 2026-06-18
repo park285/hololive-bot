@@ -38,10 +38,11 @@ func buildTargetBaselinePaths(
 	return paths
 }
 
-func targetBaselinePathCounts(channels []TargetBaselineChannel, alarmType domain.AlarmType) (int, int, bool) {
-	alarmEnabledChannelCount := 0
-	alarmEnabledRoomCount := 0
-	pathCutoverPending := false
+func targetBaselinePathCounts(channels []TargetBaselineChannel, alarmType domain.AlarmType) (
+	alarmEnabledChannelCount int,
+	alarmEnabledRoomCount int,
+	pathCutoverPending bool,
+) {
 	for i := range channels {
 		route, ok := RouteForType(channels[i].Routes, alarmType)
 		if !ok || !route.AlarmEnabled {
@@ -112,6 +113,8 @@ func subscriberKeyPrefix(alarmType domain.AlarmType) string {
 		return sharedalarmkeys.ChannelSubscribersCommunityPrefix
 	case domain.AlarmTypeShorts:
 		return sharedalarmkeys.ChannelSubscribersShortsPrefix
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+		return ""
 	default:
 		return ""
 	}

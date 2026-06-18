@@ -37,7 +37,7 @@ func TestRunRequiredObservationReport(t *testing.T) {
 			Collect: func(_ context.Context, _ *config.Config, _ *slog.Logger, _ time.Time, options string) (testReport, error) {
 				return testReport{Message: options}, nil
 			},
-			RenderMarkdown: func(report testReport) string {
+			RenderMarkdown: func(report *testReport) string {
 				return "markdown:" + report.Message
 			},
 			LoadConfigError:    "Failed to load test config",

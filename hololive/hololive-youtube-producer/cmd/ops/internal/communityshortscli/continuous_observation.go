@@ -41,7 +41,7 @@ func runContinuousObservationCommand(ctx commandContext, args []string) error {
 	}
 
 	logger := slog.New(slog.NewTextHandler(ctx.stderr, nil))
-	return runContinuousObservationReport(ctx, appConfig, logger, options)
+	return runContinuousObservationReport(ctx, appConfig, logger, &options)
 }
 
 func parseContinuousObservationCLIOptions(ctx commandContext, args []string) (continuousObservationCLIOptions, error) {
@@ -71,10 +71,13 @@ func parseContinuousObservationCLIOptions(ctx commandContext, args []string) (co
 		deliveryLogLimit:   *deliveryLogLimit,
 		waitTimeout:        *waitTimeout,
 	}
-	return options, validateContinuousObservationCLIOptions(options)
+	if err := validateContinuousObservationCLIOptions(&options); err != nil {
+		return continuousObservationCLIOptions{}, err
+	}
+	return options, nil
 }
 
-func validateContinuousObservationCLIOptions(options continuousObservationCLIOptions) error {
+func validateContinuousObservationCLIOptions(options *continuousObservationCLIOptions) error {
 	if options.format != "markdown" && options.format != "json" {
 		return fmt.Errorf("unsupported format %q (want markdown or json)", options.format)
 	}
@@ -91,7 +94,7 @@ func runContinuousObservationReport(
 	ctx commandContext,
 	appConfig *config.Config,
 	logger *slog.Logger,
-	cliOptions continuousObservationCLIOptions,
+	cliOptions *continuousObservationCLIOptions,
 ) error {
 	options := opsapp.CommunityShortsContinuousObservationCollectOptions{
 		ObservationRuntimeName:      cliOptions.observationRuntime,
@@ -110,20 +113,20 @@ func runContinuousObservationOnce(
 	appConfig *config.Config,
 	logger *slog.Logger,
 	options opsapp.CommunityShortsContinuousObservationCollectOptions,
-	cliOptions continuousObservationCLIOptions,
+	cliOptions *continuousObservationCLIOptions,
 ) error {
 	report, err := collectContinuousObservationWithWait(appConfig, logger, options, cliOptions.waitTimeout)
 	if err != nil {
 		return fmt.Errorf("failed to collect continuous observation report: %w", err)
 	}
-	return writeContinuousObservationReport(ctx, cliOptions.outputDir, cliOptions.format, report)
+	return writeContinuousObservationReport(ctx, cliOptions.outputDir, cliOptions.format, &report)
 }
 
 func runContinuousObservationWatch(
 	appConfig *config.Config,
 	logger *slog.Logger,
 	options opsapp.CommunityShortsContinuousObservationCollectOptions,
-	cliOptions continuousObservationCLIOptions,
+	cliOptions *continuousObservationCLIOptions,
 ) error {
 	dir, err := prepareContinuousObservationWatchDir(cliOptions.outputDir, options)
 	if err != nil {
@@ -135,16 +138,16 @@ func runContinuousObservationWatch(
 		return fmt.Errorf("failed to collect continuous observation report: %w", err)
 	}
 
-	return runContinuousObservationWatchLoop(appConfig, logger, options, cliOptions, dir, report)
+	return runContinuousObservationWatchLoop(appConfig, logger, options, cliOptions, dir, &report)
 }
 
 func runContinuousObservationWatchLoop(
 	appConfig *config.Config,
 	logger *slog.Logger,
 	options opsapp.CommunityShortsContinuousObservationCollectOptions,
-	cliOptions continuousObservationCLIOptions,
+	cliOptions *continuousObservationCLIOptions,
 	dir string,
-	report opsapp.CommunityShortsContinuousObservationReport,
+	report *opsapp.CommunityShortsContinuousObservationReport,
 ) error {
 	for {
 		if err := writeContinuousObservationWatchSnapshot(logger, dir, cliOptions.format, report); err != nil {
@@ -159,7 +162,7 @@ func runContinuousObservationWatchLoop(
 		if err != nil {
 			return fmt.Errorf("failed to refresh continuous observation report: %w", err)
 		}
-		report = refreshedReport
+		report = &refreshedReport
 	}
 	return nil
 }
@@ -168,13 +171,13 @@ func prepareContinuousObservationWatchDir(dir string, options opsapp.CommunitySh
 	if dir == "" {
 		dir = defaultContinuousObservationOutputDir(options.ObservationRuntimeName, options.ObservationBigBangCutoverAt)
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 	return dir, nil
 }
 
-func writeContinuousObservationReport(ctx commandContext, outputDir string, format string, report opsapp.CommunityShortsContinuousObservationReport) error {
+func writeContinuousObservationReport(ctx commandContext, outputDir, format string, report *opsapp.CommunityShortsContinuousObservationReport) error {
 	payload, ext, err := renderContinuousObservationOutput(report, format)
 	if err != nil {
 		return fmt.Errorf("failed to render continuous observation report: %w", err)
@@ -182,7 +185,7 @@ func writeContinuousObservationReport(ctx commandContext, outputDir string, form
 	if outputDir == "" {
 		return writeContinuousObservationStdout(ctx, payload)
 	}
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 	if _, err := writeContinuousObservationSnapshot(outputDir, ext, report, payload); err != nil {
@@ -198,7 +201,7 @@ func writeContinuousObservationStdout(ctx commandContext, payload []byte) error 
 	return nil
 }
 
-func writeContinuousObservationWatchSnapshot(logger *slog.Logger, dir string, format string, report opsapp.CommunityShortsContinuousObservationReport) error {
+func writeContinuousObservationWatchSnapshot(logger *slog.Logger, dir, format string, report *opsapp.CommunityShortsContinuousObservationReport) error {
 	payload, ext, err := renderContinuousObservationOutput(report, format)
 	if err != nil {
 		return fmt.Errorf("failed to render continuous observation report: %w", err)
@@ -246,7 +249,7 @@ func collectContinuousObservationOnce(
 	return opsapp.CollectCommunityShortsContinuousObservationReport(ctx, appConfig, logger, now, options)
 }
 
-func nextContinuousObservationInterval(report opsapp.CommunityShortsContinuousObservationReport) time.Duration {
+func nextContinuousObservationInterval(report *opsapp.CommunityShortsContinuousObservationReport) time.Duration {
 	interval := 15 * time.Minute
 	if report.Observation.ObservedUntil.Sub(report.Observation.ObservationStartedAt) < time.Hour {
 		interval = 5 * time.Minute

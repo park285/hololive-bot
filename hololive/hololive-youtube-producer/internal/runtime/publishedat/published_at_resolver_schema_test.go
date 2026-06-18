@@ -64,7 +64,7 @@ func TestValidatePublishedAtResolverSchemaIfEnabled_SkipsWhenResolverDisabled(t 
 
 	err := validatePublishedAtResolverSchemaIfEnabled(
 		context.Background(),
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 				Enabled:  false,
 				Interval: 15 * time.Second,
@@ -85,7 +85,7 @@ func TestValidatePublishedAtResolverSchemaIfEnabled_LogsWhenResolverEnabled(t *t
 
 	err := validatePublishedAtResolverSchemaIfEnabled(
 		context.Background(),
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 				Enabled:  true,
 				Interval: 15 * time.Second,

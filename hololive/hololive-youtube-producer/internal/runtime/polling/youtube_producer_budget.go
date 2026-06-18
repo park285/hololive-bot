@@ -43,7 +43,8 @@ func summarizeYouTubeProducerBudgetForFleet(registrations []providers.ChannelPol
 	pollerRetryAmplifiedRPM := 0.0
 	resolverRPM := 0.0
 	resolverRetryAmplifiedRPM := 0.0
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		rpm := estimateRegistrationYouTubeScraperRPM(registration)
 		retryAmplifiedRPM := estimateRegistrationYouTubeScraperWorstCaseRPM(registration)
 		if isPublishedAtResolverRegistration(registration) {
@@ -80,14 +81,14 @@ func defaultYouTubeProducerBudgetRPM() float64 {
 	return 60.0 / config.DefaultYouTubeOperationalConfig().ProducerRequestInterval.Seconds()
 }
 
-func estimateRegistrationYouTubeScraperRPM(registration providers.ChannelPollerRegistration) float64 {
+func estimateRegistrationYouTubeScraperRPM(registration *providers.ChannelPollerRegistration) float64 {
 	if registration.HasBudgetProfile && !registrationHasReservedSourceUnits(registration, poller.BudgetSourceYouTubeScraper) {
 		return 0
 	}
 	return estimateRegistrationRPM(registration)
 }
 
-func estimateRegistrationYouTubeScraperWorstCaseRPM(registration providers.ChannelPollerRegistration) float64 {
+func estimateRegistrationYouTubeScraperWorstCaseRPM(registration *providers.ChannelPollerRegistration) float64 {
 	if fallbackUnits := registrationFallbackSourceUnits(registration, poller.BudgetSourceYouTubeScraper); fallbackUnits > 0 {
 		if registration.Poller == nil || registration.Interval <= 0 {
 			return 0
@@ -104,7 +105,7 @@ func estimateRegistrationYouTubeScraperWorstCaseRPM(registration providers.Chann
 	return estimateRegistrationWorstCaseRPM(registration)
 }
 
-func registrationHasReservedSourceUnits(registration providers.ChannelPollerRegistration, source poller.BudgetSource) bool {
+func registrationHasReservedSourceUnits(registration *providers.ChannelPollerRegistration, source poller.BudgetSource) bool {
 	if len(registration.BudgetProfile.SourceUnits) == 0 {
 		return false
 	}
@@ -112,7 +113,7 @@ func registrationHasReservedSourceUnits(registration providers.ChannelPollerRegi
 	return units > 0
 }
 
-func registrationFallbackSourceUnits(registration providers.ChannelPollerRegistration, source poller.BudgetSource) float64 {
+func registrationFallbackSourceUnits(registration *providers.ChannelPollerRegistration, source poller.BudgetSource) float64 {
 	if len(registration.BudgetProfile.FallbackSourceUnits) == 0 {
 		return 0
 	}
@@ -162,13 +163,13 @@ func logYouTubeProducerBudgetSummary(summary youtubeProducerBudgetSummary, logge
 
 func estimateResolvedPollerRPM(registrations []providers.ChannelPollerRegistration) float64 {
 	var rpm float64
-	for _, registration := range registrations {
-		rpm += estimateRegistrationRPM(registration)
+	for i := range registrations {
+		rpm += estimateRegistrationRPM(&registrations[i])
 	}
 	return rpm
 }
 
-func estimateRegistrationRPM(registration providers.ChannelPollerRegistration) float64 {
+func estimateRegistrationRPM(registration *providers.ChannelPollerRegistration) float64 {
 	if registration.Poller == nil || registration.Interval <= 0 {
 		return 0
 	}
@@ -180,7 +181,7 @@ func estimateRegistrationRPM(registration providers.ChannelPollerRegistration) f
 	return float64(channelCount) * float64(requestsPerRun) * (60.0 / registration.Interval.Seconds())
 }
 
-func estimateRegistrationWorstCaseRPM(registration providers.ChannelPollerRegistration) float64 {
+func estimateRegistrationWorstCaseRPM(registration *providers.ChannelPollerRegistration) float64 {
 	if registration.WorstCaseRequestUnitsPerRun > 0 {
 		if registration.Poller == nil || registration.Interval <= 0 {
 			return 0
@@ -198,24 +199,25 @@ func estimateRegistrationWorstCaseRPM(registration providers.ChannelPollerRegist
 	return estimateRegistrationRPM(registration) * float64(attempts)
 }
 
-func resolvedRegistrationChannelCount(registration providers.ChannelPollerRegistration) int {
+func resolvedRegistrationChannelCount(registration *providers.ChannelPollerRegistration) int {
 	return len(polltarget.MergeUniqueChannelIDs(registration.ChannelIDs))
 }
 
-func resolvedRegistrationRequestsPerRun(registration providers.ChannelPollerRegistration) int {
+func resolvedRegistrationRequestsPerRun(registration *providers.ChannelPollerRegistration) int {
 	if registration.RequestsPerRun <= 0 {
 		return 1
 	}
 	return registration.RequestsPerRun
 }
 
-func isPublishedAtResolverRegistration(registration providers.ChannelPollerRegistration) bool {
+func isPublishedAtResolverRegistration(registration *providers.ChannelPollerRegistration) bool {
 	return registration.Poller != nil && registration.Poller.Name() == poller.PendingPublishedAtResolverPollerName
 }
 
 func validateExplicitPollerRegistrations(registrations []providers.ChannelPollerRegistration) error {
 	missing := make([]string, 0)
-	for _, registration := range registrations {
+	for i := range registrations {
+		registration := &registrations[i]
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}

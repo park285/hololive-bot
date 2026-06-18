@@ -29,7 +29,7 @@ func (c *recoveryLoopClaimer) TryClaim(
 	string,
 	time.Duration,
 	time.Duration,
-) (poller.JobClaimStatus, poller.JobClaim, error) {
+) (status poller.JobClaimStatus, claim poller.JobClaim, err error) {
 	call := int(c.calls.Add(1))
 	if len(c.responses) == 0 {
 		return poller.JobClaimStatus{Result: poller.JobClaimUnavailable}, nil, fmt.Errorf("missing response")

@@ -70,7 +70,7 @@ func TestShouldSyncYouTubePollRegistration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := shouldSyncYouTubePollRegistration(tt.registration)
+			got := shouldSyncYouTubePollRegistration(&tt.registration)
 
 			assert.Equal(t, tt.want, got)
 		})
@@ -149,7 +149,7 @@ func TestYouTubePollRegistrationChannelIDs(t *testing.T) {
 				WithChannelIDs([]string{"UC_REGISTRATION"}).
 				WithTargetGroup(tt.group)
 
-			got := youtubePollRegistrationChannelIDs(registration, targets, tieredTargets, tt.hasTieredTargets)
+			got := youtubePollRegistrationChannelIDs(&registration, targets, &tieredTargets, tt.hasTieredTargets)
 
 			assert.Equal(t, tt.want, got)
 		})
@@ -216,7 +216,7 @@ func TestYouTubePollRegistrationTargetSync(t *testing.T) {
 				WithChannelIDs([]string{"UC_REGISTRATION"}).
 				WithTargetGroup(tt.group)
 
-			got := youtubePollRegistrationTargetSync(registration, targets, tieredTargets, tt.hasTiered)
+			got := youtubePollRegistrationTargetSync(&registration, targets, &tieredTargets, tt.hasTiered)
 
 			assert.Equal(t, registration.Poller, got.Poller)
 			assert.Equal(t, registration.Priority, got.Priority)

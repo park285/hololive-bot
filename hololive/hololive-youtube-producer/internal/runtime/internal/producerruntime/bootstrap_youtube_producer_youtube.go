@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -43,7 +44,6 @@ func resolveIngestionRuntimeYouTubeState(
 	ctx context.Context,
 	appConfig *config.Config,
 	logger *slog.Logger,
-	spec ingestionRuntimeSpec,
 	features ingestionRuntimeFeatures,
 	infra *youtubeProducerInfrastructure,
 ) (ingestionRuntimeYouTubeState, error) {
@@ -111,7 +111,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 	logger *slog.Logger,
 	infra *youtubeProducerInfrastructure,
 	enabled bool,
-	state ingestionRuntimeYouTubeState,
+	state *ingestionRuntimeYouTubeState,
 	readinessState *readiness.State,
 ) (ingestionRuntimeYouTubeDependencies, error) {
 	deps := ingestionRuntimeYouTubeDependencies{}
@@ -124,11 +124,11 @@ func buildIngestionRuntimeYouTubeDependencies(
 	}
 
 	routeDecider := communityshorts.BuildRouteDecider(state.communityShortsPolicy)
-	sharedScraperClient := resolveIngestionSharedScraperClient(appConfig.Scraper, infra)
-	if err := publishedat.ValidateSchemaIfEnabled(ctx, appConfig.Scraper, infra.postgresService, logger); err != nil {
+	sharedScraperClient := resolveIngestionSharedScraperClient(&appConfig.Scraper, infra)
+	if err := publishedat.ValidateSchemaIfEnabled(ctx, &appConfig.Scraper, infra.postgresService, logger); err != nil {
 		return deps, fmt.Errorf("validate published_at resolver schema: %w", err)
 	}
-	jobClaimer, budgetWiring, err := buildIngestionRuntimeCoordination(appConfig, infra, budgetCfg, readinessState, logger)
+	jobClaimer, budgetWiring, err := buildIngestionRuntimeCoordination(appConfig, infra, &budgetCfg, readinessState, logger)
 	if err != nil {
 		return deps, err
 	}
@@ -136,10 +136,11 @@ func buildIngestionRuntimeYouTubeDependencies(
 		probeReadinessJobClaimer(ctx, jobClaimer, logger)
 	}
 	deps.publishedAtResolver = buildIngestionRuntimePublishedAtResolver(appConfig, infra, sharedScraperClient, routeDecider, jobClaimer, logger)
-	deps.scraperScheduler, deps.pollerRegistrations, err = polling.BuildComponentsWithJobClaimer(
-		appConfig.Scraper,
+	deps.scraperScheduler, deps.pollerRegistrations, err = polling.BuildComponentsWithJobClaimerContext(
+		ctx,
+		&appConfig.Scraper,
 		jobClaimer,
-		budgetWiring,
+		&budgetWiring,
 		infra.postgresService,
 		state.pollTargets.NotificationChannelIDs,
 		state.pollTargets.StatsChannelIDs,
@@ -161,7 +162,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 func buildIngestionRuntimeCoordination(
 	appConfig *config.Config,
 	infra *youtubeProducerInfrastructure,
-	budgetCfg config.YouTubeProducerGlobalBudgetConfig,
+	budgetCfg *config.YouTubeProducerGlobalBudgetConfig,
 	readinessState *readiness.State,
 	logger *slog.Logger,
 ) (poller.JobClaimer, polling.GlobalBudgetWiring, error) {
@@ -187,7 +188,7 @@ func buildIngestionRuntimePublishedAtResolver(
 	logger *slog.Logger,
 ) *poller.PendingPublishedAtResolver {
 	resolver := publishedat.BuildPendingResolver(
-		appConfig.Scraper,
+		&appConfig.Scraper,
 		infra.postgresService,
 		sharedScraperClient,
 		routeDecider,
@@ -209,11 +210,11 @@ func youtubeProducerBudgetRPM(requestInterval time.Duration) float64 {
 func buildIngestionRuntimeGlobalBudgetWiring(
 	appConfig *config.Config,
 	infra *youtubeProducerInfrastructure,
-	budgetCfg config.YouTubeProducerGlobalBudgetConfig,
+	budgetCfg *config.YouTubeProducerGlobalBudgetConfig,
 	readinessState *readiness.State,
 	logger *slog.Logger,
 ) (polling.GlobalBudgetWiring, error) {
-	if !budgetCfg.Enabled {
+	if budgetCfg == nil || !budgetCfg.Enabled {
 		return polling.GlobalBudgetWiring{}, nil
 	}
 	if budgetCfg.WindowCheckEnabled && logger != nil {
@@ -293,7 +294,7 @@ func buildPollTargetRefresher(
 	appConfig *config.Config,
 	infra *youtubeProducerInfrastructure,
 	deps ingestionRuntimeYouTubeDependencies,
-	state ingestionRuntimeYouTubeState,
+	state *ingestionRuntimeYouTubeState,
 	logger *slog.Logger,
 ) *polltarget.Refresher {
 	refresher := polltarget.NewRefresher(
@@ -323,10 +324,13 @@ func activeActiveInitialJitter(instanceID string) time.Duration {
 	if maxMillis <= 0 {
 		return 0
 	}
+	if maxMillis > math.MaxUint32 {
+		maxMillis = math.MaxUint32
+	}
 	return time.Duration(crc32.ChecksumIEEE([]byte(trimmed))%uint32(maxMillis)) * time.Millisecond
 }
 
-func resolveIngestionSharedScraperClient(scraperConfig config.ScraperConfig, infra *youtubeProducerInfrastructure) *scraper.Client {
+func resolveIngestionSharedScraperClient(scraperConfig *config.ScraperConfig, infra *youtubeProducerInfrastructure) *scraper.Client {
 	if infra.scraperClient != nil {
 		return infra.scraperClient
 	}

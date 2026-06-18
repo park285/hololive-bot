@@ -77,13 +77,15 @@ func (r *YouTubeProducerRuntime) runtimeName() string {
 }
 
 func (r *YouTubeProducerRuntime) Run() {
-	_ = lifecycle.Run(lifecycle.Options{
+	if err := lifecycle.Run(lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
 		Start:           r.startRuntime,
 		OnSignal:        r.handleShutdownSignal,
 		OnError:         r.handleRuntimeError,
 		Shutdown:        r.shutdownRuntime,
-	})
+	}); err != nil {
+		r.handleRuntimeError(err)
+	}
 }
 
 func (r *YouTubeProducerRuntime) startRuntime(ctx context.Context, errCh chan<- error) {

@@ -56,7 +56,7 @@ func (s *leasedPhotoSyncService) tryAcquire(ctx context.Context) (*ingestionleas
 		ChannelID:  photoSyncLeaseChannelID,
 	}, s.leaseTTL, s.retryInterval)
 	if err != nil {
-		s.logWarn("photo_sync_lease_acquire_failed", err)
+		s.logWarn(ctx, "photo_sync_lease_acquire_failed", err)
 		s.waitBeforeRetry(ctx, s.retryInterval)
 		return nil, false
 	}
@@ -77,7 +77,9 @@ func (s *leasedPhotoSyncService) runOwned(ctx context.Context, claim *ingestionl
 	}()
 	s.renewUntilStopped(ctx, claim, cancel, done)
 	cancel()
-	_, _ = claim.Release(context.WithoutCancel(ctx))
+	if _, err := claim.Release(context.WithoutCancel(ctx)); err != nil {
+		s.logWarn(ctx, "photo_sync_lease_release_failed", err)
+	}
 }
 
 func (s *leasedPhotoSyncService) renewUntilStopped(
@@ -97,7 +99,7 @@ func (s *leasedPhotoSyncService) renewUntilStopped(
 		case <-ticker.C:
 			renewed, err := claim.Renew(ctx, s.leaseTTL)
 			if err != nil || !renewed {
-				s.logWarn("photo_sync_lease_lost", err)
+				s.logWarn(ctx, "photo_sync_lease_lost", err)
 				cancel()
 				<-done
 				return
@@ -106,7 +108,7 @@ func (s *leasedPhotoSyncService) renewUntilStopped(
 	}
 }
 
-func (s *leasedPhotoSyncService) waitBeforeRetry(ctx context.Context, wait time.Duration) bool {
+func (s *leasedPhotoSyncService) waitBeforeRetry(ctx context.Context, wait time.Duration) {
 	if wait <= 0 {
 		wait = s.retryInterval
 	}
@@ -114,9 +116,9 @@ func (s *leasedPhotoSyncService) waitBeforeRetry(ctx context.Context, wait time.
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return false
+		return
 	case <-timer.C:
-		return true
+		return
 	}
 }
 
@@ -133,7 +135,7 @@ func (s *leasedPhotoSyncService) logInfo(message string) {
 	}
 }
 
-func (s *leasedPhotoSyncService) logWarn(message string, err error) {
+func (s *leasedPhotoSyncService) logWarn(ctx context.Context, message string, err error) {
 	if s.logger == nil {
 		return
 	}
@@ -141,5 +143,5 @@ func (s *leasedPhotoSyncService) logWarn(message string, err error) {
 	if err != nil {
 		attrs = append(attrs, slog.Any("error", err))
 	}
-	s.logger.LogAttrs(context.Background(), slog.LevelWarn, message, attrs...)
+	s.logger.LogAttrs(ctx, slog.LevelWarn, message, attrs...)
 }

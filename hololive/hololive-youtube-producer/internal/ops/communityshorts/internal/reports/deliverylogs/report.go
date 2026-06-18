@@ -67,7 +67,7 @@ func Collect(
 	options CollectOptions,
 ) (Report, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return Report{}, fmt.Errorf("collect community shorts delivery log report: context is nil")
 	}
 	if appConfig == nil {
 		return Report{}, fmt.Errorf("collect community shorts delivery log report: config is nil")
@@ -306,36 +306,43 @@ func normalizeQuery(query Query) Query {
 	return query
 }
 
-func normalizeRow(row domain.YouTubeNotificationDeliveryTelemetry) Row {
-	row.ChannelID = strings.TrimSpace(row.ChannelID)
-	row.ContentID = strings.TrimSpace(row.ContentID)
-	row.PostID = strings.TrimSpace(row.PostID)
-	row.RoomID = strings.TrimSpace(row.RoomID)
-	row.DedupeKey = strings.TrimSpace(row.DedupeKey)
-	row.DeliveryPath = strings.TrimSpace(row.DeliveryPath)
-	row.DeliveryMode = strings.TrimSpace(row.DeliveryMode)
-	row.SendResult = strings.TrimSpace(row.SendResult)
-	row.FailureReason = strings.TrimSpace(row.FailureReason)
-	row.ObservationStatus = strings.TrimSpace(row.ObservationStatus)
-	row.ObservationRuntimeName = strings.TrimSpace(row.ObservationRuntimeName)
-	row.ActualPublishedAt = shared.CloneSendCountTime(row.ActualPublishedAt)
-	row.AlarmSentAt = shared.CloneSendCountTime(row.AlarmSentAt)
-	row.AlarmLatencyMillis = shared.CloneSendCountInt64(row.AlarmLatencyMillis)
-	row.DetectedAt = shared.CloneSendCountTime(row.DetectedAt)
-	row.ObservationBigBangCutoverAt = shared.CloneSendCountTime(row.ObservationBigBangCutoverAt)
-	row.ObservationStartedAt = shared.CloneSendCountTime(row.ObservationStartedAt)
-	row.ObservationEndedAt = shared.CloneSendCountTime(row.ObservationEndedAt)
-	row.AttemptStartedAt = shared.CloneSendCountTime(row.AttemptStartedAt)
-	row.AttemptFinishedAt = shared.CloneSendCountTime(row.AttemptFinishedAt)
-	row.EventAt = shared.NormalizeSendCountTime(row.EventAt)
-	row.NextAttemptAt = shared.NormalizeSendCountTime(row.NextAttemptAt)
-	row.CreatedAt = shared.NormalizeSendCountTime(row.CreatedAt)
-	row.LockedAt = shared.CloneSendCountTime(row.LockedAt)
-	row.LoggedAt = shared.CloneSendCountTime(row.LoggedAt)
-	return Row{YouTubeNotificationDeliveryTelemetry: row}
+func normalizeRow(row *domain.YouTubeNotificationDeliveryTelemetry) Row {
+	if row == nil {
+		return Row{}
+	}
+	normalized := *row
+	normalized.ChannelID = strings.TrimSpace(normalized.ChannelID)
+	normalized.ContentID = strings.TrimSpace(normalized.ContentID)
+	normalized.PostID = strings.TrimSpace(normalized.PostID)
+	normalized.RoomID = strings.TrimSpace(normalized.RoomID)
+	normalized.DedupeKey = strings.TrimSpace(normalized.DedupeKey)
+	normalized.DeliveryPath = strings.TrimSpace(normalized.DeliveryPath)
+	normalized.DeliveryMode = strings.TrimSpace(normalized.DeliveryMode)
+	normalized.SendResult = strings.TrimSpace(normalized.SendResult)
+	normalized.FailureReason = strings.TrimSpace(normalized.FailureReason)
+	normalized.ObservationStatus = strings.TrimSpace(normalized.ObservationStatus)
+	normalized.ObservationRuntimeName = strings.TrimSpace(normalized.ObservationRuntimeName)
+	normalized.ActualPublishedAt = shared.CloneSendCountTime(normalized.ActualPublishedAt)
+	normalized.AlarmSentAt = shared.CloneSendCountTime(normalized.AlarmSentAt)
+	normalized.AlarmLatencyMillis = shared.CloneSendCountInt64(normalized.AlarmLatencyMillis)
+	normalized.DetectedAt = shared.CloneSendCountTime(normalized.DetectedAt)
+	normalized.ObservationBigBangCutoverAt = shared.CloneSendCountTime(normalized.ObservationBigBangCutoverAt)
+	normalized.ObservationStartedAt = shared.CloneSendCountTime(normalized.ObservationStartedAt)
+	normalized.ObservationEndedAt = shared.CloneSendCountTime(normalized.ObservationEndedAt)
+	normalized.AttemptStartedAt = shared.CloneSendCountTime(normalized.AttemptStartedAt)
+	normalized.AttemptFinishedAt = shared.CloneSendCountTime(normalized.AttemptFinishedAt)
+	normalized.EventAt = shared.NormalizeSendCountTime(normalized.EventAt)
+	normalized.NextAttemptAt = shared.NormalizeSendCountTime(normalized.NextAttemptAt)
+	normalized.CreatedAt = shared.NormalizeSendCountTime(normalized.CreatedAt)
+	normalized.LockedAt = shared.CloneSendCountTime(normalized.LockedAt)
+	normalized.LoggedAt = shared.CloneSendCountTime(normalized.LoggedAt)
+	return Row{YouTubeNotificationDeliveryTelemetry: normalized}
 }
 
-func buildPostKey(row Row) string {
+func buildPostKey(row *Row) string {
+	if row == nil {
+		return ""
+	}
 	return strings.Join([]string{
 		string(row.AlarmType),
 		strings.TrimSpace(row.ChannelID),
@@ -343,14 +350,20 @@ func buildPostKey(row Row) string {
 	}, "::")
 }
 
-func resolvePostID(row Row) string {
+func resolvePostID(row *Row) string {
+	if row == nil {
+		return ""
+	}
 	if strings.TrimSpace(row.PostID) != "" {
 		return strings.TrimSpace(row.PostID)
 	}
 	return strings.TrimSpace(row.ContentID)
 }
 
-func rowSortTime(row Row) time.Time {
+func rowSortTime(row *Row) time.Time {
+	if row == nil {
+		return time.Time{}
+	}
 	for _, candidate := range []*time.Time{row.ActualPublishedAt, row.DetectedAt} {
 		if candidate != nil {
 			return candidate.UTC()

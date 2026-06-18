@@ -27,7 +27,7 @@ type OptionalObservationCommand[Options any, Report any] struct {
 	Timeout            time.Duration
 	BuildOptions       func(time.Time, ObservationQuery, bool) (Options, error)
 	Collect            func(context.Context, *config.Config, *slog.Logger, time.Time, Options) (Report, error)
-	RenderMarkdown     func(Report) string
+	RenderMarkdown     func(*Report) string
 	LoadConfigError    string
 	CollectError       string
 	MarkdownWriteError string

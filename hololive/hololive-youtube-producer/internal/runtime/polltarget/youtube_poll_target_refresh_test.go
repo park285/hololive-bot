@@ -35,7 +35,7 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -104,7 +104,7 @@ func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{Poll: config.ScraperPoll{
+		&config.ScraperConfig{Poll: config.ScraperPoll{
 			Videos: 7 * time.Minute, Shorts: 11 * time.Minute, Community: 13 * time.Minute,
 			Stats: 4 * time.Hour, Live: 3 * time.Minute,
 		}},
@@ -167,7 +167,7 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
 	}
 	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
-	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, appConfig, scraper.NewRateLimiter(time.Second), cache, nil, []string{"UC_TIER"}, []string{"UC_TIER"})
+	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), cache, nil, []string{"UC_TIER"}, []string{"UC_TIER"})
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -234,7 +234,7 @@ func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T)
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{Poll: config.ScraperPoll{
+		&config.ScraperConfig{Poll: config.ScraperPoll{
 			Videos: 7 * time.Minute, Shorts: 11 * time.Minute, Community: 13 * time.Minute,
 			Stats: 4 * time.Hour, Live: 3 * time.Minute,
 		}},
@@ -361,7 +361,7 @@ func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testi
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -464,7 +464,7 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -531,7 +531,7 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -597,7 +597,7 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t 
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
@@ -653,7 +653,7 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		config.ScraperConfig{
+		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,

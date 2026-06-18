@@ -19,7 +19,7 @@ func recoveryLoopTreatsAsAvailable(result poller.JobClaimResult) bool {
 }
 
 func jobClaimerTreatsAsAvailable(result poller.JobClaimResult) bool {
-	return !(result == poller.JobClaimUnavailable)
+	return result != poller.JobClaimUnavailable
 }
 
 func TestPollerLeaseAvailabilityTruthTablePinsCurrentSites(t *testing.T) {

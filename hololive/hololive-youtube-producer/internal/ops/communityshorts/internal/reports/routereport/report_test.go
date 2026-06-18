@@ -17,17 +17,18 @@ func TestBuild(t *testing.T) {
 
 	generatedAt := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	since := generatedAt.Add(-24 * time.Hour)
+	baseline := testBaseline(generatedAt)
 	report := Build(
-		testBaseline(generatedAt),
+		&baseline,
 		testPathUsage(generatedAt),
 		testSendCounts(generatedAt),
 		generatedAt,
 		since,
 	)
 
-	assertSummary(t, report.Summary)
-	assertRouteUsage(t, report)
-	assertMarkdown(t, report)
+	assertSummary(t, &report.Summary)
+	assertRouteUsage(t, &report)
+	assertMarkdown(t, &report)
 }
 
 func testBaseline(generatedAt time.Time) communityshorts.TargetBaseline {
@@ -160,7 +161,7 @@ func testNoPathSendCount(generatedAt time.Time) outbox.PostSendCount {
 	}
 }
 
-func assertSummary(t *testing.T, summary Summary) {
+func assertSummary(t *testing.T, summary *Summary) {
 	t.Helper()
 
 	require.Equal(t, 3, summary.TargetChannelCount)
@@ -174,7 +175,7 @@ func assertSummary(t *testing.T, summary Summary) {
 	require.Equal(t, 0, summary.UnexpectedPathRouteCount)
 }
 
-func assertRouteUsage(t *testing.T, report Report) {
+func assertRouteUsage(t *testing.T, report *Report) {
 	t.Helper()
 
 	aCommunity := reportRouteFor(t, report, "UC_A", domain.AlarmTypeCommunity)
@@ -199,7 +200,7 @@ func assertRouteUsage(t *testing.T, report Report) {
 	require.Zero(t, cCommunity.ObservedPostCount)
 }
 
-func assertMarkdown(t *testing.T, report Report) {
+func assertMarkdown(t *testing.T, report *Report) {
 	t.Helper()
 
 	markdown := RenderMarkdown(report)
@@ -212,7 +213,7 @@ func assertMarkdown(t *testing.T, report Report) {
 
 func reportRouteFor(
 	t *testing.T,
-	report Report,
+	report *Report,
 	channelID string,
 	alarmType domain.AlarmType,
 ) Route {

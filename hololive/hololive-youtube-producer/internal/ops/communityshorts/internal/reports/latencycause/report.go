@@ -166,7 +166,7 @@ func CollectWithOptions(
 	options CollectOptions,
 ) (Report, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return Report{}, fmt.Errorf("collect community shorts latency cause report: context is nil")
 	}
 	if appConfig == nil {
 		return Report{}, fmt.Errorf("collect community shorts latency cause report: config is nil")
@@ -228,6 +228,8 @@ func collectRows(
 	switch query.Mode {
 	case queryModeObservation:
 		return collectObservationRows(ctx, session, query, now)
+	case queryModeRecent:
+		return collectRecentRows(ctx, session, query, periods)
 	default:
 		return collectRecentRows(ctx, session, query, periods)
 	}
@@ -267,7 +269,7 @@ func collectObservationRows(
 	return rawRows{query: query, periods: periods}, nil
 }
 
-func withObservationWindow(query Query, state shared.ObservationQueryState) (Query, []outbox.PostLatencyPeriod) {
+func withObservationWindow(query Query, state shared.ObservationQueryState) (queryWithWindow Query, periods []outbox.PostLatencyPeriod) {
 	query.WindowStart = shared.CloneSendCountTime(&state.Window.ObservationStartedAt)
 	query.WindowEnd = shared.CloneSendCountTime(&state.EffectiveWindowEnd)
 	if !state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {

@@ -20,9 +20,12 @@ type missingAlarmSummary struct {
 }
 
 func attachDatasetMissingAlarmRows(
-	report DatasetReport,
+	report *DatasetReport,
 	sendStateRows []outbox.PostSendCount,
-) DatasetReport {
+) {
+	if report == nil {
+		return
+	}
 	sendStateReport := sendstate.Build(
 		sendStateRows,
 		sendstate.Query{
@@ -46,10 +49,9 @@ func attachDatasetMissingAlarmRows(
 		report.VerificationRows,
 		report.ReferenceRows,
 		report.MissingAlarmRows,
-		report.Summary,
+		&report.Summary,
 		true,
 	)
-	return report
 }
 
 func buildMissingAlarmRows(
@@ -66,7 +68,7 @@ func buildMissingAlarmRows(
 	sendStateByPostKey := buildMissingAlarmSendStateIndex(sendStateRows)
 	rows := make([]DatasetMissingAlarmRow, 0, len(referenceRows))
 	for i := range referenceRows {
-		missingRow, ok := buildMissingAlarmRow(referenceRows[i], sendStateByPostKey, &summary)
+		missingRow, ok := buildMissingAlarmRow(&referenceRows[i], sendStateByPostKey, &summary)
 		if !ok {
 			continue
 		}
@@ -81,27 +83,30 @@ func buildMissingAlarmRows(
 func buildMissingAlarmSendStateIndex(sendStateRows []sendstate.Row) map[string]sendstate.Row {
 	sendStateByPostKey := make(map[string]sendstate.Row, len(sendStateRows))
 	for i := range sendStateRows {
-		upsertMissingAlarmSendState(sendStateByPostKey, sendStateRows[i])
+		upsertMissingAlarmSendState(sendStateByPostKey, &sendStateRows[i])
 	}
 	return sendStateByPostKey
 }
 
 func upsertMissingAlarmSendState(
 	sendStateByPostKey map[string]sendstate.Row,
-	row sendstate.Row,
+	row *sendstate.Row,
 ) {
 	postKey := missingAlarmSendStatePostKey(row)
 	if postKey == "" {
 		return
 	}
 	if existing, ok := sendStateByPostKey[postKey]; ok {
-		sendStateByPostKey[postKey] = mergeMissingAlarmStateRow(existing, row)
+		sendStateByPostKey[postKey] = mergeMissingAlarmStateRow(&existing, row)
 		return
 	}
-	sendStateByPostKey[postKey] = row
+	sendStateByPostKey[postKey] = *row
 }
 
-func missingAlarmSendStatePostKey(row sendstate.Row) string {
+func missingAlarmSendStatePostKey(row *sendstate.Row) string {
+	if row == nil {
+		return ""
+	}
 	postKey := strings.TrimSpace(row.PostKey)
 	if postKey != "" {
 		return postKey
@@ -110,7 +115,7 @@ func missingAlarmSendStatePostKey(row sendstate.Row) string {
 }
 
 func buildMissingAlarmRow(
-	referenceRow DatasetReferenceRow,
+	referenceRow *DatasetReferenceRow,
 	sendStateByPostKey map[string]sendstate.Row,
 	summary *missingAlarmSummary,
 ) (DatasetMissingAlarmRow, bool) {
@@ -121,15 +126,18 @@ func buildMissingAlarmRow(
 	}
 
 	missingRow := newMissingAlarmRow(referenceRow, postKey)
-	applyMissingAlarmReason(&missingRow, stateRow, ok, summary)
+	applyMissingAlarmReason(&missingRow, &stateRow, ok, summary)
 	summary.MissingAlarmPostCount++
 	return missingRow, true
 }
 
 func newMissingAlarmRow(
-	referenceRow DatasetReferenceRow,
+	referenceRow *DatasetReferenceRow,
 	postKey string,
 ) DatasetMissingAlarmRow {
+	if referenceRow == nil {
+		return DatasetMissingAlarmRow{}
+	}
 	return DatasetMissingAlarmRow{
 		AlarmType:           referenceRow.AlarmType,
 		ChannelID:           referenceRow.ChannelID,
@@ -146,7 +154,7 @@ func newMissingAlarmRow(
 
 func applyMissingAlarmReason(
 	missingRow *DatasetMissingAlarmRow,
-	stateRow sendstate.Row,
+	stateRow *sendstate.Row,
 	hasState bool,
 	summary *missingAlarmSummary,
 ) {
@@ -154,7 +162,7 @@ func applyMissingAlarmReason(
 	case !hasState:
 		summary.MissingSendStatePostCount++
 		missingRow.MissingReason = MissingAlarmReasonSendStateMissing
-	case stateRow.SendState == sendstate.PerPostStateAttemptedWithoutSuccess:
+	case stateRow != nil && stateRow.SendState == sendstate.PerPostStateAttemptedWithoutSuccess:
 		summary.AttemptedMissingPostCount++
 		fillMissingAlarmState(missingRow, stateRow, MissingAlarmReasonAttempted)
 	default:
@@ -165,9 +173,12 @@ func applyMissingAlarmReason(
 
 func fillMissingAlarmState(
 	missingRow *DatasetMissingAlarmRow,
-	stateRow sendstate.Row,
+	stateRow *sendstate.Row,
 	reason MissingAlarmReason,
 ) {
+	if stateRow == nil {
+		return
+	}
 	missingRow.MissingReason = reason
 	missingRow.SendState = stateRow.SendState
 	missingRow.StateContentID = strings.TrimSpace(stateRow.ContentID)
@@ -177,11 +188,11 @@ func fillMissingAlarmState(
 
 func sortMissingAlarmRows(rows []DatasetMissingAlarmRow) {
 	sort.SliceStable(rows, func(i, j int) bool {
-		return lessMissingAlarmRow(rows[i], rows[j])
+		return lessMissingAlarmRow(&rows[i], &rows[j])
 	})
 }
 
-func lessMissingAlarmRow(leftRow DatasetMissingAlarmRow, rightRow DatasetMissingAlarmRow) bool {
+func lessMissingAlarmRow(leftRow, rightRow *DatasetMissingAlarmRow) bool {
 	left := missingAlarmSortTime(leftRow)
 	right := missingAlarmSortTime(rightRow)
 	if !left.Equal(right) {
@@ -196,11 +207,20 @@ func lessMissingAlarmRow(leftRow DatasetMissingAlarmRow, rightRow DatasetMissing
 	return leftRow.PostID < rightRow.PostID
 }
 
-func mergeMissingAlarmStateRow(current sendstate.Row, next sendstate.Row) sendstate.Row {
-	if missingAlarmStatePriority(next.SendState) > missingAlarmStatePriority(current.SendState) {
-		return next
+func mergeMissingAlarmStateRow(current, next *sendstate.Row) sendstate.Row {
+	if current == nil {
+		if next == nil {
+			return sendstate.Row{}
+		}
+		return *next
 	}
-	return current
+	if next == nil {
+		return *current
+	}
+	if missingAlarmStatePriority(next.SendState) > missingAlarmStatePriority(current.SendState) {
+		return *next
+	}
+	return *current
 }
 
 func missingAlarmStatePriority(state sendstate.PerPostState) int {
@@ -216,7 +236,10 @@ func missingAlarmStatePriority(state sendstate.PerPostState) int {
 	}
 }
 
-func missingAlarmSortTime(row DatasetMissingAlarmRow) time.Time {
+func missingAlarmSortTime(row *DatasetMissingAlarmRow) time.Time {
+	if row == nil {
+		return time.Time{}
+	}
 	for _, candidate := range []*time.Time{row.ActualPublishedAt, row.DetectedAt, row.StateDetectedAt, row.StateAlarmSentAt} {
 		if candidate != nil {
 			return candidate.UTC()
