@@ -75,6 +75,11 @@ type Handler struct {
 	memberIndexLoader          func(context.Context) ([]*domain.Member, error)
 }
 
+type statusMessageResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
 func newStreamState() *sharedserver.StreamState {
 	return sharedserver.NewStreamState(channelStatsCacheWorkers, channelStatsRefreshWorkers)
 }

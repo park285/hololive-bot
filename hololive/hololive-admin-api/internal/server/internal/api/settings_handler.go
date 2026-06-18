@@ -16,7 +16,32 @@ import (
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
+
+type logsResponse struct {
+	Status string `json:"status"`
+	Logs   any    `json:"logs"`
+}
+
+type settingsResponse struct {
+	Status   string               `json:"status"`
+	Settings settingssvc.Settings `json:"settings"`
+	Runtime  map[string]any       `json:"runtime"`
+}
+
+type settingsUpdateResponse struct {
+	Status   string               `json:"status"`
+	Message  string               `json:"message"`
+	Settings settingssvc.Settings `json:"settings"`
+	Runtime  map[string]any       `json:"runtime"`
+}
+
+type llmSettingsResponse struct {
+	Status  string         `json:"status"`
+	Message string         `json:"message"`
+	Runtime map[string]any `json:"runtime"`
+}
 
 type SettingsActivityLogger interface {
 	Log(entryType, summary string, details map[string]any)
@@ -131,10 +156,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 		"room_name": req.RoomName,
 	})
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"message": "Room name set successfully",
-	})
+	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room name set successfully"})
 }
 
 func (h *SettingsHandler) SetUserName(c *gin.Context) {
@@ -167,10 +189,7 @@ func (h *SettingsHandler) SetUserName(c *gin.Context) {
 		slog.String("user_name", req.UserName),
 	)
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"message": "User name set successfully",
-	})
+	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "User name set successfully"})
 }
 
 func (h *SettingsHandler) GetLogs(c *gin.Context) {
@@ -185,7 +204,7 @@ func (h *SettingsHandler) GetLogs(c *gin.Context) {
 		sharedserver.RespondError(c, 500, "Failed to get logs", nil)
 		return
 	}
-	c.JSON(200, gin.H{"status": "ok", "logs": logs})
+	ginjson.Respond(c, 200, logsResponse{Status: "ok", Logs: logs})
 }
 
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
@@ -195,7 +214,7 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 
 	s := h.Settings.Get()
 	runtime := h.ScraperProxyRuntimeState(s.ScraperProxyEnabled).AsMap()
-	c.JSON(200, gin.H{"status": "ok", "settings": s, "runtime": runtime})
+	ginjson.Respond(c, 200, settingsResponse{Status: "ok", Settings: s, Runtime: runtime})
 }
 
 func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
@@ -221,7 +240,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	h.publishUpdateResult(c.Request.Context(), runtime, req.ScraperProxyEnabled, req.AlarmAdvanceMinutes)
 	h.logSettingsUpdate(current, runtime)
 
-	c.JSON(200, gin.H{"status": "ok", "message": "Settings updated", "settings": current, "runtime": runtime})
+	ginjson.Respond(c, 200, settingsUpdateResponse{Status: "ok", Message: "Settings updated", Settings: current, Runtime: runtime})
 }
 
 func (h *SettingsHandler) bindUpdateSettingsRequest(c *gin.Context) (updateSettingsRequest, bool) {
@@ -330,10 +349,10 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 		"runtime": runtime,
 	})
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"message": "LLM settings updated",
-		"runtime": runtime,
+	ginjson.Respond(c, 200, llmSettingsResponse{
+		Status:  "ok",
+		Message: "LLM settings updated",
+		Runtime: runtime,
 	})
 }
 

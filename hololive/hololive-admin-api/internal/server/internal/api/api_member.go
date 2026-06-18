@@ -30,7 +30,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
+
+type memberListResponse struct {
+	Status  string           `json:"status"`
+	Members []*domain.Member `json:"members"`
+}
 
 func (h *MemberHandler) parsePositiveMemberID(c *gin.Context) (int, bool) {
 	memberID, err := strconv.Atoi(c.Param("id"))
@@ -115,10 +121,7 @@ func (h *MemberHandler) respondGraduationSuccess(c *gin.Context, memberID int, i
 		"is_graduated": isGraduated,
 	})
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"message": "Graduation status updated successfully",
-	})
+	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Graduation status updated successfully"})
 }
 
 func (h *MemberHandler) GetMembers(c *gin.Context) {
@@ -137,10 +140,7 @@ func (h *MemberHandler) GetMembers(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"members": members,
-	})
+	ginjson.Respond(c, 200, memberListResponse{Status: "ok", Members: members})
 }
 
 func (h *MemberHandler) AddMember(c *gin.Context) {
@@ -176,5 +176,5 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 
 	h.logActivity("member_add", "Member added: "+req.Name, map[string]any{"name": req.Name})
 
-	c.JSON(201, gin.H{"status": "ok", "message": "Member added successfully"})
+	ginjson.Respond(c, 201, statusMessageResponse{Status: "ok", Message: "Member added successfully"})
 }

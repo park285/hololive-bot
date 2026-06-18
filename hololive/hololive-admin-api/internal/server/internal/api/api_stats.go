@@ -33,12 +33,22 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/shared-go/pkg/ginjson"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 var systemStatsStreamInterval = 5 * time.Second
 
 var errSystemStatsStreamStopped = errors.New("system stats stream stopped")
+
+type statsResponse struct {
+	Status  string `json:"status"`
+	Members int    `json:"members"`
+	Alarms  int    `json:"alarms"`
+	Rooms   int    `json:"rooms"`
+	Version string `json:"version"`
+	Uptime  string `json:"uptime"`
+}
 
 func (h *StatsHandler) GetStats(c *gin.Context) {
 	if !h.requireStatsDeps(c) {
@@ -90,13 +100,13 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 		roomCount = len(rooms)
 	}
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"members": len(members),
-		"alarms":  len(alarmKeys),
-		"rooms":   roomCount,
-		"version": health.GetVersion(),
-		"uptime":  health.GetUptime(),
+	ginjson.Respond(c, 200, statsResponse{
+		Status:  "ok",
+		Members: len(members),
+		Alarms:  len(alarmKeys),
+		Rooms:   roomCount,
+		Version: health.GetVersion(),
+		Uptime:  health.GetUptime(),
 	})
 }
 

@@ -31,11 +31,74 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
 
 type AuthHandler struct {
 	auth   *authsvc.Service
 	logger *slog.Logger
+}
+
+type authErrorResponse struct {
+	Success bool              `json:"success"`
+	Error   authsvc.ErrorCode `json:"error"`
+}
+
+type authSession struct {
+	Token     string `json:"token"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
+type registerUser struct {
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"displayName"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+type sessionUser struct {
+	ID          string  `json:"id"`
+	Email       string  `json:"email"`
+	DisplayName string  `json:"displayName"`
+	AvatarURL   *string `json:"avatarUrl"`
+}
+
+type meUser struct {
+	ID          string  `json:"id"`
+	Email       string  `json:"email"`
+	DisplayName string  `json:"displayName"`
+	AvatarURL   *string `json:"avatarUrl"`
+	CreatedAt   string  `json:"createdAt"`
+}
+
+type registerResponse struct {
+	Success bool         `json:"success"`
+	User    registerUser `json:"user"`
+}
+
+type loginResponse struct {
+	Success bool        `json:"success"`
+	Session authSession `json:"session"`
+	User    sessionUser `json:"user"`
+}
+
+type successResponse struct {
+	Success bool `json:"success"`
+}
+
+type refreshResponse struct {
+	Success bool        `json:"success"`
+	Session authSession `json:"session"`
+}
+
+type meResponse struct {
+	Success bool   `json:"success"`
+	User    meUser `json:"user"`
+}
+
+type resetRequestResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
 }
 
 func NewAuthHandler(auth *authsvc.Service, logger *slog.Logger) *AuthHandler {
@@ -72,10 +135,7 @@ var authErrorHTTPStatus = map[authsvc.ErrorCode]int{
 }
 
 func writeAuthError(c *gin.Context, status int, code authsvc.ErrorCode) {
-	c.JSON(status, gin.H{
-		"success": false,
-		"error":   code,
-	})
+	ginjson.Respond(c, status, authErrorResponse{Success: false, Error: code})
 }
 
 func parseBearerToken(c *gin.Context) (string, bool) {
@@ -135,13 +195,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"success": true,
-		"user": gin.H{
-			"id":          user.ID,
-			"email":       user.Email,
-			"displayName": user.DisplayName,
-			"createdAt":   user.CreatedAt.UTC().Format(time.RFC3339),
+	ginjson.Respond(c, http.StatusCreated, registerResponse{
+		Success: true,
+		User: registerUser{
+			ID:          user.ID,
+			Email:       user.Email,
+			DisplayName: user.DisplayName,
+			CreatedAt:   user.CreatedAt.UTC().Format(time.RFC3339),
 		},
 	})
 }
@@ -167,17 +227,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"session": gin.H{
-			"token":     session.Token,
-			"expiresAt": session.ExpiresAt.UTC().Format(time.RFC3339),
+	ginjson.Respond(c, http.StatusOK, loginResponse{
+		Success: true,
+		Session: authSession{
+			Token:     session.Token,
+			ExpiresAt: session.ExpiresAt.UTC().Format(time.RFC3339),
 		},
-		"user": gin.H{
-			"id":          user.ID,
-			"email":       user.Email,
-			"displayName": user.DisplayName,
-			"avatarUrl":   user.AvatarURL,
+		User: sessionUser{
+			ID:          user.ID,
+			Email:       user.Email,
+			DisplayName: user.DisplayName,
+			AvatarURL:   user.AvatarURL,
 		},
 	})
 }
@@ -202,7 +262,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	ginjson.Respond(c, http.StatusOK, successResponse{Success: true})
 }
 
 func (h *AuthHandler) Refresh(c *gin.Context) {
@@ -226,11 +286,11 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"session": gin.H{
-			"token":     session.Token,
-			"expiresAt": session.ExpiresAt.UTC().Format(time.RFC3339),
+	ginjson.Respond(c, http.StatusOK, refreshResponse{
+		Success: true,
+		Session: authSession{
+			Token:     session.Token,
+			ExpiresAt: session.ExpiresAt.UTC().Format(time.RFC3339),
 		},
 	})
 }
@@ -256,14 +316,14 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"user": gin.H{
-			"id":          user.ID,
-			"email":       user.Email,
-			"displayName": user.DisplayName,
-			"avatarUrl":   user.AvatarURL,
-			"createdAt":   user.CreatedAt.UTC().Format(time.RFC3339),
+	ginjson.Respond(c, http.StatusOK, meResponse{
+		Success: true,
+		User: meUser{
+			ID:          user.ID,
+			Email:       user.Email,
+			DisplayName: user.DisplayName,
+			AvatarURL:   user.AvatarURL,
+			CreatedAt:   user.CreatedAt.UTC().Format(time.RFC3339),
 		},
 	})
 }
@@ -288,9 +348,9 @@ func (h *AuthHandler) ResetRequest(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "If the email exists, a reset link has been sent.",
+	ginjson.Respond(c, http.StatusOK, resetRequestResponse{
+		Success: true,
+		Message: "If the email exists, a reset link has been sent.",
 	})
 }
 
@@ -314,5 +374,5 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	ginjson.Respond(c, http.StatusOK, successResponse{Success: true})
 }

@@ -30,7 +30,28 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
+
+type milestoneListResponse struct {
+	Status     string                 `json:"status"`
+	Milestones []stats.MilestoneEntry `json:"milestones"`
+	Total      int                    `json:"total"`
+	Limit      int                    `json:"limit"`
+	Offset     int                    `json:"offset"`
+}
+
+type nearMilestoneResponse struct {
+	Status    string                     `json:"status"`
+	Members   []stats.NearMilestoneEntry `json:"members"`
+	Count     int                        `json:"count"`
+	Threshold float64                    `json:"threshold"`
+}
+
+type milestoneStatsResponse struct {
+	Status string                `json:"status"`
+	Stats  *stats.MilestoneStats `json:"stats"`
+}
 
 // GET /api/milestones?limit=50&offset=0&channelId=xxx&memberName=xxx.
 func (h *MilestoneHandler) GetMilestones(c *gin.Context) {
@@ -60,12 +81,12 @@ func (h *MilestoneHandler) GetMilestones(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"status":     "ok",
-		"milestones": result.Milestones,
-		"total":      result.Total,
-		"limit":      result.Limit,
-		"offset":     result.Offset,
+	ginjson.Respond(c, 200, milestoneListResponse{
+		Status:     "ok",
+		Milestones: result.Milestones,
+		Total:      result.Total,
+		Limit:      result.Limit,
+		Offset:     result.Offset,
 	})
 }
 
@@ -151,11 +172,11 @@ func (h *MilestoneHandler) GetNearMilestoneMembers(c *gin.Context) {
 		members = members[:limit]
 	}
 
-	c.JSON(200, gin.H{
-		"status":    "ok",
-		"members":   members,
-		"count":     len(members),
-		"threshold": threshold,
+	ginjson.Respond(c, 200, nearMilestoneResponse{
+		Status:    "ok",
+		Members:   members,
+		Count:     len(members),
+		Threshold: threshold,
 	})
 }
 
@@ -186,10 +207,7 @@ func (h *MilestoneHandler) GetMilestoneStats(c *gin.Context) {
 
 	summary.TotalNearMilestone = nearCount
 
-	c.JSON(200, gin.H{
-		"status": "ok",
-		"stats":  summary,
-	})
+	ginjson.Respond(c, 200, milestoneStatsResponse{Status: "ok", Stats: summary})
 }
 
 // parseInt: 문자열을 정수로 파싱.

@@ -28,7 +28,12 @@ import (
 	"github.com/gin-gonic/gin"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
+
+type statusResponse struct {
+	Status string `json:"status"`
+}
 
 type MajorEventScheduler interface {
 	SendWeeklyNotification(ctx context.Context) error
@@ -86,5 +91,5 @@ func (h *MajorEventHandler) triggerNotification(
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": successStatus})
+	ginjson.Respond(c, http.StatusOK, statusResponse{Status: successStatus})
 }

@@ -31,7 +31,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
+
+type messageResponse struct {
+	Message string `json:"message"`
+}
 
 type templateListResponse struct {
 	Templates []*domain.NotificationTemplate `json:"templates"`
@@ -184,7 +189,7 @@ func (h *TemplateHandler) DeleteTemplateOverride(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "override deleted; default template is now active"})
+	ginjson.Respond(c, 200, messageResponse{Message: "override deleted; default template is now active"})
 }
 
 func (h *TemplateHandler) PreviewTemplate(c *gin.Context) {

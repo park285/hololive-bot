@@ -27,8 +27,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
+
+type alarmListResponse struct {
+	Status string               `json:"status"`
+	Alarms []*domain.AlarmEntry `json:"alarms"`
+}
+
+type alarmDeleteResponse struct {
+	Status  string `json:"status"`
+	Removed bool   `json:"removed"`
+}
 
 func (h *AlarmHandler) GetAlarms(c *gin.Context) {
 	if !h.requireAlarm(c) {
@@ -47,10 +59,7 @@ func (h *AlarmHandler) GetAlarms(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"status": "ok",
-		"alarms": alarmKeys,
-	})
+	ginjson.Respond(c, 200, alarmListResponse{Status: "ok", Alarms: alarmKeys})
 }
 
 func (h *AlarmHandler) DeleteAlarm(c *gin.Context) {
@@ -86,8 +95,5 @@ func (h *AlarmHandler) DeleteAlarm(c *gin.Context) {
 		"channel_id": req.ChannelID,
 	})
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"removed": removed,
-	})
+	ginjson.Respond(c, 200, alarmDeleteResponse{Status: "ok", Removed: removed})
 }

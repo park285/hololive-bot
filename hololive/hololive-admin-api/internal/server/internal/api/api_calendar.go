@@ -12,7 +12,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
+
+type calendarResponse struct {
+	Status  string                 `json:"status"`
+	Month   int                    `json:"month"`
+	Year    int                    `json:"year"`
+	Entries []domain.CalendarEntry `json:"entries"`
+}
 
 func (h *MemberHandler) GetCalendar(c *gin.Context) {
 	if !h.requireMemberDeps(c) {
@@ -41,8 +49,11 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 	if entries == nil {
 		entries = []domain.CalendarEntry{}
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"status": "ok", "month": month, "year": year, "entries": entries,
+	ginjson.Respond(c, http.StatusOK, calendarResponse{
+		Status:  "ok",
+		Month:   month,
+		Year:    year,
+		Entries: entries,
 	})
 }
 

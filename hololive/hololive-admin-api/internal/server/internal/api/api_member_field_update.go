@@ -28,6 +28,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
 
 type updateChannelIDRequest struct {
@@ -105,10 +106,7 @@ func updateMemberField[T any](h *MemberHandler, c *gin.Context, spec memberField
 		spec.activityValueKey: value,
 	})
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"message": spec.successMessage,
-	})
+	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: spec.successMessage})
 }
 
 func (h *MemberHandler) UpdateChannelID(c *gin.Context) {

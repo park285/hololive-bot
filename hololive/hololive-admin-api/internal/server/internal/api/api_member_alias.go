@@ -30,6 +30,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
 
 const aliasMaxLength = 100
@@ -128,10 +129,7 @@ func (h *MemberHandler) respondAliasOperationSuccess(c *gin.Context, memberID in
 		"alias":     alias,
 	})
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"message": "Alias " + operationName + " successfully",
-	})
+	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Alias " + operationName + " successfully"})
 }
 
 func (h *MemberHandler) AddAlias(c *gin.Context) {

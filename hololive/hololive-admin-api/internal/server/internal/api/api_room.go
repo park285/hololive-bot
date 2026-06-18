@@ -28,11 +28,26 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/park285/shared-go/pkg/ginjson"
 )
 
 type setACLRequest struct {
 	Enabled *bool   `json:"enabled"`
 	Mode    *string `json:"mode"`
+}
+
+type roomListResponse struct {
+	Status     string   `json:"status"`
+	Rooms      []string `json:"rooms"`
+	ACLEnabled bool     `json:"aclEnabled"`
+	ACLMode    string   `json:"aclMode"`
+}
+
+type setACLResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Enabled bool   `json:"enabled"`
+	Mode    string `json:"mode"`
 }
 
 func (h *RoomHandler) GetRooms(c *gin.Context) {
@@ -41,11 +56,11 @@ func (h *RoomHandler) GetRooms(c *gin.Context) {
 	}
 
 	aclEnabled, mode, rooms := h.acl.GetACLStatus()
-	c.JSON(200, gin.H{
-		"status":     "ok",
-		"rooms":      rooms,
-		"aclEnabled": aclEnabled,
-		"aclMode":    string(mode),
+	ginjson.Respond(c, 200, roomListResponse{
+		Status:     "ok",
+		Rooms:      rooms,
+		ACLEnabled: aclEnabled,
+		ACLMode:    string(mode),
 	})
 }
 
@@ -82,10 +97,7 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"message": "Room added successfully",
-	})
+	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room added successfully"})
 
 	h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
@@ -123,10 +135,7 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"message": "Room removed successfully",
-	})
+	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room removed successfully"})
 
 	h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
@@ -194,10 +203,10 @@ func (h *RoomHandler) respondSetACL(c *gin.Context) {
 	h.safeLogger().Info("Room ACL updated", slog.Bool("enabled", enabled), slog.String("mode", string(mode)))
 
 	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s", enabled, mode), map[string]any{"enabled": enabled, "mode": string(mode)})
-	c.JSON(200, gin.H{
-		"status":  "ok",
-		"message": "ACL setting updated successfully",
-		"enabled": enabled,
-		"mode":    string(mode),
+	ginjson.Respond(c, 200, setACLResponse{
+		Status:  "ok",
+		Message: "ACL setting updated successfully",
+		Enabled: enabled,
+		Mode:    string(mode),
 	})
 }
