@@ -67,7 +67,10 @@ func normalizeKaringImageURL(raw string) string {
 		return ""
 	}
 	if strings.HasPrefix(trimmed, "//") {
-		return "https:" + trimmed
+		trimmed = "https:" + trimmed
+	}
+	if !isAllowedKaringImageURL(trimmed) {
+		return ""
 	}
 	return trimmed
 }
