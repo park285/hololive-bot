@@ -7,18 +7,18 @@
 | Module | `hololive-youtube-producer` |
 | Binary | `youtube-producer` |
 | Compose service | `youtube-producer` |
-| Port | `30005` (AP-A) / `30015` (AP-B) / `30025` (AP-C) |
-| Health endpoint | `http://127.0.0.1:30005/health` (AP-A); AP-B `30015`, AP-C `30025` |
-| Ready endpoint | Osaka AP-A `http://127.0.0.1:30005/ready`; Seoul AP-B `http://127.0.0.1:30015/ready`; main-host AP-C `http://127.0.0.1:30025/ready` |
+| Port | `30015` (AP-B) / `30025` (AP-C) |
+| Health endpoint | AP-B `http://127.0.0.1:30015/health`; AP-C `30025` |
+| Ready endpoint | Seoul AP-B `http://127.0.0.1:30015/ready`; main-host AP-C `http://127.0.0.1:30025/ready` |
 
 ## Role
 
-YouTube scraping/polling, `youtube_notification_outbox` production, 3-way active-active AP runtime입니다. `youtube-producer-a`는 Osaka 호스트(`deploy/compose/docker-compose.osaka.yml`), `youtube-producer-b`는 Seoul 호스트(`deploy/compose/docker-compose.seoul.yml`), `youtube-producer-c`는 메인 호스트(`deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)에서 같은 target set을 봅니다. Osaka a와 Seoul b는 메인 valkey에 TCP로, c는 같은 호스트 valkey unix socket으로 붙어 동일한 lease 백엔드(`production` namespace)를 공유하므로, 각 `poller + channel` 실행은 단일 Valkey-backed JobRunGuard의 lease/cooldown으로 N-way 분배됩니다.
+YouTube scraping/polling, `youtube_notification_outbox` production, 2-way active-active AP runtime입니다. `youtube-producer-b`는 Seoul 호스트(`deploy/compose/docker-compose.seoul.yml`), `youtube-producer-c`는 메인 호스트(`deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)에서 같은 target set을 봅니다. Seoul b는 메인 valkey에 TCP로, c는 같은 호스트 valkey unix socket으로 붙어 동일한 lease 백엔드(`production` namespace)를 공유하므로, 각 `poller + channel` 실행은 단일 Valkey-backed JobRunGuard의 lease/cooldown으로 N-way 분배됩니다.
 
 ## Owns
 
 - YouTube polling/scraping scheduler when `YOUTUBE_INGESTION_ENABLED=true`
-- Holodex photo sync on AP-A and AP-C (`PHOTO_SYNC_ENABLED=true`), guarded by a global Valkey singleton lease so only one AP runs it at a time with TTL failover. AP-B (`PHOTO_SYNC_ENABLED=false`) is a scraping/polling failover peer only and does not participate in PhotoSync.
+- Holodex photo sync on AP-C (`PHOTO_SYNC_ENABLED=true`), guarded by a global Valkey singleton lease with TTL failover. AP-B (`PHOTO_SYNC_ENABLED=false`) is a scraping/polling failover peer only and does not participate in PhotoSync.
 - Community/shorts/live/stats polling configuration
 - `youtube_notification_outbox` production paths for YouTube-derived events
 
@@ -46,10 +46,10 @@ YouTube scraping/polling, `youtube_notification_outbox` production, 3-way active
 
 - PostgreSQL and Valkey availability
 - `YOUTUBE_INGESTION_ENABLED=true`
-- `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true` on all active-active APs (a/b/c)
-- `YOUTUBE_PRODUCER_INSTANCE_ID` unique per AP (`youtube-producer-a/-b/-c`)
+- `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true` on all active-active APs (b/c)
+- `YOUTUBE_PRODUCER_INSTANCE_ID` unique per AP (`youtube-producer-b/-c`)
 - `YOUTUBE_PRODUCER_LEASE_NAMESPACE` shared by all APs in the same environment (`production`)
-- `PHOTO_SYNC_ENABLED=true` on `youtube-producer-a` and `youtube-producer-c`, `PHOTO_SYNC_ENABLED=false` on `youtube-producer-b`
+- `PHOTO_SYNC_ENABLED=true` on `youtube-producer-c`, `PHOTO_SYNC_ENABLED=false` on `youtube-producer-b`
 - `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem`
 - scraper interval env values
 
@@ -60,9 +60,9 @@ YouTube scraping/polling, `youtube_notification_outbox` production, 3-way active
 
 ## Observability
 
-- Logs: `docker logs -f hololive-youtube-producer-c` (main), `SINCE=15m TAIL=600 ./scripts/logs/ap-logs.sh osaka youtube-producer`, `SINCE=15m TAIL=600 ./scripts/logs/ap-logs.sh seoul youtube-producer`
-- Health: `http://127.0.0.1:30005/health` (a), `http://127.0.0.1:30015/health` (b), `http://127.0.0.1:30025/health` (c)
-- Ready: `http://127.0.0.1:30005/ready` (a), `http://127.0.0.1:30015/ready` (b), `http://127.0.0.1:30025/ready` (c), all with `mode=active-active`
+- Logs: `docker logs -f hololive-youtube-producer-c` (main), `SINCE=15m TAIL=600 ./scripts/logs/ap-logs.sh seoul youtube-producer`
+- Health: `http://127.0.0.1:30015/health` (b), `http://127.0.0.1:30025/health` (c)
+- Ready: `http://127.0.0.1:30015/ready` (b), `http://127.0.0.1:30025/ready` (c), all with `mode=active-active`
 - Metrics: `youtube_poller_job_claim_total`, `youtube_poller_job_lease_renew_total`, `youtube_poller_job_mark_completed_total`, `youtube_poller_job_release_total`, `youtube_poller_outbox_insert_total`, `youtube_poller_published_at_resolver_*`
 
 ## Related documents

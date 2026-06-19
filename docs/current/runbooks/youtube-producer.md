@@ -2,17 +2,17 @@
 
 ## Role
 
-`youtube-producer`는 YouTube scraping/polling, outbox production, 3-way active-active AP runtime을 담당합니다. Osaka 호스트에서 `youtube-producer-a`(30005, `deploy/compose/docker-compose.osaka.yml`)가, Seoul 호스트에서 `youtube-producer-b`(30015, `deploy/compose/docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. 셋은 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트(osaka, seoul)는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
+`youtube-producer`는 YouTube scraping/polling, outbox production, 2-way active-active AP runtime을 담당합니다. Seoul 호스트에서 `youtube-producer-b`(30015, `deploy/compose/docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. 둘은 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트(seoul)는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
 
 ## Normal status
 
 | Check | Expected |
 |---|---|
-| Health | Osaka `http://127.0.0.1:30005/health`, Seoul `:30015/health`, main `:30025/health` return success (각 호스트 로컬 기준) |
-| Ready | all three `/ready` payloads show `mode=active-active` |
+| Health | Seoul `:30015/health`, main `:30025/health` return success (각 호스트 로컬 기준) |
+| Ready | both `/ready` payloads show `mode=active-active` |
 | Logs | startup markers include PostgreSQL and Valkey connection success; repeated poller, photo sync, outbox, DB, cache, or proxy errors are absent |
 | Queue | produces outbox/tracking state; does not consume alarm dispatch queue |
-| PostgreSQL TLS | AP `a`, AP `b`, and main `c` render `POSTGRES_SSLMODE=verify-full` and mount `/run/hololive-bot/certs/postgres-ca.pem` |
+| PostgreSQL TLS | AP `b` and main `c` render `POSTGRES_SSLMODE=verify-full` and mount `/run/hololive-bot/certs/postgres-ca.pem` |
 
 ## Dependencies
 
@@ -29,7 +29,7 @@
 | `SERVER_PORT` | HTTP health port | yes |
 | `YOUTUBE_INGESTION_ENABLED` | must be true for this service | yes |
 | `YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS=2` | YouTube producer scraper request ceiling; `2s` means `30 RPM` | yes |
-| `PHOTO_SYNC_ENABLED` | AP-A and AP-C run photo sync (`true`); a global Valkey singleton lease keeps only one active with TTL failover. AP-B is `false` | yes |
+| `PHOTO_SYNC_ENABLED` | AP-C runs photo sync (`true`); a global Valkey singleton lease keeps only one active with TTL failover. AP-B is `false` | yes |
 | `SCRAPER_SCHEDULER_WORKER_COUNT` | per-AP worker cap; remote active-active defaults each AP to `2` | remote AP yes |
 | `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED` | enables per-job JobRunGuard and disables global runtime lease gate | remote AP yes |
 | `YOUTUBE_PRODUCER_INSTANCE_ID` | unique active-active owner token prefix per AP | remote AP yes |
@@ -48,8 +48,6 @@
 ## Logs
 
 ```bash
-# Osaka a
-./scripts/logs/ap-logs.sh osaka youtube-producer-a
 # Seoul b
 ./scripts/logs/ap-logs.sh seoul youtube-producer-b
 # 메인 호스트 c (main-ap profile)
@@ -60,7 +58,7 @@ Expected startup and sync markers:
 - `Photo sync service started`
 - `Photo sync completed`
 
-Photo sync policy: `youtube-producer-a` and `youtube-producer-c` set `PHOTO_SYNC_ENABLED=true`; a global Valkey singleton lease lets only one of them own photo sync at a time, with TTL-based failover. `youtube-producer-b` is a scraping/polling failover peer only (`PHOTO_SYNC_ENABLED=false`) and does not participate in PhotoSync failover.
+Photo sync policy: `youtube-producer-c` sets `PHOTO_SYNC_ENABLED=true`; a global Valkey singleton lease keeps it the sole photo sync owner, with TTL-based failover. `youtube-producer-b` is a scraping/polling failover peer only (`PHOTO_SYNC_ENABLED=false`) and does not participate in PhotoSync failover.
 
 PostgreSQL TLS policy: all producer instances use `verify-full`. AP hosts receive
 only the CA bundle at `/run/hololive-bot/certs/postgres-ca.pem`; the central
@@ -84,12 +82,9 @@ Active-active `/ready` fails closed on startup until a lightweight Valkey JobRun
 
 `/ready` is readiness state, not recent activity telemetry. Use the `youtube_poller_job_*` metrics above to confirm recent `acquired`, `peer_owned`, `already_completed`, renew, mark-completed, and release activity.
 
-`/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. Producer metrics are served from the plain HTTP metrics listener on `:30095`, separate from the H3 app port. AP metrics are published on the host Tailscale IP only (`youtube-producer-a` `100.100.1.7:30095`, `youtube-producer-b` `100.100.1.5:30095`) so central Prometheus can scrape them with the shared API key header. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
+`/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. Producer metrics are served from the plain HTTP metrics listener on `:30095`, separate from the H3 app port. AP metrics are published on the host Tailscale IP only (`youtube-producer-b` `100.100.1.5:30095`) so central Prometheus can scrape them with the shared API key header. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
 
 ```bash
-# Osaka a host
-docker exec hololive-youtube-producer-a ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30095/metrics
-
 # Seoul b host
 docker exec hololive-youtube-producer-b ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30095/metrics
 
@@ -106,13 +101,13 @@ hololive_youtube_scraper_fetch_requests_total{engine="goscrapy",outcome="error",
 hololive_youtube_scraper_fetch_fallback_total{from_engine="goscrapy",to_engine="nethttp",...}
 ```
 
-Use `youtube-producer-a` and `youtube-producer-c` as the `nethttp` baseline and `youtube-producer-b` as the `goscrapy` canary unless a rollout explicitly changes the per-instance `YOUTUBE_PRODUCER_*_FETCHER_ENGINE` values.
+Use `youtube-producer-c` as the `nethttp` baseline and `youtube-producer-b` as the `goscrapy` canary unless a rollout explicitly changes the per-instance `YOUTUBE_PRODUCER_*_FETCHER_ENGINE` values.
 
 Rollback restores `YOUTUBE_PRODUCER_B_FETCHER_ENGINE=nethttp`, rerenders the AP env, and redeploys only `youtube-producer-b`.
 
 ## Cadence tuning
 
-Active-active cadence is global for the same `(poller_name, channel_id)` identity. When one AP completes a primary poll, `JobRunGuard` writes the shared cooldown, so setting AP A and AP B to different intervals is not a coverage mechanism for the same primary poller.
+Active-active cadence is global for the same `(poller_name, channel_id)` identity. When one AP completes a primary poll, `JobRunGuard` writes the shared cooldown, so setting AP B and AP C to different intervals is not a coverage mechanism for the same primary poller.
 
 Use primary interval tuning first, then enable backfill only if metrics show missed observations and the request budget remains acceptable. Starting profile for review, not a default:
 
@@ -141,7 +136,7 @@ SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS=180
 SCRAPER_BACKFILL_TARGET_GROUP=notification
 ```
 
-Before any live cadence/backfill change, run the local budget and compose gates, then request explicit operator approval for the config write and redeploy. Rollback restores the previous `SCRAPER_*_SECONDS` and `SCRAPER_BACKFILL_*` values, then redeploys the approved AP services only (`youtube-producer-a` on osaka, `youtube-producer-b` on seoul).
+Before any live cadence/backfill change, run the local budget and compose gates, then request explicit operator approval for the config write and redeploy. Rollback restores the previous `SCRAPER_*_SECONDS` and `SCRAPER_BACKFILL_*` values, then redeploys the approved AP services only (`youtube-producer-b` on seoul).
 
 Remote AP backfill rollout must be an env/config change, not a hardcoded service default. Set `SCRAPER_BACKFILL_ENABLED=true` and the selected intervals in `/run/hololive-bot/env` or an approved equivalent env override, then redeploy only after explicit operator approval. Monitor:
 
@@ -152,19 +147,16 @@ youtube_poller_outbox_insert_total{kind=...,result="conflict"}
 /ready: mode=active-active, valkey_available=true, scraping_paused=false
 ```
 
-## Remote AP rollout (osaka, seoul)
+## Remote AP rollout (seoul)
 
-Use the scoped deployment wrapper for remote AP active-active rollout. Host topology is defined in `scripts/deploy/ap-hosts/<host>.conf` (osaka: `youtube-producer-a`, seoul: `youtube-producer-b`). The wrapper syncs only the active-active runtime files listed in `scripts/deploy/ap-rsync-files.txt`; it intentionally excludes secrets, docs, tests, `hololive-alarm-worker/**`, runtime data, and all data paths except the embedded `hololive-shared` profile data required by the producer image.
+Use the scoped deployment wrapper for remote AP active-active rollout. Host topology is defined in `scripts/deploy/ap-hosts/<host>.conf` (seoul: `youtube-producer-b`). The wrapper syncs only the active-active runtime files listed in `scripts/deploy/ap-rsync-files.txt`; it intentionally excludes secrets, docs, tests, `hololive-alarm-worker/**`, runtime data, and all data paths except the embedded `hololive-shared` profile data required by the producer image.
 
 ```bash
-./scripts/deploy/ap-deploy.sh osaka --dry-run
-I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh osaka --apply
-
 ./scripts/deploy/ap-deploy.sh seoul --dry-run
 I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh seoul --apply
 ```
 
-Live `--apply` requires explicit operator approval before execution, with a per-host approval env var (`I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY`, `I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY`). The wrapper captures a prechange backup under `backups/<host>-active-active-<timestamp>/`, validates compose config, builds only that host's AP services, recreates them with `--no-deps --remove-orphans`, and runs readiness/health/log smoke checks.
+Live `--apply` requires explicit operator approval before execution, with a per-host approval env var (`I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY`). The wrapper captures a prechange backup under `backups/<host>-active-active-<timestamp>/`, validates compose config, builds only that host's AP services, recreates them with `--no-deps --remove-orphans`, and runs readiness/health/log smoke checks.
 
 After rollout, the read-only completion check must pass:
 
@@ -194,7 +186,6 @@ Symptoms:
 
 Diagnosis:
 ```bash
-./scripts/logs/ap-status.sh osaka
 ./scripts/logs/ap-status.sh seoul
 docker logs --tail 300 hololive-youtube-producer-c
 curl -fsS http://127.0.0.1:30025/ready
@@ -215,8 +206,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-# 각 AP 호스트 로컬에서 /ready 확인 (osaka 30005, seoul 30015, main 30025)
-./scripts/logs/ap-status.sh osaka
+# 각 AP 호스트 로컬에서 /ready 확인 (seoul 30015, main 30025)
 ./scripts/logs/ap-status.sh seoul
 curl -fsS http://127.0.0.1:30025/ready
 ```
@@ -240,13 +230,12 @@ Symptoms:
 
 Diagnosis:
 ```bash
-SINCE=30m TAIL=600 PATTERN='photo' ./scripts/logs/ap-logs.sh osaka youtube-producer | tail -n 80
 docker logs --since 30m hololive-youtube-producer-c 2>&1 | grep -i photo | tail -n 80
 ```
 
 Mitigation:
 - Check `PHOTO_SYNC_ENABLED=true`, PostgreSQL, Valkey, and Holodex/API errors.
-- Photo sync is owned by whichever of `youtube-producer-a`/`youtube-producer-c` currently holds the singleton lease; check the lease holder's logs. `youtube-producer-b` never runs PhotoSync.
+- Photo sync is owned by `youtube-producer-c` holding the singleton lease; check the lease holder's logs. `youtube-producer-b` never runs PhotoSync.
 
 Rollback:
 - Roll back the previous `youtube-producer` image/config if the startup-owned photo sync path regresses.
@@ -262,17 +251,13 @@ Diagnosis:
 ```bash
 ss -tlnp 2>/dev/null | grep ':6379'
 docker exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock PING
-ssh -F /dev/null -i ./KR.key -o IdentitiesOnly=yes -o HostKeyAlias=100.100.1.7 ubuntu@kapu-iris-osaka-1 \
-  'docker ps --format "{{.Names}}\t{{.Status}}" | grep -iE "youtube|producer"'
-SINCE=15m TAIL=600 PATTERN='active_active_paused|active_active_resumed|valkey' \
-  ./scripts/logs/ap-logs.sh osaka youtube-producer | tail -80
 SINCE=15m TAIL=600 PATTERN='active_active_paused|active_active_resumed|valkey' \
   ./scripts/logs/ap-logs.sh seoul youtube-producer | tail -80
 ```
 
 Mitigation:
 - 백그라운드 recovery loop가 `__readiness_probe__`를 사용해 5초 base interval로 재시도하므로, 메인 valkey가 살아나면 자동으로 `active_active_resumed` 로그가 등장하고 `MarkLeaseAvailable()`이 호출됩니다. 일반적으로 사람 개입 없이 회복됩니다.
-- 회복이 5분 이상 걸리면 메인 valkey-cache의 listen/auth와 Tailscale ACL, 호스트 방화벽을 먼저 확인. 그래도 막히면 producer-a(osaka) → 30초 대기 → producer-b(seoul) 순서로 재시작.
+- 회복이 5분 이상 걸리면 메인 valkey-cache의 listen/auth와 Tailscale ACL, 호스트 방화벽을 먼저 확인. 그래도 막히면 producer-b(seoul)를 재시작.
 
 Rollback:
 - 기존 active-active rollback 절차(`./scripts/deploy/ap-rollback.sh <host>`)를 그대로 사용. recovery loop는 readiness 보조 경로이므로 별도 롤백 대상이 아닙니다.
@@ -284,7 +269,6 @@ Symptoms:
 
 Diagnosis:
 ```bash
-SINCE=30m TAIL=600 PATTERN='outbox' ./scripts/logs/ap-logs.sh osaka youtube-producer | tail -n 80
 SINCE=30m TAIL=600 PATTERN='outbox' ./scripts/logs/ap-logs.sh seoul youtube-producer | tail -n 80
 docker logs --tail 300 hololive-youtube-producer-c
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
@@ -299,7 +283,6 @@ Rollback:
 ## Smoke test
 
 ```bash
-./scripts/logs/ap-smoke.sh osaka
 ./scripts/logs/ap-smoke.sh seoul
 ```
 
@@ -338,10 +321,10 @@ Do not add runtime-name aliases in application code. Historical rows remain hist
 
 - Use `docs/current/runbooks/rollback.md`.
 - Redeploy the previous `youtube-producer` image/config.
-- Scale down `youtube-producer-b` (seoul) first, confirm `youtube-producer-a` (osaka) remains healthy, then redeploy the previous image/config.
-- Confirm `YOUTUBE_INGESTION_ENABLED=true`, active `/ready`, health on port `30005`, and outbox/photo sync state after rollback.
+- Scale down `youtube-producer-b` (seoul) first, confirm `youtube-producer-c` (main) remains healthy, then redeploy the previous image/config.
+- Confirm `YOUTUBE_INGESTION_ENABLED=true`, active `/ready`, health on port `30015`, and outbox/photo sync state after rollback.
 - The deploy wrapper stores overwritten files and prechange container inventory under `backups/<host>-active-active-<timestamp>/` on that AP host; use that evidence to restore the previous `deploy/compose/docker-compose.prod.yml` and that host's compose override if active-active startup fails.
-- Topology-level rollback to the pre-2026-06-04 Osaka `a`+`b` layout is manual: stop `youtube-producer-b` on seoul, restore a pre-cutover `deploy/compose/docker-compose.osaka.yml` that defines `youtube-producer-b` — recover it from git history before the compose-directory refactor (`git show 7558024f^:docker-compose.osaka.yml`) or from the 2026-06-04 cutover backup (`backups/osaka-active-active-20260604T102113Z/`); prechange backups taken by deploys *after* the cutover no longer define `youtube-producer-b` — then start it on osaka with an explicit `up -d --no-deps youtube-producer-b`. `ap-rollback.sh osaka` alone restores files but only recreates the services listed in `ap-hosts/osaka.conf` (now `youtube-producer-a`).
+- Topology-level rollback to the pre-2026-06-04 Osaka `a`+`b` layout is manual: stop `youtube-producer-b` on seoul, restore a pre-cutover `deploy/compose/docker-compose.osaka.yml` that defines `youtube-producer-b` — recover it from git history before the compose-directory refactor (`git show 7558024f^:docker-compose.osaka.yml`) or from the 2026-06-04 cutover backup (`backups/osaka-active-active-20260604T102113Z/`); prechange backups taken by deploys *after* the cutover no longer define `youtube-producer-b` — then start it on osaka with an explicit `up -d --no-deps youtube-producer-b`. `ap-rollback.sh osaka` alone restores files but only recreates the services listed in `ap-hosts/osaka.conf` (Osaka AP는 현재 미가동, `docker-compose.osaka.yml`은 재활성화 대비 보존).
 - Dry-run the rollback helper before applying (per-host approval env var):
 
 ```bash

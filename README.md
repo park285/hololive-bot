@@ -1,47 +1,53 @@
 # Hololive Bot
 
-홀로라이브 VTuber 알림/관리 플랫폼입니다. KakaoTalk 챗봇으로 방송 알림, 스트림 상태, 멤버 뉴스, 운영 관리 기능을 제공합니다.
+홀로라이브(Hololive) 버튜버 방송 알림 및 종합 운영 관리 플랫폼입니다.
 
-이 README는 저장소 진입점입니다. 현재 구조의 상세 SSOT는 [docs/current/PROJECT_MAP.md](docs/current/PROJECT_MAP.md)이며, 배포 절차는 [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)를 따릅니다.
+카카오톡(KakaoTalk) 챗봇을 통하여 실시간 방송 알림, 방송 스트리밍 상태 조회, 멤버 소식 정보 제공 및 시스템 원격 관리 기능을 처리합니다.
 
-## Architecture
+본 문서는 저장소의 메인 가이드라인입니다. 시스템 설계 및 모듈 간 아키텍처 상세 사양은 [PROJECT_MAP.md](docs/current/PROJECT_MAP.md) 문서를, 상세 서비스 배포 절차는 [DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md) 가이드를 최우선 사양(SSOT)으로 삼습니다.
 
-현재 운영 기준은 Go runtime 5개를 단일 호스트 Docker Compose로 실행하는 구조입니다. (`youtube-producer`는 Osaka·Seoul·메인 호스트에서 3-way active-active로 확장 운영됩니다.)
+---
 
-> 운영 기준: 2026-03-07 k8s/k3s 배포에서 단일 호스트 Docker Compose 기준으로 롤백했습니다. 현재 배포, 로그 조회, 장애 대응 절차의 기준은 Compose 문서와 `docs/current` 문서군입니다.
+## 시스템 아키텍처 (Architecture Overview)
 
-| Runtime | Module | Compose service | Port | Role |
+본 플랫폼은 Go 기반으로 구현된 **5개의 독립된 런타임 서비스**로 구성되어 있으며, 단일 호스트 상에서 Docker Compose를 통해 격리 가동됩니다. (단, youtube-producer 컴포넌트는 부하 분산 및 신뢰성을 위해 Seoul 및 메인 호스트에 걸쳐 2-way Active-Active 형태로 확장 운용됩니다.)
+
+인프라 이력 사양: 이전의 k8s/k3s 오케스트레이션 구성에서 관리 편의성 향상을 위해 단일 호스트 Docker Compose 기반 환경으로 롤백 복귀하였습니다. 현재 배포 롤아웃 및 로그 분석, 트러블슈팅의 표준 준거는 Docker Compose 운영 문서군을 따릅니다.
+
+### 런타임 컴포넌트 일람 (Runtime Services)
+
+| 런타임 모듈명 | 소스 디렉토리 | Compose 서비스명 | 가동 포트 | 주요 역할 |
 |---|---|---|---:|---|
-| `bot` | `hololive-kakao-bot-go` | `hololive-bot` | 30001 | Kakao/Iris webhook ingress, command routing |
-| `admin-api` | `hololive-admin-api` | `hololive-admin-api` | 30006 | Admin HTTP control plane |
-| `alarm-worker` | `hololive-alarm-worker` | `hololive-alarm-worker` | 30007 | Alarm checker, dispatch queue consumer, and Iris/Kakao proactive egress |
-| `llm-scheduler` | `hololive-llm-sched` | `llm-scheduler` | 30003 | Major event, member news, LLM scheduling and delivery |
-| `youtube-producer` | `hololive-youtube-producer` | `youtube-producer` | 30005/30015/30025 | YouTube polling, outbox production, active-active coordination, and photo sync |
+| bot | hololive-kakao-bot-go | hololive-bot | 30001 | Kakao/Iris 인바운드 웹훅 라우팅 및 챗 명령어 파싱 |
+| admin-api | hololive-admin-api | hololive-admin-api | 30006 | 관리자 API 제어 및 웹 어드민 컨트롤 플레인 |
+| alarm-worker | hololive-alarm-worker | hololive-alarm-worker | 30007 | 방송 정보 주기적 분석, 발송 대기열 소비 및 Iris outbound 호출 |
+| llm-scheduler | hololive-llm-sched | llm-scheduler | 30003 | 버튜버 이벤트 정보 정규화, 뉴스 수집 및 LLM 작업 스케줄러 |
+| youtube-producer | hololive-youtube-producer | youtube-producer | 30015/25 | 유튜브 채널 모니터링, 신규 정보 발행 및 액티브-액티브 제어 |
 
-Shared libraries:
+### 📦 공유 라이브러리 (Shared Libraries)
 
-| Module | Role |
-|---|---|
-| `hololive-shared` | Hololive domain, contracts, shared services |
-| `shared-go` | In-repo Go utilities |
+* **hololive-shared:** 홀로라이브 도메인 도큐먼트, 데이터 스키마 및 공통 비즈니스 로직 정의
+* **shared-go:** 로그 처리, 트레이싱 등을 처리하는 범용 Go 공통 모듈 (Submodule 연계)
 
-기본 흐름:
+### 🔄 핵심 데이터 흐름 (Core Flow)
 
-- Kakao/Iris ingress: `Iris -> bot -> command/service/repository -> PostgreSQL/Valkey`
-- Alarm dispatch: `alarm-worker -> Valkey alarm:dispatch:queue -> alarm-worker egress -> Iris -> KakaoTalk`
-- LLM/member news: `admin-api` 또는 `bot` 내부 client -> `llm-scheduler` internal HTTP API
-- YouTube ingestion: `youtube-producer -> shared outbox/tracking -> alarm-worker`
+* 인바운드 메시지 처리: `Iris Core -> bot -> Command/Service -> PostgreSQL & Valkey`
+* 실시간 알림 발송: `alarm-worker -> Valkey (alarm:dispatch:queue) -> alarm-worker egress -> Iris Core -> 카카오톡`
+* LLM 뉴스 분석 연계: 어드민 API / 봇 내장 클라이언트 -> `llm-scheduler` 내부 API
+* 유튜브 신작 감지: `youtube-producer -> Shared Outbox/Tracking DB -> alarm-worker`
 
-## Development
+---
 
-### Prerequisites
+## 개발 및 검증 (Development & Test)
 
-- Go 1.26
-- PostgreSQL
-- Valkey
-- Docker Compose for production-like local checks
+### 사전 요구 사양 (Prerequisites)
 
-### Build
+* Go 1.26 계열
+* PostgreSQL (영속 저장소)
+* Valkey (세션 및 큐)
+* Docker Compose (로컬 개발 및 통합 검증용)
+
+### 1. 전체 소스 코드 컴파일 (Build)
 
 ```bash
 go work sync
@@ -54,7 +60,7 @@ go build ./shared-go/... \
   ./hololive/hololive-youtube-producer/...
 ```
 
-### Test
+### 2. 전체 단위 테스트 실행 (Test)
 
 ```bash
 go test ./shared-go/... \
@@ -66,70 +72,73 @@ go test ./shared-go/... \
   ./hololive/hololive-youtube-producer/...
 ```
 
-Runtime split contract check:
+* 독립 모듈 규격 검사: `go test . -run TestRuntimeSplitStandaloneModulesContract`
+* 아키텍처 가드레일 정적 검사:
+  ```bash
+  ./scripts/architecture/check-project-map.sh
+  ./scripts/architecture/ci-boundary-gate.sh
+  ```
+* 로컬 통합 품질 게이트: `./scripts/ci/local-ci.sh`
+
+배포 스크립트(`./build-all.sh`) 기동 시, Docker 이미지 빌드 단계 진입 전에 `local-ci.sh` 품질 게이트가 자동으로 선행 수행됩니다. 만약 해당 품질 검사(린트, NilAway, 경합 테스트, staticcheck, 취약점 진단 등) 중 하나라도 실패할 경우 빌드 프로세스가 강제 차단됩니다.
+
+---
+
+## 운영 배포 절차 (Deployment)
+
+운영계 배포 및 롤아웃은 아래 배포 스크립트 도구를 이용하여 모듈별로 안전하게 진행됩니다.
 
 ```bash
-go test . -run TestRuntimeSplitStandaloneModulesContract
-```
-
-Architecture/doc gates:
-
-```bash
-./scripts/architecture/check-project-map.sh
-./scripts/architecture/ci-boundary-gate.sh
-```
-
-Local CI gate:
-
-```bash
-./scripts/ci/local-ci.sh
-```
-
-`./build-all.sh`는 Docker Compose build 전에 이 local CI gate를 실행합니다. gate가 실패하면 image build/deploy 시작 전에 중단됩니다. 기본 gate는 architecture gates, Go toolchain pin, `go work sync` drift, `gofmt`, `go fix` drift, `go mod tidy -diff`, `go vet`, `staticcheck`, stage-3 `golangci-lint`, NilAway, `go build`, `go test -count=1`, race detector, `govulncheck`를 포함합니다. PostgreSQL integration test까지 포함하려면 `TEST_DATABASE_URL`을 설정합니다.
-
-## Deployment
-
-현재 운영 기준은 Docker Compose입니다.
-
-```bash
+# 전체 산출물 컴파일 진행 (버전 범프 제외 옵션)
 ./build-all.sh --no-bump
+
+# 특정 개별 서비스 단위 컨테이너 롤아웃 재배포
 ./scripts/deploy/compose-redeploy-service.sh hololive-bot
 ./scripts/deploy/compose-redeploy-service.sh hololive-admin-api
 ./scripts/deploy/compose-redeploy-service.sh hololive-alarm-worker
 ./scripts/deploy/compose-redeploy-service.sh llm-scheduler
-COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+
+# 유튜브 프로듀서 Active-Active 멀티 프로파일 재배포
+COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.main-ap.yml \
+COMPOSE_PROFILES=main-ap \
+./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
-원격 AP(`youtube-producer-a`/`-b`)는 [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)의 `./scripts/deploy/ap-deploy.sh <host>` 절차를 따릅니다.
+원격 인프라 노드(`youtube-producer-b`) 배포에 대한 매뉴얼은 [DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md) 내부의 `./scripts/deploy/ap-deploy.sh <host>` 운영 절차를 준수해 주십시오.
 
-세부 기준:
+---
 
-- [docs/current/PROJECT_MAP.md](docs/current/PROJECT_MAP.md)
-- [docs/current/DEPLOYMENT_BASELINE.md](docs/current/DEPLOYMENT_BASELINE.md)
-- [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)
+## 서비스 상태 진단 (Logs & Health Check)
 
-## Logs And Health
+* 로그 분석 표준(SSOT): 개발 및 문제 원인 추적 시 각 서비스의 표준 출력/표준 에러(stdout/stderr) 및 Docker Compose의 raw 로그 출력을 1순위 데이터로 다룹니다.
+* 로컬 파일 로그: 디버깅 시 참고용 보조 미러 정보로만 취급합니다.
 
-SSOT는 application stdout/stderr와 `./scripts/deploy/compose.sh ... logs`입니다. 파일 로그는 보조 미러입니다.
+### 서비스별 상태 진단 엔드포인트
 
-| Runtime | Health |
+| 런타임 모듈 | 상태 검증 URI (Health Check) |
 |---|---|
-| `bot` | `http://127.0.0.1:30001/health` |
-| `admin-api` | `http://127.0.0.1:30006/health` |
-| `alarm-worker` | `http://127.0.0.1:30007/health` |
-| `llm-scheduler` | `http://127.0.0.1:30003/health` |
-| `youtube-producer` | `http://127.0.0.1:30025/health` (main `c`; `a`/`b`는 해당 AP 로컬 `30005`/`30015`) |
+| bot | `http://127.0.0.1:30001/health` |
+| admin-api | `http://127.0.0.1:30006/health` |
+| alarm-worker | `http://127.0.0.1:30007/health` |
+| llm-scheduler | `http://127.0.0.1:30003/health` |
+| youtube-producer | `http://127.0.0.1:30025/health` (Main 노드) |
 
 ```bash
+# Docker Compose 컨테이너 동작 상태 점검
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f <service>
-./scripts/logs/logs.sh query <service> --since 1h --limit 1000
+
+# 실시간 컨테이너 로그 분석
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f <service_name>
+
+# 특정 시점 범위의 로그 필터링 쿼리
+./scripts/logs/logs.sh query <service_name> --since 1h --limit 1000
 ```
 
-## Documents
+---
 
-- [docs/README.md](docs/README.md) - 문서 인덱스
-- [docs/current/PROJECT_MAP.md](docs/current/PROJECT_MAP.md) - 현재 runtime/module/operation 인벤토리
-- [docs/current/SERVICE_OWNERSHIP.md](docs/current/SERVICE_OWNERSHIP.md) - runtime 소유권
-- [docs/current/CONTRACT_MAP.md](docs/current/CONTRACT_MAP.md) - 내부 계약 지도
-- [docs/current/runbooks/README.md](docs/current/runbooks/README.md) - runtime runbook 인덱스
+## 연관 기술 문서 (Related Documentation)
+
+* [**docs/README.md**](docs/README.md) - 전체 기술 문서 보관용 인덱스
+* [**docs/current/PROJECT_MAP.md**](docs/current/PROJECT_MAP.md) - 현 시점의 전체 런타임 및 아키텍처 인벤토리 맵 (SSOT)
+* [**docs/current/SERVICE_OWNERSHIP.md**](docs/current/SERVICE_OWNERSHIP.md) - 서비스 모듈별 관리 소유권 명세
+* [**docs/current/CONTRACT_MAP.md**](docs/current/CONTRACT_MAP.md) - 각 컴포넌트 간 통신 규격 프로토콜 계약 지도

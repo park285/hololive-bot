@@ -43,7 +43,7 @@ Current Go runtime services:
 - `hololive-admin-api`
 - `hololive-alarm-worker`
 - `llm-scheduler`
-- `youtube-producer-c` on the main host; `youtube-producer-a/b` use the AP host wrappers.
+- `youtube-producer-c` on the main host; `youtube-producer-b` uses the AP host wrapper.
 
 ## Required Checks
 

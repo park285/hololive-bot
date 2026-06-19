@@ -4,7 +4,7 @@
 
 ## 한 줄 요약
 
-`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube producer AP, LLM 스케줄링, 관리자 API, 공유 라이브러리를 Docker Compose production baseline과 Osaka/Seoul split-host override로 운영합니다.
+`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube producer AP, LLM 스케줄링, 관리자 API, 공유 라이브러리를 Docker Compose production baseline과 Seoul split-host override로 운영합니다.
 
 ## 큰 구조
 
@@ -23,7 +23,6 @@
 ├── scripts/                        # architecture, deploy, log, runtime, CI helpers
 └── deploy/compose/                 # Docker Compose baselines and overlays
     ├── docker-compose.prod.yml     # production compose baseline
-    ├── docker-compose.osaka.yml    # Osaka split-host AP (youtube-producer-a)
     ├── docker-compose.seoul.yml    # Seoul split-host AP (youtube-producer-b)
     └── docker-compose.main-ap.yml  # main-host active-active AP (youtube-producer-c, profile main-ap)
 ```
@@ -40,7 +39,7 @@ The current production runtime set is five Go binaries:
 | `admin-api` | `hololive/hololive-admin-api/` | Admin dashboard control plane | 30006 |
 | `alarm-worker` | `hololive/hololive-alarm-worker/` | Alarm checks, queue consumption, proactive notification egress | 30007 |
 | `llm-scheduler` | `hololive/hololive-llm-sched/` | Major event/member news scheduling and LLM-backed work | 30003 |
-| `youtube-producer` | `hololive/hololive-youtube-producer/` | YouTube polling/scraping, YouTube outbox production, Holodex photo sync | 30005 |
+| `youtube-producer` | `hololive/hololive-youtube-producer/` | YouTube polling/scraping, YouTube outbox production, Holodex photo sync | 30015 |
 
 ## Shared Libraries
 
@@ -80,7 +79,7 @@ youtube-producer
   -> Iris / Kakao egress
 ```
 
-The key ownership split is that `youtube-producer` produces YouTube outbox rows and owns 3-way active-active poll coordination/readiness (Osaka `a` + Seoul `b` + main `c`), while `alarm-worker` owns final delivery. Duplicate suppression depends on Valkey `JobRunGuard`, database identities such as `(kind, content_id)`, and the dispatch worker's delivery claims.
+The key ownership split is that `youtube-producer` produces YouTube outbox rows and owns 2-way active-active poll coordination/readiness (Seoul `b` + main `c`), while `alarm-worker` owns final delivery. Duplicate suppression depends on Valkey `JobRunGuard`, database identities such as `(kind, content_id)`, and the dispatch worker's delivery claims.
 
 ### LLM Work Flow
 
@@ -109,7 +108,6 @@ Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS
 The production baseline is Docker Compose, not Kubernetes. The main files are:
 
 - `deploy/compose/docker-compose.prod.yml`: production service shape;
-- `deploy/compose/docker-compose.osaka.yml`: Osaka split-host active-active AP (`youtube-producer-a`);
 - `deploy/compose/docker-compose.seoul.yml`: Seoul split-host active-active AP (`youtube-producer-b`);
 - `deploy/compose/docker-compose.main-ap.yml`: main-host active-active AP (`youtube-producer-c`, profile `main-ap`);
 - `scripts/deploy/`: deployment and compose validation helpers;
@@ -121,12 +119,12 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 
 ## Active-Active YouTube Producer Notes
 
-The `youtube-producer` active-active path runs three AP containers — `youtube-producer-a` on the Osaka host (`deploy/compose/docker-compose.osaka.yml`), `youtube-producer-b` on the Seoul host (`deploy/compose/docker-compose.seoul.yml`), and `youtube-producer-c` on the main host (`deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`) — while preserving a producer-only contract. All three share the main Valkey lease backend (`production` namespace): Osaka a and Seoul b connect over TCP, c over the local Valkey unix socket. The important invariants are:
+The `youtube-producer` active-active path runs two AP containers — `youtube-producer-b` on the Seoul host (`deploy/compose/docker-compose.seoul.yml`), and `youtube-producer-c` on the main host (`deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`) — while preserving a producer-only contract. Both share the main Valkey lease backend (`production` namespace): Seoul b connects over TCP, c over the local Valkey unix socket. The important invariants are:
 
 - per-channel polling uses Valkey-backed `JobRunGuard` keyed by `(namespace, poller, channel)`, distributing jobs N-way;
 - successful polls mark a cooldown instead of simply releasing the lease;
 - peer-owned and already-completed jobs skip polling;
-- photo sync runs on AP-A and AP-C behind a global singleton lease with TTL failover; AP-B never runs it;
+- photo sync runs on AP-C behind a global singleton lease with TTL failover; AP-B never runs it;
 - Valkey unavailable in active-active mode is fail-closed;
 - final notification delivery is still owned by `alarm-worker`.
 
@@ -138,7 +136,7 @@ Current operational details live in `docs/current/services/youtube-producer.md` 
 |---|---|
 | Find runtime ownership | `docs/current/SERVICE_OWNERSHIP.md` |
 | Find module/service inventory | `docs/current/PROJECT_MAP.md` |
-| Change deploy shape | `deploy/compose/docker-compose.prod.yml`, `deploy/compose/docker-compose.osaka.yml`, `deploy/compose/docker-compose.seoul.yml`, `docs/current/DEPLOYMENT_BASELINE.md` |
+| Change deploy shape | `deploy/compose/docker-compose.prod.yml`, `deploy/compose/docker-compose.seoul.yml`, `docs/current/DEPLOYMENT_BASELINE.md` |
 | Release, rollback, or deploy | `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`, `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
 | Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
 | Change YouTube producer behavior | `hololive/hololive-youtube-producer/`, `hololive/hololive-shared/pkg/service/youtube/`, `docs/current/services/youtube-producer.md` |
