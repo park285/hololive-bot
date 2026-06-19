@@ -161,6 +161,10 @@ func (r *PgxBatchRepository) persistVideosTx(
 	trackingRows []*domain.YouTubeContentAlarmTracking,
 	watermark *domain.YouTubeContentWatermark,
 ) error {
+	notifications, err := r.dropAlreadyKnownVideoNotifications(ctx, tx, notifications)
+	if err != nil {
+		return fmt.Errorf("drop already-known video notifications: %w", err)
+	}
 	if err := r.batchUpsertVideos(ctx, tx, videos); err != nil {
 		return fmt.Errorf("batch upsert videos: %w", err)
 	}
