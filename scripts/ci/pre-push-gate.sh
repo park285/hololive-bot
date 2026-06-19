@@ -79,6 +79,7 @@ fi
 # 구 ci.yml secret-free-gate 의 로컬 미커버 항목을 이전(gofmt 는 local-ci.sh 가 이미 커버).
 echo "[pre-push] workflow boundary / gate ownership"
 bash scripts/ci/check-workflow-secrets.sh
+bash scripts/ci/check-workflow-secrets_test.sh
 echo "[pre-push] shell syntax sweep"
 while IFS= read -r script; do
   bash -n "${script}"
