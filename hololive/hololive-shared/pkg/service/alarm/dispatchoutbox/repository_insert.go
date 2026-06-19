@@ -234,7 +234,6 @@ func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status
 		collision := addPreparedEvent(events, &event, result)
 		if collision != nil {
 			collisions = append(collisions, *collision)
-			continue
 		}
 		deliveries = append(deliveries, delivery)
 	}
@@ -271,7 +270,7 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 		err = rollbackDispatchBatchOnError(ctx, tx, err)
 	}()
 
-	eventIDs, collisions, deliveries, err := prepareBatchDeliveriesForInsert(ctx, tx, eventRows, deliveries, preflightCollisions, result, r.logger)
+	collisions, deliveries, err := prepareBatchDeliveriesForInsert(ctx, tx, eventRows, deliveries, preflightCollisions, result, r.logger)
 	if err != nil {
 		return *result, err
 	}
@@ -282,7 +281,7 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 	}
 	result.InsertedDeliveries = insertedDeliveries
 	result.DuplicateDeliveries = len(deliveries) - insertedDeliveries
-	if recordErr := recordEventCollisions(ctx, tx, attachCollisionEventIDs(collisions, eventIDs)); recordErr != nil {
+	if recordErr := recordEventCollisions(ctx, tx, collisions); recordErr != nil {
 		err = recordErr
 		return *result, err
 	}
@@ -310,17 +309,16 @@ func prepareBatchDeliveriesForInsert(
 	preflightCollisions []eventCollision,
 	result *PublishBatchResult,
 	logger *slog.Logger,
-) (map[string]int64, []eventCollision, []deliveryInsert, error) {
+) ([]eventCollision, []deliveryInsert, error) {
 	eventIDs, collisions, err := insertPreparedEvents(ctx, tx, eventRows, result, logger)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	collisions = append(preflightCollisions, collisions...)
-	if len(collisions) > 0 {
-		deliveries = filterCollisionDeliveries(deliveries, collisions)
-	}
+	collisions = attachCollisionEventIDs(collisions, eventIDs)
+	repointCollisionDeliveryEventIDs(eventIDs, collisions)
 	assignDeliveryEventIDs(deliveries, eventIDs)
-	return eventIDs, collisions, deliveries, nil
+	return collisions, deliveries, nil
 }
 
 func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result *PublishBatchResult, logger *slog.Logger) (map[string]int64, []eventCollision, error) {

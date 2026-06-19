@@ -106,23 +106,13 @@ func logEventCollisions(logger *slog.Logger, collisions []eventCollision) {
 	}
 }
 
-func filterCollisionDeliveries(deliveries []deliveryInsert, collisions []eventCollision) []deliveryInsert {
-	if len(collisions) == 0 {
-		return deliveries
-	}
-	conflictSet := make(map[string]struct{}, len(collisions))
+func repointCollisionDeliveryEventIDs(eventIDs map[string]int64, collisions []eventCollision) {
 	for i := range collisions {
 		collision := &collisions[i]
-		conflictSet[collision.Event.EventKey] = struct{}{}
-	}
-	filtered := make([]deliveryInsert, 0, len(deliveries))
-	for i := range deliveries {
-		delivery := &deliveries[i]
-		if _, conflict := conflictSet[delivery.EventKey]; !conflict {
-			filtered = append(filtered, *delivery)
+		if collision.ExistingEventID > 0 {
+			eventIDs[collision.Event.EventKey] = collision.ExistingEventID
 		}
 	}
-	return filtered
 }
 
 func attachCollisionEventIDs(collisions []eventCollision, eventIDs map[string]int64) []eventCollision {

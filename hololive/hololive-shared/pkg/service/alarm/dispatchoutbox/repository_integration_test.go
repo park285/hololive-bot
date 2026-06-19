@@ -163,8 +163,8 @@ func TestPgxRepositoryInsertBatch_RecordsSameBatchHashConflict(t *testing.T) {
 	if result.InsertedEvents != 1 {
 		t.Fatalf("InsertedEvents = %d, want 1 committed event", result.InsertedEvents)
 	}
-	if result.InsertedDeliveries != 0 {
-		t.Fatalf("InsertedDeliveries = %d, want 0", result.InsertedDeliveries)
+	if result.InsertedDeliveries != 2 {
+		t.Fatalf("InsertedDeliveries = %d, want 2 (conflicting room re-pointed to winner event)", result.InsertedDeliveries)
 	}
 
 	var eventCount, deliveryCount int
@@ -174,8 +174,21 @@ func TestPgxRepositoryInsertBatch_RecordsSameBatchHashConflict(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if eventCount != 1 || deliveryCount != 0 {
-		t.Fatalf("stored counts after conflict events=%d deliveries=%d, want 1/0", eventCount, deliveryCount)
+	if eventCount != 1 || deliveryCount != 2 {
+		t.Fatalf("stored counts after conflict events=%d deliveries=%d, want 1/2", eventCount, deliveryCount)
+	}
+
+	firstEvent, _, _ := buildLedgerRows(&first, StatusPending)
+	var room2Hash string
+	if err := pool.QueryRow(ctx, `
+		SELECT e.payload_hash
+		FROM alarm_dispatch_deliveries d
+		JOIN alarm_dispatch_events e ON e.id = d.event_id
+		WHERE d.room_id='room-2'`).Scan(&room2Hash); err != nil {
+		t.Fatalf("load room-2 delivery event hash: %v", err)
+	}
+	if room2Hash != firstEvent.PayloadHash {
+		t.Fatalf("room-2 delivery event hash = %q, want winner %q (first-wins content)", room2Hash, firstEvent.PayloadHash)
 	}
 
 	var collisionCount int
@@ -220,8 +233,8 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	if result.InsertedEvents != 0 {
 		t.Fatalf("InsertedEvents = %d, want 0", result.InsertedEvents)
 	}
-	if result.InsertedDeliveries != 0 {
-		t.Fatalf("InsertedDeliveries = %d, want 0", result.InsertedDeliveries)
+	if result.InsertedDeliveries != 1 {
+		t.Fatalf("InsertedDeliveries = %d, want 1 (conflicting room re-pointed to existing event)", result.InsertedDeliveries)
 	}
 
 	var eventCount int
@@ -245,8 +258,16 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if deliveryCount != 1 {
-		t.Fatalf("delivery count = %d, want original row only", deliveryCount)
+	if deliveryCount != 2 {
+		t.Fatalf("delivery count = %d, want original plus re-pointed conflicting room", deliveryCount)
+	}
+
+	var room2Count int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries WHERE room_id='room-2'").Scan(&room2Count); err != nil {
+		t.Fatalf("count room-2 deliveries: %v", err)
+	}
+	if room2Count != 1 {
+		t.Fatalf("room-2 delivery count = %d, want 1 (conflicting room must not be silently lost)", room2Count)
 	}
 
 	secondEvent, _, _ := buildLedgerRows(&second, StatusPending)
@@ -266,7 +287,7 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	}
 }
 
-func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversOtherRooms(t *testing.T) {
+func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversAllRooms(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
@@ -312,8 +333,8 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversOth
 	if result.InsertedEvents != 1 {
 		t.Fatalf("InsertedEvents = %d, want 1 committed non-conflicting event", result.InsertedEvents)
 	}
-	if result.InsertedDeliveries != 1 {
-		t.Fatalf("InsertedDeliveries = %d, want 1", result.InsertedDeliveries)
+	if result.InsertedDeliveries != 2 {
+		t.Fatalf("InsertedDeliveries = %d, want 2 (conflicting room re-pointed + non-conflicting room)", result.InsertedDeliveries)
 	}
 
 	var eventCount int
@@ -328,16 +349,29 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversOth
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if deliveryCount != 2 {
-		t.Fatalf("delivery count = %d, want original plus non-conflicting delivery", deliveryCount)
+	if deliveryCount != 3 {
+		t.Fatalf("delivery count = %d, want original plus conflicting plus non-conflicting delivery", deliveryCount)
 	}
 
+	eventAEvent, _, _ := buildLedgerRows(&eventA, StatusPending)
 	var room2Count int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries WHERE room_id='room-2'").Scan(&room2Count); err != nil {
 		t.Fatalf("count room-2 deliveries: %v", err)
 	}
-	if room2Count != 0 {
-		t.Fatalf("room-2 delivery count = %d, want 0", room2Count)
+	if room2Count != 1 {
+		t.Fatalf("room-2 delivery count = %d, want 1 (conflicting room must not be silently lost)", room2Count)
+	}
+
+	var room2Hash string
+	if err := pool.QueryRow(ctx, `
+		SELECT e.payload_hash
+		FROM alarm_dispatch_deliveries d
+		JOIN alarm_dispatch_events e ON e.id = d.event_id
+		WHERE d.room_id='room-2'`).Scan(&room2Hash); err != nil {
+		t.Fatalf("load room-2 delivery event hash: %v", err)
+	}
+	if room2Hash != eventAEvent.PayloadHash {
+		t.Fatalf("room-2 delivery event hash = %q, want existing %q (first-wins content)", room2Hash, eventAEvent.PayloadHash)
 	}
 
 	var room3Count int
@@ -394,16 +428,16 @@ func TestPgxRepositoryInsertBatch_CoalescesRepeatedConflictCollisions(t *testing
 	if result.ProcessedDeliveries != 3 {
 		t.Fatalf("ProcessedDeliveries = %d, want 3", result.ProcessedDeliveries)
 	}
-	if result.InsertedDeliveries != 0 {
-		t.Fatalf("InsertedDeliveries = %d, want 0", result.InsertedDeliveries)
+	if result.InsertedDeliveries != 3 {
+		t.Fatalf("InsertedDeliveries = %d, want 3 (all conflicting rooms re-pointed to existing event)", result.InsertedDeliveries)
 	}
 
 	var deliveryCount int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if deliveryCount != 1 {
-		t.Fatalf("delivery count = %d, want 1 (only original seed)", deliveryCount)
+	if deliveryCount != 4 {
+		t.Fatalf("delivery count = %d, want 4 (seed plus three re-pointed conflicting rooms)", deliveryCount)
 	}
 
 	var collisionCount int
