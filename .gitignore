@@ -231,6 +231,8 @@ docs/.omx/
 docs/doc-gen/
 docs/superpowers/
 docs/history/plan-kits/
+# codex 보안 findings export — 내부 Tailscale IP·포트·공격 narrative 포함, 추적 금지 (finding 79cd2cdb)
+docs/history/security-findings/*.csv
 docs/agent-workflows/
 docs/closeout-*/
 docs/closeout-*.tar.gz
