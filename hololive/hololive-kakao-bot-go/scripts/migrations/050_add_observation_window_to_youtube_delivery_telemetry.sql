@@ -47,7 +47,7 @@ UPDATE youtube_notification_delivery_telemetry AS t
 SET actual_published_at = m.actual_published_at,
     detected_at = m.detected_at,
     observation_status = m.observation_status,
-    observation_runtime_name = m.observation_runtime_name,
+    observation_runtime_name = COALESCE(m.observation_runtime_name, ''),
     observation_bigbang_cutover_at = m.observation_bigbang_cutover_at,
     observation_started_at = m.observation_started_at,
     observation_ended_at = m.observation_ended_at

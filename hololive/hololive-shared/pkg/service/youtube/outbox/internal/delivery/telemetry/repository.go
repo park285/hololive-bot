@@ -196,18 +196,6 @@ func deliveryTelemetrySelectColumnsWithAlias(alias string) string {
 	return strings.Join(columns, ", ")
 }
 
-func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliveryTelemetry, error) {
-	var item domain.YouTubeNotificationDeliveryTelemetry
-	err := row.Scan(
-		&item.ID, &item.DeliveryID, &item.AttemptOrdinal, &item.OutboxID, &item.ChannelID, &item.ContentID, &item.PostID, &item.RoomID, &item.AlarmType,
-		&item.ActualPublishedAt, &item.AlarmSentAt, &item.AlarmLatencyMillis, &item.DetectedAt,
-		&item.ObservationStatus, &item.ObservationRuntimeName, &item.ObservationBigBangCutoverAt, &item.ObservationStartedAt, &item.ObservationEndedAt,
-		&item.DedupeKey, &item.DeliveryPath, &item.DeliveryMode, &item.SendResult, &item.FailureReason,
-		&item.AttemptStartedAt, &item.AttemptFinishedAt, &item.EventAt, &item.NextAttemptAt, &item.CreatedAt, &item.LockedAt, &item.LoggedAt, &item.Error,
-	)
-	return item, err
-}
-
 func (r *Repository) queryTelemetryRows(ctx context.Context, action, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
 	rows, err := r.db.Query(ctx, deliverysql.PostgresPlaceholders(query), args...)
 	if err != nil {

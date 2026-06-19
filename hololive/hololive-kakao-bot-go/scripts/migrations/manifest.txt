@@ -63,3 +63,4 @@
 063 066_pg18_db_usage_hot_table_autovacuum.sql
 064 067_align_claim_index_due_first.sql
 065 068_add_shigure_ui.sql
+066 069_normalize_youtube_delivery_telemetry_observation_runtime.sql

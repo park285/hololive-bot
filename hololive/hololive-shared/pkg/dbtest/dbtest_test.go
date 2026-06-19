@@ -49,6 +49,15 @@ func TestNewPool_AppliesProdMigrations(t *testing.T) {
 	}
 }
 
+func TestApplyMigrations_IsIdempotent(t *testing.T) {
+	pool := NewPool(t)
+	ctx := context.Background()
+
+	if err := ApplyMigrations(ctx, pool); err != nil {
+		t.Fatalf("reapply migrations: %v", err)
+	}
+}
+
 // TestNewPool_RestoresBaseSchema는 006-base-runtime-tables.sql이 적용되고 이후 chain의
 // ALTER까지 반영된 결과(domain struct와 일치하는 컬럼)가 존재하는지 검증한다. 이 테스트가
 // 통과하면 base-schema gap이 없고 manifest 전체가 빈 DB에서 끝까지 적용됐음을 보장한다.

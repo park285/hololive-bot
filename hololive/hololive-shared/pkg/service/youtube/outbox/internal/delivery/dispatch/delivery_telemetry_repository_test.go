@@ -126,6 +126,56 @@ func (deliveryTelemetryTestObservationBaselineModel) TableName() string {
 	return "youtube_community_shorts_observation_post_baselines"
 }
 
+func TestDeliveryTelemetryRepository_ObservationRuntimeNameUsesEmptyStringInvariant(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := newDeliveryPool(t)
+	repository := NewDeliveryTelemetryRepository(db)
+
+	var isNullable, columnDefault string
+	require.NoError(t, db.QueryRow(ctx, `
+		SELECT is_nullable, column_default
+		FROM information_schema.columns
+		WHERE table_schema = current_schema()
+		  AND table_name = 'youtube_notification_delivery_telemetry'
+		  AND column_name = 'observation_runtime_name'
+	`).Scan(&isNullable, &columnDefault))
+	require.Equal(t, "NO", isNullable)
+	require.Contains(t, columnDefault, "''")
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
+		DeliveryID:        101,
+		AttemptOrdinal:    1,
+		OutboxID:          201,
+		ChannelID:         "UC_null_runtime",
+		ContentID:         "post-null-runtime",
+		RoomID:            "room-null-runtime",
+		AlarmType:         domain.AlarmTypeCommunity,
+		ObservationStatus: "outside_observation_window",
+		DedupeKey:         "youtube-notification:COMMUNITY_POST:post-null-runtime",
+		DeliveryPath:      communityShortsDeliveryPath,
+		DeliveryMode:      "grouped",
+		SendResult:        "success",
+		EventAt:           now,
+		NextAttemptAt:     now,
+		AttemptFinishedAt: &now,
+	}}))
+
+	_, err := db.Exec(ctx, `
+		UPDATE youtube_notification_delivery_telemetry
+		SET observation_runtime_name = NULL
+		WHERE delivery_id = $1 AND attempt_ordinal = $2
+	`, int64(101), 1)
+	require.Error(t, err)
+
+	pending, err := repository.FetchAndLockPending(ctx, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.Equal(t, "", pending[0].ObservationRuntimeName)
+}
+
 func TestDeliveryTelemetryRepository_BackfillAndFlush(t *testing.T) {
 	t.Parallel()
 

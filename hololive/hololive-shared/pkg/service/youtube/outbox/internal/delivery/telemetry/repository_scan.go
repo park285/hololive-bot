@@ -1,0 +1,40 @@
+package telemetry
+
+import (
+	"database/sql"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliveryTelemetry, error) {
+	var item domain.YouTubeNotificationDeliveryTelemetry
+	var postID, observationStatus, observationRuntimeName sql.NullString
+	var dedupeKey, deliveryPath, deliveryMode, sendResult sql.NullString
+	var failureReason, rowError sql.NullString
+	err := row.Scan(
+		&item.ID, &item.DeliveryID, &item.AttemptOrdinal, &item.OutboxID, &item.ChannelID, &item.ContentID, &postID, &item.RoomID, &item.AlarmType,
+		&item.ActualPublishedAt, &item.AlarmSentAt, &item.AlarmLatencyMillis, &item.DetectedAt,
+		&observationStatus, &observationRuntimeName, &item.ObservationBigBangCutoverAt, &item.ObservationStartedAt, &item.ObservationEndedAt,
+		&dedupeKey, &deliveryPath, &deliveryMode, &sendResult, &failureReason,
+		&item.AttemptStartedAt, &item.AttemptFinishedAt, &item.EventAt, &item.NextAttemptAt, &item.CreatedAt, &item.LockedAt, &item.LoggedAt, &rowError,
+	)
+	item.PostID = nullStringValue(postID)
+	item.ObservationStatus = nullStringValue(observationStatus)
+	item.ObservationRuntimeName = nullStringValue(observationRuntimeName)
+	item.DedupeKey = nullStringValue(dedupeKey)
+	item.DeliveryPath = nullStringValue(deliveryPath)
+	item.DeliveryMode = nullStringValue(deliveryMode)
+	item.SendResult = nullStringValue(sendResult)
+	item.FailureReason = nullStringValue(failureReason)
+	item.Error = nullStringValue(rowError)
+	return item, err
+}
+
+func nullStringValue(value sql.NullString) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String
+}
