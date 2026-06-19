@@ -293,6 +293,35 @@ write_workflow "${trusted_push}" \
   '      - run: echo "${{ secrets.MODULES_TOKEN }}"'
 expect_success "trusted push repository secret passes" "${trusted_push}"
 
+uppercase_on_secret="${TMP_DIR}/uppercase-on-secret.yml"
+write_workflow "${uppercase_on_secret}" \
+  "name: uppercase-on-secret" \
+  "ON:" \
+  "  pull_request:" \
+  "permissions:" \
+  "  contents: read" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    steps:" \
+  '      - run: echo "${{ secrets.MODULES_TOKEN }}"'
+expect_failure "uppercase on key detects pull_request secret" "secrets.MODULES_TOKEN" "${uppercase_on_secret}"
+
+secrets_string_literal="${TMP_DIR}/secrets-string-literal.yml"
+write_workflow "${secrets_string_literal}" \
+  "name: secrets-string-literal" \
+  "on:" \
+  "  pull_request:" \
+  "permissions:" \
+  "  contents: read" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    if: \${{ contains(github.event.pull_request.title, 'secrets') }}" \
+  "    steps:" \
+  "      - run: echo ok"
+expect_success "benign secrets string literal passes" "${secrets_string_literal}"
+
 if (( failures > 0 )); then
   echo "[FAIL] workflow secret checker tests failed: ${failures}" >&2
   exit 1
