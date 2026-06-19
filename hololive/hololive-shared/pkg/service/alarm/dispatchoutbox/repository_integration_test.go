@@ -449,6 +449,80 @@ func TestPgxRepositoryInsertBatch_CoalescesRepeatedConflictCollisions(t *testing
 	}
 }
 
+func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
+
+	winner := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-1",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "first"},
+		},
+		Version: 1,
+	}
+	driftedRoom2 := winner
+	driftedRoom2.Notification.RoomID = "room-2"
+	driftedRoom2.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "second"}
+	driftedRoom3 := winner
+	driftedRoom3.Notification.RoomID = "room-3"
+	driftedRoom3.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "second"}
+
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{
+		Envelopes: []domain.AlarmQueueEnvelope{winner, driftedRoom2, driftedRoom3},
+		Status:    StatusPending,
+	})
+	if err != nil {
+		t.Fatalf("InsertBatch() error = %v (duplicate (event_key, incoming_payload_hash) collision rows must be deduped, not abort the batch)", err)
+	}
+	if result.InsertedEvents != 1 {
+		t.Fatalf("InsertedEvents = %d, want 1", result.InsertedEvents)
+	}
+	if result.InsertedDeliveries != 3 {
+		t.Fatalf("InsertedDeliveries = %d, want 3 (all rooms delivered, drifted rooms re-pointed to winner)", result.InsertedDeliveries)
+	}
+
+	var eventCount, deliveryCount int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_events").Scan(&eventCount); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
+		t.Fatalf("count deliveries: %v", err)
+	}
+	if eventCount != 1 || deliveryCount != 3 {
+		t.Fatalf("stored counts events=%d deliveries=%d, want 1/3", eventCount, deliveryCount)
+	}
+
+	winnerEvent, _, _ := buildLedgerRows(&winner, StatusPending)
+	var distinctHashes int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(DISTINCT e.payload_hash)
+		FROM alarm_dispatch_deliveries d
+		JOIN alarm_dispatch_events e ON e.id = d.event_id`).Scan(&distinctHashes); err != nil {
+		t.Fatalf("count distinct delivery event hashes: %v", err)
+	}
+	if distinctHashes != 1 {
+		t.Fatalf("distinct delivery event hashes = %d, want 1 (all rooms first-wins)", distinctHashes)
+	}
+	var storedHash string
+	if err := pool.QueryRow(ctx, "SELECT payload_hash FROM alarm_dispatch_events LIMIT 1").Scan(&storedHash); err != nil {
+		t.Fatalf("load payload_hash: %v", err)
+	}
+	if storedHash != winnerEvent.PayloadHash {
+		t.Fatalf("stored event hash = %q, want winner %q", storedHash, winnerEvent.PayloadHash)
+	}
+
+	var collisionCount int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_event_collisions").Scan(&collisionCount); err != nil {
+		t.Fatalf("count collisions: %v", err)
+	}
+	if collisionCount != 1 {
+		t.Fatalf("collision count = %d, want 1 (duplicate collision rows coalesced)", collisionCount)
+	}
+}
+
 func TestPgxRepositoryInsertBatch_SkipsLegacyDedupeKey(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
