@@ -65,10 +65,6 @@ case "$SERVICE" in
     ;;
 esac
 
-remote() {
-  "${AP_SSH[@]}" "$@"
-}
-
 ap_container_for_service() {
   local service="$1"
   local i
@@ -86,34 +82,43 @@ for service in "${services[@]}"; do
   if [[ "$SOURCE" == "file" ]]; then
     logfile="logs/youtube-producer.log"
     if [[ "$FULL" == "1" ]]; then
-      if [[ -n "$PATTERN" ]]; then
-        remote "cd ~/hololive-bot && sudo -n cat '$logfile' | grep -E '$PATTERN' || true"
-      else
-        remote "cd ~/hololive-bot && sudo -n cat '$logfile'"
-      fi
+      ap_remote_bash "$logfile" "$PATTERN" <<'REMOTE'
+set -euo pipefail
+logfile="$1"; pattern="$2"
+cd ~/hololive-bot
+if [[ -n "$pattern" ]]; then
+  sudo -n cat "$logfile" | grep -E "$pattern" || true
+else
+  sudo -n cat "$logfile"
+fi
+REMOTE
       echo
       continue
     fi
-    if [[ -n "$PATTERN" ]]; then
-      remote "cd ~/hololive-bot && sudo -n tail -n '$TAIL' '$logfile' | grep -E '$PATTERN' || true"
-    else
-      remote "cd ~/hololive-bot && sudo -n tail -n '$TAIL' '$logfile'"
-    fi
+    ap_remote_bash "$logfile" "$PATTERN" "$TAIL" <<'REMOTE'
+set -euo pipefail
+logfile="$1"; pattern="$2"; tail_n="$3"
+cd ~/hololive-bot
+if [[ -n "$pattern" ]]; then
+  sudo -n tail -n "$tail_n" "$logfile" | grep -E "$pattern" || true
+else
+  sudo -n tail -n "$tail_n" "$logfile"
+fi
+REMOTE
   else
     container=$(ap_container_for_service "$service")
-    follow_args=()
-    range_args=(--since "$SINCE" --tail "$TAIL")
-    if [[ "$FOLLOW" == "1" ]]; then
-      follow_args=(-f)
-    fi
-    if [[ "$FULL" == "1" ]]; then
-      range_args=()
-    fi
-    if [[ -n "$PATTERN" ]]; then
-      remote "docker logs ${follow_args[*]} ${range_args[*]} '$container' 2>&1 | grep -E '$PATTERN' || true"
-    else
-      remote "docker logs ${follow_args[*]} ${range_args[*]} '$container' 2>&1"
-    fi
+    ap_remote_bash "$FOLLOW" "$FULL" "$SINCE" "$TAIL" "$PATTERN" "$container" <<'REMOTE'
+set -euo pipefail
+follow="$1"; full="$2"; since="$3"; tail_n="$4"; pattern="$5"; container="$6"
+args=(logs)
+if [[ "$follow" == "1" ]]; then args+=(-f); fi
+if [[ "$full" != "1" ]]; then args+=(--since "$since" --tail "$tail_n"); fi
+if [[ -n "$pattern" ]]; then
+  docker "${args[@]}" "$container" 2>&1 | grep -E "$pattern" || true
+else
+  docker "${args[@]}" "$container" 2>&1
+fi
+REMOTE
   fi
   echo
 done

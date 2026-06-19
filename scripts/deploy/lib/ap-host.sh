@@ -77,3 +77,13 @@ ap_host_load() {
     fi
     AP_SSH+=("ubuntu@$AP_SSH_HOST")
 }
+
+# 인자를 %q로 인용한다: ssh가 원격 argv를 공백으로 재조립·재파싱하므로, 인용 없이 bash -s -- "$@"로 넘기면 값의 셸 메타문자가 원격에서 실행된다.
+ap_remote_bash() {
+    local remote_cmd="bash -s --"
+    local arg
+    for arg in "$@"; do
+        remote_cmd+=" $(printf '%q' "$arg")"
+    done
+    "${AP_SSH[@]}" "$remote_cmd"
+}

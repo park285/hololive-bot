@@ -15,7 +15,20 @@ remote() {
 signals() {
   local container="$1"
   local pattern="$2"
-  remote "docker inspect '$container' >/dev/null 2>&1 || { echo '($container not present)'; exit 0; }; hits=\$(docker logs --since '$LOG_SINCE' '$container' 2>&1 | grep -E '$pattern' || true); if [ -n \"\$hits\" ]; then printf '%s\n' \"\$hits\"; else docker logs --tail '$LOG_TAIL' '$container' 2>&1 | grep -E '$pattern' || true; fi"
+  ap_remote_bash "$container" "$pattern" "$LOG_SINCE" "$LOG_TAIL" <<'REMOTE'
+set -euo pipefail
+container="$1"; pattern="$2"; since="$3"; tail_n="$4"
+if ! docker inspect "$container" >/dev/null 2>&1; then
+  echo "($container not present)"
+  exit 0
+fi
+hits=$(docker logs --since "$since" "$container" 2>&1 | grep -E "$pattern" || true)
+if [ -n "$hits" ]; then
+  printf '%s\n' "$hits"
+else
+  docker logs --tail "$tail_n" "$container" 2>&1 | grep -E "$pattern" || true
+fi
+REMOTE
 }
 
 services_list="${AP_SERVICES[*]}"

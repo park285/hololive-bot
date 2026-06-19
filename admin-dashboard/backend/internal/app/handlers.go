@@ -124,11 +124,9 @@ func writeSystemStatsFrame(conn *websocket.Conn, stats any) bool {
 	return conn.WriteJSON(stats) == nil
 }
 
-func closeConn(conn *websocket.Conn) func() {
-	return func() {
-		if err := conn.Close(); err != nil {
-			return
-		}
+func closeConn(conn *websocket.Conn) {
+	if err := conn.Close(); err != nil {
+		return
 	}
 }
 

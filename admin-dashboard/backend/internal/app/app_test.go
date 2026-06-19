@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -477,6 +478,39 @@ func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
 		var frame status.SystemStats
 		require.NoError(t, conn.ReadJSON(&frame))
 		require.Equal(t, want, frame.ThreadCount)
+	}
+}
+
+func TestCloseConnClosesServerSideConnection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		up := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+		conn, err := up.Upgrade(w, req, nil)
+		if err != nil {
+			return
+		}
+		closeConn(conn)
+	}))
+	defer srv.Close()
+
+	conn, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	require.NoError(t, err)
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			return
+		}
+	}()
+	defer func() {
+		if cerr := conn.Close(); cerr != nil {
+			return
+		}
+	}()
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+	_, _, readErr := conn.ReadMessage()
+	require.Error(t, readErr, "server must close the connection after the handler returns")
+	if netErr, ok := errors.AsType[net.Error](readErr); ok {
+		require.False(t, netErr.Timeout(),
+			"read timed out instead of seeing a server close — closeConn no longer closes the conn (FD leak regression)")
 	}
 }
 
