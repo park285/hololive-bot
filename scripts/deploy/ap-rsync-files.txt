@@ -839,3 +839,11 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/telemetry/telemetry.go
 ../shared-go/pkg/workerconfig/worker_profile.go
 ../shared-go/pkg/workerpool/queued_pool.go
+hololive/hololive-shared/pkg/server/internal/httpserver/pprof.go
+hololive/hololive-shared/pkg/service/member/cache_warmup.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/repository_scan.go
+hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/repository_batch_new_video_dedup.go
+hololive/hololive-shared/pkg/service/youtube/poller/internal/scheduler/scheduler_inspection.go
+hololive/hololive-shared/pkg/service/youtube/youtubefactory/youtubefactory.go
+hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_set.go
+../shared-go/pkg/healthprobe/cli.go
