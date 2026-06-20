@@ -225,3 +225,22 @@ func testYouTubePollTargetsOperationalChannels() []communityShortsOperationalCha
 		{OwnerLabel: "Missing", ChannelID: "", Enabled: false},
 	}
 }
+
+func TestHB05BadAlarmChannelIDDoesNotAbortIngesterStartup_1b0fca5a(t *testing.T) {
+	alarmChannelIDs := []string{
+		"",
+		"UCmiko",
+		"UCmiko",
+		"UCnot-subscribed",
+		"   ",
+		"UCpekora",
+	}
+
+	targets := resolveYouTubePollTargetsFromAlarmChannelIDs(alarmChannelIDs, testYouTubePollTargetsOperationalChannels())
+
+	assert.ElementsMatch(t, []string{"UCmiko", "UCpekora"}, targets.NotificationChannelIDs,
+		"allowed alarm channels survive; bad/duplicate/unsubscribed ids are dropped, not fatal")
+	assert.Equal(t, 3, targets.DroppedAlarmTargets,
+		"empty, whitespace, and unsubscribed ids are counted as dropped")
+	assert.ElementsMatch(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+}

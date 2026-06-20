@@ -1210,6 +1210,53 @@ func TestSendMilestoneAlerts_RetryDoesNotResendToAlreadySucceededRooms(t *testin
 	}
 }
 
+func TestHB05PartialRetryDoesNotResendHealthyRooms_2411cf47(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repository := &mockTrackAllSubscribersRepository{
+		unnotifiedMilestones: []ytstats.MilestoneNotification{
+			{ChannelID: "UC1", MemberName: "A", Value: 100000},
+		},
+	}
+	scheduler := &schedulerImpl{
+		statsRepository: repository,
+		formatter:       mockMilestoneFormatter{},
+		logger:          logger,
+		stopCh:          make(chan struct{}),
+	}
+
+	rooms := []string{"room-1", "room-2"}
+	var mu sync.Mutex
+	sentByRoom := map[string]int{}
+	failRoom1 := true
+	sendMessage := func(room, _ string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		if failRoom1 && room == "room-1" {
+			return errors.New("send failed")
+		}
+		sentByRoom[room]++
+		return nil
+	}
+
+	if err := scheduler.SendMilestoneAlerts(context.Background(), sendMessage, rooms); err != nil {
+		t.Fatalf("first SendMilestoneAlerts() error = %v", err)
+	}
+	if sentByRoom["room-2"] != 1 {
+		t.Fatalf("room-2 sent count after first cycle = %d, want 1", sentByRoom["room-2"])
+	}
+
+	failRoom1 = false
+	if err := scheduler.SendMilestoneAlerts(context.Background(), sendMessage, rooms); err != nil {
+		t.Fatalf("retry SendMilestoneAlerts() error = %v", err)
+	}
+	if sentByRoom["room-2"] != 1 {
+		t.Fatalf("healthy room-2 resent on partial-failure retry: count = %d, want 1", sentByRoom["room-2"])
+	}
+	if sentByRoom["room-1"] != 1 {
+		t.Fatalf("room-1 sent count after retry = %d, want 1", sentByRoom["room-1"])
+	}
+}
+
 func TestTrackAllSubscribers_UsesSaveStatsBatch(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
