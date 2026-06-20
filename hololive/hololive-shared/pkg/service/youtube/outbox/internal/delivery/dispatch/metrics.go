@@ -43,6 +43,8 @@ var (
 
 	outboxRevivedTotal      prometheus.Counter
 	outboxReviveErrorsTotal prometheus.Counter
+
+	outboxDeliveryRetryAfterClampedTotal prometheus.Counter
 )
 
 func initOutboxMetrics() {
@@ -130,6 +132,13 @@ func initOutboxDispatchMetrics() {
 			Help: "Total stale-failed revival sweep transaction errors.",
 		},
 	)
+
+	outboxDeliveryRetryAfterClampedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_delivery_retry_after_clamped_total",
+			Help: "Total YouTube outbox delivery HTTP Retry-After hints clamped to the maximum bound.",
+		},
+	)
 }
 
 // observeOutboxRevived는 stale-failed revival sweep이 되살린 outbox 행 수를 누적한다.
@@ -147,6 +156,14 @@ func observeOutboxReviveError() {
 		return
 	}
 	outboxReviveErrorsTotal.Inc()
+}
+
+func observeDeliveryRetryAfterClamped() {
+	initOutboxMetrics()
+	if outboxDeliveryRetryAfterClampedTotal == nil {
+		return
+	}
+	outboxDeliveryRetryAfterClampedTotal.Inc()
 }
 
 func observeOutboxEnqueueOutboxes(result string, n int) {

@@ -17,6 +17,7 @@ var (
 	alarmDispatchRunnerWakeupTimeoutTotal       prometheus.Counter
 	alarmDispatchRunnerWakeupErrorTotal         prometheus.Counter
 	alarmDispatchRunnerPostSendQuarantinedTotal prometheus.Counter
+	alarmDispatchRetryAfterClampedTotal         prometheus.Counter
 	alarmDispatchPGRetentionDeletedRowsTotal    *prometheus.CounterVec
 	alarmDispatchPGRetentionFailedTotal         prometheus.Counter
 	alarmDispatchPGBacklogRows                  *prometheus.GaugeVec
@@ -83,6 +84,10 @@ func initAlarmDispatchRunnerLoopMetrics() {
 		Name: "alarm_dispatch_runner_post_send_quarantined_total",
 		Help: "Alarm dispatch rows quarantined after ambiguous post-send failures.",
 	})
+	alarmDispatchRetryAfterClampedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "alarm_dispatch_retry_after_clamped_total",
+		Help: "Alarm dispatch HTTP Retry-After hints clamped to the maximum bound.",
+	})
 }
 
 func initAlarmDispatchRetentionMetrics() {
@@ -113,6 +118,14 @@ func observeAlarmDispatchRunnerPostSendQuarantined(rows int) {
 		return
 	}
 	alarmDispatchRunnerPostSendQuarantinedTotal.Add(float64(rows))
+}
+
+func observeAlarmDispatchRetryAfterClamped() {
+	initAlarmDispatchRunnerMetrics()
+	if alarmDispatchRetryAfterClampedTotal == nil {
+		return
+	}
+	alarmDispatchRetryAfterClampedTotal.Inc()
 }
 
 func observeAlarmDispatchRunnerIdleWait(consumerMode, waitMode string, duration time.Duration) {
