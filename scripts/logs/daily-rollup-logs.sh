@@ -53,13 +53,15 @@ archive_one_log() {
     return 0
   fi
 
-  tmp_dir="$(mktemp -d "${ARCHIVE_DIR}/.daily-rollup-${service}.XXXXXX")"
+  tmp_dir="$(mktemp -d "${LOG_ROOT}/.daily-rollup-${service}.XXXXXX")"
   tmp_file="${tmp_dir}/${base}"
-  cp -p "${log_file}" "${tmp_file}"
+  mv "${log_file}" "${tmp_file}"
+  ( set -C; : > "${log_file}" ) 2>/dev/null || true
+  chown --reference="${tmp_file}" "${log_file}" 2>/dev/null || true
+  chmod --reference="${tmp_file}" "${log_file}" 2>/dev/null || true
   tar -C "${tmp_dir}" -czf "${archive_path}" "${base}"
-  chown --reference="${log_file}" "${archive_path}" || true
+  chown --reference="${tmp_file}" "${archive_path}" || true
   chmod 0640 "${archive_path}" || true
-  : > "${log_file}"
   rm -rf "${tmp_dir}"
   echo "archived: ${log_file} -> ${archive_path}"
 }
