@@ -28,6 +28,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -88,7 +89,7 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string
 		return "", err
 	}
 
-	if err := validateSuccessfulFetchBody(pageURL, resp.Body); err != nil {
+	if err := validateSuccessfulFetchBody(pageURL, resp.FinalURL, resp.Body); err != nil {
 		return "", err
 	}
 
@@ -216,14 +217,47 @@ func drainResponseBody(resp *http.Response) error {
 
 const successfulBodySignatureScanLimit = 64 * 1024
 
-func validateSuccessfulFetchBody(pageURL string, body []byte) error {
+func validateSuccessfulFetchBody(pageURL, finalURL string, body []byte) error {
 	if len(bytes.TrimSpace(body)) == 0 {
 		return fmt.Errorf("%w: %s", ErrEmptyResponse, pageURL)
+	}
+	if finalURLLooksBlocked(finalURL) {
+		return fmt.Errorf("%w: %s -> %s", ErrBlockedResponse, pageURL, finalURL)
 	}
 	if bodyLooksBlockedByYouTube(body) {
 		return fmt.Errorf("%w: %s", ErrBlockedResponse, pageURL)
 	}
 	return nil
+}
+
+func finalURLLooksBlocked(finalURL string) bool {
+	finalURL = strings.TrimSpace(finalURL)
+	if finalURL == "" {
+		return false
+	}
+	parsed, err := url.Parse(finalURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	path := strings.ToLower(parsed.Path)
+	for _, marker := range blockedRedirectHosts {
+		if host == marker.host && (marker.pathPrefix == "" || strings.HasPrefix(path, marker.pathPrefix)) {
+			return true
+		}
+	}
+	return false
+}
+
+var blockedRedirectHosts = []struct {
+	host       string
+	pathPrefix string
+}{
+	{host: "www.google.com", pathPrefix: "/sorry"},
+	{host: "google.com", pathPrefix: "/sorry"},
+	{host: "consent.youtube.com"},
+	{host: "consent.google.com"},
+	{host: "www.youtube.com", pathPrefix: "/sorry"},
 }
 
 func bodyLooksBlockedByYouTube(body []byte) bool {
@@ -240,15 +274,9 @@ func bodyLooksBlockedByYouTube(body []byte) bool {
 	return false
 }
 
-// "captcha"·"enable cookies" 같은 일반 단어는 영상 제목/설명에도 나타나
-// fleet-wide source cooldown 오탐을 일으키므로 도메인 고정 마커만 쓴다.
 var blockedResponseSignatures = []string{
 	"youtube.com/sorry",
 	"/sorry/index",
-	"our systems have detected unusual traffic",
-	"unusual traffic from your computer network",
-	"to continue, please type the characters",
-	"before you continue to youtube",
 	"consent.youtube.com",
 	"google.com/recaptcha",
 }

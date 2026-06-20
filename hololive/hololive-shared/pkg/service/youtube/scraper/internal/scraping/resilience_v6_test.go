@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -51,15 +52,19 @@ func TestFetchPageRetriesEmptySuccessfulResponse(t *testing.T) {
 
 func TestFetchPageDoesNotRetryBlockedSuccessfulResponse(t *testing.T) {
 	var attempts atomic.Int32
+	sorryURL, err := url.Parse("https://www.google.com/sorry/index?continue=...")
+	require.NoError(t, err)
 	client := NewClient(
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				attempts.Add(1)
+				redirected := req.Clone(req.Context())
+				redirected.URL = sorryURL
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
-					Body:       io.NopCloser(strings.NewReader("Our systems have detected unusual traffic from your computer network.")),
-					Request:    req,
+					Body:       io.NopCloser(strings.NewReader("<html>captcha challenge</html>")),
+					Request:    redirected,
 				}, nil
 			}),
 		}),
@@ -67,7 +72,7 @@ func TestFetchPageDoesNotRetryBlockedSuccessfulResponse(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	_, err := client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
+	_, err = client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
 		MaxAttempts:       3,
 		PerAttemptTimeout: time.Second,
 		BaseDelay:         time.Millisecond,
@@ -76,6 +81,28 @@ func TestFetchPageDoesNotRetryBlockedSuccessfulResponse(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrBlockedResponse)
 	require.Equal(t, int32(1), attempts.Load())
+}
+
+func TestFinalURLLooksBlockedDetectsRedirectToSorry(t *testing.T) {
+	blocked := []string{
+		"https://www.google.com/sorry/index?continue=https://youtube.com",
+		"https://consent.youtube.com/m?continue=...",
+		"https://consent.google.com/ml?continue=...",
+		"https://www.youtube.com/sorry/index",
+	}
+	for _, finalURL := range blocked {
+		require.True(t, finalURLLooksBlocked(finalURL), "redirect-to-block final URL must classify blocked: %s", finalURL)
+	}
+
+	allowed := []string{
+		"",
+		"https://www.youtube.com/watch?v=abc",
+		"https://www.youtube.com/@member/community",
+		"https://www.youtube.com/post/Ug-xyz",
+	}
+	for _, finalURL := range allowed {
+		require.False(t, finalURLLooksBlocked(finalURL), "normal final URL must not classify blocked: %s", finalURL)
+	}
 }
 
 func TestFetchPagePerAttemptTimeoutRecoversOnRetry(t *testing.T) {
@@ -173,16 +200,18 @@ func TestBodyLooksBlockedByYouTubeIgnoresGenericContentWords(t *testing.T) {
 	normalBodies := []string{
 		`{"title":"I solved the world's hardest CAPTCHA","videoId":"abc"}`,
 		`{"description":"please enable cookies in your browser to save preferences"}`,
+		`{"description":"Our systems have detected unusual traffic in this drama recap."}`,
+		`{"comment":"before you continue to youtube, watch this clip"}`,
 	}
 	for _, body := range normalBodies {
 		require.False(t, bodyLooksBlockedByYouTube([]byte(body)),
-			"normal content mentioning captcha/cookies must not trigger fleet-wide cooldown: %s", body)
+			"normal content mentioning generic phrases must not trigger fleet-wide cooldown: %s", body)
 	}
 
 	blockedBodies := []string{
 		`<form action="https://www.google.com/recaptcha/api/challenge">`,
 		`location.replace("https://www.youtube.com/sorry/index?continue=...")`,
-		`Our systems have detected unusual traffic from your computer network.`,
+		`<a href="https://consent.youtube.com/m">consent</a>`,
 	}
 	for _, body := range blockedBodies {
 		require.True(t, bodyLooksBlockedByYouTube([]byte(body)),

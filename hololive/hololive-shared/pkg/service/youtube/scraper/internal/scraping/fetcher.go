@@ -30,6 +30,7 @@ type pageFetchResponse struct {
 	StatusCode int
 	Header     http.Header
 	Body       []byte
+	FinalURL   string
 }
 
 type netHTTPPageFetcher struct {
@@ -63,6 +64,7 @@ func (f netHTTPPageFetcher) FetchPage(ctx context.Context, fetchReq pageFetchReq
 	fetchResp := pageFetchResponse{
 		StatusCode: resp.StatusCode,
 		Header:     resp.Header.Clone(),
+		FinalURL:   finalResponseURL(resp),
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -94,6 +96,13 @@ func (f netHTTPPageFetcher) do(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("failed to fetch page: nil response body")
 	}
 	return resp, nil
+}
+
+func finalResponseURL(resp *http.Response) string {
+	if resp == nil || resp.Request == nil || resp.Request.URL == nil {
+		return ""
+	}
+	return resp.Request.URL.String()
 }
 
 func closeUnsuccessfulFetchResponse(resp *http.Response) error {
