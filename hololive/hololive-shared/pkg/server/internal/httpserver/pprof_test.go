@@ -93,6 +93,30 @@ func TestNewPprofServerRequiresAPIKey(t *testing.T) {
 	}
 }
 
+func TestNewPprofServerKeylessDeniedOnNonLoopback(t *testing.T) {
+	ctx := context.Background()
+
+	denied := []string{"0.0.0.0:6060", ":6060", "192.168.1.5:6060"}
+	for _, addr := range denied {
+		server := NewPprofServer(addr, "")
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/debug/pprof/", http.NoBody))
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("keyless pprof on %q status = %d, want %d", addr, rec.Code, http.StatusForbidden)
+		}
+	}
+
+	allowed := []string{"127.0.0.1:6060", "[::1]:6060", "localhost:6060"}
+	for _, addr := range allowed {
+		server := NewPprofServer(addr, "")
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/debug/pprof/", http.NoBody))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("keyless pprof on loopback %q status = %d, want %d", addr, rec.Code, http.StatusOK)
+		}
+	}
+}
+
 func TestNewRuntimeHTTPServersPprofGate(t *testing.T) {
 	certFile, keyFile := writeH3LocalhostCertificate(t)
 

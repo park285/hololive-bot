@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/pprof"
 
@@ -19,7 +20,7 @@ func NewPprofServer(addr, apiKey string) *http.Server {
 		SkipLogPaths: []string{"/debug/pprof"},
 	})
 	group := router.Group("/debug/pprof")
-	group.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	group.Use(pprofAuthMiddleware(addr, apiKey))
 	group.GET("/", gin.WrapF(pprof.Index))
 	group.GET("/cmdline", gin.WrapF(pprof.Cmdline))
 	group.GET("/profile", gin.WrapF(pprof.Profile))
@@ -36,4 +37,26 @@ func NewPprofServer(addr, apiKey string) *http.Server {
 		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
 		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
 	}
+}
+
+func pprofAuthMiddleware(addr, apiKey string) gin.HandlerFunc {
+	if apiKey != "" {
+		return middleware.APIKeyAuthMiddleware(apiKey)
+	}
+	if isLoopbackListenAddr(addr) {
+		return func(c *gin.Context) { c.Next() }
+	}
+	return func(c *gin.Context) { c.AbortWithStatus(http.StatusForbidden) }
+}
+
+func isLoopbackListenAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
