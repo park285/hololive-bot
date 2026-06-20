@@ -50,3 +50,13 @@ hololive/hololive-youtube-producer/youtube-producer
 # Data / backups (not needed for builds)
 backups/
 data/
+
+**/credentials*
+**/*-credentials*
+**/*service-account*
+**/*serviceaccount*
+**/*.p12
+**/*.pfx
+**/*secret*.json
+**/*secret*.yaml
+**/*secret*.yml

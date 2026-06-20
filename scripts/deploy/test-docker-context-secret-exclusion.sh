@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TMP_DIR}"' EXIT
+
+fail() {
+  echo "[FAIL] $*" >&2
+  exit 1
+}
+
+pass() {
+  echo "[PASS] $*"
+}
+
+if ! docker version >/dev/null 2>&1; then
+  echo "[SKIP] docker daemon unavailable" >&2
+  exit 0
+fi
+
+context_filelist() {
+  local ctx="$1"
+  local img
+  img="$(docker build -q -f - "${ctx}" 2>/dev/null <<'DOCKERFILE'
+FROM busybox
+COPY . /ctx
+RUN find /ctx -type f | sort > /filelist.txt
+DOCKERFILE
+)" || return 1
+  docker run --rm "${img}" cat /filelist.txt
+  docker rmi "${img}" >/dev/null 2>&1 || true
+}
+
+assert_excluded() {
+  local listing="$1" path="$2" label="$3"
+  if grep -qF -- "${path}" <<<"${listing}"; then
+    fail "hb03: ${label} leaked into build context: ${path}"
+  fi
+}
+
+assert_present() {
+  local listing="$1" path="$2" label="$3"
+  if ! grep -qF -- "${path}" <<<"${listing}"; then
+    fail "hb03: required ${label} missing from build context: ${path}"
+  fi
+}
+
+build_fixture() {
+  local ctx="$1" dockerignore="$2"
+  mkdir -p "${ctx}/admin-dashboard/backend/config"
+  cp "${dockerignore}" "${ctx}/.dockerignore"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/credentials.json"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/service-account.json"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/tls.key"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/.env.production"
+  printf 'package config\n' > "${ctx}/admin-dashboard/backend/config/loader.go"
+}
+
+producer_ctx="${TMP_DIR}/producer"
+build_fixture "${producer_ctx}" "${ROOT_DIR}/hololive/hololive-youtube-producer/Dockerfile.dockerignore"
+producer_list="$(context_filelist "${producer_ctx}")" || fail "hb03: producer fixture build failed"
+
+for secret in credentials.json service-account.json tls.key .env.production; do
+  assert_excluded "${producer_list}" "/ctx/admin-dashboard/backend/config/${secret}" "producer/${secret}"
+done
+assert_present "${producer_list}" "/ctx/admin-dashboard/backend/config/loader.go" "producer source"
+
+root_ctx="${TMP_DIR}/root"
+build_fixture "${root_ctx}" "${ROOT_DIR}/.dockerignore"
+root_list="$(context_filelist "${root_ctx}")" || fail "hb03: root fixture build failed"
+
+for secret in credentials.json service-account.json tls.key .env.production; do
+  assert_excluded "${root_list}" "/ctx/admin-dashboard/backend/config/${secret}" "root/${secret}"
+done
+assert_present "${root_list}" "/ctx/admin-dashboard/backend/config/loader.go" "root-context source"
+
+pass "hb03: admin backend secrets excluded from producer + root build context, sources retained (dd36cc1a, 3559884b)"
+
+named_ctx="${TMP_DIR}/named"
+shared_ctx="${TMP_DIR}/shared"
+mkdir -p "${named_ctx}" "${shared_ctx}/pkg" "${shared_ctx}/artifacts"
+printf 'module x\n' > "${shared_ctx}/go.mod"
+printf '\n' > "${shared_ctx}/go.sum"
+printf 'package p\n' > "${shared_ctx}/pkg/p.go"
+printf 'stale-untracked\n' > "${shared_ctx}/artifacts/stale.bin"
+printf 'local-uncommitted\n' > "${shared_ctx}/local-uncommitted.go"
+
+producer_named="$(grep -E '^COPY --from=shared_go_workspace' "${ROOT_DIR}/hololive/hololive-youtube-producer/Dockerfile")"
+{
+  printf 'FROM busybox\n'
+  while IFS= read -r line; do
+    printf '%s\n' "${line/\/workspace\/shared-go//w/shared-go}"
+  done <<<"${producer_named}"
+  printf 'RUN find /w -type f | sort > /fl.txt\n'
+} > "${named_ctx}/Dockerfile"
+
+named_img="$(docker build -q --build-context shared_go_workspace="${shared_ctx}" "${named_ctx}" 2>/dev/null)" \
+  || fail "hb03: named-context fixture build failed"
+named_list="$(docker run --rm "${named_img}" cat /fl.txt)"
+docker rmi "${named_img}" >/dev/null 2>&1 || true
+
+assert_excluded "${named_list}" "/w/shared-go/artifacts/stale.bin" "named-context stale artifact (9eedece2)"
+assert_excluded "${named_list}" "/w/shared-go/local-uncommitted.go" "named-context uncommitted file (9eedece2)"
+assert_present "${named_list}" "/w/shared-go/go.mod" "named-context go.mod"
+assert_present "${named_list}" "/w/shared-go/pkg/p.go" "named-context pkg source"
+
+pass "hb03: shared-go named-context COPY pulls only module-verified paths (9eedece2)"

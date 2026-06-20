@@ -48,8 +48,12 @@ ENV GOWORK=off
 WORKDIR /workspace/hololive-bot
 
 COPY go.mod go.work go.work.sum ./
-COPY --from=shared_go_workspace . /workspace/shared-go
-COPY --from=iris_client_go_workspace . /workspace/iris-client-go
+COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
+COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
+COPY --from=iris_client_go_workspace go.mod go.sum /workspace/iris-client-go/
+COPY --from=iris_client_go_workspace iris /workspace/iris-client-go/iris
+COPY --from=iris_client_go_workspace internal /workspace/iris-client-go/internal
+COPY --from=iris_client_go_workspace webhook /workspace/iris-client-go/webhook
 COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
 COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
 COPY admin-dashboard/backend ./admin-dashboard/backend

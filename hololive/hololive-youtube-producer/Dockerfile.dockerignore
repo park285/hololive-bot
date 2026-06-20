@@ -48,3 +48,13 @@
 **/testdata/
 **/testdata/**
 **/*.md
+
+**/.env*
+**/*.key
+**/*.pem
+**/*.pub
+**/credentials*
+**/*-credentials*
+**/*service-account*
+**/*.p12
+**/*.pfx
