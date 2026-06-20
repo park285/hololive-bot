@@ -153,8 +153,9 @@ func (p *ShortsPoller) buildShortBatch(
 		notifications: make([]*domain.YouTubeNotificationOutbox, 0, len(shorts)),
 		trackingRows:  make([]*domain.YouTubeContentAlarmTracking, 0, len(shorts)),
 	}
+	inlineResolveBudget := newInlineResolveBudget(MaxInlinePublishedAtResolvesPerPoll)
 	for i := range shorts {
-		dbVideo, trackingRow, notification, keepExistingWatermark := p.buildShortArtifacts(ctx, channelID, shorts[i], isInitialized, detectedAt)
+		dbVideo, trackingRow, notification, keepExistingWatermark := p.buildShortArtifacts(ctx, channelID, shorts[i], isInitialized, detectedAt, inlineResolveBudget)
 		if dbVideo != nil {
 			batch.dbVideos = append(batch.dbVideos, dbVideo)
 		}
@@ -169,12 +170,24 @@ func (p *ShortsPoller) buildShortBatch(
 	return batch
 }
 
+func newInlineResolveBudget(limit int) func() bool {
+	remaining := limit
+	return func() bool {
+		if remaining <= 0 {
+			return false
+		}
+		remaining = remaining - 1
+		return true
+	}
+}
+
 func (p *ShortsPoller) buildShortArtifacts(
 	ctx context.Context,
 	channelID string,
 	short *scraper.Short,
 	isInitialized bool,
 	detectedAt time.Time,
+	inlineResolveBudget func() bool,
 ) (*domain.YouTubeVideo, *domain.YouTubeContentAlarmTracking, *domain.YouTubeNotificationOutbox, bool) {
 	if short == nil {
 		return nil, nil, nil, false
@@ -183,7 +196,7 @@ func (p *ShortsPoller) buildShortArtifacts(
 	canonicalPostID := polling.NormalizeContentID(domain.OutboxKindNewShort, short.VideoID)
 	resourceVideoID := polling.NormalizeShortVideoResourceID(short.VideoID)
 	publishedAt := yttimestamp.NormalizePtr(short.PublishedAt)
-	if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled {
+	if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled && inlineResolveBudget != nil && inlineResolveBudget() {
 		publishedAt = p.resolveShortPublishedAtInline(ctx, resourceVideoID)
 	}
 	dbVideo := &domain.YouTubeVideo{

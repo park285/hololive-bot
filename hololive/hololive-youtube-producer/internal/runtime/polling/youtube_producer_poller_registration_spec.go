@@ -73,7 +73,7 @@ func shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt bool, maxResult
 	units := 1.0
 	if inlineResolveMissingPublishedAt {
 		units += float64(scraper.FetchPageMaxAttempts)
-		units += float64(maxResults)
+		units += float64(min(maxResults, poller.MaxInlinePublishedAtResolvesPerPoll))
 	}
 	return units
 }

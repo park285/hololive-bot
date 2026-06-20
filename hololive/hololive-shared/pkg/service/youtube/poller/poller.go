@@ -102,6 +102,8 @@ const (
 	JobClaimPeerOwned        = polling.JobClaimPeerOwned
 	JobClaimAlreadyCompleted = polling.JobClaimAlreadyCompleted
 	JobClaimUnavailable      = polling.JobClaimUnavailable
+
+	MaxInlinePublishedAtResolvesPerPoll = pollers.MaxInlinePublishedAtResolvesPerPoll
 )
 
 var DefaultViewerSampleCleanerConfig = polling.DefaultViewerSampleCleanerConfig
