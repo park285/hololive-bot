@@ -8,7 +8,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/park285/shared-go v1.9.0
+	github.com/park285/shared-go v1.14.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.75
 	golang.org/x/crypto v0.52.0
@@ -55,7 +55,5 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/park285/shared-go => ../../../shared-go
 
 replace github.com/kapu/hololive-shared => ../../hololive/hololive-shared

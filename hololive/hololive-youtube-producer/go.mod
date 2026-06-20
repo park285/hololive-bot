@@ -8,7 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/shared-go v1.9.0
+	github.com/park285/shared-go v1.14.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/quic-go/quic-go v0.60.0
 	github.com/stretchr/testify v1.11.1
@@ -171,7 +171,5 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/park285/shared-go => ../../../shared-go
 
 replace github.com/kapu/hololive-shared => ../hololive-shared

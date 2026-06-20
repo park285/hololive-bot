@@ -12,7 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/iris-client-go v0.18.0
-	github.com/park285/shared-go v1.9.0
+	github.com/park285/shared-go v1.14.0
 	github.com/quic-go/quic-go v0.60.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.75
@@ -20,8 +20,6 @@ require (
 	golang.org/x/image v0.41.0
 	golang.org/x/sync v0.20.0
 )
-
-replace github.com/park285/shared-go => ../../../shared-go
 
 replace github.com/kapu/hololive-shared => ../hololive-shared
 
