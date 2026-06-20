@@ -42,6 +42,10 @@ if [[ -z "$BACKUP_DIR" ]]; then
 fi
 
 case "$BACKUP_DIR" in
+  *[!A-Za-z0-9._/-]*)
+    echo "Refusing BACKUP_DIR with unsafe characters: $BACKUP_DIR" >&2
+    exit 2
+    ;;
   backups/"$AP_BACKUP_PREFIX"-*) ;;
   *)
     echo "Refusing suspicious BACKUP_DIR: $BACKUP_DIR" >&2
