@@ -32,7 +32,7 @@ import (
 // RecoveryMiddleware는 HTTP boundary에서 발생한 panic이 프로세스 밖으로 전파되지 않도록
 // 공통 복구 정책을 적용합니다. ApplyBaseMiddleware가 이 미들웨어를 항상 설치하므로 신규
 // gin.Engine 작성자가 gin.Recovery를 별도로 기억하지 않아도 됩니다.
-func RecoveryMiddleware(logger *slog.Logger) gin.HandlerFunc {
+func RecoveryMiddleware(ctx context.Context, logger *slog.Logger) gin.HandlerFunc {
 	log := logger
 	if log == nil {
 		log = slog.Default()
@@ -41,7 +41,7 @@ func RecoveryMiddleware(logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				logRecoveredPanic(log, c, recovered)
+				logRecoveredPanic(ctx, log, c, recovered)
 				if !c.Writer.Written() {
 					abortWithError(c, http.StatusInternalServerError, "internal_error", "internal server error")
 					return
@@ -54,15 +54,13 @@ func RecoveryMiddleware(logger *slog.Logger) gin.HandlerFunc {
 	}
 }
 
-func logRecoveredPanic(logger *slog.Logger, c *gin.Context, recovered any) {
-	ctx := context.Background()
+func logRecoveredPanic(ctx context.Context, logger *slog.Logger, c *gin.Context, recovered any) {
 	attrs := []slog.Attr{
 		slog.Any("panic", recovered),
 		slog.String("stack", string(debug.Stack())),
 	}
 
 	if c != nil && c.Request != nil {
-		ctx = c.Request.Context()
 		attrs = append(attrs,
 			slog.String("method", c.Request.Method),
 			slog.String("path", c.Request.URL.Path),

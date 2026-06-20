@@ -47,7 +47,7 @@ func ApplyBaseMiddleware(router *gin.Engine, ctx context.Context, logger *slog.L
 		maxBodyBytes = constants.ServerConfig.MaxBodyBytes
 	}
 
-	router.Use(middleware.RecoveryMiddleware(logger))
+	router.Use(middleware.RecoveryMiddleware(ctx, logger))
 	router.Use(middleware.LoggerMiddleware(ctx, logger, opts.SkipLogPaths...))
 	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.RequestIDMiddleware())
