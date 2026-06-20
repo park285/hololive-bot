@@ -210,11 +210,13 @@ cmd_dump() {
   local mirror_dir="${REPO_ROOT}/logs/mirror"
   local since="${DUMP_SINCE:-2h}"
   local limit="${DUMP_LIMIT:-10000}"
-  local rotate_bytes=$((100 * 1024 * 1024))
+  local rotate_bytes="${DUMP_ROTATE_BYTES:-$((100 * 1024 * 1024))}"
+  local max_dump_bytes="${DUMP_MAX_BYTES:-$rotate_bytes}"
   local retention_days="${DUMP_RETENTION_DAYS:-30}"
   local enable_log_mirror="${ENABLE_LOG_MIRROR:-0}"
   local dump_count=0
   local tmp_file=""
+  local tmp_size=0
   local log_file=""
   local file_size=0
   local line_count=0
@@ -231,17 +233,27 @@ cmd_dump() {
   for svc in "${services[@]}"; do
     log_file="${mirror_dir}/${svc}.log"
 
-    if [[ -f "${log_file}" ]]; then
-      file_size="$(stat -c%s "${log_file}" 2>/dev/null || echo 0)"
-      if [[ "${file_size}" -gt "${rotate_bytes}" ]]; then
-        mv -f "${log_file}" "${log_file}.1"
-        echo "$(date '+%Y-%m-%d %H:%M:%S') rotation: ${svc}.log -> ${svc}.log.1 (${file_size} bytes)" >&2
-      fi
-    fi
-
     tmp_file="$(mktemp)"
     compose_query_output "${svc}" "${since}" "${limit}" "" "true" > "${tmp_file}"
     line_count="$(wc -l < "${tmp_file}" | xargs)"
+
+    tmp_size="$(stat -c%s "${tmp_file}" 2>/dev/null || echo 0)"
+    if [[ "${tmp_size}" -gt "${max_dump_bytes}" ]]; then
+      head -c "${max_dump_bytes}" "${tmp_file}" > "${tmp_file}.capped"
+      mv -f "${tmp_file}.capped" "${tmp_file}"
+      tmp_size="${max_dump_bytes}"
+      echo "$(date '+%Y-%m-%d %H:%M:%S') dump capped: ${svc} payload truncated to ${max_dump_bytes} bytes" >&2
+    fi
+
+    file_size=0
+    if [[ -f "${log_file}" ]]; then
+      file_size="$(stat -c%s "${log_file}" 2>/dev/null || echo 0)"
+    fi
+    if [[ -f "${log_file}" ]] && [[ $((file_size + tmp_size)) -gt "${rotate_bytes}" ]]; then
+      mv -f "${log_file}" "${log_file}.1"
+      echo "$(date '+%Y-%m-%d %H:%M:%S') rotation: ${svc}.log -> ${svc}.log.1 (${file_size} bytes + ${tmp_size} pending)" >&2
+    fi
+
     if [[ "${line_count}" -gt 0 ]]; then
       cat "${tmp_file}" >> "${log_file}"
     fi
