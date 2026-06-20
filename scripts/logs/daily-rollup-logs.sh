@@ -24,8 +24,12 @@ Environment:
 
 Behavior:
   Archives each matching top-level regular log file into
-  LOG_ARCHIVE_DIR/<service>-YYYY-MM-DD.log.tar.gz, then truncates the active
-  file. Symlinked logs are skipped so remote mirrors are not modified centrally.
+  LOG_ARCHIVE_DIR/<service>-YYYY-MM-DD.log.tar.gz by atomically moving it aside
+  and recreating a fresh empty file in its place (mv + recreate, not copy +
+  truncate), so no write is lost to a copy/truncate race. This assumes the log
+  files are rsync mirrors / non-long-lived-fd writers; a process holding the
+  file open across the rollup would keep writing to the moved inode. Symlinked
+  logs are skipped so remote mirrors are not modified centrally.
 USAGE
 }
 
