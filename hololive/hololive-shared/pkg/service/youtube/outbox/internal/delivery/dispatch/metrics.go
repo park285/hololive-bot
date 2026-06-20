@@ -95,6 +95,31 @@ func initOutboxDispatchMetrics() {
 		[]string{"result"},
 	)
 
+	initOutboxDispatchHistograms()
+
+	outboxRevivedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_revived_total",
+			Help: "Total fresh never-sent FAILED YouTube outbox rows revived for redelivery.",
+		},
+	)
+
+	outboxReviveErrorsTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_revive_errors_total",
+			Help: "Total stale-failed revival sweep transaction errors.",
+		},
+	)
+
+	outboxDeliveryRetryAfterClampedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_delivery_retry_after_clamped_total",
+			Help: "Total YouTube outbox delivery HTTP Retry-After hints clamped to the maximum bound.",
+		},
+	)
+}
+
+func initOutboxDispatchHistograms() {
 	outboxDispatchDuration = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "hololive_youtube_outbox_dispatch_duration_seconds",
@@ -116,27 +141,6 @@ func initOutboxDispatchMetrics() {
 			Name:    "hololive_youtube_outbox_dispatch_touched_outboxes",
 			Help:    "Unique outbox rows touched per YouTube outbox dispatch batch.",
 			Buckets: []float64{1, 2, 5, 10, 20, 50, 100, 200},
-		},
-	)
-
-	outboxRevivedTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_revived_total",
-			Help: "Total fresh never-sent FAILED YouTube outbox rows revived for redelivery.",
-		},
-	)
-
-	outboxReviveErrorsTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_revive_errors_total",
-			Help: "Total stale-failed revival sweep transaction errors.",
-		},
-	)
-
-	outboxDeliveryRetryAfterClampedTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_delivery_retry_after_clamped_total",
-			Help: "Total YouTube outbox delivery HTTP Retry-After hints clamped to the maximum bound.",
 		},
 	)
 }

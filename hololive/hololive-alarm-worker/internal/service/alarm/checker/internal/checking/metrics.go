@@ -95,11 +95,17 @@ func observeYouTubeLiveGuardrail(result string) {
 }
 
 func alarmMinuteLabel(minute int) string {
-	switch {
-	case minute < 0:
+	if minute < 0 {
 		return "negative"
-	case minute <= 60:
+	}
+	if minute <= 60 {
 		return strconv.Itoa(minute)
+	}
+	return alarmMinuteBucket(minute)
+}
+
+func alarmMinuteBucket(minute int) string {
+	switch {
 	case minute <= 120:
 		return "61_120"
 	case minute <= 360:

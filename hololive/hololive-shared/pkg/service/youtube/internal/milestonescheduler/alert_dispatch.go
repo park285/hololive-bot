@@ -146,32 +146,45 @@ func runAlertDispatchWorks[T any, W any](
 
 	for i := range works {
 		work := works[i]
-		notification := notificationOf(work)
-		message := messageOf(work)
-		key := keyOf(work)
-		for _, room := range rooms {
-			result := &results[i]
-			if ledger.alreadySent(key, room) {
-				continue
-			}
-			eg.Go(func() error {
-				if err := sendMessage(room, message); err != nil {
-					logger.Error(sendFailureLog,
-						slog.String("room", room),
-						slog.String("member", memberNameOf(notification)),
-						slog.Any("error", err))
-					result.failureCount.Add(1)
-					return nil
-				}
-				ledger.recordSent(key, room)
-				result.successCount.Add(1)
-				return nil
-			})
-		}
+		scheduleAlertWorkDispatch(eg, logger, ledger, sendMessage, rooms, &results[i],
+			notificationOf(work), messageOf(work), keyOf(work), memberNameOf, sendFailureLog)
 	}
 
 	if err := eg.Wait(); err != nil {
 		logger.Warn("Alert dispatch worker failed", slog.Any("error", err))
+	}
+}
+
+func scheduleAlertWorkDispatch[T any](
+	eg *errgroup.Group,
+	logger *slog.Logger,
+	ledger *sentRoomLedger,
+	sendMessage func(room, message string) error,
+	rooms []string,
+	result *alertDispatchResult[T],
+	notification T,
+	message string,
+	key string,
+	memberNameOf func(T) string,
+	sendFailureLog string,
+) {
+	for _, room := range rooms {
+		if ledger.alreadySent(key, room) {
+			continue
+		}
+		eg.Go(func() error {
+			if err := sendMessage(room, message); err != nil {
+				logger.Error(sendFailureLog,
+					slog.String("room", room),
+					slog.String("member", memberNameOf(notification)),
+					slog.Any("error", err))
+				result.failureCount.Add(1)
+				return nil
+			}
+			ledger.recordSent(key, room)
+			result.successCount.Add(1)
+			return nil
+		})
 	}
 }
 
