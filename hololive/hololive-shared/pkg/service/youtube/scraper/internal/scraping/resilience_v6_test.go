@@ -219,6 +219,34 @@ func TestBodyLooksBlockedByYouTubeIgnoresGenericContentWords(t *testing.T) {
 	}
 }
 
+func TestHB05BodySubstringDoesNotTriggerBlockCooldown_9e234216(t *testing.T) {
+	spoofedBodies := []string{
+		`<a href="https://www.youtube.com/sorry/index">channel pinned comment link</a>`,
+		`location.replace("https://www.google.com/recaptcha/api")`,
+		`<iframe src="https://consent.youtube.com/m"></iframe>`,
+	}
+	for _, body := range spoofedBodies {
+		err := validateSuccessfulFetchBody(
+			"https://www.youtube.com/@channel/videos",
+			"https://www.youtube.com/@channel/videos",
+			[]byte(body),
+		)
+		require.NoError(t, err,
+			"spoofable body substring with a clean final URL must not produce ErrBlockedResponse (no 30m cooldown): %s", body)
+		require.NotErrorIs(t, err, ErrBlockedResponse, body)
+	}
+}
+
+func TestHB05FinalURLSorryTriggersCooldown_9e234216(t *testing.T) {
+	err := validateSuccessfulFetchBody(
+		"https://www.youtube.com/@channel/videos",
+		"https://www.youtube.com/sorry/index?continue=foo",
+		[]byte("any body content"),
+	)
+	require.ErrorIs(t, err, ErrBlockedResponse,
+		"a real /sorry redirect in the final URL must still classify as blocked")
+}
+
 func TestResponseBodyReadErrorDoesNotMisclassifyTransportErrors(t *testing.T) {
 	transportErr := errors.New("connection rate limit reached")
 	got := responseBodyReadError(transportErr)

@@ -225,7 +225,9 @@ func validateSuccessfulFetchBody(pageURL, finalURL string, body []byte) error {
 		return fmt.Errorf("%w: %s -> %s", ErrBlockedResponse, pageURL, finalURL)
 	}
 	if bodyLooksBlockedByYouTube(body) {
-		return fmt.Errorf("%w: %s", ErrBlockedResponse, pageURL)
+		slog.Warn("YouTube block-page signature found in fetch body without a blocked final URL; treating as success (no cooldown)",
+			"url", pageURL,
+			"final_url", finalURL)
 	}
 	return nil
 }
