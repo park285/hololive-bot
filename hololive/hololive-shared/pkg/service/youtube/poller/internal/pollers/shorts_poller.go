@@ -171,12 +171,12 @@ func (p *ShortsPoller) buildShortBatch(
 }
 
 func newInlineResolveBudget(limit int) func() bool {
-	remaining := limit
+	used := 0
 	return func() bool {
-		if remaining <= 0 {
+		if used >= limit {
 			return false
 		}
-		remaining = remaining - 1
+		used += 1
 		return true
 	}
 }
