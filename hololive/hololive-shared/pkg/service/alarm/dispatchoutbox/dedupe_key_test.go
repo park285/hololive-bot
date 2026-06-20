@@ -1,12 +1,57 @@
 package dispatchoutbox
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+func TestBuildEventKeyUsesHashFormWhenOverLimit(t *testing.T) {
+	input := DedupeInput{
+		ChannelID:    strings.Repeat("c", 600),
+		AlarmType:    domain.AlarmTypeLive,
+		StreamID:     strings.Repeat("s", 600),
+		MinutesUntil: 10,
+		Category:     "claim:event",
+	}
+
+	got := BuildEventKey(&input)
+	if len(got) > eventKeyMaxLength {
+		t.Fatalf("BuildEventKey length = %d, want <= %d", len(got), eventKeyMaxLength)
+	}
+	if !strings.HasPrefix(got, "event_sha:") {
+		t.Fatalf("BuildEventKey = %q, want event_sha: prefix when over limit", got)
+	}
+
+	raw := buildRawEventKey(&input)
+	sum := sha256.Sum256([]byte(raw))
+	want := fmt.Sprintf("event_sha:%s", hex.EncodeToString(sum[:]))
+	if got != want {
+		t.Fatalf("BuildEventKey = %q, want %q", got, want)
+	}
+}
+
+func TestBuildEventKeyShortKeyUnchanged(t *testing.T) {
+	input := DedupeInput{
+		ChannelID:    "channel-1",
+		AlarmType:    domain.AlarmTypeLive,
+		StreamID:     "stream-1",
+		MinutesUntil: 10,
+		Category:     "claim:event",
+	}
+	got := BuildEventKey(&input)
+	if got != buildRawEventKey(&input) {
+		t.Fatalf("short key altered: %q != raw %q", got, buildRawEventKey(&input))
+	}
+	if strings.HasPrefix(got, "event_sha:") {
+		t.Fatalf("short key unexpectedly hashed: %q", got)
+	}
+}
 
 func TestEventKeyIgnoresRoomAndDeliveryDedupeIncludesRoom(t *testing.T) {
 	base := DedupeInput{

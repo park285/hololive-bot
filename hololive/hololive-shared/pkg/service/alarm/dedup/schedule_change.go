@@ -23,7 +23,6 @@ package dedup
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -184,47 +183,7 @@ func (s *Service) detectLogicalScheduleChange(ctx context.Context, roomID, chann
 		return change, nil
 	}
 
-	return s.detectLegacyUpcomingEventScheduleChange(ctx, roomID, channelID, stream)
-}
-
-func (s *Service) detectLegacyUpcomingEventScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream) (*ScheduleChange, error) {
-	titleFP := keys.BuildTitleFingerprint(stream.Title, stream.ID)
-	pattern := fmt.Sprintf("%s%s:%s:*:%s", keys.UpcomingEventKeyPrefix, roomID, channelID, titleFP)
-
-	matches, err := s.cache.ScanKeys(ctx, pattern, 100)
-	if err != nil {
-		return nil, fmt.Errorf("detect legacy upcoming event schedule change: scan keys: %w", err)
-	}
-	if len(matches) == 0 {
-		return nil, nil
-	}
-
-	best := selectClosestLegacySchedule(matches, titleFP, *stream.StartScheduled)
-	if best.IsZero() {
-		return nil, nil
-	}
-
-	return newScheduleChange(keys.FormatScheduled(best), *stream.StartScheduled), nil
-}
-
-func selectClosestLegacySchedule(matches []string, titleFP string, currentScheduled time.Time) time.Time {
-	normalizedCurrent := keys.NormalizeScheduledMinute(currentScheduled.UTC())
-
-	var best time.Time
-	var bestDelta time.Duration
-	for _, match := range matches {
-		scheduled, ok := parseUpcomingEventScheduledFromKey(match, titleFP)
-		if !ok || scheduled.Equal(normalizedCurrent) {
-			continue
-		}
-
-		delta := absDuration(currentScheduled.Sub(scheduled))
-		if best.IsZero() || delta < bestDelta {
-			best = scheduled
-			bestDelta = delta
-		}
-	}
-	return best
+	return nil, nil
 }
 
 func newScheduleChange(previousScheduled string, currentScheduled time.Time) *ScheduleChange {
@@ -262,30 +221,4 @@ func parseScheduledString(raw string) (time.Time, bool) {
 	}
 
 	return keys.NormalizeScheduledMinute(parsed.UTC()), true
-}
-
-func parseUpcomingEventScheduledFromKey(rawKey, titleFP string) (time.Time, bool) {
-	withoutSuffix := strings.TrimSuffix(rawKey, ":"+titleFP)
-	if withoutSuffix == rawKey {
-		return time.Time{}, false
-	}
-
-	idx := strings.LastIndex(withoutSuffix, ":")
-	if idx < 0 || idx == len(withoutSuffix)-1 {
-		return time.Time{}, false
-	}
-
-	unixSeconds, err := strconv.ParseInt(withoutSuffix[idx+1:], 10, 64)
-	if err != nil {
-		return time.Time{}, false
-	}
-
-	return time.Unix(unixSeconds, 0).UTC(), true
-}
-
-func absDuration(d time.Duration) time.Duration {
-	if d < 0 {
-		return -d
-	}
-	return d
 }

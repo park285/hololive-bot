@@ -22,6 +22,12 @@ BUNDLE_MANIFEST.txt
 **/.gomodcache
 **/.gocache
 **/.env*
+*.key
+*.pem
+*.pub
+**/*.key
+**/*.pem
+**/*.pub
 **/vendor
 **/bin
 **/logs

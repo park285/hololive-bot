@@ -60,6 +60,7 @@ type schedulerImpl struct {
 	currentBatch         int
 	batchMu              sync.Mutex
 	batchRunning         atomic.Bool
+	alertSentRooms       sentRoomLedger
 }
 
 const (

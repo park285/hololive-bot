@@ -129,9 +129,15 @@ func deliveryFailureReasonIsPermanent(reason string) bool {
 	return false
 }
 
+const maxDeliveryRetryAfter = 5 * time.Minute
+
 func deliveryRetryAfter(err error) time.Duration {
 	var httpErr *iris.HTTPError
 	if errors.As(err, &httpErr) && httpErr != nil && httpErr.RetryAfter > 0 {
+		if httpErr.RetryAfter > maxDeliveryRetryAfter {
+			observeDeliveryRetryAfterClamped()
+			return maxDeliveryRetryAfter
+		}
 		return httpErr.RetryAfter
 	}
 	return 0

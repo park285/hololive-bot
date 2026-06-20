@@ -43,6 +43,8 @@ var (
 
 	outboxRevivedTotal      prometheus.Counter
 	outboxReviveErrorsTotal prometheus.Counter
+
+	outboxDeliveryRetryAfterClampedTotal prometheus.Counter
 )
 
 func initOutboxMetrics() {
@@ -93,6 +95,31 @@ func initOutboxDispatchMetrics() {
 		[]string{"result"},
 	)
 
+	initOutboxDispatchHistograms()
+
+	outboxRevivedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_revived_total",
+			Help: "Total fresh never-sent FAILED YouTube outbox rows revived for redelivery.",
+		},
+	)
+
+	outboxReviveErrorsTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_revive_errors_total",
+			Help: "Total stale-failed revival sweep transaction errors.",
+		},
+	)
+
+	outboxDeliveryRetryAfterClampedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_delivery_retry_after_clamped_total",
+			Help: "Total YouTube outbox delivery HTTP Retry-After hints clamped to the maximum bound.",
+		},
+	)
+}
+
+func initOutboxDispatchHistograms() {
 	outboxDispatchDuration = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "hololive_youtube_outbox_dispatch_duration_seconds",
@@ -116,20 +143,6 @@ func initOutboxDispatchMetrics() {
 			Buckets: []float64{1, 2, 5, 10, 20, 50, 100, 200},
 		},
 	)
-
-	outboxRevivedTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_revived_total",
-			Help: "Total fresh never-sent FAILED YouTube outbox rows revived for redelivery.",
-		},
-	)
-
-	outboxReviveErrorsTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_revive_errors_total",
-			Help: "Total stale-failed revival sweep transaction errors.",
-		},
-	)
 }
 
 // observeOutboxRevived는 stale-failed revival sweep이 되살린 outbox 행 수를 누적한다.
@@ -147,6 +160,14 @@ func observeOutboxReviveError() {
 		return
 	}
 	outboxReviveErrorsTotal.Inc()
+}
+
+func observeDeliveryRetryAfterClamped() {
+	initOutboxMetrics()
+	if outboxDeliveryRetryAfterClampedTotal == nil {
+		return
+	}
+	outboxDeliveryRetryAfterClampedTotal.Inc()
 }
 
 func observeOutboxEnqueueOutboxes(result string, n int) {

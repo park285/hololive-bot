@@ -357,6 +357,8 @@ func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) 
 	return retryEnvelopes, dlqEnvelopes
 }
 
+const maxHTTPRetryAfter = 5 * time.Minute
+
 func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *domain.AlarmQueueRetryMetadata {
 	retry := &domain.AlarmQueueRetryMetadata{}
 	if envelope.Retry != nil {
@@ -367,7 +369,12 @@ func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *d
 	retryAfter := time.Duration(retry.Attempt) * 5 * time.Second
 	var httpErr *iris.HTTPError
 	if errors.As(cause, &httpErr) && httpErr.RetryAfter > retryAfter {
-		retryAfter = httpErr.RetryAfter
+		hint := httpErr.RetryAfter
+		if hint > maxHTTPRetryAfter {
+			hint = maxHTTPRetryAfter
+			observeAlarmDispatchRetryAfterClamped()
+		}
+		retryAfter = hint
 	}
 	retry.RetryAfterMS = int64(retryAfter / time.Millisecond)
 	retry.NextVisibleAt = time.Now().UTC().Add(retryAfter).Format(time.RFC3339Nano)

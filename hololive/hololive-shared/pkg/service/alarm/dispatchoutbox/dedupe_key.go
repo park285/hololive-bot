@@ -71,7 +71,18 @@ func buildLegacyDedupeKey(input *DedupeInput) string {
 	)
 }
 
+const eventKeyMaxLength = 512
+
 func BuildEventKey(input *DedupeInput) string {
+	raw := buildRawEventKey(input)
+	if len(raw) <= eventKeyMaxLength {
+		return raw
+	}
+	sum := sha256.Sum256([]byte(raw))
+	return fmt.Sprintf("event_sha:%s", hex.EncodeToString(sum[:]))
+}
+
+func buildRawEventKey(input *DedupeInput) string {
 	if input.SourceKind == domain.AlarmDispatchSourceKindCelebration {
 		return fmt.Sprintf("celebration:%s", input.SourceIdentity)
 	}

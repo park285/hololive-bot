@@ -208,7 +208,7 @@ func nextGoScrapyWaitEvent(state goscrapyWaitState) goscrapyWaitEvent {
 }
 
 func finishGoScrapyResultEvent(state goscrapyWaitState, event *goscrapyWaitEvent) goscrapyWaitOutcome {
-	response, gotResponse, err := finishGoScrapyResult(event.result, state.cancel, state.errCh)
+	response, gotResponse, err := finishGoScrapyResult(&event.result, state.cancel, state.errCh)
 	return goscrapyWaitOutcome{response: response, gotResponse: gotResponse, err: err, done: true}
 }
 
@@ -232,7 +232,7 @@ func finishGoScrapyCanceledEvent(state goscrapyWaitState, _ *goscrapyWaitEvent) 
 
 func finishStoppedGoScrapy(state goscrapyWaitState) (pageFetchResponse, bool, error) {
 	if result, ok := pollGoScrapyResult(state.resultCh); ok {
-		return finishGoScrapyResult(result, state.cancel, state.errCh)
+		return finishGoScrapyResult(&result, state.cancel, state.errCh)
 	}
 	state.cancel()
 	waitGoScrapyEngine(state.errCh)
@@ -259,7 +259,7 @@ func finishGoScrapyEngineError(err error, resultCh <-chan goscrapyFetchResult) (
 	return pageFetchResponse{}, false, fmt.Errorf("goscrapy fetch page: %w", err)
 }
 
-func finishGoScrapyResult(result goscrapyFetchResult, cancel context.CancelFunc, errCh <-chan error) (pageFetchResponse, bool, error) {
+func finishGoScrapyResult(result *goscrapyFetchResult, cancel context.CancelFunc, errCh <-chan error) (pageFetchResponse, bool, error) {
 	cancel()
 	waitGoScrapyEngine(errCh)
 	return result.response, result.gotResponse, result.err

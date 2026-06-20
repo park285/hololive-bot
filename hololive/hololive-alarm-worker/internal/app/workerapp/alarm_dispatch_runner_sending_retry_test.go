@@ -96,6 +96,20 @@ func TestNextAlarmDispatchRetryKeepsAttemptDelayWhenHTTPRetryAfterHintIsShorter(
 	assertRetryNextVisibleDelay(t, retry, startedAt, 10*time.Second)
 }
 
+func TestNextAlarmDispatchRetryClampsExcessiveHTTPRetryAfter(t *testing.T) {
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	cause := &iris.HTTPError{StatusCode: 503, RetryAfter: 24 * time.Hour}
+	startedAt := time.Now().UTC()
+
+	retry := nextAlarmDispatchRetry(&envelope, cause)
+
+	require.NotNil(t, retry)
+	assert.Equal(t, 1, retry.Attempt)
+	assert.Equal(t, int64(maxHTTPRetryAfter/time.Millisecond), retry.RetryAfterMS,
+		"excessive Retry-After must clamp to maxHTTPRetryAfter")
+	assertRetryNextVisibleDelay(t, retry, startedAt, maxHTTPRetryAfter)
+}
+
 func assertRetryNextVisibleDelay(t *testing.T, retry *domain.AlarmQueueRetryMetadata, startedAt time.Time, delay time.Duration) {
 	t.Helper()
 	nextVisibleAt, err := time.Parse(time.RFC3339Nano, retry.NextVisibleAt)

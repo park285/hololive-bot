@@ -48,6 +48,16 @@ func TestDeliveryRetryAfterExtractsHTTPErrorHint(t *testing.T) {
 	}
 }
 
+func TestDeliveryRetryAfterClampsExcessiveHTTPRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	err := fmt.Errorf("wrap: %w", &iris.HTTPError{StatusCode: 429, RetryAfter: 24 * time.Hour})
+
+	if got := deliveryRetryAfter(err); got != maxDeliveryRetryAfter {
+		t.Fatalf("deliveryRetryAfter() = %s, want clamp %s", got, maxDeliveryRetryAfter)
+	}
+}
+
 func TestMetricsRecorderRecordDeliveryFailureStoresLongestRetryAfter(t *testing.T) {
 	t.Parallel()
 

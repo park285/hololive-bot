@@ -8,7 +8,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 // 운영 표면이 H3 전용이라 Prometheus가 직접 scrape하지 못해,
@@ -21,7 +20,7 @@ func NewMetricsServer(addr, apiKey string) *http.Server {
 		SkipLogPaths: []string{"/metrics"},
 	})
 	metrics := router.Group("")
-	metrics.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	metrics.Use(loopbackAwareAuthMiddleware(addr, apiKey))
 	metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	return &http.Server{

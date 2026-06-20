@@ -43,7 +43,7 @@ RUN apk add --no-cache git
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
 
-ENV GOWORK=/workspace/hololive-bot/go.work
+ENV GOWORK=off
 
 WORKDIR /workspace/hololive-bot
 

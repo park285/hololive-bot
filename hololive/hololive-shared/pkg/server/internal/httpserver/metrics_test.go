@@ -61,6 +61,30 @@ func TestNewMetricsServerExposesOnlyMetricsRoute(t *testing.T) {
 	}
 }
 
+func TestNewMetricsServerKeylessDeniedOnNonLoopback(t *testing.T) {
+	ctx := context.Background()
+
+	denied := []string{"0.0.0.0:30095", ":30095", "192.168.1.5:30095"}
+	for _, addr := range denied {
+		server := NewMetricsServer(addr, "")
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/metrics", http.NoBody))
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("keyless metrics on %q status = %d, want %d", addr, rec.Code, http.StatusForbidden)
+		}
+	}
+
+	allowed := []string{"127.0.0.1:30095", "[::1]:30095", "localhost:30095"}
+	for _, addr := range allowed {
+		server := NewMetricsServer(addr, "")
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/metrics", http.NoBody))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("keyless metrics on loopback %q status = %d, want %d", addr, rec.Code, http.StatusOK)
+		}
+	}
+}
+
 func TestNewRuntimeHTTPServersBuildsMetricsServerFromConfig(t *testing.T) {
 	certFile, keyFile := writeH3LocalhostCertificate(t)
 	servers, err := NewRuntimeHTTPServers(&config.ServerConfig{

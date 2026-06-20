@@ -37,7 +37,7 @@ func NewRuntimeHTTPServers(serverConfig *config.ServerConfig, handler http.Handl
 		servers.Metrics = NewMetricsServer(metricsAddr, serverConfig.APIKey)
 	}
 	if pprofAddr := strings.TrimSpace(serverConfig.PprofAddr); pprofAddr != "" {
-		servers.Pprof = NewPprofServer(pprofAddr)
+		servers.Pprof = NewPprofServer(pprofAddr, serverConfig.APIKey)
 	}
 	return servers, nil
 }

@@ -98,7 +98,21 @@ func alarmMinuteLabel(minute int) string {
 	if minute < 0 {
 		return "negative"
 	}
-	return strconv.Itoa(minute)
+	if minute <= 60 {
+		return strconv.Itoa(minute)
+	}
+	return alarmMinuteBucket(minute)
+}
+
+func alarmMinuteBucket(minute int) string {
+	switch {
+	case minute <= 120:
+		return "61_120"
+	case minute <= 360:
+		return "121_360"
+	default:
+		return "360_plus"
+	}
 }
 
 func youtubeUpcomingSelectionLabel(selected, current int, crossed bool) string {
