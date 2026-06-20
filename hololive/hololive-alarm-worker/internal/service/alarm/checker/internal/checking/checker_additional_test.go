@@ -839,6 +839,38 @@ func TestLiveCatchupAllowsRescheduledStreamAfterPreviousScheduleNotified(t *test
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
 }
 
+func TestAlarmMinuteLabelBucketsHighCardinality(t *testing.T) {
+	cases := []struct {
+		minute int
+		want   string
+	}{
+		{-1, "negative"},
+		{0, "0"},
+		{1, "1"},
+		{5, "5"},
+		{60, "60"},
+		{61, "61_120"},
+		{120, "61_120"},
+		{121, "121_360"},
+		{360, "121_360"},
+		{361, "360_plus"},
+		{100000, "360_plus"},
+	}
+	for _, tc := range cases {
+		if got := alarmMinuteLabel(tc.minute); got != tc.want {
+			t.Errorf("alarmMinuteLabel(%d) = %q, want %q", tc.minute, got, tc.want)
+		}
+	}
+
+	bucketSet := map[string]struct{}{}
+	for minute := -10; minute <= 100000; minute++ {
+		bucketSet[alarmMinuteLabel(minute)] = struct{}{}
+	}
+	if len(bucketSet) > 66 {
+		t.Fatalf("alarmMinuteLabel cardinality = %d, want bounded <= 66", len(bucketSet))
+	}
+}
+
 func newTestYouTubeCheckerWithDedup(t *testing.T) (*YouTubeChecker, *dedup.Service) {
 	t.Helper()
 
