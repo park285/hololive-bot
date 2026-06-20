@@ -10,9 +10,11 @@ scripts/deploy/lib/removed-runtimes.sh
 scripts/deploy/lib/ap-host.sh
 scripts/deploy/lib/require-quic-udp-buffer.sh
 scripts/deploy/ap-hosts/osaka.conf
+scripts/deploy/ap-hosts/osaka2.conf
 scripts/deploy/ap-hosts/seoul.conf
 deploy/compose/docker-compose.prod.yml
 deploy/compose/docker-compose.osaka.yml
+deploy/compose/docker-compose.osaka2.yml
 deploy/compose/docker-compose.seoul.yml
 hololive/hololive-youtube-producer/Dockerfile
 hololive/hololive-youtube-producer/Dockerfile.dockerignore

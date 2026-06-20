@@ -333,6 +333,10 @@ func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
 			file: "deploy/compose/docker-compose.osaka.yml",
 		},
 		{
+			name: "osaka2",
+			file: "deploy/compose/docker-compose.osaka2.yml",
+		},
+		{
 			name: "seoul",
 			file: "deploy/compose/docker-compose.seoul.yml",
 		},
@@ -985,6 +989,8 @@ func dockerAPComposeConfigCommand(t *testing.T, ctx context.Context, files []str
 	switch strings.Join(files, "\x00") {
 	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.osaka.yml":
 		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.prod.yml", "-f", "deploy/compose/docker-compose.osaka.yml", "config")
+	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.osaka2.yml":
+		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.prod.yml", "-f", "deploy/compose/docker-compose.osaka2.yml", "config")
 	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.seoul.yml":
 		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.prod.yml", "-f", "deploy/compose/docker-compose.seoul.yml", "config")
 	default:

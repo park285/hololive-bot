@@ -5,6 +5,7 @@
 - `docker-compose.main-ap.yml`: main-host `youtube-producer-c` overlay.
 - `docker-compose.main-ap.live-compat.yml`: live-compat overlay for `youtube-producer-c`.
 - `docker-compose.osaka.yml`: Osaka AP overlay for `youtube-producer-a`.
+- `docker-compose.osaka2.yml`: second Osaka AP overlay for `youtube-producer-d`.
 - `docker-compose.seoul.yml`: Seoul AP overlay for `youtube-producer-b`.
 - `docker-compose.remote-cache.yml`: optional BuildKit remote cache overlay.
 
@@ -56,6 +57,7 @@ recreate.
 
 All production PostgreSQL clients use `verify-full` with the CA bundle mounted
 at `/run/hololive-bot/certs/postgres-ca.pem`: the five central Go runtimes,
-`youtube-producer-c`, `hololive-db-migrate`, Osaka `youtube-producer-a`, and
-Seoul `youtube-producer-b`. The retired insecure downgrade ledger stays closed
-by preserving production paths with verified TLS and the CA bundle above.
+`youtube-producer-c`, `hololive-db-migrate`, Osaka `youtube-producer-a`,
+Osaka2 `youtube-producer-d`, and Seoul `youtube-producer-b`. The retired
+insecure downgrade ledger stays closed by preserving production paths with
+verified TLS and the CA bundle above.

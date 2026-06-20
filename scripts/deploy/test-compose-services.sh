@@ -73,6 +73,13 @@ expect_eq "${AP_PORTS[*]}" "30005" "osaka AP ports"
 expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.osaka.yml" "osaka AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY" "osaka AP deploy approval var"
 
+ap_host_load "${ROOT_DIR}" osaka2 || fail "osaka2 ap-host conf loads"
+expect_eq "${AP_SERVICES[*]}" "youtube-producer-d" "osaka2 AP services"
+expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-d" "osaka2 AP containers"
+expect_eq "${AP_PORTS[*]}" "30035" "osaka2 AP ports"
+expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.osaka2.yml" "osaka2 AP compose file"
+expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY" "osaka2 AP deploy approval var"
+
 ap_host_load "${ROOT_DIR}" seoul || fail "seoul ap-host conf loads"
 expect_eq "${AP_SERVICES[*]}" "youtube-producer-b" "seoul AP services"
 expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-b" "seoul AP containers"
@@ -132,11 +139,11 @@ fi
 pass "quic udp lib applies sysctl.conf as final override"
 rm -rf "${quic_fixture_root}"
 trap - EXIT
-for ap_compose in deploy/compose/docker-compose.osaka.yml deploy/compose/docker-compose.seoul.yml; do
+for ap_compose in deploy/compose/docker-compose.osaka.yml deploy/compose/docker-compose.osaka2.yml deploy/compose/docker-compose.seoul.yml; do
     grep -qx "${ap_compose}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_compose}"
 done
 pass "ap active-active syncs per-host compose files"
-for ap_conf in scripts/deploy/lib/ap-host.sh scripts/deploy/ap-hosts/osaka.conf scripts/deploy/ap-hosts/seoul.conf; do
+for ap_conf in scripts/deploy/lib/ap-host.sh scripts/deploy/ap-hosts/osaka.conf scripts/deploy/ap-hosts/osaka2.conf scripts/deploy/ap-hosts/seoul.conf; do
     grep -qx "${ap_conf}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_conf}"
 done
 pass "ap active-active syncs host conf and loader"
@@ -160,6 +167,8 @@ fi
 pass "ap active-active files list excludes forbidden deployment scope"
 
 expect_fail "osaka active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka --apply
+expect_fail "osaka2 active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka2 --apply
 expect_fail "seoul active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" seoul --apply
 expect_fail "osaka active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka --apply
+expect_fail "osaka2 active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka2 --apply
 expect_fail "seoul active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --apply

@@ -63,10 +63,11 @@ render() {
 main_render="$(render oracle "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 ap_render="$(render main-ap "${STUB_COMPOSE_ENV}" "${MAIN_AP_OVERLAYS[@]}")"
 osaka_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka.yml)")"
+osaka2_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka2.yml)")"
 seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
 
 MAIN_RENDER="${main_render}" AP_RENDER="${ap_render}" \
-    OSAKA_RENDER="${osaka_render}" SEOUL_RENDER="${seoul_render}" python3 - <<'PY'
+    OSAKA_RENDER="${osaka_render}" OSAKA2_RENDER="${osaka2_render}" SEOUL_RENDER="${seoul_render}" python3 - <<'PY'
 import json
 import os
 import sys
@@ -152,7 +153,8 @@ def has_bind_target(svc, target):
 
 
 AP_PRODUCERS = (
-    ("OSAKA_RENDER", "youtube-producer-a", 30005, "100.100.1.7"),
+    ("OSAKA_RENDER", "youtube-producer-a", 30005, "100.100.1.6"),
+    ("OSAKA2_RENDER", "youtube-producer-d", 30035, "100.100.1.2"),
     ("SEOUL_RENDER", "youtube-producer-b", 30015, "100.100.1.5"),
 )
 
