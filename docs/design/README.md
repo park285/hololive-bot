@@ -17,3 +17,4 @@
 
 ## Active Worklogs
 - `2026-05-15-repo-structure-refactor-worklog.md` — repo structure refactor 완료 범위, 검증, 다음 작업 기준
+- `2026-06-21-osaka-tiny-vps-runtime-handoff.md` — Osaka tiny VPS Docker Compose vs host-native `systemd` runtime 결정 handoff

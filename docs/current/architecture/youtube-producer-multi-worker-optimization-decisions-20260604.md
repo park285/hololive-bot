@@ -1,16 +1,16 @@
-# YouTube Producer 3-Way Active-Active 다중 워커 최적화 코드레벨 결정서
+# YouTube Producer Active-Active 다중 워커 최적화 코드레벨 결정서
 
 작성일: 2026-06-04 KST
 대상 저장소: `park285/hololive-bot`
 대상 런타임: `hololive-youtube-producer`
-대상 인스턴스: `youtube-producer-a`, `youtube-producer-b`, `youtube-producer-c`
+대상 인스턴스: `youtube-producer-a`, `youtube-producer-b`, `youtube-producer-c`; staged 확장 인스턴스 `youtube-producer-d`
 상태: 구현 작업 가능 기준 문서.
 
 ---
 
 ## 1. 이 문서의 목적
 
-현재 `youtube-producer`는 Osaka의 `youtube-producer-a`, Seoul의 `youtube-producer-b`, main host의 `youtube-producer-c`가 동시에 실행되는 3-way active-active 구조입니다.
+현재 `youtube-producer`는 Seoul의 `youtube-producer-b`, main host의 `youtube-producer-c`가 active-active로 실행되고, Osaka의 `youtube-producer-a`와 Osaka2의 `youtube-producer-d`가 repo-side 확장 대상으로 준비된 구조입니다.
 
 현재 구조는 이미 다음을 갖고 있습니다.
 
@@ -95,9 +95,10 @@ hololive/hololive-shared/pkg/config/internal/settings/config_env_loaders.go
 
 | 인스턴스 | 위치 | 포트 | 역할 | PhotoSync |
 |---|---:|---:|---|---|
-| `youtube-producer-a` | Osaka | `30005` | scraping/polling active-active AP | 참여 |
+| `youtube-producer-a` | Osaka | `30005` | staged scraping/polling active-active AP | 참여 |
 | `youtube-producer-b` | Seoul | `30015` | scraping/polling active-active AP | 미참여 |
 | `youtube-producer-c` | main host | `30025` | scraping/polling active-active AP | 참여 |
+| `youtube-producer-d` | Osaka2 | `30035` | staged scraping/polling active-active AP | 미참여 |
 
 공통 요구사항은 다음입니다.
 

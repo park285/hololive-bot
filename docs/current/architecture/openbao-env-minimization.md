@@ -405,7 +405,7 @@ Repo-side 변경만. **기본 경로 플립은 merge 가능하지만, 대상 호
 - `holo-postgres`는 `ssl=on`으로 동작한다. 중앙 OpenBao Agent가 `pki/issue/hololive-postgres-server`에서 TTL `720h` 서버 인증서를 발급받아 `/run/hololive-bot/postgres-tls/server.crt`와 `server.key`로 렌더한다.
 - 인증서 name/IP set은 `holo-postgres`, `host.docker.internal`, `localhost`, `100.100.1.3`, `127.0.0.1`이다. PostgreSQL server key는 client CA bundle 디렉토리와 분리된 `postgres-tls/`에 둔다.
 - 중앙 Agent template command가 인증서 갱신 뒤 `docker kill -s HUP holo-postgres`를 실행해 PostgreSQL reload를 유도한다.
-- 클라이언트 CA bundle은 `/run/hololive-bot/certs/postgres-ca.pem`이다. 중앙 5개 Go runtime, `youtube-producer-c`, `hololive-db-migrate`, Osaka `youtube-producer-a`, Seoul `youtube-producer-b`가 모두 `verify-full`로 접속한다.
+- 클라이언트 CA bundle은 `/run/hololive-bot/certs/postgres-ca.pem`이다. 중앙 5개 Go runtime, `youtube-producer-c`, `hololive-db-migrate`, Seoul `youtube-producer-b`, 그리고 staged Osaka AP `youtube-producer-a`/`youtube-producer-d`는 rollout 시 모두 `verify-full`로 접속해야 한다.
 - Live evidence: TCP PostgreSQL 연결 35건이 모두 TLSv1.3이며 plaintext TCP 연결은 0건이었다. Unix domain socket monitor 연결 1건은 TCP TLS 판정 대상에서 제외한다.
 - `docs/current/security/accepted-risk-ap-postgres-sslmode.md` ledger는 삭제 상태가 정본이다. 계약 테스트는 `POSTGRES_SSLMODE_ALLOW_INSECURE` 재도입, weak sslmode 렌더, `postgres-ca.pem` 마운트 누락을 회귀로 판정한다.
 
@@ -431,6 +431,7 @@ sudo sh -c 'cut -d= -f1 /run/hololive-bot/compose.env /run/hololive-bot/ap-compo
 ```bash
 # 값 미출력 — key 이름만 검사
 docker exec hololive-youtube-producer-a sh -c 'env | cut -d= -f1 | grep -E "^IRIS_(WEBHOOK|BOT)_TOKEN$"' && echo VIOLATION || echo OK
+docker exec hololive-youtube-producer-d sh -c 'env | cut -d= -f1 | grep -E "^IRIS_(WEBHOOK|BOT)_TOKEN$"' && echo VIOLATION || echo OK
 ```
 
 Rollback(각 단계 공통): compose 변경 commit revert → 직전 이미지/compose로 recreate. 모놀리식 `/run/hololive-bot/env`와 chatbotgo 구 `.env*`는 Phase 5 전까지 보존되므로 추가 secret 복사 없이 되돌릴 수 있다.
@@ -466,6 +467,7 @@ go test ./hololive/hololive-shared/pkg/config/internal/settings
 ./scripts/deploy/test-compose-h3-contract.sh
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml config --quiet
 COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.osaka.yml config --quiet
+COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.osaka2.yml config --quiet
 COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.seoul.yml config --quiet
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.live-compat.yml config --quiet
 ```
@@ -474,6 +476,8 @@ Token 부재(렌더 시점, 값 미출력):
 
 ```bash
 COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.osaka.yml config --format json |
+  python3 -c 'import json,sys; s=json.load(sys.stdin)["services"]; bad=[n for n,v in s.items() if n.startswith("youtube-producer") and any(k in (v.get("environment") or {}) for k in ("IRIS_WEBHOOK_TOKEN","IRIS_BOT_TOKEN"))]; print("OK" if not bad else "VIOLATION: "+",".join(bad)); sys.exit(1 if bad else 0)'
+COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.osaka2.yml config --format json |
   python3 -c 'import json,sys; s=json.load(sys.stdin)["services"]; bad=[n for n,v in s.items() if n.startswith("youtube-producer") and any(k in (v.get("environment") or {}) for k in ("IRIS_WEBHOOK_TOKEN","IRIS_BOT_TOKEN"))]; print("OK" if not bad else "VIOLATION: "+",".join(bad)); sys.exit(1 if bad else 0)'
 ```
 

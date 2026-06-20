@@ -2,14 +2,14 @@
 
 ## Role
 
-`youtube-producer`는 YouTube scraping/polling, outbox production, 2-way active-active AP runtime을 담당합니다. Seoul 호스트에서 `youtube-producer-b`(30015, `deploy/compose/docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. 둘은 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트(seoul)는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
+`youtube-producer`는 YouTube scraping/polling, outbox production, active-active AP runtime을 담당합니다. Seoul 호스트에서 `youtube-producer-b`(30015, `deploy/compose/docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. Osaka `youtube-producer-a`(30005, host `100.100.1.6`)와 Osaka2 `youtube-producer-d`(30035, host `100.100.1.2`)는 tiny VPS host-native `systemd` 런타임으로 live 운영 중이며, repo-side Docker Compose overlays는 compose 경로/계약 검증용으로 유지합니다. 모든 AP는 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
 
 ## Normal status
 
 | Check | Expected |
 |---|---|
-| Health | Seoul `:30015/health`, main `:30025/health` return success (각 호스트 로컬 기준) |
-| Ready | both `/ready` payloads show `mode=active-active` |
+| Health | active AP local `/health` returns success (`a` 30005, `b` 30015, `c` 30025, `d` 30035) |
+| Ready | active AP `/ready` payloads show `mode=active-active` |
 | Logs | startup markers include PostgreSQL and Valkey connection success; repeated poller, photo sync, outbox, DB, cache, or proxy errors are absent |
 | Queue | produces outbox/tracking state; does not consume alarm dispatch queue |
 | PostgreSQL TLS | AP `b` and main `c` render `POSTGRES_SSLMODE=verify-full` and mount `/run/hololive-bot/certs/postgres-ca.pem` |
@@ -39,7 +39,7 @@
 | `POSTGRES_SSLMODE=verify-full` | required client verification mode for central and AP PostgreSQL TCP paths | yes |
 | `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem` | CA bundle rendered by OpenBao Agent and mounted read-only into producer containers | yes |
 | `SCRAPER_FETCHER_ENGINE` | container-local page fetch engine; defaults to `nethttp`, use `goscrapy` only for scoped evaluation | no |
-| `YOUTUBE_PRODUCER_A_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_B_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_C_FETCHER_ENGINE` | compose/OpenBao per-instance source for `SCRAPER_FETCHER_ENGINE`; default is `nethttp` | no |
+| `YOUTUBE_PRODUCER_A_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_B_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_C_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_D_FETCHER_ENGINE` | compose/OpenBao per-instance source for `SCRAPER_FETCHER_ENGINE`; default is `nethttp` | no |
 | `SCRAPER_*` | poller intervals/workers | yes |
 | `SCRAPER_BACKFILL_ENABLED=false` | optional secondary poller identities for coverage; disabled by default | no |
 | `SCRAPER_BACKFILL_*_INTERVAL_SECONDS` | backfill poller intervals for shorts/community/live when enabled | no |
@@ -82,7 +82,7 @@ Active-active `/ready` fails closed on startup until a lightweight Valkey JobRun
 
 `/ready` is readiness state, not recent activity telemetry. Use the `youtube_poller_job_*` metrics above to confirm recent `acquired`, `peer_owned`, `already_completed`, renew, mark-completed, and release activity.
 
-`/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. Producer metrics are served from the plain HTTP metrics listener on `:30095`, separate from the H3 app port. AP metrics are published on the host Tailscale IP only (`youtube-producer-b` `100.100.1.5:30095`) so central Prometheus can scrape them with the shared API key header. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
+`/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. Producer metrics are served from the plain HTTP metrics listener on `:30095`, separate from the H3 app port. Docker AP metrics are published on each host Tailscale IP only (`a` `100.100.1.6:30095`, `b` `100.100.1.5:30095`, `d` `100.100.1.2:30095`) so central Prometheus can scrape them with the shared API key header. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
 
 ```bash
 # Seoul b host
@@ -147,16 +147,16 @@ youtube_poller_outbox_insert_total{kind=...,result="conflict"}
 /ready: mode=active-active, valkey_available=true, scraping_paused=false
 ```
 
-## Remote AP rollout (seoul)
+## Remote AP rollout (Docker Compose path)
 
-Use the scoped deployment wrapper for remote AP active-active rollout. Host topology is defined in `scripts/deploy/ap-hosts/<host>.conf` (seoul: `youtube-producer-b`). The wrapper syncs only the active-active runtime files listed in `scripts/deploy/ap-rsync-files.txt`; it intentionally excludes secrets, docs, tests, `hololive-alarm-worker/**`, runtime data, and all data paths except the embedded `hololive-shared` profile data required by the producer image.
+Use the scoped deployment wrapper for remote AP active-active rollout when the chosen runtime mode is Docker Compose. Host topology is defined in `scripts/deploy/ap-hosts/<host>.conf` (`osaka`: `youtube-producer-a`, `osaka2`: `youtube-producer-d`, `seoul`: `youtube-producer-b`). The wrapper syncs only the active-active runtime files listed in `scripts/deploy/ap-rsync-files.txt`; it intentionally excludes secrets, docs, tests, `hololive-alarm-worker/**`, runtime data, and all data paths except the embedded `hololive-shared` profile data required by the producer image.
 
 ```bash
 ./scripts/deploy/ap-deploy.sh seoul --dry-run
 I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh seoul --apply
 ```
 
-Live `--apply` requires explicit operator approval before execution, with a per-host approval env var (`I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY`). The wrapper captures a prechange backup under `backups/<host>-active-active-<timestamp>/`, validates compose config, builds only that host's AP services, recreates them with `--no-deps --remove-orphans`, and runs readiness/health/log smoke checks.
+Live `--apply` requires explicit operator approval before execution, with a per-host approval env var (`I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY`, `I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY`, or `I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY`). The wrapper captures a prechange backup under `backups/<host>-active-active-<timestamp>/`, validates compose config, builds only that host's AP services, recreates them with `--no-deps --remove-orphans`, and runs readiness/health/log smoke checks.
 
 After rollout, the read-only completion check must pass:
 
@@ -175,6 +175,162 @@ sudo -n env \
 ```
 
 First boot on a newly provisioned AP host (no AP containers yet) requires `AP_PREFLIGHT_ALLOW_FIRST_BOOT=true` so the Iris H3 trust preflight skips its in-container check once; post-start readiness checks still gate the rollout. The wrapper also copies `deploy/compose/docker-compose.prod.yml` and the host overlay into its prechange backup *before* the rsync step, so pre-seed the repo files onto the host once (manual rsync with `--files-from=scripts/deploy/ap-rsync-files.txt`) before the first `--apply`.
+
+## Tiny VPS host-native AP runtime
+
+Osaka `youtube-producer-a` and Osaka2 `youtube-producer-d` run as host-native
+`systemd` services on 1 vCPU / 1GB RAM Oracle VPS hosts dedicated only to
+YouTube scraping. The main risk on these hosts is not the steady-state producer
+process; it is running Go/Docker builds and retaining Docker build cache on the
+AP host.
+
+Use `scripts/deploy/ap-host-native-deploy.sh`,
+`scripts/deploy/ap-host-native-rollback.sh`, and
+`scripts/logs/ap-host-native-status.sh` for this runtime. Keep live `systemd`
+mutation behind explicit operator approval.
+
+Host-native AP invariants:
+- Build artifacts are produced on the central/build host, not on the 1GB AP host.
+- The AP host receives only the runtime artifact set: `bin/youtube-producer`,
+  `bin/healthcheck`, and `internal/domain/data`.
+- OpenBao Agent still renders the AP runtime contract under `/run/hololive-bot/`:
+  `youtube-producer.env`, `ap-compose.env`, and the cert files listed in this
+  runbook. Raw secrets stay out of repository files and command output.
+- PostgreSQL remains central over Tailscale with `POSTGRES_HOST=100.100.1.3`,
+  `POSTGRES_PORT=5433`, `POSTGRES_SSLMODE=verify-full`, and
+  `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem`.
+- Valkey remains central over Tailscale with `CACHE_HOST=100.100.1.3` and
+  `CACHE_PORT=6379`.
+- Each AP has a unique `YOUTUBE_PRODUCER_INSTANCE_ID` and `SERVER_PORT`.
+- Tiny VPS scraper APs are scraper-only by default:
+  `PHOTO_SYNC_ENABLED=false` and `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false`.
+- Start with `SCRAPER_SCHEDULER_WORKER_COUNT=1` on 1GB hosts. Raise to `2` only
+  after memory, fetch error, and lease metrics are stable.
+- Set a host memory ceiling with both `GOMEMLIMIT` and `systemd` `MemoryMax`;
+  use swap for deploy safety, not as normal steady-state capacity.
+- Maintain a low-priority `/swapfile` (`vm.swappiness=10`) as deploy/OOM
+  headroom on 1GB hosts.
+- Rotate `/var/log/hololive-bot/*.log` into `/var/log/hololive-bot/archive/`
+  so central log mirroring retains rotated AP logs.
+
+Suggested artifact layout:
+
+```text
+/opt/hololive-bot/youtube-producer/
+  current/
+    bin/youtube-producer
+    bin/healthcheck
+    internal/domain/data/...
+/etc/hololive-bot/youtube-producer-host.env
+/run/hololive-bot/youtube-producer.env
+/run/hololive-bot/certs/postgres-ca.pem
+/run/hololive-bot/certs/hololive-h3.crt
+/run/hololive-bot/certs/hololive-h3.key
+```
+
+Host override env should contain only instance-local non-secret values:
+
+```text
+YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true
+YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true
+YOUTUBE_PRODUCER_LEASE_NAMESPACE=production
+YOUTUBE_PRODUCER_INSTANCE_ID=youtube-producer-d
+YOUTUBE_PRODUCER_LOG_FILE_NAME=youtube-producer-d.log
+YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false
+YOUTUBE_INGESTION_ENABLED=true
+SERVER_PORT=30035
+HOLOLIVE_HTTP_TRANSPORTS=h3
+HOLOLIVE_H3_ADDR=:30035
+HOLOLIVE_METRICS_ADDR=100.100.1.x:30095
+HOLOLIVE_H3_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
+HOLOLIVE_H3_KEY_FILE=/run/hololive-bot/certs/hololive-h3.key
+HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
+HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1
+HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
+HEALTHCHECK_SERVER_NAME=127.0.0.1
+PHOTO_SYNC_ENABLED=false
+SCRAPER_FETCHER_ENGINE=nethttp
+SCRAPER_SCHEDULER_WORKER_COUNT=1
+GOMEMLIMIT=384MiB
+GOGC=100
+GIN_MODE=release
+LOG_DIR=/var/log/hololive-bot
+LOG_LEVEL=info
+CACHE_SOCKET_PATH=
+CACHE_HOST=100.100.1.3
+CACHE_PORT=6379
+POSTGRES_SOCKET_PATH=
+POSTGRES_HOST=100.100.1.3
+POSTGRES_PORT=5433
+POSTGRES_SSLMODE=verify-full
+POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
+CLIPROXY_BASE_URL=http://100.100.1.3:8787/v1
+```
+
+Systemd unit shape:
+
+```ini
+[Unit]
+Description=Hololive youtube-producer AP
+After=network-online.target openbao-agent-hololive-bot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hololive
+Group=hololive
+WorkingDirectory=/opt/hololive-bot/youtube-producer/current
+EnvironmentFile=/run/hololive-bot/youtube-producer.env
+EnvironmentFile=/etc/hololive-bot/youtube-producer-host.env
+ExecStart=/opt/hololive-bot/youtube-producer/current/bin/youtube-producer
+Restart=always
+RestartSec=5s
+TimeoutStopSec=30s
+MemoryMax=768M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/hololive-bot /var/log/hololive-bot /tmp
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Host-native deploy automation must add these gates before first live use:
+- Build or receive the artifact on a non-tiny host for the target architecture.
+- Rsync artifacts atomically into a timestamped release directory, then switch
+  `current`.
+- Validate rendered env key presence without printing values.
+- Run `systemd-analyze verify` for the unit.
+- Start or restart only the target AP unit.
+- Verify `StartedAt >= change_started_at`, `/health`, `/ready`, Valkey
+  availability, PostgreSQL TLS, and filtered logs after `change_started_at`.
+
+Host-native verification:
+
+```bash
+systemctl is-active hololive-youtube-producer@youtube-producer-d.service
+systemctl show hololive-youtube-producer@youtube-producer-d.service \
+  -p ActiveState -p SubState -p ExecMainPID -p MemoryCurrent -p NRestarts
+HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+  HEALTHCHECK_SERVER_NAME=127.0.0.1 \
+  /opt/hololive-bot/youtube-producer/current/bin/healthcheck \
+  https://127.0.0.1:30035/health
+HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+  HEALTHCHECK_SERVER_NAME=127.0.0.1 \
+  /opt/hololive-bot/youtube-producer/current/bin/healthcheck --body \
+  https://127.0.0.1:30035/ready
+journalctl -u hololive-youtube-producer@youtube-producer-d.service \
+  --since "$CHANGE_STARTED_AT" --no-pager |
+  grep -E 'PostgreSQL|Valkey|active_active|ERR|panic|permission denied|x509|no such file' || true
+```
+
+Host-native rollback is release-symlink based: point `current` back to the
+previous artifact directory, restart the same unit, and rerun the verification
+above. If the failure is topology-level, stop the new tiny AP first and confirm
+the existing APs remain `mode=active-active`, `valkey_available=true`, and
+`scraping_paused=false`.
 
 ## Common failure modes
 

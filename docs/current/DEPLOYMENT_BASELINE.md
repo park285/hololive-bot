@@ -52,7 +52,8 @@ server material to `/run/hololive-bot/postgres-tls/` and sends `SIGHUP` to
 The production client set uses `verify-full` with
 `/run/hololive-bot/certs/postgres-ca.pem`: `bot`, `admin-api`, `alarm-worker`,
 `llm-scheduler`, central `youtube-producer`, `youtube-producer-c`,
-`hololive-db-migrate`, and Seoul `youtube-producer-b`.
+`hololive-db-migrate`, Seoul `youtube-producer-b`, and staged Osaka APs
+`youtube-producer-a`/`youtube-producer-d` when they are rolled out.
 
 Operational evidence from the 2026-06-07 transition showed all 35 TCP
 PostgreSQL connections on TLSv1.3 and `0` plaintext TCP connections. One Unix

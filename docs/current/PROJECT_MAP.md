@@ -10,12 +10,13 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | `hololive-admin-api` | Go 1.26 | `hololive/hololive-admin-api/` | Admin HTTP control plane | 30006 |
 | `hololive-alarm-worker` | Go 1.26 | `hololive/hololive-alarm-worker/` | Alarm checker, dispatch queue consumer, and proactive egress worker | 30007 |
 | `hololive-llm-sched` | Go 1.26 | `hololive/hololive-llm-sched/` | LLM scheduler (major event + member news + delivery) | 30003 |
-| `hololive-youtube-producer` | Go 1.26 | `hololive/hololive-youtube-producer/` | YouTube producer AP runtime: primary/backfill polling, outbox production, 2-way active-active coordination (Seoul b + main-host c), readiness, and Holodex photo sync | 30015/30025 |
+| `hololive-youtube-producer` | Go 1.26 | `hololive/hololive-youtube-producer/` | YouTube producer AP runtime: primary/backfill polling, outbox production, active-active coordination (Seoul b + main-host c + Osaka host-native a/d), readiness, and Holodex photo sync | 30005/30015/30025/30035 |
 | `hololive-shared` | Go 1.26 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.26 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
 | `admin-dashboard-backend` | Go 1.26 | `admin-dashboard/backend/` | Admin dashboard Go backend (auth/session, holo API relay, Docker control, embedded frontend serving) | 30190 |
 | `deploy/compose/docker-compose.prod.yml` | YAML | `deploy/compose/docker-compose.prod.yml` | Production docker compose stack | - |
-| `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-producer-a`) — 노드 현재 미가동, 재활성화 대비 보존 | - |
+| `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-producer-a`, host `100.100.1.6`) for compose-path contract validation; live runtime is host-native `systemd` | - |
+| `deploy/compose/docker-compose.osaka2.yml` | YAML | `deploy/compose/docker-compose.osaka2.yml` | Osaka second split-host AP overlay (`youtube-producer-d`, host `100.100.1.2`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.seoul.yml` | YAML | `deploy/compose/docker-compose.seoul.yml` | Seoul split-host active-active AP (`youtube-producer-b`) | - |
 | `deploy/compose/docker-compose.main-ap.yml` | YAML | `deploy/compose/docker-compose.main-ap.yml` | Main-host active-active AP (`youtube-producer-c`, profile `main-ap`) | - |
 
@@ -27,7 +28,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | `admin-api` | `hololive-admin-api` | `admin-api` | `hololive-admin-api` | 30006 | `http://127.0.0.1:30006/health` | `services/admin-api.md` | `runbooks/admin-api.md` |
 | `alarm-worker` | `hololive-alarm-worker` | `alarm-worker` | `hololive-alarm-worker` | 30007 | `http://127.0.0.1:30007/health` | `services/alarm-worker.md` | `runbooks/alarm-worker.md` |
 | `llm-scheduler` | `hololive-llm-sched` | `llm-scheduler` | `llm-scheduler` | 30003 | `http://127.0.0.1:30003/health` | `services/llm-scheduler.md` | `runbooks/llm-scheduler.md` |
-| `youtube-producer` | `hololive-youtube-producer` | `youtube-producer` | `youtube-producer` | 30015/30025 | `http://127.0.0.1:30025/health` (main `c`; `b`는 해당 AP 로컬 `30015`) | `services/youtube-producer.md` | `runbooks/youtube-producer.md` |
+| `youtube-producer` | `hololive-youtube-producer` | `youtube-producer` | `youtube-producer` | 30005/30015/30025/30035 | `http://127.0.0.1:30025/health` (main `c`; 원격 AP는 각 호스트 로컬 포트) | `services/youtube-producer.md` | `runbooks/youtube-producer.md` |
 
 ## Infra Services
 
