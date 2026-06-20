@@ -5,12 +5,18 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 LOG_ROOT="${LOG_ROOT:-${REPO_ROOT}/logs}"
 REMOTE_MIRROR_ROOT="${REMOTE_MIRROR_ROOT:-${LOG_ROOT}/remote}"
 FORCE_MAIN_LOG_LINKS="${FORCE_MAIN_LOG_LINKS:-0}"
-OSAKA_USER_HOST="${HOL_LOG_OSAKA_USER_HOST:-ubuntu@kapu-iris-osaka-1}"
+OSAKA_USER_HOST="${HOL_LOG_OSAKA_USER_HOST:-ubuntu@100.100.1.6}"
 OSAKA_SSH_KEY="${HOL_LOG_OSAKA_SSH_KEY:-${REPO_ROOT}/KR.key}"
-OSAKA_HOST_KEY_ALIAS="${HOL_LOG_OSAKA_HOST_KEY_ALIAS:-100.100.1.7}"
-OSAKA_REMOTE_LOG_DIR="${HOL_LOG_OSAKA_LOG_DIR:-/home/ubuntu/hololive-bot/logs}"
-OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-producer}"
+OSAKA_HOST_KEY_ALIAS="${HOL_LOG_OSAKA_HOST_KEY_ALIAS:-100.100.1.6}"
+OSAKA_REMOTE_LOG_DIR="${HOL_LOG_OSAKA_LOG_DIR:-/var/log/hololive-bot}"
+OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-producer-a}"
 OSAKA_DOCKER_SERVICES="${HOL_LOG_OSAKA_DOCKER_SERVICES:-youtube-producer youtube-producer-a}"
+OSAKA2_USER_HOST="${HOL_LOG_OSAKA2_USER_HOST:-ubuntu@100.100.1.2}"
+OSAKA2_SSH_KEY="${HOL_LOG_OSAKA2_SSH_KEY:-${REPO_ROOT}/KR.key}"
+OSAKA2_HOST_KEY_ALIAS="${HOL_LOG_OSAKA2_HOST_KEY_ALIAS:-100.100.1.2}"
+OSAKA2_REMOTE_LOG_DIR="${HOL_LOG_OSAKA2_LOG_DIR:-/var/log/hololive-bot}"
+OSAKA2_SERVICES="${HOL_LOG_OSAKA2_SERVICES:-youtube-producer-d}"
+OSAKA2_DOCKER_SERVICES="${HOL_LOG_OSAKA2_DOCKER_SERVICES:-youtube-producer youtube-producer-d}"
 SEOUL_USER_HOST="${HOL_LOG_SEOUL_USER_HOST:-ubuntu@100.100.1.5}"
 SEOUL_SSH_KEY="${HOL_LOG_SEOUL_SSH_KEY:-${REPO_ROOT}/KR.key}"
 SEOUL_HOST_KEY_ALIAS="${HOL_LOG_SEOUL_HOST_KEY_ALIAS:-100.100.1.5}"
@@ -21,19 +27,25 @@ usage() {
   cat <<'USAGE'
 Usage:
   remote-sync-main-logs.sh once osaka
+  remote-sync-main-logs.sh once osaka2
   remote-sync-main-logs.sh once seoul
-  remote-sync-main-logs.sh daemon <osaka|seoul> [--interval 30]
-  remote-sync-main-logs.sh status <osaka|seoul>
-  remote-sync-main-logs.sh query <osaka|seoul> <service> [--tail 500] [--grep pattern]
-  remote-sync-main-logs.sh tail <osaka|seoul> <service>
-  remote-sync-main-logs.sh docker-tail <osaka|seoul> <service> [--since 15m] [--tail 200]
+  remote-sync-main-logs.sh daemon <osaka|osaka2|seoul> [--interval 30]
+  remote-sync-main-logs.sh status <osaka|osaka2|seoul>
+  remote-sync-main-logs.sh query <osaka|osaka2|seoul> <service> [--tail 500] [--grep pattern]
+  remote-sync-main-logs.sh tail <osaka|osaka2|seoul> <service>
+  remote-sync-main-logs.sh docker-tail <osaka|osaka2|seoul> <service> [--since 15m] [--tail 200]
 Environment:
   LOG_ROOT=<repo>/logs
-  HOL_LOG_OSAKA_USER_HOST=ubuntu@kapu-iris-osaka-1
+  HOL_LOG_OSAKA_USER_HOST=ubuntu@100.100.1.6
   HOL_LOG_OSAKA_SSH_KEY=<repo>/KR.key
-  HOL_LOG_OSAKA_HOST_KEY_ALIAS=100.100.1.7
-  HOL_LOG_OSAKA_LOG_DIR=/home/ubuntu/hololive-bot/logs
-  HOL_LOG_OSAKA_SERVICES=youtube-producer
+  HOL_LOG_OSAKA_HOST_KEY_ALIAS=100.100.1.6
+  HOL_LOG_OSAKA_LOG_DIR=/var/log/hololive-bot
+  HOL_LOG_OSAKA_SERVICES=youtube-producer-a
+  HOL_LOG_OSAKA2_USER_HOST=ubuntu@100.100.1.2
+  HOL_LOG_OSAKA2_SSH_KEY=<repo>/KR.key
+  HOL_LOG_OSAKA2_HOST_KEY_ALIAS=100.100.1.2
+  HOL_LOG_OSAKA2_LOG_DIR=/var/log/hololive-bot
+  HOL_LOG_OSAKA2_SERVICES=youtube-producer-d
   HOL_LOG_SEOUL_USER_HOST=ubuntu@100.100.1.5
   HOL_LOG_SEOUL_SSH_KEY=<repo>/KR.key
   HOL_LOG_SEOUL_HOST_KEY_ALIAS=100.100.1.5
@@ -50,6 +62,7 @@ target_services() {
 	local target="$1"
 	case "${target}" in
 	    osaka) printf '%s\n' "${OSAKA_SERVICES}" ;;
+	    osaka2) printf '%s\n' "${OSAKA2_SERVICES}" ;;
 	    seoul) printf '%s\n' "${SEOUL_SERVICES}" ;;
 	    *) echo "ERROR: unknown target: ${target}" >&2; exit 1 ;;
 	esac
@@ -59,7 +72,7 @@ target_value() {
   local suffix="$2"
   local name
   case "${target}" in
-    osaka|seoul) ;;
+    osaka|osaka2|seoul) ;;
     *) echo "ERROR: unknown target: ${target}" >&2; exit 1 ;;
   esac
   name="${target^^}_${suffix}"
@@ -69,9 +82,18 @@ remote_log_service_name() {
   local target="$1"
   local service="$2"
   case "${target}:${service}" in
-    osaka:youtube-producer-a) printf '%s\n' "youtube-producer" ;;
+    osaka2:youtube-producer-d) printf '%s\n' "youtube-producer-d" ;;
     *) printf '%s\n' "${service}" ;;
   esac
+}
+remote_log_include_patterns() {
+  local target="$1"
+  local service="$2"
+  local remote_service
+  remote_service="$(remote_log_service_name "${target}" "${service}")"
+  printf '%s\n' "${remote_service}.log"
+  printf '%s\n' "${remote_service}.log.*"
+  printf '%s\n' "archive/${remote_service}*"
 }
 validate_target_service() {
   local target="$1"
@@ -113,6 +135,7 @@ container_for() {
   local service="$2"
   case "${target}:${service}" in
     osaka:youtube-producer|osaka:youtube-producer-a) printf '%s\n' "hololive-youtube-producer-a" ;;
+    osaka2:youtube-producer|osaka2:youtube-producer-d) printf '%s\n' "hololive-youtube-producer-d" ;;
     seoul:youtube-producer|seoul:youtube-producer-b) printf '%s\n' "hololive-youtube-producer-b" ;;
     *) echo "ERROR: unknown service for ${target}: ${service}" >&2; exit 1 ;;
   esac
@@ -189,11 +212,11 @@ sync_once_remote() {
     echo "ERROR: rsync is required" >&2
     exit 1
   fi
-  local rsync_includes=()
+  local rsync_includes=() pattern
   for service in $(target_services "${target}"); do
-    remote_service="$(remote_log_service_name "${target}" "${service}")"
-    rsync_includes+=(--include="${remote_service}.log")
-    rsync_includes+=(--include="archive/${remote_service}*")
+    while IFS= read -r pattern; do
+      rsync_includes+=(--include="${pattern}")
+    done < <(remote_log_include_patterns "${target}" "${service}")
   done
   user_host="$(target_value "${target}" USER_HOST)"
   remote_log_dir="$(target_value "${target}" REMOTE_LOG_DIR)"

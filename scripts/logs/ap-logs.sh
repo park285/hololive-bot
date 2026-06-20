@@ -25,7 +25,7 @@ Environment:
   PATTERN='ERR|panic'    optional grep -E pattern
   FOLLOW=1               follow docker logs
   FULL=1                 print all available logs; ignores SINCE and TAIL
-  SOURCE=docker|file     read docker logs or /home/ubuntu/hololive-bot/logs/*.log
+  SOURCE=docker|file     read docker logs or AP file logs
 
 Examples:
   ap-logs.sh osaka youtube-producer
@@ -77,15 +77,21 @@ ap_container_for_service() {
   return 1
 }
 
+ap_file_log_dir() {
+  case "$AP_NAME" in
+    osaka|osaka2) printf '%s\n' "/var/log/hololive-bot" ;;
+    *) printf '%s\n' "/home/ubuntu/hololive-bot/logs" ;;
+  esac
+}
+
 for service in "${services[@]}"; do
   echo "== $service =="
   if [[ "$SOURCE" == "file" ]]; then
-    logfile="logs/youtube-producer.log"
+    logfile="$(ap_file_log_dir)/${service}.log"
     if [[ "$FULL" == "1" ]]; then
       ap_remote_bash "$logfile" "$PATTERN" <<'REMOTE'
 set -euo pipefail
 logfile="$1"; pattern="$2"
-cd ~/hololive-bot
 if [[ -n "$pattern" ]]; then
   sudo -n cat "$logfile" | grep -E "$pattern" || true
 else
@@ -98,7 +104,6 @@ REMOTE
     ap_remote_bash "$logfile" "$PATTERN" "$TAIL" <<'REMOTE'
 set -euo pipefail
 logfile="$1"; pattern="$2"; tail_n="$3"
-cd ~/hololive-bot
 if [[ -n "$pattern" ]]; then
   sudo -n tail -n "$tail_n" "$logfile" | grep -E "$pattern" || true
 else
