@@ -95,10 +95,8 @@ func DecodeJSON(r *http.Request, dst any, maxBytes int64) error {
 	return nil
 }
 
-func closeBody(body io.Closer) func() {
-	return func() {
-		if err := body.Close(); err != nil {
-			return
-		}
+func closeBody(body io.Closer) {
+	if err := body.Close(); err != nil {
+		return
 	}
 }

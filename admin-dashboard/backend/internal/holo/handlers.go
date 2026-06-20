@@ -218,10 +218,8 @@ func topChannelStats(stats map[string]json.RawMessage, limit int) map[string]jso
 	return trimmed
 }
 
-func closeRequestBody(body interface{ Close() error }) func() {
-	return func() {
-		if err := body.Close(); err != nil {
-			return
-		}
+func closeRequestBody(body interface{ Close() error }) {
+	if err := body.Close(); err != nil {
+		return
 	}
 }
