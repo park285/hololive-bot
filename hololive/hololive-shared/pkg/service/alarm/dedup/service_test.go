@@ -410,6 +410,29 @@ func TestService_DetectScheduleChange(t *testing.T) {
 	assert.Empty(t, message, "분 단위가 같으면 변경으로 보지 않음")
 }
 
+func TestService_DetectNotificationScheduleChange_NoLegacyScanFallback(t *testing.T) {
+	cacheMock, _ := newMockDedupCache(t)
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	var scanCalls int
+	cacheMock.ScanKeysFunc = func(_ context.Context, _ string, _ int64) ([]string, error) {
+		scanCalls++
+		return nil, nil
+	}
+
+	currentScheduled := time.Date(2026, 3, 4, 9, 45, 0, 0, time.UTC)
+	currentStream := &domain.Stream{
+		ID:             "new-waiting-room",
+		Title:          "same title",
+		StartScheduled: &currentScheduled,
+	}
+
+	change, err := service.DetectNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", currentStream)
+	require.NoError(t, err)
+	assert.Nil(t, change)
+	assert.Equal(t, 0, scanCalls, "DetectNotificationScheduleChange must not fall back to wildcard SCAN")
+}
+
 func TestService_DetectNotificationScheduleChange_LogicalWaitingRoomReplacement(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())

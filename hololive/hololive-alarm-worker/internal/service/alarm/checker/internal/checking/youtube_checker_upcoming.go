@@ -91,15 +91,18 @@ func (c *YouTubeChecker) resolveYouTubeUpcomingSelection(
 	currentMinutesUntil := sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.End)
 	previousMinutesUntil := sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.Start)
 	minutesUntil, targetCrossed := targetPolicy.HighestCrossed(*stream.StartScheduled, window)
-	scheduleChanges, err := c.detectRoomScheduleChanges(ctx, stream, subscriberRooms)
-	if err != nil {
-		return youtubeUpcomingSelection{}, fmt.Errorf("build upcoming notifications: detect schedule change: %w", err)
-	}
-	if !targetCrossed && len(scheduleChanges) == 0 {
-		observeYouTubeUpcomingNoMinuteDecision("no_target", window)
-		return youtubeUpcomingSelection{}, nil
-	}
+
+	var scheduleChanges map[string]*dedup.ScheduleChange
 	if !targetCrossed {
+		changes, err := c.detectRoomScheduleChanges(ctx, stream, subscriberRooms)
+		if err != nil {
+			return youtubeUpcomingSelection{}, fmt.Errorf("build upcoming notifications: detect schedule change: %w", err)
+		}
+		if len(changes) == 0 {
+			observeYouTubeUpcomingNoMinuteDecision("no_target", window)
+			return youtubeUpcomingSelection{}, nil
+		}
+		scheduleChanges = changes
 		minutesUntil = currentMinutesUntil
 	}
 
