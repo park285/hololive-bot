@@ -355,16 +355,16 @@ func (m *Mapper) clearConflictingTwitchChannelLoginMapping(
 	existingChannelID string,
 	channelID string,
 ) error {
-	if err := m.cache.HDel(ctx, TwitchChannelLoginMapKey, channelID); err != nil {
-		return fmt.Errorf("clear conflicting twitch channel login mapping: %w", err)
+	if err := m.cache.HDel(ctx, TwitchChannelLoginMapKey, existingChannelID); err != nil {
+		return fmt.Errorf("prune stale twitch channel login mapping: %w", err)
 	}
 
 	logging.Warn(ctx, m.logger, "platform_mapping.duplicate_twitch_login", "Duplicate Twitch login detected while incrementally syncing platform mappings",
 		slog.String("twitch_login", desiredLogin),
-		slog.String("kept_channel_id", existingChannelID),
-		slog.String("ignored_channel_id", channelID),
+		slog.String("pruned_channel_id", existingChannelID),
+		slog.String("owner_channel_id", channelID),
 	)
-	return nil
+	return m.upsertTwitchMappingsForChannel(ctx, channelID, desiredLogin)
 }
 
 func (m *Mapper) upsertTwitchMappingsForChannel(ctx context.Context, channelID, desiredLogin string) error {

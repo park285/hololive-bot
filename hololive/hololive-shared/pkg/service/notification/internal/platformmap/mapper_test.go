@@ -95,7 +95,7 @@ func TestSyncForChannel_FreshTwitchMappingCreation(t *testing.T) {
 	}
 }
 
-func TestSyncForChannel_ConflictingLoginKeepsExistingOwner(t *testing.T) {
+func TestHB05IncrementalSyncPrunesStaleTwitchLoginMapping_cf189323(t *testing.T) {
 	t.Parallel()
 
 	mapper, c := newTestMapper(t, &domain.Member{
@@ -105,13 +105,13 @@ func TestSyncForChannel_ConflictingLoginKeepsExistingOwner(t *testing.T) {
 
 	registerChannel(t, c, "UC_beta")
 	require.NoError(t, c.HSet(t.Context(), TwitchLoginMapKey, "sharedlogin", "UC_alpha"))
-	require.NoError(t, c.HSet(t.Context(), TwitchChannelLoginMapKey, "UC_beta", "sharedlogin"))
+	require.NoError(t, c.HSet(t.Context(), TwitchChannelLoginMapKey, "UC_alpha", "sharedlogin"))
 
 	require.NoError(t, mapper.SyncForChannel(t.Context(), "UC_beta"))
 
 	assertTwitchHashes(t, c,
-		map[string]string{"sharedlogin": "UC_alpha"},
-		map[string]string{},
+		map[string]string{"sharedlogin": "UC_beta"},
+		map[string]string{"UC_beta": "sharedlogin"},
 	)
 }
 
@@ -311,14 +311,19 @@ func TestClearConflictingTwitchChannelLoginMapping(t *testing.T) {
 	t.Parallel()
 
 	mapper, c := newTestMapper(t)
-	require.NoError(t, c.HSet(t.Context(), TwitchChannelLoginMapKey, "UC_loser", "sharedlogin"))
+	require.NoError(t, c.HSet(t.Context(), TwitchLoginMapKey, "sharedlogin", "UC_prev_owner"))
+	require.NoError(t, c.HSet(t.Context(), TwitchChannelLoginMapKey, "UC_prev_owner", "sharedlogin"))
 	require.NoError(t, c.HSet(t.Context(), TwitchChannelLoginMapKey, "UC_keep", "other"))
 
-	require.NoError(t, mapper.clearConflictingTwitchChannelLoginMapping(t.Context(), "sharedlogin", "UC_winner", "UC_loser"))
+	require.NoError(t, mapper.clearConflictingTwitchChannelLoginMapping(t.Context(), "sharedlogin", "UC_prev_owner", "UC_new_owner"))
+
+	loginMap, err := c.HGetAll(t.Context(), TwitchLoginMapKey)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"sharedlogin": "UC_new_owner"}, loginMap)
 
 	channelMap, err := c.HGetAll(t.Context(), TwitchChannelLoginMapKey)
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"UC_keep": "other"}, channelMap)
+	require.Equal(t, map[string]string{"UC_keep": "other", "UC_new_owner": "sharedlogin"}, channelMap)
 }
 
 func TestSyncForChannel_PropagatesRegistryError(t *testing.T) {
