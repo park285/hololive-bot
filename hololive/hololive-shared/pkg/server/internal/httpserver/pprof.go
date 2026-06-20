@@ -20,7 +20,7 @@ func NewPprofServer(addr, apiKey string) *http.Server {
 		SkipLogPaths: []string{"/debug/pprof"},
 	})
 	group := router.Group("/debug/pprof")
-	group.Use(pprofAuthMiddleware(addr, apiKey))
+	group.Use(loopbackAwareAuthMiddleware(addr, apiKey))
 	group.GET("/", gin.WrapF(pprof.Index))
 	group.GET("/cmdline", gin.WrapF(pprof.Cmdline))
 	group.GET("/profile", gin.WrapF(pprof.Profile))
@@ -39,7 +39,7 @@ func NewPprofServer(addr, apiKey string) *http.Server {
 	}
 }
 
-func pprofAuthMiddleware(addr, apiKey string) gin.HandlerFunc {
+func loopbackAwareAuthMiddleware(addr, apiKey string) gin.HandlerFunc {
 	if apiKey != "" {
 		return middleware.APIKeyAuthMiddleware(apiKey)
 	}
