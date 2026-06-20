@@ -37,6 +37,14 @@ sudo -n env \
 > youtube-producer 등)의 DB 연결이 끊기기 때문이다. 의도적 토폴로지 변경 시에만
 > `ALLOW_POSTGRES_TOPOLOGY_CHANGE=true`를 설정한다.
 
+> Security (a691472f): live-compat overlay는 현 호스트의 host-network Postgres
+> 토폴로지를 반영하는 필수 overlay이며 "약화 레이어"가 아니다. 과거 이 overlay가
+> 비-bot 서비스(admin-api 등)에 `/run/hololive-bot/certs` 디렉터리 전체를
+> `!override` 마운트해 불필요한 cert(`postgres-ca.pem` 등)를 노출하던 결함은
+> 파일 단위 마운트로 환원해 해소했다. admin-api는 자신이 H3 서버이므로
+> `hololive-h3.{crt,key}`·`iris-ca.pem`만 받고 디렉터리 전체는 더 이상 마운트하지
+> 않는다(검증: `scripts/deploy/test-live-compat-cert-mount-scope.sh`).
+
 Current Go runtime services:
 
 - `hololive-bot`

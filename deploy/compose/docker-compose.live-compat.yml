@@ -45,7 +45,9 @@ services:
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
   hololive-admin-api:
@@ -55,7 +57,9 @@ services:
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
   hololive-alarm-worker:
@@ -69,7 +73,9 @@ services:
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
   youtube-producer:
@@ -79,7 +85,8 @@ services:
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
   llm-scheduler:
@@ -89,7 +96,8 @@ services:
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
   admin-dashboard:
