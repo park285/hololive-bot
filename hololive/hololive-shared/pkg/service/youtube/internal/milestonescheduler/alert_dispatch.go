@@ -23,6 +23,7 @@ package milestonescheduler
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
@@ -30,19 +31,72 @@ import (
 
 type alertDispatchResult[T any] struct {
 	notification T
+	key          string
 	targetRooms  int
 	successCount atomic.Int32
 	failureCount atomic.Int32
 }
 
+type sentRoomLedger struct {
+	mu    sync.Mutex
+	byKey map[string]map[string]struct{}
+}
+
+func (l *sentRoomLedger) alreadySent(key, room string) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, ok := l.byKey[key][room]
+	return ok
+}
+
+func (l *sentRoomLedger) recordSent(key, room string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.byKey == nil {
+		l.byKey = make(map[string]map[string]struct{})
+	}
+	rooms := l.byKey[key]
+	if rooms == nil {
+		rooms = make(map[string]struct{})
+		l.byKey[key] = rooms
+	}
+	rooms[room] = struct{}{}
+}
+
+func (l *sentRoomLedger) sentCount(key string) int {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.byKey[key])
+}
+
+func (l *sentRoomLedger) clear(key string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.byKey, key)
+}
+
 func dispatchAlertWorks[T any, W any](
 	logger *slog.Logger,
 	ctx context.Context,
+	ledger *sentRoomLedger,
 	sendMessage func(room, message string) error,
 	rooms []string,
 	works []W,
 	notificationOf func(W) T,
 	messageOf func(W) string,
+	keyOf func(W) string,
 	memberNameOf func(T) string,
 	sendFailureLog string,
 	partialWarnLog string,
@@ -51,20 +105,22 @@ func dispatchAlertWorks[T any, W any](
 		return nil
 	}
 
-	results := newAlertDispatchResults(works, rooms, notificationOf)
-	runAlertDispatchWorks(logger, ctx, sendMessage, rooms, works, results, notificationOf, messageOf, memberNameOf, sendFailureLog)
-	return collectSentAlertNotifications(logger, results, memberNameOf, partialWarnLog)
+	results := newAlertDispatchResults(works, rooms, notificationOf, keyOf)
+	runAlertDispatchWorks(logger, ctx, ledger, sendMessage, rooms, works, results, notificationOf, messageOf, keyOf, memberNameOf, sendFailureLog)
+	return collectSentAlertNotifications(logger, ledger, results, memberNameOf, partialWarnLog)
 }
 
 func newAlertDispatchResults[T any, W any](
 	works []W,
 	rooms []string,
 	notificationOf func(W) T,
+	keyOf func(W) string,
 ) []alertDispatchResult[T] {
 	results := make([]alertDispatchResult[T], len(works))
 	for i := range works {
 		results[i] = alertDispatchResult[T]{
 			notification: notificationOf(works[i]),
+			key:          keyOf(works[i]),
 			targetRooms:  len(rooms),
 		}
 	}
@@ -74,12 +130,14 @@ func newAlertDispatchResults[T any, W any](
 func runAlertDispatchWorks[T any, W any](
 	logger *slog.Logger,
 	ctx context.Context,
+	ledger *sentRoomLedger,
 	sendMessage func(room, message string) error,
 	rooms []string,
 	works []W,
 	results []alertDispatchResult[T],
 	notificationOf func(W) T,
 	messageOf func(W) string,
+	keyOf func(W) string,
 	memberNameOf func(T) string,
 	sendFailureLog string,
 ) {
@@ -90,8 +148,12 @@ func runAlertDispatchWorks[T any, W any](
 		work := works[i]
 		notification := notificationOf(work)
 		message := messageOf(work)
+		key := keyOf(work)
 		for _, room := range rooms {
 			result := &results[i]
+			if ledger.alreadySent(key, room) {
+				continue
+			}
 			eg.Go(func() error {
 				if err := sendMessage(room, message); err != nil {
 					logger.Error(sendFailureLog,
@@ -101,6 +163,7 @@ func runAlertDispatchWorks[T any, W any](
 					result.failureCount.Add(1)
 					return nil
 				}
+				ledger.recordSent(key, room)
 				result.successCount.Add(1)
 				return nil
 			})
@@ -114,6 +177,7 @@ func runAlertDispatchWorks[T any, W any](
 
 func collectSentAlertNotifications[T any](
 	logger *slog.Logger,
+	ledger *sentRoomLedger,
 	results []alertDispatchResult[T],
 	memberNameOf func(T) string,
 	partialWarnLog string,
@@ -122,14 +186,17 @@ func collectSentAlertNotifications[T any](
 	for i := range results {
 		successCount := int(results[i].successCount.Load())
 		failureCount := int(results[i].failureCount.Load())
-		if results[i].targetRooms > 0 && successCount == results[i].targetRooms && failureCount == 0 {
+		coveredRooms := ledger.sentCount(results[i].key)
+		if results[i].targetRooms > 0 && coveredRooms >= results[i].targetRooms {
 			sentNotifications = append(sentNotifications, results[i].notification)
+			ledger.clear(results[i].key)
 			continue
 		}
-		if successCount > 0 {
+		if successCount > 0 || failureCount > 0 {
 			logger.Warn(partialWarnLog,
 				slog.String("member", memberNameOf(results[i].notification)),
 				slog.Int("target_rooms", results[i].targetRooms),
+				slog.Int("covered_rooms", coveredRooms),
 				slog.Int("success_count", successCount),
 				slog.Int("failure_count", failureCount))
 		}

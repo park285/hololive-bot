@@ -143,11 +143,15 @@ func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
 	return dispatchAlertWorks(
 		ys.logger,
 		ctx,
+		&ys.alertSentRooms,
 		sendMessage,
 		rooms,
 		works,
 		func(work milestoneAlertWork) ytstats.MilestoneNotification { return work.notification },
 		func(work milestoneAlertWork) string { return work.message },
+		func(work milestoneAlertWork) string {
+			return fmt.Sprintf("m:%s:%s:%d", work.notification.ChannelID, work.notification.Type, work.notification.Value)
+		},
 		func(notification ytstats.MilestoneNotification) string { return notification.MemberName },
 		"Failed to send milestone notification",
 		"Milestone notification partially sent; keeping unsent state for retry",
@@ -189,11 +193,15 @@ func (ys *schedulerImpl) dispatchApproachingAlertWorks(
 	return dispatchAlertWorks(
 		ys.logger,
 		ctx,
+		&ys.alertSentRooms,
 		sendMessage,
 		rooms,
 		works,
 		func(work approachingAlertWork) ytstats.ApproachingNotification { return work.notification },
 		func(work approachingAlertWork) string { return work.message },
+		func(work approachingAlertWork) string {
+			return fmt.Sprintf("a:%s:%d", work.notification.ChannelID, work.notification.MilestoneValue)
+		},
 		func(notification ytstats.ApproachingNotification) string { return notification.MemberName },
 		"Failed to send approaching notification",
 		"Approaching notification partially sent; keeping unsent state for retry",
