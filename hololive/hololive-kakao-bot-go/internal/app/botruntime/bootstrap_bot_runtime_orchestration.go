@@ -77,7 +77,7 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 
 	var pprofServer *http.Server
 	if pprofAddr := strings.TrimSpace(appConfig.Server.PprofAddr); pprofAddr != "" {
-		pprofServer = sharedserver.NewPprofServer(pprofAddr)
+		pprofServer = sharedserver.NewPprofServer(pprofAddr, appConfig.Server.APIKey)
 	}
 
 	return &BotRuntime{
