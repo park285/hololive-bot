@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=/home/kapu/work/iris-stack/hololive-bot
 ExecStart=/usr/local/sbin/hololive-compose-up
-ExecStop=/bin/sh -c 'COMPOSE_ENV_FILE=/run/hololive-bot/compose.env /home/kapu/work/iris-stack/hololive-bot/scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.live-compat.yml down'
+ExecStop=/usr/local/sbin/hololive-compose-down
 RemainAfterExit=yes
 TimeoutStartSec=300
 

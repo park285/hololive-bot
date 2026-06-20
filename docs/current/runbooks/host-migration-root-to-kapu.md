@@ -61,6 +61,7 @@
 - `/home/kapu/.{cargo,rustup,gradle,m2,npm,nvm,go,java-env.sh,android,dotnet,hermes}` ← chown 이전
 - `/home/kapu/migration-archive/` — 보존 백업 (restore-metadata, restore-safety, debian-migrate-backup)
 - `/usr/local/sbin/hololive-compose-up` — `cd /root/work/...` → `cd /home/kapu/work/...` 갱신 (기존 파일 in-place edit)
+- `/usr/local/sbin/hololive-compose-down` — 신규 (root-owned 0755). `hololive-compose.service` ExecStop이 mutable home 스크립트를 직접 실행하던 것을 immutable wrapper로 옮긴 대응물. 기존 ExecStop과 동치 명령을 수행한다: `COMPOSE_ENV_FILE=/run/hololive-bot/compose.env <repo>/scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml down` (live-compat overlay 분리 후 표준 prod down).
 - `/etc/systemd/system/code-server-kapu.service` — 신규 (User=kapu, HOME=/home/kapu)
 
 ### 수정 (in-place edit, `/root/` → `/home/kapu/`)
