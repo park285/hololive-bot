@@ -18,5 +18,6 @@ services:
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - valkey-cache-socket:/var/run/valkey:ro
