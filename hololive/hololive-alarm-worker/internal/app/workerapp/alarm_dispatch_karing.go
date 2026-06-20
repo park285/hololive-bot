@@ -204,11 +204,13 @@ func resolveAlarmDispatchKaringThumbnailURL(notification *domain.AlarmNotificati
 	if notification == nil {
 		return ""
 	}
-	if notification.Stream != nil && notification.Stream.Thumbnail != nil && strings.TrimSpace(*notification.Stream.Thumbnail) != "" {
-		return strings.TrimSpace(*notification.Stream.Thumbnail)
+	if notification.Stream != nil && notification.Stream.Thumbnail != nil {
+		if url := normalizeKaringImageURL(*notification.Stream.Thumbnail); url != "" {
+			return url
+		}
 	}
 	if notification.Channel != nil {
-		return strings.TrimSpace(notification.Channel.GetPhotoURL())
+		return normalizeKaringImageURL(notification.Channel.GetPhotoURL())
 	}
 	return ""
 }

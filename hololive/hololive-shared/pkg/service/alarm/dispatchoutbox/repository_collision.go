@@ -30,7 +30,7 @@ func recordEventCollisions(ctx context.Context, tx pgx.Tx, collisions []eventCol
 	if len(collisions) == 0 {
 		return nil
 	}
-	rows := buildEventCollisionBatchRows(collisions)
+	rows := buildEventCollisionBatchRows(dedupeEventCollisions(collisions))
 	raw, err := json.Marshal(rows)
 	if err != nil {
 		return fmt.Errorf("record dispatch event collisions: marshal batch: %w", err)
@@ -72,6 +72,21 @@ func recordEventCollisions(ctx context.Context, tx pgx.Tx, collisions []eventCol
 		return fmt.Errorf("record dispatch event collisions: %w", err)
 	}
 	return nil
+}
+
+func dedupeEventCollisions(collisions []eventCollision) []eventCollision {
+	seen := make(map[string]struct{}, len(collisions))
+	deduped := make([]eventCollision, 0, len(collisions))
+	for i := range collisions {
+		collision := &collisions[i]
+		key := collision.Event.EventKey + "\x00" + collision.Event.PayloadHash
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		deduped = append(deduped, *collision)
+	}
+	return deduped
 }
 
 func buildEventCollisionBatchRows(collisions []eventCollision) []eventCollisionBatchRow {
