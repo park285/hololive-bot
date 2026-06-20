@@ -213,28 +213,55 @@ func (r *Runtime) verifyWSOrigin(origin string) error {
 }
 
 func (r *Runtime) clientIP(req *http.Request) string {
-	if r.cfg.TrustedForwarders {
-		if ip := forwardedClientIP(req); ip != "" {
+	peer := peerHost(req.RemoteAddr)
+	if r.cfg.TrustedForwarders && ipInTrustedProxy(peer, r.cfg.TrustedProxyCIDRs) {
+		if ip := forwardedClientIP(req, r.cfg.TrustedProxyCIDRs); ip != "" {
 			return ip
 		}
 	}
-	host, _, err := net.SplitHostPort(req.RemoteAddr)
+	return peer
+}
+
+func peerHost(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
-		return req.RemoteAddr
+		return remoteAddr
 	}
 	return host
 }
 
-func forwardedClientIP(req *http.Request) string {
-	for _, header := range []string{"X-Forwarded-For", "X-Real-IP"} {
-		value := req.Header.Get(header)
-		if value == "" {
-			continue
+func ipInTrustedProxy(ip string, cidrs []*net.IPNet) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, cidr := range cidrs {
+		if cidr != nil && cidr.Contains(parsed) {
+			return true
 		}
-		candidate := strings.TrimSpace(strings.Split(value, ",")[0])
-		if net.ParseIP(candidate) != nil {
+	}
+	return false
+}
+
+func forwardedClientIP(req *http.Request, trusted []*net.IPNet) string {
+	xff := req.Header.Get("X-Forwarded-For")
+	if xff != "" {
+		hops := strings.Split(xff, ",")
+		for i := len(hops) - 1; i >= 0; i-- {
+			candidate := strings.TrimSpace(hops[i])
+			if net.ParseIP(candidate) == nil {
+				continue
+			}
+			if ipInTrustedProxy(candidate, trusted) {
+				continue
+			}
 			return candidate
 		}
+		return ""
+	}
+	candidate := strings.TrimSpace(req.Header.Get("X-Real-IP"))
+	if net.ParseIP(candidate) != nil && !ipInTrustedProxy(candidate, trusted) {
+		return candidate
 	}
 	return ""
 }

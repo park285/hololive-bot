@@ -1,9 +1,39 @@
 package config
 
 import (
+	"net"
 	"testing"
 	"time"
 )
+
+func TestHB04ParseTrustedProxyCIDRs_e8fc8b7d(t *testing.T) {
+	t.Run("parses and skips blanks", func(t *testing.T) {
+		got, err := parseTrustedProxyCIDRs("10.0.0.0/8, , 192.168.0.0/16")
+		if err != nil {
+			t.Fatalf("parseTrustedProxyCIDRs error = %v", err)
+		}
+		if len(got) != 2 {
+			t.Fatalf("len = %d, want 2", len(got))
+		}
+		if !got[0].Contains(net.ParseIP("10.5.5.5")) {
+			t.Fatal("first cidr must contain 10.5.5.5")
+		}
+	})
+	t.Run("rejects malformed entry", func(t *testing.T) {
+		if _, err := parseTrustedProxyCIDRs("not-a-cidr"); err == nil {
+			t.Fatal("malformed CIDR must error")
+		}
+	})
+	t.Run("empty input yields no cidrs", func(t *testing.T) {
+		got, err := parseTrustedProxyCIDRs("")
+		if err != nil {
+			t.Fatalf("error = %v", err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("len = %d, want 0", len(got))
+		}
+	})
+}
 
 func TestIsLocalhostOrigin(t *testing.T) {
 	t.Parallel()

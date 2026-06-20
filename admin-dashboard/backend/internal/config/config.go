@@ -71,6 +71,7 @@ type Config struct {
 	Session           SessionConfig
 	RuntimeVersion    string
 	TrustedForwarders bool
+	TrustedProxyCIDRs []*net.IPNet
 }
 
 func Load() (*Config, error) {
@@ -97,6 +98,15 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	trustedForwarders := envutil.Bool("TRUST_FORWARDED_HEADERS", false)
+	trustedProxyCIDRs, err := parseTrustedProxyCIDRs(envutil.String("TRUSTED_PROXY_CIDRS", ""))
+	if err != nil {
+		return nil, err
+	}
+	if trustedForwarders && len(trustedProxyCIDRs) == 0 {
+		return nil, errors.New("config: TRUST_FORWARDED_HEADERS is enabled but TRUSTED_PROXY_CIDRS is empty")
+	}
+
 	return &Config{
 		Port:              port,
 		Env:               env,
@@ -113,8 +123,26 @@ func Load() (*Config, error) {
 		Security:          LoadSecurityConfig(env, allowLocalhostInProd),
 		Session:           sessionCfg,
 		RuntimeVersion:    envutil.String("ADMIN_DASHBOARD_VERSION", "0.1.0-go"),
-		TrustedForwarders: envutil.Bool("TRUST_FORWARDED_HEADERS", false),
+		TrustedForwarders: trustedForwarders,
+		TrustedProxyCIDRs: trustedProxyCIDRs,
 	}, nil
+}
+
+func parseTrustedProxyCIDRs(raw string) ([]*net.IPNet, error) {
+	fields := strings.Split(raw, ",")
+	cidrs := make([]*net.IPNet, 0, len(fields))
+	for _, field := range fields {
+		entry := strings.TrimSpace(field)
+		if entry == "" {
+			continue
+		}
+		_, network, err := net.ParseCIDR(entry)
+		if err != nil {
+			return nil, fmt.Errorf("config: invalid TRUSTED_PROXY_CIDRS entry %q: %w", entry, err)
+		}
+		cidrs = append(cidrs, network)
+	}
+	return cidrs, nil
 }
 
 func LoadLoggingConfig() LoggingConfig {

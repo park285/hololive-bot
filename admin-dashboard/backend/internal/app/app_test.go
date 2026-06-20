@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -533,15 +534,55 @@ func TestOpenAPIToggle(t *testing.T) {
 	require.Contains(t, decodeBody(t, rec), "paths")
 }
 
-func TestClientIPRespectsTrustedForwarders(t *testing.T) {
+func mustCIDR(t *testing.T, cidr string) *net.IPNet {
+	t.Helper()
+	_, network, err := net.ParseCIDR(cidr)
+	require.NoError(t, err)
+	return network
+}
+
+func TestHB04ForwardedHeaderIgnoredFromUntrustedPeer_e8fc8b7d(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, func(cfg *config.Config) {
 		cfg.TrustedForwarders = true
+		cfg.TrustedProxyCIDRs = []*net.IPNet{mustCIDR(t, "10.0.0.0/8")}
+	})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+	req.RemoteAddr = "203.0.113.50:4321"
+	req.Header.Set("X-Forwarded-For", "198.51.100.7")
+	require.Equal(t, "203.0.113.50", rt.clientIP(req),
+		"untrusted peer must not be able to override clientIP via X-Forwarded-For")
+}
+
+func TestHB04ForwardedHeaderRotationDoesNotResetRateLimit_e8fc8b7d(t *testing.T) {
+	rt := newTestRuntime(t, &fakeSessions{}, func(cfg *config.Config) {
+		cfg.TrustedForwarders = true
+		cfg.TrustedProxyCIDRs = []*net.IPNet{mustCIDR(t, "10.0.0.0/8")}
+	})
+	keys := make(map[string]struct{})
+	for i := range 8 {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+		req.RemoteAddr = "203.0.113.50:4321"
+		req.Header.Set("X-Forwarded-For", "198.51.100."+strconv.Itoa(i))
+		keys[rt.clientIP(req)] = struct{}{}
+	}
+	require.Len(t, keys, 1, "rotated forwarded headers from one untrusted peer must collapse to a single limiter key")
+	for key := range keys {
+		require.Equal(t, "203.0.113.50", key)
+	}
+}
+
+func TestHB04TrustedProxyXFFAcceptedFromAllowlistedPeer_e8fc8b7d(t *testing.T) {
+	rt := newTestRuntime(t, &fakeSessions{}, func(cfg *config.Config) {
+		cfg.TrustedForwarders = true
+		cfg.TrustedProxyCIDRs = []*net.IPNet{mustCIDR(t, "10.0.0.0/8")}
 	})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
 	req.RemoteAddr = "10.0.0.9:4321"
 	req.Header.Set("X-Forwarded-For", "203.0.113.7, 10.0.0.1")
-	require.Equal(t, "203.0.113.7", rt.clientIP(req))
+	require.Equal(t, "203.0.113.7", rt.clientIP(req),
+		"XFF from an allowlisted proxy chain must resolve to the rightmost non-trusted hop")
 
 	rt = newTestRuntime(t, &fakeSessions{}, nil)
-	require.Equal(t, "10.0.0.9", rt.clientIP(req))
+	require.Equal(t, "10.0.0.9", rt.clientIP(req),
+		"with forwarding disabled the peer host is the key")
 }
