@@ -25,14 +25,14 @@ func BuildYouTubeAPIStack(ctx context.Context, params *YouTubeAPIStackParams) *p
 	if params == nil {
 		return &providers.YouTubeStack{}
 	}
-	if !params.YouTubeConfig.EnableQuotaBuilding || params.YouTubeConfig.APIKey == "" {
+	if !params.YouTubeConfig.EnableQuotaBuilding {
 		if params.Logger != nil {
-			params.Logger.Info("YouTube quota building disabled; stats repository only")
+			params.Logger.Info("YouTube scraper scheduler disabled; stats repository only")
 		}
 		return &providers.YouTubeStack{StatsRepository: params.StatsRepository}
 	}
 
-	service, err := youtubefactory.NewYouTubeService(ctx, params.YouTubeConfig.APIKey, params.CacheService, scraper.ProxyConfig{
+	service, err := youtubefactory.NewYouTubeService(ctx, params.CacheService, scraper.ProxyConfig{
 		Enabled: params.ScraperConfig.ProxyEnabled,
 		URL:     params.ScraperConfig.ProxyURL,
 	}, params.SharedRateLimit, params.Logger)

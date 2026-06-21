@@ -71,19 +71,6 @@ func TestLoadYouTubeProducerRuntimeAllowsMissingIrisAndRooms(t *testing.T) {
 	}
 }
 
-func TestLoadYouTubeProducerRuntimeRequiresRealYouTubeKey(t *testing.T) {
-	clearIrisAndRoomEnv(t)
-	t.Setenv("API_SECRET_KEY", "dummy-secret")
-	setRuntimeH3ServerEnv(t)
-	t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
-	t.Setenv("YOUTUBE_API_KEY", "changeme")
-
-	_, err := LoadYouTubeProducerRuntime()
-	if err == nil || !strings.Contains(err.Error(), "YOUTUBE_API_KEY") {
-		t.Fatalf("LoadYouTubeProducerRuntime() error = %v, want YOUTUBE_API_KEY requirement", err)
-	}
-}
-
 func TestLoadYouTubeProducerRuntimeRequiresHolodexKey(t *testing.T) {
 	clearIrisAndRoomEnv(t)
 	t.Setenv("API_SECRET_KEY", "dummy-secret")

@@ -1020,7 +1020,6 @@ func TestConfigValidate_ScraperPublishedAtResolverRejectsMaxRunDurationBelowReso
 			BaseURLFile:  "/tmp/iris_base_url",
 		},
 		Holodex:  HolodexConfig{APIKey: "test-key"},
-		YouTube:  YouTubeConfig{APIKey: "test-youtube-key"},
 		Postgres: PostgresConfig{SSLMode: "disable"},
 		Scraper: ScraperConfig{
 			PublishedAtResolver: ScraperPublishedAtResolverConfig{
@@ -1090,19 +1089,6 @@ func TestLoad_UsesProductionWhenOnlyLegacyTelemetryEnvIsSet(t *testing.T) {
 	}
 	if config.Environment != "production" {
 		t.Fatalf("Environment = %q, want %q", config.Environment, "production")
-	}
-}
-
-func TestLoad_RejectsPlaceholderYouTubeAPIKey(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("YOUTUBE_API_KEY", "your_youtube_api_key")
-
-	_, err := Load()
-	if err == nil {
-		t.Fatal("Load() expected placeholder youtube api key error, got nil")
-	}
-	if !strings.Contains(err.Error(), "YOUTUBE_API_KEY uses placeholder value") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

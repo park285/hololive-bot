@@ -66,20 +66,12 @@ func DefaultHolodexOperationalConfig() HolodexConfig {
 
 func DefaultYouTubeOperationalConfig() YouTubeConfig {
 	return YouTubeConfig{
-		DailyQuotaLimit:         10000,
-		SearchQuotaCost:         100,
-		ChannelsQuotaCost:       1,
-		MaxChannelsPerCall:      20,
-		MaxConcurrentRequests:   3,
-		SearchMaxResults:        10,
-		QuotaSafetyMargin:       2000,
 		CacheExpiration:         2 * time.Hour,
 		MaxPageBodyBytes:        8 << 20,
 		ScraperHTTPTimeout:      15 * time.Second,
 		ScraperDialTimeout:      5 * time.Second,
 		ScraperHeaderTimeout:    12 * time.Second,
 		ScraperPhaseTimeout:     45 * time.Second,
-		APIFallbackTimeout:      30 * time.Second,
 		CacheSaveTimeout:        5 * time.Second,
 		CommunityMissingTTL:     24 * time.Hour,
 		VideoRSSBackoffTTL:      6 * time.Hour,

@@ -14,22 +14,13 @@ type HolodexConfig struct {
 }
 
 type YouTubeConfig struct {
-	APIKey                       string
 	EnableQuotaBuilding          bool
-	DailyQuotaLimit              int
-	SearchQuotaCost              int
-	ChannelsQuotaCost            int
-	MaxChannelsPerCall           int
-	MaxConcurrentRequests        int
-	SearchMaxResults             int
-	QuotaSafetyMargin            int
 	CacheExpiration              time.Duration
 	MaxPageBodyBytes             int64
 	ScraperHTTPTimeout           time.Duration
 	ScraperDialTimeout           time.Duration
 	ScraperHeaderTimeout         time.Duration
 	ScraperPhaseTimeout          time.Duration
-	APIFallbackTimeout           time.Duration
 	CacheSaveTimeout             time.Duration
 	CommunityMissingTTL          time.Duration
 	VideoRSSBackoffTTL           time.Duration

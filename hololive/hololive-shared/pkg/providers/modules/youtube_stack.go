@@ -61,7 +61,7 @@ func BuildYouTubeStack(ctx context.Context, params *YouTubeStackParams) *provide
 	)
 
 	if params.Logger != nil {
-		params.Logger.Info("YouTube quota building enabled", slog.String("mode", "API Key"), slog.Int("daily_target", 9192))
+		params.Logger.Info("YouTube scraper scheduler enabled")
 	}
 
 	stack.Scheduler = scheduler

@@ -38,13 +38,12 @@ import (
 
 func NewYouTubeService(
 	ctx context.Context,
-	apiKey string,
 	cacheClient cache.Client,
 	scraperProxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
 ) (youtube.Service, error) {
-	return apiservice.New(ctx, apiKey, cacheClient, scraperProxyConfig, sharedRL, logger)
+	return apiservice.New(ctx, cacheClient, scraperProxyConfig, sharedRL, logger)
 }
 
 func NewScheduler(

@@ -273,22 +273,13 @@ func loadYouTubeConfig() YouTubeConfig {
 	d := DefaultYouTubeOperationalConfig()
 	producerInterval := time.Duration(sharedenv.Int("YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS", int(d.ProducerRequestInterval/time.Second))) * time.Second
 	return YouTubeConfig{
-		APIKey:                  sharedenv.String("YOUTUBE_API_KEY", ""),
 		EnableQuotaBuilding:     sharedenv.Bool("YOUTUBE_ENABLE_QUOTA_BUILDING", false),
-		DailyQuotaLimit:         sharedenv.Int("YOUTUBE_DAILY_QUOTA_LIMIT", d.DailyQuotaLimit),
-		SearchQuotaCost:         sharedenv.Int("YOUTUBE_SEARCH_QUOTA_COST", d.SearchQuotaCost),
-		ChannelsQuotaCost:       sharedenv.Int("YOUTUBE_CHANNELS_QUOTA_COST", d.ChannelsQuotaCost),
-		MaxChannelsPerCall:      sharedenv.Int("YOUTUBE_MAX_CHANNELS_PER_CALL", d.MaxChannelsPerCall),
-		MaxConcurrentRequests:   sharedenv.Int("YOUTUBE_MAX_CONCURRENT_REQUESTS", d.MaxConcurrentRequests),
-		SearchMaxResults:        sharedenv.Int("YOUTUBE_SEARCH_MAX_RESULTS", d.SearchMaxResults),
-		QuotaSafetyMargin:       sharedenv.Int("YOUTUBE_QUOTA_SAFETY_MARGIN", d.QuotaSafetyMargin),
 		CacheExpiration:         time.Duration(sharedenv.Int("YOUTUBE_CACHE_EXPIRATION_SECONDS", int(d.CacheExpiration/time.Second))) * time.Second,
 		MaxPageBodyBytes:        int64(sharedenv.Int("YOUTUBE_MAX_PAGE_BODY_BYTES", int(d.MaxPageBodyBytes))),
 		ScraperHTTPTimeout:      time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HTTP_TIMEOUT_SECONDS", int(d.ScraperHTTPTimeout/time.Second))) * time.Second,
 		ScraperDialTimeout:      time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_DIAL_TIMEOUT_SECONDS", int(d.ScraperDialTimeout/time.Second))) * time.Second,
 		ScraperHeaderTimeout:    time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HEADER_TIMEOUT_SECONDS", int(d.ScraperHeaderTimeout/time.Second))) * time.Second,
 		ScraperPhaseTimeout:     time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS", int(d.ScraperPhaseTimeout/time.Second))) * time.Second,
-		APIFallbackTimeout:      time.Duration(sharedenv.Int("YOUTUBE_API_FALLBACK_TIMEOUT_SECONDS", int(d.APIFallbackTimeout/time.Second))) * time.Second,
 		CacheSaveTimeout:        time.Duration(sharedenv.Int("YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS", int(d.CacheSaveTimeout/time.Second))) * time.Second,
 		CommunityMissingTTL:     time.Duration(sharedenv.Int("YOUTUBE_COMMUNITY_MISSING_TTL_SECONDS", int(d.CommunityMissingTTL/time.Second))) * time.Second,
 		VideoRSSBackoffTTL:      time.Duration(sharedenv.Int("YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS", int(d.VideoRSSBackoffTTL/time.Second))) * time.Second,

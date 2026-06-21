@@ -89,9 +89,6 @@ func (c *Config) validateYouTubeProducerRequiredConfig() error {
 	if strings.TrimSpace(c.Holodex.APIKey) == "" {
 		return fmt.Errorf("HOLODEX_API_KEY is required")
 	}
-	if isPlaceholderAPIKey(c.YouTube.APIKey) {
-		return fmt.Errorf("YOUTUBE_API_KEY uses placeholder value; set a real API key")
-	}
 	return nil
 }
 
@@ -110,9 +107,6 @@ func (c *Config) validateRequiredConfig() error {
 	}
 	if strings.TrimSpace(c.Holodex.APIKey) == "" {
 		return fmt.Errorf("HOLODEX_API_KEY is required")
-	}
-	if isPlaceholderAPIKey(c.YouTube.APIKey) {
-		return fmt.Errorf("YOUTUBE_API_KEY uses placeholder value; set a real API key")
 	}
 	return nil
 }
@@ -283,16 +277,6 @@ func intAliasEnv(keys []string, fallback int) int {
 		}
 	}
 	return fallback
-}
-
-func isPlaceholderAPIKey(value string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	switch normalized {
-	case "", "your_api_key", "your_youtube_api_key", "changeme", "change_me", "replace_me", "replace-with-real-key":
-		return true
-	default:
-		return false
-	}
 }
 
 func validateUnsupportedLegacyEnvUsage() error {

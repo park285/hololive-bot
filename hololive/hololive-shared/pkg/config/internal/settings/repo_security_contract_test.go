@@ -247,7 +247,6 @@ func assertProdRenderedEgressRuntimeKeys(t *testing.T, cfg renderedCompose) {
 			"API_SECRET_KEY",
 			"HOLODEX_API_KEY",
 			"HOLODEX_API_KEY_1",
-			"YOUTUBE_API_KEY",
 		} {
 			if _, ok := env[key]; !ok {
 				t.Fatalf("%s missing egress runtime key %s", service, key)
@@ -267,7 +266,7 @@ func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 	}
 
 	producerEnv := composeEnvironment(t, cfg, "youtube-producer")
-	for _, key := range []string{"YOUTUBE_API_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
+	for _, key := range []string{"HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
 		if _, ok := producerEnv[key]; !ok {
 			t.Fatalf("youtube-producer missing scoped %s mapping", key)
 		}
@@ -749,7 +748,7 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 			t.Fatalf("youtube-producer-c rendered with %s under live overlay", key)
 		}
 	}
-	for _, key := range []string{"API_SECRET_KEY", "YOUTUBE_API_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
+	for _, key := range []string{"API_SECRET_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
 		if _, ok := env[key]; !ok {
 			t.Fatalf("youtube-producer-c missing scoped %s mapping", key)
 		}
@@ -1050,7 +1049,6 @@ func writeAPProducerEnvFile(t *testing.T) string {
 		"API_SECRET_KEY=dummy",
 		"HOLODEX_API_KEY=dummy",
 		"HOLODEX_API_KEY_1=dummy",
-		"YOUTUBE_API_KEY=dummy",
 	})
 }
 
