@@ -107,12 +107,14 @@ bash -n "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh" \
     "${ROOT_DIR}/scripts/deploy/test-compose-env.sh" \
     "${ROOT_DIR}/scripts/deploy/test-compose-services.sh" \
     "${ROOT_DIR}/scripts/deploy/test-compose-h3-contract.sh" \
+    "${ROOT_DIR}/scripts/deploy/test-live-compat-cert-mount-scope.sh" \
     "${ROOT_DIR}/scripts/deploy/test-removed-runtimes.sh" \
     "${ROOT_DIR}/scripts/logs/remote-sync-main-logs.sh" \
     "${ROOT_DIR}/scripts/logs/test-remote-sync-main-logs.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-env.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-services.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-h3-contract.sh"
+"${ROOT_DIR}/scripts/deploy/test-live-compat-cert-mount-scope.sh"
 "${ROOT_DIR}/scripts/deploy/test-removed-runtimes.sh"
 "${ROOT_DIR}/scripts/logs/test-remote-sync-main-logs.sh"
 echo
