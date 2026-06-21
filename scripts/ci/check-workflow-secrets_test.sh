@@ -157,6 +157,20 @@ write_workflow "${quoted_event_key}" \
   '      - run: echo "${{ secrets.MODULES_TOKEN }}"'
 expect_failure "quoted event key detects pull_request secret" "secrets.MODULES_TOKEN" "${quoted_event_key}"
 
+list_item_event_comment="${TMP_DIR}/list-item-event-comment.yml"
+write_workflow "${list_item_event_comment}" \
+  "name: list-item-event-comment" \
+  "on:" \
+  "  - pull_request # trigger on PR" \
+  "permissions:" \
+  "  contents: read" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    steps:" \
+  '      - run: echo "${{ secrets.MODULES_TOKEN }}"'
+expect_failure "list-item on entry with trailing comment detects pull_request secret" "secrets.MODULES_TOKEN" "${list_item_event_comment}"
+
 pr_target="${TMP_DIR}/pull-request-target.yml"
 write_workflow "${pr_target}" \
   "name: pull-request-target" \
