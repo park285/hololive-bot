@@ -244,23 +244,26 @@ func ipInTrustedProxy(ip string, cidrs []*net.IPNet) bool {
 }
 
 func forwardedClientIP(req *http.Request, trusted []*net.IPNet) string {
-	xff := req.Header.Get("X-Forwarded-For")
-	if xff != "" {
-		hops := strings.Split(xff, ",")
-		for i := len(hops) - 1; i >= 0; i-- {
-			candidate := strings.TrimSpace(hops[i])
-			if net.ParseIP(candidate) == nil {
-				continue
-			}
-			if ipInTrustedProxy(candidate, trusted) {
-				continue
-			}
-			return candidate
-		}
-		return ""
+	if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
+		return clientIPFromXFF(xff, trusted)
 	}
 	candidate := strings.TrimSpace(req.Header.Get("X-Real-IP"))
 	if net.ParseIP(candidate) != nil && !ipInTrustedProxy(candidate, trusted) {
+		return candidate
+	}
+	return ""
+}
+
+func clientIPFromXFF(xff string, trusted []*net.IPNet) string {
+	hops := strings.Split(xff, ",")
+	for i := len(hops) - 1; i >= 0; i-- {
+		candidate := strings.TrimSpace(hops[i])
+		if net.ParseIP(candidate) == nil {
+			continue
+		}
+		if ipInTrustedProxy(candidate, trusted) {
+			continue
+		}
 		return candidate
 	}
 	return ""
