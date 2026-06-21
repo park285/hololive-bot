@@ -63,7 +63,7 @@ export const AlarmGroups = ({
 	if (groups.length === 0) {
 		return (
 			<div className="py-16 flex flex-col items-center text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-				<div className="flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 text-slate-400 mb-4 ring-4 ring-white shadow-sm">
+				<div className="flex items-center justify-center w-16 h-16 rounded-full bg-linear-to-br from-slate-300 to-slate-400 text-white mb-4 ring-4 ring-white shadow-sm">
 					<Bell size={32} aria-hidden="true" />
 				</div>
 				<h3 className="text-lg font-bold text-slate-800 tracking-tight">
@@ -104,8 +104,9 @@ export const AlarmGroups = ({
 								<div
 									key={groupKey}
 									role="listitem"
-									className="flex flex-col bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:border-sky-200/50 transition-all duration-300 focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500"
+									className="relative flex flex-col bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:border-sky-200/50 transition-all duration-300 focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500"
 								>
+								<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-indigo-400 to-sky-400 z-10" />
 									<div
 										role="button"
 										tabIndex={0}
@@ -123,7 +124,7 @@ export const AlarmGroups = ({
 									>
 										<div className="flex items-center justify-between mb-3">
 											<div className="flex items-center gap-3">
-												<div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 font-black text-sm ring-2 ring-white shadow-sm">
+												<div className="flex items-center justify-center w-8 h-8 rounded-full bg-linear-to-br from-indigo-400 to-indigo-500 text-white font-black text-sm ring-2 ring-white shadow-sm shadow-indigo-200/50">
 													{group.roomName.charAt(0) || "?"}
 												</div>
 												<span className="text-xs font-bold text-slate-500 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-sm tabular-nums">

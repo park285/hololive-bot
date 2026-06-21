@@ -18,7 +18,9 @@ export const NearMilestonesSection = ({
 	<div className="space-y-4">
 		<div className="flex items-center justify-between pb-2 border-b border-slate-200">
 			<h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-				<TrendingUp size={20} className="text-amber-500" />
+				<span className="flex items-center justify-center w-9 h-9 rounded-xl bg-linear-to-br from-amber-400 to-amber-500 text-white shadow-sm shadow-amber-200/50">
+					<TrendingUp size={18} />
+				</span>
 				{nearData?.threshold && nearData.threshold > 0
 					? "달성 임박 멤버"
 					: "달성 근접 멤버"}
@@ -46,12 +48,12 @@ export const NearMilestonesSection = ({
 						return (
 							<div
 								key={member.channelId}
-								className="p-4 hover:bg-slate-50 transition-colors"
+							className="p-4 hover:bg-linear-to-r hover:from-amber-50/40 hover:to-transparent transition-colors"
 							>
 								<div className="flex items-center gap-4 mb-3">
-									<div className="w-10 h-10 shrink-0 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-										#{idx + 1}
-									</div>
+								<div className="w-10 h-10 shrink-0 rounded-full bg-linear-to-br from-amber-400 to-amber-500 text-white flex items-center justify-center font-bold shadow-sm shadow-amber-200/50">
+									#{idx + 1}
+								</div>
 									<div className="flex-1 min-w-0">
 										<div className="flex justify-between items-start">
 											<div>

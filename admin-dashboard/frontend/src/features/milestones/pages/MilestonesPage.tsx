@@ -119,16 +119,17 @@ export const MilestonesPage = () => {
 
 	return (
 		<div className="space-y-8">
-			<div>
-				<div className="flex flex-col gap-2 mb-2">
-					<h2 className="text-2xl font-bold text-slate-800 tracking-tight">
-						Milestone Tracker
-					</h2>
-					<p className="text-slate-500">
-						구독자 마일스톤 달성 현황 및 임박 멤버 모니터링
-					</p>
-				</div>
+		<div className="flex items-center gap-4 mb-2">
+			<div className="w-1 h-12 rounded-full bg-linear-to-b from-indigo-400 to-cyan-400 shrink-0" />
+			<div className="flex flex-col gap-1">
+				<h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">
+					Milestone Tracker
+				</h2>
+				<p className="text-slate-500">
+					구독자 마일스톤 달성 현황 및 임박 멤버 모니터링
+				</p>
 			</div>
+		</div>
 
 			<MilestonesStatsSection cards={statCards} />
 

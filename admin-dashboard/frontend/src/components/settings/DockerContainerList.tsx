@@ -36,10 +36,11 @@ export const DockerContainerList = ({
 
 	return (
 		<>
-			<Card>
+			<Card className="relative overflow-hidden">
+				<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-indigo-400 to-sky-400" />
 				<Card.Header className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
 					<div className="flex items-center gap-2">
-						<Server className="text-slate-600" size={20} />
+						<span className="flex items-center justify-center w-9 h-9 rounded-xl bg-linear-to-br from-indigo-400 to-indigo-500 text-white shadow-sm shadow-indigo-200/50"><Server size={18} /></span>
 						<h3 className="text-lg font-bold text-slate-800">컨테이너 관리</h3>
 						{dockerHealth?.available ? (
 							<Badge color="green" className="px-2 py-0.5">

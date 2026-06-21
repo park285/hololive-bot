@@ -23,7 +23,9 @@ export const AchievedMilestonesSection = ({
 	<div className="space-y-4">
 		<div className="flex items-center justify-between pb-2 border-b border-slate-200">
 			<h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-				<Trophy size={20} className="text-indigo-500" />
+				<span className="flex items-center justify-center w-9 h-9 rounded-xl bg-linear-to-br from-indigo-400 to-indigo-500 text-white shadow-sm shadow-indigo-200/50">
+					<Trophy size={18} />
+				</span>
 				최근 달성 기록
 			</h3>
 		</div>
@@ -38,12 +40,12 @@ export const AchievedMilestonesSection = ({
 					{achievedData?.milestones.map((milestone, idx) => (
 						<div
 							key={`${milestone.channelId}-${String(milestone.value)}-${String(idx)}`}
-							className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between"
+						className="p-4 hover:bg-linear-to-r hover:from-indigo-50/40 hover:to-transparent transition-colors flex items-center justify-between"
 						>
 							<div className="flex items-center gap-4">
-								<div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-									#{idx + 1}
-								</div>
+							<div className="w-10 h-10 rounded-full bg-linear-to-br from-indigo-400 to-indigo-500 text-white flex items-center justify-center font-bold shadow-sm shadow-indigo-200/50">
+								#{idx + 1}
+							</div>
 								<div>
 									<div className="font-bold text-slate-800">
 										{milestone.memberName}

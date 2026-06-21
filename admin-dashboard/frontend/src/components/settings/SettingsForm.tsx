@@ -92,16 +92,17 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 	};
 
 	return (
-		<Card className="overflow-hidden">
+		<Card className="relative overflow-hidden">
+			<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-sky-400 to-cyan-400" />
 			<Card.Header className="flex flex-row items-center gap-2 border-b border-slate-100 pb-4">
-				<SettingsIcon className="text-slate-600" size={20} aria-hidden="true" />
+				<span className="flex items-center justify-center w-9 h-9 rounded-xl bg-linear-to-br from-sky-400 to-cyan-400 text-white shadow-sm shadow-sky-200/50"><SettingsIcon size={18} aria-hidden="true" /></span>
 				<h3 className="text-lg font-bold text-slate-800">시스템 설정</h3>
 			</Card.Header>
 
 			<Card.Body className="space-y-6 pt-6">
 				<form onSubmit={onSubmit} className="space-y-6">
 					<div>
-						<h4 className="mb-4 border-l-2 border-sky-500 pl-3 text-sm font-bold text-slate-900">
+						<h4 className="mb-4 border-l-4 border-sky-400 pl-3 text-sm font-bold text-slate-900">
 							알림 옵션
 						</h4>
 
@@ -146,7 +147,7 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 						<Button
 							type="submit"
 							disabled={!isDirty || updateMutation.isPending}
-							className="gap-2 shadow-sm shadow-slate-200 focus-visible:ring-2 focus-visible:ring-slate-200"
+							className="gap-2 bg-linear-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 shadow-sm shadow-sky-200 focus-visible:ring-2 focus-visible:ring-sky-200"
 							aria-label="설정 저장하기"
 						>
 							{updateMutation.isPending ? (

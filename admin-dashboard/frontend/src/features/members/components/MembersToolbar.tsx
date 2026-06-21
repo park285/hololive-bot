@@ -27,7 +27,8 @@ export const MembersToolbar = ({
 	onSearchTermChange,
 }: MembersToolbarProps) => (
 	<>
-		<div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+		<div className="relative flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+			<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-sky-400 to-cyan-400" />
 			<div className="flex items-center gap-4 w-full md:w-auto">
 				<label className="flex items-center gap-2 cursor-pointer bg-slate-50 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors focus-within:ring-2 focus-within:ring-sky-200">
 					<input
@@ -54,7 +55,7 @@ export const MembersToolbar = ({
 				onMouseEnter={onAddModalIntent}
 				onFocus={onAddModalIntent}
 				onClick={onOpenAddModal}
-				className="gap-2 shrink-0 bg-sky-500 hover:bg-sky-600 text-white text-sm font-bold shadow-sm shadow-sky-200 focus-visible:ring-2 focus-visible:ring-sky-200"
+			className="gap-2 shrink-0 bg-linear-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 text-white text-sm font-bold shadow-sm shadow-sky-200 focus-visible:ring-2 focus-visible:ring-sky-200"
 				aria-label="새로운 멤버 추가"
 			>
 				<Plus size={16} aria-hidden="true" /> 멤버 추가

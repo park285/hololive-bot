@@ -1,4 +1,5 @@
 import Edit2 from "lucide-react/dist/esm/icons/edit-2.mjs";
+import clsx from "clsx";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link.mjs";
 import GraduationCap from "lucide-react/dist/esm/icons/graduation-cap.mjs";
 import Plus from "lucide-react/dist/esm/icons/plus.mjs";
@@ -59,7 +60,14 @@ const MemberCard = memo(
 		};
 
 		return (
-			<Card className="relative group flex flex-col h-full overflow-hidden border-slate-200 [content-visibility:auto] contain-intrinsic-size-[350px] focus-within:ring-2 focus-within:ring-sky-100 transition-shadow">
+		<Card className="relative group flex flex-col h-full overflow-hidden border-slate-200 [content-visibility:auto] contain-intrinsic-size-[350px] focus-within:ring-2 focus-within:ring-sky-100 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:shadow-sky-100/50">
+			{/* 상단 그라데이션 액센트 바 - 활성 멤버 sky, 졸업 멤버 slate */}
+			<div className={clsx(
+				"absolute top-0 left-0 right-0 h-1",
+				member.isGraduated
+					? "bg-linear-to-r from-slate-300 to-slate-400"
+					: "bg-linear-to-r from-sky-400 to-cyan-400",
+			)} />
 				<Card.Header className="pb-3 border-b border-slate-50">
 					<div className="flex items-start justify-between">
 						<div>
@@ -155,7 +163,7 @@ const MemberCard = memo(
 							className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-400"
 						>
 							<span
-								className="h-1.5 w-1.5 rounded-full bg-sky-400"
+								className="h-1.5 w-1.5 rounded-full bg-linear-to-br from-sky-400 to-cyan-400"
 								aria-hidden="true"
 							></span>
 							한국어 별명
@@ -219,7 +227,7 @@ const MemberCard = memo(
 							className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-400"
 						>
 							<span
-								className="h-1.5 w-1.5 rounded-full bg-rose-400"
+								className="h-1.5 w-1.5 rounded-full bg-linear-to-br from-rose-400 to-rose-500"
 								aria-hidden="true"
 							></span>
 							일본어 별명

@@ -9,16 +9,17 @@ export const CalendarPage = () => {
 
 	return (
 		<div className="space-y-6">
-			<div>
-				<div className="flex flex-col gap-2 mb-2">
-					<h2 className="text-2xl font-bold text-slate-800 tracking-tight">
-						기념일 달력
-					</h2>
-					<p className="text-slate-500">
-						홀로멤 생일·데뷔 주년 월별 조회
-					</p>
-				</div>
+		<div className="flex items-center gap-4 mb-2">
+			<div className="w-1 h-12 rounded-full bg-linear-to-b from-rose-400 to-amber-400 shrink-0" />
+			<div className="flex flex-col gap-1">
+				<h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">
+					기념일 달력
+				</h2>
+				<p className="text-slate-500">
+					홀로멤 생일·데뷔 주년 월별 조회
+				</p>
 			</div>
+		</div>
 
 			<CalendarToolbar
 				month={month}

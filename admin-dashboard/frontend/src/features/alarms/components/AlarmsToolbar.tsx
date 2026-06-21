@@ -18,7 +18,8 @@ export const AlarmsToolbar = ({
 	groupCount,
 	alarmCount,
 }: AlarmsToolbarProps) => (
-	<Card className="p-4 bg-white shadow-sm border-slate-200">
+	<Card className="relative p-4 bg-white shadow-sm border-slate-200 overflow-hidden">
+		<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-rose-400 to-amber-400" />
 		<div className="flex flex-col md:flex-row items-center gap-4">
 			<div className="relative w-full md:w-96">
 				<Label htmlFor="alarm-search" className="sr-only">

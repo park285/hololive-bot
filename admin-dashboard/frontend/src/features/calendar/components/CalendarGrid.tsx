@@ -36,16 +36,17 @@ export const CalendarGrid = ({ entries, month }: CalendarGridProps) => {
 			{[...grouped.entries()].map(([day, dayEntries]) => (
 				<div
 					key={day}
-					className="rounded-2xl border border-slate-200 p-4"
+					className="relative rounded-2xl border border-slate-200 p-4 overflow-hidden hover:shadow-md transition-shadow"
 				>
-					<h3 className="mb-3 text-sm font-medium text-slate-500">
+					<div className="absolute top-0 left-0 right-0 h-0.5 bg-linear-to-r from-rose-300 to-amber-300 opacity-60" />
+					<h3 className="mb-3 text-sm font-bold text-slate-600">
 						{month}월 {day}일
 					</h3>
 					<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
 						{dayEntries.map((entry) => (
 							<div
 								key={`${entry.kind}-${entry.member.channelId}`}
-								className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"
+								className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 hover:bg-linear-to-r hover:from-rose-50/40 hover:to-transparent transition-colors"
 							>
 								{entry.member.photo && (
 									<img

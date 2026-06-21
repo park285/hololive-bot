@@ -27,13 +27,14 @@ export const RoomsAclSection = ({
 	return (
 		<Card
 			className={clsx(
-				"transition-all duration-300 border",
+				"relative transition-all duration-300 border overflow-hidden",
 				aclEnabled
 					? "bg-white border-blue-100 shadow-sm"
 					: "bg-slate-50 border-slate-200",
 			)}
 		>
 			<div className="p-6 space-y-5">
+			<div className={clsx("absolute top-0 left-0 right-0 h-1", !aclEnabled ? "bg-linear-to-r from-slate-300 to-slate-400" : isBlacklist ? "bg-linear-to-r from-rose-400 to-rose-500" : "bg-linear-to-r from-sky-400 to-cyan-400")} />
 				<div className="flex flex-col md:flex-row items-center justify-between gap-4">
 					<div className="flex items-start gap-4">
 						<div
@@ -82,7 +83,7 @@ export const RoomsAclSection = ({
 							aria-label="방 접근 제어 토글"
 							className={clsx(
 								"relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500",
-								aclEnabled ? "bg-blue-600" : "bg-slate-300",
+								aclEnabled ? "bg-linear-to-r from-sky-500 to-cyan-500" : "bg-slate-300",
 								isPending && "opacity-50 cursor-wait",
 							)}
 						>

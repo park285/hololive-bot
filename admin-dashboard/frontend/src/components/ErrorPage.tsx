@@ -52,7 +52,7 @@ const ErrorPage = () => {
 			<div className="max-w-md w-full glass relative z-10 p-8 rounded-2xl text-center animate-in fade-in zoom-in-95 duration-500 border border-white/40 shadow-2xl shadow-indigo-500/10">
 				<div className="mb-8 flex justify-center">
 					<div className="relative group">
-						<div className="absolute inset-0 bg-gradient-to-tr from-rose-400 to-orange-400 rounded-full blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-500"></div>
+						<div className="absolute inset-0 bg-linear-to-tr from-rose-400 to-orange-400 rounded-full blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-500"></div>
 						<div className="relative w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg border border-rose-50 group-hover:scale-105 transition-transform duration-300">
 							{isRouteErrorResponse(error) && error.status === 401 ? (
 								<ShieldAlert
@@ -89,7 +89,7 @@ const ErrorPage = () => {
 
 					<button
 						onClick={handleGoHome}
-						className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 transition-all duration-200 active:scale-95 hover:shadow-indigo-500/40"
+						className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-linear-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 text-white font-semibold rounded-xl shadow-lg shadow-sky-500/30 transition-all duration-200 active:scale-95 hover:shadow-sky-500/40"
 					>
 						<Home className="w-4 h-4" />
 						<span>홈으로</span>

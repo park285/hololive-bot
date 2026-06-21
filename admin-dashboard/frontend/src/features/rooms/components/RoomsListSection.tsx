@@ -54,8 +54,9 @@ export const RoomsListSection = ({
 			</div>
 
 			<div
-				className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden"
+				className="relative bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden"
 			>
+				<div className={clsx("absolute top-0 left-0 right-0 h-1", isBlacklist ? "bg-linear-to-r from-rose-400 to-rose-500" : "bg-linear-to-r from-sky-400 to-cyan-400")} />
 				{rooms.length === 0 ? (
 					<div className="text-slate-400 text-center py-12 flex flex-col items-center gap-2">
 						<Info size={32} className="opacity-20" aria-hidden="true" />
@@ -73,7 +74,7 @@ export const RoomsListSection = ({
 							<div
 								key={room}
 								role="listitem"
-								className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors group focus-within:bg-slate-50 bg-white"
+								className="flex items-center justify-between px-6 py-4 hover:bg-linear-to-r hover:from-sky-50/40 hover:to-transparent transition-colors group focus-within:bg-sky-50/40 bg-white"
 							>
 								<div className="flex items-center gap-3">
 									<div
@@ -176,8 +177,8 @@ export const RoomsListSection = ({
 							className={clsx(
 								"w-full shadow-sm",
 								isBlacklist
-									? "bg-rose-600 hover:bg-rose-700 shadow-rose-200"
-									: "bg-blue-600 hover:bg-blue-700 shadow-blue-200",
+									? "bg-linear-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-rose-200"
+									: "bg-linear-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 shadow-sky-200",
 							)}
 							aria-label="채팅방 추가하기"
 						>

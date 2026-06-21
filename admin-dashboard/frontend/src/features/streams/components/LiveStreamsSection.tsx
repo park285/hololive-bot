@@ -45,10 +45,11 @@ export const LiveStreamsSection = ({
 	const streamRows = useMemo(() => chunkStreams(liveStreams), [liveStreams]);
 
 	return (
-		<div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 md:p-8">
+		<div className="relative bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 md:p-8 overflow-hidden">
 			<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+			<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-rose-400 to-rose-500" />
 				<div className="flex items-center gap-3">
-					<div className="flex items-center justify-center w-10 h-10 rounded-full bg-rose-50 text-rose-500 ring-4 ring-rose-50/50">
+					<div className="flex items-center justify-center w-10 h-10 rounded-full bg-linear-to-br from-rose-400 to-rose-500 text-white ring-4 ring-rose-50/50 shadow-sm shadow-rose-200/50">
 						<PlayCircle size={22} className="ml-0.5" />
 					</div>
 					<div>

@@ -53,13 +53,14 @@ export const UpcomingStreamsSection = ({
 	);
 
 	return (
-		<div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+		<div className="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-6 overflow-hidden">
 			<div className="flex items-center gap-2 mb-4">
-				<Calendar className="text-sky-500" />
+			<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-sky-400 to-cyan-400" />
+				<span className="flex items-center justify-center w-8 h-8 rounded-lg bg-linear-to-br from-sky-400 to-cyan-400 text-white shadow-sm shadow-sky-200/50"><Calendar size={16} /></span>
 				<h3 className="text-lg font-bold text-slate-800">
 					Upcoming Streams (24h)
 				</h3>
-				<span className="text-xs font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-600">
+				<span className="text-xs font-medium px-2 py-0.5 rounded-full bg-linear-to-r from-sky-400 to-cyan-400 text-white">
 					{upcomingStreams.length}
 				</span>
 			</div>

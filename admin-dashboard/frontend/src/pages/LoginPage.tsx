@@ -86,7 +86,7 @@ const LoginPage = () => {
 			<div className="w-full max-w-[400px] z-10 px-6">
 				<div className="relative">
 					<div className="text-center mb-10 animate-fade-in-up">
-						<div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-tr from-sky-400 to-cyan-400 rounded-2xl shadow-lg shadow-sky-200/60 mb-6 transform rotate-3 hover:rotate-6 transition-transform duration-300">
+						<div className="inline-flex items-center justify-center w-16 h-16 bg-linear-to-tr from-sky-400 to-cyan-400 rounded-2xl shadow-lg shadow-sky-200/60 mb-6 transform rotate-3 hover:rotate-6 transition-transform duration-300">
 							<Play
 								className="w-8 h-8 text-white fill-white ml-1"
 								aria-hidden="true"
@@ -160,7 +160,7 @@ const LoginPage = () => {
 						<Button
 							type="submit"
 							disabled={loginMutation.isPending}
-							className="w-full relative overflow-hidden flex justify-center items-center py-6 px-4 bg-slate-900 rounded-xl text-sm font-display font-bold text-white hover:bg-slate-800 focus-visible:ring-4 focus-visible:ring-slate-200 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 shadow-xl shadow-slate-200/80 hover:shadow-2xl hover:shadow-slate-300/60 hover:-translate-y-0.5 group"
+							className="w-full relative overflow-hidden flex justify-center items-center py-6 px-4 bg-linear-to-r from-slate-800 to-slate-900 rounded-xl text-sm font-display font-bold text-white hover:from-slate-700 hover:to-slate-800 focus-visible:ring-4 focus-visible:ring-slate-200 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 shadow-xl shadow-slate-300/60 hover:shadow-2xl hover:shadow-sky-300/40 hover:-translate-y-0.5 group"
 						>
 							<div className="relative z-10 flex items-center justify-center">
 								{loginMutation.isPending ? (
@@ -187,9 +187,9 @@ const LoginPage = () => {
 
 					<div className="mt-12 text-center space-y-2 animate-fade-in stagger-4">
 						<div className="flex justify-center space-x-2">
-							<div className="w-1.5 h-1.5 rounded-full bg-sky-400"></div>
-							<div className="w-1.5 h-1.5 rounded-full bg-cyan-400"></div>
-							<div className="w-1.5 h-1.5 rounded-full bg-teal-400"></div>
+							<div className="w-1.5 h-1.5 rounded-full bg-linear-to-br from-sky-400 to-cyan-400"></div>
+							<div className="w-1.5 h-1.5 rounded-full bg-linear-to-br from-cyan-400 to-teal-400"></div>
+							<div className="w-1.5 h-1.5 rounded-full bg-linear-to-br from-teal-400 to-emerald-400"></div>
 						</div>
 					</div>
 				</div>

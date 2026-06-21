@@ -32,7 +32,7 @@ export const DockerContainerItem = ({
 				className={clsx(
 					"w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 shadow-sm transition-colors",
 					container.state === "running"
-						? "bg-white border-slate-100 text-sky-500"
+						? "bg-linear-to-br from-sky-400 to-cyan-400 border-transparent text-white shadow-sm shadow-sky-200/50"
 						: "bg-slate-100 border-slate-200 text-slate-400",
 				)}
 				aria-hidden="true"
