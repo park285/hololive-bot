@@ -135,6 +135,8 @@ func newTestRuntime(t *testing.T, store sessionStore, mutate func(*config.Config
 		statsHub:        status.NewHub(nil),
 		static:          static.NewHandler(),
 		wsStreams:       make(chan struct{}, maxSystemStatsStreams),
+		wsPongWait:      defaultWSPongWait,
+		wsPingPeriod:    defaultWSPingPeriod,
 		openapiJSON:     openapiJSON,
 	}
 }
@@ -396,19 +398,50 @@ func TestETagRoundTrip(t *testing.T) {
 	rt := newTestRuntime(t, storeWith(sess), nil)
 	handler := rt.Handler()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/health", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	etag := rec.Header().Get("ETag")
 	require.NotEmpty(t, etag)
 
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/health", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	req.Header.Set("If-None-Match", etag)
 	rec = doRequest(handler, req)
 	require.Equal(t, http.StatusNotModified, rec.Code)
 	require.Empty(t, rec.Body.String())
+}
+
+func TestSessionStatusIssuesCSRFTokenForBootstrap(t *testing.T) {
+	sess := liveSession("bootstrap-session")
+	rt := newTestRuntime(t, storeWith(sess), nil)
+	handler := rt.Handler()
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req.AddCookie(signedSessionCookie(sess.ID))
+	rec := doRequest(handler, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	token, ok := decodeBody(t, rec)["csrf_token"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, token, "/auth/session must issue a CSRF token so the SPA recovers it after a page refresh")
+
+	var csrfCookie *http.Cookie
+	for _, ck := range rec.Result().Cookies() {
+		if ck.Name == auth.CSRFCookieName {
+			csrfCookie = ck
+		}
+	}
+	require.NotNil(t, csrfCookie, "/auth/session must re-set the CSRF cookie")
+	require.Equal(t, token, csrfCookie.Value, "double-submit cookie and body token must match")
+
+	post := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
+	post.AddCookie(signedSessionCookie(sess.ID))
+	post.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: token, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	post.Header.Set("X-CSRF-Token", token)
+	require.Equal(t, http.StatusOK, doRequest(handler, post).Code,
+		"the token issued by /auth/session must satisfy the CSRF gate on the next mutation")
 }
 
 func TestSPAFallbackServesIndexWith200(t *testing.T) {
@@ -479,6 +512,41 @@ func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
 		var frame status.SystemStats
 		require.NoError(t, conn.ReadJSON(&frame))
 		require.Equal(t, want, frame.ThreadCount)
+	}
+}
+
+func TestSystemStatsWSReapsSilentPeer(t *testing.T) {
+	sess := liveSession("ws-reap-session")
+	rt := newTestRuntime(t, storeWith(sess), nil)
+	rt.wsPongWait = 200 * time.Millisecond
+	rt.wsPingPeriod = 60 * time.Millisecond
+
+	server := httptest.NewServer(rt.Handler())
+	defer server.Close()
+
+	header := http.Header{}
+	header.Set("Origin", "https://ok.test")
+	header.Set("Cookie", signedSessionCookie(sess.ID).String())
+	conn, resp, err := websocket.DefaultDialer.Dial(
+		"ws"+strings.TrimPrefix(server.URL, "http")+"/admin/api/ws/system-stats", header)
+	require.NoError(t, err)
+	if resp != nil {
+		defer func() { require.NoError(t, resp.Body.Close()) }()
+	}
+	defer func() {
+		if cerr := conn.Close(); cerr != nil {
+			return
+		}
+	}()
+
+	conn.SetPingHandler(func(string) error { return nil })
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+	_, _, readErr := conn.ReadMessage()
+	require.Error(t, readErr, "server must reap a peer that stops answering pings instead of leaking its stream slot")
+	if netErr, ok := errors.AsType[net.Error](readErr); ok {
+		require.False(t, netErr.Timeout(),
+			"client read timed out — server never reaped the silent peer (wsStreams slot leak regression)")
 	}
 }
 

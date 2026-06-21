@@ -21,14 +21,7 @@ export function clearCSRFToken(): void {
 }
 
 function csrfTokenForRequest(): string | null {
-	return csrfToken ?? getCookie("csrf_token");
-}
-
-// getCookie: document.cookie에서 특정 쿠키 값을 추출
-export function getCookie(name: string): string | null {
-	const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const m = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
-	return m ? decodeURIComponent(m[1] ?? "") : null;
+	return csrfToken;
 }
 
 function setRequestHeader(

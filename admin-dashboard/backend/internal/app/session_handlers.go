@@ -77,11 +77,18 @@ func (r *Runtime) handleSessionStatus(c *gin.Context) {
 		httpx.Abort(c, httpx.Unauthorized())
 		return
 	}
+	csrf, err := auth.NewCSRFToken(sessionID, r.cfg.SessionSecret)
+	if err != nil {
+		httpx.Abort(c, httpx.Internal(err))
+		return
+	}
+	auth.SetCSRFCookie(c.Writer, csrf, r.cfg.Security.ForceHTTPS)
 	ginjson.Respond(c, http.StatusOK, sessionStatusResponse{
 		Status:            "ok",
 		Authenticated:     true,
 		Username:          r.cfg.AdminUser,
 		AbsoluteExpiresAt: sess.AbsoluteExpiresAt.Unix(),
+		CSRFToken:         csrf,
 		SessionPolicy: sessionPolicy{
 			HeartbeatIntervalMS:     durationMillis(r.cfg.Session.HeartbeatInterval),
 			IdleTimeoutMS:           durationMillis(r.cfg.Session.IdleTimeout),

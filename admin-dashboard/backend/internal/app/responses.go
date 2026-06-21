@@ -26,6 +26,7 @@ type sessionStatusResponse struct {
 	Username          string        `json:"username"`
 	AbsoluteExpiresAt int64         `json:"absolute_expires_at"`
 	SessionPolicy     sessionPolicy `json:"session_policy"`
+	CSRFToken         string        `json:"csrf_token"`
 }
 
 type heartbeatOKResponse struct {

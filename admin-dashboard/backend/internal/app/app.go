@@ -24,6 +24,12 @@ import (
 
 const maxSystemStatsStreams = 16
 
+const (
+	wsWriteWait         = 5 * time.Second
+	defaultWSPongWait   = 60 * time.Second
+	defaultWSPingPeriod = (defaultWSPongWait * 9) / 10
+)
+
 const sessionIDKey = "admin-session-id"
 
 type sessionStore interface {
@@ -46,6 +52,8 @@ type Runtime struct {
 	statsHub        *status.Hub
 	static          static.Handler
 	wsStreams       chan struct{}
+	wsPongWait      time.Duration
+	wsPingPeriod    time.Duration
 	openapiJSON     []byte
 }
 
@@ -85,6 +93,8 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 		statsHub:        statsHub,
 		static:          static.NewHandler(),
 		wsStreams:       make(chan struct{}, maxSystemStatsStreams),
+		wsPongWait:      defaultWSPongWait,
+		wsPingPeriod:    defaultWSPingPeriod,
 		openapiJSON:     openapiJSON,
 	}, nil
 }

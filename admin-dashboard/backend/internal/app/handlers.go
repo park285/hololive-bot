@@ -11,6 +11,7 @@ import (
 	"github.com/park285/shared-go/pkg/ginjson"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
+	"github.com/kapu/admin-dashboard/internal/status"
 )
 
 func (r *Runtime) handleHealth(c *gin.Context) {
@@ -105,16 +106,66 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 func (r *Runtime) streamSystemStats(conn *websocket.Conn) {
 	history, updates, unsubscribe := r.statsHub.Subscribe()
 	defer unsubscribe()
+
+	peerGone := watchPeer(conn, r.wsPongWait)
+
 	for _, stats := range history {
 		if !writeSystemStatsFrame(conn, stats) {
 			return
 		}
 	}
-	for stats := range updates {
-		if !writeSystemStatsFrame(conn, stats) {
+
+	r.pumpSystemStats(conn, updates, peerGone)
+}
+
+func (r *Runtime) pumpSystemStats(conn *websocket.Conn, updates <-chan status.SystemStats, peerGone <-chan struct{}) {
+	ping := time.NewTicker(r.wsPingPeriod)
+	defer ping.Stop()
+
+	for {
+		if !pumpSystemStatsOnce(conn, updates, peerGone, ping.C) {
 			return
 		}
 	}
+}
+
+func pumpSystemStatsOnce(conn *websocket.Conn, updates <-chan status.SystemStats, peerGone <-chan struct{}, tick <-chan time.Time) bool {
+	select {
+	case <-peerGone:
+		return false
+	case <-tick:
+		return writePing(conn)
+	case stats, ok := <-updates:
+		return ok && writeSystemStatsFrame(conn, stats)
+	}
+}
+
+func watchPeer(conn *websocket.Conn, pongWait time.Duration) <-chan struct{} {
+	gone := make(chan struct{})
+	conn.SetReadLimit(512)
+	if err := conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		close(gone)
+		return gone
+	}
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
+	go func() {
+		defer close(gone)
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+	return gone
+}
+
+func writePing(conn *websocket.Conn) bool {
+	if err := conn.SetWriteDeadline(time.Now().Add(wsWriteWait)); err != nil {
+		return false
+	}
+	return conn.WriteMessage(websocket.PingMessage, nil) == nil
 }
 
 func writeSystemStatsFrame(conn *websocket.Conn, stats any) bool {
@@ -131,7 +182,7 @@ func closeConn(conn *websocket.Conn) {
 }
 
 func setWriteDeadline(conn *websocket.Conn) error {
-	return conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	return conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
 }
 
 func (r *Runtime) handleOpenAPI(c *gin.Context) {

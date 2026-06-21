@@ -21,6 +21,7 @@ export interface SessionStatusResponse {
 	authenticated: boolean;
 	username: string;
 	absolute_expires_at: number;
+	csrf_token?: string | null;
 	session_policy: {
 		heartbeat_interval_ms: number;
 		idle_timeout_ms: number;
@@ -170,6 +171,9 @@ export const authApi = {
 
 	getSession: async (): Promise<SessionStatusResponse> => {
 		const { data } = await apiClient.get<SessionStatusResponse>("/auth/session");
+		if (data.csrf_token !== undefined) {
+			setCSRFToken(data.csrf_token);
+		}
 		return data;
 	},
 
