@@ -467,6 +467,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_RouteAwareWorstCaseReque
 		byName[registration.Poller.Name()] = registration
 	}
 
-	assert.Equal(t, 14.0, byName["shorts"].WorstCaseRequestUnitsPerRun)
+	assert.Equal(t, 7.0, byName["shorts"].WorstCaseRequestUnitsPerRun)
 	assert.Equal(t, 11.0, byName["community"].WorstCaseRequestUnitsPerRun)
 }
