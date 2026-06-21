@@ -355,7 +355,13 @@ run_go_package_step "Go test" go_mod_readonly go test -count=1
 
 if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
     RACE_TEST_PARALLEL="${RACE_TEST_PARALLEL:-$(( ($(nproc) + 2) / 3 ))}"
-    (( RACE_TEST_PARALLEL < 2 )) && RACE_TEST_PARALLEL=2
+    # 산술 컨텍스트는 변수 내용을 재귀 평가하므로, 검증 없이 (( ))에 넣으면 호출 env 가
+    # 제어하는 RACE_TEST_PARALLEL 로 코드가 실행될 수 있다(82cbfe75). 정수만 허용.
+    if [[ ! "${RACE_TEST_PARALLEL}" =~ ^[0-9]+$ ]]; then
+        echo "[LOCAL CI] invalid RACE_TEST_PARALLEL=${RACE_TEST_PARALLEL}; expected a non-negative integer" >&2
+        exit 1
+    fi
+    (( 10#${RACE_TEST_PARALLEL} < 2 )) && RACE_TEST_PARALLEL=2
     run_go_package_step "Go race test (testcontainer boot fan-out limited via -p ${RACE_TEST_PARALLEL})" \
         go_mod_readonly go test -race -p "${RACE_TEST_PARALLEL}" -count=1
 else

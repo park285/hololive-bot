@@ -80,6 +80,11 @@ fi
 echo "[pre-push] workflow boundary / gate ownership"
 bash scripts/ci/check-workflow-secrets.sh
 bash scripts/ci/check-workflow-secrets_test.sh
+echo "[pre-push] security regression shell tests"
+bash scripts/logs/daily-rollup-logs_test.sh
+bash scripts/deploy/verify-exec-tree-ownership_test.sh
+bash scripts/deploy/ap-host-native-deploy_test.sh
+bash scripts/ci/race-parallel-guard_test.sh
 echo "[pre-push] shell syntax sweep"
 while IFS= read -r script; do
   bash -n "${script}"

@@ -42,6 +42,21 @@ validate_rollup_date() {
   [[ "${ROLLUP_DATE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "LOG_ROLLUP_DATE must be YYYY-MM-DD"
 }
 
+# mv 로 비워진 경로에 새 빈 로그를 재생성한다. 공격자가 LOG_ROOT 쓰기 권한으로 그 경로에
+# symlink 를 심으면 path 기반 chown/chmod 가 host 파일을 follow 해 root 권한상승이 된다.
+# 그래서 우리 소유 0700 tmp_dir 안에서 owner/mode 를 맞춘 정규 파일을 만든 뒤 mv -fT 로
+# rename 한다. rename(2) 은 목적지 symlink 를 follow 하지 않고 그 이름을 원자 교체하므로,
+# 권한 설정은 attacker 가 닿지 못하는 tmp 에서만 일어나고 교체는 symlink 를 안전히 덮어쓴다.
+recreate_empty_log() {
+  local log_file="$1" ref_file="$2" tmp_dir="$3"
+  local fresh="${tmp_dir}/.recreate.tmp"
+
+  : > "${fresh}"
+  chown --reference="${ref_file}" "${fresh}" 2>/dev/null || true
+  chmod --reference="${ref_file}" "${fresh}" 2>/dev/null || true
+  mv -fT "${fresh}" "${log_file}"
+}
+
 archive_one_log() {
   local log_file="$1"
   local base service archive_path tmp_dir tmp_file
@@ -60,11 +75,9 @@ archive_one_log() {
   tmp_dir="$(mktemp -d "${LOG_ROOT}/.daily-rollup-${service}.XXXXXX")"
   tmp_file="${tmp_dir}/${base}"
   mv "${log_file}" "${tmp_file}"
-  ( set -C; : > "${log_file}" ) 2>/dev/null || true
-  chown --reference="${tmp_file}" "${log_file}" 2>/dev/null || true
-  chmod --reference="${tmp_file}" "${log_file}" 2>/dev/null || true
+  recreate_empty_log "${log_file}" "${tmp_file}" "${tmp_dir}"
   tar -C "${tmp_dir}" -czf "${archive_path}" "${base}"
-  chown --reference="${tmp_file}" "${archive_path}" || true
+  chown --no-dereference --reference="${tmp_file}" "${archive_path}" || true
   chmod 0640 "${archive_path}" || true
   rm -rf "${tmp_dir}"
   echo "archived: ${log_file} -> ${archive_path}"
@@ -99,15 +112,17 @@ rollup_once() {
   fi
 }
 
-cmd="${1:-once}"
-case "${cmd}" in
-  once)
-    rollup_once
-    ;;
-  help|-h|--help)
-    usage
-    ;;
-  *)
-    die "unknown command: ${cmd}"
-    ;;
-esac
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  cmd="${1:-once}"
+  case "${cmd}" in
+    once)
+      rollup_once
+      ;;
+    help|-h|--help)
+      usage
+      ;;
+    *)
+      die "unknown command: ${cmd}"
+      ;;
+  esac
+fi

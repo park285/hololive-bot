@@ -58,7 +58,7 @@ write_host_env() {
     printf 'YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true\n'
     printf 'SERVER_PORT=%s\n' "$port"
     printf 'HOLOLIVE_HTTP_TRANSPORTS=h3\n'
-    printf 'HOLOLIVE_H3_ADDR=:%s\n' "$port"
+    printf 'HOLOLIVE_H3_ADDR=127.0.0.1:%s\n' "$port"
     printf 'HOLOLIVE_H3_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HOLOLIVE_H3_KEY_FILE=/run/hololive-bot/certs/hololive-h3.key\n'
     printf 'HOLOLIVE_H3_SERVER_NAME=127.0.0.1\n'
