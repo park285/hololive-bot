@@ -31,26 +31,59 @@ type celebrationRunner struct {
 	logger       *slog.Logger
 	checkHourKST int
 	runInterval  time.Duration
+	now          func() time.Time
+	sleep        func(context.Context, time.Duration) bool
 }
 
 func (r *celebrationRunner) Start(ctx context.Context) error {
+	if r.checkHourKST >= 0 {
+		return r.startScheduled(ctx)
+	}
+
 	for {
-		if err := r.RunOnce(ctx); err != nil {
-			if r.logger != nil {
-				r.logger.Warn("Celebration runner failed", slog.Any("error", err))
-			}
-		}
-		if !sleepContext(ctx, r.effectiveInterval()) {
+		r.logRunFailure(r.RunOnce(ctx))
+		if !r.effectiveSleep()(ctx, r.effectiveInterval()) {
 			return nil
 		}
 	}
 }
 
+func (r *celebrationRunner) startScheduled(ctx context.Context) error {
+	var lastScheduledAt time.Time
+	for {
+		now := r.effectiveNow()
+		scheduledAt := nextCelebrationRunAt(r.scheduleFrom(now, lastScheduledAt), r.checkHourKST)
+		if !r.effectiveSleep()(ctx, scheduledAt.Sub(now)) {
+			return nil
+		}
+		r.logRunFailure(r.runAt(ctx, scheduledAt))
+		lastScheduledAt = scheduledAt
+	}
+}
+
+func (r *celebrationRunner) scheduleFrom(now, lastScheduledAt time.Time) time.Time {
+	if !lastScheduledAt.IsZero() && !now.After(lastScheduledAt) {
+		return lastScheduledAt.Add(time.Nanosecond)
+	}
+	return now
+}
+
+func (r *celebrationRunner) logRunFailure(err error) {
+	if err == nil || r.logger == nil {
+		return
+	}
+	r.logger.Warn("Celebration runner failed", slog.Any("error", err))
+}
+
 func (r *celebrationRunner) RunOnce(ctx context.Context) error {
-	now := util.NowKST()
+	now := r.effectiveNow()
 	if !r.shouldRunAt(now) {
 		return nil
 	}
+	return r.runAt(ctx, now)
+}
+
+func (r *celebrationRunner) runAt(ctx context.Context, now time.Time) error {
 	month, day, year := int(now.Month()), now.Day(), now.Year()
 	dateStr := now.Format("2006-01-02")
 
@@ -97,6 +130,19 @@ func (r *celebrationRunner) shouldRunAt(now time.Time) bool {
 	return r.checkHourKST < 0 || now.Hour() == r.checkHourKST
 }
 
+func nextCelebrationRunAt(now time.Time, checkHourKST int) time.Time {
+	kstNow := util.ToKST(now)
+	if _, offset := now.Zone(); offset == 9*60*60 {
+		kstNow = now
+	}
+
+	next := time.Date(kstNow.Year(), kstNow.Month(), kstNow.Day(), checkHourKST, 0, 0, 0, kstNow.Location())
+	if kstNow.After(next) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next
+}
+
 type celebrationCandidates struct {
 	birthdays     []*domain.Member
 	anniversaries []*domain.Member
@@ -128,6 +174,20 @@ func (r *celebrationRunner) effectiveInterval() time.Duration {
 		return r.runInterval
 	}
 	return time.Hour
+}
+
+func (r *celebrationRunner) effectiveNow() time.Time {
+	if r.now != nil {
+		return r.now()
+	}
+	return util.NowKST()
+}
+
+func (r *celebrationRunner) effectiveSleep() func(context.Context, time.Duration) bool {
+	if r.sleep != nil {
+		return r.sleep
+	}
+	return sleepContext
 }
 
 func filterValidAnniversaryMembers(members []*domain.Member, currentYear int) []*domain.Member {

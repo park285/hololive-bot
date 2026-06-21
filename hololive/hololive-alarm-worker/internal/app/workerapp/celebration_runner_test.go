@@ -38,10 +38,14 @@ type celebrationTestPublisher struct {
 	envelopes []domain.AlarmQueueEnvelope
 	result    dispatchoutbox.PublishBatchResult
 	err       error
+	onPublish func()
 }
 
 func (p *celebrationTestPublisher) PublishDispatchBatch(_ context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	p.envelopes = envelopes
+	if p.onPublish != nil {
+		p.onPublish()
+	}
 	return p.result, p.err
 }
 
@@ -200,4 +204,150 @@ func TestCelebrationRunnerRunOncePublishes(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, publisher.envelopes, 2)
+}
+
+func TestNextCelebrationRunAtFromLatePreviousDay(t *testing.T) {
+	t.Parallel()
+
+	kst := time.FixedZone("KST", 9*60*60)
+	now := time.Date(2026, time.May, 25, 23, 50, 0, 0, kst)
+
+	got := nextCelebrationRunAt(now, 0)
+	want := time.Date(2026, time.May, 26, 0, 0, 0, 0, kst)
+
+	assert.Equal(t, want, got)
+}
+
+func TestCelebrationRunnerStartPublishesAtScheduledMidnight(t *testing.T) {
+	kst := time.FixedZone("KST", 9*60*60)
+	current := time.Date(2026, time.May, 25, 23, 50, 0, 0, kst)
+	var publishedAt time.Time
+	var sleepCalls []time.Duration
+
+	ctx, cancel := context.WithCancel(t.Context())
+	publisher := &celebrationTestPublisher{
+		result: dispatchoutbox.PublishBatchResult{InsertedEvents: 1, InsertedDeliveries: 1},
+		onPublish: func() {
+			publishedAt = current
+			cancel()
+		},
+	}
+	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
+	runner := &celebrationRunner{
+		memberRepo: &celebrationTestMemberRepo{
+			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+		},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		publisher:    publisher,
+		checkHourKST: 0,
+		now: func() time.Time {
+			return current
+		},
+		sleep: func(ctx context.Context, d time.Duration) bool {
+			sleepCalls = append(sleepCalls, d)
+			if ctx.Err() != nil {
+				return false
+			}
+			current = current.Add(d)
+			return true
+		},
+	}
+
+	err := runner.Start(ctx)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, sleepCalls)
+	assert.Equal(t, 10*time.Minute, sleepCalls[0])
+	assert.Equal(t, time.Date(2026, time.May, 26, 0, 0, 0, 0, kst), publishedAt)
+	require.Len(t, publisher.envelopes, 1)
+	require.NotNil(t, publisher.envelopes[0].Celebration)
+	assert.Equal(t, "2026-05-26", publisher.envelopes[0].Celebration.Date)
+}
+
+func TestCelebrationRunnerStartPublishesScheduledDateWhenWakeIsLate(t *testing.T) {
+	kst := time.FixedZone("KST", 9*60*60)
+	current := time.Date(2026, time.May, 25, 23, 50, 0, 0, kst)
+	var sleepCalls []time.Duration
+
+	ctx, cancel := context.WithCancel(t.Context())
+	publisher := &celebrationTestPublisher{
+		result: dispatchoutbox.PublishBatchResult{InsertedEvents: 1, InsertedDeliveries: 1},
+		onPublish: func() {
+			cancel()
+		},
+	}
+	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
+	runner := &celebrationRunner{
+		memberRepo: &celebrationTestMemberRepo{
+			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+		},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		publisher:    publisher,
+		checkHourKST: 0,
+		now: func() time.Time {
+			return current
+		},
+		sleep: func(ctx context.Context, d time.Duration) bool {
+			if ctx.Err() != nil {
+				return false
+			}
+			sleepCalls = append(sleepCalls, d)
+			if len(sleepCalls) > 1 {
+				return false
+			}
+			current = time.Date(2026, time.May, 26, 1, 5, 0, 0, kst)
+			return true
+		},
+	}
+
+	err := runner.Start(ctx)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, sleepCalls)
+	assert.Equal(t, 10*time.Minute, sleepCalls[0])
+	require.Len(t, publisher.envelopes, 1)
+	require.NotNil(t, publisher.envelopes[0].Celebration)
+	assert.Equal(t, "2026-05-26", publisher.envelopes[0].Celebration.Date)
+}
+
+func TestCelebrationRunnerStartSleepsUntilNextDayAfterScheduledRun(t *testing.T) {
+	kst := time.FixedZone("KST", 9*60*60)
+	current := time.Date(2026, time.May, 25, 23, 50, 0, 0, kst)
+	var publishCount int
+	var sleepCalls []time.Duration
+
+	publisher := &celebrationTestPublisher{
+		result: dispatchoutbox.PublishBatchResult{InsertedEvents: 1, InsertedDeliveries: 1},
+		onPublish: func() {
+			publishCount++
+		},
+	}
+	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
+	runner := &celebrationRunner{
+		memberRepo: &celebrationTestMemberRepo{
+			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+		},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		publisher:    publisher,
+		checkHourKST: 0,
+		now: func() time.Time {
+			return current
+		},
+		sleep: func(_ context.Context, d time.Duration) bool {
+			sleepCalls = append(sleepCalls, d)
+			if len(sleepCalls) == 2 {
+				return false
+			}
+			current = current.Add(d)
+			return true
+		},
+	}
+
+	err := runner.Start(t.Context())
+
+	require.NoError(t, err)
+	require.Len(t, sleepCalls, 2)
+	assert.Equal(t, 10*time.Minute, sleepCalls[0])
+	assert.Equal(t, 24*time.Hour, sleepCalls[1])
+	assert.Equal(t, 1, publishCount)
 }
