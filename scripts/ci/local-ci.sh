@@ -354,7 +354,10 @@ run_warning_step "PGO freshness gate" ./scripts/ci/check-pgo-freshness.sh
 run_go_package_step "Go test" go_mod_readonly go test -count=1
 
 if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
-    run_go_package_step "Go race test" go_mod_readonly go test -race -count=1
+    RACE_TEST_PARALLEL="${RACE_TEST_PARALLEL:-$(( ($(nproc) + 2) / 3 ))}"
+    (( RACE_TEST_PARALLEL < 2 )) && RACE_TEST_PARALLEL=2
+    run_go_package_step "Go race test (testcontainer boot fan-out limited via -p ${RACE_TEST_PARALLEL})" \
+        go_mod_readonly go test -race -p "${RACE_TEST_PARALLEL}" -count=1
 else
     echo "[LOCAL CI] Skip race tests: set RUN_RACE_TESTS=true to run go test -race"
     echo
