@@ -42,11 +42,9 @@ validate_rollup_date() {
   [[ "${ROLLUP_DATE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "LOG_ROLLUP_DATE must be YYYY-MM-DD"
 }
 
-# mv 로 비워진 경로에 새 빈 로그를 재생성한다. 공격자가 LOG_ROOT 쓰기 권한으로 그 경로에
-# symlink 를 심으면 path 기반 chown/chmod 가 host 파일을 follow 해 root 권한상승이 된다.
-# 그래서 우리 소유 0700 tmp_dir 안에서 owner/mode 를 맞춘 정규 파일을 만든 뒤 mv -fT 로
-# rename 한다. rename(2) 은 목적지 symlink 를 follow 하지 않고 그 이름을 원자 교체하므로,
-# 권한 설정은 attacker 가 닿지 못하는 tmp 에서만 일어나고 교체는 symlink 를 안전히 덮어쓴다.
+# 권한 설정을 대상 경로에서 직접 하면 공격자가 심은 symlink 를 follow 해 privesc 가 된다.
+# 그래서 우리 소유 0700 tmp 에서 owner/mode 를 맞춘 뒤 mv -fT 로 rename — rename(2) 은
+# 목적지 symlink 를 follow 하지 않는다(4eef60aa).
 recreate_empty_log() {
   local log_file="$1" ref_file="$2" tmp_dir="$3"
   local fresh="${tmp_dir}/.recreate.tmp"

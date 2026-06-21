@@ -4,9 +4,6 @@ set -euo pipefail
 ROOT_DIR="${HOLOLIVE_BOT_ROOT:-/home/kapu/work/iris-stack/hololive-bot}"
 cd "$ROOT_DIR"
 
-# root 로 실행될 때, 곧 실행할 트리(entrypoint+sourced lib+compose YAML)가 비root 에게
-# 쓰기 가능하면 그 계정 장악만으로 root RCE 가 된다(03e6dca8). 기본은 경고만 — 운영자가
-# 트리를 root-owned 로 전환한 뒤 HOLOLIVE_EXEC_TREE_ENFORCE=1 로 강제(start 차단)한다.
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   exec_tree=(
     "${ROOT_DIR}/scripts/deploy/systemd-compose-up.sh"

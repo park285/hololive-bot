@@ -16,7 +16,6 @@ export LOG_ROOT
 # shellcheck disable=SC1090
 source "${ROOT_DIR}/scripts/logs/daily-rollup-logs.sh"
 
-# 회귀 4eef60aa: mv 직후 공격자가 recreate 경로에 symlink 를 심은 상황을 모사.
 secret="${TMP_DIR}/secret"
 printf 'SECRET' > "${secret}"
 chmod 0600 "${secret}"

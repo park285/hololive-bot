@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 인자로 받은 각 경로가 root-owned 이고 비root 사용자에게 쓰기 불가인지 검증한다.
-# root systemd 가 실행하는 entrypoint/sourced-lib/compose-YAML 이 kapu 등 비root 에게
-# 쓰기 가능하면, 그 계정을 장악한 공격자가 다음 start/stop/boot 시 root 로 임의 코드를
-# 실행할 수 있다(03e6dca8). non-root 소유는 소유자가 언제든 chmod 후 내용 교체가 가능하므로
-# "쓰기 비트"가 아니라 "소유권"까지 root 여야 안전하다.
+# non-root 소유는 소유자가 chmod 후 내용을 언제든 교체할 수 있으므로, root systemd 실행
+# 트리는 쓰기 비트가 아니라 소유권까지 root 여야 안전하다(03e6dca8).
 
 violations=0
 
