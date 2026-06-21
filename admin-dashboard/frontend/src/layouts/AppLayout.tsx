@@ -128,7 +128,7 @@ export const AppLayout = () => {
 											clsx(
 												"flex items-center px-3 py-3.5 rounded-xl transition-all duration-200 group relative overflow-hidden",
 												isActive
-													? "bg-sky-500 text-white shadow-md shadow-sky-200 scale-[1.02]"
+													? "bg-linear-to-r from-sky-500 to-cyan-500 text-white shadow-lg shadow-sky-300/40 scale-[1.02]"
 													: "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
 											)
 										}
@@ -156,7 +156,7 @@ export const AppLayout = () => {
 													</span>
 												)}
 												{isActive && (
-													<div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white/30 rounded-r-full" />
+													<div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-linear-to-b from-white to-cyan-200/50" />
 												)}
 											</>
 										)}
@@ -193,18 +193,21 @@ export const AppLayout = () => {
 
 			<main className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
 				<header className="h-20 bg-white/60 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-8 sticky top-0 z-20">
-					<div className="animate-fade-in-up">
-						<h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">
-							{activeRoute?.label || "대시보드"}
-						</h2>
-						<p className="text-xs text-slate-400 font-medium mt-0.5 tracking-wide">
-							통합 봇 관리 시스템
-						</p>
+					<div className="animate-fade-in-up flex items-center gap-3">
+						<div className="w-1 h-10 rounded-full bg-linear-to-b from-sky-400 to-cyan-400 shrink-0" />
+						<div>
+							<h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">
+								{activeRoute?.label || "대시보드"}
+							</h2>
+							<p className="text-xs text-slate-400 font-medium mt-0.5 tracking-wide">
+								통합 봇 관리 시스템
+							</p>
+						</div>
 					</div>
 
 					<div className="flex items-center space-x-4">
 						<div className="flex items-center space-x-3 px-1 py-1 bg-white border border-slate-200 rounded-full shadow-sm pr-4">
-							<div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-400 to-cyan-400 flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white">
+							<div className="w-8 h-8 rounded-full bg-linear-to-tr from-sky-400 to-cyan-400 flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white">
 								A
 							</div>
 							<div className="flex flex-col justify-center">

@@ -1,24 +1,51 @@
 import ArrowRight from "lucide-react/dist/esm/icons/arrow-right.mjs";
+import Bell from "lucide-react/dist/esm/icons/bell.mjs";
+import MessageSquare from "lucide-react/dist/esm/icons/message-square.mjs";
+import Users from "lucide-react/dist/esm/icons/users.mjs";
+import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface StatsQuickLinksProps {
 	onNavigate: (path: string) => void;
 }
 
-const links = [
+interface QuickLink {
+	label: string;
+	path: string;
+	Icon: LucideIcon;
+	accent: string;
+	iconColor: string;
+	hoverClasses: string;
+	text: string;
+}
+
+const links: QuickLink[] = [
 	{
 		label: "멤버 관리하기",
 		path: "/dashboard/members",
-		className: "bg-sky-50 text-sky-700 hover:bg-sky-100",
+		Icon: Users,
+		accent: "border-l-sky-400",
+		iconColor: "text-sky-500",
+		hoverClasses: "bg-sky-50/60 hover:bg-sky-50",
+		text: "text-sky-700",
 	},
 	{
 		label: "알람 설정 확인",
 		path: "/dashboard/alarms",
-		className: "bg-rose-50 text-rose-700 hover:bg-rose-100",
+		Icon: Bell,
+		accent: "border-l-rose-400",
+		iconColor: "text-rose-500",
+		hoverClasses: "bg-rose-50/60 hover:bg-rose-50",
+		text: "text-rose-700",
 	},
 	{
 		label: "채팅방 목록",
 		path: "/dashboard/rooms",
-		className: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
+		Icon: MessageSquare,
+		accent: "border-l-indigo-400",
+		iconColor: "text-indigo-500",
+		hoverClasses: "bg-indigo-50/60 hover:bg-indigo-50",
+		text: "text-indigo-700",
 	},
 ];
 
@@ -28,22 +55,35 @@ export const StatsQuickLinks = ({ onNavigate }: StatsQuickLinksProps) => (
 			바로가기
 		</h3>
 		<div className="space-y-3 flex-1">
-			{links.map((link) => (
-				<button
-					key={link.path}
-					onClick={() => {
-						onNavigate(link.path);
-					}}
-					className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors group text-left ${link.className}`}
-				>
-					<span className="font-medium">{link.label}</span>
-					<ArrowRight
-						size={18}
-						className="opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-transform"
-						aria-hidden="true"
-					/>
-				</button>
-			))}
+			{links.map((link) => {
+				const { Icon } = link;
+				return (
+					<button
+						key={link.path}
+						onClick={() => {
+							onNavigate(link.path);
+						}}
+						className={cn(
+							"w-full flex items-center gap-3 p-3.5 rounded-xl border-l-4 transition-all duration-200 group text-left shadow-sm hover:shadow-md hover:-translate-y-0.5",
+							link.accent,
+							link.hoverClasses,
+							link.text,
+						)}
+					>
+						<Icon
+							size={20}
+							className={cn("shrink-0", link.iconColor)}
+							aria-hidden="true"
+						/>
+						<span className="font-medium flex-1">{link.label}</span>
+						<ArrowRight
+							size={18}
+							className="opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all"
+							aria-hidden="true"
+						/>
+					</button>
+				);
+			})}
 		</div>
 	</div>
 );
