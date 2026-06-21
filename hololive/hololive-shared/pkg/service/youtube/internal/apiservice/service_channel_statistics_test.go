@@ -71,24 +71,30 @@ func TestValidatedScrapedChannelCount(t *testing.T) {
 			t.Parallel()
 
 			got, err := validatedScrapedChannelCount("UC_chan", "subscriber", tt.value)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("validatedScrapedChannelCount(_, _, %d) expected error, got nil", tt.value)
-				}
-				for _, want := range []string{"UC_chan", "subscriber", "-5"} {
-					if !strings.Contains(err.Error(), want) {
-						t.Fatalf("error %q missing %q", err.Error(), want)
-					}
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("validatedScrapedChannelCount(_, _, %d) unexpected error: %v", tt.value, err)
-			}
-			if got != tt.wantCount {
-				t.Fatalf("validatedScrapedChannelCount(_, _, %d) = %d, want %d", tt.value, got, tt.wantCount)
-			}
+			assertValidatedScrapedChannelCount(t, tt.value, got, err, tt.wantCount, tt.wantErr)
 		})
+	}
+}
+
+func assertValidatedScrapedChannelCount(t *testing.T, value int64, got uint64, err error, wantCount uint64, wantErr bool) {
+	t.Helper()
+
+	if wantErr {
+		if err == nil {
+			t.Fatalf("validatedScrapedChannelCount(_, _, %d) expected error, got nil", value)
+		}
+		for _, want := range []string{"UC_chan", "subscriber", "-5"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("error %q missing %q", err.Error(), want)
+			}
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("validatedScrapedChannelCount(_, _, %d) unexpected error: %v", value, err)
+	}
+	if got != wantCount {
+		t.Fatalf("validatedScrapedChannelCount(_, _, %d) = %d, want %d", value, got, wantCount)
 	}
 }
 
@@ -136,96 +142,98 @@ func TestValidatedScrapedChannelCounts(t *testing.T) {
 
 			stats := tt.stats
 			sub, vid, viw, err := validatedScrapedChannelCounts("UC1", &stats)
-			if tt.wantErr != "" {
-				if err == nil {
-					t.Fatalf("validatedScrapedChannelCounts(%+v) expected error containing %q, got nil", tt.stats, tt.wantErr)
-				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("error %q does not contain %q", err.Error(), tt.wantErr)
-				}
-				if sub != 0 || vid != 0 || viw != 0 {
-					t.Fatalf("on error counts must be zeroed, got sub=%d vid=%d viw=%d", sub, vid, viw)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("validatedScrapedChannelCounts(%+v) unexpected error: %v", tt.stats, err)
-			}
-			if sub != tt.wantSub || vid != tt.wantVid || viw != tt.wantViw {
-				t.Fatalf("counts = (%d,%d,%d), want (%d,%d,%d)", sub, vid, viw, tt.wantSub, tt.wantVid, tt.wantViw)
-			}
+			assertValidatedScrapedChannelCounts(t, &tt.stats, sub, vid, viw, err, tt.wantSub, tt.wantVid, tt.wantViw, tt.wantErr)
 		})
 	}
 }
 
-func TestChannelStatsFromScraped(t *testing.T) {
+func assertValidatedScrapedChannelCounts(t *testing.T, stats *scraper.ChannelStats, sub, vid, viw uint64, err error, wantSub, wantVid, wantViw uint64, wantErr string) {
+	t.Helper()
+
+	if wantErr != "" {
+		if err == nil {
+			t.Fatalf("validatedScrapedChannelCounts(%+v) expected error containing %q, got nil", *stats, wantErr)
+		}
+		if !strings.Contains(err.Error(), wantErr) {
+			t.Fatalf("error %q does not contain %q", err.Error(), wantErr)
+		}
+		if sub != 0 || vid != 0 || viw != 0 {
+			t.Fatalf("on error counts must be zeroed, got sub=%d vid=%d viw=%d", sub, vid, viw)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("validatedScrapedChannelCounts(%+v) unexpected error: %v", *stats, err)
+	}
+	if sub != wantSub || vid != wantVid || viw != wantViw {
+		t.Fatalf("counts = (%d,%d,%d), want (%d,%d,%d)", sub, vid, viw, wantSub, wantVid, wantViw)
+	}
+}
+
+func TestChannelStatsFromScraped_MapsFieldsAndUsesScrapedChannelID(t *testing.T) {
 	t.Parallel()
 
-	t.Run("maps fields and uses scraped channel ID", func(t *testing.T) {
-		t.Parallel()
+	ys := newTestService(t, nil)
+	scraped := &scraper.ChannelStats{
+		ChannelID:       "UC_scraped",
+		SubscriberCount: 1000,
+		VideoCount:      50,
+		ViewCount:       1_000_000,
+		Handle:          "@handle",
+	}
 
-		ys := newTestService(t, nil)
-		scraped := &scraper.ChannelStats{
-			ChannelID:       "UC_scraped",
-			SubscriberCount: 1000,
-			VideoCount:      50,
-			ViewCount:       1_000_000,
-			Handle:          "@handle",
-		}
+	got, err := ys.channelStatsFromScraped("UC_lookup", scraped)
+	if err != nil {
+		t.Fatalf("channelStatsFromScraped() unexpected error: %v", err)
+	}
+	if got.ChannelID != "UC_scraped" {
+		t.Fatalf("ChannelID = %q, want %q (must come from scraped stats)", got.ChannelID, "UC_scraped")
+	}
+	if got.SubscriberCount != 1000 || got.VideoCount != 50 || got.ViewCount != 1_000_000 {
+		t.Fatalf("counts = (%d,%d,%d), want (1000,50,1000000)", got.SubscriberCount, got.VideoCount, got.ViewCount)
+	}
+	if got.Timestamp.IsZero() {
+		t.Fatal("Timestamp should be set")
+	}
+}
 
-		got, err := ys.channelStatsFromScraped("UC_lookup", scraped)
-		if err != nil {
-			t.Fatalf("channelStatsFromScraped() unexpected error: %v", err)
-		}
-		if got.ChannelID != "UC_scraped" {
-			t.Fatalf("ChannelID = %q, want %q (must come from scraped stats)", got.ChannelID, "UC_scraped")
-		}
-		if got.SubscriberCount != 1000 || got.VideoCount != 50 || got.ViewCount != 1_000_000 {
-			t.Fatalf("counts = (%d,%d,%d), want (1000,50,1000000)", got.SubscriberCount, got.VideoCount, got.ViewCount)
-		}
-		if got.Timestamp.IsZero() {
-			t.Fatal("Timestamp should be set")
-		}
-	})
+func TestChannelStatsFromScraped_FallsBackToHandleWhenChannelNameUnknown(t *testing.T) {
+	t.Parallel()
 
-	t.Run("falls back to handle when channel name unknown", func(t *testing.T) {
-		t.Parallel()
+	ys := newTestService(t, nil)
+	got, err := ys.channelStatsFromScraped("UC_lookup", &scraper.ChannelStats{Handle: "@onlyhandle"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.ChannelTitle != "@onlyhandle" {
+		t.Fatalf("ChannelTitle = %q, want fallback handle %q", got.ChannelTitle, "@onlyhandle")
+	}
+}
 
-		ys := newTestService(t, nil)
-		got, err := ys.channelStatsFromScraped("UC_lookup", &scraper.ChannelStats{Handle: "@onlyhandle"})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got.ChannelTitle != "@onlyhandle" {
-			t.Fatalf("ChannelTitle = %q, want fallback handle %q", got.ChannelTitle, "@onlyhandle")
-		}
-	})
+func TestChannelStatsFromScraped_PrefersCachedMemberNameOverHandle(t *testing.T) {
+	t.Parallel()
 
-	t.Run("prefers cached member name over handle", func(t *testing.T) {
-		t.Parallel()
+	ys := newTestService(t, map[string]string{"UC_lookup": "ときのそら"})
+	got, err := ys.channelStatsFromScraped("UC_lookup", &scraper.ChannelStats{Handle: "@handle"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.ChannelTitle != "ときのそら" {
+		t.Fatalf("ChannelTitle = %q, want cached name %q", got.ChannelTitle, "ときのそら")
+	}
+}
 
-		ys := newTestService(t, map[string]string{"UC_lookup": "ときのそら"})
-		got, err := ys.channelStatsFromScraped("UC_lookup", &scraper.ChannelStats{Handle: "@handle"})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got.ChannelTitle != "ときのそら" {
-			t.Fatalf("ChannelTitle = %q, want cached name %q", got.ChannelTitle, "ときのそら")
-		}
-	})
+func TestChannelStatsFromScraped_RejectsNegativeCounts(t *testing.T) {
+	t.Parallel()
 
-	t.Run("rejects negative counts", func(t *testing.T) {
-		t.Parallel()
-
-		ys := newTestService(t, nil)
-		got, err := ys.channelStatsFromScraped("UC_lookup", &scraper.ChannelStats{SubscriberCount: -1})
-		if err == nil {
-			t.Fatalf("expected error for negative subscriber count, got %+v", got)
-		}
-		if got != nil {
-			t.Fatalf("expected nil stats on error, got %+v", got)
-		}
-	})
+	ys := newTestService(t, nil)
+	got, err := ys.channelStatsFromScraped("UC_lookup", &scraper.ChannelStats{SubscriberCount: -1})
+	if err == nil {
+		t.Fatalf("expected error for negative subscriber count, got %+v", got)
+	}
+	if got != nil {
+		t.Fatalf("expected nil stats on error, got %+v", got)
+	}
 }
 
 func TestResolveChannelTitle(t *testing.T) {
