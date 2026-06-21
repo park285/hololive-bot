@@ -218,6 +218,89 @@ func TestNextCelebrationRunAtFromLatePreviousDay(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
+func TestCelebrationSchedule_SameDayRestart_7f8d8a9e(t *testing.T) {
+	kst := time.FixedZone("KST", 9*60*60)
+	current := time.Date(2026, time.May, 26, 0, 1, 0, 0, kst)
+	var sleepCalls []time.Duration
+
+	ctx, cancel := context.WithCancel(t.Context())
+	publisher := &celebrationTestPublisher{
+		result: dispatchoutbox.PublishBatchResult{InsertedEvents: 1, InsertedDeliveries: 1},
+		onPublish: func() {
+			cancel()
+		},
+	}
+	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
+	runner := &celebrationRunner{
+		memberRepo: &celebrationTestMemberRepo{
+			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+		},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		publisher:    publisher,
+		checkHourKST: 0,
+		now: func() time.Time {
+			return current
+		},
+		sleep: func(ctx context.Context, d time.Duration) bool {
+			sleepCalls = append(sleepCalls, d)
+			if ctx.Err() != nil {
+				return false
+			}
+			current = current.Add(d)
+			return true
+		},
+	}
+
+	err := runner.Start(ctx)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, sleepCalls)
+	assert.LessOrEqual(t, sleepCalls[0], time.Duration(0), "설정 hour 직후 재시작은 당일 즉시 실행해야 한다")
+	require.Len(t, publisher.envelopes, 1)
+	require.NotNil(t, publisher.envelopes[0].Celebration)
+	assert.Equal(t, "2026-05-26", publisher.envelopes[0].Celebration.Date)
+}
+
+func TestCelebrationSchedule_RestartOutsideGraceWaitsNextDay_7f8d8a9e(t *testing.T) {
+	kst := time.FixedZone("KST", 9*60*60)
+	current := time.Date(2026, time.May, 26, 2, 30, 0, 0, kst)
+	var sleepCalls []time.Duration
+
+	ctx, cancel := context.WithCancel(t.Context())
+	publisher := &celebrationTestPublisher{
+		result: dispatchoutbox.PublishBatchResult{InsertedEvents: 1, InsertedDeliveries: 1},
+		onPublish: func() {
+			cancel()
+		},
+	}
+	birthday := time.Date(2000, time.May, 27, 0, 0, 0, 0, time.UTC)
+	runner := &celebrationRunner{
+		memberRepo: &celebrationTestMemberRepo{
+			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+		},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		publisher:    publisher,
+		checkHourKST: 0,
+		now: func() time.Time {
+			return current
+		},
+		sleep: func(ctx context.Context, d time.Duration) bool {
+			sleepCalls = append(sleepCalls, d)
+			if ctx.Err() != nil {
+				return false
+			}
+			current = current.Add(d)
+			return true
+		},
+	}
+
+	err := runner.Start(ctx)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, sleepCalls)
+	assert.Equal(t, 21*time.Hour+30*time.Minute, sleepCalls[0], "grace window 밖 재시작은 다음 날 00:00까지 대기해야 한다")
+}
+
 func TestCelebrationRunnerStartPublishesAtScheduledMidnight(t *testing.T) {
 	kst := time.FixedZone("KST", 9*60*60)
 	current := time.Date(2026, time.May, 25, 23, 50, 0, 0, kst)

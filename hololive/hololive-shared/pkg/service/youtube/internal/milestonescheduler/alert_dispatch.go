@@ -78,6 +78,25 @@ func (l *sentRoomLedger) sentCount(key string) int {
 	return len(l.byKey[key])
 }
 
+func (l *sentRoomLedger) sentCountIn(key string, rooms []string) int {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	sent := l.byKey[key]
+	if len(sent) == 0 {
+		return 0
+	}
+	count := 0
+	for _, room := range rooms {
+		if _, ok := sent[room]; ok {
+			count++
+		}
+	}
+	return count
+}
+
 func (l *sentRoomLedger) clear(key string) {
 	if l == nil {
 		return
@@ -107,7 +126,7 @@ func dispatchAlertWorks[T any, W any](
 
 	results := newAlertDispatchResults(works, rooms, notificationOf, keyOf)
 	runAlertDispatchWorks(logger, ctx, ledger, sendMessage, rooms, works, results, notificationOf, messageOf, keyOf, memberNameOf, sendFailureLog)
-	return collectSentAlertNotifications(logger, ledger, results, memberNameOf, partialWarnLog)
+	return collectSentAlertNotifications(logger, ledger, rooms, results, memberNameOf, partialWarnLog)
 }
 
 func newAlertDispatchResults[T any, W any](
@@ -191,6 +210,7 @@ func scheduleAlertWorkDispatch[T any](
 func collectSentAlertNotifications[T any](
 	logger *slog.Logger,
 	ledger *sentRoomLedger,
+	rooms []string,
 	results []alertDispatchResult[T],
 	memberNameOf func(T) string,
 	partialWarnLog string,
@@ -199,7 +219,7 @@ func collectSentAlertNotifications[T any](
 	for i := range results {
 		successCount := int(results[i].successCount.Load())
 		failureCount := int(results[i].failureCount.Load())
-		coveredRooms := ledger.sentCount(results[i].key)
+		coveredRooms := ledger.sentCountIn(results[i].key, rooms)
 		if results[i].targetRooms > 0 && coveredRooms >= results[i].targetRooms {
 			sentNotifications = append(sentNotifications, results[i].notification)
 			ledger.clear(results[i].key)

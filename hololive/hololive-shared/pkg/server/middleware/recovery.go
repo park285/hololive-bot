@@ -27,6 +27,7 @@ import (
 	"runtime/debug"
 
 	"github.com/gin-gonic/gin"
+	sharedlog "github.com/park285/shared-go/pkg/logging"
 )
 
 // RecoveryMiddleware는 HTTP boundary에서 발생한 panic이 프로세스 밖으로 전파되지 않도록
@@ -68,5 +69,17 @@ func logRecoveredPanic(ctx context.Context, logger *slog.Logger, c *gin.Context,
 		)
 	}
 
-	logger.LogAttrs(ctx, slog.LevelError, "http.request.panic_recovered", attrs...)
+	sharedlog.Error(panicLogContext(ctx, c), logger, "http.request.panic_recovered", "", attrs...)
+}
+
+func panicLogContext(ctx context.Context, c *gin.Context) context.Context {
+	if c != nil && c.Request != nil {
+		if reqCtx := c.Request.Context(); reqCtx != nil {
+			return reqCtx
+		}
+	}
+	if ctx != nil {
+		return ctx
+	}
+	return context.Background()
 }

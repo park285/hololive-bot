@@ -52,7 +52,12 @@ func (r *celebrationRunner) startScheduled(ctx context.Context) error {
 	var lastScheduledAt time.Time
 	for {
 		now := r.effectiveNow()
-		scheduledAt := nextCelebrationRunAt(r.scheduleFrom(now, lastScheduledAt), r.checkHourKST)
+		var scheduledAt time.Time
+		if lastScheduledAt.IsZero() {
+			scheduledAt = firstCelebrationRunAt(now, r.checkHourKST)
+		} else {
+			scheduledAt = nextCelebrationRunAt(r.scheduleFrom(now, lastScheduledAt), r.checkHourKST)
+		}
 		if !r.effectiveSleep()(ctx, scheduledAt.Sub(now)) {
 			return nil
 		}
@@ -131,17 +136,33 @@ func (r *celebrationRunner) shouldRunAt(now time.Time) bool {
 }
 
 func nextCelebrationRunAt(now time.Time, checkHourKST int) time.Time {
-	kstNow := util.ToKST(now)
-	if _, offset := now.Zone(); offset == 9*60*60 {
-		kstNow = now
-	}
-
+	kstNow := toKSTForSchedule(now)
 	next := time.Date(kstNow.Year(), kstNow.Month(), kstNow.Day(), checkHourKST, 0, 0, 0, kstNow.Location())
 	if kstNow.After(next) {
 		next = next.AddDate(0, 0, 1)
 	}
 	return next
 }
+
+// grace를 후속 cycle에 적용하면 방금 실행한 boundary를 당일로 되돌려 같은 날 재실행
+// 루프가 생기므로, 이 함수는 재시작 직후 첫 cycle에서만 호출해야 한다.
+func firstCelebrationRunAt(now time.Time, checkHourKST int) time.Time {
+	kstNow := toKSTForSchedule(now)
+	todayAt := time.Date(kstNow.Year(), kstNow.Month(), kstNow.Day(), checkHourKST, 0, 0, 0, kstNow.Location())
+	if kstNow.After(todayAt) && !kstNow.After(todayAt.Add(celebrationSameDayGrace)) {
+		return todayAt
+	}
+	return nextCelebrationRunAt(now, checkHourKST)
+}
+
+func toKSTForSchedule(now time.Time) time.Time {
+	if _, offset := now.Zone(); offset == 9*60*60 {
+		return now
+	}
+	return util.ToKST(now)
+}
+
+const celebrationSameDayGrace = time.Hour
 
 type celebrationCandidates struct {
 	birthdays     []*domain.Member
