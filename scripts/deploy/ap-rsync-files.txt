@@ -521,16 +521,9 @@ hololive/hololive-shared/pkg/service/youtube/contentid/canonical.go
 hololive/hololive-shared/pkg/service/youtube/interfaces.go
 hololive/hololive-shared/pkg/service/youtube/internal/admission/deferred.go
 hololive/hololive-shared/pkg/service/youtube/internal/apiservice/interfaces.go
-hololive/hololive-shared/pkg/service/youtube/internal/apiservice/metrics_scraper.go
 hololive/hololive-shared/pkg/service/youtube/internal/apiservice/service.go
 hololive/hololive-shared/pkg/service/youtube/internal/apiservice/service_channel_statistics.go
-hololive/hololive-shared/pkg/service/youtube/internal/apiservice/service_policy.go
 hololive/hololive-shared/pkg/service/youtube/internal/apiservice/service_read.go
-hololive/hololive-shared/pkg/service/youtube/internal/apiservice/service_retry.go
-hololive/hololive-shared/pkg/service/youtube/internal/apiservice/service_upcoming.go
-hololive/hololive-shared/pkg/service/youtube/internal/apiservice/service_upcoming_failure.go
-hololive/hololive-shared/pkg/service/youtube/internal/apiservice/service_upcoming_fallback.go
-hololive/hololive-shared/pkg/service/youtube/internal/apiservice/service_upcoming_scrape.go
 hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/alert_dispatch.go
 hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/scheduler.go
 hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/scheduler_alerts.go
@@ -538,10 +531,7 @@ hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/schedul
 hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/scheduler_milestones.go
 hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/scheduler_tracking.go
 hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/scheduler_watch.go
-hololive/hololive-shared/pkg/service/youtube/internal/oauthservice/oauth.go
-hololive/hololive-shared/pkg/service/youtube/internal/statscollector/stats.go
 hololive/hololive-shared/pkg/service/youtube/logschema/community_shorts_alarm.go
-hololive/hololive-shared/pkg/service/youtube/oauth.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics/channel_summary.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics/helpers.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/analytics/latency_period.go
@@ -722,7 +712,6 @@ hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/yt_initia
 hololive/hololive-shared/pkg/service/youtube/scraper/scraper.go
 hololive/hololive-shared/pkg/service/youtube/scraper/ua/provider.go
 hololive/hololive-shared/pkg/service/youtube/service.go
-hololive/hololive-shared/pkg/service/youtube/stats.go
 hololive/hololive-shared/pkg/service/youtube/stats/stats_repository.go
 hololive/hololive-shared/pkg/service/youtube/stats/stats_repository_graph.go
 hololive/hololive-shared/pkg/service/youtube/stats/stats_repository_interfaces.go
