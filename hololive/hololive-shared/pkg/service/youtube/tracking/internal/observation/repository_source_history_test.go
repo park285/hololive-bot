@@ -664,3 +664,77 @@ func TestRepositoryUpsertKeepsSingleTrackingRowForConcurrentSaves(t *testing.T) 
 		})
 	}
 }
+
+func concurrentUpsertTracking(t *testing.T, repository *PgxRepository, records []*domain.YouTubeContentAlarmTracking) {
+	t.Helper()
+	ctx := context.Background()
+	errCh := make(chan error, len(records))
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(len(records))
+	for _, record := range records {
+		go func(rec *domain.YouTubeContentAlarmTracking) {
+			defer wg.Done()
+			<-start
+			errCh <- repository.Upsert(ctx, rec)
+		}(record)
+	}
+	close(start)
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+}
+
+func requireSingleCanonicalTrackingRow(t *testing.T, db trackingDB, kind domain.OutboxKind, canonicalID string) {
+	t.Helper()
+	rows := selectTrackingRowsForTest(t, db)
+	require.Len(t, rows, 1)
+	require.Equal(t, kind, rows[0].Kind)
+	require.Equal(t, canonicalID, rows[0].CanonicalContentID)
+}
+
+func TestRepositoryUpsertConvergesOnCanonicalForMixedIdentityConcurrentSaves(t *testing.T) {
+	testCases := []struct {
+		name        string
+		kind        domain.OutboxKind
+		rawID       string
+		canonicalID string
+	}{
+		{
+			name:        "community post",
+			kind:        domain.OutboxKindCommunityPost,
+			rawID:       "post-mixed-1",
+			canonicalID: "community:post-mixed-1",
+		},
+		{
+			name:        "short",
+			kind:        domain.OutboxKindNewShort,
+			rawID:       "short-mixed-1",
+			canonicalID: "short:short-mixed-1",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newTrackingTestDBWithMaxOpenConns(t, 8)
+			repository := NewRepository(db)
+			detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
+
+			contentIDForms := []string{tc.rawID, tc.canonicalID, tc.rawID, tc.canonicalID, tc.rawID, tc.canonicalID, tc.rawID, tc.canonicalID}
+			records := make([]*domain.YouTubeContentAlarmTracking, 0, len(contentIDForms))
+			for i, form := range contentIDForms {
+				records = append(records, &domain.YouTubeContentAlarmTracking{
+					Kind:       tc.kind,
+					ContentID:  form,
+					ChannelID:  "UC_MIXED",
+					DetectedAt: detectedAt.Add(time.Duration(i) * time.Second),
+				})
+			}
+
+			concurrentUpsertTracking(t, repository, records)
+			requireSingleCanonicalTrackingRow(t, db, tc.kind, tc.canonicalID)
+		})
+	}
+}

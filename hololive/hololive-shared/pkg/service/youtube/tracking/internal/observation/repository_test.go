@@ -32,6 +32,7 @@ func TestRepositoryUpsertAndFindByIdentity(t *testing.T) {
 	require.NotNil(t, record)
 	require.Equal(t, domain.OutboxKindCommunityPost, record.Kind)
 	require.Equal(t, "post-1", record.ContentID)
+	require.Equal(t, "community:post-1", record.CanonicalContentID)
 	require.Equal(t, "UC_TEST", record.ChannelID)
 	require.NotNil(t, record.ActualPublishedAt)
 	require.Equal(t, actualPublishedAt, record.ActualPublishedAt.UTC())
@@ -135,7 +136,14 @@ func TestRepositoryFindByIdentitySupportsShortCanonicalAlias(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	require.Equal(t, "short-1", record.ContentID)
+	require.Equal(t, "short:short-1", record.CanonicalContentID)
 	require.Equal(t, domain.YouTubeContentAlarmDeliveryStatusPending, record.DeliveryStatus)
+
+	aliasRecord, err := repository.FindByIdentity(ctx, domain.OutboxKindNewShort, "short-1")
+	require.NoError(t, err)
+	require.NotNil(t, aliasRecord)
+	require.Equal(t, "short-1", aliasRecord.ContentID)
+	require.Equal(t, "short:short-1", aliasRecord.CanonicalContentID)
 }
 
 func TestRepositoryUpsertDedupesByCanonicalContentIdentity(t *testing.T) {
