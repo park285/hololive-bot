@@ -17,10 +17,14 @@ type calendarRepoStub struct {
 	entries []domain.CalendarEntry
 	err     error
 	calls   int
+	months  []int
+	years   []int
 }
 
-func (s *calendarRepoStub) FindMembersWithCelebrationsInMonth(_ context.Context, _, _ int) ([]domain.CalendarEntry, error) {
+func (s *calendarRepoStub) FindMembersWithCelebrationsInMonth(_ context.Context, month, year int) ([]domain.CalendarEntry, error) {
 	s.calls++
+	s.months = append(s.months, month)
+	s.years = append(s.years, year)
 	return s.entries, s.err
 }
 
@@ -108,6 +112,56 @@ func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
 
 	if sentImage == nil {
 		t.Error("expected image to be sent")
+	}
+}
+
+func TestCalendarCommand_Execute_NextMonthAcrossYear(t *testing.T) {
+	deps := &Dependencies{
+		Formatter:   formatter.NewResponseFormatter("!", nil),
+		SendMessage: func(_ context.Context, _, _ string) error { return nil },
+		SendError:   func(_ context.Context, _, _ string) error { return nil },
+		Logger:      slog.Default(),
+	}
+	repo := &calendarRepoStub{}
+	cmd := NewCalendarCommand(deps, repo, nil)
+	cmd.now = func() time.Time {
+		return time.Date(2026, time.December, 15, 12, 0, 0, 0, time.FixedZone("KST", 9*60*60))
+	}
+
+	err := cmd.Execute(context.Background(), &domain.CommandContext{Room: "test-room"}, map[string]any{"monthOffset": 1})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(repo.months) != 1 || repo.months[0] != 1 {
+		t.Fatalf("repo months = %v, want [1]", repo.months)
+	}
+	if len(repo.years) != 1 || repo.years[0] != 2027 {
+		t.Fatalf("repo years = %v, want [2027]", repo.years)
+	}
+}
+
+func TestCalendarCommand_Execute_PreviousMonthAcrossYear(t *testing.T) {
+	deps := &Dependencies{
+		Formatter:   formatter.NewResponseFormatter("!", nil),
+		SendMessage: func(_ context.Context, _, _ string) error { return nil },
+		SendError:   func(_ context.Context, _, _ string) error { return nil },
+		Logger:      slog.Default(),
+	}
+	repo := &calendarRepoStub{}
+	cmd := NewCalendarCommand(deps, repo, nil)
+	cmd.now = func() time.Time {
+		return time.Date(2026, time.January, 15, 12, 0, 0, 0, time.FixedZone("KST", 9*60*60))
+	}
+
+	err := cmd.Execute(context.Background(), &domain.CommandContext{Room: "test-room"}, map[string]any{"monthOffset": -1})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(repo.months) != 1 || repo.months[0] != 12 {
+		t.Fatalf("repo months = %v, want [12]", repo.months)
+	}
+	if len(repo.years) != 1 || repo.years[0] != 2025 {
+		t.Fatalf("repo years = %v, want [2025]", repo.years)
 	}
 }
 

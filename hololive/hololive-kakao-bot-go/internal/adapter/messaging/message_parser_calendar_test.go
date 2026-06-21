@@ -18,6 +18,7 @@ func TestTryCelebrationCalendarCommand(t *testing.T) {
 		raw     string
 		want    bool
 		month   int
+		offset  int
 	}{
 		{
 			name:    "달력 without args",
@@ -33,6 +34,22 @@ func TestTryCelebrationCalendarCommand(t *testing.T) {
 			raw:     "!달력 6",
 			want:    true,
 			month:   6,
+		},
+		{
+			name:    "달력 next month",
+			command: "달력",
+			args:    []string{"다음달"},
+			raw:     "!달력 다음달",
+			want:    true,
+			offset:  1,
+		},
+		{
+			name:    "달력 previous month",
+			command: "달력",
+			args:    []string{"저번달"},
+			raw:     "!달력 저번달",
+			want:    true,
+			offset:  -1,
 		},
 		{
 			name:    "기념일 alias",
@@ -88,12 +105,30 @@ func TestTryCelebrationCalendarCommand(t *testing.T) {
 				t.Errorf("Type = %v, want %v", cmd.Type, domain.CommandCalendar)
 			}
 
-			if tt.month > 0 {
-				m, hasMonth := cmd.Params["month"].(int)
-				if !hasMonth || m != tt.month {
-					t.Errorf("Params[month] = %v, want %d", cmd.Params["month"], tt.month)
-				}
-			}
+			assertMonthParam(t, cmd.Params, tt.month)
+			assertOffsetParam(t, cmd.Params, tt.offset)
 		})
+	}
+}
+
+func assertMonthParam(t *testing.T, params map[string]any, want int) {
+	t.Helper()
+	if want <= 0 {
+		return
+	}
+	m, hasMonth := params["month"].(int)
+	if !hasMonth || m != want {
+		t.Errorf("Params[month] = %v, want %d", params["month"], want)
+	}
+}
+
+func assertOffsetParam(t *testing.T, params map[string]any, want int) {
+	t.Helper()
+	if want == 0 {
+		return
+	}
+	offset, hasOffset := params["monthOffset"].(int)
+	if !hasOffset || offset != want {
+		t.Errorf("Params[monthOffset] = %v, want %d", params["monthOffset"], want)
 	}
 }

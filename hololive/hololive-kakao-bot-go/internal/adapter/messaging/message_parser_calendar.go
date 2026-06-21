@@ -26,10 +26,34 @@ func (ma *MessageAdapter) isCalendarCommand(cmd string) bool {
 
 func (ma *MessageAdapter) parseCalendarArgs(args []string) map[string]any {
 	params := make(map[string]any)
-	if len(args) > 0 {
-		if m, err := strconv.Atoi(args[0]); err == nil && m >= 1 && m <= 12 {
-			params["month"] = m
-		}
+	if len(args) == 0 {
+		return params
+	}
+	arg := stringutil.Normalize(args[0])
+	if offset, ok := calendarMonthOffset(arg); ok {
+		params["monthOffset"] = offset
+	}
+	if month, ok := calendarMonth(arg); ok {
+		params["month"] = month
 	}
 	return params
+}
+
+func calendarMonthOffset(arg string) (int, bool) {
+	switch arg {
+	case "다음달":
+		return 1, true
+	case "저번달":
+		return -1, true
+	default:
+		return 0, false
+	}
+}
+
+func calendarMonth(arg string) (int, bool) {
+	m, err := strconv.Atoi(arg)
+	if err != nil || m < 1 || m > 12 {
+		return 0, false
+	}
+	return m, true
 }
