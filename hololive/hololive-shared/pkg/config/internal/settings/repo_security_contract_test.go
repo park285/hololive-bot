@@ -812,6 +812,45 @@ func TestRepoCompose_StandaloneDispatcherServiceIsRemoved(t *testing.T) {
 	}
 }
 
+func TestRepoHololiveComposeUnitExecutesOnlyImmutableRootWrappers_03e6dca8(t *testing.T) {
+	unit := readRepoFile(t, "scripts/systemd/hololive-compose.service")
+
+	execDirectives := []string{
+		"ExecStart=", "ExecStartPre=", "ExecStartPost=",
+		"ExecReload=", "ExecStop=", "ExecStopPost=",
+	}
+
+	found := 0
+	for line := range strings.SplitSeq(unit, "\n") {
+		trimmed := strings.TrimSpace(line)
+		for _, directive := range execDirectives {
+			if !strings.HasPrefix(trimmed, directive) {
+				continue
+			}
+			found++
+			value := strings.TrimPrefix(trimmed, directive)
+			binary := systemdExecBinary(value)
+			if !strings.HasPrefix(binary, "/usr/local/sbin/") {
+				t.Fatalf("%s%s executes %q; a root unit must run only immutable root-owned /usr/local/sbin wrappers, never a kapu-writable repo/home path (privilege escalation 03e6dca8)", directive, value, binary)
+			}
+		}
+	}
+
+	if found == 0 {
+		t.Fatal("hololive-compose.service declares no Exec* directives to verify (03e6dca8)")
+	}
+}
+
+func systemdExecBinary(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimLeft(value, "-@+!:")
+	fields := strings.Fields(value)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
 func isWeakPostgresSSLMode(mode string) bool {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "disable", "allow", "prefer", "require", "verify-ca":
