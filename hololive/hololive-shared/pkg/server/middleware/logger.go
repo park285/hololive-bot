@@ -147,9 +147,17 @@ func requestDeviceInfo(c *gin.Context) string {
 
 func appendOptionalHeaderAttr(attrs []slog.Attr, key, value string) []slog.Attr {
 	if value := strings.TrimSpace(value); value != "" {
-		return append(attrs, slog.String(key, value))
+		return append(attrs, slog.String(key, truncateHeader(value)))
 	}
 	return attrs
+}
+
+func truncateHeader(value string) string {
+	const maxLen = 128
+	if len(value) > maxLen {
+		return value[:maxLen] + "..."
+	}
+	return value
 }
 
 // shouldSkipPath: 경로가 스킵 대상인지 확인합니다.

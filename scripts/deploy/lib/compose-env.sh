@@ -238,8 +238,8 @@ compose_postgres_runtime_network_mode() {
 compose_env_assert_live_compat_for_host_networked_postgres() {
     local path
     for path in "$@"; do
-        case "${path}" in
-            *live-compat*) return 0 ;;
+        case "${path##*/}" in
+            docker-compose.live-compat.yml) return 0 ;;
         esac
     done
 

@@ -33,6 +33,7 @@ export PATH="${FAKEBIN}:${PATH}"
 
 PROD="deploy/compose/docker-compose.prod.yml"
 LIVE_COMPAT="deploy/compose/docker-compose.live-compat.yml"
+MAIN_AP_LIVE_COMPAT="deploy/compose/docker-compose.main-ap.live-compat.yml"
 
 run_guard() {
   # exit 1 을 부모로 전파하지 않도록 subshell 로 격리한다.
@@ -49,6 +50,12 @@ if FAKE_PG_NETWORK=host run_guard "${PROD}" "${LIVE_COMPAT}"; then
   pass "host-networked postgres with live-compat allowed"
 else
   record_fail "host-networked postgres with live-compat should be allowed"
+fi
+
+if FAKE_PG_NETWORK=host run_guard "${PROD}" "${MAIN_AP_LIVE_COMPAT}"; then
+  record_fail "main-ap.live-compat alone (no host-postgres overlay) should be rejected"
+else
+  pass "main-ap.live-compat alone rejected"
 fi
 
 if FAKE_PG_NETWORK=hololive-bot_hololive-net run_guard "${PROD}"; then

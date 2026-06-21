@@ -44,33 +44,14 @@ func ProvideBotRouter(
 ) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:         appConfig.Server.APIKey,
-		ReadyResponder: botReadyResponder(appConfig, webhookHandler),
+		ReadyResponder: botReadyResponder(),
 		RegisterRoutes: botRouteRegistrar(appConfig.Server.APIKey, webhookHandler, triggerHandler),
 	})
 }
 
-func botReadyResponder(appConfig *config.Config, webhookHandler *iris.WebhookHandler) func(*gin.Context) {
+func botReadyResponder() func(*gin.Context) {
 	return func(c *gin.Context) {
-		payload := gin.H{"health": health.Get()}
-		if appConfig != nil {
-			payload["workerProfile"] = gin.H{
-				"version": appConfig.WorkerProfile.Version,
-				"hash":    appConfig.WorkerProfile.Hash,
-			}
-		}
-		if webhookHandler != nil {
-			diagnostics := webhookHandler.Diagnostics()
-			payload["irisWebhookReceive"] = gin.H{
-				"workersConfigured":   diagnostics.WorkersConfigured,
-				"queueSize":           diagnostics.QueueSize,
-				"pending":             diagnostics.Pending,
-				"inFlight":            diagnostics.InFlight,
-				"enqueueRejected":     diagnostics.EnqueueRejected,
-				"queueFullCount":      diagnostics.QueueFullCount,
-				"handlerTimeoutCount": diagnostics.HandlerTimeouts,
-			}
-		}
-		c.JSON(http.StatusOK, payload)
+		c.JSON(http.StatusOK, gin.H{"health": health.Get()})
 	}
 }
 

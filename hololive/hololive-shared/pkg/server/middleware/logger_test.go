@@ -129,6 +129,86 @@ func TestTruncateUA(t *testing.T) {
 	}
 }
 
+func TestTruncateHeader(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{
+			name:  "짧은 값 → 그대로 반환",
+			value: "203.0.113.10",
+			want:  "203.0.113.10",
+		},
+		{
+			name:  "정확히 128자 → 그대로 반환",
+			value: strings.Repeat("a", 128),
+			want:  strings.Repeat("a", 128),
+		},
+		{
+			name:  "128자 초과 → 128자 잘라 '...' 추가",
+			value: strings.Repeat("b", 300),
+			want:  strings.Repeat("b", 128) + "...",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := truncateHeader(tt.value)
+			if got != tt.want {
+				t.Fatalf("truncateHeader(len=%d) = %q, want %q", len(tt.value), got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoggerMiddleware_TruncatesOverlongForwardedHeaders(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.ReleaseMode)
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	router := gin.New()
+	if err := router.SetTrustedProxies([]string{"10.0.0.0/8"}); err != nil {
+		t.Fatalf("SetTrustedProxies 에러: %v", err)
+	}
+	router.Use(LoggerMiddleware(context.Background(), logger))
+	router.GET("/inspect", func(c *gin.Context) {
+		c.Status(http.StatusUnauthorized)
+	})
+
+	overlongXFF := strings.Repeat("9", 4096)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inspect", http.NoBody)
+	req.RemoteAddr = "10.10.0.5:4321"
+	req.Header.Set("X-Forwarded-For", overlongXFF)
+	req.Header.Set("X-Real-IP", overlongXFF)
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	var entry map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
+		t.Fatalf("로그 JSON 파싱 실패: %v, raw=%s", err, buf.String())
+	}
+
+	wantTruncated := truncateHeader(overlongXFF)
+	gotXFF, ok := entry["x_forwarded_for"].(string)
+	if !ok || gotXFF != wantTruncated {
+		t.Fatalf("x_forwarded_for = %v, want truncated to %d chars", entry["x_forwarded_for"], len(wantTruncated))
+	}
+	gotRealIP, ok := entry["x_real_ip"].(string)
+	if !ok || gotRealIP != wantTruncated {
+		t.Fatalf("x_real_ip = %v, want truncated to %d chars", entry["x_real_ip"], len(wantTruncated))
+	}
+}
+
 func TestLogDebugf_NoPanic(t *testing.T) {
 	t.Parallel()
 
