@@ -13,6 +13,9 @@
     "generate:api": "mkdir -p ../backend/docs && (cd ../backend && go run ./cmd/export-openapi > docs/swagger.json) && swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular"
   },
   "overrides": {
+    "form-data": "^4.0.6",
+    "dompurify": "^3.4.11",
+    "esbuild": "^0.28.1",
     "flatted": "^3.4.2",
     "defu": "^6.1.7",
     "yaml": "^2.8.3",
@@ -36,7 +39,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-virtual": "^3.13.23",
-    "axios": "^1.15.0",
+    "axios": "^1.18.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
