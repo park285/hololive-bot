@@ -71,6 +71,54 @@ func TestLoadYouTubeProducerRuntimeAllowsMissingIrisAndRooms(t *testing.T) {
 	}
 }
 
+func TestNonEgressConfigLoadersSkipWorkerProfileFetchWithAccidentalIrisToken(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*testing.T)
+		load  func() (*Config, error)
+	}{
+		{
+			name: "admin api",
+			setup: func(t *testing.T) {
+				t.Helper()
+				setAdminAPIRuntimeEnv(t)
+			},
+			load: LoadAdminAPIRuntime,
+		},
+		{
+			name: "youtube producer",
+			setup: func(t *testing.T) {
+				t.Helper()
+				clearIrisAndRoomEnv(t)
+				t.Setenv("API_SECRET_KEY", "dummy-secret")
+				setRuntimeH3ServerEnv(t)
+				t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
+				t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
+			},
+			load: LoadYouTubeProducerRuntime,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup(t)
+			t.Setenv("IRIS_BOT_TOKEN", "accidental-egress-token")
+			t.Setenv("IRIS_BASE_URL", "http://iris.invalid")
+
+			cfg, err := tt.load()
+			if err != nil {
+				t.Fatalf("%s load error = %v, want nil without Iris worker profile fetch", tt.name, err)
+			}
+			if cfg.WorkerPool.Workers != 10 || cfg.WorkerPool.QueueSize != 100 {
+				t.Fatalf("%s WorkerPool = %#v, want legacy worker profile defaults", tt.name, cfg.WorkerPool)
+			}
+			if cfg.Webhook.WorkerCount != 16 || cfg.Webhook.QueueSize != 1000 {
+				t.Fatalf("%s Webhook = %#v, want legacy worker profile defaults", tt.name, cfg.Webhook)
+			}
+		})
+	}
+}
+
 func TestLoadYouTubeProducerRuntimeRequiresHolodexKey(t *testing.T) {
 	clearIrisAndRoomEnv(t)
 	t.Setenv("API_SECRET_KEY", "dummy-secret")

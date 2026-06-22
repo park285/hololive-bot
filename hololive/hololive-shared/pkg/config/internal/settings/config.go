@@ -66,27 +66,31 @@ type Config struct {
 	Version              string
 }
 
+type configLoadOptions struct {
+	FetchIrisWorkerProfile bool
+}
+
 func Load() (*Config, error) {
-	return loadConfigValidated((*Config).Validate)
+	return loadConfigValidated((*Config).Validate, configLoadOptions{FetchIrisWorkerProfile: true})
 }
 
 func LoadAdminAPIRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateAdminAPIRuntime)
+	return loadConfigValidated((*Config).ValidateAdminAPIRuntime, configLoadOptions{})
 }
 
 // LoadYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
 // Iris egress 토큰·KAKAO_ROOMS를 받지 않으므로 해당 필수 검증을 면제합니다.
 func LoadYouTubeProducerRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateYouTubeProducerRuntime)
+	return loadConfigValidated((*Config).ValidateYouTubeProducerRuntime, configLoadOptions{})
 }
 
-func loadConfigValidated(validate func(*Config) error) (*Config, error) {
+func loadConfigValidated(validate func(*Config) error, options configLoadOptions) (*Config, error) {
 	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("load .env: %w", err)
 	}
 
 	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
-	config, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction)
+	config, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction, options)
 	if err != nil {
 		return nil, err
 	}
@@ -99,15 +103,23 @@ func loadConfigValidated(validate func(*Config) error) (*Config, error) {
 }
 
 //nolint:funlen // central environment-to-config assembly is intentionally kept in one place
-func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) (*Config, error) {
+func buildConfig(
+	webhookToken, botToken string,
+	corsAllowedOrigins []string,
+	corsMissingInProduction bool,
+	options configLoadOptions,
+) (*Config, error) {
 	communityShortsBigBangCutoverAt, err := loadCommunityShortsBigBangCutoverAt()
 	if err != nil {
 		return nil, err
 	}
 	irisConfig := loadIrisConfig(webhookToken, botToken)
-	workerProfile, err := fetchIrisBotWebhookWorkerProfile(&irisConfig)
-	if err != nil && !errors.Is(err, workerconfig.ErrWorkerProfileDisabled) {
-		return nil, fmt.Errorf("fetch Iris bot webhook worker profile: %w", err)
+	workerProfile := workerconfig.LegacyIrisBotWebhookWorkerProfile()
+	if options.FetchIrisWorkerProfile {
+		workerProfile, err = fetchIrisBotWebhookWorkerProfile(&irisConfig)
+		if err != nil && !errors.Is(err, workerconfig.ErrWorkerProfileDisabled) {
+			return nil, fmt.Errorf("fetch Iris bot webhook worker profile: %w", err)
+		}
 	}
 
 	return &Config{
