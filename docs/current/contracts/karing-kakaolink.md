@@ -115,17 +115,11 @@ Do not use `https://youtu.be/${item_web_url}` for the 1-item template because it
 
 Smoke tests must explicitly set the target room. Do not rely on Iris runtime default receiver fields.
 
-Primary test room:
+Keep concrete Kakao `receiver_room_id` values and room names in private operational runbooks or environment-specific smoke configuration. Committed contract docs may show only placeholders:
 
 ```text
-receiver_room_id=464252100463241
-receiver_name=테스트방
-```
-
-Additional operator-approved room used for cross-check:
-
-```text
-receiver_room_id=18479861808840308
+receiver_room_id=<explicit private smoke room id>
+receiver_name=<explicit private smoke room name>
 ```
 
 Before changing template IDs, variables, or link settings:

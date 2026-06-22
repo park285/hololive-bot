@@ -194,6 +194,7 @@ func setAdminAPIRuntimeEnv(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
 	t.Setenv("SERVER_PORT", "30006")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "https://admin.example.com")
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "")
 	t.Setenv("IRIS_BOT_TOKEN", "")
 	t.Setenv("IRIS_BASE_URL", "")
@@ -214,6 +215,19 @@ func TestLoadAdminAPIRuntime_BootsWithoutIrisEgressTokens(t *testing.T) {
 
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
 		t.Fatalf("Load() error = %v, want IRIS_WEBHOOK_TOKEN is required", err)
+	}
+}
+
+func TestLoadAdminAPIRuntime_DefaultEnforcesCORSOrigins_05c4a5ef(t *testing.T) {
+	setAdminAPIRuntimeEnv(t)
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+
+	_, err := LoadAdminAPIRuntime()
+	if err == nil {
+		t.Fatal("LoadAdminAPIRuntime() error = nil, want missing CORS_ALLOWED_ORIGINS error")
+	}
+	if !strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

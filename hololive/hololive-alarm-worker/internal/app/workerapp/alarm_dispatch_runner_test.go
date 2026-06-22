@@ -252,6 +252,36 @@ func TestAlarmDispatchRunnerYouTubeOutboxCommunitySendsKaringRequest(t *testing.
 	assert.Equal(t, "youtube", item.Platform)
 }
 
+func TestAlarmDispatchRunnerYouTubeOutboxMilestoneUsesTextDispatchWhenKaringEnabled_f8d2b5af(t *testing.T) {
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
+	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
+		Kind:       domain.OutboxKindMilestone,
+		AlarmType:  domain.AlarmTypeCommunity,
+		ChannelID:  "UCtest",
+		MemberName: "Milestone Member",
+		Items: []domain.YouTubeOutboxItem{{
+			OutboxID:  1,
+			ContentID: "milestone-1",
+			Payload:   `{"milestone":"100만"}`,
+		}},
+	}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	assert.Empty(t, sender.karingRequests)
+	require.Len(t, sender.messages, 1)
+	assert.Contains(t, sender.messages[0], "100만")
+	assert.Len(t, consumer.markDispatched, 1)
+	assert.Empty(t, consumer.scheduledRetry)
+	assert.Empty(t, consumer.movedDLQ)
+}
+
 func TestAlarmDispatchRunnerYouTubeOutboxCommunityNormalizesLiteralNewlines(t *testing.T) {
 	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
 	envelope.Notification.AlarmType = domain.AlarmTypeCommunity

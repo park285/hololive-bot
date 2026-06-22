@@ -46,6 +46,12 @@ type testSender struct {
 	clientRequestIDs []string
 }
 
+type failFirstSendTestSender struct {
+	mu       sync.Mutex
+	attempts int
+	messages []string
+}
+
 type deliveryTestOutboxModel struct {
 	ID            int64     `db:"id"`
 	Kind          string    `db:"kind"`
@@ -101,6 +107,23 @@ func (s *testSender) SendMessageWithClientRequestID(_ context.Context, roomID, m
 	s.messages = append(s.messages, roomID+":"+message)
 	s.clientRequestIDs = append(s.clientRequestIDs, clientRequestID)
 	return nil
+}
+
+func (s *failFirstSendTestSender) SendMessage(_ context.Context, roomID, message string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.attempts++
+	s.messages = append(s.messages, roomID+":"+message)
+	if s.attempts == 1 {
+		return assert.AnError
+	}
+	return nil
+}
+
+func (s *failFirstSendTestSender) messageCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.messages)
 }
 
 func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testing.T) {

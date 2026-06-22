@@ -98,6 +98,20 @@ write_workflow "${bracket_secret}" \
   '      - run: echo "${{ secrets['\''MODULES_TOKEN'\''] }}"'
 expect_failure "pull_request bracket secret fails" "secrets.MODULES_TOKEN" "${bracket_secret}"
 
+dynamic_secret="${TMP_DIR}/dynamic-secret.yml"
+write_workflow "${dynamic_secret}" \
+  "name: dynamic-secret" \
+  "on:" \
+  "  pull_request:" \
+  "permissions:" \
+  "  contents: read" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    steps:" \
+  '      - run: echo "${{ secrets[format('\''MODULES_{0}'\'', '\''TOKEN'\'')] }}"'
+expect_failure "pull_request dynamic secret index fails" "secrets[dynamic]" "${dynamic_secret}"
+
 multiline_secret="${TMP_DIR}/multiline-secret.yml"
 write_workflow "${multiline_secret}" \
   "name: multiline-secret" \
@@ -170,6 +184,38 @@ write_workflow "${list_item_event_comment}" \
   "    steps:" \
   '      - run: echo "${{ secrets.MODULES_TOKEN }}"'
 expect_failure "list-item on entry with trailing comment detects pull_request secret" "secrets.MODULES_TOKEN" "${list_item_event_comment}"
+
+multiline_flow_on="${TMP_DIR}/multiline-flow-on.yml"
+write_workflow "${multiline_flow_on}" \
+  "name: multiline-flow-on" \
+  "on:" \
+  "  [" \
+  "    push," \
+  "    pull_request" \
+  "  ]" \
+  "permissions:" \
+  "  contents: read" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    steps:" \
+  '      - run: echo "${{ secrets.MODULES_TOKEN }}"'
+expect_failure "multi-line flow on is rejected fail-closed" "multi-line YAML flow collections" "${multiline_flow_on}"
+
+alias_on="${TMP_DIR}/alias-on.yml"
+write_workflow "${alias_on}" \
+  "name: alias-on" \
+  "events: &pr_events" \
+  "  pull_request:" \
+  '"on": *pr_events' \
+  "permissions:" \
+  "  contents: read" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    steps:" \
+  '      - run: echo "${{ secrets.MODULES_TOKEN }}"'
+expect_failure "yaml alias on is rejected fail-closed" "YAML anchors and aliases" "${alias_on}"
 
 pr_target="${TMP_DIR}/pull-request-target.yml"
 write_workflow "${pr_target}" \
@@ -265,6 +311,21 @@ write_workflow "${write_permissions_without_token}" \
   "      - run: echo ok"
 expect_failure "pull_request write permissions without token fails" "read-only permissions" "${write_permissions_without_token}"
 
+commented_write_permissions="${TMP_DIR}/commented-write-permissions.yml"
+write_workflow "${commented_write_permissions}" \
+  "name: commented-write-permissions" \
+  "on:" \
+  "  pull_request:" \
+  "permissions:" \
+  "  contents: read" \
+  "  pull-requests: write # should fail" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    steps:" \
+  "      - run: echo ok"
+expect_failure "pull_request write permissions with trailing comment fails" "read-only permissions" "${commented_write_permissions}"
+
 allowed_token="${TMP_DIR}/allowed-github-token.yml"
 write_workflow "${allowed_token}" \
   "name: allowed-github-token" \
@@ -306,6 +367,53 @@ write_workflow "${trusted_push}" \
   "    steps:" \
   '      - run: echo "${{ secrets.MODULES_TOKEN }}"'
 expect_success "trusted push repository secret passes" "${trusted_push}"
+
+quoted_checkout="${TMP_DIR}/quoted-checkout.yml"
+write_workflow "${quoted_checkout}" \
+  "name: quoted-checkout" \
+  "on:" \
+  "  pull_request:" \
+  "permissions:" \
+  "  contents: read" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    steps:" \
+  '      - uses: "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"'
+expect_failure "quoted checkout without persist-credentials fails" "persist-credentials: false" "${quoted_checkout}"
+
+checkout_env_persist="${TMP_DIR}/checkout-env-persist.yml"
+write_workflow "${checkout_env_persist}" \
+  "name: checkout-env-persist" \
+  "on:" \
+  "  pull_request:" \
+  "permissions:" \
+  "  contents: read" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    steps:" \
+  "      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd" \
+  "        env:" \
+  "          persist-credentials: false"
+expect_failure "checkout persist-credentials under env fails" "persist-credentials: false" "${checkout_env_persist}"
+
+checkout_duplicate_persist="${TMP_DIR}/checkout-duplicate-persist.yml"
+write_workflow "${checkout_duplicate_persist}" \
+  "name: checkout-duplicate-persist" \
+  "on:" \
+  "  pull_request:" \
+  "permissions:" \
+  "  contents: read" \
+  "jobs:" \
+  "  test:" \
+  "    runs-on: ubuntu-latest" \
+  "    steps:" \
+  "      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd" \
+  "        with:" \
+  "          persist-credentials: false" \
+  "          persist-credentials: true"
+expect_failure "checkout duplicate persist-credentials fails" "persist-credentials: false" "${checkout_duplicate_persist}"
 
 uppercase_on_secret="${TMP_DIR}/uppercase-on-secret.yml"
 write_workflow "${uppercase_on_secret}" \

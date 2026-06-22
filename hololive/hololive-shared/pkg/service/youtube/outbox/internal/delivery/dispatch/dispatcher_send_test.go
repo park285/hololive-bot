@@ -456,6 +456,42 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 	}
 }
 
+func TestDispatchDeliveryRows_GroupedSendFailureRetriesGroupedBatch(t *testing.T) {
+	t.Parallel()
+
+	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShortsGroup, "{{range .Items}}{{.Title}} {{.URL}}\n{{end}}")
+	sender := &failFirstSendTestSender{}
+	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
+		BatchSize:           10,
+		LockTimeout:         time.Minute,
+		PollInterval:        time.Second,
+		MaxRetries:          3,
+		RetryBackoff:        time.Minute,
+		DeliveryParallelism: 2,
+	})
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+	}
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 102, OutboxID: 2, RoomID: "room1"},
+	}
+
+	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+
+	if result.FailedDeliveries != 2 {
+		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
+	}
+	if len(result.SuccessDeliveryIDs) != 0 {
+		t.Fatalf("successDeliveryIDs = %#v, want none", result.SuccessDeliveryIDs)
+	}
+	if got := sender.messageCount(); got != 1 {
+		t.Fatalf("sender message count = %d, want 1 grouped attempt without per-room fallback", got)
+	}
+}
+
 func TestDispatchDeliveryRows_OrphanRows(t *testing.T) {
 	t.Parallel()
 
@@ -759,10 +795,10 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAttemptStarted(t 
 	contentIDs := make([]string, 0, len(entries))
 	postIDs := make([]string, 0, len(entries))
 	dedupeKeys := make([]string, 0, len(entries))
+	modes := make([]string, 0, len(entries))
 	for i := range entries {
 		assertSendLogStringField(t, entries[i], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
 		assertSendLogStringField(t, entries[i], deliveryAuditPathLogField, communityShortsDeliveryPath)
-		assertSendLogStringField(t, entries[i], deliveryAuditModeLogField, "grouped")
 		assertSendLogStringField(t, entries[i], logschema.FieldRoomID, "room1")
 		assertSendLogIntField(t, entries[i], logschema.FieldAttemptOrdinal, 2)
 
@@ -774,6 +810,7 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAttemptStarted(t 
 		contentIDs = append(contentIDs, readSendLogStringField(t, entries[i], deliveryAuditContentIDLogField))
 		postIDs = append(postIDs, readSendLogStringField(t, entries[i], deliveryAuditPostIDLogField))
 		dedupeKeys = append(dedupeKeys, readSendLogStringField(t, entries[i], deliveryDedupeKeyLogField))
+		modes = append(modes, readSendLogStringField(t, entries[i], deliveryAuditModeLogField))
 	}
 
 	if !sameStrings(contentIDs, []string{"post-1", "post-2"}) {
@@ -787,6 +824,9 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAttemptStarted(t 
 		"youtube-notification:COMMUNITY_POST:post-2",
 	}) {
 		t.Fatalf("attempt start dedupe keys = %#v", dedupeKeys)
+	}
+	if !sameStrings(modes, []string{"grouped", "grouped"}) {
+		t.Fatalf("attempt start delivery modes = %#v", modes)
 	}
 }
 

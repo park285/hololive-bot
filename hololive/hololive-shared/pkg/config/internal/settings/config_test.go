@@ -54,6 +54,7 @@ func setRequiredLoadEnv(t *testing.T) {
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "https://admin.example.com")
 }
 
 func setRequiredH3ServerEnv(t *testing.T) {

@@ -31,18 +31,18 @@ sudo -n env \
   ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
-> 배포 스크립트는 holo-postgres가 host network(live-compat 토폴로지)로 실행 중인데
-> `COMPOSE_FILE`에 live-compat overlay가 없으면 fail-closed로 거부한다. overlay 없이
-> 배포하면 holo-postgres가 bridge network로 재생성되어 host:5433 소비자(AP
-> youtube-producer 등)의 DB 연결이 끊기기 때문이다. 의도적 토폴로지 변경 시에만
+> 배포 스크립트는 기존 host-network Postgres 런타임에서 live-compat overlay 없이
+> 배포하려는 경로를 fail-closed로 거부한다. live-compat overlay는 이제
+> `network_mode: host` 대신 bridge network를 유지하고 `100.100.1.3:5433`을
+> container `5432`에 명시 bind한다. 의도적 토폴로지 변경 시에만
 > `ALLOW_POSTGRES_TOPOLOGY_CHANGE=true`를 설정한다.
 
-> Security (a691472f): live-compat overlay는 현 호스트의 host-network Postgres
+> Security (a691472f): live-compat overlay는 현 호스트의 PostgreSQL/cert
 > 토폴로지를 반영하는 필수 overlay이며 "약화 레이어"가 아니다. 과거 이 overlay가
 > 비-bot 서비스(admin-api 등)에 `/run/hololive-bot/certs` 디렉터리 전체를
 > `!override` 마운트해 불필요한 cert를 노출하던 결함은 파일 단위 마운트로 환원해
 > 해소했다. 단 `postgres-ca.pem`은 모든 app 서비스(admin-api 포함)가
-> `host.docker.internal:5433`에 `verify-full`로 연결하는 데 필수이므로 파일 단위로
+> PostgreSQL에 `verify-full`로 연결하는 데 필수이므로 파일 단위로
 > 함께 mount한다 — 디렉터리→파일 환원(0c8d4125) 시 이 파일이 누락돼 재배포 컨테이너가
 > `unable to read CA file`로 크래시하던 회귀를 복원한 것이다(06-20 이전 컨테이너는 옛
 > 디렉터리 mount 유지로 미발현). admin-api는 `hololive-h3.{crt,key}`·`iris-ca.pem`·

@@ -24,7 +24,7 @@
 
 | Service | Purpose | Current notes |
 |---|---|---|
-| `holo-postgres` | Primary PostgreSQL | Host-networked, port 5433; TLS `ssl=on`; PKI server certificate rendered under `/run/hololive-bot/postgres-tls/` |
+| `holo-postgres` | Primary PostgreSQL | Bridge-networked; live-compat publishes `100.100.1.3:5433` explicitly to container `5432`; TLS `ssl=on`; PKI server certificate rendered under `/run/hololive-bot/postgres-tls/` |
 | `hololive-db-migrate` | Migration job | Runs before app services; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
 | `valkey-cache` | Cache, queue, Pub/Sub | TCP and Unix socket, password required |
 | `admin-dashboard` | Dashboard frontend | Port 30190, not part of Go runtime count |

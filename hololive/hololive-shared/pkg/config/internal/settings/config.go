@@ -68,6 +68,7 @@ type Config struct {
 
 type configLoadOptions struct {
 	FetchIrisWorkerProfile bool
+	CORSDefaultEnforce     bool
 }
 
 func Load() (*Config, error) {
@@ -75,7 +76,7 @@ func Load() (*Config, error) {
 }
 
 func LoadAdminAPIRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateAdminAPIRuntime, configLoadOptions{})
+	return loadConfigValidated((*Config).ValidateAdminAPIRuntime, configLoadOptions{CORSDefaultEnforce: true})
 }
 
 // LoadYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
@@ -102,7 +103,6 @@ func loadConfigValidated(validate func(*Config) error, options configLoadOptions
 	return config, nil
 }
 
-//nolint:funlen // central environment-to-config assembly is intentionally kept in one place
 func buildConfig(
 	webhookToken, botToken string,
 	corsAllowedOrigins []string,
@@ -157,13 +157,21 @@ func buildConfig(
 		OfficialProfile:      loadOfficialProfileConfig(),
 		MaxResponseBodyBytes: int64(sharedenv.Int("MAX_RESPONSE_BODY_BYTES", int(DefaultMaxResponseBodyBytes))),
 		LLMSchedulerURL:      sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
-		CORS: CORSConfig{
-			AllowedOrigins:      corsAllowedOrigins,
-			Enforce:             sharedenv.Bool("CORS_ENFORCE", false),
-			MissingInProduction: corsMissingInProduction,
-		},
-		Version: sharedenv.String("APP_VERSION", "1.1.0-go"),
+		CORS:                 loadCORSConfig(corsAllowedOrigins, corsMissingInProduction, options),
+		Version:              sharedenv.String("APP_VERSION", "1.1.0-go"),
 	}, nil
+}
+
+func loadCORSConfig(
+	corsAllowedOrigins []string,
+	corsMissingInProduction bool,
+	options configLoadOptions,
+) CORSConfig {
+	return CORSConfig{
+		AllowedOrigins:      corsAllowedOrigins,
+		Enforce:             sharedenv.Bool("CORS_ENFORCE", options.CORSDefaultEnforce),
+		MissingInProduction: corsMissingInProduction,
+	}
 }
 
 func loadServicesConfig() ServicesConfig {

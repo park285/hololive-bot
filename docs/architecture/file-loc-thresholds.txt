@@ -3,6 +3,8 @@ admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
 scripts/logs/remote-sync-main-logs.sh:480
 hololive/hololive-kakao-bot-go/scripts/bot.sh:560
 scripts/review/verify-full-bundle.sh:500
+scripts/ci/check-workflow-secrets.sh:560
+scripts/ci/check-workflow-secrets_test.sh:470
 scripts/perf/check-bench-regression.sh:861
 scripts/perf/check-bench-regression_test.sh:579
 scripts/perf/pgo/compare-pgo.sh:538

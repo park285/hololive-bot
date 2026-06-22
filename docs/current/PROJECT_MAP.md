@@ -34,7 +34,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 
 | Compose service | Role | Notes |
 |---|---|---|
-| `holo-postgres` | PostgreSQL data store | Host-networked PostgreSQL on port 5433; `ssl=on`; OpenBao PKI server cert under `/run/hololive-bot/postgres-tls/` |
+| `holo-postgres` | PostgreSQL data store | Bridge-networked PostgreSQL; live-compat explicitly publishes `100.100.1.3:5433` to container `5432`; `ssl=on`; OpenBao PKI server cert under `/run/hololive-bot/postgres-tls/` |
 | `hololive-db-migrate` | Migration bootstrap/apply job | Must complete before app runtime services start; `PGSSLMODE=verify-full` with `postgres-ca.pem` |
 | `valkey-cache` | Valkey cache, queue, Pub/Sub | TCP and Unix socket endpoints |
 | `admin-dashboard` | Dashboard (Go backend + embedded frontend) | Not part of the 5 Go runtime set |

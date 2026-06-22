@@ -6,7 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=/home/kapu/work/iris-stack/hololive-bot
+WorkingDirectory=/opt/hololive-bot/compose/current
 ExecStart=/usr/local/sbin/hololive-compose-up
 ExecStop=/usr/local/sbin/hololive-compose-down
 RemainAfterExit=yes

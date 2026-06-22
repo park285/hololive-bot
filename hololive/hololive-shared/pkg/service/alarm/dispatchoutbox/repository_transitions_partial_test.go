@@ -6,7 +6,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-func TestExpectRowsAffected_PartialBatchReturnsNil(t *testing.T) {
+func TestWarnRowsAffected_PartialBatchReturnsNilForPostSendTransitions(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -28,13 +28,13 @@ func TestExpectRowsAffected_PartialBatchReturnsNil(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "partial match — RowsAffected < len(ids) should return nil for MarkSent/MarkSending",
+			name:    "partial match returns nil for post-send transition",
 			got:     1,
 			want:    3,
 			wantErr: false,
 		},
 		{
-			name:    "zero rows out of many — should return nil for MarkSent/MarkSending",
+			name:    "zero rows out of many returns nil for post-send transition",
 			got:     0,
 			want:    5,
 			wantErr: false,
@@ -50,6 +50,18 @@ func TestExpectRowsAffected_PartialBatchReturnsNil(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExpectRowsAffected_BlocksPartialMarkSending_140eb6c4(t *testing.T) {
+	t.Parallel()
+
+	if err := expectRowsAffected(1, 3, "mark dispatch deliveries sending"); err == nil {
+		t.Fatal("partial MarkSending update must fail before external send")
+	}
+	if err := expectRowsAffected(0, 5, "mark dispatch deliveries sending"); err == nil {
+		t.Fatal("zero-row MarkSending update must fail before external send")
+	}
+	requireNoError(t, expectRowsAffected(3, 3, "mark dispatch deliveries sending"))
 }
 
 func TestWarnRowsAffected_EmitsMetricOnPartial(t *testing.T) {

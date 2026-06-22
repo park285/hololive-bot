@@ -10,6 +10,15 @@ report() {
   echo "[verify-exec-tree] $*" >&2
 }
 
+lexical_abs() {
+  python3 - "$1" <<'PY'
+import os
+import sys
+
+print(os.path.abspath(os.path.normpath(sys.argv[1])))
+PY
+}
+
 path_is_root_safe() {
   local f="$1" uid gid perms g o
   uid="$(stat -c '%u' "$f")"
@@ -33,6 +42,32 @@ path_is_root_safe() {
   return 0
 }
 
+path_chain() {
+  local path="$1" dir
+  path="$(lexical_abs "${path}")"
+  dir="$(dirname "${path}")"
+  while [[ "${dir}" != "/" ]]; do
+    printf '%s\n' "${dir}"
+    dir="$(dirname "${dir}")"
+  done
+  printf '/\n'
+  printf '%s\n' "${path}"
+}
+
+path_chain_is_root_safe() {
+  local target="$1" path violations=0
+  while IFS= read -r path; do
+    if [[ -L "${path}" ]]; then
+      report "symlink in root exec path: ${path}"
+      violations=$((violations + 1))
+      continue
+    fi
+    path_is_root_safe "${path}" || violations=$((violations + 1))
+  done < <(path_chain "${target}")
+
+  (( violations == 0 ))
+}
+
 if [[ "$#" -eq 0 ]]; then
   report "usage: verify-exec-tree-ownership.sh <path> [path...]"
   exit 2
@@ -43,7 +78,7 @@ for target in "$@"; do
     report "missing (skipped): ${target}"
     continue
   fi
-  path_is_root_safe "${target}" || violations=$((violations + 1))
+  path_chain_is_root_safe "${target}" || violations=$((violations + 1))
 done
 
 if (( violations > 0 )); then

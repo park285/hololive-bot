@@ -396,7 +396,8 @@ func assertLiveCompatRenderedPortsAndModes(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	assertRenderedPort(t, cfg, "valkey-cache", "6379", "6379", "tcp")
-	assertRenderedPort(t, cfg, "admin-dashboard", "30190", "30190", "tcp")
+	assertRenderedPortOnHost(t, cfg, "admin-dashboard", "127.0.0.1", "30190", "30190", "tcp")
+	assertRenderedPort(t, cfg, "holo-postgres", "5433", "5432", "tcp")
 	assertRenderedPort(t, cfg, "hololive-bot", "30001", "30001", "tcp")
 	assertRenderedPort(t, cfg, "hololive-bot", "30001", "30001", "udp")
 
@@ -405,8 +406,8 @@ func assertLiveCompatRenderedPortsAndModes(t *testing.T, cfg renderedCompose) {
 	}
 
 	for _, service := range []string{"holo-postgres", "hololive-db-migrate"} {
-		if got := stringValue(composeService(t, cfg, service)["network_mode"]); got != "host" {
-			t.Fatalf("%s network_mode = %q, want host", service, got)
+		if got := stringValue(composeService(t, cfg, service)["network_mode"]); got == "host" {
+			t.Fatalf("%s network_mode = %q, want bridge networking", service, got)
 		}
 	}
 }
@@ -415,19 +416,19 @@ func assertLiveCompatRenderedPostgres(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	migrationEnv := composeEnvironment(t, cfg, "hololive-db-migrate")
-	if migrationEnv["PGHOST"] != "127.0.0.1" || migrationEnv["PGPORT"] != "5433" {
-		t.Fatalf("hololive-db-migrate PGHOST/PGPORT = %q/%q, want 127.0.0.1/5433", migrationEnv["PGHOST"], migrationEnv["PGPORT"])
+	if migrationEnv["PGHOST"] != "holo-postgres" || migrationEnv["PGPORT"] != "5432" {
+		t.Fatalf("hololive-db-migrate PGHOST/PGPORT = %q/%q, want holo-postgres/5432", migrationEnv["PGHOST"], migrationEnv["PGPORT"])
 	}
 
 	postgresEnv := composeEnvironment(t, cfg, "holo-postgres")
-	if postgresEnv["PGPORT"] != "5433" {
-		t.Fatalf("holo-postgres PGPORT = %q, want 5433", postgresEnv["PGPORT"])
+	if postgresEnv["PGPORT"] != "5432" {
+		t.Fatalf("holo-postgres PGPORT = %q, want 5432", postgresEnv["PGPORT"])
 	}
 
 	for _, service := range []string{"hololive-bot", "hololive-admin-api", "hololive-alarm-worker", "youtube-producer", "llm-scheduler"} {
 		env := composeEnvironment(t, cfg, service)
-		if env["POSTGRES_HOST"] != "host.docker.internal" || env["POSTGRES_PORT"] != "5433" || env["POSTGRES_SSLMODE"] != "verify-full" {
-			t.Fatalf("%s POSTGRES env = %q/%q/%q, want host.docker.internal/5433/verify-full", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
+		if env["POSTGRES_HOST"] != "holo-postgres" || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != "verify-full" {
+			t.Fatalf("%s POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
 		}
 		if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
 			t.Fatalf("%s renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q; verify-full replaced the downgrade path", service, value)
@@ -489,8 +490,11 @@ func assertLiveCompatDashboardOrigin(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	dashboardEnv := composeEnvironment(t, cfg, "admin-dashboard")
-	if !strings.Contains(dashboardEnv["ALLOWED_ORIGINS"], "http://100.100.1.3:30190") {
-		t.Fatalf("admin-dashboard ALLOWED_ORIGINS = %q, want Tailnet origin restored", dashboardEnv["ALLOWED_ORIGINS"])
+	if strings.Contains(dashboardEnv["ALLOWED_ORIGINS"], "100.100.1.3:30190") {
+		t.Fatalf("admin-dashboard ALLOWED_ORIGINS = %q, want no default Tailnet origin", dashboardEnv["ALLOWED_ORIGINS"])
+	}
+	if !strings.Contains(dashboardEnv["ALLOWED_ORIGINS"], "https://admin.holo-oshi.com") {
+		t.Fatalf("admin-dashboard ALLOWED_ORIGINS = %q, want explicit HTTPS admin origin", dashboardEnv["ALLOWED_ORIGINS"])
 	}
 }
 
@@ -734,8 +738,8 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 	}
 
 	env := composeEnvironment(t, cfg, "youtube-producer-c")
-	if env["POSTGRES_HOST"] != "host.docker.internal" || env["POSTGRES_PORT"] != "5433" || env["POSTGRES_SSLMODE"] != "verify-full" {
-		t.Fatalf("youtube-producer-c POSTGRES env = %q/%q/%q, want host.docker.internal/5433/verify-full", env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
+	if env["POSTGRES_HOST"] != "holo-postgres" || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != "verify-full" {
+		t.Fatalf("youtube-producer-c POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
 	}
 	if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
 		t.Fatalf("youtube-producer-c renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q", value)
@@ -1269,7 +1273,12 @@ func composePorts(t *testing.T, serviceName string, service map[string]any) []re
 func assertRenderedPort(t *testing.T, cfg renderedCompose, service, published, target, protocol string) {
 	t.Helper()
 
-	const hostIP = "100.100.1.3"
+	assertRenderedPortOnHost(t, cfg, service, "100.100.1.3", published, target, protocol)
+}
+
+func assertRenderedPortOnHost(t *testing.T, cfg renderedCompose, service, hostIP, published, target, protocol string) {
+	t.Helper()
+
 	for _, port := range composePorts(t, service, composeService(t, cfg, service)) {
 		if port.HostIP == hostIP && port.Published == published && port.Target == target && port.Protocol == protocol {
 			return

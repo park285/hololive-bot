@@ -30,7 +30,7 @@ func (r *PgxRepository) MarkSending(ctx context.Context, ids []int64, workerID s
 	if err != nil {
 		return fmt.Errorf("mark dispatch deliveries sending: %w", err)
 	}
-	return warnRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries sending", r.logger)
+	return expectRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries sending")
 }
 
 func (r *PgxRepository) MarkSent(ctx context.Context, ids []int64, workerID string) error {
@@ -167,11 +167,9 @@ func (r *PgxRepository) ReleaseLeased(ctx context.Context, ids []int64, workerID
 	return expectRowsAffected(tag.RowsAffected(), len(ids), "release dispatch deliveries")
 }
 
-// warnRowsAffected는 MarkSent/MarkSending에서 concurrent workers가 partial update를
+// warnRowsAffected는 MarkSent에서 concurrent workers가 partial update를
 // 일으킬 때 error 대신 warn을 로그하고 metric을 emit한다.
-// error를 반환하지 않는 이유: QuarantineStaleSending/RecoverExpiredLeased가 잔여 row를
-// 처리하며, Iris reply admission store(client_request_id 기반)가 KakaoTalk 레벨 중복을
-// 차단하므로 partial update는 silent alarm loss가 아니라 정상 경합이다.
+// MarkSending은 외부 전송 전 소유권 gate라 partial update를 error로 반환해야 한다.
 func warnRowsAffected(got int64, want int, action string, logger *slog.Logger) error {
 	if got == int64(want) {
 		return nil

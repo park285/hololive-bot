@@ -226,6 +226,7 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 	reason := deliveryFailureReason(sendErr)
 	mr.logger.Warn("Failed to send grouped delivery",
 		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
 		slog.String("kind", string(kind)),
 		slog.Int("count", len(validRows)),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),

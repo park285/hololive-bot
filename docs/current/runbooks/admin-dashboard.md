@@ -150,7 +150,7 @@ Diagnosis:
 - fallback allowlist는 `https://admin.capu.blog` 하나뿐이며 production에서는 localhost 계열이 제거됨.
 
 Mitigation:
-- compose `ALLOWED_ORIGINS`에 실제 접속 origin(예: `http://100.100.1.3:30190`)을 콤마로 추가 후 `up -d --no-deps admin-dashboard`.
+- 기본 compose/live-compat bind는 loopback입니다. Tailscale 직접 접속이 필요하면 먼저 tailnet ACL 또는 host firewall로 source peer를 제한한 뒤 `ADMIN_DASHBOARD_PORT_BIND_IP`와 `ADMIN_DASHBOARD_ALLOWED_ORIGINS`를 명시 override하고 `up -d --no-deps admin-dashboard`를 실행합니다.
 
 ## Smoke test
 

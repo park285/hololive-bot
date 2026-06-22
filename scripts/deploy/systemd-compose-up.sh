@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${HOLOLIVE_BOT_ROOT:-/home/kapu/work/iris-stack/hololive-bot}"
+ROOT_DIR="${HOLOLIVE_BOT_ROOT:-/opt/hololive-bot/compose/current}"
 cd "$ROOT_DIR"
 
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
@@ -18,11 +18,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   if ! "${ROOT_DIR}/scripts/deploy/verify-exec-tree-ownership.sh" "${exec_tree[@]}"; then
     echo "[SECURITY] root-executed deploy tree is writable by a non-root user (03e6dca8)." >&2
     echo "           chown the tree to root (or run this unit as a constrained service user)." >&2
-    if [[ "${HOLOLIVE_EXEC_TREE_ENFORCE:-0}" == "1" ]]; then
-      echo "           HOLOLIVE_EXEC_TREE_ENFORCE=1 -> refusing to start." >&2
-      exit 1
-    fi
-    echo "           set HOLOLIVE_EXEC_TREE_ENFORCE=1 to make this fatal once the tree is root-owned." >&2
+    exit 1
   fi
 fi
 

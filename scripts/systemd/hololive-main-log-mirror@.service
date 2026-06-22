@@ -5,12 +5,14 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=/root/work/hololive-bot
+User=kapu
+Group=kapu
+WorkingDirectory=/home/kapu/work/iris-stack/hololive-bot
 EnvironmentFile=-/etc/hololive/log-mirror.env
-Environment=LOG_ROOT=/root/work/hololive-bot/logs
-Environment=HOL_LOG_OSAKA_SSH_KEY=/root/work/hololive-bot/KR.key
-Environment=HOL_LOG_SEOUL_SSH_KEY=/root/work/hololive-bot/KR.key
-ExecStart=/root/work/hololive-bot/scripts/logs/remote-sync-main-logs.sh once %i
+Environment=LOG_ROOT=/home/kapu/work/iris-stack/hololive-bot/logs
+Environment=HOL_LOG_OSAKA_SSH_KEY=/home/kapu/work/iris-stack/hololive-bot/KR.key
+Environment=HOL_LOG_SEOUL_SSH_KEY=/home/kapu/work/iris-stack/hololive-bot/KR.key
+ExecStart=/home/kapu/work/iris-stack/hololive-bot/scripts/logs/remote-sync-main-logs.sh once %i
 UMask=0027
 Nice=10
 IOSchedulingClass=best-effort

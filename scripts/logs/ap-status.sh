@@ -8,10 +8,6 @@ LOG_TAIL="${LOG_TAIL:-400}"
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
-remote() {
-  "${AP_SSH[@]}" "$@"
-}
-
 signals() {
   local container="$1"
   local pattern="$2"
@@ -36,21 +32,43 @@ containers_list="${AP_CONTAINERS[*]}"
 ports_list="${AP_PORTS[*]}"
 
 echo "== $AP_NAME compose services =="
-remote "cd ~/hololive-bot && sudo -n test -r /run/hololive-bot/ap-compose.env && (test -w /var/run/docker.sock || groups | grep -qw docker) && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps --format 'table {{.Name}}\t{{.Service}}\t{{.Status}}\t{{.Ports}}'"
+ap_remote_bash "$AP_COMPOSE_FILE" "$services_list" <<'REMOTE'
+set -euo pipefail
+compose_file="$1"
+services_list="$2"
+read -r -a services <<< "$services_list"
+cd ~/hololive-bot
+sudo -n test -r /run/hololive-bot/ap-compose.env
+test -w /var/run/docker.sock || groups | grep -qw docker
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
+  ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f "$compose_file" \
+  ps --format 'table {{.Name}}\t{{.Service}}\t{{.Status}}\t{{.Ports}}' "${services[@]}"
+REMOTE
 
 echo
 echo "== Health =="
-remote "AP_SERVICES_LIST='$services_list' AP_CONTAINERS_LIST='$containers_list' AP_PORTS_LIST='$ports_list' bash -c '
-services=(\$AP_SERVICES_LIST); containers=(\$AP_CONTAINERS_LIST); ports=(\$AP_PORTS_LIST)
-for i in \"\${!services[@]}\"; do
-  printf \"%s: \" \"\${services[\$i]}\"
-  docker exec \"\${containers[\$i]}\" ./bin/healthcheck --body \"https://127.0.0.1:\${ports[\$i]}/health\"
-  printf \"\n\"
-done'"
+ap_remote_bash "$services_list" "$containers_list" "$ports_list" <<'REMOTE'
+set -euo pipefail
+services_list="$1"
+containers_list="$2"
+ports_list="$3"
+read -r -a services <<< "$services_list"
+read -r -a containers <<< "$containers_list"
+read -r -a ports <<< "$ports_list"
+for i in "${!services[@]}"; do
+  printf "%s: " "${services[$i]}"
+  docker exec "${containers[$i]}" ./bin/healthcheck --body "https://127.0.0.1:${ports[$i]}/health"
+  printf "\n"
+done
+REMOTE
 
 echo
 echo "== Runtime directory =="
-remote 'cd ~/hololive-bot && find . -maxdepth 1 -mindepth 1 -printf "%f\n" | sort'
+ap_remote_bash <<'REMOTE'
+set -euo pipefail
+cd ~/hololive-bot
+find . -maxdepth 1 -mindepth 1 -printf "%f\n" | sort
+REMOTE
 
 echo
 echo "== Recent youtube-producer signals =="
@@ -64,4 +82,7 @@ signals hololive-alarm-worker 'YouTube outbox dispatcher started by alarm-worker
 
 echo
 echo "== Unused split-host volumes =="
-remote 'docker volume ls --format "{{.Name}}" | grep "^hololive-bot_" || true'
+ap_remote_bash <<'REMOTE'
+set -euo pipefail
+docker volume ls --format "{{.Name}}" | grep "^hololive-bot_" || true
+REMOTE

@@ -100,8 +100,12 @@ for ap_script in scripts/logs/ap-smoke.sh scripts/logs/ap-status.sh; do
     if grep -q '/run/hololive-bot/env' "${ROOT_DIR}/${ap_script}"; then
         fail "${ap_script} must not require legacy monolithic env"
     fi
+    grep -q 'ap_remote_bash' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} must pass remote arguments through ap_remote_bash"
+    if grep -q '\${AP_SSH\[@\]}' "${ROOT_DIR}/${ap_script}"; then
+        fail "${ap_script} must not build direct ssh remote command strings"
+    fi
 done
-pass "ap active-active smoke/status use AP compose env"
+pass "ap active-active smoke/status use AP compose env and safe remote argv"
 grep -q 'AP prechange compose config skipped' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy allows token-free transition prechange config only with explicit marker"
 grep -Fq "grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|/run/hololive-bot/(bot|alarm-worker)\\.env'" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy prechange config bypass is limited to AP token/env-file transition"
 pass "ap active-active deploy handles token-free prechange transition"

@@ -11,8 +11,8 @@ services:
 
   youtube-producer-c:
     environment:
-      POSTGRES_HOST: host.docker.internal
-      POSTGRES_PORT: "5433"
+      POSTGRES_HOST: holo-postgres
+      POSTGRES_PORT: "5432"
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
     volumes: !override
       - ../../data:/app/data

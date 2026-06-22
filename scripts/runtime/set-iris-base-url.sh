@@ -52,8 +52,6 @@ target_file="${IRIS_BASE_URL_FILE:-$runtime_dir/iris_base_url}"
 mkdir -p "$runtime_dir"
 tmp_file="$(mktemp "$runtime_dir/.iris_base_url.XXXXXX")"
 printf '%s\n' "$base_url" > "$tmp_file"
-chmod 0644 "$tmp_file"
 mv "$tmp_file" "$target_file"
 
 echo "updated $target_file"
-echo "current iris base url: $base_url"

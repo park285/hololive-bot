@@ -134,6 +134,63 @@ if violations:
 PY
 }
 
+assert_postgres_not_host_networked() {
+  local label="$1" profiles="$2"
+  shift 2
+  local compose_file
+  compose_file="$(IFS=:; echo "$*")"
+
+  local merged
+  merged="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE="${compose_file}" COMPOSE_PROFILES="${profiles}" \
+    docker compose config --no-interpolate --format json 2>/dev/null)" \
+    || fail "hb08: ${label} merge failed to render"
+
+  COMPOSE_MERGE_LABEL="${label}" python3 - "${merged}" <<'PY'
+import json, os, sys
+
+merged = json.loads(sys.argv[1])
+label = os.environ["COMPOSE_MERGE_LABEL"]
+services = merged.get("services", {})
+
+violations = []
+for name in ("holo-postgres", "hololive-db-migrate"):
+    svc = services.get(name, {})
+    if svc.get("network_mode") == "host":
+        violations.append(name)
+
+if violations:
+    print("[FAIL] hb08 (%s): live-compat postgres services use host networking: %s"
+          % (label, sorted(violations)))
+    sys.exit(1)
+
+pg = services.get("holo-postgres", {})
+ports = pg.get("ports", []) or []
+published = []
+for port in ports:
+    if isinstance(port, dict):
+        target = str(port.get("target", ""))
+        published_port = str(port.get("published", ""))
+        host_ip = str(port.get("host_ip", ""))
+        if target == "5432" and published_port == "5433":
+            published.append(host_ip)
+        continue
+    parts = str(port).rsplit(":", 2)
+    if len(parts) == 3 and parts[1] == "5433" and parts[2] == "5432":
+        published.append(parts[0])
+
+if not published:
+    print("[FAIL] hb08 (%s): holo-postgres must publish host port 5433 to container port 5432 "
+          "without using host network" % label)
+    sys.exit(1)
+
+unsafe = [ip for ip in published if ip in ("", "0.0.0.0", "::")]
+if unsafe:
+    print("[FAIL] hb08 (%s): holo-postgres bind IP must be explicit, not wildcard: %s"
+          % (label, unsafe))
+    sys.exit(1)
+PY
+}
+
 assert_no_dir_mount "prod+live-compat" "" \
   docker-compose.prod.yml docker-compose.live-compat.yml
 
@@ -151,3 +208,12 @@ assert_sslrootcert_mounted "main-ap+live-compat" "main-ap" \
   docker-compose.main-ap.yml docker-compose.main-ap.live-compat.yml
 
 pass "hb07: every verify-full DB service bind-mounts its POSTGRES_SSLROOTCERT/PGSSLROOTCERT file (a691472f)"
+
+assert_postgres_not_host_networked "prod+live-compat" "" \
+  docker-compose.prod.yml docker-compose.live-compat.yml
+
+assert_postgres_not_host_networked "main-ap+live-compat" "main-ap" \
+  docker-compose.prod.yml docker-compose.live-compat.yml \
+  docker-compose.main-ap.yml docker-compose.main-ap.live-compat.yml
+
+pass "hb08: live-compat postgres uses bridge networking with explicit host port binding (2b45b8a7/faa876be)"

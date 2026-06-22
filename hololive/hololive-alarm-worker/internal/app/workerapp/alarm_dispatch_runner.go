@@ -80,13 +80,26 @@ func (r *alarmDispatchRunner) dispatchGroups(ctx context.Context, groups []alarm
 }
 
 func (r *alarmDispatchRunner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
-	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindCelebration {
+	if alarmDispatchGroupUsesTextPath(group) {
 		return r.dispatchMessageGroup(ctx, group)
 	}
 	if !r.karingEnabled {
 		return r.dispatchMessageGroup(ctx, group)
 	}
 	return r.dispatchKaringContentListGroup(ctx, group)
+}
+
+func alarmDispatchGroupUsesTextPath(group alarmDispatchGroup) bool {
+	if len(group.envelopes) == 0 {
+		return false
+	}
+	envelope := group.envelopes[0]
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration {
+		return true
+	}
+	return envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox &&
+		envelope.YouTubeOutbox != nil &&
+		envelope.YouTubeOutbox.Kind == domain.OutboxKindMilestone
 }
 
 func (r *alarmDispatchRunner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {

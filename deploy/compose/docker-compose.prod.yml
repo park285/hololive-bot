@@ -421,8 +421,8 @@ services:
       KAKAO_ACL_MODE: ${KAKAO_ACL_MODE:-whitelist}
       HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
       HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
-      CORS_ENFORCE: ${CORS_ENFORCE:-false}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://admin.holo-oshi.com,https://admin.capu.blog}
+      CORS_ENFORCE: ${CORS_ENFORCE:-true}
       LOG_DIR: /app/logs
       GOMEMLIMIT: "320MiB"
       APP_ENV: "production"
