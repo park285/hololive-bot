@@ -600,6 +600,104 @@ func TestDispatchDeliveryRows_SendFailure(t *testing.T) {
 	}
 }
 
+func messagesForRoom(t *testing.T, sender *testSender, roomID string) []string {
+	t.Helper()
+	sender.mu.Lock()
+	defer sender.mu.Unlock()
+	prefix := roomID + ":"
+	matched := make([]string, 0, len(sender.messages))
+	for i := range sender.messages {
+		if strings.HasPrefix(sender.messages[i], prefix) {
+			matched = append(matched, sender.messages[i])
+		}
+	}
+	return matched
+}
+
+func TestDispatchDeliveryRows_MultiRoomPartialFailureIsolatesHealthyRoom(t *testing.T) {
+	t.Parallel()
+
+	sender := &testSender{failRoom: map[string]bool{"room2": true}}
+	d := newTestDispatcherForSend(t, sender)
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, ContentID: "video-1", Payload: `{"video_id":"v1","title":"영상1"}`},
+	}
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 102, OutboxID: 1, RoomID: "room2"},
+	}
+
+	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+
+	if got := result.SuccessDeliveryIDs; len(got) != 1 || got[0] != 101 {
+		t.Fatalf("successDeliveryIDs = %#v, want [101] (healthy room only)", got)
+	}
+	if result.FailedDeliveries != 1 {
+		t.Fatalf("failedDeliveries = %d, want 1 (failing room only)", result.FailedDeliveries)
+	}
+	failedIDs := result.FailureBuckets["send message"]
+	if len(failedIDs) != 1 || failedIDs[0] != 102 {
+		t.Fatalf("failure bucket = %#v, want [102] (failing room only)", result.FailureBuckets)
+	}
+
+	if healthy := messagesForRoom(t, sender, "room1"); len(healthy) != 1 {
+		t.Fatalf("healthy room message count = %d, want exactly 1", len(healthy))
+	}
+}
+
+func TestDispatchDeliveryRows_RetryResendsOnlyFailedRowsNotHealthyRooms(t *testing.T) {
+	t.Parallel()
+
+	sender := &testSender{failRoom: map[string]bool{"room2": true}}
+	d := newTestDispatcherForSend(t, sender)
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, ContentID: "video-1", Payload: `{"video_id":"v1","title":"영상1"}`},
+	}
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 102, OutboxID: 1, RoomID: "room2"},
+	}
+
+	first := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	if got := first.SuccessDeliveryIDs; len(got) != 1 || got[0] != 101 {
+		t.Fatalf("first pass successDeliveryIDs = %#v, want [101]", got)
+	}
+	failedIDs := first.FailureBuckets["send message"]
+	if len(failedIDs) != 1 || failedIDs[0] != 102 {
+		t.Fatalf("first pass failure bucket = %#v, want [102]", first.FailureBuckets)
+	}
+
+	successByID := make(map[int64]bool, len(first.SuccessDeliveryIDs))
+	for _, id := range first.SuccessDeliveryIDs {
+		successByID[id] = true
+	}
+	retryRows := make([]domain.YouTubeNotificationDelivery, 0, len(rows))
+	for i := range rows {
+		if !successByID[rows[i].ID] {
+			retryRows = append(retryRows, rows[i])
+		}
+	}
+
+	delete(sender.failRoom, "room2")
+	second := d.send.dispatchDeliveryRows(context.Background(), retryRows, outboxByID)
+
+	if got := second.SuccessDeliveryIDs; len(got) != 1 || got[0] != 102 {
+		t.Fatalf("retry successDeliveryIDs = %#v, want [102] (previously failed row only)", got)
+	}
+	if second.FailedDeliveries != 0 {
+		t.Fatalf("retry failedDeliveries = %d, want 0", second.FailedDeliveries)
+	}
+
+	if healthy := messagesForRoom(t, sender, "room1"); len(healthy) != 1 {
+		t.Fatalf("healthy room message count after retry = %d, want exactly 1 (no resend)", len(healthy))
+	}
+	if recovered := messagesForRoom(t, sender, "room2"); len(recovered) != 1 {
+		t.Fatalf("recovered room message count = %d, want exactly 1 (retried once)", len(recovered))
+	}
+}
+
 func TestDispatchDeliveryRows_EmptyDedupeKeyFailsWithoutSending(t *testing.T) {
 	t.Parallel()
 

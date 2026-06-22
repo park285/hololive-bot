@@ -27,6 +27,15 @@ else
   pass "root systemd ExecStop wrapper source is root-exec-tree guarded"
 fi
 
+for wrapper in "${WRAPPER}" "${DOWN_WRAPPER}"; do
+  wrapper_name="$(basename "${wrapper}")"
+  if ! grep -q 'root verifier is writable by a non-root user' "${wrapper}"; then
+    record_fail "${wrapper_name} must self-check the verifier's own ownership before running it as root (4d57f81c)"
+  else
+    pass "${wrapper_name} self-checks the verifier before root execution"
+  fi
+done
+
 if grep -Eq '^WorkingDirectory=/home/' "${UNIT}"; then
   record_fail "root systemd unit must not use a mutable home-tree WorkingDirectory (ee1c9a5b)"
 else
