@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 UNIT="${ROOT_DIR}/scripts/systemd/hololive-compose.service"
 WRAPPER="${ROOT_DIR}/scripts/deploy/systemd-compose-up.sh"
+DOWN_WRAPPER="${ROOT_DIR}/scripts/deploy/systemd-compose-down.sh"
 SYSTEMD_DIR="${ROOT_DIR}/scripts/systemd"
 
 failures=0
@@ -14,6 +15,16 @@ if grep -q 'HOLOLIVE_EXEC_TREE_ENFORCE' "${WRAPPER}"; then
   record_fail "root exec-tree ownership enforcement must be fail-closed, not opt-in (4d57f81c/03e6dca8)"
 else
   pass "root exec-tree ownership enforcement has no opt-in bypass"
+fi
+
+if [[ ! -f "${DOWN_WRAPPER}" ]]; then
+  record_fail "root systemd ExecStop wrapper source is missing"
+elif grep -Eq '/(home|root/work)' "${DOWN_WRAPPER}"; then
+  record_fail "root systemd ExecStop wrapper source must not reference mutable home/root-work paths"
+elif ! grep -q 'verify-exec-tree-ownership.sh' "${DOWN_WRAPPER}"; then
+  record_fail "root systemd ExecStop wrapper must enforce root-owned deploy tree"
+else
+  pass "root systemd ExecStop wrapper source is root-exec-tree guarded"
 fi
 
 if grep -Eq '^WorkingDirectory=/home/' "${UNIT}"; then
