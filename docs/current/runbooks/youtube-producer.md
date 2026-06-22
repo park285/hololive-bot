@@ -1,8 +1,10 @@
 # Runbook: youtube-producer
 
+> 실제 tailnet 주소/호스트는 private ops evidence 참조.
+
 ## Role
 
-`youtube-producer`는 YouTube scraping/polling, outbox production, active-active AP runtime을 담당합니다. Seoul 호스트에서 `youtube-producer-b`(30015, `deploy/compose/docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. Osaka `youtube-producer-a`(30005, host `100.100.1.6`)와 Osaka2 `youtube-producer-d`(30035, host `100.100.1.2`)는 tiny VPS host-native `systemd` 런타임으로 live 운영 중이며, repo-side Docker Compose overlays는 compose 경로/계약 검증용으로 유지합니다. 모든 AP는 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
+`youtube-producer`는 YouTube scraping/polling, outbox production, active-active AP runtime을 담당합니다. Seoul 호스트에서 `youtube-producer-b`(30015, `deploy/compose/docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. Osaka `youtube-producer-a`(30005, host `<tailnet-osaka-a>`)와 Osaka2 `youtube-producer-d`(30035, host `<tailnet-osaka2-d>`)는 tiny VPS host-native `systemd` 런타임으로 live 운영 중이며, repo-side Docker Compose overlays는 compose 경로/계약 검증용으로 유지합니다. 모든 AP는 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
 
 ## Normal status
 
@@ -82,7 +84,7 @@ Active-active `/ready` fails closed on startup until a lightweight Valkey JobRun
 
 `/ready` is readiness state, not recent activity telemetry. Use the `youtube_poller_job_*` metrics above to confirm recent `acquired`, `peer_owned`, `already_completed`, renew, mark-completed, and release activity.
 
-`/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. Producer metrics are served from the plain HTTP metrics listener on `:30095`, separate from the H3 app port. Docker AP metrics are published on each host Tailscale IP only (`a` `100.100.1.6:30095`, `b` `100.100.1.5:30095`, `d` `100.100.1.2:30095`) so central Prometheus can scrape them with the shared API key header. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
+`/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. Producer metrics are served from the plain HTTP metrics listener on `:30095`, separate from the H3 app port. Docker AP metrics are published on each host Tailscale IP only (`a` `<tailnet-osaka-a>:30095`, `b` `<tailnet-seoul-b>:30095`, `d` `<tailnet-osaka2-d>:30095`) so central Prometheus can scrape them with the shared API key header. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
 
 ```bash
 # Seoul b host
@@ -196,10 +198,10 @@ Host-native AP invariants:
 - OpenBao Agent still renders the AP runtime contract under `/run/hololive-bot/`:
   `youtube-producer.env`, `ap-compose.env`, and the cert files listed in this
   runbook. Raw secrets stay out of repository files and command output.
-- PostgreSQL remains central over Tailscale with `POSTGRES_HOST=100.100.1.3`,
+- PostgreSQL remains central over Tailscale with `POSTGRES_HOST=<tailnet-central>`,
   `POSTGRES_PORT=5433`, `POSTGRES_SSLMODE=verify-full`, and
   `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem`.
-- Valkey remains central over Tailscale with `CACHE_HOST=100.100.1.3` and
+- Valkey remains central over Tailscale with `CACHE_HOST=<tailnet-central>` and
   `CACHE_PORT=6379`.
 - Each AP has a unique `YOUTUBE_PRODUCER_INSTANCE_ID` and `SERVER_PORT`.
 - Tiny VPS scraper APs are scraper-only by default:
@@ -257,14 +259,14 @@ GIN_MODE=release
 LOG_DIR=/var/log/hololive-bot
 LOG_LEVEL=info
 CACHE_SOCKET_PATH=
-CACHE_HOST=100.100.1.3
+CACHE_HOST=<tailnet-central>
 CACHE_PORT=6379
 POSTGRES_SOCKET_PATH=
-POSTGRES_HOST=100.100.1.3
+POSTGRES_HOST=<tailnet-central>
 POSTGRES_PORT=5433
 POSTGRES_SSLMODE=verify-full
 POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
-CLIPROXY_BASE_URL=http://100.100.1.3:8787/v1
+CLIPROXY_BASE_URL=http://<tailnet-central>:8787/v1
 ```
 
 Systemd unit shape:

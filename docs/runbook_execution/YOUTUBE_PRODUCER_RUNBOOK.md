@@ -1,5 +1,7 @@
 # YouTube Producer 운영 Runbook
 
+> 실제 tailnet 주소/호스트는 private ops evidence 참조.
+
 > 마지막 업데이트: 2026-06-04
 > 대상 서비스: `youtube-producer` (3-way active-active: osaka `30005`, seoul `30015`, main `30025`)
 
@@ -27,9 +29,9 @@
 - canary/legacy 선택 플래그 없이 전체 운영 채널에 동일 경로를 적용합니다.
 
 Remote AP split-host 운영 기준 (3-way active-active):
-- 토폴로지: Osaka `youtube-producer-a` (`kapu-iris-osaka-1`, `100.100.1.7`, `30005`) + Seoul `youtube-producer-b` (`100.100.1.5`, `30015`) + main `youtube-producer-c` (`100.100.1.3`, `30025`, profile `main-ap`)
-- shared state/control 호스트: `kapu` (`100.100.1.3`)
-- 원격 AP에서는 `holo-postgres`, `hololive-db-migrate`, `valkey-cache`를 올리지 않고 `100.100.1.3:5433`, `100.100.1.3:6379`, `http://100.100.1.3:8787/v1`을 사용합니다.
+- 토폴로지: Osaka `youtube-producer-a` (`<osaka-a-host>`, `<tailnet-osaka-a>`, `30005`) + Seoul `youtube-producer-b` (`<tailnet-seoul-b>`, `30015`) + main `youtube-producer-c` (`<tailnet-central>`, `30025`, profile `main-ap`)
+- shared state/control 호스트: `kapu` (`<tailnet-central>`)
+- 원격 AP에서는 `holo-postgres`, `hololive-db-migrate`, `valkey-cache`를 올리지 않고 `<tailnet-central>:5433`, `<tailnet-central>:6379`, `http://<tailnet-central>:8787/v1`을 사용합니다.
 - 원격 AP start는 항상 `docker-compose.prod.yml`에 host overlay(`docker-compose.osaka.yml` / `docker-compose.seoul.yml`)를 겹치고 `--no-deps`를 붙입니다.
 - `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true`는 host overlay(osaka/seoul)와 `main-ap` profile에서만 설정합니다. 중앙 host `kapu`의 base `youtube-producer`는 이 값이 false라서 락 획득 전에 종료되어야 합니다.
 - env 정본은 OpenBao KV이며, 원격 AP Compose는 OpenBao Agent가 렌더링한 token-free `/run/hololive-bot/ap-compose.env`와 producer 전용 `/run/hololive-bot/youtube-producer.env`를 사용합니다. 중앙 Valkey는 Tailscale IP에 publish되지만 password 인증을 필수로 사용합니다.

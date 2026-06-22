@@ -33,7 +33,7 @@ sudo -n env \
 
 > 배포 스크립트는 기존 host-network Postgres 런타임에서 live-compat overlay 없이
 > 배포하려는 경로를 fail-closed로 거부한다. live-compat overlay는 이제
-> `network_mode: host` 대신 bridge network를 유지하고 `100.100.1.3:5433`을
+> `network_mode: host` 대신 bridge network를 유지하고 `<tailnet-central>:5433`을
 > container `5432`에 명시 bind한다. 의도적 토폴로지 변경 시에만
 > `ALLOW_POSTGRES_TOPOLOGY_CHANGE=true`를 설정한다.
 

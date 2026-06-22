@@ -1,11 +1,13 @@
 # Osaka Tiny VPS Runtime Handoff
 
+> 실제 tailnet 주소/호스트는 private ops evidence 참조.
+
 ## Goal
 
 Decide and implement the runtime mode for the two Osaka YouTube scraper VPS nodes:
 
-- `osaka`: `100.100.1.6`, hostname `tailscale-osaka`, staged service `youtube-producer-a`, port `30005`
-- `osaka2`: `100.100.1.2`, hostname `yt-scraper-osaka`, staged service `youtube-producer-d`, port `30035`
+- `osaka`: `<tailnet-osaka-a>`, hostname `<osaka-a-host>`, staged service `youtube-producer-a`, port `30005`
+- `osaka2`: `<tailnet-osaka2-d>`, hostname `<osaka2-d-host>`, staged service `youtube-producer-d`, port `30035`
 
 The repo-side AP topology is prepared, but no live deploy, restart, Docker install,
 OpenBao Agent render, systemd mutation, or service start has been performed for
@@ -17,17 +19,17 @@ Collected from `kapu` on 2026-06-21 KST with read-only SSH checks:
 
 | Check | `osaka` | `osaka2` |
 |---|---|---|
-| SSH | `ubuntu` + `KR.key` works | `ubuntu` + `KR.key` works |
-| Tailscale IP | `100.100.1.6` | `100.100.1.2` |
+| SSH | `ubuntu` + `<ssh-key>` works | `ubuntu` + `<ssh-key>` works |
+| Tailscale IP | `<tailnet-osaka-a>` | `<tailnet-osaka2-d>` |
 | CPU/RAM | `2 vCPU`, `956MiB` RAM | `2 vCPU`, `956MiB` RAM |
 | Swap | none | none |
 | Disk | about `45G`, about `6%` used | about `45G`, about `6%` used |
 | `tailscaled` | active | active |
 | Docker | missing | missing |
 | `sudo -n` | works | works |
-| Central Postgres `100.100.1.3:5433` | open | open |
-| Central Valkey `100.100.1.3:6379` | open | open |
-| CLIProxy `100.100.1.3:8787` | open | open |
+| Central Postgres `<tailnet-central>:5433` | open | open |
+| Central Valkey `<tailnet-central>:6379` | open | open |
+| CLIProxy `<tailnet-central>:8787` | open | open |
 | YouTube HTTPS | `200` | `200` |
 | Holodex HTTPS | `200` | `200` |
 | `/run/hololive-bot` | missing | missing |
@@ -37,9 +39,9 @@ Collected from `kapu` on 2026-06-21 KST with read-only SSH checks:
 
 ## Repo Changes Prepared
 
-- `scripts/deploy/ap-hosts/osaka.conf` now targets `100.100.1.6`.
-- `scripts/deploy/ap-hosts/osaka2.conf` stages `youtube-producer-d` on `100.100.1.2`.
-- `deploy/compose/docker-compose.osaka.yml` metrics bind now uses `100.100.1.6`.
+- `scripts/deploy/ap-hosts/osaka.conf` now targets `<tailnet-osaka-a>`.
+- `scripts/deploy/ap-hosts/osaka2.conf` stages `youtube-producer-d` on `<tailnet-osaka2-d>`.
+- `deploy/compose/docker-compose.osaka.yml` metrics bind now uses `<tailnet-osaka-a>`.
 - `deploy/compose/docker-compose.osaka2.yml` stages Docker Compose service `youtube-producer-d`.
 - AP rsync, compose contract tests, H3 contract tests, project map, service docs, and runbook references are updated for `osaka2`.
 
@@ -106,7 +108,7 @@ Keep raw secrets, rendered env values, private keys, and unfiltered logs out of 
 ## Validation Checklist For The Next Agent
 
 - [ ] Reconfirm `git status --short` and preserve unrelated changes.
-- [ ] Reconfirm SSH: `ubuntu@100.100.1.6`, `ubuntu@100.100.1.2`.
+- [ ] Reconfirm SSH: `ubuntu@<tailnet-osaka-a>`, `ubuntu@<tailnet-osaka2-d>`.
 - [ ] Reconfirm central port reachability from both nodes: `5433`, `6379`, `8787`.
 - [ ] Decide Docker Compose vs host-native `systemd`.
 - [ ] For Docker path, dry-run both AP wrappers before live apply.
