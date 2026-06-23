@@ -69,7 +69,7 @@ func main() {
 	})
 	if logCloser != nil {
 		if err := logCloser.Close(); err != nil {
-			slog.Error("log closer close failed", slog.Any("error", err))
+			slog.New(slog.NewTextHandler(os.Stderr, nil)).Error("log closer close failed", slog.Any("error", err))
 		}
 	}
 	os.Exit(code)
