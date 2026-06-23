@@ -1,7 +1,7 @@
 # Live-status 폴백 페이싱 코드레벨 변경안
 
-작성일: 2026-06-23  
-대상 PR: #139 보강 문서  
+작성일: 2026-06-23
+대상 PR: #139 보강 문서
 기준: `Live-status 스크래퍼 폴백 페이싱 Implementation Plan v2` + PR #139 코드 리뷰 문서
 
 ## 목적
@@ -158,7 +158,7 @@ func TestDeferredErrorMatchesSentinel(t *testing.T) {
 
 ### 수정 파일
 
-`hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/ratelimiter/ratelimiter.go`  
+`hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/ratelimiter/ratelimiter.go`
 또는 새 파일: `.../ratelimiter/errors.go`
 
 ### 의도
@@ -365,9 +365,9 @@ func TestWaitWithBucketRollsBackWaitedLocalReservationOnDistributedError(t *test
 
 ### 수정 파일
 
-`hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/client.go`  
-`hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/client_http.go`  
-`hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/client_resolve.go`  
+`hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/client.go`
+`hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/client_http.go`
+`hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/client_resolve.go`
 `hololive/hololive-shared/pkg/service/youtube/scraper/scraper.go`
 
 ### `FetchPolicy` 변경
@@ -576,9 +576,9 @@ func (s *Service) convertEventsToStreams(events []*scraper.UpcomingEvent, channe
 
 ### 수정 파일
 
-`hololive/hololive-shared/pkg/config/internal/settings/config_api_operational.go`  
-`hololive/hololive-shared/pkg/config/internal/settings/config_youtube.go`  
-`hololive/hololive-shared/pkg/config/internal/settings/config.go`  
+`hololive/hololive-shared/pkg/config/internal/settings/config_api_operational.go`
+`hololive/hololive-shared/pkg/config/internal/settings/config_youtube.go`
+`hololive/hololive-shared/pkg/config/internal/settings/config.go`
 `hololive/hololive-shared/pkg/config/internal/settings/config_validation.go`
 
 ### config type
