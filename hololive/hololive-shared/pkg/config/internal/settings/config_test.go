@@ -329,6 +329,88 @@ func TestResolveHolodexAPIKey(t *testing.T) {
 	})
 }
 
+func assertHolodexLiveStatusFallbackConfig(t *testing.T, got, want HolodexLiveStatusFallbackConfig) {
+	t.Helper()
+	if got != want {
+		t.Fatalf("Holodex.LiveStatusFallback = %+v, want %+v", got, want)
+	}
+}
+
+func TestDefaultHolodexOperationalConfig_LiveStatusFallbackDefaults(t *testing.T) {
+	config := DefaultHolodexOperationalConfig()
+
+	assertHolodexLiveStatusFallbackConfig(t, config.LiveStatusFallback, HolodexLiveStatusFallbackConfig{
+		MaxPerCycle:     4,
+		WallClockBudget: 12 * time.Second,
+		DeadlineMargin:  500 * time.Millisecond,
+	})
+}
+
+func TestLoad_HolodexLiveStatusFallbackEnvOverrides(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE", "7")
+	t.Setenv("HOLODEX_LIVE_STATUS_FALLBACK_WALL_CLOCK_BUDGET_SECONDS", "18")
+	t.Setenv("HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS", "750")
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	assertHolodexLiveStatusFallbackConfig(t, config.Holodex.LiveStatusFallback, HolodexLiveStatusFallbackConfig{
+		MaxPerCycle:     7,
+		WallClockBudget: 18 * time.Second,
+		DeadlineMargin:  750 * time.Millisecond,
+	})
+}
+
+func TestLoad_HolodexLiveStatusFallbackValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     map[string]string
+		wantErr string
+	}{
+		{
+			name: "rejects zero max per cycle",
+			env: map[string]string{
+				"HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE": "0",
+			},
+			wantErr: "HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE must be positive",
+		},
+		{
+			name: "rejects zero wall clock budget",
+			env: map[string]string{
+				"HOLODEX_LIVE_STATUS_FALLBACK_WALL_CLOCK_BUDGET_SECONDS": "0",
+			},
+			wantErr: "HOLODEX_LIVE_STATUS_FALLBACK_WALL_CLOCK_BUDGET_SECONDS must be positive",
+		},
+		{
+			name: "rejects negative deadline margin",
+			env: map[string]string{
+				"HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS": "-1",
+			},
+			wantErr: "HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS must be >= 0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setRequiredLoadEnv(t)
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("Load() error = nil, want validation error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Load() error = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestKakaoConfig_IsRoomAllowed(t *testing.T) {
 	t.Run("ACL disabled allows all", func(t *testing.T) {
 		config := KakaoConfig{

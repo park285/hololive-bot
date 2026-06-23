@@ -61,6 +61,11 @@ func DefaultHolodexOperationalConfig() HolodexConfig {
 			KeyPrefix:  "ratelimit:sliding",
 			BucketBase: "holodex:api",
 		},
+		LiveStatusFallback: HolodexLiveStatusFallbackConfig{
+			MaxPerCycle:     4,
+			WallClockBudget: 12 * time.Second,
+			DeadlineMargin:  500 * time.Millisecond,
+		},
 	}
 }
 

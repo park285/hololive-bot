@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 )
 
 type fakeLiveStatusProvider struct {
@@ -172,4 +173,23 @@ func TestLivePollerPollPropagatesLiveStatusProviderError(t *testing.T) {
 	err := poller.Poll(context.Background(), "UC_LIVE")
 	require.Error(t, err)
 	require.ErrorIs(t, err, providerErr)
+}
+
+func TestLivePollerPollUsesDetailedProviderForDeferredSoftSkip(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+	provider := &fakeLiveStatusWithFailuresProvider{
+		failures: map[string]error{
+			"UC_LIVE": livestatus.NewDeferred(livestatus.DeferredReasonPerCycleCap, "UC_LIVE", nil),
+		},
+	}
+	poller := NewLivePollerWithStatusProvider(provider, nil, db)
+
+	err := poller.Poll(context.Background(), "UC_LIVE")
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"UC_LIVE"}, provider.channels)
+
+	var sessions []domain.YouTubeLiveSession
+	require.NoError(t, db.Find(&sessions).Error)
+	require.Empty(t, sessions)
 }

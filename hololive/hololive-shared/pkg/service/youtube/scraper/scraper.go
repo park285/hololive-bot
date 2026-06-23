@@ -63,6 +63,7 @@ const (
 var DefaultFetchPolicy = scraping.DefaultFetchPolicy
 var HighFrequencyChannelFetchPolicy = scraping.HighFrequencyChannelFetchPolicy
 var MetadataResolveFetchPolicy = scraping.MetadataResolveFetchPolicy
+var LiveStatusFallbackFetchPolicy = scraping.LiveStatusFallbackFetchPolicy
 var ErrRateLimited = scraping.ErrRateLimited
 var ErrForbidden = scraping.ErrForbidden
 var ErrTransientCooldown = scraping.ErrTransientCooldown
@@ -94,6 +95,7 @@ var WithBrowserSnapshotFetcher = scraping.WithBrowserSnapshotFetcher
 var NewClient = scraping.NewClient
 var ClassifyFailure = scraping.ClassifyFailure
 var IsAdmissionDeferred = scraping.IsAdmissionDeferred
+var IsDistributedRateLimiterUnavailable = scraping.IsDistributedRateLimiterUnavailable
 var NewParserDriftError = scraping.NewParserDriftError
 var IsParserDriftError = scraping.IsParserDriftError
 var WithProxy = scraping.WithProxy

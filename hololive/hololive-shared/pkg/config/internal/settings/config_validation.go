@@ -60,11 +60,35 @@ func (c *Config) validateWithRequired(validateRequired func() error) error {
 	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return err
 	}
+	return c.validateRuntimeConfigs()
+}
+
+func (c *Config) validateRuntimeConfigs() error {
 	if err := validateScraperConfig(&c.Scraper); err != nil {
+		return err
+	}
+	if err := validateHolodexConfig(&c.Holodex); err != nil {
 		return err
 	}
 	if err := validateCORSConfig(c.Environment, c.CORS); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateHolodexConfig(config *HolodexConfig) error {
+	if config == nil {
+		return nil
+	}
+	fallback := config.LiveStatusFallback
+	if fallback.MaxPerCycle <= 0 {
+		return fmt.Errorf("HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE must be positive")
+	}
+	if fallback.WallClockBudget <= 0 {
+		return fmt.Errorf("HOLODEX_LIVE_STATUS_FALLBACK_WALL_CLOCK_BUDGET_SECONDS must be positive")
+	}
+	if fallback.DeadlineMargin < 0 {
+		return fmt.Errorf("HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS must be >= 0")
 	}
 	return nil
 }

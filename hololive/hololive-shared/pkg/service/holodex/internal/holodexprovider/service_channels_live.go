@@ -25,6 +25,7 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/url"
 	"slices"
 	"strings"
@@ -34,6 +35,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -132,10 +134,22 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 	if err != nil {
 		return nil, err
 	}
-	if len(streams) == 0 && len(failed) > 0 {
+	if len(streams) == 0 && hasHardChannelsLiveStatusFailures(failed) {
 		return nil, fmt.Errorf("get channels live status: %w", joinChannelsLiveStatusFailures(channelIDs, failed))
 	}
 	return streams, nil
+}
+
+func hasHardChannelsLiveStatusFailures(failures map[string]error) bool {
+	for _, err := range failures {
+		if err == nil {
+			continue
+		}
+		if !livestatus.IsDeferred(err) {
+			return true
+		}
+	}
+	return false
 }
 
 // failed map은 fetch 실패 채널을 "방송 없음" 채널과 구분해 live session 오종료를 막는 계약이다.
@@ -185,30 +199,36 @@ func (h *Service) tryChannelsLiveStatusFallback(ctx context.Context, channelIDs 
 	}
 
 	h.logger.Warn("Using scraper fallback for channels live status", slog.Any("error", err))
-	allStreams, failed := h.getChannelsLiveStatusFromScraper(ctx, channelIDs)
-	h.logChannelsLiveStatusFallbackFailures(channelIDs, failed)
-	return h.resolveChannelsLiveStatusFallback(ctx, channelIDs, allStreams, failed)
+	result := h.getChannelsLiveStatusFromScraper(ctx, channelIDs)
+	h.logChannelsLiveStatusFallbackFailures(channelIDs, result.failed, result.deferred)
+	return h.resolveChannelsLiveStatusFallback(ctx, channelIDs, result.streams, result.failed, result.deferred)
 }
 
-func (h *Service) logChannelsLiveStatusFallbackFailures(channelIDs []string, failed map[string]error) {
-	if len(failed) == 0 {
-		return
+func (h *Service) logChannelsLiveStatusFallbackFailures(channelIDs []string, failed, deferred map[string]error) {
+	if len(failed) > 0 {
+		h.logger.Warn("Scraper live status fallback failed for some channels",
+			slog.Int("channel_count", len(channelIDs)),
+			slog.Int("failed_count", len(failed)),
+		)
 	}
-	h.logger.Warn("Scraper live status fallback failed for some channels",
-		slog.Int("channel_count", len(channelIDs)),
-		slog.Int("failed_count", len(failed)),
-	)
+	if len(deferred) > 0 {
+		h.logger.Debug("Scraper live status fallback deferred for some channels",
+			slog.Int("channel_count", len(channelIDs)),
+			slog.Int("deferred_count", len(deferred)),
+		)
+	}
 }
 
-func (h *Service) resolveChannelsLiveStatusFallback(ctx context.Context, channelIDs []string, allStreams []*domain.Stream, failed map[string]error) ([]*domain.Stream, map[string]error, error, bool) {
+func (h *Service) resolveChannelsLiveStatusFallback(ctx context.Context, channelIDs []string, allStreams []*domain.Stream, failed, deferred map[string]error) ([]*domain.Stream, map[string]error, error, bool) {
 	if sourceLevelErr := firstChannelsLiveStatusSourceLevelError(channelIDs, failed); sourceLevelErr != nil {
 		return nil, nil, fmt.Errorf("fetch channels live status from scraper: %w", sourceLevelErr), false
 	}
 	if len(failed) > 0 && len(failed) == len(channelIDs) {
 		return nil, nil, fmt.Errorf("fetch channels live status from scraper: %w", joinChannelsLiveStatusFailures(channelIDs, failed)), false
 	}
-	if len(failed) > 0 {
-		return allStreams, failed, nil, true
+	unresolved := mergeChannelsLiveStatusFailures(failed, deferred)
+	if len(unresolved) > 0 {
+		return allStreams, unresolved, nil, true
 	}
 	if len(allStreams) == 0 {
 		return nil, nil, nil, false
@@ -216,6 +236,16 @@ func (h *Service) resolveChannelsLiveStatusFallback(ctx context.Context, channel
 
 	h.cacheManager.SetChannelsLiveStatusStreams(ctx, channelIDs, allStreams, 30*time.Second)
 	return allStreams, nil, nil, true
+}
+
+func mergeChannelsLiveStatusFailures(failed, deferred map[string]error) map[string]error {
+	if len(failed) == 0 && len(deferred) == 0 {
+		return nil
+	}
+	merged := make(map[string]error, len(failed)+len(deferred))
+	maps.Copy(merged, deferred)
+	maps.Copy(merged, failed)
+	return merged
 }
 
 func firstChannelsLiveStatusSourceLevelError(channelIDs []string, failed map[string]error) error {
@@ -317,23 +347,4 @@ func (h *Service) hydrateIndieStreamChannel(stream *domain.Stream, indieRequeste
 	if stream.Channel.Org == nil || *stream.Channel.Org == "" {
 		stream.Channel.Org = &indie
 	}
-}
-
-func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelIDs []string) (result0 []*domain.Stream, result1 map[string]error) {
-	allStreams := make([]*domain.Stream, 0, len(channelIDs))
-	var failed map[string]error
-
-	for _, channelID := range channelIDs {
-		streams, err := h.scraper.FetchFromYouTubeProducer(ctx, channelID)
-		if err != nil {
-			if failed == nil {
-				failed = make(map[string]error, 1)
-			}
-			failed[channelID] = err
-			continue
-		}
-		allStreams = append(allStreams, streams...)
-	}
-
-	return allStreams, failed
 }

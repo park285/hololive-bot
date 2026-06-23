@@ -73,9 +73,7 @@ func (r *RateLimiter) tryReserveLocalAdmission(ctx context.Context) (localWaitRe
 }
 
 func (r *RateLimiter) reserveLocalAdmissionLocked(next time.Time) localWaitReservation {
-	previous := r.lastTime
-	r.commitLocalWait(next)
-	return localWaitReservation{prevLastTime: previous, seq: r.seq}
+	return r.commitLocalReservationLocked(next)
 }
 
 func (r *RateLimiter) tryReserveDistributedAdmission(ctx context.Context, bucket string) (AdmissionDecision, error) {
@@ -85,7 +83,7 @@ func (r *RateLimiter) tryReserveDistributedAdmission(ctx context.Context, bucket
 
 	decision, err := r.distributed.Allow(ctx, bucket, r.distributedLimit, r.distributedWindow)
 	if err != nil {
-		return AdmissionDecision{}, fmt.Errorf("distributed rate limiter allow failed: %w", err)
+		return AdmissionDecision{}, fmt.Errorf("%w: distributed rate limiter allow failed: %w", ErrDistributedLimiterUnavailable, err)
 	}
 	if decision.Allowed {
 		return AdmissionDecision{Allowed: true}, nil

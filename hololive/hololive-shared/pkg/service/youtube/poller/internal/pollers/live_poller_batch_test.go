@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 )
 
 func TestLivePollerPollBatchUsesSingleProviderCallAndPersistsPerChannel(t *testing.T) {
@@ -109,6 +110,25 @@ func TestLivePollerPollBatchKeepsSessionsForFetchFailedChannels(t *testing.T) {
 	var sessionA domain.YouTubeLiveSession
 	require.NoError(t, db.First(&sessionA, "video_id = ?", "live-a").Error)
 	require.Equal(t, domain.LiveStatusLive, sessionA.Status)
+}
+
+func TestLivePollerPollBatchTreatsDeferredFailuresAsSoftSkips(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+	provider := &fakeLiveStatusWithFailuresProvider{
+		failures: map[string]error{
+			"UC_A": livestatus.NewDeferred(livestatus.DeferredReasonPerCycleCap, "UC_A", nil),
+			"UC_B": livestatus.NewDeferred(livestatus.DeferredReasonAdmissionDeferred, "UC_B", nil),
+		},
+	}
+	poller := NewLivePollerWithStatusProvider(provider, nil, db)
+
+	errs := poller.PollBatch(context.Background(), []string{"UC_A", "UC_B"})
+
+	require.Empty(t, errs)
+
+	var sessions []domain.YouTubeLiveSession
+	require.NoError(t, db.Find(&sessions).Error)
+	require.Empty(t, sessions)
 }
 
 func TestLivePollerPollBatchAttributesEmptyChannelIDStreamToSingleChannel(t *testing.T) {

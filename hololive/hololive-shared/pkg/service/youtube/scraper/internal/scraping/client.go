@@ -40,6 +40,7 @@ type FetchPolicy struct {
 	BaseDelay         time.Duration
 	Jitter            time.Duration
 	MaxDelay          time.Duration
+	AdmissionBlocking bool
 }
 
 func defaultFetchPerAttemptTimeout(fallback time.Duration) time.Duration {
@@ -64,6 +65,11 @@ var (
 	MetadataResolveFetchPolicy = FetchPolicy{
 		MaxAttempts:       1,
 		PerAttemptTimeout: 10 * time.Second,
+	}
+	LiveStatusFallbackFetchPolicy = FetchPolicy{
+		MaxAttempts:       1,
+		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
+		AdmissionBlocking: true,
 	}
 )
 

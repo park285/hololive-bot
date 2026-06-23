@@ -106,7 +106,7 @@ func buildYouTubeProducerResources(ctx context.Context, appConfig *config.Config
 
 	scraperClient := polling.BuildSharedClient(&appConfig.Scraper, infra.Cache, sharedRL)
 	scraperService := sharedproviders.ProvideScraperServiceWithYouTubeProducer(infra.Cache, memberServiceAdapter, scraperClient, logger)
-	holodexService, err := sharedproviders.ProvideHolodexService(appConfig.Holodex.BaseURL, appConfig.Holodex.APIKey, infra.Cache, scraperService, logger)
+	holodexService, err := sharedproviders.ProvideHolodexServiceWithConfig(&appConfig.Holodex, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}

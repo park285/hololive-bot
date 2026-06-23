@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/park285/shared-go/pkg/httputil"
 
@@ -34,6 +35,10 @@ type Service struct {
 	filter       *streammapping.StreamFilter
 	retry        *retryScheduler
 	concurrency  config.HolodexConcurrencyConfig
+
+	liveFallbackMu     sync.Mutex
+	liveFallbackCursor int
+	liveStatusFallback config.HolodexLiveStatusFallbackConfig
 }
 
 func NewHolodexService(baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
@@ -66,16 +71,35 @@ func NewHolodexServiceWithConfig(holodexCfg *config.HolodexConfig, baseURL, apiK
 	}
 	requester := apiclient.NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter, holodexCfg)
 	service := &Service{
-		requester:    requester,
-		scraper:      scraperService,
-		logger:       logger,
-		cacheManager: NewCacheManager(cacheClient, logger),
-		mapper:       streammapping.NewStreamMapper(logger),
-		filter:       streammapping.NewStreamFilter(logger),
-		concurrency:  holodexCfg.Concurrency,
+		requester:          requester,
+		scraper:            scraperService,
+		logger:             logger,
+		cacheManager:       NewCacheManager(cacheClient, logger),
+		mapper:             streammapping.NewStreamMapper(logger),
+		filter:             streammapping.NewStreamFilter(logger),
+		concurrency:        holodexCfg.Concurrency,
+		liveStatusFallback: holodexCfg.LiveStatusFallback,
 	}
 	service.retry = newRetryScheduler(constants.RetrySchedulerConfig.Delay, constants.RetrySchedulerConfig.Timeout, constants.RetrySchedulerConfig.MaxSize, logger)
 	return service, nil
+}
+
+func (h *Service) effectiveLiveStatusFallbackConfig() config.HolodexLiveStatusFallbackConfig {
+	d := config.DefaultHolodexOperationalConfig().LiveStatusFallback
+	if h == nil {
+		return d
+	}
+	cfg := h.liveStatusFallback
+	if cfg.MaxPerCycle <= 0 {
+		cfg.MaxPerCycle = d.MaxPerCycle
+	}
+	if cfg.WallClockBudget <= 0 {
+		cfg.WallClockBudget = d.WallClockBudget
+	}
+	if cfg.DeadlineMargin < 0 {
+		cfg.DeadlineMargin = d.DeadlineMargin
+	}
+	return cfg
 }
 
 func (h *Service) SetScraperProxyEnabled(enabled bool) bool {

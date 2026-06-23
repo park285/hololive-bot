@@ -182,5 +182,9 @@ func liveBatchYouTubeScraperFallbackUnits(channelCount int) float64 {
 	if channelCount < 1 {
 		channelCount = 1
 	}
-	return float64(channelCount * scraper.FetchPageMaxAttempts)
+	attempts := scraper.LiveStatusFallbackFetchPolicy.MaxAttempts
+	if attempts <= 0 {
+		attempts = scraper.FetchPageMaxAttempts
+	}
+	return float64(channelCount * attempts)
 }

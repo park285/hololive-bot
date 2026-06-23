@@ -97,12 +97,20 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string
 	return string(resp.Body), nil
 }
 
-func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string) error {
+func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string, policy ...FetchPolicy) error {
 	if cooldownRemaining := c.backoffState.HardCooldownRemaining(); cooldownRemaining > 0 {
 		return fmt.Errorf("in cooldown for %v: %w", cooldownRemaining.Round(time.Second), ErrRateLimited)
 	}
 
+	resolvedPolicy := resolveFetchPolicy(policy...)
 	bucket := distributedBucketFromURL(pageURL)
+	if resolvedPolicy.AdmissionBlocking {
+		if err := c.rateLimiter.WaitWithBucket(ctx, bucket); err != nil {
+			return fmt.Errorf("rate limiter wait admission failed: %w", err)
+		}
+		return nil
+	}
+
 	decision, err := c.rateLimiter.TryReserveWithBucket(ctx, bucket)
 	if err != nil {
 		return fmt.Errorf("rate limiter admission failed: %w", err)

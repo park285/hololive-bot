@@ -21,7 +21,6 @@
 package providers
 
 import (
-	"fmt"
 	"log/slog"
 	"strings"
 
@@ -62,21 +61,6 @@ func ProvideScraperServiceWithYouTubeProducer(
 	logger *slog.Logger,
 ) *holodex.ScraperService {
 	return holodex.NewScraperServiceWithYouTubeProducer(cacheClient, members, youtubeProducer, logger)
-}
-
-// ProvideHolodexService - Holodex API 서비스 생성
-func ProvideHolodexService(
-	baseURL string,
-	apiKey string,
-	cacheClient cache.Client,
-	scraperService *holodex.ScraperService,
-	logger *slog.Logger,
-) (*holodex.Service, error) {
-	service, err := holodex.NewHolodexService(baseURL, apiKey, cacheClient, scraperService, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create holodex service: %w", err)
-	}
-	return service, nil
 }
 
 // ProvideYouTubeStatsRepository - YouTube 통계 저장소 생성

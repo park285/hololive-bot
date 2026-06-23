@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -77,11 +78,11 @@ func (p *LivePoller) ProxyEnabled() bool {
 }
 
 func (p *LivePoller) Poll(ctx context.Context, channelID string) error {
-	streams, err := p.fetchLiveStreams(ctx, channelID)
+	streams, failures, err := p.fetchLiveStreams(ctx, channelID)
 	if err != nil {
 		return fmt.Errorf("failed to get live streams: %w", err)
 	}
-	return p.pollLiveStreams(ctx, channelID, streams, time.Now())
+	return p.pollBatchChannel(ctx, channelID, streams, failures, time.Now())
 }
 
 func (p *LivePoller) PollBatch(ctx context.Context, channelIDs []string) map[string]error {
@@ -139,6 +140,9 @@ func (p *LivePoller) pollBatchChannel(
 		return ctxErr
 	}
 	if fetchErr, ok := failures[channelID]; ok {
+		if livestatus.IsDeferred(fetchErr) {
+			return nil
+		}
 		return fmt.Errorf("failed to get live streams: %w", fetchErr)
 	}
 	return p.pollLiveStreams(ctx, channelID, streams, now)
@@ -226,19 +230,23 @@ func liveBatchErrorForAll(channelIDs []string, err error) map[string]error {
 	return errs
 }
 
-func (p *LivePoller) fetchLiveStreams(ctx context.Context, channelID string) ([]*domain.Stream, error) {
+func (p *LivePoller) fetchLiveStreams(ctx context.Context, channelID string) ([]*domain.Stream, map[string]error, error) {
 	if p.liveStatusProvider != nil {
-		return p.liveStatusProvider.GetChannelsLiveStatus(ctx, []string{channelID})
+		if detailed, ok := p.liveStatusProvider.(LiveStatusWithFailuresProvider); ok {
+			return detailed.GetChannelsLiveStatusWithFailures(ctx, []string{channelID})
+		}
+		streams, err := p.liveStatusProvider.GetChannelsLiveStatus(ctx, []string{channelID})
+		return streams, nil, err
 	}
 	if p.client == nil {
-		return nil, errors.New("live poller has no status provider or scraper client")
+		return nil, nil, errors.New("live poller has no status provider or scraper client")
 	}
 
 	events, err := p.client.GetUpcomingEvents(ctx, channelID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return streamsFromUpcomingEvents(channelID, events), nil
+	return streamsFromUpcomingEvents(channelID, events), nil, nil
 }
 
 func (p *LivePoller) pollStream(ctx context.Context, channelID string, stream *domain.Stream, now time.Time) error {

@@ -10,6 +10,7 @@ type Config = settings.Config
 type ConsensusLLMConfig = settings.ConsensusLLMConfig
 type ExaConfig = settings.ExaConfig
 type HolodexConfig = settings.HolodexConfig
+type HolodexLiveStatusFallbackConfig = settings.HolodexLiveStatusFallbackConfig
 type IngestionConfig = settings.IngestionConfig
 type IrisConfig = settings.IrisConfig
 type KakaoConfig = settings.KakaoConfig

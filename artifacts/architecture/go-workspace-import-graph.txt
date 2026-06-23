@@ -605,12 +605,14 @@ github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/cache
+github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/ratelimit
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/youtube
+github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/youtube/livestatus
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/youtube/poller
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
@@ -751,6 +753,7 @@ github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> 
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider/streammapping
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/service/ratelimit
+github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/service/youtube/livestatus
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/shared-go/pkg/httputil
@@ -933,6 +936,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> g
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/alarm/keys
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
+github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/youtube/livestatus
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/youtube/logschema
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal

@@ -11,6 +11,13 @@ type HolodexConfig struct {
 	Transport            HolodexTransportConfig
 	Concurrency          HolodexConcurrencyConfig
 	DistributedRateLimit DistributedRateLimitConfig
+	LiveStatusFallback   HolodexLiveStatusFallbackConfig
+}
+
+type HolodexLiveStatusFallbackConfig struct {
+	MaxPerCycle     int
+	WallClockBudget time.Duration
+	DeadlineMargin  time.Duration
 }
 
 type YouTubeConfig struct {

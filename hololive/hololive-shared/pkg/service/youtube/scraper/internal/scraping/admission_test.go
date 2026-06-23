@@ -30,6 +30,33 @@ func TestFetchPagePreflight_RateLimitDenialReturnsAdmissionDeferred(t *testing.T
 	require.NotEmpty(t, deferred.Bucket)
 }
 
+func TestFetchPagePreflightBlockingWaitsInsteadOfDeferring(t *testing.T) {
+	limiter := NewRateLimiter(30 * time.Millisecond)
+	client := NewClient(WithRateLimiter(limiter))
+	pageURL := "https://www.youtube.com/channel/UC123"
+
+	require.NoError(t, client.fetchPagePreflight(context.Background(), pageURL, DefaultFetchPolicy))
+	err := client.fetchPagePreflight(context.Background(), pageURL, DefaultFetchPolicy)
+	require.Error(t, err)
+	require.True(t, IsAdmissionDeferred(err), "err = %v", err)
+
+	started := time.Now()
+	require.NoError(t, client.fetchPagePreflight(context.Background(), pageURL, LiveStatusFallbackFetchPolicy))
+	if elapsed := time.Since(started); elapsed < 20*time.Millisecond {
+		t.Fatalf("blocking preflight returned too fast: %s", elapsed)
+	}
+}
+
+func TestResolveFetchPolicyPropagatesAdmissionBlocking(t *testing.T) {
+	resolved := resolveFetchPolicy(LiveStatusFallbackFetchPolicy)
+	if !resolved.AdmissionBlocking {
+		t.Fatal("AdmissionBlocking not propagated")
+	}
+	if resolved.MaxAttempts != 1 {
+		t.Fatalf("MaxAttempts = %d, want 1", resolved.MaxAttempts)
+	}
+}
+
 func TestClassifyFailure_AdmissionDeferred(t *testing.T) {
 	delay := 3 * time.Second
 	err := fmt.Errorf("wrapped: %w", &AdmissionDeferredError{

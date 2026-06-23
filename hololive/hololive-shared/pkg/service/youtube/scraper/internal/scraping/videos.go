@@ -19,9 +19,17 @@ var (
 )
 
 func (c *Client) GetUpcomingEvents(ctx context.Context, channelID string) ([]*UpcomingEvent, error) {
+	return c.getUpcomingEvents(ctx, channelID)
+}
+
+func (c *Client) GetUpcomingEventsWaitAdmission(ctx context.Context, channelID string) ([]*UpcomingEvent, error) {
+	return c.getUpcomingEvents(ctx, channelID, LiveStatusFallbackFetchPolicy)
+}
+
+func (c *Client) getUpcomingEvents(ctx context.Context, channelID string, policy ...FetchPolicy) ([]*UpcomingEvent, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
 
-	html, err := c.fetchChannelSourcePage(ctx, "upcoming_events", channelID, url, FailureSourceHTML)
+	html, err := c.fetchChannelSourcePage(ctx, "upcoming_events", channelID, url, FailureSourceHTML, policy...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch channel page: %w", err)
 	}

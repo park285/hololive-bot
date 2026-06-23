@@ -92,7 +92,7 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 	var result string
 
 	err := retry.WithRetry(ctx, c.fetchPageRetryOptions(pageURL, resolvedPolicy), func(ctx context.Context) error {
-		if err := c.fetchPagePreflight(ctx, pageURL); err != nil {
+		if err := c.fetchPagePreflight(ctx, pageURL, resolvedPolicy); err != nil {
 			return err
 		}
 
@@ -136,6 +136,7 @@ func resolveFetchPolicy(policy ...FetchPolicy) FetchPolicy {
 	if override.MaxDelay > 0 {
 		resolved.MaxDelay = override.MaxDelay
 	}
+	resolved.AdmissionBlocking = override.AdmissionBlocking
 	return resolved
 }
 

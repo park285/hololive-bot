@@ -286,6 +286,11 @@ func loadHolodexConfig() HolodexConfig {
 			KeyPrefix:  sharedenv.String("HOLODEX_DISTRIBUTED_RATELIMIT_KEY_PREFIX", d.DistributedRateLimit.KeyPrefix),
 			BucketBase: sharedenv.String("HOLODEX_DISTRIBUTED_RATELIMIT_BUCKET_BASE", d.DistributedRateLimit.BucketBase),
 		},
+		LiveStatusFallback: HolodexLiveStatusFallbackConfig{
+			MaxPerCycle:     sharedenv.Int("HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE", d.LiveStatusFallback.MaxPerCycle),
+			WallClockBudget: time.Duration(sharedenv.Int("HOLODEX_LIVE_STATUS_FALLBACK_WALL_CLOCK_BUDGET_SECONDS", int(d.LiveStatusFallback.WallClockBudget/time.Second))) * time.Second,
+			DeadlineMargin:  time.Duration(sharedenv.Int("HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS", int(d.LiveStatusFallback.DeadlineMargin/time.Millisecond))) * time.Millisecond,
+		},
 	}
 }
 

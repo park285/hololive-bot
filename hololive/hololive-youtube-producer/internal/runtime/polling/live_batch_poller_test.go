@@ -36,13 +36,13 @@ func TestAppendLivePollerRegistrationsBatchesWhenProviderEnabled(t *testing.T) {
 	require.Equal(t, []string{providers.SyntheticGlobalPollerChannelID}, registrations[0].ChannelIDs)
 	require.Equal(t, 1.0, registrations[0].BudgetProfile.SourceUnits[poller.BudgetSourceHolodexLive])
 	require.Zero(t, registrations[0].BudgetProfile.SourceUnits[poller.BudgetSourceYouTubeScraper])
-	require.Equal(t, float64(defaultLiveBatchChannelChunkSize*scraper.FetchPageMaxAttempts), registrations[0].BudgetProfile.FallbackSourceUnits[poller.BudgetSourceYouTubeScraper])
+	require.Equal(t, float64(defaultLiveBatchChannelChunkSize*scraper.LiveStatusFallbackFetchPolicy.MaxAttempts), registrations[0].BudgetProfile.FallbackSourceUnits[poller.BudgetSourceYouTubeScraper])
 	require.Equal(t, float64(defaultLiveBatchChannelChunkSize), registrations[0].BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
-	require.Equal(t, float64(defaultLiveBatchChannelChunkSize*scraper.FetchPageMaxAttempts), registrations[0].WorstCaseRequestUnitsPerRun)
+	require.Equal(t, float64(defaultLiveBatchChannelChunkSize*scraper.LiveStatusFallbackFetchPolicy.MaxAttempts), registrations[0].WorstCaseRequestUnitsPerRun)
 }
 
 func TestSummarizeBudgetIncludesLiveBatchFallbackInYouTubeScraperFaultEnvelope(t *testing.T) {
-	fallbackUnits := float64(30 * scraper.FetchPageMaxAttempts)
+	fallbackUnits := float64(30 * scraper.LiveStatusFallbackFetchPolicy.MaxAttempts)
 	base := sourceCooldownTestPoller{name: "live"}
 	registration := providers.NewChannelPollerRegistration(base, poller.PriorityHigh, time.Minute).
 		WithChannelIDs([]string{providers.SyntheticGlobalPollerChannelID}).

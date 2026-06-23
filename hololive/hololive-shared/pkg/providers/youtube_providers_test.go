@@ -5,14 +5,21 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -61,6 +68,12 @@ type providerBudgetObservation struct {
 	deadline time.Duration
 }
 
+type providerRoundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f providerRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 type testMemberDataProvider struct {
 	members []*domain.Member
 }
@@ -78,6 +91,60 @@ func (p testMemberDataProvider) WithContext(context.Context) domain.MemberDataPr
 }
 func (p testMemberDataProvider) FindMembersByName(name string) []*domain.Member   { return nil }
 func (p testMemberDataProvider) FindMembersByAlias(alias string) []*domain.Member { return nil }
+
+func TestProvideHolodexServiceWithConfigPassesLiveStatusFallbackConfig(t *testing.T) {
+	t.Parallel()
+
+	holodexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/live" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(holodexServer.Close)
+
+	var youtubeRequests atomic.Int32
+	youtubeClient := scraper.NewClient(
+		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
+		scraper.WithHTTPClient(&http.Client{
+			Transport: providerRoundTripFunc(func(*http.Request) (*http.Response, error) {
+				youtubeRequests.Add(1)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("<html></html>")),
+				}, nil
+			}),
+		}),
+	)
+	scraperService := ProvideScraperServiceWithYouTubeProducer(cachemocks.NewLenientClient(), nil, youtubeClient, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	holodexCfg := config.DefaultHolodexOperationalConfig()
+	holodexCfg.BaseURL = holodexServer.URL
+	holodexCfg.APIKey = "test-key"
+	holodexCfg.DistributedRateLimit.Enabled = false
+	holodexCfg.LiveStatusFallback = config.HolodexLiveStatusFallbackConfig{
+		MaxPerCycle:     1,
+		WallClockBudget: time.Second,
+		DeadlineMargin:  0,
+	}
+
+	service, err := ProvideHolodexServiceWithConfig(&holodexCfg, cachemocks.NewLenientClient(), scraperService, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("ProvideHolodexServiceWithConfig() error = %v", err)
+	}
+
+	_, failed, err := service.GetChannelsLiveStatusWithFailures(context.Background(), []string{"c1", "c2"})
+	if err != nil {
+		t.Fatalf("GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
+	}
+	if got := youtubeRequests.Load(); got != 1 {
+		t.Fatalf("youtube requests = %d, want 1 from configured MaxPerCycle", got)
+	}
+	if got := livestatus.ReasonOf(failed["c2"]); got != livestatus.DeferredReasonPerCycleCap {
+		t.Fatalf("failed[c2] reason = %q, want %q", got, livestatus.DeferredReasonPerCycleCap)
+	}
+}
 
 func TestEstimatedRequestsPerMinute(t *testing.T) {
 	t.Parallel()
