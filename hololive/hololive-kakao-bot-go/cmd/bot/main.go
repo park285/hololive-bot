@@ -21,6 +21,8 @@
 package main
 
 import (
+	"io"
+	"log/slog"
 	"os"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -36,7 +38,8 @@ import (
 var Version = "dev"
 
 func main() {
-	os.Exit(bootstrap.Run(bootstrap.Options[*config.Config, *app.BotRuntime]{
+	var logCloser io.Closer
+	code := bootstrap.Run(bootstrap.Options[*config.Config, *app.BotRuntime]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
@@ -44,16 +47,18 @@ func main() {
 		},
 		LoadConfig:             config.Load,
 		LoadConfigErrorMessage: "Failed to load config",
-		LoggerConfig: func(appConfig *config.Config) sharedlogging.Config {
-			return sharedlogging.Config{
+		NewLogger: func(appConfig *config.Config) (*slog.Logger, error) {
+			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
+				Level:      appConfig.Logging.Level,
 				Dir:        appConfig.Logging.Dir,
 				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
-			}
+			}, "bot.log", sharedlogging.Options{AsyncStdout: true})
+			logCloser = closer
+			return logger, err
 		},
-		LoggerFileName: "bot.log",
 		LoggerLevel: func(appConfig *config.Config) string {
 			return appConfig.Logging.Level
 		},
@@ -61,5 +66,11 @@ func main() {
 		BuildTimeout:      constants.AppTimeout.Build,
 		BuildRuntime:      app.BuildRuntime,
 		BuildErrorMessage: "Failed to assemble application services",
-	}))
+	})
+	if logCloser != nil {
+		if err := logCloser.Close(); err != nil {
+			slog.Error("log closer close failed", slog.Any("error", err))
+		}
+	}
+	os.Exit(code)
 }

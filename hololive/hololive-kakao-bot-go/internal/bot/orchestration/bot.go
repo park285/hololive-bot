@@ -35,6 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/stringutil"
 	"github.com/park285/shared-go/pkg/workerpool"
 
@@ -57,7 +58,7 @@ type Bot struct {
 	irisBaseURL           string
 	notification          config.NotificationConfig
 	logger                *slog.Logger
-	irisClient            irisClient
+	irisClient            iris.BotClient
 	messageAdapter        *adapter.MessageAdapter
 	formatter             *adapter.ResponseFormatter
 	cache                 cache.Client

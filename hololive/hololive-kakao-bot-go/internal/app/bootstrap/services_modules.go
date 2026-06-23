@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
@@ -26,7 +27,7 @@ func BuildBotDependencyModules(
 	holodexService *holodex.Service,
 	messageAdapter *adapter.MessageAdapter,
 	formatter *adapter.ResponseFormatter,
-	irisClient BotIrisClient,
+	irisClient iris.BotClient,
 	profileService *member.ProfileService,
 	memberMatcher *matcher.Matcher,
 	youTubeStack *providers.YouTubeStack,
@@ -61,7 +62,7 @@ func buildBotCoreModule(appConfig *config.Config, logger *slog.Logger) BotCoreMo
 }
 
 func buildBotMessagingModule(
-	irisClient BotIrisClient,
+	irisClient iris.BotClient,
 	messageAdapter *adapter.MessageAdapter,
 	formatter *adapter.ResponseFormatter,
 ) BotMessagingModule {

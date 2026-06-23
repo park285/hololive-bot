@@ -76,7 +76,7 @@ func provideBotDependenciesFromStacks(
 	integrationServices *CoreIntegrationServices,
 	messageAdapter *adapter.MessageAdapter,
 	formatter *adapter.ResponseFormatter,
-	irisClient BotIrisClient,
+	irisClient iris.BotClient,
 	logger *slog.Logger,
 ) *bot.Dependencies {
 	modules := BuildBotDependencyModules(

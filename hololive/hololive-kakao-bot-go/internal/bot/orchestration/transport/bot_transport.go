@@ -56,11 +56,11 @@ type acceptedMessageSender interface {
 }
 
 type CommandTransport struct {
-	irisClient IrisTransportClient
+	irisClient iris.BotClient
 	formatter  *adapter.ResponseFormatter
 }
 
-func NewCommandTransport(irisClient IrisTransportClient, formatter *adapter.ResponseFormatter) *CommandTransport {
+func NewCommandTransport(irisClient iris.BotClient, formatter *adapter.ResponseFormatter) *CommandTransport {
 	return &CommandTransport{
 		irisClient: irisClient,
 		formatter:  formatter,

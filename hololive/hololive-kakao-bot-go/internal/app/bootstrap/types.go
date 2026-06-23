@@ -71,8 +71,6 @@ type CoreIntegrationServices struct {
 	WorkerPool           *workerpool.QueuedPool
 }
 
-type BotIrisClient = iris.BotClient
-
 type BotCoreModule struct {
 	BotSelfUser           string
 	IrisBaseURL           string
@@ -83,7 +81,7 @@ type BotCoreModule struct {
 }
 
 type BotMessagingModule struct {
-	Client         BotIrisClient
+	Client         iris.BotClient
 	MessageAdapter *adapter.MessageAdapter
 	Formatter      *adapter.ResponseFormatter
 }

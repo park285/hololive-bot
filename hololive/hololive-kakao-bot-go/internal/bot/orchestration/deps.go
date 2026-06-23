@@ -33,6 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
@@ -51,7 +52,7 @@ type Dependencies struct {
 	CalendarImageCacheDir  string
 	CalendarEntryCacheTTL  time.Duration
 	Logger                 *slog.Logger
-	Client                 irisClient
+	Client                 iris.BotClient
 	MessageAdapter         *adapter.MessageAdapter
 	Formatter              *adapter.ResponseFormatter
 	Cache                  cache.Client
@@ -86,7 +87,7 @@ type coreDependencies struct {
 }
 
 type messagingDependencies struct {
-	client         irisClient
+	client         iris.BotClient
 	messageAdapter *adapter.MessageAdapter
 	formatter      *adapter.ResponseFormatter
 }

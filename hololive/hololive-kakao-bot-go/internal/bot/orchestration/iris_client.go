@@ -20,10 +20,4 @@
 
 package orchestration
 
-import (
-	"github.com/park285/iris-client-go/iris"
-)
-
 const serviceNameIris = "iris"
-
-type irisClient = iris.BotClient
