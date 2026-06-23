@@ -35,7 +35,7 @@ func main() {
 }
 
 func runBody(url string) {
-	body, err := healthprobe.FetchURL(url)
+	body, err := healthprobe.FetchURLInternal(url)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -69,11 +69,11 @@ func fetchBodyWithAPIKeyEnv(envName, url string) ([]byte, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, fmt.Errorf("%s is empty or not set", envName)
 	}
-	return healthprobe.FetchURLWithHeaders(url, map[string]string{common.APIKeyHeader: apiKey})
+	return healthprobe.FetchURLWithHeadersInternal(url, map[string]string{common.APIKeyHeader: apiKey})
 }
 
 func runCheck(url string) {
-	if err := healthprobe.CheckURL(url); err != nil {
+	if err := healthprobe.CheckURLInternal(url); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

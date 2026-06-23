@@ -92,14 +92,18 @@ done
 
 export COMPOSE_ENV_FILE=/run/hololive-bot/compose.env
 
-./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  up -d
+base_files=(-f deploy/compose/docker-compose.prod.yml)
+main_ap_files=(-f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml)
+if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" == "1" ]]; then
+  base_files+=(-f deploy/compose/docker-compose.live-compat.yml)
+  main_ap_files=(
+    -f deploy/compose/docker-compose.prod.yml
+    -f deploy/compose/docker-compose.live-compat.yml
+    -f deploy/compose/docker-compose.main-ap.yml
+    -f deploy/compose/docker-compose.main-ap.live-compat.yml
+  )
+fi
 
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  -f deploy/compose/docker-compose.main-ap.yml \
-  -f deploy/compose/docker-compose.main-ap.live-compat.yml \
-  up -d youtube-producer-c
+./scripts/deploy/compose.sh "${base_files[@]}" up -d
+
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh "${main_ap_files[@]}" up -d youtube-producer-c

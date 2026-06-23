@@ -12,7 +12,7 @@ func main() {
 	if len(os.Args) > 1 {
 		url = os.Args[1]
 	}
-	if err := healthprobe.CheckURL(url); err != nil {
+	if err := healthprobe.CheckURLInternal(url); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

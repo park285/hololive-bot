@@ -48,9 +48,17 @@ fi
 
 export COMPOSE_ENV_FILE=/run/hololive-bot/compose.env
 
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  -f deploy/compose/docker-compose.main-ap.yml \
-  -f deploy/compose/docker-compose.main-ap.live-compat.yml \
-  down
+down_files=(
+  -f deploy/compose/docker-compose.prod.yml
+  -f deploy/compose/docker-compose.main-ap.yml
+)
+if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" == "1" ]]; then
+  down_files=(
+    -f deploy/compose/docker-compose.prod.yml
+    -f deploy/compose/docker-compose.live-compat.yml
+    -f deploy/compose/docker-compose.main-ap.yml
+    -f deploy/compose/docker-compose.main-ap.live-compat.yml
+  )
+fi
+
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh "${down_files[@]}" down

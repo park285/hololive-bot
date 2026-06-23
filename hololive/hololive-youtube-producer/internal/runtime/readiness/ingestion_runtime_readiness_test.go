@@ -350,6 +350,88 @@ func TestStateResponseSourceCooldownExpiresAfterTTL(t *testing.T) {
 	}
 }
 
+func TestPublicResponseOmitsOperationalDiagnostics(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:       true,
+		ActiveActiveEnabled:  true,
+		ActiveActiveInstance: "youtube-producer-a",
+		GlobalBudgetEnabled:  true,
+		ScraperFetcherEngine: "goscrapy",
+	})
+	state.MarkRunning()
+	state.MarkLeaseAvailable()
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
+
+	statusCode, payload := state.PublicResponse()
+
+	if statusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusOK)
+	}
+	if payload["status"] != "ready" {
+		t.Fatalf("status = %v, want ready", payload["status"])
+	}
+
+	sensitiveKeys := []string{
+		"instance_id",
+		"job_lease_enabled",
+		"valkey_available",
+		"budget_backend_available",
+		"budget_exhausted",
+		"source_cooldown",
+		"budget_cleanup_incomplete",
+		"affected_sources",
+		"scraping_paused",
+		"reason",
+		"mode",
+		"active_active",
+		"runtime",
+		"scraper_fetcher_engine",
+		"youtube_enabled",
+		"photo_sync_enabled",
+		"http_server_started",
+		"shutting_down",
+	}
+	for _, key := range sensitiveKeys {
+		if _, exists := payload[key]; exists {
+			t.Fatalf("public /ready payload must omit %q: %v", key, payload)
+		}
+	}
+}
+
+func TestPublicResponseActiveActiveLeaseUnavailableIsNotReady(t *testing.T) {
+	state := New("youtube-producer", Features{
+		YouTubeEnabled:       true,
+		ActiveActiveEnabled:  true,
+		ActiveActiveInstance: "youtube-producer-a",
+	})
+	state.MarkRunning()
+
+	statusCode, payload := state.PublicResponse()
+
+	if statusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
+	}
+	if payload["status"] != "not_ready" {
+		t.Fatalf("status = %v, want not_ready", payload["status"])
+	}
+	if _, exists := payload["reason"]; exists {
+		t.Fatalf("public /ready payload must omit \"reason\": %v", payload)
+	}
+}
+
+func TestNilStatePublicResponseIsServiceUnavailable(t *testing.T) {
+	var state *State
+
+	statusCode, payload := state.PublicResponse()
+
+	if statusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
+	}
+	if payload["status"] != "not_ready" {
+		t.Fatalf("status = %v, want not_ready", payload["status"])
+	}
+}
+
 func TestNilStateResponseIncludesBudgetCleanupIncompleteFalse(t *testing.T) {
 	var state *State
 

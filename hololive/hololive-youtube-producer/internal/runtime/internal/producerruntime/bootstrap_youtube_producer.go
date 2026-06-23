@@ -265,7 +265,7 @@ func buildYouTubeProducerHTTPRouter(
 	return sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, appConfig.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
 		opts.EnableGzip = true
 		opts.ReadyResponder = func(c *gin.Context) {
-			statusCode, payload := readinessState.Response()
+			statusCode, payload := readinessState.PublicResponse()
 			c.JSON(statusCode, payload)
 		}
 	})

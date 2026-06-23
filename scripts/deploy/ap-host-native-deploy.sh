@@ -151,6 +151,7 @@ mkdir -p "$artifact_dir/bin" "$artifact_dir/internal/domain"
 
 (
   cd "$REPO_ROOT/hololive/hololive-youtube-producer"
+  export GOWORK=off
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64="${GOAMD64:-v1}" \
     go build -tags sonic -trimpath -buildvcs=false \
       -ldflags="-s -w -buildid= -X main.Version=$version" \
@@ -311,9 +312,7 @@ ready="$(
   "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
 )"
 printf '%s\n' "$ready"
-printf '%s' "$ready" | grep -q '"mode":"active-active"'
-printf '%s' "$ready" | grep -q '"valkey_available":true'
-printf '%s' "$ready" | grep -q '"scraping_paused":false'
+printf '%s' "$ready" | grep -q '"status":"ready"'
 
 journal_since="${change_started_at/T/ }"
 journal_since="${journal_since%Z} UTC"

@@ -175,6 +175,29 @@ func (s *State) Response() (statusCode int, payload map[string]any) {
 	return statusCode, response
 }
 
+func (s *State) PublicResponse() (statusCode int, payload map[string]any) {
+	base := health.Get()
+	if s == nil {
+		return http.StatusServiceUnavailable, publicReadinessPayload(base, "not_ready")
+	}
+
+	leaseAvailable := s.leaseAvailable.Load()
+	leaseEnabled := s.activeActiveEnabled
+	budgetEnabled := s.globalBudgetEnabled.Load()
+	budgetBackendAvailable := !budgetEnabled || s.budgetBackendAvailable.Load()
+	statusCode, status := readinessHTTPStatus(s.ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable))
+	return statusCode, publicReadinessPayload(base, status)
+}
+
+func publicReadinessPayload(base health.Response, status string) map[string]any {
+	return map[string]any{
+		"status":     status,
+		"version":    base.Version,
+		"uptime":     base.Uptime,
+		"goroutines": base.Goroutines,
+	}
+}
+
 func nilReadinessPayload(base health.Response) map[string]any {
 	return map[string]any{
 		"status":                    "not_ready",

@@ -76,6 +76,59 @@ else
   record_fail "ALLOW_POSTGRES_TOPOLOGY_CHANGE=true should allow"
 fi
 
+run_dashboard_guard() {
+  ( compose_env_assert_admin_dashboard_loopback_bind "$@" ) 2>/dev/null
+}
+
+ENV_LOOPBACK="${TMP_DIR}/dashboard-loopback.env"
+printf 'ADMIN_DASHBOARD_PORT_BIND_IP=127.0.0.1\n' >"${ENV_LOOPBACK}"
+ENV_IPV6_LOOPBACK="${TMP_DIR}/dashboard-ipv6-loopback.env"
+printf 'ADMIN_DASHBOARD_PORT_BIND_IP=::1\n' >"${ENV_IPV6_LOOPBACK}"
+ENV_ROUTABLE="${TMP_DIR}/dashboard-routable.env"
+printf 'ADMIN_DASHBOARD_PORT_BIND_IP=100.100.1.3\n' >"${ENV_ROUTABLE}"
+ENV_WILDCARD="${TMP_DIR}/dashboard-wildcard.env"
+printf 'ADMIN_DASHBOARD_PORT_BIND_IP=0.0.0.0\n' >"${ENV_WILDCARD}"
+ENV_UNSET="${TMP_DIR}/dashboard-unset.env"
+printf 'CACHE_PASSWORD=stub\n' >"${ENV_UNSET}"
+
+unset ADMIN_DASHBOARD_PORT_BIND_IP
+
+if run_dashboard_guard "${ENV_LOOPBACK}"; then
+  pass "admin-dashboard loopback bind (127.0.0.1) allowed"
+else
+  record_fail "admin-dashboard loopback bind should be allowed"
+fi
+
+if run_dashboard_guard "${ENV_IPV6_LOOPBACK}"; then
+  pass "admin-dashboard IPv6 loopback bind (::1) allowed"
+else
+  record_fail "admin-dashboard IPv6 loopback bind should be allowed"
+fi
+
+if run_dashboard_guard "${ENV_UNSET}"; then
+  pass "admin-dashboard default (unset) bind allowed"
+else
+  record_fail "admin-dashboard default bind should be allowed"
+fi
+
+if run_dashboard_guard "${ENV_ROUTABLE}"; then
+  record_fail "admin-dashboard routable bind (100.100.1.3) should be rejected"
+else
+  pass "admin-dashboard routable bind rejected"
+fi
+
+if run_dashboard_guard "${ENV_WILDCARD}"; then
+  record_fail "admin-dashboard wildcard bind (0.0.0.0) should be rejected"
+else
+  pass "admin-dashboard wildcard bind rejected"
+fi
+
+if ADMIN_DASHBOARD_PORT_BIND_IP=100.100.1.3 run_dashboard_guard "${ENV_LOOPBACK}"; then
+  record_fail "admin-dashboard shell-env routable override should be rejected"
+else
+  pass "admin-dashboard shell-env routable override rejected"
+fi
+
 if [ "${failures}" -ne 0 ]; then
   echo "compose-env guard: ${failures} failure(s)" >&2
   exit 1
