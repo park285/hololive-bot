@@ -11,6 +11,8 @@ services:
       service: youtube-producer
     profiles: !override ["main-ap"]
     container_name: hololive-youtube-producer-c
+    env_file:
+      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
     environment:
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
       YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"

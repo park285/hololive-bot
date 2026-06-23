@@ -41,8 +41,9 @@ HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE=/run/hololive-bot/youtube-producer.env
 AP overlays use only `youtube-producer.env` for `youtube-producer` instances, so Iris
 egress tokens stay out of AP producer containers. Osaka/Seoul AP hosts also use
 `ap-compose.env`, which excludes `IRIS_WEBHOOK_TOKEN` and `IRIS_BOT_TOKEN`.
-`docker-compose.main-ap.yml` keeps `youtube-producer-c` without an `env_file`; it
-receives only explicit `environment:` values from the base compose and overlay.
+`docker-compose.main-ap.yml` also uses scoped `youtube-producer.env` for
+`youtube-producer-c`; it still must not receive Iris egress tokens or the
+monolithic Compose env file as an `env_file`.
 
 Deploy this repo-side contract after OpenBao Agent has rendered `compose.env` or
 `ap-compose.env` plus the per-service env files for the target host.

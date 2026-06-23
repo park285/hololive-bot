@@ -31,6 +31,14 @@ cat >"${STUB_YOUTUBE_PRODUCER_ENV}" <<'EOF'
 API_SECRET_KEY=stub
 HOLODEX_API_KEY=stub
 HOLODEX_API_KEY_1=stub
+HOLODEX_API_KEY_2=stub
+HOLODEX_API_KEY_3=stub
+HOLODEX_API_KEY_4=stub
+HOLODEX_API_KEY_5=stub
+SCRAPER_PROXY_ENABLED=false
+SCRAPER_PROXY_URL=http://proxy.invalid
+YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT=2026-04-10T01:11:12Z
+YOUTUBE_ENABLE_QUOTA_BUILDING=true
 EOF
 
 PROD_OVERLAYS=(
@@ -145,6 +153,13 @@ if pc is not None:
     check("youtube-producer-c HOLOLIVE_H3_ADDR is :30025", h3_addr_aligned(pc, 30025))
     check("youtube-producer-c HOLOLIVE_METRICS_ADDR is :30095", metrics_addr_aligned(pc))
     check("youtube-producer-c publishes metrics on 30095/tcp", has_tcp_published(pc, 30095, 30095))
+    env = pc.get("environment") or {}
+    check(
+        "youtube-producer-c receives community shorts cutover from scoped producer env",
+        env.get("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT") == "2026-04-10T01:11:12Z",
+    )
+    for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
+        check(f"youtube-producer-c does not receive {iris_key}", iris_key not in env)
 
 
 def has_bind_target(svc, target):

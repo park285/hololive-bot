@@ -360,7 +360,7 @@ Repo-side 변경만. **기본 경로 플립은 merge 가능하지만, 대상 호
 - `deploy/compose/docker-compose.prod.yml` — egress 2종 `env_file`을 per-service 파일(`/run/hololive-bot/bot.env`, `alarm-worker.env`)로 교체.
 - `deploy/compose/docker-compose.osaka.yml`, `docker-compose.seoul.yml` — AP youtube-producer `env_file`을 `/run/hololive-bot/youtube-producer.env`로 교체(모놀리식 주입 제거 = Iris token 차단).
 - `deploy/compose/docker-compose.live-compat.yml` — broad env 복원 로직을 per-service 파일 기준으로 재작성.
-- `deploy/compose/docker-compose.main-ap.yml`, `docker-compose.main-ap.live-compat.yml` — youtube-producer-c가 `env_file` 없이 유지되는지 계약 검증 대상에 포함.
+- `deploy/compose/docker-compose.main-ap.yml`, `docker-compose.main-ap.live-compat.yml` — youtube-producer-c가 scoped `/run/hololive-bot/youtube-producer.env`만 `env_file`로 받고 Iris token/모놀리식 env는 받지 않는지 계약 검증 대상에 포함.
 - `deploy/compose/README.md` — 운영 입력 계약 서술 갱신.
 - `scripts/deploy/lib/compose-env.sh` — 기본값을 `/run/hololive-bot/compose.env`로 플립(`OPENBAO_HOLOLIVE_ENV_FILE` 변수명 유지 여부 포함).
 - `scripts/deploy/compose.sh` — `--env-file` 주입 로직은 유지, resolve 기본값만 변경.

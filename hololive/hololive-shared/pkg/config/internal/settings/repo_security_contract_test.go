@@ -712,16 +712,7 @@ func assertDBMigrateVerifyFullTLS(t *testing.T, cfg renderedCompose, stackName s
 }
 
 func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T) {
-	overlay := readRepoFile(t, "deploy/compose/docker-compose.main-ap.live-compat.yml")
-	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
-		block := composeServiceBlock(t, overlay, service)
-		if !strings.Contains(block, "IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}") {
-			t.Fatalf("docker-compose.main-ap.live-compat.yml missing IRIS_BASE_URL_ALLOWED_HOSTS default for %s", service)
-		}
-	}
-	if block := composeServiceBlock(t, overlay, "youtube-producer-c"); strings.Contains(block, "env_file:") {
-		t.Fatal("main-ap live overlay must keep youtube-producer-c scoped without env_file")
-	}
+	assertMainAPLiveCompatOverlayText(t)
 
 	cfg := renderComposeConfig(t,
 		"deploy/compose/docker-compose.prod.yml",
@@ -730,12 +721,40 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 		"deploy/compose/docker-compose.main-ap.live-compat.yml",
 	)
 
+	assertMainAPLiveCompatRenderedEgressAllowedHosts(t, cfg)
+	assertMainAPLiveCompatRenderedProducer(t, cfg)
+}
+
+func assertMainAPLiveCompatOverlayText(t *testing.T) {
+	t.Helper()
+
+	overlay := readRepoFile(t, "deploy/compose/docker-compose.main-ap.live-compat.yml")
+	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
+		block := composeServiceBlock(t, overlay, service)
+		if !strings.Contains(block, "IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}") {
+			t.Fatalf("docker-compose.main-ap.live-compat.yml missing IRIS_BASE_URL_ALLOWED_HOSTS default for %s", service)
+		}
+	}
+	mainAP := readRepoFile(t, "deploy/compose/docker-compose.main-ap.yml")
+	const producerEnvFile = "${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}"
+	if block := composeServiceBlock(t, mainAP, "youtube-producer-c"); !strings.Contains(block, "env_file:") || !strings.Contains(block, producerEnvFile) {
+		t.Fatalf("main-ap must give youtube-producer-c scoped env_file %q", producerEnvFile)
+	}
+}
+
+func assertMainAPLiveCompatRenderedEgressAllowedHosts(t *testing.T, cfg renderedCompose) {
+	t.Helper()
+
 	for _, service := range []string{"hololive-bot", "hololive-alarm-worker"} {
 		env := composeEnvironment(t, cfg, service)
 		if env["IRIS_BASE_URL_ALLOWED_HOSTS"] != "100.100.1.5" {
 			t.Fatalf("%s IRIS_BASE_URL_ALLOWED_HOSTS = %q, want 100.100.1.5", service, env["IRIS_BASE_URL_ALLOWED_HOSTS"])
 		}
 	}
+}
+
+func assertMainAPLiveCompatRenderedProducer(t *testing.T, cfg renderedCompose) {
+	t.Helper()
 
 	env := composeEnvironment(t, cfg, "youtube-producer-c")
 	if env["POSTGRES_HOST"] != "holo-postgres" || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != "verify-full" {
@@ -755,6 +774,11 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 	for _, key := range []string{"API_SECRET_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
 		if _, ok := env[key]; !ok {
 			t.Fatalf("youtube-producer-c missing scoped %s mapping", key)
+		}
+	}
+	for _, key := range []string{"HOLODEX_API_KEY_2", "SCRAPER_PROXY_ENABLED", "YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "YOUTUBE_ENABLE_QUOTA_BUILDING"} {
+		if _, ok := env[key]; !ok {
+			t.Fatalf("youtube-producer-c missing producer env_file key %s", key)
 		}
 	}
 
@@ -1092,6 +1116,14 @@ func writeAPProducerEnvFile(t *testing.T) string {
 		"API_SECRET_KEY=dummy",
 		"HOLODEX_API_KEY=dummy",
 		"HOLODEX_API_KEY_1=dummy",
+		"HOLODEX_API_KEY_2=dummy",
+		"HOLODEX_API_KEY_3=dummy",
+		"HOLODEX_API_KEY_4=dummy",
+		"HOLODEX_API_KEY_5=dummy",
+		"SCRAPER_PROXY_ENABLED=false",
+		"SCRAPER_PROXY_URL=http://proxy.invalid",
+		"YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT=2026-04-10T01:11:12Z",
+		"YOUTUBE_ENABLE_QUOTA_BUILDING=true",
 	})
 }
 
