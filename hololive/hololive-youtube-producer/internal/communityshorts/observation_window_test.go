@@ -15,7 +15,6 @@ func TestBuildObservationWindow(t *testing.T) {
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	deploymentCompletedAt := time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
 	policy, err := BuildPolicy(config.IngestionConfig{
-		CommunityShortsBigBangEnabled:   true,
 		CommunityShortsBigBangCutoverAt: cutoverAt,
 	}, []OperationalChannel{{OwnerLabel: "A", ChannelID: "UC_1", Enabled: true}, {OwnerLabel: "B", ChannelID: "UC_2", Enabled: true}})
 	require.NoError(t, err)

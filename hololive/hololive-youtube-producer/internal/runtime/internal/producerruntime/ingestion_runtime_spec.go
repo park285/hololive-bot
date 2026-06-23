@@ -7,11 +7,10 @@ import (
 )
 
 type ingestionRuntimeFeatures struct {
-	youtubeEnabled                bool
-	photoSyncEnabled              bool
-	communityShortsBigBangEnabled bool
-	activeActiveEnabled           bool
-	activeActiveInstanceID        string
+	youtubeEnabled         bool
+	photoSyncEnabled       bool
+	activeActiveEnabled    bool
+	activeActiveInstanceID string
 }
 
 type ingestionRuntimeSpec struct {
@@ -27,11 +26,10 @@ func youtubeProducerSpec(appConfig *config.Config) ingestionRuntimeSpec {
 		name:              youtubeProducerRuntimeName,
 		requestedFeatures: requested,
 		features: ingestionRuntimeFeatures{
-			youtubeEnabled:                requested.youtubeEnabled,
-			photoSyncEnabled:              requested.photoSyncEnabled,
-			communityShortsBigBangEnabled: requested.communityShortsBigBangEnabled,
-			activeActiveEnabled:           requested.activeActiveEnabled,
-			activeActiveInstanceID:        requested.activeActiveInstanceID,
+			youtubeEnabled:         requested.youtubeEnabled,
+			photoSyncEnabled:       requested.photoSyncEnabled,
+			activeActiveEnabled:    requested.activeActiveEnabled,
+			activeActiveInstanceID: requested.activeActiveInstanceID,
 		},
 	}
 }
@@ -42,11 +40,10 @@ func requestedFeatures(appConfig *config.Config) ingestionRuntimeFeatures {
 	}
 
 	return ingestionRuntimeFeatures{
-		youtubeEnabled:                appConfig.Ingestion.YouTubeEnabled,
-		photoSyncEnabled:              appConfig.Ingestion.PhotoSyncEnabled,
-		communityShortsBigBangEnabled: appConfig.Ingestion.CommunityShortsBigBangEnabled,
-		activeActiveEnabled:           appConfig.Scraper.ActiveActive.Enabled,
-		activeActiveInstanceID:        appConfig.Scraper.ActiveActive.InstanceID,
+		youtubeEnabled:         appConfig.Ingestion.YouTubeEnabled,
+		photoSyncEnabled:       appConfig.Ingestion.PhotoSyncEnabled,
+		activeActiveEnabled:    appConfig.Scraper.ActiveActive.Enabled,
+		activeActiveInstanceID: appConfig.Scraper.ActiveActive.InstanceID,
 	}
 }
 
@@ -64,8 +61,6 @@ func logFeatureOverride(logger *slog.Logger, spec ingestionRuntimeSpec) {
 		slog.Bool("effective_youtube_enabled", spec.features.youtubeEnabled),
 		slog.Bool("requested_photo_sync_enabled", spec.requestedFeatures.photoSyncEnabled),
 		slog.Bool("effective_photo_sync_enabled", spec.features.photoSyncEnabled),
-		slog.Bool("requested_community_shorts_bigbang_enabled", spec.requestedFeatures.communityShortsBigBangEnabled),
-		slog.Bool("effective_community_shorts_bigbang_enabled", spec.features.communityShortsBigBangEnabled),
 		slog.Bool("requested_active_active_enabled", spec.requestedFeatures.activeActiveEnabled),
 		slog.Bool("effective_active_active_enabled", spec.features.activeActiveEnabled),
 	)

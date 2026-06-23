@@ -114,12 +114,11 @@ func TestBuildRuntimePhotoSyncService_ReturnsNilWhenDisabled(t *testing.T) {
 }
 
 func TestBuildIngestionRuntimeSpec(t *testing.T) {
-	t.Run("youtube producer spec preserves configured flags before big-bang cutover", func(t *testing.T) {
+	t.Run("youtube producer spec preserves configured flags", func(t *testing.T) {
 		ingestionConfig := &config.Config{
 			Ingestion: config.IngestionConfig{
-				YouTubeEnabled:                true,
-				PhotoSyncEnabled:              true,
-				CommunityShortsBigBangEnabled: false,
+				YouTubeEnabled:   true,
+				PhotoSyncEnabled: true,
 			},
 		}
 
@@ -128,33 +127,13 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 		assert.Equal(t, spec.requestedFeatures, spec.features)
 		assert.True(t, spec.features.youtubeEnabled)
 		assert.True(t, spec.features.photoSyncEnabled)
-		assert.False(t, spec.features.communityShortsBigBangEnabled)
 	})
 
-	t.Run("youtube producer spec preserves youtube routing during big-bang cutover", func(t *testing.T) {
+	t.Run("youtube producer spec preserves photo sync request", func(t *testing.T) {
 		ingestionConfig := &config.Config{
 			Ingestion: config.IngestionConfig{
-				YouTubeEnabled:                true,
-				PhotoSyncEnabled:              true,
-				CommunityShortsBigBangEnabled: true,
-			},
-		}
-
-		spec := youtubeProducerSpec(ingestionConfig)
-		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
-		assert.True(t, spec.requestedFeatures.youtubeEnabled)
-		assert.True(t, spec.requestedFeatures.communityShortsBigBangEnabled)
-		assert.True(t, spec.features.youtubeEnabled)
-		assert.True(t, spec.features.photoSyncEnabled)
-		assert.True(t, spec.features.communityShortsBigBangEnabled)
-	})
-
-	t.Run("youtube producer spec preserves photo sync request before big-bang cutover", func(t *testing.T) {
-		ingestionConfig := &config.Config{
-			Ingestion: config.IngestionConfig{
-				YouTubeEnabled:                true,
-				PhotoSyncEnabled:              true,
-				CommunityShortsBigBangEnabled: false,
+				YouTubeEnabled:   true,
+				PhotoSyncEnabled: true,
 			},
 		}
 
@@ -162,15 +141,13 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
 		assert.True(t, spec.features.youtubeEnabled)
 		assert.True(t, spec.features.photoSyncEnabled)
-		assert.False(t, spec.features.communityShortsBigBangEnabled)
 	})
 
-	t.Run("youtube producer spec does not force youtube on from big-bang flag alone", func(t *testing.T) {
+	t.Run("youtube producer spec keeps youtube off when disabled", func(t *testing.T) {
 		ingestionConfig := &config.Config{
 			Ingestion: config.IngestionConfig{
-				YouTubeEnabled:                false,
-				PhotoSyncEnabled:              true,
-				CommunityShortsBigBangEnabled: true,
+				YouTubeEnabled:   false,
+				PhotoSyncEnabled: true,
 			},
 		}
 
@@ -178,10 +155,8 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
 		assert.False(t, spec.requestedFeatures.youtubeEnabled)
 		assert.True(t, spec.requestedFeatures.photoSyncEnabled)
-		assert.True(t, spec.requestedFeatures.communityShortsBigBangEnabled)
 		assert.False(t, spec.features.youtubeEnabled)
 		assert.True(t, spec.features.photoSyncEnabled)
-		assert.True(t, spec.features.communityShortsBigBangEnabled)
 	})
 }
 
@@ -189,36 +164,22 @@ func TestIngestionRuntimeSpecs_YouTubeProducerOwnsConfiguredYouTubeState(t *test
 	t.Parallel()
 
 	tests := map[string]struct {
-		ingestionConfig      config.IngestionConfig
-		wantYouTube          bool
-		wantCommunityBigBang bool
+		ingestionConfig config.IngestionConfig
+		wantYouTube     bool
 	}{
-		"youtube enabled without big-bang still starts producer polling": {
+		"youtube enabled starts producer polling": {
 			ingestionConfig: config.IngestionConfig{
-				YouTubeEnabled:                true,
-				PhotoSyncEnabled:              true,
-				CommunityShortsBigBangEnabled: false,
+				YouTubeEnabled:   true,
+				PhotoSyncEnabled: true,
 			},
-			wantYouTube:          true,
-			wantCommunityBigBang: false,
-		},
-		"big-bang enabled keeps producer polling and observation enabled": {
-			ingestionConfig: config.IngestionConfig{
-				YouTubeEnabled:                true,
-				PhotoSyncEnabled:              true,
-				CommunityShortsBigBangEnabled: true,
-			},
-			wantYouTube:          true,
-			wantCommunityBigBang: true,
+			wantYouTube: true,
 		},
 		"youtube disabled leaves producer polling idle even if photo sync is enabled": {
 			ingestionConfig: config.IngestionConfig{
-				YouTubeEnabled:                false,
-				PhotoSyncEnabled:              true,
-				CommunityShortsBigBangEnabled: false,
+				YouTubeEnabled:   false,
+				PhotoSyncEnabled: true,
 			},
-			wantYouTube:          false,
-			wantCommunityBigBang: false,
+			wantYouTube: false,
 		},
 	}
 
@@ -230,7 +191,6 @@ func TestIngestionRuntimeSpecs_YouTubeProducerOwnsConfiguredYouTubeState(t *test
 			producerSpec := youtubeProducerSpec(ingestionConfig)
 
 			assert.Equal(t, tc.wantYouTube, producerSpec.features.youtubeEnabled)
-			assert.Equal(t, tc.wantCommunityBigBang, producerSpec.features.communityShortsBigBangEnabled)
 		})
 	}
 }
@@ -240,9 +200,8 @@ func TestIngestionRuntimeSpecs_AllowYouTubeProducerPhotoSyncOwner(t *testing.T) 
 
 	ingestionConfig := &config.Config{
 		Ingestion: config.IngestionConfig{
-			YouTubeEnabled:                true,
-			PhotoSyncEnabled:              true,
-			CommunityShortsBigBangEnabled: true,
+			YouTubeEnabled:   true,
+			PhotoSyncEnabled: true,
 		},
 	}
 	producerSpec := youtubeProducerSpec(ingestionConfig)

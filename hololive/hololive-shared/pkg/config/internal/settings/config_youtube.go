@@ -66,7 +66,6 @@ func DefaultYouTubeProducerGlobalBudgetConfig() YouTubeProducerGlobalBudgetConfi
 type IngestionConfig struct {
 	YouTubeEnabled                  bool
 	PhotoSyncEnabled                bool
-	CommunityShortsBigBangEnabled   bool
 	CommunityShortsBigBangCutoverAt time.Time
 }
 

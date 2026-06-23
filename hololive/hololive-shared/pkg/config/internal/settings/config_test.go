@@ -595,18 +595,6 @@ func TestLoad_ServerHTTPTransportsRejectClientOnlyTransportValue(t *testing.T) {
 	}
 }
 
-func TestLoad_CommunityShortsBigBangFlagDefaultsFalse(t *testing.T) {
-	setRequiredLoadEnv(t)
-
-	config, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if config.Ingestion.CommunityShortsBigBangEnabled {
-		t.Fatal("Ingestion.CommunityShortsBigBangEnabled = true, want false")
-	}
-}
-
 func TestLoad_CommunityShortsBigBangCutoverDefaultsZero(t *testing.T) {
 	setRequiredLoadEnv(t)
 
@@ -616,19 +604,6 @@ func TestLoad_CommunityShortsBigBangCutoverDefaultsZero(t *testing.T) {
 	}
 	if !config.Ingestion.CommunityShortsBigBangCutoverAt.IsZero() {
 		t.Fatalf("Ingestion.CommunityShortsBigBangCutoverAt = %s, want zero", config.Ingestion.CommunityShortsBigBangCutoverAt)
-	}
-}
-
-func TestLoad_CommunityShortsBigBangFlagEnvOverride(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED", "true")
-
-	config, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if !config.Ingestion.CommunityShortsBigBangEnabled {
-		t.Fatal("Ingestion.CommunityShortsBigBangEnabled = false, want true")
 	}
 }
 

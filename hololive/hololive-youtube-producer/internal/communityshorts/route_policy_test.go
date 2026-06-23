@@ -17,7 +17,6 @@ func TestBuildPolicy(t *testing.T) {
 
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	policy, err := BuildPolicy(config.IngestionConfig{
-		CommunityShortsBigBangEnabled:   true,
 		CommunityShortsBigBangCutoverAt: cutoverAt,
 	}, BuildOperationalChannelsFromMembers([]*domain.Member{
 		{Name: "Pekora", Org: "Hololive", ChannelID: "UCpekora"},
@@ -30,10 +29,10 @@ func TestBuildPolicy(t *testing.T) {
 	assert.Equal(t, []string{"UCmiko", "UCpekora"}, policy.TargetChannelIDs())
 	assert.True(t, policy.ShouldUseNewPath(RouteRequest{AlarmType: domain.AlarmTypeCommunity, ChannelID: "UCpekora", PublishedAt: cutoverAt}))
 	assert.True(t, policy.ShouldUseNewPath(RouteRequest{AlarmType: domain.AlarmTypeShorts, ChannelID: "UCmiko", PublishedAt: cutoverAt.Add(time.Second)}))
-	assert.False(t, policy.ShouldUseNewPath(RouteRequest{AlarmType: domain.AlarmTypeCommunity, ChannelID: "UCpekora", PublishedAt: cutoverAt.Add(-time.Second)}))
+	assert.True(t, policy.ShouldUseNewPath(RouteRequest{AlarmType: domain.AlarmTypeCommunity, ChannelID: "UCpekora", PublishedAt: cutoverAt.Add(-time.Second)}))
+	assert.True(t, policy.ShouldUseNewPath(RouteRequest{AlarmType: domain.AlarmTypeShorts, ChannelID: "UCmiko"}))
 	assert.False(t, policy.ShouldUseNewPath(RouteRequest{AlarmType: domain.AlarmTypeLive, ChannelID: "UCpekora", PublishedAt: cutoverAt}))
 	assert.False(t, policy.ShouldUseNewPath(RouteRequest{AlarmType: domain.AlarmTypeShorts, ChannelID: "UCunknown", PublishedAt: cutoverAt}))
-	assert.False(t, policy.ShouldUseNewPath(RouteRequest{AlarmType: domain.AlarmTypeShorts, ChannelID: "UCmiko"}))
 }
 
 func TestBuildPolicy_DisabledCases(t *testing.T) {
@@ -44,10 +43,11 @@ func TestBuildPolicy_DisabledCases(t *testing.T) {
 	assert.False(t, policy.Enabled())
 	assert.Zero(t, policy.TargetChannelCount())
 
-	policy, err = BuildPolicy(config.IngestionConfig{CommunityShortsBigBangEnabled: true}, []OperationalChannel{{OwnerLabel: "Pekora", ChannelID: "UCpekora", Enabled: true}})
+	policy, err = BuildPolicy(config.IngestionConfig{}, []OperationalChannel{{OwnerLabel: "Pekora", ChannelID: "UCpekora", Enabled: true}})
 	require.NoError(t, err)
-	assert.False(t, policy.Enabled())
+	assert.True(t, policy.Enabled())
 	assert.Equal(t, 1, policy.TargetChannelCount())
+	assert.True(t, policy.CutoverAt().IsZero())
 }
 
 func TestBuildRouteDecider(t *testing.T) {
@@ -55,7 +55,6 @@ func TestBuildRouteDecider(t *testing.T) {
 
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	policy, err := BuildPolicy(config.IngestionConfig{
-		CommunityShortsBigBangEnabled:   true,
 		CommunityShortsBigBangCutoverAt: cutoverAt,
 	}, []OperationalChannel{{OwnerLabel: "Pekora", ChannelID: "UCpekora", Enabled: true}})
 	require.NoError(t, err)
@@ -63,7 +62,8 @@ func TestBuildRouteDecider(t *testing.T) {
 	decider := BuildRouteDecider(policy)
 	require.NotNil(t, decider)
 	assert.True(t, decider(poller.NotificationRouteRequest{AlarmType: domain.AlarmTypeCommunity, ChannelID: "UCpekora", PublishedAt: cutoverAt}))
-	assert.False(t, decider(poller.NotificationRouteRequest{AlarmType: domain.AlarmTypeShorts, ChannelID: "UCpekora", PublishedAt: cutoverAt.Add(-time.Second)}))
+	assert.True(t, decider(poller.NotificationRouteRequest{AlarmType: domain.AlarmTypeShorts, ChannelID: "UCpekora", PublishedAt: cutoverAt.Add(-time.Second)}))
 	assert.False(t, decider(poller.NotificationRouteRequest{AlarmType: domain.AlarmTypeLive, ChannelID: "UCpekora", PublishedAt: cutoverAt}))
+	assert.False(t, decider(poller.NotificationRouteRequest{AlarmType: domain.AlarmTypeShorts, ChannelID: "UCunknown", PublishedAt: cutoverAt}))
 	assert.Nil(t, BuildRouteDecider(Policy{}))
 }

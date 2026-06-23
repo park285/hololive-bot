@@ -131,7 +131,6 @@ func buildConfig(
 		Ingestion: IngestionConfig{
 			YouTubeEnabled:                  sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
 			PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
-			CommunityShortsBigBangEnabled:   sharedenv.Bool("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED", false),
 			CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
 		},
 		Valkey:       loadValkeyConfig(),

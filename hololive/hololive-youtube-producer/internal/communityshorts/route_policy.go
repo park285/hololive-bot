@@ -23,10 +23,6 @@ type Policy struct {
 }
 
 func BuildPolicy(ingestionConfig config.IngestionConfig, channels []OperationalChannel) (Policy, error) {
-	if !ingestionConfig.CommunityShortsBigBangEnabled {
-		return Policy{}, nil
-	}
-
 	if err := ValidateOperationalTargets(channels); err != nil {
 		return Policy{}, fmt.Errorf("build community shorts big-bang policy: %w", err)
 	}
@@ -60,7 +56,7 @@ func BuildRouteDecider(policy Policy) poller.NotificationRouteDecider {
 }
 
 func (p Policy) Enabled() bool {
-	return !p.cutoverAt.IsZero() && len(p.targetChannelIDs) > 0
+	return len(p.targetChannelIDs) > 0
 }
 
 func (p Policy) CutoverAt() time.Time {
@@ -81,7 +77,7 @@ func (p Policy) TargetChannelIDs() []string {
 }
 
 func (p Policy) ShouldUseNewPath(req RouteRequest) bool {
-	if !p.Enabled() || req.PublishedAt.IsZero() {
+	if !p.Enabled() {
 		return false
 	}
 
@@ -98,5 +94,5 @@ func (p Policy) ShouldUseNewPath(req RouteRequest) bool {
 		return false
 	}
 
-	return !req.PublishedAt.UTC().Before(p.cutoverAt)
+	return true
 }

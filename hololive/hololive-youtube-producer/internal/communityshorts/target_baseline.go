@@ -125,8 +125,8 @@ func BuildTargetBaseline(
 	}
 
 	activationIndex := buildAlarmActivationIndex(alarms)
-	finalOwner := resolveFinalDeliveryOwner(ingestionConfig)
-	cutoverPending := isCutoverPending(ingestionConfig, generatedAt)
+	finalOwner := resolveFinalDeliveryOwner()
+	cutoverPending := isCutoverPending()
 
 	enabledChannels := make([]TargetBaselineChannel, 0, len(channels))
 	for i := range channels {
@@ -160,7 +160,7 @@ func BuildTargetBaseline(
 		GeneratedAt: generatedAt.UTC(),
 		Runtime: TargetBaselineRuntime{
 			FinalDeliveryOwner:              finalOwner,
-			CommunityShortsBigBangEnabled:   ingestionConfig.CommunityShortsBigBangEnabled,
+			CommunityShortsBigBangEnabled:   true,
 			CommunityShortsBigBangCutoverAt: cutoverAt,
 			TargetChannelCount:              len(enabledChannels),
 		},

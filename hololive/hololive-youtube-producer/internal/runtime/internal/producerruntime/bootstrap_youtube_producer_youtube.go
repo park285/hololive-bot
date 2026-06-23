@@ -69,7 +69,7 @@ func resolveIngestionRuntimeYouTubeState(
 
 	state.operationalChannels = operationalChannels
 	state.pollTargets = pollTargets
-	communityShortsPolicy, err := resolveCommunityShortsBigBangPolicy(appConfig, logger, operationalChannels, features)
+	communityShortsPolicy, err := resolveCommunityShortsBigBangPolicy(appConfig, logger, operationalChannels)
 	if err != nil {
 		return state, err
 	}
@@ -82,12 +82,7 @@ func resolveCommunityShortsBigBangPolicy(
 	appConfig *config.Config,
 	logger *slog.Logger,
 	operationalChannels []communityShortsOperationalChannel,
-	features ingestionRuntimeFeatures,
 ) (communityShortsBigBangPolicy, error) {
-	if !features.communityShortsBigBangEnabled {
-		return communityShortsBigBangPolicy{}, nil
-	}
-
 	policy, err := communityshorts.BuildPolicy(appConfig.Ingestion, operationalChannels)
 	if err != nil {
 		return policy, err

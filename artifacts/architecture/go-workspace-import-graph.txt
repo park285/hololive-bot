@@ -699,8 +699,6 @@ github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/holol
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/testutil
-github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/util
-github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/alarm/tier -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/service/alarm/tier -> github.com/kapu/hololive-shared/pkg/domain

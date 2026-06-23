@@ -4,7 +4,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
@@ -146,22 +145,12 @@ func effectiveDeliveryMode(roomCount int, cutoverPending bool) string {
 	return DeliveryModeNew
 }
 
-func isCutoverPending(ingestionConfig config.IngestionConfig, generatedAt time.Time) bool {
-	if !ingestionConfig.CommunityShortsBigBangEnabled {
-		return false
-	}
-	cutoverAt := normalizedCutoverAt(ingestionConfig.CommunityShortsBigBangCutoverAt)
-	if cutoverAt == nil {
-		return false
-	}
-	return generatedAt.UTC().Before(*cutoverAt)
+func isCutoverPending() bool {
+	return false
 }
 
-func resolveFinalDeliveryOwner(ingestionConfig config.IngestionConfig) string {
-	if ingestionConfig.CommunityShortsBigBangEnabled {
-		return RuntimeOwnerAlarmWorker
-	}
-	return RuntimeOwnerYouTubeProducer
+func resolveFinalDeliveryOwner() string {
+	return RuntimeOwnerAlarmWorker
 }
 
 func normalizedCutoverAt(cutoverAt time.Time) *time.Time {

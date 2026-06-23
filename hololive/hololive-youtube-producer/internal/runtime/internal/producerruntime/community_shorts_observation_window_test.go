@@ -36,7 +36,6 @@ func TestYouTubeProducerRuntimeEnsureCommunityShortsObservationWindowWrites24Hou
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	deploymentCompletedAt := time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
 	policy, err := communityshorts.BuildPolicy(config.IngestionConfig{
-		CommunityShortsBigBangEnabled:   true,
 		CommunityShortsBigBangCutoverAt: cutoverAt,
 	}, []communityshorts.OperationalChannel{
 		{OwnerLabel: "A", ChannelID: "UC_1", Enabled: true},
@@ -88,7 +87,6 @@ func TestYouTubeProducerRuntimeEnsureCommunityShortsObservationWindowReturnsWrit
 
 	writer := &observationWindowWriterStub{err: errors.New("write failed")}
 	policy, err := communityshorts.BuildPolicy(config.IngestionConfig{
-		CommunityShortsBigBangEnabled:   true,
 		CommunityShortsBigBangCutoverAt: time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC),
 	}, []communityshorts.OperationalChannel{{OwnerLabel: "A", ChannelID: "UC_1", Enabled: true}})
 	require.NoError(t, err)

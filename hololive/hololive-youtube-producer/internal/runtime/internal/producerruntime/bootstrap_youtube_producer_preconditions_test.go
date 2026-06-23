@@ -25,6 +25,7 @@ import (
 	"io"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,7 @@ func TestBuildYouTubeProducerRuntimeRequiresRuntimeAllowEnv(t *testing.T) {
 	t.Setenv("YOUTUBE_PRODUCER_RUNTIME_ALLOWED", "")
 
 	appConfig := buildInfraFailureConfig()
-	appConfig.Ingestion.CommunityShortsBigBangEnabled = true
+	appConfig.Ingestion.CommunityShortsBigBangCutoverAt = time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 
 	runtime, err := BuildYouTubeProducerRuntime(context.Background(), appConfig, newYouTubeProducerTestLogger())
 	require.Error(t, err)

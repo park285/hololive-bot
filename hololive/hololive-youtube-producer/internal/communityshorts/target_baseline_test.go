@@ -39,12 +39,12 @@ func TestBuildTargetBaseline(t *testing.T) {
 			{RoomID: "room-shorts-1", ChannelID: "UCpekora", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
 			{RoomID: "room-live-only", ChannelID: "UCpekora", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 		}, config.IngestionConfig{
-			CommunityShortsBigBangEnabled:   true,
 			CommunityShortsBigBangCutoverAt: cutoverAt,
 		}, cutoverAt.Add(time.Minute))
 		require.NoError(t, err)
 
 		require.Equal(t, RuntimeOwnerAlarmWorker, baseline.Runtime.FinalDeliveryOwner)
+		require.True(t, baseline.Runtime.CommunityShortsBigBangEnabled)
 		require.Equal(t, 2, baseline.Runtime.TargetChannelCount)
 		require.NotNil(t, baseline.Runtime.CommunityShortsBigBangCutoverAt)
 		require.Equal(t, cutoverAt, *baseline.Runtime.CommunityShortsBigBangCutoverAt)
@@ -67,27 +67,27 @@ func TestBuildTargetBaseline(t *testing.T) {
 		require.Equal(t, DeliveryModeNew, mikoCommunity.EffectiveDeliveryMode)
 	})
 
-	t.Run("reports pending cutover before activation time", func(t *testing.T) {
+	t.Run("reports cutover complete with new-only delivery", func(t *testing.T) {
 		t.Parallel()
 		cutoverAt := time.Date(2026, 4, 10, 3, 0, 0, 0, time.UTC)
 		generatedAt := cutoverAt.Add(-30 * time.Minute)
 		baseline, err := BuildTargetBaseline([]OperationalChannel{{OwnerLabel: "Miko", ChannelID: "UCmiko", Enabled: true}}, []*domain.Alarm{{
 			RoomID: "room-community-1", ChannelID: "UCmiko", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
 		}}, config.IngestionConfig{
-			CommunityShortsBigBangEnabled:   true,
 			CommunityShortsBigBangCutoverAt: cutoverAt,
 		}, generatedAt)
 		require.NoError(t, err)
 		communityRoute, _ := RouteForType(baseline.Channels[0].Routes, domain.AlarmTypeCommunity)
-		require.True(t, communityRoute.CutoverPending)
-		require.Equal(t, DeliveryModePending, communityRoute.EffectiveDeliveryMode)
+		require.False(t, communityRoute.CutoverPending)
+		require.Equal(t, DeliveryModeNew, communityRoute.EffectiveDeliveryMode)
 	})
 
-	t.Run("falls back to youtube producer owner before big bang", func(t *testing.T) {
+	t.Run("final delivery owner is alarm worker after cutover", func(t *testing.T) {
 		t.Parallel()
 		baseline, err := BuildTargetBaseline([]OperationalChannel{{OwnerLabel: "Sora", ChannelID: "UCsora", Enabled: true}}, nil, config.IngestionConfig{}, time.Date(2026, 4, 10, 2, 0, 0, 0, time.UTC))
 		require.NoError(t, err)
-		require.Equal(t, RuntimeOwnerYouTubeProducer, baseline.Runtime.FinalDeliveryOwner)
+		require.Equal(t, RuntimeOwnerAlarmWorker, baseline.Runtime.FinalDeliveryOwner)
+		require.True(t, baseline.Runtime.CommunityShortsBigBangEnabled)
 	})
 }
 

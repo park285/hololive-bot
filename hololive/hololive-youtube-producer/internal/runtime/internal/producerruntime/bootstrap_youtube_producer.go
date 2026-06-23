@@ -130,7 +130,6 @@ func logIngestionRuntimeConfigured(ctx context.Context, logger *slog.Logger, run
 		sharedlog.Runtime(runtimeName),
 		slog.Bool("youtube_enabled", features.youtubeEnabled),
 		slog.Bool("photo_sync_enabled", features.photoSyncEnabled),
-		slog.Bool("community_shorts_bigbang_enabled", features.communityShortsBigBangEnabled),
 		slog.Bool("active_active_enabled", features.activeActiveEnabled),
 		slog.String("scraper_fetcher_engine", normalizeScraperFetcherEngineForLog(scraperFetcherEngine)),
 		slog.String("lock_key", ingestionlease.Key),
