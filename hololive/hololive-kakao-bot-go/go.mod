@@ -11,8 +11,8 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.21.0
-	github.com/park285/shared-go v1.17.1
+	github.com/park285/iris-client-go v0.22.0
+	github.com/park285/shared-go v1.18.0
 	github.com/quic-go/quic-go v0.60.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.76
