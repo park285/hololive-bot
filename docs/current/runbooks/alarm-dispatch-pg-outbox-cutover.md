@@ -1,20 +1,28 @@
 # Alarm Dispatch PG Ledger Cutover
 
+> Status: cutover COMPLETE. The PG dispatch outbox is the sole, unconditional publish and consume path.
+> The legacy `valkey_only`/`shadow` publish arms and the `valkey` consumer arm have been REMOVED from the
+> code, along with `ALARM_DISPATCH_PUBLISH_MODE`, `ALARM_DISPATCH_CONSUMER_MODE`, and
+> `ALARM_DISPATCH_SHADOW_FATAL`. Env-flip rollback is gone; rollback is now "redeploy the previous image".
+> The sections below are retained as operational history and steady-state PG guidance.
+
 ## Modes
 
-Publisher:
+There is no mode selection anymore. PG publish (pending-row insert + Valkey wakeup) and the PG consumer are
+unconditional. The three former mode variables are no longer read; setting `ALARM_DISPATCH_PUBLISH_MODE` or
+`ALARM_DISPATCH_CONSUMER_MODE` to a removed legacy value (`valkey_only`, `shadow`, `valkey`) is a startup
+error. `pg_first`/`pg`/unset are accepted as no-ops for one redeploy of grace.
+
+Publisher (steady-state):
 
 ```text
-ALARM_DISPATCH_PUBLISH_MODE=valkey_only|shadow|pg_first
-ALARM_DISPATCH_SHADOW_FATAL=false|true
 ALARM_DISPATCH_WAKEUP_ENABLED=true|false
 ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH=1000
 ```
 
-Dispatcher:
+Dispatcher (steady-state):
 
 ```text
-ALARM_DISPATCH_CONSUMER_MODE=valkey|pg
 ALARM_DISPATCH_MAX_BATCH=50
 ALARM_DISPATCH_LEASE_SECONDS=60
 ALARM_DISPATCH_POLL_INTERVAL_MS=1000
@@ -30,41 +38,29 @@ ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS=30000
 ALARM_DISPATCH_RETENTION_LIMIT=1000
 ```
 
-Allowed steady-state pairs:
+Former mode matrix (REMOVED — historical only):
 
-| publisher | consumer | state |
-|---|---|---|
-| `valkey_only` | `valkey` | legacy production path |
-| `shadow` | `valkey` | PG observation only |
-| `pg_first` | `pg` | PG ledger + Valkey wakeup hybrid |
+| publisher | consumer | state | status |
+|---|---|---|---|
+| `valkey_only` | `valkey` | legacy production path | removed |
+| `shadow` | `valkey` | PG observation only | removed |
+| `pg_first` | `pg` | PG ledger + Valkey wakeup hybrid | now the only, unconditional path |
 
-Forbidden pairs:
+## Steady-State Notes (post-cutover)
 
-| publisher | consumer | reason |
-|---|---|---|
-| `pg_first` | `valkey` | PG rows are written but legacy dispatcher never claims them |
-| `shadow` | `pg` | shadow rows are observation-only and must not be promoted automatically |
-| empty/unknown | `pg` | PG consumer requires explicit `pg_first` peer mode |
-
-## Safe Sequence
-
-1. Apply migrations through `059_harden_alarm_dispatch_outbox.sql`.
-2. Run the PostgreSQL integration gate against a disposable or staging database:
+1. Migrations through `059_harden_alarm_dispatch_outbox.sql` are applied.
+2. PostgreSQL integration gate:
 
 ```bash
 TEST_DATABASE_URL=postgres://... go test -tags=integration ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox
 ```
 
-3. Start `shadow` publisher mode with dispatcher still in `valkey` mode.
-4. Confirm only `shadowed` rows increase in `alarm_dispatch_deliveries`.
-5. Drain or explicitly account for legacy Valkey queue/retry residue.
-6. Switch publisher to `pg_first` and dispatcher to `pg` in the same rollout window.
-7. Watch `pending`, `leased`, `sending`, `sent`, `retry`, `dlq`, and `quarantined` counts.
+3. The publisher writes `pending` rows directly and emits a payload-free Valkey wakeup; the PG consumer
+   claims them under lease. Watch `pending`, `leased`, `sending`, `sent`, `retry`, `dlq`, and `quarantined`
+   counts.
 
-Do not perform full rollout until the P1-P4 hardening gates are complete: set-based insert, Valkey degraded PG readiness, reconciliation throttle, batch terminal updates, and retention indexes.
-
-Do not run `publisher=pg_first, consumer=valkey` or `publisher=valkey_only/shadow, consumer=pg` as a steady state.
-Unknown publisher modes are startup errors. Treat a failed alarm-worker start during cutover as safer than silently falling back to the wrong producer mode.
+Setting a removed legacy mode value is a startup error. Treat a failed alarm-worker start on a stale
+legacy mode value as safer than silently running the wrong producer; clear the variable and redeploy.
 
 ## Logic Hardening Gate
 
@@ -77,8 +73,11 @@ go test ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox -count=1
 
 ```bash
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml config \
-  | grep -E 'ALARM_DISPATCH_(PUBLISH_MODE|CONSUMER_MODE|WAKEUP|MAX_BATCH|POLL|LEASE|RECOVERY|RETENTION|IDLE)'
+  | grep -E 'ALARM_DISPATCH_(WAKEUP|MAX_BATCH|POLL|LEASE|RECOVERY|RETENTION|IDLE)'
 ```
+
+`ALARM_DISPATCH_PUBLISH_MODE`/`ALARM_DISPATCH_CONSUMER_MODE`/`ALARM_DISPATCH_SHADOW_FATAL` are intentionally
+absent from compose — PG is the only path and these variables are no longer read.
 
 Required hardening conditions:
 
@@ -150,14 +149,16 @@ DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh quarantine
 
 The alarm-worker maintenance runner performs the same cleanup automatically when `ALARM_DISPATCH_RETENTION_ENABLED=true`. Keep the manual script as an emergency fallback.
 
-## Rollback Matrix
+## Rollback
+
+The env-flip rollback to a Valkey publish/consume path has been REMOVED. There is no `valkey_only`/`shadow`/
+`valkey` mode to switch back to. Rollback now means redeploying the previous alarm-worker image. The legacy
+rollback window is closed by explicit decision.
 
 | rollback path | allowed | required accounting |
 |---|---|---|
-| stop producer, keep `consumer=pg`, drain PG | yes | record active status counts and oldest ages before and after drain |
-| `pg_first/pg` to `valkey_only/valkey` | only with operator approval | record stranded PG `pending/retry/leased/sending` rows and legacy Valkey residue |
-| `pg_first/valkey` | no | creates stranded PG rows |
-| `shadow/pg` | no | `shadowed` rows are observation-only |
-| `valkey_only/pg` | no | PG consumer has no durable producer |
+| stop producer, keep PG consumer running, drain PG | yes | record active status counts and oldest ages before and after drain |
+| redeploy previous image (image-level rollback) | yes, with operator approval | the prior image still expects PG; do not reintroduce legacy mode env |
 
-Never replay legacy Valkey residue into PG. Never promote `shadowed` rows to `pending`. Never automatically retry `sending` rows. Never replay `quarantined` rows without explicit duplicate-risk acknowledgement.
+Never promote any historical `shadowed` rows to `pending`. Never automatically retry `sending` rows. Never
+replay `quarantined` rows without explicit duplicate-risk acknowledgement.

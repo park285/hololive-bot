@@ -61,9 +61,10 @@ func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
 	assert.Contains(t, err.Error(), "postgres is required")
 }
 
-func TestBuildAlarmDispatchRunnerWiresValkeyMode(t *testing.T) {
+func TestBuildAlarmDispatchRunnerDefaultsToPGWhenConsumerModeUnset(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
 	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "")
+	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "")
 	t.Setenv("ALARM_DISPATCH_MAX_BATCH", "7")
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
@@ -73,11 +74,26 @@ func TestBuildAlarmDispatchRunnerWiresValkeyMode(t *testing.T) {
 
 	runner, ok := scheduler.(*alarmDispatchRunner)
 	require.True(t, ok)
-	assert.Equal(t, "valkey", runner.consumerMode)
+	assert.Equal(t, "pg", runner.consumerMode)
 	assert.Equal(t, 7, runner.maxBatch)
 	assert.True(t, runner.karingEnabled)
 	assert.True(t, runner.postSendQuarantine)
-	assert.Nil(t, runner.idleWaiter)
+	waiter, ok := runner.idleWaiter.(*alarmDispatchWakeupWaiter)
+	require.True(t, ok)
+	assert.NotNil(t, waiter)
+}
+
+func TestBuildAlarmDispatchRunnerRejectsRemovedLegacyConsumerMode(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
+	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "valkey")
+	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "")
+	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
+
+	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	require.Error(t, err)
+	assert.Nil(t, scheduler)
+	assert.Contains(t, err.Error(), "ALARM_DISPATCH_CONSUMER_MODE")
+	assert.Contains(t, err.Error(), "no longer supported")
 }
 
 func TestBuildAlarmDispatchRunnerWiresPGMode(t *testing.T) {

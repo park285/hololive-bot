@@ -3,15 +3,12 @@ package workerapp
 import (
 	"fmt"
 	"log/slog"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	youtubeoutbox "github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
@@ -108,41 +105,31 @@ func buildAlarmDispatchRunner(
 	if infra == nil {
 		return nil, fmt.Errorf("infra is required")
 	}
-
-	consumerMode := strings.ToLower(strings.TrimSpace(os.Getenv("ALARM_DISPATCH_CONSUMER_MODE")))
-	maxBatch := parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50)
-	karingEnabled := parseAlarmDispatchKaringEnabled()
-	if consumerMode == "pg" {
-		if infra.Postgres == nil {
-			return nil, fmt.Errorf("postgres is required")
-		}
-		lease := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_LEASE_SECONDS", 60*time.Second)
-		return &alarmDispatchRunner{
-			consumer: dispatchoutbox.NewConsumer(
-				dispatchoutbox.NewPgxRepository(infra.Postgres, logger),
-				logger,
-				dispatchoutbox.WithLease(lease),
-				dispatchoutbox.WithRecoveryInterval(parsePositiveDurationMSEnv("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", 30*time.Second)),
-				dispatchoutbox.WithRecoveryBatchSize(parsePositiveIntEnv("ALARM_DISPATCH_RECOVERY_BATCH_SIZE", 100)),
-				dispatchoutbox.WithClaimKeyReleaser(infra.Cache),
-			),
-			sender:             sender,
-			idleWaiter:         newAlarmDispatchWakeupWaiter(infra.Cache, logger),
-			karingEnabled:      karingEnabled,
-			consumerMode:       "pg",
-			postSendQuarantine: true,
-			maxBatch:           maxBatch,
-			maxBatchesPerWake:  parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", 20),
-			logger:             logger,
-		}, nil
+	if err := rejectRemovedAlarmDispatchModeEnv(); err != nil {
+		return nil, err
 	}
+	if infra.Postgres == nil {
+		return nil, fmt.Errorf("postgres is required")
+	}
+
+	maxBatch := parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50)
+	lease := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_LEASE_SECONDS", 60*time.Second)
 	return &alarmDispatchRunner{
-		consumer:           queue.NewConsumer(infra.Cache, logger, queue.WithMaxBatch(maxBatch)),
+		consumer: dispatchoutbox.NewConsumer(
+			dispatchoutbox.NewPgxRepository(infra.Postgres, logger),
+			logger,
+			dispatchoutbox.WithLease(lease),
+			dispatchoutbox.WithRecoveryInterval(parsePositiveDurationMSEnv("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", 30*time.Second)),
+			dispatchoutbox.WithRecoveryBatchSize(parsePositiveIntEnv("ALARM_DISPATCH_RECOVERY_BATCH_SIZE", 100)),
+			dispatchoutbox.WithClaimKeyReleaser(infra.Cache),
+		),
 		sender:             sender,
-		karingEnabled:      karingEnabled,
-		consumerMode:       "valkey",
+		idleWaiter:         newAlarmDispatchWakeupWaiter(infra.Cache, logger),
+		karingEnabled:      parseAlarmDispatchKaringEnabled(),
+		consumerMode:       "pg",
 		postSendQuarantine: true,
 		maxBatch:           maxBatch,
+		maxBatchesPerWake:  parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", 20),
 		logger:             logger,
 	}, nil
 }

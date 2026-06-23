@@ -10,7 +10,6 @@ import (
 type Status string
 
 const (
-	StatusShadowed    Status = "shadowed"
 	StatusPending     Status = "pending"
 	StatusLeased      Status = "leased"
 	StatusRetry       Status = "retry"
@@ -27,8 +26,6 @@ const (
 	Inserted          InsertResult = "inserted"
 	DuplicateActive   InsertResult = "duplicate_active"
 	DuplicateTerminal InsertResult = "duplicate_terminal"
-	DuplicateShadowed InsertResult = "duplicate_shadowed"
-	PromotedShadow    InsertResult = "promoted_shadow"
 )
 
 type Record struct {
@@ -81,17 +78,15 @@ type PublishBatchInput struct {
 }
 
 type PublishBatchResult struct {
-	RequestedEvents       int
-	InsertedEvents        int
-	DuplicateEvents       int
-	HashConflictEvents    int
-	RequestedDeliveries   int
-	ProcessedDeliveries   int
-	InsertedDeliveries    int
-	DuplicateDeliveries   int
-	TerminalDuplicates    int
-	ShadowedDuplicates    int
-	PromotedShadowedCount int
+	RequestedEvents     int
+	InsertedEvents      int
+	DuplicateEvents     int
+	HashConflictEvents  int
+	RequestedDeliveries int
+	ProcessedDeliveries int
+	InsertedDeliveries  int
+	DuplicateDeliveries int
+	TerminalDuplicates  int
 }
 
 func processedPublishBatchResult(result *PublishBatchResult) PublishBatchResult {
@@ -112,7 +107,6 @@ type TerminalUpdate struct {
 }
 
 type Writer interface {
-	InsertShadowed(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, error)
 	InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error)
 	InsertBatch(ctx context.Context, input PublishBatchInput) (PublishBatchResult, error)
 }

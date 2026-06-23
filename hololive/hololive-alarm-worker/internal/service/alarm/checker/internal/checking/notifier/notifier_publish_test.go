@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/stretchr/testify/assert"
@@ -58,9 +59,13 @@ func TestNotifierPublishBatchAndMarkSuccess(t *testing.T) {
 	cache := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, []int{10}, logger)
+	outbox := &notifierBatchOutbox{}
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cache, logger),
+		queue.NewPublisher(cache, logger,
+			queue.WithOutbox(outbox),
+			queue.WithWakeupEnabled(false),
+		),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -72,7 +77,9 @@ func TestNotifierPublishBatchAndMarkSuccess(t *testing.T) {
 	processed, err := notifier.publishBatchAndMark(t.Context(), []claimedSend{item})
 	require.NoError(t, err)
 	assert.Equal(t, 1, processed)
-	assert.Equal(t, int64(1), readDispatchQueueSize(t, cache))
+	assert.Equal(t, 1, outbox.insertBatchCalls)
+	assert.Equal(t, dispatchoutbox.StatusPending, outbox.lastBatchInput.Status)
+	assert.Zero(t, readDispatchQueueSize(t, cache))
 
 	alreadyNotified, err := dedupService.IsAlreadyNotifiedForSchedule(t.Context(), "stream-success", start, 10)
 	require.NoError(t, err)
@@ -100,7 +107,6 @@ func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T)
 		dedupService,
 		queue.NewPublisher(cache, logger,
 			queue.WithOutbox(outbox),
-			queue.WithPublishMode(queue.PublishModePGFirst),
 			queue.WithWakeupEnabled(false),
 			queue.WithMaxDeliveriesPerBatch(1),
 		),

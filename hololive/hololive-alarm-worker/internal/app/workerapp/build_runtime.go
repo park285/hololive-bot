@@ -295,58 +295,29 @@ func buildAlarmFoundation(
 }
 
 func loadAlarmDispatchPublishConfig() (queue.PublishConfig, error) {
-	mode, err := parseAlarmDispatchPublishMode(os.Getenv("ALARM_DISPATCH_PUBLISH_MODE"))
-	if err != nil {
-		return queue.PublishConfig{}, err
-	}
-	if err := validateAlarmDispatchModePair(mode, os.Getenv("ALARM_DISPATCH_CONSUMER_MODE")); err != nil {
+	if err := rejectRemovedAlarmDispatchModeEnv(); err != nil {
 		return queue.PublishConfig{}, err
 	}
 	return queue.PublishConfig{
-		Mode:                  mode,
-		ShadowFatal:           parseBoolEnv("ALARM_DISPATCH_SHADOW_FATAL", false),
 		WakeupEnabled:         parseBoolEnv("ALARM_DISPATCH_WAKEUP_ENABLED", true),
 		MaxDeliveriesPerBatch: parsePositiveIntEnv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000),
 	}, nil
 }
 
-func parseAlarmDispatchPublishMode(raw string) (queue.PublishMode, error) {
-	mode := queue.PublishMode(strings.ToLower(strings.TrimSpace(raw)))
-	switch mode {
-	case "", queue.PublishModeValkeyOnly:
-		return queue.PublishModeValkeyOnly, nil
-	case queue.PublishModeShadow, queue.PublishModePGFirst:
-		return mode, nil
+func rejectRemovedAlarmDispatchModeEnv() error {
+	publishMode := strings.ToLower(strings.TrimSpace(os.Getenv("ALARM_DISPATCH_PUBLISH_MODE")))
+	switch publishMode {
+	case "", "pg_first":
 	default:
-		return "", fmt.Errorf("ALARM_DISPATCH_PUBLISH_MODE must be valkey_only, shadow, or pg_first")
+		return fmt.Errorf("ALARM_DISPATCH_PUBLISH_MODE=%q is no longer supported; the PG dispatch outbox is the only publish path (unset the variable)", publishMode)
 	}
-}
-func validateAlarmDispatchModePair(publishMode queue.PublishMode, rawConsumerMode string) error {
-	consumerMode := strings.ToLower(strings.TrimSpace(rawConsumerMode))
-	if consumerMode == "" {
-		if publishMode == queue.PublishModePGFirst {
-			return fmt.Errorf("ALARM_DISPATCH_CONSUMER_MODE is required when ALARM_DISPATCH_PUBLISH_MODE=pg_first")
-		}
+	consumerMode := strings.ToLower(strings.TrimSpace(os.Getenv("ALARM_DISPATCH_CONSUMER_MODE")))
+	switch consumerMode {
+	case "", "pg":
 		return nil
+	default:
+		return fmt.Errorf("ALARM_DISPATCH_CONSUMER_MODE=%q is no longer supported; the PG dispatch outbox is the only consumer path (unset the variable)", consumerMode)
 	}
-	if consumerMode != "valkey" && consumerMode != "pg" {
-		return fmt.Errorf("ALARM_DISPATCH_CONSUMER_MODE must be valkey or pg when provided")
-	}
-	if alarmDispatchModeRequiresPGConsumer(publishMode, consumerMode) {
-		return fmt.Errorf("forbidden alarm dispatch mode combination: publisher=pg_first requires consumer=pg")
-	}
-	if alarmDispatchModeRequiresPGPublisher(publishMode, consumerMode) {
-		return fmt.Errorf("forbidden alarm dispatch mode combination: consumer=pg requires publisher=pg_first")
-	}
-	return nil
-}
-
-func alarmDispatchModeRequiresPGConsumer(publishMode queue.PublishMode, consumerMode string) bool {
-	return publishMode == queue.PublishModePGFirst && consumerMode != "pg"
-}
-
-func alarmDispatchModeRequiresPGPublisher(publishMode queue.PublishMode, consumerMode string) bool {
-	return publishMode != queue.PublishModePGFirst && consumerMode == "pg"
 }
 
 func buildCelebrationRunnerScheduler(
@@ -371,8 +342,6 @@ func buildCelebrationRunnerScheduler(
 		infra.Cache,
 		logger,
 		queue.WithOutbox(foundation.Outbox),
-		queue.WithPublishMode(publishConfig.Mode),
-		queue.WithShadowFatal(publishConfig.ShadowFatal),
 		queue.WithWakeupEnabled(publishConfig.WakeupEnabled),
 		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
 	)

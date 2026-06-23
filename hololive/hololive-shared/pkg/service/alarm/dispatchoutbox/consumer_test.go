@@ -333,10 +333,6 @@ type consumerTestRepository struct {
 	markSentWorkerID            string
 }
 
-func (r *consumerTestRepository) InsertShadowed(context.Context, *domain.AlarmQueueEnvelope) (*Record, error) {
-	return nil, nil
-}
-
 func (r *consumerTestRepository) InsertPending(context.Context, *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
 	return nil, "", nil
 }

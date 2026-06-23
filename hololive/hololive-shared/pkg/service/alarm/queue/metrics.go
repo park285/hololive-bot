@@ -32,14 +32,6 @@ import (
 var (
 	queueMetricsInitOnce sync.Once
 
-	alarmQueueDrainDuration               prometheus.Histogram
-	alarmQueueDrainBatch                  prometheus.Histogram
-	alarmQueueDrainTotal                  *prometheus.CounterVec
-	alarmQueueEnvelopeTotal               *prometheus.CounterVec
-	alarmQueueClaimReleased               prometheus.Counter
-	alarmQueueRetryScheduled              prometheus.Counter
-	alarmQueueRetryDrained                prometheus.Counter
-	alarmQueueDLQMoved                    prometheus.Counter
 	alarmDispatchPublishBatchDuration     prometheus.Histogram
 	alarmDispatchPublishRequestedTotal    *prometheus.CounterVec
 	alarmDispatchPublishProcessedTotal    *prometheus.CounterVec
@@ -54,56 +46,8 @@ var (
 
 func initQueueMetrics() {
 	queueMetricsInitOnce.Do(func() {
-		initAlarmQueueDrainMetrics()
 		initAlarmDispatchPublishMetrics()
 		initAlarmDispatchWakeupMetrics()
-	})
-}
-
-func initAlarmQueueDrainMetrics() {
-	alarmQueueDrainDuration = promauto.NewHistogram(
-		prometheus.HistogramOpts{
-			Name:    "hololive_alarm_dispatch_queue_drain_duration_seconds",
-			Help:    "Alarm dispatch queue drain duration in seconds.",
-			Buckets: prometheus.DefBuckets,
-		},
-	)
-	alarmQueueDrainBatch = promauto.NewHistogram(
-		prometheus.HistogramOpts{
-			Name:    "hololive_alarm_dispatch_queue_drain_batch_size",
-			Help:    "Alarm dispatch queue drained envelope count per batch.",
-			Buckets: []float64{0, 1, 2, 5, 10, 20, 50, 100},
-		},
-	)
-	alarmQueueDrainTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "hololive_alarm_dispatch_queue_drain_total",
-			Help: "Total alarm dispatch queue drain attempts by result.",
-		},
-		[]string{"result"},
-	)
-	alarmQueueEnvelopeTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "hololive_alarm_dispatch_queue_envelopes_total",
-			Help: "Total parsed alarm dispatch queue envelopes by result.",
-		},
-		[]string{"result"},
-	)
-	alarmQueueClaimReleased = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "hololive_alarm_dispatch_queue_claim_keys_released_total",
-		Help: "Total released alarm dispatch queue claim keys.",
-	})
-	alarmQueueRetryScheduled = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "hololive_alarm_dispatch_queue_retry_scheduled_total",
-		Help: "Total alarm dispatch queue envelopes scheduled into the delayed retry queue.",
-	})
-	alarmQueueRetryDrained = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "hololive_alarm_dispatch_queue_retry_drained_total",
-		Help: "Total delayed retry envelopes drained into active processing.",
-	})
-	alarmQueueDLQMoved = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "hololive_alarm_dispatch_queue_dlq_moved_total",
-		Help: "Total alarm dispatch queue envelopes moved to the dead-letter queue.",
 	})
 }
 
@@ -171,9 +115,11 @@ func initAlarmDispatchWakeupMetrics() {
 	})
 }
 
-func observeAlarmDispatchPublishBatch(duration time.Duration, mode PublishMode, result *dispatchoutbox.PublishBatchResult) {
+const alarmDispatchPublishModeLabel = "pg_first"
+
+func observeAlarmDispatchPublishBatch(duration time.Duration, result *dispatchoutbox.PublishBatchResult) {
 	initQueueMetrics()
-	modeLabel := string(normalizePublishMode(mode))
+	modeLabel := alarmDispatchPublishModeLabel
 	if alarmDispatchPublishBatchDuration == nil ||
 		alarmDispatchPublishRequestedTotal == nil ||
 		alarmDispatchPublishProcessedTotal == nil ||
@@ -188,38 +134,6 @@ func observeAlarmDispatchPublishBatch(duration time.Duration, mode PublishMode, 
 	alarmDispatchPublishInsertedTotal.WithLabelValues(modeLabel).Add(float64(result.InsertedDeliveries))
 	alarmDispatchPublishDuplicateTotal.WithLabelValues(modeLabel).Add(float64(result.DuplicateDeliveries))
 	alarmDispatchPublishHashConflictTotal.WithLabelValues(modeLabel).Add(float64(result.HashConflictEvents))
-}
-
-func observeAlarmQueueClaimReleased(n int) {
-	initQueueMetrics()
-	if alarmQueueClaimReleased == nil || n <= 0 {
-		return
-	}
-	alarmQueueClaimReleased.Add(float64(n))
-}
-
-func observeAlarmQueueRetryScheduled(n int) {
-	initQueueMetrics()
-	if alarmQueueRetryScheduled == nil || n <= 0 {
-		return
-	}
-	alarmQueueRetryScheduled.Add(float64(n))
-}
-
-func observeAlarmQueueRetryDrained(n int) {
-	initQueueMetrics()
-	if alarmQueueRetryDrained == nil || n <= 0 {
-		return
-	}
-	alarmQueueRetryDrained.Add(float64(n))
-}
-
-func observeAlarmQueueDLQMoved(n int) {
-	initQueueMetrics()
-	if alarmQueueDLQMoved == nil || n <= 0 {
-		return
-	}
-	alarmQueueDLQMoved.Add(float64(n))
 }
 
 func observeAlarmDispatchWakeupSent() {

@@ -382,11 +382,6 @@ hololive/hololive-shared/pkg/service/alarm/dto.go
 hololive/hololive-shared/pkg/service/alarm/keys/keys.go
 hololive/hololive-shared/pkg/service/alarm/keys/validation.go
 hololive/hololive-shared/pkg/service/alarm/metrics.go
-hololive/hololive-shared/pkg/service/alarm/queue/consumer.go
-hololive/hololive-shared/pkg/service/alarm/queue/consumer_delayed_retry.go
-hololive/hololive-shared/pkg/service/alarm/queue/consumer_payload.go
-hololive/hololive-shared/pkg/service/alarm/queue/consumer_primitives.go
-hololive/hololive-shared/pkg/service/alarm/queue/consumer_retry.go
 hololive/hololive-shared/pkg/service/alarm/queue/metrics.go
 hololive/hololive-shared/pkg/service/alarm/queue/publisher.go
 hololive/hololive-shared/pkg/service/alarm/repository.go

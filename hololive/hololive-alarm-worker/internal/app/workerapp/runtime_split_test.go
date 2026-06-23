@@ -3,7 +3,6 @@ package workerapp
 import (
 	"context"
 	"log/slog"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -58,41 +57,50 @@ func TestRuntimeAllowsAlarmScheduler(t *testing.T) {
 	}
 }
 
-func TestLoadAlarmDispatchPublishConfigRejectsUnknownMode(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg-frist")
+func TestLoadAlarmDispatchPublishConfigRejectsRemovedLegacyPublishMode(t *testing.T) {
+	for _, mode := range []string{"valkey_only", "shadow", "pg-frist"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", mode)
+			t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "")
 
-	appConfig, err := loadAlarmDispatchPublishConfig()
-	require.Error(t, err)
-	assert.Equal(t, queue.PublishConfig{}, appConfig)
-	assert.True(t, strings.Contains(err.Error(), "ALARM_DISPATCH_PUBLISH_MODE"))
+			appConfig, err := loadAlarmDispatchPublishConfig()
+			require.Error(t, err)
+			assert.Equal(t, queue.PublishConfig{}, appConfig)
+			assert.Contains(t, err.Error(), "ALARM_DISPATCH_PUBLISH_MODE")
+			assert.Contains(t, err.Error(), "no longer supported")
+		})
+	}
 }
 
-func TestLoadAlarmDispatchPublishConfigRejectsForbiddenConsumerModePair(t *testing.T) {
+func TestLoadAlarmDispatchPublishConfigRejectsRemovedLegacyConsumerMode(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
 	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "valkey")
 
 	appConfig, err := loadAlarmDispatchPublishConfig()
 	require.Error(t, err)
 	assert.Equal(t, queue.PublishConfig{}, appConfig)
-	assert.Contains(t, err.Error(), "forbidden alarm dispatch mode combination")
+	assert.Contains(t, err.Error(), "ALARM_DISPATCH_CONSUMER_MODE")
+	assert.Contains(t, err.Error(), "no longer supported")
 }
 
-func TestLoadAlarmDispatchPublishConfigRejectsPGFirstWithoutPeerConsumerMode(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
+func TestLoadAlarmDispatchPublishConfigAllowsUnsetAndPGValues(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		publishMode string
+		consumer    string
+	}{
+		{name: "unset", publishMode: "", consumer: ""},
+		{name: "explicit pg pair", publishMode: "pg_first", consumer: "pg"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", tc.publishMode)
+			t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", tc.consumer)
 
-	appConfig, err := loadAlarmDispatchPublishConfig()
-	require.Error(t, err)
-	assert.Equal(t, queue.PublishConfig{}, appConfig)
-	assert.Contains(t, err.Error(), "ALARM_DISPATCH_CONSUMER_MODE is required")
-}
-
-func TestLoadAlarmDispatchPublishConfigAllowsMatchingPGPair(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
-	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "pg")
-
-	appConfig, err := loadAlarmDispatchPublishConfig()
-	require.NoError(t, err)
-	assert.Equal(t, queue.PublishModePGFirst, appConfig.Mode)
+			appConfig, err := loadAlarmDispatchPublishConfig()
+			require.NoError(t, err)
+			assert.True(t, appConfig.WakeupEnabled)
+		})
+	}
 }
 
 func TestNotificationEgressRunnerRetriesHeldLeaseUntilAcquired(t *testing.T) {

@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,27 +14,17 @@ import (
 )
 
 type fakeOutboxRepository struct {
-	insertShadowedCalls int
-	insertPendingCalls  int
-	insertBatchCalls    int
-	lastBatchInput      dispatchoutbox.PublishBatchInput
-	batchInputs         []dispatchoutbox.PublishBatchInput
-	shadowedErr         error
-	pendingRecord       *dispatchoutbox.Record
-	pendingResult       dispatchoutbox.InsertResult
-	batchResult         dispatchoutbox.PublishBatchResult
-	batchResults        []dispatchoutbox.PublishBatchResult
-	batchErrors         []error
-	pendingErr          error
-	batchErr            error
-}
-
-func (r *fakeOutboxRepository) InsertShadowed(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, error) {
-	r.insertShadowedCalls++
-	if r.shadowedErr != nil {
-		return nil, r.shadowedErr
-	}
-	return &dispatchoutbox.Record{ID: 11, Status: dispatchoutbox.StatusShadowed}, nil
+	insertPendingCalls int
+	insertBatchCalls   int
+	lastBatchInput     dispatchoutbox.PublishBatchInput
+	batchInputs        []dispatchoutbox.PublishBatchInput
+	pendingRecord      *dispatchoutbox.Record
+	pendingResult      dispatchoutbox.InsertResult
+	batchResult        dispatchoutbox.PublishBatchResult
+	batchResults       []dispatchoutbox.PublishBatchResult
+	batchErrors        []error
+	pendingErr         error
+	batchErr           error
 }
 
 func (r *fakeOutboxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, dispatchoutbox.InsertResult, error) {
@@ -82,51 +71,11 @@ func (r *fakeOutboxRepository) InsertBatch(ctx context.Context, input dispatchou
 	return result, nil
 }
 
-func TestPublisherShadowModeWritesOutboxAfterValkeySuccess(t *testing.T) {
+func TestPublisherDoesNotPushLegacyQueue(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{}
 	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
-		WithPublishMode(PublishModeShadow),
-	)
-
-	_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
-		AlarmType: domain.AlarmTypeLive,
-		RoomID:    "room-shadow",
-	}, []string{"notified:claim:shadow"})
-	require.NoError(t, err)
-
-	require.Len(t, queueItemsOrEmpty(t, mini), 1)
-	assert.Equal(t, 1, repository.insertBatchCalls)
-	assert.Equal(t, dispatchoutbox.StatusShadowed, repository.lastBatchInput.Status)
-	assert.Len(t, repository.lastBatchInput.Envelopes, 1)
-	assert.Equal(t, 0, repository.insertShadowedCalls)
-	assert.Equal(t, 0, repository.insertPendingCalls)
-}
-
-func TestPublisherShadowModeHonorsFatalFlag(t *testing.T) {
-	cacheClient, _ := newTestCacheClient(t)
-	repository := &fakeOutboxRepository{batchErr: errors.New("pg unavailable")}
-	publisher := NewPublisher(cacheClient, slog.Default(),
-		WithOutbox(repository),
-		WithPublishMode(PublishModeShadow),
-		WithShadowFatal(true),
-	)
-
-	_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
-		AlarmType: domain.AlarmTypeLive,
-		RoomID:    "room-shadow-fatal",
-	}, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "insert shadowed")
-}
-
-func TestPublisherPGFirstDoesNotPushLegacyQueue(t *testing.T) {
-	cacheClient, mini := newTestCacheClient(t)
-	repository := &fakeOutboxRepository{}
-	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
-		WithOutbox(repository),
-		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
 	)
 
@@ -137,27 +86,24 @@ func TestPublisherPGFirstDoesNotPushLegacyQueue(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
-	assert.Equal(t, 0, repository.insertShadowedCalls)
 	assert.Equal(t, 1, repository.insertBatchCalls)
+	assert.Equal(t, dispatchoutbox.StatusPending, repository.lastBatchInput.Status)
 	assert.Equal(t, 0, repository.insertPendingCalls)
 }
 
 func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{batchResult: dispatchoutbox.PublishBatchResult{
-		RequestedEvents:       1,
-		ProcessedDeliveries:   1,
-		RequestedDeliveries:   1,
-		DuplicateDeliveries:   1,
-		TerminalDuplicates:    1,
-		InsertedDeliveries:    0,
-		HashConflictEvents:    0,
-		ShadowedDuplicates:    0,
-		PromotedShadowedCount: 0,
+		RequestedEvents:     1,
+		ProcessedDeliveries: 1,
+		RequestedDeliveries: 1,
+		DuplicateDeliveries: 1,
+		TerminalDuplicates:  1,
+		InsertedDeliveries:  0,
+		HashConflictEvents:  0,
 	}}
 	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
-		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
 	)
 
@@ -182,7 +128,6 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 	}
 	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
-		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
 		WithMaxDeliveriesPerBatch(1),
 	)
@@ -204,7 +149,6 @@ func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(
 	repository := &fakeOutboxRepository{}
 	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
-		WithPublishMode(PublishModePGFirst),
 	)
 	channel := &domain.Channel{ID: "channel-1"}
 	stream := &domain.Stream{ID: "stream-1", ChannelID: "channel-1"}

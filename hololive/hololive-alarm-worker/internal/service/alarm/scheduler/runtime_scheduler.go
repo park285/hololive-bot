@@ -225,8 +225,6 @@ func newRuntimeSchedulerQueuePublisher(
 		cacheClient,
 		logger,
 		queue.WithOutbox(outbox),
-		queue.WithPublishMode(publishConfig.Mode),
-		queue.WithShadowFatal(publishConfig.ShadowFatal),
 		queue.WithWakeupEnabled(publishConfig.WakeupEnabled),
 		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
 	)

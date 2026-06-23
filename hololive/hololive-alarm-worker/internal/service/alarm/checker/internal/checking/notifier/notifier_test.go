@@ -39,25 +39,12 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
 )
-
-type failingPublishCacheClient struct {
-	cache.Client
-}
-
-func (c *failingPublishCacheClient) DoMulti(context.Context, ...valkey.Completed) []valkey.ValkeyResult {
-	return nil
-}
 
 type notifierBatchOutbox struct {
 	insertBatchCalls int
 	lastBatchInput   dispatchoutbox.PublishBatchInput
 	batchErrors      []error
-}
-
-func (o *notifierBatchOutbox) InsertShadowed(context.Context, *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, error) {
-	return nil, nil
 }
 
 func (o *notifierBatchOutbox) InsertPending(context.Context, *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, dispatchoutbox.InsertResult, error) {
@@ -132,10 +119,14 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 
 	cacheClient := newCheckerTestCacheClient(t)
 	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())
+	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, newCheckerTestLogger()),
+		queue.NewPublisher(cacheClient, newCheckerTestLogger(),
+			queue.WithOutbox(outbox),
+			queue.WithWakeupEnabled(false),
+		),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -163,8 +154,17 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 
-	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 1 {
-		t.Fatalf("expected dispatch queue size=1, got %d", queueSize)
+	if outbox.insertBatchCalls != 1 {
+		t.Fatalf("expected one pending outbox insert, got %d", outbox.insertBatchCalls)
+	}
+	if got := len(outbox.lastBatchInput.Envelopes); got != 1 {
+		t.Fatalf("expected one published envelope, got %d", got)
+	}
+	if outbox.lastBatchInput.Status != dispatchoutbox.StatusPending {
+		t.Fatalf("expected pending outbox status, got %q", outbox.lastBatchInput.Status)
+	}
+	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
+		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
 	}
 
 	notifiedKey := "notified:" + stream.ID
@@ -193,10 +193,14 @@ func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
 
 	cacheClient := newCheckerTestCacheClient(t)
 	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())
+	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, newCheckerTestLogger()),
+		queue.NewPublisher(cacheClient, newCheckerTestLogger(),
+			queue.WithOutbox(outbox),
+			queue.WithWakeupEnabled(false),
+		),
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -236,8 +240,11 @@ func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
 	require.NoError(t, sendErr)
 	assert.Equal(t, SendResult{Sent: 2}, result)
 
-	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 2 {
-		t.Fatalf("expected non-youtube live streams to publish, got queue size %d", queueSize)
+	require.Equal(t, 1, outbox.insertBatchCalls)
+	assert.Len(t, outbox.lastBatchInput.Envelopes, 2)
+	assert.Equal(t, dispatchoutbox.StatusPending, outbox.lastBatchInput.Status)
+	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
+		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
 	}
 }
 
@@ -245,14 +252,17 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 	t.Parallel()
 
 	cacheClient := newCheckerTestCacheClient(t)
-	failingCache := &failingPublishCacheClient{Client: cacheClient}
 	logger := newCheckerTestLogger()
-	dedupService := dedup.NewService(failingCache, []int{5, 3, 1}, logger)
+	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
+	outbox := &notifierBatchOutbox{batchErrors: []error{errors.New("pg unavailable")}}
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(failingCache, logger),
+		queue.NewPublisher(cacheClient, logger,
+			queue.WithOutbox(outbox),
+			queue.WithWakeupEnabled(false),
+		),
 		tierSched,
 		logger,
 	)
@@ -336,10 +346,14 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 	cacheClient := newCheckerTestCacheClient(t)
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, logger)
+	outbox := &notifierBatchOutbox{}
 
 	notifier, err := NewNotifier(
 		dedupService,
-		queue.NewPublisher(cacheClient, logger),
+		queue.NewPublisher(cacheClient, logger,
+			queue.WithOutbox(outbox),
+			queue.WithWakeupEnabled(false),
+		),
 		tier.NewTieredScheduler(logger),
 		logger,
 	)
@@ -374,8 +388,14 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 		t.Fatalf("expected Sent=2, got %d (Skipped=%d, Failed=%d)", result.Sent, result.Skipped, result.Failed)
 	}
 
-	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 2 {
-		t.Fatalf("expected dispatch queue size=2, got %d", queueSize)
+	if outbox.insertBatchCalls != 1 {
+		t.Fatalf("expected one pending outbox insert, got %d", outbox.insertBatchCalls)
+	}
+	if got := len(outbox.lastBatchInput.Envelopes); got != 2 {
+		t.Fatalf("expected two published envelopes, got %d", got)
+	}
+	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
+		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
 	}
 }
 
@@ -391,7 +411,6 @@ func TestNotifierSend_UsesSinglePublishBatchForClaimedNotifications(t *testing.T
 		dedupService,
 		queue.NewPublisher(cacheClient, logger,
 			queue.WithOutbox(outbox),
-			queue.WithPublishMode(queue.PublishModePGFirst),
 			queue.WithWakeupEnabled(false),
 		),
 		tier.NewTieredScheduler(logger),
@@ -444,7 +463,6 @@ func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *te
 		dedupService,
 		queue.NewPublisher(cacheClient, logger,
 			queue.WithOutbox(outbox),
-			queue.WithPublishMode(queue.PublishModePGFirst),
 			queue.WithWakeupEnabled(false),
 		),
 		tier.NewTieredScheduler(logger),
@@ -514,7 +532,6 @@ func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testin
 		dedupService,
 		queue.NewPublisher(cacheClient, logger,
 			queue.WithOutbox(outbox),
-			queue.WithPublishMode(queue.PublishModePGFirst),
 			queue.WithWakeupEnabled(false),
 			queue.WithMaxDeliveriesPerBatch(1),
 		),

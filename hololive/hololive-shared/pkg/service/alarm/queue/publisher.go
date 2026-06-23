@@ -31,8 +31,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	json "github.com/park285/shared-go/pkg/json"
-	"github.com/valkey-io/valkey-go"
 )
 
 const AlarmDispatchQueue = contractsalarm.DispatchQueueKey
@@ -40,17 +38,7 @@ const AlarmDispatchWakeupQueue = "alarm:dispatch:wakeup"
 const alarmDispatchWakeupGuardKey = "alarm:dispatch:wakeup:guard"
 const defaultPublishBatchDeliveryLimit = 1000
 
-type PublishMode string
-
-const (
-	PublishModeValkeyOnly PublishMode = "valkey_only"
-	PublishModeShadow     PublishMode = "shadow"
-	PublishModePGFirst    PublishMode = "pg_first"
-)
-
 type PublishConfig struct {
-	Mode                  PublishMode
-	ShadowFatal           bool
 	WakeupEnabled         bool
 	MaxDeliveriesPerBatch int
 }
@@ -68,18 +56,6 @@ type PublisherOption func(*Publisher)
 func WithOutbox(repository dispatchoutbox.Writer) PublisherOption {
 	return func(p *Publisher) {
 		p.outbox = repository
-	}
-}
-
-func WithPublishMode(mode PublishMode) PublisherOption {
-	return func(p *Publisher) {
-		p.publishConfig.Mode = normalizePublishMode(mode)
-	}
-}
-
-func WithShadowFatal(enabled bool) PublisherOption {
-	return func(p *Publisher) {
-		p.publishConfig.ShadowFatal = enabled
 	}
 }
 
@@ -106,7 +82,6 @@ func NewPublisher(c cache.Client, logger *slog.Logger, opts ...PublisherOption) 
 	publisher := &Publisher{
 		cache: c,
 		publishConfig: PublishConfig{
-			Mode:                  PublishModeValkeyOnly,
 			WakeupEnabled:         true,
 			MaxDeliveriesPerBatch: defaultPublishBatchDeliveryLimit,
 		},
@@ -116,22 +91,10 @@ func NewPublisher(c cache.Client, logger *slog.Logger, opts ...PublisherOption) 
 	for _, opt := range opts {
 		opt(publisher)
 	}
-	publisher.publishConfig.Mode = normalizePublishMode(publisher.publishConfig.Mode)
 	if publisher.publishConfig.MaxDeliveriesPerBatch <= 0 {
 		publisher.publishConfig.MaxDeliveriesPerBatch = defaultPublishBatchDeliveryLimit
 	}
 	return publisher
-}
-
-func normalizePublishMode(mode PublishMode) PublishMode {
-	switch mode {
-	case PublishModeValkeyOnly:
-		return PublishModeValkeyOnly
-	case PublishModeShadow, PublishModePGFirst:
-		return mode
-	default:
-		return PublishModeValkeyOnly
-	}
 }
 
 func (p *Publisher) Publish(ctx context.Context, notification *domain.AlarmNotification, claimKeys []string) (dispatchoutbox.PublishBatchResult, error) {
@@ -153,7 +116,7 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 
 	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
 	defer func() {
-		observeAlarmDispatchPublishBatch(time.Since(startedAt), p.publishConfig.Mode, &result)
+		observeAlarmDispatchPublishBatch(time.Since(startedAt), &result)
 	}()
 
 	result, err = p.publishEnvelopes(ctx, envelopes)
@@ -179,7 +142,7 @@ func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain
 
 	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
 	defer func() {
-		observeAlarmDispatchPublishBatch(time.Since(startedAt), p.publishConfig.Mode, &result)
+		observeAlarmDispatchPublishBatch(time.Since(startedAt), &result)
 	}()
 
 	result, err := p.publishEnvelopes(ctx, envelopes)
@@ -222,36 +185,7 @@ func (p *Publisher) publishEnvelopes(
 	ctx context.Context,
 	envelopes []domain.AlarmQueueEnvelope,
 ) (dispatchoutbox.PublishBatchResult, error) {
-	switch p.publishConfig.Mode {
-	case PublishModeValkeyOnly:
-		return p.publishValkeyBatch(ctx, envelopes)
-	case PublishModeShadow:
-		return p.publishShadowBatch(ctx, envelopes)
-	case PublishModePGFirst:
-		return p.publishPGFirstBatch(ctx, envelopes)
-	default:
-		return p.publishValkeyBatch(ctx, envelopes)
-	}
-}
-
-func (p *Publisher) publishShadowBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
-	result, err := p.publishValkeyBatch(ctx, envelopes)
-	if err != nil || p.outbox == nil {
-		return result, err
-	}
-	insertResult, err := p.insertOutboxChunks(ctx, envelopes, dispatchoutbox.StatusShadowed)
-	insertResult.RequestedDeliveries = len(envelopes)
-	insertResult.ProcessedDeliveries = result.ProcessedDeliveries
-	if err != nil {
-		p.logger.Warn("Alarm outbox shadow batch insert failed",
-			slog.Int("notification_count", len(envelopes)),
-			slog.Any("error", err),
-		)
-		if p.publishConfig.ShadowFatal {
-			return insertResult, fmt.Errorf("publish alarm queue batch: insert shadowed outbox: %w", err)
-		}
-	}
-	return insertResult, nil
+	return p.publishPGFirstBatch(ctx, envelopes)
 }
 
 func (p *Publisher) publishPGFirstBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
@@ -267,42 +201,6 @@ func (p *Publisher) publishPGFirstBatch(ctx context.Context, envelopes []domain.
 		p.publishWakeup(ctx)
 	}
 	return result, nil
-}
-
-func (p *Publisher) publishValkeyBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
-	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
-	if len(envelopes) == 0 {
-		return result, nil
-	}
-
-	cmds, err := p.buildValkeyLpushCmds(envelopes)
-	if err != nil {
-		return result, err
-	}
-
-	responses := p.cache.DoMulti(ctx, cmds...)
-	if len(responses) != len(cmds) {
-		return result, fmt.Errorf("publish alarm queue batch: unexpected response count %d for %d commands", len(responses), len(cmds))
-	}
-	for i, resp := range responses {
-		if err := resp.Error(); err != nil {
-			return result, fmt.Errorf("publish alarm queue batch: lpush envelope %d: %w", i, err)
-		}
-		result.ProcessedDeliveries++
-	}
-	return result, nil
-}
-
-func (p *Publisher) buildValkeyLpushCmds(envelopes []domain.AlarmQueueEnvelope) ([]valkey.Completed, error) {
-	cmds := make([]valkey.Completed, 0, len(envelopes))
-	for i := range envelopes {
-		jsonBytes, err := json.Marshal(&envelopes[i])
-		if err != nil {
-			return nil, fmt.Errorf("publish alarm queue batch: marshal envelope %d: %w", i, err)
-		}
-		cmds = append(cmds, p.cache.B().Lpush().Key(AlarmDispatchQueue).Element(string(jsonBytes)).Build())
-	}
-	return cmds, nil
 }
 
 func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {
@@ -326,8 +224,6 @@ func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.A
 		total.InsertedDeliveries += result.InsertedDeliveries
 		total.DuplicateDeliveries += result.DuplicateDeliveries
 		total.TerminalDuplicates += result.TerminalDuplicates
-		total.ShadowedDuplicates += result.ShadowedDuplicates
-		total.PromotedShadowedCount += result.PromotedShadowedCount
 	}
 	return total, nil
 }

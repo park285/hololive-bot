@@ -7,17 +7,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (r *PgxRepository) InsertShadowed(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, error) {
-	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}, Status: StatusShadowed})
-	if err != nil {
-		return nil, err
-	}
-	if result.InsertedDeliveries == 0 {
-		return r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
-	}
-	return r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
-}
-
 func (r *PgxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
 	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}, Status: StatusPending})
 	if err != nil {
@@ -45,8 +34,6 @@ func insertDuplicateResult(status Status) InsertResult {
 	}
 
 	switch status {
-	case StatusShadowed:
-		return DuplicateShadowed
 	case StatusPending, StatusLeased, StatusRetry, StatusSending, StatusSent, StatusDLQ, StatusQuarantined, StatusCancelled:
 		return DuplicateActive
 	default:
@@ -62,7 +49,7 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 	if status == "" {
 		status = StatusPending
 	}
-	if status != StatusPending && status != StatusShadowed {
+	if status != StatusPending {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: unsupported status %q", status)
 	}
 	result := PublishBatchResult{RequestedDeliveries: len(input.Envelopes)}
