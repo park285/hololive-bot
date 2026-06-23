@@ -84,10 +84,10 @@ func BuildEventKey(input *DedupeInput) string {
 
 func buildRawEventKey(input *DedupeInput) string {
 	if input.SourceKind == domain.AlarmDispatchSourceKindCelebration {
-		return fmt.Sprintf("celebration:%s", input.SourceIdentity)
+		return "celebration:" + input.SourceIdentity
 	}
 	if input.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return fmt.Sprintf("youtube-outbox:%s:%s", input.SourceOutboxKind, input.SourceIdentity)
+		return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + input.SourceIdentity
 	}
 	alarmType := input.AlarmType
 	if alarmType == "" {
