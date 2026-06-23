@@ -2,6 +2,7 @@ package matcher
 
 import (
 	"context"
+	"runtime"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -32,7 +33,9 @@ func TestFindBestMatchCacheHitAllocationBudget(t *testing.T) {
 	ctx := context.Background()
 	mm := newBenchMatcher(t, ctx)
 
-	allocs := testing.AllocsPerRun(100, func() {
+	runtime.GC()
+
+	allocs := testing.AllocsPerRun(1000, func() {
 		channel, err := mm.FindBestMatch(ctx, "sora")
 		if err != nil || channel == nil {
 			t.Fatalf("FindBestMatch = (%v, %v), want cached channel", channel, err)
