@@ -1161,17 +1161,16 @@ func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
 	}
 }
 
-func TestLoad_UsesProductionWhenOnlyLegacyTelemetryEnvIsSet(t *testing.T) {
+func TestLoad_UnsupportedLegacyTelemetryEnvRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", "")
 	t.Setenv("OTEL_ENVIRONMENT", "development")
 
-	config, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected unsupported legacy env error, got nil")
 	}
-	if config.Environment != "production" {
-		t.Fatalf("Environment = %q, want %q", config.Environment, "production")
+	if !strings.Contains(err.Error(), "OTEL_ENVIRONMENT is no longer supported") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

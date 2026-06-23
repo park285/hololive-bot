@@ -313,6 +313,9 @@ func validateUnsupportedLegacyEnvUsage() error {
 	if value, exists := os.LookupEnv("DB_QUERY_EXEC_MODE"); exists && stringutil.TrimSpace(value) != "" {
 		return fmt.Errorf("DB_QUERY_EXEC_MODE is no longer supported; use POSTGRES_QUERY_EXEC_MODE")
 	}
+	if value, exists := os.LookupEnv("OTEL_ENVIRONMENT"); exists && stringutil.TrimSpace(value) != "" {
+		return fmt.Errorf("OTEL_ENVIRONMENT is no longer supported; use APP_ENV")
+	}
 
 	return nil
 }
