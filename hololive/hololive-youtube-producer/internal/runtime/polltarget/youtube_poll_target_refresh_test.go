@@ -46,7 +46,6 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_STATS"},
 	)
@@ -110,7 +109,6 @@ func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged
 		}},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_VERSIONED"},
 	)
@@ -167,7 +165,7 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
 	}
 	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
-	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), cache, nil, []string{"UC_TIER"}, []string{"UC_TIER"})
+	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), cache, []string{"UC_TIER"}, []string{"UC_TIER"})
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -240,7 +238,6 @@ func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T)
 		}},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_VERSIONED"},
 	)
@@ -374,7 +371,6 @@ func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testi
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_NOTIFY", "UC_STATS_A"},
 	)
@@ -477,7 +473,6 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
 	)
@@ -544,7 +539,6 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
 	)
@@ -610,7 +604,6 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t 
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
 	)
@@ -666,7 +659,6 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
 	)

@@ -17,7 +17,6 @@ func buildYouTubeProducerChannelPollerRegistrations(
 	scraperConfig *config.ScraperConfig,
 	_ *scraper.RateLimiter,
 	_ cache.Client,
-	_ poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {

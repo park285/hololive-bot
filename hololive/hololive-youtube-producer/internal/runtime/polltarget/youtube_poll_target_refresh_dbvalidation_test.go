@@ -42,7 +42,6 @@ func TestYouTubePollTargetRefresher_ExpiredCacheOnlyAdditionDoesNotForceDBValida
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
 	)
@@ -112,7 +111,6 @@ func TestYouTubePollTargetRefresher_UnexpiredCacheOnlyAdditionStillForcesValidat
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
 	)
@@ -190,7 +188,6 @@ func TestYouTubePollTargetRefresher_ClearsCacheOnlyStateWhenCandidateDisappears(
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
 	)
@@ -257,7 +254,6 @@ func TestYouTubePollTargetRefresher_ValidatesRemovalAgainstDB(t *testing.T) {
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
 	)
@@ -320,7 +316,6 @@ func TestYouTubePollTargetRefresher_DBValidationFailureKeepsPreviousTargets(t *t
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
 	)
@@ -386,7 +381,6 @@ func TestYouTubePollTargetRefresher_DBFallbackShrinkDoesNotRevalidate(t *testing
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
 	)
@@ -447,7 +441,6 @@ func TestYouTubePollTargetRefresher_DBValidationValidatedMetricAndLog(t *testing
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
 	)
@@ -508,7 +501,6 @@ func TestYouTubePollTargetRefresher_DBValidationFailureMetric(t *testing.T) {
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A", "UC_B"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
 	)
@@ -563,7 +555,6 @@ func TestYouTubePollTargetRefresher_DBValidationSkippedMetric(t *testing.T) {
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A", "UC_B"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
 	)

@@ -41,7 +41,6 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsAreUnchanged(t *t
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_SAME"},
 		[]string{"UC_SAME", "UC_STATS"},
 	)
@@ -99,7 +98,6 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsMatchInDifferentO
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_NOTIFY_A", "UC_NOTIFY_B"},
 		[]string{"UC_NOTIFY_B", "UC_NOTIFY_A", "UC_STATS"},
 	)
@@ -159,7 +157,6 @@ func TestYouTubePollTargetRefresherFallsBackToDBWhenCacheLookupFails(t *testing.
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_STATS"},
 	)
@@ -213,7 +210,6 @@ func TestYouTubePollTargetRefresherRecentEmptyCacheKeepsPreviousResolvedTargetsD
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_OLD"},
 		[]string{"UC_STATS"},
 	)
@@ -278,7 +274,6 @@ func TestYouTubePollTargetRefresher_EmptyCacheGraceStillRefreshesStatsTargets(t 
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_NOTIFY", "UC_STATS_A"},
 	)
@@ -346,7 +341,6 @@ func TestYouTubePollTargetRefresherPreservesExplicitEmptyNotificationTargets(t *
 		scraper.NewRateLimiter(time.Second),
 		cache,
 		nil,
-		nil,
 		[]string{"UC_STATS"},
 	)
 
@@ -408,7 +402,6 @@ func TestYouTubePollTargetRefresher_PartialCacheShrinkUsesDBValidation(t *testin
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
 	)
@@ -474,7 +467,6 @@ func TestYouTubePollTargetRefresher_ValidatesSameSizeSetMismatchAgainstDB(t *tes
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A", "UC_B"},
 		[]string{"UC_A", "UC_B", "UC_C", "UC_STATS"},
 	)
@@ -537,7 +529,6 @@ func TestYouTubePollTargetRefresher_AllowsCacheOnlyAdditionWithinGrace(t *testin
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
 	)
@@ -597,7 +588,6 @@ func TestYouTubePollTargetRefresher_DropsCacheOnlyAdditionAfterGraceIfStillMissi
 		},
 		scraper.NewRateLimiter(time.Second),
 		cache,
-		nil,
 		[]string{"UC_A"},
 		[]string{"UC_A", "UC_B", "UC_STATS"},
 	)

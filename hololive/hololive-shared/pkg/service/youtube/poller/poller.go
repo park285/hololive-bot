@@ -6,10 +6,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/scheduler"
 )
 
-type NotificationRouteRequest = polling.NotificationRouteRequest
-
-type NotificationRouteDecider = polling.NotificationRouteDecider
-
 type ViewerSampleCleanerConfig = polling.ViewerSampleCleanerConfig
 
 type ViewerSampleCleaner = polling.ViewerSampleCleaner
