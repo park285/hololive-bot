@@ -133,6 +133,31 @@ WITH input AS (
 	  )
 	  AND (s.alarm_sent_at IS NULL OR s.alarm_sent_at > i.alarm_sent_at OR s.authorized_at IS NOT NULL)
 	RETURNING s.kind, s.post_id
+), alarm_state_insert_candidates AS (
+	SELECT DISTINCT ON (t.kind, post_id)
+		t.kind,
+		CASE
+			WHEN t.canonical_content_id <> '' THEN t.canonical_content_id
+			ELSE i.canonical_content_id
+		END AS post_id,
+		t.content_id,
+		t.channel_id,
+		t.actual_published_at,
+		t.detected_at,
+		CASE
+			WHEN t.alarm_sent_at IS NULL OR t.alarm_sent_at > i.alarm_sent_at THEN i.alarm_sent_at
+			ELSE t.alarm_sent_at
+		END AS alarm_sent_at
+	FROM deduped_input AS i
+	JOIN youtube_content_alarm_tracking AS t
+	  ON t.kind = i.kind
+	 AND (
+		t.canonical_content_id = i.canonical_content_id
+		OR t.content_id = i.content_id
+		OR t.content_id = i.raw_content_id
+	 )
+	WHERE i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
+	ORDER BY t.kind, post_id, alarm_sent_at ASC
 ), missing_state_inserted AS (
 	INSERT INTO youtube_community_shorts_alarm_states (
 		kind,
@@ -159,9 +184,8 @@ WITH input AS (
 		'SENT',
 		$7,
 		$7
-	FROM tracking_updated AS t
-	WHERE t.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
-	  AND NOT EXISTS (
+	FROM alarm_state_insert_candidates AS t
+	WHERE NOT EXISTS (
 		SELECT 1
 		FROM youtube_community_shorts_alarm_states AS s
 		WHERE s.kind = t.kind
