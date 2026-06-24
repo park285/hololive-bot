@@ -89,7 +89,7 @@ SINCE=15m TAIL=600 PATTERN='ingestion_lease|outbox|ERR|WRN' ./scripts/logs/ap-lo
 3. 로그에서 `event=ingestion_runtime_configured`와 `runtime=youtube-producer` 확인
 4. 로그에서 `event=ingestion_lease_acquired`, `role=youtube-producer` 확인
 5. 10~15분 관찰 시 중복 수집/중복 알림/락 상실 로그 없음
-6. 배포 직후 24시간 검증은 `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_POST_DEPLOY_24H_VERIFICATION.md` 기준으로 진행
+6. 배포 직후 24시간 검증은 `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md`·`docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md` 기준으로 진행
 
 ## 5) 장애 대응
 
@@ -153,12 +153,11 @@ rollback도 한 번에 한 호스트만 수행합니다. 토폴로지/순서 기
 - poll interval 또는 worker count 변경 시 `youtube-producer`만 재배포하고 10~15분 동안 backlog/지연 로그 증가 여부 확인
 - outbox 처리량 증가/정체 여부 확인
 - 스케줄러 시작 로그가 모두 남는지 확인
-- 커뮤니티/쇼츠 big-bang 배포 직후에는 첫 24시간 동안 `detected/success/unsent/pending/duplicate/latency` 지표를 전용 runbook 기준으로 재확인
+- 커뮤니티/쇼츠 big-bang 배포 직후에는 첫 24시간 동안 `detected/success/unsent/pending/duplicate/latency` 지표를 `YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md`·`YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md` 기준으로 재확인
 
 ## 8) 관련 문서
 
 - `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`
-- `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_POST_DEPLOY_24H_VERIFICATION.md`
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md`
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md`
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md`
