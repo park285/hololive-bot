@@ -195,35 +195,22 @@ SELECT
 	(SELECT COUNT(*) FROM missing_state_inserted) AS missing_state_inserted_count
 `
 
+type bulkAlarmSentMarkInputs struct {
+	kinds               []string
+	contentIDs          []string
+	canonicalContentIDs []string
+	alarmSentAts        []time.Time
+	authorizedAts       []pgtype.Timestamptz
+}
+
 func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks []AlarmSentMark) error {
 	if len(marks) == 0 {
 		return nil
 	}
 
-	kinds := make([]string, 0, len(marks))
-	contentIDs := make([]string, 0, len(marks))
-	canonicalContentIDs := make([]string, 0, len(marks))
-	alarmSentAts := make([]time.Time, 0, len(marks))
-	authorizedAts := make([]pgtype.Timestamptz, 0, len(marks))
-
-	for i, mark := range marks {
-		if mark.AlarmSentAt.IsZero() {
-			return fmt.Errorf("bulk mark alarm sent: alarm sent at is empty at index %d", i)
-		}
-		canonicalContentID := canonicalTrackingIdentity(mark.Kind, mark.ContentID)
-		if strings.TrimSpace(canonicalContentID) == "" {
-			return fmt.Errorf("bulk mark alarm sent: canonical content id is empty at index %d", i)
-		}
-
-		kinds = append(kinds, string(mark.Kind))
-		contentIDs = append(contentIDs, mark.ContentID)
-		canonicalContentIDs = append(canonicalContentIDs, canonicalContentID)
-		alarmSentAts = append(alarmSentAts, mark.AlarmSentAt)
-		if mark.AuthorizedAt == nil {
-			authorizedAts = append(authorizedAts, pgtype.Timestamptz{})
-			continue
-		}
-		authorizedAts = append(authorizedAts, pgtype.Timestamptz{Time: *mark.AuthorizedAt, Valid: true})
+	inputs, err := newBulkAlarmSentMarkInputs(marks)
+	if err != nil {
+		return err
 	}
 
 	updatedAt := yttimestamp.Normalize(time.Now())
@@ -232,7 +219,7 @@ func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks
 	var authorizationMismatches int64
 	var existingStateUpdated int64
 	var missingStateInserted int64
-	if err := r.db.QueryRow(ctx, bulkApplyAlarmSentMarksSQL, kinds, contentIDs, canonicalContentIDs, alarmSentAts, authorizedAts, updatedAt).Scan(
+	if err := r.db.QueryRow(ctx, bulkApplyAlarmSentMarksSQL, inputs.kinds, inputs.contentIDs, inputs.canonicalContentIDs, inputs.alarmSentAts, inputs.authorizedAts, updatedAt).Scan(
 		&trackingUpdated,
 		&claimedStateFinalized,
 		&authorizationMismatches,
@@ -246,6 +233,50 @@ func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks
 	}
 
 	return nil
+}
+
+func newBulkAlarmSentMarkInputs(marks []AlarmSentMark) (bulkAlarmSentMarkInputs, error) {
+	inputs := bulkAlarmSentMarkInputs{
+		kinds:               make([]string, 0, len(marks)),
+		contentIDs:          make([]string, 0, len(marks)),
+		canonicalContentIDs: make([]string, 0, len(marks)),
+		alarmSentAts:        make([]time.Time, 0, len(marks)),
+		authorizedAts:       make([]pgtype.Timestamptz, 0, len(marks)),
+	}
+
+	for i, mark := range marks {
+		if err := appendBulkAlarmSentMarkInput(&inputs, i, mark); err != nil {
+			return bulkAlarmSentMarkInputs{}, err
+		}
+	}
+
+	return inputs, nil
+}
+
+func appendBulkAlarmSentMarkInput(inputs *bulkAlarmSentMarkInputs, index int, mark AlarmSentMark) error {
+	if mark.AlarmSentAt.IsZero() {
+		return fmt.Errorf("bulk mark alarm sent: alarm sent at is empty at index %d", index)
+	}
+	canonicalContentID := canonicalTrackingIdentity(mark.Kind, mark.ContentID)
+	if strings.TrimSpace(canonicalContentID) == "" {
+		return fmt.Errorf("bulk mark alarm sent: canonical content id is empty at index %d", index)
+	}
+
+	inputs.kinds = append(inputs.kinds, string(mark.Kind))
+	inputs.contentIDs = append(inputs.contentIDs, mark.ContentID)
+	inputs.canonicalContentIDs = append(inputs.canonicalContentIDs, canonicalContentID)
+	inputs.alarmSentAts = append(inputs.alarmSentAts, mark.AlarmSentAt)
+	inputs.authorizedAts = append(inputs.authorizedAts, alarmSentAuthorizedAtValue(mark.AuthorizedAt))
+
+	return nil
+}
+
+func alarmSentAuthorizedAtValue(authorizedAt *time.Time) pgtype.Timestamptz {
+	if authorizedAt == nil {
+		return pgtype.Timestamptz{}
+	}
+
+	return pgtype.Timestamptz{Time: *authorizedAt, Valid: true}
 }
 
 func (r *deliveryStateRepository) applyAlarmSentMark(ctx context.Context, mark AlarmSentMark, updatedAt time.Time) error {
