@@ -103,12 +103,11 @@ func applyDeliveryTelemetryDefaults(row *domain.YouTubeNotificationDeliveryTelem
 	}
 	row.DeliveryPath = NormalizeCommunityShortsDeliveryPath(row.DeliveryPath)
 	ApplyTelemetryPostID(row)
-	row.ObservationStatus = normalizeDeliveryTelemetryObservationStatus(row.ObservationStatus)
 }
 
 const (
 	enqueueTelemetryChunkSize     = 500
-	enqueueTelemetryColumnsPerRow = 29
+	enqueueTelemetryColumnsPerRow = 24
 )
 
 func (r *Repository) EnqueuePrepared(
@@ -138,7 +137,6 @@ func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.You
 		INSERT INTO youtube_notification_delivery_telemetry (
 			delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type,
 			actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at,
-			observation_status, observation_runtime_name, observation_bigbang_cutover_at, observation_started_at, observation_ended_at,
 			dedupe_key, delivery_path, delivery_mode, send_result, failure_reason,
 			attempt_started_at, attempt_finished_at, event_at, next_attempt_at, locked_at, logged_at, error
 		) VALUES `)
@@ -175,7 +173,6 @@ func writeTelemetryRowPlaceholders(sb *strings.Builder, base int) {
 func appendTelemetryRowArgs(args []any, row *domain.YouTubeNotificationDeliveryTelemetry) []any {
 	return append(args, row.DeliveryID, row.AttemptOrdinal, row.OutboxID, row.ChannelID, row.ContentID, row.PostID, row.RoomID, row.AlarmType,
 		row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis, row.DetectedAt,
-		row.ObservationStatus, row.ObservationRuntimeName, row.ObservationBigBangCutoverAt, row.ObservationStartedAt, row.ObservationEndedAt,
 		row.DedupeKey, row.DeliveryPath, row.DeliveryMode, row.SendResult, row.FailureReason,
 		row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.LockedAt, row.LoggedAt, row.Error)
 }
@@ -183,7 +180,6 @@ func appendTelemetryRowArgs(args []any, row *domain.YouTubeNotificationDeliveryT
 func deliveryTelemetrySelectColumns() string {
 	return `id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type,
 		actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at,
-		observation_status, observation_runtime_name, observation_bigbang_cutover_at, observation_started_at, observation_ended_at,
 		dedupe_key, delivery_path, delivery_mode, send_result, failure_reason,
 		attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error`
 }
@@ -324,7 +320,7 @@ func (r *Repository) refreshLockedRows(
 	}
 
 	for i := range enriched {
-		if !deliveryTelemetryObservationContextChanged(&rows[i], &enriched[i]) {
+		if !deliveryTelemetryTrackingContextChanged(&rows[i], &enriched[i]) {
 			rows[i] = enriched[i]
 			continue
 		}
@@ -334,16 +330,10 @@ func (r *Repository) refreshLockedRows(
 			SET actual_published_at = $1,
 			    alarm_sent_at = $2,
 			    alarm_latency_millis = $3,
-			    detected_at = $4,
-			    observation_status = $5,
-			    observation_runtime_name = $6,
-			    observation_bigbang_cutover_at = $7,
-			    observation_started_at = $8,
-			    observation_ended_at = $9
-			WHERE id = $10
+			    detected_at = $4
+			WHERE id = $5
 		`, enriched[i].ActualPublishedAt, enriched[i].AlarmSentAt, enriched[i].AlarmLatencyMillis, enriched[i].DetectedAt,
-			normalizeDeliveryTelemetryObservationStatus(enriched[i].ObservationStatus), strings.TrimSpace(enriched[i].ObservationRuntimeName),
-			enriched[i].ObservationBigBangCutoverAt, enriched[i].ObservationStartedAt, enriched[i].ObservationEndedAt, enriched[i].ID); err != nil {
+			enriched[i].ID); err != nil {
 			return fmt.Errorf("refresh locked delivery telemetry rows: update row %d: %w", enriched[i].ID, err)
 		}
 		rows[i] = enriched[i]

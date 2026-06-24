@@ -53,12 +53,11 @@ func (db *pollerBatchTestDB) resetOptionalTables(t *testing.T, models ...any) {
 	t.Helper()
 
 	keep := map[string]bool{
-		"youtube_content_alarm_tracking":               true,
-		"youtube_community_shorts_source_posts":        true,
-		"youtube_community_shorts_alarm_states":        true,
-		"youtube_notification_delivery":                true,
-		"youtube_notification_delivery_telemetry":      true,
-		"youtube_community_shorts_observation_windows": true,
+		"youtube_content_alarm_tracking":          true,
+		"youtube_community_shorts_source_posts":   true,
+		"youtube_community_shorts_alarm_states":   true,
+		"youtube_notification_delivery":           true,
+		"youtube_notification_delivery_telemetry": true,
 	}
 	for _, model := range models {
 		keep[pollerTestTableName(model)] = true

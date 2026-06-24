@@ -50,37 +50,32 @@ func (deliveryTelemetryTestDeliveryModel) TableName() string {
 }
 
 type deliveryTelemetryTestBufferModel struct {
-	ID                          int64  `db:"id"`
-	DeliveryID                  int64  `db:"delivery_id"`
-	AttemptOrdinal              int    `db:"attempt_ordinal"`
-	OutboxID                    int64  `db:"outbox_id"`
-	ChannelID                   string `db:"channel_id"`
-	ContentID                   string `db:"content_id"`
-	PostID                      string `db:"post_id"`
-	RoomID                      string `db:"room_id"`
-	AlarmType                   string `db:"alarm_type"`
-	ActualPublishedAt           *time.Time
-	AlarmSentAt                 *time.Time
-	AlarmLatencyMillis          *int64
-	DetectedAt                  *time.Time
-	ObservationStatus           string     `db:"observation_status"`
-	ObservationRuntimeName      string     `db:"observation_runtime_name"`
-	ObservationBigBangCutoverAt *time.Time `db:"observation_bigbang_cutover_at"`
-	ObservationStartedAt        *time.Time
-	ObservationEndedAt          *time.Time
-	DedupeKey                   string `db:"dedupe_key"`
-	DeliveryPath                string `db:"delivery_path"`
-	DeliveryMode                string `db:"delivery_mode"`
-	SendResult                  string `db:"send_result"`
-	FailureReason               string `db:"failure_reason"`
-	AttemptStartedAt            *time.Time
-	AttemptFinishedAt           *time.Time
-	EventAt                     time.Time `db:"event_at"`
-	NextAttemptAt               time.Time `db:"next_attempt_at"`
-	CreatedAt                   time.Time
-	LockedAt                    *time.Time
-	LoggedAt                    *time.Time
-	Error                       string `db:"error"`
+	ID                 int64  `db:"id"`
+	DeliveryID         int64  `db:"delivery_id"`
+	AttemptOrdinal     int    `db:"attempt_ordinal"`
+	OutboxID           int64  `db:"outbox_id"`
+	ChannelID          string `db:"channel_id"`
+	ContentID          string `db:"content_id"`
+	PostID             string `db:"post_id"`
+	RoomID             string `db:"room_id"`
+	AlarmType          string `db:"alarm_type"`
+	ActualPublishedAt  *time.Time
+	AlarmSentAt        *time.Time
+	AlarmLatencyMillis *int64
+	DetectedAt         *time.Time
+	DedupeKey          string `db:"dedupe_key"`
+	DeliveryPath       string `db:"delivery_path"`
+	DeliveryMode       string `db:"delivery_mode"`
+	SendResult         string `db:"send_result"`
+	FailureReason      string `db:"failure_reason"`
+	AttemptStartedAt   *time.Time
+	AttemptFinishedAt  *time.Time
+	EventAt            time.Time `db:"event_at"`
+	NextAttemptAt      time.Time `db:"next_attempt_at"`
+	CreatedAt          time.Time
+	LockedAt           *time.Time
+	LoggedAt           *time.Time
+	Error              string `db:"error"`
 }
 
 func (deliveryTelemetryTestBufferModel) TableName() string {
@@ -107,56 +102,6 @@ type deliveryTelemetryTestObservationTrackingModel struct {
 
 func (deliveryTelemetryTestObservationTrackingModel) TableName() string {
 	return "youtube_content_alarm_tracking"
-}
-
-func TestDeliveryTelemetryRepository_ObservationRuntimeNameUsesEmptyStringInvariant(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	db := newDeliveryPool(t)
-	repository := NewDeliveryTelemetryRepository(db)
-
-	var isNullable, columnDefault string
-	require.NoError(t, db.QueryRow(ctx, `
-		SELECT is_nullable, column_default
-		FROM information_schema.columns
-		WHERE table_schema = current_schema()
-		  AND table_name = 'youtube_notification_delivery_telemetry'
-		  AND column_name = 'observation_runtime_name'
-	`).Scan(&isNullable, &columnDefault))
-	require.Equal(t, "NO", isNullable)
-	require.Contains(t, columnDefault, "''")
-
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
-		DeliveryID:        101,
-		AttemptOrdinal:    1,
-		OutboxID:          201,
-		ChannelID:         "UC_null_runtime",
-		ContentID:         "post-null-runtime",
-		RoomID:            "room-null-runtime",
-		AlarmType:         domain.AlarmTypeCommunity,
-		ObservationStatus: "outside_observation_window",
-		DedupeKey:         "youtube-notification:COMMUNITY_POST:post-null-runtime",
-		DeliveryPath:      communityShortsDeliveryPath,
-		DeliveryMode:      "grouped",
-		SendResult:        "success",
-		EventAt:           now,
-		NextAttemptAt:     now,
-		AttemptFinishedAt: &now,
-	}}))
-
-	_, err := db.Exec(ctx, `
-		UPDATE youtube_notification_delivery_telemetry
-		SET observation_runtime_name = NULL
-		WHERE delivery_id = $1 AND attempt_ordinal = $2
-	`, int64(101), 1)
-	require.Error(t, err)
-
-	pending, err := repository.FetchAndLockPending(ctx, 10, time.Minute)
-	require.NoError(t, err)
-	require.Len(t, pending, 1)
-	require.Equal(t, "", pending[0].ObservationRuntimeName)
 }
 
 func TestDeliveryTelemetryRepository_BackfillAndFlush(t *testing.T) {
@@ -487,14 +432,11 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
-	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	observationStartedAt := sentAt.Add(-15 * time.Minute).UTC()
-	actualPublishedAt := observationStartedAt.Add(2 * time.Minute)
+	actualPublishedAt := sentAt.Add(-13 * time.Minute).UTC()
 	detectedAt := actualPublishedAt.Add(20 * time.Second)
 	alarmSentAt := actualPublishedAt.Add(3 * time.Minute)
 	alarmLatencyMillis := int64(alarmSentAt.Sub(actualPublishedAt) / time.Millisecond)
 	alarmLatencyExceeded := true
-	seedObservationWindow(t, db, cutoverAt, observationStartedAt)
 	require.NoError(t, insertDeliveryTestRows(db, &deliveryTelemetryTestObservationTrackingModel{
 		Kind:                 string(domain.OutboxKindNewShort),
 		ContentID:            "short-emit",
@@ -524,8 +466,6 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 	require.Contains(t, logBuffer.String(), deliveryAuditLogMessage)
 	require.Contains(t, logBuffer.String(), "\"delivery_path\":\""+communityShortsDeliveryPath+"\"")
 	require.Contains(t, logBuffer.String(), "\"post_id\":\"short-emit\"")
-	require.Contains(t, logBuffer.String(), "\"observation_status\":\"matched\"")
-	require.Contains(t, logBuffer.String(), "\"observation_runtime_name\":\"youtube-producer\"")
 	require.Contains(t, logBuffer.String(), "\"actual_published_at\":")
 	require.Contains(t, logBuffer.String(), "\"alarm_latency_exceeded\":true")
 	require.Contains(t, logBuffer.String(), "\"latency_classification\":{")

@@ -138,7 +138,6 @@ var markdownColumns = []md.Column{
 	{Header: "publish_to_event_ms", AlignRight: true},
 	{Header: "send_result"},
 	{Header: "delivery_path"},
-	{Header: "observation_status"},
 	{Header: "failure_reason"},
 }
 
@@ -160,7 +159,6 @@ func buildMarkdownRows(rows []Row) [][]string {
 			shared.FormatSendCountInt64Ptr(row.PublishToEventMillis),
 			md.Code(shared.FallbackSendCountValue(strings.TrimSpace(row.SendResult))),
 			md.Code(shared.FallbackSendCountValue(strings.TrimSpace(row.DeliveryPath))),
-			md.Code(shared.FallbackSendCountValue(strings.TrimSpace(row.ObservationStatus))),
 			md.Code(shared.FallbackSendCountValue(strings.TrimSpace(row.FailureReason))),
 		})
 	}

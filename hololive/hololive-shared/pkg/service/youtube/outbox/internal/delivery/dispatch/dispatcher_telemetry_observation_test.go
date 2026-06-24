@@ -11,57 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestBuildDeliveryAuditLogAttrsIncludesObservationWindowFields(t *testing.T) {
-	t.Parallel()
-
-	actualPublishedAt := time.Date(2026, 4, 10, 1, 5, 0, 0, time.UTC)
-	detectedAt := actualPublishedAt.Add(20 * time.Second)
-	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
-	observationEndedAt := observationStartedAt.Add(24 * time.Hour)
-
-	row := domain.YouTubeNotificationDeliveryTelemetry{
-		DeliveryID:                  11,
-		AttemptOrdinal:              1,
-		OutboxID:                    22,
-		ChannelID:                   "UC_observe",
-		ContentID:                   "short-observe",
-		PostID:                      "short-observe",
-		RoomID:                      "room-observe",
-		AlarmType:                   domain.AlarmTypeShorts,
-		ActualPublishedAt:           &actualPublishedAt,
-		DetectedAt:                  &detectedAt,
-		AlarmSentAt:                 new(detectedAt.Add(time.Minute)),
-		AlarmLatencyMillis:          new(int64(55 * time.Second / time.Millisecond)),
-		ObservationStatus:           deliveryTelemetryObservationStatusMatched,
-		ObservationRuntimeName:      "youtube-producer",
-		ObservationBigBangCutoverAt: &cutoverAt,
-		ObservationStartedAt:        &observationStartedAt,
-		ObservationEndedAt:          &observationEndedAt,
-		DedupeKey:                   "youtube-notification:NEW_SHORT:short-observe",
-		DeliveryPath:                communityShortsDeliveryPath,
-		DeliveryMode:                "per_room",
-		SendResult:                  "success",
-		EventAt:                     detectedAt.Add(time.Minute),
-	}
-
-	buffer := &bytes.Buffer{}
-	logger := slog.New(slog.NewJSONHandler(buffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrs(&row)...)
-
-	logLine := buffer.String()
-	require.Contains(t, logLine, `"actual_published_at":`)
-	require.Contains(t, logLine, `"alarm_sent_at":`)
-	require.Contains(t, logLine, `"alarm_latency_millis":80000`)
-	require.Contains(t, logLine, `"alarm_latency_exceeded":false`)
-	require.Contains(t, logLine, `"detected_at":`)
-	require.Contains(t, logLine, `"observation_status":"matched"`)
-	require.Contains(t, logLine, `"observation_runtime_name":"youtube-producer"`)
-	require.Contains(t, logLine, `"observation_bigbang_cutover_at":`)
-	require.Contains(t, logLine, `"observation_started_at":`)
-	require.Contains(t, logLine, `"observation_ended_at":`)
-}
-
 func TestBuildDeliveryAuditLogAttrsIncludesCommunityTimingFields(t *testing.T) {
 	t.Parallel()
 
@@ -83,7 +32,6 @@ func TestBuildDeliveryAuditLogAttrsIncludesCommunityTimingFields(t *testing.T) {
 		DetectedAt:         &detectedAt,
 		AlarmSentAt:        &alarmSentAt,
 		AlarmLatencyMillis: &alarmLatencyMillis,
-		ObservationStatus:  deliveryTelemetryObservationStatusMatched,
 		DedupeKey:          "youtube-notification:COMMUNITY_POST:community:post-observe",
 		DeliveryPath:       communityShortsDeliveryPath,
 		DeliveryMode:       "grouped",

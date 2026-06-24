@@ -19,8 +19,3 @@ var BuildChannelPostDeliverySummaries = analytics.BuildChannelPostDeliverySummar
 var BuildPostLatencyPeriodSummaries = analytics.BuildPostLatencyPeriodSummaries
 
 const communityShortsDeliveryPath = telemetry.CommunityShortsDeliveryPath
-
-const (
-	deliveryTelemetryObservationStatusMatched       = telemetry.ObservationStatusMatched
-	deliveryTelemetryObservationStatusOutsideWindow = telemetry.ObservationStatusOutsideWindow
-)

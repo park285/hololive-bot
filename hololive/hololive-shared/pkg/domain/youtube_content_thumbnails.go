@@ -72,7 +72,6 @@ var YouTubeModels = []any{
 	&YouTubeContentAlarmTracking{},
 	&YouTubeCommunityShortsSourcePost{},
 	&YouTubeCommunityShortsAlarmState{},
-	&YouTubeCommunityShortsObservationWindow{},
 	&YouTubeNotificationDeliveryTelemetry{},
 	&YouTubeNotificationDelivery{},
 	&YouTubeLiveSession{},

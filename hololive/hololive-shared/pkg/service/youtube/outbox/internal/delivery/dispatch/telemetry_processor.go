@@ -30,31 +30,13 @@ func buildDeliveryAuditLogAttrsWithClassification(row *domain.YouTubeNotificatio
 		slog.Int(logschema.FieldAttemptOrdinal, row.AttemptOrdinal),
 	}
 	attrs = appendCommunityShortsAlarmTimingLogAttrs(attrs, telemetry.CommunityShortsAlarmTimingForTelemetryRow(row))
-	attrs = appendDeliveryObservationLogAttrs(attrs, row)
+	if row.DetectedAt != nil {
+		attrs = append(attrs, slog.Time(logschema.FieldDetectedAt, row.DetectedAt.UTC()))
+	}
 	if strings.TrimSpace(row.FailureReason) != "" {
 		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, row.FailureReason))
 	}
 	attrs = appendLatencyClassificationLogAttr(attrs, classification)
-	return attrs
-}
-
-func appendDeliveryObservationLogAttrs(attrs []any, row *domain.YouTubeNotificationDeliveryTelemetry) []any {
-	if row.DetectedAt != nil {
-		attrs = append(attrs, slog.Time(logschema.FieldDetectedAt, row.DetectedAt.UTC()))
-	}
-	attrs = append(attrs, slog.String(logschema.FieldObservationStatus, telemetry.NormalizeDeliveryTelemetryObservationStatus(row.ObservationStatus)))
-	if strings.TrimSpace(row.ObservationRuntimeName) != "" {
-		attrs = append(attrs, slog.String(logschema.FieldObservationRuntimeName, strings.TrimSpace(row.ObservationRuntimeName)))
-	}
-	if row.ObservationBigBangCutoverAt != nil {
-		attrs = append(attrs, slog.Time(logschema.FieldObservationBigBangCutoverAt, row.ObservationBigBangCutoverAt.UTC()))
-	}
-	if row.ObservationStartedAt != nil {
-		attrs = append(attrs, slog.Time(logschema.FieldObservationStartedAt, row.ObservationStartedAt.UTC()))
-	}
-	if row.ObservationEndedAt != nil {
-		attrs = append(attrs, slog.Time(logschema.FieldObservationEndedAt, row.ObservationEndedAt.UTC()))
-	}
 	return attrs
 }
 

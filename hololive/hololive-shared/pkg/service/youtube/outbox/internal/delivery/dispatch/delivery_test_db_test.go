@@ -536,21 +536,18 @@ func insertDomainTelemetry(ctx context.Context, pool *pgxpool.Pool, row *domain.
 	row.ActualPublishedAt = normalizeTimePtr(row.ActualPublishedAt)
 	row.AlarmSentAt = normalizeTimePtr(row.AlarmSentAt)
 	row.DetectedAt = normalizeTimePtr(row.DetectedAt)
-	row.ObservationBigBangCutoverAt = normalizeTimePtr(row.ObservationBigBangCutoverAt)
-	row.ObservationStartedAt = normalizeTimePtr(row.ObservationStartedAt)
-	row.ObservationEndedAt = normalizeTimePtr(row.ObservationEndedAt)
 	row.AttemptStartedAt = normalizeTimePtr(row.AttemptStartedAt)
 	row.AttemptFinishedAt = normalizeTimePtr(row.AttemptFinishedAt)
 	row.LockedAt = normalizeTimePtr(row.LockedAt)
 	row.LoggedAt = normalizeTimePtr(row.LoggedAt)
 	if row.ID == 0 {
-		err := pool.QueryRow(ctx, `INSERT INTO youtube_notification_delivery_telemetry (delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, observation_status, observation_runtime_name, observation_bigbang_cutover_at, observation_started_at, observation_ended_at, dedupe_key, delivery_path, delivery_mode, send_result, failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30) RETURNING id`, row.DeliveryID, row.AttemptOrdinal, row.OutboxID, row.ChannelID, row.ContentID, row.PostID, row.RoomID, row.AlarmType, row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis, row.DetectedAt, row.ObservationStatus, row.ObservationRuntimeName, row.ObservationBigBangCutoverAt, row.ObservationStartedAt, row.ObservationEndedAt, row.DedupeKey, row.DeliveryPath, row.DeliveryMode, row.SendResult, row.FailureReason, row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.CreatedAt, row.LockedAt, row.LoggedAt, row.Error).Scan(&row.ID)
+		err := pool.QueryRow(ctx, `INSERT INTO youtube_notification_delivery_telemetry (delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, dedupe_key, delivery_path, delivery_mode, send_result, failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25) RETURNING id`, row.DeliveryID, row.AttemptOrdinal, row.OutboxID, row.ChannelID, row.ContentID, row.PostID, row.RoomID, row.AlarmType, row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis, row.DetectedAt, row.DedupeKey, row.DeliveryPath, row.DeliveryMode, row.SendResult, row.FailureReason, row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.CreatedAt, row.LockedAt, row.LoggedAt, row.Error).Scan(&row.ID)
 		if err != nil {
 			return 0, err
 		}
 		return 1, nil
 	}
-	tag, err := pool.Exec(ctx, `INSERT INTO youtube_notification_delivery_telemetry (id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, observation_status, observation_runtime_name, observation_bigbang_cutover_at, observation_started_at, observation_ended_at, dedupe_key, delivery_path, delivery_mode, send_result, failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)`, row.ID, row.DeliveryID, row.AttemptOrdinal, row.OutboxID, row.ChannelID, row.ContentID, row.PostID, row.RoomID, row.AlarmType, row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis, row.DetectedAt, row.ObservationStatus, row.ObservationRuntimeName, row.ObservationBigBangCutoverAt, row.ObservationStartedAt, row.ObservationEndedAt, row.DedupeKey, row.DeliveryPath, row.DeliveryMode, row.SendResult, row.FailureReason, row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.CreatedAt, row.LockedAt, row.LoggedAt, row.Error)
+	tag, err := pool.Exec(ctx, `INSERT INTO youtube_notification_delivery_telemetry (id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, dedupe_key, delivery_path, delivery_mode, send_result, failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`, row.ID, row.DeliveryID, row.AttemptOrdinal, row.OutboxID, row.ChannelID, row.ContentID, row.PostID, row.RoomID, row.AlarmType, row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis, row.DetectedAt, row.DedupeKey, row.DeliveryPath, row.DeliveryMode, row.SendResult, row.FailureReason, row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.CreatedAt, row.LockedAt, row.LoggedAt, row.Error)
 	return tag.RowsAffected(), err
 }
 
@@ -612,7 +609,7 @@ func deliveryTestTableForModel(model any) string {
 
 func deliveryTestUpdateAssignment(column string) string {
 	switch column {
-	case "actual_published_at", "alarm_sent_at", "attempt_finished_at", "attempt_started_at", "authorized_at", "created_at", "detected_at", "event_at", "locked_at", "logged_at", "next_attempt_at", "observation_bigbang_cutover_at", "observation_ended_at", "observation_started_at", "sent_at", "updated_at":
+	case "actual_published_at", "alarm_sent_at", "attempt_finished_at", "attempt_started_at", "authorized_at", "created_at", "detected_at", "event_at", "locked_at", "logged_at", "next_attempt_at", "sent_at", "updated_at":
 		return fmt.Sprintf("%s = ?::timestamptz", column)
 	default:
 		return fmt.Sprintf("%s = ?", column)
@@ -630,7 +627,7 @@ func deliveryTestSelectColumns(table string) string {
 	case "youtube_community_shorts_alarm_states":
 		return "kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at"
 	case "youtube_notification_delivery_telemetry":
-		return "id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, COALESCE(post_id, '') AS post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, COALESCE(observation_status, '') AS observation_status, COALESCE(observation_runtime_name, '') AS observation_runtime_name, observation_bigbang_cutover_at, observation_started_at, observation_ended_at, COALESCE(dedupe_key, '') AS dedupe_key, COALESCE(delivery_path, '') AS delivery_path, COALESCE(delivery_mode, '') AS delivery_mode, COALESCE(send_result, '') AS send_result, COALESCE(failure_reason, '') AS failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, COALESCE(error, '') AS error"
+		return "id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, COALESCE(post_id, '') AS post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, COALESCE(dedupe_key, '') AS dedupe_key, COALESCE(delivery_path, '') AS delivery_path, COALESCE(delivery_mode, '') AS delivery_mode, COALESCE(send_result, '') AS send_result, COALESCE(failure_reason, '') AS failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, COALESCE(error, '') AS error"
 	default:
 		return "*"
 	}

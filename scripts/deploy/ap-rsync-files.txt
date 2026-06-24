@@ -579,13 +579,11 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/backfill.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/channel_post_summaries.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/classifiers.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/enrich.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/latency_period_rollups.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/load.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/logs.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/normalize.go
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/observation_context.go
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/observation_context_apply.go
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/observation_context_compare.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/path_usage.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/post_id.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/post_send_counts.go

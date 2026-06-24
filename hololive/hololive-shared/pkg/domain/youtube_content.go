@@ -181,26 +181,6 @@ func ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt, alarmSentAt *ti
 	return YouTubeCommunityShortsAlarmStateStatusDetected
 }
 
-// 동일 cutover/runtime 조합에 대해 최초 감지된 배포 완료 시각과 관찰 창을 보존한다.
-type YouTubeCommunityShortsObservationWindow struct {
-	RuntimeName             string     `db:"runtime_name" json:"runtime_name"`
-	BigBangCutoverAt        time.Time  `db:"bigbang_cutover_at" json:"bigbang_cutover_at"`
-	AppVersion              string     `db:"app_version" json:"app_version"`
-	TargetChannelCount      int        `db:"target_channel_count" json:"target_channel_count"`
-	DeploymentCompletedAt   time.Time  `db:"deployment_completed_at" json:"deployment_completed_at"`
-	ObservationStartedAt    time.Time  `db:"observation_started_at" json:"observation_started_at"`
-	ObservationEndedAt      time.Time  `db:"observation_ended_at" json:"observation_ended_at"`
-	ClosedAt                *time.Time `db:"closed_at" json:"closed_at,omitempty"`
-	FinalizedPostBaselineAt *time.Time `db:"finalized_post_baseline_at" json:"finalized_post_baseline_at,omitempty"`
-	FinalizedPostCount      int        `db:"finalized_post_count" json:"finalized_post_count"`
-	CreatedAt               time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt               time.Time  `db:"updated_at" json:"updated_at"`
-}
-
-func (YouTubeCommunityShortsObservationWindow) TableName() string {
-	return "youtube_community_shorts_observation_windows"
-}
-
 type WatermarkType string
 
 const (

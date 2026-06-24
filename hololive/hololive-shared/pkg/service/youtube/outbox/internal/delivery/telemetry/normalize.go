@@ -6,18 +6,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func NormalizeDeliveryTelemetryObservationStatus(status string) string {
-	return normalizeDeliveryTelemetryObservationStatus(status)
-}
-
-func normalizeDeliveryTelemetryObservationStatus(status string) string {
-	normalized := strings.TrimSpace(status)
-	if normalized == "" {
-		return deliveryTelemetryObservationStatusUnclassified
-	}
-	return normalized
-}
-
 func deliveryTelemetryIdentityForRow(row *domain.YouTubeNotificationDeliveryTelemetry) (deliveryTelemetryIdentity, bool) {
 	kind, ok := deliveryTelemetryKindForAlarmType(row.AlarmType)
 	if !ok {

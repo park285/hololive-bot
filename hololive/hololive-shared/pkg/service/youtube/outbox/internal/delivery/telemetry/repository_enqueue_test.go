@@ -64,7 +64,6 @@ func makeEnqueueTestRow(outboxID, deliveryID int64, ordinal int) domain.YouTubeN
 		AlarmType:          domain.AlarmType("community"),
 		AlarmSentAt:        &sentAt,
 		AlarmLatencyMillis: &latency,
-		ObservationStatus:  "observed",
 		DedupeKey:          "dedupe-key",
 		DeliveryPath:       "community_post",
 		DeliveryMode:       "grouped",
