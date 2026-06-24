@@ -203,7 +203,7 @@ func resolveOutboxPublishedAt(outbox *domain.YouTubeNotificationOutbox) *time.Ti
 
 func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
 	var payload videoPayload
-	if err := json.Unmarshal([]byte(rawPayload), payload); err != nil {
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		return nil
 	}
 	return yttimestamp.NormalizePtr(payload.PublishedAt)
@@ -211,7 +211,7 @@ func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
 
 func resolveCommunityPayloadPublishedAt(rawPayload string) *time.Time {
 	var payload communityPayload
-	if err := json.Unmarshal([]byte(rawPayload), payload); err != nil {
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		return nil
 	}
 	return yttimestamp.NormalizePtr(payload.PublishedAt)
