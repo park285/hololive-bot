@@ -474,9 +474,19 @@ func mergeAlarmSentMark(existing *AlarmSentMark, next AlarmSentMark, identity st
 	return nil
 }
 
+func isCommunityShortsAlarmStateKind(kind domain.OutboxKind) bool {
+	switch kind {
+	case domain.OutboxKindCommunityPost, domain.OutboxKindNewShort:
+		return true
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+		return false
+	default:
+		return false
+	}
+}
+
 func calculateLatencyResult(actualPublishedAt *time.Time, alarmSentAt *time.Time) (*int64, *bool) {
-	result := alarmtiming.CalculateLatencyResult(actualPublishedAt, alarmSentAt)
-	return result.LatencyMillis, result.Exceeded
+	return alarmtiming.CalculateLatency(actualPublishedAt, alarmSentAt)
 }
 
 func nullableInt64Value(value *int64) any {
