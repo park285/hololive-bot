@@ -38,7 +38,6 @@ type ingestionRuntimeYouTubeDependencies struct {
 
 func resolveIngestionRuntimeYouTubeState(
 	ctx context.Context,
-	appConfig *config.Config,
 	logger *slog.Logger,
 	features ingestionRuntimeFeatures,
 	infra *youtubeProducerInfrastructure,

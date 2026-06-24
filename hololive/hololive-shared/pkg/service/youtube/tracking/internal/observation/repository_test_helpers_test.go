@@ -43,29 +43,6 @@ func selectTrackingRowsForTest(t *testing.T, db trackingDB) []domain.YouTubeCont
 	return rows
 }
 
-func insertAlarmStatesForTest(t *testing.T, db trackingDB, rows []domain.YouTubeCommunityShortsAlarmState) {
-	t.Helper()
-	now := time.Now().UTC()
-	for i := range rows {
-		row := rows[i]
-		if row.CreatedAt.IsZero() {
-			row.CreatedAt = now
-		}
-		if row.UpdatedAt.IsZero() {
-			row.UpdatedAt = now
-		}
-		_, err := dbx.ExecSQL(context.Background(), db, "insert alarm state for test", `
-			INSERT INTO youtube_community_shorts_alarm_states
-				(kind, post_id, content_id, channel_id, actual_published_at, detected_at,
-				 published_at_retry_after, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt,
-			row.DetectedAt, row.PublishedAtRetryAfter, row.AuthorizedAt, row.AlarmSentAt,
-			row.DeliveryStatus, row.CreatedAt, row.UpdatedAt)
-		require.NoError(t, err)
-	}
-}
-
 func ensureObservationWindowForBaselineTest(t *testing.T, db trackingDB, row *domain.YouTubeCommunityShortsObservationPostBaseline) {
 	t.Helper()
 	observationEndedAt := row.FinalizedAt

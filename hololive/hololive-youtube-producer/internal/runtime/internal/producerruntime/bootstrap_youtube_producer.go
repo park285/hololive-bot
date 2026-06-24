@@ -80,7 +80,7 @@ func buildIngestionRuntime(ctx context.Context, appConfig *config.Config, logger
 		return nil, err
 	}
 
-	youtubeState, err := resolveIngestionRuntimeYouTubeState(ctx, appConfig, logger, features, infra)
+	youtubeState, err := resolveIngestionRuntimeYouTubeState(ctx, logger, features, infra)
 	if err != nil {
 		infra.cleanup()
 		return nil, err
