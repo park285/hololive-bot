@@ -35,7 +35,6 @@ hololive/hololive-youtube-producer/internal/runtime/ingestionlease/lease.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/bootstrap.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/bootstrap_youtube_producer.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/bootstrap_youtube_producer_youtube.go
-hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/community_shorts_observation_persist.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/community_shorts_types.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/ingestion_events.go
 hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/ingestion_runtime_spec.go
@@ -70,16 +69,11 @@ hololive/hololive-youtube-producer/internal/runtime/polltarget/youtube_poll_targ
 hololive/hololive-youtube-producer/internal/runtime/polltarget/youtube_poll_target_scheduler.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/youtube_poll_target_tiering.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/youtube_poll_targets.go
-hololive/hololive-youtube-producer/internal/runtime/publishedat/api.go
-hololive/hololive-youtube-producer/internal/runtime/publishedat/published_at_resolver_builder.go
-hololive/hololive-youtube-producer/internal/runtime/publishedat/published_at_resolver_schema.go
 hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_budget_admission.go
 hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_runtime_readiness.go
 hololive/hololive-youtube-producer/internal/runtime/runtime.go
 hololive/hololive-youtube-producer/internal/communityshorts/constants.go
-hololive/hololive-youtube-producer/internal/communityshorts/observation_window.go
 hololive/hololive-youtube-producer/internal/communityshorts/operational_channels.go
-hololive/hololive-youtube-producer/internal/communityshorts/route_policy.go
 hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go
 hololive/hololive-youtube-producer/internal/communityshorts/target_baseline_routes.go
 hololive/hololive-shared/internal/ctxutil/sleep.go
@@ -619,16 +613,6 @@ hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/live_poller
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/live_poller_stats.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/pgx_helpers.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/metrics.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver_candidate.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver_controls.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver_notification_rows.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver_pgx_helpers.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver_poller.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver_repository.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver_repository_finalize.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver_repository_notification.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/resolver/published_at_resolver_run.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/scheduler/rate_limiter.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/repository_batch.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/latency_persister.go
@@ -640,7 +624,6 @@ hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/repositor
 hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/repository_batch_source_posts.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/repository_batch_validation.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/repository_batch_writes.go
-hololive/hololive-shared/pkg/service/youtube/poller/internal/route_decider.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/scheduler/scheduler.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/budget.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/scheduler/scheduler_admission.go
@@ -722,7 +705,6 @@ hololive/hololive-shared/pkg/service/youtube/stats/stats_repository_write.go
 hololive/hololive-shared/pkg/service/youtube/timestamp/canonical.go
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/alarm_state_repository.go
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/alarm_state_repository_claim.go
-hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/alarm_state_repository_resolution_page.go
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/alarm_state_repository_upsert.go
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/community_alarm_sent_history.go
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/observation_compare.go
