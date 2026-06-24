@@ -15,14 +15,16 @@ WITH input AS (
 		$1::text[],
 		$2::text[],
 		$3::text[],
-		$4::timestamptz[],
-		$5::timestamptz[]
-	) AS t(kind, content_id, canonical_content_id, alarm_sent_at, authorized_at)
+		$4::text[],
+		$5::timestamptz[],
+		$6::timestamptz[]
+	) AS t(kind, content_id, canonical_content_id, raw_content_id, alarm_sent_at, authorized_at)
 ), deduped_input AS (
 	SELECT DISTINCT ON (kind, canonical_content_id)
 		kind,
 		content_id,
 		canonical_content_id,
+		raw_content_id,
 		alarm_sent_at,
 		authorized_at
 	FROM input
@@ -43,14 +45,21 @@ WITH input AS (
 	        ELSE FALSE
 	    END,
 	    delivery_status = 'SENT',
-	    updated_at = $6
+	    updated_at = $7
 	FROM deduped_input AS i
 	WHERE t.kind = i.kind
-	  AND t.canonical_content_id = i.canonical_content_id
+	  AND (
+		t.canonical_content_id = i.canonical_content_id
+		OR t.content_id = i.content_id
+		OR t.content_id = i.raw_content_id
+	  )
 	  AND (t.alarm_sent_at IS NULL OR t.alarm_sent_at > i.alarm_sent_at)
 	RETURNING
 		t.kind,
-		t.canonical_content_id AS post_id,
+		CASE
+			WHEN t.canonical_content_id <> '' THEN t.canonical_content_id
+			ELSE i.canonical_content_id
+		END AS post_id,
 		t.content_id,
 		t.channel_id,
 		t.actual_published_at,
@@ -61,10 +70,14 @@ WITH input AS (
 	SET authorized_at = NULL,
 	    alarm_sent_at = i.alarm_sent_at,
 	    delivery_status = 'SENT',
-	    updated_at = $6
+	    updated_at = $7
 	FROM deduped_input AS i
 	WHERE s.kind = i.kind
-	  AND s.post_id = i.canonical_content_id
+	  AND (
+		s.post_id = i.canonical_content_id
+		OR s.content_id = i.content_id
+		OR s.content_id = i.raw_content_id
+	  )
 	  AND i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 	  AND i.authorized_at IS NOT NULL
 	  AND s.authorized_at = i.authorized_at
@@ -75,7 +88,11 @@ WITH input AS (
 	FROM deduped_input AS i
 	JOIN youtube_community_shorts_alarm_states AS s
 	  ON s.kind = i.kind
-	 AND s.post_id = i.canonical_content_id
+	 AND (
+		s.post_id = i.canonical_content_id
+		OR s.content_id = i.content_id
+		OR s.content_id = i.raw_content_id
+	 )
 	WHERE i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 	  AND i.authorized_at IS NOT NULL
 	  AND s.alarm_sent_at IS NULL
@@ -93,10 +110,14 @@ WITH input AS (
 	        ELSE s.alarm_sent_at
 	    END,
 	    delivery_status = 'SENT',
-	    updated_at = $6
+	    updated_at = $7
 	FROM deduped_input AS i
 	WHERE s.kind = i.kind
-	  AND s.post_id = i.canonical_content_id
+	  AND (
+		s.post_id = i.canonical_content_id
+		OR s.content_id = i.content_id
+		OR s.content_id = i.raw_content_id
+	  )
 	  AND i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 	  AND NOT EXISTS (
 		SELECT 1
@@ -136,15 +157,18 @@ WITH input AS (
 		NULL,
 		t.alarm_sent_at,
 		'SENT',
-		$6,
-		$6
+		$7,
+		$7
 	FROM tracking_updated AS t
 	WHERE t.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 	  AND NOT EXISTS (
 		SELECT 1
 		FROM youtube_community_shorts_alarm_states AS s
 		WHERE s.kind = t.kind
-		  AND s.post_id = t.post_id
+		  AND (
+			s.post_id = t.post_id
+			OR s.content_id = t.content_id
+		  )
 	  )
 	ON CONFLICT (kind, post_id) DO UPDATE
 	SET alarm_sent_at = CASE
@@ -155,7 +179,7 @@ WITH input AS (
 	    END,
 	    delivery_status = 'SENT',
 	    authorized_at = NULL,
-	    updated_at = $6
+	    updated_at = $7
 	RETURNING kind, post_id
 )
 SELECT
@@ -170,6 +194,7 @@ type bulkAlarmSentMarkInputs struct {
 	kinds               []string
 	contentIDs          []string
 	canonicalContentIDs []string
+	rawContentIDs       []string
 	alarmSentAts        []time.Time
 	authorizedAts       []pgtype.Timestamptz
 }
@@ -179,6 +204,7 @@ func newBulkAlarmSentMarkInputs(marks []AlarmSentMark) (bulkAlarmSentMarkInputs,
 		kinds:               make([]string, 0, len(marks)),
 		contentIDs:          make([]string, 0, len(marks)),
 		canonicalContentIDs: make([]string, 0, len(marks)),
+		rawContentIDs:       make([]string, 0, len(marks)),
 		alarmSentAts:        make([]time.Time, 0, len(marks)),
 		authorizedAts:       make([]pgtype.Timestamptz, 0, len(marks)),
 	}
@@ -204,10 +230,21 @@ func appendBulkAlarmSentMarkInput(inputs *bulkAlarmSentMarkInputs, index int, ma
 	inputs.kinds = append(inputs.kinds, string(mark.Kind))
 	inputs.contentIDs = append(inputs.contentIDs, mark.ContentID)
 	inputs.canonicalContentIDs = append(inputs.canonicalContentIDs, canonicalContentID)
+	inputs.rawContentIDs = append(inputs.rawContentIDs, rawAlarmSentContentID(mark))
 	inputs.alarmSentAts = append(inputs.alarmSentAts, mark.AlarmSentAt)
 	inputs.authorizedAts = append(inputs.authorizedAts, alarmSentAuthorizedAtValue(mark.AuthorizedAt))
 
 	return nil
+}
+
+func rawAlarmSentContentID(mark AlarmSentMark) string {
+	for _, candidate := range trackingIdentityCandidates(mark.Kind, mark.ContentID) {
+		if candidate != canonicalTrackingIdentity(mark.Kind, mark.ContentID) {
+			return candidate
+		}
+	}
+
+	return mark.ContentID
 }
 
 func alarmSentAuthorizedAtValue(authorizedAt *time.Time) pgtype.Timestamptz {
