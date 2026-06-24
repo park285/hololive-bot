@@ -54,9 +54,6 @@ type Metrics struct {
 	JobReleaseTotal                   *prometheus.CounterVec
 	OutboxInsertTotal                 *prometheus.CounterVec
 	CommunityShortsDetectedPostsTotal *prometheus.CounterVec
-	PublishedAtResolutionAttemptTotal *prometheus.CounterVec
-	PublishedAtResolutionSuccessTotal *prometheus.CounterVec
-	PublishedAtResolutionFailureTotal *prometheus.CounterVec
 }
 
 func NewMetrics() *Metrics {
@@ -153,26 +150,6 @@ func (m *Metrics) registerContentMetrics() {
 		Name: "youtube_poller_community_shorts_detected_posts_total",
 		Help: "커뮤니티/쇼츠 감지 게시물 수",
 	}, []string{"alarm_type"})
-	m.registerPublishedAtResolverMetrics()
-}
-
-func (m *Metrics) registerPublishedAtResolverMetrics() {
-	m.PublishedAtResolutionAttemptTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "youtube_poller_published_at_resolution_attempt_total",
-		Help: "resolver published_at 해석 시도 횟수",
-	}, []string{"kind"})
-	m.PublishedAtResolutionSuccessTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "youtube_poller_published_at_resolution_success_total",
-		Help: "resolver published_at 해석 성공 횟수",
-	}, []string{"kind"})
-	m.PublishedAtResolutionFailureTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "youtube_poller_published_at_resolution_failure_total",
-		Help: "resolver published_at 해석 실패 횟수",
-	}, []string{"kind"})
-}
-
-func (m *Metrics) ObservePublishedAtResolutionAttempt(kind domain.OutboxKind) {
-	m.PublishedAtResolutionAttemptTotal.WithLabelValues(string(kind)).Inc()
 }
 
 func (m *Metrics) ObserveJobClaim(pollerName, result string) {
@@ -264,12 +241,4 @@ func forBudgetProfileSource(profile BudgetProfile, observe func(BudgetSource)) {
 	for source := range profile.SourceUnits {
 		observe(source)
 	}
-}
-
-func (m *Metrics) ObservePublishedAtResolutionSuccess(kind domain.OutboxKind) {
-	m.PublishedAtResolutionSuccessTotal.WithLabelValues(string(kind)).Inc()
-}
-
-func (m *Metrics) ObservePublishedAtResolutionFailure(kind domain.OutboxKind) {
-	m.PublishedAtResolutionFailureTotal.WithLabelValues(string(kind)).Inc()
 }

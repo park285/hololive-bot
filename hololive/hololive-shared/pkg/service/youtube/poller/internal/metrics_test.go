@@ -26,9 +26,6 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 	m.ObserveJobRelease("resolver", "error")
 	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, "success", 2)
 	m.CommunityShortsDetectedPostsTotal.WithLabelValues(string(domain.AlarmTypeShorts)).Add(3)
-	m.ObservePublishedAtResolutionAttempt(domain.OutboxKindNewShort)
-	m.ObservePublishedAtResolutionSuccess(domain.OutboxKindNewShort)
-	m.ObservePublishedAtResolutionFailure(domain.OutboxKindNewShort)
 
 	families, err := reg.Gather()
 	require.NoError(t, err)
@@ -70,15 +67,6 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 	assertCounterValue(t, families, "youtube_poller_community_shorts_detected_posts_total", map[string]string{
 		"alarm_type": string(domain.AlarmTypeShorts),
 	}, 3)
-	assertCounterValue(t, families, "youtube_poller_published_at_resolution_attempt_total", map[string]string{
-		"kind": string(domain.OutboxKindNewShort),
-	}, 1)
-	assertCounterValue(t, families, "youtube_poller_published_at_resolution_success_total", map[string]string{
-		"kind": string(domain.OutboxKindNewShort),
-	}, 1)
-	assertCounterValue(t, families, "youtube_poller_published_at_resolution_failure_total", map[string]string{
-		"kind": string(domain.OutboxKindNewShort),
-	}, 1)
 }
 
 func TestObserveOutboxInsertSkipsNonPositiveCounts(t *testing.T) {

@@ -76,7 +76,7 @@ scraper-only by default with `PHOTO_SYNC_ENABLED=false`,
 - Logs: `docker logs -f hololive-youtube-producer-c` (main), `SINCE=15m TAIL=600 ./scripts/logs/ap-logs.sh <ap-host> youtube-producer`
 - Health: remote AP local port (`30005`/`30015`/`30035`), AP-C `http://127.0.0.1:30025/health`
 - Ready: remote AP local port (`30005`/`30015`/`30035`), AP-C `http://127.0.0.1:30025/ready`, all with `mode=active-active`
-- Metrics: `youtube_poller_job_claim_total`, `youtube_poller_job_lease_renew_total`, `youtube_poller_job_mark_completed_total`, `youtube_poller_job_release_total`, `youtube_poller_outbox_insert_total`, `youtube_poller_published_at_resolver_*`
+- Metrics: `youtube_poller_job_claim_total`, `youtube_poller_job_lease_renew_total`, `youtube_poller_job_mark_completed_total`, `youtube_poller_job_release_total`, `youtube_poller_outbox_insert_total`
 
 ## Related documents
 

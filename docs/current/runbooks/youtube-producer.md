@@ -78,7 +78,6 @@ central host.
 - `youtube_poller_job_lease_renew_total{poller,result}`: lease renew success/error/lost signals.
 - `youtube_poller_job_mark_completed_total{poller,result}` and `youtube_poller_job_release_total{poller,result}`: completion/release ownership outcomes.
 - `youtube_poller_outbox_insert_total{kind,result}`: outbox insert success/conflict/error counts.
-- `youtube_poller_published_at_resolver_*`: pending `published_at` resolver attempts, successes, failures, skips, and enqueue counts.
 
 Active-active `/ready` fails closed on startup until a lightweight Valkey JobRunGuard probe or later job claim proves lease availability. During that state it reports `valkey_available=false` and `scraping_paused=true` while `/health` can still be up.
 
