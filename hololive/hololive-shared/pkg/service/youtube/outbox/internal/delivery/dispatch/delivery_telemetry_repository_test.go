@@ -82,7 +82,7 @@ func (deliveryTelemetryTestBufferModel) TableName() string {
 	return "youtube_notification_delivery_telemetry"
 }
 
-type deliveryTelemetryTestObservationTrackingModel struct {
+type deliveryTelemetryTestAlarmTrackingModel struct {
 	Kind                        string `db:"kind"`
 	ContentID                   string `db:"content_id"`
 	CanonicalContentID          string
@@ -100,7 +100,7 @@ type deliveryTelemetryTestObservationTrackingModel struct {
 	UpdatedAt                   time.Time
 }
 
-func (deliveryTelemetryTestObservationTrackingModel) TableName() string {
+func (deliveryTelemetryTestAlarmTrackingModel) TableName() string {
 	return "youtube_content_alarm_tracking"
 }
 
@@ -138,7 +138,7 @@ func TestDeliveryTelemetryRepository_BackfillAndFlush(t *testing.T) {
 	detectedAt := sentAt.Add(-1 * time.Minute)
 	alarmLatencyMillis := int64(sentAt.Sub(actualPublishedAt) / time.Millisecond)
 	alarmLatencyExceeded := false
-	require.NoError(t, insertDeliveryTestRows(db, &deliveryTelemetryTestObservationTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTelemetryTestAlarmTrackingModel{
 		Kind:                 string(domain.OutboxKindCommunityPost),
 		ContentID:            outbox.ContentID,
 		ChannelID:            outbox.ChannelID,
@@ -437,7 +437,7 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 	alarmSentAt := actualPublishedAt.Add(3 * time.Minute)
 	alarmLatencyMillis := int64(alarmSentAt.Sub(actualPublishedAt) / time.Millisecond)
 	alarmLatencyExceeded := true
-	require.NoError(t, insertDeliveryTestRows(db, &deliveryTelemetryTestObservationTrackingModel{
+	require.NoError(t, insertDeliveryTestRows(db, &deliveryTelemetryTestAlarmTrackingModel{
 		Kind:                 string(domain.OutboxKindNewShort),
 		ContentID:            "short-emit",
 		ChannelID:            "UC_emit",

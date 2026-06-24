@@ -41,23 +41,9 @@
 | `delivery_mode` | 발송 모드입니다. grouped fan-out, 복구 backfill, 최종 결과 로그를 구분합니다. | `string enum` | `grouped` |
 | `actual_published_at` | 실제 유튜브 게시 시각입니다. 내부 지연 2분 계산의 시작점입니다. | `RFC3339 timestamp string` | `2026-04-10T00:01:10Z` |
 | `detected_at` | 스크래퍼가 게시물을 최초 감지한 시각입니다. 외부 수집 지연과 내부 지연을 분리할 때 사용합니다. | `RFC3339 timestamp string` | `2026-04-10T00:01:42Z` |
-| `sent_at` | 해당 감사 로그가 가리키는 발송 완료 또는 실패 시점입니다. 이 runbook의 조회 결과에서는 `event_at` 로 표시됩니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` |
-| `observation_status` | 지정 관찰 구간에 속하는지 여부입니다. big-bang 적용 후 검증 창 포함 여부를 판정합니다. | `string enum` | `matched` |
-| `failure_reason` | 실패 시도일 때의 축약 원인입니다. 실패 후 재시도/최종 성공 여부를 해석할 때 사용합니다. 성공 로그에서는 비어 있을 수 있습니다. | `string` | `send message` |
+| `sent_at` | 해당 감사 로그가 가리키는 발송 완료 또는 실패 시점입니다. 이 runbook의 조회 결과에서는 `event_at` 로 표시됩니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` || `failure_reason` | 실패 시도일 때의 축약 원인입니다. 실패 후 재시도/최종 성공 여부를 해석할 때 사용합니다. 성공 로그에서는 비어 있을 수 있습니다. | `string` | `send message` |
 
-### 2. observation_status 값 해석
-
-`observation_status` 값 해석:
-
-| Value | Meaning |
-| --- | --- |
-| `matched` | 실제 게시 시각 기준으로 현재 관찰 구간에 포함됩니다. |
-| `outside_observation_window` | 실제 게시 시각은 있으나 현재 관찰 구간 밖입니다. |
-| `missing_actual_published_at` | 실제 게시 시각이 비어 있어 SLA 시작점을 확정하지 못했습니다. |
-| `tracking_not_found` | tracking row를 찾지 못해 게시물 기준 정보 결합에 실패했습니다. |
-| `unclassified` | 분류 전 또는 backfill 보완 전 상태입니다. |
-
-### 3. 2분 SLA 판정 필드
+### 2. 2분 SLA 판정 필드
 
 `telemetry_source = outbox_final_result` 인 `delivery audit` 로그에서는 아래 하위 필드를 추가로 확인합니다.
 
@@ -109,7 +95,7 @@
 | `retry_accumulation` | 실패 후 재시도 누적으로 지연이 커졌습니다. |
 | `job_failure` | 발송 job 실패 흔적이 직접 감지됐습니다. |
 
-### 4. Runbook 조회 컬럼 매핑
+### 3. Runbook 조회 컬럼 매핑
 
 | Runbook output column | Raw log field / derivation |
 | --- | --- |
@@ -119,7 +105,6 @@
 | `publish_to_event_ms` | `sent_at - actual_published_at` |
 | `send_result` | `send_result` |
 | `delivery_path` | `delivery_path` |
-| `observation_status` | `observation_status` |
 | `failure_reason` | `failure_reason` |
 
 ## Execute
@@ -166,7 +151,6 @@ SELECT
     event_at,
     send_result,
     delivery_path,
-    observation_status,
     failure_reason
 FROM youtube_notification_delivery_telemetry
 WHERE alarm_type IN ('COMMUNITY', 'SHORTS')
