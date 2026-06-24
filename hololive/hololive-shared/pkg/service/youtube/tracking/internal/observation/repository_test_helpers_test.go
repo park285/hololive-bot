@@ -126,28 +126,3 @@ func insertObservationBaselinesForTest(t *testing.T, db trackingDB, rows []domai
 		require.NoError(t, err)
 	}
 }
-
-func newLegacyAlarmStateTestDB(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	db := newTrackingTestDB(t)
-	_, err := db.Exec(context.Background(), `DROP TABLE youtube_community_shorts_alarm_states`)
-	require.NoError(t, err)
-	_, err = db.Exec(context.Background(), `
-		CREATE TABLE youtube_community_shorts_alarm_states (
-			kind TEXT NOT NULL,
-			post_id TEXT NOT NULL,
-			content_id TEXT NOT NULL,
-			channel_id TEXT NOT NULL,
-			actual_published_at TIMESTAMPTZ,
-			detected_at TIMESTAMPTZ NOT NULL,
-			authorized_at TIMESTAMPTZ,
-			alarm_sent_at TIMESTAMPTZ,
-			delivery_status TEXT NOT NULL DEFAULT 'DETECTED',
-			created_at TIMESTAMPTZ NOT NULL,
-			updated_at TIMESTAMPTZ NOT NULL,
-			PRIMARY KEY (kind, post_id)
-		)
-	`)
-	require.NoError(t, err)
-	return db
-}

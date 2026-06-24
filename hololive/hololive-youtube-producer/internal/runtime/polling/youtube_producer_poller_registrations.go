@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
-	"github.com/kapu/hololive-youtube-producer/internal/runtime/publishedat"
 )
 
 const defaultChannelPollerMaxResults = 10
@@ -43,7 +42,6 @@ func buildYouTubeProducerChannelPollerRegistrations(
 	scraperConfig *config.ScraperConfig,
 	sharedRL *scraper.RateLimiter,
 	cacheClient cache.Client,
-	routeDecider poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
@@ -56,7 +54,6 @@ func buildYouTubeProducerChannelPollerRegistrations(
 		scraperConfig,
 		buildSharedYouTubeProducerClient(scraperConfig, cacheClient, sharedRL),
 		nil,
-		routeDecider,
 		notificationChannelIDs,
 		statsChannelIDs,
 	)
@@ -68,7 +65,6 @@ func buildYouTubeProducerChannelPollerRegistrationsWithClient(
 	scraperConfig *config.ScraperConfig,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
-	routeDecider poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
@@ -76,21 +72,19 @@ func buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		scraperConfig = &config.ScraperConfig{}
 	}
 	poll := scraperConfig.PollOrDefault()
-	resolverConfig := publishedat.EffectiveConfig(scraperConfig)
-	inlineResolveMissingPublishedAt := routeDecider != nil && !resolverConfig.Enabled
 	communityKeywords := []string{}
 	pool := postgres.GetPool()
 	tieringEnabled := scraperConfig.PollTiering.Enabled
-	pollers := newYouTubeProducerPollerSet(scraperClient, liveStatusProvider, pool, communityKeywords, routeDecider, inlineResolveMissingPublishedAt)
+	pollers := newYouTubeProducerPollerSet(scraperClient, liveStatusProvider, pool, communityKeywords)
 
 	if registrations, ok := tryBuildTieredChannelPollerRegistrations(ctx, tieringEnabled, pool, &pollers, poll, polltarget.Targets{
 		NotificationChannelIDs: notificationChannelIDs,
 		StatsChannelIDs:        statsChannelIDs,
-	}, inlineResolveMissingPublishedAt, defaultChannelPollerMaxResults); ok {
-		return appendBackfillChannelPollerRegistrations(registrations, &pollers, scraperConfig.Backfill, notificationChannelIDs, inlineResolveMissingPublishedAt, defaultChannelPollerMaxResults)
+	}); ok {
+		return appendBackfillChannelPollerRegistrations(registrations, &pollers, scraperConfig.Backfill, notificationChannelIDs)
 	}
-	registrations := buildFlatYouTubeProducerChannelPollerRegistrations(&pollers, poll, notificationChannelIDs, statsChannelIDs, inlineResolveMissingPublishedAt, defaultChannelPollerMaxResults)
-	return appendBackfillChannelPollerRegistrations(registrations, &pollers, scraperConfig.Backfill, notificationChannelIDs, inlineResolveMissingPublishedAt, defaultChannelPollerMaxResults)
+	registrations := buildFlatYouTubeProducerChannelPollerRegistrations(&pollers, poll, notificationChannelIDs, statsChannelIDs)
+	return appendBackfillChannelPollerRegistrations(registrations, &pollers, scraperConfig.Backfill, notificationChannelIDs)
 }
 
 func appendBackfillChannelPollerRegistrations(
@@ -98,14 +92,12 @@ func appendBackfillChannelPollerRegistrations(
 	pollers *youTubeProducerPollerSet,
 	backfill config.ScraperBackfillConfig,
 	notificationChannelIDs []string,
-	inlineResolveMissingPublishedAt bool,
-	maxResults int,
 ) []providers.ChannelPollerRegistration {
 	if !backfill.Enabled {
 		return registrations
 	}
 	if backfill.ShortsEnabled {
-		shortsUnits := shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)
+		shortsUnits := shortsWorstCaseRequestUnits()
 		registrations = append(registrations, buildRegistration(&registrationSpec{
 			Poller:                newNamedBackfillPoller("shorts_backfill", pollers.shorts),
 			Priority:              poller.PriorityLow,
@@ -118,7 +110,7 @@ func appendBackfillChannelPollerRegistrations(
 		}))
 	}
 	if backfill.CommunityEnabled {
-		communityUnits := communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)
+		communityUnits := communityWorstCaseRequestUnits()
 		registrations = append(registrations, buildRegistration(&registrationSpec{
 			Poller:                newNamedBackfillPoller("community_backfill", pollers.community),
 			Priority:              poller.PriorityLow,
@@ -152,12 +144,10 @@ func buildFlatYouTubeProducerChannelPollerRegistrations(
 	poll config.ScraperPoll,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
-	inlineResolveMissingPublishedAt bool,
-	maxResults int,
 ) []providers.ChannelPollerRegistration {
 	communityInterval := communityPrimaryPollInterval(poll)
-	shortsUnits := shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)
-	communityUnits := communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)
+	shortsUnits := shortsWorstCaseRequestUnits()
+	communityUnits := communityWorstCaseRequestUnits()
 	registrations := []providers.ChannelPollerRegistration{
 		buildRegistration(&registrationSpec{
 			Poller:                pollers.videos,
@@ -212,8 +202,6 @@ func tryBuildTieredChannelPollerRegistrations(
 	pollers *youTubeProducerPollerSet,
 	poll config.ScraperPoll,
 	targets polltarget.Targets,
-	inlineResolveMissingPublishedAt bool,
-	maxResults int,
 ) ([]providers.ChannelPollerRegistration, bool) {
 	if !enabled {
 		return nil, false
@@ -222,20 +210,18 @@ func tryBuildTieredChannelPollerRegistrations(
 	if tierErr != nil {
 		return nil, false
 	}
-	return buildTieredYouTubeProducerChannelPollerRegistrations(pollers, poll, &tieredTargets, inlineResolveMissingPublishedAt, maxResults), true
+	return buildTieredYouTubeProducerChannelPollerRegistrations(pollers, poll, &tieredTargets), true
 }
 
 func buildTieredYouTubeProducerChannelPollerRegistrations(
 	pollers *youTubeProducerPollerSet,
 	poll config.ScraperPoll,
 	targets *polltarget.TieredTargets,
-	inlineResolveMissingPublishedAt bool,
-	maxResults int,
 ) []providers.ChannelPollerRegistration {
 	registrations := make([]providers.ChannelPollerRegistration, 0, 11)
 	registrations = appendTieredNotificationRegistration(registrations, pollers.videos, targets, poll.Videos, poller.PriorityNormal, scraper.FetchPageMaxAttempts, videosWorstCaseRequestUnits(), youtubeScraperBudgetProfile(videosWorstCaseRequestUnits(), poller.BudgetBurstPrimary, poller.BudgetPriorityNormal), false)
-	registrations = appendTieredNotificationRegistration(registrations, pollers.shorts, targets, poll.Shorts, poller.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), youtubeScraperBudgetProfile(shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), poller.BudgetBurstPrimary, poller.BudgetPriorityLow), true)
-	registrations = appendTieredNotificationRegistration(registrations, pollers.community, targets, communityPrimaryPollInterval(poll), poller.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), youtubeScraperBudgetProfile(communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults), poller.BudgetBurstPrimary, poller.BudgetPriorityLow), true)
+	registrations = appendTieredNotificationRegistration(registrations, pollers.shorts, targets, poll.Shorts, poller.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, shortsWorstCaseRequestUnits(), youtubeScraperBudgetProfile(shortsWorstCaseRequestUnits(), poller.BudgetBurstPrimary, poller.BudgetPriorityLow), true)
+	registrations = appendTieredNotificationRegistration(registrations, pollers.community, targets, communityPrimaryPollInterval(poll), poller.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, communityWorstCaseRequestUnits(), youtubeScraperBudgetProfile(communityWorstCaseRequestUnits(), poller.BudgetBurstPrimary, poller.BudgetPriorityLow), true)
 	registrations = append(registrations, buildStatsRegistration(pollers.stats, poll.Stats, targets.StatsChannelIDs))
 	registrations = appendLivePollerRegistrations(registrations, &livePollerRegistrationSpec{
 		Name:           "live",

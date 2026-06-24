@@ -104,7 +104,6 @@ func buildIngestionRuntime(ctx context.Context, appConfig *config.Config, logger
 	}
 
 	configSubscriber := buildRuntimeConfigSubscriber(features, infra, youtubeDeps.scraperScheduler, logger)
-	observationWindowWriter := buildIngestionRuntimeObservationWindowWriter(spec.name, youtubeState.communityShortsPolicy, infra)
 
 	httpServers, err := buildYouTubeProducerHTTPServers(ctx, appConfig, logger, spec.name, readinessState)
 	if err != nil {
@@ -112,7 +111,7 @@ func buildIngestionRuntime(ctx context.Context, appConfig *config.Config, logger
 		return nil, err
 	}
 
-	return newYouTubeProducerRuntime(appConfig, logger, spec.name, features, readinessState, infra, &youtubeState, youtubeDeps, configSubscriber, observationWindowWriter, httpServers), nil
+	return newYouTubeProducerRuntime(appConfig, logger, spec.name, features, readinessState, infra, &youtubeState, youtubeDeps, configSubscriber, httpServers), nil
 }
 
 func validateIngestionRuntimeInputs(appConfig *config.Config, logger *slog.Logger) error {
@@ -173,7 +172,6 @@ func newYouTubeProducerRuntime(
 	youtubeState *ingestionRuntimeYouTubeState,
 	youtubeDeps ingestionRuntimeYouTubeDependencies,
 	configSubscriber *configsub.Subscriber,
-	observationWindowWriter communityShortsObservationWindowWriter,
 	httpServers *sharedserver.RuntimeHTTPServers,
 ) *YouTubeProducerRuntime {
 	cleanup := func() {
@@ -181,22 +179,19 @@ func newYouTubeProducerRuntime(
 	}
 
 	return &YouTubeProducerRuntime{
-		RuntimeName:                            runtimeName,
-		Config:                                 appConfig,
-		Logger:                                 logger,
-		Scheduler:                              youtubeDeps.youtubeScheduler,
-		ScraperScheduler:                       youtubeDeps.scraperScheduler,
-		PublishedAtResolver:                    youtubeDeps.publishedAtResolver,
-		PhotoSync:                              buildRuntimePhotoSyncService(appConfig, features, infra, logger),
-		ConfigSubscriber:                       configSubscriber,
-		PollTargetRefresher:                    youtubeDeps.pollTargetRefresher,
-		ServerAddr:                             httpServers.Addr(),
-		HTTPServers:                            httpServers,
-		Readiness:                              readinessState,
-		CommunityShortsBigBangPolicy:           youtubeState.communityShortsPolicy,
-		communityShortsObservationWindowWriter: observationWindowWriter,
-		ingestionLease:                         youtubeState.ingestionLease,
-		Managed:                                lifecycle.NewManaged(cleanup),
+		RuntimeName:         runtimeName,
+		Config:              appConfig,
+		Logger:              logger,
+		Scheduler:           youtubeDeps.youtubeScheduler,
+		ScraperScheduler:    youtubeDeps.scraperScheduler,
+		PhotoSync:           buildRuntimePhotoSyncService(appConfig, features, infra, logger),
+		ConfigSubscriber:    configSubscriber,
+		PollTargetRefresher: youtubeDeps.pollTargetRefresher,
+		ServerAddr:          httpServers.Addr(),
+		HTTPServers:         httpServers,
+		Readiness:           readinessState,
+		ingestionLease:      youtubeState.ingestionLease,
+		Managed:             lifecycle.NewManaged(cleanup),
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
-	"github.com/kapu/hololive-youtube-producer/internal/runtime/publishedat"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,7 +133,7 @@ func TestFlatAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 }
 
 func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
-	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{}, nil, false)
+	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{})
 	poll := config.ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
@@ -152,8 +151,6 @@ func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 			ColdNotificationChannelIDs:   []string{"UC_C"},
 			StatsChannelIDs:              []string{"UC_STATS"},
 		},
-		false,
-		defaultChannelPollerMaxResults,
 	)
 	registrations = appendBackfillChannelPollerRegistrations(registrations, &pollers, config.ScraperBackfillConfig{
 		Enabled:           true,
@@ -164,13 +161,13 @@ func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 		LiveEnabled:       true,
 		LiveInterval:      3 * time.Minute,
 		TargetGroup:       "notification",
-	}, []string{"UC_A", "UC_B", "UC_C"}, false, defaultChannelPollerMaxResults)
+	}, []string{"UC_A", "UC_B", "UC_C"})
 
 	assertAllBudgetProfiles(t, registrations)
 }
 
 func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
-	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{}, nil, false)
+	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{})
 	videosName := pollers.videos.Name()
 	shortsName := pollers.shorts.Name()
 	poll := config.ScraperPoll{
@@ -190,8 +187,6 @@ func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
 			ColdNotificationChannelIDs:   []string{"UC_C"},
 			StatsChannelIDs:              []string{"UC_STATS"},
 		},
-		false,
-		defaultChannelPollerMaxResults,
 	)
 
 	videosCold := requireRegistrationForTargetGroup(t, registrations, videosName, providers.ChannelTargetGroupCold)
@@ -212,7 +207,7 @@ func TestPrimaryCommunityRegistrationUsesShortsInterval(t *testing.T) {
 }
 
 func TestTieredCommunityRegistrationsUseShortsInterval(t *testing.T) {
-	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{}, nil, false)
+	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{})
 	poll := config.ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
@@ -230,8 +225,6 @@ func TestTieredCommunityRegistrationsUseShortsInterval(t *testing.T) {
 			ColdNotificationChannelIDs:   []string{"UC_C"},
 			StatsChannelIDs:              []string{"UC_STATS"},
 		},
-		false,
-		defaultChannelPollerMaxResults,
 	)
 
 	shortsName := pollers.shorts.Name()
@@ -280,36 +273,6 @@ func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
 	require.Equal(t, float64(1), stats.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
 	require.Equal(t, poller.BudgetBurstPrimary, stats.BudgetProfile.BurstClass)
 	require.Equal(t, poller.BudgetPriorityLow, stats.BudgetProfile.Priority)
-}
-
-func TestPublishedAtResolverRegistrationHasBudgetProfile(t *testing.T) {
-	resolver := poller.NewPendingPublishedAtResolverWithControls(
-		nil,
-		nil,
-		nil,
-		20*time.Second,
-		10,
-		7,
-		time.Second,
-		time.Second,
-		time.Second,
-		time.Minute,
-		nil,
-	)
-	registration := publishedat.BuildRegistration(resolver, &config.ScraperConfig{
-		PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
-			Enabled:          true,
-			Interval:         20 * time.Second,
-			MaxResolvePerRun: 7,
-		},
-	}, nil)
-
-	require.NotNil(t, registration)
-	require.True(t, registration.HasBudgetProfile)
-	require.Equal(t, float64(7*scraper.MetadataResolveFetchPolicy.MaxAttempts), registration.BudgetProfile.SourceUnits[poller.BudgetSourceYouTubeScraper])
-	require.Equal(t, float64(1), registration.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
-	require.Equal(t, poller.BudgetBurstPrimary, registration.BudgetProfile.BurstClass)
-	require.Equal(t, poller.BudgetPriorityLow, registration.BudgetProfile.Priority)
 }
 
 func TestValidateRegistrationBudgetProfilesRequiresExplicitProfiles(t *testing.T) {
@@ -411,7 +374,6 @@ func buildBackfillTestRegistrationsWithLiveStatusProvider(backfill config.Scrape
 		},
 		nil,
 		liveStatusProvider,
-		nil,
 		notificationChannelIDs,
 		[]string{"UC_STATS"},
 	)

@@ -3,7 +3,6 @@ package poller
 import (
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/resolver"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/scheduler"
 )
 
@@ -14,8 +13,6 @@ type NotificationRouteDecider = polling.NotificationRouteDecider
 type ViewerSampleCleanerConfig = polling.ViewerSampleCleanerConfig
 
 type ViewerSampleCleaner = polling.ViewerSampleCleaner
-
-type PendingPublishedAtResolverPoller = resolver.PendingPublishedAtResolverPoller
 
 type RateLimiter = scheduler.RateLimiter
 
@@ -67,8 +64,6 @@ type VideosPoller = pollers.VideosPoller
 
 type CommunityPoller = pollers.CommunityPoller
 
-type PendingPublishedAtResolver = resolver.PendingPublishedAtResolver
-
 type LivePoller = pollers.LivePoller
 
 type LiveStatusProvider = pollers.LiveStatusProvider
@@ -76,9 +71,6 @@ type LiveStatusProvider = pollers.LiveStatusProvider
 type Metrics = polling.Metrics
 
 const (
-	PendingPublishedAtResolverPollerName          = resolver.PendingPublishedAtResolverPollerName
-	PendingPublishedAtResolverCandidatePollerName = resolver.PendingPublishedAtResolverCandidatePollerName
-
 	PriorityLow    = scheduler.PriorityLow
 	PriorityNormal = scheduler.PriorityNormal
 	PriorityHigh   = scheduler.PriorityHigh
@@ -102,15 +94,11 @@ const (
 	JobClaimPeerOwned        = polling.JobClaimPeerOwned
 	JobClaimAlreadyCompleted = polling.JobClaimAlreadyCompleted
 	JobClaimUnavailable      = polling.JobClaimUnavailable
-
-	MaxInlinePublishedAtResolvesPerPoll = pollers.MaxInlinePublishedAtResolvesPerPoll
 )
 
 var DefaultViewerSampleCleanerConfig = polling.DefaultViewerSampleCleanerConfig
 
 var NewViewerSampleCleaner = polling.NewViewerSampleCleaner
-
-var NewPendingPublishedAtResolverPoller = resolver.NewPendingPublishedAtResolverPoller
 
 var NewRateLimiter = scheduler.NewRateLimiter
 
@@ -125,10 +113,6 @@ var NewChannelStatsPoller = pollers.NewChannelStatsPoller
 var NewVideosPoller = pollers.NewVideosPoller
 
 var NewCommunityPoller = pollers.NewCommunityPoller
-
-var NewPendingPublishedAtResolver = resolver.NewPendingPublishedAtResolver
-
-var NewPendingPublishedAtResolverWithControls = resolver.NewPendingPublishedAtResolverWithControls
 
 var NewLivePoller = pollers.NewLivePoller
 

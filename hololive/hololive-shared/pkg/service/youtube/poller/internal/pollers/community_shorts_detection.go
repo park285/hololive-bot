@@ -32,10 +32,8 @@ import (
 )
 
 const (
-	communityPostDetectedLogMessage     = logschema.CommunityPostDetectedMessage
-	shortDetectedLogMessage             = logschema.ShortDetectedMessage
-	inlinePublishedAtFallbackTimeout    = 10 * time.Second
-	MaxInlinePublishedAtResolvesPerPoll = 3
+	communityPostDetectedLogMessage = logschema.CommunityPostDetectedMessage
+	shortDetectedLogMessage         = logschema.ShortDetectedMessage
 )
 
 func observeCommunityShortsDetectionBatch(ctx context.Context, channelID string, alarmType domain.AlarmType, detectedCount int, detectedAt time.Time, metrics *polling.Metrics) {

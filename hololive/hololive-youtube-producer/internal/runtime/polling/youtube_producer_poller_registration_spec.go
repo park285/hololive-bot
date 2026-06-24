@@ -69,19 +69,10 @@ func channelStatsWorstCaseRequestUnits() float64 {
 	return float64(scraper.FetchPageMaxAttempts * 2)
 }
 
-func shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt bool, maxResults int) float64 {
-	units := 1.0
-	if inlineResolveMissingPublishedAt {
-		units += float64(scraper.FetchPageMaxAttempts)
-		units += float64(min(maxResults, poller.MaxInlinePublishedAtResolvesPerPoll))
-	}
-	return units
+func shortsWorstCaseRequestUnits() float64 {
+	return 1.0
 }
 
-func communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt bool, maxResults int) float64 {
-	units := 1.0
-	if inlineResolveMissingPublishedAt {
-		units += float64(maxResults)
-	}
-	return units
+func communityWorstCaseRequestUnits() float64 {
+	return 1.0
 }

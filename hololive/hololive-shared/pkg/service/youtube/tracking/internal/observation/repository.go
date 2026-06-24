@@ -12,8 +12,6 @@ import (
 
 type ReadRepository interface {
 	FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error)
-	ListPendingPublishedAtResolutionsPage(ctx context.Context, referenceNow, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error)
-	ListPendingPublishedAtResolutions(ctx context.Context, detectedBefore time.Time, limit int) ([]PublishedAtResolutionCandidate, error)
 }
 
 type WriteRepository interface {
@@ -28,8 +26,7 @@ type Repository interface {
 }
 
 type alarmStateRepository struct {
-	db                       trackingDB
-	hasPublishedAtRetryAfter bool
+	db trackingDB
 }
 
 type windowRepository struct {
@@ -74,8 +71,7 @@ type trackingTxBeginner interface {
 }
 
 type PgxRepository struct {
-	db                       trackingDB
-	hasPublishedAtRetryAfter bool
+	db trackingDB
 
 	alarm           *alarmStateRepository
 	window          *windowRepository
@@ -85,20 +81,6 @@ type PgxRepository struct {
 	identity        *identityRepository
 	source          *sourcePostRepository
 	compareMetadata *compareMetadataRepository
-}
-
-type PublishedAtResolutionCandidate struct {
-	Kind       domain.OutboxKind
-	PostID     string
-	ContentID  string
-	ChannelID  string
-	DetectedAt time.Time
-}
-
-type PublishedAtResolutionCursor struct {
-	PriorityBucket int
-	DetectedAt     time.Time
-	PostID         string
 }
 
 type AlarmSentMark struct {
@@ -112,14 +94,11 @@ func NewRepository(db trackingDB) *PgxRepository {
 	return NewRepositoryContext(context.Background(), db)
 }
 
-func NewRepositoryContext(ctx context.Context, db trackingDB) *PgxRepository {
-	hasRetryAfter := hasPublishedAtRetryAfterColumn(ctx, db)
+func NewRepositoryContext(_ context.Context, db trackingDB) *PgxRepository {
 	repo := &PgxRepository{
-		db:                       db,
-		hasPublishedAtRetryAfter: hasRetryAfter,
+		db: db,
 		alarm: &alarmStateRepository{
-			db:                       db,
-			hasPublishedAtRetryAfter: hasRetryAfter,
+			db: db,
 		},
 		history:         &historyRepository{db: db},
 		identity:        &identityRepository{db: db},
@@ -133,22 +112,6 @@ func NewRepositoryContext(ctx context.Context, db trackingDB) *PgxRepository {
 }
 
 // --- delegation: AlarmState ---
-
-func (r *PgxRepository) ListPendingPublishedAtResolutions(ctx context.Context, detectedBefore time.Time, limit int) ([]PublishedAtResolutionCandidate, error) {
-	return r.alarm.ListPendingPublishedAtResolutions(ctx, detectedBefore, limit)
-}
-
-func (r *PgxRepository) ListPendingPublishedAtResolutionsPage(ctx context.Context, referenceNow, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error) {
-	return r.alarm.ListPendingPublishedAtResolutionsPage(ctx, referenceNow, detectedBefore, cursor, limit)
-}
-
-func (r *PgxRepository) MarkPublishedAtRetryAfter(ctx context.Context, kind domain.OutboxKind, postID string, retryAfter time.Time) error {
-	return r.alarm.MarkPublishedAtRetryAfter(ctx, kind, postID, retryAfter)
-}
-
-func (r *PgxRepository) ClearPublishedAtRetryAfter(ctx context.Context, kind domain.OutboxKind, postID string) error {
-	return r.alarm.ClearPublishedAtRetryAfter(ctx, kind, postID)
-}
 
 func (r *PgxRepository) FindAlarmStateByPostID(ctx context.Context, kind domain.OutboxKind, postID string) (*domain.YouTubeCommunityShortsAlarmState, error) {
 	return r.alarm.FindAlarmStateByPostID(ctx, kind, postID)

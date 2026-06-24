@@ -50,7 +50,6 @@ import (
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
-	"github.com/kapu/hololive-youtube-producer/internal/runtime/publishedat"
 )
 
 type fakeMemberDataProvider struct {
@@ -255,71 +254,6 @@ func schedulerJobCount(t *testing.T, scheduler *poller.Scheduler) int {
 	return field.Len()
 }
 
-func scraperClientPointerFromPoller(t *testing.T, channelPoller poller.Poller) uintptr {
-	t.Helper()
-
-	value := reflect.ValueOf(channelPoller)
-	require.True(t, value.IsValid())
-	if value.Kind() == reflect.Pointer {
-		value = value.Elem()
-	}
-	field := value.FieldByName("client")
-	require.True(t, field.IsValid(), "client field must exist")
-	require.False(t, field.IsNil(), "client field must not be nil")
-	return field.Pointer()
-}
-
-func inlinePublishedAtFallbackEnabled(t *testing.T, channelPoller poller.Poller) bool {
-	t.Helper()
-
-	value := reflect.ValueOf(channelPoller)
-	require.True(t, value.IsValid())
-	if value.Kind() == reflect.Pointer {
-		value = value.Elem()
-	}
-	field := value.FieldByName("inlinePublishedAtFallbackEnabled")
-	require.True(t, field.IsValid(), "inlinePublishedAtFallbackEnabled field must exist")
-	return field.Bool()
-}
-
-func scraperClientPointerFromResolver(t *testing.T, resolver *poller.PendingPublishedAtResolver) uintptr {
-	t.Helper()
-
-	value := reflect.ValueOf(resolver).Elem()
-	field := value.FieldByName("client")
-	require.True(t, field.IsValid(), "resolver client field must exist")
-	require.False(t, field.IsNil(), "resolver client field must not be nil")
-	return field.Pointer()
-}
-
-func extractResolverDurationField(t *testing.T, resolver *poller.PendingPublishedAtResolver, fieldName string) time.Duration {
-	t.Helper()
-
-	value := reflect.ValueOf(resolver).Elem()
-	field := value.FieldByName(fieldName)
-	require.True(t, field.IsValid(), "%s field must exist", fieldName)
-	return time.Duration(field.Int())
-}
-
-func extractResolverIntField(t *testing.T, resolver *poller.PendingPublishedAtResolver, fieldName string) int {
-	t.Helper()
-
-	value := reflect.ValueOf(resolver).Elem()
-	field := value.FieldByName(fieldName)
-	require.True(t, field.IsValid(), "%s field must exist", fieldName)
-	return int(field.Int())
-}
-
-func scraperRateLimiterPointer(t *testing.T, client *scraper.Client) uintptr {
-	t.Helper()
-
-	value := reflect.ValueOf(client).Elem()
-	field := value.FieldByName("rateLimiter")
-	require.True(t, field.IsValid(), "rateLimiter field must exist")
-	require.False(t, field.IsNil(), "rateLimiter field must not be nil")
-	return field.Pointer()
-}
-
 func extractScraperFetcherEngine(t *testing.T, client *scraper.Client) scraper.FetcherEngine {
 	t.Helper()
 
@@ -327,15 +261,6 @@ func extractScraperFetcherEngine(t *testing.T, client *scraper.Client) scraper.F
 	field := value.FieldByName("fetcherEngine")
 	require.True(t, field.IsValid(), "fetcherEngine field must exist")
 	return scraper.FetcherEngine(field.String())
-}
-
-func requireScraperStateStoreConfigured(t *testing.T, client *scraper.Client) {
-	t.Helper()
-
-	value := reflect.ValueOf(client).Elem()
-	field := value.FieldByName("stateStore")
-	require.True(t, field.IsValid(), "stateStore field must exist")
-	require.False(t, field.IsNil(), "stateStore field must not be nil")
 }
 
 func newTestValkeyClient(t *testing.T) (client valkey.Client, addr string) {
@@ -377,7 +302,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 
 	require.Len(t, registrations, 5)
@@ -399,213 +323,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations(t *testing.T) {
 		assert.Equal(t, expected[idx].priority, registration.Priority)
 		assert.Equal(t, expected[idx].interval, int64(registration.Interval))
 	}
-}
-
-func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing.T) {
-	t.Parallel()
-
-	cacheClient := cachemocks.NewLenientClient()
-	sharedRL := scraper.NewRateLimiter(time.Second)
-	appConfig := config.ScraperConfig{
-		ProxyEnabled:        true,
-		ProxyURL:            "socks5://proxy.internal:1080",
-		PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
-		Poll: config.ScraperPoll{
-			Videos:    7 * time.Minute,
-			Shorts:    11 * time.Minute,
-			Community: 13 * time.Minute,
-			Stats:     4 * time.Hour,
-			Live:      3 * time.Minute,
-		},
-	}
-	sharedClient := polling.BuildSharedClient(&appConfig, cacheClient, sharedRL)
-	registrations := polling.BuildRegistrationsWithClient(
-		newPollerRegistrationTestDB(t),
-		&appConfig,
-		sharedClient,
-		nil,
-		nil,
-		[]string{"UC_NOTIFY_A"},
-		[]string{"UC_STATS_A"},
-	)
-	resolver := publishedat.BuildPendingResolver(
-		&appConfig,
-		newPollerRegistrationTestDB(t),
-		sharedClient,
-		func(poller.NotificationRouteRequest) bool { return false },
-		testLogger(),
-	)
-
-	require.NotNil(t, sharedClient)
-	require.NotNil(t, resolver)
-	require.NotEmpty(t, registrations)
-
-	sharedClientPointer := reflect.ValueOf(sharedClient).Pointer()
-	pollerClientPointer := scraperClientPointerFromPoller(t, registrations[0].Poller)
-	resolverClientPointer := scraperClientPointerFromResolver(t, resolver)
-
-	require.Equal(t, sharedClientPointer, pollerClientPointer)
-	require.Equal(t, sharedClientPointer, resolverClientPointer)
-	require.Equal(t, reflect.ValueOf(sharedRL).Pointer(), scraperRateLimiterPointer(t, sharedClient))
-	requireScraperStateStoreConfigured(t, sharedClient)
-	require.Equal(t, 3*time.Minute, extractResolverDurationField(t, resolver, "interval"))
-	require.Equal(t, 10, extractResolverIntField(t, resolver, "batchSize"))
-	require.Equal(t, 1, extractResolverIntField(t, resolver, "maxResolvePerRun"))
-	require.Equal(t, 12*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
-	require.Equal(t, 10*time.Second, extractResolverDurationField(t, resolver, "resolveTimeout"))
-	require.Equal(t, 30*time.Second, extractResolverDurationField(t, resolver, "minDetectedAge"))
-	require.Equal(t, 5*time.Minute, extractResolverDurationField(t, resolver, "failureBackoffTTL"))
-	require.True(t, sharedClient.ProxyEnabled())
-
-	require.True(t, sharedClient.SetProxyEnabled(false))
-	assert.False(t, sharedClient.ProxyEnabled())
-
-	value := reflect.ValueOf(resolver).Elem()
-	softLimiterField := value.FieldByName("softLimiter")
-	assert.False(t, softLimiterField.IsValid())
-}
-
-func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_NilRouteDeciderDisablesInlinePublishedAtFallback(t *testing.T) {
-	t.Parallel()
-
-	appConfig := config.ScraperConfig{
-		PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
-		Poll: config.ScraperPoll{
-			Videos:    7 * time.Minute,
-			Shorts:    11 * time.Minute,
-			Community: 13 * time.Minute,
-			Stats:     4 * time.Hour,
-			Live:      3 * time.Minute,
-		},
-	}
-
-	registrations := polling.BuildRegistrationsWithClient(
-		newPollerRegistrationTestDB(t),
-		&appConfig,
-		polling.BuildSharedClient(&appConfig, nil, scraper.NewRateLimiter(time.Second)),
-		nil,
-		nil,
-		[]string{"UC_NOTIFY_A"},
-		[]string{"UC_STATS_A"},
-	)
-
-	require.Len(t, registrations, 5)
-	assert.False(t, inlinePublishedAtFallbackEnabled(t, registrations[1].Poller))
-	assert.False(t, inlinePublishedAtFallbackEnabled(t, registrations[2].Poller))
-}
-
-func TestBuildYouTubeProducerChannelPollerRegistrationsWithClient_DisabledResolverEnablesInlinePublishedAtFallbackForRoutedPollers(t *testing.T) {
-	t.Parallel()
-
-	appConfig := config.ScraperConfig{
-		PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
-			Enabled: false,
-		},
-		Poll: config.ScraperPoll{
-			Videos:    7 * time.Minute,
-			Shorts:    11 * time.Minute,
-			Community: 13 * time.Minute,
-			Stats:     4 * time.Hour,
-			Live:      3 * time.Minute,
-		},
-	}
-
-	registrations := polling.BuildRegistrationsWithClient(
-		newPollerRegistrationTestDB(t),
-		&appConfig,
-		polling.BuildSharedClient(&appConfig, nil, scraper.NewRateLimiter(time.Second)),
-		nil,
-		func(poller.NotificationRouteRequest) bool { return true },
-		[]string{"UC_NOTIFY_A"},
-		[]string{"UC_STATS_A"},
-	)
-
-	require.Len(t, registrations, 5)
-	assert.True(t, inlinePublishedAtFallbackEnabled(t, registrations[1].Poller))
-	assert.True(t, inlinePublishedAtFallbackEnabled(t, registrations[2].Poller))
-}
-
-func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
-	t.Parallel()
-
-	appConfig := config.ScraperConfig{
-		PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
-			Enabled:           true,
-			Interval:          12 * time.Second,
-			BatchSize:         9,
-			MaxResolvePerRun:  3,
-			MaxRunDuration:    12 * time.Second,
-			ResolveTimeout:    10 * time.Second,
-			MinDetectedAge:    45 * time.Second,
-			FailureBackoffTTL: 7 * time.Minute,
-		},
-	}
-
-	resolver := publishedat.BuildPendingResolver(
-		&appConfig,
-		newPollerRegistrationTestDB(t),
-		scraper.NewClient(),
-		func(poller.NotificationRouteRequest) bool { return true },
-		testLogger(),
-	)
-
-	require.NotNil(t, resolver)
-	require.Equal(t, 12*time.Second, extractResolverDurationField(t, resolver, "interval"))
-	require.Equal(t, 9, extractResolverIntField(t, resolver, "batchSize"))
-	require.Equal(t, 3, extractResolverIntField(t, resolver, "maxResolvePerRun"))
-	require.Equal(t, 12*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
-	require.Equal(t, 10*time.Second, extractResolverDurationField(t, resolver, "resolveTimeout"))
-	require.Equal(t, 45*time.Second, extractResolverDurationField(t, resolver, "minDetectedAge"))
-	require.Equal(t, 7*time.Minute, extractResolverDurationField(t, resolver, "failureBackoffTTL"))
-}
-
-func TestBuildPendingPublishedAtResolver_DisabledReturnsNil(t *testing.T) {
-	t.Parallel()
-
-	resolver := publishedat.BuildPendingResolver(
-		&config.ScraperConfig{
-			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
-				Enabled:  false,
-				Interval: 15 * time.Second,
-			},
-		},
-		newPollerRegistrationTestDB(t),
-		scraper.NewClient(),
-		nil,
-		testLogger(),
-	)
-
-	require.Nil(t, resolver)
-}
-
-func TestBuildPendingPublishedAtResolver_ZeroValueConfigReturnsNil(t *testing.T) {
-	t.Parallel()
-
-	resolver := publishedat.BuildPendingResolver(
-		&config.ScraperConfig{},
-		newPollerRegistrationTestDB(t),
-		scraper.NewClient(),
-		nil,
-		testLogger(),
-	)
-
-	require.Nil(t, resolver)
-}
-
-func TestBuildPendingPublishedAtResolver_NilRouteDeciderReturnsNil(t *testing.T) {
-	t.Parallel()
-
-	resolver := publishedat.BuildPendingResolver(
-		&config.ScraperConfig{
-			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
-		},
-		newPollerRegistrationTestDB(t),
-		scraper.NewClient(),
-		nil,
-		testLogger(),
-	)
-
-	require.Nil(t, resolver)
 }
 
 func TestBuildYouTubeProducerYouTubeComponents(t *testing.T) {
@@ -652,8 +369,6 @@ func TestBuildYouTubeProducerYouTubeComponents(t *testing.T) {
 			nil,
 		),
 		nil,
-		nil,
-		nil,
 		testLogger(),
 	)
 	require.NoError(t, err)
@@ -665,67 +380,6 @@ func TestBuildYouTubeProducerYouTubeComponents(t *testing.T) {
 	assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
 	assert.Equal(t, 7, scraperScheduler.WorkerCount())
 	assert.Equal(t, 5, scraperScheduler.SetProxyEnabled(false))
-}
-
-func TestBuildYouTubeProducerYouTubeComponents_RegistersPublishedAtResolverAsGlobalJob(t *testing.T) {
-	t.Parallel()
-
-	resolver := publishedat.BuildPendingResolver(
-		&config.ScraperConfig{
-			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
-			Poll: config.ScraperPoll{
-				Videos:    5 * time.Minute,
-				Shorts:    10 * time.Minute,
-				Community: 10 * time.Minute,
-				Stats:     6 * time.Hour,
-				Live:      5 * time.Minute,
-			},
-		},
-		newPollerRegistrationTestDB(t),
-		scraper.NewClient(),
-		func(poller.NotificationRouteRequest) bool { return true },
-		testLogger(),
-	)
-	require.NotNil(t, resolver)
-
-	scraperScheduler, registrations, err := polling.BuildComponents(
-		&config.ScraperConfig{
-			Poll: config.ScraperPoll{
-				Videos:    5 * time.Minute,
-				Shorts:    10 * time.Minute,
-				Community: 10 * time.Minute,
-				Stats:     6 * time.Hour,
-				Live:      5 * time.Minute,
-			},
-			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
-		},
-		newPollerRegistrationTestDB(t),
-		[]string{"UC_NOTIFY"},
-		[]string{"UC_STATS"},
-		scraper.NewClient(),
-		nil,
-		func(poller.NotificationRouteRequest) bool { return true },
-		resolver,
-		testLogger(),
-	)
-	require.NoError(t, err)
-	require.Len(t, registrations, 6)
-	require.Contains(t, schedulerJobKeys(t, scraperScheduler), providers.SyntheticGlobalPollerChannelID+":"+poller.PendingPublishedAtResolverPollerName)
-	assert.Equal(t, 6, schedulerJobCount(t, scraperScheduler))
-
-	var resolverRegistration *providers.ChannelPollerRegistration
-	for idx := range registrations {
-		registration := &registrations[idx]
-		if registration.Poller != nil && registration.Poller.Name() == poller.PendingPublishedAtResolverPollerName {
-			resolverRegistration = registration
-			break
-		}
-	}
-	require.NotNil(t, resolverRegistration)
-	assert.Equal(t, providers.ChannelTargetGroupGlobal, resolverRegistration.TargetGroup)
-	assert.Equal(t, []string{providers.SyntheticGlobalPollerChannelID}, resolverRegistration.ChannelIDs)
-	assert.Equal(t, 1, resolverRegistration.RequestsPerRun)
-	assert.Equal(t, scraper.MetadataResolveFetchPolicy.MaxAttempts, resolverRegistration.WorstCaseAttempts)
 }
 
 func TestBuildIngestionRuntimeGlobalBudgetWiringPassesCleanupLimit(t *testing.T) {

@@ -94,8 +94,6 @@ func newYouTubeProducerPollerSet(
 	liveStatusProvider poller.LiveStatusProvider,
 	db any,
 	communityKeywords []string,
-	routeDecider poller.NotificationRouteDecider,
-	inlineResolveMissingPublishedAt bool,
 ) youTubeProducerPollerSet {
 	livePoller := poller.NewLivePollerWithStatusProvider(liveStatusProvider, scraperClient, db)
 	if !hasYouTubeProducerPollerDB(db) {
@@ -111,8 +109,8 @@ func newYouTubeProducerPollerSet(
 	}
 	return youTubeProducerPollerSet{
 		videos:           poller.NewVideosPoller(scraperClient, db, defaultChannelPollerMaxResults),
-		shorts:           poller.NewShortsPoller(scraperClient, db, defaultChannelPollerMaxResults, routeDecider, inlineResolveMissingPublishedAt),
-		community:        poller.NewCommunityPoller(scraperClient, db, defaultChannelPollerMaxResults, communityKeywords, routeDecider, inlineResolveMissingPublishedAt),
+		shorts:           poller.NewShortsPoller(scraperClient, db, defaultChannelPollerMaxResults),
+		community:        poller.NewCommunityPoller(scraperClient, db, defaultChannelPollerMaxResults, communityKeywords),
 		stats:            poller.NewChannelStatsPoller(scraperClient, db),
 		live:             livePoller,
 		liveBatch:        livePoller,

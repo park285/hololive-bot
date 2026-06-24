@@ -23,15 +23,9 @@ package scraping
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"time"
 
 	"github.com/tidwall/gjson"
-
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
-
-const shortsPublishedAtLookupWindow = 30
 
 func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int) ([]*Short, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/shorts", channelID)
@@ -54,34 +48,6 @@ func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int
 	shorts := c.parseShortsLockupViewModels(shortItems, maxResults)
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 	return shorts, nil
-}
-
-func (c *Client) EnrichShortsPublishedAtFromRSS(ctx context.Context, channelID string, shorts []*Short) {
-	c.enrichShortsPublishedAt(ctx, channelID, shorts)
-}
-
-func (c *Client) enrichShortsPublishedAt(ctx context.Context, channelID string, shorts []*Short) {
-	if len(shorts) == 0 {
-		return
-	}
-
-	lookupLimit := max(len(shorts)*3, shortsPublishedAtLookupWindow)
-	videos, err := c.getRecentVideosFromRSS(ctx, channelID, lookupLimit)
-	if err != nil {
-		slog.Debug("shorts published_at rss lookup failed",
-			"channel_id", channelID,
-			"error", err.Error())
-		return
-	}
-
-	if len(videos) == 0 {
-		return
-	}
-
-	publishedAtByVideoID := publishedAtByRSSVideoID(videos)
-	for _, short := range shorts {
-		short.PublishedAt = yttimestamp.NormalizePtr(publishedAtByVideoID[short.VideoID])
-	}
 }
 
 func extractShortsLockupViewModels(data *gjson.Result) []gjson.Result {
@@ -119,23 +85,6 @@ func (c *Client) parseShortsLockupViewModels(shortItems []gjson.Result, maxResul
 		}
 	}
 	return shorts
-}
-
-func publishedAtByRSSVideoID(videos []*Video) map[string]*time.Time {
-	publishedAtByVideoID := make(map[string]*time.Time, len(videos))
-	for _, video := range videos {
-		if videoPublishedAt, ok := rssVideoPublishedAt(video); ok {
-			publishedAtByVideoID[video.VideoID] = videoPublishedAt
-		}
-	}
-	return publishedAtByVideoID
-}
-
-func rssVideoPublishedAt(video *Video) (*time.Time, bool) {
-	if video == nil || video.VideoID == "" {
-		return nil, false
-	}
-	return yttimestamp.ParsePublishedAt(video.PublishedText)
 }
 
 // parseShortsLockupViewModel: shortsLockupViewModel JSON을 Short 구조체로 변환

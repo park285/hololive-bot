@@ -78,7 +78,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 		},
 		scraper.NewRateLimiter(time.Second),
 		nil,
-		nil,
 		[]string{"UC_NOTIFY_A", "UC_NOTIFY_B"},
 		[]string{"UC_STATS_A"},
 	)
@@ -154,7 +153,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_AllExplicit(t *testing.T
 		},
 		scraper.NewRateLimiter(time.Second),
 		nil,
-		nil,
 		[]string{"UC_NOTIFY_A", "UC_NOTIFY_B"},
 		[]string{"UC_STATS_A"},
 	)
@@ -210,8 +208,8 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieredTargetsReduceRPM(t
 	flatConfig.PollTiering.Enabled = false
 	activityDB := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 
-	flat := polling.BuildRegistrations(activityDB, &flatConfig, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
-	tiered := polling.BuildRegistrations(activityDB, &appConfig, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
+	flat := polling.BuildRegistrations(activityDB, &flatConfig, scraper.NewRateLimiter(time.Second), nil, notificationIDs, statsIDs)
+	tiered := polling.BuildRegistrations(activityDB, &appConfig, scraper.NewRateLimiter(time.Second), nil, notificationIDs, statsIDs)
 
 	require.Greater(t, len(tiered), len(flat))
 	require.Less(t, polling.EstimateResolvedPollerRPM(tiered), polling.EstimateResolvedPollerRPM(flat))
@@ -226,7 +224,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieringDisabledByDefault
 		Live:      10 * time.Minute,
 	}}
 	postgres := newPollerRegistrationTestDB(t)
-	registrations := polling.BuildRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE", "UC_COLD"}, []string{"UC_STATS"})
+	registrations := polling.BuildRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), nil, []string{"UC_ACTIVE", "UC_COLD"}, []string{"UC_STATS"})
 
 	require.False(t, polltarget.HasTieredNotificationRegistration(registrations))
 }
@@ -248,7 +246,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieringEnabledWithAllAct
 		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
 	}
 	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
-	registrations := polling.BuildRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE"}, []string{"UC_STATS"})
+	registrations := polling.BuildRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), nil, []string{"UC_ACTIVE"}, []string{"UC_STATS"})
 
 	require.True(t, polltarget.HasTieredNotificationRegistration(registrations))
 }
@@ -270,7 +268,7 @@ func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 		Live:      10 * time.Minute,
 	}, PollTiering: config.ScraperPollTieringConfig{Enabled: true}}
 	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
-	registrations := polling.BuildRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
+	registrations := polling.BuildRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), nil, notificationIDs, statsIDs)
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		newPollerRegistrationTestLogger(),
@@ -303,7 +301,7 @@ func TestTieredPollerRefreshRemovesEmptyNotificationTargets(t *testing.T) {
 		Live:      10 * time.Minute,
 	}, PollTiering: config.ScraperPollTieringConfig{Enabled: true}}
 	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
-	registrations := polling.BuildRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
+	registrations := polling.BuildRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), nil, notificationIDs, statsIDs)
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		newPollerRegistrationTestLogger(),
@@ -414,8 +412,6 @@ func TestBuildYouTubeProducerYouTubeComponents_GraduatedMembersFiltered(t *testi
 		communityshorts.EnabledChannelIDs(operationalChannels),
 		polling.BuildSharedClient(&config.ScraperConfig{}, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
-		nil,
-		nil,
 		newPollerRegistrationTestLogger(),
 	)
 	require.NoError(t, err)
@@ -433,7 +429,7 @@ func TestBuildYouTubeProducerYouTubeComponents_GraduatedMembersFiltered(t *testi
 	}
 }
 
-func TestBuildYouTubeProducerChannelPollerRegistrations_RouteAwareWorstCaseRequestUnits(t *testing.T) {
+func TestBuildYouTubeProducerChannelPollerRegistrations_FlatWorstCaseRequestUnits(t *testing.T) {
 	t.Parallel()
 
 	postgres := newPollerRegistrationTestDB(t)
@@ -448,13 +444,9 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_RouteAwareWorstCaseReque
 				Stats:     4 * time.Hour,
 				Live:      3 * time.Minute,
 			},
-			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
-				Enabled: false,
-			},
 		},
 		scraper.NewRateLimiter(time.Second),
 		nil,
-		func(poller.NotificationRouteRequest) bool { return true },
 		[]string{"UC_NOTIFY_A"},
 		[]string{"UC_STATS_A"},
 	)
@@ -467,6 +459,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_RouteAwareWorstCaseReque
 		byName[registration.Poller.Name()] = registration
 	}
 
-	assert.Equal(t, 7.0, byName["shorts"].WorstCaseRequestUnitsPerRun)
-	assert.Equal(t, 11.0, byName["community"].WorstCaseRequestUnitsPerRun)
+	assert.Equal(t, 1.0, byName["shorts"].WorstCaseRequestUnitsPerRun)
+	assert.Equal(t, 1.0, byName["community"].WorstCaseRequestUnitsPerRun)
 }

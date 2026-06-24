@@ -15,7 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
-	"github.com/kapu/hololive-youtube-producer/internal/runtime/publishedat"
 )
 
 func TestEstimateResolvedPollerRPM_UsesExplicitChannelCounts(t *testing.T) {
@@ -31,39 +30,6 @@ func TestEstimateResolvedPollerRPM_UsesExplicitChannelCounts(t *testing.T) {
 	assert.Equal(t, 2.5, rpm)
 }
 
-func TestLogYouTubeProducerBudgetSummary_ReportsPollerAndResolverRPM(t *testing.T) {
-	t.Parallel()
-
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
-
-	polling.LogBudgetSummary(
-		polling.SummarizeBudget(
-			[]providers.ChannelPollerRegistration{
-				providers.NewChannelPollerRegistration(fakeTestPoller{name: "videos"}, poller.PriorityNormal, time.Second).
-					WithChannelIDs([]string{"UC_A", "UC_B"}).
-					WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-					WithWorstCaseRequestUnitsPerRun(6),
-				providers.NewGlobalPollerRegistration(fakeTestPoller{name: poller.PendingPublishedAtResolverPollerName}, poller.PriorityLow, 15*time.Second).
-					WithRequestsPerRun(2).
-					WithWorstCaseAttempts(1).
-					WithWorstCaseRequestUnitsPerRun(2),
-			},
-		),
-		logger,
-	)
-
-	assert.Contains(t, logBuf.String(), `"msg":"youtube_producer_combined_budget_summary"`)
-	assert.Contains(t, logBuf.String(), `"expected_poller_rpm":120`)
-	assert.Contains(t, logBuf.String(), `"expected_poller_retry_amplified_rpm_max":720`)
-	assert.Contains(t, logBuf.String(), `"expected_resolver_rpm":8`)
-	assert.Contains(t, logBuf.String(), `"expected_resolver_retry_amplified_rpm_max":8`)
-	assert.Contains(t, logBuf.String(), `"expected_combined_rpm":128`)
-	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":728`)
-	assert.Contains(t, logBuf.String(), `"msg":"youtube_producer_combined_budget_exceeds_rate_limit"`)
-	assert.Contains(t, logBuf.String(), `"msg":"youtube_producer_fault_envelope_exceeds_rate_limit"`)
-}
-
 func TestSummarizeYouTubeProducerBudget_UsesRegistrationRequestsAndAttempts(t *testing.T) {
 	t.Parallel()
 
@@ -76,18 +42,12 @@ func TestSummarizeYouTubeProducerBudget_UsesRegistrationRequestsAndAttempts(t *t
 			WithChannelIDs([]string{"UC_A"}).
 			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
 			WithWorstCaseRequestUnitsPerRun(9),
-		providers.NewGlobalPollerRegistration(fakeTestPoller{name: poller.PendingPublishedAtResolverPollerName}, poller.PriorityLow, 30*time.Second).
-			WithRequestsPerRun(2).
-			WithWorstCaseAttempts(1).
-			WithWorstCaseRequestUnitsPerRun(2),
 	})
 
 	assert.InDelta(t, 1.1, summary.PollerRPM, 0.0001)
 	assert.InDelta(t, 4.9, summary.PollerRetryAmplifiedRPM, 0.0001)
-	assert.InDelta(t, 4.0, summary.ResolverRPM, 0.0001)
-	assert.InDelta(t, 4.0, summary.ResolverRetryAmplifiedRPM, 0.0001)
-	assert.InDelta(t, 5.1, summary.CombinedRPM, 0.0001)
-	assert.InDelta(t, 8.9, summary.CombinedRetryAmplifiedRPM, 0.0001)
+	assert.InDelta(t, 1.1, summary.CombinedRPM, 0.0001)
+	assert.InDelta(t, 4.9, summary.CombinedRetryAmplifiedRPM, 0.0001)
 }
 
 func TestLogYouTubeProducerBudgetSummary_FaultEnvelopeCanExceedSteadyBudgetViaRecoveryBranches(t *testing.T) {
@@ -115,34 +75,14 @@ func TestLogYouTubeProducerBudgetSummary_FaultEnvelopeCanExceedSteadyBudgetViaRe
 func TestBuildYouTubeProducerYouTubeComponents_FailsWhenCombinedBudgetExceedsRateLimit(t *testing.T) {
 	t.Parallel()
 
-	resolver := publishedat.BuildPendingResolver(
-		&config.ScraperConfig{
-			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
-				Enabled:          true,
-				Interval:         time.Second,
-				MaxResolvePerRun: 1,
-			},
-		},
-		newPollerRegistrationTestDB(t),
-		scraper.NewClient(),
-		func(poller.NotificationRouteRequest) bool { return true },
-		testLogger(),
-	)
-	require.NotNil(t, resolver)
-
 	_, _, err := polling.BuildComponents(
 		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
-				Videos:    15 * time.Minute,
-				Shorts:    6 * time.Minute,
-				Community: 6 * time.Minute,
+				Videos:    2 * time.Minute,
+				Shorts:    1 * time.Minute,
+				Community: 1 * time.Minute,
 				Stats:     6 * time.Hour,
-				Live:      10 * time.Minute,
-			},
-			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
-				Enabled:          true,
-				Interval:         time.Second,
-				MaxResolvePerRun: 1,
+				Live:      1 * time.Minute,
 			},
 		},
 		newPollerRegistrationTestDB(t),
@@ -150,8 +90,6 @@ func TestBuildYouTubeProducerYouTubeComponents_FailsWhenCombinedBudgetExceedsRat
 		repeatChannelIDs("UC_STATS_", 111),
 		polling.BuildSharedClient(&config.ScraperConfig{}, nil, nil),
 		nil,
-		func(poller.NotificationRouteRequest) bool { return true },
-		resolver,
 		testLogger(),
 	)
 
@@ -170,8 +108,6 @@ func TestBuildYouTubeProducerYouTubeComponents_AllowsBudgetSafeDefaultPollConfig
 		repeatChannelIDs("UC_STATS_", 111),
 		polling.BuildSharedClient(&config.ScraperConfig{}, nil, nil),
 		nil,
-		nil,
-		nil,
 		testLogger(),
 	)
 
@@ -186,17 +122,6 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWith
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	resolver := publishedat.BuildPendingResolver(
-		&config.ScraperConfig{
-			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
-		},
-		newPollerRegistrationTestDB(t),
-		scraper.NewClient(),
-		func(poller.NotificationRouteRequest) bool { return true },
-		logger,
-	)
-	require.NotNil(t, resolver)
-
 	_, _, err := polling.BuildComponentsWithJobClaimer(
 		&config.ScraperConfig{
 			Poll: config.ScraperPoll{
@@ -206,7 +131,6 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWith
 				Stats:     6 * time.Hour,
 				Live:      10 * time.Minute,
 			},
-			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
 		nil,
 		&polling.GlobalBudgetWiring{BudgetRPM: 30},
@@ -215,8 +139,6 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWith
 		repeatChannelIDs("UC_STATS_", 111),
 		polling.BuildSharedClient(&config.ScraperConfig{}, nil, nil),
 		nil,
-		func(poller.NotificationRouteRequest) bool { return true },
-		resolver,
 		logger,
 	)
 
@@ -224,37 +146,6 @@ func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWith
 	assert.NotContains(t, logBuf.String(), `"msg":"youtube_producer_combined_budget_exceeds_rate_limit"`)
 	assert.NotContains(t, logBuf.String(), `"msg":"youtube_producer_fault_envelope_exceeds_rate_limit"`)
 	assert.Contains(t, logBuf.String(), `"budget_rpm":30`)
-	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":24.983333333333334`)
-}
-
-func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {
-	t.Parallel()
-
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
-
-	resolver := publishedat.BuildPendingResolver(
-		&config.ScraperConfig{
-			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
-				Enabled:           true,
-				Interval:          12 * time.Second,
-				BatchSize:         9,
-				MaxResolvePerRun:  3,
-				MaxRunDuration:    12 * time.Second,
-				ResolveTimeout:    10 * time.Second,
-				MinDetectedAge:    45 * time.Second,
-				FailureBackoffTTL: 7 * time.Minute,
-			},
-		},
-		newPollerRegistrationTestDB(t),
-		scraper.NewClient(),
-		func(poller.NotificationRouteRequest) bool { return true },
-		logger,
-	)
-
-	require.NotNil(t, resolver)
-	assert.Contains(t, logBuf.String(), `"msg":"published_at_resolver_configured"`)
-	assert.Contains(t, logBuf.String(), `"resolve_timeout":10000000000`)
 }
 
 func TestSummarizeYouTubeProducerBudget_ExcludesInactiveResolver(t *testing.T) {
@@ -269,7 +160,6 @@ func TestSummarizeYouTubeProducerBudget_ExcludesInactiveResolver(t *testing.T) {
 	)
 
 	assert.Equal(t, 0.1, summary.PollerRPM)
-	assert.Zero(t, summary.ResolverRPM)
 	assert.Equal(t, summary.PollerRPM, summary.CombinedRPM)
 }
 

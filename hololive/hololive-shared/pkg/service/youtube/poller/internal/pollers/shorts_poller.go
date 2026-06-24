@@ -22,10 +22,8 @@ package pollers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
@@ -38,31 +36,23 @@ import (
 )
 
 type ShortsPoller struct {
-	client                           *scraper.Client
-	db                               pollerDB
-	repository                       batchrepo.BatchRepository
-	maxResults                       int
-	routeDecider                     polling.NotificationRouteDecider
-	inlinePublishedAtFallbackEnabled bool
-	metrics                          *polling.Metrics
+	client     *scraper.Client
+	db         pollerDB
+	repository batchrepo.BatchRepository
+	maxResults int
+	metrics    *polling.Metrics
 }
 
-func NewShortsPoller(scraperClient *scraper.Client, db any, maxResults int, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *ShortsPoller {
+func NewShortsPoller(scraperClient *scraper.Client, db any, maxResults int) *ShortsPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
-	inlineFallbackEnabled := false
-	if len(inlinePublishedAtFallbackEnabled) > 0 {
-		inlineFallbackEnabled = inlinePublishedAtFallbackEnabled[0]
-	}
 	querier := normalizePollerDB(db)
 	return &ShortsPoller{
-		client:                           scraperClient,
-		db:                               querier,
-		repository:                       batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
-		maxResults:                       maxResults,
-		routeDecider:                     routeDecider,
-		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,
+		client:     scraperClient,
+		db:         querier,
+		repository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
+		maxResults: maxResults,
 	}
 }
 
@@ -114,9 +104,6 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		return err
 	}
 	newShorts := collectNewShorts(shorts, &watermark, isInitialized)
-	if isInitialized && len(newShorts) > 0 && p.inlinePublishedAtFallbackEnabled && shortsNeedPublishedAtLookup(newShorts) {
-		p.client.EnrichShortsPublishedAtFromRSS(ctx, channelID, newShorts)
-	}
 
 	detectedAt := yttimestamp.Normalize(time.Now()).Truncate(time.Microsecond)
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt, p.ensureMetrics())
@@ -126,7 +113,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,
-		LastContentID: selectLastWatermarkContentID(domain.OutboxKindNewShort, shorts[0].VideoID, watermark.LastContentID, batch.keepExistingWatermark),
+		LastContentID: polling.NormalizeContentID(domain.OutboxKindNewShort, shorts[0].VideoID),
 	}); err != nil {
 		return fmt.Errorf("persist short batch: %w", err)
 	}
@@ -135,10 +122,9 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 }
 
 type shortsPollBatch struct {
-	dbVideos              []*domain.YouTubeVideo
-	notifications         []*domain.YouTubeNotificationOutbox
-	trackingRows          []*domain.YouTubeContentAlarmTracking
-	keepExistingWatermark bool
+	dbVideos      []*domain.YouTubeVideo
+	notifications []*domain.YouTubeNotificationOutbox
+	trackingRows  []*domain.YouTubeContentAlarmTracking
 }
 
 func (p *ShortsPoller) buildShortBatch(
@@ -153,9 +139,8 @@ func (p *ShortsPoller) buildShortBatch(
 		notifications: make([]*domain.YouTubeNotificationOutbox, 0, len(shorts)),
 		trackingRows:  make([]*domain.YouTubeContentAlarmTracking, 0, len(shorts)),
 	}
-	inlineResolveBudget := newInlineResolveBudget(MaxInlinePublishedAtResolvesPerPoll)
 	for i := range shorts {
-		dbVideo, trackingRow, notification, keepExistingWatermark := p.buildShortArtifacts(ctx, channelID, shorts[i], isInitialized, detectedAt, inlineResolveBudget)
+		dbVideo, trackingRow, notification := p.buildShortArtifacts(ctx, channelID, shorts[i], isInitialized, detectedAt)
 		if dbVideo != nil {
 			batch.dbVideos = append(batch.dbVideos, dbVideo)
 		}
@@ -165,20 +150,8 @@ func (p *ShortsPoller) buildShortBatch(
 		if notification != nil {
 			batch.notifications = append(batch.notifications, notification)
 		}
-		batch.keepExistingWatermark = batch.keepExistingWatermark || keepExistingWatermark
 	}
 	return batch
-}
-
-func newInlineResolveBudget(limit int) func() bool {
-	used := 0
-	return func() bool {
-		if used >= limit {
-			return false
-		}
-		used += 1
-		return true
-	}
 }
 
 func (p *ShortsPoller) buildShortArtifacts(
@@ -187,18 +160,14 @@ func (p *ShortsPoller) buildShortArtifacts(
 	short *scraper.Short,
 	isInitialized bool,
 	detectedAt time.Time,
-	inlineResolveBudget func() bool,
-) (*domain.YouTubeVideo, *domain.YouTubeContentAlarmTracking, *domain.YouTubeNotificationOutbox, bool) {
+) (*domain.YouTubeVideo, *domain.YouTubeContentAlarmTracking, *domain.YouTubeNotificationOutbox) {
 	if short == nil {
-		return nil, nil, nil, false
+		return nil, nil, nil
 	}
 
 	canonicalPostID := polling.NormalizeContentID(domain.OutboxKindNewShort, short.VideoID)
 	resourceVideoID := polling.NormalizeShortVideoResourceID(short.VideoID)
 	publishedAt := yttimestamp.NormalizePtr(short.PublishedAt)
-	if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled && inlineResolveBudget != nil && inlineResolveBudget() {
-		publishedAt = p.resolveShortPublishedAtInline(ctx, resourceVideoID)
-	}
 	dbVideo := &domain.YouTubeVideo{
 		VideoID:     resourceVideoID,
 		ChannelID:   channelID,
@@ -210,7 +179,7 @@ func (p *ShortsPoller) buildShortArtifacts(
 	}
 	logShortDetected(ctx, channelID, canonicalPostID, dbVideo.PublishedAt, detectedAt)
 	if !isInitialized {
-		return dbVideo, nil, nil, false
+		return dbVideo, nil, nil
 	}
 
 	trackingRow := &domain.YouTubeContentAlarmTracking{
@@ -220,30 +189,22 @@ func (p *ShortsPoller) buildShortArtifacts(
 		ActualPublishedAt: dbVideo.PublishedAt,
 		DetectedAt:        detectedAt,
 	}
-	notification, keepExistingWatermark := p.buildShortNotification(channelID, canonicalPostID, dbVideo)
-	return dbVideo, trackingRow, notification, keepExistingWatermark
+	notification := p.buildShortNotification(channelID, canonicalPostID, dbVideo)
+	return dbVideo, trackingRow, notification
 }
 
 func (p *ShortsPoller) buildShortNotification(
 	channelID string,
 	canonicalPostID string,
 	dbVideo *domain.YouTubeVideo,
-) (*domain.YouTubeNotificationOutbox, bool) {
-	routePublishedAt := derefTime(dbVideo.PublishedAt)
-	if p.routeDecider != nil && routePublishedAt.IsZero() {
-		return nil, p.inlinePublishedAtFallbackEnabled
-	}
-	if p.routeDecider != nil && !polling.ShouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeShorts, channelID, routePublishedAt) {
-		return nil, false
-	}
-
+) *domain.YouTubeNotificationOutbox {
 	return &domain.YouTubeNotificationOutbox{
 		Kind:      domain.OutboxKindNewShort,
 		ChannelID: channelID,
 		ContentID: canonicalPostID,
 		Payload:   polling.BuildShortNotificationPayload(dbVideo, canonicalPostID),
 		Status:    domain.OutboxStatusPending,
-	}, false
+	}
 }
 
 func collectNewShorts(
@@ -260,38 +221,6 @@ func collectNewShorts(
 		newShorts = append(newShorts, short)
 	}
 	return newShorts
-}
-
-func shortsNeedPublishedAtLookup(shorts []*scraper.Short) bool {
-	for _, short := range shorts {
-		if short != nil && short.PublishedAt == nil {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *ShortsPoller) resolveShortPublishedAtInline(ctx context.Context, videoID string) *time.Time {
-	if strings.TrimSpace(videoID) == "" {
-		return nil
-	}
-
-	resolveCtx, cancel := context.WithTimeout(ctx, inlinePublishedAtFallbackTimeout)
-	defer cancel()
-
-	publishedAt, err := p.client.ResolveVideoPublishedAt(resolveCtx, videoID)
-	if err != nil {
-		if errors.Is(err, scraper.ErrPublishedAtNotFound) {
-			return nil
-		}
-		slog.WarnContext(ctx, "short published_at inline fallback failed",
-			"video_id", videoID,
-			"error", err,
-		)
-		return nil
-	}
-
-	return yttimestamp.NormalizePtr(publishedAt)
 }
 
 func logShortDetected(ctx context.Context, channelID, postID string, actualPublishedAt *time.Time, detectedAt time.Time) {

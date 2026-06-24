@@ -21,7 +21,6 @@
 package settings
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -142,9 +141,6 @@ func validateScraperConfig(config *ScraperConfig) error {
 	if err := validateScraperFetcherEngine(config.FetcherEngine); err != nil {
 		return err
 	}
-	if err := validateScraperPublishedAtResolverConfig(config.PublishedAtResolver); err != nil {
-		return err
-	}
 	if err := validateScraperBackfillConfig(config.Backfill); err != nil {
 		return err
 	}
@@ -187,44 +183,6 @@ func validateScraperFetcherEngine(engine string) error {
 	default:
 		return fmt.Errorf("SCRAPER_FETCHER_ENGINE must be one of: nethttp, goscrapy")
 	}
-}
-
-func validateScraperPublishedAtResolverConfig(config ScraperPublishedAtResolverConfig) error {
-	if !config.Enabled {
-		return nil
-	}
-
-	checks := []struct {
-		valid   bool
-		message string
-	}{
-		{config.Interval > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS must be positive when resolver is enabled"},
-		{config.BatchSize > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE must be positive when resolver is enabled"},
-		{config.MaxResolvePerRun > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN must be positive when resolver is enabled"},
-		{config.MaxRunDuration > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be positive when resolver is enabled"},
-		{config.ResolveTimeout > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS must be positive when resolver is enabled"},
-	}
-	for _, check := range checks {
-		if !check.valid {
-			return errors.New(check.message)
-		}
-	}
-	if config.MaxRunDuration < config.ResolveTimeout {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be >= SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS")
-	}
-	tailChecks := []struct {
-		valid   bool
-		message string
-	}{
-		{config.MinDetectedAge > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS must be positive when resolver is enabled"},
-		{config.FailureBackoffTTL > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS must be positive when resolver is enabled"},
-	}
-	for _, check := range tailChecks {
-		if !check.valid {
-			return errors.New(check.message)
-		}
-	}
-	return nil
 }
 
 func validateScraperActiveActiveConfig(config ScraperActiveActiveConfig) error {

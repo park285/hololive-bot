@@ -315,12 +315,14 @@ func TestYouTubePollTargetRefresher_PreservesExplicitGlobalRegistrationsDuringRe
 		return nil, nil
 	}
 
+	const globalPollerName = "global_job"
+
 	registrations := []providers.ChannelPollerRegistration{
 		providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
 			WithChannelIDs([]string{"UC_OLD"}).
 			WithTargetGroup(providers.ChannelTargetGroupNotification),
 		providers.NewGlobalPollerRegistration(
-			refreshTestPoller{name: poller.PendingPublishedAtResolverPollerName},
+			refreshTestPoller{name: globalPollerName},
 			poller.PriorityLow,
 			3*time.Minute,
 		),
@@ -344,8 +346,8 @@ func TestYouTubePollTargetRefresher_PreservesExplicitGlobalRegistrationsDuringRe
 
 	jobKeys := schedulerJobKeys(t, scheduler)
 	require.Contains(t, jobKeys, "UC_NOTIFY:videos")
-	require.Contains(t, jobKeys, providers.SyntheticGlobalPollerChannelID+":"+poller.PendingPublishedAtResolverPollerName)
-	require.NotContains(t, jobKeys, "UC_NOTIFY:"+poller.PendingPublishedAtResolverPollerName)
+	require.Contains(t, jobKeys, providers.SyntheticGlobalPollerChannelID+":"+globalPollerName)
+	require.NotContains(t, jobKeys, "UC_NOTIFY:"+globalPollerName)
 }
 
 func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testing.T) {

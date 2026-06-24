@@ -29,10 +29,6 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 	m.ObservePublishedAtResolutionAttempt(domain.OutboxKindNewShort)
 	m.ObservePublishedAtResolutionSuccess(domain.OutboxKindNewShort)
 	m.ObservePublishedAtResolutionFailure(domain.OutboxKindNewShort)
-	m.ObservePublishedAtResolverSkipped(domain.OutboxKindNewShort, "")
-	m.ObservePublishedAtResolverEnqueued(domain.OutboxKindNewShort)
-	m.SetPublishedAtResolverPageCandidates(7)
-	m.ObservePublishedAtResolverScanned(domain.OutboxKindNewShort)
 
 	families, err := reg.Gather()
 	require.NoError(t, err)
@@ -81,17 +77,6 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 		"kind": string(domain.OutboxKindNewShort),
 	}, 1)
 	assertCounterValue(t, families, "youtube_poller_published_at_resolution_failure_total", map[string]string{
-		"kind": string(domain.OutboxKindNewShort),
-	}, 1)
-	assertCounterValue(t, families, "youtube_poller_published_at_resolver_skipped_total", map[string]string{
-		"kind":   string(domain.OutboxKindNewShort),
-		"reason": "",
-	}, 1)
-	assertCounterValue(t, families, "youtube_poller_published_at_resolver_enqueued_total", map[string]string{
-		"kind": string(domain.OutboxKindNewShort),
-	}, 1)
-	assertGaugeValue(t, families, "youtube_poller_published_at_resolver_page_candidates", nil, 7)
-	assertCounterValue(t, families, "youtube_poller_published_at_resolver_scanned_total", map[string]string{
 		"kind": string(domain.OutboxKindNewShort),
 	}, 1)
 }

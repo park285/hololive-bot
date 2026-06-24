@@ -30,8 +30,6 @@ func BuildComponents(
 	statsChannelIDs []string,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
-	routeDecider poller.NotificationRouteDecider,
-	publishedAtResolver *poller.PendingPublishedAtResolver,
 	logger *slog.Logger,
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
 	return BuildComponentsWithJobClaimerContext(
@@ -44,8 +42,6 @@ func BuildComponents(
 		statsChannelIDs,
 		scraperClient,
 		liveStatusProvider,
-		routeDecider,
-		publishedAtResolver,
 		logger,
 	)
 }
@@ -59,8 +55,6 @@ func BuildComponentsWithJobClaimer(
 	statsChannelIDs []string,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
-	routeDecider poller.NotificationRouteDecider,
-	publishedAtResolver *poller.PendingPublishedAtResolver,
 	logger *slog.Logger,
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
 	return BuildComponentsWithJobClaimerContext(
@@ -73,8 +67,6 @@ func BuildComponentsWithJobClaimer(
 		statsChannelIDs,
 		scraperClient,
 		liveStatusProvider,
-		routeDecider,
-		publishedAtResolver,
 		logger,
 	)
 }
@@ -89,8 +81,6 @@ func BuildComponentsWithJobClaimerContext(
 	statsChannelIDs []string,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
-	routeDecider poller.NotificationRouteDecider,
-	publishedAtResolver *poller.PendingPublishedAtResolver,
 	logger *slog.Logger,
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
 	return buildYouTubeProducerComponents(
@@ -103,8 +93,6 @@ func BuildComponentsWithJobClaimerContext(
 		statsChannelIDs,
 		scraperClient,
 		liveStatusProvider,
-		routeDecider,
-		publishedAtResolver,
 		logger,
 	)
 }
@@ -122,7 +110,6 @@ func BuildRegistrations(
 	scraperConfig *config.ScraperConfig,
 	sharedRL *scraper.RateLimiter,
 	cacheClient cache.Client,
-	routeDecider poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
@@ -132,7 +119,6 @@ func BuildRegistrations(
 		scraperConfig,
 		sharedRL,
 		cacheClient,
-		routeDecider,
 		notificationChannelIDs,
 		statsChannelIDs,
 	)
@@ -143,7 +129,6 @@ func BuildRegistrationsWithClient(
 	scraperConfig *config.ScraperConfig,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
-	routeDecider poller.NotificationRouteDecider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
@@ -153,7 +138,6 @@ func BuildRegistrationsWithClient(
 		scraperConfig,
 		scraperClient,
 		liveStatusProvider,
-		routeDecider,
 		notificationChannelIDs,
 		statsChannelIDs,
 	)

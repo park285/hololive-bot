@@ -3,17 +3,11 @@ package notifier
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking"
 	"github.com/kapu/hololive-shared/pkg/domain"
-)
-
-const (
-	legacyCommunityShortsRouteAuditLogMessage = "YouTube community/shorts legacy route audit"
-	legacyCommunityShortsDeliveryPath         = "legacy_alarm_queue"
 )
 
 func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotification) (*sendInput, []string, sendOutcome, error) {
@@ -22,7 +16,6 @@ func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotificati
 		return nil, nil, sendOutcomeSkipped, nil
 	}
 	if err := payload.notification.ValidateLegacyRoute(); err != nil {
-		n.logLegacyCommunityShortsRoute(payload, err)
 		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: validate legacy route: %w", err)
 	}
 
@@ -36,33 +29,6 @@ func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotificati
 	}
 
 	return payload, claimKeys, sendOutcomeSent, nil
-}
-
-func (n *Notifier) logLegacyCommunityShortsRoute(payload *sendInput, routeErr error) {
-	if n == nil || payload == nil || payload.notification == nil {
-		return
-	}
-
-	attrs := []any{
-		slog.String("delivery_path", legacyCommunityShortsDeliveryPath),
-		slog.String("send_result", "blocked"),
-		slog.String("failure_reason", "legacy route blocked"),
-		slog.String("alarm_type", string(payload.notification.AlarmType)),
-	}
-	if payload.notification.RoomID != "" {
-		attrs = append(attrs, slog.String("room_id", payload.notification.RoomID))
-	}
-	if payload.channelID != "" {
-		attrs = append(attrs, slog.String("channel_id", payload.channelID))
-	}
-	if payload.streamID != "" {
-		attrs = append(attrs, slog.String("stream_id", payload.streamID))
-	}
-	if routeErr != nil {
-		attrs = append(attrs, slog.String("error", routeErr.Error()))
-	}
-
-	n.logger.Warn(legacyCommunityShortsRouteAuditLogMessage, attrs...)
 }
 
 func resolveSendInput(notif *domain.AlarmNotification, now time.Time) *sendInput {

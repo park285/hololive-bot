@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/kapu/hololive-youtube-producer/internal/runtime/publishedat"
 )
 
 func buildYouTubeProducerComponents(
@@ -23,8 +22,6 @@ func buildYouTubeProducerComponents(
 	statsChannelIDs []string,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
-	routeDecider poller.NotificationRouteDecider,
-	publishedAtResolver *poller.PendingPublishedAtResolver,
 	logger *slog.Logger,
 ) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
 	if scraperConfig == nil {
@@ -36,13 +33,9 @@ func buildYouTubeProducerComponents(
 		scraperConfig,
 		scraperClient,
 		liveStatusProvider,
-		routeDecider,
 		notificationChannelIDs,
 		statsChannelIDs,
 	)
-	if resolverRegistration := publishedat.BuildRegistration(publishedAtResolver, scraperConfig, logger); resolverRegistration != nil {
-		pollerRegistrations = append(pollerRegistrations, *resolverRegistration)
-	}
 	if budgetWiring == nil {
 		budgetWiring = &GlobalBudgetWiring{}
 	}

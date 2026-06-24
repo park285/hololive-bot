@@ -43,8 +43,6 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersCommunityAndShortsForEve
 		communityshorts.EnabledChannelIDs(operationalChannels),
 		polling.BuildSharedClient(&config.ScraperConfig{}, nil, nil),
 		nil,
-		nil,
-		nil,
 		testLogger(),
 	)
 	require.NoError(t, err)

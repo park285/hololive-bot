@@ -57,10 +57,6 @@ type Metrics struct {
 	PublishedAtResolutionAttemptTotal *prometheus.CounterVec
 	PublishedAtResolutionSuccessTotal *prometheus.CounterVec
 	PublishedAtResolutionFailureTotal *prometheus.CounterVec
-	PublishedAtResolverSkippedTotal   *prometheus.CounterVec
-	PublishedAtResolverEnqueuedTotal  *prometheus.CounterVec
-	PublishedAtResolverPageCandidates prometheus.Gauge
-	PublishedAtResolverScannedTotal   *prometheus.CounterVec
 }
 
 func NewMetrics() *Metrics {
@@ -173,22 +169,6 @@ func (m *Metrics) registerPublishedAtResolverMetrics() {
 		Name: "youtube_poller_published_at_resolution_failure_total",
 		Help: "resolver published_at 해석 실패 횟수",
 	}, []string{"kind"})
-	m.PublishedAtResolverSkippedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "youtube_poller_published_at_resolver_skipped_total",
-		Help: "resolver가 후보를 enqueue 없이 건너뛴 횟수",
-	}, []string{"kind", "reason"})
-	m.PublishedAtResolverEnqueuedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "youtube_poller_published_at_resolver_enqueued_total",
-		Help: "resolver가 enqueue한 알림 수",
-	}, []string{"kind"})
-	m.PublishedAtResolverPageCandidates = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "youtube_poller_published_at_resolver_page_candidates",
-		Help: "현재 resolver iteration에서 마지막으로 조회한 candidate page 길이",
-	})
-	m.PublishedAtResolverScannedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "youtube_poller_published_at_resolver_scanned_total",
-		Help: "resolver가 iteration 동안 스캔한 candidate 수",
-	}, []string{"kind"})
 }
 
 func (m *Metrics) ObservePublishedAtResolutionAttempt(kind domain.OutboxKind) {
@@ -292,20 +272,4 @@ func (m *Metrics) ObservePublishedAtResolutionSuccess(kind domain.OutboxKind) {
 
 func (m *Metrics) ObservePublishedAtResolutionFailure(kind domain.OutboxKind) {
 	m.PublishedAtResolutionFailureTotal.WithLabelValues(string(kind)).Inc()
-}
-
-func (m *Metrics) ObservePublishedAtResolverSkipped(kind domain.OutboxKind, reason string) {
-	m.PublishedAtResolverSkippedTotal.WithLabelValues(string(kind), reason).Inc()
-}
-
-func (m *Metrics) ObservePublishedAtResolverEnqueued(kind domain.OutboxKind) {
-	m.PublishedAtResolverEnqueuedTotal.WithLabelValues(string(kind)).Inc()
-}
-
-func (m *Metrics) SetPublishedAtResolverPageCandidates(count int) {
-	m.PublishedAtResolverPageCandidates.Set(float64(count))
-}
-
-func (m *Metrics) ObservePublishedAtResolverScanned(kind domain.OutboxKind) {
-	m.PublishedAtResolverScannedTotal.WithLabelValues(string(kind)).Inc()
 }

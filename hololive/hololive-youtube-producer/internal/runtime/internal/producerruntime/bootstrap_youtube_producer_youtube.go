@@ -14,27 +14,23 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
-	"github.com/kapu/hololive-youtube-producer/internal/runtime/publishedat"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
 )
 
 const activeActivePollTargetRefreshMaxJitter = 2 * time.Second
 
 type ingestionRuntimeYouTubeState struct {
-	operationalChannels   []communityShortsOperationalChannel
-	pollTargets           polltarget.Targets
-	communityShortsPolicy communityShortsBigBangPolicy
-	ingestionLease        *ingestionlease.Lease
+	operationalChannels []communityShortsOperationalChannel
+	pollTargets         polltarget.Targets
+	ingestionLease      *ingestionlease.Lease
 }
 
 type ingestionRuntimeYouTubeDependencies struct {
 	scraperScheduler    *poller.Scheduler
-	publishedAtResolver *poller.PendingPublishedAtResolver
 	pollerRegistrations []providers.ChannelPollerRegistration
 	pollTargetRefresher *polltarget.Refresher
 	youtubeScheduler    youtube.Scheduler
@@ -69,35 +65,8 @@ func resolveIngestionRuntimeYouTubeState(
 
 	state.operationalChannels = operationalChannels
 	state.pollTargets = pollTargets
-	communityShortsPolicy, err := resolveCommunityShortsBigBangPolicy(appConfig, logger, operationalChannels)
-	if err != nil {
-		return state, err
-	}
-	state.communityShortsPolicy = communityShortsPolicy
 
 	return state, nil
-}
-
-func resolveCommunityShortsBigBangPolicy(
-	appConfig *config.Config,
-	logger *slog.Logger,
-	operationalChannels []communityShortsOperationalChannel,
-) (communityShortsBigBangPolicy, error) {
-	policy, err := communityshorts.BuildPolicy(appConfig.Ingestion, operationalChannels)
-	if err != nil {
-		return policy, err
-	}
-	if policy.Enabled() {
-		logger.Info("Community/shorts big-bang request switch configured",
-			slog.Time("community_shorts_bigbang_cutover_at", policy.CutoverAt()),
-			slog.Int("community_shorts_bigbang_target_channels", policy.TargetChannelCount()),
-		)
-		return policy, nil
-	}
-
-	logger.Warn("Community/shorts big-bang request switch is missing cutover criteria",
-		slog.Int("community_shorts_bigbang_target_channels", policy.TargetChannelCount()))
-	return policy, nil
 }
 
 func buildIngestionRuntimeYouTubeDependencies(
@@ -118,11 +87,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 		return deps, nil
 	}
 
-	routeDecider := communityshorts.BuildRouteDecider(state.communityShortsPolicy)
 	sharedScraperClient := resolveIngestionSharedScraperClient(&appConfig.Scraper, infra)
-	if err := publishedat.ValidateSchemaIfEnabled(ctx, &appConfig.Scraper, infra.postgresService, logger); err != nil {
-		return deps, fmt.Errorf("validate published_at resolver schema: %w", err)
-	}
 	jobClaimer, budgetWiring, err := buildIngestionRuntimeCoordination(appConfig, infra, &budgetCfg, readinessState, logger)
 	if err != nil {
 		return deps, err
@@ -130,7 +95,6 @@ func buildIngestionRuntimeYouTubeDependencies(
 	if appConfig.Scraper.ActiveActive.Enabled {
 		probeReadinessJobClaimer(ctx, jobClaimer, logger)
 	}
-	deps.publishedAtResolver = buildIngestionRuntimePublishedAtResolver(appConfig, infra, sharedScraperClient, routeDecider, jobClaimer, logger)
 	deps.scraperScheduler, deps.pollerRegistrations, err = polling.BuildComponentsWithJobClaimerContext(
 		ctx,
 		&appConfig.Scraper,
@@ -141,8 +105,6 @@ func buildIngestionRuntimeYouTubeDependencies(
 		state.pollTargets.StatsChannelIDs,
 		sharedScraperClient,
 		infra.holodexService,
-		routeDecider,
-		deps.publishedAtResolver,
 		logger,
 	)
 	if err != nil {
@@ -172,27 +134,6 @@ func buildIngestionRuntimeCoordination(
 	}
 	budgetWiring.BudgetRPM = youtubeProducerBudgetRPM(appConfig.YouTube.ProducerRequestInterval)
 	return jobClaimer, budgetWiring, nil
-}
-
-func buildIngestionRuntimePublishedAtResolver(
-	appConfig *config.Config,
-	infra *youtubeProducerInfrastructure,
-	sharedScraperClient *scraper.Client,
-	routeDecider poller.NotificationRouteDecider,
-	jobClaimer poller.JobClaimer,
-	logger *slog.Logger,
-) *poller.PendingPublishedAtResolver {
-	resolver := publishedat.BuildPendingResolver(
-		&appConfig.Scraper,
-		infra.postgresService,
-		sharedScraperClient,
-		routeDecider,
-		logger,
-	)
-	if resolver != nil {
-		resolver.SetCandidateClaimer(jobClaimer)
-	}
-	return resolver
 }
 
 func youtubeProducerBudgetRPM(requestInterval time.Duration) float64 {
@@ -330,15 +271,4 @@ func resolveIngestionSharedScraperClient(scraperConfig *config.ScraperConfig, in
 		return infra.scraperClient
 	}
 	return polling.BuildSharedClient(scraperConfig, infra.cacheService, infra.sharedRL)
-}
-
-func buildIngestionRuntimeObservationWindowWriter(
-	runtimeName string,
-	policy communityShortsBigBangPolicy,
-	infra *youtubeProducerInfrastructure,
-) communityShortsObservationWindowWriter {
-	if runtimeName == youtubeProducerRuntimeName && policy.Enabled() {
-		return trackingrepo.NewRepository(infra.postgresService.GetPool())
-	}
-	return nil
 }

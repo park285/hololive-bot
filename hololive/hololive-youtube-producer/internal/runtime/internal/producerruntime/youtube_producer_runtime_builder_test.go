@@ -305,8 +305,6 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 				communityshorts.EnabledChannelIDs(operationalChannels),
 				polling.BuildSharedClient(&ingestionConfig.Scraper, infra.cacheService, infra.sharedRL),
 				nil,
-				nil,
-				nil,
 				testLogger(),
 			)
 			require.NoError(t, err)

@@ -108,8 +108,8 @@ func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 				RoomID:    "room-blocked",
 			}, nil)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "youtube outbox path")
-
+			assert.Contains(t, err.Error(), "legacy alarm route does not support alarm type")
+			assert.Contains(t, err.Error(), string(alarmType))
 		})
 	}
 }

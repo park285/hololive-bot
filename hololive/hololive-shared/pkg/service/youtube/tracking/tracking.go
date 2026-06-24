@@ -28,10 +28,6 @@ type ObservationPostComparisonVerdictReason = observation.ObservationPostCompari
 
 type ObservationPostComparisonVerdictRow = observation.ObservationPostComparisonVerdictRow
 
-type PublishedAtResolutionCandidate = observation.PublishedAtResolutionCandidate
-
-type PublishedAtResolutionCursor = observation.PublishedAtResolutionCursor
-
 type ReadRepository = observation.ReadRepository
 
 type Repository = observation.Repository

@@ -25,56 +25,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/retry"
 )
-
-func (c *Client) ResolveCommunityPostPublishedAt(ctx context.Context, postID string) (*time.Time, error) {
-	trimmedPostID := strings.TrimSpace(postID)
-	if trimmedPostID == "" {
-		return nil, ErrCommunityPublishedAtNotFound
-	}
-
-	postURL := "https://www.youtube.com/post/" + url.PathEscape(trimmedPostID)
-
-	html, err := c.fetchPage(ctx, postURL, MetadataResolveFetchPolicy)
-	if err != nil {
-		return nil, fmt.Errorf("fetch community post page: %w", err)
-	}
-
-	publishedAt, err := extractCommunityPublishedAtFromHTML(html)
-	if err != nil {
-		return nil, fmt.Errorf("extract community published_at: %w", err)
-	}
-
-	return publishedAt, nil
-}
-
-func (c *Client) ResolveVideoPublishedAt(ctx context.Context, videoID string) (*time.Time, error) {
-	trimmedVideoID := strings.TrimSpace(videoID)
-	if trimmedVideoID == "" {
-		return nil, ErrPublishedAtNotFound
-	}
-
-	params := url.Values{}
-	params.Set("v", trimmedVideoID)
-	watchURL := "https://www.youtube.com/watch?" + params.Encode()
-
-	html, err := c.fetchPage(ctx, watchURL, MetadataResolveFetchPolicy)
-	if err != nil {
-		return nil, fmt.Errorf("fetch video page: %w", err)
-	}
-
-	publishedAt, err := extractPublishedAtFromHTML(html)
-	if err != nil {
-		return nil, fmt.Errorf("extract video published_at: %w", err)
-	}
-
-	return publishedAt, nil
-}
 
 // fetchPage: YouTube 페이지 HTML 가져오기 (5xx 에러 시 재시도 포함)
 func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchPolicy) (string, error) {

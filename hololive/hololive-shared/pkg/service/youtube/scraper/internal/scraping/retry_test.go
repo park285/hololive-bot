@@ -345,65 +345,6 @@ func TestGetShorts_UsesSingleAttemptHighFrequencyPolicy(t *testing.T) {
 	assert.Equal(t, int32(1), attempts.Load())
 }
 
-func TestPublishedAtResolvers_UseSingleAttemptMetadataPolicy(t *testing.T) {
-	tests := []struct {
-		name     string
-		call     func(*Client) (*time.Time, error)
-		wantPath string
-		wantBody string
-	}{
-		{
-			name: "video resolver",
-			call: func(client *Client) (*time.Time, error) {
-				return client.ResolveVideoPublishedAt(context.Background(), "video-1")
-			},
-			wantPath: "/watch",
-			wantBody: `<html><head><meta itemprop="uploadDate" content="2026-04-10T10:11:12+09:00"></head></html>`,
-		},
-		{
-			name: "community resolver",
-			call: func(client *Client) (*time.Time, error) {
-				return client.ResolveCommunityPostPublishedAt(context.Background(), "post-1")
-			},
-			wantPath: "/post/post-1",
-			wantBody: `<html><head><meta itemprop="datePublished" content="2026-04-10T10:11:12+09:00"></head></html>`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var attempts atomic.Int32
-			client := NewClient(
-				WithHTTPClient(&http.Client{
-					Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-						assert.Equal(t, tt.wantPath, req.URL.Path)
-						if attempts.Add(1) == 1 {
-							return &http.Response{
-								StatusCode: http.StatusBadGateway,
-								Header:     make(http.Header),
-								Body:       io.NopCloser(strings.NewReader("bad gateway")),
-								Request:    req,
-							}, nil
-						}
-						return &http.Response{
-							StatusCode: http.StatusOK,
-							Header:     make(http.Header),
-							Body:       io.NopCloser(strings.NewReader(tt.wantBody)),
-							Request:    req,
-						}, nil
-					}),
-				}),
-				WithRateLimiter(NewRateLimiter(0)),
-				WithUAProvider(ua.NewStaticProvider("test-agent")),
-			)
-
-			_, err := tt.call(client)
-			require.Error(t, err)
-			assert.Equal(t, int32(1), attempts.Load())
-		})
-	}
-}
-
 func TestFetchPage_TransportRetryClassification(t *testing.T) {
 	tests := []struct {
 		name             string

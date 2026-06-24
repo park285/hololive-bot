@@ -21,17 +21,11 @@
 package scraping
 
 import (
-	"context"
-	"io"
-	"net/http"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
 
 func TestExtractPublishedAtFromHTML(t *testing.T) {
@@ -72,65 +66,6 @@ func TestExtractCommunityPublishedAtFromHTML(t *testing.T) {
 			</head>
 		</html>
 	`)
-	require.NoError(t, err)
-	require.NotNil(t, publishedAt)
-	assert.Equal(t, "2026-04-10T01:11:12Z", publishedAt.Format(time.RFC3339))
-}
-
-func TestResolveCommunityPostPublishedAt(t *testing.T) {
-	client := NewClient(
-		WithHTTPClient(&http.Client{
-			Transport: communityRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-				require.Equal(t, "/post/post-1", req.URL.Path)
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Header:     make(http.Header),
-					Body: io.NopCloser(strings.NewReader(`
-						<html>
-							<head>
-								<meta itemprop="datePublished" content="2026-04-10T10:11:12+09:00">
-							</head>
-						</html>
-					`)),
-					Request: req,
-				}, nil
-			}),
-		}),
-		WithRateLimiter(NewRateLimiter(0)),
-		WithUAProvider(ua.NewStaticProvider("test-agent")),
-	)
-
-	publishedAt, err := client.ResolveCommunityPostPublishedAt(context.Background(), "post-1")
-	require.NoError(t, err)
-	require.NotNil(t, publishedAt)
-	assert.Equal(t, "2026-04-10T01:11:12Z", publishedAt.Format(time.RFC3339))
-}
-
-func TestResolveVideoPublishedAt(t *testing.T) {
-	client := NewClient(
-		WithHTTPClient(&http.Client{
-			Transport: communityRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-				require.Equal(t, "/watch", req.URL.Path)
-				require.Equal(t, "video-1", req.URL.Query().Get("v"))
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Header:     make(http.Header),
-					Body: io.NopCloser(strings.NewReader(`
-						<html>
-							<head>
-								<meta itemprop="uploadDate" content="2026-04-10T10:11:12+09:00">
-							</head>
-						</html>
-					`)),
-					Request: req,
-				}, nil
-			}),
-		}),
-		WithRateLimiter(NewRateLimiter(0)),
-		WithUAProvider(ua.NewStaticProvider("test-agent")),
-	)
-
-	publishedAt, err := client.ResolveVideoPublishedAt(context.Background(), "video-1")
 	require.NoError(t, err)
 	require.NotNil(t, publishedAt)
 	assert.Equal(t, "2026-04-10T01:11:12Z", publishedAt.Format(time.RFC3339))

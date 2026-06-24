@@ -25,7 +25,6 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -47,7 +46,6 @@ type YouTubeProducerRuntime struct {
 
 	Scheduler           youtube.Scheduler
 	ScraperScheduler    *poller.Scheduler
-	PublishedAtResolver *poller.PendingPublishedAtResolver
 	PhotoSync           photoSyncService
 	ConfigSubscriber    *configsub.Subscriber
 	PollTargetRefresher *polltarget.Refresher
@@ -56,10 +54,6 @@ type YouTubeProducerRuntime struct {
 	HTTPServers *sharedserver.RuntimeHTTPServers
 
 	Readiness *readiness.State
-
-	CommunityShortsBigBangPolicy           communityShortsBigBangPolicy
-	communityShortsObservationWindowWriter communityShortsObservationWindowWriter
-	timeNow                                func() time.Time
 
 	ingestionLease *ingestionlease.Lease
 	lifecycle.Managed
@@ -91,10 +85,6 @@ func (r *YouTubeProducerRuntime) Run() {
 func (r *YouTubeProducerRuntime) startRuntime(ctx context.Context, errCh chan<- error) {
 	r.startBackgroundServices(ctx, errCh)
 	r.startHTTPServer(errCh)
-	if err := r.ensureCommunityShortsObservationWindow(ctx); err != nil {
-		errCh <- err
-		return
-	}
 	if r.Readiness != nil {
 		r.Readiness.MarkRunning()
 	}

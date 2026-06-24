@@ -185,18 +185,10 @@ func validateLegacyRouteAlarmType(alarmType AlarmType) error {
 	if alarmType == AlarmTypeLive {
 		return nil
 	}
-	if _, ok := legacyRouteOutboxAlarmTypes[alarmType]; ok {
-		return fmt.Errorf("legacy alarm route only supports %s notifications; use youtube outbox path for %s", AlarmTypeLive, alarmType)
-	}
 	if alarmType == "" {
 		return fmt.Errorf("legacy alarm route requires explicit alarm type")
 	}
 	return fmt.Errorf("legacy alarm route does not support alarm type %q", alarmType)
-}
-
-var legacyRouteOutboxAlarmTypes = map[AlarmType]struct{}{
-	AlarmTypeCommunity: {},
-	AlarmTypeShorts:    {},
 }
 
 type AlarmQueueEnvelope struct {

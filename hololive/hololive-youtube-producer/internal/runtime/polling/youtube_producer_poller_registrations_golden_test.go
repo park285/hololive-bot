@@ -50,7 +50,6 @@ func goldenBuildRegistrations(tiering, backfill bool, liveStatusProvider poller.
 		&scraperConfig,
 		nil,
 		liveStatusProvider,
-		nil,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_STATS_1", "UC_STATS_2"},
 	)

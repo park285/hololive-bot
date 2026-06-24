@@ -22,7 +22,6 @@ package pollers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -38,33 +37,25 @@ import (
 )
 
 type CommunityPoller struct {
-	client                           *scraper.Client
-	db                               pollerDB
-	repository                       batchrepo.BatchRepository
-	maxResults                       int
-	keywords                         []string
-	routeDecider                     polling.NotificationRouteDecider
-	inlinePublishedAtFallbackEnabled bool
-	metrics                          *polling.Metrics
+	client     *scraper.Client
+	db         pollerDB
+	repository batchrepo.BatchRepository
+	maxResults int
+	keywords   []string
+	metrics    *polling.Metrics
 }
 
-func NewCommunityPoller(scraperClient *scraper.Client, db any, maxResults int, keywords []string, routeDecider polling.NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *CommunityPoller {
+func NewCommunityPoller(scraperClient *scraper.Client, db any, maxResults int, keywords []string) *CommunityPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
-	inlineFallbackEnabled := false
-	if len(inlinePublishedAtFallbackEnabled) > 0 {
-		inlineFallbackEnabled = inlinePublishedAtFallbackEnabled[0]
-	}
 	querier := normalizePollerDB(db)
 	return &CommunityPoller{
-		client:                           scraperClient,
-		db:                               querier,
-		repository:                       batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
-		maxResults:                       maxResults,
-		keywords:                         keywords,
-		routeDecider:                     routeDecider,
-		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,
+		client:     scraperClient,
+		db:         querier,
+		repository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
+		maxResults: maxResults,
+		keywords:   keywords,
 	}
 }
 
@@ -124,7 +115,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeCommunityPost,
 		Initialized:   true,
-		LastContentID: selectLastWatermarkContentID(domain.OutboxKindCommunityPost, posts[0].PostID, watermark.LastContentID, batch.keepExistingWatermark),
+		LastContentID: polling.NormalizeContentID(domain.OutboxKindCommunityPost, posts[0].PostID),
 	}); err != nil {
 		return fmt.Errorf("persist community batch: %w", err)
 	}
@@ -133,10 +124,9 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 }
 
 type communityPollBatch struct {
-	dbPosts               []*domain.YouTubeCommunityPost
-	notifications         []*domain.YouTubeNotificationOutbox
-	trackingRows          []*domain.YouTubeContentAlarmTracking
-	keepExistingWatermark bool
+	dbPosts       []*domain.YouTubeCommunityPost
+	notifications []*domain.YouTubeNotificationOutbox
+	trackingRows  []*domain.YouTubeContentAlarmTracking
 }
 
 func (p *CommunityPoller) buildCommunityBatch(
@@ -152,7 +142,7 @@ func (p *CommunityPoller) buildCommunityBatch(
 		trackingRows:  make([]*domain.YouTubeContentAlarmTracking, 0, len(posts)),
 	}
 	for i := range posts {
-		dbPost, trackingRow, notification, keepExistingWatermark := p.buildCommunityPostArtifacts(ctx, channelID, posts[i], isInitialized, detectedAt)
+		dbPost, trackingRow, notification := p.buildCommunityPostArtifacts(ctx, channelID, posts[i], isInitialized, detectedAt)
 		if dbPost != nil {
 			batch.dbPosts = append(batch.dbPosts, dbPost)
 		}
@@ -162,7 +152,6 @@ func (p *CommunityPoller) buildCommunityBatch(
 		if notification != nil {
 			batch.notifications = append(batch.notifications, notification)
 		}
-		batch.keepExistingWatermark = batch.keepExistingWatermark || keepExistingWatermark
 	}
 	return batch
 }
@@ -173,16 +162,13 @@ func (p *CommunityPoller) buildCommunityPostArtifacts(
 	post *scraper.CommunityPost,
 	isInitialized bool,
 	detectedAt time.Time,
-) (*domain.YouTubeCommunityPost, *domain.YouTubeContentAlarmTracking, *domain.YouTubeNotificationOutbox, bool) {
+) (*domain.YouTubeCommunityPost, *domain.YouTubeContentAlarmTracking, *domain.YouTubeNotificationOutbox) {
 	if post == nil {
-		return nil, nil, nil, false
+		return nil, nil, nil
 	}
 
 	canonicalPostID := polling.NormalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
 	publishedAt := yttimestamp.NormalizePtr(post.PublishedAt)
-	if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled {
-		publishedAt = p.resolveCommunityPublishedAtInline(ctx, polling.NormalizeCommunityResourceID(post.PostID))
-	}
 	logCommunityPostDetected(ctx, channelID, canonicalPostID, publishedAt, detectedAt)
 
 	dbPost := &domain.YouTubeCommunityPost{
@@ -199,7 +185,7 @@ func (p *CommunityPoller) buildCommunityPostArtifacts(
 		AttachedVideo: post.VideoID,
 	}
 	if !isInitialized || !p.matchesKeywords(post.ContentText) {
-		return dbPost, nil, nil, false
+		return dbPost, nil, nil
 	}
 
 	trackingRow := &domain.YouTubeContentAlarmTracking{
@@ -209,30 +195,22 @@ func (p *CommunityPoller) buildCommunityPostArtifacts(
 		ActualPublishedAt: dbPost.PublishedAt,
 		DetectedAt:        detectedAt,
 	}
-	notification, keepExistingWatermark := p.buildCommunityNotification(channelID, canonicalPostID, dbPost)
-	return dbPost, trackingRow, notification, keepExistingWatermark
+	notification := p.buildCommunityNotification(channelID, canonicalPostID, dbPost)
+	return dbPost, trackingRow, notification
 }
 
 func (p *CommunityPoller) buildCommunityNotification(
 	channelID string,
 	canonicalPostID string,
 	dbPost *domain.YouTubeCommunityPost,
-) (*domain.YouTubeNotificationOutbox, bool) {
-	routePublishedAt := derefTime(dbPost.PublishedAt)
-	if p.routeDecider != nil && routePublishedAt.IsZero() {
-		return nil, p.inlinePublishedAtFallbackEnabled
-	}
-	if p.routeDecider != nil && !polling.ShouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeCommunity, channelID, routePublishedAt) {
-		return nil, false
-	}
-
+) *domain.YouTubeNotificationOutbox {
 	return &domain.YouTubeNotificationOutbox{
 		Kind:      domain.OutboxKindCommunityPost,
 		ChannelID: channelID,
 		ContentID: canonicalPostID,
 		Payload:   polling.BuildCommunityNotificationPayload(dbPost, canonicalPostID),
 		Status:    domain.OutboxStatusPending,
-	}, false
+	}
 }
 
 func collectNewCommunityPosts(
@@ -251,29 +229,6 @@ func collectNewCommunityPosts(
 	return newPosts
 }
 
-func (p *CommunityPoller) resolveCommunityPublishedAtInline(ctx context.Context, postID string) *time.Time {
-	if strings.TrimSpace(postID) == "" {
-		return nil
-	}
-
-	resolveCtx, cancel := context.WithTimeout(ctx, inlinePublishedAtFallbackTimeout)
-	defer cancel()
-
-	publishedAt, err := p.client.ResolveCommunityPostPublishedAt(resolveCtx, postID)
-	if err != nil {
-		if errors.Is(err, scraper.ErrCommunityPublishedAtNotFound) {
-			return nil
-		}
-		slog.WarnContext(ctx, "community published_at inline fallback failed",
-			"post_id", postID,
-			"error", err,
-		)
-		return nil
-	}
-
-	return yttimestamp.NormalizePtr(publishedAt)
-}
-
 func logCommunityPostDetected(ctx context.Context, channelID, postID string, actualPublishedAt *time.Time, detectedAt time.Time) {
 	slog.LogAttrs(ctx, slog.LevelInfo, communityPostDetectedLogMessage,
 		slog.String(logschema.FieldChannelID, channelID),
@@ -288,20 +243,6 @@ func optionalTimestampAttr(key string, value *time.Time) slog.Attr {
 		return slog.Any(key, nil)
 	}
 	return slog.String(key, yttimestamp.Format(*value))
-}
-
-func selectLastWatermarkContentID(kind domain.OutboxKind, latestID, existingID string, keepExisting bool) string {
-	if keepExisting && strings.TrimSpace(existingID) != "" {
-		return existingID
-	}
-	return polling.NormalizeContentID(kind, latestID)
-}
-
-func derefTime(value *time.Time) time.Time {
-	if value == nil {
-		return time.Time{}
-	}
-	return *value
 }
 
 // matchesKeywords: 텍스트가 키워드 조건에 맞는지 확인

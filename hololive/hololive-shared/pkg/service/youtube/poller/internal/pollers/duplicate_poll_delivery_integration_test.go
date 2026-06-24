@@ -84,7 +84,7 @@ func TestCommunityPollerDuplicatePollDispatchesExactlyOnce(t *testing.T) {
 		}),
 	)
 
-	poller := NewCommunityPoller(client, db, 10, nil, nil)
+	poller := NewCommunityPoller(client, db, 10, nil)
 	sender := &duplicatePollTestSender{}
 	dispatcher := newDuplicatePollTestDispatcher(db, newDuplicatePollTestCache(channelID, domain.AlarmTypeCommunity), sender)
 	ctx := context.Background()
@@ -108,7 +108,7 @@ func TestCommunityPollerDuplicatePollDispatchesExactlyOnce(t *testing.T) {
 	require.EqualValues(t, 1, postCount)
 }
 
-func TestShortsPollerDuplicatePollEnqueuesExactlyOnceWithInlineFallback(t *testing.T) {
+func TestShortsPollerDuplicatePollEnqueuesExactlyOnce(t *testing.T) {
 	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -161,7 +161,7 @@ func TestShortsPollerDuplicatePollEnqueuesExactlyOnceWithInlineFallback(t *testi
 		}),
 	)
 
-	poller := NewShortsPoller(client, db, 10, nil, true)
+	poller := NewShortsPoller(client, db, 10)
 	ctx := context.Background()
 
 	require.NoError(t, poller.Poll(ctx, channelID))
@@ -279,7 +279,7 @@ func requireDuplicatePollSingleEnqueuedState(t *testing.T, db *pollerBatchTestDB
 	require.Equal(t, canonicalPostID, stateRow.PostID)
 	require.Equal(t, canonicalPostID, stateRow.ContentID)
 	require.Nil(t, stateRow.AlarmSentAt)
-	require.NotNil(t, stateRow.ActualPublishedAt)
+	require.Nil(t, stateRow.ActualPublishedAt)
 	require.Nil(t, stateRow.AuthorizedAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, stateRow.DeliveryStatus)
 }

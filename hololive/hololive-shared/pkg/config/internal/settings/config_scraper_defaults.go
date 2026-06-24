@@ -23,19 +23,6 @@ func DefaultScraperSchedulerConfig() ScraperSchedulerConfig {
 	}
 }
 
-func DefaultScraperPublishedAtResolverConfig() ScraperPublishedAtResolverConfig {
-	return ScraperPublishedAtResolverConfig{
-		Enabled:           true,
-		Interval:          3 * time.Minute,
-		BatchSize:         10,
-		MaxResolvePerRun:  1,
-		MaxRunDuration:    12 * time.Second,
-		ResolveTimeout:    10 * time.Second,
-		MinDetectedAge:    30 * time.Second,
-		FailureBackoffTTL: 5 * time.Minute,
-	}
-}
-
 func DefaultScraperSnapshotConfig() ScraperSnapshotConfig {
 	return ScraperSnapshotConfig{
 		Enabled:      false,

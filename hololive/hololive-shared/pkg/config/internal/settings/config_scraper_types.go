@@ -13,17 +13,6 @@ type ScraperPoll struct {
 	Live      time.Duration
 }
 
-type ScraperPublishedAtResolverConfig struct {
-	Enabled           bool
-	Interval          time.Duration
-	BatchSize         int
-	MaxResolvePerRun  int
-	MaxRunDuration    time.Duration
-	ResolveTimeout    time.Duration
-	MinDetectedAge    time.Duration
-	FailureBackoffTTL time.Duration
-}
-
 func DefaultScraperWorkerCount() int {
 	return 4
 }
@@ -89,19 +78,18 @@ type ScraperActiveActiveConfig struct {
 }
 
 type ScraperConfig struct {
-	ProxyEnabled        bool
-	ProxyURL            string
-	FetcherEngine       string
-	WorkerCount         int
-	Scheduler           ScraperSchedulerConfig
-	Poll                ScraperPoll
-	PublishedAtResolver ScraperPublishedAtResolverConfig
-	Snapshot            ScraperSnapshotConfig
-	ChannelHealth       ScraperChannelHealthConfig
-	BrowserDiagnostic   ScraperBrowserDiagnosticConfig
-	PollTiering         ScraperPollTieringConfig
-	Backfill            ScraperBackfillConfig
-	ActiveActive        ScraperActiveActiveConfig
+	ProxyEnabled      bool
+	ProxyURL          string
+	FetcherEngine     string
+	WorkerCount       int
+	Scheduler         ScraperSchedulerConfig
+	Poll              ScraperPoll
+	Snapshot          ScraperSnapshotConfig
+	ChannelHealth     ScraperChannelHealthConfig
+	BrowserDiagnostic ScraperBrowserDiagnosticConfig
+	PollTiering       ScraperPollTieringConfig
+	Backfill          ScraperBackfillConfig
+	ActiveActive      ScraperActiveActiveConfig
 }
 
 type ScraperSchedulerConfig struct {

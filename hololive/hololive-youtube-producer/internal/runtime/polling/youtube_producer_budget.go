@@ -15,8 +15,6 @@ import (
 type youtubeProducerBudgetSummary struct {
 	PollerRPM                 float64
 	PollerRetryAmplifiedRPM   float64
-	ResolverRPM               float64
-	ResolverRetryAmplifiedRPM float64
 	CombinedRPM               float64
 	CombinedRetryAmplifiedRPM float64
 	BudgetRPM                 float64
@@ -41,22 +39,11 @@ func summarizeYouTubeProducerBudgetWithLimit(registrations []providers.ChannelPo
 func summarizeYouTubeProducerBudgetForFleet(registrations []providers.ChannelPollerRegistration, budgetRPM float64, activeAPCount int) youtubeProducerBudgetSummary {
 	pollerRPM := 0.0
 	pollerRetryAmplifiedRPM := 0.0
-	resolverRPM := 0.0
-	resolverRetryAmplifiedRPM := 0.0
 	for i := range registrations {
 		registration := &registrations[i]
-		rpm := estimateRegistrationYouTubeScraperRPM(registration)
-		retryAmplifiedRPM := estimateRegistrationYouTubeScraperWorstCaseRPM(registration)
-		if isPublishedAtResolverRegistration(registration) {
-			resolverRPM += rpm
-			resolverRetryAmplifiedRPM += retryAmplifiedRPM
-			continue
-		}
-		pollerRPM += rpm
-		pollerRetryAmplifiedRPM += retryAmplifiedRPM
+		pollerRPM += estimateRegistrationYouTubeScraperRPM(registration)
+		pollerRetryAmplifiedRPM += estimateRegistrationYouTubeScraperWorstCaseRPM(registration)
 	}
-	combinedRPM := pollerRPM + resolverRPM
-	combinedRetryAmplifiedRPM := pollerRetryAmplifiedRPM + resolverRetryAmplifiedRPM
 	if budgetRPM <= 0 {
 		budgetRPM = defaultYouTubeProducerBudgetRPM()
 	}
@@ -67,10 +54,8 @@ func summarizeYouTubeProducerBudgetForFleet(registrations []providers.ChannelPol
 	return youtubeProducerBudgetSummary{
 		PollerRPM:                 pollerRPM,
 		PollerRetryAmplifiedRPM:   pollerRetryAmplifiedRPM,
-		ResolverRPM:               resolverRPM,
-		ResolverRetryAmplifiedRPM: resolverRetryAmplifiedRPM,
-		CombinedRPM:               combinedRPM,
-		CombinedRetryAmplifiedRPM: combinedRetryAmplifiedRPM,
+		CombinedRPM:               pollerRPM,
+		CombinedRetryAmplifiedRPM: pollerRetryAmplifiedRPM,
 		BudgetRPM:                 budgetRPM,
 		FleetBudgetRPM:            budgetRPM * float64(activeAPCount),
 		ActiveAPCount:             activeAPCount,
@@ -132,8 +117,6 @@ func logYouTubeProducerBudgetSummary(summary youtubeProducerBudgetSummary, logge
 	logger.Info("youtube_producer_combined_budget_summary",
 		slog.Float64("expected_poller_rpm", summary.PollerRPM),
 		slog.Float64("expected_poller_retry_amplified_rpm_max", summary.PollerRetryAmplifiedRPM),
-		slog.Float64("expected_resolver_rpm", summary.ResolverRPM),
-		slog.Float64("expected_resolver_retry_amplified_rpm_max", summary.ResolverRetryAmplifiedRPM),
 		slog.Float64("expected_combined_rpm", summary.CombinedRPM),
 		slog.Float64("expected_combined_retry_amplified_rpm_max", summary.CombinedRetryAmplifiedRPM),
 		slog.Float64("budget_rpm", summary.BudgetRPM),
@@ -141,7 +124,6 @@ func logYouTubeProducerBudgetSummary(summary youtubeProducerBudgetSummary, logge
 	if summary.CombinedRPM > summary.BudgetRPM {
 		logger.Warn("youtube_producer_combined_budget_exceeds_rate_limit",
 			slog.Float64("expected_poller_rpm", summary.PollerRPM),
-			slog.Float64("expected_resolver_rpm", summary.ResolverRPM),
 			slog.Float64("expected_combined_rpm", summary.CombinedRPM),
 			slog.Float64("budget_rpm", summary.BudgetRPM),
 		)
@@ -150,8 +132,6 @@ func logYouTubeProducerBudgetSummary(summary youtubeProducerBudgetSummary, logge
 		logger.Warn("youtube_producer_fault_envelope_exceeds_rate_limit",
 			slog.Float64("expected_poller_rpm", summary.PollerRPM),
 			slog.Float64("expected_poller_retry_amplified_rpm_max", summary.PollerRetryAmplifiedRPM),
-			slog.Float64("expected_resolver_rpm", summary.ResolverRPM),
-			slog.Float64("expected_resolver_retry_amplified_rpm_max", summary.ResolverRetryAmplifiedRPM),
 			slog.Float64("expected_combined_rpm", summary.CombinedRPM),
 			slog.Float64("expected_combined_retry_amplified_rpm_max", summary.CombinedRetryAmplifiedRPM),
 			slog.Float64("budget_rpm", summary.BudgetRPM),
@@ -208,10 +188,6 @@ func resolvedRegistrationRequestsPerRun(registration *providers.ChannelPollerReg
 		return 1
 	}
 	return registration.RequestsPerRun
-}
-
-func isPublishedAtResolverRegistration(registration *providers.ChannelPollerRegistration) bool {
-	return registration.Poller != nil && registration.Poller.Name() == poller.PendingPublishedAtResolverPollerName
 }
 
 func validateExplicitPollerRegistrations(registrations []providers.ChannelPollerRegistration) error {
