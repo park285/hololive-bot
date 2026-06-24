@@ -146,18 +146,17 @@ func (YouTubeCommunityShortsSourcePost) TableName() string {
 
 // canonical post identifier를 루트 키로 사용해 게시물당 하나의 상태 레코드만 유지한다.
 type YouTubeCommunityShortsAlarmState struct {
-	Kind                  OutboxKind                             `db:"kind" json:"kind"`
-	PostID                string                                 `db:"post_id" json:"post_id"`
-	ContentID             string                                 `db:"content_id" json:"content_id"`
-	ChannelID             string                                 `db:"channel_id" json:"channel_id"`
-	ActualPublishedAt     *time.Time                             `json:"actual_published_at,omitempty"`
-	DetectedAt            time.Time                              `db:"detected_at" json:"detected_at"`
-	PublishedAtRetryAfter *time.Time                             `db:"published_at_retry_after" json:"published_at_retry_after,omitempty"`
-	AuthorizedAt          *time.Time                             `db:"authorized_at" json:"authorized_at,omitempty"`
-	AlarmSentAt           *time.Time                             `db:"alarm_sent_at" json:"alarm_sent_at,omitempty"`
-	DeliveryStatus        YouTubeCommunityShortsAlarmStateStatus `db:"delivery_status" json:"delivery_status"`
-	CreatedAt             time.Time                              `db:"created_at" json:"created_at"`
-	UpdatedAt             time.Time                              `db:"updated_at" json:"updated_at"`
+	Kind              OutboxKind                             `db:"kind" json:"kind"`
+	PostID            string                                 `db:"post_id" json:"post_id"`
+	ContentID         string                                 `db:"content_id" json:"content_id"`
+	ChannelID         string                                 `db:"channel_id" json:"channel_id"`
+	ActualPublishedAt *time.Time                             `json:"actual_published_at,omitempty"`
+	DetectedAt        time.Time                              `db:"detected_at" json:"detected_at"`
+	AuthorizedAt      *time.Time                             `db:"authorized_at" json:"authorized_at,omitempty"`
+	AlarmSentAt       *time.Time                             `db:"alarm_sent_at" json:"alarm_sent_at,omitempty"`
+	DeliveryStatus    YouTubeCommunityShortsAlarmStateStatus `db:"delivery_status" json:"delivery_status"`
+	CreatedAt         time.Time                              `db:"created_at" json:"created_at"`
+	UpdatedAt         time.Time                              `db:"updated_at" json:"updated_at"`
 }
 
 func (YouTubeCommunityShortsAlarmState) TableName() string {

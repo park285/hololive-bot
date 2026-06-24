@@ -376,9 +376,9 @@ func insertPollerTestAlarmState(ctx context.Context, db *pgxpool.Pool, row *doma
 	}
 	return execPollerTestInsert(ctx, db, `
 		INSERT INTO youtube_community_shorts_alarm_states
-			(kind, post_id, content_id, channel_id, actual_published_at, detected_at, published_at_retry_after, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, row.PublishedAtRetryAfter, row.AuthorizedAt, row.AlarmSentAt, row.DeliveryStatus, row.CreatedAt, row.UpdatedAt)
+			(kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		row.Kind, row.PostID, row.ContentID, row.ChannelID, row.ActualPublishedAt, row.DetectedAt, row.AuthorizedAt, row.AlarmSentAt, row.DeliveryStatus, row.CreatedAt, row.UpdatedAt)
 }
 
 func insertPollerTestChannelStatsSnapshot(ctx context.Context, db *pgxpool.Pool, row *domain.YouTubeChannelStatsSnapshot) (int64, error) {
