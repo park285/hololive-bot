@@ -94,7 +94,7 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 
 	revived, err := cm.reviveStaleFailedOutbox(ctx, 60*time.Minute, 50)
 	require.NoError(t, err)
-	assert.Equal(t, int64(4), revived, "video+live+milestone+zero-delivery video 4건만 revive")
+	assert.Equal(t, int64(5), revived, "video+live+milestone+zero-delivery video+community 5건 revive(community/shorts 포함 전 kind)")
 
 	assertRevived := func(id int64, label string) {
 		var row domain.YouTubeNotificationOutbox
@@ -115,10 +115,10 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 	assertRevived(freshLive.ID, "freshLive")
 	assertRevived(freshMilestone.ID, "freshMilestone")
 	assertRevived(zeroDeliveryVideo.ID, "zeroDeliveryVideo")
+	assertRevived(freshCommunity.ID, "freshCommunity")
 	assertNotRevived(staleVideo.ID, "staleVideo")
 	assertNotRevived(deliveredVideo.ID, "deliveredVideo")
 	assertNotRevived(lockedVideo.ID, "lockedVideo")
-	assertNotRevived(freshCommunity.ID, "freshCommunity(스코프 밖)")
 
 	// per-room dedup: SENT 행 불변, FAILED 행만 PENDING.
 	var sentDelivery domain.YouTubeNotificationDelivery
@@ -182,6 +182,73 @@ func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
 	var updated domain.YouTubeNotificationDelivery
 	require.NoError(t, firstDeliveryTestRowWhere(db, &updated, "id = ?", deliveryRow.ID).Error)
 	assert.Equal(t, domain.OutboxStatusSent, updated.Status, "재전달 후 delivery 행은 SENT")
+}
+
+func TestReviveStaleFailedOutbox_RevivesCommunityAndShorts(t *testing.T) {
+	db := newDeliveryPool(t)
+	cm := reviveTestClaimManager(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	freshCreatedAt := now.Add(-5 * time.Minute)
+	oldNextAttempt := now.Add(-30 * time.Minute)
+	sentAt := now.Add(-20 * time.Minute)
+
+	newFailedOutbox := func(kind domain.OutboxKind, contentID string) *domain.YouTubeNotificationOutbox {
+		row := &domain.YouTubeNotificationOutbox{
+			Kind: kind, ChannelID: "ch-cs", ContentID: contentID,
+			Payload: `{"id":"` + contentID + `"}`, Status: domain.OutboxStatusFailed,
+			AttemptCount: 3, NextAttemptAt: oldNextAttempt, CreatedAt: freshCreatedAt, Error: "failed",
+		}
+		require.NoError(t, insertDeliveryTestRows(db, row).Error)
+		return row
+	}
+
+	short := newFailedOutbox(domain.OutboxKindNewShort, "short-fresh")
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
+		OutboxID: short.ID, RoomID: "room-short-failed", Status: domain.OutboxStatusFailed,
+		AttemptCount: 3, NextAttemptAt: oldNextAttempt, Error: "send failed",
+	}).Error)
+
+	community := newFailedOutbox(domain.OutboxKindCommunityPost, "post-fresh")
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
+		OutboxID: community.ID, RoomID: "room-comm-sent", Status: domain.OutboxStatusSent,
+		AttemptCount: 1, NextAttemptAt: oldNextAttempt, SentAt: &sentAt,
+	}).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
+		OutboxID: community.ID, RoomID: "room-comm-failed", Status: domain.OutboxStatusFailed,
+		AttemptCount: 3, NextAttemptAt: oldNextAttempt, Error: "send failed",
+	}).Error)
+
+	revived, err := cm.reviveStaleFailedOutbox(ctx, 60*time.Minute, 50)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), revived, "community+shorts 2건 revive(제외 제거 후)")
+
+	assertOutboxPending := func(id int64, label string) {
+		var row domain.YouTubeNotificationOutbox
+		require.NoError(t, firstDeliveryTestRowWhere(db, &row, "id = ?", id).Error)
+		assert.Equal(t, domain.OutboxStatusPending, row.Status, label+" → PENDING")
+		assert.Zero(t, row.AttemptCount, label+" attempt 리셋")
+		assert.Empty(t, row.Error, label+" error clear")
+		assert.True(t, row.NextAttemptAt.After(oldNextAttempt), label+" next_attempt 전진")
+		assert.Nil(t, row.LockedAt)
+	}
+	assertOutboxPending(short.ID, "short")
+	assertOutboxPending(community.ID, "community")
+
+	var shortDelivery domain.YouTubeNotificationDelivery
+	require.NoError(t, firstDeliveryTestRowWhere(db, &shortDelivery, "outbox_id = ? AND room_id = ?", short.ID, "room-short-failed").Error)
+	assert.Equal(t, domain.OutboxStatusPending, shortDelivery.Status, "FAILED shorts delivery 행은 재시도 대상")
+	assert.Zero(t, shortDelivery.AttemptCount)
+
+	var commFailedDelivery domain.YouTubeNotificationDelivery
+	require.NoError(t, firstDeliveryTestRowWhere(db, &commFailedDelivery, "outbox_id = ? AND room_id = ?", community.ID, "room-comm-failed").Error)
+	assert.Equal(t, domain.OutboxStatusPending, commFailedDelivery.Status, "FAILED community delivery 행은 재시도 대상")
+
+	var commSentDelivery domain.YouTubeNotificationDelivery
+	require.NoError(t, firstDeliveryTestRowWhere(db, &commSentDelivery, "outbox_id = ? AND room_id = ?", community.ID, "room-comm-sent").Error)
+	assert.Equal(t, domain.OutboxStatusSent, commSentDelivery.Status, "이미 발송된 room은 재발송 금지")
+	require.NotNil(t, commSentDelivery.SentAt)
 }
 
 func senderMessages(s *testSender) []string {

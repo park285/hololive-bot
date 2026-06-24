@@ -30,11 +30,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// TestIsCommunityShortsOutboxKindRearmPolicy는 poll-persist의 community/shorts 전용 게이트를
-// 전 OutboxKind에 대해 고정한다. 이 헬퍼는 "poll 재발견 rearm"(ON CONFLICT)과 community/shorts 전용
-// 처리만 게이팅하며, community/shorts만 대상인 것은 watermark 보류로 이들만 재폴링에서 재등장하기
-// 때문이다(video/live는 watermark 전진으로 재등장 없음). video/live의 미발송 FAILED 복구는 dispatcher의
-// revival sweep(별도 경로)이 담당하므로, 이 헬퍼가 video/live를 false로 두는 것은 유실 정책이 아니다.
+// TestIsCommunityShortsOutboxKindRearmPolicy는 poll-persist의 community/shorts 전용 ON CONFLICT rearm
+// 게이트를 전 OutboxKind에 대해 고정한다. 이 rearm은 재삽입(재발견)된 community/shorts FAILED 행만
+// 되살리며, 폴링과 무관한 미발송 FAILED 복구는 video/live·community/shorts 모두 dispatcher의 revive
+// sweep이 담당한다. 따라서 이 헬퍼가 video/live를 false로 두는 것은 유실 정책이 아니다.
 func TestIsCommunityShortsOutboxKindRearmPolicy(t *testing.T) {
 	cases := []struct {
 		kind  domain.OutboxKind

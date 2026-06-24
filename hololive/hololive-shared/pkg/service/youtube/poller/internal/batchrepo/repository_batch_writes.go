@@ -241,7 +241,6 @@ func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Contex
 		appendNotificationInsertArgs(&sb, &args, i, notification, now)
 	}
 
-	// community/shorts만 watermark 보류로 같은 (kind, content_id)가 재등장할 수 있다.
 	sb.WriteString(`
 		ON CONFLICT (kind, content_id) DO UPDATE
 		SET channel_id = EXCLUDED.channel_id,

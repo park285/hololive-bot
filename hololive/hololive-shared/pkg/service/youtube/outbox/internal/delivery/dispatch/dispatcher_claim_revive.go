@@ -30,18 +30,15 @@ import (
 )
 
 // reviveStaleFailedOutbox는 전송 실패로 한 번도 발송 못 한 채 영구 FAILED된 알람을 PENDING으로 되살려
-// 디스패처가 재전송하도록 한다. poll-persist의 ON CONFLICT rearm은 community/shorts 재발견에만 도달하고
-// (videos_poller는 watermark를 무조건 전진시켜 video/live는 재발견 자체가 없음), 폴링과 무관하게 FAILED를
-// 되살리는 경로는 이것뿐이다.
+// 디스패처가 재전송하도록 한다. poll-persist의 ON CONFLICT rearm은 재발견(re-poll)된 행에만 도달하지만
+// 모든 poller가 watermark를 무조건 전진시켜 재발견이 사실상 없으므로, 폴링과 무관하게 FAILED를 되살리는
+// 경로는 이것뿐이다(community/shorts 포함 전 kind).
 //
 // 대상 선정 predicate:
 //   - status='FAILED': aggregate FAILED는 pending room이 없음을 함의(resolveOutboxStatus) = 재시도 소진.
 //   - sent_at IS NULL: aggregate가 한 번도 SENT에 도달 안 함 = 사용자에게 전달된 적 없음(중복 방지 가드).
-//   - kind NOT IN (community_post, new_short): 이 sweep은 per-post "alarm-once" 게이트
-//     (isCommunityShortsDeliveryAuditKind, dispatcher_claim_acquire의 alarm_sent_at 체크)를 우회하는
-//     kind(NEW_VIDEO/LIVE_STREAM/MILESTONE)만 대상으로 한다. community/shorts는 한 room이라도 보내면
-//     per-post로 alarm-once 처리되어, 되살려도 dispatch에서 재전달이 skip된다(무의미한 PENDING 플립).
-//     community/shorts의 미발송 복구는 자체 ON CONFLICT 재발견 rearm + alarm-state 경로가 담당한다.
+//     community/shorts는 한 room이라도 보내면 alarm-once로 aggregate가 SENT가 되어 이 가드가 제외하며,
+//     부분 전송 행이 남더라도 dispatch의 alarm-once 게이트(alarm_sent_at)가 재전달을 한 번 더 막는다.
 //   - created_at >= now-freshnessWindow: 콘텐츠가 아직 신선할 때만(철 지난 알림 스팸 방지). created_at은
 //     poller가 콘텐츠를 감지한 시각 ≈ 발행 직후라 freshness proxy로 적합하다.
 //   - locked_at 만료: 처리 중(in-flight) 행은 건드리지 않음.
@@ -109,13 +106,12 @@ func selectStaleFailedOutboxIDs(ctx context.Context, tx dbx.Querier, freshCutoff
 		FROM youtube_notification_outbox
 		WHERE status = ?
 		  AND sent_at IS NULL
-		  AND kind NOT IN (?, ?)
 		  AND created_at >= ?
 		  AND (locked_at IS NULL OR locked_at < ?)
 		ORDER BY id
 		LIMIT ?
 		FOR UPDATE SKIP LOCKED
-	`, string(domain.OutboxStatusFailed), string(domain.OutboxKindCommunityPost), string(domain.OutboxKindNewShort), freshCutoff, lockCutoff, batchSize); err != nil {
+	`, string(domain.OutboxStatusFailed), freshCutoff, lockCutoff, batchSize); err != nil {
 		return nil, err
 	}
 	return ids, nil

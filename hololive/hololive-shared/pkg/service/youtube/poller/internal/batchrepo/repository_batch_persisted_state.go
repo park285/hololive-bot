@@ -218,7 +218,6 @@ func updateIdentitySentAtMin(sentAtByIdentity map[string]time.Time, identityKey 
 	sentAtByIdentity[identityKey] = candidate
 }
 
-// community/shorts만 watermark 보류로 같은 (kind, content_id)가 재등장할 수 있다.
 func isCommunityShortsOutboxKind(kind domain.OutboxKind) bool {
 	switch kind {
 	case domain.OutboxKindCommunityPost, domain.OutboxKindNewShort:
