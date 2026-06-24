@@ -234,92 +234,6 @@ func TestBuild(t *testing.T) {
 	require.Contains(t, markdown, "`short-internal`")
 }
 
-func TestBuildWithQuery_ObservationWindow(t *testing.T) {
-	t.Parallel()
-
-	windowStart := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	windowEnd := windowStart.Add(24 * time.Hour)
-	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	generatedAt := windowEnd.Add(15 * time.Minute)
-	publishedAt := windowStart.Add(35 * time.Minute)
-	detectedAt := publishedAt.Add(15 * time.Second)
-	alarmSentAt := publishedAt.Add(3 * time.Minute)
-	latencyMillis := int64(3 * time.Minute / time.Millisecond)
-	exceeded := true
-	queueWaitMillis := int64(100 * time.Second / time.Millisecond)
-	internalLatencyMillis := int64(165 * time.Second / time.Millisecond)
-
-	report, err := BuildWithQuery(
-		[]outbox.PostSendCount{{
-			AlarmType:            domain.AlarmTypeCommunity,
-			ChannelID:            "UC_OBSERVATION",
-			PostID:               "community-observation",
-			ContentID:            "community-observation",
-			ActualPublishedAt:    &publishedAt,
-			DetectedAt:           &detectedAt,
-			AlarmSentAt:          &alarmSentAt,
-			AlarmLatencyMillis:   &latencyMillis,
-			AlarmLatencyExceeded: &exceeded,
-		}},
-		[]outbox.PostDeliveryTimeline{{
-			AlarmType:             domain.AlarmTypeCommunity,
-			ChannelID:             "UC_OBSERVATION",
-			PostID:                "community-observation",
-			ContentID:             "community-observation",
-			ActualPublishedAt:     &publishedAt,
-			DetectedAt:            &detectedAt,
-			AlarmSentAt:           &alarmSentAt,
-			AlarmLatencyMillis:    &latencyMillis,
-			AlarmLatencyExceeded:  &exceeded,
-			InternalLatencyMillis: &internalLatencyMillis,
-			QueueWaitMillis:       &queueWaitMillis,
-			DelaySource:           outbox.PostDelaySourceInternalDelivery,
-			InternalDelayCause:    outbox.PostInternalDelayCauseQueueWait,
-			LatencyClassification: outbox.PostLatencyClassificationResult{
-				Status:             outbox.PostLatencyClassificationStatusExceeded,
-				ThresholdMillis:    int64(2 * time.Minute / time.Millisecond),
-				DelaySource:        outbox.PostDelaySourceInternalDelivery,
-				InternalDelayCause: outbox.PostInternalDelayCauseQueueWait,
-			},
-		}},
-		Query{
-			Mode:                        queryModeObservation,
-			WindowStart:                 &windowStart,
-			WindowEnd:                   &windowEnd,
-			ObservationRuntimeName:      "youtube-producer",
-			ObservationBigBangCutoverAt: &cutoverAt,
-		},
-		generatedAt,
-		[]outbox.PostLatencyPeriod{{
-			Label:   observationPeriodLabel,
-			StartAt: windowStart,
-			EndAt:   windowEnd,
-		}},
-	)
-	require.NoError(t, err)
-	require.Equal(t, queryModeObservation, report.Query.Mode)
-	require.NotNil(t, report.Query.WindowStart)
-	require.Equal(t, windowStart, report.Query.WindowStart.UTC())
-	require.NotNil(t, report.Query.WindowEnd)
-	require.Equal(t, windowEnd, report.Query.WindowEnd.UTC())
-	require.Equal(t, "youtube-producer", report.Query.ObservationRuntimeName)
-	require.NotNil(t, report.Query.ObservationBigBangCutoverAt)
-	require.Equal(t, cutoverAt, report.Query.ObservationBigBangCutoverAt.UTC())
-	require.Len(t, report.RequestedPeriods, 1)
-	require.Equal(t, observationPeriodLabel, report.RequestedPeriods[0].Label)
-	require.Equal(t, 24*time.Hour, report.RequestedPeriods[0].Window)
-	require.Len(t, report.Periods, 1)
-	require.Equal(t, int64(1), report.Periods[0].CauseSummary.InternalSystemCausePostCount)
-	require.Equal(t, int64(1), report.Periods[0].CauseSummary.QueueWaitCausePostCount)
-	require.Equal(t, internalCauseRule, report.Verification.InternalCauseRule)
-
-	markdown := RenderMarkdown(&report)
-	require.Contains(t, markdown, "- mode: `observation_window`")
-	require.Contains(t, markdown, "- observation runtime: `youtube-producer`, cutover: `2026-04-10T00:00:00Z`")
-	require.Contains(t, markdown, "## `observation_window`")
-	require.Contains(t, markdown, "`community-observation`")
-}
-
 func TestBuild_UsesInsufficientEvidenceWhenTimelineMissing(t *testing.T) {
 	t.Parallel()
 
@@ -533,7 +447,6 @@ func TestNormalizeCollectOptions(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 4, 11, 12, 0, 0, 0, time.UTC)
-	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 
 	t.Run("recent mode defaults periods and window", func(t *testing.T) {
 		query, periods, err := normalizeCollectOptions(CollectOptions{}, now)
@@ -543,37 +456,6 @@ func TestNormalizeCollectOptions(t *testing.T) {
 		require.NotNil(t, query.WindowEnd)
 		require.Equal(t, now, query.WindowEnd.UTC())
 		require.Len(t, periods, 3)
-	})
-
-	t.Run("observation mode rejects period specs", func(t *testing.T) {
-		_, _, err := normalizeCollectOptions(CollectOptions{
-			PeriodSpecs:                 []PeriodSpec{{Label: "last_24h", Window: 24 * time.Hour}},
-			ObservationRuntimeName:      "youtube-producer",
-			ObservationBigBangCutoverAt: &cutoverAt,
-		}, now)
-		require.EqualError(t, err, "period specs and observation window are mutually exclusive")
-	})
-
-	t.Run("observation mode requires full key", func(t *testing.T) {
-		_, _, err := normalizeCollectOptions(CollectOptions{
-			ObservationRuntimeName: "youtube-producer",
-		}, now)
-		require.EqualError(t, err, "observation runtime name and cutover must both be set")
-	})
-
-	t.Run("observation mode returns query without recent periods", func(t *testing.T) {
-		query, periods, err := normalizeCollectOptions(CollectOptions{
-			ObservationRuntimeName:      "youtube-producer",
-			ObservationBigBangCutoverAt: &cutoverAt,
-		}, now)
-		require.NoError(t, err)
-		require.Equal(t, queryModeObservation, query.Mode)
-		require.Equal(t, "youtube-producer", query.ObservationRuntimeName)
-		require.NotNil(t, query.ObservationBigBangCutoverAt)
-		require.Equal(t, cutoverAt, query.ObservationBigBangCutoverAt.UTC())
-		require.Nil(t, query.WindowStart)
-		require.Nil(t, query.WindowEnd)
-		require.Nil(t, periods)
 	})
 }
 

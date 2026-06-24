@@ -35,7 +35,6 @@ func newDeliveryPool(t testing.TB) *pgxpool.Pool {
 	for _, statement := range []string{
 		`ALTER TABLE youtube_notification_delivery DROP CONSTRAINT IF EXISTS youtube_notification_delivery_outbox_id_fkey`,
 		`ALTER TABLE youtube_notification_delivery_telemetry DROP CONSTRAINT IF EXISTS youtube_notification_delivery_telemetry_outbox_id_fkey`,
-		`ALTER TABLE youtube_community_shorts_observation_post_baselines DROP CONSTRAINT IF EXISTS fk_ycsopb_observation_window`,
 	} {
 		if _, err := pool.Exec(context.Background(), statement); err != nil {
 			t.Fatalf("delivery test db: relax legacy unit-test constraint: %v", err)

@@ -11,6 +11,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 )
 
+type testReport struct {
+	Message string `json:"message"`
+}
+
 func TestRunWindowReport(t *testing.T) {
 	t.Parallel()
 

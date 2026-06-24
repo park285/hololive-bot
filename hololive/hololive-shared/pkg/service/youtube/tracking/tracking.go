@@ -4,58 +4,12 @@ import observation "github.com/kapu/hololive-shared/pkg/service/youtube/tracking
 
 type AlarmSentMark = observation.AlarmSentMark
 
-type CommunityAlarmSentHistoryRow = observation.CommunityAlarmSentHistoryRow
-
 type PgxRepository = observation.PgxRepository
-
-type ObservationAlarmSentHistoryRow = observation.ObservationAlarmSentHistoryRow
-
-type ObservationIdentifierMismatchCandidate = observation.ObservationIdentifierMismatchCandidate
-
-type ObservationIdentifierMismatchCandidateReviewStatus = observation.ObservationIdentifierMismatchCandidateReviewStatus
-
-type ObservationPostComparisonInput = observation.ObservationPostComparisonInput
-
-type ObservationPostComparisonResult = observation.ObservationPostComparisonResult
-
-type ObservationPostComparisonRow = observation.ObservationPostComparisonRow
-
-type ObservationPostComparisonSummary = observation.ObservationPostComparisonSummary
-
-type ObservationPostComparisonVerdict = observation.ObservationPostComparisonVerdict
-
-type ObservationPostComparisonVerdictReason = observation.ObservationPostComparisonVerdictReason
-
-type ObservationPostComparisonVerdictRow = observation.ObservationPostComparisonVerdictRow
 
 type ReadRepository = observation.ReadRepository
 
 type Repository = observation.Repository
 
-type ShortsAlarmSentHistoryRow = observation.ShortsAlarmSentHistoryRow
-
 type WriteRepository = observation.WriteRepository
 
-const (
-	ObservationIdentifierMismatchCandidateReviewStatusPendingReview = observation.ObservationIdentifierMismatchCandidateReviewStatusPendingReview
-
-	ObservationPostComparisonVerdictMatched                     = observation.ObservationPostComparisonVerdictMatched
-	ObservationPostComparisonVerdictUnsent                      = observation.ObservationPostComparisonVerdictUnsent
-	ObservationPostComparisonVerdictDuplicateSent               = observation.ObservationPostComparisonVerdictDuplicateSent
-	ObservationPostComparisonVerdictUnexpectedSent              = observation.ObservationPostComparisonVerdictUnexpectedSent
-	ObservationPostComparisonVerdictIdentifierMismatchCandidate = observation.ObservationPostComparisonVerdictIdentifierMismatchCandidate
-
-	ObservationPostComparisonVerdictReasonCanonicalIdentifierMatched       = observation.ObservationPostComparisonVerdictReasonCanonicalIdentifierMatched
-	ObservationPostComparisonVerdictReasonBaselineWithoutSentHistory       = observation.ObservationPostComparisonVerdictReasonBaselineWithoutSentHistory
-	ObservationPostComparisonVerdictReasonMultipleSentRowsForCanonicalPost = observation.ObservationPostComparisonVerdictReasonMultipleSentRowsForCanonicalPost
-	ObservationPostComparisonVerdictReasonSentHistoryWithoutBaseline       = observation.ObservationPostComparisonVerdictReasonSentHistoryWithoutBaseline
-	ObservationPostComparisonVerdictReasonAuxiliaryMetadataPendingReview   = observation.ObservationPostComparisonVerdictReasonAuxiliaryMetadataPendingReview
-)
-
 var NewRepository = observation.NewRepository
-
-var BuildObservationPostComparisonInputsFromBaselines = observation.BuildObservationPostComparisonInputsFromBaselines
-
-var BuildObservationPostComparisonInputsFromSentHistories = observation.BuildObservationPostComparisonInputsFromSentHistories
-
-var CompareObservationPostInputs = observation.CompareObservationPostInputs

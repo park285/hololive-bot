@@ -2,20 +2,15 @@ package communityshortscli
 
 import (
 	"errors"
-	"flag"
 	"time"
 
-	"github.com/kapu/hololive-youtube-producer/cmd/ops/internal/observationquery"
 	"github.com/kapu/hololive-youtube-producer/cmd/ops/internal/reportcli"
 	opsapp "github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts"
 )
 
 type sendCountsFlags struct {
-	window             *time.Duration
-	observationRuntime *string
-	observationCutover *string
-	format             *string
-	windowExplicit     bool
+	window *time.Duration
+	format *string
 }
 
 func runSendCountsCommand(ctx commandContext, args []string) error {
@@ -24,8 +19,8 @@ func runSendCountsCommand(ctx commandContext, args []string) error {
 		return err
 	}
 
-	return reportcli.RunOptionalObservationReport(
-		sendCountsReportParams(flags),
+	return reportcli.RunWindowReport(
+		reportcli.WindowParams{Window: *flags.window, Format: *flags.format},
 		sendCountsReportCommand(ctx, flags),
 	)
 }
@@ -33,39 +28,20 @@ func runSendCountsCommand(ctx commandContext, args []string) error {
 func parseSendCountsFlags(ctx commandContext, args []string) (sendCountsFlags, error) {
 	fs := newFlagSet(ctx, "send-counts")
 	flags := sendCountsFlags{
-		window:             fs.Duration("window", 24*time.Hour, "lookback window for recent community/shorts per-post send counts"),
-		observationRuntime: fs.String("observation-runtime", "", "runtime name for a specific observation window"),
-		observationCutover: fs.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window"),
-		format:             fs.String("format", "markdown", "output format: markdown or json"),
+		window: fs.Duration("window", 24*time.Hour, "lookback window for recent community/shorts per-post send counts"),
+		format: fs.String("format", "markdown", "output format: markdown or json"),
 	}
 	if err := fs.Parse(args); err != nil {
 		return sendCountsFlags{}, err
 	}
-	flags.windowExplicit = flagSetContains(fs, "window")
 	return flags, nil
 }
 
-func flagSetContains(fs *flag.FlagSet, name string) bool {
-	found := false
-	fs.Visit(func(f *flag.Flag) {
-		found = found || f.Name == name
-	})
-	return found
-}
-
-func sendCountsReportParams(flags sendCountsFlags) reportcli.OptionalObservationParams {
-	return reportcli.OptionalObservationParams{
-		Runtime: *flags.observationRuntime,
-		Cutover: *flags.observationCutover,
-		Format:  *flags.format,
-	}
-}
-
-func sendCountsReportCommand(ctx commandContext, flags sendCountsFlags) reportcli.OptionalObservationCommand[
+func sendCountsReportCommand(ctx commandContext, flags sendCountsFlags) reportcli.WindowCommand[
 	opsapp.CommunityShortsSendCountCollectOptions,
 	opsapp.CommunityShortsSendCountReport,
 ] {
-	return reportcli.OptionalObservationCommand[
+	return reportcli.WindowCommand[
 		opsapp.CommunityShortsSendCountCollectOptions,
 		opsapp.CommunityShortsSendCountReport,
 	]{
@@ -81,61 +57,15 @@ func sendCountsReportCommand(ctx commandContext, flags sendCountsFlags) reportcl
 	}
 }
 
-func buildSendCountsOptions(flags sendCountsFlags) func(
+func buildSendCountsOptions(_ sendCountsFlags) func(
 	time.Time,
-	reportcli.ObservationQuery,
-	bool,
+	time.Duration,
 ) (opsapp.CommunityShortsSendCountCollectOptions, error) {
-	return func(now time.Time, query reportcli.ObservationQuery, useObservationQuery bool) (opsapp.CommunityShortsSendCountCollectOptions, error) {
-		return newSendCountsCollectOptions(flags, now, query, useObservationQuery)
-	}
-}
-
-func newSendCountsCollectOptions(
-	flags sendCountsFlags,
-	now time.Time,
-	query reportcli.ObservationQuery,
-	useObservationQuery bool,
-) (opsapp.CommunityShortsSendCountCollectOptions, error) {
-	if err := validateCommunityShortsSendCountCLIArgs(
-		*flags.window,
-		flags.windowExplicit,
-		*flags.observationRuntime,
-		*flags.observationCutover,
-	); err != nil {
-		return opsapp.CommunityShortsSendCountCollectOptions{}, err
-	}
-	options := opsapp.CommunityShortsSendCountCollectOptions{
-		ObservationRuntimeName: query.Runtime,
-	}
-	if useObservationQuery {
-		options.ObservationBigBangCutoverAt = &query.CutoverAt
-		return options, nil
-	}
-	since := now.Add(-*flags.window)
-	options.Since = &since
-	return options, nil
-}
-
-func validateCommunityShortsSendCountCLIArgs(
-	window time.Duration,
-	windowExplicit bool,
-	observationRuntime string,
-	observationCutover string,
-) error {
-	_, useObservationQuery, err := observationquery.ParseOptional(observationRuntime, observationCutover)
-	if err != nil {
-		return err
-	}
-
-	if !useObservationQuery {
+	return func(now time.Time, window time.Duration) (opsapp.CommunityShortsSendCountCollectOptions, error) {
 		if window <= 0 {
-			return errors.New("window must be greater than zero")
+			return opsapp.CommunityShortsSendCountCollectOptions{}, errors.New("window must be greater than zero")
 		}
-		return nil
+		since := now.Add(-window)
+		return opsapp.CommunityShortsSendCountCollectOptions{Since: &since}, nil
 	}
-	if windowExplicit {
-		return errors.New("window and observation query flags are mutually exclusive")
-	}
-	return nil
 }

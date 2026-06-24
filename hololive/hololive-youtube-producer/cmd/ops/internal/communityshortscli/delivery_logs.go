@@ -9,11 +9,9 @@ import (
 )
 
 type deliveryLogsFlags struct {
-	window             *time.Duration
-	observationRuntime *string
-	observationCutover *string
-	limit              *int
-	format             *string
+	window *time.Duration
+	limit  *int
+	format *string
 }
 
 func runDeliveryLogsCommand(ctx commandContext, args []string) error {
@@ -22,17 +20,18 @@ func runDeliveryLogsCommand(ctx commandContext, args []string) error {
 		return err
 	}
 
-	return reportcli.RunOptionalObservationReport(deliveryLogsReportParams(flags), deliveryLogsReportCommand(ctx, flags))
+	return reportcli.RunWindowReport(
+		reportcli.WindowParams{Window: *flags.window, Format: *flags.format},
+		deliveryLogsReportCommand(ctx, flags),
+	)
 }
 
 func parseDeliveryLogsFlags(ctx commandContext, args []string) (deliveryLogsFlags, error) {
 	fs := newFlagSet(ctx, "delivery-logs")
 	flags := deliveryLogsFlags{
-		window:             fs.Duration("window", 24*time.Hour, "lookback window for recent community/shorts delivery logs"),
-		observationRuntime: fs.String("observation-runtime", "", "runtime name for a specific observation window"),
-		observationCutover: fs.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window"),
-		limit:              fs.Int("limit", 200, "maximum number of delivery log rows to return"),
-		format:             fs.String("format", "markdown", "output format: markdown or json"),
+		window: fs.Duration("window", 24*time.Hour, "lookback window for recent community/shorts delivery logs"),
+		limit:  fs.Int("limit", 200, "maximum number of delivery log rows to return"),
+		format: fs.String("format", "markdown", "output format: markdown or json"),
 	}
 	if err := fs.Parse(args); err != nil {
 		return deliveryLogsFlags{}, err
@@ -40,19 +39,11 @@ func parseDeliveryLogsFlags(ctx commandContext, args []string) (deliveryLogsFlag
 	return flags, nil
 }
 
-func deliveryLogsReportParams(flags deliveryLogsFlags) reportcli.OptionalObservationParams {
-	return reportcli.OptionalObservationParams{
-		Runtime: *flags.observationRuntime,
-		Cutover: *flags.observationCutover,
-		Format:  *flags.format,
-	}
-}
-
-func deliveryLogsReportCommand(ctx commandContext, flags deliveryLogsFlags) reportcli.OptionalObservationCommand[
+func deliveryLogsReportCommand(ctx commandContext, flags deliveryLogsFlags) reportcli.WindowCommand[
 	opsapp.CommunityShortsDeliveryLogCollectOptions,
 	opsapp.CommunityShortsDeliveryLogReport,
 ] {
-	return reportcli.OptionalObservationCommand[
+	return reportcli.WindowCommand[
 		opsapp.CommunityShortsDeliveryLogCollectOptions,
 		opsapp.CommunityShortsDeliveryLogReport,
 	]{
@@ -70,35 +61,19 @@ func deliveryLogsReportCommand(ctx commandContext, flags deliveryLogsFlags) repo
 
 func buildDeliveryLogsOptions(flags deliveryLogsFlags) func(
 	time.Time,
-	reportcli.ObservationQuery,
-	bool,
+	time.Duration,
 ) (opsapp.CommunityShortsDeliveryLogCollectOptions, error) {
-	return func(now time.Time, query reportcli.ObservationQuery, useObservationQuery bool) (opsapp.CommunityShortsDeliveryLogCollectOptions, error) {
-		return newDeliveryLogsCollectOptions(flags, now, query, useObservationQuery)
+	return func(now time.Time, window time.Duration) (opsapp.CommunityShortsDeliveryLogCollectOptions, error) {
+		if window <= 0 {
+			return opsapp.CommunityShortsDeliveryLogCollectOptions{}, fmt.Errorf("window must be greater than zero")
+		}
+		if *flags.limit <= 0 {
+			return opsapp.CommunityShortsDeliveryLogCollectOptions{}, fmt.Errorf("limit must be greater than zero")
+		}
+		since := now.Add(-window)
+		return opsapp.CommunityShortsDeliveryLogCollectOptions{
+			Since: &since,
+			Limit: *flags.limit,
+		}, nil
 	}
-}
-
-func newDeliveryLogsCollectOptions(
-	flags deliveryLogsFlags,
-	now time.Time,
-	query reportcli.ObservationQuery,
-	useObservationQuery bool,
-) (opsapp.CommunityShortsDeliveryLogCollectOptions, error) {
-	if !useObservationQuery && *flags.window <= 0 {
-		return opsapp.CommunityShortsDeliveryLogCollectOptions{}, fmt.Errorf("window must be greater than zero")
-	}
-	if *flags.limit <= 0 {
-		return opsapp.CommunityShortsDeliveryLogCollectOptions{}, fmt.Errorf("limit must be greater than zero")
-	}
-	options := opsapp.CommunityShortsDeliveryLogCollectOptions{
-		ObservationRuntimeName: query.Runtime,
-		Limit:                  *flags.limit,
-	}
-	if useObservationQuery {
-		options.ObservationBigBangCutoverAt = &query.CutoverAt
-		return options, nil
-	}
-	since := now.Add(-*flags.window)
-	options.Since = &since
-	return options, nil
 }

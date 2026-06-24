@@ -29,20 +29,6 @@ type alarmStateRepository struct {
 	db trackingDB
 }
 
-type windowRepository struct {
-	db    trackingDB
-	owner *PgxRepository
-}
-
-type baselineRepository struct {
-	db    trackingDB
-	owner *PgxRepository
-}
-
-type historyRepository struct {
-	db trackingDB
-}
-
 type deliveryStateRepository struct {
 	db    trackingDB
 	owner *PgxRepository
@@ -53,10 +39,6 @@ type identityRepository struct {
 }
 
 type sourcePostRepository struct {
-	db trackingDB
-}
-
-type compareMetadataRepository struct {
 	db trackingDB
 }
 
@@ -73,14 +55,10 @@ type trackingTxBeginner interface {
 type PgxRepository struct {
 	db trackingDB
 
-	alarm           *alarmStateRepository
-	window          *windowRepository
-	baseline        *baselineRepository
-	history         *historyRepository
-	delivery        *deliveryStateRepository
-	identity        *identityRepository
-	source          *sourcePostRepository
-	compareMetadata *compareMetadataRepository
+	alarm    *alarmStateRepository
+	delivery *deliveryStateRepository
+	identity *identityRepository
+	source   *sourcePostRepository
 }
 
 type AlarmSentMark struct {
@@ -100,13 +78,9 @@ func NewRepositoryContext(_ context.Context, db trackingDB) *PgxRepository {
 		alarm: &alarmStateRepository{
 			db: db,
 		},
-		history:         &historyRepository{db: db},
-		identity:        &identityRepository{db: db},
-		source:          &sourcePostRepository{db: db},
-		compareMetadata: &compareMetadataRepository{db: db},
+		identity: &identityRepository{db: db},
+		source:   &sourcePostRepository{db: db},
 	}
-	repo.window = &windowRepository{db: db, owner: repo}
-	repo.baseline = &baselineRepository{db: db, owner: repo}
 	repo.delivery = &deliveryStateRepository{db: db, owner: repo}
 	return repo
 }
@@ -131,44 +105,6 @@ func (r *PgxRepository) TryClaimAlarmState(ctx context.Context, record *domain.Y
 
 func (r *PgxRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain.OutboxKind, postID string, authorizedAt time.Time) (bool, error) {
 	return r.alarm.ReleaseAlarmStateClaim(ctx, kind, postID, authorizedAt)
-}
-
-// --- delegation: Window ---
-
-func (r *PgxRepository) FindCommunityShortsObservationWindow(ctx context.Context, runtimeName string, bigBangCutoverAt time.Time) (*domain.YouTubeCommunityShortsObservationWindow, error) {
-	return r.window.FindCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt)
-}
-
-func (r *PgxRepository) FindClosedCommunityShortsObservationWindow(ctx context.Context, runtimeName string, bigBangCutoverAt, now time.Time) (*domain.YouTubeCommunityShortsObservationWindow, error) {
-	return r.window.FindClosedCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt, now)
-}
-
-func (r *PgxRepository) EnsureCommunityShortsObservationWindow(ctx context.Context, window *domain.YouTubeCommunityShortsObservationWindow) error {
-	return r.window.EnsureCommunityShortsObservationWindow(ctx, window)
-}
-
-// --- delegation: Baseline ---
-
-func (r *PgxRepository) ListCommunityShortsObservationPostBaselines(ctx context.Context, runtimeName string, bigBangCutoverAt time.Time) ([]domain.YouTubeCommunityShortsObservationPostBaseline, error) {
-	return r.baseline.ListCommunityShortsObservationPostBaselines(ctx, runtimeName, bigBangCutoverAt)
-}
-
-// --- delegation: History ---
-
-func (r *PgxRepository) ListCommunityAlarmSentHistoriesByFinalizedObservationWindow(ctx context.Context, runtimeName string, bigBangCutoverAt time.Time) ([]CommunityAlarmSentHistoryRow, error) {
-	return r.history.ListCommunityAlarmSentHistoriesByFinalizedObservationWindow(ctx, runtimeName, bigBangCutoverAt)
-}
-
-func (r *PgxRepository) ListShortsAlarmSentHistoriesByFinalizedObservationWindow(ctx context.Context, runtimeName string, bigBangCutoverAt time.Time) ([]ShortsAlarmSentHistoryRow, error) {
-	return r.history.ListShortsAlarmSentHistoriesByFinalizedObservationWindow(ctx, runtimeName, bigBangCutoverAt)
-}
-
-func (r *PgxRepository) ListCommunityAlarmSentHistoriesWithinObservationWindow(ctx context.Context, windowStart, windowEnd, detectedBefore time.Time) ([]CommunityAlarmSentHistoryRow, error) {
-	return r.history.ListCommunityAlarmSentHistoriesWithinObservationWindow(ctx, windowStart, windowEnd, detectedBefore)
-}
-
-func (r *PgxRepository) ListShortsAlarmSentHistoriesWithinObservationWindow(ctx context.Context, windowStart, windowEnd, detectedBefore time.Time) ([]ShortsAlarmSentHistoryRow, error) {
-	return r.history.ListShortsAlarmSentHistoriesWithinObservationWindow(ctx, windowStart, windowEnd, detectedBefore)
 }
 
 // --- delegation: DeliveryState ---
@@ -199,18 +135,4 @@ func (r *PgxRepository) UpsertSourcePost(ctx context.Context, record *domain.You
 
 func (r *PgxRepository) UpsertSourcePostsBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsSourcePost) error {
 	return r.source.UpsertSourcePostsBatch(ctx, records)
-}
-
-func (r *PgxRepository) ListSourcePostsDetectedWithinWindow(ctx context.Context, windowStart, windowEnd time.Time) ([]domain.YouTubeCommunityShortsSourcePost, error) {
-	return r.source.ListSourcePostsDetectedWithinWindow(ctx, windowStart, windowEnd)
-}
-
-func (r *PgxRepository) ListSourcePostsWithinObservationWindow(ctx context.Context, windowStart, windowEnd, detectedBefore time.Time) ([]domain.YouTubeCommunityShortsSourcePost, error) {
-	return r.source.ListSourcePostsWithinObservationWindow(ctx, windowStart, windowEnd, detectedBefore)
-}
-
-// --- delegation: CompareMetadata ---
-
-func (r *PgxRepository) EnrichObservationPostComparisonInputs(ctx context.Context, inputs []ObservationPostComparisonInput) ([]ObservationPostComparisonInput, error) {
-	return r.compareMetadata.EnrichObservationPostComparisonInputs(ctx, inputs)
 }

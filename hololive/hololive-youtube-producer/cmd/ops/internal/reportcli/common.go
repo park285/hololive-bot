@@ -1,7 +1,6 @@
 package reportcli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,67 +10,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-youtube-producer/cmd/ops/internal/observationquery"
 )
-
-type ObservationQuery = observationquery.Query
-
-type RequiredObservationParams struct {
-	Runtime string
-	Cutover string
-	Format  string
-}
-
-type RequiredObservationCommand[Options any, Report any] struct {
-	Stdout             io.Writer
-	Stderr             io.Writer
-	LoadConfig         func() (*config.Config, error)
-	NewLogger          func(io.Writer) *slog.Logger
-	Now                func() time.Time
-	Timeout            time.Duration
-	BuildOptions       func(ObservationQuery) Options
-	Collect            func(context.Context, *config.Config, *slog.Logger, time.Time, Options) (Report, error)
-	RenderMarkdown     func(*Report) string
-	LoadConfigError    string
-	CollectError       string
-	MarkdownWriteError string
-	JSONWriteError     string
-}
-
-func RunRequiredObservationReport[Options any, Report any](
-	params RequiredObservationParams,
-	command RequiredObservationCommand[Options, Report],
-) error {
-	query, err := observationquery.ParseRequired(params.Runtime, params.Cutover)
-	if err != nil {
-		return err
-	}
-
-	appConfig, err := loadReportConfig(command.LoadConfig)
-	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(command.LoadConfigError), err)
-	}
-
-	logger := newReportLogger(command.Stderr, command.NewLogger)
-	now := reportNow(command.Now)
-	timeout := normalizeReportTimeout(command.Timeout)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	report, err := command.Collect(ctx, appConfig, logger, now, command.BuildOptions(query))
-	if err != nil {
-		return fmt.Errorf("%s: %w", strings.TrimSpace(command.CollectError), err)
-	}
-
-	return writeFormattedReport(
-		reportStdout(command.Stdout),
-		params.Format,
-		report,
-		command.RenderMarkdown,
-		strings.TrimSpace(command.MarkdownWriteError),
-		strings.TrimSpace(command.JSONWriteError),
-	)
-}
 
 func loadReportConfig(loadConfig func() (*config.Config, error)) (*config.Config, error) {
 	if loadConfig == nil {

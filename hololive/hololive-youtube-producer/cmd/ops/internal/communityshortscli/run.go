@@ -78,17 +78,12 @@ func runSelectedCommand(ctx commandContext, selected command, args []string) int
 
 func commandRegistry() map[string]command {
 	commands := []command{
-		{name: "alarm-sent-history-dataset", run: runAlarmSentHistoryDatasetCommand},
 		{name: "channel-summary", run: runChannelSummaryCommand},
-		{name: "community-alarm-sent-history", run: runCommunityAlarmSentHistoryCommand},
-		{name: "continuous-observation-report", run: runContinuousObservationCommand},
 		{name: "delivery-logs", run: runDeliveryLogsCommand},
 		{name: "latency-cause-report", run: runLatencyCauseCommand},
 		{name: "latency-period-summary", run: runLatencyPeriodSummaryCommand},
 		{name: "route-report", run: runRouteReportCommand},
 		{name: "send-counts", run: runSendCountsCommand},
-		{name: "send-state", run: runSendStateCommand},
-		{name: "shorts-alarm-sent-history", run: runShortsAlarmSentHistoryCommand},
 		{name: "target-baseline", run: runTargetBaselineCommand},
 	}
 	indexed := make(map[string]command, len(commands))

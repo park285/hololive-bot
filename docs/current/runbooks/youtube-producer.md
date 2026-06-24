@@ -449,31 +449,6 @@ Default smoke checks the host's AP `/ready` payloads for `mode=active-active`, `
 AP_SMOKE_EXTERNAL=true ./scripts/logs/ap-smoke.sh <host>
 ```
 
-## Observation runtime cutover
-
-`youtube-producer` is the only runtime name after this cleanup. Before rollout, audit existing observation rows so operators know which historical reports were collected under earlier runtime names:
-
-```sql
-SELECT runtime_name, count(*)
-FROM youtube_community_shorts_observation_windows
-GROUP BY runtime_name
-ORDER BY runtime_name;
-
-SELECT runtime_name, count(*)
-FROM youtube_community_shorts_observation_post_baselines
-GROUP BY runtime_name
-ORDER BY runtime_name;
-```
-
-Post-rollout operational reports must use:
-
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts continuous-observation \
-  -observation-runtime youtube-producer
-```
-
-Do not add runtime-name aliases in application code. Historical rows remain historical data; new observation windows and baselines are created under `youtube-producer`.
-
 ## Rollback
 
 - Use `docs/current/runbooks/rollback.md`.

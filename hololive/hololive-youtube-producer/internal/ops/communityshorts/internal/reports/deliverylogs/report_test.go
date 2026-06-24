@@ -13,9 +13,7 @@ func TestBuild(t *testing.T) {
 	t.Parallel()
 
 	generatedAt := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
-	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
-	observationEndedAt := observationStartedAt.Add(24 * time.Hour)
+	windowStart := generatedAt.Add(-24 * time.Hour)
 	communityPublishedAt := generatedAt.Add(-2 * time.Hour)
 	communityDetectedAt := generatedAt.Add(-119 * time.Minute)
 	communityFirstEventAt := generatedAt.Add(-118 * time.Minute)
@@ -26,13 +24,11 @@ func TestBuild(t *testing.T) {
 
 	report := Build(
 		Query{
-			Mode:                        QueryModeObservation,
-			ObservationRuntimeName:      "youtube-producer",
-			ObservationBigBangCutoverAt: &cutoverAt,
-			WindowStart:                 &observationStartedAt,
-			WindowEnd:                   &observationEndedAt,
-			Limit:                       2,
-			Truncated:                   true,
+			Mode:        QueryModeRecent,
+			WindowStart: &windowStart,
+			WindowEnd:   &generatedAt,
+			Limit:       2,
+			Truncated:   true,
 		},
 		[]domain.YouTubeNotificationDeliveryTelemetry{
 			{
@@ -95,14 +91,11 @@ func TestBuild(t *testing.T) {
 	)
 
 	require.Equal(t, generatedAt, report.GeneratedAt)
-	require.Equal(t, QueryModeObservation, report.Query.Mode)
-	require.Equal(t, "youtube-producer", report.Query.ObservationRuntimeName)
-	require.NotNil(t, report.Query.ObservationBigBangCutoverAt)
-	require.Equal(t, cutoverAt, report.Query.ObservationBigBangCutoverAt.UTC())
+	require.Equal(t, QueryModeRecent, report.Query.Mode)
 	require.NotNil(t, report.Query.WindowStart)
-	require.Equal(t, observationStartedAt, report.Query.WindowStart.UTC())
+	require.Equal(t, windowStart, report.Query.WindowStart.UTC())
 	require.NotNil(t, report.Query.WindowEnd)
-	require.Equal(t, observationEndedAt, report.Query.WindowEnd.UTC())
+	require.Equal(t, generatedAt, report.Query.WindowEnd.UTC())
 	require.Equal(t, 2, report.Query.Limit)
 	require.True(t, report.Query.Truncated)
 
@@ -132,7 +125,7 @@ func TestBuild(t *testing.T) {
 
 	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "# YouTube Community/Shorts Delivery Logs Report")
-	require.Contains(t, markdown, "mode: `observation_window`")
+	require.Contains(t, markdown, "mode: `recent_window`")
 	require.Contains(t, markdown, "truncated=`true`")
 	require.Contains(t, markdown, "alarm_sent_at")
 	require.Contains(t, markdown, "alarm_latency_millis")
@@ -165,30 +158,4 @@ func TestRenderMarkdown_EmptyRows(t *testing.T) {
 	markdown := RenderMarkdown(&report)
 	require.Contains(t, markdown, "mode: `recent_window`")
 	require.Contains(t, markdown, "조회된 community/shorts 발송 로그가 없습니다.")
-}
-
-func TestRenderMarkdown_ObservationMetadata(t *testing.T) {
-	t.Parallel()
-
-	generatedAt := time.Date(2026, 4, 12, 1, 0, 0, 0, time.UTC)
-	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
-	observationEndedAt := observationStartedAt.Add(24 * time.Hour)
-
-	report := Build(
-		Query{
-			Mode:                        QueryModeObservation,
-			WindowStart:                 &observationStartedAt,
-			WindowEnd:                   &observationEndedAt,
-			ObservationRuntimeName:      "youtube-producer",
-			ObservationBigBangCutoverAt: &cutoverAt,
-			Limit:                       200,
-		},
-		nil,
-		generatedAt,
-	)
-
-	markdown := RenderMarkdown(&report)
-	require.Contains(t, markdown, "observation runtime: `youtube-producer`, cutover: `2026-04-10T00:00:00Z`")
-	require.Contains(t, markdown, "window: `2026-04-10T01:00:00Z` -> `2026-04-11T01:00:00Z`")
 }

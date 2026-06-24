@@ -109,23 +109,6 @@ func (deliveryTelemetryTestObservationTrackingModel) TableName() string {
 	return "youtube_content_alarm_tracking"
 }
 
-type deliveryTelemetryTestObservationBaselineModel struct {
-	RuntimeName       string    `db:"runtime_name"`
-	BigBangCutoverAt  time.Time `db:"bigbang_cutover_at"`
-	Kind              string    `db:"kind"`
-	PostID            string    `db:"post_id"`
-	ChannelID         string    `db:"channel_id"`
-	ActualPublishedAt *time.Time
-	DetectedAt        time.Time `db:"detected_at"`
-	FinalizedAt       time.Time `db:"finalized_at"`
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-}
-
-func (deliveryTelemetryTestObservationBaselineModel) TableName() string {
-	return "youtube_community_shorts_observation_post_baselines"
-}
-
 func TestDeliveryTelemetryRepository_ObservationRuntimeNameUsesEmptyStringInvariant(t *testing.T) {
 	t.Parallel()
 

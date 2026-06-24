@@ -167,8 +167,6 @@ func normalizeQuery(query Query) Query {
 	query.Mode = QueryMode(strings.TrimSpace(string(query.Mode)))
 	query.WindowStart = shared.CloneSendCountTime(query.WindowStart)
 	query.WindowEnd = shared.CloneSendCountTime(query.WindowEnd)
-	query.ObservationRuntimeName = strings.TrimSpace(query.ObservationRuntimeName)
-	query.ObservationBigBangCutoverAt = shared.CloneSendCountTime(query.ObservationBigBangCutoverAt)
 	return query
 }
 

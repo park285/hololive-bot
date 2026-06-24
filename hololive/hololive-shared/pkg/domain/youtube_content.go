@@ -181,24 +181,6 @@ func ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt, alarmSentAt *ti
 	return YouTubeCommunityShortsAlarmStateStatusDetected
 }
 
-// 동일 observation key에 대해 dedup 완료된 게시물 집합을 이후 검증에서 재사용한다.
-type YouTubeCommunityShortsObservationPostBaseline struct {
-	RuntimeName       string     `db:"runtime_name" json:"runtime_name"`
-	BigBangCutoverAt  time.Time  `db:"bigbang_cutover_at" json:"bigbang_cutover_at"`
-	Kind              OutboxKind `db:"kind" json:"kind"`
-	PostID            string     `db:"post_id" json:"post_id"`
-	ChannelID         string     `db:"channel_id" json:"channel_id"`
-	ActualPublishedAt *time.Time `json:"actual_published_at,omitempty"`
-	DetectedAt        time.Time  `db:"detected_at" json:"detected_at"`
-	FinalizedAt       time.Time  `db:"finalized_at" json:"finalized_at"`
-	CreatedAt         time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt         time.Time  `db:"updated_at" json:"updated_at"`
-}
-
-func (YouTubeCommunityShortsObservationPostBaseline) TableName() string {
-	return "youtube_community_shorts_observation_post_baselines"
-}
-
 // 동일 cutover/runtime 조합에 대해 최초 감지된 배포 완료 시각과 관찰 창을 보존한다.
 type YouTubeCommunityShortsObservationWindow struct {
 	RuntimeName             string     `db:"runtime_name" json:"runtime_name"`

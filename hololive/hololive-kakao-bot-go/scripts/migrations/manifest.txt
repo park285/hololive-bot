@@ -66,3 +66,4 @@
 066 069_normalize_youtube_delivery_telemetry_observation_runtime.sql
 067 070_repoint_youtube_content_alarm_tracking_pk_to_canonical.sql
 068 071_drop_ycsas_published_at_resolution_artifacts.sql
+069 072_drop_community_shorts_observation_tables.sql

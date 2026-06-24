@@ -1,15 +1,13 @@
 # YouTube Community Shorts Latency Cause Report
 
-최근 period 기반 조회 또는 닫힌 24시간 observation window 기준으로 실제 게시 시각 SLA 집계와 2분 초과 게시물 목록, 내부 원인 집계 결과를 함께 확인할 때 사용하는 운영 절차입니다.
+최근 period 기반 조회로 실제 게시 시각 SLA 집계와 2분 초과 게시물 목록, 내부 원인 집계 결과를 함께 확인할 때 사용하는 운영 절차입니다.
 
 ## Scope
 
 - 대상은 `COMMUNITY_POST`, `NEW_SHORT` 두 종류만 포함합니다.
 - recent query는 각 period의 `[period_start_at, period_end_at)` 범위를 사용합니다.
-- observation query는 `runtime_name + bigbang_cutover_at` 로 식별한 `youtube_community_shorts_observation_windows` 레코드를 사용합니다. 관찰 창이 열려 있으면 `[observation_started_at, min(now, observation_ended_at))` 누적 구간을 읽고, 닫힌 뒤에는 finalized baseline 기준 전체 24시간 구간을 읽습니다.
 - 기간 판정 시작점은 `youtube_content_alarm_tracking.actual_published_at` 이고, 실제 게시 시각이 비어 있으면 `detected_at` 로 대체합니다.
 - 2분 초과 여부는 저장된 `alarm_latency_exceeded = true` 기준입니다.
-- observation query는 finalized baseline 기준으로 관찰 구간 종료 이후에 처음 감지된 게시물을 제외합니다.
 - 원인 분류는 저장된 `delay_source`, `internal_delay_cause`, `latency_classification_status` 와 텔레메트리 재구성값을 함께 사용합니다.
 - 지연 집계와 원인 분류 모두 대상 범위를 community/shorts 게시물에만 한정합니다.
 
@@ -26,30 +24,13 @@ go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts lat
   -period last_24h=24h
 ```
 
-observation window:
-
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts latency-cause-report \
-  -observation-runtime youtube-producer \
-  -observation-cutover 2026-04-10T00:00:00Z
-
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts latency-cause-report \
-  -observation-runtime youtube-producer \
-  -observation-cutover 2026-04-10T00:00:00Z \
-  -format json
-```
-
 - `-period` 를 주지 않으면 기본 기간은 `last_1h=1h`, `last_24h=24h`, `last_7d=168h` 입니다.
-- observation query에서는 fixed period label `observation_window` 하나만 생성됩니다.
-- `-period` recent query와 observation query는 서로 배타적입니다.
-- `-observation-runtime`, `-observation-cutover` 는 반드시 함께 줘야 합니다.
 - 기본 출력은 Markdown 입니다. 각 period마다 지연 집계 요약과 `over_2m` 게시물 행 목록이 함께 나옵니다.
 - `-format json` 은 자동 수집이나 후처리에 사용할 수 있습니다.
 
 ## Readout
 
 - `mode = recent_window`: rolling period 조회입니다. top-level `window` 는 가장 이른 period 시작 시각부터 마지막 period 종료 시각까지의 fetch 범위입니다.
-- `mode = observation_window`: 배포 후 같은 observation key로 누적 조회하는 모드입니다. top-level `observation runtime`, `cutover`, `window` 로 현재 누적 관찰 범위 또는 finalized 24시간 범위를 재확인합니다.
 - `latency summary`: 기간별 전체 게시물 수, 발송 완료 수, 대기 수, 평균/p95/최대 지연, 2분 초과 건수를 보여줍니다.
 - top-level `verification.internal_cause_rule`, `verification.non_internal_cause_rule`, `verification.excluded_external_rule`, `verification.insufficient_evidence_rule` 는 내부/비내부 판정과 외부 시스템 지연 제외 규칙에 실제로 사용한 문자열을 그대로 노출합니다.
 - top-level `verification.evidence_field_catalog` 는 row 판정에 사용할 수 있는 안정된 근거 필드 목록입니다. 현재 목록은 `delay_source`, `internal_delay_cause`, `alarm_latency_millis`, `publish_to_detect_millis`, `internal_latency_millis`, `queue_wait_millis`, `retry_accumulation_millis`, `job_failure_detected`, `latency_classification.status`, `latency_classification.evidence` 입니다.

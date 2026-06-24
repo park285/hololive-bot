@@ -189,48 +189,6 @@ func TestBuild(t *testing.T) {
 	require.Contains(t, markdown, "`short-no-success`")
 }
 
-func TestBuildWithQuery_ObservationWindow(t *testing.T) {
-	t.Parallel()
-
-	generatedAt := time.Date(2026, 4, 12, 1, 0, 0, 0, time.UTC)
-	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	observationStartedAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
-	observationEndedAt := observationStartedAt.Add(24 * time.Hour)
-
-	report := BuildWithQuery(
-		nil,
-		nil,
-		Query{
-			Mode:                        QueryModeObservation,
-			WindowStart:                 &observationStartedAt,
-			WindowEnd:                   &observationEndedAt,
-			ObservationRuntimeName:      "youtube-producer",
-			ObservationBigBangCutoverAt: &cutoverAt,
-		},
-		generatedAt,
-	)
-
-	require.Equal(t, QueryModeObservation, report.Query.Mode)
-	require.NotNil(t, report.Query.WindowStart)
-	require.Equal(t, observationStartedAt, report.Query.WindowStart.UTC())
-	require.NotNil(t, report.Query.WindowEnd)
-	require.Equal(t, observationEndedAt, report.Query.WindowEnd.UTC())
-	require.Equal(t, observationStartedAt, report.WindowStart)
-	require.Equal(t, observationEndedAt, report.WindowEnd)
-	require.Equal(t, "youtube-producer", report.Query.ObservationRuntimeName)
-	require.NotNil(t, report.Query.ObservationBigBangCutoverAt)
-	require.Equal(t, cutoverAt, report.Query.ObservationBigBangCutoverAt.UTC())
-	require.Equal(t, VerificationStatusPass, report.Verification.DuplicateAlarmStatus)
-	require.Equal(t, 0, report.Verification.DuplicateAlarmPostCount)
-	require.Equal(t, DuplicateAlarmRule, report.Verification.DuplicateAlarmRule)
-
-	markdown := RenderMarkdown(&report)
-	require.Contains(t, markdown, "mode: `observation_window`")
-	require.Contains(t, markdown, "observation runtime: `youtube-producer`, cutover: `2026-04-10T00:00:00Z`")
-	require.Contains(t, markdown, "duplicate alarm verdict: status=`pass`, duplicate_posts=`0`, rule=`duplicate_success_posts == 0`")
-	require.Contains(t, markdown, "조회된 community/shorts 게시물이 없습니다.")
-}
-
 func TestRenderMarkdown_OutputStability(t *testing.T) {
 	t.Parallel()
 

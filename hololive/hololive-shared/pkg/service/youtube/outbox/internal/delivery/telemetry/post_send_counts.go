@@ -43,7 +43,7 @@ func (r *Repository) ListPostSendCountsSince(ctx context.Context, since time.Tim
 		return nil, fmt.Errorf("list post send counts since: since is empty")
 	}
 
-	rows, err := r.listPostSendCounts(ctx, since.UTC(), nil, nil)
+	rows, err := r.listPostSendCounts(ctx, since.UTC(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("list post send counts since: %w", err)
 	}
@@ -71,131 +71,17 @@ func (r *Repository) ListPostSendCountsWithinPublishedWindow(
 		return nil, fmt.Errorf("list post send counts within published window: window start must be before window end")
 	}
 
-	rows, err := r.listPostSendCounts(ctx, startUTC, &endUTC, nil)
+	rows, err := r.listPostSendCounts(ctx, startUTC, &endUTC)
 	if err != nil {
 		return nil, fmt.Errorf("list post send counts within published window: %w", err)
 	}
 	return rows, nil
 }
 
-func (r *Repository) ListPostSendCountsWithinObservationWindow(
-	ctx context.Context,
-	windowStart time.Time,
-	windowEnd time.Time,
-	detectedBefore time.Time,
-) ([]PostSendCount, error) {
-	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list post send counts within observation window: db is nil")
-	}
-	if windowStart.IsZero() {
-		return nil, fmt.Errorf("list post send counts within observation window: window start is empty")
-	}
-	if windowEnd.IsZero() {
-		return nil, fmt.Errorf("list post send counts within observation window: window end is empty")
-	}
-	if detectedBefore.IsZero() {
-		return nil, fmt.Errorf("list post send counts within observation window: detected before is empty")
-	}
-
-	startUTC := windowStart.UTC()
-	endUTC := windowEnd.UTC()
-	detectedBeforeUTC := detectedBefore.UTC()
-	if !startUTC.Before(endUTC) {
-		return nil, fmt.Errorf("list post send counts within observation window: window start must be before window end")
-	}
-	if detectedBeforeUTC.Before(endUTC) {
-		return nil, fmt.Errorf("list post send counts within observation window: detected before must be on or after window end")
-	}
-
-	rows, err := r.listPostSendCounts(ctx, startUTC, &endUTC, &detectedBeforeUTC)
-	if err != nil {
-		return nil, fmt.Errorf("list post send counts within observation window: %w", err)
-	}
-	return rows, nil
-}
-
-func (r *Repository) ListPostSendCountsByFinalizedObservationWindow(
-	ctx context.Context,
-	runtimeName string,
-	bigBangCutoverAt time.Time,
-) ([]PostSendCount, error) {
-	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list post send counts by finalized observation window: db is nil")
-	}
-
-	normalizedRuntimeName := strings.TrimSpace(runtimeName)
-	if normalizedRuntimeName == "" {
-		return nil, fmt.Errorf("list post send counts by finalized observation window: runtime name is empty")
-	}
-	if bigBangCutoverAt.IsZero() {
-		return nil, fmt.Errorf("list post send counts by finalized observation window: big-bang cutover at is empty")
-	}
-
-	var scanned []postSendCountScanRow
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "list post send counts by finalized observation window: scan rows", `
-		SELECT `+finalizedObservationPostSendCountsSelectSQL()+`
-		FROM youtube_community_shorts_observation_post_baselines AS base
-		LEFT JOIN youtube_content_alarm_tracking track ON track.kind = base.kind AND track.canonical_content_id = base.post_id
-		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
-		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id
-		WHERE base.runtime_name = ?
-		  AND base.bigbang_cutover_at = ?
-		GROUP BY `+finalizedObservationPostSendCountsGroupSQL()+`
-		ORDER BY COALESCE(MAX(CASE WHEN t.send_result = 'success' THEN t.event_at END), MAX(t.event_at), track.actual_published_at, base.actual_published_at, track.detected_at, base.detected_at) DESC,
-		         base.post_id ASC
-	`, normalizedRuntimeName, bigBangCutoverAt.UTC()); err != nil {
-		return nil, fmt.Errorf("list post send counts by finalized observation window: scan rows: %w", err)
-	}
-
-	return buildPostSendCountsFromScanRows(scanned), nil
-}
-
-func finalizedObservationPostSendCountsSelectSQL() string {
-	return strings.Join([]string{
-		"base.kind AS outbox_kind",
-		"CASE base.kind WHEN 'COMMUNITY_POST' THEN 'COMMUNITY' WHEN 'NEW_SHORT' THEN 'SHORTS' ELSE 'LIVE' END AS alarm_type",
-		"COALESCE(track.channel_id, base.channel_id) AS channel_id",
-		"base.post_id AS post_id",
-		"COALESCE(track.content_id, base.post_id) AS content_id",
-		"COALESCE(track.actual_published_at, base.actual_published_at) AS actual_published_at",
-		"COALESCE(track.detected_at, base.detected_at) AS detected_at",
-		"track.alarm_sent_at AS alarm_sent_at",
-		"track.alarm_latency_millis AS alarm_latency_millis",
-		"track.alarm_latency_exceeded AS alarm_latency_exceeded",
-		"MIN(t.event_at) AS first_event_at",
-		"MAX(t.event_at) AS last_event_at",
-		"MIN(CASE WHEN t.send_result = 'success' THEN t.event_at END) AS first_success_at",
-		"MAX(CASE WHEN t.send_result = 'success' THEN t.event_at END) AS last_success_at",
-		"COUNT(DISTINCT o.id) AS outbox_count",
-		"COALESCE(SUM(CASE WHEN t.send_result = 'success' THEN 1 ELSE 0 END), 0) AS success_send_count",
-		"COUNT(DISTINCT CASE WHEN t.send_result = 'success' THEN t.room_id END) AS success_room_count",
-		"COALESCE(SUM(CASE WHEN t.send_result = 'success' THEN 1 ELSE 0 END), 0) - COUNT(DISTINCT CASE WHEN t.send_result = 'success' THEN t.room_id END) AS duplicate_success_count",
-		"COALESCE(SUM(CASE WHEN t.send_result <> 'success' THEN 1 ELSE 0 END), 0) AS failed_attempt_count",
-	}, ", ")
-}
-
-func finalizedObservationPostSendCountsGroupSQL() string {
-	return strings.Join([]string{
-		"base.kind",
-		"base.channel_id",
-		"base.post_id",
-		"base.actual_published_at",
-		"base.detected_at",
-		"track.channel_id",
-		"track.content_id",
-		"track.actual_published_at",
-		"track.detected_at",
-		"track.alarm_sent_at",
-		"track.alarm_latency_millis",
-		"track.alarm_latency_exceeded",
-	}, ", ")
-}
-
 func (r *Repository) listPostSendCounts(
 	ctx context.Context,
 	windowStart time.Time,
 	windowEnd *time.Time,
-	detectedBefore *time.Time,
 ) ([]PostSendCount, error) {
 	var scanned []postSendCountScanRow
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
@@ -213,10 +99,6 @@ func (r *Repository) listPostSendCounts(
 	if windowEnd != nil {
 		query += " AND COALESCE(track.actual_published_at, track.detected_at) < ?"
 		args = append(args, windowEnd.UTC())
-	}
-	if detectedBefore != nil {
-		query += " AND track.detected_at < ?"
-		args = append(args, detectedBefore.UTC())
 	}
 	query += postSendCountsGroupOrderSQL()
 	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {

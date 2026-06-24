@@ -3,11 +3,9 @@ package observation
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/require"
@@ -41,65 +39,4 @@ func selectTrackingRowsForTest(t *testing.T, db trackingDB) []domain.YouTubeCont
 		ORDER BY content_id ASC
 	`))
 	return rows
-}
-
-func ensureObservationWindowForBaselineTest(t *testing.T, db trackingDB, row *domain.YouTubeCommunityShortsObservationPostBaseline) {
-	t.Helper()
-	observationEndedAt := row.FinalizedAt
-	if observationEndedAt.IsZero() {
-		observationEndedAt = time.Now().UTC()
-	}
-	observationStartedAt := observationEndedAt.Add(-24 * time.Hour)
-	deploymentCompletedAt := observationStartedAt.Add(-time.Minute)
-	_, err := dbx.ExecSQL(context.Background(), db, "insert observation window for baseline test", `
-		INSERT INTO youtube_community_shorts_observation_windows
-			(runtime_name, bigbang_cutover_at, app_version, target_channel_count,
-			 deployment_completed_at, observation_started_at, observation_ended_at,
-			 closed_at, finalized_post_baseline_at, finalized_post_count, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (runtime_name, bigbang_cutover_at) DO UPDATE
-		SET observation_started_at = EXCLUDED.observation_started_at,
-		    observation_ended_at = EXCLUDED.observation_ended_at,
-		    closed_at = EXCLUDED.closed_at,
-		    finalized_post_baseline_at = EXCLUDED.finalized_post_baseline_at,
-		    finalized_post_count = EXCLUDED.finalized_post_count,
-		    updated_at = EXCLUDED.updated_at
-	`, row.RuntimeName, row.BigBangCutoverAt, "test", 1,
-		deploymentCompletedAt, observationStartedAt, observationEndedAt,
-		observationEndedAt, observationEndedAt, 0, deploymentCompletedAt, observationEndedAt)
-	require.NoError(t, err)
-
-	var exists bool
-	err = db.QueryRow(context.Background(), `
-		SELECT EXISTS (
-			SELECT 1
-			FROM youtube_community_shorts_observation_windows
-			WHERE runtime_name = $1 AND bigbang_cutover_at = $2
-		)
-	`, row.RuntimeName, row.BigBangCutoverAt).Scan(&exists)
-	require.NoError(t, err)
-	require.True(t, exists)
-}
-
-func insertObservationBaselinesForTest(t *testing.T, db trackingDB, rows []domain.YouTubeCommunityShortsObservationPostBaseline) {
-	t.Helper()
-	now := time.Now().UTC()
-	for i := range rows {
-		row := rows[i]
-		ensureObservationWindowForBaselineTest(t, db, &row)
-		if row.CreatedAt.IsZero() {
-			row.CreatedAt = now
-		}
-		if row.UpdatedAt.IsZero() {
-			row.UpdatedAt = now
-		}
-		_, err := dbx.ExecSQL(context.Background(), db, "insert observation baseline for test", `
-			INSERT INTO youtube_community_shorts_observation_post_baselines
-				(runtime_name, bigbang_cutover_at, kind, post_id, channel_id,
-				 actual_published_at, detected_at, finalized_at, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, row.RuntimeName, row.BigBangCutoverAt, row.Kind, row.PostID, row.ChannelID,
-			row.ActualPublishedAt, row.DetectedAt, row.FinalizedAt, row.CreatedAt, row.UpdatedAt)
-		require.NoError(t, err)
-	}
 }

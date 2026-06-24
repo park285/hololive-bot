@@ -100,15 +100,6 @@ func RenderMarkdown(report *Report) string {
 				md.Code(shared.FormatSendCountTimePtr(report.Query.WindowEnd)),
 		)
 	}
-	if report.Query.Mode == QueryModeObservation {
-		md.WriteKV(
-			&builder,
-			"observation runtime",
-			md.Code(shared.FallbackSendCountValue(report.Query.ObservationRuntimeName))+
-				", cutover: "+
-				md.Code(shared.FormatSendCountTimePtr(report.Query.ObservationBigBangCutoverAt)),
-		)
-	}
 	md.WriteKV(&builder, "summary", buildSummaryMarkdown(report.Summary, report.Query))
 
 	if len(report.Rows) == 0 {

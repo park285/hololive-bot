@@ -15,17 +15,13 @@ import (
 
 type QueryMode string
 
-const (
-	QueryModeRecent      QueryMode = "recent_window"
-	QueryModeObservation QueryMode = "observation_window"
-	DefaultLimit                   = 200
-)
+const QueryModeRecent QueryMode = "recent_window"
+
+const DefaultLimit = 200
 
 type CollectOptions struct {
-	Since                       *time.Time
-	ObservationRuntimeName      string
-	ObservationBigBangCutoverAt *time.Time
-	Limit                       int
+	Since *time.Time
+	Limit int
 }
 
 type Report struct {
@@ -36,13 +32,11 @@ type Report struct {
 }
 
 type Query struct {
-	Mode                        QueryMode  `json:"mode"`
-	WindowStart                 *time.Time `json:"window_start,omitempty"`
-	WindowEnd                   *time.Time `json:"window_end,omitempty"`
-	ObservationRuntimeName      string     `json:"observation_runtime_name,omitempty"`
-	ObservationBigBangCutoverAt *time.Time `json:"observation_bigbang_cutover_at,omitempty"`
-	Limit                       int        `json:"limit"`
-	Truncated                   bool       `json:"truncated"`
+	Mode        QueryMode  `json:"mode"`
+	WindowStart *time.Time `json:"window_start,omitempty"`
+	WindowEnd   *time.Time `json:"window_end,omitempty"`
+	Limit       int        `json:"limit"`
+	Truncated   bool       `json:"truncated"`
 }
 
 type Summary struct {
@@ -107,13 +101,7 @@ func collectWithSession(
 		return Report{}, fmt.Errorf("collect community shorts delivery log report: session is nil")
 	}
 
-	var rows []domain.YouTubeNotificationDeliveryTelemetry
-	var err error
-	if query.Mode == QueryModeObservation {
-		query, rows, err = listObservationLogs(ctx, session, query, now)
-	} else {
-		rows, err = listRecentLogs(ctx, session, query)
-	}
+	rows, err := listRecentLogs(ctx, session, query)
 	if err != nil {
 		return Report{}, err
 	}
@@ -122,70 +110,6 @@ func collectWithSession(
 	query.Truncated = truncated
 
 	return Build(query, trimmedRows, now), nil
-}
-
-func listObservationLogs(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	now time.Time,
-) (Query, []domain.YouTubeNotificationDeliveryTelemetry, error) {
-	state, err := resolveObservationState(ctx, session, query, now)
-	if err != nil {
-		return query, nil, err
-	}
-	query.WindowStart = shared.CloneSendCountTime(&state.Window.ObservationStartedAt)
-	query.WindowEnd = shared.CloneSendCountTime(&state.EffectiveWindowEnd)
-
-	rows, err := listLogsForObservationState(ctx, session, query, state)
-	return query, rows, err
-}
-
-func resolveObservationState(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	now time.Time,
-) (shared.ObservationQueryState, error) {
-	state, err := shared.ResolveObservationQueryState(
-		ctx,
-		session.TrackingRepository,
-		query.ObservationRuntimeName,
-		*query.ObservationBigBangCutoverAt,
-		now,
-	)
-	if err != nil {
-		return shared.ObservationQueryState{}, fmt.Errorf("collect community shorts delivery log report: find observation window: %w", err)
-	}
-	if state.Window == nil {
-		return shared.ObservationQueryState{}, fmt.Errorf(
-			"collect community shorts delivery log report: observation window not found: runtime=%s cutover=%s",
-			query.ObservationRuntimeName,
-			shared.FormatSendCountTime(*query.ObservationBigBangCutoverAt),
-		)
-	}
-	return state, nil
-}
-
-func listLogsForObservationState(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	state shared.ObservationQueryState,
-) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
-	if state.Finalized {
-		rows, err := session.TelemetryRepository.ListByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
-		if err != nil {
-			return nil, fmt.Errorf("collect community shorts delivery log report: list finalized observation-window logs: %w", err)
-		}
-		return rows, nil
-	}
-
-	rows, err := session.TelemetryRepository.ListByObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
-	if err != nil {
-		return nil, fmt.Errorf("collect community shorts delivery log report: list active observation-window logs: %w", err)
-	}
-	return rows, nil
 }
 
 func listRecentLogs(
@@ -206,37 +130,9 @@ func normalizeCollectOptions(
 	now time.Time,
 ) (Query, error) {
 	limit := normalizeRequestedLimit(options.Limit)
-	observationRuntimeName := strings.TrimSpace(options.ObservationRuntimeName)
-	hasObservationCutover := options.ObservationBigBangCutoverAt != nil && !options.ObservationBigBangCutoverAt.IsZero()
-	hasObservationQuery := observationRuntimeName != "" || hasObservationCutover
 	hasRecentQuery := options.Since != nil && !options.Since.IsZero()
 
-	if hasObservationQuery {
-		return normalizeObservationOptions(options, observationRuntimeName, hasObservationCutover, hasRecentQuery, limit)
-	}
-
 	return normalizeRecentOptions(options, hasRecentQuery, limit, now)
-}
-
-func normalizeObservationOptions(
-	options CollectOptions,
-	observationRuntimeName string,
-	hasObservationCutover bool,
-	hasRecentQuery bool,
-	limit int,
-) (Query, error) {
-	if hasRecentQuery {
-		return Query{}, fmt.Errorf("recent window and observation window are mutually exclusive")
-	}
-	if observationRuntimeName == "" || !hasObservationCutover {
-		return Query{}, fmt.Errorf("observation runtime name and cutover must both be set")
-	}
-	return Query{
-		Mode:                        QueryModeObservation,
-		ObservationRuntimeName:      observationRuntimeName,
-		ObservationBigBangCutoverAt: shared.CloneSendCountTime(options.ObservationBigBangCutoverAt),
-		Limit:                       limit,
-	}, nil
 }
 
 func normalizeRecentOptions(
@@ -301,8 +197,6 @@ func normalizeQuery(query Query) Query {
 	query.Mode = QueryMode(strings.TrimSpace(string(query.Mode)))
 	query.WindowStart = shared.CloneSendCountTime(query.WindowStart)
 	query.WindowEnd = shared.CloneSendCountTime(query.WindowEnd)
-	query.ObservationRuntimeName = strings.TrimSpace(query.ObservationRuntimeName)
-	query.ObservationBigBangCutoverAt = shared.CloneSendCountTime(query.ObservationBigBangCutoverAt)
 	return query
 }
 

@@ -48,15 +48,6 @@ func writeReportMetadata(builder *strings.Builder, report *Report) {
 				md.Code(shared.FormatSendCountTimePtr(report.Query.WindowEnd)),
 		)
 	}
-	if report.Query.Mode == queryModeObservation {
-		md.WriteKV(
-			builder,
-			"observation runtime",
-			md.Code(shared.FallbackSendCountValue(report.Query.ObservationRuntimeName))+
-				", cutover: "+
-				md.Code(shared.FormatSendCountTimePtr(report.Query.ObservationBigBangCutoverAt)),
-		)
-	}
 	md.WriteKV(builder, "observed at basis", md.Code(shared.FallbackSendCountValue(report.ObservedAtBasis)))
 	md.WriteKV(builder, "threshold millis", md.Code(strconv.FormatInt(report.ThresholdMillis, 10)))
 	md.WriteKV(builder, "internal cause rule", md.Code(report.Verification.InternalCauseRule))

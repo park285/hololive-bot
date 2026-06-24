@@ -19,7 +19,7 @@ func TestRunListsConsolidatedCommands(t *testing.T) {
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout=%q want empty", stdout.String())
 	}
-	for _, command := range []string{"send-counts", "delivery-logs", "continuous-observation-report", "target-baseline"} {
+	for _, command := range []string{"send-counts", "delivery-logs", "channel-summary", "target-baseline"} {
 		if !strings.Contains(stderr.String(), command) {
 			t.Fatalf("usage missing %q:\n%s", command, stderr.String())
 		}

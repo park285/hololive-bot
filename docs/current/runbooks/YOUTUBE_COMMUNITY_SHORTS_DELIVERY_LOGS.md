@@ -1,12 +1,11 @@
 # YouTube Community Shorts Delivery Logs
 
-최근 구간 또는 지정한 관찰 구간의 유튜브 커뮤니티/쇼츠 알람 발송 로그만 별도로 조회할 때 사용하는 운영 절차입니다.
+최근 구간의 유튜브 커뮤니티/쇼츠 알람 발송 로그만 별도로 조회할 때 사용하는 운영 절차입니다.
 
 ## Scope
 
 - 대상은 `COMMUNITY`, `SHORTS` 발송 로그만 포함합니다.
 - 최근 조회의 기준 시각은 `youtube_notification_delivery_telemetry.actual_published_at` 이며, 값이 없으면 `detected_at`, 둘 다 없으면 `event_at` 으로 대체합니다.
-- 지정 관찰 구간 조회는 `runtime_name + bigbang_cutover_at` 로 식별한 `youtube_community_shorts_observation_windows` 레코드를 사용합니다. 관찰 창이 열려 있으면 현재까지 누적된 matched 로그만 반환하고, 관찰 창이 닫힌 뒤에는 finalized baseline 기준으로 종료 이후 최초 감지 게시물을 제외한 최종 로그 집합을 반환합니다.
 - 결과는 발송 시도 로그 단위이며, 성공/실패 시도와 재시도 흔적이 모두 유지됩니다.
 
 ## Canonical Validation Log
@@ -46,14 +45,7 @@
 | `observation_status` | 지정 관찰 구간에 속하는지 여부입니다. big-bang 적용 후 검증 창 포함 여부를 판정합니다. | `string enum` | `matched` |
 | `failure_reason` | 실패 시도일 때의 축약 원인입니다. 실패 후 재시도/최종 성공 여부를 해석할 때 사용합니다. 성공 로그에서는 비어 있을 수 있습니다. | `string` | `send message` |
 
-### 2. 관찰 구간 매칭 필드
-
-| Field | Meaning | Type | Example |
-| --- | --- | --- | --- |
-| `observation_runtime_name` | 매칭된 24시간 관찰 구간의 runtime 이름입니다. 전체 운영 채널이 `youtube-producer` 로 수렴했는지 확인합니다. | `string` | `youtube-producer` |
-| `observation_bigbang_cutover_at` | 관찰 구간을 식별하는 big-bang cutover 시각입니다. 같은 운영 전환 창 로그만 묶을 때 사용합니다. | `RFC3339 timestamp string` | `2026-04-10T00:00:00Z` |
-| `observation_started_at` | 매칭된 관찰 구간 시작 시각입니다. | `RFC3339 timestamp string` | `2026-04-10T00:00:00Z` |
-| `observation_ended_at` | 매칭된 관찰 구간 종료 시각입니다. | `RFC3339 timestamp string` | `2026-04-11T00:00:00Z` |
+### 2. observation_status 값 해석
 
 `observation_status` 값 해석:
 
@@ -139,22 +131,7 @@ go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts del
 go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs -window 30m -limit 500 -format json
 ```
 
-특정 관찰 구간만 보려면 observation key를 함께 지정합니다.
-
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs \
-  -observation-runtime youtube-producer \
-  -observation-cutover 2026-04-10T00:00:00Z
-
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs \
-  -observation-runtime youtube-producer \
-  -observation-cutover 2026-04-10T00:00:00Z \
-  -limit 1000 \
-  -format json
-```
-
-- `-window`: recent 조회 창. observation query를 쓰지 않을 때만 적용됩니다.
-- `-observation-runtime`, `-observation-cutover`: 특정 24시간 관찰 구간을 선택합니다. 둘 중 하나만 주면 실패합니다.
+- `-window`: recent 조회 창입니다. 기본값은 `24h` 입니다.
 - `-limit`: 반환할 최대 로그 row 수입니다. 기본값은 `200` 입니다.
 - `-format json`: 자동 수집이나 후처리용 JSON 출력을 사용합니다.
 
@@ -164,7 +141,6 @@ go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts del
 - `publish_to_event_ms` 가 있으면 실제 게시 시각 기준으로 해당 시도까지 걸린 시간입니다.
 - `send_result = success`: 해당 시도에서 실제 발송이 성공했습니다.
 - `send_result != success`: 실패 또는 재시도 전 시도입니다. `failure_reason` 으로 이유를 확인합니다.
-- `observation_status = matched`: 지정 관찰 구간에 속한 게시물입니다.
 - `truncated = true`: `limit` 때문에 전체 로그가 잘렸습니다. 더 큰 `-limit` 로 다시 조회합니다.
 
 ## Fallback SQL
@@ -196,36 +172,6 @@ FROM youtube_notification_delivery_telemetry
 WHERE alarm_type IN ('COMMUNITY', 'SHORTS')
   AND COALESCE(actual_published_at, detected_at, event_at) >= NOW() - INTERVAL '24 hours'
 ORDER BY COALESCE(actual_published_at, detected_at, event_at) DESC, event_at ASC, id ASC
-LIMIT 200;
-SQL
-```
-
-지정 관찰 구간 조회:
-
-```bash
-set -a
-source "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/env}"
-set +a
-
-PGPASSWORD="$DB_PASSWORD" psql -h localhost -p 5433 -U "${HOLOLIVE_DB_USER:-hololive_runtime}" -d hololive <<'SQL'
-SELECT
-    alarm_type,
-    channel_id,
-    COALESCE(NULLIF(post_id, ''), content_id) AS post_id,
-    room_id,
-    attempt_ordinal,
-    actual_published_at,
-    detected_at,
-    event_at,
-    send_result,
-    delivery_path,
-    observation_status,
-    failure_reason
-FROM youtube_notification_delivery_telemetry
-WHERE observation_status = 'matched'
-  AND observation_runtime_name = 'youtube-producer'
-  AND observation_bigbang_cutover_at = '2026-04-10T00:00:00Z'
-ORDER BY event_at ASC, id ASC
 LIMIT 200;
 SQL
 ```

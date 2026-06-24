@@ -188,14 +188,6 @@ func deliveryTelemetrySelectColumns() string {
 		attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error`
 }
 
-func deliveryTelemetrySelectColumnsWithAlias(alias string) string {
-	columns := strings.Split(deliveryTelemetrySelectColumns(), ",")
-	for i := range columns {
-		columns[i] = alias + "." + strings.TrimSpace(columns[i])
-	}
-	return strings.Join(columns, ", ")
-}
-
 func (r *Repository) queryTelemetryRows(ctx context.Context, action, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
 	rows, err := r.db.Query(ctx, deliverysql.PostgresPlaceholders(query), args...)
 	if err != nil {

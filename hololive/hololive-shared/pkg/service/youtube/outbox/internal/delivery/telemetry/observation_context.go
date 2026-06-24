@@ -3,7 +3,6 @@ package telemetry
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -93,72 +92,4 @@ func applyDeliveryTelemetryObservationContexts(
 		snapshotCopy := snapshot
 		applyDeliveryTelemetryObservationContext(&rows[i], &snapshotCopy, observationWindows)
 	}
-}
-
-func (r *Repository) ListByObservationWindow(
-	ctx context.Context,
-	runtimeName string,
-	bigBangCutoverAt time.Time,
-) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
-	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list delivery telemetry by observation window: db is nil")
-	}
-
-	normalizedRuntimeName := strings.TrimSpace(runtimeName)
-	if normalizedRuntimeName == "" {
-		return nil, fmt.Errorf("list delivery telemetry by observation window: runtime name is empty")
-	}
-	if bigBangCutoverAt.IsZero() {
-		return nil, fmt.Errorf("list delivery telemetry by observation window: big-bang cutover at is empty")
-	}
-
-	rows, err := r.queryTelemetryRows(ctx, "list delivery telemetry by observation window: query rows", `
-		SELECT `+deliveryTelemetrySelectColumns()+`
-		FROM youtube_notification_delivery_telemetry
-		WHERE observation_status = $1
-		  AND observation_runtime_name = $2
-		  AND observation_bigbang_cutover_at = $3
-		ORDER BY event_at ASC, id ASC
-	`, deliveryTelemetryObservationStatusMatched, normalizedRuntimeName, bigBangCutoverAt.UTC())
-	if err != nil {
-		return nil, fmt.Errorf("list delivery telemetry by observation window: query rows: %w", err)
-	}
-
-	return rows, nil
-}
-
-func (r *Repository) ListByFinalizedObservationWindow(
-	ctx context.Context,
-	runtimeName string,
-	bigBangCutoverAt time.Time,
-) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
-	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list delivery telemetry by finalized observation window: db is nil")
-	}
-
-	normalizedRuntimeName := strings.TrimSpace(runtimeName)
-	if normalizedRuntimeName == "" {
-		return nil, fmt.Errorf("list delivery telemetry by finalized observation window: runtime name is empty")
-	}
-	if bigBangCutoverAt.IsZero() {
-		return nil, fmt.Errorf("list delivery telemetry by finalized observation window: big-bang cutover at is empty")
-	}
-
-	rows, err := r.queryTelemetryRows(ctx, "list delivery telemetry by finalized observation window: query rows", `
-		SELECT `+deliveryTelemetrySelectColumnsWithAlias("t")+`
-		FROM youtube_notification_delivery_telemetry AS t
-		LEFT JOIN youtube_notification_outbox o ON o.id = t.outbox_id
-		LEFT JOIN youtube_content_alarm_tracking track ON track.kind = o.kind AND track.content_id = o.content_id
-		INNER JOIN youtube_community_shorts_observation_post_baselines base
-			ON base.runtime_name = $1
-			AND base.bigbang_cutover_at = $2
-			AND base.kind = track.kind
-			AND base.post_id = track.canonical_content_id
-		ORDER BY t.event_at ASC, t.id ASC
-	`, normalizedRuntimeName, bigBangCutoverAt.UTC())
-	if err != nil {
-		return nil, fmt.Errorf("list delivery telemetry by finalized observation window: query rows: %w", err)
-	}
-
-	return rows, nil
 }

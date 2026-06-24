@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -15,12 +14,11 @@ import (
 )
 
 const (
-	observedAtBasis        = "COALESCE(actual_published_at, detected_at)"
-	observationPeriodLabel = "observation_window"
-	internalCauseRule      = "internal_system if delay_source in {internal_delivery,mixed} OR (internal_delay_cause != none AND delay_source != external_collection)"
-	nonInternalCauseRule   = "non_internal if delay_source = external_collection OR (delay_source = none AND internal_delay_cause = none)"
-	excludedExternalRule   = "delay_source = external_collection rows stay logged as reference-only excluded_external_delay_posts and do not contribute to failure-driving counts"
-	insufficientEvidence   = "latency_classification.status = insufficient_evidence keeps the row in non_internal and increments insufficient_evidence_posts"
+	observedAtBasis      = "COALESCE(actual_published_at, detected_at)"
+	internalCauseRule    = "internal_system if delay_source in {internal_delivery,mixed} OR (internal_delay_cause != none AND delay_source != external_collection)"
+	nonInternalCauseRule = "non_internal if delay_source = external_collection OR (delay_source = none AND internal_delay_cause = none)"
+	excludedExternalRule = "delay_source = external_collection rows stay logged as reference-only excluded_external_delay_posts and do not contribute to failure-driving counts"
+	insufficientEvidence = "latency_classification.status = insufficient_evidence keeps the row in non_internal and increments insufficient_evidence_posts"
 )
 
 var evidenceFieldCatalog = []string{
@@ -39,8 +37,7 @@ var evidenceFieldCatalog = []string{
 type QueryMode string
 
 const (
-	queryModeRecent      QueryMode = "recent_window"
-	queryModeObservation QueryMode = "observation_window"
+	queryModeRecent QueryMode = "recent_window"
 )
 
 type InternalCauseJudgment string
@@ -51,17 +48,13 @@ const (
 )
 
 type CollectOptions struct {
-	PeriodSpecs                 []PeriodSpec
-	ObservationRuntimeName      string
-	ObservationBigBangCutoverAt *time.Time
+	PeriodSpecs []PeriodSpec
 }
 
 type Query struct {
-	Mode                        QueryMode  `json:"mode"`
-	WindowStart                 *time.Time `json:"window_start,omitempty"`
-	WindowEnd                   *time.Time `json:"window_end,omitempty"`
-	ObservationRuntimeName      string     `json:"observation_runtime_name,omitempty"`
-	ObservationBigBangCutoverAt *time.Time `json:"observation_bigbang_cutover_at,omitempty"`
+	Mode        QueryMode  `json:"mode"`
+	WindowStart *time.Time `json:"window_start,omitempty"`
+	WindowEnd   *time.Time `json:"window_end,omitempty"`
 }
 
 type Verification struct {
@@ -207,7 +200,7 @@ func collectWithSession(
 		return Report{}, fmt.Errorf("collect community shorts latency cause report: session is nil")
 	}
 
-	rows, err := collectRows(ctx, session, query, now, periods)
+	rows, err := collectRows(ctx, session, query, periods)
 	if err != nil {
 		return Report{}, err
 	}
@@ -222,100 +215,9 @@ func collectRows(
 	ctx context.Context,
 	session *shared.OpsSession,
 	query Query,
-	now time.Time,
 	periods []outbox.PostLatencyPeriod,
 ) (rawRows, error) {
-	switch query.Mode {
-	case queryModeObservation:
-		return collectObservationRows(ctx, session, query, now)
-	case queryModeRecent:
-		return collectRecentRows(ctx, session, query, periods)
-	default:
-		return collectRecentRows(ctx, session, query, periods)
-	}
-}
-
-func collectObservationRows(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	now time.Time,
-) (rawRows, error) {
-	state, err := shared.ResolveObservationQueryState(
-		ctx,
-		session.TrackingRepository,
-		query.ObservationRuntimeName,
-		*query.ObservationBigBangCutoverAt,
-		now,
-	)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts latency cause report: find observation window: %w", err)
-	}
-	if state.Window == nil {
-		return rawRows{}, fmt.Errorf(
-			"collect community shorts latency cause report: observation window not found: runtime=%s cutover=%s",
-			query.ObservationRuntimeName,
-			shared.FormatSendCountTime(*query.ObservationBigBangCutoverAt),
-		)
-	}
-
-	query, periods := withObservationWindow(query, state)
-	if state.Finalized {
-		return collectFinalizedObservationRows(ctx, session, query, periods, state.Window.BigBangCutoverAt)
-	}
-	if state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
-		return collectActiveObservationRows(ctx, session, query, periods, state)
-	}
-	return rawRows{query: query, periods: periods}, nil
-}
-
-func withObservationWindow(query Query, state shared.ObservationQueryState) (queryWithWindow Query, periods []outbox.PostLatencyPeriod) {
-	query.WindowStart = shared.CloneSendCountTime(&state.Window.ObservationStartedAt)
-	query.WindowEnd = shared.CloneSendCountTime(&state.EffectiveWindowEnd)
-	if !state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
-		return query, nil
-	}
-	return query, []outbox.PostLatencyPeriod{{
-		Label:   observationPeriodLabel,
-		StartAt: state.Window.ObservationStartedAt,
-		EndAt:   state.EffectiveWindowEnd,
-	}}
-}
-
-func collectFinalizedObservationRows(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	periods []outbox.PostLatencyPeriod,
-	cutoverAt time.Time,
-) (rawRows, error) {
-	sendCountRows, err := session.TelemetryRepository.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts latency cause report: list finalized observation-window send counts: %w", err)
-	}
-	timelineRows, err := session.TelemetryRepository.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts latency cause report: list finalized observation-window delivery timelines: %w", err)
-	}
-	return rawRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query, periods: periods}, nil
-}
-
-func collectActiveObservationRows(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	periods []outbox.PostLatencyPeriod,
-	state shared.ObservationQueryState,
-) (rawRows, error) {
-	sendCountRows, err := session.TelemetryRepository.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts latency cause report: list active observation-window send counts: %w", err)
-	}
-	timelineRows, err := session.TelemetryRepository.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts latency cause report: list active observation-window delivery timelines: %w", err)
-	}
-	return rawRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query, periods: periods}, nil
+	return collectRecentRows(ctx, session, query, periods)
 }
 
 func collectRecentRows(
@@ -340,39 +242,12 @@ func normalizeCollectOptions(
 	options CollectOptions,
 	now time.Time,
 ) (Query, []outbox.PostLatencyPeriod, error) {
-	observationRuntimeName := strings.TrimSpace(options.ObservationRuntimeName)
-
-	if hasObservationQuery(observationRuntimeName, options.ObservationBigBangCutoverAt) {
-		return normalizeObservationOptions(options, observationRuntimeName)
-	}
-
 	periods, err := buildPeriods(now, options.PeriodSpecs)
 	if err != nil {
 		return Query{}, nil, err
 	}
 
 	return withQueryWindow(Query{Mode: queryModeRecent}, periods), periods, nil
-}
-
-func hasObservationQuery(runtimeName string, cutoverAt *time.Time) bool {
-	return runtimeName != "" || cutoverAt != nil && !cutoverAt.IsZero()
-}
-
-func normalizeObservationOptions(
-	options CollectOptions,
-	observationRuntimeName string,
-) (Query, []outbox.PostLatencyPeriod, error) {
-	if len(options.PeriodSpecs) > 0 {
-		return Query{}, nil, fmt.Errorf("period specs and observation window are mutually exclusive")
-	}
-	if observationRuntimeName == "" || options.ObservationBigBangCutoverAt == nil || options.ObservationBigBangCutoverAt.IsZero() {
-		return Query{}, nil, fmt.Errorf("observation runtime name and cutover must both be set")
-	}
-	return Query{
-		Mode:                        queryModeObservation,
-		ObservationRuntimeName:      observationRuntimeName,
-		ObservationBigBangCutoverAt: shared.CloneSendCountTime(options.ObservationBigBangCutoverAt),
-	}, nil, nil
 }
 
 func earliestPeriodStart(periods []outbox.PostLatencyPeriod) time.Time {

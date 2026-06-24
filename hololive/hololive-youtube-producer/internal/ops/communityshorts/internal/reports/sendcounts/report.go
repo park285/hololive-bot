@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -18,24 +17,19 @@ type QueryMode string
 
 const (
 	QueryModeRecent        QueryMode          = "recent_window"
-	QueryModeObservation   QueryMode          = "observation_window"
 	VerificationStatusPass VerificationStatus = "pass"
 	VerificationStatusFail VerificationStatus = "fail"
 	DuplicateAlarmRule                        = "duplicate_success_posts == 0"
 )
 
 type CollectOptions struct {
-	Since                       *time.Time
-	ObservationRuntimeName      string
-	ObservationBigBangCutoverAt *time.Time
+	Since *time.Time
 }
 
 type Query struct {
-	Mode                        QueryMode  `json:"mode"`
-	WindowStart                 *time.Time `json:"window_start,omitempty"`
-	WindowEnd                   *time.Time `json:"window_end,omitempty"`
-	ObservationRuntimeName      string     `json:"observation_runtime_name,omitempty"`
-	ObservationBigBangCutoverAt *time.Time `json:"observation_bigbang_cutover_at,omitempty"`
+	Mode        QueryMode  `json:"mode"`
+	WindowStart *time.Time `json:"window_start,omitempty"`
+	WindowEnd   *time.Time `json:"window_end,omitempty"`
 }
 
 type Report struct {
@@ -164,96 +158,11 @@ func collectWithSession(
 		return Report{}, fmt.Errorf("collect community shorts send count report: session is nil")
 	}
 
-	rows, err := collectRows(ctx, session, query, now)
+	rows, err := collectRecentRows(ctx, session, query)
 	if err != nil {
 		return Report{}, err
 	}
 	return BuildWithQuery(rows.sendCountRows, rows.timelineRows, rows.query, now), nil
-}
-
-func collectRows(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	now time.Time,
-) (rawRows, error) {
-	switch query.Mode {
-	case QueryModeObservation:
-		return collectObservationRows(ctx, session, query, now)
-	case QueryModeRecent:
-		return collectRecentRows(ctx, session, query)
-	default:
-		return collectRecentRows(ctx, session, query)
-	}
-}
-
-func collectObservationRows(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	now time.Time,
-) (rawRows, error) {
-	state, err := shared.ResolveObservationQueryState(
-		ctx,
-		session.TrackingRepository,
-		query.ObservationRuntimeName,
-		*query.ObservationBigBangCutoverAt,
-		now,
-	)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts send count report: find observation window: %w", err)
-	}
-	if state.Window == nil {
-		return rawRows{}, fmt.Errorf(
-			"collect community shorts send count report: observation window not found: runtime=%s cutover=%s",
-			query.ObservationRuntimeName,
-			shared.FormatSendCountTime(*query.ObservationBigBangCutoverAt),
-		)
-	}
-
-	query.WindowStart = shared.CloneSendCountTime(&state.Window.ObservationStartedAt)
-	query.WindowEnd = shared.CloneSendCountTime(&state.EffectiveWindowEnd)
-	if state.Finalized {
-		return collectFinalizedObservationRows(ctx, session, query, state.Window.BigBangCutoverAt)
-	}
-	if state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
-		return collectActiveObservationRows(ctx, session, query, state)
-	}
-	return rawRows{query: query}, nil
-}
-
-func collectFinalizedObservationRows(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	cutoverAt time.Time,
-) (rawRows, error) {
-	sendCountRows, err := session.TelemetryRepository.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window send counts: %w", err)
-	}
-	timelineRows, err := session.TelemetryRepository.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window delivery timelines: %w", err)
-	}
-	return rawRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query}, nil
-}
-
-func collectActiveObservationRows(
-	ctx context.Context,
-	session *shared.OpsSession,
-	query Query,
-	state shared.ObservationQueryState,
-) (rawRows, error) {
-	sendCountRows, err := session.TelemetryRepository.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts send count report: list active observation-window send counts: %w", err)
-	}
-	timelineRows, err := session.TelemetryRepository.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
-	if err != nil {
-		return rawRows{}, fmt.Errorf("collect community shorts send count report: list active observation-window delivery timelines: %w", err)
-	}
-	return rawRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query}, nil
 }
 
 func collectRecentRows(
@@ -276,34 +185,7 @@ func normalizeCollectOptions(
 	options CollectOptions,
 	now time.Time,
 ) (Query, error) {
-	observationRuntimeName := strings.TrimSpace(options.ObservationRuntimeName)
-
-	if hasObservationQuery(observationRuntimeName, options.ObservationBigBangCutoverAt) {
-		return normalizeObservationOptions(options, observationRuntimeName)
-	}
-
 	return normalizeRecentOptions(options, now)
-}
-
-func hasObservationQuery(runtimeName string, cutoverAt *time.Time) bool {
-	return runtimeName != "" || cutoverAt != nil && !cutoverAt.IsZero()
-}
-
-func normalizeObservationOptions(
-	options CollectOptions,
-	observationRuntimeName string,
-) (Query, error) {
-	if options.Since != nil && !options.Since.IsZero() {
-		return Query{}, fmt.Errorf("recent window and observation window are mutually exclusive")
-	}
-	if observationRuntimeName == "" || options.ObservationBigBangCutoverAt == nil || options.ObservationBigBangCutoverAt.IsZero() {
-		return Query{}, fmt.Errorf("observation runtime name and cutover must both be set")
-	}
-	return Query{
-		Mode:                        QueryModeObservation,
-		ObservationRuntimeName:      observationRuntimeName,
-		ObservationBigBangCutoverAt: shared.CloneSendCountTime(options.ObservationBigBangCutoverAt),
-	}, nil
 }
 
 func normalizeRecentOptions(
