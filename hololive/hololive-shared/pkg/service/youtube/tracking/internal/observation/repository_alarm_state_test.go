@@ -315,6 +315,90 @@ func TestRepositoryMarkAlarmSentBatchFinalizesMatchingClaimedAlarmState(t *testi
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, record.DeliveryStatus)
 }
 
+func TestRepositoryDuplicateAlarmMarksFinalizeOnePostLevelSentState(t *testing.T) {
+	db := newTrackingTestDB(t)
+	repository := NewRepository(db)
+	ctx := context.Background()
+	actualPublishedAt := time.Date(2026, 4, 10, 1, 2, 3, 0, time.UTC)
+	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
+	authorizedAt := time.Date(2026, 4, 10, 1, 4, 30, 0, time.UTC)
+	otherAuthorizedAt := authorizedAt.Add(30 * time.Second)
+	firstAlarmSentAt := time.Date(2026, 4, 10, 1, 5, 0, 0, time.UTC)
+	laterAlarmSentAt := firstAlarmSentAt.Add(10 * time.Second)
+
+	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+		Kind:              domain.OutboxKindCommunityPost,
+		ContentID:         "post-duplicate-delivery",
+		ChannelID:         "UC_TEST",
+		ActualPublishedAt: &actualPublishedAt,
+		DetectedAt:        detectedAt,
+	}))
+
+	claimed, err := repository.TryClaimAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
+		Kind:              domain.OutboxKindCommunityPost,
+		PostID:            "post-duplicate-delivery",
+		ContentID:         "post-duplicate-delivery",
+		ChannelID:         "UC_TEST",
+		ActualPublishedAt: &actualPublishedAt,
+		DetectedAt:        detectedAt,
+		AuthorizedAt:      &authorizedAt,
+	})
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	duplicateClaimed, err := repository.TryClaimAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
+		Kind:              domain.OutboxKindCommunityPost,
+		PostID:            "community:post-duplicate-delivery",
+		ContentID:         "post-duplicate-delivery",
+		ChannelID:         "UC_TEST",
+		ActualPublishedAt: &actualPublishedAt,
+		DetectedAt:        detectedAt,
+		AuthorizedAt:      &otherAuthorizedAt,
+	})
+	require.NoError(t, err)
+	require.False(t, duplicateClaimed)
+
+	require.NoError(t, repository.MarkAlarmSentBatch(ctx, []AlarmSentMark{
+		{
+			Kind:         domain.OutboxKindCommunityPost,
+			ContentID:    "post-duplicate-delivery",
+			AuthorizedAt: &authorizedAt,
+			AlarmSentAt:  laterAlarmSentAt,
+		},
+		{
+			Kind:         domain.OutboxKindCommunityPost,
+			ContentID:    "community:post-duplicate-delivery",
+			AuthorizedAt: &authorizedAt,
+			AlarmSentAt:  firstAlarmSentAt,
+		},
+	}))
+
+	state, err := repository.FindAlarmStateByPostID(ctx, domain.OutboxKindCommunityPost, "post-duplicate-delivery")
+	require.NoError(t, err)
+	require.NotNil(t, state)
+	require.Equal(t, "community:post-duplicate-delivery", state.PostID)
+	require.Nil(t, state.AuthorizedAt)
+	require.NotNil(t, state.AlarmSentAt)
+	require.Equal(t, firstAlarmSentAt, state.AlarmSentAt.UTC())
+	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, state.DeliveryStatus)
+
+	tracking, err := repository.FindByIdentity(ctx, domain.OutboxKindCommunityPost, "community:post-duplicate-delivery")
+	require.NoError(t, err)
+	require.NotNil(t, tracking)
+	require.NotNil(t, tracking.AlarmSentAt)
+	require.Equal(t, firstAlarmSentAt, tracking.AlarmSentAt.UTC())
+	require.Equal(t, domain.YouTubeContentAlarmDeliveryStatusSent, tracking.DeliveryStatus)
+
+	var postLevelStates int
+	require.NoError(t, db.QueryRow(ctx, `
+		SELECT count(*)
+		FROM youtube_community_shorts_alarm_states
+		WHERE kind = $1
+		  AND (post_id = $2 OR content_id = $3)
+	`, domain.OutboxKindCommunityPost, "community:post-duplicate-delivery", "post-duplicate-delivery").Scan(&postLevelStates))
+	require.Equal(t, 1, postLevelStates)
+}
+
 func TestRepositoryMarkAlarmSentBatchRollsBackOnClaimAuthorizationMismatch(t *testing.T) {
 	repository := NewRepository(newTrackingTestDB(t))
 	ctx := context.Background()
