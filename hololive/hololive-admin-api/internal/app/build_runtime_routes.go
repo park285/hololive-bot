@@ -9,7 +9,6 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/repository"
-	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
@@ -114,8 +113,8 @@ func registerAdminAPIInternalAlarmRoutes(
 		return
 	}
 
-	alarmAPI := sharedalarm.NewHandler(alarmMode.AlarmCRUD, logger)
-	internalAlarm := router.Group("")
-	internalAlarm.Use(middleware.APIKeyAuthMiddleware(appConfig.Server.APIKey))
-	alarmAPI.RegisterInternalRoutes(internalAlarm)
+	registrar := sharedalarm.NewInternalRouteRegistrar(appConfig.Server.APIKey, alarmMode.AlarmCRUD, logger)
+	if err := registrar(router); err != nil && logger != nil {
+		logger.Error("admin-api alarm compatibility route registration failed", slog.Any("error", err))
+	}
 }
