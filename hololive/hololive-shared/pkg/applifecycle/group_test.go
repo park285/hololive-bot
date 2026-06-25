@@ -49,6 +49,9 @@ func TestGroupRuntimeShutdownUsesReverseOrderAndJoinsErrors(t *testing.T) {
 	)
 
 	err := group.Shutdown(context.Background())
+	if err == nil {
+		t.Fatal("shutdown returned nil error, want joined component errors")
+	}
 
 	wantOrder := []string{"llm", "admin", "bot"}
 	if !reflect.DeepEqual(got, wantOrder) {
