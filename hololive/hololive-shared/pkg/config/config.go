@@ -21,7 +21,6 @@ type NotificationConfig = settings.NotificationConfig
 type PostgresConfig = settings.PostgresConfig
 type ScraperBackfillConfig = settings.ScraperBackfillConfig
 type ScraperBrowserDiagnosticConfig = settings.ScraperBrowserDiagnosticConfig
-type ScraperChannelHealthConfig = settings.ScraperChannelHealthConfig
 type ScraperConfig = settings.ScraperConfig
 type ScraperActiveActiveConfig = settings.ScraperActiveActiveConfig
 type ScraperPoll = settings.ScraperPoll
@@ -52,6 +51,8 @@ const (
 )
 
 var Load = settings.Load
+var LoadBotRuntime = settings.LoadBotRuntime
+var LoadAlarmWorkerRuntime = settings.LoadAlarmWorkerRuntime
 var LoadAdminAPIRuntime = settings.LoadAdminAPIRuntime
 var LoadYouTubeProducerRuntime = settings.LoadYouTubeProducerRuntime
 
