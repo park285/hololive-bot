@@ -2,24 +2,27 @@
 
 ## Decision
 
-`alarm.http` keeps `admin-api` as the current HTTP provider registration. `alarm-worker` is the alarm domain owner and remains the target provider for a later migration.
+`alarm.http` is in a staged provider migration. `alarm-worker` now registers the target `/internal/alarm/*` provider route set, while `admin-api` remains as a compatibility provider until all callers are cut over.
 
 ## Current State
 
-- `admin-api` registers `hololive-shared/pkg/service/alarm.APIHandler` when `AlarmCRUD` is configured.
+- `alarm-worker` registers `hololive-shared/pkg/service/alarm.Handler` when `AlarmCRUD` is configured.
+- `admin-api` still registers the same shared handler during the migration window.
 - `bot` and the admin facade consume `/internal/alarm/*`.
-- `alarm-worker` owns alarm checking and dispatch queue publishing, but it does not currently own the HTTP provider process.
+- `alarm-worker` owns alarm checking, dispatch queue publishing, dispatch consumption, and proactive egress.
 
 ## Short-Term Rule
 
-- Keep `/internal/alarm/*` registered in `admin-api`.
-- Do not split the current route set across multiple providers.
+- Keep the route set identical between `alarm-worker` and `admin-api` compatibility registration.
+- Do not split the current route set across different providers; staged duplication is allowed only while the full route set exists on both sides.
 - Any HTTP DTO or error-envelope polish must preserve the existing `success`/`message` response compatibility.
+- Move caller base URLs to `alarm-worker` before removing the `admin-api` compatibility provider.
 
 ## Long-Term Target
 
-- Move `/internal/alarm/*` provider registration to `alarm-worker` in a dedicated migration PR.
+- Remove `/internal/alarm/*` provider registration from `admin-api` after caller cutover.
 - Keep `admin-api` as a facade/client if dashboard behavior still needs the routes.
+- Keep `alarm-worker` as the sole alarm HTTP provider and domain owner.
 - Update `CONTRACT_MAP.md`, `CONTRACT_MANIFEST.txt`, `docs/current/contracts/alarm.md`, service docs, and affected runbooks in the same migration.
 
 ## Required Migration Checks
