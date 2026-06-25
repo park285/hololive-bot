@@ -78,11 +78,13 @@ func TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce(t *tes
 				NextAttemptAt: now,
 			}
 			require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+			postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
 			require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
-				Kind:       string(item.Kind),
-				ContentID:  item.ContentID,
-				ChannelID:  item.ChannelID,
-				DetectedAt: now,
+				Kind:               string(item.Kind),
+				ContentID:          item.ContentID,
+				CanonicalContentID: postID,
+				ChannelID:          item.ChannelID,
+				DetectedAt:         now,
 			}).Error)
 
 			delivery := domain.YouTubeNotificationDelivery{
@@ -118,7 +120,6 @@ func TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce(t *tes
 			assert.Equal(t, string(domain.OutboxStatusPending), failedOutbox.Status)
 			assert.Nil(t, failedOutbox.SentAt)
 
-			postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
 			var releasedState domain.YouTubeCommunityShortsAlarmState
 			require.NoError(t, firstDeliveryTestRow(db, &releasedState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
 			assert.Nil(t, releasedState.AuthorizedAt)
@@ -302,10 +303,11 @@ func insertRetryFinalizeOnceRows(
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
-		Kind:       string(item.Kind),
-		ContentID:  item.ContentID,
-		ChannelID:  item.ChannelID,
-		DetectedAt: now,
+		Kind:               string(item.Kind),
+		ContentID:          item.ContentID,
+		CanonicalContentID: store.CanonicalDeliveryPostID(item.Kind, item.ContentID),
+		ChannelID:          item.ChannelID,
+		DetectedAt:         now,
 	}).Error)
 
 	delivery := domain.YouTubeNotificationDelivery{

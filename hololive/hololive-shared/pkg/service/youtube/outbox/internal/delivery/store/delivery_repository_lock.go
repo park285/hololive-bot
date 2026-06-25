@@ -51,11 +51,10 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 
 	sentAt := dispatchstate.CanonicalSentAtNow()
 	if err := deliverysql.InDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
-		updatedIDs, err := updateSentDeliveryRowsIfLocked(ctx, tx, uniqueTokens, sentAt)
-		if err != nil {
+		if _, err := updateSentDeliveryRowsIfLocked(ctx, tx, uniqueTokens, sentAt); err != nil {
 			return err
 		}
-		trackingMarks, err := loadAlarmSentMarksForDeliveryIDs(ctx, tx, updatedIDs, sentAt, claimTokens)
+		trackingMarks, err := LoadAlarmSentMarksForDeliveryIDs(ctx, tx, deliveryLockTokenIDs(uniqueTokens), sentAt, claimTokens)
 		if err != nil {
 			return fmt.Errorf("load tracking marks: %w", err)
 		}
@@ -78,6 +77,11 @@ func deliveryLockTokenArrays(tokens []LockToken) ([]int64, []time.Time) {
 		lockedAts = append(lockedAts, *tokens[i].lockedAt)
 	}
 	return ids, lockedAts
+}
+
+func deliveryLockTokenIDs(tokens []LockToken) []int64 {
+	ids, _ := deliveryLockTokenArrays(tokens)
+	return ids
 }
 
 func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens []LockToken, sentAt time.Time) ([]int64, error) {

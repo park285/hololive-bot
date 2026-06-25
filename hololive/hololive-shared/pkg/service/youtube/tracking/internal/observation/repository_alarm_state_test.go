@@ -129,6 +129,46 @@ func TestRepositoryMarkAlarmSentBatchRepairsMissingAlarmStateForAlreadySentTrack
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, record.DeliveryStatus)
 }
 
+func TestRepositoryMarkAlarmSentBatchRepairsMissingCanonicalAlarmStateWhenLegacyContentStateExists(t *testing.T) {
+	db := newTrackingTestDB(t)
+	repository := NewRepository(db)
+	ctx := context.Background()
+	actualPublishedAt := time.Date(2026, 4, 10, 1, 5, 0, 0, time.UTC)
+	detectedAt := time.Date(2026, 4, 10, 1, 6, 0, 0, time.UTC)
+	firstAlarmSentAt := time.Date(2026, 4, 10, 1, 8, 0, 0, time.UTC)
+	laterAlarmSentAt := time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)
+
+	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+		Kind:              domain.OutboxKindCommunityPost,
+		ContentID:         "post-legacy-state-repair",
+		ChannelID:         "UC_TEST",
+		ActualPublishedAt: &actualPublishedAt,
+		DetectedAt:        detectedAt,
+		AlarmSentAt:       &firstAlarmSentAt,
+	}))
+	_, err := db.Exec(ctx, `
+		INSERT INTO youtube_community_shorts_alarm_states
+			(kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+	`, domain.OutboxKindCommunityPost, "post-legacy-state-repair", "post-legacy-state-repair", "UC_TEST", actualPublishedAt, detectedAt, firstAlarmSentAt, domain.YouTubeCommunityShortsAlarmStateStatusSent, detectedAt)
+	require.NoError(t, err)
+
+	require.NoError(t, repository.MarkAlarmSentBatch(ctx, []AlarmSentMark{{
+		Kind:        domain.OutboxKindCommunityPost,
+		ContentID:   "post-legacy-state-repair",
+		AlarmSentAt: laterAlarmSentAt,
+	}}))
+
+	record, err := repository.FindAlarmStateByPostID(ctx, domain.OutboxKindCommunityPost, "post-legacy-state-repair")
+	require.NoError(t, err)
+	require.NotNil(t, record)
+	require.Equal(t, "community:post-legacy-state-repair", record.PostID)
+	require.Equal(t, "post-legacy-state-repair", record.ContentID)
+	require.NotNil(t, record.AlarmSentAt)
+	require.Equal(t, firstAlarmSentAt, record.AlarmSentAt.UTC())
+	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, record.DeliveryStatus)
+}
+
 func TestRepositoryUpsertAndFindAlarmStateByPostID(t *testing.T) {
 	repository := NewRepository(newTrackingTestDB(t))
 	ctx := context.Background()

@@ -11,6 +11,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
+	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 func TestMarkSentBatchIfLockedRejectsStaleRelockWithinOneMillisecond(t *testing.T) {
@@ -46,6 +48,68 @@ func TestMarkSentBatchIfLockedRejectsStaleRelockWithinOneMillisecond(t *testing.
 	require.NotNil(t, sentAt)
 }
 
+func TestMarkSentBatchIfLockedPersistsTrackingWhenDeliveryRelocked(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
+	trackingRepository := trackingrepo.NewRepository(pool)
+	staleLockedAt := time.Date(2026, time.June, 3, 12, 0, 0, 123456000, time.UTC)
+	currentLockedAt := staleLockedAt.Add(500 * time.Microsecond)
+	authorizedAt := staleLockedAt.Add(10 * time.Second)
+	actualPublishedAt := staleLockedAt.Add(-2 * time.Minute)
+	detectedAt := staleLockedAt.Add(-time.Minute)
+	deliveryID := seedLockedCommunityDelivery(t, ctx, pool, staleLockedAt)
+
+	require.NoError(t, trackingRepository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+		Kind:              domain.OutboxKindCommunityPost,
+		ContentID:         "post-lock-state",
+		ChannelID:         "channel-lock-state",
+		ActualPublishedAt: &actualPublishedAt,
+		DetectedAt:        detectedAt,
+	}))
+	require.NoError(t, trackingRepository.UpsertAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
+		Kind:              domain.OutboxKindCommunityPost,
+		PostID:            "post-lock-state",
+		ContentID:         "post-lock-state",
+		ChannelID:         "channel-lock-state",
+		ActualPublishedAt: &actualPublishedAt,
+		DetectedAt:        detectedAt,
+		AuthorizedAt:      &authorizedAt,
+	}))
+	_, err := pool.Exec(ctx, `
+		UPDATE youtube_notification_delivery
+		SET locked_at = $1
+		WHERE id = $2
+	`, currentLockedAt, deliveryID)
+	require.NoError(t, err)
+
+	err = repository.MarkSentBatchIfLocked(ctx, []LockToken{NewLockToken(deliveryID, &staleLockedAt)}, dispatchstate.ClaimToken{
+		Kind:         domain.OutboxKindCommunityPost,
+		PostID:       "community:post-lock-state",
+		AuthorizedAt: authorizedAt,
+	})
+	require.NoError(t, err)
+
+	status, lockedAt, sentAt := readDeliveryStatusAndLocks(t, ctx, pool, deliveryID)
+	require.Equal(t, domain.OutboxStatusPending, status)
+	require.NotNil(t, lockedAt)
+	require.True(t, lockedAt.Equal(currentLockedAt), "locked_at = %s, want %s", lockedAt, currentLockedAt)
+	require.Nil(t, sentAt)
+
+	trackingRow, err := trackingRepository.FindByIdentity(ctx, domain.OutboxKindCommunityPost, "post-lock-state")
+	require.NoError(t, err)
+	require.NotNil(t, trackingRow)
+	require.NotNil(t, trackingRow.AlarmSentAt)
+	require.Equal(t, domain.YouTubeContentAlarmDeliveryStatusSent, trackingRow.DeliveryStatus)
+
+	stateRow, err := trackingRepository.FindAlarmStateByPostID(ctx, domain.OutboxKindCommunityPost, "post-lock-state")
+	require.NoError(t, err)
+	require.NotNil(t, stateRow)
+	require.Nil(t, stateRow.AuthorizedAt)
+	require.NotNil(t, stateRow.AlarmSentAt)
+	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, stateRow.DeliveryStatus)
+}
+
 func seedLockedDelivery(t *testing.T, ctx context.Context, db *pgxpool.Pool, lockedAt time.Time) int64 {
 	t.Helper()
 
@@ -65,6 +129,30 @@ func seedLockedDelivery(t *testing.T, ctx context.Context, db *pgxpool.Pool, loc
 		VALUES ($1, $2, $3, 0, $4, $5, $6)
 		RETURNING id
 	`, outboxID, "room-lock-race", string(domain.OutboxStatusPending), lockedAt, lockedAt, lockedAt).Scan(&deliveryID)
+	require.NoError(t, err)
+
+	return deliveryID
+}
+
+func seedLockedCommunityDelivery(t *testing.T, ctx context.Context, db *pgxpool.Pool, lockedAt time.Time) int64 {
+	t.Helper()
+
+	var outboxID int64
+	err := db.QueryRow(ctx, `
+		INSERT INTO youtube_notification_outbox
+			(kind, channel_id, content_id, payload, status, attempt_count, next_attempt_at, created_at)
+		VALUES ($1, $2, $3, $4::jsonb, $5, 0, $6, $7)
+		RETURNING id
+	`, string(domain.OutboxKindCommunityPost), "channel-lock-state", "post-lock-state", `{"canonical_post_id":"community:post-lock-state","post_id":"post-lock-state"}`, string(domain.OutboxStatusPending), lockedAt, lockedAt).Scan(&outboxID)
+	require.NoError(t, err)
+
+	var deliveryID int64
+	err = db.QueryRow(ctx, `
+		INSERT INTO youtube_notification_delivery
+			(outbox_id, room_id, status, attempt_count, next_attempt_at, created_at, locked_at)
+		VALUES ($1, $2, $3, 0, $4, $5, $6)
+		RETURNING id
+	`, outboxID, "room-lock-state", string(domain.OutboxStatusPending), lockedAt, lockedAt, lockedAt).Scan(&deliveryID)
 	require.NoError(t, err)
 
 	return deliveryID
