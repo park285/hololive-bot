@@ -15,7 +15,6 @@ import (
 func TestRegisterAlarmWorkerInternalAlarmRoutesRegistersAlarmAPI(t *testing.T) {
 	t.Parallel()
 
-	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	registrar := registerAlarmWorkerInternalAlarmRoutes("secret", fakeAlarmCRUD{}, slog.New(slog.DiscardHandler))
 
@@ -37,7 +36,6 @@ func TestRegisterAlarmWorkerInternalAlarmRoutesRegistersAlarmAPI(t *testing.T) {
 func TestRegisterAlarmWorkerInternalAlarmRoutesSkipsWhenAlarmCRUDMissing(t *testing.T) {
 	t.Parallel()
 
-	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	registrar := registerAlarmWorkerInternalAlarmRoutes("secret", nil, slog.New(slog.DiscardHandler))
 
