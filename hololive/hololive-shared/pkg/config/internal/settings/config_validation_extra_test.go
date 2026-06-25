@@ -187,6 +187,7 @@ func TestIsValidPostgresSSLMode(t *testing.T) {
 
 func setAdminAPIRuntimeEnv(t *testing.T) {
 	t.Helper()
+	clearRuntimeRoleEnv(t)
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
