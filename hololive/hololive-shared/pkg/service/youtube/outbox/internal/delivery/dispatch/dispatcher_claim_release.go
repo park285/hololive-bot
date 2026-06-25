@@ -51,6 +51,47 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	if deleted > 0 {
 		d.logger.Info("Cleaned up old outbox items", slog.Int64("deleted", deleted))
 	}
+
+	d.cleanupOrphanPendingOutbox(ctx)
+}
+
+// cutoff가 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가
+// config invariant로 보장되지 않으므로, max로 삭제 대상을 항상 created_at < now-ClaimFreshnessWindow로
+// 묶어 primary claim(dispatcher_claim.go의 created_at >= now-ClaimFreshnessWindow)에서 다시 claim될 수
+// 없음을 보장한다. ClaimFreshnessWindow<=0이면 claim에 신선도 하한이 없어 안전한 cutoff가 없으므로 skip.
+// NOT EXISTS delivery 가드는 ON DELETE CASCADE로 인한 delivery/telemetry 동반 삭제를 막는다.
+func (d *ClaimManager) cleanupOrphanPendingOutbox(ctx context.Context) {
+	if d.config.ClaimFreshnessWindow <= 0 {
+		return
+	}
+
+	now := time.Now().UTC()
+	pendingCutoff := now.Add(-d.orphanPendingCutoff())
+	lockExpiry := now.Add(-d.config.LockTimeout)
+
+	deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup orphan pending outbox items", `
+		DELETE FROM youtube_notification_outbox o
+		WHERE o.status = ?
+		  AND o.sent_at IS NULL
+		  AND o.created_at < ?
+		  AND (o.locked_at IS NULL OR o.locked_at < ?)
+		  AND NOT EXISTS (
+			SELECT 1 FROM youtube_notification_delivery d
+			WHERE d.outbox_id = o.id
+		  )
+	`, domain.OutboxStatusPending, pendingCutoff, lockExpiry)
+	if err != nil {
+		d.logger.Warn("Failed to cleanup orphan pending outbox items", slog.Any("error", err))
+		return
+	}
+
+	if deleted > 0 {
+		d.logger.Info("Cleaned up orphan pending outbox items", slog.Int64("deleted", deleted))
+	}
+}
+
+func (d *ClaimManager) orphanPendingCutoff() time.Duration {
+	return max(d.config.CleanupAfter, d.config.ClaimFreshnessWindow)
 }
 
 func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error {
