@@ -84,7 +84,7 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *config.Config, logger 
 		communityShortsOpsRepository, settingsApplier, systemCollector,
 		templateAdmin, majorEventTriggerClient, logger,
 	)
-	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, authService, handler, alarmMode, logger)
+	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, authService, handler, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -97,15 +97,12 @@ func buildAdminAPIHTTPRuntime(
 	infra *sharedmodules.InfraModule,
 	authService *authsvc.Service,
 	handler *server.Handler,
-	alarmMode *alarmModeComponents,
 	logger *slog.Logger,
 ) (*AdminAPIRuntime, error) {
 	router, err := buildAdminAPIRouter(ctx, appConfig, infra, authService, handler, logger)
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "provide api router", err)
 	}
-
-	registerAdminAPIInternalAlarmRoutes(router, appConfig, alarmMode, logger)
 
 	runtime, err := newAdminAPIRuntime(appConfig, logger, router, infra.Cleanup)
 	if err != nil {
