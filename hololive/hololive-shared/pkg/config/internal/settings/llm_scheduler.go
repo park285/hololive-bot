@@ -121,7 +121,10 @@ func (c *LLMSchedulerConfig) validateRuntime() error {
 	if err := c.validateServerBasics(); err != nil {
 		return err
 	}
-	return validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode)
+	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+		return err
+	}
+	return validateNoNotificationEgressOwnership(runtimeLLMScheduler)
 }
 
 func (c *LLMSchedulerConfig) validateServerBasics() error {

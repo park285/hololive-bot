@@ -52,6 +52,8 @@ const (
 )
 
 var Load = settings.Load
+var LoadBotRuntime = settings.LoadBotRuntime
+var LoadAlarmWorkerRuntime = settings.LoadAlarmWorkerRuntime
 var LoadAdminAPIRuntime = settings.LoadAdminAPIRuntime
 var LoadYouTubeProducerRuntime = settings.LoadYouTubeProducerRuntime
 

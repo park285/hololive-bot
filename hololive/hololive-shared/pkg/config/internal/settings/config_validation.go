@@ -37,7 +37,10 @@ func (c *Config) Validate() error {
 // ValidateAdminAPIRuntime: admin-api는 compose 보안 계약상 nonEgress라
 // Iris egress 토큰을 받을 수 없으므로 IRIS·YouTube 필수 검증을 면제합니다.
 func (c *Config) ValidateAdminAPIRuntime() error {
-	return c.validateWithRequired(c.validateAdminAPIRequiredConfig)
+	if err := c.validateWithRequired(c.validateAdminAPIRequiredConfig); err != nil {
+		return err
+	}
+	return validateNoNotificationEgressOwnership(runtimeAdminAPI)
 }
 
 func (c *Config) validateWithRequired(validateRequired func() error) error {
@@ -105,7 +108,10 @@ func (c *Config) validateAdminAPIRequiredConfig() error {
 // ValidateYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
 // Iris egress 토큰·KAKAO_ROOMS를 받지 않으므로 해당 필수 검증을 면제합니다.
 func (c *Config) ValidateYouTubeProducerRuntime() error {
-	return c.validateWithRequired(c.validateYouTubeProducerRequiredConfig)
+	if err := c.validateWithRequired(c.validateYouTubeProducerRequiredConfig); err != nil {
+		return err
+	}
+	return validateNoNotificationEgressOwnership(runtimeYouTubeProducer)
 }
 
 func (c *Config) validateYouTubeProducerRequiredConfig() error {
