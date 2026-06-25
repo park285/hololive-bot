@@ -45,7 +45,7 @@ func main() {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             config.Load,
+		LoadConfig:             config.LoadBotRuntime,
 		LoadConfigErrorMessage: "Failed to load config",
 		NewLogger: func(appConfig *config.Config) (*slog.Logger, error) {
 			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
