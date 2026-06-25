@@ -13,10 +13,11 @@
 
 ## Role
 
-Alarm checker/scheduler, alarm dispatch queue publishing/consumption, generic notification delivery outbox consumption, YouTube outbox dispatch, proactive notification egress를 담당합니다.
+Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/consumption, generic notification delivery outbox consumption, YouTube outbox dispatch, proactive notification egress를 담당합니다.
 
 ## Owns
 
+- Alarm HTTP provider route registration for `/internal/alarm/*` during the staged provider migration
 - Alarm checking and scheduling loops
 - Dispatch queue publish path
 - Dispatch queue consume/render/send path under the notification egress lease
@@ -29,16 +30,17 @@ Alarm checker/scheduler, alarm dispatch queue publishing/consumption, generic no
 
 | Contract | Type | Path/Event/Queue | Consumers |
 |---|---|---|---|
+| Alarm HTTP provider | internal HTTP JSON | `/internal/alarm/*` | `bot`, `admin-api` facade |
 | Alarm dispatch egress | Valkey list | `alarm:dispatch:queue` | Iris/Kakao via alarm-worker egress |
 | Notification delivery outbox | PostgreSQL table | `notification_delivery_outbox` | Iris/Kakao via alarm-worker egress |
 | YouTube outbox dispatch | PostgreSQL table | `youtube_notification_outbox` | Iris/Kakao via alarm-worker egress |
-| Alarm service state | in-process domain service | `domain.AlarmCRUD` | local scheduler/checker |
+| Alarm service state | in-process domain service | `domain.AlarmCRUD` | local scheduler/checker and alarm HTTP provider |
 
 ## Consumes
 
 | Dependency | Purpose | Failure impact |
 |---|---|---|
-| PostgreSQL | alarm/member/channel state and notification delivery outbox | alarm evaluation or generic notification delivery fails |
+| PostgreSQL | alarm/member/channel state and notification delivery outbox | alarm evaluation, alarm HTTP CRUD/query, or generic notification delivery fails |
 | PostgreSQL YouTube outbox | claim, render, per-room delivery, and final send state | YouTube notification dispatch pauses |
 | Valkey | queue, cache, Pub/Sub | dispatch publishing and config updates fail |
 | Valkey egress lease | single active proactive egress owner | dispatch queue and YouTube outbox egress do not start if held or unavailable |
@@ -60,6 +62,7 @@ Alarm checker/scheduler, alarm dispatch queue publishing/consumption, generic no
 
 ## Shutdown behavior
 
+- Stop the alarm HTTP listener gracefully.
 - Stop scheduler/checker loops gracefully.
 - Stop dispatch queue and YouTube outbox consumers during shutdown.
 
