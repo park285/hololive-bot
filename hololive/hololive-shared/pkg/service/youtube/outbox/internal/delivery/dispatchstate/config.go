@@ -107,8 +107,9 @@ func normalizeDispatcherCoreConfig(config, defaults *Config) {
 	if config.ClaimFreshnessWindow <= 0 {
 		config.ClaimFreshnessWindow = defaults.ClaimFreshnessWindow
 	}
-	if config.ClaimFreshnessWindow <= config.ReviveFreshnessWindow {
-		config.ClaimFreshnessWindow = config.ReviveFreshnessWindow + config.ReviveInterval
+	minClaimFreshnessWindow := config.ReviveFreshnessWindow + config.ReviveInterval
+	if config.ClaimFreshnessWindow < minClaimFreshnessWindow {
+		config.ClaimFreshnessWindow = minClaimFreshnessWindow
 	}
 }
 

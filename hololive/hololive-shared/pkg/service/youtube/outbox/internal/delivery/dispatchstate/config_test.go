@@ -28,4 +28,14 @@ func TestNormalizeDispatcherConfigKeepsClaimFreshnessAboveReviveWindow(t *testin
 		got := NormalizeDispatcherConfig(&Config{ClaimFreshnessWindow: 90 * time.Minute})
 		require.Equal(t, 90*time.Minute, got.ClaimFreshnessWindow)
 	})
+
+	t.Run("claim window below revive plus interval is raised", func(t *testing.T) {
+		t.Parallel()
+		got := NormalizeDispatcherConfig(&Config{
+			ReviveFreshnessWindow: 60 * time.Minute,
+			ReviveInterval:        5 * time.Minute,
+			ClaimFreshnessWindow:  62 * time.Minute,
+		})
+		require.Equal(t, 65*time.Minute, got.ClaimFreshnessWindow)
+	})
 }
