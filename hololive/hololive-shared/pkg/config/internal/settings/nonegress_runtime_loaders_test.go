@@ -7,6 +7,7 @@ import (
 
 func clearIrisAndRoomEnv(t *testing.T) {
 	t.Helper()
+	clearRuntimeRoleEnv(t)
 
 	for _, key := range []string{
 		"IRIS_WEBHOOK_TOKEN",
