@@ -12,9 +12,10 @@ Alarm domain currently has HTTP JSON APIs, the Valkey dispatch queue, generic no
 
 ## Provider
 
-- HTTP service: `admin-api` registers `hololive-shared/pkg/service/alarm.APIHandler` when `AlarmCRUD` is configured.
+- HTTP staged provider: `alarm-worker` registers `hololive-shared/pkg/service/alarm.Handler` for `/internal/alarm/*` through the shared alarm route registrar when `AlarmCRUD` is configured.
+- HTTP compatibility provider: `admin-api` still registers the same route set during the migration window so existing callers can roll forward without a hard cutover.
 - Domain owner: `alarm-worker`.
-- Ownership decision: short-term `admin-api` provider 유지, long-term `alarm-worker` provider migration. See `../../design/alarm-http-provider-ownership.md`.
+- Ownership decision: `alarm-worker` is the target owner; `admin-api` compatibility registration must be removed after bot/admin clients are cut over. See `../../design/alarm-http-provider-ownership.md`.
 - Queue service: `alarm-worker`
 - Modules: `hololive-admin-api`, `hololive-alarm-worker`, `hololive-shared`
 
@@ -101,7 +102,8 @@ Queue success has no response body; delivery outcome is represented by queue mov
 
 - Queue consumers must retain dual-read behavior when introducing a new envelope version.
 - Raw payload preservation must remain in place before changing DLQ tooling.
-- HTTP provider migration must follow `../../design/alarm-http-provider-ownership.md` before moving `/internal/alarm/*` between runtimes.
+- HTTP provider migration must keep `admin-api` compatibility registration until `bot` and dashboard/admin paths are explicitly cut over to the `alarm-worker` provider.
+- The two staged providers must register the same `/internal/alarm/*` route set and reuse the same shared handler implementation.
 
 ## Tests
 
@@ -109,8 +111,9 @@ Queue success has no response body; delivery outcome is represented by queue mov
 - Queue fixtures: `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json`
 - Queue behavior: `hololive/hololive-shared/pkg/service/alarm/queue/queue_test.go`
 - HTTP handler/client: `hololive/hololive-shared/pkg/service/alarm/api_test.go`, `client_test.go`
+- Shared alarm route registrar: `hololive/hololive-shared/pkg/service/alarm/routes_test.go`
 
 ## Known gaps
 
 - Alarm HTTP API DTOs are not yet represented by a dedicated `pkg/contracts/alarm` DTO package.
-- Current HTTP provider registration is `admin-api`; long-term migration to `alarm-worker` is documented but not implemented.
+- `admin-api` compatibility registration remains until the consumer cutover PR removes it.

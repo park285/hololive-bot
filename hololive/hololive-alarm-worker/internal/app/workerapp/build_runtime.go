@@ -110,7 +110,14 @@ func buildAlarmWorkerHTTPRuntime(
 	foundation *alarmFoundation,
 	logger *slog.Logger,
 ) (servers *sharedserver.RuntimeHTTPServers, scheduler runtimeAlarmScheduler, stage string, err error) {
-	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{APIKey: appConfig.Server.APIKey})
+	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
+		APIKey: appConfig.Server.APIKey,
+		RegisterRoutes: sharedalarm.NewInternalRouteRegistrar(
+			appConfig.Server.APIKey,
+			foundation.AlarmCRUD,
+			logger,
+		),
+	})
 	if err != nil {
 		return nil, nil, "router", err
 	}

@@ -29,6 +29,7 @@
 `docs/design`과 `docs/superpowers/specs`는 아직 current로 승격되지 않은 설계 제안을 둡니다.
 
 - `design/README.md` - 설계 문서 규칙
+- `design/three-runtime-consolidation-plan.md` - 5개 Go runtime을 3개 runtime으로 줄이기 위한 migration plan
 - `design/2026-05-15-repo-structure-refactor-worklog.md` - repo structure refactor worklog
 - `design/repo-tree-classification.md` - completed top-level docs directory classification and move record
 - `superpowers/specs/` - 승인된 design spec 보관 위치
