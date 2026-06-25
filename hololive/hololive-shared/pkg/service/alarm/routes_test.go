@@ -3,6 +3,8 @@ package alarm
 import (
 	"context"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -18,17 +20,31 @@ func TestNewInternalRouteRegistrarRegistersCompleteAlarmRouteSet(t *testing.T) {
 
 	require.NoError(t, registrar(router))
 
-	routes := routeSet(router.Routes())
-	assert.Contains(t, routes, "POST "+contractsalarm.BasePath+contractsalarm.AddRoute)
-	assert.Contains(t, routes, "POST "+contractsalarm.BasePath+contractsalarm.RemoveRoute)
-	assert.Contains(t, routes, "GET "+contractsalarm.BasePath+contractsalarm.RoomRoute)
-	assert.Contains(t, routes, "GET "+contractsalarm.BasePath+contractsalarm.RoomViewRoute)
-	assert.Contains(t, routes, "POST "+contractsalarm.BasePath+contractsalarm.ClearRoute)
-	assert.Contains(t, routes, "GET "+contractsalarm.BasePath+contractsalarm.NextStreamRoute)
-	assert.Contains(t, routes, "PUT "+contractsalarm.BasePath+contractsalarm.SettingsRoute)
-	assert.Contains(t, routes, "PUT "+contractsalarm.BasePath+contractsalarm.RoomNameRoute)
-	assert.Contains(t, routes, "PUT "+contractsalarm.BasePath+contractsalarm.UserNameRoute)
-	assert.Contains(t, routes, "GET "+contractsalarm.BasePath+contractsalarm.KeysRoute)
+	expected := []string{
+		"POST " + contractsalarm.BasePath + contractsalarm.AddRoute,
+		"POST " + contractsalarm.BasePath + contractsalarm.RemoveRoute,
+		"GET " + contractsalarm.BasePath + contractsalarm.RoomRoute,
+		"GET " + contractsalarm.BasePath + contractsalarm.RoomViewRoute,
+		"POST " + contractsalarm.BasePath + contractsalarm.ClearRoute,
+		"GET " + contractsalarm.BasePath + contractsalarm.NextStreamRoute,
+		"PUT " + contractsalarm.BasePath + contractsalarm.SettingsRoute,
+		"PUT " + contractsalarm.BasePath + contractsalarm.RoomNameRoute,
+		"PUT " + contractsalarm.BasePath + contractsalarm.UserNameRoute,
+		"GET " + contractsalarm.BasePath + contractsalarm.KeysRoute,
+	}
+	assert.ElementsMatch(t, expected, routeKeys(router.Routes()))
+}
+
+func TestNewInternalRouteRegistrarAppliesAPIKeyAuth(t *testing.T) {
+	router := gin.New()
+	registrar := NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, slog.New(slog.DiscardHandler))
+	require.NoError(t, registrar(router))
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, contractsalarm.BasePath+contractsalarm.KeysRoute, http.NoBody)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
 func TestNewInternalRouteRegistrarSkipsWhenRouterOrAlarmCRUDMissing(t *testing.T) {
@@ -36,10 +52,10 @@ func TestNewInternalRouteRegistrarSkipsWhenRouterOrAlarmCRUDMissing(t *testing.T
 	require.NoError(t, NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, slog.New(slog.DiscardHandler))(nil))
 }
 
-func routeSet(routes gin.RoutesInfo) map[string]struct{} {
-	out := make(map[string]struct{}, len(routes))
+func routeKeys(routes gin.RoutesInfo) []string {
+	out := make([]string, 0, len(routes))
 	for _, route := range routes {
-		out[route.Method+" "+route.Path] = struct{}{}
+		out = append(out, route.Method+" "+route.Path)
 	}
 	return out
 }
