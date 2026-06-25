@@ -102,40 +102,9 @@ WITH input AS (
 		WHERE f.kind = s.kind
 		  AND f.post_id = s.post_id
 	  )
-), existing_state_updated AS (
-	UPDATE youtube_community_shorts_alarm_states AS s
-	SET authorized_at = NULL,
-	    alarm_sent_at = CASE
-	        WHEN s.alarm_sent_at IS NULL OR s.alarm_sent_at > i.alarm_sent_at THEN i.alarm_sent_at
-	        ELSE s.alarm_sent_at
-	    END,
-	    delivery_status = 'SENT',
-	    updated_at = $7
-	FROM deduped_input AS i
-	WHERE s.kind = i.kind
-	  AND (
-		s.post_id = i.canonical_content_id
-		OR s.content_id = i.content_id
-		OR s.content_id = i.raw_content_id
-	  )
-	  AND i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
-	  AND NOT EXISTS (
-		SELECT 1
-		FROM claimed_state_finalized AS f
-		WHERE f.kind = s.kind
-		  AND f.post_id = s.post_id
-	  )
-	  AND NOT EXISTS (
-		SELECT 1
-		FROM authorization_mismatches AS m
-		WHERE m.kind = s.kind
-		  AND m.post_id = s.post_id
-	  )
-	  AND (s.alarm_sent_at IS NULL OR s.alarm_sent_at > i.alarm_sent_at OR s.authorized_at IS NOT NULL)
-	RETURNING s.kind, s.post_id
-), alarm_state_insert_candidates AS (
-	SELECT DISTINCT ON (t.kind, post_id)
-		t.kind,
+	), alarm_state_insert_candidates AS (
+		SELECT DISTINCT ON (t.kind, post_id)
+			t.kind,
 		CASE
 			WHEN t.canonical_content_id <> '' THEN t.canonical_content_id
 			ELSE i.canonical_content_id
@@ -156,10 +125,85 @@ WITH input AS (
 		OR t.content_id = i.content_id
 		OR t.content_id = i.raw_content_id
 	 )
-	WHERE i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
-	ORDER BY t.kind, post_id, alarm_sent_at ASC
-), missing_state_inserted AS (
-	INSERT INTO youtube_community_shorts_alarm_states (
+		WHERE i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
+		ORDER BY t.kind, post_id, alarm_sent_at ASC
+	), legacy_state_repointed AS (
+		UPDATE youtube_community_shorts_alarm_states AS s
+		SET post_id = t.post_id,
+		    actual_published_at = COALESCE(s.actual_published_at, t.actual_published_at),
+		    detected_at = CASE
+		        WHEN t.detected_at < s.detected_at THEN t.detected_at
+		        ELSE s.detected_at
+		    END,
+		    authorized_at = NULL,
+		    alarm_sent_at = CASE
+		        WHEN s.alarm_sent_at IS NULL OR s.alarm_sent_at > t.alarm_sent_at THEN t.alarm_sent_at
+		        ELSE s.alarm_sent_at
+		    END,
+		    delivery_status = 'SENT',
+		    updated_at = $7
+		FROM alarm_state_insert_candidates AS t
+		WHERE s.kind = t.kind
+		  AND s.content_id = t.content_id
+		  AND s.post_id <> t.post_id
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM claimed_state_finalized AS f
+			WHERE f.kind = s.kind
+			  AND f.post_id = s.post_id
+		  )
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM authorization_mismatches AS m
+			WHERE m.kind = s.kind
+			  AND m.post_id = s.post_id
+		  )
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM youtube_community_shorts_alarm_states AS existing
+			WHERE existing.kind = t.kind
+			  AND existing.post_id = t.post_id
+		  )
+		RETURNING s.kind, s.content_id
+	), existing_state_updated AS (
+		UPDATE youtube_community_shorts_alarm_states AS s
+		SET authorized_at = NULL,
+		    alarm_sent_at = CASE
+		        WHEN s.alarm_sent_at IS NULL OR s.alarm_sent_at > i.alarm_sent_at THEN i.alarm_sent_at
+		        ELSE s.alarm_sent_at
+		    END,
+		    delivery_status = 'SENT',
+		    updated_at = $7
+		FROM deduped_input AS i
+		WHERE s.kind = i.kind
+		  AND (
+			s.post_id = i.canonical_content_id
+			OR s.content_id = i.content_id
+			OR s.content_id = i.raw_content_id
+		  )
+		  AND i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM claimed_state_finalized AS f
+			WHERE f.kind = s.kind
+			  AND f.post_id = s.post_id
+		  )
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM authorization_mismatches AS m
+			WHERE m.kind = s.kind
+			  AND m.post_id = s.post_id
+		  )
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM legacy_state_repointed AS r
+			WHERE r.kind = s.kind
+			  AND r.content_id = s.content_id
+		  )
+		  AND (s.alarm_sent_at IS NULL OR s.alarm_sent_at > i.alarm_sent_at OR s.authorized_at IS NOT NULL)
+		RETURNING s.kind, s.post_id
+	), missing_state_inserted AS (
+		INSERT INTO youtube_community_shorts_alarm_states (
 		kind,
 		post_id,
 		content_id,
@@ -185,15 +229,15 @@ WITH input AS (
 		$7,
 		$7
 	FROM alarm_state_insert_candidates AS t
-	WHERE NOT EXISTS (
-		SELECT 1
-		FROM youtube_community_shorts_alarm_states AS s
-		WHERE s.kind = t.kind
-		  AND (
-			s.post_id = t.post_id
-			OR s.content_id = t.content_id
-		  )
-	  )
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM youtube_community_shorts_alarm_states AS s
+			WHERE s.kind = t.kind
+			  AND (
+				s.post_id = t.post_id
+				OR s.content_id = t.content_id
+			  )
+		)
 	ON CONFLICT (kind, post_id) DO UPDATE
 	SET alarm_sent_at = CASE
 	        WHEN youtube_community_shorts_alarm_states.alarm_sent_at IS NULL

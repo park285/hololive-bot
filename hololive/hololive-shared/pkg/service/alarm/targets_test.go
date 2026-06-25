@@ -199,23 +199,18 @@ func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFal
 		time.Sleep(50 * time.Millisecond)
 	})
 
-	alarmTypes := []domain.AlarmType{
-		domain.AlarmTypeLive,
-		domain.AlarmTypeShorts,
-		domain.AlarmTypeCommunity,
-	}
-
 	start := make(chan struct{})
 	type result struct {
 		subscribers []string
 		err         error
 	}
 
-	results := make([]result, len(alarmTypes))
+	const concurrentCalls = 3
+	results := make([]result, concurrentCalls)
 	var wg sync.WaitGroup
-	for i, alarmType := range alarmTypes {
+	for i := range concurrentCalls {
 		wg.Add(1)
-		go func(index int, alarmType domain.AlarmType) {
+		go func(index int) {
 			defer wg.Done()
 			<-start
 			results[index].subscribers, results[index].err = ResolveChannelSubscribersByType(
@@ -223,9 +218,9 @@ func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFal
 				nil,
 				db,
 				"UC_batch_channel",
-				alarmType,
+				domain.AlarmTypeShorts,
 			)
-		}(i, alarmType)
+		}(i)
 	}
 
 	close(start)
@@ -271,12 +266,12 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 	go func() {
 		defer wg.Done()
 		<-start
-		first, firstErr = loadChannelSubscriberAlarms(t.Context(), db, "UC_pointer_channel")
+		first, firstErr = loadChannelSubscriberAlarms(t.Context(), db, "UC_pointer_channel", domain.AlarmTypeLive)
 	}()
 	go func() {
 		defer wg.Done()
 		<-start
-		second, secondErr = loadChannelSubscriberAlarms(t.Context(), db, "UC_pointer_channel")
+		second, secondErr = loadChannelSubscriberAlarms(t.Context(), db, "UC_pointer_channel", domain.AlarmTypeLive)
 	}()
 
 	close(start)
@@ -323,7 +318,7 @@ func TestLoadChannelSubscriberAlarms_QueryContextPreservesParentDeadline(t *test
 		}
 	})
 
-	alarms, err := loadChannelSubscriberAlarms(ctx, db, "UC_deadline_preserved")
+	alarms, err := loadChannelSubscriberAlarms(ctx, db, "UC_deadline_preserved", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Nil(t, alarms)
 	require.True(t, <-hasDeadline)
@@ -345,7 +340,7 @@ func TestLoadChannelSubscriberAlarms_QueryContextAppliesFallbackTimeoutWithoutPa
 		}
 	})
 
-	alarms, err := loadChannelSubscriberAlarms(context.Background(), db, "UC_fallback_timeout")
+	alarms, err := loadChannelSubscriberAlarms(context.Background(), db, "UC_fallback_timeout", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Nil(t, alarms)
 	require.True(t, <-hasDeadline)
@@ -387,7 +382,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharesDeadlineBoundQuery(t *tes
 
 	firstDone := make(chan alarmLoadResult, 1)
 	go func() {
-		alarms, err := loadChannelSubscriberAlarms(shortCtx, db, "UC_mixed_context")
+		alarms, err := loadChannelSubscriberAlarms(shortCtx, db, "UC_mixed_context", domain.AlarmTypeLive)
 		firstDone <- alarmLoadResult{alarms: alarms, err: err}
 	}()
 
@@ -395,7 +390,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharesDeadlineBoundQuery(t *tes
 
 	secondDone := make(chan alarmLoadResult, 1)
 	go func() {
-		alarms, err := loadChannelSubscriberAlarms(context.Background(), db, "UC_mixed_context")
+		alarms, err := loadChannelSubscriberAlarms(context.Background(), db, "UC_mixed_context", domain.AlarmTypeLive)
 		secondDone <- alarmLoadResult{alarms: alarms, err: err}
 	}()
 
@@ -457,7 +452,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 	for range 2 {
 		go func() {
 			<-start
-			_, err := loadChannelSubscriberAlarms(t.Context(), db, "UC_shared_metric")
+			_, err := loadChannelSubscriberAlarms(t.Context(), db, "UC_shared_metric", domain.AlarmTypeLive)
 			done <- err
 		}()
 	}

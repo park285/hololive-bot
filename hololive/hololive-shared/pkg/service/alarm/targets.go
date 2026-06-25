@@ -121,7 +121,7 @@ func resolveChannelSubscribersFromDB(
 	channelID string,
 	alarmType domain.AlarmType,
 ) ([]string, error) {
-	alarms, err := loadChannelSubscriberAlarms(ctx, db, channelID)
+	alarms, err := loadChannelSubscriberAlarms(ctx, db, channelID, alarmType)
 	if err != nil {
 		observeAlarmSubscriberDBFallback("error")
 		return nil, fmt.Errorf("resolve channel subscribers by type: %w", err)
@@ -161,20 +161,24 @@ func warmChannelSubscriberCache(ctx context.Context, cacheClient cache.Client, a
 	}
 }
 
-func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string) ([]*domain.Alarm, error) {
+func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
 	if db == nil {
 		return nil, errors.New("load channel subscriber alarms: database is nil")
 	}
+	if !domain.AlarmTypes(domain.AllAlarmTypes).Contains(alarmType) {
+		return nil, nil
+	}
 
 	normalizedChannelID := strings.TrimSpace(channelID)
-	resultCh := channelSubscriberLoadGroup.DoChan(normalizedChannelID, func() (any, error) {
-		return queryChannelSubscriberAlarms(ctx, db, normalizedChannelID)
+	loadKey := normalizedChannelID + "\x00" + string(alarmType)
+	resultCh := channelSubscriberLoadGroup.DoChan(loadKey, func() (any, error) {
+		return queryChannelSubscriberAlarms(ctx, db, normalizedChannelID, alarmType)
 	})
 
 	return waitForChannelSubscriberAlarms(ctx, resultCh)
 }
 
-func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string) ([]*domain.Alarm, error) {
+func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
 	queryCtx, cancel := withoutCancelPreserveDeadline(ctx, channelSubscriberLoadTimeout)
 	defer cancel()
 
@@ -182,8 +186,9 @@ func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID
 		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at
 		FROM alarms
 		WHERE channel_id = $1
+		  AND $2::alarm_type = ANY(CASE WHEN cardinality(alarm_types) = 0 THEN ARRAY['LIVE', 'COMMUNITY', 'SHORTS']::alarm_type[] ELSE alarm_types END)
 		ORDER BY created_at ASC
-	`, channelID)
+	`, channelID, string(alarmType))
 	if err != nil {
 		return nil, fmt.Errorf("load channel subscriber alarms: %w", err)
 	}

@@ -201,7 +201,7 @@ func recoverSuccessfulCommunityShortsSentStateTx(
 	uniqueIDs []int64,
 	sentAt time.Time,
 ) error {
-	marks, err := store.LoadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
+	marks, err := store.LoadAlarmSentMarksForDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
 	if err != nil {
 		return fmt.Errorf("load sent-state recovery marks: %w", err)
 	}

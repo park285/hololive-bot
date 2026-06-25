@@ -39,7 +39,7 @@ func LoadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db dbx.Querier
 	return loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, &status)
 }
 
-func loadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]trackingrepo.AlarmSentMark, error) {
+func LoadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]trackingrepo.AlarmSentMark, error) {
 	return loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, nil)
 }
 
