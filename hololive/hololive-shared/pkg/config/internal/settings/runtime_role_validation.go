@@ -8,22 +8,22 @@ import (
 )
 
 const (
-	runtimeBot         = "bot"
-	runtimeAlarmWorker = "alarm-worker"
-	runtimeAdminAPI    = "admin-api"
-	runtimeLLMScheduler = "llm-scheduler"
+	runtimeBot             = "bot"
+	runtimeAlarmWorker     = "alarm-worker"
+	runtimeAdminAPI        = "admin-api"
+	runtimeLLMScheduler    = "llm-scheduler"
 	runtimeYouTubeProducer = "youtube-producer"
 
-	notificationEgressRoleEnv       = "NOTIFICATION_EGRESS_ROLE"
-	notificationSchedulerRoleEnv    = "NOTIFICATION_SCHEDULER_ROLE"
-	deliveryDispatcherEnabledEnv     = "DELIVERY_DISPATCHER_ENABLED"
+	notificationEgressRoleEnv         = "NOTIFICATION_EGRESS_ROLE"
+	notificationSchedulerRoleEnv      = "NOTIFICATION_SCHEDULER_ROLE"
+	deliveryDispatcherEnabledEnv      = "DELIVERY_DISPATCHER_ENABLED"
 	youTubeOutboxDispatcherEnabledEnv = "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"
-	alarmDispatchConsumerEnabledEnv = "ALARM_DISPATCH_CONSUMER_ENABLED"
-	alarmWorkerEgressLeaseEnabledEnv = "ALARM_WORKER_EGRESS_LEASE_ENABLED"
+	alarmDispatchConsumerEnabledEnv   = "ALARM_DISPATCH_CONSUMER_ENABLED"
+	alarmWorkerEgressLeaseEnabledEnv  = "ALARM_WORKER_EGRESS_LEASE_ENABLED"
 
-	notificationEgressRoleOwner    = "owner"
-	notificationEgressRoleProducer = "producer"
-	notificationEgressRoleOff      = "off"
+	notificationEgressRoleOwner     = "owner"
+	notificationEgressRoleProducer  = "producer"
+	notificationEgressRoleOff       = "off"
 	notificationSchedulerRoleWorker = "worker"
 	notificationSchedulerRoleOff    = "off"
 )
@@ -57,20 +57,33 @@ func (c *Config) ValidateAlarmWorkerRuntime() error {
 }
 
 func validateNoNotificationEgressOwnership(runtime string) error {
+	if err := validateNotificationRoleEnvValues(); err != nil {
+		return err
+	}
+	if err := rejectReservedEgressRoles(runtime); err != nil {
+		return err
+	}
+	return rejectReservedDispatchers(runtime)
+}
+
+func validateNotificationRoleEnvValues() error {
 	if err := validateKnownNotificationRoleEnv(notificationEgressRoleEnv, notificationEgressRoleOwner, notificationEgressRoleProducer, notificationEgressRoleOff); err != nil {
 		return err
 	}
-	if err := validateKnownNotificationRoleEnv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker, notificationSchedulerRoleOff); err != nil {
-		return err
-	}
+	return validateKnownNotificationRoleEnv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker, notificationSchedulerRoleOff)
+}
 
+func rejectReservedEgressRoles(runtime string) error {
 	if strings.EqualFold(trimmedEnv(notificationEgressRoleEnv), notificationEgressRoleOwner) {
 		return fmt.Errorf("%s must not own proactive notification egress; %s=%s is reserved for alarm-worker", runtime, notificationEgressRoleEnv, notificationEgressRoleOwner)
 	}
 	if strings.EqualFold(trimmedEnv(notificationSchedulerRoleEnv), notificationSchedulerRoleWorker) {
 		return fmt.Errorf("%s must not run the alarm scheduler role; %s=%s is reserved for alarm-worker", runtime, notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
 	}
+	return nil
+}
 
+func rejectReservedDispatchers(runtime string) error {
 	for _, key := range []string{
 		deliveryDispatcherEnabledEnv,
 		youTubeOutboxDispatcherEnabledEnv,
@@ -81,15 +94,11 @@ func validateNoNotificationEgressOwnership(runtime string) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
 func validateAlarmWorkerOwnership(environment string) error {
-	if err := validateKnownNotificationRoleEnv(notificationEgressRoleEnv, notificationEgressRoleOwner, notificationEgressRoleProducer, notificationEgressRoleOff); err != nil {
-		return err
-	}
-	if err := validateKnownNotificationRoleEnv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker, notificationSchedulerRoleOff); err != nil {
+	if err := validateNotificationRoleEnvValues(); err != nil {
 		return err
 	}
 	if !isProductionEnvironment(environment) {
@@ -143,7 +152,7 @@ func explicitBoolEnvIsFalse(key string) (bool, error) {
 	return explicit && !value, nil
 }
 
-func lookupExplicitBoolEnv(key string) (bool, bool, error) {
+func lookupExplicitBoolEnv(key string) (value, explicit bool, err error) {
 	raw, ok := os.LookupEnv(key)
 	if !ok {
 		return false, false, nil
@@ -152,7 +161,7 @@ func lookupExplicitBoolEnv(key string) (bool, bool, error) {
 	if trimmed == "" {
 		return false, false, nil
 	}
-	value, err := strconv.ParseBool(trimmed)
+	value, err = strconv.ParseBool(trimmed)
 	if err != nil {
 		return false, true, fmt.Errorf("%s must be a boolean: %w", key, err)
 	}
