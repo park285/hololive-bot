@@ -45,6 +45,7 @@ func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.You
 
 	now := time.Now()
 	lockExpiry := now.Add(-d.config.LockTimeout)
+	claimFreshCutoff := outboxClaimFreshCutoff(d.config.ClaimFreshnessWindow, now)
 
 	rows, err := d.db.Query(ctx, `
 		WITH claim AS (
@@ -53,6 +54,7 @@ func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.You
 			WHERE o.status = $1
 			  AND (o.locked_at IS NULL OR o.locked_at < $2)
 			  AND o.next_attempt_at <= $3
+			  AND o.created_at >= $6
 			  AND NOT EXISTS (
 				SELECT 1 FROM youtube_notification_delivery d
 				WHERE d.outbox_id = o.id
@@ -73,7 +75,7 @@ func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.You
 		       attempt_count, next_attempt_at, created_at, locked_at, sent_at, error
 		FROM updated
 		ORDER BY next_attempt_at ASC, created_at ASC, id ASC
-	`, domain.OutboxStatusPending, lockExpiry, now, d.config.BatchSize, now)
+	`, domain.OutboxStatusPending, lockExpiry, now, d.config.BatchSize, now, claimFreshCutoff)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)
 	}
@@ -84,6 +86,13 @@ func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.You
 	}
 
 	return items, nil
+}
+
+func outboxClaimFreshCutoff(window time.Duration, now time.Time) time.Time {
+	if window <= 0 {
+		return time.Time{}
+	}
+	return now.Add(-window)
 }
 
 func (d *ClaimManager) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) int {

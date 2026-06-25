@@ -35,6 +35,7 @@ type Config struct {
 	ReviveEnabled               bool          // stale-failed revival sweep 활성화 여부
 	ReviveInterval              time.Duration // revival sweep 주기
 	ReviveFreshnessWindow       time.Duration // 되살릴 FAILED 알람의 최대 콘텐츠 신선도(created_at 기준)
+	ClaimFreshnessWindow        time.Duration
 	DeliveryParallelism         int           // room/delivery send 제한 병렬성
 	DeliverySendTimeout         time.Duration // room 단위 메시지 발송 1회 최대 시간
 	SubscriberLookupParallelism int           // 채널별 구독자 조회 제한 병렬성
@@ -48,16 +49,18 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		BatchSize:                   50,
-		LockTimeout:                 5 * time.Minute,
-		PollInterval:                2 * time.Second,
-		MaxRetries:                  3,
-		RetryBackoff:                1 * time.Minute,
-		CleanupAfter:                7 * 24 * time.Hour, // 7일
-		CleanupEnabled:              true,
-		ReviveEnabled:               true,
-		ReviveInterval:              5 * time.Minute,
-		ReviveFreshnessWindow:       60 * time.Minute,
+		BatchSize:             50,
+		LockTimeout:           5 * time.Minute,
+		PollInterval:          2 * time.Second,
+		MaxRetries:            3,
+		RetryBackoff:          1 * time.Minute,
+		CleanupAfter:          7 * 24 * time.Hour, // 7일
+		CleanupEnabled:        true,
+		ReviveEnabled:         true,
+		ReviveInterval:        5 * time.Minute,
+		ReviveFreshnessWindow: 60 * time.Minute,
+		// revive window보다 커야 되살린 PENDING(created_at 최대 60m)이 primary claim에서 탈락하지 않는다.
+		ClaimFreshnessWindow:        2 * time.Hour,
 		DeliveryParallelism:         4,
 		DeliverySendTimeout:         10 * time.Second,
 		SubscriberLookupParallelism: 16,
@@ -100,6 +103,9 @@ func normalizeDispatcherCoreConfig(config, defaults *Config) {
 	}
 	if config.ReviveFreshnessWindow <= 0 {
 		config.ReviveFreshnessWindow = defaults.ReviveFreshnessWindow
+	}
+	if config.ClaimFreshnessWindow <= 0 {
+		config.ClaimFreshnessWindow = defaults.ClaimFreshnessWindow
 	}
 }
 

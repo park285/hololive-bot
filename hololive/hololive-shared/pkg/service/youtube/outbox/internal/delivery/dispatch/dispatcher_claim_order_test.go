@@ -35,6 +35,48 @@ func TestFetchAndLockForPerRoomReturnsByNextAttemptBeforeCreated(t *testing.T) {
 	require.NotEqual(t, createdFirstID, rows[0].ID)
 }
 
+func TestFetchAndLockForPerRoomSkipsStaleByClaimFreshnessWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	freshID := insertClaimOrderOutboxForDispatch(t, ctx, pool, "fresh-within-window", now.Add(-30*time.Minute), now.Add(-1*time.Minute))
+	staleID := insertClaimOrderOutboxForDispatch(t, ctx, pool, "stale-beyond-window", now.Add(-3*time.Hour), now.Add(-1*time.Minute))
+
+	manager := &ClaimManager{
+		db:       pool,
+		config:   Config{BatchSize: 10, LockTimeout: time.Minute, ClaimFreshnessWindow: 2 * time.Hour},
+		delivery: store.NewDeliveryRepository(pool, nil),
+	}
+	rows, err := manager.fetchAndLockForPerRoom(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, freshID, rows[0].ID)
+	require.NotEqual(t, staleID, rows[0].ID)
+}
+
+func TestFetchAndLockForPerRoomClaimsStaleWhenFreshnessWindowDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	staleID := insertClaimOrderOutboxForDispatch(t, ctx, pool, "stale-no-window", now.Add(-72*time.Hour), now.Add(-1*time.Minute))
+
+	manager := &ClaimManager{
+		db:       pool,
+		config:   Config{BatchSize: 10, LockTimeout: time.Minute},
+		delivery: store.NewDeliveryRepository(pool, nil),
+	}
+	rows, err := manager.fetchAndLockForPerRoom(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, staleID, rows[0].ID)
+}
+
 func insertClaimOrderOutboxForDispatch(t *testing.T, ctx context.Context, pool *pgxpool.Pool, contentID string, createdAt, nextAttemptAt time.Time) int64 {
 	t.Helper()
 	var id int64

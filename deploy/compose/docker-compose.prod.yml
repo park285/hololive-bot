@@ -33,7 +33,7 @@ x-security-hardening: &security-hardening
 
 x-app-service: &app-service
   <<: [*autoheal-service, *security-hardening]
-  restart: on-failure
+  restart: unless-stopped
 
 x-public-dns: &public-dns
   - 8.8.8.8
