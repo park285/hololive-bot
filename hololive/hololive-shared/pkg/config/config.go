@@ -21,6 +21,7 @@ type NotificationConfig = settings.NotificationConfig
 type PostgresConfig = settings.PostgresConfig
 type ScraperBackfillConfig = settings.ScraperBackfillConfig
 type ScraperBrowserDiagnosticConfig = settings.ScraperBrowserDiagnosticConfig
+type ScraperChannelHealthConfig = settings.ScraperChannelHealthConfig
 type ScraperConfig = settings.ScraperConfig
 type ScraperActiveActiveConfig = settings.ScraperActiveActiveConfig
 type ScraperPoll = settings.ScraperPoll
