@@ -2,8 +2,12 @@ package observation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -27,11 +31,7 @@ func (r *alarmStateRepository) TryClaimAlarmState(ctx context.Context, record *d
 		return false, fmt.Errorf("try claim alarm state: %w", err)
 	}
 
-	claimed, err := r.insertAlarmStateClaim(ctx, normalizedRecord)
-	if err != nil || !claimed {
-		return claimed, err
-	}
-	return r.confirmAlarmStateClaim(ctx, normalizedRecord)
+	return r.insertAlarmStateClaim(ctx, normalizedRecord)
 }
 
 func (r *alarmStateRepository) insertAlarmStateClaim(
@@ -39,24 +39,27 @@ func (r *alarmStateRepository) insertAlarmStateClaim(
 	normalizedRecord *domain.YouTubeCommunityShortsAlarmState,
 ) (bool, error) {
 	now := yttimestamp.Normalize(time.Now())
-	rowsAffected, err := dbx.ExecSQL(ctx, r.db, "try claim alarm state: exec query", `
-        INSERT INTO youtube_community_shorts_alarm_states
-            (kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (kind, post_id) DO UPDATE
-        SET content_id = EXCLUDED.content_id,
-            channel_id = EXCLUDED.channel_id,
-            actual_published_at = COALESCE(youtube_community_shorts_alarm_states.actual_published_at, EXCLUDED.actual_published_at),
-            detected_at = CASE
-                WHEN EXCLUDED.detected_at < youtube_community_shorts_alarm_states.detected_at THEN EXCLUDED.detected_at
-                ELSE youtube_community_shorts_alarm_states.detected_at
-            END,
-            authorized_at = EXCLUDED.authorized_at,
-            delivery_status = EXCLUDED.delivery_status,
-            updated_at = EXCLUDED.updated_at
-        WHERE youtube_community_shorts_alarm_states.authorized_at IS NULL
-          AND youtube_community_shorts_alarm_states.alarm_sent_at IS NULL
-    `,
+	var returnedAuthorizedAt time.Time
+	var returnedAlarmSentAt pgtype.Timestamptz
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO youtube_community_shorts_alarm_states
+		    (kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		ON CONFLICT (kind, post_id) DO UPDATE
+		SET content_id = EXCLUDED.content_id,
+		    channel_id = EXCLUDED.channel_id,
+		    actual_published_at = COALESCE(youtube_community_shorts_alarm_states.actual_published_at, EXCLUDED.actual_published_at),
+		    detected_at = CASE
+		        WHEN EXCLUDED.detected_at < youtube_community_shorts_alarm_states.detected_at THEN EXCLUDED.detected_at
+		        ELSE youtube_community_shorts_alarm_states.detected_at
+		    END,
+		    authorized_at = EXCLUDED.authorized_at,
+		    delivery_status = EXCLUDED.delivery_status,
+		    updated_at = EXCLUDED.updated_at
+		WHERE youtube_community_shorts_alarm_states.authorized_at IS NULL
+		  AND youtube_community_shorts_alarm_states.alarm_sent_at IS NULL
+		RETURNING authorized_at, alarm_sent_at
+	`,
 		normalizedRecord.Kind,
 		normalizedRecord.PostID,
 		normalizedRecord.ContentID,
@@ -68,32 +71,25 @@ func (r *alarmStateRepository) insertAlarmStateClaim(
 		normalizedRecord.DeliveryStatus,
 		now,
 		now,
-	)
+	).Scan(&returnedAuthorizedAt, &returnedAlarmSentAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
-	if rowsAffected == 0 {
-		return false, nil
-	}
-	return true, nil
+
+	return alarmStateClaimMatches(returnedAuthorizedAt, returnedAlarmSentAt, *normalizedRecord.AuthorizedAt), nil
 }
 
-func (r *alarmStateRepository) confirmAlarmStateClaim(
-	ctx context.Context,
-	normalizedRecord *domain.YouTubeCommunityShortsAlarmState,
-) (bool, error) {
-	current, err := r.FindAlarmStateByPostID(ctx, normalizedRecord.Kind, normalizedRecord.PostID)
-	if err != nil {
-		return false, fmt.Errorf("try claim alarm state: reload row: %w", err)
+func alarmStateClaimMatches(returnedAuthorizedAt time.Time, returnedAlarmSentAt pgtype.Timestamptz, expectedAuthorizedAt time.Time) bool {
+	if returnedAuthorizedAt.IsZero() {
+		return false
 	}
-	if current == nil || current.AuthorizedAt == nil || current.AuthorizedAt.IsZero() {
-		return false, nil
+	if returnedAlarmSentAt.Valid && !returnedAlarmSentAt.Time.IsZero() {
+		return false
 	}
-	if current.AlarmSentAt != nil && !current.AlarmSentAt.IsZero() {
-		return false, nil
-	}
-
-	return current.AuthorizedAt.UTC().Equal(normalizedRecord.AuthorizedAt.UTC()), nil
+	return normalizeDatabaseTimestamp(returnedAuthorizedAt).Equal(normalizeDatabaseTimestamp(expectedAuthorizedAt))
 }
 
 func (r *alarmStateRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain.OutboxKind, postID string, authorizedAt time.Time) (bool, error) {
