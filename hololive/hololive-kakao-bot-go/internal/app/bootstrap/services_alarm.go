@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -55,6 +56,16 @@ func InitAlarmModeComponents(
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*AlarmModeComponents, error) {
+	if providerURL := strings.TrimSpace(appConfig.AlarmServiceURL); providerURL != "" {
+		httpClient := httputil.NewExternalAPIClient(10 * time.Second)
+		return &AlarmModeComponents{
+			AlarmCRUD:        alarm.NewClientWithAPIKey(providerURL, appConfig.Server.APIKey, logger),
+			ChzzkClient:      ProvideChzzkClient(httpClient, appConfig.Chzzk, logger),
+			TwitchClient:     ProvideTwitchClient(&appConfig.Twitch, logger),
+			MemberDataSource: memberServiceAdapter,
+		}, nil
+	}
+
 	alarmDeps, alarmErr := InitAlarmDependencies(
 		appConfig.Chzzk,
 		&appConfig.Twitch,
