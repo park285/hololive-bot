@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
@@ -16,7 +15,6 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
@@ -114,7 +112,7 @@ func buildAlarmWorkerHTTPRuntime(
 ) (servers *sharedserver.RuntimeHTTPServers, scheduler runtimeAlarmScheduler, stage string, err error) {
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey: appConfig.Server.APIKey,
-		RegisterRoutes: registerAlarmWorkerInternalAlarmRoutes(
+		RegisterRoutes: sharedalarm.NewInternalRouteRegistrar(
 			appConfig.Server.APIKey,
 			foundation.AlarmCRUD,
 			logger,
@@ -136,20 +134,6 @@ func buildAlarmWorkerHTTPRuntime(
 	}
 
 	return servers, celebRunner, "", nil
-}
-
-func registerAlarmWorkerInternalAlarmRoutes(apiKey string, alarmCRUD domain.AlarmCRUD, logger *slog.Logger) func(*gin.Engine) error {
-	return func(router *gin.Engine) error {
-		if alarmCRUD == nil {
-			return nil
-		}
-
-		alarmAPI := sharedalarm.NewHandler(alarmCRUD, logger)
-		internalAlarm := router.Group("")
-		internalAlarm.Use(middleware.APIKeyAuthMiddleware(apiKey))
-		alarmAPI.RegisterInternalRoutes(internalAlarm)
-		return nil
-	}
 }
 
 func BuildAlarmWorkerConfigSubscriber(
