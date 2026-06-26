@@ -1,0 +1,152 @@
+name: hololive-bot
+
+services:
+  holo-postgres:
+    extends:
+      file: docker-compose.prod.yml
+      service: holo-postgres
+
+  valkey-cache:
+    extends:
+      file: docker-compose.prod.yml
+      service: valkey-cache
+
+  hololive-db-migrate:
+    extends:
+      file: docker-compose.prod.yml
+      service: hololive-db-migrate
+
+  hololive-alarm-worker:
+    extends:
+      file: docker-compose.prod.yml
+      service: hololive-alarm-worker
+
+  youtube-producer:
+    extends:
+      file: docker-compose.prod.yml
+      service: youtube-producer
+
+  hololive-api:
+    extends:
+      file: docker-compose.prod.yml
+      service: hololive-bot
+    image: hololive-api:prod
+    build:
+      dockerfile: hololive/hololive-api/Dockerfile
+      args:
+        VERSION: ${HOLO_API_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
+        GO_PGO_FILE: ""
+    container_name: hololive-api
+    stop_grace_period: 45s
+    pids_limit: 512
+    environment:
+      APP_VERSION: ${HOLO_API_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
+      SERVER_PORT: 30001
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_H3_ADDR:-:30001}
+      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_BOT_METRICS_ADDR:-:30091}
+      HOLOLIVE_PPROF_ADDR: ${HOLOLIVE_BOT_PPROF_ADDR:-:30061}
+      HOLOLIVE_ADMIN_API_PORT: 30006
+      HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS: ${HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_ADMIN_API_H3_ADDR: ${HOLOLIVE_ADMIN_API_H3_ADDR:-:30006}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-172.16.0.0/12,127.0.0.1/32}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://admin.holo-oshi.com,https://admin.capu.blog}
+      CORS_ENFORCE: ${CORS_ENFORCE:-true}
+      LLM_SCHEDULER_PORT: 30003
+      HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS: ${HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_LLM_SCHEDULER_H3_ADDR: ${HOLOLIVE_LLM_SCHEDULER_H3_ADDR:-:30003}
+      LLM_SCHEDULER_INTERNAL_URL: https://127.0.0.1:30003
+      SERVICES_LLM_SCHEDULER_HEALTH_URL: https://127.0.0.1:30003/health
+      ALARM_INTERNAL_URL: https://hololive-alarm-worker:30007
+      BOT_POSTGRES_POOL_MIN_CONNS: ${BOT_POSTGRES_POOL_MIN_CONNS:-1}
+      BOT_POSTGRES_POOL_MAX_CONNS: ${BOT_POSTGRES_POOL_MAX_CONNS:-4}
+      ADMIN_API_POSTGRES_POOL_MIN_CONNS: ${ADMIN_API_POSTGRES_POOL_MIN_CONNS:-1}
+      ADMIN_API_POSTGRES_POOL_MAX_CONNS: ${ADMIN_API_POSTGRES_POOL_MAX_CONNS:-4}
+      LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS:-1}
+      LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS:-4}
+      NOTIFICATION_EGRESS_ROLE: producer
+      NOTIFICATION_SCHEDULER_ROLE: off
+      DELIVERY_DISPATCHER_ENABLED: "false"
+      YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
+      ALARM_DISPATCH_CONSUMER_ENABLED: "false"
+      ALARM_WORKER_EGRESS_LEASE_ENABLED: "false"
+      GOGC: "80"
+      GOMEMLIMIT: 1024MiB
+      GIN_MODE: release
+    ports: !override
+      - 127.0.0.1:30001:30001
+      - 127.0.0.1:30001:30001/udp
+      - 127.0.0.1:30003:30003
+      - 127.0.0.1:30003:30003/udp
+      - 127.0.0.1:30006:30006
+      - 127.0.0.1:30006:30006/udp
+      - 127.0.0.1:30091:30091
+      - 127.0.0.1:30061:30061
+    depends_on: !override
+      holo-postgres:
+        condition: service_healthy
+      hololive-db-migrate:
+        condition: service_completed_successfully
+      valkey-cache:
+        condition: service_healthy
+      hololive-alarm-worker:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 1280m
+    healthcheck:
+      test: [CMD, ./bin/healthcheck, https://127.0.0.1:30001/health]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
+    networks: !override
+      hololive-net:
+        aliases:
+          - hololive-api
+      docker-proxy-net: {}
+
+  admin-dashboard:
+    extends:
+      file: docker-compose.prod.yml
+      service: admin-dashboard
+    environment:
+      HOLO_ADMIN_API_URL: https://hololive-api:30006
+      HOLO_BOT_URL: https://hololive-api:30006
+    depends_on: !override
+      valkey-cache:
+        condition: service_healthy
+      hololive-api:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+
+  docker-proxy:
+    extends:
+      file: docker-compose.prod.yml
+      service: docker-proxy
+
+  deunhealth:
+    extends:
+      file: docker-compose.prod.yml
+      service: deunhealth
+
+volumes:
+  holo-pg-data:
+  valkey-cache-data:
+  valkey-cache-socket:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=0777
+
+networks:
+  hololive-net:
+    driver: bridge
+  docker-proxy-net:
+    driver: bridge
+    internal: true
