@@ -15,7 +15,7 @@ compose_file_resolve_path() {
     printf '%s\n' "${file}"
 }
 
-resolve_workspace_path() {
+resolve_required_workspace_path() {
     local explicit_value="$1"
     local sibling_path="$2"
     local embedded_path="$3"
@@ -31,10 +31,40 @@ resolve_workspace_path() {
     fi
     if [[ ! -d "${candidate}" ]]; then
         echo "[ERROR] Active ${label} workspace not found" >&2
-        exit 1
+        return 1
     fi
 
     (cd "${candidate}" && pwd)
+}
+
+resolve_optional_workspace_path() {
+    local explicit_value="$1"
+    local sibling_path="$2"
+    local embedded_path="$3"
+    local label="$4"
+
+    if [[ -n "${explicit_value}" ]]; then
+        if [[ ! -d "${explicit_value}" ]]; then
+            echo "[ERROR] Explicit ${label} workspace not found: ${explicit_value}" >&2
+            return 1
+        fi
+        (cd "${explicit_value}" && pwd)
+        return
+    fi
+
+    if [[ -d "${sibling_path}" ]]; then
+        (cd "${sibling_path}" && pwd)
+        return
+    fi
+    if [[ -d "${embedded_path}" ]]; then
+        (cd "${embedded_path}" && pwd)
+        return
+    fi
+
+    # Producer-only AP hosts do not need this build context. Keep the conventional
+    # absolute candidate so Compose can render; an API image build will fail before
+    # any runtime is stopped if the context is genuinely required and absent.
+    printf '%s\n' "${sibling_path}"
 }
 
 compose_args=()
@@ -90,12 +120,12 @@ if [[ ${#compose_files[@]} -eq 0 ]]; then
     compose_args=(-f deploy/compose/docker-compose.prod.yml "${compose_args[@]}")
 fi
 
-SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
+SHARED_GO_WORKSPACE_PATH="$(resolve_required_workspace_path \
     "${SHARED_GO_WORKSPACE_PATH:-}" \
     "${ROOT_DIR}/../shared-go" \
     "${ROOT_DIR}/shared-go" \
     "shared-go")"
-IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_workspace_path \
+IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_optional_workspace_path \
     "${IRIS_CLIENT_GO_WORKSPACE_PATH:-}" \
     "${ROOT_DIR}/../iris-client-go" \
     "${ROOT_DIR}/iris-client-go" \
@@ -149,17 +179,68 @@ if [[ "${compose_invokes_up}" == true ]]; then
         echo "[ERROR] Internal error: compose up index was not found" >&2
         exit 1
     fi
-    compose_prefix=("${compose_args[@]:0:up_index}")
 
-    echo "[PREFLIGHT] Rendering Compose before runtime cutover"
+    compose_prefix=("${compose_args[@]:0:up_index}")
+    up_service_targets=()
+    option_requires_value=false
+    after_separator=false
+    for ((index = up_index + 1; index < ${#compose_args[@]}; index++)); do
+        token="${compose_args[$index]}"
+        if [[ "${option_requires_value}" == true ]]; then
+            option_requires_value=false
+            continue
+        fi
+        if [[ "${after_separator}" == true ]]; then
+            up_service_targets+=("${token}")
+            continue
+        fi
+        case "${token}" in
+            --)
+                after_separator=true
+                ;;
+            --scale|--wait-timeout|--timeout|-t|--exit-code-from|--pull|--attach|--no-attach)
+                option_requires_value=true
+                ;;
+            --scale=*|--wait-timeout=*|--timeout=*|--exit-code-from=*|--pull=*|--attach=*|--no-attach=*)
+                ;;
+            -*)
+                ;;
+            *)
+                up_service_targets+=("${token}")
+                ;;
+        esac
+    done
+
+    cutover_required=false
+    if [[ ${#up_service_targets[@]} -eq 0 ]]; then
+        cutover_required=true
+    else
+        for service in "${up_service_targets[@]}"; do
+            case "${service}" in
+                hololive-api|admin-dashboard)
+                    cutover_required=true
+                    ;;
+            esac
+        done
+    fi
+
+    echo "[PREFLIGHT] Rendering Compose before start"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_prefix[@]}" config --quiet
 
     if [[ "${compose_up_build}" == true ]]; then
-        echo "[PREFLIGHT] Building images before stopping retired runtimes"
-        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_prefix[@]}" build
+        echo "[PREFLIGHT] Building images before start"
+        if [[ ${#up_service_targets[@]} -gt 0 ]]; then
+            "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" \
+                "${compose_prefix[@]}" build --with-dependencies "${up_service_targets[@]}"
+        else
+            "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_prefix[@]}" build
+        fi
     fi
 
-    removed_runtime_cleanup_before_cutover
+    if [[ "${cutover_required}" == true ]]; then
+        removed_runtime_cleanup_before_cutover
+    fi
+
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_args[@]}"
     exit 0
 fi
