@@ -106,11 +106,9 @@ main = json.loads(os.environ["MAIN_RENDER"])["services"]
 ap = json.loads(os.environ["AP_RENDER"])["services"]
 
 H3_HEALTH = {
-    "hololive-bot": ("https://127.0.0.1:30001/health", 30001),
-    "hololive-admin-api": ("https://127.0.0.1:30006/health", None),
+    "hololive-api": ("https://127.0.0.1:30001/health", 30001),
     "hololive-alarm-worker": ("https://127.0.0.1:30007/health", None),
     "youtube-producer": ("https://127.0.0.1:30005/health", None),
-    "llm-scheduler": ("https://127.0.0.1:30003/health", None),
 }
 
 for name, (url, udp_port) in H3_HEALTH.items():

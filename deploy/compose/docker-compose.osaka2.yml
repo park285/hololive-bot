@@ -22,7 +22,7 @@ x-osaka2-ap-logging: &osaka2-ap-logging
     max-file: "3"
 
 services:
-  hololive-bot:
+  hololive-api:
     env_file: !override []
 
   hololive-alarm-worker:

@@ -1,7 +1,7 @@
 # main-ap 확장 인스턴스의 사전 hardening 운영 동작을 보존하는 명시 opt-in overlay입니다.
 
 services:
-  hololive-bot:
+  hololive-api:
     environment:
       IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
 

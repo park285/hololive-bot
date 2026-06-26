@@ -28,7 +28,7 @@ services:
       PGHOST: holo-postgres
       PGPORT: "5432"
 
-  hololive-bot:
+  hololive-api:
     env_file: !override
       - ${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/bot.env}
     environment:
@@ -39,19 +39,6 @@ services:
     ports:
       - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001"
       - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001/udp"
-    volumes: !override
-      - ../../data:/app/data
-      - ../../logs:/app/logs
-      - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - valkey-cache-socket:/var/run/valkey:ro
-
-  hololive-admin-api:
-    environment:
-      <<: *live-postgres-env
     volumes: !override
       - ../../data:/app/data
       - ../../logs:/app/logs
@@ -80,18 +67,6 @@ services:
       - valkey-cache-socket:/var/run/valkey:ro
 
   youtube-producer:
-    environment:
-      <<: *live-postgres-env
-    volumes: !override
-      - ../../data:/app/data
-      - ../../logs:/app/logs
-      - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - valkey-cache-socket:/var/run/valkey:ro
-
-  llm-scheduler:
     environment:
       <<: *live-postgres-env
     volumes: !override

@@ -55,7 +55,7 @@ x-osaka-ap-env-common: &osaka-ap-env-common
   GOMEMLIMIT: "640MiB"
 
 services:
-  hololive-bot:
+  hololive-api:
     env_file: !override []
 
   hololive-alarm-worker:

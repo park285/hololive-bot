@@ -37,14 +37,14 @@ def env_map(svc):
         return out
     return env
 
-admin_api = services.get("hololive-admin-api", {})
+admin_api = services.get("hololive-api", {})
 env = env_map(admin_api)
 if env.get("CORS_ENFORCE") != "${CORS_ENFORCE:-true}":
-    print("[FAIL] hololive-admin-api CORS_ENFORCE default must be true")
+    print("[FAIL] hololive-api CORS_ENFORCE default must be true")
     sys.exit(1)
 origins = str(env.get("CORS_ALLOWED_ORIGINS", ""))
 if origins in ("", "${CORS_ALLOWED_ORIGINS:-}"):
-    print("[FAIL] hololive-admin-api CORS_ALLOWED_ORIGINS default must be explicit")
+    print("[FAIL] hololive-api CORS_ALLOWED_ORIGINS default must be explicit")
     sys.exit(1)
 
 dashboard = services.get("admin-dashboard", {})
