@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -o /dist/bin/hololive-api ./hololive/hololive-api/cmd/hololive-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOAMD64=${GOAMD64} \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
-      -o /dist/bin/healthcheck ./hololive/hololive-youtube-producer/cmd/runtime/healthcheck && \
+      -o /dist/bin/healthcheck ./hololive/hololive-api/cmd/healthcheck && \
     mkdir -p /dist/internal/domain && \
     cp -r hololive/hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/ && \
     cp hololive/hololive-kakao-bot-go/config.example.json /dist/ && \
