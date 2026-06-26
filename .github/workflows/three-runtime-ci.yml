@@ -13,6 +13,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  source-snapshot:
+    name: Source snapshot diagnostics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - name: Archive source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git -czf "${RUNNER_TEMP}/hololive-bot-source.tar.gz" .
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: hololive-bot-source-${{ github.sha }}
+          path: ${{ runner.temp }}/hololive-bot-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
   go-test:
     name: Go test (${{ matrix.module }})
     runs-on: ubuntu-latest
@@ -30,7 +51,7 @@ jobs:
           - hololive/hololive-api
     steps:
       - name: Checkout pull request branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: hololive-bot
           fetch-depth: 1
@@ -49,7 +70,7 @@ jobs:
     container: golang:1.26.4-bookworm
     steps:
       - name: Checkout pull request branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: hololive-bot
           fetch-depth: 1
@@ -69,19 +90,19 @@ jobs:
     container: golang:1.26.4-bookworm
     steps:
       - name: Checkout hololive-bot
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: hololive-bot
           fetch-depth: 1
       - name: Checkout shared-go
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: park285/shared-go
           ref: v1.19.0
           path: shared-go
           fetch-depth: 1
       - name: Checkout iris-client-go
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: park285/iris-client-go
           ref: v0.23.0
@@ -99,7 +120,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout pull request branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: hololive-bot
           fetch-depth: 1
@@ -125,19 +146,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout hololive-bot
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: hololive-bot
           fetch-depth: 1
       - name: Checkout shared-go
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: park285/shared-go
           ref: v1.19.0
           path: shared-go
           fetch-depth: 1
       - name: Checkout iris-client-go
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: park285/iris-client-go
           ref: v0.23.0
