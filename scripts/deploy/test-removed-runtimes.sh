@@ -80,8 +80,12 @@ TEST_VALUE=ok
 EOF
 cat >"${compose_file}" <<'EOF'
 services:
-  app:
-    image: example
+  hololive-api:
+    image: example-api
+  hololive-alarm-worker:
+    image: example-worker
+  youtube-producer:
+    image: example-producer
 EOF
 
 : >"${MOCK_DOCKER_LOG}"
@@ -89,18 +93,42 @@ MOCK_DOCKER_PRESENT_NAMES="hololive-kakao-bot-go hololive-admin-api hololive-llm
 COMPOSE_ENV_FILE="${env_file}" \
 SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
 IRIS_CLIENT_GO_WORKSPACE_PATH="${tmpdir}/iris-client-go" \
-    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build app
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build hololive-api
 
 config_line="$(grep -nE '^compose --env-file .* config --quiet$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
-build_line="$(grep -nE '^compose --env-file .* build$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
+build_line="$(grep -nE '^compose --env-file .* build --with-dependencies hololive-api$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
 cleanup_line="$(grep -n '^stop hololive-kakao-bot-go$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
-up_line="$(grep -nE '^compose --env-file .* up -d app$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
+up_line="$(grep -nE '^compose --env-file .* up -d hololive-api$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
 
 [[ -n "${config_line}" && -n "${build_line}" && -n "${cleanup_line}" && -n "${up_line}" ]] \
-    || fail "compose cutover did not execute render, build, cleanup and up phases"
+    || fail "unified API cutover did not execute render, dependency build, cleanup and up phases"
 (( config_line < build_line && build_line < cleanup_line && cleanup_line < up_line )) \
-    || fail "compose cutover order must be render -> build -> cleanup -> up"
+    || fail "unified API cutover order must be render -> build -> cleanup -> up"
 if grep -Eq '^compose --env-file .* up .*--build' "${MOCK_DOCKER_LOG}"; then
     fail "final up must not rebuild after retired runtimes have been stopped"
 fi
-pass "compose cutover builds before cleanup and starts the new topology last"
+pass "unified API cutover builds dependencies before cleanup and starts last"
+
+: >"${MOCK_DOCKER_LOG}"
+unset IRIS_CLIENT_GO_WORKSPACE_PATH
+MOCK_DOCKER_PRESENT_NAMES="${retired_names}" \
+COMPOSE_ENV_FILE="${env_file}" \
+SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build youtube-producer
+
+grep -Eq '^compose --env-file .* build --with-dependencies youtube-producer$' "${MOCK_DOCKER_LOG}" \
+    || fail "producer-only start did not preserve targeted dependency build"
+if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
+    fail "producer-only start must not stop retired central runtimes"
+fi
+pass "producer-only AP start neither requires iris-client-go nor triggers central cutover cleanup"
+
+: >"${MOCK_DOCKER_LOG}"
+MOCK_DOCKER_PRESENT_NAMES="${retired_names}" \
+COMPOSE_ENV_FILE="${env_file}" \
+SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d hololive-alarm-worker
+if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
+    fail "alarm-worker-only start must not stop retired API-plane runtimes"
+fi
+pass "alarm-worker-only start does not trigger API-plane cutover cleanup"
