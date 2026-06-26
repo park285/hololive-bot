@@ -138,13 +138,25 @@ compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
 if [[ "${compose_invokes_up}" == true ]]; then
     compose_env_assert_live_compat_for_host_networked_postgres "${compose_files[@]}"
 
+    up_index=-1
+    for index in "${!compose_args[@]}"; do
+        if [[ "${compose_args[$index]}" == "up" ]]; then
+            up_index="${index}"
+            break
+        fi
+    done
+    if (( up_index < 0 )); then
+        echo "[ERROR] Internal error: compose up index was not found" >&2
+        exit 1
+    fi
+    compose_prefix=("${compose_args[@]:0:up_index}")
+
     echo "[PREFLIGHT] Rendering Compose before runtime cutover"
-    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_args[@]%%up*}" >/dev/null 2>&1 || true
-    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" $(printf '%q ' "${compose_args[@]}" | sed 's/ up .*/ config --quiet/')
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_prefix[@]}" config --quiet
 
     if [[ "${compose_up_build}" == true ]]; then
         echo "[PREFLIGHT] Building images before stopping retired runtimes"
-        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" $(printf '%q ' "${compose_args[@]}" | sed 's/ up .*/ build/')
+        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_prefix[@]}" build
     fi
 
     removed_runtime_cleanup_before_cutover
