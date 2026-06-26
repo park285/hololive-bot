@@ -12,7 +12,6 @@ import (
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 
@@ -101,20 +100,4 @@ func buildAdminAPIRouter(
 		nil,
 		infra.Cache,
 	)
-}
-
-func registerAdminAPIInternalAlarmRoutes(
-	router *gin.Engine,
-	appConfig *config.Config,
-	alarmMode *alarmModeComponents,
-	logger *slog.Logger,
-) {
-	if alarmMode.AlarmCRUD == nil {
-		return
-	}
-
-	registrar := sharedalarm.NewInternalRouteRegistrar(appConfig.Server.APIKey, alarmMode.AlarmCRUD, logger)
-	if err := registrar(router); err != nil && logger != nil {
-		logger.Error("admin-api alarm compatibility route registration failed", slog.Any("error", err))
-	}
 }
