@@ -54,12 +54,6 @@
     ]
   },
   {
-    "path": "hololive/hololive-llm-sched/cmd/llm-scheduler/main.go",
-    "must_contain": [
-      "bootstrap.Run("
-    ]
-  },
-  {
     "path": "hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts/main.go",
     "must_contain": [
       "communityshortscli.Run("
