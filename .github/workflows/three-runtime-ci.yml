@@ -22,9 +22,6 @@ jobs:
       matrix:
         module:
           - hololive/hololive-shared
-          - hololive/hololive-kakao-bot-go
-          - hololive/hololive-admin-api
-          - hololive/hololive-llm-sched
           - hololive/hololive-alarm-worker
           - hololive/hololive-youtube-producer
           - hololive/hololive-api

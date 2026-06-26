@@ -2,7 +2,7 @@
 
 ## Summary
 
-`admin-api`가 `llm-scheduler`에 major event/member news manual notification trigger를 요청하는 internal HTTP JSON 계약입니다.
+`hololive-api`의 admin plane이 같은 프로세스의 llm plane에 major event/member news manual notification trigger를 요청하는 internal HTTP JSON 계약입니다.
 
 ## Contract ID
 
@@ -10,14 +10,14 @@
 
 ## Provider
 
-- Service: `llm-scheduler`
-- Module: `hololive-llm-sched`
-- Runtime: `llm-scheduler`
+- Service: `hololive-api` (llm plane)
+- Module: `hololive-api`
+- Runtime: `hololive-api`
 
 ## Consumers
 
-- Service: `admin-api`
-- Module: `hololive-admin-api`
+- Service: `hololive-api` (admin plane)
+- Module: `hololive-api`
 - Usage: dashboard/admin manual notification trigger
 
 ## Transport
@@ -73,8 +73,8 @@ gin.H{"status": "member news weekly digest sent"}
 ## Tests
 
 - Route constants: `hololive/hololive-shared/pkg/contracts/trigger/routes_test.go`
-- Provider/router tests: `hololive/hololive-llm-sched/internal/app/*trigger*_test.go`
-- Consumer tests: `hololive/hololive-admin-api/internal/client/trigger/client_test.go`
+- Provider/router tests: `hololive/hololive-api/internal/planes/llm/internal/app/internal/runtime/router_integration_test.go`
+- Consumer tests: `hololive/hololive-api/internal/planes/admin/internal/client/trigger/client_test.go`
 
 ## Known gaps
 

@@ -34,9 +34,6 @@ go_workspace_module_dirs() {
 go_workspace_non_admin_package_patterns() {
     local module
     for module in "${GO_WORKSPACE_MODULES[@]}"; do
-        if [[ "${module}" == "hololive/hololive-admin-api" ]]; then
-            continue
-        fi
         printf './%s/...\n' "${module}"
     done
 }
@@ -44,9 +41,6 @@ go_workspace_non_admin_package_patterns() {
 go_workspace_runtime_log_scan_targets() {
     local module
     for module in "${GO_WORKSPACE_MODULES[@]}"; do
-        if [[ "${module}" == "hololive/hololive-admin-api" ]]; then
-            continue
-        fi
         printf '%s\n' "${module}"
     done
 }

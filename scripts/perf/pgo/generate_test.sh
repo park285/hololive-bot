@@ -324,7 +324,7 @@ EOF
 
 case_validate_meta_accepts_retro_meta() {
   local metas=(
-    "hololive/hololive-kakao-bot-go/cmd/bot/default.pgo.meta.json"
+    "hololive/hololive-api/cmd/hololive-api/default.pgo.meta.json"
     "hololive/hololive-alarm-worker/cmd/alarm-worker/default.pgo.meta.json"
     "../chat-bot-go-kakao/cmd/bot/default.pgo.meta.json"
   )

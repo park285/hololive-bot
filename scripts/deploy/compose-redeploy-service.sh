@@ -132,10 +132,12 @@ compose_env_assert_shell_matches_all_file_keys "$COMPOSE_ENV_FILE"
 compose_env_assert_no_shell_shadow_for_compose_files "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_PATHS[@]}"
 compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
 
-export HOLO_BOT_VERSION="$(cat hololive/hololive-kakao-bot-go/VERSION 2>/dev/null | xargs || echo dev)"
+export HOLO_API_VERSION="$(cat hololive/hololive-api/VERSION 2>/dev/null | xargs || echo dev)"
+export HOLO_BOT_VERSION="${HOLO_API_VERSION}"
 
 echo "[INFO] COMPOSE_MODE=$COMPOSE_MODE"
 echo "[INFO] COMPOSE_FILE=$COMPOSE_FILE"
+echo "[INFO] HOLO_API_VERSION=$HOLO_API_VERSION"
 echo "[INFO] HOLO_BOT_VERSION=$HOLO_BOT_VERSION"
 echo "[INFO] SHARED_GO_WORKSPACE_PATH=$SHARED_GO_WORKSPACE_PATH"
 echo "[INFO] COMPOSE_ENV_FILE=$COMPOSE_ENV_FILE"

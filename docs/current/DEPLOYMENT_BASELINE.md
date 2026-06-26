@@ -14,10 +14,8 @@
 
 | Runtime | Compose service | Port | Env groups | Volumes | Depends on |
 |---|---|---:|---|---|---|
-| `bot` | `hololive-bot` | 30001 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, docker-proxy |
-| `admin-api` | `hololive-admin-api` | 30006 | app file log, cache, PostgreSQL | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
+| `hololive-api` | `hololive-api` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, docker-proxy |
 | `alarm-worker` | `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
-| `llm-scheduler` | `llm-scheduler` | 30003 | app file log, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
 | `youtube-producer` | `youtube-producer` | 30005 | app file log, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
 
 ## Infra Services
@@ -35,10 +33,10 @@
 
 | Boundary | Used by | Contract doc |
 |---|---|---|
-| Iris / Redroid KakaoTalk automation | `bot`, `alarm-worker` | `contracts/iris-boundary.md` |
-| PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-kakao-bot-go/scripts/migrations` |
+| Iris / Redroid KakaoTalk automation | `hololive-api`, `alarm-worker` | `contracts/iris-boundary.md` |
+| PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-api/scripts/migrations` |
 | Valkey | cache, alarm queue, config Pub/Sub | `QUEUE_AND_PUBSUB_CONTRACTS.md` |
-| CLIPROXY/OpenAI-compatible LLM proxy | `bot`, `llm-scheduler`, `youtube-producer` where configured | 검토 필요 |
+| CLIPROXY/OpenAI-compatible LLM proxy | `hololive-api`, `youtube-producer` where configured | 검토 필요 |
 
 ## PostgreSQL TLS Baseline
 
@@ -50,8 +48,8 @@ server material to `/run/hololive-bot/postgres-tls/` and sends `SIGHUP` to
 `holo-postgres` after renewal.
 
 The production client set uses `verify-full` with
-`/run/hololive-bot/certs/postgres-ca.pem`: `bot`, `admin-api`, `alarm-worker`,
-`llm-scheduler`, central `youtube-producer`, `youtube-producer-c`,
+`/run/hololive-bot/certs/postgres-ca.pem`: `hololive-api`, `alarm-worker`,
+central `youtube-producer`, `youtube-producer-c`,
 `hololive-db-migrate`, Seoul `youtube-producer-b`, and staged Osaka APs
 `youtube-producer-a`/`youtube-producer-d` when they are rolled out.
 

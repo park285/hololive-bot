@@ -7,8 +7,8 @@
 #   ./build-all.sh --build-only         # 빌드만 수행 (배포/재기동 없음)
 #   ./build-all.sh --remote-cache       # registry-backed remote cache 사용 (REMOTE_CACHE_PREFIX 필요)
 #   ./build-all.sh --skip-local-ci      # 로컬 CI gate를 건너뜀
-#   ./build-all.sh hololive-bot         # 특정 서비스만 빌드
-#   ./build-all.sh bot                  # hololive-bot alias
+#   ./build-all.sh hololive-api         # 특정 서비스만 빌드
+#   ./build-all.sh alarm-worker         # hololive-alarm-worker alias
 
 set -Eeuo pipefail
 
@@ -85,14 +85,12 @@ fi
 
 # 버전 관리 대상 디렉토리
 VERSION_DIRS=(
-    "hololive/hololive-kakao-bot-go"
-    "hololive/hololive-admin-api"
+    "hololive/hololive-api"
     "hololive/hololive-alarm-worker"
 )
 
 declare -A VERSION_DIR_BY_SERVICE=(
-    [hololive-bot]="hololive/hololive-kakao-bot-go"
-    [hololive-admin-api]="hololive/hololive-admin-api"
+    [hololive-api]="hololive/hololive-api"
     [hololive-alarm-worker]="hololive/hololive-alarm-worker"
 )
 
@@ -272,12 +270,12 @@ echo "  IRIS_CLIENT_GO_WORKSPACE_PATH=${IRIS_CLIENT_GO_WORKSPACE_PATH}"
 echo "  COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 # VERSION 파일에서 환경변수 설정 (docker-compose build args로 전달)
-export HOLO_BOT_VERSION="$(read_version hololive/hololive-kakao-bot-go dev)"
-export HOLO_ADMIN_API_VERSION="$(read_version hololive/hololive-admin-api "${HOLO_BOT_VERSION}")"
-export HOLO_ALARM_WORKER_VERSION="$(read_version hololive/hololive-alarm-worker "${HOLO_BOT_VERSION}")"
+export HOLO_API_VERSION="$(read_version hololive/hololive-api dev)"
+export HOLO_BOT_VERSION="${HOLO_API_VERSION}"
+export HOLO_ALARM_WORKER_VERSION="$(read_version hololive/hololive-alarm-worker "${HOLO_API_VERSION}")"
 
+echo "  HOLO_API_VERSION=${HOLO_API_VERSION}"
 echo "  HOLO_BOT_VERSION=${HOLO_BOT_VERSION}"
-echo "  HOLO_ADMIN_API_VERSION=${HOLO_ADMIN_API_VERSION}"
 echo "  HOLO_ALARM_WORKER_VERSION=${HOLO_ALARM_WORKER_VERSION}"
 if [[ "${REMOTE_CACHE}" == true ]]; then
     echo "  REMOTE_CACHE_PREFIX=${REMOTE_CACHE_PREFIX}"

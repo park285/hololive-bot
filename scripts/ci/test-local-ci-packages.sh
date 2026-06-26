@@ -17,8 +17,8 @@ setup_repo() {
     "${workdir}/deploy/compose" \
     "${workdir}/shared-go/pkg/lib" \
     "${workdir}/hololive/hololive-shared/pkg/common" \
-    "${workdir}/hololive/hololive-kakao-bot-go/internal/lib" \
-    "${workdir}/hololive/hololive-kakao-bot-go/internal/app" \
+    "${workdir}/hololive/hololive-api/internal/lib" \
+    "${workdir}/hololive/hololive-api/internal/app" \
     "${workdir}/scripts" \
     "${workdir}/scripts/ci"
 
@@ -31,8 +31,8 @@ setup_repo() {
   printf 'package workspace\n' >"${workdir}/internal/workspace/a.go"
   printf 'package lib\n' >"${workdir}/shared-go/pkg/lib/a.go"
   printf 'package common\n' >"${workdir}/hololive/hololive-shared/pkg/common/a.go"
-  printf 'package lib\n' >"${workdir}/hololive/hololive-kakao-bot-go/internal/lib/a.go"
-  printf 'package app\n' >"${workdir}/hololive/hololive-kakao-bot-go/internal/app/a.go"
+  printf 'package lib\n' >"${workdir}/hololive/hololive-api/internal/lib/a.go"
+  printf 'package app\n' >"${workdir}/hololive/hololive-api/internal/app/a.go"
   printf '#!/usr/bin/env bash\n' >"${workdir}/scripts/run.sh"
   printf 'services: {}\n' >"${workdir}/deploy/compose/docker-compose.prod.yml"
   printf 'APP_ENV=production\n' >"${workdir}/.env.example"
@@ -52,14 +52,14 @@ run_scope() {
     GO_MODULES=(
       shared-go
       hololive/hololive-shared
-      hololive/hololive-kakao-bot-go
+      hololive/hololive-api
     )
     source "${files_helper}"
     mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
     WORKSPACE_GO_PACKAGES=(
       ./shared-go/...
       ./hololive/hololive-shared/...
-      ./hololive/hololive-kakao-bot-go/...
+      ./hololive/hololive-api/...
     )
     GO_PACKAGES=()
     LOCAL_CI_GO_SCOPE="${scope}"
@@ -90,7 +90,7 @@ full_scope="$(printf '%s\n' \
   ./internal/workspace \
   ./shared-go/... \
   ./hololive/hololive-shared/... \
-  ./hololive/hololive-kakao-bot-go/...)"
+  ./hololive/hololive-api/...)"
 
 root_scope="$(printf '%s\n' \
   ./ \
@@ -105,18 +105,18 @@ expect_scope "all" "$(run_scope "${workdir}" all "${base_ref}")" "${full_scope}"
 workdir="${tmpdir}/app-package"
 setup_repo "${workdir}"
 base_ref="$(git -C "${workdir}" rev-parse HEAD)"
-printf 'const changed = true\n' >>"${workdir}/hololive/hololive-kakao-bot-go/internal/app/a.go"
+printf 'const changed = true\n' >>"${workdir}/hololive/hololive-api/internal/app/a.go"
 expect_scope "changed app package" \
   "$(run_scope "${workdir}" changed "${base_ref}")" \
-  "./hololive/hololive-kakao-bot-go/..."
+  "./hololive/hololive-api/..."
 
 workdir="${tmpdir}/runtime-library-package"
 setup_repo "${workdir}"
 base_ref="$(git -C "${workdir}" rev-parse HEAD)"
-printf 'const changed = true\n' >>"${workdir}/hololive/hololive-kakao-bot-go/internal/lib/a.go"
+printf 'const changed = true\n' >>"${workdir}/hololive/hololive-api/internal/lib/a.go"
 expect_scope "changed runtime library package" \
   "$(run_scope "${workdir}" changed "${base_ref}")" \
-  "./hololive/hololive-kakao-bot-go/..."
+  "./hololive/hololive-api/..."
 
 workdir="${tmpdir}/root-package"
 setup_repo "${workdir}"

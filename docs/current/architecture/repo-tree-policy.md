@@ -41,10 +41,8 @@ Go module directories stay stable:
 
 - `shared-go/`
 - `hololive/hololive-shared/`
-- `hololive/hololive-admin-api/`
+- `hololive/hololive-api/`
 - `hololive/hololive-alarm-worker/`
-- `hololive/hololive-kakao-bot-go/`
-- `hololive/hololive-llm-sched/`
 - `hololive/hololive-youtube-producer/`
 
 Package refactors must preserve `go.work`, Docker Compose build targets, runtime binary names, and architecture import boundary gates.

@@ -6,10 +6,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 
 | Module | Language | Path | Role | Port |
 |--------|----------|------|------|------|
-| `hololive-kakao-bot-go` | Go 1.26 | `hololive/hololive-kakao-bot-go/` | Main bot ingress (webhook + command routing) | 30001 |
-| `hololive-admin-api` | Go 1.26 | `hololive/hololive-admin-api/` | Admin HTTP control plane | 30006 |
 | `hololive-alarm-worker` | Go 1.26 | `hololive/hololive-alarm-worker/` | Alarm checker, dispatch queue consumer, and proactive egress worker | 30007 |
-| `hololive-llm-sched` | Go 1.26 | `hololive/hololive-llm-sched/` | LLM scheduler (major event + member news + delivery) | 30003 |
 | `hololive-api` | Go 1.26 | `hololive/hololive-api/` | Unified runtime hosting bot/admin/llm planes in one process | 30001/30003/30006 |
 | `hololive-youtube-producer` | Go 1.26 | `hololive/hololive-youtube-producer/` | YouTube producer AP runtime: primary/backfill polling, outbox production, active-active coordination (Seoul b + main-host c + Osaka host-native a/d), readiness, and Holodex photo sync | 30005/30015/30025/30035 |
 | `hololive-shared` | Go 1.26 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
@@ -25,10 +22,8 @@ Module and runtime inventory for the `hololive-bot` workspace.
 
 | Runtime | Module | Binary | Compose service | Port | Health / Ready | Service doc | Runbook |
 |---|---|---|---|---:|---|---|---|
-| `bot` | `hololive-kakao-bot-go` | `bot` | `hololive-bot` | 30001 | `http://127.0.0.1:30001/health` | `services/bot.md` | `runbooks/bot.md` |
-| `admin-api` | `hololive-admin-api` | `admin-api` | `hololive-admin-api` | 30006 | `http://127.0.0.1:30006/health` | `services/admin-api.md` | `runbooks/admin-api.md` |
+| `hololive-api` | `hololive-api` | `hololive-api` | `hololive-api` | 30001/30003/30006 | `http://127.0.0.1:30001/health` | `services/hololive-api.md` | `runbooks/hololive-api.md` |
 | `alarm-worker` | `hololive-alarm-worker` | `alarm-worker` | `hololive-alarm-worker` | 30007 | `http://127.0.0.1:30007/health` | `services/alarm-worker.md` | `runbooks/alarm-worker.md` |
-| `llm-scheduler` | `hololive-llm-sched` | `llm-scheduler` | `llm-scheduler` | 30003 | `http://127.0.0.1:30003/health` | `services/llm-scheduler.md` | `runbooks/llm-scheduler.md` |
 | `youtube-producer` | `hololive-youtube-producer` | `youtube-producer` | `youtube-producer` | 30005/30015/30025/30035 | `http://127.0.0.1:30025/health` (main `c`; 원격 AP는 각 호스트 로컬 포트) | `services/youtube-producer.md` | `runbooks/youtube-producer.md` |
 
 ## Infra Services
@@ -38,8 +33,8 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | `holo-postgres` | PostgreSQL data store | Bridge-networked PostgreSQL; live-compat explicitly publishes `<tailnet-central>:5433` to container `5432`; `ssl=on`; OpenBao PKI server cert under `/run/hololive-bot/postgres-tls/` |
 | `hololive-db-migrate` | Migration bootstrap/apply job | Must complete before app runtime services start; `PGSSLMODE=verify-full` with `postgres-ca.pem` |
 | `valkey-cache` | Valkey cache, queue, Pub/Sub | TCP and Unix socket endpoints |
-| `admin-dashboard` | Dashboard (Go backend + embedded frontend) | Not part of the 5 Go runtime set |
-| `docker-proxy` | Docker socket proxy | Used by bot operational endpoints |
+| `admin-dashboard` | Dashboard (Go backend + embedded frontend) | Not part of the 3 app runtime set |
+| `docker-proxy` | Docker socket proxy | Used by `hololive-api` operational endpoints |
 | `deunhealth` | Container autoheal | Restarts unhealthy labeled containers |
 
 ## Cross-Runtime Contracts
@@ -54,12 +49,12 @@ Module and runtime inventory for the `hololive-bot` workspace.
 
 - Keep Go module entries aligned with `go.work`.
 - Keep runtime binary and Docker Compose service entries aligned with `deploy/compose/docker-compose.prod.yml`.
-- Keep service docs and runbook links valid for all 5 runtime rows.
+- Keep service docs and runbook links valid for all 3 runtime rows.
 - Keep contract docs aligned with `hololive/hololive-shared/pkg/contracts/*`.
 - Run `./scripts/architecture/check-project-map.sh` after changing `go.work`, module inventory, or repo-root docs references.
 - Run `./scripts/architecture/check-runbook-coverage.sh` after changing runtime docs or runbook links.
 - Run `./scripts/architecture/check-contract-map.sh` after changing contract docs or `hololive-shared/pkg/contracts/*`.
 - Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
-- Architecture: Go single-language runtime (5 binaries: bot + admin-api + alarm-worker + llm-scheduler + youtube-producer).
+- Architecture: Go single-language runtime (3 app runtimes: hololive-api + alarm-worker + youtube-producer). `hololive-api` hosts the bot/admin/llm planes in one process on ports 30001/30003/30006.
 - Deployment baseline: Docker Compose (`deploy/compose/docker-compose.prod.yml`) is the current production standard after the 2026-03-07 rollback from k8s/k3s.
 - Retired runtime names: `hololive-alarm`, `hololive-scraper`, `rust-dispatcher`, `hololive-admin`, `hololive-rs`.

@@ -9,10 +9,8 @@ RUNBOOK_INDEX="${ROOT_DIR}/docs/current/runbooks/README.md"
 echo "[CHECK] runtime runbook coverage"
 
 required_runtimes=(
-  bot
-  admin-api
+  hololive-api
   alarm-worker
-  llm-scheduler
   youtube-producer
 )
 

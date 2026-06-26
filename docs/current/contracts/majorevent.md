@@ -2,7 +2,7 @@
 
 ## Summary
 
-`bot`이 `llm-scheduler`에 major event 구독 상태를 조회/변경하는 internal HTTP JSON 계약입니다.
+`hololive-api`의 bot plane이 같은 프로세스의 llm plane에 major event 구독 상태를 조회/변경하는 internal HTTP JSON 계약입니다.
 
 ## Contract ID
 
@@ -10,14 +10,14 @@
 
 ## Provider
 
-- Service: `llm-scheduler`
-- Module: `hololive-llm-sched`
-- Runtime: `llm-scheduler`
+- Service: `hololive-api` (llm plane)
+- Module: `hololive-api`
+- Runtime: `hololive-api`
 
 ## Consumers
 
-- Service: `bot`
-- Module: `hololive-kakao-bot-go`
+- Service: `hololive-api` (bot plane)
+- Module: `hololive-api`
 - Usage: major event subscription commands
 
 ## Transport
@@ -76,8 +76,8 @@ Subscribe/unsubscribe success currently returns `{"status":"subscribed"}` or `{"
 
 ## Tests
 
-- Provider route tests: `hololive/hololive-llm-sched/internal/app/internal/runtime/providers_major_event_routes_test.go`
-- Consumer client tests: `hololive/hololive-kakao-bot-go/internal/client/majorevent/client_test.go`
+- Provider route tests: `hololive/hololive-api/internal/planes/llm/internal/app/internal/runtime/providers_major_event_routes_test.go`
+- Consumer client tests: `hololive/hololive-api/internal/planes/bot/internal/client/majorevent/client_test.go`
 
 ## Known gaps
 
