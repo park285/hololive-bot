@@ -21,8 +21,6 @@ x-osaka-ap-logging: &osaka-ap-logging
     max-size: "5m"
     max-file: "3"
 
-# AP 공통 서비스 골격. 인스턴스별 차이(container_name·INSTANCE_ID·SERVER_PORT·PHOTO_SYNC·ports)만 각 서비스에서 덮어쓴다.
-# youtube-producer-b 는 Seoul 호스트(docker-compose.seoul.yml)로 이전됨.
 x-osaka-ap-service: &osaka-ap-service
   extends:
     file: docker-compose.prod.yml
@@ -44,7 +42,6 @@ x-osaka-ap-service: &osaka-ap-service
       limits:
         memory: 768m
 
-# AP 공통 env. GOMEMLIMIT: 768m 컨테이너에 맞춰 베이스 320MiB → 640MiB 상향(GC 빈도↓). GOGC 는 베이스(100) 유지.
 x-osaka-ap-env-common: &osaka-ap-env-common
   <<: *osaka-ap-env
   YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
@@ -56,10 +53,21 @@ x-osaka-ap-env-common: &osaka-ap-env-common
 
 services:
   hololive-api:
+    profiles: !override ["central-only"]
     env_file: !override []
 
   hololive-alarm-worker:
+    profiles: !override ["central-only"]
     env_file: !override []
+
+  admin-dashboard:
+    profiles: !override ["central-only"]
+
+  docker-proxy:
+    profiles: !override ["central-only"]
+
+  deunhealth:
+    profiles: !override ["central-only"]
 
   youtube-producer:
     profiles: !override ["retired-youtube-producer"]

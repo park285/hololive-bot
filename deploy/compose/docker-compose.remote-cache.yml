@@ -6,6 +6,13 @@ services:
       cache_to:
         - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-api-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
 
+  hololive-alarm-worker:
+    build:
+      cache_from:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-alarm-worker-buildcache:buildcache
+      cache_to:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-alarm-worker-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
+
   youtube-producer:
     build:
       cache_from:

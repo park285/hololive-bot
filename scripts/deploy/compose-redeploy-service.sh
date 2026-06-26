@@ -1,59 +1,52 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$ROOT_DIR"
-. "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
-. "$ROOT_DIR/scripts/deploy/lib/compose-services.sh"
-. "$ROOT_DIR/scripts/deploy/lib/removed-runtimes.sh"
-REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
+cd "${ROOT_DIR}"
+. "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 
 compose_file_resolve_path() {
     local file="$1"
-    if [ ! -r "$file" ] && [ -r "$ROOT_DIR/deploy/compose/$file" ]; then
-        printf '%s\n' "deploy/compose/$file"
+    if [[ ! -r "${file}" && -r "${ROOT_DIR}/deploy/compose/${file}" ]]; then
+        printf '%s\n' "deploy/compose/${file}"
         return
     fi
-    printf '%s\n' "$file"
+    printf '%s\n' "${file}"
 }
 
-COMPOSE_FILE="${COMPOSE_FILE:-deploy/compose/docker-compose.prod.yml}"
-# COMPOSE_FILE 은 docker compose 관례대로 ':' 로 구분된 다중 경로를 허용한다(예: prod:main-ap overlay).
-IFS=':' read -r -a COMPOSE_FILE_PATHS <<< "${COMPOSE_FILE}"
-COMPOSE_FILE_ARGS=()
-for _compose_file_index in "${!COMPOSE_FILE_PATHS[@]}"; do
-    _compose_file="${COMPOSE_FILE_PATHS[$_compose_file_index]}"
-    if [ -n "${_compose_file}" ]; then
-        _compose_file="$(compose_file_resolve_path "${_compose_file}")"
-        COMPOSE_FILE_PATHS[$_compose_file_index]="${_compose_file}"
-        COMPOSE_FILE_ARGS+=("-f" "${_compose_file}")
-    fi
-done
-COMPOSE_FILE="$(IFS=:; printf '%s' "${COMPOSE_FILE_PATHS[*]}")"
-CONTAINER_CLI="${CONTAINER_CLI:-docker}"
+resolve_workspace_path() {
+    local explicit_value="$1"
+    local sibling_path="$2"
+    local embedded_path="$3"
+    local label="$4"
+    local candidate="${explicit_value}"
 
-resolve_shared_go_workspace_path() {
-    local candidate="${SHARED_GO_WORKSPACE_PATH:-}"
-    if [ -z "$candidate" ]; then
-        if [ -d "${REPO_CANONICAL_ROOT}/../shared-go" ]; then
-            candidate="${REPO_CANONICAL_ROOT}/../shared-go"
-        elif [ -d "${REPO_CANONICAL_ROOT}/shared-go" ]; then
-            candidate="${REPO_CANONICAL_ROOT}/shared-go"
+    if [[ -z "${candidate}" ]]; then
+        if [[ -d "${sibling_path}" ]]; then
+            candidate="${sibling_path}"
+        elif [[ -d "${embedded_path}" ]]; then
+            candidate="${embedded_path}"
         fi
     fi
-    if [ ! -d "$candidate" ]; then
-        echo "[ERROR] Active shared-go workspace not found" >&2
+    if [[ ! -d "${candidate}" ]]; then
+        echo "[ERROR] Active ${label} workspace not found" >&2
         exit 1
     fi
-
-    printf '%s\n' "$(cd "$candidate" && pwd)"
+    (cd "${candidate}" && pwd)
 }
 
-if ! SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"; then
-    exit 1
-fi
-export SHARED_GO_WORKSPACE_PATH
+contains_compose_file() {
+    local expected="$1"
+    local path=""
+    for path in "${COMPOSE_FILE_PATHS[@]}"; do
+        if [[ "${path##*/}" == "${expected}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 usage() {
     echo "Usage: $0 <service|all>"
@@ -62,64 +55,93 @@ usage() {
     compose_service_redeploy_usage_lines
 }
 
-if [ $# -ne 1 ]; then
+if [[ $# -ne 1 ]]; then
     usage
     exit 1
 fi
 
-case "$CONTAINER_CLI" in
+COMPOSE_FILE="${COMPOSE_FILE:-deploy/compose/docker-compose.prod.yml}"
+IFS=':' read -r -a COMPOSE_FILE_PATHS <<<"${COMPOSE_FILE}"
+COMPOSE_FILE_ARGS=()
+for index in "${!COMPOSE_FILE_PATHS[@]}"; do
+    file="${COMPOSE_FILE_PATHS[$index]}"
+    [[ -n "${file}" ]] || continue
+    file="$(compose_file_resolve_path "${file}")"
+    COMPOSE_FILE_PATHS[$index]="${file}"
+    COMPOSE_FILE_ARGS+=("-f" "${file}")
+done
+COMPOSE_FILE="$(IFS=:; printf '%s' "${COMPOSE_FILE_PATHS[*]}")"
+
+SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
+    "${SHARED_GO_WORKSPACE_PATH:-}" \
+    "${ROOT_DIR}/../shared-go" \
+    "${ROOT_DIR}/shared-go" \
+    "shared-go")"
+IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_workspace_path \
+    "${IRIS_CLIENT_GO_WORKSPACE_PATH:-}" \
+    "${ROOT_DIR}/../iris-client-go" \
+    "${ROOT_DIR}/iris-client-go" \
+    "iris-client-go")"
+export SHARED_GO_WORKSPACE_PATH IRIS_CLIENT_GO_WORKSPACE_PATH
+
+CONTAINER_CLI="${CONTAINER_CLI:-docker}"
+case "${CONTAINER_CLI}" in
     docker|podman) ;;
     *)
-        echo "[ERROR] Unsupported CONTAINER_CLI: $CONTAINER_CLI"
-        echo "        Allowed values: docker, podman"
+        echo "[ERROR] Unsupported CONTAINER_CLI: ${CONTAINER_CLI}" >&2
         exit 1
         ;;
 esac
-
-if ! command -v "$CONTAINER_CLI" >/dev/null 2>&1; then
-    echo "[ERROR] Container CLI not found: $CONTAINER_CLI"
+if ! command -v "${CONTAINER_CLI}" >/dev/null 2>&1; then
+    echo "[ERROR] Container CLI not found: ${CONTAINER_CLI}" >&2
     exit 1
 fi
 
-COMPOSE_CMD=("$CONTAINER_CLI" "compose")
-COMPOSE_MODE="$CONTAINER_CLI compose"
-if [ "$CONTAINER_CLI" = "podman" ] && command -v podman-compose >/dev/null 2>&1; then
-    COMPOSE_CMD=("podman-compose")
-    COMPOSE_MODE="podman-compose"
-elif ! "$CONTAINER_CLI" compose version >/dev/null 2>&1; then
-    if [ "$CONTAINER_CLI" = "podman" ] && command -v podman-compose >/dev/null 2>&1; then
-        COMPOSE_CMD=("podman-compose")
-        COMPOSE_MODE="podman-compose"
-    else
-        echo "[ERROR] '$CONTAINER_CLI compose' is unavailable"
-        exit 1
-    fi
+COMPOSE_CMD=("${CONTAINER_CLI}" compose)
+COMPOSE_MODE="${CONTAINER_CLI} compose"
+if [[ "${CONTAINER_CLI}" == "podman" ]] && command -v podman-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(podman-compose)
+    COMPOSE_MODE=podman-compose
+elif ! "${CONTAINER_CLI}" compose version >/dev/null 2>&1; then
+    echo "[ERROR] '${CONTAINER_CLI} compose' is unavailable" >&2
+    exit 1
 fi
 
 SERVICE="$1"
-if ! TARGET="$(compose_service_resolve_redeploy_target "$SERVICE")"; then
-    echo "[ERROR] Unsupported service: $SERVICE"
-    echo
-    usage
+if ! TARGET="$(compose_service_resolve_redeploy_target "${SERVICE}")"; then
+    echo "[ERROR] Unsupported service: ${SERVICE}" >&2
+    echo >&2
+    usage >&2
     exit 1
 fi
 
-if [ "$TARGET" = "youtube-producer" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]; then
-    echo "[ERROR] youtube-producer is remote-AP-owned (osaka/seoul). Refusing central redeploy without ALLOW_CENTRAL_YOUTUBE_PRODUCER=true."
+if [[ "${TARGET}" == "youtube-producer" ]] \
+   && ! contains_compose_file docker-compose.osaka.yml \
+   && ! contains_compose_file docker-compose.osaka2.yml \
+   && ! contains_compose_file docker-compose.seoul.yml \
+   && [[ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]]; then
+    echo "[ERROR] youtube-producer is remote-AP-owned; central redeploy requires ALLOW_CENTRAL_YOUTUBE_PRODUCER=true" >&2
     exit 1
 fi
-if [ "$TARGET" = "youtube-producer-c" ]; then
-    if [[ ",${COMPOSE_FILE}," != *"docker-compose.main-ap.yml"* ]]; then
-        echo "[ERROR] youtube-producer-c requires docker-compose.main-ap.yml in COMPOSE_FILE (e.g. COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.main-ap.yml)."
+
+if [[ "${TARGET}" == "youtube-producer-c" ]]; then
+    if ! contains_compose_file docker-compose.main-ap.yml; then
+        echo "[ERROR] youtube-producer-c requires docker-compose.main-ap.yml in COMPOSE_FILE" >&2
         exit 1
     fi
     if [[ ",${COMPOSE_PROFILES:-}," != *",main-ap,"* ]]; then
-        echo "[ERROR] youtube-producer-c requires COMPOSE_PROFILES=main-ap."
+        echo "[ERROR] youtube-producer-c requires COMPOSE_PROFILES=main-ap" >&2
         exit 1
     fi
 fi
-if [ -z "$TARGET" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]; then
-    echo "[ERROR] COMPOSE_PROFILES=oracle would include youtube-producer, which is remote-AP-owned (osaka/seoul). Refusing central all-service deploy."
+
+if [[ -z "${TARGET}" ]] \
+   && ! contains_compose_file docker-compose.osaka.yml \
+   && ! contains_compose_file docker-compose.osaka2.yml \
+   && ! contains_compose_file docker-compose.seoul.yml \
+   && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] \
+   && [[ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]]; then
+    echo "[ERROR] Central all-service deploy cannot enable the remote-owned oracle profile" >&2
     exit 1
 fi
 
@@ -127,31 +149,63 @@ if ! COMPOSE_ENV_FILE="$(compose_env_resolve_file)"; then
     exit 1
 fi
 export COMPOSE_ENV_FILE
-compose_env_validate_file_format "$COMPOSE_ENV_FILE"
-compose_env_assert_shell_matches_all_file_keys "$COMPOSE_ENV_FILE"
-compose_env_assert_no_shell_shadow_for_compose_files "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_PATHS[@]}"
+compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
+compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
+compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
+compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
 compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
 
-export HOLO_API_VERSION="$(cat hololive/hololive-api/VERSION 2>/dev/null | xargs || echo dev)"
-export HOLO_BOT_VERSION="${HOLO_API_VERSION}"
+HOLO_API_VERSION="$(xargs <hololive/hololive-api/VERSION 2>/dev/null || printf '%s' dev)"
+HOLO_ALARM_WORKER_VERSION="$(xargs <hololive/hololive-alarm-worker/VERSION 2>/dev/null || printf '%s' "${HOLO_API_VERSION}")"
+export HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION
 
-echo "[INFO] COMPOSE_MODE=$COMPOSE_MODE"
-echo "[INFO] COMPOSE_FILE=$COMPOSE_FILE"
-echo "[INFO] HOLO_API_VERSION=$HOLO_API_VERSION"
-echo "[INFO] HOLO_BOT_VERSION=$HOLO_BOT_VERSION"
-echo "[INFO] SHARED_GO_WORKSPACE_PATH=$SHARED_GO_WORKSPACE_PATH"
-echo "[INFO] COMPOSE_ENV_FILE=$COMPOSE_ENV_FILE"
+echo "[INFO] COMPOSE_MODE=${COMPOSE_MODE}"
+echo "[INFO] COMPOSE_FILE=${COMPOSE_FILE}"
+echo "[INFO] HOLO_API_VERSION=${HOLO_API_VERSION}"
+echo "[INFO] HOLO_ALARM_WORKER_VERSION=${HOLO_ALARM_WORKER_VERSION}"
+echo "[INFO] SHARED_GO_WORKSPACE_PATH=${SHARED_GO_WORKSPACE_PATH}"
+echo "[INFO] IRIS_CLIENT_GO_WORKSPACE_PATH=${IRIS_CLIENT_GO_WORKSPACE_PATH}"
+echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
-if [ -n "$TARGET" ]; then
-    echo "[UP] $TARGET"
-    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" up -d --build "$TARGET"
-    removed_runtime_cleanup_standalone_dispatcher
-    echo "[PS] $TARGET"
-    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" ps "$TARGET"
+"${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" config --quiet
+
+build_target=false
+case "${TARGET}" in
+    hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|admin-dashboard)
+        build_target=true
+        ;;
+    "")
+        build_target=true
+        ;;
+esac
+
+if [[ "${build_target}" == true ]]; then
+    if [[ -n "${TARGET}" ]]; then
+        echo "[BUILD] ${TARGET}"
+        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build "${TARGET}"
+    else
+        echo "[BUILD] all buildable services"
+        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build
+    fi
+fi
+
+if [[ "${TARGET}" == "hololive-api" || -z "${TARGET}" ]]; then
+    removed_runtime_cleanup_before_cutover
+fi
+
+if [[ -n "${TARGET}" ]]; then
+    echo "[UP] ${TARGET}"
+    up_args=(up -d)
+    if [[ "${build_target}" == true ]]; then
+        up_args+=(--no-build)
+    fi
+    up_args+=("${TARGET}")
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" "${up_args[@]}"
+    echo "[PS] ${TARGET}"
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps "${TARGET}"
 else
     echo "[UP] all services"
-    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" up -d --build
-    removed_runtime_cleanup_standalone_dispatcher
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
     echo "[PS] all services"
-    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" ps
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps
 fi

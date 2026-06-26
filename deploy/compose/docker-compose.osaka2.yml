@@ -23,10 +23,21 @@ x-osaka2-ap-logging: &osaka2-ap-logging
 
 services:
   hololive-api:
+    profiles: !override ["central-only"]
     env_file: !override []
 
   hololive-alarm-worker:
+    profiles: !override ["central-only"]
     env_file: !override []
+
+  admin-dashboard:
+    profiles: !override ["central-only"]
+
+  docker-proxy:
+    profiles: !override ["central-only"]
+
+  deunhealth:
+    profiles: !override ["central-only"]
 
   youtube-producer:
     profiles: !override ["retired-youtube-producer"]
