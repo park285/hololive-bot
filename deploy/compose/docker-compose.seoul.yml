@@ -82,6 +82,14 @@ services:
       - "127.0.0.1:30015:30015"
       - "127.0.0.1:30015:30015/udp"
       - "${SEOUL_METRICS_BIND_IP:?SEOUL_METRICS_BIND_IP is required}:30095:30095"
+    volumes: !override
+      - ../../data:/app/data
+      - ../../logs:/app/logs
+      - ../../runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
     healthcheck:
       test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30015/health"]
     logging: *seoul-ap-logging

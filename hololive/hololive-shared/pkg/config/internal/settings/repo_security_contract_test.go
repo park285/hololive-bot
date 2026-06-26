@@ -142,7 +142,7 @@ func assertProdComposeEgressEnvFiles(t *testing.T, content string) {
 	for _, service := range egressOwners {
 		block := composeServiceBlock(t, content, service)
 		wantEnvFile := map[string]string{
-			"hololive-api":          "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/bot.env}",
+			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}",
 			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}",
 		}[service]
 		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {
@@ -366,7 +366,7 @@ func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 	for _, service := range []string{"hololive-api", "hololive-alarm-worker"} {
 		block := composeServiceBlock(t, overlay, service)
 		wantEnvFile := map[string]string{
-			"hololive-api":          "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/bot.env}",
+			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}",
 			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}",
 		}[service]
 		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {
@@ -960,7 +960,7 @@ func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files .
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
 		"COMPOSE_ENV_FILE="+composeEnvFile,
-		"HOLOLIVE_BOT_ENV_FILE="+composeEnvFile,
+		"HOLOLIVE_API_ENV_FILE="+composeEnvFile,
 		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+composeEnvFile,
 		"HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="+writeAPProducerEnvFile(t),
 		"DB_PASSWORD=dummy",
@@ -1033,6 +1033,10 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 		"CACHE_PASSWORD=dummy",
 		"ADMIN_PASS_BCRYPT=dummy",
 		"SESSION_SECRET=dummy",
+		"SEOUL_CACHE_HOST=stub",
+		"SEOUL_POSTGRES_HOST=stub",
+		"SEOUL_CLIPROXY_BASE_URL=https://cliproxy.invalid",
+		"SEOUL_METRICS_BIND_IP=100.100.1.5",
 	)
 
 	output, err := cmd.CombinedOutput()

@@ -51,7 +51,7 @@ func skipIfNoLLMKey(t *testing.T) {
 
 func loadEnv() error {
 	candidates := []string{
-		os.Getenv("HOLOLIVE_BOT_ENV_FILE"),
+		os.Getenv("HOLOLIVE_API_ENV_FILE"),
 		"../../../../.env",
 		"../../../../../../.env",
 	}

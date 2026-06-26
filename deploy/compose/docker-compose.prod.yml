@@ -77,10 +77,6 @@ x-go-healthcheck: &go-healthcheck
   start_period: 30s
   retries: 3
 
-x-deploy-1280m: &deploy-1280m
-  resources:
-    limits:
-      memory: 1280m
 x-deploy-512m: &deploy-512m
   resources:
     limits:
@@ -421,7 +417,6 @@ services:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
     container_name: hololive-api
     stop_grace_period: 45s
-    pids_limit: 512
     env_file:
       - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}
     environment:
@@ -488,7 +483,11 @@ services:
         condition: service_healthy
       docker-proxy:
         condition: service_started
-    deploy: *deploy-1280m
+    deploy:
+      resources:
+        limits:
+          memory: 1280m
+          pids: 512
     healthcheck:
       <<: *go-healthcheck
       start_period: 45s

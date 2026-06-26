@@ -49,7 +49,7 @@ func skipIfNoCliproxy(t *testing.T) {
 func loadEnv() error {
 	// monorepo 루트 .env 또는 모듈 로컬 .env를 순서대로 탐색한다.
 	candidates := []string{
-		os.Getenv("HOLOLIVE_BOT_ENV_FILE"),
+		os.Getenv("HOLOLIVE_API_ENV_FILE"),
 		"../../../../.env",
 		"../../../../../../.env",
 	}
