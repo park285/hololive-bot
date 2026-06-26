@@ -13,35 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  source-snapshot:
-    name: Source snapshot diagnostics
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout pull request branch
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 1
-      - name: Archive source tree
-        shell: bash
-        run: |
-          set -euo pipefail
-          tar --exclude=.git -czf "${RUNNER_TEMP}/hololive-bot-source.tar.gz" .
-      - name: Upload source snapshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: hololive-bot-source-${{ github.sha }}
-          path: ${{ runner.temp }}/hololive-bot-source.tar.gz
-          if-no-files-found: error
-          retention-days: 1
-
   go-test:
     name: Go test (${{ matrix.module }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     container: golang:1.26.4-bookworm
     strategy:
       fail-fast: false
       matrix:
         module:
+          - admin-dashboard/backend
           - hololive/hololive-shared
           - hololive/hololive-kakao-bot-go
           - hololive/hololive-admin-api
@@ -50,43 +31,36 @@ jobs:
           - hololive/hololive-youtube-producer
           - hololive/hololive-api
     steps:
-      - name: Checkout pull request branch
+      - name: Checkout hololive-bot
         uses: actions/checkout@v5
         with:
           path: hololive-bot
           fetch-depth: 1
-      - name: Test module
+      - name: Checkout shared-go
+        uses: actions/checkout@v5
+        with:
+          repository: park285/shared-go
+          ref: v1.19.0
+          path: shared-go
+          fetch-depth: 1
+      - name: Checkout iris-client-go
+        uses: actions/checkout@v5
+        with:
+          repository: park285/iris-client-go
+          ref: v0.23.0
+          path: iris-client-go
+          fetch-depth: 1
+      - name: Test module in repository workspace
         shell: bash
-        env:
-          GOWORK: "off"
+        working-directory: hololive-bot/${{ matrix.module }}
         run: |
           set -euo pipefail
-          cd "hololive-bot/${{ matrix.module }}"
           go test ./...
 
   race:
     name: Race-sensitive packages
     runs-on: ubuntu-latest
-    container: golang:1.26.4-bookworm
-    steps:
-      - name: Checkout pull request branch
-        uses: actions/checkout@v5
-        with:
-          path: hololive-bot
-          fetch-depth: 1
-      - name: Alarm client and lifecycle race tests
-        shell: bash
-        env:
-          GOWORK: "off"
-        run: |
-          set -euo pipefail
-          cd hololive-bot/hololive/hololive-shared
-          go test -race ./pkg/service/alarm/...
-          go test -race ./pkg/applifecycle/...
-
-  architecture:
-    name: Architecture boundary gate
-    runs-on: ubuntu-latest
+    timeout-minutes: 25
     container: golang:1.26.4-bookworm
     steps:
       - name: Checkout hololive-bot
@@ -108,24 +82,125 @@ jobs:
           ref: v0.23.0
           path: iris-client-go
           fetch-depth: 1
-      - name: Run architecture contracts
+      - name: Alarm client and lifecycle race tests
         shell: bash
+        working-directory: hololive-bot/hololive/hololive-shared
         run: |
           set -euo pipefail
-          cd hololive-bot
-          ./scripts/architecture/ci-boundary-gate.sh
+          go test -race ./pkg/service/alarm/...
+          go test -race ./pkg/applifecycle/...
 
-  compose:
-    name: Render production topology
+  deploy-contract:
+    name: Deployment and topology contracts
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Checkout pull request branch
+      - name: Checkout hololive-bot
         uses: actions/checkout@v5
         with:
           path: hololive-bot
           fetch-depth: 1
-      - name: Render Compose
+      - name: Checkout shared-go
+        uses: actions/checkout@v5
+        with:
+          repository: park285/shared-go
+          ref: v1.19.0
+          path: shared-go
+          fetch-depth: 1
+      - name: Checkout iris-client-go
+        uses: actions/checkout@v5
+        with:
+          repository: park285/iris-client-go
+          ref: v0.23.0
+          path: iris-client-go
+          fetch-depth: 1
+      - name: Validate shell and deployment contracts
         shell: bash
+        working-directory: hololive-bot
+        run: |
+          set -euo pipefail
+          bash -n \
+            build-all.sh \
+            scripts/deploy/compose.sh \
+            scripts/deploy/compose-redeploy-service.sh \
+            scripts/deploy/lib/compose-env.sh \
+            scripts/deploy/lib/compose-services.sh \
+            scripts/deploy/lib/removed-runtimes.sh \
+            scripts/deploy/test-compose-env.sh \
+            scripts/deploy/test-compose-services.sh \
+            scripts/deploy/test-three-runtime-topology.sh \
+            scripts/deploy/test-removed-runtimes.sh
+          ./scripts/deploy/test-compose-env.sh
+          ./scripts/deploy/test-compose-services.sh
+          ./scripts/deploy/test-three-runtime-topology.sh
+          ./scripts/deploy/test-removed-runtimes.sh
+
+  architecture:
+    name: Architecture boundary gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: golang:1.26.4-bookworm
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@v5
+        with:
+          path: hololive-bot
+          fetch-depth: 1
+      - name: Checkout shared-go
+        uses: actions/checkout@v5
+        with:
+          repository: park285/shared-go
+          ref: v1.19.0
+          path: shared-go
+          fetch-depth: 1
+      - name: Checkout iris-client-go
+        uses: actions/checkout@v5
+        with:
+          repository: park285/iris-client-go
+          ref: v0.23.0
+          path: iris-client-go
+          fetch-depth: 1
+      - name: Install architecture gate tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends git ripgrep
+          rm -rf /var/lib/apt/lists/*
+      - name: Run architecture contracts
+        shell: bash
+        working-directory: hololive-bot
+        run: |
+          set -euo pipefail
+          ./scripts/architecture/ci-boundary-gate.sh
+
+  compose:
+    name: Render active Compose topologies
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@v5
+        with:
+          path: hololive-bot
+          fetch-depth: 1
+      - name: Checkout shared-go
+        uses: actions/checkout@v5
+        with:
+          repository: park285/shared-go
+          ref: v1.19.0
+          path: shared-go
+          fetch-depth: 1
+      - name: Checkout iris-client-go
+        uses: actions/checkout@v5
+        with:
+          repository: park285/iris-client-go
+          ref: v0.23.0
+          path: iris-client-go
+          fetch-depth: 1
+      - name: Render production and AP topologies
+        shell: bash
+        working-directory: hololive-bot
         env:
           DB_PASSWORD: ci-db-password
           CACHE_PASSWORD: ci-cache-password
@@ -136,14 +211,44 @@ jobs:
           HOLODEX_API_KEY: ci-holodex-key
           HOLOLIVE_API_ENV_FILE: /dev/null
           HOLOLIVE_ALARM_WORKER_ENV_FILE: /dev/null
+          HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE: /dev/null
+          SHARED_GO_WORKSPACE_PATH: ${{ github.workspace }}/shared-go
+          IRIS_CLIENT_GO_WORKSPACE_PATH: ${{ github.workspace }}/iris-client-go
+          SEOUL_CACHE_HOST: ci-cache.internal
+          SEOUL_POSTGRES_HOST: ci-postgres.internal
+          SEOUL_CLIPROXY_BASE_URL: http://ci-cliproxy.internal:8787/v1
+          SEOUL_METRICS_BIND_IP: 127.0.0.1
         run: |
           set -euo pipefail
-          cd hololive-bot
+          ./scripts/deploy/test-three-runtime-topology.sh
           docker compose -f deploy/compose/docker-compose.prod.yml config --quiet
+          docker compose \
+            -f deploy/compose/docker-compose.prod.yml \
+            -f deploy/compose/docker-compose.live-compat.yml \
+            config --quiet
+          COMPOSE_PROFILES=main-ap docker compose \
+            -f deploy/compose/docker-compose.prod.yml \
+            -f deploy/compose/docker-compose.main-ap.yml \
+            -f deploy/compose/docker-compose.main-ap.live-compat.yml \
+            config --quiet
+          for ap_overlay in \
+            deploy/compose/docker-compose.osaka.yml \
+            deploy/compose/docker-compose.osaka2.yml \
+            deploy/compose/docker-compose.seoul.yml; do
+            COMPOSE_PROFILES=oracle docker compose \
+              -f deploy/compose/docker-compose.prod.yml \
+              -f "${ap_overlay}" \
+              config --quiet
+          done
+          docker compose \
+            -f deploy/compose/docker-compose.prod.yml \
+            -f deploy/compose/docker-compose.remote-cache.yml \
+            config --quiet
 
   image:
-    name: Build hololive-api image
+    name: Build three runtime images
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout hololive-bot
         uses: actions/checkout@v5
@@ -164,7 +269,7 @@ jobs:
           ref: v0.23.0
           path: iris-client-go
           fetch-depth: 1
-      - name: Build unified runtime image
+      - name: Build unified API image
         shell: bash
         run: |
           set -euo pipefail
@@ -173,4 +278,23 @@ jobs:
             --build-context iris_client_go_workspace=iris-client-go \
             -f hololive-bot/hololive/hololive-api/Dockerfile \
             -t hololive-api:ci \
+            hololive-bot
+      - name: Build alarm worker image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --load \
+            --build-context shared_go_workspace=shared-go \
+            --build-context iris_client_go_workspace=iris-client-go \
+            -f hololive-bot/hololive/hololive-alarm-worker/Dockerfile \
+            -t hololive-alarm-worker:ci \
+            hololive-bot
+      - name: Build YouTube producer image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --load \
+            --build-context shared_go_workspace=shared-go \
+            -f hololive-bot/hololive/hololive-youtube-producer/Dockerfile \
+            -t hololive-youtube-producer:ci \
             hololive-bot
