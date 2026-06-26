@@ -12,13 +12,11 @@ concurrency:
   group: three-runtime-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  GO_VERSION: 1.26.4
-
 jobs:
   go-test:
     name: Go test (${{ matrix.module }})
     runs-on: ubuntu-latest
+    container: golang:1.26.4-bookworm
     strategy:
       fail-fast: false
       matrix:
@@ -31,85 +29,104 @@ jobs:
           - hololive/hololive-youtube-producer
           - hololive/hololive-api
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
+      - name: Checkout pull request branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
       - name: Test module
-        working-directory: ${{ matrix.module }}
+        shell: bash
         env:
           GOWORK: "off"
-        run: go test ./...
+        run: |
+          set -euo pipefail
+          cd "${{ matrix.module }}"
+          go test ./...
 
   race:
     name: Race-sensitive packages
     runs-on: ubuntu-latest
+    container: golang:1.26.4-bookworm
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
+      - name: Checkout pull request branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
       - name: Alarm client and lifecycle race tests
-        working-directory: hololive/hololive-shared
+        shell: bash
         env:
           GOWORK: "off"
         run: |
+          set -euo pipefail
+          cd hololive/hololive-shared
           go test -race ./pkg/service/alarm/...
           go test -race ./pkg/applifecycle/...
 
-  contracts:
-    name: Architecture and Compose contracts
+  architecture:
+    name: Architecture boundary gate
+    runs-on: ubuntu-latest
+    container: golang:1.26.4-bookworm
+    steps:
+      - name: Checkout repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
+          git clone --depth 1 --branch v1.19.0 https://github.com/park285/shared-go.git ../shared-go
+          git clone --depth 1 --branch v0.22.0 https://github.com/park285/iris-client-go.git ../iris-client-go
+      - name: Run architecture contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/architecture/ci-boundary-gate.sh
+
+  compose:
+    name: Render production topology
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: park285/shared-go
-          ref: v1.19.0
-          path: external/shared-go
-      - uses: actions/checkout@v4
-        with:
-          repository: park285/iris-client-go
-          ref: v0.22.0
-          path: external/iris-client-go
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
-      - name: Link workspace dependencies
+      - name: Checkout pull request branch
+        shell: bash
         run: |
-          ln -sfn "$GITHUB_WORKSPACE/external/shared-go" "$GITHUB_WORKSPACE/../shared-go"
-          ln -sfn "$GITHUB_WORKSPACE/external/iris-client-go" "$GITHUB_WORKSPACE/../iris-client-go"
-      - name: Render production topology
-        run: docker compose -f deploy/compose/docker-compose.runtime3.yml config --quiet
-      - name: Architecture boundary gate
-        run: ./scripts/architecture/ci-boundary-gate.sh
+          set -euo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
+      - name: Render Compose
+        shell: bash
+        env:
+          DB_PASSWORD: ci-db-password
+          CACHE_PASSWORD: ci-cache-password
+          ADMIN_PASS_BCRYPT: ci-bcrypt-placeholder
+          SESSION_SECRET: ci-session-secret
+          API_SECRET_KEY: ci-api-secret
+          KAKAO_ROOMS: ci-room
+          HOLODEX_API_KEY: ci-holodex-key
+        run: |
+          set -euo pipefail
+          docker compose -f deploy/compose/docker-compose.runtime3.yml config --quiet
 
   image:
     name: Build hololive-api image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: park285/shared-go
-          ref: v1.19.0
-          path: external/shared-go
-      - uses: actions/checkout@v4
-        with:
-          repository: park285/iris-client-go
-          ref: v0.22.0
-          path: external/iris-client-go
-      - uses: docker/setup-buildx-action@v3
+      - name: Checkout repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
+          git clone --depth 1 --branch v1.19.0 https://github.com/park285/shared-go.git ../shared-go
+          git clone --depth 1 --branch v0.22.0 https://github.com/park285/iris-client-go.git ../iris-client-go
       - name: Build unified runtime image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: hololive/hololive-api/Dockerfile
-          push: false
-          tags: hololive-api:ci
-          build-contexts: |
-            shared_go_workspace=external/shared-go
-            iris_client_go_workspace=external/iris-client-go
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --load \
+            --build-context shared_go_workspace=../shared-go \
+            --build-context iris_client_go_workspace=../iris-client-go \
+            -f hololive/hololive-api/Dockerfile \
+            -t hololive-api:ci \
+            .
