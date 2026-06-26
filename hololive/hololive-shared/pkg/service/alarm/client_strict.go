@@ -19,18 +19,8 @@ func NewClientWithAPIKeyStrict(baseURL, apiKey string, logger *slog.Logger) (*Cl
 	if baseURL == "" {
 		return nil, fmt.Errorf("alarm service base URL is required")
 	}
-	parsed, err := url.Parse(baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse alarm service base URL: %w", err)
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return nil, fmt.Errorf("alarm service URL scheme must be http or https")
-	}
-	if parsed.Host == "" {
-		return nil, fmt.Errorf("alarm service URL must include a host")
-	}
-	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
-		return nil, fmt.Errorf("alarm service URL must be an origin without credentials, path, query or fragment")
+	if err := validateAlarmServiceOrigin(baseURL); err != nil {
+		return nil, err
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -45,4 +35,28 @@ func NewClientWithAPIKeyStrict(baseURL, apiKey string, logger *slog.Logger) (*Cl
 		httpClient: httpClient,
 		logger:     logger,
 	}, nil
+}
+
+func validateAlarmServiceOrigin(baseURL string) error {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("parse alarm service base URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("alarm service URL scheme must be http or https")
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("alarm service URL must include a host")
+	}
+	if alarmOriginHasDisallowedParts(parsed) {
+		return fmt.Errorf("alarm service URL must be an origin without credentials, path, query or fragment")
+	}
+	return nil
+}
+
+func alarmOriginHasDisallowedParts(parsed *url.URL) bool {
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return true
+	}
+	return parsed.Path != "" && parsed.Path != "/"
 }

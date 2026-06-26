@@ -100,6 +100,19 @@ func (c *HololiveAPIConfig) Validate() error {
 	if c.Bot == nil || c.Admin == nil || c.LLM == nil {
 		return fmt.Errorf("bot, admin and llm plane configs are required")
 	}
+	if err := c.validatePlaneRuntimes(); err != nil {
+		return err
+	}
+	if err := c.validateAlarmProviders(); err != nil {
+		return err
+	}
+	if err := c.validatePlanePools(); err != nil {
+		return err
+	}
+	return validateHololiveAPIListenerPorts(c)
+}
+
+func (c *HololiveAPIConfig) validatePlaneRuntimes() error {
 	if err := c.Bot.ValidateBotRuntime(); err != nil {
 		return fmt.Errorf("bot plane: %w", err)
 	}
@@ -109,12 +122,20 @@ func (c *HololiveAPIConfig) Validate() error {
 	if err := c.LLM.validateRuntime(); err != nil {
 		return fmt.Errorf("llm plane: %w", err)
 	}
+	return nil
+}
+
+func (c *HololiveAPIConfig) validateAlarmProviders() error {
 	if err := validateAlarmProviderURL(c.Bot.Environment, c.Bot.AlarmServiceURL); err != nil {
 		return err
 	}
 	if c.Admin.AlarmServiceURL != c.Bot.AlarmServiceURL {
 		return fmt.Errorf("bot and admin planes must use the same alarm provider URL")
 	}
+	return nil
+}
+
+func (c *HololiveAPIConfig) validatePlanePools() error {
 	if err := validatePlanePool("bot", c.Bot.Postgres); err != nil {
 		return err
 	}
@@ -124,7 +145,7 @@ func (c *HololiveAPIConfig) Validate() error {
 	if err := validatePlanePool("llm", c.LLM.Postgres); err != nil {
 		return err
 	}
-	return validateHololiveAPIListenerPorts(c)
+	return nil
 }
 
 func validateAlarmProviderURL(environment, rawURL string) error {
@@ -139,6 +160,13 @@ func validateAlarmProviderURL(environment, rawURL string) error {
 	if parsed.Host == "" {
 		return fmt.Errorf("ALARM_INTERNAL_URL must include a host")
 	}
+	if err := validateAlarmProviderScheme(environment, parsed); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateAlarmProviderScheme(environment string, parsed *url.URL) error {
 	if isProductionEnvironment(environment) && parsed.Scheme != "https" {
 		return fmt.Errorf("ALARM_INTERNAL_URL must use https in production")
 	}
@@ -163,6 +191,13 @@ func validatePlanePool(plane string, config PostgresConfig) error {
 
 func validateHololiveAPIListenerPorts(config *HololiveAPIConfig) error {
 	owners := make(map[int]string)
+	if err := registerPrimaryListenerPorts(owners, config); err != nil {
+		return err
+	}
+	return registerAuxiliaryListenerPorts(owners, config)
+}
+
+func registerPrimaryListenerPorts(owners map[int]string, config *HololiveAPIConfig) error {
 	listeners := []struct {
 		owner string
 		port  int
@@ -175,19 +210,22 @@ func validateHololiveAPIListenerPorts(config *HololiveAPIConfig) error {
 		if listener.port <= 0 || listener.port > 65535 {
 			return fmt.Errorf("%s listener port must be between 1 and 65535", listener.owner)
 		}
-		if previous, exists := owners[listener.port]; exists {
-			return fmt.Errorf("listener port %d is shared by %s and %s", listener.port, previous, listener.owner)
+		if err := recordListenerPort(owners, listener.owner, listener.port); err != nil {
+			return err
 		}
-		owners[listener.port] = listener.owner
 	}
+	return nil
+}
 
-	for _, auxiliary := range []struct {
+func registerAuxiliaryListenerPorts(owners map[int]string, config *HololiveAPIConfig) error {
+	auxiliaries := []struct {
 		owner string
 		addr  string
 	}{
 		{owner: "metrics", addr: config.Bot.Server.MetricsAddr},
 		{owner: "pprof", addr: config.Bot.Server.PprofAddr},
-	} {
+	}
+	for _, auxiliary := range auxiliaries {
 		if strings.TrimSpace(auxiliary.addr) == "" {
 			continue
 		}
@@ -195,11 +233,18 @@ func validateHololiveAPIListenerPorts(config *HololiveAPIConfig) error {
 		if err != nil {
 			return fmt.Errorf("%s listener: %w", auxiliary.owner, err)
 		}
-		if previous, exists := owners[port]; exists {
-			return fmt.Errorf("listener port %d is shared by %s and %s", port, previous, auxiliary.owner)
+		if err := recordListenerPort(owners, auxiliary.owner, port); err != nil {
+			return err
 		}
-		owners[port] = auxiliary.owner
 	}
+	return nil
+}
+
+func recordListenerPort(owners map[int]string, owner string, port int) error {
+	if previous, exists := owners[port]; exists {
+		return fmt.Errorf("listener port %d is shared by %s and %s", port, previous, owner)
+	}
+	owners[port] = owner
 	return nil
 }
 

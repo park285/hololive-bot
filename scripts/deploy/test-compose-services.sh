@@ -36,27 +36,30 @@ expect_fail() {
     pass "${label}"
 }
 
-expect_eq "$(compose_service_resolve_build_target bot)" "hololive-bot" "build alias bot"
-expect_eq "$(compose_service_resolve_build_target hololive-kakao-bot-go)" "hololive-bot" "build legacy module alias"
-expect_eq "$(compose_service_resolve_build_target admin-api)" "hololive-admin-api" "build alias admin-api"
+expect_eq "$(compose_service_resolve_build_target hololive-api)" "hololive-api" "build target hololive-api"
+expect_fail "build target rejects retired bot alias" compose_service_resolve_build_target bot
+expect_fail "build target rejects retired bot module" compose_service_resolve_build_target hololive-kakao-bot-go
+expect_fail "build target rejects retired admin-api alias" compose_service_resolve_build_target admin-api
 expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm-worker" "build alias alarm-worker"
 expect_eq "$(compose_service_resolve_build_target youtube-producer)" "youtube-producer" "build target youtube-producer"
 expect_fail "build target rejects removed dispatcher" compose_service_resolve_build_target dispatcher-go
 
-expect_eq "$(compose_service_resolve_redeploy_target bot)" "hololive-bot" "redeploy alias bot"
-expect_eq "$(compose_service_resolve_redeploy_target llm)" "llm-scheduler" "redeploy alias llm"
+expect_eq "$(compose_service_resolve_redeploy_target hololive-api)" "hololive-api" "redeploy target hololive-api"
+expect_fail "redeploy target rejects retired bot alias" compose_service_resolve_redeploy_target bot
+expect_fail "redeploy target rejects retired llm alias" compose_service_resolve_redeploy_target llm
 expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" "redeploy alias postgres"
 expect_eq "$(compose_service_resolve_redeploy_target admin)" "admin-dashboard" "redeploy alias admin"
 expect_eq "$(compose_service_resolve_redeploy_target all)" "" "redeploy all sentinel"
 expect_eq "$(compose_service_resolve_redeploy_target youtube-producer-c)" "youtube-producer-c" "redeploy target youtube-producer-c (main-ap)"
 expect_fail "redeploy target rejects removed dispatcher" compose_service_resolve_redeploy_target dispatcher-go
 
-expect_eq "$(compose_service_resolve_log_target bot)" "hololive-bot" "log alias bot"
+expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
+expect_fail "log target rejects retired bot alias" compose_service_resolve_log_target bot
 expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
 expect_eq "$(compose_service_resolve_log_target youtube-producer)" "youtube-producer" "log target youtube-producer"
 expect_eq "$(compose_service_resolve_log_target youtube-producer-c)" "youtube-producer-c" "log target youtube-producer-c (main-ap)"
 expect_fail "log target rejects removed producer shorthand" compose_service_resolve_log_target producer
-expect_eq "$(compose_service_resolve_log_target llm)" "llm-scheduler" "log alias llm"
+expect_fail "log target rejects retired llm alias" compose_service_resolve_log_target llm
 expect_fail "log target rejects removed dispatcher" compose_service_resolve_log_target dispatcher-go
 
 . "${ROOT_DIR}/scripts/deploy/lib/ap-host.sh"

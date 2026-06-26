@@ -3,6 +3,7 @@ package alarm
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -15,7 +16,9 @@ func TestClient_UpdateAlarmAdvanceMinutes_NilContextSkipsRequest(t *testing.T) {
 		requestCount++
 		w.WriteHeader(http.StatusOK)
 	})
-	client := newTestClient(t, mux)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := NewClient(server.URL, nil)
 
 	var nilCtx context.Context
 

@@ -302,22 +302,33 @@ func decodeAPIEnvelope(path string, body io.Reader, out any) error {
 		return fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
 	}
 	if !envelope.Success {
-		message := strings.TrimSpace(envelope.Message)
-		if message == "" {
-			message = strings.TrimSpace(envelope.Error)
-		}
-		if message == "" {
-			message = "provider returned unsuccessful response"
-		}
-		return fmt.Errorf("alarm-api: %s: %s", path, message)
+		return fmt.Errorf("alarm-api: %s: %s", path, envelopeFailureMessage(envelope))
 	}
-	if out == nil || len(envelope.Data) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Data), []byte("null")) {
+	if !envelopeHasData(out, envelope.Data) {
 		return nil
 	}
 	if err := json.Unmarshal(envelope.Data, out); err != nil {
 		return fmt.Errorf("alarm-api: %s: decode data: %w", path, err)
 	}
 	return nil
+}
+
+func envelopeFailureMessage(envelope apiEnvelope) string {
+	message := strings.TrimSpace(envelope.Message)
+	if message == "" {
+		message = strings.TrimSpace(envelope.Error)
+	}
+	if message == "" {
+		message = "provider returned unsuccessful response"
+	}
+	return message
+}
+
+func envelopeHasData(out any, data json.RawMessage) bool {
+	if out == nil || len(data) == 0 {
+		return false
+	}
+	return !bytes.Equal(bytes.TrimSpace(data), []byte("null"))
 }
 
 func encodeJSONRequestBody(path string, body any) (io.Reader, error) {
