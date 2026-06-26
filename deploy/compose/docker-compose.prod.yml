@@ -77,11 +77,26 @@ x-go-healthcheck: &go-healthcheck
   start_period: 30s
   retries: 3
 
-x-deploy-1280m: &deploy-1280m {resources: {limits: {memory: 1280m}}}
-x-deploy-512m: &deploy-512m {resources: {limits: {memory: 512m}}}
-x-deploy-384m: &deploy-384m {resources: {limits: {memory: 384m}}}
-x-deploy-128m: &deploy-128m {resources: {limits: {memory: 128m}}}
-x-deploy-32m: &deploy-32m {resources: {limits: {memory: 32m}}}
+x-deploy-1280m: &deploy-1280m
+  resources:
+    limits:
+      memory: 1280m
+x-deploy-512m: &deploy-512m
+  resources:
+    limits:
+      memory: 512m
+x-deploy-384m: &deploy-384m
+  resources:
+    limits:
+      memory: 384m
+x-deploy-128m: &deploy-128m
+  resources:
+    limits:
+      memory: 128m
+x-deploy-32m: &deploy-32m
+  resources:
+    limits:
+      memory: 32m
 
 x-cache-env: &cache-env
   CACHE_SOCKET_PATH: ${CACHE_SOCKET_PATH:-}
@@ -306,4 +321,342 @@ services:
       POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
       POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
-      HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-
+      HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
+    command:
+      - /bin/sh
+      - /migrations/bootstrap-and-apply.sh
+    volumes:
+      - ../../hololive/hololive-kakao-bot-go/scripts/migrations:/migrations:ro
+      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+    depends_on:
+      holo-postgres:
+        condition: service_healthy
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - hololive-net
+
+  hololive-alarm-worker:
+    <<: *app-service
+    image: hololive-alarm-worker:prod
+    build:
+      <<: *go-build-base
+      dockerfile: hololive/hololive-alarm-worker/Dockerfile
+      args:
+        VERSION: ${HOLO_ALARM_WORKER_VERSION:-${HOLO_API_VERSION:-2.0.0}}
+        GO_PGO_FILE: ${HOLOLIVE_ALARM_WORKER_GO_PGO_FILE:-cmd/alarm-worker/default.pgo}
+    container_name: hololive-alarm-worker
+    env_file:
+      - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}
+    environment:
+      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env]
+      NOTIFICATION_EGRESS_ROLE: "owner"
+      NOTIFICATION_SCHEDULER_ROLE: "worker"
+      YOUTUBE_OUTBOX_DISPATCHER_ENABLED: ${YOUTUBE_OUTBOX_DISPATCHER_ENABLED:-true}
+      YOUTUBE_OUTBOX_KARING_ENABLED: ${YOUTUBE_OUTBOX_KARING_ENABLED:-false}
+      DELIVERY_DISPATCHER_ENABLED: ${DELIVERY_DISPATCHER_ENABLED:-true}
+      ALARM_WORKER_EGRESS_LEASE_ENABLED: ${ALARM_WORKER_EGRESS_LEASE_ENABLED:-true}
+      SERVER_PORT: 30007
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_ALARM_WORKER_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_ALARM_WORKER_H3_ADDR:-:30007}
+      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_ALARM_WORKER_METRICS_ADDR:-:30097}
+      HOLOLIVE_PPROF_ADDR: ${HOLOLIVE_ALARM_WORKER_PPROF_ADDR:-:30067}
+      POSTGRES_POOL_MIN_CONNS: ${ALARM_WORKER_POSTGRES_POOL_MIN_CONNS:-1}
+      POSTGRES_POOL_MAX_CONNS: ${ALARM_WORKER_POSTGRES_POOL_MAX_CONNS:-8}
+      ALARM_DISPATCH_KARING_ENABLED: ${ALARM_DISPATCH_KARING_ENABLED:-false}
+      ALARM_DISPATCH_WAKEUP_ENABLED: ${ALARM_DISPATCH_WAKEUP_ENABLED:-true}
+      ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH: ${ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH:-1000}
+      ALARM_DISPATCH_MAX_BATCH: ${ALARM_DISPATCH_MAX_BATCH:-50}
+      ALARM_DISPATCH_LEASE_SECONDS: ${ALARM_DISPATCH_LEASE_SECONDS:-60}
+      ALARM_DISPATCH_POLL_INTERVAL_MS: ${ALARM_DISPATCH_POLL_INTERVAL_MS:-1000}
+      ALARM_DISPATCH_MAX_BATCHES_PER_WAKE: ${ALARM_DISPATCH_MAX_BATCHES_PER_WAKE:-20}
+      ALARM_DISPATCH_IDLE_BACKOFF_MIN_MS: ${ALARM_DISPATCH_IDLE_BACKOFF_MIN_MS:-250}
+      ALARM_DISPATCH_IDLE_BACKOFF_MAX_MS: ${ALARM_DISPATCH_IDLE_BACKOFF_MAX_MS:-5000}
+      ALARM_DISPATCH_RECOVERY_INTERVAL_MS: ${ALARM_DISPATCH_RECOVERY_INTERVAL_MS:-30000}
+      ALARM_DISPATCH_RECOVERY_BATCH_SIZE: ${ALARM_DISPATCH_RECOVERY_BATCH_SIZE:-100}
+      ALARM_DISPATCH_RETENTION_ENABLED: ${ALARM_DISPATCH_RETENTION_ENABLED:-true}
+      ALARM_DISPATCH_RETENTION_INTERVAL_MS: ${ALARM_DISPATCH_RETENTION_INTERVAL_MS:-3600000}
+      ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS: ${ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS:-30000}
+      ALARM_DISPATCH_RETENTION_LIMIT: ${ALARM_DISPATCH_RETENTION_LIMIT:-1000}
+      ALARM_DISPATCH_RETENTION_SENT_DAYS: ${ALARM_DISPATCH_RETENTION_SENT_DAYS:-90}
+      ALARM_DISPATCH_RETENTION_DLQ_DAYS: ${ALARM_DISPATCH_RETENTION_DLQ_DAYS:-180}
+      ALARM_DISPATCH_RETENTION_QUARANTINED_DAYS: ${ALARM_DISPATCH_RETENTION_QUARANTINED_DAYS:-180}
+      ALARM_DISPATCH_RETENTION_CANCELLED_DAYS: ${ALARM_DISPATCH_RETENTION_CANCELLED_DAYS:-90}
+      ALARM_DISPATCH_RETENTION_EVENT_DAYS: ${ALARM_DISPATCH_RETENTION_EVENT_DAYS:-90}
+      ALARM_TWITCH_ENABLED: ${ALARM_TWITCH_ENABLED:-true}
+      LOG_DIR: /app/logs
+      GOMEMLIMIT: "320MiB"
+      APP_ENV: "production"
+      KAKAO_ROOMS: ${KAKAO_ROOMS:-}
+      KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED:-true}
+      KAKAO_ACL_MODE: ${KAKAO_ACL_MODE:-whitelist}
+      API_SECRET_KEY: ${API_SECRET_KEY:-}
+      HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
+      HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
+    ports:
+      - "127.0.0.1:30007:30007"
+      - "127.0.0.1:30007:30007/udp"
+      - "127.0.0.1:30097:30097"
+      - "127.0.0.1:30067:30067"
+    volumes: *alarm-worker-volumes
+    extra_hosts: *iris-extra-hosts
+    depends_on: *db-cache-depends
+    deploy: *deploy-384m
+    healthcheck:
+      <<: *go-healthcheck
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30007/health"]
+    networks:
+      hololive-net:
+        aliases:
+          - hololive-alarm-worker
+
+  hololive-api:
+    <<: *app-service
+    image: hololive-api:prod
+    build:
+      <<: *go-build-base
+      dockerfile: hololive/hololive-api/Dockerfile
+      args:
+        VERSION: ${HOLO_API_VERSION:-2.0.0}
+    container_name: hololive-api
+    stop_grace_period: 45s
+    pids_limit: 512
+    env_file:
+      - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}
+    environment:
+      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
+      APP_VERSION: ${HOLO_API_VERSION:-2.0.0}
+      APP_ENV: "production"
+      SERVER_PORT: 30001
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_H3_ADDR:-:30001}
+      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_API_METRICS_ADDR:-:30091}
+      HOLOLIVE_PPROF_ADDR: ${HOLOLIVE_API_PPROF_ADDR:-:30061}
+      HOLOLIVE_ADMIN_API_PORT: 30006
+      HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS: ${HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_ADMIN_API_H3_ADDR: ${HOLOLIVE_ADMIN_API_H3_ADDR:-:30006}
+      LLM_SCHEDULER_PORT: 30003
+      HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS: ${HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_LLM_SCHEDULER_H3_ADDR: ${HOLOLIVE_LLM_SCHEDULER_H3_ADDR:-:30003}
+      LLM_SCHEDULER_INTERNAL_URL: https://127.0.0.1:30003
+      SERVICES_LLM_SCHEDULER_HEALTH_URL: https://127.0.0.1:30003/health
+      ALARM_INTERNAL_URL: https://hololive-alarm-worker:30007
+      BOT_POSTGRES_POOL_MIN_CONNS: ${BOT_POSTGRES_POOL_MIN_CONNS:-1}
+      BOT_POSTGRES_POOL_MAX_CONNS: ${BOT_POSTGRES_POOL_MAX_CONNS:-4}
+      ADMIN_API_POSTGRES_POOL_MIN_CONNS: ${ADMIN_API_POSTGRES_POOL_MIN_CONNS:-1}
+      ADMIN_API_POSTGRES_POOL_MAX_CONNS: ${ADMIN_API_POSTGRES_POOL_MAX_CONNS:-4}
+      LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS:-1}
+      LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS:-4}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-172.16.0.0/12,127.0.0.1/32}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://admin.holo-oshi.com,https://admin.capu.blog}
+      CORS_ENFORCE: ${CORS_ENFORCE:-true}
+      KAKAO_ROOMS: ${KAKAO_ROOMS:-}
+      KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED:-true}
+      KAKAO_ACL_MODE: ${KAKAO_ACL_MODE:-whitelist}
+      API_SECRET_KEY: ${API_SECRET_KEY:-}
+      HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
+      HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
+      SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
+      SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
+      NOTIFICATION_EGRESS_ROLE: "producer"
+      NOTIFICATION_SCHEDULER_ROLE: "off"
+      DELIVERY_DISPATCHER_ENABLED: "false"
+      YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
+      ALARM_DISPATCH_CONSUMER_ENABLED: "false"
+      ALARM_WORKER_EGRESS_LEASE_ENABLED: "false"
+      DOCKER_HOST: tcp://docker-proxy:2375
+      LOG_DIR: /app/logs
+      GOGC: "80"
+      GOMEMLIMIT: "1024MiB"
+      GIN_MODE: release
+    dns: *public-dns
+    ports:
+      - "127.0.0.1:30001:30001"
+      - "127.0.0.1:30001:30001/udp"
+      - "127.0.0.1:30003:30003"
+      - "127.0.0.1:30003:30003/udp"
+      - "127.0.0.1:30006:30006"
+      - "127.0.0.1:30006:30006/udp"
+      - "127.0.0.1:30091:30091"
+      - "127.0.0.1:30061:30061"
+    volumes: *hololive-api-volumes
+    extra_hosts: *iris-extra-hosts
+    depends_on:
+      <<: *db-cache-depends
+      hololive-alarm-worker:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+    deploy: *deploy-1280m
+    healthcheck:
+      <<: *go-healthcheck
+      start_period: 45s
+      test:
+        - CMD
+        - ./bin/healthcheck
+        - https://127.0.0.1:30001/health
+        - https://127.0.0.1:30003/ready
+        - https://127.0.0.1:30006/health
+    networks:
+      hololive-net:
+        aliases:
+          - hololive-api
+      docker-proxy-net: {}
+
+  youtube-producer:
+    <<: *app-service
+    profiles: ["oracle"]
+    image: hololive-youtube-producer:prod
+    build:
+      <<: *go-build-base
+      dockerfile: hololive/hololive-youtube-producer/Dockerfile
+      args:
+        VERSION: ${HOLO_API_VERSION:-2.0.0}
+    container_name: hololive-youtube-producer
+    environment:
+      <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
+      NOTIFICATION_EGRESS_ROLE: "producer"
+      YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
+      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "false"
+      SERVER_PORT: 30005
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_YOUTUBE_PRODUCER_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_YOUTUBE_PRODUCER_H3_ADDR:-:30005}
+      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_YOUTUBE_PRODUCER_METRICS_ADDR:-:30095}
+      POSTGRES_POOL_MIN_CONNS: ${YOUTUBE_PRODUCER_POSTGRES_POOL_MIN_CONNS:-2}
+      POSTGRES_POOL_MAX_CONNS: ${YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS:-8}
+      API_SECRET_KEY: ${API_SECRET_KEY:-}
+      HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
+      HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
+      YOUTUBE_INGESTION_ENABLED: "true"
+      YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS: "${YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS:-2}"
+      PHOTO_SYNC_ENABLED: "true"
+      GOGC: "100"
+      GOMEMLIMIT: "320MiB"
+      GIN_MODE: release
+      LOG_DIR: /app/logs
+    dns: *public-dns
+    ports:
+      - "127.0.0.1:30005:30005"
+      - "127.0.0.1:30005:30005/udp"
+      - "127.0.0.1:30095:30095"
+    volumes: *go-volumes
+    extra_hosts: *host-extra-hosts
+    depends_on: *db-cache-depends
+    deploy: *deploy-384m
+    healthcheck:
+      <<: *go-healthcheck
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30005/health"]
+    networks:
+      hololive-net:
+        aliases:
+          - youtube-producer
+
+  admin-dashboard:
+    <<: *app-service
+    image: admin-dashboard:prod
+    build:
+      <<: *go-build-base
+      dockerfile: admin-dashboard/Dockerfile
+      args:
+        VERSION: ${HOLO_API_VERSION:-2.0.0}
+    container_name: admin-dashboard
+    environment:
+      PORT: "30190"
+      ENV: "production"
+      FORCE_HTTPS: "true"
+      LOG_LEVEL: "info"
+      ALLOWED_ORIGINS: "https://admin.holo-oshi.com,https://admin.capu.blog"
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASS_HASH: ${ADMIN_PASS_BCRYPT:?ADMIN_PASS_BCRYPT is required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      SESSION_TOKEN_ROTATION: "true"
+      VALKEY_URL: :${CACHE_PASSWORD:?CACHE_PASSWORD is required}@valkey-cache:6379
+      DOCKER_HOST: tcp://docker-proxy:2375
+      HOLO_ADMIN_API_URL: https://hololive-api:30006
+      HOLO_BOT_URL: https://hololive-api:30006
+      HOLO_BOT_API_KEY: ${HOLO_BOT_API_KEY:-}
+      HOLOLIVE_INTERNAL_H3_CA_CERT_FILE: ${HOLOLIVE_INTERNAL_H3_CA_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
+      HOLOLIVE_INTERNAL_H3_SERVER_NAME: ${HOLOLIVE_INTERNAL_H3_SERVER_NAME:-127.0.0.1}
+      LOG_DIR: /app/logs
+    ports:
+      - "127.0.0.1:30190:30190"
+    volumes:
+      - ../../logs:/app/logs
+      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+    extra_hosts: *host-extra-hosts
+    depends_on:
+      valkey-cache:
+        condition: service_healthy
+      hololive-api:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+    deploy: *deploy-128m
+    healthcheck:
+      <<: *go-healthcheck
+      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30190/health"]
+    networks:
+      hololive-net:
+        aliases:
+          - admin-dashboard
+      docker-proxy-net: {}
+
+  docker-proxy:
+    <<: *restart-logging
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:-tecnativa/docker-socket-proxy@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476}
+    container_name: docker-proxy
+    environment:
+      CONTAINERS: 1
+      POST: 1
+      LOGS: 1
+      BUILD: 0
+      EXEC: 0
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      SWARM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs:
+      - /run:size=16m,mode=1777
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy: *deploy-32m
+    networks:
+      - docker-proxy-net
+
+  deunhealth:
+    <<: [*restart-logging, *security-hardening]
+    image: ${DEUNHEALTH_IMAGE:-qmcgaw/deunhealth@sha256:db1e4fcd3aceeb0da34a83f7a8a5432df586e6d0388ddb6ad8dd7b479e4aa25d}
+    container_name: deunhealth
+    environment:
+      TZ: Asia/Seoul
+      LOG_LEVEL: info
+      DOCKER_HOST: tcp://docker-proxy:2375
+    depends_on:
+      docker-proxy:
+        condition: service_started
+    deploy: *deploy-32m
+    networks:
+      - docker-proxy-net
+
+volumes:
+  holo-pg-data:
+  valkey-cache-data:
+  valkey-cache-socket:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=0777
+
+networks:
+  hololive-net:
+    driver: bridge
+  docker-proxy-net:
+    driver: bridge
+    internal: true
