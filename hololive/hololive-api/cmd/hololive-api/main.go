@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"log/slog"
 	"os"
 
@@ -16,7 +17,8 @@ import (
 var Version = "dev"
 
 func main() {
-	os.Exit(bootstrap.Run(bootstrap.Options[*config.HololiveAPIConfig, *app.Runtime]{
+	var logCloser io.Closer
+	code := bootstrap.Run(bootstrap.Options[*config.HololiveAPIConfig, *app.Runtime]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
@@ -24,16 +26,18 @@ func main() {
 		},
 		LoadConfig:             config.LoadHololiveAPIRuntime,
 		LoadConfigErrorMessage: "Failed to load hololive-api config",
-		LoggerConfig: func(appConfig *config.HololiveAPIConfig) sharedlogging.Config {
-			return sharedlogging.Config{
+		NewLogger: func(appConfig *config.HololiveAPIConfig) (*slog.Logger, error) {
+			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
+				Level:      appConfig.Logging.Level,
 				Dir:        appConfig.Logging.Dir,
 				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
-			}
+			}, "hololive-api.log", sharedlogging.Options{AsyncStdout: true})
+			logCloser = closer
+			return logger, err
 		},
-		LoggerFileName: "hololive-api.log",
 		LoggerLevel: func(appConfig *config.HololiveAPIConfig) string {
 			return appConfig.Logging.Level
 		},
@@ -48,5 +52,11 @@ func main() {
 		BuildTimeout:      constants.AppTimeout.Build,
 		BuildRuntime:      app.BuildRuntime,
 		BuildErrorMessage: "Failed to assemble hololive-api runtime",
-	}))
+	})
+	if logCloser != nil {
+		if err := logCloser.Close(); err != nil {
+			slog.New(slog.NewTextHandler(os.Stderr, nil)).Error("log closer close failed", slog.Any("error", err))
+		}
+	}
+	os.Exit(code)
 }
