@@ -44,16 +44,15 @@ func BuildRuntime(ctx context.Context, appConfig *config.HololiveAPIConfig, logg
 
 	admin, err := adminruntime.Build(ctx, appConfig.Admin, logger.With(slog.String("plane", "admin")))
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("build admin plane: %w", err), closeComponent("llm", llm))
+		llm.Close()
+		return nil, fmt.Errorf("build admin plane: %w", err)
 	}
 
 	bot, err := botruntime.Build(ctx, appConfig.Bot, logger.With(slog.String("plane", "bot")))
 	if err != nil {
-		return nil, errors.Join(
-			fmt.Errorf("build bot plane: %w", err),
-			closeComponent("admin", admin),
-			closeComponent("llm", llm),
-		)
+		admin.Close()
+		llm.Close()
+		return nil, fmt.Errorf("build bot plane: %w", err)
 	}
 
 	runtime := &Runtime{
@@ -90,7 +89,7 @@ func BuildRuntime(ctx context.Context, appConfig *config.HololiveAPIConfig, logg
 }
 
 func (r *Runtime) Run() {
-	if r == nil {
+	if r == nil || r.group == nil {
 		return
 	}
 
@@ -113,27 +112,20 @@ func (r *Runtime) Run() {
 	}
 }
 
-func (r *Runtime) Close() error {
+// Close releases process resources after all listeners and background loops have
+// been drained by Run. Component cleanup is idempotent in the existing runtime
+// implementations, so this also safely handles partial bootstrap failures.
+func (r *Runtime) Close() {
 	if r == nil {
-		return nil
+		return
 	}
-	return errors.Join(
-		closeComponent("bot", r.Bot),
-		closeComponent("admin", r.Admin),
-		closeComponent("llm", r.LLM),
-	)
-}
-
-type componentCloser interface {
-	Close() error
-}
-
-func closeComponent(name string, component componentCloser) error {
-	if component == nil {
-		return nil
+	if r.Bot != nil {
+		r.Bot.Close()
 	}
-	if err := component.Close(); err != nil {
-		return fmt.Errorf("close %s component: %w", name, err)
+	if r.Admin != nil {
+		r.Admin.Close()
 	}
-	return nil
+	if r.LLM != nil {
+		r.LLM.Close()
+	}
 }
