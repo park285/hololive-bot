@@ -10,7 +10,7 @@ if ! command -v rg >/dev/null 2>&1; then
 fi
 
 admin_server_dir="${ROOT_DIR}/hololive/hololive-api/internal/planes/admin/internal/server"
-bot_server_dir="${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server"
+bot_server_dir="${ROOT_DIR}/hololive/hololive-api/internal/planes/bot/internal/server"
 
 if [[ ! -d "${admin_server_dir}" ]]; then
   echo "FAIL: expected admin-api server directory is missing: ${admin_server_dir}" >&2

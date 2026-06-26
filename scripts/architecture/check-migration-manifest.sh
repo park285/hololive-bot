@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-MIGRATIONS_DIR="${ROOT_DIR}/hololive/hololive-kakao-bot-go/scripts/migrations"
+MIGRATIONS_DIR="${ROOT_DIR}/hololive/hololive-api/scripts/migrations"
 MANIFEST="${MIGRATIONS_DIR}/manifest.txt"
 
 if [[ ! -f "${MANIFEST}" ]]; then

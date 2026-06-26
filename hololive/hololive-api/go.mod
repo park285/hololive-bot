@@ -5,12 +5,12 @@ go 1.26.2
 toolchain go1.26.4
 
 require (
+	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/kapu/hololive-kakao-bot-go v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go/v3 v3.41.0
@@ -21,6 +21,8 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.5
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.76
+	golang.org/x/crypto v0.53.0
+	golang.org/x/image v0.43.0
 	golang.org/x/sync v0.21.0
 )
 
@@ -34,7 +36,6 @@ require (
 	github.com/Noooste/uquic-go v1.0.5 // indirect
 	github.com/Noooste/utls v1.3.21 // indirect
 	github.com/Noooste/websocket v1.0.3 // indirect
-	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/andybalholm/cascadia v1.3.4 // indirect
 	github.com/antchfx/htmlquery v1.3.6 // indirect
@@ -155,8 +156,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	golang.org/x/arch v0.27.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
@@ -165,7 +164,5 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/kapu/hololive-kakao-bot-go => ../hololive-kakao-bot-go
 
 replace github.com/kapu/hololive-shared => ../hololive-shared

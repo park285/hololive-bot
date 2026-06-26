@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}"
 
 DEFAULT_PROFILES=(
-  "hololive/hololive-kakao-bot-go/cmd/bot/default.pgo"
+  "hololive/hololive-api/cmd/hololive-api/default.pgo"
   "hololive/hololive-alarm-worker/cmd/alarm-worker/default.pgo"
 )
 APPROVED_DEFAULT="${ROOT_DIR}/scripts/perf/pgo/approved-workloads"

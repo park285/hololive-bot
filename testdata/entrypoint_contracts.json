@@ -18,31 +18,25 @@
     ]
   },
   {
-    "path": "hololive/hololive-kakao-bot-go/cmd/bot/main.go",
-    "must_contain": [
-      "bootstrap.Run("
-    ]
-  },
-  {
-    "path": "hololive/hololive-kakao-bot-go/cmd/test_db_integration/main.go",
+    "path": "hololive/hololive-api/internal/planes/bot/cmd/test_db_integration/main.go",
     "must_contain": [
       "app.BuildDBIntegrationRuntime("
     ]
   },
   {
-    "path": "hololive/hololive-kakao-bot-go/cmd/tools/fetch_profiles/main.go",
+    "path": "hololive/hololive-api/internal/planes/bot/cmd/fetch_profiles/main.go",
     "must_contain": [
       "app.BuildFetchProfilesRuntime("
     ]
   },
   {
-    "path": "hololive/hololive-kakao-bot-go/cmd/tools/verifyhash/main.go",
+    "path": "hololive/hololive-api/cmd/tools/verifyhash/main.go",
     "must_contain": [
       "bcrypt.CompareHashAndPassword("
     ]
   },
   {
-    "path": "hololive/hololive-kakao-bot-go/cmd/tools/warm_member_cache/main.go",
+    "path": "hololive/hololive-api/internal/planes/bot/cmd/warm_member_cache/main.go",
     "must_contain": [
       "app.InitializeWarmMemberCache("
     ]

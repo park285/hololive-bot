@@ -8,8 +8,8 @@ import (
 	"os"
 
 	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
+	botruntime "github.com/kapu/hololive-api/internal/planes/bot/runtime"
 	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
-	botruntime "github.com/kapu/hololive-kakao-bot-go/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"

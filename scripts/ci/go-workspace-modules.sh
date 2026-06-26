@@ -5,7 +5,6 @@ GO_WORKSPACE_MODULES=(
     admin-dashboard/backend
     hololive/hololive-shared
     hololive/hololive-api
-    hololive/hololive-kakao-bot-go
     hololive/hololive-alarm-worker
     hololive/hololive-youtube-producer
 )

@@ -9,7 +9,6 @@ use (
 	./admin-dashboard/backend
 	./hololive/hololive-alarm-worker
 	./hololive/hololive-api
-	./hololive/hololive-kakao-bot-go
 	./hololive/hololive-shared
 	./hololive/hololive-youtube-producer
 )

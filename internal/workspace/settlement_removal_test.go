@@ -122,7 +122,7 @@ func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
 	}
 
 	copyChecks := []string{
-		"hololive/hololive-kakao-bot-go/Dockerfile",
+		"hololive/hololive-api/Dockerfile",
 		"hololive/hololive-youtube-producer/Dockerfile",
 	}
 	for _, rel := range copyChecks {
@@ -144,9 +144,8 @@ func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
 		{file: "hololive/hololive-shared/pkg/domain/command.go", token: removedCommandToken("SettlementStatus")},
 		{file: "hololive/hololive-shared/pkg/config/config.go", token: removedRoomEnv()},
 		{file: "hololive/hololive-shared/pkg/config/internal/settings/config_types.go", token: "Settlement" + "RoomID"},
-		{file: "hololive/hololive-kakao-bot-go/.env.example", token: removedRoomEnv()},
-		{file: "hololive/hololive-kakao-bot-go/internal/bot/orchestration/orchcmd/command_normalizer_test.go", token: removedCommandValue("status")},
-		{file: "hololive/hololive-kakao-bot-go/internal/bot/orchestration/bot_command_init_views_test.go", token: removedCommandToken("SettlementStatus")},
+		{file: "hololive/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd/command_normalizer_test.go", token: removedCommandValue("status")},
+		{file: "hololive/hololive-api/internal/planes/bot/internal/bot/orchestration/bot_command_init_views_test.go", token: removedCommandToken("SettlementStatus")},
 	}
 	for _, check := range residueChecks {
 		t.Run(check.file, func(t *testing.T) {
@@ -162,8 +161,8 @@ func TestSettlementMigrationsAreArchivedAndRunbookExists(t *testing.T) {
 	root := repoRootFromHelper(t)
 
 	activePaths := []string{
-		"hololive/hololive-kakao-bot-go/scripts/migrations/038_create_settlement.sql",
-		"hololive/hololive-kakao-bot-go/scripts/migrations/039_create_settlement_v2.sql",
+		"hololive/hololive-api/scripts/migrations/038_create_settlement.sql",
+		"hololive/hololive-api/scripts/migrations/039_create_settlement_v2.sql",
 	}
 	for _, rel := range activePaths {
 		t.Run("active-"+filepath.Base(rel), func(t *testing.T) {
@@ -175,9 +174,9 @@ func TestSettlementMigrationsAreArchivedAndRunbookExists(t *testing.T) {
 	}
 
 	requiredPaths := []string{
-		"hololive/hololive-kakao-bot-go/scripts/migrations/archive/settlement/038_create_settlement.sql",
-		"hololive/hololive-kakao-bot-go/scripts/migrations/archive/settlement/039_create_settlement_v2.sql",
-		"hololive/hololive-kakao-bot-go/scripts/migrations/manual/settlement_drop.sql",
+		"hololive/hololive-api/scripts/migrations/archive/settlement/038_create_settlement.sql",
+		"hololive/hololive-api/scripts/migrations/archive/settlement/039_create_settlement_v2.sql",
+		"hololive/hololive-api/scripts/migrations/manual/settlement_drop.sql",
 		"docs/runbook_execution/SETTLEMENT_DECOMMISSION_RUNBOOK.md",
 		"docs/history/settlement/README.md",
 	}
