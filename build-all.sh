@@ -7,8 +7,6 @@
 #   ./build-all.sh --build-only         # 빌드만 수행 (배포/재기동 없음)
 #   ./build-all.sh --remote-cache       # registry-backed remote cache 사용 (REMOTE_CACHE_PREFIX 필요)
 #   ./build-all.sh --skip-local-ci      # 로컬 CI gate를 건너뜀
-#   ./build-all.sh hololive-api         # 특정 서비스만 빌드
-#   ./build-all.sh alarm-worker         # hololive-alarm-worker alias
 
 set -Eeuo pipefail
 
