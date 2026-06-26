@@ -88,8 +88,12 @@ func buildAlarmModeComponents(
 	}, logger)
 
 	if providerURL := strings.TrimSpace(appConfig.AlarmServiceURL); providerURL != "" {
+		alarmClient, err := sharedalarm.NewClientWithAPIKeyStrict(providerURL, appConfig.Server.APIKey, logger)
+		if err != nil {
+			return nil, fmt.Errorf("configure alarm worker client: %w", err)
+		}
 		return &alarmModeComponents{
-			AlarmCRUD:        sharedalarm.NewClientWithAPIKey(providerURL, appConfig.Server.APIKey, logger),
+			AlarmCRUD:        alarmClient,
 			ChzzkClient:      chzzkClient,
 			TwitchClient:     twitchClient,
 			MemberDataSource: memberData,
