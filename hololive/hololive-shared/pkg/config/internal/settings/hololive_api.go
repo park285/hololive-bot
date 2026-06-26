@@ -136,13 +136,13 @@ func (c *HololiveAPIConfig) validateAlarmProviders() error {
 }
 
 func (c *HololiveAPIConfig) validatePlanePools() error {
-	if err := validatePlanePool("bot", c.Bot.Postgres); err != nil {
+	if err := validatePlanePool("bot", &c.Bot.Postgres); err != nil {
 		return err
 	}
-	if err := validatePlanePool("admin", c.Admin.Postgres); err != nil {
+	if err := validatePlanePool("admin", &c.Admin.Postgres); err != nil {
 		return err
 	}
-	if err := validatePlanePool("llm", c.LLM.Postgres); err != nil {
+	if err := validatePlanePool("llm", &c.LLM.Postgres); err != nil {
 		return err
 	}
 	return nil
@@ -176,7 +176,7 @@ func validateAlarmProviderScheme(environment string, parsed *url.URL) error {
 	return nil
 }
 
-func validatePlanePool(plane string, config PostgresConfig) error {
+func validatePlanePool(plane string, config *PostgresConfig) error {
 	if config.PoolMinConns < 0 {
 		return fmt.Errorf("%s POSTGRES_POOL_MIN_CONNS must be >= 0", plane)
 	}

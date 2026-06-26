@@ -46,7 +46,11 @@ func TestClientDoRequestNilResponse(t *testing.T) {
 
 	resp, err := client.doRequest(t.Context(), http.MethodGet, "/alarms", http.NoBody, false)
 	if resp != nil && resp.Body != nil {
-		t.Cleanup(func() { _ = resp.Body.Close() })
+		t.Cleanup(func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("close response body: %v", closeErr)
+			}
+		})
 	}
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil response")

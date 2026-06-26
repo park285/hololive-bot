@@ -56,7 +56,7 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 func TestValidatePlanePool(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, validatePlanePool("bot", PostgresConfig{PoolMinConns: 1, PoolMaxConns: 4}))
-	require.Error(t, validatePlanePool("bot", PostgresConfig{PoolMinConns: 5, PoolMaxConns: 4}))
-	require.Error(t, validatePlanePool("bot", PostgresConfig{PoolMinConns: 0, PoolMaxConns: 0}))
+	require.NoError(t, validatePlanePool("bot", &PostgresConfig{PoolMinConns: 1, PoolMaxConns: 4}))
+	require.Error(t, validatePlanePool("bot", &PostgresConfig{PoolMinConns: 5, PoolMaxConns: 4}))
+	require.Error(t, validatePlanePool("bot", &PostgresConfig{PoolMinConns: 0, PoolMaxConns: 0}))
 }
