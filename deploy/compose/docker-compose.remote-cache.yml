@@ -1,10 +1,17 @@
 services:
-  hololive-bot:
+  hololive-api:
     build:
       cache_from:
-        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-kakao-bot-go-buildcache:buildcache
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-api-buildcache:buildcache
       cache_to:
-        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-kakao-bot-go-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-api-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
+
+  hololive-alarm-worker:
+    build:
+      cache_from:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-alarm-worker-buildcache:buildcache
+      cache_to:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-alarm-worker-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
 
   youtube-producer:
     build:
@@ -12,10 +19,3 @@ services:
         - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-youtube-producer-buildcache:buildcache
       cache_to:
         - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-youtube-producer-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
-
-  llm-scheduler:
-    build:
-      cache_from:
-        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-llm-scheduler-buildcache:buildcache
-      cache_to:
-        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-llm-scheduler-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
