@@ -30,18 +30,17 @@ jobs:
           - hololive/hololive-api
     steps:
       - name: Checkout pull request branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
+        uses: actions/checkout@v4
+        with:
+          path: hololive-bot
+          fetch-depth: 1
       - name: Test module
         shell: bash
         env:
           GOWORK: "off"
         run: |
           set -euo pipefail
-          cd "${{ matrix.module }}"
+          cd "hololive-bot/${{ matrix.module }}"
           go test ./...
 
   race:
@@ -50,18 +49,17 @@ jobs:
     container: golang:1.26.4-bookworm
     steps:
       - name: Checkout pull request branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
+        uses: actions/checkout@v4
+        with:
+          path: hololive-bot
+          fetch-depth: 1
       - name: Alarm client and lifecycle race tests
         shell: bash
         env:
           GOWORK: "off"
         run: |
           set -euo pipefail
-          cd hololive/hololive-shared
+          cd hololive-bot/hololive/hololive-shared
           go test -race ./pkg/service/alarm/...
           go test -race ./pkg/applifecycle/...
 
@@ -70,18 +68,30 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:1.26.4-bookworm
     steps:
-      - name: Checkout repositories
-        shell: bash
-        run: |
-          set -euo pipefail
-          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
-          git clone --depth 1 --branch v1.19.0 https://github.com/park285/shared-go.git ../shared-go
-          git clone --depth 1 --branch v0.22.0 https://github.com/park285/iris-client-go.git ../iris-client-go
+      - name: Checkout hololive-bot
+        uses: actions/checkout@v4
+        with:
+          path: hololive-bot
+          fetch-depth: 1
+      - name: Checkout shared-go
+        uses: actions/checkout@v4
+        with:
+          repository: park285/shared-go
+          ref: v1.19.0
+          path: shared-go
+          fetch-depth: 1
+      - name: Checkout iris-client-go
+        uses: actions/checkout@v4
+        with:
+          repository: park285/iris-client-go
+          ref: v0.23.0
+          path: iris-client-go
+          fetch-depth: 1
       - name: Run architecture contracts
         shell: bash
         run: |
           set -euo pipefail
+          cd hololive-bot
           ./scripts/architecture/ci-boundary-gate.sh
 
   compose:
@@ -89,11 +99,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout pull request branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
+        uses: actions/checkout@v4
+        with:
+          path: hololive-bot
+          fetch-depth: 1
       - name: Render Compose
         shell: bash
         env:
@@ -104,29 +113,43 @@ jobs:
           API_SECRET_KEY: ci-api-secret
           KAKAO_ROOMS: ci-room
           HOLODEX_API_KEY: ci-holodex-key
+          HOLOLIVE_API_ENV_FILE: /dev/null
+          HOLOLIVE_ALARM_WORKER_ENV_FILE: /dev/null
         run: |
           set -euo pipefail
-          docker compose -f deploy/compose/docker-compose.runtime3.yml config --quiet
+          cd hololive-bot
+          docker compose -f deploy/compose/docker-compose.prod.yml config --quiet
 
   image:
     name: Build hololive-api image
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repositories
-        shell: bash
-        run: |
-          set -euo pipefail
-          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          git clone --depth 1 --branch "$ref" "https://github.com/${GITHUB_REPOSITORY}.git" .
-          git clone --depth 1 --branch v1.19.0 https://github.com/park285/shared-go.git ../shared-go
-          git clone --depth 1 --branch v0.22.0 https://github.com/park285/iris-client-go.git ../iris-client-go
+      - name: Checkout hololive-bot
+        uses: actions/checkout@v4
+        with:
+          path: hololive-bot
+          fetch-depth: 1
+      - name: Checkout shared-go
+        uses: actions/checkout@v4
+        with:
+          repository: park285/shared-go
+          ref: v1.19.0
+          path: shared-go
+          fetch-depth: 1
+      - name: Checkout iris-client-go
+        uses: actions/checkout@v4
+        with:
+          repository: park285/iris-client-go
+          ref: v0.23.0
+          path: iris-client-go
+          fetch-depth: 1
       - name: Build unified runtime image
         shell: bash
         run: |
           set -euo pipefail
           docker buildx build --load \
-            --build-context shared_go_workspace=../shared-go \
-            --build-context iris_client_go_workspace=../iris-client-go \
-            -f hololive/hololive-api/Dockerfile \
+            --build-context shared_go_workspace=shared-go \
+            --build-context iris_client_go_workspace=iris-client-go \
+            -f hololive-bot/hololive/hololive-api/Dockerfile \
             -t hololive-api:ci \
-            .
+            hololive-bot
