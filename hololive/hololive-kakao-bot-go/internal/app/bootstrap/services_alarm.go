@@ -57,9 +57,13 @@ func InitAlarmModeComponents(
 	logger *slog.Logger,
 ) (*AlarmModeComponents, error) {
 	if providerURL := strings.TrimSpace(appConfig.AlarmServiceURL); providerURL != "" {
+		alarmClient, err := alarm.NewClientWithAPIKeyStrict(providerURL, appConfig.Server.APIKey, logger)
+		if err != nil {
+			return nil, fmt.Errorf("configure alarm worker client: %w", err)
+		}
 		httpClient := httputil.NewExternalAPIClient(10 * time.Second)
 		return &AlarmModeComponents{
-			AlarmCRUD:        alarm.NewClientWithAPIKey(providerURL, appConfig.Server.APIKey, logger),
+			AlarmCRUD:        alarmClient,
 			ChzzkClient:      ProvideChzzkClient(httpClient, appConfig.Chzzk, logger),
 			TwitchClient:     ProvideTwitchClient(&appConfig.Twitch, logger),
 			MemberDataSource: memberServiceAdapter,
