@@ -86,6 +86,16 @@ func buildAlarmModeComponents(
 		ClientID:     appConfig.Twitch.ClientID,
 		ClientSecret: appConfig.Twitch.ClientSecret,
 	}, logger)
+
+	if providerURL := strings.TrimSpace(appConfig.AlarmServiceURL); providerURL != "" {
+		return &alarmModeComponents{
+			AlarmCRUD:        sharedalarm.NewClientWithAPIKey(providerURL, appConfig.Server.APIKey, logger),
+			ChzzkClient:      chzzkClient,
+			TwitchClient:     twitchClient,
+			MemberDataSource: memberData,
+		}, nil
+	}
+
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
 	alarmService, err := notification.NewAlarmService(cacheClient, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
 	if err != nil {
