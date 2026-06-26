@@ -29,9 +29,15 @@ case "$1" in
     exit "${MOCK_DOCKER_COMPOSE_EXIT:-0}"
     ;;
   ps)
-    if [[ "${MOCK_DOCKER_HAS_DISPATCHER:-0}" == "1" ]]; then
-      printf '%s\n' "mock-container-id"
-    fi
+    filter="${*: -1}"
+    name="${filter#name=^}"
+    name="${name%\$}"
+    for present in ${MOCK_DOCKER_PRESENT_NAMES:-}; do
+      if [[ "${present}" == "${name}" ]]; then
+        printf '%s\n' "mock-${name}"
+        break
+      fi
+    done
     ;;
   stop)
     exit "${MOCK_DOCKER_STOP_EXIT:-0}"
@@ -46,28 +52,29 @@ export PATH="${tmpdir}:${PATH}"
 export CONTAINER_CLI=docker
 export MOCK_DOCKER_LOG="${tmpdir}/docker.log"
 
-MOCK_DOCKER_HAS_DISPATCHER=0 removed_runtime_cleanup_standalone_dispatcher
-if rg -q 'stop|rm -f' "${MOCK_DOCKER_LOG}" 2>/dev/null; then
-    fail "cleanup issued stop/rm when dispatcher container is absent"
+: >"${MOCK_DOCKER_LOG}"
+MOCK_DOCKER_PRESENT_NAMES="" removed_runtime_cleanup_before_cutover
+if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
+    fail "cleanup issued stop/rm when retired containers are absent"
 fi
-pass "absent dispatcher cleanup is no-op"
+pass "absent retired runtime cleanup is a no-op"
 
 : >"${MOCK_DOCKER_LOG}"
-MOCK_DOCKER_HAS_DISPATCHER=1 MOCK_DOCKER_STOP_EXIT=1 removed_runtime_cleanup_standalone_dispatcher
-
-if ! rg -q 'ps -aq --filter name=\^hololive-dispatcher-go\$' "${MOCK_DOCKER_LOG}"; then
-    fail "cleanup did not query exact dispatcher container name"
-fi
-if ! rg -q '^stop hololive-dispatcher-go$' "${MOCK_DOCKER_LOG}"; then
-    fail "cleanup did not stop dispatcher container"
-fi
-if ! rg -q '^rm -f hololive-dispatcher-go$' "${MOCK_DOCKER_LOG}"; then
-    fail "cleanup did not remove dispatcher container"
-fi
-pass "present dispatcher cleanup stops and removes container"
+retired_names="$(removed_runtime_container_names | tr '\n' ' ')"
+MOCK_DOCKER_PRESENT_NAMES="${retired_names}" MOCK_DOCKER_STOP_EXIT=1 removed_runtime_cleanup_before_cutover
+while IFS= read -r name; do
+    grep -Fqx "ps -aq --filter name=^${name}$" "${MOCK_DOCKER_LOG}" \
+        || fail "cleanup did not query exact retired container name: ${name}"
+    grep -Fqx "stop ${name}" "${MOCK_DOCKER_LOG}" \
+        || fail "cleanup did not stop retired container: ${name}"
+    grep -Fqx "rm -f ${name}" "${MOCK_DOCKER_LOG}" \
+        || fail "cleanup did not remove retired container: ${name}"
+done < <(removed_runtime_container_names)
+pass "all retired runtime containers are stopped and removed"
 
 env_file="${tmpdir}/env"
 compose_file="${tmpdir}/docker-compose.yml"
+mkdir -p "${tmpdir}/shared-go" "${tmpdir}/iris-client-go"
 cat >"${env_file}" <<'EOF'
 TEST_VALUE=ok
 EOF
@@ -78,15 +85,22 @@ services:
 EOF
 
 : >"${MOCK_DOCKER_LOG}"
-MOCK_DOCKER_HAS_DISPATCHER=1 COMPOSE_ENV_FILE="${env_file}" "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build app
+MOCK_DOCKER_PRESENT_NAMES="hololive-kakao-bot-go hololive-admin-api hololive-llm-scheduler hololive-dispatcher-go" \
+COMPOSE_ENV_FILE="${env_file}" \
+SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
+IRIS_CLIENT_GO_WORKSPACE_PATH="${tmpdir}/iris-client-go" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build app
 
-if ! rg -q '^compose --env-file .* up -d --build app$' "${MOCK_DOCKER_LOG}"; then
-    fail "compose wrapper did not run docker compose up"
+config_line="$(grep -nE '^compose --env-file .* config --quiet$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
+build_line="$(grep -nE '^compose --env-file .* build$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
+cleanup_line="$(grep -n '^stop hololive-kakao-bot-go$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
+up_line="$(grep -nE '^compose --env-file .* up -d app$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
+
+[[ -n "${config_line}" && -n "${build_line}" && -n "${cleanup_line}" && -n "${up_line}" ]] \
+    || fail "compose cutover did not execute render, build, cleanup and up phases"
+(( config_line < build_line && build_line < cleanup_line && cleanup_line < up_line )) \
+    || fail "compose cutover order must be render -> build -> cleanup -> up"
+if grep -Eq '^compose --env-file .* up .*--build' "${MOCK_DOCKER_LOG}"; then
+    fail "final up must not rebuild after retired runtimes have been stopped"
 fi
-if ! rg -q '^stop hololive-dispatcher-go$' "${MOCK_DOCKER_LOG}"; then
-    fail "compose wrapper up did not stop dispatcher container"
-fi
-if ! rg -q '^rm -f hololive-dispatcher-go$' "${MOCK_DOCKER_LOG}"; then
-    fail "compose wrapper up did not remove dispatcher container"
-fi
-pass "compose wrapper up performs removed dispatcher cleanup"
+pass "compose cutover builds before cleanup and starts the new topology last"
