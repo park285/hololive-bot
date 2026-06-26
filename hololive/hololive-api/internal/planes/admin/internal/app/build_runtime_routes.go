@@ -15,10 +15,10 @@ import (
 	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 
-	apphttp "github.com/kapu/hololive-admin-api/internal/app/http"
-	triggerclient "github.com/kapu/hololive-admin-api/internal/client/trigger"
-	"github.com/kapu/hololive-admin-api/internal/server"
-	"github.com/kapu/hololive-admin-api/internal/service/system"
+	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/app/http"
+	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 )
 
 func buildAdminHandler(

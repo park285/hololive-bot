@@ -12,7 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	json "github.com/park285/shared-go/pkg/json"
 
-	"github.com/kapu/hololive-admin-api/internal/server"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
 
 func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {

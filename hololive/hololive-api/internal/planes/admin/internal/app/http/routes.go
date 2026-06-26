@@ -23,7 +23,7 @@ package apphttp
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-admin-api/internal/server"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
 
 func registerAlarmRoutes(holoAPI *gin.RouterGroup, handler *server.AlarmHandler) {

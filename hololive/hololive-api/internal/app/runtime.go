@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"os"
 
-	adminruntime "github.com/kapu/hololive-admin-api/runtime"
+	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
 	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
 	botruntime "github.com/kapu/hololive-kakao-bot-go/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"

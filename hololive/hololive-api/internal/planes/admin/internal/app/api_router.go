@@ -30,8 +30,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/park285/iris-client-go/iris"
 
-	apphttp "github.com/kapu/hololive-admin-api/internal/app/http"
-	"github.com/kapu/hololive-admin-api/internal/server"
+	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/app/http"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
 
 func ProvideAPIRouter(

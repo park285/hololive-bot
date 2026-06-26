@@ -1,11 +1,5 @@
 [
   {
-    "path": "hololive/hololive-admin-api/cmd/admin-api/main.go",
-    "must_contain": [
-      "bootstrap.Run("
-    ]
-  },
-  {
     "path": "hololive/hololive-api/cmd/hololive-api/main.go",
     "must_contain": [
       "bootstrap.Run("

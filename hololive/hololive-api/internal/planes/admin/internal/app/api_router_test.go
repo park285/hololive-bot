@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 
-	"github.com/kapu/hololive-admin-api/internal/server"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
 
 func TestFailClosedAuth(t *testing.T) {

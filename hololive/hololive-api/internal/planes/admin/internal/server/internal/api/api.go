@@ -36,7 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
-	"github.com/kapu/hololive-admin-api/internal/service/system"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
 )

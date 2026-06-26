@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 
-	"github.com/kapu/hololive-admin-api/internal/server"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
 
 func adminAllowlistRouter(t *testing.T, allowedIPs []string) *gin.Engine {

@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 
-	"github.com/kapu/hololive-admin-api/internal/service/system"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 )
 
 func TestStatsHandler_StreamSystemStats_CollectorUnavailable(t *testing.T) {

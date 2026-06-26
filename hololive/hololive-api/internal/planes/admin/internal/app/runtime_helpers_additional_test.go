@@ -24,7 +24,7 @@ import (
 
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
 
-	"github.com/kapu/hololive-admin-api/internal/server"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
 
 type memberNewsRunNowStub struct {
@@ -264,8 +264,6 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 	if router == nil {
 		t.Fatal("buildAdminAPIRouter() returned nil router")
 	}
-
-	registerAdminAPIInternalAlarmRoutes(router, appConfig, alarmMode, logger)
 
 	repository := buildAdminAPICommunityShortsOpsRepository(infra)
 	if repository != nil {

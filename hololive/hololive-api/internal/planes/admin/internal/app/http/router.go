@@ -36,7 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-admin-api/internal/server"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
 
 // Admin Dashboard와 Tauri 앱에서 사용됩니다.

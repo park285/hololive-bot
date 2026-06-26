@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
-	"github.com/kapu/hololive-admin-api/internal/server"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
 
 func buildAdminAPIYouTubeStack(

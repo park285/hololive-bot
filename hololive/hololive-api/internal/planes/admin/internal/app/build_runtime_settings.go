@@ -8,8 +8,8 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 
-	triggerclient "github.com/kapu/hololive-admin-api/internal/client/trigger"
-	"github.com/kapu/hololive-admin-api/internal/service/system"
+	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 )
 
 func buildAdminAPISettingsApplier(

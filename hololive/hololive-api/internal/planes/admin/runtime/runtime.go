@@ -2,7 +2,7 @@
 // Implementation details remain protected by the module's internal boundary.
 package runtime
 
-import app "github.com/kapu/hololive-admin-api/internal/app"
+import app "github.com/kapu/hololive-api/internal/planes/admin/internal/app"
 
 type Runtime = app.AdminAPIRuntime
 
