@@ -242,7 +242,7 @@ if [[ "${compose_invokes_up}" == true ]]; then
         COMPOSE_FILE_ARGS=("${compose_prefix[@]}")
         gate_targets=()
         if [[ ${#up_service_targets[@]} -eq 0 ]]; then
-            gate_targets=(hololive-api hololive-alarm-worker)
+            gate_targets=(hololive-api hololive-alarm-worker admin-dashboard)
         else
             for service in "${up_service_targets[@]}"; do
                 case "${service}" in
