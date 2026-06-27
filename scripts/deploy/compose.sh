@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
 
 compose_file_resolve_path() {
     local file="$1"
@@ -238,10 +239,35 @@ if [[ "${compose_invokes_up}" == true ]]; then
     fi
 
     if [[ "${cutover_required}" == true ]]; then
+        echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID}:${HOLOLIVE_APP_GID}"
+        if ! cutover_bind_mount_preflight "${ROOT_DIR}"; then
+            echo "[ERROR] host bind-mount preflight failed before cutover; aborting (no containers changed)" >&2
+            exit 1
+        fi
         removed_runtime_cleanup_before_cutover
     fi
 
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_args[@]}"
+
+    if [[ "${cutover_required}" == true ]]; then
+        COMPOSE_FILE_ARGS=("${compose_prefix[@]}")
+        gate_targets=()
+        if [[ ${#up_service_targets[@]} -eq 0 ]]; then
+            gate_targets=(hololive-api hololive-alarm-worker)
+        else
+            for service in "${up_service_targets[@]}"; do
+                case "${service}" in
+                    hololive-api|hololive-alarm-worker|admin-dashboard)
+                        gate_targets+=("${service}")
+                        ;;
+                esac
+            done
+        fi
+        if [[ ${#gate_targets[@]} -gt 0 ]] && ! cutover_health_gate "${gate_targets[@]}"; then
+            echo "[ERROR] health gate failed after cutover up" >&2
+            exit 1
+        fi
+    fi
     exit 0
 fi
 
