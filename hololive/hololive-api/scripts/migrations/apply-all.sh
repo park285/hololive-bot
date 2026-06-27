@@ -40,6 +40,16 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM HUP
 
+run_psql() {
+  PGPASSWORD="${PGPASSWORD}" psql \
+    -v ON_ERROR_STOP=1 \
+    -h "${PGHOST}" \
+    -p "${PGPORT}" \
+    -U "${PGUSER}" \
+    -d "${PGDATABASE}" \
+    "$@"
+}
+
 if [ -z "${PGPASSWORD}" ]; then
   echo "PGPASSWORD is required" >&2
   exit 1
@@ -126,6 +136,23 @@ if ! cmp -s "${MANIFEST_ALL_SORTED}" "${ACTUAL_ALL_SQL_SORTED}"; then
   exit 1
 fi
 
+echo "==> ensuring schema_migrations ledger"
+run_psql -q -c "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now());"
+
+ledger_count="$(run_psql -tAc "SELECT count(*) FROM schema_migrations;" | tr -d '[:space:]')"
+if [ "${ledger_count}" = "0" ]; then
+  existing_schema="$(run_psql -tAc "SELECT (to_regclass('public.members') IS NOT NULL AND to_regclass('public.alarms') IS NOT NULL);" | tr -d '[:space:]')"
+  if [ "${existing_schema}" = "t" ]; then
+    # ledger는 비었지만 핵심 테이블이 이미 있으면 schema_migrations 도입 이전부터 살아온 DB다.
+    # 전량 재적용(특히 012의 DELETE+reseed가 운영자 편집을 날림)을 피하려 SQL 재실행 없이 applied로만 마킹한다.
+    echo "==> existing schema detected with empty ledger; baselining manifest as already-applied (no SQL re-run)"
+    while IFS= read -r baseline_file || [ -n "${baseline_file}" ]; do
+      [ -n "${baseline_file}" ] || continue
+      run_psql -q -c "INSERT INTO schema_migrations(filename) VALUES ('${baseline_file}') ON CONFLICT (filename) DO NOTHING;"
+    done < "${MANIFEST_SELECTED_ORDERED}"
+  fi
+fi
+
 while IFS= read -r filename || [ -n "${filename}" ]; do
   [ -n "${filename}" ] || continue
   file="${MIGRATIONS_DIR}/${filename}"
@@ -134,14 +161,14 @@ while IFS= read -r filename || [ -n "${filename}" ]; do
     exit 1
   fi
 
+  if [ "$(run_psql -tAc "SELECT 1 FROM schema_migrations WHERE filename = '${filename}';" | tr -d '[:space:]')" = "1" ]; then
+    echo "==> skip ${filename} (already applied)"
+    continue
+  fi
+
   echo "==> apply ${file}"
-  PGPASSWORD="${PGPASSWORD}" psql \
-    -v ON_ERROR_STOP=1 \
-    -h "${PGHOST}" \
-    -p "${PGPORT}" \
-    -U "${PGUSER}" \
-    -d "${PGDATABASE}" \
-    -f "${file}"
+  run_psql -f "${file}"
+  run_psql -q -c "INSERT INTO schema_migrations(filename) VALUES ('${filename}') ON CONFLICT (filename) DO NOTHING;"
 done < "${MANIFEST_SELECTED_ORDERED}"
 
 echo "==> hololive migrations applied"
