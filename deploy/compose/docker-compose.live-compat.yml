@@ -30,7 +30,7 @@ services:
 
   hololive-api:
     env_file: !override
-      - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}
+      - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/bot.env}
     environment:
       <<: *live-postgres-env
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}

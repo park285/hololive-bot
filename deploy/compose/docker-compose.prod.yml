@@ -418,7 +418,7 @@ services:
     container_name: hololive-api
     stop_grace_period: 45s
     env_file:
-      - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}
+      - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/bot.env}
     environment:
       <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
       APP_VERSION: ${HOLO_API_VERSION:-2.0.0}
