@@ -105,8 +105,10 @@ hololive/hololive-shared/pkg/config/internal/settings/config_scraper_types.go
 hololive/hololive-shared/pkg/config/internal/settings/config_types.go
 hololive/hololive-shared/pkg/config/internal/settings/config_validation.go
 hololive/hololive-shared/pkg/config/internal/settings/config_youtube.go
+hololive/hololive-shared/pkg/config/internal/settings/hololive_api.go
 hololive/hololive-shared/pkg/config/internal/settings/llm_scheduler.go
 hololive/hololive-shared/pkg/config/internal/settings/runtime_inputs.go
+hololive/hololive-shared/pkg/config/internal/settings/runtime_role_validation.go
 hololive/hololive-shared/pkg/config/internal/settings/server_transport.go
 hololive/hololive-shared/pkg/constants/alarm_tier.go
 hololive/hololive-shared/pkg/constants/api.go
@@ -358,6 +360,7 @@ hololive/hololive-shared/pkg/service/alarm/cache_warm_write.go
 hololive/hololive-shared/pkg/service/alarm/checker/helpers.go
 hololive/hololive-shared/pkg/service/alarm/checker/target_policy.go
 hololive/hololive-shared/pkg/service/alarm/client.go
+hololive/hololive-shared/pkg/service/alarm/client_strict.go
 hololive/hololive-shared/pkg/service/alarm/dedup/fallback.go
 hololive/hololive-shared/pkg/service/alarm/dedup/notified_cache.go
 hololive/hololive-shared/pkg/service/alarm/dedup/schedule_change.go
@@ -380,7 +383,9 @@ hololive/hololive-shared/pkg/service/alarm/queue/metrics.go
 hololive/hololive-shared/pkg/service/alarm/queue/publisher.go
 hololive/hololive-shared/pkg/service/alarm/repository.go
 hololive/hololive-shared/pkg/service/alarm/repository_rooms.go
+hololive/hololive-shared/pkg/service/alarm/routes.go
 hololive/hololive-shared/pkg/service/alarm/targets.go
+hololive/hololive-shared/pkg/service/internalhttp/json_client.go
 hololive/hololive-shared/pkg/service/alarm/tier/policies.go
 hololive/hololive-shared/pkg/service/alarm/tier/scheduler.go
 hololive/hololive-shared/pkg/service/auth/config.go

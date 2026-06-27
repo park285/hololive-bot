@@ -44,12 +44,9 @@ WORKDIR /workspace/hololive-bot
 COPY go.mod go.work go.work.sum ./
 COPY --from=shared_go_workspace . /workspace/shared-go
 COPY --from=iris_client_go_workspace . /workspace/iris-client-go
-COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
 COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
 COPY admin-dashboard/backend ./admin-dashboard/backend
 COPY hololive/hololive-shared ./hololive/hololive-shared
-COPY hololive/hololive-kakao-bot-go ./hololive/hololive-kakao-bot-go
-COPY hololive/hololive-admin-api ./hololive/hololive-admin-api
 COPY hololive/hololive-alarm-worker ./hololive/hololive-alarm-worker
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-alarm-worker
@@ -64,8 +61,7 @@ RUN \
       go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/runtime/healthcheck ) && \
     if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/alarm-worker /dist/bin/healthcheck; fi && \
     mkdir -p /dist/internal/domain && \
-    cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/ && \
-    cp ../hololive-kakao-bot-go/config.example.json ../hololive-kakao-bot-go/official_japanese_names.json /dist/
+    cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 
 FROM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838
 

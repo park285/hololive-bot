@@ -141,7 +141,7 @@ cmd_stream() {
   local name=""
   local pid=""
   local svc=""
-  local services=(bot youtube-producer llm-scheduler)
+  local services=(hololive-api youtube-producer)
 
   case "${command}" in
     start)
