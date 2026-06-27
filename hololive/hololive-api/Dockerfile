@@ -31,9 +31,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
       -o /dist/bin/healthcheck ./hololive/hololive-api/cmd/healthcheck && \
     mkdir -p /dist/internal/domain && \
-    cp -r hololive/hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/ && \
-    cp hololive/hololive-kakao-bot-go/config.example.json /dist/ && \
-    cp hololive/hololive-kakao-bot-go/official_japanese_names.json /dist/
+    cp -r hololive/hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 
 FROM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838
 

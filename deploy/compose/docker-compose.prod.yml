@@ -261,7 +261,7 @@ services:
     volumes:
       - holo-pg-data:/var/lib/postgresql/data
       - ../../backups:/backups
-      - ../../hololive/hololive-kakao-bot-go/scripts/init-db:/docker-entrypoint-initdb.d:ro
+      - ../../hololive/hololive-api/scripts/init-db:/docker-entrypoint-initdb.d:ro
       - /run/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -322,7 +322,7 @@ services:
       - /bin/sh
       - /migrations/bootstrap-and-apply.sh
     volumes:
-      - ../../hololive/hololive-kakao-bot-go/scripts/migrations:/migrations:ro
+      - ../../hololive/hololive-api/scripts/migrations:/migrations:ro
       - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
     depends_on:
       holo-postgres:
