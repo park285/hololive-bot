@@ -90,6 +90,12 @@ check_no_imports() {
   local pattern="$3"
   local hits
 
+  if [[ ! -d "${ROOT_DIR}/${path}" ]]; then
+    echo "[FAIL] ${label} path missing: ${path}"
+    missing=1
+    return
+  fi
+
   hits="$(rg -n "${pattern}" "${ROOT_DIR}/${path}" -g '*.go' || true)"
   if [[ -n "${hits}" ]]; then
     echo "[FAIL] forbidden imports in ${label}"
@@ -105,7 +111,7 @@ check_no_imports "bot runtime" \
   'hololive-(alarm-worker|admin-api|llm-sched)/internal'
 
 check_no_imports "shared-go module" \
-  "shared-go" \
+  "../shared-go" \
   'github.com/kapu/hololive-|github.com/park285/llm-kakao-bots/hololive'
 
 check_no_imports "youtube-producer direct YouTube dispatch" \

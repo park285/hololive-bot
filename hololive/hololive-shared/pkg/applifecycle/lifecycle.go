@@ -59,7 +59,7 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 		logInfo(hooks.Logger, "Config subscriber started")
 	}
 
-	startBot(ctx, hooks.Logger, hooks.StartBot)
+	startBot(ctx, errCh, hooks.Logger, hooks.StartBot)
 
 	if hooks.StartH3CertReload != nil {
 		hooks.StartH3CertReload(ctx)
@@ -212,20 +212,31 @@ func handleAlarmSchedulerError(err error, errCh chan<- error, logger *slog.Logge
 	logError(logger, "Alarm runtime scheduler error", wrapped)
 }
 
-func startBot(ctx context.Context, logger *slog.Logger, startBot func(ctx context.Context) error) {
+func startBot(ctx context.Context, errCh chan<- error, logger *slog.Logger, startBot func(ctx context.Context) error) {
 	if startBot == nil {
 		return
 	}
 
 	go func() {
 		if err := startBot(ctx); err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				logInfo(logger, "Background runtime task stopped (context done)")
-			} else {
-				logError(logger, "Background runtime task error", err)
-			}
+			handleBotError(err, errCh, logger)
 		}
 	}()
+}
+
+func handleBotError(err error, errCh chan<- error, logger *slog.Logger) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		logInfo(logger, "Background runtime task stopped (context done)")
+		return
+	}
+
+	wrapped := fmt.Errorf("bot runtime error: %w", err)
+	if errCh != nil {
+		errCh <- wrapped
+		return
+	}
+
+	logError(logger, "Background runtime task error", wrapped)
 }
 
 func logInfo(logger *slog.Logger, msg string, attrs ...any) {

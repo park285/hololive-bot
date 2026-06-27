@@ -203,6 +203,7 @@ if [[ "${TARGET}" == "hololive-api" || -z "${TARGET}" ]]; then
 fi
 
 if [[ -n "${TARGET}" ]]; then
+    cutover_capture_restart_baseline "${TARGET}"
     echo "[UP] ${TARGET}"
     up_args=(up -d)
     if [[ "${build_target}" == true ]]; then
@@ -217,6 +218,7 @@ if [[ -n "${TARGET}" ]]; then
         exit 1
     fi
 else
+    cutover_capture_restart_baseline hololive-api hololive-alarm-worker
     echo "[UP] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
     echo "[PS] all services"

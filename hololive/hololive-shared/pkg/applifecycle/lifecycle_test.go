@@ -166,6 +166,53 @@ func TestStart_NonErrorAlarmAdapterDoesNotTouchErrCh(t *testing.T) {
 	}
 }
 
+func TestStart_BotErrorPropagatesToErrCh(t *testing.T) {
+	t.Parallel()
+
+	errCh := make(chan error, 1)
+	botCrash := errors.New("bot crashed")
+
+	Start(t.Context(), errCh, StartHooks{
+		Logger: slog.New(slog.DiscardHandler),
+		StartBot: func(context.Context) error {
+			return botCrash
+		},
+	})
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("expected bot error, got nil")
+		}
+		if !errors.Is(err, botCrash) {
+			t.Fatalf("unexpected bot error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected bot error to be sent to errCh")
+	}
+}
+
+func TestStart_BotContextCancellationIsNotFatal(t *testing.T) {
+	t.Parallel()
+
+	errCh := make(chan error, 1)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	Start(ctx, errCh, StartHooks{
+		Logger: slog.New(slog.DiscardHandler),
+		StartBot: func(context.Context) error {
+			return context.Canceled
+		},
+	})
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("bot context cancellation must not be propagated as fatal error: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 func TestStartRunsH3CertReloadHookWithRunContext(t *testing.T) {
 	t.Parallel()
 
