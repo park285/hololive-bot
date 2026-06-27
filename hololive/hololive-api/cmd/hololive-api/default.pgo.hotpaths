@@ -1,2 +1,2 @@
-hololive/hololive-kakao-bot-go/internal/service/matcher/**
+hololive/hololive-api/internal/planes/bot/internal/service/matcher/**
 hololive/hololive-shared/pkg/service/template/**
