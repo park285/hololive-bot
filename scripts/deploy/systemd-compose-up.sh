@@ -34,6 +34,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "${ROOT_DIR}/scripts/deploy/compose.sh"
     "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
     "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
+    "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
   )
   while IFS= read -r yml; do
     exec_tree+=("${yml}")
@@ -75,6 +76,13 @@ wait_for_file() {
 }
 
 wait_for_tailscale_ip
+
+if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" != "1" ]]; then
+  echo "[SECURITY] this host requires the live-compat overlay but HOLOLIVE_ENABLE_LIVE_COMPAT is unset (drop-in missing?)." >&2
+  echo "           refusing to start: prod-only bindings would drop valkey/postgres off 100.100.1.3 (2026-06-27 incident)." >&2
+  exit 1
+fi
+
 for file in \
   /run/hololive-bot/compose.env \
   /run/hololive-bot/bot.env \

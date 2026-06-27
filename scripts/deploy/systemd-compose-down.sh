@@ -34,6 +34,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "${ROOT_DIR}/scripts/deploy/compose.sh"
     "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
     "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
+    "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
   )
   while IFS= read -r yml; do
     exec_tree+=("${yml}")

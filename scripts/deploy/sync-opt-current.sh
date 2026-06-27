@@ -31,8 +31,10 @@ log "repo=$REPO_ROOT HEAD=$HEAD_SHA -> $OPT_CURRENT"
 if [[ -d "$OPT_CURRENT" ]]; then
   BACKUP="${OPT_CURRENT}.bak-${HEAD_SHA}"
   rm -rf "$BACKUP"
-  cp -a "$OPT_CURRENT" "$BACKUP"
-  log "backup -> $BACKUP"
+  mkdir -p "$BACKUP"
+  rsync -a --delete --exclude=/data --exclude=/logs --exclude=/backups "$OPT_CURRENT/" "$BACKUP/"
+  ls -dt "${OPT_CURRENT}".bak-* 2>/dev/null | tail -n +4 | xargs -r rm -rf
+  log "backup -> $BACKUP (exec tree only, latest 3 kept)"
 fi
 
 # staging 은 OPT_ROOT 와 같은 파일시스템에 둔다: cross-device rsync(/tmp 별도 mount) 회피.
@@ -61,13 +63,14 @@ rsync -a --delete \
   --exclude=/data --exclude=/logs --exclude=/backups --exclude=/runtime-config \
   "$STAGING/" "$OPT_CURRENT/"
 
-# runtime-config 는 tracked 템플릿과 gitignored 런타임 설정(iris_base_url, iris-ca.pem)이
-# 섞여 있다. git archive 는 후자를 빠뜨려 alarm-worker 의 IRIS_BASE_URL_FILE 로딩이 깨지므로,
-# data 와 함께 dev tree(LIVE) 전체를 보존 이관한다.
+# runtime-config 는 tracked 템플릿과 gitignored 런타임 설정(iris_base_url, iris-ca.pem)이 섞여
+# 있고 git archive 는 후자를 빠뜨려 alarm-worker 의 IRIS_BASE_URL_FILE 로딩이 깨진다.
+# --ignore-existing: cutover 후 /opt 가 정본이고 dev tree 는 stale 이 되므로, 최초 시드 이후
+# 재실행에서 live 런타임 데이터를 stale dev 값으로 덮어쓰지 않는다(멱등).
 for d in data runtime-config; do
   if [[ -d "$REPO_ROOT/$d" ]]; then
     mkdir -p "$OPT_CURRENT/$d"
-    rsync -a "$REPO_ROOT/$d/" "$OPT_CURRENT/$d/"
+    rsync -a --ignore-existing "$REPO_ROOT/$d/" "$OPT_CURRENT/$d/"
   fi
 done
 mkdir -p "$OPT_CURRENT/logs" "$OPT_CURRENT/backups"
@@ -102,6 +105,7 @@ exec_tree=(
   "$OPT_CURRENT/scripts/deploy/compose.sh"
   "$OPT_CURRENT/scripts/deploy/lib/compose-env.sh"
   "$OPT_CURRENT/scripts/deploy/lib/removed-runtimes.sh"
+  "$OPT_CURRENT/scripts/deploy/lib/health-gate.sh"
 )
 while IFS= read -r yml; do
   exec_tree+=("$yml")
