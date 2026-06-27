@@ -14,11 +14,10 @@ matches="$(
   rg -n --no-messages "${retired}" \
     deploy scripts hololive admin-dashboard \
     -g '!**/*_test.go' \
-    -g '!**/*_test.sh' \
-    -g '!**/test-*.sh' \
     -g '!scripts/deploy/lib/removed-runtimes.sh' \
     -g '!scripts/architecture/check-removed-runtime-references.sh' \
     -g '!scripts/architecture/check-removed-runtime-build-paths.sh' \
+    -g '!hololive/hololive-api/scripts/test-bot-env-loader.sh' \
     || true
 )"
 
