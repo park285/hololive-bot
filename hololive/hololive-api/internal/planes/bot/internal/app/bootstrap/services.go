@@ -64,6 +64,8 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 		Deps:           deps,
 		AlarmCRUD:      alarmYouTubeStack.AlarmMode.AlarmCRUD,
 		HolodexService: foundation.HolodexService,
+		Postgres:       infra.Postgres,
+		Cache:          infra.Cache,
 		Cleanup:        composeBotInfrastructureCleanup(infra.Cleanup, irisClient, logger),
 	}, nil
 }

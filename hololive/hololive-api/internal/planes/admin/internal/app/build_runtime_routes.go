@@ -19,6 +19,7 @@ import (
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
+	"github.com/kapu/hololive-api/internal/readiness"
 )
 
 func buildAdminHandler(
@@ -90,6 +91,10 @@ func buildAdminAPIRouter(
 	handler *server.Handler,
 	logger *slog.Logger,
 ) (*gin.Engine, error) {
+	readyProbe := readiness.NewProbe("admin",
+		readiness.PostgresCheck(infra.Postgres),
+		readiness.ValkeyCheck(infra.Cache),
+	)
 	return apphttp.ProvideAPIRouter(
 		ctx,
 		appConfig,
@@ -99,5 +104,6 @@ func buildAdminAPIRouter(
 		nil,
 		nil,
 		infra.Cache,
+		readyProbe,
 	)
 }

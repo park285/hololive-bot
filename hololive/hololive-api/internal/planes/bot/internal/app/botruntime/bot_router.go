@@ -10,6 +10,7 @@ import (
 	"github.com/park285/iris-client-go/iris"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
+	"github.com/kapu/hololive-api/internal/readiness"
 )
 
 func ProvideBotRouter(
@@ -18,6 +19,7 @@ func ProvideBotRouter(
 	logger *slog.Logger,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
+	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {
-	return apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler)
+	return apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, readyProbe...)
 }

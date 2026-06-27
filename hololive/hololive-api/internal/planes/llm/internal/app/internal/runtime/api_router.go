@@ -28,6 +28,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+
+	"github.com/kapu/hololive-api/internal/readiness"
 )
 
 func buildHealthOnlyRouter(ctx context.Context, logger *slog.Logger, apiKey string) (*gin.Engine, error) {
@@ -41,8 +43,9 @@ func buildTriggerRouter(
 	logger *slog.Logger,
 	triggerHandler *sharedserver.TriggerHandler,
 	apiKey string,
+	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {
-	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
+	routerOptions := &sharedserver.RuntimeRouterOptions{
 		APIKey: apiKey,
 		RegisterRoutes: func(router *gin.Engine) error {
 			if triggerHandler == nil {
@@ -54,5 +57,9 @@ func buildTriggerRouter(
 			triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
 			return nil
 		},
-	})
+	}
+	if probe := readiness.Pick(readyProbe...); probe != nil {
+		routerOptions.ReadyResponder = readiness.GinHandler(probe) //nolint:contextcheck // gin readiness 핸들러는 c.Request.Context()로 요청 컨텍스트를 전달(표준 HTTP 경계)
+	}
+	return sharedserver.NewRuntimeRouter(ctx, logger, routerOptions)
 }

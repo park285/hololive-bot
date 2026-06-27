@@ -21,25 +21,22 @@
 package apphttp
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	json "github.com/park285/shared-go/pkg/json"
+
+	"github.com/kapu/hololive-api/internal/readiness"
 )
 
 func TestBotReadyResponder_OmitsWorkerAndWebhookDiagnostics(t *testing.T) {
 	t.Parallel()
 
-	gin.SetMode(gin.ReleaseMode)
-
-	router := gin.New()
-	router.GET("/ready", botReadyResponder())
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", http.NoBody)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	rec := serveBotReady(t, botReadyResponder(nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", rec.Code, http.StatusOK)
@@ -59,4 +56,66 @@ func TestBotReadyResponder_OmitsWorkerAndWebhookDiagnostics(t *testing.T) {
 	if _, ok := payload["irisWebhookReceive"]; ok {
 		t.Fatalf("unauthenticated /ready must omit \"irisWebhookReceive\": %v", payload)
 	}
+}
+
+func TestBotReadyResponder_DegradedDependencyReturns503(t *testing.T) {
+	t.Parallel()
+
+	probe := readiness.NewProbe("bot", readiness.Check{
+		Name:  "postgres",
+		Probe: func(context.Context) error { return errors.New("pool exhausted") },
+	})
+
+	rec := serveBotReady(t, botReadyResponder(probe))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("/ready status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
+	}
+	if payload["status"] != "not_ready" {
+		t.Fatalf("status = %v, want not_ready", payload["status"])
+	}
+	if _, ok := payload["workerProfile"]; ok {
+		t.Fatalf("degraded /ready must omit \"workerProfile\": %v", payload)
+	}
+}
+
+func TestBotReadyResponder_HealthyDependencyReturns200(t *testing.T) {
+	t.Parallel()
+
+	probe := readiness.NewProbe("bot", readiness.Check{
+		Name:  "postgres",
+		Probe: func(context.Context) error { return nil },
+	})
+
+	rec := serveBotReady(t, botReadyResponder(probe))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/ready status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
+	}
+	if payload["status"] != "ready" {
+		t.Fatalf("status = %v, want ready", payload["status"])
+	}
+}
+
+func serveBotReady(t *testing.T, handler func(*gin.Context)) *httptest.ResponseRecorder {
+	t.Helper()
+
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+	router.GET("/ready", handler)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", http.NoBody)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
 }

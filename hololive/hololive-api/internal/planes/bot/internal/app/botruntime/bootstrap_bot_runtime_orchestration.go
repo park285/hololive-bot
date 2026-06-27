@@ -34,7 +34,15 @@ import (
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
+	"github.com/kapu/hololive-api/internal/readiness"
 )
+
+func newBotReadyProbe(infra *appbootstrap.BotInfrastructure) *readiness.Probe {
+	return readiness.NewProbe("bot",
+		readiness.PostgresCheck(infra.Postgres),
+		readiness.ValkeyCheck(infra.Cache),
+	)
+}
 
 func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger, infra *appbootstrap.BotInfrastructure) (*BotRuntime, error) {
 	if appConfig == nil {
@@ -61,10 +69,12 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 
 	configSubscriber := appbootstrap.BuildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
 
+	readyProbe := newBotReadyProbe(infra)
+
 	var h3Server *http3.Server
 	var h3CertReloadStart func(context.Context)
 	if appConfig.ServerTransportEnabled("h3") {
-		h3Server, h3CertReloadStart, err = appbootstrap.BuildBotHTTP3Server(ctx, appConfig, webhookHandler, nil, logger)
+		h3Server, h3CertReloadStart, err = appbootstrap.BuildBotHTTP3Server(ctx, appConfig, webhookHandler, nil, logger, readyProbe)
 		if err != nil {
 			return nil, err
 		}

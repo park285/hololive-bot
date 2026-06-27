@@ -32,6 +32,7 @@ import (
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/app/http"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
+	"github.com/kapu/hololive-api/internal/readiness"
 )
 
 func ProvideAPIRouter(
@@ -43,6 +44,7 @@ func ProvideAPIRouter(
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 	cacheClient cache.Client,
+	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {
-	return apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, webhookHandler, triggerHandler, cacheClient)
+	return apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, webhookHandler, triggerHandler, cacheClient, readyProbe...)
 }

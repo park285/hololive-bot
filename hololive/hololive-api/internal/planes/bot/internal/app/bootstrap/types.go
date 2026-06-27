@@ -32,6 +32,8 @@ type BotInfrastructure struct {
 	Deps           *bot.Dependencies
 	AlarmCRUD      domain.AlarmCRUD
 	HolodexService *holodex.Service
+	Postgres       database.Client
+	Cache          cache.Client
 	Cleanup        func()
 }
 

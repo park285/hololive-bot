@@ -37,6 +37,7 @@ import (
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
+	"github.com/kapu/hololive-api/internal/readiness"
 )
 
 // Admin Dashboard와 Tauri 앱에서 사용됩니다.
@@ -49,6 +50,7 @@ func ProvideAPIRouter(
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 	cacheClient cache.Client,
+	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {
 	if err := validateAPIRouterInputs(appConfig, domainHandlers, authHandler); err != nil {
 		return nil, err
@@ -57,7 +59,7 @@ func ProvideAPIRouter(
 		logger = slog.Default()
 	}
 
-	router, err := newAPIRouter(ctx, appConfig, logger)
+	router, err := newAPIRouter(ctx, appConfig, logger, readyProbe...)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +145,7 @@ func validateDomainHandlers(h *server.DomainHandlers) error {
 	return nil
 }
 
-func newAPIRouter(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*gin.Engine, error) {
+func newAPIRouter(ctx context.Context, appConfig *config.Config, logger *slog.Logger, readyProbe ...*readiness.Probe) (*gin.Engine, error) {
 	if appConfig == nil {
 		return nil, errors.New("config must not be nil")
 	}
@@ -156,7 +158,7 @@ func newAPIRouter(ctx context.Context, appConfig *config.Config, logger *slog.Lo
 		return nil, err
 	}
 
-	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
+	routerOptions := &sharedserver.RuntimeRouterOptions{
 		APIKey:       appConfig.Server.APIKey,
 		EnableGzip:   true,
 		SkipLogPaths: []string{"/metrics"},
@@ -169,7 +171,12 @@ func newAPIRouter(ctx context.Context, appConfig *config.Config, logger *slog.Lo
 			cors.New(newAPICORSConfig(appConfig, appConfig.CORS.Enforce)),
 			middleware.ClientHintsMiddleware(),
 		},
-	})
+	}
+	if probe := readiness.Pick(readyProbe...); probe != nil {
+		routerOptions.ReadyResponder = readiness.GinHandler(probe) //nolint:contextcheck // gin readiness 핸들러는 c.Request.Context()로 요청 컨텍스트를 전달(표준 HTTP 경계)
+	}
+
+	router, err := sharedserver.NewRuntimeRouter(ctx, logger, routerOptions)
 	if err != nil {
 		return nil, err
 	}

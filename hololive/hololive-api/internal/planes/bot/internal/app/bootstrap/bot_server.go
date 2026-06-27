@@ -15,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
+	"github.com/kapu/hololive-api/internal/readiness"
 )
 
 func BuildBotServer(
@@ -39,8 +40,9 @@ func BuildBotHTTP3Server(
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 	logger *slog.Logger,
+	readyProbe ...*readiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
-	return buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, logger, reloadingTLSCertificateOptions{})
+	return buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, logger, reloadingTLSCertificateOptions{}, readyProbe...)
 }
 
 func buildBotHTTP3ServerWithReloaderOptions(
@@ -50,8 +52,9 @@ func buildBotHTTP3ServerWithReloaderOptions(
 	triggerHandler *sharedserver.TriggerHandler,
 	logger *slog.Logger,
 	reloaderOptions reloadingTLSCertificateOptions,
+	readyProbe ...*readiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
-	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler)
+	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, readyProbe...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build bot h3 server: provide bot router: %w", err)
 	}

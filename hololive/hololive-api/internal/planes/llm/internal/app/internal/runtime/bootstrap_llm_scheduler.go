@@ -34,6 +34,7 @@ import (
 	mescraper "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scraper"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
+	"github.com/kapu/hololive-api/internal/readiness"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -238,7 +239,11 @@ func buildLLMSchedulerComponents(
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, logger)
 
 	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
-	httpServers, err := buildLLMSchedulerHTTPServers(ctx, &schedulerConfig.Server, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService)
+	readyProbe := readiness.NewProbe("llm",
+		readiness.PostgresCheck(postgresService),
+		readiness.ValkeyCheck(cacheService),
+	)
+	httpServers, err := buildLLMSchedulerHTTPServers(ctx, &schedulerConfig.Server, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService, readyProbe)
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +331,7 @@ func buildLLMSchedulerHTTPServers(
 	apiKey string,
 	majorEventRepository *majorevent.Repository,
 	memberNewsService *membernews.Service,
+	readyProbe *readiness.Probe,
 ) (*sharedserver.RuntimeHTTPServers, error) {
 	if serverConfig == nil {
 		serverConfig = &config.ServerConfig{}
@@ -334,7 +340,7 @@ func buildLLMSchedulerHTTPServers(
 		return nil, fmt.Errorf("build llm scheduler router: API_SECRET_KEY required")
 	}
 
-	router, err := buildTriggerRouter(ctx, logger, triggerHandler, apiKey)
+	router, err := buildTriggerRouter(ctx, logger, triggerHandler, apiKey, readyProbe)
 	if err != nil {
 		return nil, fmt.Errorf("build llm scheduler router: %w", err)
 	}

@@ -32,6 +32,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/park285/iris-client-go/iris"
+
+	"github.com/kapu/hololive-api/internal/readiness"
 )
 
 // Admin API 라우트(members, alarms, rooms, stats, settings 등)는 이 라우터에서 제외합니다.
@@ -41,15 +43,19 @@ func ProvideBotRouter(
 	logger *slog.Logger,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
+	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:         appConfig.Server.APIKey,
-		ReadyResponder: botReadyResponder(),
+		ReadyResponder: botReadyResponder(readiness.Pick(readyProbe...)), //nolint:contextcheck // gin readiness 핸들러는 c.Request.Context()로 요청 컨텍스트를 전달(표준 HTTP 경계)
 		RegisterRoutes: botRouteRegistrar(appConfig.Server.APIKey, webhookHandler, triggerHandler),
 	})
 }
 
-func botReadyResponder() func(*gin.Context) {
+func botReadyResponder(probe *readiness.Probe) func(*gin.Context) {
+	if probe != nil {
+		return readiness.GinHandler(probe)
+	}
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"health": health.Get()})
 	}
