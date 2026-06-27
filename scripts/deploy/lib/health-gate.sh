@@ -3,6 +3,9 @@
 HOLOLIVE_APP_UID="${HOLOLIVE_APP_UID:-1000}"
 HOLOLIVE_APP_GID="${HOLOLIVE_APP_GID:-1000}"
 
+declare -gA CUTOVER_RESTART_BASELINE=()
+declare -gA CUTOVER_CONTAINER_ID=()
+
 compose_health_resolve_container() {
     local service="$1"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" \
@@ -22,6 +25,13 @@ wait_for_service_health() {
         return 1
     fi
 
+    local baseline_restarts=0
+    if [[ -n "${CUTOVER_CONTAINER_ID[${service}]:-}" \
+       && "${CUTOVER_CONTAINER_ID[${service}]}" == "${container}" ]]; then
+        baseline_restarts="${CUTOVER_RESTART_BASELINE[${service}]:-0}"
+    fi
+    : "${baseline_restarts:=0}"
+
     local has_health=""
     has_health="$("${CONTAINER_CLI}" inspect -f '{{if .State.Health}}yes{{end}}' "${container}" 2>/dev/null || true)"
 
@@ -36,8 +46,8 @@ wait_for_service_health() {
         fi
         echo "[HEALTH] ${service}: status=${status} health=${health} restarts=${restarts} (${elapsed}s/${timeout}s)"
 
-        if [[ "${status}" == restarting || "${status}" == exited || "${status}" == dead ]] || (( restarts > 0 )); then
-            echo "[HEALTH] ${service} unstable (status=${status} restarts=${restarts})" >&2
+        if [[ "${status}" == restarting || "${status}" == exited || "${status}" == dead ]] || (( restarts > baseline_restarts )); then
+            echo "[HEALTH] ${service} unstable (status=${status} restarts=${restarts} baseline=${baseline_restarts})" >&2
             return 1
         fi
         if [[ "${has_health}" == yes ]]; then
@@ -50,7 +60,7 @@ wait_for_service_health() {
             sleep "${interval}"; elapsed=$((elapsed + interval))
             status="$("${CONTAINER_CLI}" inspect -f '{{.State.Status}}' "${container}" 2>/dev/null || echo unknown)"
             restarts="$("${CONTAINER_CLI}" inspect -f '{{.RestartCount}}' "${container}" 2>/dev/null || echo 0)"
-            if [[ "${status}" == running ]] && (( restarts == 0 )); then
+            if [[ "${status}" == running ]] && (( restarts == baseline_restarts )); then
                 return 0
             fi
             echo "[HEALTH] ${service} did not stay running (status=${status} restarts=${restarts})" >&2
@@ -138,4 +148,19 @@ cutover_health_gate() {
         fi
     done
     return "${rc}"
+}
+
+cutover_capture_restart_baseline() {
+    local svc="" container="" restarts=""
+    for svc in "$@"; do
+        container="$(compose_health_resolve_container "${svc}")"
+        if [[ -n "${container}" ]]; then
+            restarts="$("${CONTAINER_CLI}" inspect -f '{{.RestartCount}}' "${container}" 2>/dev/null || echo 0)"
+            CUTOVER_RESTART_BASELINE["${svc}"]="${restarts:-0}"
+            CUTOVER_CONTAINER_ID["${svc}"]="${container}"
+        else
+            CUTOVER_RESTART_BASELINE["${svc}"]=0
+            CUTOVER_CONTAINER_ID["${svc}"]=""
+        fi
+    done
 }
