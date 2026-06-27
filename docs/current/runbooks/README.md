@@ -6,10 +6,8 @@
 
 | Runtime | Runbook |
 |---|---|
-| `bot` | `bot.md` |
-| `admin-api` | `admin-api.md` |
+| `hololive-api` | `hololive-api.md` |
 | `alarm-worker` | `alarm-worker.md` |
-| `llm-scheduler` | `llm-scheduler.md` |
 | `youtube-producer` | `youtube-producer.md` |
 | `admin-dashboard` | `admin-dashboard.md` |
 

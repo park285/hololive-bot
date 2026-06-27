@@ -11,8 +11,9 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 	t.Parallel()
 
 	mustExist := []string{
-		"hololive/hololive-admin-api/go.mod",
-		"hololive/hololive-admin-api/cmd/admin-api/main.go",
+		"hololive/hololive-api/go.mod",
+		"hololive/hololive-api/cmd/hololive-api/main.go",
+		"hololive/hololive-api/internal/planes/admin/runtime/runtime.go",
 		"hololive/hololive-alarm-worker/go.mod",
 		"hololive/hololive-alarm-worker/cmd/alarm-worker/main.go",
 		"hololive/hololive-shared/pkg/service/notification/notification.go",
@@ -43,7 +44,7 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 	}
 
 	goWork := readContractFile(t, "go.work")
-	for _, entry := range []string{"./hololive/hololive-admin-api", "./hololive/hololive-alarm-worker"} {
+	for _, entry := range []string{"./hololive/hololive-api", "./hololive/hololive-alarm-worker"} {
 		if !strings.Contains(goWork, entry) {
 			t.Fatalf("go.work must include %s", entry)
 		}
@@ -51,7 +52,7 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 
 	projectMap := readContractFile(t, filepath.ToSlash("docs/current/PROJECT_MAP.md"))
 	for _, want := range []string{
-		"| `hololive-admin-api` | Go 1.26 | `hololive/hololive-admin-api/` |",
+		"| `hololive-api` | Go 1.26 | `hololive/hololive-api/` |",
 		"| `hololive-alarm-worker` | Go 1.26 | `hololive/hololive-alarm-worker/` |",
 	} {
 		if !strings.Contains(projectMap, want) {

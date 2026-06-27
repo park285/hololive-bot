@@ -63,6 +63,7 @@ type Config struct {
 	OfficialProfile      OfficialProfileConfig
 	MaxResponseBodyBytes int64
 	LLMSchedulerURL      string
+	AlarmServiceURL      string
 	Version              string
 }
 
@@ -156,6 +157,7 @@ func buildConfig(
 		OfficialProfile:      loadOfficialProfileConfig(),
 		MaxResponseBodyBytes: int64(sharedenv.Int("MAX_RESPONSE_BODY_BYTES", int(DefaultMaxResponseBodyBytes))),
 		LLMSchedulerURL:      sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
+		AlarmServiceURL:      sharedenv.String("ALARM_INTERNAL_URL", ""),
 		CORS:                 loadCORSConfig(corsAllowedOrigins, corsMissingInProduction, options),
 		Version:              sharedenv.String("APP_VERSION", "1.1.0-go"),
 	}, nil

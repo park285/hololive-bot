@@ -7,8 +7,7 @@ TODAY="${1:-$(date -u +%F)}"
 
 python3 - "$TODAY" \
     "${ROOT_DIR}/hololive/hololive-shared/pkg" \
-    "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal" \
-    "${ROOT_DIR}/hololive/hololive-llm-sched/internal" \
+    "${ROOT_DIR}/hololive/hololive-api/internal" \
     "${ROOT_DIR}/hololive/hololive-youtube-producer/internal" <<'PY'
 import datetime
 import re

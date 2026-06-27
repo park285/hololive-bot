@@ -10,13 +10,13 @@ Runtime settings changes are broadcast through Valkey Pub/Sub channel `config:up
 
 ## Provider
 
-- Service: `admin-api` settings update paths
+- Service: `hololive-api` admin-plane settings update paths
 - Module: `hololive-shared` dispatcher helpers are shared
-- Runtime: publisher is currently `admin-api`
+- Runtime: publisher is currently `hololive-api` (admin plane)
 
 ## Consumers
 
-- Services: `bot`, `alarm-worker`, `llm-scheduler`, ingestion runtimes where `configsub.Subscriber` is configured
+- Services: `hololive-api`, `alarm-worker`, `youtube-producer`, ingestion runtimes where `configsub.Subscriber` is configured
 - Usage: scraper proxy toggles, alarm advance minutes updates, member news run-now event
 
 ## Transport
@@ -86,9 +86,9 @@ Known update types:
 
 - Contract constants: `hololive/hololive-shared/pkg/contracts/settings/contracts_test.go`
 - Dispatcher behavior: `hololive/hololive-shared/pkg/service/configsub/dispatcher_test.go`
-- Runtime subscriber wiring: `hololive/hololive-llm-sched/internal/app/internal/runtime/bootstrap_llm_scheduler_config_subscriber_test.go`
+- Runtime subscriber wiring: `hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/bot_config_subscriber_test.go`
 
 ## Known gaps
 
-- Publisher ownership is `admin-api`; new publishers must update `CONTRACT_MAP.md` and `CONTRACT_MANIFEST.txt`.
+- Publisher ownership is `hololive-api` (admin plane); new publishers must update `CONTRACT_MAP.md` and `CONTRACT_MANIFEST.txt`.
 - Pub/Sub startup refresh requirements are runtime-specific and must be checked per subscriber.

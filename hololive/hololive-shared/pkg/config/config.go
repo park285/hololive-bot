@@ -11,6 +11,7 @@ type ConsensusLLMConfig = settings.ConsensusLLMConfig
 type ExaConfig = settings.ExaConfig
 type HolodexConfig = settings.HolodexConfig
 type HolodexLiveStatusFallbackConfig = settings.HolodexLiveStatusFallbackConfig
+type HololiveAPIConfig = settings.HololiveAPIConfig
 type IngestionConfig = settings.IngestionConfig
 type IrisConfig = settings.IrisConfig
 type KakaoConfig = settings.KakaoConfig
@@ -55,6 +56,7 @@ var Load = settings.Load
 var LoadBotRuntime = settings.LoadBotRuntime
 var LoadAlarmWorkerRuntime = settings.LoadAlarmWorkerRuntime
 var LoadAdminAPIRuntime = settings.LoadAdminAPIRuntime
+var LoadHololiveAPIRuntime = settings.LoadHololiveAPIRuntime
 var LoadYouTubeProducerRuntime = settings.LoadYouTubeProducerRuntime
 
 var LoadLLMScheduler = settings.LoadLLMScheduler

@@ -9,8 +9,8 @@ if ! command -v rg >/dev/null 2>&1; then
   exit 1
 fi
 
-admin_server_dir="${ROOT_DIR}/hololive/hololive-admin-api/internal/server"
-bot_server_dir="${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server"
+admin_server_dir="${ROOT_DIR}/hololive/hololive-api/internal/planes/admin/internal/server"
+bot_server_dir="${ROOT_DIR}/hololive/hololive-api/internal/planes/bot/internal/server"
 
 if [[ ! -d "${admin_server_dir}" ]]; then
   echo "FAIL: expected admin-api server directory is missing: ${admin_server_dir}" >&2
@@ -30,7 +30,7 @@ forbidden_files=(
   "${bot_server_dir}/api_response.go"
   "${ROOT_DIR}/hololive/hololive-shared/internal/envutil/env.go"
   "${ROOT_DIR}/hololive/hololive-shared/pkg/logging/logging.go"
-  "${ROOT_DIR}/hololive/hololive-llm-sched/internal/app/delivery_providers_local.go"
+  "${ROOT_DIR}/hololive/hololive-api/internal/planes/llm/internal/app/delivery_providers_local.go"
 )
 
 found_file=0

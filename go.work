@@ -7,10 +7,8 @@ use (
 	../shared-go
 	./
 	./admin-dashboard/backend
-	./hololive/hololive-admin-api
 	./hololive/hololive-alarm-worker
-	./hololive/hololive-kakao-bot-go
-	./hololive/hololive-llm-sched
+	./hololive/hololive-api
 	./hololive/hololive-shared
 	./hololive/hololive-youtube-producer
 )

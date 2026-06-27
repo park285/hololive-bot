@@ -53,17 +53,17 @@ check_forbidden_scoped_go_hits \
   "hololive/hololive-youtube-producer"
 
 check_forbidden_scoped_go_hits \
-  "llm-sched does not start proactive delivery dispatch or Iris delivery" \
+  "hololive-api llm plane does not start proactive delivery dispatch or Iris delivery" \
   'DeliveryDispatcher|Delivery outbox dispatcher started|NewIrisMessageSender|ProvideIrisClient|iris\.WithBaseURL|iris\.WithBotToken' \
-  "hololive/hololive-llm-sched"
+  "hololive/hololive-api/internal/planes/llm"
 
 check_forbidden_scoped_go_hits \
-  "admin-api does not start proactive delivery dispatch or Iris delivery" \
+  "hololive-api admin plane does not start proactive delivery dispatch or Iris delivery" \
   'DeliveryDispatcher|NewIrisMessageSender|outbox\.NewDispatcher|ProvideIrisClient|iris\.WithBaseURL|iris\.WithBotToken' \
-  "hololive/hololive-admin-api"
+  "hololive/hololive-api/internal/planes/admin"
 
 compose="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
-for service in hololive-admin-api youtube-producer llm-scheduler; do
+for service in youtube-producer; do
   block="$(awk -v service="  ${service}:" '
     $0 == service {in_block=1; print; next}
     in_block && $0 ~ /^  [A-Za-z0-9_-]+:/ {exit}
@@ -76,24 +76,6 @@ for service in hololive-admin-api youtube-producer llm-scheduler; do
     echo "[PASS] ${service} has no Iris egress env"
   fi
 done
-
-admin_api_block="$(awk '
-  $0 == "  hololive-admin-api:" {in_block=1; print; next}
-  in_block && $0 ~ /^  [A-Za-z0-9_-]+:/ {exit}
-  in_block {print}
-' "${compose}")"
-if grep -Eq '^[[:space:]]+env_file:' <<< "${admin_api_block}"; then
-  echo "[FAIL] hololive-admin-api must not import a service-level env_file" >&2
-  fail=1
-else
-  echo "[PASS] hololive-admin-api does not import a service-level env_file"
-fi
-if grep -Eq 'ADMIN_PASS_BCRYPT|ADMIN_PASS_HASH|ADMIN_SECRET_KEY|SESSION_SECRET' <<< "${admin_api_block}"; then
-  echo "[FAIL] hololive-admin-api must not receive dashboard-only secrets" >&2
-  fail=1
-else
-  echo "[PASS] hololive-admin-api has no dashboard-only secrets"
-fi
 
 dispatcher_hits="$(rg -n 'dispatcher-go|hololive-dispatcher-go|legacy-dispatcher-go' "${compose}" || true)"
 if [[ -n "${dispatcher_hits}" ]]; then

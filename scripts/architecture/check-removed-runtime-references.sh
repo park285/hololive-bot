@@ -13,8 +13,8 @@ matches="$(
     --glob '!docs/history/settlement/**' \
     --glob '!docs/history/**' \
     --glob '!docs/superpowers/**' \
-    --glob '!hololive/hololive-kakao-bot-go/scripts/migrations/archive/settlement/**' \
-    --glob '!hololive/hololive-kakao-bot-go/scripts/migrations/manual/settlement_drop.sql' \
+    --glob '!hololive/hololive-api/scripts/migrations/archive/settlement/**' \
+    --glob '!hololive/hololive-api/scripts/migrations/manual/settlement_drop.sql' \
     --glob '!scripts/architecture/check-removed-runtime-references.sh' \
     --glob '!scripts/architecture/ci-notification-egress-gate.sh' \
     --glob '!scripts/deploy/test-compose-services.sh' \

@@ -65,7 +65,7 @@ write_globs() {
   local path="$1"
   mkdir -p "$(dirname "${path}")"
   cat >"${path}" <<'EOF'
-hololive/hololive-kakao-bot-go/internal/service/matcher/**
+hololive/hololive-api/internal/planes/bot/internal/service/matcher/**
 EOF
 }
 

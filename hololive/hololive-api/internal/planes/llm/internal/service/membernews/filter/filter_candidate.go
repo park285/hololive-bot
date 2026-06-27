@@ -1,0 +1,49 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package filter
+
+import "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+
+func buildFilteredCandidate(
+	item *datedCandidate,
+	profiles []memberProfile,
+	sourceValidator model.SourceURLValidator,
+) (model.FilteredCandidate, bool) {
+	matchedMembers := matchMembers(&item.candidate, profiles)
+	if len(matchedMembers) == 0 {
+		return model.FilteredCandidate{}, false
+	}
+
+	tier, normalizedURL, ok := resolveSource(&item.candidate, sourceValidator)
+	if !ok {
+		return model.FilteredCandidate{}, false
+	}
+
+	return model.FilteredCandidate{
+		Candidate:      item.candidate,
+		EffectiveDate:  item.date,
+		MatchedMembers: matchedMembers,
+		MemberText:     formatMemberText(matchedMembers),
+		Category:       classifyCategory(&item.candidate),
+		SourceTier:     tier,
+		SourceURL:      normalizedURL,
+	}, true
+}

@@ -25,6 +25,10 @@ ADMIN_PASS_BCRYPT=stub
 CACHE_PASSWORD=stub
 DB_PASSWORD=stub
 SESSION_SECRET=stub
+SEOUL_CACHE_HOST=stub
+SEOUL_POSTGRES_HOST=stub
+SEOUL_CLIPROXY_BASE_URL=https://cliproxy.invalid
+SEOUL_METRICS_BIND_IP=100.100.1.5
 EOF
 cp "${STUB_COMPOSE_ENV}" "${STUB_APP_ENV}"
 cat >"${STUB_YOUTUBE_PRODUCER_ENV}" <<'EOF'
@@ -60,7 +64,7 @@ render() {
     shift
     shift
     COMPOSE_ENV_FILE="${compose_env_file}" \
-        HOLOLIVE_BOT_ENV_FILE="${STUB_APP_ENV}" \
+        HOLOLIVE_API_ENV_FILE="${STUB_APP_ENV}" \
         HOLOLIVE_ALARM_WORKER_ENV_FILE="${STUB_APP_ENV}" \
         HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="${STUB_YOUTUBE_PRODUCER_ENV}" \
         COMPOSE_PROFILES="${profiles}" \
@@ -106,19 +110,26 @@ main = json.loads(os.environ["MAIN_RENDER"])["services"]
 ap = json.loads(os.environ["AP_RENDER"])["services"]
 
 H3_HEALTH = {
-    "hololive-bot": ("https://127.0.0.1:30001/health", 30001),
-    "hololive-admin-api": ("https://127.0.0.1:30006/health", None),
-    "hololive-alarm-worker": ("https://127.0.0.1:30007/health", None),
-    "youtube-producer": ("https://127.0.0.1:30005/health", None),
-    "llm-scheduler": ("https://127.0.0.1:30003/health", None),
+    "hololive-api": (
+        [
+            "https://127.0.0.1:30001/health",
+            "https://127.0.0.1:30003/ready",
+            "https://127.0.0.1:30006/health",
+        ],
+        30001,
+    ),
+    "hololive-alarm-worker": (["https://127.0.0.1:30007/health"], None),
+    "youtube-producer": (["https://127.0.0.1:30005/health"], None),
 }
 
-for name, (url, udp_port) in H3_HEALTH.items():
+for name, (urls, udp_port) in H3_HEALTH.items():
     svc = main.get(name)
     check(f"{name} present in oracle render", svc is not None)
     if svc is None:
         continue
-    check(f"{name} healthcheck is {url}", healthcheck_url(svc) == url)
+    test = (svc.get("healthcheck") or {}).get("test") or []
+    for url in urls:
+        check(f"{name} healthcheck includes {url}", url in test)
     if udp_port is not None:
         check(f"{name} publishes {udp_port}/udp", has_udp_published(svc, udp_port))
 

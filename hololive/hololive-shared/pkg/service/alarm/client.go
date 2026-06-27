@@ -101,19 +101,33 @@ type updateAdvanceMinutesReq struct {
 	Minutes int `json:"minutes"`
 }
 
-type boolResp struct {
-	Result bool `json:"result"`
+type addAlarmResp struct {
+	Added bool `json:"added"`
 }
 
-type intResp struct {
-	Count int `json:"count"`
+type removeAlarmResp struct {
+	Removed bool `json:"removed"`
+}
+
+type clearRoomResp struct {
+	Deleted int `json:"deleted"`
 }
 
 type minutesResp struct {
-	Minutes []int `json:"minutes"`
+	TargetMinutes []int `json:"target_minutes"`
+}
+
+type apiEnvelope struct {
+	Success bool            `json:"success"`
+	Error   string          `json:"error,omitempty"`
+	Message string          `json:"message,omitempty"`
+	Data    json.RawMessage `json:"data,omitempty"`
 }
 
 func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
+	if req == nil {
+		return false, fmt.Errorf("alarm-api: add alarm request must not be nil")
+	}
 	body := addAlarmReq{
 		RoomID:     req.RoomID,
 		UserID:     req.UserID,
@@ -123,11 +137,11 @@ func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (boo
 		UserName:   req.UserName,
 		AlarmTypes: req.AlarmTypes,
 	}
-	var resp boolResp
+	var resp addAlarmResp
 	if err := c.postJSON(ctx, contractsalarm.AddPath, body, &resp); err != nil {
 		return false, err
 	}
-	return resp.Result, nil
+	return resp.Added, nil
 }
 
 func (c *Client) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
@@ -136,11 +150,11 @@ func (c *Client) RemoveAlarm(ctx context.Context, roomID, channelID string, alar
 		ChannelID:  channelID,
 		AlarmTypes: alarmTypes,
 	}
-	var resp boolResp
+	var resp removeAlarmResp
 	if err := c.postJSON(ctx, contractsalarm.RemovePath, body, &resp); err != nil {
 		return false, err
 	}
-	return resp.Result, nil
+	return resp.Removed, nil
 }
 
 func (c *Client) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
@@ -149,8 +163,10 @@ func (c *Client) GetRoomAlarms(ctx context.Context, roomID string) ([]string, er
 		return nil, err
 	}
 	ids := make([]string, 0, len(alarms))
-	for _, a := range alarms {
-		ids = append(ids, a.ChannelID)
+	for _, alarm := range alarms {
+		if alarm != nil {
+			ids = append(ids, alarm.ChannelID)
+		}
 	}
 	return ids, nil
 }
@@ -161,47 +177,15 @@ func (c *Client) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*
 		return nil, err
 	}
 	if alarms == nil {
-		alarms = []*domain.Alarm{}
+		return []*domain.Alarm{}, nil
 	}
 	return alarms, nil
 }
 
-type apiEnvelope struct {
-	Success bool             `json:"success"`
-	Message string           `json:"message,omitempty"`
-	Data    *json.RawMessage `json:"data,omitempty"`
-}
-
 func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
-	path := contractsalarm.RoomAlarmsViewPath(roomID)
-	resp, err := c.doRequest(ctx, http.MethodGet, path, http.NoBody, false)
-	if err != nil {
-		return nil, err
-	}
-	defer c.closeResponseBody(resp, path)
-
-	return decodeAlarmListViewEnvelope(path, resp.Body)
-}
-
-func decodeAlarmListViewEnvelope(path string, body io.Reader) ([]domain.AlarmListView, error) {
-	var envelope apiEnvelope
-	if err := json.NewDecoder(body).Decode(&envelope); err != nil {
-		return nil, fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
-	}
-	if !envelope.Success {
-		return nil, fmt.Errorf("alarm-api: %s: %s", path, envelope.Message)
-	}
-	if envelope.Data == nil {
-		return []domain.AlarmListView{}, nil
-	}
-
-	return decodeAlarmListViewEntries(path, *envelope.Data)
-}
-
-func decodeAlarmListViewEntries(path string, data json.RawMessage) ([]domain.AlarmListView, error) {
 	var entries []domain.AlarmListView
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, fmt.Errorf("alarm-api: %s: decode entries: %w", path, err)
+	if err := c.getJSON(ctx, contractsalarm.RoomAlarmsViewPath(roomID), &entries); err != nil {
+		return nil, err
 	}
 	if entries == nil {
 		return []domain.AlarmListView{}, nil
@@ -211,58 +195,50 @@ func decodeAlarmListViewEntries(path string, data json.RawMessage) ([]domain.Ala
 
 func (c *Client) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
 	body := clearRoomReq{RoomID: roomID}
-	var resp intResp
+	var resp clearRoomResp
 	if err := c.postJSON(ctx, contractsalarm.ClearPath, body, &resp); err != nil {
 		return 0, err
 	}
-	return resp.Count, nil
+	return resp.Deleted, nil
 }
 
-// 서버에 데이터가 없으면 nil을 반환합니다.
+// GetNextStreamInfo returns nil when the provider has no next-stream payload.
 func (c *Client) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
-	var info domain.NextStreamInfo
-	err := c.getJSON(ctx, contractsalarm.NextStreamPath(channelID), &info)
-	if err != nil {
-		if httputil.IsStatus(err, http.StatusNotFound) {
-			return nil, nil
-		}
+	var info *domain.NextStreamInfo
+	if err := c.getJSON(ctx, contractsalarm.NextStreamPath(channelID), &info); err != nil {
 		return nil, err
 	}
-	if !info.Status.IsValid() {
+	if info == nil || !info.Status.IsValid() {
 		return nil, nil
 	}
-	return &info, nil
+	return info, nil
 }
 
 func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int {
-	body := updateAdvanceMinutesReq{Minutes: minutes}
-	var resp minutesResp
 	if ctx == nil {
 		c.logger.Warn("UpdateAlarmAdvanceMinutes skipped: nil context", slog.Int("minutes", minutes))
 		return []int{}
 	}
+	body := updateAdvanceMinutesReq{Minutes: minutes}
+	var resp minutesResp
 	if err := c.putJSON(ctx, contractsalarm.SettingsPath, body, &resp); err != nil {
-		c.logger.Warn("UpdateAlarmAdvanceMinutes 실패",
+		c.logger.Warn("UpdateAlarmAdvanceMinutes failed",
 			slog.Int("minutes", minutes),
 			slog.Any("error", err),
 		)
 		return []int{}
 	}
+	result := append([]int(nil), resp.TargetMinutes...)
 	c.targetMinutesMu.Lock()
-	c.targetMinutes = resp.Minutes
+	c.targetMinutes = result
 	c.targetMinutesMu.Unlock()
-	return resp.Minutes
+	return append([]int(nil), result...)
 }
 
 func (c *Client) GetTargetMinutes() []int {
 	c.targetMinutesMu.RLock()
 	defer c.targetMinutesMu.RUnlock()
-	if len(c.targetMinutes) == 0 {
-		return []int{}
-	}
-	result := make([]int, len(c.targetMinutes))
-	copy(result, c.targetMinutes)
-	return result
+	return append([]int(nil), c.targetMinutes...)
 }
 
 func (c *Client) SetRoomName(ctx context.Context, roomID, roomName string) error {
@@ -281,7 +257,7 @@ func (c *Client) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, err
 		return nil, err
 	}
 	if entries == nil {
-		entries = []*domain.AlarmEntry{}
+		return []*domain.AlarmEntry{}, nil
 	}
 	return entries, nil
 }
@@ -314,17 +290,45 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 	}
 	defer c.closeResponseBody(resp, path)
 
-	if out == nil {
-		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-			return fmt.Errorf("alarm-api: %s: discard response: %w", path, err)
-		}
-		return nil
-	}
-
-	if err := httputil.DecodeJSON(resp, out); err != nil {
-		return fmt.Errorf("alarm-api: %s: decode response: %w", path, err)
+	if err := decodeAPIEnvelope(path, resp.Body, out); err != nil {
+		return err
 	}
 	return nil
+}
+
+func decodeAPIEnvelope(path string, body io.Reader, out any) error {
+	var envelope apiEnvelope
+	if err := json.NewDecoder(body).Decode(&envelope); err != nil {
+		return fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
+	}
+	if !envelope.Success {
+		return fmt.Errorf("alarm-api: %s: %s", path, envelopeFailureMessage(envelope))
+	}
+	if !envelopeHasData(out, envelope.Data) {
+		return nil
+	}
+	if err := json.Unmarshal(envelope.Data, out); err != nil {
+		return fmt.Errorf("alarm-api: %s: decode data: %w", path, err)
+	}
+	return nil
+}
+
+func envelopeFailureMessage(envelope apiEnvelope) string {
+	message := strings.TrimSpace(envelope.Message)
+	if message == "" {
+		message = strings.TrimSpace(envelope.Error)
+	}
+	if message == "" {
+		message = "provider returned unsuccessful response"
+	}
+	return message
+}
+
+func envelopeHasData(out any, data json.RawMessage) bool {
+	if out == nil || len(data) == 0 {
+		return false
+	}
+	return !bytes.Equal(bytes.TrimSpace(data), []byte("null"))
 }
 
 func encodeJSONRequestBody(path string, body any) (io.Reader, error) {
@@ -367,9 +371,6 @@ func (c *Client) validateResponse(path string, resp *http.Response) error {
 		return fmt.Errorf("alarm-api: %s: nil response body", path)
 	}
 	if err := httputil.CheckStatus(resp); err != nil {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			c.logger.Warn("Failed to close alarm API response body", slog.String("path", path), slog.Any("error", closeErr))
-		}
 		return fmt.Errorf("alarm-api: %s: check status: %w", path, err)
 	}
 	return nil

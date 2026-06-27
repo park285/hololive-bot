@@ -312,7 +312,7 @@ def check_hololive_base_middleware(root: Path, findings: list[Finding]) -> None:
 
 
 def check_hololive_holo_api_auth(root: Path, findings: list[Finding]) -> None:
-    path = root / "hololive/hololive-admin-api/internal/app/http/registration.go"
+    path = root / "hololive/hololive-api/internal/planes/admin/internal/app/http/registration.go"
     if not path.exists():
         return
     lines = read_text(path).splitlines()

@@ -51,10 +51,8 @@ sudo -n env \
 
 Current Go runtime services:
 
-- `hololive-bot`
-- `hololive-admin-api`
+- `hololive-api`
 - `hololive-alarm-worker`
-- `llm-scheduler`
 - `youtube-producer-c` on the main host; `youtube-producer-b` uses the AP host wrapper.
 
 ## Required Checks

@@ -21,7 +21,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-${REPO_DIR}/deploy/compose/docker-compose.prod.yml
 COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-/run/hololive-bot/env}"
 PING_SOCKET="${PING_SOCKET:-/var/run/valkey/valkey-cache.sock}"
 # post-check: 복구 후 살아있어야 할 핵심 컨테이너
-POSTCHECK_CONTAINERS="${POSTCHECK_CONTAINERS:-valkey-cache holo-postgres hololive-kakao-bot-go hololive-alarm-worker}"
+POSTCHECK_CONTAINERS="${POSTCHECK_CONTAINERS:-valkey-cache holo-postgres hololive-api hololive-alarm-worker}"
 NOW="${SELFHEAL_NOW:-$(date +%s)}"
 MODE="${1:---dry-run}"
 

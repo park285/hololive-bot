@@ -10,7 +10,7 @@
 
 ## 시스템 아키텍처 (Architecture Overview)
 
-본 플랫폼은 Go 기반으로 구현된 **5개의 독립된 런타임 서비스**로 구성되어 있으며, 단일 호스트 상에서 Docker Compose를 통해 격리 가동됩니다. (단, youtube-producer 컴포넌트는 부하 분산 및 신뢰성을 위해 Seoul 및 메인 호스트에 걸쳐 2-way Active-Active 형태로 확장 운용됩니다.)
+본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-producer`)로 구성되어 있으며, 단일 호스트 상에서 Docker Compose를 통해 격리 가동됩니다. `hololive-api`는 bot/admin/llm plane을 단일 프로세스에서 호스팅합니다. (단, youtube-producer 컴포넌트는 부하 분산 및 신뢰성을 위해 Seoul 및 메인 호스트에 걸쳐 2-way Active-Active 형태로 확장 운용됩니다.)
 
 인프라 이력 사양: 이전의 k8s/k3s 오케스트레이션 구성에서 관리 편의성 향상을 위해 단일 호스트 Docker Compose 기반 환경으로 롤백 복귀하였습니다. 현재 배포 롤아웃 및 로그 분석, 트러블슈팅의 표준 준거는 Docker Compose 운영 문서군을 따릅니다.
 
@@ -18,10 +18,8 @@
 
 | 런타임 모듈명 | 소스 디렉토리 | Compose 서비스명 | 가동 포트 | 주요 역할 |
 |---|---|---|---:|---|
-| bot | hololive-kakao-bot-go | hololive-bot | 30001 | Kakao/Iris 인바운드 웹훅 라우팅 및 챗 명령어 파싱 |
-| admin-api | hololive-admin-api | hololive-admin-api | 30006 | 관리자 API 제어 및 웹 어드민 컨트롤 플레인 |
+| hololive-api | hololive-api | hololive-api | 30001/30003/30006 | bot/admin/llm plane 통합 런타임: Kakao/Iris 웹훅 라우팅·챗 명령어 파싱(bot), 관리자 API 컨트롤 플레인(admin), 이벤트/뉴스 정규화 및 LLM 스케줄러(llm) |
 | alarm-worker | hololive-alarm-worker | hololive-alarm-worker | 30007 | 방송 정보 주기적 분석, 발송 대기열 소비 및 Iris outbound 호출 |
-| llm-scheduler | hololive-llm-sched | llm-scheduler | 30003 | 버튜버 이벤트 정보 정규화, 뉴스 수집 및 LLM 작업 스케줄러 |
 | youtube-producer | hololive-youtube-producer | youtube-producer | 30015/25 | 유튜브 채널 모니터링, 신규 정보 발행 및 액티브-액티브 제어 |
 
 ### 📦 공유 라이브러리 (Shared Libraries)
@@ -31,9 +29,9 @@
 
 ### 🔄 핵심 데이터 흐름 (Core Flow)
 
-* 인바운드 메시지 처리: `Iris Core -> bot -> Command/Service -> PostgreSQL & Valkey`
+* 인바운드 메시지 처리: `Iris Core -> hololive-api (bot plane) -> Command/Service -> PostgreSQL & Valkey`
 * 실시간 알림 발송: `alarm-worker -> Valkey (alarm:dispatch:queue) -> alarm-worker egress -> Iris Core -> 카카오톡`
-* LLM 뉴스 분석 연계: 어드민 API / 봇 내장 클라이언트 -> `llm-scheduler` 내부 API
+* LLM 뉴스 분석 연계: `hololive-api` admin/bot plane 내장 클라이언트 -> `hololive-api` (llm plane) 내부 API
 * 유튜브 신작 감지: `youtube-producer -> Shared Outbox/Tracking DB -> alarm-worker`
 
 ---
@@ -53,10 +51,8 @@
 go work sync
 go build ./shared-go/... \
   ./hololive/hololive-shared/... \
-  ./hololive/hololive-admin-api/... \
+  ./hololive/hololive-api/... \
   ./hololive/hololive-alarm-worker/... \
-  ./hololive/hololive-kakao-bot-go/... \
-  ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-youtube-producer/...
 ```
 
@@ -65,10 +61,8 @@ go build ./shared-go/... \
 ```bash
 go test ./shared-go/... \
   ./hololive/hololive-shared/... \
-  ./hololive/hololive-admin-api/... \
+  ./hololive/hololive-api/... \
   ./hololive/hololive-alarm-worker/... \
-  ./hololive/hololive-kakao-bot-go/... \
-  ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-youtube-producer/...
 ```
 
@@ -93,10 +87,8 @@ go test ./shared-go/... \
 ./build-all.sh --no-bump
 
 # 특정 개별 서비스 단위 컨테이너 롤아웃 재배포
-./scripts/deploy/compose-redeploy-service.sh hololive-bot
-./scripts/deploy/compose-redeploy-service.sh hololive-admin-api
+./scripts/deploy/compose-redeploy-service.sh hololive-api
 ./scripts/deploy/compose-redeploy-service.sh hololive-alarm-worker
-./scripts/deploy/compose-redeploy-service.sh llm-scheduler
 
 # 유튜브 프로듀서 Active-Active 멀티 프로파일 재배포
 COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.main-ap.yml \
@@ -117,10 +109,10 @@ COMPOSE_PROFILES=main-ap \
 
 | 런타임 모듈 | 상태 검증 URI (Health Check) |
 |---|---|
-| bot | `http://127.0.0.1:30001/health` |
-| admin-api | `http://127.0.0.1:30006/health` |
+| hololive-api (bot) | `http://127.0.0.1:30001/health` |
+| hololive-api (llm) | `http://127.0.0.1:30003/health` |
+| hololive-api (admin) | `http://127.0.0.1:30006/health` |
 | alarm-worker | `http://127.0.0.1:30007/health` |
-| llm-scheduler | `http://127.0.0.1:30003/health` |
 | youtube-producer | `http://127.0.0.1:30025/health` (Main 노드) |
 
 ```bash

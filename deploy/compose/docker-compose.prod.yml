@@ -47,7 +47,6 @@ x-iris-extra-hosts: &iris-extra-hosts
   - "vnic-kapu-iris-seoul-fk:100.100.1.5"
   - "vnic-kapu-iris-seoul-fk.tail742dd8.ts.net:100.100.1.5"
 
-# DB/Cache용 보안 설정 (setuid/setgid 필요)
 x-db-security: &db-security
   cap_drop:
     - ALL
@@ -78,12 +77,22 @@ x-go-healthcheck: &go-healthcheck
   start_period: 30s
   retries: 3
 
-x-deploy-512m: &deploy-512m {resources: {limits: {memory: 512m}}}
-x-deploy-384m: &deploy-384m {resources: {limits: {memory: 384m}}}
-x-deploy-320m: &deploy-320m {resources: {limits: {memory: 320m}}}
-x-deploy-256m: &deploy-256m {resources: {limits: {memory: 256m}}}
-x-deploy-128m: &deploy-128m {resources: {limits: {memory: 128m}}}
-x-deploy-32m: &deploy-32m {resources: {limits: {memory: 32m}}}
+x-deploy-512m: &deploy-512m
+  resources:
+    limits:
+      memory: 512m
+x-deploy-384m: &deploy-384m
+  resources:
+    limits:
+      memory: 384m
+x-deploy-128m: &deploy-128m
+  resources:
+    limits:
+      memory: 128m
+x-deploy-32m: &deploy-32m
+  resources:
+    limits:
+      memory: 32m
 
 x-cache-env: &cache-env
   CACHE_SOCKET_PATH: ${CACHE_SOCKET_PATH:-}
@@ -162,7 +171,7 @@ x-go-volumes: &go-volumes
   - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
-x-hololive-bot-volumes: &hololive-bot-volumes
+x-hololive-api-volumes: &hololive-api-volumes
   - ../../data:/app/data
   - ../../logs:/app/logs
   - ../../runtime-config:/app/runtime-config:ro
@@ -182,15 +191,6 @@ x-alarm-worker-volumes: &alarm-worker-volumes
   - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
-x-go-basic-volumes: &go-basic-volumes
-  - ../../data:/app/data
-  - ../../logs:/app/logs
-  - valkey-cache-socket:/var/run/valkey:ro
-
-x-logs-runtime-cache-volumes: &logs-runtime-cache-volumes
-  - ../../logs:/app/logs
-  - valkey-cache-socket:/var/run/valkey:ro
-
 x-db-depends: &db-depends
   holo-postgres:
     condition: service_healthy
@@ -203,15 +203,11 @@ x-db-cache-depends: &db-cache-depends
     condition: service_healthy
 
 services:
-  # Storage & Infrastructure
   holo-postgres:
     <<: *db-service
     image: ${POSTGRES_IMAGE:-postgres:18}
     container_name: holo-postgres
     shm_size: 256mb
-    # PG18 관측(A1) + 512MB envelope 명시화(A2). shared_preload_libraries는 postmaster
-    # context라 변경 시 컨테이너 recreate 필수. WAL I/O 타이밍은 track_io_timing +
-    # track_wal_io_timing 둘 다 켜야 pg_stat_io(object='wal')에 시간이 집계된다.
     command:
       - postgres
       - "-c"
@@ -271,7 +267,7 @@ services:
       - /tmp:size=64m,mode=1777
       - /var/run/postgresql:size=16m,mode=3775
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t" ]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -298,7 +294,7 @@ services:
     sysctls:
       - net.core.somaxconn=1024
     healthcheck:
-      test: [ "CMD-SHELL", "REDISCLI_AUTH=\"$$CACHE_PASSWORD\" valkey-cli -s /var/run/valkey/valkey-cache.sock ping" ]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$CACHE_PASSWORD\" valkey-cli -s /var/run/valkey/valkey-cache.sock ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -337,125 +333,6 @@ services:
     networks:
       - hololive-net
 
-  # Core Services
-  hololive-bot:
-    <<: *app-service
-    image: hololive-kakao-bot-go:prod
-    build:
-      <<: *go-build-base
-      dockerfile: hololive/hololive-kakao-bot-go/Dockerfile
-      args:
-        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-        GO_PGO_FILE: ${HOLOLIVE_BOT_GO_PGO_FILE:-cmd/bot/default.pgo}
-    container_name: hololive-kakao-bot-go
-    env_file:
-      - ${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/bot.env}
-    environment:
-      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
-      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_HTTP_TRANSPORTS:-h3}
-      HOLOLIVE_H3_ADDR: ${HOLOLIVE_H3_ADDR:-:30001}
-      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_BOT_METRICS_ADDR:-:30091}
-      HOLOLIVE_PPROF_ADDR: ${HOLOLIVE_BOT_PPROF_ADDR:-:30061}
-      POSTGRES_POOL_MIN_CONNS: ${BOT_POSTGRES_POOL_MIN_CONNS:-1}
-      POSTGRES_POOL_MAX_CONNS: ${BOT_POSTGRES_POOL_MAX_CONNS:-4}
-      # Dockerfile 기본값은 GOGC=200이지만 운영 Compose에서는 메모리 상한을 우선해 60으로 낮춥니다.
-      GOGC: "60"
-      LLM_SCHEDULER_INTERNAL_URL: https://llm-scheduler:30003
-      NOTIFICATION_SCHEDULER_ROLE: "off"
-      SERVER_PORT: 30001
-      LOG_DIR: /app/logs
-      GOMEMLIMIT: "450MiB"
-      # 통합 Goroutine 모니터링용 외부 서비스 Health URL (llm 레포 서비스 → host.docker.internal)
-      SERVICES_LLM_SCHEDULER_HEALTH_URL: https://llm-scheduler:30003/health
-      SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
-      SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
-      APP_ENV: "production"
-      KAKAO_ROOMS: ${KAKAO_ROOMS:-}
-      KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED:-true}
-      KAKAO_ACL_MODE: ${KAKAO_ACL_MODE:-whitelist}
-      API_SECRET_KEY: ${API_SECRET_KEY:-}
-      HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
-      HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
-      # Docker Socket Proxy (보안: 직접 소켓 마운트 대신 제한된 API만 허용)
-      DOCKER_HOST: tcp://docker-proxy:2375
-    dns: *public-dns
-    ports:
-      - "127.0.0.1:30001:30001"
-      - "127.0.0.1:30001:30001/udp"
-      - "127.0.0.1:30091:30091"
-      - "127.0.0.1:30061:30061"
-    volumes: *hololive-bot-volumes
-    extra_hosts: *iris-extra-hosts
-    depends_on:
-      <<: *db-cache-depends
-      docker-proxy:
-        condition: service_started
-    deploy: *deploy-512m
-    healthcheck:
-      <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30001/health"]
-    networks:
-      hololive-net:
-        aliases:
-          - hololive-bot
-      docker-proxy-net: {}
-
-  hololive-admin-api:
-    <<: *app-service
-    image: hololive-admin-api:prod
-    build:
-      <<: *go-build-base
-      dockerfile: hololive/hololive-admin-api/Dockerfile
-      args:
-        VERSION: ${HOLO_ADMIN_API_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
-    container_name: hololive-admin-api
-    environment:
-      <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env]
-      SERVER_PORT: 30006
-      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS:-h3}
-      HOLOLIVE_H3_ADDR: ${HOLOLIVE_ADMIN_API_H3_ADDR:-:30006}
-      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_ADMIN_API_METRICS_ADDR:-:30096}
-      POSTGRES_POOL_MIN_CONNS: ${ADMIN_API_POSTGRES_POOL_MIN_CONNS:-1}
-      POSTGRES_POOL_MAX_CONNS: ${ADMIN_API_POSTGRES_POOL_MAX_CONNS:-4}
-      API_SECRET_KEY: ${API_SECRET_KEY:-}
-      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-172.16.0.0/12,127.0.0.1/32}
-      KAKAO_ROOMS: ${KAKAO_ROOMS:-}
-      KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED:-true}
-      KAKAO_ACL_MODE: ${KAKAO_ACL_MODE:-whitelist}
-      HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
-      HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://admin.holo-oshi.com,https://admin.capu.blog}
-      CORS_ENFORCE: ${CORS_ENFORCE:-true}
-      LOG_DIR: /app/logs
-      GOMEMLIMIT: "320MiB"
-      APP_ENV: "production"
-      LLM_SCHEDULER_INTERNAL_URL: https://llm-scheduler:30003
-      SERVICES_LLM_SCHEDULER_HEALTH_URL: https://llm-scheduler:30003/health
-      SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
-      SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
-    ports:
-      - "127.0.0.1:30006:30006"
-      - "127.0.0.1:30006:30006/udp"
-      - "127.0.0.1:30096:30096"
-    volumes:
-      - ../../data:/app/data
-      - ../../logs:/app/logs
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - valkey-cache-socket:/var/run/valkey:ro
-    extra_hosts: *host-extra-hosts
-    depends_on: *db-cache-depends
-    deploy: *deploy-384m
-    healthcheck:
-      <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30006/health"]
-    networks:
-      hololive-net:
-        aliases:
-          - hololive-admin-api
-
   hololive-alarm-worker:
     <<: *app-service
     image: hololive-alarm-worker:prod
@@ -463,7 +340,7 @@ services:
       <<: *go-build-base
       dockerfile: hololive/hololive-alarm-worker/Dockerfile
       args:
-        VERSION: ${HOLO_ALARM_WORKER_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
+        VERSION: ${HOLO_ALARM_WORKER_VERSION:-${HOLO_API_VERSION:-2.0.0}}
         GO_PGO_FILE: ${HOLOLIVE_ALARM_WORKER_GO_PGO_FILE:-cmd/alarm-worker/default.pgo}
     container_name: hololive-alarm-worker
     env_file:
@@ -530,6 +407,102 @@ services:
         aliases:
           - hololive-alarm-worker
 
+  hololive-api:
+    <<: *app-service
+    image: hololive-api:prod
+    build:
+      <<: *go-build-base
+      dockerfile: hololive/hololive-api/Dockerfile
+      args:
+        VERSION: ${HOLO_API_VERSION:-2.0.0}
+    container_name: hololive-api
+    stop_grace_period: 45s
+    env_file:
+      - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}
+    environment:
+      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
+      APP_VERSION: ${HOLO_API_VERSION:-2.0.0}
+      APP_ENV: "production"
+      SERVER_PORT: 30001
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_H3_ADDR:-:30001}
+      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_API_METRICS_ADDR:-:30091}
+      HOLOLIVE_PPROF_ADDR: ${HOLOLIVE_API_PPROF_ADDR:-:30061}
+      HOLOLIVE_ADMIN_API_PORT: 30006
+      HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS: ${HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_ADMIN_API_H3_ADDR: ${HOLOLIVE_ADMIN_API_H3_ADDR:-:30006}
+      LLM_SCHEDULER_PORT: 30003
+      HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS: ${HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_LLM_SCHEDULER_H3_ADDR: ${HOLOLIVE_LLM_SCHEDULER_H3_ADDR:-:30003}
+      LLM_SCHEDULER_INTERNAL_URL: https://127.0.0.1:30003
+      SERVICES_LLM_SCHEDULER_HEALTH_URL: https://127.0.0.1:30003/health
+      ALARM_INTERNAL_URL: https://hololive-alarm-worker:30007
+      BOT_POSTGRES_POOL_MIN_CONNS: ${BOT_POSTGRES_POOL_MIN_CONNS:-1}
+      BOT_POSTGRES_POOL_MAX_CONNS: ${BOT_POSTGRES_POOL_MAX_CONNS:-4}
+      ADMIN_API_POSTGRES_POOL_MIN_CONNS: ${ADMIN_API_POSTGRES_POOL_MIN_CONNS:-1}
+      ADMIN_API_POSTGRES_POOL_MAX_CONNS: ${ADMIN_API_POSTGRES_POOL_MAX_CONNS:-4}
+      LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS:-1}
+      LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS:-4}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-172.16.0.0/12,127.0.0.1/32}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://admin.holo-oshi.com,https://admin.capu.blog}
+      CORS_ENFORCE: ${CORS_ENFORCE:-true}
+      KAKAO_ROOMS: ${KAKAO_ROOMS:-}
+      KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED:-true}
+      KAKAO_ACL_MODE: ${KAKAO_ACL_MODE:-whitelist}
+      API_SECRET_KEY: ${API_SECRET_KEY:-}
+      HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
+      HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
+      SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
+      SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
+      NOTIFICATION_EGRESS_ROLE: "producer"
+      NOTIFICATION_SCHEDULER_ROLE: "off"
+      DELIVERY_DISPATCHER_ENABLED: "false"
+      YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
+      ALARM_DISPATCH_CONSUMER_ENABLED: "false"
+      ALARM_WORKER_EGRESS_LEASE_ENABLED: "false"
+      DOCKER_HOST: tcp://docker-proxy:2375
+      LOG_DIR: /app/logs
+      GOGC: "80"
+      GOMEMLIMIT: "1024MiB"
+      GIN_MODE: release
+    dns: *public-dns
+    ports:
+      - "127.0.0.1:30001:30001"
+      - "127.0.0.1:30001:30001/udp"
+      - "127.0.0.1:30003:30003"
+      - "127.0.0.1:30003:30003/udp"
+      - "127.0.0.1:30006:30006"
+      - "127.0.0.1:30006:30006/udp"
+      - "127.0.0.1:30091:30091"
+      - "127.0.0.1:30061:30061"
+    volumes: *hololive-api-volumes
+    extra_hosts: *iris-extra-hosts
+    depends_on:
+      <<: *db-cache-depends
+      hololive-alarm-worker:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 1280m
+          pids: 512
+    healthcheck:
+      <<: *go-healthcheck
+      start_period: 45s
+      test:
+        - CMD
+        - ./bin/healthcheck
+        - https://127.0.0.1:30001/health
+        - https://127.0.0.1:30003/ready
+        - https://127.0.0.1:30006/health
+    networks:
+      hololive-net:
+        aliases:
+          - hololive-api
+      docker-proxy-net: {}
+
   youtube-producer:
     <<: *app-service
     profiles: ["oracle"]
@@ -538,7 +511,7 @@ services:
       <<: *go-build-base
       dockerfile: hololive/hololive-youtube-producer/Dockerfile
       args:
-        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+        VERSION: ${HOLO_API_VERSION:-2.0.0}
     container_name: hololive-youtube-producer
     environment:
       <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
@@ -578,49 +551,6 @@ services:
         aliases:
           - youtube-producer
 
-  llm-scheduler:
-    <<: *app-service
-    image: hololive-llm-scheduler:prod
-    build:
-      <<: *go-build-base
-      dockerfile: hololive/hololive-llm-sched/Dockerfile
-      args:
-        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-    container_name: hololive-llm-scheduler
-    environment:
-      <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
-      NOTIFICATION_EGRESS_ROLE: "producer"
-      DELIVERY_DISPATCHER_ENABLED: "false"
-      LLM_SCHEDULER_PORT: 30003
-      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS:-h3}
-      HOLOLIVE_H3_ADDR: ${HOLOLIVE_LLM_SCHEDULER_H3_ADDR:-:30003}
-      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_LLM_SCHEDULER_METRICS_ADDR:-:30093}
-      POSTGRES_POOL_MIN_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS:-1}
-      POSTGRES_POOL_MAX_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS:-4}
-      API_SECRET_KEY: ${API_SECRET_KEY:-}
-      GOGC: "100"
-      # Dockerfile 기본값은 GOMEMLIMIT=192MiB이지만 운영 deploy limit에 맞춰 256MiB로 올립니다.
-      GOMEMLIMIT: "256MiB"
-      GIN_MODE: release
-      LOG_DIR: /app/logs
-    dns: *public-dns
-    ports:
-      - "127.0.0.1:30003:30003"
-      - "127.0.0.1:30003:30003/udp"
-      - "127.0.0.1:30093:30093"
-    volumes: *go-volumes
-    extra_hosts: *host-extra-hosts
-    depends_on: *db-cache-depends
-    deploy: *deploy-320m
-    healthcheck:
-      <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30003/health"]
-    networks:
-      hololive-net:
-        aliases:
-          - llm-scheduler
-
-  # Admin Dashboard (Unified Management Hub)
   admin-dashboard:
     <<: *app-service
     image: admin-dashboard:prod
@@ -628,7 +558,7 @@ services:
       <<: *go-build-base
       dockerfile: admin-dashboard/Dockerfile
       args:
-        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+        VERSION: ${HOLO_API_VERSION:-2.0.0}
     container_name: admin-dashboard
     environment:
       PORT: "30190"
@@ -642,8 +572,8 @@ services:
       SESSION_TOKEN_ROTATION: "true"
       VALKEY_URL: :${CACHE_PASSWORD:?CACHE_PASSWORD is required}@valkey-cache:6379
       DOCKER_HOST: tcp://docker-proxy:2375
-      HOLO_ADMIN_API_URL: https://hololive-admin-api:30006
-      HOLO_BOT_URL: https://hololive-admin-api:30006
+      HOLO_ADMIN_API_URL: https://hololive-api:30006
+      HOLO_BOT_URL: https://hololive-api:30006
       HOLO_BOT_API_KEY: ${HOLO_BOT_API_KEY:-}
       HOLOLIVE_INTERNAL_H3_CA_CERT_FILE: ${HOLOLIVE_INTERNAL_H3_CA_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
       HOLOLIVE_INTERNAL_H3_SERVER_NAME: ${HOLOLIVE_INTERNAL_H3_SERVER_NAME:-127.0.0.1}
@@ -657,7 +587,7 @@ services:
     depends_on:
       valkey-cache:
         condition: service_healthy
-      hololive-admin-api:
+      hololive-api:
         condition: service_healthy
       docker-proxy:
         condition: service_started
@@ -671,13 +601,11 @@ services:
           - admin-dashboard
       docker-proxy-net: {}
 
-  # Docker Socket Proxy
   docker-proxy:
     <<: *restart-logging
     image: ${DOCKER_SOCKET_PROXY_IMAGE:-tecnativa/docker-socket-proxy@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476}
     container_name: docker-proxy
     environment:
-      #(1=허용, 0=차단)
       CONTAINERS: 1
       POST: 1
       LOGS: 1
@@ -700,7 +628,6 @@ services:
     networks:
       - docker-proxy-net
 
-  # Container Health Monitor (DeUnhealth)
   deunhealth:
     <<: [*restart-logging, *security-hardening]
     image: ${DEUNHEALTH_IMAGE:-qmcgaw/deunhealth@sha256:db1e4fcd3aceeb0da34a83f7a8a5432df586e6d0388ddb6ad8dd7b479e4aa25d}

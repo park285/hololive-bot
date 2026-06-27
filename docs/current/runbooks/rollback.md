@@ -22,10 +22,8 @@ Use the repository deployment flow for the affected Compose service. Exact image
 
 Runtime service names:
 
-- `hololive-bot`
-- `hololive-admin-api`
+- `hololive-api`
 - `hololive-alarm-worker`
-- `llm-scheduler`
 - `youtube-producer`
 
 ## Contract Rollback

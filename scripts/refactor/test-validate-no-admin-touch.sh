@@ -86,17 +86,17 @@ run_guardrail() {
 }
 
 for script in "${scripts[@]}"; do
-  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-admin-api-rename"
+  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-admin-plane-rename"
   setup_repo "${workdir}"
   install_gate_stub "${workdir}" 0
-  mkdir -p "${workdir}/hololive/hololive-admin-api" "${workdir}/other"
-  printf 'x\n' >"${workdir}/hololive/hololive-admin-api/a.txt"
+  mkdir -p "${workdir}/hololive/hololive-api/internal/planes/admin" "${workdir}/other"
+  printf 'x\n' >"${workdir}/hololive/hololive-api/internal/planes/admin/a.txt"
   commit_all "${workdir}" "base"
   base_ref="$(git -C "${workdir}" rev-parse HEAD)"
-  git -C "${workdir}" mv hololive/hololive-admin-api/a.txt other/a.txt
+  git -C "${workdir}" mv hololive/hololive-api/internal/planes/admin/a.txt other/a.txt
   commit_all "${workdir}" "rename admin out"
-  expect_pass "$(basename "${script}")-admin-api-rename" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
-  expect_gate_not_invoked "$(basename "${script}")-admin-api-rename" "${workdir}"
+  expect_pass "$(basename "${script}")-admin-plane-rename" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
+  expect_gate_not_invoked "$(basename "${script}")-admin-plane-rename" "${workdir}"
 
   workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-admin-dashboard-staged-change"
   setup_repo "${workdir}"

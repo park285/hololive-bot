@@ -1,4 +1,4 @@
-# 사전 hardening 운영 동작을 보존하는 명시 opt-in overlay입니다.
+# Explicit opt-in overlay for the current live host bindings.
 
 x-live-postgres-env: &live-postgres-env
   POSTGRES_HOST: holo-postgres
@@ -13,7 +13,7 @@ services:
     ports:
       - "${POSTGRES_PORT_BIND_IP:-100.100.1.3}:5433:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t" ]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t"]
 
   valkey-cache:
     ports:
@@ -28,30 +28,23 @@ services:
       PGHOST: holo-postgres
       PGPORT: "5432"
 
-  hololive-bot:
+  hololive-api:
     env_file: !override
-      - ${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/bot.env}
+      - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}
     environment:
       <<: *live-postgres-env
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
       IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
       HEALTHCHECK_SERVER_NAME: ${HOLOLIVE_H3_SERVER_NAME:-100.100.1.3}
-    ports:
-      - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001"
-      - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001/udp"
-    volumes: !override
-      - ../../data:/app/data
-      - ../../logs:/app/logs
-      - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - valkey-cache-socket:/var/run/valkey:ro
-
-  hololive-admin-api:
-    environment:
-      <<: *live-postgres-env
+    ports: !override
+      - "${HOLOLIVE_API_PORT_BIND_IP:-100.100.1.3}:30001:30001"
+      - "${HOLOLIVE_API_PORT_BIND_IP:-100.100.1.3}:30001:30001/udp"
+      - "127.0.0.1:30003:30003"
+      - "127.0.0.1:30003:30003/udp"
+      - "127.0.0.1:30006:30006"
+      - "127.0.0.1:30006:30006/udp"
+      - "127.0.0.1:30091:30091"
+      - "127.0.0.1:30061:30061"
     volumes: !override
       - ../../data:/app/data
       - ../../logs:/app/logs
@@ -80,18 +73,6 @@ services:
       - valkey-cache-socket:/var/run/valkey:ro
 
   youtube-producer:
-    environment:
-      <<: *live-postgres-env
-    volumes: !override
-      - ../../data:/app/data
-      - ../../logs:/app/logs
-      - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - valkey-cache-socket:/var/run/valkey:ro
-
-  llm-scheduler:
     environment:
       <<: *live-postgres-env
     volumes: !override

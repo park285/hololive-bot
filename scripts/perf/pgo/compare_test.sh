@@ -180,8 +180,8 @@ setup_case() {
   write_live_cmd "${LIVE_CMD}"
   COMPARE_ARGS=(
     --service hololive-bot
-    --main ./hololive/hololive-kakao-bot-go/cmd/bot
-    --profile hololive/hololive-kakao-bot-go/cmd/bot/default.pgo
+    --main ./hololive/hololive-api/cmd/hololive-api
+    --profile hololive/hololive-api/cmd/hololive-api/default.pgo
     --workload "${WORKLOAD}"
     --output-dir "${OUTPUT_DIR}"
     --build-cmd "${BUILD_CMD}"
@@ -424,7 +424,7 @@ repo: hololive-bot
 benchmarks:
   BenchmarkBuildDedupeKey: { package: ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox, class: hotpath, gate: pr }
   BenchmarkBuildEventKey: { package: ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox, class: hotpath, gate: pr }
-  BenchmarkFindBestMatchCacheHit: { package: ./hololive/hololive-kakao-bot-go/internal/service/matcher, class: critical, gate: pr }
+  BenchmarkFindBestMatchCacheHit: { package: ./hololive/hololive-api/internal/planes/bot/internal/service/matcher, class: critical, gate: pr }
 settings:
   min_count: 6
 EOF

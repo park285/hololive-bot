@@ -101,7 +101,7 @@ check_no_imports() {
 }
 
 check_no_imports "bot runtime" \
-  "hololive/hololive-kakao-bot-go" \
+  "hololive/hololive-api/internal/planes/bot" \
   'hololive-(alarm-worker|admin-api|llm-sched)/internal'
 
 check_no_imports "shared-go module" \
@@ -114,8 +114,8 @@ check_no_imports "youtube-producer direct YouTube dispatch" \
 
 major_event_hits="$(
   rg -n 'majorevent.*repository|repository.*majorevent' \
-    "${ROOT_DIR}/hololive/hololive-kakao-bot-go" \
-    "${ROOT_DIR}/hololive/hololive-admin-api" \
+    "${ROOT_DIR}/hololive/hololive-api/internal/planes/bot" \
+    "${ROOT_DIR}/hololive/hololive-api/internal/planes/admin" \
     -g '*.go' || true
 )"
 if [[ -n "${major_event_hits}" ]]; then

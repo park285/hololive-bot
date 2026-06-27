@@ -4,17 +4,15 @@
 
 ## 한 줄 요약
 
-`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube producer AP, LLM 스케줄링, 관리자 API, 공유 라이브러리를 Docker Compose production baseline과 Seoul split-host override로 운영합니다.
+`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube producer AP, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm plane), `alarm-worker`, `youtube-producer`로 Docker Compose production baseline과 Seoul split-host override에서 운영합니다.
 
 ## 큰 구조
 
 ```text
 .
 ├── hololive/
-│   ├── hololive-kakao-bot-go/      # Kakao/Iris webhook ingress, command routing
-│   ├── hololive-admin-api/         # Admin dashboard-facing HTTP API
+│   ├── hololive-api/               # Unified runtime: bot/admin/llm planes (webhook ingress, admin API, LLM/news/event scheduler)
 │   ├── hololive-alarm-worker/      # Alarm checker, dispatch queue, proactive egress
-│   ├── hololive-llm-sched/         # LLM/member news/major event scheduler
 │   ├── hololive-youtube-producer/   # YouTube producer AP runtime
 │   └── hololive-shared/            # shared domain, config, providers, contracts, services
 ├── shared-go/                      # lower-level shared Go utilities
@@ -27,18 +25,16 @@
     └── docker-compose.main-ap.yml  # main-host active-active AP (youtube-producer-c, profile main-ap)
 ```
 
-`go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The five production runtime binaries are implemented in Go 1.26.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
+`go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-producer`) are implemented in Go 1.26.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
 
 ## Runtime Services
 
-The current production runtime set is five Go binaries:
+The current production runtime set is three Go binaries:
 
 | Runtime | Path | Main responsibility | Typical port |
 |---|---|---|---:|
-| `bot` | `hololive/hololive-kakao-bot-go/` | Kakao/Iris webhook ingress, command routing, user-facing replies | 30001 |
-| `admin-api` | `hololive/hololive-admin-api/` | Admin dashboard control plane | 30006 |
+| `hololive-api` | `hololive/hololive-api/` | Bot/admin/llm planes: webhook ingress + command routing (bot), admin control plane (admin), major event/member news scheduling + LLM-backed work (llm) | 30001/30003/30006 |
 | `alarm-worker` | `hololive/hololive-alarm-worker/` | Alarm checks, queue consumption, proactive notification egress | 30007 |
-| `llm-scheduler` | `hololive/hololive-llm-sched/` | Major event/member news scheduling and LLM-backed work | 30003 |
 | `youtube-producer` | `hololive/hololive-youtube-producer/` | YouTube polling/scraping, YouTube outbox production, Holodex photo sync | 30015 |
 
 ## Shared Libraries
@@ -60,13 +56,13 @@ The current production runtime set is five Go binaries:
 
 ```text
 Kakao / Iris
-  -> bot
+  -> hololive-api (bot plane)
   -> command router / service clients
-  -> PostgreSQL / Valkey / llm-scheduler / alarm APIs as needed
+  -> PostgreSQL / Valkey / hololive-api llm plane / alarm APIs as needed
   -> Kakao / Iris response
 ```
 
-The bot owns webhook ingress and user-facing command routing. It must not take over alarm scheduling loops, proactive dispatch consumption, or admin control-plane ownership.
+The `hololive-api` bot plane owns webhook ingress and user-facing command routing. It must not take over alarm scheduling loops, proactive dispatch consumption, or shift admin/llm responsibilities outside their planes.
 
 ### YouTube Producer Flow
 
@@ -84,13 +80,13 @@ The key ownership split is that `youtube-producer` produces YouTube outbox rows 
 ### LLM Work Flow
 
 ```text
-bot / admin-api / scheduled runtime
-  -> llm-scheduler internal contracts
+hololive-api bot/admin planes / scheduled runtime
+  -> hololive-api llm plane internal contracts
   -> PostgreSQL / Valkey / cliproxy or LLM provider
   -> summarized result or scheduled delivery
 ```
 
-`llm-scheduler` owns major event and member-news scheduling. Other runtimes should call documented contracts instead of importing internal packages.
+The `hololive-api` llm plane owns major event and member-news scheduling. Other runtimes and planes should call documented contracts instead of importing internal packages.
 
 ### Config / Queue / Coordination Flow
 
@@ -141,8 +137,8 @@ Current operational details live in `docs/current/services/youtube-producer.md` 
 | Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
 | Change YouTube producer behavior | `hololive/hololive-youtube-producer/`, `hololive/hololive-shared/pkg/service/youtube/`, `docs/current/services/youtube-producer.md` |
 | Change final notification delivery | `docs/current/contracts/alarm.md`, `docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md`, `docs/current/runbooks/alarm-worker.md`, `docs/current/runbooks/dlq-replay.md`, `hololive/hololive-alarm-worker/` |
-| Change command handling | `hololive/hololive-kakao-bot-go/` |
-| Change admin dashboard API | `hololive/hololive-admin-api/`, `admin-dashboard/` |
+| Change command handling | `hololive/hololive-api/internal/planes/bot/` |
+| Change admin dashboard API | `hololive/hololive-api/internal/planes/admin/`, `admin-dashboard/` |
 | Run architecture checks | `scripts/architecture/` |
 | Run deploy/status checks | `scripts/deploy/`, `scripts/logs/` |
 
@@ -152,8 +148,8 @@ Use the smallest command that matches the change. For broad Go runtime changes, 
 
 ```bash
 ./build-all.sh --no-bump --build-only
-go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-admin-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-kakao-bot-go/... ./hololive/hololive-llm-sched/... ./hololive/hololive-youtube-producer/...
-go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-admin-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-kakao-bot-go/... ./hololive/hololive-llm-sched/... ./hololive/hololive-youtube-producer/...
+go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-producer/...
+go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-producer/...
 ```
 
 Run the deploying `./build-all.sh --no-bump` path only with explicit operator approval because it can recreate live Compose services.

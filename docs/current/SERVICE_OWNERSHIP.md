@@ -2,16 +2,14 @@
 
 ## Scope
 
-현재 5개 Go runtime의 책임 경계와 금지 소유 범위를 정리합니다. Historical handoff 문서는 `docs/history/runtime-split/`에 보관합니다.
+현재 3개 app runtime(`hololive-api`, `alarm-worker`, `youtube-producer`)의 책임 경계와 금지 소유 범위를 정리합니다. `hololive-api`는 bot/admin/llm plane을 한 프로세스에서 호스팅합니다. Historical handoff 문서는 `docs/history/runtime-split/`에 보관합니다.
 
 ## Ownership Matrix
 
 | Runtime | Owns | Provides | Consumes | Must not own | Detail |
 |---|---|---|---|---|---|
-| `bot` | Kakao/Iris webhook ingress, command routing, user-facing replies | Kakao webhook/H3 ingress | PostgreSQL, Valkey, Iris, `llm-scheduler`, alarm API | alarm checking worker, proactive dispatch queue consumer, admin control plane | `services/bot.md` |
-| `admin-api` | Dashboard-facing admin HTTP control plane; alarm HTTP compatibility facade during migration | Admin API, trigger client facade, temporary alarm HTTP compatibility provider | PostgreSQL, Valkey, `llm-scheduler`, alarm API | bot webhook ingress, alarm scheduling loops, proactive notification egress | `services/admin-api.md` |
+| `hololive-api` | Bot plane: Kakao/Iris webhook ingress, command routing, user-facing replies. Admin plane: dashboard-facing admin HTTP control plane + alarm HTTP compatibility facade during migration. LLM plane: major event/member news scheduling, LLM summaries, internal subscription/trigger APIs | Kakao webhook/H3 ingress, Admin API + trigger client facade, temporary alarm HTTP compatibility provider, `membernews`/`majorevent`/`trigger` internal HTTP contracts | PostgreSQL, Valkey, Iris, settings Pub/Sub, alarm API, cliproxy/LLM where configured | alarm checking worker, alarm scheduling loops, proactive dispatch queue consumption, proactive notification egress | `services/hololive-api.md` |
 | `alarm-worker` | Alarm HTTP provider, alarm checker, alarm scheduler, dispatch queue publishing/consumption, proactive notification egress | Alarm HTTP provider, alarm queue publisher/consumer, YouTube outbox dispatcher | PostgreSQL, Valkey, settings Pub/Sub, Iris | Kakao command routing | `services/alarm-worker.md` |
-| `llm-scheduler` | Major event/member news scheduling, LLM summaries, internal subscription APIs | `membernews`, `majorevent`, `trigger` internal HTTP contracts | PostgreSQL, Valkey, cliproxy/LLM where configured | Kakao webhook ingress, alarm checker loop, proactive notification egress | `services/llm-scheduler.md` |
 | `youtube-producer` | YouTube producer AP runtime: primary/backfill polling, outbox production, active-active poll coordination (Seoul b + main-host c + Osaka host-native a/d), readiness, and Holodex photo sync (AP-C, singleton lease) | YouTube poller/outbox production, active-active coordination/readiness, photo sync runtime | PostgreSQL, Valkey | bot command routing, proactive notification egress, alarm dispatch queue consumption | `services/youtube-producer.md` |
 
 ## Split Rules

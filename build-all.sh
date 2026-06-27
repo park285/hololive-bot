@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# build-all.sh: Hololive Bot 서비스 버전 관리 및 Docker 이미지 빌드 스크립트
+# Build, validate and optionally deploy the production three-runtime topology.
 #
-# 사용법:
-#   ./build-all.sh                      # 모든 서비스 버전 bump + 빌드/배포
-#   ./build-all.sh --no-bump            # 버전 bump 없이 빌드/배포
-#   ./build-all.sh --build-only         # 빌드만 수행 (배포/재기동 없음)
-#   ./build-all.sh --remote-cache       # registry-backed remote cache 사용 (REMOTE_CACHE_PREFIX 필요)
-#   ./build-all.sh --skip-local-ci      # 로컬 CI gate를 건너뜀
-#   ./build-all.sh hololive-bot         # 특정 서비스만 빌드
-#   ./build-all.sh bot                  # hololive-bot alias
+# Usage:
+#   ./build-all.sh
+#   ./build-all.sh --no-bump
+#   ./build-all.sh --build-only
+#   ./build-all.sh --remote-cache
+#   ./build-all.sh --skip-local-ci
+#   ./build-all.sh hololive-api
+#   ./build-all.sh alarm-worker
 
 set -Eeuo pipefail
 
-# 스크립트 위치 기준 절대 경로로 이동한다. git common-dir를 쓰면 linked worktree에서
-# 현재 작업트리가 아닌 원본 checkout의 shared-go를 참조할 수 있다.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
@@ -21,82 +19,93 @@ cd "${REPO_ROOT}"
 . "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/removed-runtimes.sh"
 
-resolve_shared_go_workspace_path() {
-    local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_ROOT}/shared-go}"
+resolve_workspace_path() {
+    local explicit_value="$1"
+    local sibling_path="$2"
+    local embedded_path="$3"
+    local label="$4"
+    local candidate="${explicit_value}"
+
+    if [[ -z "${candidate}" ]]; then
+        if [[ -d "${sibling_path}" ]]; then
+            candidate="${sibling_path}"
+        elif [[ -d "${embedded_path}" ]]; then
+            candidate="${embedded_path}"
+        fi
+    fi
     if [[ ! -d "${candidate}" ]]; then
-        echo "[ERROR] Active shared-go workspace not found: ${candidate}" >&2
+        echo "[ERROR] Active ${label} workspace not found" >&2
         exit 1
     fi
-
     (cd "${candidate}" && pwd)
 }
 
-resolve_iris_client_go_workspace_path() {
-    local candidate="${IRIS_CLIENT_GO_WORKSPACE_PATH:-${REPO_ROOT}/../iris-client-go}"
-    if [[ ! -d "${candidate}" ]]; then
-        echo "[ERROR] Active iris-client-go workspace not found: ${candidate}" >&2
-        exit 1
-    fi
+read_version() {
+    local dir_path="$1"
+    local fallback="$2"
+    local value=""
 
-    (cd "${candidate}" && pwd)
+    if [[ -f "${dir_path}/VERSION" ]]; then
+        value="$(xargs <"${dir_path}/VERSION")"
+    fi
+    if [[ -n "${value}" ]]; then
+        printf '%s\n' "${value}"
+    else
+        printf '%s\n' "${fallback}"
+    fi
 }
 
-if ! SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"; then
-    exit 1
-fi
-export SHARED_GO_WORKSPACE_PATH
-if ! IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_iris_client_go_workspace_path)"; then
-    exit 1
-fi
-export IRIS_CLIENT_GO_WORKSPACE_PATH
+usage() {
+    sed -n '1,12p' "$0"
+    echo
+    echo "Build targets:"
+    compose_service_build_targets_text | sed 's/^/  /'
+}
 
-# 컨테이너 런타임 CLI (docker / podman)
+SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
+    "${SHARED_GO_WORKSPACE_PATH:-}" \
+    "${REPO_ROOT}/../shared-go" \
+    "${REPO_ROOT}/shared-go" \
+    "shared-go")"
+IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_workspace_path \
+    "${IRIS_CLIENT_GO_WORKSPACE_PATH:-}" \
+    "${REPO_ROOT}/../iris-client-go" \
+    "${REPO_ROOT}/iris-client-go" \
+    "iris-client-go")"
+export SHARED_GO_WORKSPACE_PATH IRIS_CLIENT_GO_WORKSPACE_PATH
+
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 case "${CONTAINER_CLI}" in
     docker|podman) ;;
     *)
         echo "[ERROR] Unsupported CONTAINER_CLI: ${CONTAINER_CLI}" >&2
-        echo "        Allowed values: docker, podman" >&2
         exit 1
         ;;
 esac
 if ! command -v "${CONTAINER_CLI}" >/dev/null 2>&1; then
     echo "[ERROR] Container CLI not found: ${CONTAINER_CLI}" >&2
-    echo "        Set CONTAINER_CLI=docker or CONTAINER_CLI=podman" >&2
     exit 1
 fi
 
-COMPOSE_CMD=("${CONTAINER_CLI}" "compose")
+COMPOSE_CMD=("${CONTAINER_CLI}" compose)
 COMPOSE_MODE="${CONTAINER_CLI} compose"
-# podman 선택 시 docker-compose provider 의존을 피하기 위해 podman-compose 우선
 if [[ "${CONTAINER_CLI}" == "podman" ]] && command -v podman-compose >/dev/null 2>&1; then
-    COMPOSE_CMD=("podman-compose")
-    COMPOSE_MODE="podman-compose"
+    COMPOSE_CMD=(podman-compose)
+    COMPOSE_MODE=podman-compose
 elif ! "${CONTAINER_CLI}" compose version >/dev/null 2>&1; then
-    if [[ "${CONTAINER_CLI}" == "podman" ]] && command -v podman-compose >/dev/null 2>&1; then
-        COMPOSE_CMD=("podman-compose")
-        COMPOSE_MODE="podman-compose"
-    else
-        echo "[ERROR] '${CONTAINER_CLI} compose' is unavailable" >&2
-        echo "        Install compose support for ${CONTAINER_CLI} first" >&2
-        exit 1
-    fi
+    echo "[ERROR] '${CONTAINER_CLI} compose' is unavailable" >&2
+    exit 1
 fi
 
-# 버전 관리 대상 디렉토리
 VERSION_DIRS=(
-    "hololive/hololive-kakao-bot-go"
-    "hololive/hololive-admin-api"
+    "hololive/hololive-api"
     "hololive/hololive-alarm-worker"
 )
-
 declare -A VERSION_DIR_BY_SERVICE=(
-    [hololive-bot]="hololive/hololive-kakao-bot-go"
-    [hololive-admin-api]="hololive/hololive-admin-api"
+    [hololive-api]="hololive/hololive-api"
     [hololive-alarm-worker]="hololive/hololive-alarm-worker"
 )
 
-# 인자 파싱
 NO_BUMP=false
 BUILD_ONLY=false
 REMOTE_CACHE=false
@@ -107,22 +116,18 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-bump)
             NO_BUMP=true
-            shift
             ;;
         --build-only)
             BUILD_ONLY=true
-            shift
             ;;
         --remote-cache)
             REMOTE_CACHE=true
-            shift
             ;;
         --skip-local-ci)
             SKIP_LOCAL_CI=true
-            shift
             ;;
         --help|-h)
-            sed -n '1,10p' "$0"
+            usage
             exit 0
             ;;
         --*)
@@ -132,14 +137,13 @@ while [[ $# -gt 0 ]]; do
         *)
             if ! service="$(compose_service_resolve_build_target "$1")"; then
                 echo "[ERROR] Unknown build target: $1" >&2
-                echo "        Known targets:" >&2
-                compose_service_build_targets_text | sed 's/^/        - /' >&2
+                usage >&2
                 exit 1
             fi
             TARGET_SERVICES+=("${service}")
-            shift
             ;;
     esac
+    shift
 done
 
 COMPOSE_FILE_PATHS=(deploy/compose/docker-compose.prod.yml)
@@ -147,7 +151,6 @@ COMPOSE_FILES=(-f deploy/compose/docker-compose.prod.yml)
 if [[ "${REMOTE_CACHE}" == true ]]; then
     if [[ -z "${REMOTE_CACHE_PREFIX:-}" ]]; then
         echo "[ERROR] --remote-cache requires REMOTE_CACHE_PREFIX" >&2
-        echo "        Example: REMOTE_CACHE_PREFIX=ghcr.io/<owner>" >&2
         exit 1
     fi
     COMPOSE_FILE_PATHS+=(deploy/compose/docker-compose.remote-cache.yml)
@@ -161,28 +164,12 @@ export COMPOSE_ENV_FILE
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
+compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
 
-read_version() {
-    local dir_path="$1"
-    local fallback="$2"
-    local version_file="${dir_path}/VERSION"
-    local value=""
-
-    if [[ -f "${version_file}" ]]; then
-        value="$(xargs < "${version_file}")"
-    fi
-
-    if [[ -n "${value}" ]]; then
-        printf '%s\n' "${value}"
-    else
-        printf '%s\n' "${fallback}"
-    fi
-}
-
-# 범프 대상 확인 함수
 should_bump() {
     local dir_path="$1"
-    local target_service
+    local target_service=""
+
     if [[ ${#TARGET_SERVICES[@]} -eq 0 ]]; then
         return 0
     fi
@@ -199,7 +186,6 @@ read_compose_env_value() {
 }
 
 validate_runtime_config_for_deploy() {
-    # build-only와 단일 target 빌드는 런타임 파일이 필요 없다. up -d 전에만 운영 파일 누락을 막는다.
     if [[ "${BUILD_ONLY}" == true || ${#TARGET_SERVICES[@]} -gt 0 ]]; then
         return 0
     fi
@@ -207,13 +193,16 @@ validate_runtime_config_for_deploy() {
     local runtime_config_dir="${RUNTIME_CONFIG_DIR:-${REPO_ROOT}/runtime-config}"
     local host_iris_base_url_file="${runtime_config_dir}/iris_base_url"
     local container_iris_base_url_file="/app/runtime-config/iris_base_url"
-    local iris_base_url
-    local iris_base_url_file
+    local iris_base_url=""
+    local iris_base_url_file=""
+
     iris_base_url="$(read_compose_env_value IRIS_BASE_URL)"
     iris_base_url_file="$(read_compose_env_value IRIS_BASE_URL_FILE)"
 
-    if [[ -n "${iris_base_url_file}" && "${iris_base_url_file}" == "${container_iris_base_url_file}" && ! -s "${host_iris_base_url_file}" ]]; then
-        echo "[ERROR] IRIS_BASE_URL_FILE points to ${container_iris_base_url_file}, but ${host_iris_base_url_file} is missing or empty" >&2
+    if [[ -n "${iris_base_url_file}" \
+       && "${iris_base_url_file}" == "${container_iris_base_url_file}" \
+       && ! -s "${host_iris_base_url_file}" ]]; then
+        echo "[ERROR] ${host_iris_base_url_file} is missing or empty" >&2
         exit 1
     fi
 
@@ -222,94 +211,80 @@ validate_runtime_config_for_deploy() {
             export IRIS_BASE_URL_FILE="${container_iris_base_url_file}"
             echo "[INFO] Using file-based IRIS_BASE_URL: ${IRIS_BASE_URL_FILE}"
         else
-            echo "[ERROR] IRIS_BASE_URL and IRIS_BASE_URL_FILE are both empty, and ${host_iris_base_url_file} does not exist or is empty" >&2
-            echo "        Either set IRIS_BASE_URL in ${COMPOSE_ENV_FILE}, set IRIS_BASE_URL_FILE, or create runtime-config/iris_base_url" >&2
+            echo "[ERROR] IRIS_BASE_URL is not configured" >&2
             exit 1
         fi
     fi
 }
 
-# Step 0: 로컬 CI gate
 if [[ "${SKIP_LOCAL_CI}" == false ]]; then
-    echo "[CHECK] Running local CI gate before build..."
+    echo "[CHECK] Running local CI gate before build"
     ./scripts/ci/local-ci.sh
-    echo ""
 else
-    echo "[SKIP] Skipping local CI gate (--skip-local-ci set)"
-    echo ""
+    echo "[SKIP] Local CI gate disabled by --skip-local-ci"
 fi
 
-# Step 1: 버전 범프
 if [[ "${NO_BUMP}" == false ]]; then
-    echo "[BUMP] Bumping patch versions..."
+    echo "[BUMP] Bumping patch versions"
     for dir in "${VERSION_DIRS[@]}"; do
-        if should_bump "${dir}"; then
-            if [[ -f "${dir}/Makefile" && -f "${dir}/VERSION" ]]; then
-                old_version="$(read_version "${dir}" dev)"
-                make -C "${dir}" bump-patch --no-print-directory >/dev/null
-                new_version="$(read_version "${dir}" dev)"
-                echo "  [OK] ${dir}: ${old_version} -> ${new_version}"
-            else
-                echo "  [WARN] ${dir}: Makefile or VERSION not found, skipping" >&2
-            fi
+        if ! should_bump "${dir}"; then
+            continue
         fi
+        if [[ ! -f "${dir}/Makefile" || ! -f "${dir}/VERSION" ]]; then
+            echo "[ERROR] Version contract missing in ${dir}" >&2
+            exit 1
+        fi
+        old_version="$(read_version "${dir}" dev)"
+        make -C "${dir}" bump-patch --no-print-directory >/dev/null
+        new_version="$(read_version "${dir}" dev)"
+        echo "  ${dir}: ${old_version} -> ${new_version}"
     done
-    echo ""
 else
-    echo "[SKIP] Skipping version bump (--no-bump set)"
-    echo ""
+    echo "[SKIP] Version bump disabled by --no-bump"
 fi
 
-# Step 2: Docker Compose 빌드
+HOLO_API_VERSION="$(read_version hololive/hololive-api dev)"
+HOLO_ALARM_WORKER_VERSION="$(read_version hololive/hololive-alarm-worker "${HOLO_API_VERSION}")"
+export HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION
+
 validate_runtime_config_for_deploy
 
-echo "[BUILD] Building Docker images..."
-echo "  CONTAINER_CLI=${CONTAINER_CLI}"
-echo "  COMPOSE_MODE=${COMPOSE_MODE}"
-echo "  REMOTE_CACHE=${REMOTE_CACHE}"
-echo "  SHARED_GO_WORKSPACE_PATH=${SHARED_GO_WORKSPACE_PATH}"
-echo "  IRIS_CLIENT_GO_WORKSPACE_PATH=${IRIS_CLIENT_GO_WORKSPACE_PATH}"
-echo "  COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
+echo "[INFO] CONTAINER_CLI=${CONTAINER_CLI}"
+echo "[INFO] COMPOSE_MODE=${COMPOSE_MODE}"
+echo "[INFO] REMOTE_CACHE=${REMOTE_CACHE}"
+echo "[INFO] HOLO_API_VERSION=${HOLO_API_VERSION}"
+echo "[INFO] HOLO_ALARM_WORKER_VERSION=${HOLO_ALARM_WORKER_VERSION}"
+echo "[INFO] SHARED_GO_WORKSPACE_PATH=${SHARED_GO_WORKSPACE_PATH}"
+echo "[INFO] IRIS_CLIENT_GO_WORKSPACE_PATH=${IRIS_CLIENT_GO_WORKSPACE_PATH}"
+echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
-# VERSION 파일에서 환경변수 설정 (docker-compose build args로 전달)
-export HOLO_BOT_VERSION="$(read_version hololive/hololive-kakao-bot-go dev)"
-export HOLO_ADMIN_API_VERSION="$(read_version hololive/hololive-admin-api "${HOLO_BOT_VERSION}")"
-export HOLO_ALARM_WORKER_VERSION="$(read_version hololive/hololive-alarm-worker "${HOLO_BOT_VERSION}")"
-
-echo "  HOLO_BOT_VERSION=${HOLO_BOT_VERSION}"
-echo "  HOLO_ADMIN_API_VERSION=${HOLO_ADMIN_API_VERSION}"
-echo "  HOLO_ALARM_WORKER_VERSION=${HOLO_ALARM_WORKER_VERSION}"
-if [[ "${REMOTE_CACHE}" == true ]]; then
-    echo "  REMOTE_CACHE_PREFIX=${REMOTE_CACHE_PREFIX}"
-fi
-echo ""
+"${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" config --quiet
 
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
-    # 지정 타겟 빌드
-    echo "  [Docker] Targets: ${TARGET_SERVICES[*]}"
+    echo "[BUILD] Targets: ${TARGET_SERVICES[*]}"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build "${TARGET_SERVICES[@]}"
+    echo "[DONE] Target image build complete"
 elif [[ "${BUILD_ONLY}" == true ]]; then
-    # 전체 빌드만 수행
-    echo "  Target: All Services (build only)"
-    printf '  [Docker]'; printf ' %q' "${COMPOSE_FILES[@]}"; echo ""
+    echo "[BUILD] All active buildable services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build
+    echo "[DONE] Image build complete"
 else
-    # 전체 빌드 + 배포
-    echo "  Target: All Services (build + deploy)"
     compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
-    printf '  [Docker]'; printf ' %q' "${COMPOSE_FILES[@]}"; echo ""
-    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --build
-    removed_runtime_cleanup_standalone_dispatcher
+
+    echo "[BUILD] All active buildable services"
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build
+
+    echo "[CUTOVER] Replacing retired runtimes with the three-runtime topology"
+    removed_runtime_cleanup_before_cutover
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --no-build
+
+    echo "[VERIFY] Compose service state"
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" ps
+    echo "[DONE] Build and deployment complete"
 fi
 
-echo ""
-echo "[DONE] Build complete!"
-
-# Step 3: 버전 리포트
-echo ""
-echo "[VERSIONS] Current versions:"
+echo
+echo "[VERSIONS]"
 for dir in "${VERSION_DIRS[@]}"; do
-    if [[ -f "${dir}/VERSION" ]]; then
-        printf "  %-40s : %s\n" "${dir}" "$(read_version "${dir}" dev)"
-    fi
+    printf "  %-40s : %s\n" "${dir}" "$(read_version "${dir}" dev)"
 done

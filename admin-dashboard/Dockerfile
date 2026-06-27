@@ -54,12 +54,10 @@ COPY --from=iris_client_go_workspace go.mod go.sum /workspace/iris-client-go/
 COPY --from=iris_client_go_workspace iris /workspace/iris-client-go/iris
 COPY --from=iris_client_go_workspace internal /workspace/iris-client-go/internal
 COPY --from=iris_client_go_workspace webhook /workspace/iris-client-go/webhook
-COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
 COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
 COPY admin-dashboard/backend ./admin-dashboard/backend
 COPY hololive/hololive-shared ./hololive/hololive-shared
-COPY hololive/hololive-kakao-bot-go ./hololive/hololive-kakao-bot-go
-COPY hololive/hololive-admin-api ./hololive/hololive-admin-api
+COPY hololive/hololive-api ./hololive/hololive-api
 COPY hololive/hololive-alarm-worker ./hololive/hololive-alarm-worker
 
 WORKDIR /workspace/hololive-bot/admin-dashboard/backend

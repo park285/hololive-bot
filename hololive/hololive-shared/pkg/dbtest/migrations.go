@@ -19,7 +19,7 @@
 // SOFTWARE.
 
 // Package dbtest는 pgx 마이그레이션 테스트를 위한 PostgreSQL 하니스를 제공한다.
-// prod SSOT migration(hololive-kakao-bot-go/scripts/migrations)을 격리 스키마에 그대로
+// prod SSOT migration(hololive-api/scripts/migrations)을 격리 스키마에 그대로
 // 적용하여 test/prod schema drift를 제거한다.
 package dbtest
 
@@ -39,7 +39,7 @@ const (
 	repoRootMarker = "build-all.sh"
 
 	// migrationsRelDir는 모노레포 루트 기준 prod migration SSOT 경로다.
-	migrationsRelDir = "hololive/hololive-kakao-bot-go/scripts/migrations"
+	migrationsRelDir = "hololive/hololive-api/scripts/migrations"
 
 	// manifestFileName은 적용 순서를 규정하는 파일이다("NNN filename.sql" 형식).
 	manifestFileName = "manifest.txt"

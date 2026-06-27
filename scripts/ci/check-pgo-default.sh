@@ -9,7 +9,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}"
 
 PGO_REQUIRED_MAINS=(
-  "hololive/hololive-kakao-bot-go|./cmd/bot"
+  "hololive/hololive-api|./cmd/hololive-api"
   "hololive/hololive-alarm-worker|./cmd/alarm-worker"
 )
 
