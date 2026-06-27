@@ -157,6 +157,13 @@ if [[ "${REMOTE_CACHE}" == true ]]; then
     COMPOSE_FILES+=(-f deploy/compose/docker-compose.remote-cache.yml)
 fi
 
+if [[ ( "${BUILD_ONLY}" == true || ${#TARGET_SERVICES[@]} -gt 0 ) \
+      && -z "${COMPOSE_ENV_FILE:-}" \
+      && ! -r "${OPENBAO_HOLOLIVE_ENV_FILE:-/run/hololive-bot/compose.env}" ]]; then
+    COMPOSE_ENV_FILE="${REPO_ROOT}/deploy/compose/build-only.env.sample"
+    echo "[INFO] build-only: no production compose env present; using committed sample ${COMPOSE_ENV_FILE}" >&2
+fi
+
 if ! COMPOSE_ENV_FILE="$(compose_env_resolve_file)"; then
     exit 1
 fi

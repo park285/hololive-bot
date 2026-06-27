@@ -34,7 +34,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | `hololive-db-migrate` | Migration bootstrap/apply job | Must complete before app runtime services start; `PGSSLMODE=verify-full` with `postgres-ca.pem` |
 | `valkey-cache` | Valkey cache, queue, Pub/Sub | TCP and Unix socket endpoints |
 | `admin-dashboard` | Dashboard (Go backend + embedded frontend) | Not part of the 3 app runtime set |
-| `docker-proxy` | Docker socket proxy | Used by `hololive-api` operational endpoints |
+| `docker-proxy` | Docker socket proxy | Used by `admin-dashboard` (Docker control) and `deunhealth` (autoheal). `hololive-api` is not granted access — it performs no Docker control |
 | `deunhealth` | Container autoheal | Restarts unhealthy labeled containers |
 
 ## Cross-Runtime Contracts
@@ -56,5 +56,6 @@ Module and runtime inventory for the `hololive-bot` workspace.
 - Run `./scripts/architecture/check-contract-map.sh` after changing contract docs or `hololive-shared/pkg/contracts/*`.
 - Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
 - Architecture: Go single-language runtime (3 app runtimes: hololive-api + alarm-worker + youtube-producer). `hololive-api` hosts the bot/admin/llm planes in one process on ports 30001/30003/30006.
+- Central host default `docker compose up -d` starts `hololive-api` + `hololive-alarm-worker` only. `youtube-producer` is AP-owned and gated behind `COMPOSE_PROFILES=oracle` (central `c`) or the per-host AP overlays (`docker-compose.{osaka,osaka2,seoul,main-ap}.yml`); it is intentionally absent from a profile-less central `up`.
 - Deployment baseline: Docker Compose (`deploy/compose/docker-compose.prod.yml`) is the current production standard after the 2026-03-07 rollback from k8s/k3s.
 - Retired runtime names: `hololive-alarm`, `hololive-scraper`, `rust-dispatcher`, `hololive-admin`, `hololive-rs`.
