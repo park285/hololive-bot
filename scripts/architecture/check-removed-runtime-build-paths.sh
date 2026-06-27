@@ -10,15 +10,17 @@ cd "${ROOT_DIR}"
 # 대상이 아니다. 경로 패턴은 그 이름들과 충돌하지 않는다.
 retired='hololive/hololive-(kakao-bot-go|admin-api|llm-sched)'
 
+# Go _test.go 는 runtime split contract 가 삭제 사실 자체를 검증하느라 경로를
+# 의도적으로 참조하므로 제외한다. test-bot-env-loader.sh:19 는 mktemp 합성 fixture
+# 경로일 뿐 실제 build/deploy 참조가 아니므로 false positive 로 allowlist 한다.
 matches="$(
   rg -n --no-messages "${retired}" \
     deploy scripts hololive admin-dashboard \
     -g '!**/*_test.go' \
-    -g '!**/*_test.sh' \
-    -g '!**/test-*.sh' \
     -g '!scripts/deploy/lib/removed-runtimes.sh' \
     -g '!scripts/architecture/check-removed-runtime-references.sh' \
     -g '!scripts/architecture/check-removed-runtime-build-paths.sh' \
+    -g '!hololive/hololive-api/scripts/test-bot-env-loader.sh' \
     || true
 )"
 
