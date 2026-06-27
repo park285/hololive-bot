@@ -26,6 +26,17 @@ case "$1" in
     if [[ "${2:-}" == "version" ]]; then
       exit 0
     fi
+    _has_ps=false
+    _has_q=false
+    _last=""
+    for _a in "$@"; do
+      [[ "${_a}" == ps ]] && _has_ps=true
+      [[ "${_a}" == -q ]] && _has_q=true
+      _last="${_a}"
+    done
+    if [[ "${_has_ps}" == true && "${_has_q}" == true ]]; then
+      printf 'mock-%s\n' "${_last}"
+    fi
     exit "${MOCK_DOCKER_COMPOSE_EXIT:-0}"
     ;;
   ps)
@@ -43,6 +54,20 @@ case "$1" in
     exit "${MOCK_DOCKER_STOP_EXIT:-0}"
     ;;
   rm)
+    ;;
+  inspect)
+    _fmt=""
+    _prev=""
+    for _a in "$@"; do
+      [[ "${_prev}" == -f ]] && _fmt="${_a}"
+      _prev="${_a}"
+    done
+    case "${_fmt}" in
+      *Health.Status*) printf 'healthy\n' ;;
+      *.State.Health*) printf 'yes\n' ;;
+      *.State.Status*) printf 'running\n' ;;
+      *RestartCount*) printf '0\n' ;;
+    esac
     ;;
 esac
 MOCK

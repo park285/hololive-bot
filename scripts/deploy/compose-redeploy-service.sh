@@ -192,7 +192,7 @@ fi
 
 if [[ "${TARGET}" == "hololive-api" || "${TARGET}" == "hololive-alarm-worker" || -z "${TARGET}" ]]; then
     echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID}:${HOLOLIVE_APP_GID}"
-    if ! assert_app_bind_mounts_writable "${ROOT_DIR}/logs"; then
+    if ! cutover_bind_mount_preflight "${ROOT_DIR}"; then
         echo "[ERROR] host bind-mount preflight failed before cutover; aborting (no containers changed)" >&2
         exit 1
     fi
@@ -212,25 +212,17 @@ if [[ -n "${TARGET}" ]]; then
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" "${up_args[@]}"
     echo "[PS] ${TARGET}"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps "${TARGET}"
-    echo "[HEALTH-GATE] ${TARGET}"
-    if ! wait_for_service_health "${TARGET}"; then
-        dump_failure_diagnostics "${TARGET}"
+    if ! cutover_health_gate "${TARGET}"; then
         echo "[ERROR] ${TARGET} failed health gate after redeploy" >&2
         exit 1
     fi
-    echo "[OK] ${TARGET} passed health gate"
 else
     echo "[UP] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps
-    for gated_service in hololive-api hololive-alarm-worker; do
-        echo "[HEALTH-GATE] ${gated_service}"
-        if ! wait_for_service_health "${gated_service}"; then
-            dump_failure_diagnostics "${gated_service}"
-            echo "[ERROR] ${gated_service} failed health gate after redeploy" >&2
-            exit 1
-        fi
-        echo "[OK] ${gated_service} passed health gate"
-    done
+    if ! cutover_health_gate hololive-api hololive-alarm-worker; then
+        echo "[ERROR] health gate failed after all-service redeploy" >&2
+        exit 1
+    fi
 fi

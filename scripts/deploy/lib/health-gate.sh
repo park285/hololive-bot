@@ -111,3 +111,31 @@ assert_app_bind_mounts_writable() {
     done
     return "${rc}"
 }
+
+HOLOLIVE_APP_WRITABLE_BIND_DIRS=("logs" "data")
+
+cutover_bind_mount_preflight() {
+    local root="$1"
+    local -a dirs=()
+    local name=""
+    for name in "${HOLOLIVE_APP_WRITABLE_BIND_DIRS[@]}"; do
+        dirs+=("${root}/${name}")
+    done
+    assert_app_bind_mounts_writable "${dirs[@]}"
+}
+
+cutover_health_gate() {
+    local rc=0
+    local svc=""
+    for svc in "$@"; do
+        echo "[HEALTH-GATE] ${svc}"
+        if wait_for_service_health "${svc}"; then
+            echo "[OK] ${svc} passed health gate"
+        else
+            dump_failure_diagnostics "${svc}"
+            echo "[ERROR] ${svc} failed health gate" >&2
+            rc=1
+        fi
+    done
+    return "${rc}"
+}
