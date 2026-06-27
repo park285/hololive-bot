@@ -11,8 +11,8 @@ ARG TARGETARCH=amd64
 ARG GOAMD64=v1
 
 RUN apk add --no-cache git
-RUN printf 'app:x:65532:65532:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
-    printf 'app:x:65532:\n' > /tmp/group
+RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
+    printf 'app:x:1000:\n' > /tmp/group
 
 WORKDIR /workspace/hololive-bot
 COPY . .
@@ -50,9 +50,9 @@ ENV TZ=Asia/Seoul \
 WORKDIR /app
 COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
-COPY --from=builder --link --chown=65532:65532 /dist ./
+COPY --from=builder --link --chown=1000:1000 /dist ./
 
 EXPOSE 30001/tcp 30001/udp 30003/tcp 30003/udp 30006/tcp 30006/udp 30061/tcp 30091/tcp
 
-USER 65532:65532
+USER 1000:1000
 ENTRYPOINT ["./bin/hololive-api"]
