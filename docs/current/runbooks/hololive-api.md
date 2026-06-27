@@ -111,6 +111,16 @@ curl http://127.0.0.1:30006/health
 - Redeploy the previous `hololive-api` image/config.
 - Recheck Iris webhook/reply, scheduler-dependent commands, manual triggers, and dashboard health after rollback.
 
+## Post-deploy monitoring (unified runtime)
+
+bot/admin/llm을 한 프로세스에 묶었으므로 평균값보다 동시 spike(예: LLM weekly digest + admin stats 조회 + bot 이미지 렌더링 동시 발생)가 중요하다. 컷오버 후 최소 24시간 관찰:
+
+- Go RSS / heap inuse·idle, GC pause·GC CPU 비중 (GOMEMLIMIT 1024MiB, 컨테이너 limit 1280m 대비 여유)
+- PostgreSQL active/idle connection 수 — plane별 pool 합산(bot/admin/llm 각 max 4 = 최대 12) + alarm-worker/youtube-producer/migration 포함 전체 budget
+- pgx acquire latency, Valkey command latency, H3 handshake error rate
+- bot webhook p95/p99, admin API p95/p99, LLM scheduler job lag
+- deunhealth 재시작 빈도 — healthcheck(30001/health·30003/ready·30006/health)는 process liveness 기준이므로, 잦은 재시작은 H3 listener hang/5s 타임아웃/GC pause를 의심
+
 ## Related contracts
 
 - `../contracts/iris-boundary.md`

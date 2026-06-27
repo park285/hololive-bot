@@ -460,7 +460,6 @@ services:
       YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
       ALARM_DISPATCH_CONSUMER_ENABLED: "false"
       ALARM_WORKER_EGRESS_LEASE_ENABLED: "false"
-      DOCKER_HOST: tcp://docker-proxy:2375
       LOG_DIR: /app/logs
       GOGC: "80"
       GOMEMLIMIT: "1024MiB"
@@ -481,8 +480,6 @@ services:
       <<: *db-cache-depends
       hololive-alarm-worker:
         condition: service_healthy
-      docker-proxy:
-        condition: service_started
     deploy:
       resources:
         limits:
@@ -501,7 +498,6 @@ services:
       hololive-net:
         aliases:
           - hololive-api
-      docker-proxy-net: {}
 
   youtube-producer:
     <<: *app-service
