@@ -142,7 +142,7 @@ func assertProdComposeEgressEnvFiles(t *testing.T, content string) {
 	for _, service := range egressOwners {
 		block := composeServiceBlock(t, content, service)
 		wantEnvFile := map[string]string{
-			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}",
+			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/bot.env}",
 			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}",
 		}[service]
 		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {
@@ -366,7 +366,7 @@ func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 	for _, service := range []string{"hololive-api", "hololive-alarm-worker"} {
 		block := composeServiceBlock(t, overlay, service)
 		wantEnvFile := map[string]string{
-			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/hololive-api.env}",
+			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/bot.env}",
 			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}",
 		}[service]
 		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {

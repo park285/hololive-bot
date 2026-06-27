@@ -33,7 +33,7 @@ so AP hosts do not receive Iris egress tokens in their Compose interpolation fil
 Application-only env is scoped per service:
 
 ```text
-HOLOLIVE_BOT_ENV_FILE=/run/hololive-bot/bot.env
+HOLOLIVE_API_ENV_FILE=/run/hololive-bot/bot.env
 HOLOLIVE_ALARM_WORKER_ENV_FILE=/run/hololive-bot/alarm-worker.env
 HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE=/run/hololive-bot/youtube-producer.env
 ```
