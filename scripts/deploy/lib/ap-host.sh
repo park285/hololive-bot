@@ -31,6 +31,7 @@ ap_host_load() {
     AP_SSH_HOST=""
     AP_SSH_HOST_KEY_ALIAS=""
     AP_COMPOSE_FILE=""
+    AP_RUNTIME_MODE=""
     AP_SERVICES=()
     AP_CONTAINERS=()
     AP_PORTS=()
