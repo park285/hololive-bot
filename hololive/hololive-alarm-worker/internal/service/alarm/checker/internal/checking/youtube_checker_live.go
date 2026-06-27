@@ -122,7 +122,7 @@ func (c *YouTubeChecker) finalizeLiveCatchupNotifications(
 	}
 	if len(notifications) == 0 {
 		if suppressedRooms > 0 {
-			sharedlog.Info(ctx, c.logger, "alarm.youtube.live_catchup.suppressed", "youtube live catchup alarm suppressed",
+			sharedlog.Debug(ctx, c.logger, "alarm.youtube.live_catchup.suppressed", "youtube live catchup alarm suppressed",
 				slog.String("stream_id", stream.ID),
 				slog.String("channel_id", youtubeStreamChannelID(stream)),
 				slog.Time("start_at", startAt.UTC()),
@@ -133,7 +133,7 @@ func (c *YouTubeChecker) finalizeLiveCatchupNotifications(
 	}
 
 	observeYouTubeLiveCatchup("selected")
-	sharedlog.Info(ctx, c.logger, "alarm.youtube.live_catchup.selected", "youtube live catchup alarm selected",
+	sharedlog.Debug(ctx, c.logger, "alarm.youtube.live_catchup.selected", "youtube live catchup alarm selected",
 		slog.String("stream_id", stream.ID),
 		slog.String("channel_id", youtubeStreamChannelID(stream)),
 		slog.Time("start_at", startAt.UTC()),
