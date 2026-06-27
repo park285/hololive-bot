@@ -27,8 +27,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type StartHooks struct {
@@ -55,7 +57,11 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	startAlarmScheduler(ctx, errCh, hooks)
 
 	if hooks.RunConfigSubscriber != nil {
-		go hooks.RunConfigSubscriber(ctx)
+		go func() {
+			panicguard.Run(hooks.Logger, "config-subscriber", func() {
+				hooks.RunConfigSubscriber(ctx)
+			})
+		}()
 		logInfo(hooks.Logger, "Config subscriber started")
 	}
 
@@ -179,7 +185,9 @@ func startAlarmScheduler(ctx context.Context, errCh chan<- error, hooks StartHoo
 	alarmCtx := alarmSchedulerContext(ctx, hooks)
 
 	go func() {
-		if err := hooks.StartAlarmScheduler(alarmCtx); err != nil {
+		if err := panicguard.RunE(hooks.Logger, "alarm-scheduler", func() error {
+			return hooks.StartAlarmScheduler(alarmCtx)
+		}); err != nil {
 			handleAlarmSchedulerError(err, errCh, hooks.Logger)
 		}
 	}()
@@ -218,7 +226,9 @@ func startBot(ctx context.Context, errCh chan<- error, logger *slog.Logger, star
 	}
 
 	go func() {
-		if err := startBot(ctx); err != nil {
+		if err := panicguard.RunE(logger, "bot-runtime", func() error {
+			return startBot(ctx)
+		}); err != nil {
 			handleBotError(err, errCh, logger)
 		}
 	}()

@@ -121,6 +121,41 @@ func TestRuntimeStopsOnContextCancellation(t *testing.T) {
 	rt.Stop()
 }
 
+func TestRuntimeContinuesAfterTickPanic(t *testing.T) {
+	rt := NewRuntime()
+	ctx := t.Context()
+
+	var calls atomic.Int32
+	secondTick := make(chan struct{}, 1)
+
+	rt.Start(ctx, &Config{
+		Logger:         testLogger(),
+		WaitingLog:     "waiting",
+		ContextStopLog: "context stop",
+		StopLog:        "stop",
+		CalculateNextRun: func(time.Time) time.Time {
+			return time.Now().Add(-time.Millisecond)
+		},
+		OnTick: func(context.Context) {
+			if calls.Add(1) == 1 {
+				panic("tick exploded")
+			}
+			select {
+			case secondTick <- struct{}{}:
+			default:
+			}
+		},
+	})
+
+	select {
+	case <-secondTick:
+	case <-time.After(time.Second):
+		t.Fatal("expected loop to keep ticking after a tick panic")
+	}
+
+	rt.Stop()
+}
+
 func TestRuntimeCanRestartAfterStop(t *testing.T) {
 	rt := NewRuntime()
 	stopped := make(chan StopReason, 1)

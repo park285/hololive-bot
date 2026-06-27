@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 const defaultH3CertificateReloadInterval = 45 * time.Second
@@ -115,7 +117,7 @@ func (r *reloadingTLSCertificate) runReloadLoop(ctx context.Context) {
 	defer ticker.Stop()
 
 	for waitH3CertificateReloadTick(ctx, ticker.C) {
-		r.reloadOnce()
+		panicguard.Run(r.logger, "h3-certificate-reload", r.reloadOnce)
 	}
 }
 

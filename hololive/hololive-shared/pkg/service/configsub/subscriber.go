@@ -29,6 +29,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 const DefaultChannel = contractssettings.PubSubChannelV1
@@ -55,29 +56,7 @@ func New(client valkey.Client, applyFn func(ConfigUpdate), logger *slog.Logger) 
 func (s *Subscriber) Run(ctx context.Context) {
 	s.logger.Info("Config subscriber started", slog.String("channel", s.channel))
 
-	err := s.client.Receive(ctx, s.client.B().Subscribe().Channel(s.channel).Build(), func(msg valkey.PubSubMessage) {
-		var update ConfigUpdate
-		if err := json.Unmarshal([]byte(msg.Message), &update); err != nil {
-			s.logger.Warn("Failed to unmarshal config update",
-				slog.String("channel", s.channel),
-				slog.Any("error", err),
-			)
-			return
-		}
-
-		if update.Type == "" {
-			s.logger.Warn("Config update with empty type, ignoring",
-				slog.String("channel", s.channel),
-			)
-			return
-		}
-
-		s.logger.Info("Config update received",
-			slog.String("type", update.Type),
-			slog.String("channel", s.channel),
-		)
-		s.applyFn(update)
-	})
+	err := s.client.Receive(ctx, s.client.B().Subscribe().Channel(s.channel).Build(), s.handleMessage)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		s.logger.Error("Config subscriber error",
 			slog.String("channel", s.channel),
@@ -86,4 +65,30 @@ func (s *Subscriber) Run(ctx context.Context) {
 	}
 
 	s.logger.Info("Config subscriber stopped", slog.String("channel", s.channel))
+}
+
+func (s *Subscriber) handleMessage(msg valkey.PubSubMessage) {
+	var update ConfigUpdate
+	if err := json.Unmarshal([]byte(msg.Message), &update); err != nil {
+		s.logger.Warn("Failed to unmarshal config update",
+			slog.String("channel", s.channel),
+			slog.Any("error", err),
+		)
+		return
+	}
+
+	if update.Type == "" {
+		s.logger.Warn("Config update with empty type, ignoring",
+			slog.String("channel", s.channel),
+		)
+		return
+	}
+
+	s.logger.Info("Config update received",
+		slog.String("type", update.Type),
+		slog.String("channel", s.channel),
+	)
+	panicguard.Run(s.logger, "config-subscriber-apply", func() {
+		s.applyFn(update)
+	})
 }

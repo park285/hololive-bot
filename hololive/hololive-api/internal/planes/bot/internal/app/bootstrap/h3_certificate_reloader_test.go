@@ -141,6 +141,55 @@ func TestReloadingTLSCertificateReloadFailureKeepsPreviousCertificateConcurrentl
 	}
 }
 
+func TestReloadingTLSCertificateReloadLoopSurvivesReloadPanic(t *testing.T) {
+	t.Parallel()
+
+	certFile, keyFile := writeLocalhostCertificate(t)
+
+	safe := countingTLSCertificateFileReader(&atomic.Int64{})
+	var reads atomic.Int64
+	reloader := newTestReloadingTLSCertificateWithOptions(
+		t,
+		certFile,
+		keyFile,
+		5*time.Millisecond,
+		reloadingTLSCertificateOptions{
+			readFile: func(name string) ([]byte, error) {
+				if reads.Add(1) > 2 {
+					panic("certificate read exploded")
+				}
+				return safe(name)
+			},
+		},
+	)
+
+	original, err := reloader.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatalf("GetCertificate() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	reloader.Start(ctx)
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && reads.Load() <= 4 {
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if got := reads.Load(); got <= 2 {
+		t.Fatalf("reload loop did not continue after panic: reads = %d", got)
+	}
+
+	cert, err := reloader.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatalf("GetCertificate() after reload panic error = %v", err)
+	}
+	if cert != original {
+		t.Fatal("expected previous certificate to be preserved after reload panic")
+	}
+}
+
 func newTestReloadingTLSCertificate(
 	t *testing.T,
 	certFile, keyFile string,

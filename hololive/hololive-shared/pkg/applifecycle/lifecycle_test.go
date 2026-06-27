@@ -192,6 +192,52 @@ func TestStart_BotErrorPropagatesToErrCh(t *testing.T) {
 	}
 }
 
+func TestStart_AlarmSchedulerPanicIsRecoveredAndPropagatedToErrCh(t *testing.T) {
+	t.Parallel()
+
+	errCh := make(chan error, 1)
+
+	require.NotPanics(t, func() {
+		Start(t.Context(), errCh, StartHooks{
+			Logger: slog.New(slog.DiscardHandler),
+			StartAlarmScheduler: func(context.Context) error {
+				panic("alarm scheduler exploded")
+			},
+		})
+	})
+
+	select {
+	case err := <-errCh:
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "alarm scheduler exploded")
+	case <-time.After(time.Second):
+		t.Fatal("expected recovered scheduler panic to be sent to errCh")
+	}
+}
+
+func TestStart_BotPanicIsRecoveredAndPropagatedToErrCh(t *testing.T) {
+	t.Parallel()
+
+	errCh := make(chan error, 1)
+
+	require.NotPanics(t, func() {
+		Start(t.Context(), errCh, StartHooks{
+			Logger: slog.New(slog.DiscardHandler),
+			StartBot: func(context.Context) error {
+				panic("bot exploded")
+			},
+		})
+	})
+
+	select {
+	case err := <-errCh:
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "bot exploded")
+	case <-time.After(time.Second):
+		t.Fatal("expected recovered bot panic to be sent to errCh")
+	}
+}
+
 func TestStart_BotContextCancellationIsNotFatal(t *testing.T) {
 	t.Parallel()
 

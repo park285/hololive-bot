@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type StopReason int
@@ -87,10 +89,15 @@ func (r *Runtime) Start(ctx context.Context, config *Config) {
 	go func(stopCh chan struct{}) {
 		defer r.wg.Done()
 
-		reason := r.run(ctx, config, logger, stopCh)
+		var reason StopReason
+		panicguard.Run(logger, "schedulerkit-runtime", func() {
+			reason = r.run(ctx, config, logger, stopCh)
+		})
 		r.finishRun(stopCh)
 		if config.OnStop != nil {
-			config.OnStop(reason)
+			panicguard.Run(logger, "schedulerkit-onstop", func() {
+				config.OnStop(reason)
+			})
 		}
 	}(stopCh)
 }
@@ -127,7 +134,9 @@ func (r *Runtime) run(ctx context.Context, config *Config, logger *slog.Logger, 
 		if reason, stopped := waitRuntimeTick(ctx, config, logger, stopCh, timer); stopped {
 			return reason
 		}
-		config.OnTick(ctx)
+		panicguard.Run(logger, "schedulerkit-tick", func() {
+			config.OnTick(ctx)
+		})
 	}
 }
 

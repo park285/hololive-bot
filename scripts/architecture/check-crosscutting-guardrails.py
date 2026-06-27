@@ -51,6 +51,7 @@ GOROUTINE_RECOVERY_TOKENS = (
     "runtimekit.Go(",
     "safeGo(",
     "RunProtected(",
+    "panicguard.Run",
 )
 
 RUST_JNI_BOUNDARY_TOKENS = (
