@@ -4,7 +4,6 @@ import runtime "github.com/kapu/hololive-api/internal/planes/llm/internal/app/in
 
 type DeliveryModule = runtime.DeliveryModule
 type LLMSchedulerRuntime = runtime.LLMSchedulerRuntime
-type UIEmoji = runtime.UIEmoji
 
 const (
 	EventLLMRuntimeStarted   = runtime.EventLLMRuntimeStarted
@@ -20,8 +19,6 @@ const (
 	EventLLMIntentWriteSucceeded     = runtime.EventLLMIntentWriteSucceeded
 	EventLLMIntentWriteFailed        = runtime.EventLLMIntentWriteFailed
 )
-
-var DefaultEmoji = runtime.DefaultEmoji
 
 var ProvideMajorEventAdjudicatorClient = runtime.ProvideMajorEventAdjudicatorClient
 var ProvideMajorEventLLMClient = runtime.ProvideMajorEventLLMClient

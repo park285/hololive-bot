@@ -22,24 +22,20 @@ package formatter
 
 import (
 	"context"
-	"fmt"
 	"strings"
-	"time"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 )
 
 type majorEventWeeklySummaryData struct {
-	Emoji      msging.UIEmoji
 	Count      int
 	Events     []majorEventView
 	LLMSummary string
 }
 
 type majorEventMonthlySummaryData struct {
-	Emoji      msging.UIEmoji
 	Count      int
 	Events     []majorEventView
 	LLMSummary string
@@ -48,18 +44,15 @@ type majorEventMonthlySummaryData struct {
 type majorEventView = templateview.MajorEventView
 
 type majorEventSubscribedData struct {
-	Emoji  msging.UIEmoji
 	Prefix string
 }
 
 type majorEventStatusData struct {
-	Emoji        msging.UIEmoji
 	IsSubscribed bool
 	Prefix       string
 }
 
 type majorEventUsageData struct {
-	Emoji  msging.UIEmoji
 	Prefix string
 }
 
@@ -77,7 +70,6 @@ func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, e
 	}
 
 	data := majorEventWeeklySummaryData{
-		Emoji:      msging.DefaultEmoji,
 		Count:      len(events),
 		Events:     views,
 		LLMSummary: normalizedSummary,
@@ -85,7 +77,7 @@ func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, e
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventWeeklySummary, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
@@ -105,7 +97,6 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 	}
 
 	data := majorEventMonthlySummaryData{
-		Emoji:      msging.DefaultEmoji,
 		Count:      len(events),
 		Events:     views,
 		LLMSummary: normalizedSummary,
@@ -113,7 +104,7 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventMonthlySummary, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
@@ -125,42 +116,41 @@ func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {
 
 func (f *ResponseFormatter) FormatMajorEventSubscribed(ctx context.Context) string {
 	data := majorEventSubscribedData{
-		Emoji:  msging.DefaultEmoji,
 		Prefix: f.prefix,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventSubscribed, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
 }
 
 func (f *ResponseFormatter) FormatMajorEventUnsubscribed(ctx context.Context) string {
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventUnsubscribed, majorEventSubscribedData{Emoji: msging.DefaultEmoji})
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventUnsubscribed, majorEventSubscribedData{})
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
 }
 
 func (f *ResponseFormatter) FormatMajorEventAlreadySubscribed(ctx context.Context) string {
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventAlreadySub, majorEventSubscribedData{Emoji: msging.DefaultEmoji})
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventAlreadySub, majorEventSubscribedData{})
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
 }
 
 func (f *ResponseFormatter) FormatMajorEventNotSubscribed(ctx context.Context) string {
-	data := majorEventSubscribedData{Emoji: msging.DefaultEmoji, Prefix: f.prefix}
+	data := majorEventSubscribedData{Prefix: f.prefix}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventNotSub, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
@@ -168,14 +158,13 @@ func (f *ResponseFormatter) FormatMajorEventNotSubscribed(ctx context.Context) s
 
 func (f *ResponseFormatter) FormatMajorEventStatus(ctx context.Context, isSubscribed bool) string {
 	data := majorEventStatusData{
-		Emoji:        msging.DefaultEmoji,
 		IsSubscribed: isSubscribed,
 		Prefix:       f.prefix,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventStatus, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
@@ -183,36 +172,13 @@ func (f *ResponseFormatter) FormatMajorEventStatus(ctx context.Context, isSubscr
 
 func (f *ResponseFormatter) FormatMajorEventUsage(ctx context.Context) string {
 	data := majorEventUsageData{
-		Emoji:  msging.DefaultEmoji,
 		Prefix: f.prefix,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventUsage, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
-}
-
-func formatMajorEventDates(dates []time.Time) string {
-	if len(dates) == 0 {
-		return "TBA"
-	}
-
-	weekdays := []string{"일", "월", "화", "수", "목", "금", "토"}
-	formatDate := func(t time.Time) string {
-		return fmt.Sprintf("%d년 %d월 %d일(%s)", t.Year(), t.Month(), t.Day(), weekdays[t.Weekday()])
-	}
-
-	if len(dates) == 1 {
-		return formatDate(dates[0])
-	}
-
-	return fmt.Sprintf("%s ~ %s", formatDate(dates[0]), formatDate(dates[len(dates)-1]))
-}
-
-// formatMajorEventDatesFromDB는 DB에서 조회된 EventStartDate/EventEndDate를 기반으로 날짜 문자열을 생성합니다.
-func formatMajorEventDatesFromDB(start, end *time.Time) string {
-	return templateview.FormatMajorEventDatesFromDB(start, end)
 }

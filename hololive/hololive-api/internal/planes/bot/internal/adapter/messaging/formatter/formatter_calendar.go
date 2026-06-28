@@ -1,50 +1,105 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package formatter
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
-func (f *ResponseFormatter) CelebrationCalendar(_ context.Context, month, year int, entries []domain.CalendarEntry) string {
-	if len(entries) == 0 {
-		return fmt.Sprintf("📅 %d년 %d월 기념일\n\n등록된 기념일이 없습니다.", year, month)
+type calendarEntryView struct {
+	Name       string
+	IsBirthday bool
+	Years      int
+}
+
+type calendarDayView struct {
+	Month   int
+	Day     int
+	Entries []calendarEntryView
+}
+
+type calendarTemplateData struct {
+	Year  int
+	Month int
+	Count int
+	Days  []calendarDayView
+}
+
+func (f *ResponseFormatter) CelebrationCalendar(ctx context.Context, month, year int, entries []domain.CalendarEntry) string {
+	days := calendarDayViews(month, entries)
+	data := calendarTemplateData{
+		Year:  year,
+		Month: month,
+		Count: calendarEntryCount(days),
+		Days:  days,
 	}
 
-	var b strings.Builder
-	fmt.Fprintf(&b, "📅 %d년 %d월 기념일 (%d건)\n", year, month, len(entries))
-	b.WriteString("━━━━━━━━━━━━━━━━\n")
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdCalendar, data)
+	if err != nil {
+		return messagestrings.FallbackSentinel
+	}
+
+	return rendered
+}
+
+func calendarDayViews(month int, entries []domain.CalendarEntry) []calendarDayView {
+	var days []calendarDayView
 
 	currentDay := 0
 	for _, e := range entries {
-		if e.Day != currentDay {
-			if currentDay > 0 {
-				b.WriteString("\n")
-			}
-			currentDay = e.Day
-			fmt.Fprintf(&b, "\n📌 %d월 %d일\n", month, e.Day)
+		if e.Member == nil {
+			continue
 		}
-		formatCalendarEntry(&b, e)
+
+		if len(days) == 0 || e.Day != currentDay {
+			currentDay = e.Day
+			days = append(days, calendarDayView{Month: month, Day: e.Day})
+		}
+
+		last := len(days) - 1
+		days[last].Entries = append(days[last].Entries, calendarEntryView{
+			Name:       calendarMemberDisplayName(e.Member),
+			IsBirthday: e.Kind == domain.CelebrationKindBirthday,
+			Years:      e.Ordinal,
+		})
 	}
 
-	return b.String()
+	return days
 }
 
-func formatCalendarEntry(b *strings.Builder, e domain.CalendarEntry) {
-	name := calendarMemberDisplayName(e.Member)
-	switch e.Kind {
-	case domain.CelebrationKindBirthday:
-		fmt.Fprintf(b, "  🎂 %s 생일\n", name)
-	case domain.CelebrationKindAnniversary:
-		fmt.Fprintf(b, "  🎉 %s 데뷔 %d주년\n", name, e.Ordinal)
+func calendarEntryCount(days []calendarDayView) int {
+	count := 0
+	for _, d := range days {
+		count += len(d.Entries)
 	}
+
+	return count
 }
 
 func calendarMemberDisplayName(m *domain.Member) string {
 	if m == nil {
-		return "알 수 없음"
+		return ""
 	}
 	if m.ShortKoreanName != "" {
 		return m.ShortKoreanName

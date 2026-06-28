@@ -1,6 +1,7 @@
 package workerapp
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/iris-client-go/iris"
 )
@@ -23,8 +25,8 @@ var alarmDispatchKaringTemplateIDByItemCount = map[int]int64{
 	4: 133267,
 }
 
-func buildAlarmDispatchKaringContentListRequests(group alarmDispatchGroup) ([]iris.KaringContentListRequest, error) {
-	items, err := buildAlarmDispatchKaringContentItems(group)
+func buildAlarmDispatchKaringContentListRequests(ctx context.Context, messageStrings *messagestrings.Store, group alarmDispatchGroup) ([]iris.KaringContentListRequest, error) {
+	items, err := buildAlarmDispatchKaringContentItems(ctx, messageStrings, group)
 	if err != nil {
 		return nil, err
 	}
@@ -99,24 +101,24 @@ func alarmDispatchKaringTemplateID(itemCount int) int64 {
 	return alarmDispatchKaringTemplateIDByItemCount[itemCount]
 }
 
-func buildAlarmDispatchKaringContentItems(group alarmDispatchGroup) ([]iris.KaringContentItem, error) {
+func buildAlarmDispatchKaringContentItems(ctx context.Context, messageStrings *messagestrings.Store, group alarmDispatchGroup) ([]iris.KaringContentItem, error) {
 	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return buildAlarmDispatchYouTubeOutboxKaringContentItems(&group.envelopes[0])
+		return buildAlarmDispatchYouTubeOutboxKaringContentItems(ctx, messageStrings, &group.envelopes[0])
 	}
 	items := make([]iris.KaringContentItem, 0, len(group.notifications))
 	for i := range group.notifications {
-		items = append(items, buildAlarmDispatchNotificationKaringContentItem(&group.notifications[i]))
+		items = append(items, buildAlarmDispatchNotificationKaringContentItem(ctx, messageStrings, &group.notifications[i]))
 	}
 	return items, nil
 }
 
-func buildAlarmDispatchNotificationKaringContentItem(notification *domain.AlarmNotification) iris.KaringContentItem {
+func buildAlarmDispatchNotificationKaringContentItem(ctx context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) iris.KaringContentItem {
 	if notification == nil {
 		return iris.KaringContentItem{}
 	}
-	memberName := resolveAlarmDispatchMemberName(notification)
+	memberName := resolveAlarmDispatchMemberName(ctx, store, notification)
 	return iris.KaringContentItem{
-		Title:        resolveAlarmDispatchTitle(notification),
+		Title:        resolveAlarmDispatchTitle(ctx, store, notification),
 		URL:          resolveAlarmDispatchURL(notification),
 		MemberName:   memberName,
 		ChannelName:  resolveAlarmDispatchKaringChannelName(notification, memberName),

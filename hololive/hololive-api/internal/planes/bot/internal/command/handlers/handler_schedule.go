@@ -64,7 +64,7 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 	}
 
 	days := scheduleDays(params)
-	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
+	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "일정")
 	if memberLookupHandled(err) {
 		return nil
 	}

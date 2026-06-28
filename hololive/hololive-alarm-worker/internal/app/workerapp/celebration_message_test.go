@@ -1,16 +1,25 @@
 package workerapp
 
 import (
+	"log/slog"
 	"testing"
 
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+func newCelebrationTestRenderer(t *testing.T) *template.Renderer {
+	t.Helper()
+	return template.NewRenderer(dbtest.NewPool(t), slog.Default())
+}
+
 func TestRenderCelebrationMessageBirthday(t *testing.T) {
 	t.Parallel()
 
+	renderer := newCelebrationTestRenderer(t)
 	envelope := domain.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
@@ -19,7 +28,7 @@ func TestRenderCelebrationMessageBirthday(t *testing.T) {
 		},
 	}
 
-	msg, err := renderCelebrationMessage(&envelope)
+	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
 	assert.Equal(t, "🎂 시라카미 후부키 생일 축하합니다!\n🔗 https://youtube.com/channel/UCdn5BQ06XqgXoAxIhbqw5Rg", msg)
 }
@@ -27,6 +36,7 @@ func TestRenderCelebrationMessageBirthday(t *testing.T) {
 func TestRenderCelebrationMessageBirthdayOrdinal(t *testing.T) {
 	t.Parallel()
 
+	renderer := newCelebrationTestRenderer(t)
 	envelope := domain.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
@@ -36,7 +46,7 @@ func TestRenderCelebrationMessageBirthdayOrdinal(t *testing.T) {
 		},
 	}
 
-	msg, err := renderCelebrationMessage(&envelope)
+	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
 	assert.Equal(t, "🎂 리오나 2번째 생일 축하합니다!\n🔗 https://youtube.com/channel/UC9LSiN9hXI55svYEBrrK-tw", msg)
 }
@@ -44,6 +54,7 @@ func TestRenderCelebrationMessageBirthdayOrdinal(t *testing.T) {
 func TestRenderCelebrationMessageAnniversary(t *testing.T) {
 	t.Parallel()
 
+	renderer := newCelebrationTestRenderer(t)
 	envelope := domain.AlarmQueueEnvelope{
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindAnniversary,
@@ -53,7 +64,7 @@ func TestRenderCelebrationMessageAnniversary(t *testing.T) {
 		},
 	}
 
-	msg, err := renderCelebrationMessage(&envelope)
+	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
 	require.NoError(t, err)
 	assert.Equal(t, "🎉 토키노 소라 데뷔 7주년 축하합니다!\n🔗 https://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg", msg)
 }
@@ -61,7 +72,7 @@ func TestRenderCelebrationMessageAnniversary(t *testing.T) {
 func TestRenderCelebrationMessageNilPayload(t *testing.T) {
 	t.Parallel()
 
-	_, err := renderCelebrationMessage(&domain.AlarmQueueEnvelope{})
+	_, err := renderCelebrationMessage(t.Context(), newCelebrationTestRenderer(t), &domain.AlarmQueueEnvelope{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "payload is nil")
 }
@@ -76,7 +87,7 @@ func TestRenderCelebrationMessageAnniversaryZeroYears(t *testing.T) {
 		},
 	}
 
-	_, err := renderCelebrationMessage(&envelope)
+	_, err := renderCelebrationMessage(t.Context(), newCelebrationTestRenderer(t), &envelope)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "years must be positive")
 }
@@ -88,7 +99,7 @@ func TestRenderCelebrationMessageUnknownKind(t *testing.T) {
 		Celebration: &domain.CelebrationDispatchPayload{Kind: "unknown"},
 	}
 
-	_, err := renderCelebrationMessage(&envelope)
+	_, err := renderCelebrationMessage(t.Context(), newCelebrationTestRenderer(t), &envelope)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown kind")
 }
@@ -160,7 +171,7 @@ func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -175,6 +186,7 @@ func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
 func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 	t.Parallel()
 
+	renderer := newCelebrationTestRenderer(t)
 	envelope := domain.AlarmQueueEnvelope{
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
@@ -189,7 +201,7 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
 	}
 
-	msg, err := renderAlarmDispatchGroup(t.Context(), group)
+	msg, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, group)
 	require.NoError(t, err)
 	assert.Equal(t, "🎉 토키노 소라 데뷔 7주년 축하합니다!\n🔗 https://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg", msg)
 }

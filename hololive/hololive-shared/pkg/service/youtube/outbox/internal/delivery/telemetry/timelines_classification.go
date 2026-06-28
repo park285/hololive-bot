@@ -110,7 +110,10 @@ func (r *Repository) updatePostLatencyClassification(
 		    updated_at = $4
 		WHERE kind = $5 AND content_id = $6
 	`, string(status), string(delaySource), string(internalDelayCause), updatedAt, row.OutboxKind, contentID)
-	return err
+	if err != nil {
+		return fmt.Errorf("update post latency classification: %w", err)
+	}
+	return nil
 }
 
 func normalizedPostLatencyClassificationPersistenceValues(

@@ -70,7 +70,7 @@ func FindActiveMemberOrError(ctx context.Context, deps *Dependencies, room, memb
 }
 
 // 동명이인 또는 미발견인 경우 사용자-facing 응답을 보내고 ErrMemberLookupHandled를 반환한다.
-func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
+func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName, commandExample string) (*domain.Channel, error) {
 	if err := ValidateMemberLookupDependencies(deps); err != nil {
 		return nil, fmt.Errorf("member lookup dependencies not configured: %w", err)
 	}
@@ -80,7 +80,7 @@ func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, ro
 		var ambiguousErr *matcher.AmbiguousMatchError
 
 		if errors.As(err, &ambiguousErr) {
-			message := deps.Formatter.FormatAmbiguousMembers(ambiguousErr.Candidates)
+			message := deps.Formatter.FormatAmbiguousMembers(ctx, ambiguousErr.Candidates, commandExample)
 
 			return nil, sendAmbiguousMembers(ctx, deps, room, message)
 		}
@@ -96,8 +96,8 @@ func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, ro
 }
 
 // !라이브, !일정, !예정 명령에서 사용한다. 동명이인 응답과 졸업 멤버 차단을 함께 처리한다.
-func FindActiveMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
-	channel, err := FindMemberWithCandidatesOrError(ctx, deps, room, memberName)
+func FindActiveMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName, commandExample string) (*domain.Channel, error) {
+	channel, err := FindMemberWithCandidatesOrError(ctx, deps, room, memberName, commandExample)
 	if err != nil {
 		return nil, fmt.Errorf("find member with candidates: %w", err)
 	}
@@ -116,7 +116,7 @@ func FindActiveMemberWithCandidatesOrError(ctx context.Context, deps *Dependenci
 }
 
 func sendMemberNotFound(ctx context.Context, deps *Dependencies, room, memberName string) error {
-	if err := deps.SendError(ctx, room, deps.Formatter.MemberNotFound(memberName)); err != nil {
+	if err := deps.SendMessage(ctx, room, deps.Formatter.MemberNotFound(ctx, memberName)); err != nil {
 		return fmt.Errorf("send member not found response: %w", err)
 	}
 	return ErrMemberLookupHandled

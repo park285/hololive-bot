@@ -24,8 +24,8 @@ import (
 	"context"
 	"strings"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
@@ -40,7 +40,6 @@ type MemberDirectoryEntry struct {
 }
 
 type memberDirectoryTemplateData struct {
-	Emoji  msging.UIEmoji
 	Total  int
 	Groups []memberDirectoryGroupView
 }
@@ -66,14 +65,13 @@ func (f *ResponseFormatter) MemberDirectory(ctx context.Context, groups []Member
 	}
 
 	data := memberDirectoryTemplateData{
-		Emoji:  msging.DefaultEmoji,
 		Total:  total,
 		Groups: viewGroups,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberDirectory, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayMemberListFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered

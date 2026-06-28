@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/iris-client-go/iris"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
-	"github.com/park285/iris-client-go/iris"
 )
 
 type deliverySendRequest struct {
@@ -39,14 +40,21 @@ const (
 var ErrDeliveryDedupeKeyRequired = errors.New("delivery dedupe key is required")
 var errDeliverySendTimeout = errors.New("delivery send timeout exceeded")
 
+const (
+	deliveryReasonAuth        = "auth"
+	deliveryReasonRateLimited = "rate-limited"
+	deliveryReasonTransport   = "transport"
+	deliveryReasonSendMessage = "send message"
+)
+
 var deliveryFailureReasonBySentinel = []struct {
 	err       error
 	reason    string
 	permanent bool
 }{
-	{err: iris.ErrAuthFailed, reason: "auth", permanent: true},
-	{err: iris.ErrRateLimited, reason: "rate-limited"},
-	{err: iris.ErrTransport, reason: "transport"},
+	{err: iris.ErrAuthFailed, reason: deliveryReasonAuth, permanent: true},
+	{err: iris.ErrRateLimited, reason: deliveryReasonRateLimited},
+	{err: iris.ErrTransport, reason: deliveryReasonTransport},
 	{err: iris.ErrPermanent, reason: "http-permanent", permanent: true},
 }
 
@@ -117,7 +125,7 @@ func deliveryFailureReason(err error) string {
 			return item.reason
 		}
 	}
-	return "send message"
+	return deliveryReasonSendMessage
 }
 
 func deliveryFailureReasonIsPermanent(reason string) bool {

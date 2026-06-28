@@ -7,11 +7,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
+
+func setupStatsTestRenderer(t *testing.T) *serviceTemplate.Renderer {
+	t.Helper()
+
+	pool := dbtest.NewPool(t)
+	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
+		t.Fatalf("clear templates: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO notification_templates(template_key, channel_id, body)
+		VALUES ($1, NULL, $2)
+		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+	`, domain.TemplateKeyCmdStatsGainers, "📊 순위\n{{range .Gainers}}{{.Rank}}위 {{.MemberName}}\n{{end}}"); err != nil {
+		t.Fatalf("seed stats gainers template: %v", err)
+	}
+
+	return serviceTemplate.NewRenderer(pool, slog.New(slog.DiscardHandler))
+}
 
 type statsRepoStub struct {
 	gainers  []domain.RankEntry
@@ -53,7 +74,7 @@ func TestStatsCommand_Execute_TopGainers_GoldenPath(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter:       adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", setupStatsTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -86,7 +107,7 @@ func TestStatsCommand_Execute_DefaultActionIsGainers(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter:       adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", setupStatsTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -111,7 +132,7 @@ func TestStatsCommand_Execute_UnknownAction(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: &statsRepoStub{},
-		Formatter:       adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", setupStatsTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -144,7 +165,7 @@ func TestStatsCommand_Execute_RepoError(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter:       adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", setupStatsTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -177,13 +198,13 @@ func TestStatsCommand_Execute_NoData(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter:       adapter.NewResponseFormatter("!", nil),
-		SendMessage: func(_ context.Context, _, message string) error {
+		Formatter:       adapter.NewResponseFormatter("!", setupStatsTestRenderer(t)),
+		SendMessage:     func(_ context.Context, _, _ string) error { return nil },
+		SendError: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
 		},
-		SendError: func(_ context.Context, _, _ string) error { return nil },
-		Logger:    slog.New(slog.DiscardHandler),
+		Logger: slog.New(slog.DiscardHandler),
 	}
 
 	cmd := NewStatsCommand(deps)
@@ -210,7 +231,7 @@ func TestStatsCommand_Execute_NilDeps(t *testing.T) {
 
 func TestStatsCommand_Execute_NilStatsRepo(t *testing.T) {
 	deps := &Dependencies{
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: adapter.NewResponseFormatter("!", setupStatsTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -237,7 +258,7 @@ func TestStatsCommand_Execute_WithPeriodParam(t *testing.T) {
 
 	deps := &Dependencies{
 		StatsRepository: repo,
-		Formatter:       adapter.NewResponseFormatter("!", nil),
+		Formatter:       adapter.NewResponseFormatter("!", setupStatsTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil

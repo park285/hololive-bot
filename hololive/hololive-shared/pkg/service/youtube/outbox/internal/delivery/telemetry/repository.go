@@ -227,7 +227,8 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 	}
 	slices.Sort(candidateIDs)
 
-	if err := r.lockPendingTelemetryRows(ctx, candidateIDs, now, lockExpiry); err != nil {
+	err = r.lockPendingTelemetryRows(ctx, candidateIDs, now, lockExpiry)
+	if err != nil {
 		return nil, err
 	}
 
@@ -261,7 +262,7 @@ func (r *Repository) lockPendingTelemetryRows(ctx context.Context, candidateIDs 
 		  AND logged_at IS NULL
 		  AND (locked_at IS NULL OR locked_at < ?)
 	`, lockArgs...); err != nil {
-		return err
+		return fmt.Errorf("lock delivery telemetry rows: %w", err)
 	}
 	return nil
 }
@@ -280,7 +281,7 @@ func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
 		SET logged_at = ?, locked_at = NULL, error = ''
 		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
-		return err
+		return fmt.Errorf("mark delivery telemetry logged: %w", err)
 	}
 
 	return nil
@@ -300,7 +301,7 @@ func (r *Repository) MarkRetryBatch(ctx context.Context, ids []int64, backoff ti
 		SET locked_at = NULL, next_attempt_at = ?, error = ?
 		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
-		return err
+		return fmt.Errorf("mark delivery telemetry retry: %w", err)
 	}
 
 	return nil

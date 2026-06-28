@@ -31,8 +31,17 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
+
+func setupMemberNewsStore(t *testing.T) *messagestrings.Store {
+	t.Helper()
+
+	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, store.Load(t.Context()))
+	return store
+}
 
 func setupFormatterRenderer(t *testing.T, key domain.TemplateKey, body string) *template.Renderer {
 	t.Helper()
@@ -93,12 +102,6 @@ func TestNewLLMSchedulerFormatter_UsesProvidedValues(t *testing.T) {
 	assert.Equal(t, "?", formatter.prefix)
 	assert.Equal(t, renderer, formatter.renderer)
 	assert.Equal(t, logger, formatter.logger)
-}
-
-func TestErrorMessage(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "❌ 실패", errorMessage("실패"))
 }
 
 func TestLLMSchedulerFormatterRender(t *testing.T) {

@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 func buildDeliveryAuditLogAttrsWithClassification(row *domain.YouTubeNotificationDeliveryTelemetry, classification *PostLatencyClassificationResult) []any {
@@ -169,7 +170,7 @@ func (tp *TelemetryProcessor) loadDeliveryTelemetryLatencyClassifications(
 
 	timelines, err := tp.telemetry.ListPostDeliveryTimelinesByOutboxIDs(ctx, telemetry.CollectTelemetryOutboxIDs(rows))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list post delivery timelines by outbox ids: %w", err)
 	}
 
 	classificationsByOutboxID := make(map[int64]PostLatencyClassificationResult, len(timelines))

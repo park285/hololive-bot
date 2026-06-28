@@ -34,8 +34,8 @@ func addTemplateMajorEventSummarySamples(data map[TemplateKey]any) {
 
 func templateMajorEventSummarySample() map[string]any {
 	return map[string]any{
-		"Emoji":      map[string]string{"Schedule": "📅", "Member": "👥", "Link": "🔗"},
-		"Count":      2,
+		fieldEmoji:   map[string]string{"Schedule": "📅", "Member": "👥", "Link": "🔗"},
+		fieldCount:   2,
 		"LLMSummary": "",
 		"Events":     templateMajorEventItems(),
 	}
@@ -44,14 +44,14 @@ func templateMajorEventSummarySample() map[string]any {
 func templateMajorEventItems() []map[string]any {
 	return []map[string]any{
 		{
-			"Title":    "hololive SUPER EXPO 2026",
+			fieldTitle: "hololive SUPER EXPO 2026",
 			"DateStr":  "2026년 3월 7일(토) ~ 2026년 3월 8일(일)",
 			"Members":  "사쿠라 미코, 호시마치 스이세이",
 			"Link":     "https://hololive.hololivepro.com/events/",
 			"HasDates": true,
 		},
 		{
-			"Title":    "hololive 7th fes.",
+			fieldTitle: "hololive 7th fes.",
 			"DateStr":  "TBA",
 			"Members":  "hololive members",
 			"Link":     "https://hololive.hololivepro.com/",
@@ -66,26 +66,26 @@ func addTemplateMajorEventSubscriptionSamples(data map[TemplateKey]any) {
 	data[TemplateKeyCmdMajorEventAlreadySub] = templateMajorEventAlarmInfoSample()
 	data[TemplateKeyCmdMajorEventNotSub] = templateMajorEventAlarmInfoSample()
 	data[TemplateKeyCmdMajorEventStatus] = map[string]any{
-		"Emoji":        map[string]string{"Alarm": "🔔", "Info": "ℹ️"},
+		fieldEmoji:     map[string]string{fieldAlarm: "🔔", "Info": "ℹ️"},
 		"IsSubscribed": true,
-		"Prefix":       "!",
+		fieldPrefix:    "!",
 	}
 	data[TemplateKeyCmdMajorEventUsage] = map[string]any{
-		"Emoji":  map[string]string{"Alarm": "🔔", "Hint": "💡"},
-		"Prefix": "!",
+		fieldEmoji:  map[string]string{fieldAlarm: "🔔", "Hint": "💡"},
+		fieldPrefix: "!",
 	}
 }
 
 func templateMajorEventAlarmSuccessSample() map[string]any {
 	return map[string]any{
-		"Emoji":  map[string]string{"Alarm": "🔔", "Success": "✅"},
-		"Prefix": "!",
+		fieldEmoji:  map[string]string{fieldAlarm: "🔔", "Success": "✅"},
+		fieldPrefix: "!",
 	}
 }
 
 func templateMajorEventAlarmInfoSample() map[string]any {
 	return map[string]any{
-		"Emoji":  map[string]string{"Alarm": "🔔", "Info": "ℹ️"},
-		"Prefix": "!",
+		fieldEmoji:  map[string]string{fieldAlarm: "🔔", "Info": "ℹ️"},
+		fieldPrefix: "!",
 	}
 }

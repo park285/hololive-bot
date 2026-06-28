@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 )
@@ -41,6 +42,7 @@ import (
 type llmSchedulerFormatter struct {
 	prefix   string
 	renderer *template.Renderer
+	store    *messagestrings.Store
 	logger   *slog.Logger
 }
 
@@ -58,58 +60,6 @@ func newLLMSchedulerFormatter(prefix string, renderer *template.Renderer, logger
 	}
 }
 
-// UIEmoji/DefaultEmoji는 기존 템플릿 데이터(Emoji.* 참조) 호환을 위해 local 정의한다.
-type UIEmoji struct {
-	Brand     string
-	Alarm     string
-	Broadcast string
-	Success   string
-	Error     string
-	Schedule  string
-	Live      string
-	Hint      string
-	Time      string
-	Info      string
-	Member    string
-	Link      string
-	Web       string
-	Speech    string
-	Highlight string
-	Data      string
-	Stats     string
-	Video     string
-}
-
-var DefaultEmoji = UIEmoji{
-	Brand:     "🌸",
-	Alarm:     "🔔",
-	Broadcast: "📺",
-	Success:   "✅",
-	Error:     "❌",
-	Schedule:  "📅",
-	Live:      "🔴",
-	Hint:      "💡",
-	Time:      "⏰",
-	Info:      "ℹ️",
-	Member:    "📘",
-	Link:      "🔗",
-	Web:       "🌐",
-	Speech:    "🗣️",
-	Highlight: "✨",
-	Data:      "📋",
-	Stats:     "📊",
-	Video:     "🎬",
-}
-
-const (
-	errDisplayMajorEventFailed = "행사 알림 정보를 표시할 수 없습니다."
-	errDisplayMemberNewsFailed = "멤버 뉴스 정보를 표시할 수 없습니다."
-)
-
-func errorMessage(message string) string {
-	return fmt.Sprintf("%s %s", DefaultEmoji.Error, message)
-}
-
 func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateKey, data any) (string, error) {
 	if f == nil || f.renderer == nil {
 		return "", fmt.Errorf("template renderer not configured")
@@ -122,17 +72,16 @@ func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateK
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
-func (f *llmSchedulerFormatter) renderOrError(ctx context.Context, key domain.TemplateKey, data any, warnMsg, fallback string) string {
+func (f *llmSchedulerFormatter) renderOrError(ctx context.Context, key domain.TemplateKey, data any, warnMsg string) string {
 	rendered, err := f.render(ctx, key, data)
 	if err != nil {
 		f.logger.Warn(warnMsg, slog.Any("error", err))
-		return errorMessage(fallback)
+		return messagestrings.FallbackSentinel
 	}
 	return rendered
 }
 
 type majorEventSummaryData struct {
-	Emoji      UIEmoji
 	Count      int
 	Events     []majorEventView
 	LLMSummary string
@@ -161,13 +110,12 @@ func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key
 	}
 
 	data := majorEventSummaryData{
-		Emoji:      DefaultEmoji,
 		Count:      len(events),
 		Events:     views,
 		LLMSummary: normalizedSummary,
 	}
 
-	return f.renderOrError(ctx, key, data, majorEventSummaryWarnMsg(key), errDisplayMajorEventFailed)
+	return f.renderOrError(ctx, key, data, majorEventSummaryWarnMsg(key))
 }
 
 func majorEventSummaryWarnMsg(key domain.TemplateKey) string {
@@ -186,7 +134,6 @@ func formatMajorEventDatesFromDB(start, end *time.Time) string {
 }
 
 type memberNewsDigestTemplateData struct {
-	Emoji       UIEmoji
 	Headline    string
 	TopItems    []membernews.SummaryItem
 	MoreSummary string
@@ -195,21 +142,20 @@ type memberNewsDigestTemplateData struct {
 
 func (f *llmSchedulerFormatter) FormatMemberNewsDigest(ctx context.Context, digest *membernews.Digest) string {
 	if digest == nil {
-		return errorMessage(errDisplayMemberNewsFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	data := memberNewsDigestTemplateData{
-		Emoji:       DefaultEmoji,
 		Headline:    digest.Headline,
-		TopItems:    localizeMemberNewsItems(digest.TopItems),
+		TopItems:    f.localizeMemberNewsItems(ctx, digest.TopItems),
 		MoreSummary: digest.MoreSummary,
 		TotalCount:  digest.TotalCount,
 	}
 
-	return f.renderOrError(ctx, domain.TemplateKeyCmdMemberNewsDigest, data, "member news digest render failed", errDisplayMemberNewsFailed)
+	return f.renderOrError(ctx, domain.TemplateKeyCmdMemberNewsDigest, data, "member news digest render failed")
 }
 
-func localizeMemberNewsItems(items []membernews.SummaryItem) []membernews.SummaryItem {
+func (f *llmSchedulerFormatter) localizeMemberNewsItems(ctx context.Context, items []membernews.SummaryItem) []membernews.SummaryItem {
 	if len(items) == 0 {
 		return items
 	}
@@ -217,12 +163,15 @@ func localizeMemberNewsItems(items []membernews.SummaryItem) []membernews.Summar
 	localized := make([]membernews.SummaryItem, len(items))
 	copy(localized, items)
 	for i := range localized {
-		localized[i].Category = memberNewsCategoryLabel(localized[i].Category)
+		localized[i].Category = f.memberNewsCategoryLabel(ctx, localized[i].Category)
 	}
 
 	return localized
 }
 
-func memberNewsCategoryLabel(raw string) string {
-	return templateview.MemberNewsCategoryLabel(raw)
+func (f *llmSchedulerFormatter) memberNewsCategoryLabel(ctx context.Context, raw string) string {
+	if label := f.store.GetContext(ctx, messagestrings.NamespaceNewsCat, strings.ToLower(strings.TrimSpace(raw))); label != "" {
+		return label
+	}
+	return raw
 }

@@ -24,9 +24,9 @@ import (
 	"context"
 	"fmt"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
@@ -39,7 +39,6 @@ type liveStreamView struct {
 }
 
 type liveStreamsTemplateData struct {
-	Emoji   msging.UIEmoji
 	Count   int
 	Streams []liveStreamView
 }
@@ -52,7 +51,6 @@ type upcomingStreamView struct {
 }
 
 type upcomingStreamsTemplateData struct {
-	Emoji   msging.UIEmoji
 	Count   int
 	Hours   int
 	Streams []upcomingStreamView
@@ -66,7 +64,6 @@ type scheduleEntryView struct {
 }
 
 type channelScheduleTemplateData struct {
-	Emoji       msging.UIEmoji
 	ChannelName string
 	Days        int
 	Count       int
@@ -74,43 +71,42 @@ type channelScheduleTemplateData struct {
 }
 
 func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*domain.Stream) string {
-	data := f.liveStreamsTemplateData(streams)
+	data := f.liveStreamsTemplateData(ctx, streams)
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdLiveStreams, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayLiveStreamsFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
 }
 
-func (f *ResponseFormatter) liveStreamsTemplateData(streams []*domain.Stream) liveStreamsTemplateData {
+func (f *ResponseFormatter) liveStreamsTemplateData(ctx context.Context, streams []*domain.Stream) liveStreamsTemplateData {
 	return liveStreamsTemplateData{
-		Emoji:   msging.DefaultEmoji,
 		Count:   len(streams),
-		Streams: f.liveStreamViews(streams),
+		Streams: f.liveStreamViews(ctx, streams),
 	}
 }
 
-func (f *ResponseFormatter) liveStreamViews(streams []*domain.Stream) []liveStreamView {
+func (f *ResponseFormatter) liveStreamViews(ctx context.Context, streams []*domain.Stream) []liveStreamView {
 	if len(streams) == 0 {
 		return nil
 	}
 
 	views := make([]liveStreamView, len(streams))
 	for i, stream := range streams {
-		views[i] = f.liveStreamView(stream)
+		views[i] = f.liveStreamView(ctx, stream)
 	}
 	return views
 }
 
-func (f *ResponseFormatter) liveStreamView(stream *domain.Stream) liveStreamView {
+func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.Stream) liveStreamView {
 	viewerCount := 0
 	if stream.ViewerCount != nil {
 		viewerCount = *stream.ViewerCount
 	}
 
 	return liveStreamView{
-		ChannelName: f.formatChannelName(stream),
+		ChannelName: f.formatChannelName(ctx, stream),
 		Title:       f.truncateTitle(stream.Title),
 		URL:         stream.GetYouTubeURL(),
 		ViewerCount: viewerCount,
@@ -118,14 +114,14 @@ func (f *ResponseFormatter) liveStreamView(stream *domain.Stream) liveStreamView
 }
 
 func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*domain.Stream, hours int) string {
-	data := upcomingStreamsTemplateData{Emoji: msging.DefaultEmoji, Count: len(streams), Hours: hours}
+	data := upcomingStreamsTemplateData{Count: len(streams), Hours: hours}
 	if len(streams) > 0 {
 		data.Streams = make([]upcomingStreamView, len(streams))
 		for i, stream := range streams {
 			data.Streams[i] = upcomingStreamView{
-				ChannelName: f.formatChannelName(stream),
+				ChannelName: f.formatChannelName(ctx, stream),
 				Title:       f.truncateTitle(stream.Title),
-				TimeInfo:    f.streamTimeInfo(stream),
+				TimeInfo:    f.streamTimeInfo(ctx, stream),
 				URL:         stream.GetYouTubeURL(),
 			}
 		}
@@ -133,29 +129,28 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdUpcomingStreams, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayUpcomingFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
 }
 
 func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) string {
-	data := f.channelScheduleTemplateData(channel, streams, days)
+	data := f.channelScheduleTemplateData(ctx, channel, streams, days)
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdChannelSchedule, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayScheduleFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
 }
 
-func (f *ResponseFormatter) channelScheduleTemplateData(channel *domain.Channel, streams []*domain.Stream, days int) channelScheduleTemplateData {
+func (f *ResponseFormatter) channelScheduleTemplateData(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) channelScheduleTemplateData {
 	return channelScheduleTemplateData{
-		Emoji:       msging.DefaultEmoji,
 		ChannelName: channelScheduleName(channel),
 		Days:        days,
 		Count:       len(streams),
-		Streams:     f.scheduleEntryViews(streams),
+		Streams:     f.scheduleEntryViews(ctx, streams),
 	}
 }
 
@@ -166,19 +161,19 @@ func channelScheduleName(channel *domain.Channel) string {
 	return channel.GetDisplayName()
 }
 
-func (f *ResponseFormatter) scheduleEntryViews(streams []*domain.Stream) []scheduleEntryView {
+func (f *ResponseFormatter) scheduleEntryViews(ctx context.Context, streams []*domain.Stream) []scheduleEntryView {
 	if len(streams) == 0 {
 		return nil
 	}
 
 	entries := make([]scheduleEntryView, len(streams))
 	for i, stream := range streams {
-		entries[i] = f.scheduleEntryView(stream)
+		entries[i] = f.scheduleEntryView(ctx, stream)
 	}
 	return entries
 }
 
-func (f *ResponseFormatter) scheduleEntryView(stream *domain.Stream) scheduleEntryView {
+func (f *ResponseFormatter) scheduleEntryView(ctx context.Context, stream *domain.Stream) scheduleEntryView {
 	entry := scheduleEntryView{
 		Title: f.truncateTitle(stream.Title),
 		URL:   stream.GetYouTubeURL(),
@@ -188,7 +183,7 @@ func (f *ResponseFormatter) scheduleEntryView(stream *domain.Stream) scheduleEnt
 		return entry
 	}
 
-	entry.TimeInfo = f.streamTimeInfo(stream)
+	entry.TimeInfo = f.streamTimeInfo(ctx, stream)
 	return entry
 }
 
@@ -196,9 +191,9 @@ func (f *ResponseFormatter) truncateTitle(title string) string {
 	return stringutil.TruncateString(title, constants.StringLimits.StreamTitle)
 }
 
-func (f *ResponseFormatter) streamTimeInfo(stream *domain.Stream) string {
+func (f *ResponseFormatter) streamTimeInfo(ctx context.Context, stream *domain.Stream) string {
 	if stream == nil || stream.StartScheduled == nil {
-		return msging.MsgTimeUnknown
+		return f.messageStrings.GetContext(ctx, messagestrings.NamespaceMisc, "time_unknown")
 	}
 
 	kstTime := util.FormatKST(*stream.StartScheduled, "01/02 15:04")
@@ -222,13 +217,13 @@ func (f *ResponseFormatter) streamTimeInfo(stream *domain.Stream) string {
 	}
 }
 
-func (f *ResponseFormatter) formatChannelName(stream *domain.Stream) string {
+func (f *ResponseFormatter) formatChannelName(ctx context.Context, stream *domain.Stream) string {
 	if stream == nil {
 		return ""
 	}
 
 	name := stream.ChannelName
-	displayOrg := streamDisplayOrg(stream)
+	displayOrg := f.streamDisplayOrg(ctx, stream)
 	if displayOrg == "" {
 		return name
 	}
@@ -236,42 +231,47 @@ func (f *ResponseFormatter) formatChannelName(stream *domain.Stream) string {
 	return fmt.Sprintf("[%s] %s", displayOrg, name)
 }
 
-func streamDisplayOrg(stream *domain.Stream) string {
+func (f *ResponseFormatter) streamDisplayOrg(ctx context.Context, stream *domain.Stream) string {
 	if stream.Channel == nil || stream.Channel.Org == nil {
 		return ""
 	}
-	return formatStreamOrg(*stream.Channel.Org)
+	return f.formatStreamOrg(ctx, *stream.Channel.Org)
 }
 
-func formatStreamOrg(org string) string {
+func (f *ResponseFormatter) formatStreamOrg(ctx context.Context, org string) string {
 	if org == "" {
 		return ""
 	}
 
-	labels := map[string]string{
-		"Hololive":     "Holo",
-		"Nijisanji":    "니지산지",
-		"Independents": "개인세",
-		"Stellive":     "스텔라이브",
-	}
-	if label, ok := labels[org]; ok {
+	if label := f.messageStrings.GetContext(ctx, messagestrings.NamespaceOrg, org); label != "" {
 		return label
 	}
 	return org
 }
 
-func (f *ResponseFormatter) FormatMemberNotLive(memberName string) string {
-	return fmt.Sprintf(msging.MsgMemberNotLive, memberName)
+type memberNotLiveTemplateData struct {
+	MemberName string
 }
 
-func (f *ResponseFormatter) FormatLiveOverflowCount(extraCount int) string {
-	return fmt.Sprintf("\n\n외 %d개의 방송이 있습니다.", extraCount)
+type memberNoUpcomingTemplateData struct {
+	MemberName string
+	Hours      int
 }
 
-func (f *ResponseFormatter) FormatMemberNoUpcoming(memberName string, hours int) string {
-	return fmt.Sprintf(msging.MsgMemberNoUpcoming, memberName, hours)
+func (f *ResponseFormatter) FormatMemberNotLive(ctx context.Context, memberName string) string {
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNotLive, memberNotLiveTemplateData{MemberName: memberName})
+	if err != nil {
+		return messagestrings.FallbackSentinel
+	}
+
+	return rendered
 }
 
-func (f *ResponseFormatter) FormatUpcomingOverflowCount(extraCount int) string {
-	return fmt.Sprintf("\n\n외 %d개의 방송이 예정되어 있습니다.", extraCount)
+func (f *ResponseFormatter) FormatMemberNoUpcoming(ctx context.Context, memberName string, hours int) string {
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNoUpcoming, memberNoUpcomingTemplateData{MemberName: memberName, Hours: hours})
+	if err != nil {
+		return messagestrings.FallbackSentinel
+	}
+
+	return rendered
 }

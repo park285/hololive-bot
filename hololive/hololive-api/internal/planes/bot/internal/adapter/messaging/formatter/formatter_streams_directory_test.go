@@ -25,9 +25,9 @@ import (
 	"testing"
 	"time"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +40,7 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 		domain.TemplateKeyCmdUpcomingStreams: "예정 목록\n{{range .Streams}}{{.ChannelName}}|{{.TimeInfo}}|{{.URL}}\n{{end}}",
 		domain.TemplateKeyCmdChannelSchedule: "채널 일정\n{{range .Streams}}{{if .IsLive}}LIVE{{else}}{{.TimeInfo}}{{end}}|{{.Title}}|{{.URL}}\n{{end}}",
 	})
-	formatter := NewResponseFormatter("!", renderer)
+	formatter := NewResponseFormatter("!", renderer, WithMessageStrings(setupFormatterTestStore(t)))
 
 	orgHololive := "Hololive"
 	future := time.Now().Add(2 * time.Hour)
@@ -80,15 +80,19 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 	errorFormatter := NewResponseFormatter("!", errorRenderer)
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayLiveStreamsFailed), errorFormatter.FormatLiveStreams(t.Context(), streams))
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayUpcomingFailed), errorFormatter.UpcomingStreams(t.Context(), streams, 12))
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayScheduleFailed), errorFormatter.ChannelSchedule(t.Context(), channel, streams, 7))
+	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.FormatLiveStreams(t.Context(), streams))
+	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.UpcomingStreams(t.Context(), streams, 12))
+	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.ChannelSchedule(t.Context(), channel, streams, 7))
 }
 
 func TestStreamHelpers(t *testing.T) {
 	t.Parallel()
 
-	formatter := NewResponseFormatter("!", nil)
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdMemberNotLive:    "{{.MemberName}}은(는) 현재 방송 중이 아닙니다.",
+		domain.TemplateKeyCmdMemberNoUpcoming: "{{.MemberName}}은(는) {{.Hours}}시간 이내 예정된 방송이 없습니다.",
+	})
+	formatter := NewResponseFormatter("!", renderer, WithMessageStrings(setupFormatterTestStore(t)))
 
 	t.Run("truncate title", func(t *testing.T) {
 		t.Parallel()
@@ -100,43 +104,41 @@ func TestStreamHelpers(t *testing.T) {
 
 	t.Run("streamTimeInfo branches", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, msging.MsgTimeUnknown, formatter.streamTimeInfo(nil))
-		assert.Equal(t, msging.MsgTimeUnknown, formatter.streamTimeInfo(&domain.Stream{}))
+		assert.Equal(t, "시간 미정", formatter.streamTimeInfo(t.Context(), nil))
+		assert.Equal(t, "시간 미정", formatter.streamTimeInfo(t.Context(), &domain.Stream{}))
 
 		futureDays := time.Now().Add(50 * time.Hour)
-		assert.Contains(t, formatter.streamTimeInfo(&domain.Stream{StartScheduled: &futureDays}), "일 후")
+		assert.Contains(t, formatter.streamTimeInfo(t.Context(), &domain.Stream{StartScheduled: &futureDays}), "일 후")
 
 		futureHours := time.Now().Add(3*time.Hour + 10*time.Minute)
-		assert.Contains(t, formatter.streamTimeInfo(&domain.Stream{StartScheduled: &futureHours}), "시간")
+		assert.Contains(t, formatter.streamTimeInfo(t.Context(), &domain.Stream{StartScheduled: &futureHours}), "시간")
 
 		futureMinutes := time.Now().Add(20 * time.Minute)
-		assert.Contains(t, formatter.streamTimeInfo(&domain.Stream{StartScheduled: &futureMinutes}), "분 후")
+		assert.Contains(t, formatter.streamTimeInfo(t.Context(), &domain.Stream{StartScheduled: &futureMinutes}), "분 후")
 
 		past := time.Now().Add(-10 * time.Minute)
-		assert.NotContains(t, formatter.streamTimeInfo(&domain.Stream{StartScheduled: &past}), "후")
+		assert.NotContains(t, formatter.streamTimeInfo(t.Context(), &domain.Stream{StartScheduled: &past}), "후")
 	})
 
 	t.Run("formatChannelName", func(t *testing.T) {
 		t.Parallel()
-		assert.Empty(t, formatter.formatChannelName(nil))
+		assert.Empty(t, formatter.formatChannelName(t.Context(), nil))
 
 		org := "Nijisanji"
 		stream := &domain.Stream{ChannelName: "쿠제 혼마", Channel: &domain.Channel{Org: &org}}
-		assert.Equal(t, "[니지산지] 쿠제 혼마", formatter.formatChannelName(stream))
+		assert.Equal(t, "[니지산지] 쿠제 혼마", formatter.formatChannelName(t.Context(), stream))
 
 		unknownOrg := "NewOrg"
 
 		stream = &domain.Stream{ChannelName: "테스트", Channel: &domain.Channel{Org: &unknownOrg}}
-		assert.Equal(t, "[NewOrg] 테스트", formatter.formatChannelName(stream))
+		assert.Equal(t, "[NewOrg] 테스트", formatter.formatChannelName(t.Context(), stream))
 
 		stream = &domain.Stream{ChannelName: "채널명"}
-		assert.Equal(t, "채널명", formatter.formatChannelName(stream))
+		assert.Equal(t, "채널명", formatter.formatChannelName(t.Context(), stream))
 	})
 
-	assert.Equal(t, "미코은(는) 현재 방송 중이 아닙니다.", formatter.FormatMemberNotLive("미코"))
-	assert.Equal(t, "\n\n외 3개의 방송이 있습니다.", formatter.FormatLiveOverflowCount(3))
-	assert.Equal(t, "미코은(는) 12시간 이내 예정된 방송이 없습니다.", formatter.FormatMemberNoUpcoming("미코", 12))
-	assert.Equal(t, "\n\n외 4개의 방송이 예정되어 있습니다.", formatter.FormatUpcomingOverflowCount(4))
+	assert.Equal(t, "미코은(는) 현재 방송 중이 아닙니다.", formatter.FormatMemberNotLive(t.Context(), "미코"))
+	assert.Equal(t, "미코은(는) 12시간 이내 예정된 방송이 없습니다.", formatter.FormatMemberNoUpcoming(t.Context(), "미코", 12))
 }
 
 func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
@@ -186,13 +188,13 @@ func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 	errorFormatter := NewResponseFormatter("!", errorRenderer)
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayMemberListFailed), errorFormatter.MemberDirectory(t.Context(), groups, 1))
+	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.MemberDirectory(t.Context(), groups, 1))
 }
 
 func TestFormatChannelName_IndependentsOrg(t *testing.T) {
 	t.Parallel()
 
-	f := &ResponseFormatter{}
+	f := &ResponseFormatter{messageStrings: setupFormatterTestStore(t)}
 
 	tests := []struct {
 		name   string
@@ -229,7 +231,7 @@ func TestFormatChannelName_IndependentsOrg(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, f.formatChannelName(tt.stream))
+			assert.Equal(t, tt.want, f.formatChannelName(t.Context(), tt.stream))
 		})
 	}
 }

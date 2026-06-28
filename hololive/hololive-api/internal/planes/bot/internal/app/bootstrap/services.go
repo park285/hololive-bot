@@ -7,6 +7,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/iris"
 
@@ -38,8 +39,12 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 	}()
 
 	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
+	messageStrings := messagestrings.NewStore(infra.Postgres.GetPool(), logger)
+	if err := messageStrings.Load(ctx); err != nil {
+		logger.WarnContext(ctx, "message_strings 초기 적재 실패, lazy 재시도로 진행", "error", err)
+	}
 	messageAdapter := adapter.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
-	formatter := adapter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer)
+	formatter := adapter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, adapter.WithMessageStrings(messageStrings))
 
 	foundation, err := InitScraperHolodexProfileFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
@@ -57,7 +62,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 	}
 
 	deps := provideBotDependenciesFromStacks(
-		appConfig, infra, foundation, alarmYouTubeStack, integrationServices, messageAdapter, formatter, irisClient, logger,
+		appConfig, infra, foundation, alarmYouTubeStack, integrationServices, messageAdapter, formatter, messageStrings, irisClient, logger,
 	)
 
 	return &BotInfrastructure{
@@ -78,6 +83,7 @@ func provideBotDependenciesFromStacks(
 	integrationServices *CoreIntegrationServices,
 	messageAdapter *adapter.MessageAdapter,
 	formatter *adapter.ResponseFormatter,
+	messageStrings *messagestrings.Store,
 	irisClient iris.BotClient,
 	logger *slog.Logger,
 ) *bot.Dependencies {
@@ -88,6 +94,7 @@ func provideBotDependenciesFromStacks(
 		foundation.HolodexService,
 		messageAdapter,
 		formatter,
+		messageStrings,
 		irisClient,
 		foundation.ProfileService,
 		alarmYouTubeStack.Matcher,

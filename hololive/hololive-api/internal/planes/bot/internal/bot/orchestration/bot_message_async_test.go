@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -92,7 +93,7 @@ func TestExecuteCommandAsync_RejectsImmediatelyOnWorkerPoolBackpressure(t *testi
 	assert.Zero(t, executed.Load(), "expected rejected task not to run")
 	select {
 	case msg := <-msgCh:
-		assert.Contains(t, msg.message, asyncCommandBackpressureMessage)
+		assert.Equal(t, messagestrings.FallbackSentinel, msg.message)
 	case <-time.After(time.Second):
 		t.Fatal("expected backpressure message")
 	}

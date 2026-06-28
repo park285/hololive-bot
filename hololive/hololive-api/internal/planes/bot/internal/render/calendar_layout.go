@@ -9,6 +9,8 @@ import (
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
+
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 const (
@@ -35,6 +37,7 @@ type calendarMetrics struct {
 	avatarSize, avatarGap                                  int
 	badgePadX, badgePadY, badgeH, badgeRadius              int
 	fonts                                                  calendarFonts
+	strings                                                *messagestrings.Store
 }
 
 func newCalendarMetrics(compact float64) calendarMetrics {

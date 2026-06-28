@@ -26,14 +26,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
 var outboxCleanupLoopInterval = 1 * time.Hour
@@ -67,6 +70,15 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 	querier := deliverysql.AsQuerier(db)
 	deliveryDB := store.AsDeliveryDB(db)
 
+	pool, hasPool := db.(*pgxpool.Pool)
+	if renderer == nil && hasPool && pool != nil {
+		renderer = template.NewRenderer(pool, logger)
+	}
+	var messageStrings *messagestrings.Store
+	if hasPool && pool != nil {
+		messageStrings = messagestrings.NewStore(pool, logger)
+	}
+
 	var telemetryRepository *DeliveryTelemetryRepository
 	if querier != nil {
 		telemetryRepository = NewDeliveryTelemetryRepository(querier)
@@ -77,7 +89,7 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &normalizedConfig, tp)
 	grouper := newOutboxGrouper(querier, cacheClient, logger, &normalizedConfig)
 	status := newStatusUpdater(querier, logger, &normalizedConfig)
-	formatter := newMessageFormatter(renderer, cacheClient, logger)
+	formatter := newMessageFormatter(renderer, cacheClient, logger, messageStrings)
 
 	claimManager := newClaimManager(deliveryDB, logger, &normalizedConfig, deliveryRepo, nil, status, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al, claimManager)

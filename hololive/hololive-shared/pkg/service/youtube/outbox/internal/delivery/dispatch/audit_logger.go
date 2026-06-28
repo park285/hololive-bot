@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -12,6 +13,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
+)
+
+const (
+	sendResultSuccess = "success"
+	sendResultFailure = "failure"
 )
 
 type AuditLogger struct {
@@ -238,7 +244,7 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResults(ctx context.Cont
 
 	results, err := al.delivery.LoadTerminalCommunityShortsOutboxResults(ctx, outboxIDs)
 	if err != nil {
-		return err
+		return fmt.Errorf("load terminal community shorts outbox results: %w", err)
 	}
 	if len(results) == 0 {
 		return nil
@@ -269,7 +275,7 @@ func (al *AuditLogger) loadFinalizedCommunityShortsTimelines(
 
 	timelines, err := al.telemetry.ListPostDeliveryTimelinesByOutboxIDs(ctx, outboxIDs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list post delivery timelines by outbox ids: %w", err)
 	}
 	for i := range timelines {
 		if timelines[i].OutboxID == 0 {
@@ -298,10 +304,10 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
 	finalizedAt time.Time,
 	timing alarmtiming.Snapshot,
 ) {
-	sendResult := "failure"
+	sendResult := sendResultFailure
 	eventAt := finalizedAt
 	if result.Status == domain.OutboxStatusSent {
-		sendResult = "success"
+		sendResult = sendResultSuccess
 		if result.SentAt != nil && !result.SentAt.IsZero() {
 			eventAt = result.SentAt.UTC()
 		}

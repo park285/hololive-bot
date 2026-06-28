@@ -440,10 +440,11 @@ func TestEntryDisplayName(t *testing.T) {
 		{"english name fallback", &domain.Member{Name: "Pekora"}, "Pekora"},
 	}
 
+	m := newCalendarMetrics(1)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := entryDisplayName(tt.member); got != tt.want {
+			if got := entryDisplayName(&m, tt.member); got != tt.want {
 				t.Errorf("entryDisplayName() = %q, want %q", got, tt.want)
 			}
 		})

@@ -134,7 +134,7 @@ func TestNormalizeUpcomingDisplayLimit(t *testing.T) {
 		want         int
 	}{
 		{name: "show all always zero", displayLimit: 5, showAll: true, want: 0},
-		{name: "less than one", displayLimit: 0, showAll: false, want: 10},
+		{name: "less than one means unlimited", displayLimit: 0, showAll: false, want: 0},
 		{name: "over maximum", displayLimit: 150, showAll: false, want: 100},
 		{name: "normal", displayLimit: 20, showAll: false, want: 20},
 	}
@@ -160,7 +160,7 @@ func TestParseUpcomingOptions(t *testing.T) {
 			name:             "defaults",
 			params:           map[string]any{},
 			wantHours:        24,
-			wantDisplayLimit: 10,
+			wantDisplayLimit: 0,
 		},
 		{
 			name:             "caps hours and limit",
@@ -178,7 +178,7 @@ func TestParseUpcomingOptions(t *testing.T) {
 			name:             "normalizes low limit",
 			params:           map[string]any{"hours": 36, "limit": -1},
 			wantHours:        36,
-			wantDisplayLimit: 10,
+			wantDisplayLimit: 0,
 		},
 	}
 

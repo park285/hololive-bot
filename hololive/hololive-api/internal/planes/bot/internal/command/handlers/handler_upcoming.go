@@ -69,7 +69,7 @@ type upcomingOptions struct {
 func parseUpcomingOptions(params map[string]any) upcomingOptions {
 	hours := normalizeUpcomingHours(parseUpcomingIntParam(params, "hours", 24))
 	showAll := boolParam(params, "all")
-	displayLimit := normalizeUpcomingDisplayLimit(parseUpcomingIntParam(params, "limit", 10), showAll)
+	displayLimit := normalizeUpcomingDisplayLimit(parseUpcomingIntParam(params, "limit", 0), showAll)
 
 	return upcomingOptions{
 		hours:        hours,
@@ -111,7 +111,7 @@ func normalizeUpcomingDisplayLimit(displayLimit int, showAll bool) int {
 	}
 
 	if displayLimit < 1 {
-		return 10
+		return 0
 	}
 
 	if displayLimit > 100 {
@@ -122,7 +122,7 @@ func normalizeUpcomingDisplayLimit(displayLimit int, showAll bool) int {
 }
 
 func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, memberName string, hours int) error {
-	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), roomID, memberName)
+	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), roomID, memberName, "예정")
 	if memberLookupHandled(err) {
 		return nil
 	}
@@ -143,7 +143,7 @@ func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, mem
 
 	memberStreams := filterUpcomingStreamsByChannel(streams, channel.ID)
 	if len(memberStreams) == 0 {
-		return c.Deps().SendMessage(ctx, roomID, c.Deps().Formatter.FormatMemberNoUpcoming(channel.Name, hours))
+		return c.Deps().SendMessage(ctx, roomID, c.Deps().Formatter.FormatMemberNoUpcoming(ctx, channel.Name, hours))
 	}
 
 	message := c.Deps().Formatter.UpcomingStreams(ctx, memberStreams, hours)
@@ -173,15 +173,11 @@ func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string,
 		streams = []*domain.Stream{}
 	}
 
-	total := len(streams)
-	if options.displayLimit > 0 && total > options.displayLimit {
+	if options.displayLimit > 0 && len(streams) > options.displayLimit {
 		streams = streams[:options.displayLimit]
 	}
 
 	message := c.Deps().Formatter.UpcomingStreams(ctx, streams, options.hours)
-	if options.displayLimit > 0 && total > options.displayLimit {
-		message += c.Deps().Formatter.FormatUpcomingOverflowCount(total - options.displayLimit)
-	}
 
 	return c.Deps().SendMessage(ctx, roomID, message)
 }

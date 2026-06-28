@@ -29,7 +29,7 @@ import (
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 )
 
-const asyncCommandBackpressureMessage = "요청이 많아 잠시 후 다시 시도해주세요."
+const asyncCommandBackpressureMessage = "async_command_backpressure"
 
 func (b *Bot) executeCommand(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
 	return b.ensureCommandExecutor().Execute(ctx, cmdCtx, cmdType, params)
@@ -96,7 +96,7 @@ func (b *Bot) recoverAsyncCommandPanic(ctx context.Context, commandType string) 
 }
 
 func (b *Bot) handleAsyncCommandError(ctx context.Context, err error, commandType, chatID string) {
-	errorMsg := b.getErrorMessage(err, commandType)
+	errorMsg := b.getErrorMessage(err)
 	if chatID == "" {
 		return
 	}

@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,8 +43,9 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 		domain.TemplateKeyCmdAlarmLiveStarted:  "LIVE {{.ChannelName}} {{.ScheduledTimeKST}} {{.URL}}",
 		domain.TemplateKeyCmdMilestoneAchieved: "MILESTONE {{.MemberName}} {{.Milestone}}",
 		domain.TemplateKeyCmdMilestoneApproach: "APPROACH {{.MemberName}} {{.Milestone}} {{.Remaining}}",
+		domain.TemplateKeyCmdAmbiguousMember:   "동일한 이름의 멤버가 여러 명 있습니다:\n\n{{range .Candidates}}{{.Index}}. {{.Name}}\n{{end}}\n정확한 멤버를 지정하려면 다음과 같이 입력해주세요:\n{{.Prefix}}{{.CommandExample}} {{.FirstName}}",
 	})
-	formatter := NewResponseFormatter("!", renderer)
+	formatter := NewResponseFormatter("!", renderer, WithMessageStrings(setupFormatterTestStore(t)))
 
 	now := time.Now().Add(2 * time.Hour)
 	nextUpcoming := &domain.NextStreamInfo{
@@ -71,7 +72,6 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 	assert.Equal(t, "알람 목록", emptyList)
 
 	assert.Equal(t, "CLEAR 3", formatter.FormatAlarmCleared(t.Context(), 3))
-	assert.Equal(t, msging.ErrInvalidAlarmUsage, formatter.InvalidAlarmUsage())
 
 	notify := formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{
 		Channel: &domain.Channel{Name: "미코"},
@@ -105,21 +105,26 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 	approachMsg, err := formatter.FormatMilestoneApproaching(t.Context(), "미코", "100만", "5천")
 	require.NoError(t, err)
 	assert.Equal(t, "APPROACH 미코 100만 5천", approachMsg)
+
+	ambiguous := formatter.FormatAmbiguousMembers(t.Context(), []*domain.Member{{Name: "미코", Org: "Hololive"}, {Name: "미코", Org: "Nijisanji"}}, "라이브")
+	assert.Contains(t, ambiguous, "동일한 이름의 멤버가 여러 명")
+	assert.Contains(t, ambiguous, "1. 미코 (Hololive)")
+	assert.Contains(t, ambiguous, "2. 미코 (Nijisanji)")
+	assert.Contains(t, ambiguous, "!라이브 미코 (Hololive)")
 }
 
 func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 	t.Parallel()
 
-	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmAddFailed), formatter.FormatAlarmAdded(t.Context(), "미코", true, nil))
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmRemoveFailed), formatter.FormatAlarmRemoved(t.Context(), "미코", true))
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmListFailed), formatter.FormatAlarmList(t.Context(), []AlarmListEntry{{MemberName: "미코"}}))
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmClearFailed), formatter.FormatAlarmCleared(t.Context(), 1))
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayAlarmNotifyFailed), formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 1, Stream: &domain.Stream{ID: "yt", Title: "t", ChannelName: "c"}}))
+	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}), WithMessageStrings(setupFormatterTestStore(t)))
+	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAlarmAdded(t.Context(), "미코", true, nil))
+	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAlarmRemoved(t.Context(), "미코", true))
+	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAlarmList(t.Context(), []AlarmListEntry{{MemberName: "미코"}}))
+	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAlarmCleared(t.Context(), 1))
+	assert.Equal(t, messagestrings.FallbackSentinel, formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 1, Stream: &domain.Stream{ID: "yt", Title: "t", ChannelName: "c"}}))
 
 	fallbackLive := formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 0, Channel: &domain.Channel{Name: "미코"}, Stream: &domain.Stream{ID: "yt", Title: "제목", ChannelName: "미코"}})
-	assert.Contains(t, fallbackLive, "방송 시작됨")
-	assert.Contains(t, fallbackLive, "https://youtube.com/watch?v=yt")
+	assert.Equal(t, messagestrings.FallbackSentinel, fallbackLive)
 
 	assert.Nil(t, summarizeNextStreamInfo(nil))
 	assert.Nil(t, summarizeNextStreamInfo(&domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming}))
@@ -145,12 +150,9 @@ func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 	assert.Equal(t, "2시간 0분 후", formatUpcomingTimeDetail(2*time.Hour))
 	assert.Equal(t, "1일 후", formatUpcomingTimeDetail(26*time.Hour))
 
-	assert.Equal(t, "전체", formatAlarmTypesLabel(nil))
-	assert.Equal(t, "전체", formatAlarmTypesLabel(domain.AlarmTypes(domain.AllAlarmTypes)))
-	assert.Equal(t, "방송+쇼츠", formatAlarmTypesLabel(domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts}))
+	assert.Equal(t, "전체", formatter.formatAlarmTypesLabel(t.Context(), nil))
+	assert.Equal(t, "전체", formatter.formatAlarmTypesLabel(t.Context(), domain.AlarmTypes(domain.AllAlarmTypes)))
+	assert.Equal(t, "방송+쇼츠", formatter.formatAlarmTypesLabel(t.Context(), domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts}))
 
-	ambiguous := formatter.FormatAmbiguousMembers([]*domain.Member{{Name: "미코", Org: "Hololive"}, {Name: "미코", Org: "Nijisanji"}})
-	assert.Contains(t, ambiguous, "동일한 이름의 멤버가 여러 명")
-	assert.Contains(t, ambiguous, "미코 (Hololive)")
-	assert.Contains(t, ambiguous, "!알람 추가")
+	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAmbiguousMembers(t.Context(), []*domain.Member{{Name: "미코", Org: "Hololive"}, {Name: "미코", Org: "Nijisanji"}}, "알람 추가"))
 }

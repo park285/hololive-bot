@@ -62,7 +62,7 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrSubscriberNeedMemberName)
 	}
 
-	matchedChannel, err := FindMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberQuery)
+	matchedChannel, err := FindMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberQuery, "구독자")
 	if memberLookupHandled(err) {
 		return nil
 	}
@@ -86,7 +86,7 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	}
 
 	memberName := c.subscriberMemberName(ctx, channel)
-	message := c.Deps().Formatter.FormatSubscriberCount(memberName, uint64(*channel.SubscriberCount))
+	message := c.Deps().Formatter.FormatSubscriberCount(ctx, memberName, uint64(*channel.SubscriberCount))
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }

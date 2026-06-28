@@ -28,23 +28,25 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
 )
 
 type CommandRouter struct {
-	registry    *command.Registry
-	logger      *slog.Logger
-	sendMessage func(ctx context.Context, room, message string) error
+	registry       *command.Registry
+	logger         *slog.Logger
+	sendMessage    func(ctx context.Context, room, message string) error
+	messageStrings *messagestrings.Store
 }
 
-func NewCommandRouter(registry *command.Registry, logger *slog.Logger, sendMessage func(ctx context.Context, room, message string) error) *CommandRouter {
+func NewCommandRouter(registry *command.Registry, logger *slog.Logger, sendMessage func(ctx context.Context, room, message string) error, messageStrings *messagestrings.Store) *CommandRouter {
 	return &CommandRouter{
-		registry:    registry,
-		logger:      logger,
-		sendMessage: sendMessage,
+		registry:       registry,
+		logger:         logger,
+		sendMessage:    sendMessage,
+		messageStrings: messageStrings,
 	}
 }
 
@@ -67,7 +69,8 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 			warnAttrs = append(warnAttrs, sharedlog.SinceMS(started))
 			sharedlog.Warn(ctx, r.logger, EventBotCommandUnknown, "unknown command", warnAttrs...)
 
-			if sendErr := r.sendMessage(ctx, cmdCtx.Room, adapter.ErrUnknownCommand); sendErr != nil {
+			unknownMessage := r.messageStrings.GetOrContext(ctx, messagestrings.NamespaceError, "unknown_command", messagestrings.FallbackSentinel)
+			if sendErr := r.sendMessage(ctx, cmdCtx.Room, unknownMessage); sendErr != nil {
 				return fmt.Errorf("failed to send unknown command message: %w", sendErr)
 			}
 

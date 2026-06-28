@@ -6,14 +6,16 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type youtubeOutboxKaringSender struct {
-	sender *egress.IrisMessageSender
+	sender         *egress.IrisMessageSender
+	messageStrings *messagestrings.Store
 }
 
-func newYouTubeOutboxKaringSender(sender *egress.IrisMessageSender) youtubeOutboxKaringSender {
-	return youtubeOutboxKaringSender{sender: sender}
+func newYouTubeOutboxKaringSender(sender *egress.IrisMessageSender, messageStrings *messagestrings.Store) youtubeOutboxKaringSender {
+	return youtubeOutboxKaringSender{sender: sender, messageStrings: messageStrings}
 }
 
 func (s youtubeOutboxKaringSender) requireSender() error {
@@ -53,7 +55,7 @@ func (s youtubeOutboxKaringSender) SendYouTubeOutboxKaring(ctx context.Context, 
 		YouTubeOutbox: payload,
 		Version:       1,
 	}
-	requests, err := buildAlarmDispatchKaringContentListRequests(alarmDispatchGroup{
+	requests, err := buildAlarmDispatchKaringContentListRequests(ctx, s.messageStrings, alarmDispatchGroup{
 		roomID:    roomID,
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
 	})

@@ -78,6 +78,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 		nil,
 		messageAdapter,
 		formatter,
+		nil,
 		irisClient,
 		nil,
 		nil,

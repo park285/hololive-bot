@@ -27,7 +27,27 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/stretchr/testify/assert"
 )
+
+const cmdAlarmNotificationGroupBody = `🔔 방송 알림 ({{.Count}}개)
+
+{{if le .MinutesUntil 0}}⏰ 여러 방송이 시작되었습니다.{{else if eq (len .ScheduledTimes) 0}}⏰ 여러 방송이 곧 시작됩니다.{{else if eq (len .ScheduledTimes) 1}}⏰ {{index .ScheduledTimes 0}} 방송예정{{else}}⏰ 방송예정: {{join .ScheduledTimes ", "}}{{end}}
+
+{{range $i, $e := .Entries}}{{if $i}}
+{{end}}{{$e.Index}}. {{$e.ChannelName | default "알 수 없는 채널"}}{{if $e.ScheduledKST}}{{if gt $.MinutesUntil 0}} ({{$e.ScheduledKST}} 방송예정){{else}} ({{$e.ScheduledKST}} 방송 시작){{end}}{{else}}{{if gt $.MinutesUntil 0}} (방송예정){{end}}{{end}}
+{{if $e.Title}}   {{$e.Title}}
+{{end}}{{if $e.URL}}   {{$e.URL}}
+{{end}}{{end}}`
+
+func newAlarmGroupTestFormatter(t *testing.T) *ResponseFormatter {
+	t.Helper()
+
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdAlarmNotificationGroup: cmdAlarmNotificationGroupBody,
+	})
+	return NewResponseFormatter("!", renderer)
+}
 
 func TestAlarmChannelName_WithStelliveOrg(t *testing.T) {
 	tests := []struct {
@@ -259,7 +279,7 @@ func TestAlarmNotification_LiveFallback(t *testing.T) {
 func TestAlarmNotificationGroup_WithScheduledTime(t *testing.T) {
 	t.Parallel()
 
-	formatter := &ResponseFormatter{}
+	formatter := newAlarmGroupTestFormatter(t)
 	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
 	notifications := []*domain.AlarmNotification{
 		{
@@ -283,24 +303,15 @@ func TestAlarmNotificationGroup_WithScheduledTime(t *testing.T) {
 		},
 	}
 
-	got := formatter.AlarmNotificationGroup(5, notifications)
-	if !strings.Contains(got, "⏰ 21:00 방송예정") {
-		t.Fatalf("expected absolute scheduled time in group header, got:\n%s", got)
-	}
-
-	if !strings.Contains(got, "1. 채널A (21:00 방송예정)") {
-		t.Fatalf("expected absolute scheduled upcoming label for first entry, got:\n%s", got)
-	}
-
-	if !strings.Contains(got, "2. 채널B (방송예정)") {
-		t.Fatalf("expected upcoming fallback label for second entry, got:\n%s", got)
-	}
+	assert.Equal(t,
+		"🔔 방송 알림 (2개)\n\n⏰ 21:00 방송예정\n\n1. 채널A (21:00 방송예정)\n   방송 A\n   https://youtube.com/watch?v=stream-a\n\n2. 채널B (방송예정)\n   방송 B\n   https://youtube.com/watch?v=stream-b",
+		formatter.AlarmNotificationGroup(t.Context(), 5, notifications))
 }
 
 func TestAlarmNotificationGroup_LiveStartedLabel(t *testing.T) {
 	t.Parallel()
 
-	formatter := &ResponseFormatter{}
+	formatter := newAlarmGroupTestFormatter(t)
 	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
 	notifications := []*domain.AlarmNotification{
 		{
@@ -315,20 +326,15 @@ func TestAlarmNotificationGroup_LiveStartedLabel(t *testing.T) {
 		},
 	}
 
-	got := formatter.AlarmNotificationGroup(0, notifications)
-	if !strings.Contains(got, "⏰ 여러 방송이 시작되었습니다.") {
-		t.Fatalf("expected live started summary in group header, got:\n%s", got)
-	}
-
-	if !strings.Contains(got, "1. 채널A (21:00 방송 시작)") {
-		t.Fatalf("expected live started label in group entry, got:\n%s", got)
-	}
+	assert.Equal(t,
+		"🔔 방송 알림 (1개)\n\n⏰ 여러 방송이 시작되었습니다.\n\n1. 채널A (21:00 방송 시작)\n   방송 A\n   https://youtube.com/watch?v=stream-a",
+		formatter.AlarmNotificationGroup(t.Context(), 0, notifications))
 }
 
 func TestAlarmNotificationGroup_HeaderWithMultipleScheduledTimes(t *testing.T) {
 	t.Parallel()
 
-	formatter := &ResponseFormatter{}
+	formatter := newAlarmGroupTestFormatter(t)
 	scheduledA := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
 	scheduledB := time.Date(2026, time.February, 12, 12, 30, 0, 0, time.UTC)
 	notifications := []*domain.AlarmNotification{
@@ -354,8 +360,7 @@ func TestAlarmNotificationGroup_HeaderWithMultipleScheduledTimes(t *testing.T) {
 		},
 	}
 
-	got := formatter.AlarmNotificationGroup(5, notifications)
-	if !strings.Contains(got, "⏰ 방송예정: 21:00, 21:30") {
-		t.Fatalf("expected multi-time summary in group header, got:\n%s", got)
-	}
+	assert.Equal(t,
+		"🔔 방송 알림 (2개)\n\n⏰ 방송예정: 21:00, 21:30\n\n1. 채널A (21:00 방송예정)\n   방송 A\n   https://youtube.com/watch?v=stream-a\n\n2. 채널B (21:30 방송예정)\n   방송 B\n   https://youtube.com/watch?v=stream-b",
+		formatter.AlarmNotificationGroup(t.Context(), 5, notifications))
 }

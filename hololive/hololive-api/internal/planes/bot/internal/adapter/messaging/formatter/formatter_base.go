@@ -25,18 +25,29 @@ import (
 	"fmt"
 	"strings"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 type ResponseFormatter struct {
-	prefix   string
-	renderer *template.Renderer
+	prefix         string
+	renderer       *template.Renderer
+	messageStrings *messagestrings.Store
+}
+
+type Option func(*ResponseFormatter)
+
+func WithMessageStrings(store *messagestrings.Store) Option {
+	return func(f *ResponseFormatter) { f.messageStrings = store }
 }
 
 func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, data any) (string, error) {
+	if f == nil || f.renderer == nil {
+		return "", fmt.Errorf("render template %s: renderer not configured", key)
+	}
+
 	rendered, err := f.renderer.Render(ctx, key, "", data)
 	if err != nil {
 		return "", fmt.Errorf("render template %s: %w", key, err)
@@ -45,12 +56,16 @@ func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, 
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
-func NewResponseFormatter(prefix string, renderer *template.Renderer) *ResponseFormatter {
+func NewResponseFormatter(prefix string, renderer *template.Renderer, opts ...Option) *ResponseFormatter {
 	if stringutil.TrimSpace(prefix) == "" {
 		prefix = "!"
 	}
 
-	return &ResponseFormatter{prefix: prefix, renderer: renderer}
+	f := &ResponseFormatter{prefix: prefix, renderer: renderer}
+	for _, opt := range opts {
+		opt(f)
+	}
+	return f
 }
 
 func (f *ResponseFormatter) Prefix() string {
@@ -65,10 +80,23 @@ func (f *ResponseFormatter) Prefix() string {
 	return "!"
 }
 
-func (f *ResponseFormatter) FormatError(message string) string {
-	return msging.ErrorMessage(message)
+func (f *ResponseFormatter) ResolveError(key string) string {
+	return f.messageStrings.GetOr(messagestrings.NamespaceError, key, messagestrings.FallbackSentinel)
 }
 
-func (f *ResponseFormatter) MemberNotFound(memberName string) string {
-	return f.FormatError(fmt.Sprintf("'%s' 멤버를 찾을 수 없습니다.", memberName))
+func (f *ResponseFormatter) GraduatedMemberWarning() string {
+	return f.messageStrings.Get(messagestrings.NamespaceNotify, "graduated_member_warning")
+}
+
+type memberNotFoundTemplateData struct {
+	MemberName string
+}
+
+func (f *ResponseFormatter) MemberNotFound(ctx context.Context, memberName string) string {
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNotFound, memberNotFoundTemplateData{MemberName: memberName})
+	if err != nil {
+		return messagestrings.FallbackSentinel
+	}
+
+	return rendered
 }

@@ -294,7 +294,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, streamProvider.seenCtx == reqCtx)
 	assert.True(t, sendMessageCtx == reqCtx)
-	assert.Equal(t, cmd.Deps().Formatter.FormatMemberNotLive("Aqua"), sendMessageMsg)
+	assert.Equal(t, cmd.Deps().Formatter.FormatMemberNotLive(reqCtx, "Aqua"), sendMessageMsg)
 	provider.state.assertAll(t, reqCtx)
 }
 

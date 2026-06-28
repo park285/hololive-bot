@@ -25,13 +25,21 @@ import (
 	"strings"
 	"testing"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func setupFormatterTestStore(t *testing.T) *messagestrings.Store {
+	t.Helper()
+
+	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
+	require.NoError(t, store.Load(t.Context()))
+	return store
+}
 
 func setupFormatterTestRenderer(t *testing.T, templates map[domain.TemplateKey]string) *serviceTemplate.Renderer {
 	t.Helper()
@@ -145,14 +153,19 @@ func TestFormatHelp(t *testing.T) {
 		formatter := NewResponseFormatter("!", renderer)
 
 		got := formatter.FormatHelp(t.Context())
-		assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayHelpFailed), got)
+		assert.Equal(t, messagestrings.FallbackSentinel, got)
 	})
 }
 
-func TestFormatErrorAndMemberNotFound(t *testing.T) {
+func TestMemberNotFound(t *testing.T) {
 	t.Parallel()
 
-	formatter := NewResponseFormatter("!", nil)
-	assert.Equal(t, msging.ErrorMessage("테스트 오류"), formatter.FormatError("테스트 오류"))
-	assert.Equal(t, msging.ErrorMessage("'후부키' 멤버를 찾을 수 없습니다."), formatter.MemberNotFound("후부키"))
+	nilRenderer := NewResponseFormatter("!", nil)
+	assert.Equal(t, messagestrings.FallbackSentinel, nilRenderer.MemberNotFound(t.Context(), "후부키"))
+
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdMemberNotFound: "❌ '{{.MemberName}}' 멤버를 찾을 수 없습니다.",
+	})
+	memberFormatter := NewResponseFormatter("!", renderer)
+	assert.Equal(t, "❌ '후부키' 멤버를 찾을 수 없습니다.", memberFormatter.MemberNotFound(t.Context(), "후부키"))
 }

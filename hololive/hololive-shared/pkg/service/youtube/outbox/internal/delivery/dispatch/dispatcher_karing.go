@@ -112,7 +112,7 @@ func (d *SendEngine) buildYouTubeOutboxKaringPayload(
 ) (domain.YouTubeOutboxDispatchPayload, error) {
 	memberName, err := d.formatter.getMemberName(ctx, channelID)
 	if err != nil || strings.TrimSpace(memberName) == "" {
-		memberName = "VTuber"
+		memberName = d.formatter.vtuberFallback(ctx)
 	}
 	payload := domain.YouTubeOutboxDispatchPayload{
 		OutboxIDs:  make([]int64, 0, len(outboxes)),

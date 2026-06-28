@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/stringutil"
@@ -61,6 +62,7 @@ type Bot struct {
 	irisClient            iris.BotClient
 	messageAdapter        *adapter.MessageAdapter
 	formatter             *adapter.ResponseFormatter
+	messageStrings        *messagestrings.Store
 	cache                 cache.Client
 	postgres              database.Client
 	holodex               streamRuntime
@@ -105,6 +107,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		irisClient:            messaging.client,
 		messageAdapter:        messaging.messageAdapter,
 		formatter:             messaging.formatter,
+		messageStrings:        messaging.messageStrings,
 		cache:                 data.cache,
 		postgres:              data.postgres,
 		holodex:               holodexRuntime,
@@ -120,7 +123,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		commandBuilders:       feature.commandBuilders,
 		membersData:           stream.membersData,
 		memberRepository:      newCelebrationCalendarFinder(data, &core),
-		calendarImageRenderer: render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(core.calendarImageCacheDir)),
+		calendarImageRenderer: render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(core.calendarImageCacheDir), render.WithCalendarStrings(messaging.messageStrings)),
 		workerPool:            support.workerPool,
 		stopCh:                make(chan struct{}),
 		doneCh:                make(chan struct{}),
@@ -175,7 +178,7 @@ func (b *Bot) initializeCommands() {
 		registry.Register(cmd)
 	}
 
-	b.commandExecutor = orchcmd.NewCommandRouter(registry, b.logger, b.sendMessage)
+	b.commandExecutor = orchcmd.NewCommandRouter(registry, b.logger, b.sendMessage, b.messageStrings)
 	b.logger.Info("Commands initialized", slog.Int("count", registry.Count()))
 }
 

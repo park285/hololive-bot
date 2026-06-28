@@ -22,10 +22,10 @@ package formatter
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type milestoneAchievedTemplateData struct {
@@ -58,32 +58,53 @@ func (f *ResponseFormatter) FormatMilestoneApproaching(ctx context.Context, memb
 	return f.render(ctx, domain.TemplateKeyCmdMilestoneApproach, data)
 }
 
-func formatAlarmTypesLabel(types domain.AlarmTypes) string {
+func (f *ResponseFormatter) formatAlarmTypesLabel(ctx context.Context, types domain.AlarmTypes) string {
 	if len(types) == 0 || len(types) == len(domain.AllAlarmTypes) {
-		return "전체"
+		return f.messageStrings.GetContext(ctx, messagestrings.NamespaceAlarmType, "ALL")
 	}
 
 	names := make([]string, len(types))
 	for i, t := range types {
-		names[i] = t.DisplayName()
+		names[i] = f.messageStrings.GetContext(ctx, messagestrings.NamespaceAlarmType, t.String())
 	}
 
 	return strings.Join(names, "+")
 }
 
-func (f *ResponseFormatter) FormatAmbiguousMembers(candidates []*domain.Member) string {
-	var sb strings.Builder
-	sb.WriteString("동일한 이름의 멤버가 여러 명 있습니다:\n\n")
+type ambiguousMemberCandidate struct {
+	Index int
+	Name  string
+}
 
+type ambiguousMembersTemplateData struct {
+	Prefix         string
+	CommandExample string
+	FirstName      string
+	Candidates     []ambiguousMemberCandidate
+}
+
+func (f *ResponseFormatter) FormatAmbiguousMembers(ctx context.Context, candidates []*domain.Member, commandExample string) string {
+	shaped := make([]ambiguousMemberCandidate, len(candidates))
 	for i, m := range candidates {
-		fmt.Fprintf(&sb, "%d. %s\n", i+1, m.GetDisplayName())
+		shaped[i] = ambiguousMemberCandidate{Index: i + 1, Name: m.GetDisplayName()}
 	}
 
-	sb.WriteString("\n정확한 멤버를 지정하려면 다음과 같이 입력해주세요:\n")
-
+	firstName := ""
 	if len(candidates) > 0 {
-		fmt.Fprintf(&sb, "%s알람 추가 %s", f.prefix, candidates[0].GetDisplayName())
+		firstName = candidates[0].GetDisplayName()
 	}
 
-	return sb.String()
+	data := ambiguousMembersTemplateData{
+		Prefix:         f.Prefix(),
+		CommandExample: commandExample,
+		FirstName:      firstName,
+		Candidates:     shaped,
+	}
+
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdAmbiguousMember, data)
+	if err != nil {
+		return messagestrings.FallbackSentinel
+	}
+
+	return rendered
 }

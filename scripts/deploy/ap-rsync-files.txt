@@ -717,7 +717,6 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repository_source_posts.go
 hololive/hololive-shared/pkg/service/youtube/tracking/tracking.go
 hololive/hololive-shared/pkg/templateview/major_event.go
-hololive/hololive-shared/pkg/templateview/member_news.go
 hololive/hololive-shared/pkg/testutil/cache.go
 hololive/hololive-shared/pkg/util/breaker.go
 hololive/hololive-shared/pkg/util/kakao.go

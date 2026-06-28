@@ -75,16 +75,16 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 			slog.Any("error", err),
 		)
 
-		return c.Deps().SendError(ctx, cmdCtx.Room, fmt.Sprintf(adapter.ErrMemberProfileLoadFailed, member.Name))
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberProfileLoadFailed)
 	}
 
-	message := c.Deps().Formatter.FormatTalentProfile(rawProfile, translated)
+	message := c.Deps().Formatter.FormatTalentProfile(ctx, rawProfile, translated)
 	if message == "" {
-		return c.Deps().SendError(ctx, cmdCtx.Room, fmt.Sprintf(adapter.ErrMemberProfileBuildFailed, member.Name))
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberProfileBuildFailed)
 	}
 
 	if member.IsGraduated {
-		message = adapter.MsgGraduatedMemberWarning + message
+		message = c.Deps().Formatter.GraduatedMemberWarning() + message
 	}
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
@@ -102,7 +102,7 @@ func (c *MemberInfoCommand) sendMemberNotFound(ctx context.Context, room, englis
 		target = rawQuery
 	}
 
-	return c.Deps().SendError(ctx, room, c.Deps().Formatter.MemberNotFound(target))
+	return c.Deps().SendMessage(ctx, room, c.Deps().Formatter.MemberNotFound(ctx, target))
 }
 
 func (c *MemberInfoCommand) ensureDeps() error {

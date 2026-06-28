@@ -118,7 +118,7 @@ func messageReplyIdentity(message *iris.Message) string {
 }
 
 func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandType string, err error) {
-	errorMsg := b.getErrorMessage(err, commandType)
+	errorMsg := b.getErrorMessage(err)
 	if chatID == "" {
 		return
 	}

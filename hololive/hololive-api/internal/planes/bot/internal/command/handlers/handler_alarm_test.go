@@ -238,7 +238,7 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 		t.Fatalf("execute returned error: %v", err)
 	}
 
-	expectedMessage := deps.Formatter.InvalidAlarmUsage()
+	expectedMessage := adapter.ErrInvalidAlarmUsage
 	if sentError != expectedMessage {
 		t.Fatalf("expected error message %q, got %q", expectedMessage, sentError)
 	}
@@ -338,16 +338,16 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	memberProvider := newContextAwareMemberProvider(nil)
 	alarm := &alarmAddRecorder{}
-	sendErrorCalled := false
+	sendMessageCalled := false
 	deps := &Dependencies{
 		Alarm:     alarm,
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
+			sendMessageCalled = true
 			return nil
 		},
 		SendError: func(context.Context, string, string) error {
-			sendErrorCalled = true
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
@@ -366,8 +366,8 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 		t.Fatalf("execute returned error: %v", err)
 	}
 
-	if !sendErrorCalled {
-		t.Fatal("expected no-match error message")
+	if !sendMessageCalled {
+		t.Fatal("expected no-match member message")
 	}
 	if alarm.addCtx != nil {
 		t.Fatal("expected AddAlarm not to be called after no-match member resolution")

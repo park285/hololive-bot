@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func TestFormatMajorEventWeeklySummary_EmptyEvents(t *testing.T) {
@@ -84,7 +85,7 @@ func TestFormatMajorEventMonthlySummary_RenderFailFallback(t *testing.T) {
 	formatter := newLLMSchedulerFormatter("!", nil, nil)
 	events := []domain.MajorEvent{{Title: "A"}}
 	got := formatter.FormatMajorEventMonthlySummary(context.Background(), events, "")
-	assert.Equal(t, errorMessage(errDisplayMajorEventFailed), got)
+	assert.Equal(t, messagestrings.FallbackSentinel, got)
 }
 
 func TestFormatMajorEventWeeklySummary_RenderFailFallback(t *testing.T) {
@@ -93,7 +94,7 @@ func TestFormatMajorEventWeeklySummary_RenderFailFallback(t *testing.T) {
 	formatter := newLLMSchedulerFormatter("!", nil, nil)
 	events := []domain.MajorEvent{{Title: "A"}}
 	got := formatter.FormatMajorEventWeeklySummary(context.Background(), events, "")
-	assert.Equal(t, errorMessage(errDisplayMajorEventFailed), got)
+	assert.Equal(t, messagestrings.FallbackSentinel, got)
 }
 
 func TestFormatMajorEventSummary_WeeklyMonthlyParity(t *testing.T) {
@@ -168,7 +169,7 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 
 		formatter := newLLMSchedulerFormatter("!", nil, nil)
 		got := formatter.FormatMemberNewsDigest(context.Background(), nil)
-		assert.Equal(t, errorMessage(errDisplayMemberNewsFailed), got)
+		assert.Equal(t, messagestrings.FallbackSentinel, got)
 	})
 
 	t.Run("localize categories", func(t *testing.T) {
@@ -180,6 +181,7 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 			"{{.Headline}}\n{{range .TopItems}}{{.Category}}|{{.Title}}\n{{end}}",
 		)
 		formatter := newLLMSchedulerFormatter("!", renderer, nil)
+		formatter.store = setupMemberNewsStore(t)
 
 		digest := &membernews.Digest{
 			Headline: "이번주 뉴스",
@@ -206,15 +208,18 @@ func TestLocalizeMemberNewsItemsAndCategoryLabel(t *testing.T) {
 		{Category: "unknown_code", Title: "D"},
 	}
 
-	localized := localizeMemberNewsItems(items)
+	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	formatter.store = setupMemberNewsStore(t)
+
+	localized := formatter.localizeMemberNewsItems(t.Context(), items)
 	require.Len(t, localized, 4)
 	assert.Equal(t, "생일 라이브", localized[0].Category)
 	assert.Equal(t, "솔로 라이브", localized[1].Category)
 	assert.Equal(t, "이벤트", localized[2].Category)
 	assert.Equal(t, "unknown_code", localized[3].Category)
 
-	assert.Equal(t, "콜라보", memberNewsCategoryLabel("collab"))
-	assert.Equal(t, "굿즈", memberNewsCategoryLabel("goods"))
-	assert.Equal(t, "기타", memberNewsCategoryLabel("other"))
-	assert.Equal(t, "custom", memberNewsCategoryLabel("custom"))
+	assert.Equal(t, "콜라보", formatter.memberNewsCategoryLabel(t.Context(), "collab"))
+	assert.Equal(t, "굿즈", formatter.memberNewsCategoryLabel(t.Context(), "goods"))
+	assert.Equal(t, "기타", formatter.memberNewsCategoryLabel(t.Context(), "other"))
+	assert.Equal(t, "custom", formatter.memberNewsCategoryLabel(t.Context(), "custom"))
 }

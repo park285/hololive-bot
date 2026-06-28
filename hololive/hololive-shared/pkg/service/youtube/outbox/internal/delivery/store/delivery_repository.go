@@ -190,7 +190,7 @@ func updateSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int
 		SET status = ?, sent_at = ?, locked_at = NULL, error = ''
 		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
 	`, args...); err != nil {
-		return err
+		return fmt.Errorf("update delivery rows: %w", err)
 	}
 	return nil
 }
@@ -264,7 +264,7 @@ func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int
 		    locked_at = NULL
 		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
-		return err
+		return fmt.Errorf("mark delivery rows failed batch: %w", err)
 	}
 
 	return nil
@@ -287,7 +287,7 @@ func (r *DeliveryRepository) MarkPermanentFailureBatch(ctx context.Context, ids 
 		    locked_at = NULL
 		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
 	`, args...); err != nil {
-		return err
+		return fmt.Errorf("mark delivery rows permanent failed batch: %w", err)
 	}
 
 	return nil
@@ -339,7 +339,7 @@ func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outbox
 		    error = CASE WHEN ?::text = ?::text THEN ? ELSE '' END
 		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
-		return err
+		return fmt.Errorf("update outbox aggregate statuses: apply update: %w", err)
 	}
 
 	return nil

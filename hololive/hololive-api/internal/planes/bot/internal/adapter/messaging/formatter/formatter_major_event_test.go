@@ -30,42 +30,6 @@ import (
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-func TestFormatMajorEventDates(t *testing.T) {
-	tests := []struct {
-		name     string
-		dates    []time.Time
-		contains string
-	}{
-		{
-			name:     "empty dates",
-			dates:    []time.Time{},
-			contains: "TBA",
-		},
-		{
-			name:     "single date",
-			dates:    []time.Time{time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)},
-			contains: "2026년 3월 6일",
-		},
-		{
-			name: "multiple dates (range)",
-			dates: []time.Time{
-				time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC),
-				time.Date(2026, time.March, 8, 0, 0, 0, 0, time.UTC),
-			},
-			contains: "~",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := formatMajorEventDates(tt.dates)
-			if !containsString(result, tt.contains) {
-				t.Errorf("formatMajorEventDates() = %q, should contain %q", result, tt.contains)
-			}
-		})
-	}
-}
-
 func containsString(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
@@ -74,48 +38,6 @@ func containsString(s, substr string) bool {
 	}
 
 	return false
-}
-
-func TestFormatMajorEventDatesFromDB(t *testing.T) {
-	tests := []struct {
-		name     string
-		start    *time.Time
-		end      *time.Time
-		contains string
-	}{
-		{
-			name:     "nil start date",
-			start:    nil,
-			end:      nil,
-			contains: "TBA",
-		},
-		{
-			name:     "single date (end nil)",
-			start:    new(time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)),
-			end:      nil,
-			contains: "2026년 3월 6일",
-		},
-		{
-			name:     "same start and end",
-			start:    new(time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)),
-			end:      new(time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)),
-			contains: "2026년 3월 6일",
-		},
-		{
-			name:     "date range",
-			start:    new(time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)),
-			end:      new(time.Date(2026, time.March, 8, 0, 0, 0, 0, time.UTC)),
-			contains: "~",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := formatMajorEventDatesFromDB(tt.start, tt.end)
-			if !containsString(result, tt.contains) {
-				t.Errorf("formatMajorEventDatesFromDB() = %q, should contain %q", result, tt.contains)
-			}
-		})
-	}
 }
 
 func TestFormatMajorEventMonthlySummary_NoDuplicateListWhenLLMSummaryExists(t *testing.T) {

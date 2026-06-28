@@ -196,7 +196,7 @@ func TestAlarmDispatchRunnerKaringRequestPreservesConfiguredNickname(t *testing.
 	envelope.Notification.Stream.Channel = envelope.Notification.Channel
 	envelope.Notification.Stream.ChannelName = "사쿠나"
 
-	requests, err := buildAlarmDispatchKaringContentListRequests(alarmDispatchGroup{
+	requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, alarmDispatchGroup{
 		roomID:        "room-1",
 		notifications: []domain.AlarmNotification{envelope.Notification},
 	})
@@ -268,7 +268,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxMilestoneUsesTextDispatchWhenKaringEnab
 	}
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -298,7 +298,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxCommunityNormalizesLiteralNewlines(t *t
 		}},
 	}
 
-	requests, err := buildAlarmDispatchKaringContentListRequests(alarmDispatchGroup{
+	requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, alarmDispatchGroup{
 		roomID:    "room-1",
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
 	})
@@ -442,7 +442,7 @@ func TestAlarmDispatchKaringRequestChunkTemplatesByItemCount(t *testing.T) {
 			groups := groupAlarmDispatchEnvelopes(envelopes)
 			require.Len(t, groups, 1)
 
-			requests, err := buildAlarmDispatchKaringContentListRequests(groups[0])
+			requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, groups[0])
 
 			require.NoError(t, err)
 			require.Len(t, requests, len(tc.wantTemplates))
@@ -460,7 +460,7 @@ func TestAlarmDispatchKaringRequestUsesReceiverRoomID(t *testing.T) {
 	envelope := alarmDispatchRunnerTestEnvelope("464252100463241", nil)
 	group := newAlarmDispatchGroup(&envelope)
 
-	requests, err := buildAlarmDispatchKaringContentListRequests(group)
+	requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, group)
 
 	require.NoError(t, err)
 	require.Len(t, requests, 1)
@@ -479,7 +479,7 @@ func TestAlarmDispatchKaringTemplateIDByItemCount(t *testing.T) {
 func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, postSendQuarantine: true, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), postSendQuarantine: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -511,7 +511,7 @@ func TestParseAlarmDispatchKaringEnabledFromEnv(t *testing.T) {
 func TestAlarmDispatchRunnerRunOnceSchedulesRetryOnSendFailure(t *testing.T) {
 	consumer := &alarmDispatchRunnerLegacyTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, postSendQuarantine: true, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), postSendQuarantine: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -528,7 +528,7 @@ func TestAlarmDispatchRunnerRunOnceSchedulesRetryOnSendFailure(t *testing.T) {
 func TestAlarmDispatchRunnerQuarantinesPGSendFailureAfterMarkSending(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, postSendQuarantine: true, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), postSendQuarantine: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -571,7 +571,7 @@ func TestAlarmDispatchRunnerReturnsErrorWhenPostSendQuarantineFails(t *testing.T
 		quarantineErr: quarantineErr,
 	}
 	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, postSendQuarantine: true, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), postSendQuarantine: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -587,7 +587,7 @@ func TestAlarmDispatchRunnerRetriesRenderFailureBeforeMarkSending(t *testing.T) 
 	envelope.YouTubeOutbox = nil
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -607,7 +607,7 @@ func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testin
 		markDispatchedErr: markErr,
 	}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -622,7 +622,7 @@ func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testin
 func TestAlarmDispatchRunnerUsesLegacyRetryWhenConsumerCannotQuarantine(t *testing.T) {
 	consumer := &alarmDispatchRunnerLegacyTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -637,7 +637,7 @@ func TestAlarmDispatchRunnerRunOnceMovesExhaustedRetryToDLQAndReleasesClaims(t *
 	envelope.ClaimKeys = []string{"alarm:dispatch:claim:room-1:stream-1"}
 	consumer := &alarmDispatchRunnerLegacyTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := alarmDispatchRunner{consumer: consumer, sender: sender, maxBatch: 10}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -653,7 +653,7 @@ func TestAlarmDispatchRunnerRunOnceMovesExhaustedRetryToDLQAndReleasesClaims(t *
 func TestAlarmDispatchRunnerWaitsOnIdleWaiterForEmptyPGBatch(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
 	waiter := &alarmDispatchRunnerTestIdleWaiter{returnValue: false}
-	runner := alarmDispatchRunner{consumer: consumer, sender: &alarmDispatchRunnerTestSender{}, maxBatch: 10, idleWaiter: waiter}
+	runner := alarmDispatchRunner{consumer: consumer, sender: &alarmDispatchRunnerTestSender{}, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10, idleWaiter: waiter}
 
 	keepGoing := runner.runStep(t.Context())
 
@@ -665,7 +665,7 @@ func TestAlarmDispatchRunnerWaitsOnIdleWaiterForEmptyPGBatch(t *testing.T) {
 func TestAlarmDispatchRunnerResetsIdleWaiterAfterProcessedBatch(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	waiter := &alarmDispatchRunnerTestIdleWaiter{returnValue: true}
-	runner := alarmDispatchRunner{consumer: consumer, sender: &alarmDispatchRunnerTestSender{}, maxBatch: 10, idleWaiter: waiter}
+	runner := alarmDispatchRunner{consumer: consumer, sender: &alarmDispatchRunnerTestSender{}, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10, idleWaiter: waiter}
 
 	keepGoing := runner.runStep(t.Context())
 
@@ -683,6 +683,7 @@ func TestAlarmDispatchRunnerYieldsAfterMaxBatchesPerWake(t *testing.T) {
 	runner := alarmDispatchRunner{
 		consumer:          consumer,
 		sender:            &alarmDispatchRunnerTestSender{},
+		renderer:          newAlarmDispatchTestRenderer(t),
 		maxBatch:          10,
 		maxBatchesPerWake: 2,
 		yield: func(context.Context) bool {
@@ -707,6 +708,7 @@ func TestAlarmDispatchRunnerStartProcessesBatchesUntilIdleWaitStops(t *testing.T
 	runner := &alarmDispatchRunner{
 		consumer:   consumer,
 		sender:     sender,
+		renderer:   newAlarmDispatchTestRenderer(t),
 		maxBatch:   10,
 		idleWaiter: waiter,
 	}
@@ -785,7 +787,7 @@ func TestRenderAlarmDispatchNotificationGroupMatchesLegacyValkeyRenderer(t *test
 	second.Notification.Stream.StartScheduled = &start
 	group := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{first, second})[0]
 
-	message, err := renderAlarmDispatchGroup(t.Context(), group)
+	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "⏰ 방송 1분 전 알림\n\n"+
@@ -803,8 +805,9 @@ func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(
 	notification.Stream.StartScheduled = &start
 	notification.Stream.StartActual = &start
 
-	got := renderAlarmDispatchNotification(&notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, &notification)
 
+	require.NoError(t, err)
 	assert.Equal(t,
 		"⏰ Member 방송 5분 전\n📺 Live Title\n🔗 https://youtube.com/watch?v=live-1",
 		got,

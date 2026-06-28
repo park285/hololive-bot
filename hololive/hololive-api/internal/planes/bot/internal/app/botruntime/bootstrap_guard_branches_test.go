@@ -236,6 +236,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 		&holodex.Service{},
 		&adapter.MessageAdapter{},
 		&adapter.ResponseFormatter{},
+		nil,
 		&stubIrisClient{},
 		&member.ProfileService{},
 		matcherService,

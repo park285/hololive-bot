@@ -25,9 +25,9 @@ import (
 	"fmt"
 	"time"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
@@ -39,7 +39,6 @@ type AlarmListEntry struct {
 }
 
 type alarmAddedTemplateData struct {
-	Emoji      msging.UIEmoji
 	MemberName string
 	Added      bool
 	NextStream *nextStreamInfoView
@@ -47,13 +46,11 @@ type alarmAddedTemplateData struct {
 }
 
 type alarmRemovedTemplateData struct {
-	Emoji      msging.UIEmoji
 	MemberName string
 	Removed    bool
 }
 
 type alarmListTemplateData struct {
-	Emoji  msging.UIEmoji
 	Count  int
 	Prefix string
 	Alarms []alarmListEntryView
@@ -75,12 +72,10 @@ type nextStreamInfoView struct {
 }
 
 type alarmClearedTemplateData struct {
-	Emoji msging.UIEmoji
 	Count int
 }
 
 type alarmNotificationTemplateData struct {
-	Emoji            msging.UIEmoji
 	ChannelName      string
 	MinutesUntil     int
 	Title            string
@@ -155,7 +150,6 @@ func displayAlarmOrg(org string) string {
 
 func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName string, added bool, nextStreamInfo *domain.NextStreamInfo) string {
 	data := alarmAddedTemplateData{
-		Emoji:      msging.DefaultEmoji,
 		MemberName: memberName,
 		Added:      added,
 		NextStream: buildNextStreamInfoView(nextStreamInfo),
@@ -164,7 +158,7 @@ func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName str
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmAdded, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayAlarmAddFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
@@ -172,14 +166,13 @@ func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName str
 
 func (f *ResponseFormatter) FormatAlarmRemoved(ctx context.Context, memberName string, removed bool) string {
 	data := alarmRemovedTemplateData{
-		Emoji:      msging.DefaultEmoji,
 		MemberName: memberName,
 		Removed:    removed,
 	}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmRemoved, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayAlarmRemoveFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered

@@ -65,7 +65,7 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 }
 
 func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.CommandContext, memberName string) error {
-	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
+	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "라이브")
 	if memberLookupHandled(err) {
 		return nil
 	}
@@ -86,7 +86,7 @@ func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.Comm
 		memberStreams = c.memberChzzkLiveStreams(ctx, channel.ID)
 	}
 	if len(memberStreams) == 0 {
-		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNotLive(channel.Name))
+		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNotLive(ctx, channel.Name))
 	}
 
 	message := c.Deps().Formatter.FormatLiveStreams(ctx, memberStreams)
@@ -125,16 +125,7 @@ func (c *LiveCommand) executeAllLive(ctx context.Context, cmdCtx *domain.Command
 
 	streams = append(streams, chzzkStreams...)
 
-	total := len(streams)
-	if total > 10 {
-		streams = streams[:10]
-	}
-
 	message := c.Deps().Formatter.FormatLiveStreams(ctx, streams)
-
-	if total > 10 {
-		message += c.Deps().Formatter.FormatLiveOverflowCount(total - 10)
-	}
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }

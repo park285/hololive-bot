@@ -24,11 +24,10 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
@@ -41,7 +40,6 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 	channelName := alarmChannelName(notification)
 	stream := notification.Stream
 	data := alarmNotificationTemplateData{
-		Emoji:            msging.DefaultEmoji,
 		ChannelName:      channelName,
 		MinutesUntil:     notification.MinutesUntil,
 		Title:            stringutil.TruncateString(stream.Title, constants.StringLimits.StreamTitle),
@@ -54,7 +52,7 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 
 	rendered, err := f.render(ctx, templateKey, data)
 	if err != nil {
-		return alarmNotificationRenderFallback(templateKey, &data)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
@@ -98,18 +96,22 @@ func alarmNotificationTemplateKey(minutesUntil int) domain.TemplateKey {
 	return domain.TemplateKeyCmdAlarmNotification
 }
 
-func alarmNotificationRenderFallback(templateKey domain.TemplateKey, data *alarmNotificationTemplateData) string {
-	if data == nil {
-		return msging.ErrorMessage(msging.ErrDisplayAlarmNotifyFailed)
-	}
-	if templateKey == domain.TemplateKeyCmdAlarmLiveStarted {
-		return fmt.Sprintf("🔴 %s 방송 시작됨\n📺 %s\n🔗 %s", data.ChannelName, data.Title, data.URL)
-	}
-
-	return msging.ErrorMessage(msging.ErrDisplayAlarmNotifyFailed)
+type alarmGroupEntryView struct {
+	Index        int
+	ChannelName  string
+	ScheduledKST string
+	Title        string
+	URL          string
 }
 
-func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notifications []*domain.AlarmNotification) string {
+type alarmGroupTemplateData struct {
+	Count          int
+	MinutesUntil   int
+	ScheduledTimes []string
+	Entries        []alarmGroupEntryView
+}
+
+func (f *ResponseFormatter) AlarmNotificationGroup(ctx context.Context, minutesUntil int, notifications []*domain.AlarmNotification) string {
 	if len(notifications) == 0 {
 		return ""
 	}
@@ -120,7 +122,57 @@ func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notificatio
 	}
 
 	sortAlarmNotificationGroupEntries(entries)
-	return renderAlarmNotificationGroup(minutesUntil, entries)
+
+	data := alarmGroupTemplateData{
+		Count:          len(entries),
+		MinutesUntil:   minutesUntil,
+		ScheduledTimes: alarmGroupScheduledTimes(entries),
+		Entries:        alarmGroupEntryViews(entries),
+	}
+
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmNotificationGroup, data)
+	if err != nil {
+		return messagestrings.FallbackSentinel
+	}
+
+	return rendered
+}
+
+func alarmGroupScheduledTimes(entries []alarmNotificationGroupEntry) []string {
+	seen := make(map[string]struct{}, len(entries))
+	times := make([]string, 0, len(entries))
+
+	for _, entry := range entries {
+		scheduledKST := stringutil.TrimSpace(entry.ScheduledKST)
+		if scheduledKST == "" {
+			continue
+		}
+
+		if _, ok := seen[scheduledKST]; ok {
+			continue
+		}
+
+		seen[scheduledKST] = struct{}{}
+		times = append(times, scheduledKST)
+	}
+
+	slices.Sort(times)
+	return times
+}
+
+func alarmGroupEntryViews(entries []alarmNotificationGroupEntry) []alarmGroupEntryView {
+	views := make([]alarmGroupEntryView, 0, len(entries))
+	for idx, entry := range entries {
+		views = append(views, alarmGroupEntryView{
+			Index:        idx + 1,
+			ChannelName:  entry.ChannelName,
+			ScheduledKST: entry.ScheduledKST,
+			Title:        entry.Title,
+			URL:          entry.URL,
+		})
+	}
+
+	return views
 }
 
 func alarmNotificationGroupEntries(notifications []*domain.AlarmNotification) []alarmNotificationGroupEntry {
@@ -165,89 +217,4 @@ func compareAlarmNotificationGroupEntry(a, b alarmNotificationGroupEntry) int {
 		return 1
 	}
 	return 0
-}
-
-func renderAlarmNotificationGroup(minutesUntil int, entries []alarmNotificationGroupEntry) string {
-	var sb strings.Builder
-	sb.WriteString(msging.CountedHeader(msging.DefaultEmoji.Alarm, "방송 알림", len(entries)))
-	sb.WriteString("\n\n")
-	sb.WriteString(groupAlarmSummaryLine(minutesUntil, entries))
-	sb.WriteString("\n\n")
-
-	for idx, entry := range entries {
-		writeAlarmNotificationGroupEntry(&sb, idx, len(entries), minutesUntil, entry)
-	}
-
-	return stringutil.TrimSpace(sb.String())
-}
-
-func writeAlarmNotificationGroupEntry(sb *strings.Builder, idx, count, minutesUntil int, entry alarmNotificationGroupEntry) {
-	name := stringutil.TrimSpace(entry.ChannelName)
-	if name == "" {
-		name = "알 수 없는 채널"
-	}
-
-	sb.WriteString(groupAlarmEntryLine(idx+1, name, entry.ScheduledKST, minutesUntil))
-	sb.WriteByte('\n')
-
-	if entry.Title != "" {
-		fmt.Fprintf(sb, "   %s\n", entry.Title)
-	}
-	if entry.URL != "" {
-		fmt.Fprintf(sb, "   %s\n", entry.URL)
-	}
-	if idx < count-1 {
-		sb.WriteString("\n")
-	}
-}
-
-func groupAlarmEntryLine(index int, channelName, scheduledKST string, minutesUntil int) string {
-	if scheduledKST != "" {
-		if minutesUntil > 0 {
-			return fmt.Sprintf("%d. %s (%s 방송예정)", index, channelName, scheduledKST)
-		}
-
-		return fmt.Sprintf("%d. %s (%s 방송 시작)", index, channelName, scheduledKST)
-	}
-
-	if minutesUntil > 0 {
-		return fmt.Sprintf("%d. %s (방송예정)", index, channelName)
-	}
-
-	return fmt.Sprintf("%d. %s", index, channelName)
-}
-
-func groupAlarmSummaryLine(minutesUntil int, entries []alarmNotificationGroupEntry) string {
-	if minutesUntil <= 0 {
-		return msging.DefaultEmoji.Time + " 여러 방송이 시작되었습니다."
-	}
-
-	seen := make(map[string]struct{}, len(entries))
-
-	scheduledTimes := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		scheduledKST := stringutil.TrimSpace(entry.ScheduledKST)
-		if scheduledKST == "" {
-			continue
-		}
-
-		if _, ok := seen[scheduledKST]; ok {
-			continue
-		}
-
-		seen[scheduledKST] = struct{}{}
-		scheduledTimes = append(scheduledTimes, scheduledKST)
-	}
-
-	if len(scheduledTimes) == 0 {
-		return msging.DefaultEmoji.Time + " 여러 방송이 곧 시작됩니다."
-	}
-
-	slices.Sort(scheduledTimes)
-
-	if len(scheduledTimes) == 1 {
-		return fmt.Sprintf("%s %s 방송예정", msging.DefaultEmoji.Time, scheduledTimes[0])
-	}
-
-	return fmt.Sprintf("%s 방송예정: %s", msging.DefaultEmoji.Time, strings.Join(scheduledTimes, ", "))
 }

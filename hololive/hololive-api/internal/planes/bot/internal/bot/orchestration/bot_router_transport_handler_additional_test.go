@@ -28,7 +28,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -193,7 +195,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	cmdCtx := domain.NewCommandContext("room-1", "room", "user-1", "user", "!help", false)
 
 	t.Run("nil registry", func(t *testing.T) {
-		router := orchcmd.NewCommandRouter(nil, newBotTestLogger(), func(context.Context, string, string) error { return nil })
+		router := orchcmd.NewCommandRouter(nil, newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil)
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "command registry is not initialized")
@@ -207,18 +209,18 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 			gotMessage = message
 
 			return nil
-		})
+		}, nil)
 
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "room-1", gotRoom)
-		assert.Equal(t, adapter.ErrUnknownCommand, gotMessage)
+		assert.Equal(t, messagestrings.FallbackSentinel, gotMessage)
 	})
 
 	t.Run("unknown command fallback send failure", func(t *testing.T) {
 		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error {
 			return errors.New("send failed")
-		})
+		}, nil)
 
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
@@ -234,7 +236,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 			},
 		})
 
-		router := orchcmd.NewCommandRouter(registry, newBotTestLogger(), func(context.Context, string, string) error { return nil })
+		router := orchcmd.NewCommandRouter(registry, newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil)
 
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
@@ -242,7 +244,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	})
 
 	t.Run("normalize alarm add command", func(t *testing.T) {
-		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error { return nil })
+		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil)
 		key, params := router.NormalizeCommand(domain.CommandAlarmAdd, map[string]any{"member": "miko"})
 		assert.Equal(t, orchcmd.CommandKeyAlarm, key)
 		assert.Equal(t, "add", params["action"])
@@ -391,15 +393,27 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		assert.Equal(t, 1, client.multipleImagesAcceptedCalls)
 	})
 
-	t.Run("send error uses formatter", func(t *testing.T) {
+	t.Run("send error resolves key via formatter", func(t *testing.T) {
+		client := &testIrisClient{}
+		store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler)) //nolint:contextcheck // dbtest 전용 pool 생성자라 t.Cleanup으로 자체 lifecycle을 관리하며 prod ctx 경로와 무관(호출처 69곳)
+		require.NoError(t, store.Load(ctx))
+		formatter := adapter.NewResponseFormatter("!", nil, adapter.WithMessageStrings(store))
+		transport := NewCommandTransport(client, formatter)
+
+		require.NoError(t, transport.SendError(ctx, "room", adapter.ErrAlarmAddFailed))
+		assert.Equal(t, "room", client.lastMessageRoom)
+		want := store.GetContext(ctx, messagestrings.NamespaceError, "alarm_add_failed")
+		require.NotEmpty(t, want)
+		assert.Equal(t, want, client.lastMessage)
+	})
+
+	t.Run("send error fails closed to sentinel on unknown key", func(t *testing.T) {
 		client := &testIrisClient{}
 		formatter := adapter.NewResponseFormatter("!", nil)
 		transport := NewCommandTransport(client, formatter)
 
-		require.NoError(t, transport.SendError(ctx, "room", "boom"))
-		assert.Equal(t, "room", client.lastMessageRoom)
-		assert.Contains(t, client.lastMessage, "boom")
-		assert.Contains(t, client.lastMessage, "❌")
+		require.NoError(t, transport.SendError(ctx, "room", "totally_unknown_key"))
+		assert.Equal(t, messagestrings.FallbackSentinel, client.lastMessage)
 	})
 }
 
@@ -444,7 +458,7 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 	select {
 	case msg := <-msgCh:
 		assert.Equal(t, "room-1", msg.room)
-		assert.Equal(t, adapter.ErrUnknownCommand, msg.message)
+		assert.Equal(t, messagestrings.FallbackSentinel, msg.message)
 	case <-time.After(1 * time.Second):
 		t.Fatal("did not receive message in time")
 	}
@@ -487,30 +501,29 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	select {
 	case msg := <-msgCh:
 		assert.Equal(t, "room-1", msg.room)
-		assert.Contains(t, msg.message, "help 명령어 처리 중 오류")
+		assert.Equal(t, messagestrings.FallbackSentinel, msg.message)
 	case <-time.After(1 * time.Second):
 		t.Fatal("did not receive message in time")
 	}
 
 	t.Run("getErrorMessage mappings", func(t *testing.T) {
-		assert.Empty(t, b.getErrorMessage(nil, "help"))
+		assert.Empty(t, b.getErrorMessage(nil))
 
 		irisServiceErr := appErrors.NewServiceError("msg", serviceNameIris, "send_message", errors.New("down"))
-		assert.Equal(t, adapter.ErrIrisConnectionFailed, b.getErrorMessage(irisServiceErr, "help"))
+		assert.Equal(t, adapter.ErrIrisConnectionFailed, b.getErrorMessage(irisServiceErr))
 
 		apiErr := appErrors.NewAPIError("api", 500, map[string]any{"operation": "fetch"})
-		assert.Equal(t, adapter.ErrExternalAPICallFailed, b.getErrorMessage(apiErr, "help"))
+		assert.Equal(t, adapter.ErrExternalAPICallFailed, b.getErrorMessage(apiErr))
 
 		keyRotationErr := appErrors.NewKeyRotationError("key", 429, map[string]any{"url": "https://example.com"})
-		assert.Equal(t, adapter.ErrExternalAPICallFailed, b.getErrorMessage(keyRotationErr, "help"))
+		assert.Equal(t, adapter.ErrExternalAPICallFailed, b.getErrorMessage(keyRotationErr))
 
 		cacheErr := appErrors.NewCacheError("cache", "get", "k1", errors.New("down"))
-		assert.Equal(t, adapter.ErrCacheConnectionFailed, b.getErrorMessage(cacheErr, "help"))
+		assert.Equal(t, adapter.ErrCacheConnectionFailed, b.getErrorMessage(cacheErr))
 
 		validationErr := appErrors.NewValidationError("invalid input", "field", "v")
-		assert.Equal(t, validationErr.Error(), b.getErrorMessage(validationErr, "help"))
+		assert.Equal(t, adapter.ErrCommandProcessingFailed, b.getErrorMessage(validationErr))
 
-		fallback := b.getErrorMessage(errors.New("generic error"), "help")
-		assert.Contains(t, fallback, "help 명령어 처리 중 오류")
+		assert.Equal(t, adapter.ErrCommandProcessingFailed, b.getErrorMessage(errors.New("generic error")))
 	})
 }

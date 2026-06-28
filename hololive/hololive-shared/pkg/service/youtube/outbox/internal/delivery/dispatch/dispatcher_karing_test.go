@@ -84,7 +84,7 @@ func TestDispatcherFallsBackToTextForUnsupportedKaringKind(t *testing.T) {
 	t.Parallel()
 
 	sender := &youtubeOutboxKaringTestSender{}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
+	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, newSendTestRenderer(t), slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})

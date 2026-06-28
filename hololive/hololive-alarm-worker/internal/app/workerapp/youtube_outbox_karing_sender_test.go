@@ -45,7 +45,7 @@ func TestYouTubeOutboxKaringSenderNilInnerReturnsPinnedError(t *testing.T) {
 
 func TestYouTubeOutboxKaringSenderForwardsSendMessage(t *testing.T) {
 	stub := &karingSenderStubIrisSender{}
-	sender := newYouTubeOutboxKaringSender(egress.NewIrisMessageSender(stub))
+	sender := newYouTubeOutboxKaringSender(egress.NewIrisMessageSender(stub), nil)
 
 	require.NoError(t, sender.SendMessage(t.Context(), "room-1", "hello"))
 
@@ -57,7 +57,7 @@ func TestYouTubeOutboxKaringSenderForwardsSendMessage(t *testing.T) {
 
 func TestYouTubeOutboxKaringSenderForwardsSendMessageWithClientRequestID(t *testing.T) {
 	stub := &karingSenderStubIrisSender{}
-	sender := newYouTubeOutboxKaringSender(egress.NewIrisMessageSender(stub))
+	sender := newYouTubeOutboxKaringSender(egress.NewIrisMessageSender(stub), nil)
 
 	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), "room-1", "hello", "req-1"))
 
@@ -69,7 +69,7 @@ func TestYouTubeOutboxKaringSenderForwardsSendMessageWithClientRequestID(t *test
 
 func TestYouTubeOutboxKaringSenderForwardsKaringChunks(t *testing.T) {
 	stub := &karingSenderStubIrisSender{}
-	sender := newYouTubeOutboxKaringSender(egress.NewIrisMessageSender(stub))
+	sender := newYouTubeOutboxKaringSender(egress.NewIrisMessageSender(stub), nil)
 	payload := domain.YouTubeOutboxDispatchPayload{
 		Kind:       domain.OutboxKindNewVideo,
 		AlarmType:  domain.OutboxKindNewVideo.ToAlarmType(),

@@ -28,45 +28,7 @@ import (
 )
 
 func TestTemplateSampleData_AllKeysPresent(t *testing.T) {
-	allKeys := []domain.TemplateKey{
-		domain.TemplateKeyOutboxShorts,
-		domain.TemplateKeyOutboxCommunity,
-		domain.TemplateKeyOutboxVideo,
-		domain.TemplateKeyOutboxMilestone,
-		domain.TemplateKeyOutboxVideoGroup,
-		domain.TemplateKeyOutboxShortsGroup,
-		domain.TemplateKeyOutboxCommunityGroup,
-		domain.TemplateKeyCmdAlarmList,
-		domain.TemplateKeyCmdAlarmNotification,
-		domain.TemplateKeyCmdAlarmLiveStarted,
-		domain.TemplateKeyCmdLiveStreams,
-		domain.TemplateKeyCmdUpcomingStreams,
-		domain.TemplateKeyCmdHelp,
-		domain.TemplateKeyCmdMemberDirectory,
-		domain.TemplateKeyCmdChannelSchedule,
-		domain.TemplateKeyCmdAlarmAdded,
-		domain.TemplateKeyCmdAlarmRemoved,
-		domain.TemplateKeyCmdAlarmCleared,
-		domain.TemplateKeyCmdMilestoneAchieved,
-		domain.TemplateKeyCmdMilestoneApproach,
-		domain.TemplateKeyCmdMajorEventWeeklySummary,
-		domain.TemplateKeyCmdMajorEventMonthlySummary,
-		domain.TemplateKeyCmdMajorEventSubscribed,
-		domain.TemplateKeyCmdMajorEventUnsubscribed,
-		domain.TemplateKeyCmdMajorEventAlreadySub,
-		domain.TemplateKeyCmdMajorEventNotSub,
-		domain.TemplateKeyCmdMajorEventStatus,
-		domain.TemplateKeyCmdMajorEventUsage,
-		domain.TemplateKeyCmdMemberNewsDigest,
-		domain.TemplateKeyCmdMemberNewsNoMembers,
-		domain.TemplateKeyCmdMemberNewsSubscribed,
-		domain.TemplateKeyCmdMemberNewsUnsubscribed,
-		domain.TemplateKeyCmdMemberNewsAlreadySub,
-		domain.TemplateKeyCmdMemberNewsNotSub,
-		domain.TemplateKeyCmdMemberNewsStatus,
-	}
-
-	for _, key := range allKeys {
+	for _, key := range domain.GetAllTemplateKeys() {
 		t.Run(string(key), func(t *testing.T) {
 			data := domain.GetTemplateSampleData(key)
 			assert.NotNil(t, data, "sample data should exist for key %s", key)

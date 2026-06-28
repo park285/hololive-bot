@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
@@ -26,7 +27,10 @@ func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliver
 	item.SendResult = nullStringValue(sendResult)
 	item.FailureReason = nullStringValue(failureReason)
 	item.Error = nullStringValue(rowError)
-	return item, err
+	if err != nil {
+		return item, fmt.Errorf("scan telemetry row: %w", err)
+	}
+	return item, nil
 }
 
 func nullStringValue(value sql.NullString) string {

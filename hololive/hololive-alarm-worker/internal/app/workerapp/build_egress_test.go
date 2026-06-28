@@ -36,7 +36,7 @@ func TestBuildYouTubeOutboxSenderDisablesKaringByDefault(t *testing.T) {
 	t.Setenv("YOUTUBE_OUTBOX_KARING_ENABLED", "")
 	irisSender := egress.NewIrisMessageSender(nil)
 
-	sender := buildYouTubeOutboxSender(irisSender)
+	sender := buildYouTubeOutboxSender(irisSender, nil)
 
 	assert.Same(t, irisSender, sender)
 	_, ok := sender.(youtubeOutboxKaringCapableSender)
@@ -47,7 +47,7 @@ func TestBuildYouTubeOutboxSenderEnablesKaringWhenConfigured(t *testing.T) {
 	t.Setenv("YOUTUBE_OUTBOX_KARING_ENABLED", "true")
 	irisSender := egress.NewIrisMessageSender(nil)
 
-	sender := buildYouTubeOutboxSender(irisSender)
+	sender := buildYouTubeOutboxSender(irisSender, nil)
 
 	_, ok := sender.(youtubeOutboxKaringCapableSender)
 	assert.True(t, ok)

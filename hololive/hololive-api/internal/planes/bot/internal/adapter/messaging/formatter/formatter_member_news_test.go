@@ -25,10 +25,10 @@ import (
 	"strings"
 	"testing"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -61,7 +61,7 @@ func TestFormatMemberNewsDigest_RendersTemplate(t *testing.T) {
 
 func TestFormatMemberNewsDigest_LocalizesCategoryLabel(t *testing.T) {
 	renderer := setupMemberNewsRenderer(t)
-	formatter := NewResponseFormatter("!", renderer)
+	formatter := NewResponseFormatter("!", renderer, WithMessageStrings(setupFormatterTestStore(t)))
 
 	digest := &membernewscontracts.Digest{
 		Headline: "🗞️ 테스트",
@@ -86,7 +86,7 @@ func TestFormatMemberNewsDigest_RenderFailFallback(t *testing.T) {
 
 	output := formatter.FormatMemberNewsDigest(t.Context(), digest)
 
-	expected := msging.ErrorMessage(msging.ErrDisplayMemberNewsFailed)
+	expected := messagestrings.FallbackSentinel
 	if output != expected {
 		t.Fatalf("expected %q, got %q", expected, output)
 	}

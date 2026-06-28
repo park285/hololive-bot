@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/iris"
 )
 
@@ -48,6 +48,8 @@ type alarmDispatchClientRequestSender interface {
 type alarmDispatchRunner struct {
 	consumer           alarmDispatchConsumer
 	sender             alarmDispatchSender
+	renderer           *template.Renderer
+	messageStrings     *messagestrings.Store
 	idleWaiter         alarmDispatchIdleWaiter
 	karingEnabled      bool
 	consumerMode       string
@@ -103,7 +105,7 @@ func alarmDispatchGroupUsesTextPath(group alarmDispatchGroup) bool {
 }
 
 func (r *alarmDispatchRunner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
-	message, err := renderAlarmDispatchGroup(ctx, group)
+	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, group)
 	if err != nil {
 		return r.persistPreSendFailure(ctx, group.envelopes, err)
 	}
@@ -127,7 +129,7 @@ func sendAlarmDispatchMessage(ctx context.Context, sender alarmDispatchSender, g
 }
 
 func (r *alarmDispatchRunner) dispatchKaringContentListGroup(ctx context.Context, group alarmDispatchGroup) error {
-	requests, err := buildAlarmDispatchKaringContentListRequests(group)
+	requests, err := buildAlarmDispatchKaringContentListRequests(ctx, r.messageStrings, group)
 	if err != nil {
 		return r.persistPreSendFailure(ctx, group.envelopes, err)
 	}
@@ -229,122 +231,6 @@ func (r *alarmDispatchRunner) preserveAfterPersistenceFailure(
 		return fmt.Errorf("%w: fallback requeue: %w", persistErr, err)
 	}
 	return persistErr
-}
-
-func renderAlarmDispatchGroup(ctx context.Context, group alarmDispatchGroup) (string, error) {
-	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindCelebration {
-		return renderCelebrationMessage(&group.envelopes[0])
-	}
-	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return renderAlarmDispatchYouTubeOutbox(ctx, &group.envelopes[0])
-	}
-	if len(group.notifications) == 1 {
-		return renderAlarmDispatchNotification(&group.notifications[0]), nil
-	}
-	return renderAlarmDispatchNotificationGroup(group), nil
-}
-
-func renderAlarmDispatchYouTubeOutbox(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (string, error) {
-	if envelope.YouTubeOutbox == nil {
-		return "", fmt.Errorf("render youtube outbox dispatch: payload is nil")
-	}
-	return outbox.FormatYouTubeOutboxPayload(ctx, envelope.YouTubeOutbox)
-}
-
-func renderAlarmDispatchNotificationGroup(group alarmDispatchGroup) string {
-	var builder strings.Builder
-	if group.minutesUntil <= 0 {
-		builder.WriteString("🔔 방송 시작 알림")
-	} else {
-		fmt.Fprintf(&builder, "⏰ 방송 %d분 전 알림", group.minutesUntil)
-	}
-	for i := range group.notifications {
-		builder.WriteString("\n\n")
-		builder.WriteString(renderAlarmDispatchNotificationInGroup(&group.notifications[i], group.minutesUntil))
-	}
-	return builder.String()
-}
-
-func renderAlarmDispatchNotification(notification *domain.AlarmNotification) string {
-	return renderAlarmDispatchNotificationInGroup(notification, -1)
-}
-
-func renderAlarmDispatchNotificationInGroup(notification *domain.AlarmNotification, groupMinutesUntil int) string {
-	memberName := resolveAlarmDispatchMemberName(notification)
-	title := resolveAlarmDispatchTitle(notification)
-	url := resolveAlarmDispatchURL(notification)
-	var builder strings.Builder
-	switch {
-	case notification.MinutesUntil <= 0:
-		fmt.Fprintf(&builder, "🔔 %s 방송 시작!\n", memberName)
-	case groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil:
-		fmt.Fprintf(&builder, "⏰ %s 방송 예정\n", memberName)
-	default:
-		fmt.Fprintf(&builder, "⏰ %s 방송 %d분 전\n", memberName, notification.MinutesUntil)
-	}
-	fmt.Fprintf(&builder, "📺 %s\n", title)
-	if scheduleMessage := strings.TrimSpace(notification.ScheduleChangeMessage); scheduleMessage != "" {
-		fmt.Fprintf(&builder, "📅 %s\n", scheduleMessage)
-	}
-	if url != "" {
-		fmt.Fprintf(&builder, "🔗 %s", url)
-	}
-	return strings.TrimSpace(builder.String())
-}
-
-func resolveAlarmDispatchMemberName(notification *domain.AlarmNotification) string {
-	if notification.Channel != nil && strings.TrimSpace(notification.Channel.Name) != "" {
-		return strings.TrimSpace(notification.Channel.Name)
-	}
-	if notification.Stream != nil && strings.TrimSpace(notification.Stream.ChannelName) != "" {
-		return strings.TrimSpace(notification.Stream.ChannelName)
-	}
-	return "알 수 없는 멤버"
-}
-
-func resolveAlarmDispatchTitle(notification *domain.AlarmNotification) string {
-	if notification.Stream == nil {
-		return "방송 정보 없음"
-	}
-	if title := strings.TrimSpace(notification.Stream.Title); title != "" {
-		return title
-	}
-	return "제목 없음"
-}
-
-func resolveAlarmDispatchURL(notification *domain.AlarmNotification) string {
-	if notification.Stream == nil {
-		return ""
-	}
-	stream := notification.Stream
-	if url, ok := resolveAlarmDispatchDirectPlatformURL(stream); ok {
-		return url
-	}
-	if stream.IsIntegrated {
-		return resolveAlarmDispatchIntegratedURL(stream)
-	}
-	return stream.GetYouTubeURL()
-}
-
-func resolveAlarmDispatchDirectPlatformURL(stream *domain.Stream) (string, bool) {
-	if stream.IsTwitchOnly && stream.GetTwitchLiveURL() != "" {
-		return stream.GetTwitchLiveURL(), true
-	}
-	if stream.IsChzzkOnly && stream.GetChzzkLiveURL() != "" {
-		return stream.GetChzzkLiveURL(), true
-	}
-	return "", false
-}
-
-func resolveAlarmDispatchIntegratedURL(stream *domain.Stream) string {
-	youtubeURL := stream.GetYouTubeURL()
-	if youtubeURL == "" {
-		return ""
-	}
-	if chzzkURL := stream.GetChzzkLiveURL(); chzzkURL != "" {
-		return fmt.Sprintf("%s | %s", youtubeURL, chzzkURL)
-	}
-	return youtubeURL
 }
 
 func claimKeysForAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) []string {

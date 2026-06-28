@@ -79,10 +79,10 @@ func (c *StatsCommand) showTopGainers(ctx context.Context, cmdCtx *domain.Comman
 	}
 
 	if len(gainers) == 0 {
-		return c.deps.SendMessage(ctx, cmdCtx.Room, adapter.MsgNoStatsData)
+		return c.deps.SendError(ctx, cmdCtx.Room, adapter.MsgNoStatsData)
 	}
 
-	message := c.deps.Formatter.FormatStatsTopGainers(periodLabel, gainers)
+	message := c.deps.Formatter.FormatStatsTopGainers(ctx, periodLabel, gainers)
 
 	return c.deps.SendMessage(ctx, cmdCtx.Room, message)
 }

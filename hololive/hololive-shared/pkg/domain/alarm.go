@@ -270,7 +270,7 @@ func (e *AlarmQueueEnvelope) EnsureSourcePayloadFromRaw() {
 func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 	var wire alarmQueueEnvelopeWire
 	if err := json.Unmarshal(data, &wire); err != nil {
-		return err
+		return fmt.Errorf("unmarshal alarm queue envelope: %w", err)
 	}
 
 	alarmType := wire.Notification.AlarmType
@@ -303,7 +303,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 
 	normalizedPayload, err := json.Marshal(*e)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal alarm queue envelope: %w", err)
 	}
 	e.normalizedPayload = string(normalizedPayload)
 

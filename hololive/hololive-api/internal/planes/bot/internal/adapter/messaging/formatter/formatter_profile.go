@@ -21,15 +21,35 @@
 package formatter
 
 import (
-	"fmt"
+	"context"
 	"strings"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
-// 번역된 값 우선 사용, 없으면 원본 반환.
+type profileTemplateData struct {
+	Names       []string
+	Catchphrase string
+	Summary     string
+	Highlights  []string
+	DataRows    []profileDataRow
+	SocialLinks []profileSocialLink
+	OfficialURL string
+}
+
+type profileDataRow struct {
+	Label     string
+	Value     string
+	Multiline bool
+}
+
+type profileSocialLink struct {
+	Label string
+	URL   string
+}
+
 func getTranslatedText(translatedVal, rawVal string) string {
 	if trimmed := stringutil.TrimSpace(translatedVal); trimmed != "" {
 		return trimmed
@@ -38,59 +58,46 @@ func getTranslatedText(translatedVal, rawVal string) string {
 	return stringutil.TrimSpace(rawVal)
 }
 
-// 캐치프레이즈 섹션 포맷팅.
-func formatProfileCatchphrase(raw *domain.TalentProfile, translated *domain.Translated) string {
-	catchphrase := ""
-
+func profileCatchphrase(raw *domain.TalentProfile, translated *domain.Translated) string {
 	if translated != nil {
-		catchphrase = getTranslatedText(translated.Catchphrase, raw.Catchphrase)
-	} else if raw != nil {
-		catchphrase = stringutil.TrimSpace(raw.Catchphrase)
+		return getTranslatedText(translated.Catchphrase, raw.Catchphrase)
 	}
 
-	if catchphrase == "" {
-		return ""
+	if raw != nil {
+		return stringutil.TrimSpace(raw.Catchphrase)
 	}
 
-	return fmt.Sprintf("%s %s\n", msging.DefaultEmoji.Speech, catchphrase)
+	return ""
 }
 
-// 요약 섹션 포맷팅.
-func formatProfileSummary(raw *domain.TalentProfile, translated *domain.Translated) string {
-	summary := ""
-
+func profileSummary(raw *domain.TalentProfile, translated *domain.Translated) string {
 	if translated != nil {
-		summary = getTranslatedText(translated.Summary, raw.Description)
-	} else if raw != nil {
-		summary = stringutil.TrimSpace(raw.Description)
+		return getTranslatedText(translated.Summary, raw.Description)
 	}
 
-	if summary == "" {
-		return ""
+	if raw != nil {
+		return stringutil.TrimSpace(raw.Description)
 	}
 
-	return summary + "\n"
+	return ""
 }
 
-// 하이라이트 섹션 포맷팅.
-func formatProfileHighlights(translated *domain.Translated) string {
+func profileHighlights(translated *domain.Translated) []string {
 	if translated == nil || len(translated.Highlights) == 0 {
-		return ""
+		return nil
 	}
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n%s 하이라이트\n", msging.DefaultEmoji.Highlight)
+	highlights := make([]string, 0, len(translated.Highlights))
 
 	for _, highlight := range translated.Highlights {
 		if trimmed := stringutil.TrimSpace(highlight); trimmed != "" {
-			fmt.Fprintf(&sb, "- %s\n", trimmed)
+			highlights = append(highlights, trimmed)
 		}
 	}
 
-	return sb.String()
+	return highlights
 }
 
-// 번역된 데이터 또는 원본 데이터 반환.
 func getProfileDataEntries(raw *domain.TalentProfile, translated *domain.Translated) []domain.TranslatedProfileDataRow {
 	if translated != nil && len(translated.Data) > 0 {
 		return translated.Data
@@ -113,48 +120,46 @@ func getProfileDataEntries(raw *domain.TalentProfile, translated *domain.Transla
 	return entries
 }
 
-// 프로필 데이터 섹션 포맷팅 (최대 8개).
-func formatProfileDataEntries(raw *domain.TalentProfile, translated *domain.Translated) string {
-	dataEntries := getProfileDataEntries(raw, translated)
-	if len(dataEntries) == 0 {
-		return ""
+func profileDataRows(raw *domain.TalentProfile, translated *domain.Translated) []profileDataRow {
+	entries := getProfileDataEntries(raw, translated)
+	if len(entries) == 0 {
+		return nil
 	}
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n%s 프로필 데이터\n", msging.DefaultEmoji.Data)
-
-	maxRows := min(len(dataEntries), 8)
+	maxRows := min(len(entries), 8)
+	rows := make([]profileDataRow, 0, maxRows)
 
 	for i := range maxRows {
-		row := dataEntries[i]
-		label := stringutil.TrimSpace(row.Label)
+		label := stringutil.TrimSpace(entries[i].Label)
 
-		value := stringutil.TrimSpace(row.Value)
+		value := stringutil.TrimSpace(entries[i].Value)
 		if label == "" || value == "" {
 			continue
 		}
 
 		if strings.Contains(value, "\n") {
-			indented := "  " + strings.ReplaceAll(value, "\n", "\n  ")
-			fmt.Fprintf(&sb, "- %s:\n%s\n", label, indented)
-		} else {
-			fmt.Fprintf(&sb, "- %s: %s\n", label, value)
+			rows = append(rows, profileDataRow{
+				Label:     label,
+				Value:     "  " + strings.ReplaceAll(value, "\n", "\n  "),
+				Multiline: true,
+			})
+
+			continue
 		}
+
+		rows = append(rows, profileDataRow{Label: label, Value: value})
 	}
 
-	return sb.String()
+	return rows
 }
 
-// 소셜 링크 섹션 포맷팅 (최대 4개).
-func formatProfileSocialLinks(raw *domain.TalentProfile) string {
+func (f *ResponseFormatter) profileSocialLinks(ctx context.Context, raw *domain.TalentProfile) []profileSocialLink {
 	if raw == nil || len(raw.SocialLinks) == 0 {
-		return ""
+		return nil
 	}
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n%s 링크\n", msging.DefaultEmoji.Link)
-
 	maxLinks := min(len(raw.SocialLinks), 4)
+	links := make([]profileSocialLink, 0, maxLinks)
 
 	for i := range maxLinks {
 		link := raw.SocialLinks[i]
@@ -162,60 +167,52 @@ func formatProfileSocialLinks(raw *domain.TalentProfile) string {
 			continue
 		}
 
-		translatedLabel := socialLinkLabel(link.Label)
-		fmt.Fprintf(&sb, "- %s: %s\n", translatedLabel, stringutil.TrimSpace(link.URL))
+		links = append(links, profileSocialLink{
+			Label: f.socialLinkLabel(ctx, link.Label),
+			URL:   stringutil.TrimSpace(link.URL),
+		})
 	}
 
-	return sb.String()
+	return links
 }
 
-// 공식 URL 섹션 포맷팅.
-func formatProfileOfficialURL(raw *domain.TalentProfile) string {
-	if raw == nil || stringutil.TrimSpace(raw.OfficialURL) == "" {
+func profileOfficialURL(raw *domain.TalentProfile) string {
+	if raw == nil {
 		return ""
 	}
 
-	return fmt.Sprintf("\n%s 공식 프로필: %s", msging.DefaultEmoji.Web, stringutil.TrimSpace(raw.OfficialURL))
+	return stringutil.TrimSpace(raw.OfficialURL)
 }
 
-func (f *ResponseFormatter) FormatTalentProfile(raw *domain.TalentProfile, translated *domain.Translated) string {
+func (f *ResponseFormatter) FormatTalentProfile(ctx context.Context, raw *domain.TalentProfile, translated *domain.Translated) string {
 	if raw == nil {
-		return msging.ErrorMessage(msging.ErrDisplayProfileDataFailed)
+		return messagestrings.FallbackSentinel
 	}
 
-	var sb strings.Builder
+	data := profileTemplateData{
+		Names:       talentDisplayNames(raw, translated),
+		Catchphrase: profileCatchphrase(raw, translated),
+		Summary:     profileSummary(raw, translated),
+		Highlights:  profileHighlights(translated),
+		DataRows:    profileDataRows(raw, translated),
+		SocialLinks: f.profileSocialLinks(ctx, raw),
+		OfficialURL: profileOfficialURL(raw),
+	}
 
-	header := buildTalentHeader(raw, translated)
-	sb.WriteString(header)
-	sb.WriteString("\n")
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdProfile, data)
+	if err != nil {
+		return messagestrings.FallbackSentinel
+	}
 
-	sb.WriteString(formatProfileCatchphrase(raw, translated))
-	sb.WriteString(formatProfileSummary(raw, translated))
-	sb.WriteString(formatProfileHighlights(translated))
-	sb.WriteString(formatProfileDataEntries(raw, translated))
-	sb.WriteString(formatProfileSocialLinks(raw))
-	sb.WriteString(formatProfileOfficialURL(raw))
-
-	return stringutil.TrimSpace(sb.String())
+	return rendered
 }
 
-func socialLinkLabel(label string) string {
-	translations := map[string]string{
-		"歌の再生リスト":   "음악 플레이리스트",
-		"公式グッズ":     "공식 굿즈",
-		"オフィシャルグッズ": "공식 굿즈",
-	}
-
-	if korean, ok := translations[label]; ok {
-		return korean
+func (f *ResponseFormatter) socialLinkLabel(ctx context.Context, label string) string {
+	if translated := f.messageStrings.GetContext(ctx, messagestrings.NamespaceSocial, label); translated != "" {
+		return translated
 	}
 
 	return label
-}
-
-func buildTalentHeader(raw *domain.TalentProfile, translated *domain.Translated) string {
-	names := talentDisplayNames(raw, translated)
-	return msging.MemberHeader(names)
 }
 
 func talentDisplayNames(raw *domain.TalentProfile, translated *domain.Translated) []string {

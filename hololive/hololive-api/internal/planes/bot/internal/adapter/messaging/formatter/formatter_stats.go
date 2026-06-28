@@ -21,50 +21,80 @@
 package formatter
 
 import (
-	"fmt"
-	"strings"
+	"context"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
-func (f *ResponseFormatter) FormatStatsTopGainers(periodLabel string, gainers []domain.RankEntry) string {
-	trimmedPeriod := stringutil.TrimSpace(periodLabel)
-	instruction := fmt.Sprintf("%s %s", msging.DefaultEmoji.Stats, msging.MsgStatsGainersHeader)
-
-	if trimmedPeriod != "" {
-		instruction = fmt.Sprintf("%s (%s)", instruction, trimmedPeriod)
-	}
-
-	var builder strings.Builder
-	builder.WriteString(instruction)
-	builder.WriteString("\n\n")
-
-	for _, entry := range gainers {
-		fmt.Fprintf(&builder, "%d위. %s\n", entry.Rank, entry.MemberName)
-		fmt.Fprintf(&builder, "    +%s명", util.FormatKoreanNumber(entry.Value))
-
-		if entry.CurrentSubscribers > 0 {
-			fmt.Fprintf(&builder, " (현재 %s명)", util.FormatKoreanNumber(uint64ToInt64(entry.CurrentSubscribers)))
-		}
-
-		builder.WriteString("\n\n")
-	}
-
-	return stringutil.TrimSpace(builder.String())
+type statsCountTemplateData struct {
+	MemberName  string
+	Subscribers string
 }
 
-func (f *ResponseFormatter) FormatSubscriberCount(memberName string, subscribers uint64) string {
-	formattedSubs := util.FormatKoreanNumber(uint64ToInt64(subscribers))
+type statsGainerView struct {
+	Rank       int
+	MemberName string
+	Delta      string
+	Current    string
+}
 
-	return fmt.Sprintf("%s %s\n\n%s 현재 구독자: %s명",
-		msging.DefaultEmoji.Member,
-		memberName,
-		msging.DefaultEmoji.Stats,
-		formattedSubs,
-	)
+type statsGainersTemplateData struct {
+	Period  string
+	Gainers []statsGainerView
+}
+
+func (f *ResponseFormatter) FormatSubscriberCount(ctx context.Context, memberName string, subscribers uint64) string {
+	data := statsCountTemplateData{
+		MemberName:  memberName,
+		Subscribers: util.FormatKoreanNumber(uint64ToInt64(subscribers)),
+	}
+
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdStatsCount, data)
+	if err != nil {
+		return messagestrings.FallbackSentinel
+	}
+
+	return rendered
+}
+
+func (f *ResponseFormatter) FormatStatsTopGainers(ctx context.Context, periodLabel string, gainers []domain.RankEntry) string {
+	data := statsGainersTemplateData{
+		Period:  stringutil.TrimSpace(periodLabel),
+		Gainers: statsGainerViews(gainers),
+	}
+
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdStatsGainers, data)
+	if err != nil {
+		return messagestrings.FallbackSentinel
+	}
+
+	return rendered
+}
+
+func statsGainerViews(gainers []domain.RankEntry) []statsGainerView {
+	if len(gainers) == 0 {
+		return nil
+	}
+
+	views := make([]statsGainerView, len(gainers))
+	for i, entry := range gainers {
+		view := statsGainerView{
+			Rank:       entry.Rank,
+			MemberName: entry.MemberName,
+			Delta:      util.FormatKoreanNumber(entry.Value),
+		}
+
+		if entry.CurrentSubscribers > 0 {
+			view.Current = util.FormatKoreanNumber(uint64ToInt64(entry.CurrentSubscribers))
+		}
+
+		views[i] = view
+	}
+
+	return views
 }
 
 func uint64ToInt64(value uint64) int64 {

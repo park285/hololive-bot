@@ -21,12 +21,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 )
 
+func newSendTestRenderer(t *testing.T) *template.Renderer {
+	t.Helper()
+	return template.NewRenderer(dbtest.NewPool(t), slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
 func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
 	t.Helper()
 
 	cache := cachemocks.NewLenientClient()
 
-	return NewDispatcher(nil, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
+	return NewDispatcher(nil, cache, sender, newSendTestRenderer(t), slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -430,7 +435,15 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 	t.Parallel()
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	d := newTestDispatcherForSend(t, sender)
+	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShorts, "{{.Title}}\n{{.URL}}")
+	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
+		BatchSize:           10,
+		LockTimeout:         time.Minute,
+		PollInterval:        time.Second,
+		MaxRetries:          3,
+		RetryBackoff:        time.Minute,
+		DeliveryParallelism: 2,
+	})
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
 		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
@@ -1211,6 +1224,10 @@ func (b *safeBuffer) String() string {
 
 func newLoggedTestDispatcherForSend(t *testing.T, sender *testSender, renderer *template.Renderer) (*Dispatcher, *safeBuffer) {
 	t.Helper()
+
+	if renderer == nil {
+		renderer = newSendTestRenderer(t)
+	}
 
 	cache := cachemocks.NewLenientClient()
 	logBuffer := &safeBuffer{}

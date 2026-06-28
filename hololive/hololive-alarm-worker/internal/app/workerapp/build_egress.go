@@ -10,6 +10,7 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	youtubeoutbox "github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/park285/iris-client-go/iris"
@@ -42,7 +43,7 @@ func buildNotificationEgress(
 	if err != nil {
 		return nil, err
 	}
-	youtubeOutboxDispatcher, err := buildYouTubeOutboxDispatcher(infra, buildYouTubeOutboxSender(irisSender), logger)
+	youtubeOutboxDispatcher, err := buildYouTubeOutboxDispatcher(infra, buildYouTubeOutboxSender(irisSender, alarmDispatchMessageStrings(infra, logger)), logger)
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +125,8 @@ func buildAlarmDispatchRunner(
 			dispatchoutbox.WithClaimKeyReleaser(infra.Cache),
 		),
 		sender:             sender,
+		renderer:           template.NewRenderer(infra.Postgres.GetPool(), logger),
+		messageStrings:     alarmDispatchMessageStrings(infra, logger),
 		idleWaiter:         newAlarmDispatchWakeupWaiter(infra.Cache, logger),
 		karingEnabled:      parseAlarmDispatchKaringEnabled(),
 		consumerMode:       "pg",
@@ -138,11 +141,22 @@ func parseAlarmDispatchKaringEnabled() bool {
 	return parseBoolEnv("ALARM_DISPATCH_KARING_ENABLED", false)
 }
 
-func buildYouTubeOutboxSender(irisSender *egress.IrisMessageSender) delivery.MessageSender {
+func alarmDispatchMessageStrings(infra *sharedmodules.InfraModule, logger *slog.Logger) *messagestrings.Store {
+	if infra == nil || infra.Postgres == nil {
+		return nil
+	}
+	pool := infra.Postgres.GetPool()
+	if pool == nil {
+		return nil
+	}
+	return messagestrings.NewStore(pool, logger)
+}
+
+func buildYouTubeOutboxSender(irisSender *egress.IrisMessageSender, messageStrings *messagestrings.Store) delivery.MessageSender {
 	if !parseBoolEnv("YOUTUBE_OUTBOX_KARING_ENABLED", false) {
 		return irisSender
 	}
-	return newYouTubeOutboxKaringSender(irisSender)
+	return newYouTubeOutboxKaringSender(irisSender, messageStrings)
 }
 
 func buildYouTubeOutboxDispatcher(

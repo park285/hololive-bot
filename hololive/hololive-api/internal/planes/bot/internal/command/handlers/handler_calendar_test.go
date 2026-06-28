@@ -7,11 +7,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 )
+
+func setupCalendarTestRenderer(t *testing.T) *serviceTemplate.Renderer {
+	t.Helper()
+
+	pool := dbtest.NewPool(t)
+	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
+		t.Fatalf("clear templates: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO notification_templates(template_key, channel_id, body)
+		VALUES ($1, NULL, $2)
+		ON CONFLICT (template_key) WHERE channel_id IS NULL
+		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+	`, domain.TemplateKeyCmdCalendar, "📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}}건)"); err != nil {
+		t.Fatalf("seed calendar template: %v", err)
+	}
+
+	return serviceTemplate.NewRenderer(pool, slog.New(slog.DiscardHandler))
+}
 
 type calendarRepoStub struct {
 	entries []domain.CalendarEntry
@@ -54,7 +75,7 @@ func TestCalendarCommand_Description(t *testing.T) {
 func TestCalendarCommand_Execute_TextFallback(t *testing.T) {
 	var sentMessage string
 	deps := &Dependencies{
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, msg string) error {
 			sentMessage = msg
 			return nil
@@ -85,7 +106,7 @@ func TestCalendarCommand_Execute_TextFallback(t *testing.T) {
 func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
 	var sentImage []byte
 	deps := &Dependencies{
-		Formatter:   formatter.NewResponseFormatter("!", nil),
+		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 		SendImage: func(_ context.Context, _ string, data []byte, _ ...iris.SendOption) error {
 			sentImage = data
@@ -117,7 +138,7 @@ func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
 
 func TestCalendarCommand_Execute_NextMonthAcrossYear(t *testing.T) {
 	deps := &Dependencies{
-		Formatter:   formatter.NewResponseFormatter("!", nil),
+		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 		SendError:   func(_ context.Context, _, _ string) error { return nil },
 		Logger:      slog.Default(),
@@ -142,7 +163,7 @@ func TestCalendarCommand_Execute_NextMonthAcrossYear(t *testing.T) {
 
 func TestCalendarCommand_Execute_PreviousMonthAcrossYear(t *testing.T) {
 	deps := &Dependencies{
-		Formatter:   formatter.NewResponseFormatter("!", nil),
+		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 		SendError:   func(_ context.Context, _, _ string) error { return nil },
 		Logger:      slog.Default(),
@@ -250,7 +271,7 @@ func TestCachedCelebrationCalendarFinder_RefreshesExpiredSnapshot(t *testing.T) 
 func TestCalendarCommand_Execute_ImageFailureFallsBackToText(t *testing.T) {
 	var sentMessage string
 	deps := &Dependencies{
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, msg string) error {
 			sentMessage = msg
 			return nil
@@ -286,7 +307,7 @@ func TestCalendarCommand_Execute_ImageFailureFallsBackToText(t *testing.T) {
 func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 	var sentMessage string
 	deps := &Dependencies{
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, msg string) error {
 			sentMessage = msg
 			return nil
@@ -321,7 +342,7 @@ func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 func TestCalendarCommand_Execute_RepoError(t *testing.T) {
 	var sentError string
 	deps := &Dependencies{
-		Formatter:   formatter.NewResponseFormatter("!", nil),
+		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 		SendError: func(_ context.Context, _, msg string) error {
 			sentError = msg
@@ -347,7 +368,7 @@ func TestCalendarCommand_Execute_RepoError(t *testing.T) {
 
 func TestCalendarCommand_EnsureDeps_NilRepo(t *testing.T) {
 	deps := &Dependencies{
-		Formatter:   formatter.NewResponseFormatter("!", nil),
+		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 		SendError:   func(_ context.Context, _, _ string) error { return nil },
 		Logger:      slog.Default(),

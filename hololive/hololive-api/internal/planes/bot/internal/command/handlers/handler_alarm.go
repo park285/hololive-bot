@@ -111,7 +111,7 @@ func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *domain.Command
 		slog.String("member", memberName),
 	)
 
-	return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.InvalidAlarmUsage())
+	return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrInvalidAlarmUsage)
 }
 
 func (c *AlarmCommand) ensureDeps() error {
@@ -184,15 +184,15 @@ func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName 
 	if err != nil {
 		var ambiguousErr *matcher.AmbiguousMatchError
 		if stdErrors.As(err, &ambiguousErr) {
-			message := c.Deps().Formatter.FormatAmbiguousMembers(ambiguousErr.Candidates)
+			message := c.Deps().Formatter.FormatAmbiguousMembers(ctx, ambiguousErr.Candidates, "알람 추가")
 			return nil, c.Deps().SendMessage(ctx, room, message)
 		}
 
-		return nil, c.Deps().SendError(ctx, room, c.Deps().Formatter.MemberNotFound(memberName))
+		return nil, c.Deps().SendMessage(ctx, room, c.Deps().Formatter.MemberNotFound(ctx, memberName))
 	}
 
 	if channel == nil {
-		return nil, c.Deps().SendError(ctx, room, c.Deps().Formatter.MemberNotFound(memberName))
+		return nil, c.Deps().SendMessage(ctx, room, c.Deps().Formatter.MemberNotFound(ctx, memberName))
 	}
 
 	return channel, nil

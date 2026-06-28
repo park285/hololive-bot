@@ -23,7 +23,6 @@ package orchestration
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/park285/iris-client-go/iris"
 
@@ -43,7 +42,7 @@ func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {
 	return b.ensureTransport().SendError(ctx, room, errorMsg)
 }
 
-func (b *Bot) getErrorMessage(err error, commandType string) string {
+func (b *Bot) getErrorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
@@ -70,8 +69,8 @@ func (b *Bot) getErrorMessage(err error, commandType string) string {
 
 	var validationErr *appErrors.ValidationError
 	if errors.As(err, &validationErr) {
-		return err.Error()
+		return adapter.ErrCommandProcessingFailed
 	}
 
-	return fmt.Sprintf(adapter.ErrCommandProcessingFailed, commandType)
+	return adapter.ErrCommandProcessingFailed
 }

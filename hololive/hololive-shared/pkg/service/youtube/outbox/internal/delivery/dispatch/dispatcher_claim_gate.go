@@ -87,9 +87,9 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 	}
 
 	result, err := reuseCache.ResolveClaim(ctx, claimIdentity, func(ctx context.Context) (claim.Decision, *claim.Token, error) {
-		decision, claimToken, err := d.tryClaimDelivery(ctx, row, outbox)
-		if err != nil {
-			return claim.Decision{}, nil, err
+		decision, claimToken, claimErr := d.tryClaimDelivery(ctx, row, outbox)
+		if claimErr != nil {
+			return claim.Decision{}, nil, claimErr
 		}
 		var token *claim.Token
 		if claimToken != nil {

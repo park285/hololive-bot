@@ -23,10 +23,11 @@ package formatter
 import (
 	"testing"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatMemberNewsSubscriptionMessages(t *testing.T) {
@@ -56,20 +57,22 @@ func TestFormatMemberNewsSubscriptionMessages_Fallback(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	formatter := NewResponseFormatter("!", nil)
+	store := setupFormatterTestStore(t)
+	formatter := NewResponseFormatter("!", nil, WithMessageStrings(store))
 
-	assert.Equal(t, msging.MsgMemberNewsNoMembers, formatter.FormatMemberNewsNoMembers(ctx))
-	assert.Equal(t, msging.MsgMemberNewsSubscribed, formatter.FormatMemberNewsSubscribed(ctx))
-	assert.Equal(t, msging.MsgMemberNewsAlreadySubscribed, formatter.FormatMemberNewsAlreadySubscribed(ctx))
-	assert.Equal(t, msging.MsgMemberNewsUnsubscribed, formatter.FormatMemberNewsUnsubscribed(ctx))
-	assert.Equal(t, msging.MsgMemberNewsNotSubscribed, formatter.FormatMemberNewsNotSubscribed(ctx))
-	assert.Equal(t, msging.MsgMemberNewsStatusOn, formatter.FormatMemberNewsStatus(ctx, true))
-	assert.Equal(t, msging.MsgMemberNewsStatusOff, formatter.FormatMemberNewsStatus(ctx, false))
+	noMembers := store.Get(messagestrings.NamespaceNotify, "member_news_no_members")
+	require.NotEmpty(t, noMembers)
+
+	assert.Equal(t, noMembers, formatter.FormatMemberNewsNoMembers(ctx))
+	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_subscribed"), formatter.FormatMemberNewsSubscribed(ctx))
+	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_already_subscribed"), formatter.FormatMemberNewsAlreadySubscribed(ctx))
+	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_unsubscribed"), formatter.FormatMemberNewsUnsubscribed(ctx))
+	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_not_subscribed"), formatter.FormatMemberNewsNotSubscribed(ctx))
+	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_status_on"), formatter.FormatMemberNewsStatus(ctx, true))
+	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_status_off"), formatter.FormatMemberNewsStatus(ctx, false))
 }
 
 func TestMemberNewsLocalizationHelpers(t *testing.T) {
-	t.Parallel()
-
 	items := []membernewscontracts.SummaryItem{
 		{Category: "birthday_live"},
 		{Category: "solo_live"},
@@ -80,7 +83,9 @@ func TestMemberNewsLocalizationHelpers(t *testing.T) {
 		{Category: "unknown"},
 	}
 
-	localized := localizeMemberNewsItems(items)
+	formatter := NewResponseFormatter("!", nil, WithMessageStrings(setupFormatterTestStore(t)))
+
+	localized := formatter.localizeMemberNewsItems(t.Context(), items)
 	assert.Equal(t, "생일 라이브", localized[0].Category)
 	assert.Equal(t, "솔로 라이브", localized[1].Category)
 	assert.Equal(t, "콜라보", localized[2].Category)
@@ -89,6 +94,6 @@ func TestMemberNewsLocalizationHelpers(t *testing.T) {
 	assert.Equal(t, "기타", localized[5].Category)
 	assert.Equal(t, "unknown", localized[6].Category)
 
-	assert.Empty(t, memberNewsCategoryLabel(""))
-	assert.Equal(t, "굿즈", memberNewsCategoryLabel(" goods "))
+	assert.Empty(t, formatter.memberNewsCategoryLabel(t.Context(), ""))
+	assert.Equal(t, "굿즈", formatter.memberNewsCategoryLabel(t.Context(), " goods "))
 }

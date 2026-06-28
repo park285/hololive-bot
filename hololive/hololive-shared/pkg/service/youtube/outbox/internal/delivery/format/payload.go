@@ -6,14 +6,16 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 type DispatchPayloadFormatter interface {
 	FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error)
 }
 
-func FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
-	return (&MessageFormatter{}).FormatYouTubeOutboxPayload(ctx, payload)
+func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
+	return (&MessageFormatter{Renderer: renderer, MessageStrings: messageStrings}).FormatYouTubeOutboxPayload(ctx, payload)
 }
 
 func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
@@ -26,17 +28,18 @@ func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payl
 
 	memberName := strings.TrimSpace(payload.MemberName)
 	if memberName == "" {
-		memberName = "VTuber"
+		memberName = mf.MessageStrings.VTuberFallbackContext(ctx)
 	}
 
 	items := notificationOutboxItemsFromDispatchPayload(payload)
 	if len(items) == 1 {
-		return mf.FormatMessageFallback(memberName, &items[0])
+		data, err := mf.BuildTemplateData(memberName, &items[0])
+		if err != nil {
+			return "", err
+		}
+		return mf.renderTemplate(ctx, items[0].Kind.ToTemplateKey(), items[0].ChannelID, data)
 	}
-	if mf != nil && mf.Renderer != nil {
-		return mf.FormatGroupedMessage(ctx, memberName, payload.ChannelID, payload.Kind, items)
-	}
-	return FormatGroupedMessageFallback(memberName, payload.Kind, items)
+	return mf.FormatGroupedMessage(ctx, memberName, payload.ChannelID, payload.Kind, items)
 }
 
 func notificationOutboxItemsFromDispatchPayload(payload *domain.YouTubeOutboxDispatchPayload) []domain.YouTubeNotificationOutbox {
@@ -51,37 +54,4 @@ func notificationOutboxItemsFromDispatchPayload(payload *domain.YouTubeOutboxDis
 		})
 	}
 	return items
-}
-
-func FormatGroupedMessageFallback(memberName string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) (string, error) {
-	mf := &MessageFormatter{}
-	_, header := mf.GetGroupedTemplateKeyAndHeader(memberName, kind, len(items))
-	renderedBody := renderGroupedFallbackBody(kind, items)
-	if renderedBody == "" {
-		return "", fmt.Errorf("format grouped youtube outbox fallback: rendered body is empty")
-	}
-	return strings.TrimSpace(header + "\n" + renderedBody), nil
-}
-
-func renderGroupedFallbackBody(kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) string {
-	var body strings.Builder
-	for i := range items {
-		if i > 0 {
-			body.WriteString("\n\n")
-		}
-		body.WriteString(renderGroupedFallbackItem(kind, &items[i]))
-	}
-	return strings.TrimSpace(body.String())
-}
-
-func renderGroupedFallbackItem(kind domain.OutboxKind, notification *domain.YouTubeNotificationOutbox) string {
-	item := BuildGroupedItemData(notification)
-	text := strings.TrimSpace(item.Title)
-	if kind == domain.OutboxKindCommunityPost {
-		text = strings.TrimSpace(item.ContentText)
-	}
-	if url := strings.TrimSpace(item.URL); url != "" {
-		return strings.TrimSpace(text + "\n" + url)
-	}
-	return text
 }

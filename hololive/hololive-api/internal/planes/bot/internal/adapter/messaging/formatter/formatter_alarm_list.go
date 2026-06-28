@@ -23,8 +23,8 @@ package formatter
 import (
 	"context"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmListEntry) string {
@@ -32,13 +32,12 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 	for idx, alarm := range alarms {
 		processed[idx] = alarmListEntryView{
 			MemberName: alarm.MemberName,
-			TypesLabel: formatAlarmTypesLabel(alarm.AlarmTypes),
+			TypesLabel: f.formatAlarmTypesLabel(ctx, alarm.AlarmTypes),
 			NextStream: buildNextStreamInfoView(summarizeNextStreamInfo(alarm.NextStream)),
 		}
 	}
 
 	data := alarmListTemplateData{
-		Emoji:  msging.DefaultEmoji,
 		Count:  len(processed),
 		Prefix: f.prefix,
 		Alarms: processed,
@@ -46,23 +45,19 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmList, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayAlarmListFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
 }
 
 func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) string {
-	data := alarmClearedTemplateData{Emoji: msging.DefaultEmoji, Count: count}
+	data := alarmClearedTemplateData{Count: count}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmCleared, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayAlarmClearFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered
-}
-
-func (f *ResponseFormatter) InvalidAlarmUsage() string {
-	return msging.ErrInvalidAlarmUsage
 }

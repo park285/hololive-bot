@@ -68,3 +68,11 @@
 068 071_drop_ycsas_published_at_resolution_artifacts.sql
 069 072_drop_community_shorts_observation_tables.sql
 070 073_drop_community_shorts_observation_artifacts.sql
+071 074_create_message_strings.sql
+072 076_seed_new_command_templates.sql
+073 077_seed_notification_celebration_templates.sql
+074 078_unify_outbox_header_body_templates.sql
+075 079_seed_error_strings.sql
+076 080_refresh_help_and_ambiguous.sql
+077 081_seed_canonical_alarm_templates.sql
+078 082_seed_calendar_image_strings.sql

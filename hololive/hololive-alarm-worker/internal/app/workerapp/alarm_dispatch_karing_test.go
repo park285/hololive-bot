@@ -145,7 +145,7 @@ func TestBuildAlarmDispatchKaringContentItems(t *testing.T) {
 	second.Stream.ChannelName = "Channel B"
 	second.Stream.StartScheduled = new(start.Add(time.Hour))
 
-	items, err := buildAlarmDispatchKaringContentItems(alarmDispatchGroup{
+	items, err := buildAlarmDispatchKaringContentItems(t.Context(), nil, alarmDispatchGroup{
 		notifications: []domain.AlarmNotification{first, second},
 	})
 

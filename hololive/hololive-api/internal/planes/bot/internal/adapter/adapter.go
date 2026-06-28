@@ -10,18 +10,14 @@ type CommandParser = messaging.CommandParser
 type MemberDirectoryEntry = formatter.MemberDirectoryEntry
 type MemberDirectoryGroup = formatter.MemberDirectoryGroup
 type MessageAdapter = messaging.MessageAdapter
-type MessageBuilder = messaging.MessageBuilder
 type ParsedCommand = messaging.ParsedCommand
 type ResponseFormatter = formatter.ResponseFormatter
-type UIEmoji = messaging.UIEmoji
 
 const (
 	ErrMemberProfileLoadFailed  = messaging.ErrMemberProfileLoadFailed
 	ErrMemberProfileBuildFailed = messaging.ErrMemberProfileBuildFailed
-	ErrMemberInfoDisplayFailed  = messaging.ErrMemberInfoDisplayFailed
 	ErrNoMemberInfoFound        = messaging.ErrNoMemberInfoFound
 	ErrCannotDisplayMemberInfo  = messaging.ErrCannotDisplayMemberInfo
-	MsgGraduatedMemberWarning   = messaging.MsgGraduatedMemberWarning
 	ErrGraduatedMemberBlocked   = messaging.ErrGraduatedMemberBlocked
 
 	ErrAlarmServiceNotInitialized = messaging.ErrAlarmServiceNotInitialized
@@ -31,12 +27,11 @@ const (
 	ErrAlarmClearFailed           = messaging.ErrAlarmClearFailed
 	ErrAlarmNeedMemberNameAdd     = messaging.ErrAlarmNeedMemberNameAdd
 	ErrAlarmNeedMemberNameRemove  = messaging.ErrAlarmNeedMemberNameRemove
+	ErrInvalidAlarmUsage          = messaging.ErrInvalidAlarmUsage
 
 	ErrLiveStreamQueryFailed     = messaging.ErrLiveStreamQueryFailed
 	ErrUpcomingStreamQueryFailed = messaging.ErrUpcomingStreamQueryFailed
 	ErrScheduleQueryFailed       = messaging.ErrScheduleQueryFailed
-	MsgMemberNotLive             = messaging.MsgMemberNotLive
-	MsgMemberNoUpcoming          = messaging.MsgMemberNoUpcoming
 	ErrScheduleNeedMemberName    = messaging.ErrScheduleNeedMemberName
 
 	ErrUnknownStatsPeriod = messaging.ErrUnknownStatsPeriod
@@ -47,64 +42,24 @@ const (
 	ErrSubscriberQueryFailed    = messaging.ErrSubscriberQueryFailed
 	MsgNoSubscriberData         = messaging.MsgNoSubscriberData
 
-	ErrMatcherNotActivated = messaging.ErrMatcherNotActivated
-
-	ErrUnknownCommand           = messaging.ErrUnknownCommand
-	ErrExternalAPICallFailed    = messaging.ErrExternalAPICallFailed
-	ErrCacheConnectionFailed    = messaging.ErrCacheConnectionFailed
-	ErrIrisConnectionFailed     = messaging.ErrIrisConnectionFailed
-	ErrCommandProcessingFailed  = messaging.ErrCommandProcessingFailed
-	ErrDisplayLiveStreamsFailed = messaging.ErrDisplayLiveStreamsFailed
-	ErrDisplayUpcomingFailed    = messaging.ErrDisplayUpcomingFailed
-	ErrDisplayScheduleFailed    = messaging.ErrDisplayScheduleFailed
-	ErrDisplayAlarmAddFailed    = messaging.ErrDisplayAlarmAddFailed
-	ErrDisplayAlarmRemoveFailed = messaging.ErrDisplayAlarmRemoveFailed
-	ErrDisplayAlarmListFailed   = messaging.ErrDisplayAlarmListFailed
-	ErrDisplayAlarmClearFailed  = messaging.ErrDisplayAlarmClearFailed
-	ErrDisplayAlarmNotifyFailed = messaging.ErrDisplayAlarmNotifyFailed
-	ErrDisplayMemberListFailed  = messaging.ErrDisplayMemberListFailed
-	ErrDisplayHelpFailed        = messaging.ErrDisplayHelpFailed
-	ErrDisplayProfileDataFailed = messaging.ErrDisplayProfileDataFailed
-	ErrDisplayMajorEventFailed  = messaging.ErrDisplayMajorEventFailed
-	ErrDisplayMemberNewsFailed  = messaging.ErrDisplayMemberNewsFailed
-	ErrInvalidAlarmUsage        = messaging.ErrInvalidAlarmUsage
-	MsgTimeUnknown              = messaging.MsgTimeUnknown
-	MsgStatsGainersHeader       = messaging.MsgStatsGainersHeader
-
-	ErrMemberNewsServiceNotInitialized = messaging.ErrMemberNewsServiceNotInitialized
-	ErrMemberNewsQueryFailed           = messaging.ErrMemberNewsQueryFailed
-	ErrMemberNewsSubscriptionFailed    = messaging.ErrMemberNewsSubscriptionFailed
-	MsgMemberNewsNoMembers             = messaging.MsgMemberNewsNoMembers
-	MsgMemberNewsSubscribed            = messaging.MsgMemberNewsSubscribed
-	MsgMemberNewsAlreadySubscribed     = messaging.MsgMemberNewsAlreadySubscribed
-	MsgMemberNewsUnsubscribed          = messaging.MsgMemberNewsUnsubscribed
-	MsgMemberNewsNotSubscribed         = messaging.MsgMemberNewsNotSubscribed
-	MsgMemberNewsStatusOn              = messaging.MsgMemberNewsStatusOn
-	MsgMemberNewsStatusOff             = messaging.MsgMemberNewsStatusOff
-
-	ErrGraphNeedMemberName = messaging.ErrGraphNeedMemberName
-	ErrGraphQueryFailed    = messaging.ErrGraphQueryFailed
-	MsgNoGraphData         = messaging.MsgNoGraphData
+	ErrCalendarQueryFailed = messaging.ErrCalendarQueryFailed
 
 	ErrMajorEventServiceNotInitialized = messaging.ErrMajorEventServiceNotInitialized
 	ErrMajorEventStatusCheckFailed     = messaging.ErrMajorEventStatusCheckFailed
 	ErrMajorEventSubscribeFailed       = messaging.ErrMajorEventSubscribeFailed
 	ErrMajorEventUnsubscribeFailed     = messaging.ErrMajorEventUnsubscribeFailed
 
-	ErrCalendarQueryFailed = messaging.ErrCalendarQueryFailed
+	ErrMemberNewsServiceNotInitialized = messaging.ErrMemberNewsServiceNotInitialized
+	ErrMemberNewsQueryFailed           = messaging.ErrMemberNewsQueryFailed
+	ErrMemberNewsSubscriptionFailed    = messaging.ErrMemberNewsSubscriptionFailed
+
+	ErrUnknownCommand          = messaging.ErrUnknownCommand
+	ErrExternalAPICallFailed   = messaging.ErrExternalAPICallFailed
+	ErrCacheConnectionFailed   = messaging.ErrCacheConnectionFailed
+	ErrIrisConnectionFailed    = messaging.ErrIrisConnectionFailed
+	ErrCommandProcessingFailed = messaging.ErrCommandProcessingFailed
 )
 
-var DefaultEmoji = messaging.DefaultEmoji
-
-var CountedHeader = messaging.CountedHeader
-var DayRangeHeader = messaging.DayRangeHeader
-var EmptyMessage = messaging.EmptyMessage
-var ErrorMessage = messaging.ErrorMessage
-var MemberHeader = messaging.MemberHeader
-var SuccessMessage = messaging.SuccessMessage
-var TimeRangeHeader = messaging.TimeRangeHeader
-var UsageHint = messaging.UsageHint
-
 var NewMessageAdapter = messaging.NewMessageAdapter
-var NewMessageBuilder = messaging.NewMessageBuilder
 var NewResponseFormatter = formatter.NewResponseFormatter
+var WithMessageStrings = formatter.WithMessageStrings

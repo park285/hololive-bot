@@ -24,8 +24,8 @@ import (
 	"testing"
 	"time"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +73,7 @@ func TestFormatMajorEventCommandMessages_Fallback(t *testing.T) {
 	t.Parallel()
 
 	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
-	want := msging.ErrorMessage(msging.ErrDisplayMajorEventFailed)
+	want := messagestrings.FallbackSentinel
 
 	assert.Equal(t, want, formatter.FormatMajorEventSubscribed(t.Context()))
 	assert.Equal(t, want, formatter.FormatMajorEventUnsubscribed(t.Context()))
@@ -82,6 +82,68 @@ func TestFormatMajorEventCommandMessages_Fallback(t *testing.T) {
 	assert.Equal(t, want, formatter.FormatMajorEventStatus(t.Context(), true))
 	assert.Equal(t, want, formatter.FormatMajorEventUsage(t.Context()))
 }
+
+const cmdProfileTestBody = `{{- if eq (len .Names) 0 -}}
+📘 멤버 정보
+{{- else -}}
+📘 {{index .Names 0}}{{if gt (len .Names) 1}} ({{join (slice .Names 1) " / "}}){{end}}
+{{- end}}
+{{- if .Catchphrase}}
+🗣️ {{.Catchphrase}}
+{{- end}}
+{{- if .Summary}}
+{{.Summary}}
+{{- end}}
+{{- if .Highlights}}
+
+✨ 하이라이트
+{{- range .Highlights}}
+- {{.}}
+{{- end}}
+{{- end}}
+{{- if .DataRows}}
+
+📋 프로필 데이터
+{{- range .DataRows}}
+{{- if .Multiline}}
+- {{.Label}}:
+{{.Value}}
+{{- else}}
+- {{.Label}}: {{.Value}}
+{{- end}}
+{{- end}}
+{{- end}}
+{{- if .SocialLinks}}
+
+🔗 링크
+{{- range .SocialLinks}}
+- {{.Label}}: {{.URL}}
+{{- end}}
+{{- end}}
+{{- if .OfficialURL}}
+
+🌐 공식 프로필: {{.OfficialURL}}
+{{- end -}}`
+
+const cmdProfileGolden = `📘 Shirakami Fubuki (시라카미 후부키 / 白上フブキ)
+🗣️ 친구야!
+홀로라이브 1기생
+
+✨ 하이라이트
+- 고양이 아님
+- FOX
+
+📋 프로필 데이터
+- 생일: 10월 5일
+- 특기:
+  노래
+  게임
+
+🔗 링크
+- 음악 플레이리스트: https://yt.example/playlist
+- Twitter: https://x.example/fubuki
+
+🌐 공식 프로필: https://hololive.example/fubuki`
 
 func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 	t.Parallel()
@@ -114,15 +176,19 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 
 	assert.Equal(t, "친구야!", getTranslatedText("친구야!", "Friend!"))
 	assert.Equal(t, "Friend!", getTranslatedText(" ", "Friend!"))
-	assert.Contains(t, formatProfileCatchphrase(raw, translated), msging.DefaultEmoji.Speech)
-	assert.Contains(t, formatProfileSummary(raw, translated), "홀로라이브")
-	assert.Contains(t, formatProfileHighlights(translated), "하이라이트")
+	assert.Equal(t, "친구야!", profileCatchphrase(raw, translated))
+	assert.Equal(t, "홀로라이브 1기생", profileSummary(raw, translated))
+	assert.Equal(t, []string{"고양이 아님", "FOX"}, profileHighlights(translated))
 	assert.Len(t, getProfileDataEntries(raw, translated), 2)
-	assert.Contains(t, formatProfileDataEntries(raw, translated), "특기")
-	assert.Contains(t, formatProfileSocialLinks(raw), "음악 플레이리스트")
-	assert.Contains(t, formatProfileOfficialURL(raw), "공식 프로필")
-	assert.Equal(t, "공식 굿즈", socialLinkLabel("公式グッズ"))
-	assert.Equal(t, "custom", socialLinkLabel("custom"))
+
+	rows := profileDataRows(raw, translated)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "생일", rows[0].Label)
+	assert.False(t, rows[0].Multiline)
+	assert.Equal(t, "특기", rows[1].Label)
+	assert.True(t, rows[1].Multiline)
+	assert.Equal(t, "  노래\n  게임", rows[1].Value)
+	assert.Equal(t, "https://hololive.example/fubuki", profileOfficialURL(raw))
 
 	parts := parseDisplayNameComponents("시라카미 후부키 (Shirakami Fubuki) / FBK")
 	require.NotEmpty(t, parts)
@@ -130,19 +196,31 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 	assert.Contains(t, parts, "Shirakami Fubuki")
 	assert.Contains(t, parts, "FBK")
 
-	names := []string{"A"}
-	addUniqueName(&names, "a")
-	addUniqueName(&names, "B")
-	assert.Equal(t, []string{"A", "B"}, names)
+	uniqueNames := []string{"A"}
+	addUniqueName(&uniqueNames, "a")
+	addUniqueName(&uniqueNames, "B")
+	assert.Equal(t, []string{"A", "B"}, uniqueNames)
 
-	header := buildTalentHeader(raw, translated)
-	assert.Contains(t, header, "시라카미 후부키")
+	assert.Contains(t, talentDisplayNames(raw, translated), "시라카미 후부키")
 
-	formatter := NewResponseFormatter("!", nil)
-	msg := formatter.FormatTalentProfile(raw, translated)
-	assert.Contains(t, msg, "시라카미 후부키")
-	assert.Contains(t, msg, "공식 프로필")
+	store := setupFormatterTestStore(t)
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdProfile: cmdProfileTestBody,
+	})
+	formatter := NewResponseFormatter("!", renderer, WithMessageStrings(store))
+
+	assert.Equal(t, "공식 굿즈", formatter.socialLinkLabel(t.Context(), "公式グッズ"))
+	assert.Equal(t, "custom", formatter.socialLinkLabel(t.Context(), "custom"))
+
+	links := formatter.profileSocialLinks(t.Context(), raw)
+	require.Len(t, links, 2)
+	assert.Equal(t, "음악 플레이리스트", links[0].Label)
+	assert.Equal(t, "https://yt.example/playlist", links[0].URL)
+	assert.Equal(t, "Twitter", links[1].Label)
+
+	msg := formatter.FormatTalentProfile(t.Context(), raw, translated)
+	assert.Equal(t, cmdProfileGolden, msg)
 	assert.NotContains(t, msg, "\u200b")
 
-	assert.Equal(t, msging.ErrorMessage(msging.ErrDisplayProfileDataFailed), formatter.FormatTalentProfile(nil, translated))
+	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatTalentProfile(t.Context(), nil, translated))
 }

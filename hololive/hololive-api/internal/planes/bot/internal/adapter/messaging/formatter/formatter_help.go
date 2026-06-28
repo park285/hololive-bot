@@ -23,21 +23,20 @@ package formatter
 import (
 	"context"
 
-	msging "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type helpTemplateData struct {
-	Emoji  msging.UIEmoji
 	Prefix string
 }
 
 func (f *ResponseFormatter) FormatHelp(ctx context.Context) string {
-	data := helpTemplateData{Emoji: msging.DefaultEmoji, Prefix: f.prefix}
+	data := helpTemplateData{Prefix: f.prefix}
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdHelp, data)
 	if err != nil {
-		return msging.ErrorMessage(msging.ErrDisplayHelpFailed)
+		return messagestrings.FallbackSentinel
 	}
 
 	return rendered

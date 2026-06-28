@@ -1,66 +1,87 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package formatter
 
 import (
-	"context"
-	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/stretchr/testify/assert"
 )
+
+const cmdCalendarBody = `{{if eq .Count 0}}📅 {{.Year}}년 {{.Month}}월 기념일
+
+등록된 기념일이 없습니다.{{else}}📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}}건)
+━━━━━━━━━━━━━━━━
+{{range $i, $day := .Days}}{{if $i}}
+{{end}}
+📌 {{$day.Month}}월 {{$day.Day}}일
+{{range $day.Entries}}{{if .IsBirthday}}  🎂 {{.Name}} 생일{{else}}  🎉 {{.Name}} 데뷔 {{.Years}}주년{{end}}
+{{end}}{{end}}{{end}}`
+
+func newCalendarTestFormatter(t *testing.T) *ResponseFormatter {
+	t.Helper()
+
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdCalendar: cmdCalendarBody,
+	})
+	return NewResponseFormatter("!", renderer)
+}
 
 func TestCelebrationCalendar(t *testing.T) {
 	t.Parallel()
 
-	f := NewResponseFormatter("!", nil)
+	f := newCalendarTestFormatter(t)
 
 	t.Run("empty entries", func(t *testing.T) {
 		t.Parallel()
 
-		result := f.CelebrationCalendar(context.Background(), 6, 2026, nil)
-		if !strings.Contains(result, "등록된 기념일이 없습니다") {
-			t.Error("empty entries should contain empty message")
-		}
-		if !strings.Contains(result, "6월") {
-			t.Error("should contain month")
-		}
+		assert.Equal(t,
+			"📅 2026년 6월 기념일\n\n등록된 기념일이 없습니다.",
+			f.CelebrationCalendar(t.Context(), 6, 2026, nil))
 	})
 
 	t.Run("birthday entry without ordinal", func(t *testing.T) {
 		t.Parallel()
 
 		entries := []domain.CalendarEntry{
-			{
-				Kind:   domain.CelebrationKindBirthday,
-				Member: &domain.Member{ShortKoreanName: "페코라"},
-				Day:    15,
-			},
+			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "페코라"}, Day: 15},
 		}
 
-		result := f.CelebrationCalendar(context.Background(), 6, 2026, entries)
-		if !strings.Contains(result, "페코라 생일") {
-			t.Error("should contain birthday text")
-		}
-		if strings.Contains(result, "주년") {
-			t.Error("birthday should not contain 주년")
-		}
+		assert.Equal(t,
+			"📅 2026년 6월 기념일 (1건)\n━━━━━━━━━━━━━━━━\n\n📌 6월 15일\n  🎂 페코라 생일",
+			f.CelebrationCalendar(t.Context(), 6, 2026, entries))
 	})
 
 	t.Run("anniversary entry with ordinal", func(t *testing.T) {
 		t.Parallel()
 
 		entries := []domain.CalendarEntry{
-			{
-				Kind:    domain.CelebrationKindAnniversary,
-				Member:  &domain.Member{ShortKoreanName: "미코"},
-				Day:     5,
-				Ordinal: 3,
-			},
+			{Kind: domain.CelebrationKindAnniversary, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5, Ordinal: 3},
 		}
 
-		result := f.CelebrationCalendar(context.Background(), 6, 2026, entries)
-		if !strings.Contains(result, "미코 데뷔 3주년") {
-			t.Errorf("should contain anniversary text, got: %s", result)
-		}
+		assert.Equal(t,
+			"📅 2026년 6월 기념일 (1건)\n━━━━━━━━━━━━━━━━\n\n📌 6월 5일\n  🎉 미코 데뷔 3주년",
+			f.CelebrationCalendar(t.Context(), 6, 2026, entries))
 	})
 
 	t.Run("multiple entries grouped by day", func(t *testing.T) {
@@ -72,16 +93,9 @@ func TestCelebrationCalendar(t *testing.T) {
 			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "보탄"}, Day: 20},
 		}
 
-		result := f.CelebrationCalendar(context.Background(), 6, 2026, entries)
-		if !strings.Contains(result, "3건") {
-			t.Error("should show count")
-		}
-		if !strings.Contains(result, "6월 10일") {
-			t.Error("should contain day header for day 10")
-		}
-		if !strings.Contains(result, "6월 20일") {
-			t.Error("should contain day header for day 20")
-		}
+		assert.Equal(t,
+			"📅 2026년 6월 기념일 (3건)\n━━━━━━━━━━━━━━━━\n\n📌 6월 10일\n  🎂 라미 생일\n  🎉 라미 데뷔 2주년\n\n\n📌 6월 20일\n  🎂 보탄 생일",
+			f.CelebrationCalendar(t.Context(), 6, 2026, entries))
 	})
 
 	t.Run("member display name fallback", func(t *testing.T) {
@@ -91,10 +105,9 @@ func TestCelebrationCalendar(t *testing.T) {
 			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{Name: "Pekora"}, Day: 1},
 		}
 
-		result := f.CelebrationCalendar(context.Background(), 1, 2026, entries)
-		if !strings.Contains(result, "Pekora") {
-			t.Error("should fall back to Name")
-		}
+		assert.Equal(t,
+			"📅 2026년 1월 기념일 (1건)\n━━━━━━━━━━━━━━━━\n\n📌 1월 1일\n  🎂 Pekora 생일",
+			f.CelebrationCalendar(t.Context(), 1, 2026, entries))
 	})
 
 	t.Run("nil member", func(t *testing.T) {
@@ -104,9 +117,18 @@ func TestCelebrationCalendar(t *testing.T) {
 			{Kind: domain.CelebrationKindBirthday, Member: nil, Day: 1},
 		}
 
-		result := f.CelebrationCalendar(context.Background(), 1, 2026, entries)
-		if !strings.Contains(result, "알 수 없음") {
-			t.Error("nil member should show fallback name")
-		}
+		assert.Equal(t,
+			"📅 2026년 1월 기념일\n\n등록된 기념일이 없습니다.",
+			f.CelebrationCalendar(t.Context(), 1, 2026, entries))
 	})
+}
+
+func TestCelebrationCalendar_Fallback(t *testing.T) {
+	t.Parallel()
+
+	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
+
+	assert.Equal(t,
+		messagestrings.FallbackSentinel,
+		formatter.CelebrationCalendar(t.Context(), 6, 2026, nil))
 }

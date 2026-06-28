@@ -13,6 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
@@ -178,12 +179,13 @@ func TestShortsPollerDuplicatePollEnqueuesExactlyOnce(t *testing.T) {
 }
 
 func newDuplicatePollTestDispatcher(db *pollerBatchTestDB, cache *cachemocks.Client, sender *duplicatePollTestSender) *outbox.Dispatcher {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return outbox.NewDispatcher(
 		db,
 		cache,
 		sender,
-		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		template.NewRenderer(db.Pool, logger),
+		logger,
 		&outbox.Config{
 			BatchSize:           10,
 			LockTimeout:         time.Minute,

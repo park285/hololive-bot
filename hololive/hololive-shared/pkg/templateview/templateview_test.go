@@ -24,9 +24,3 @@ func TestBuildMajorEventViews(t *testing.T) {
 		t.Fatalf("unexpected members: %q", views[0].Members)
 	}
 }
-
-func TestMemberNewsCategoryLabel(t *testing.T) {
-	if got := MemberNewsCategoryLabel(" goods "); got != "굿즈" {
-		t.Fatalf("unexpected category label: %q", got)
-	}
-}

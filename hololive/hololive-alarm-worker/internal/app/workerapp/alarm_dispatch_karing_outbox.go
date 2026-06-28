@@ -1,11 +1,13 @@
 package workerapp
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/shared-go/pkg/json"
@@ -33,7 +35,7 @@ type alarmDispatchKaringImagePayload struct {
 	Height int    `json:"height,omitempty"`
 }
 
-func buildAlarmDispatchYouTubeOutboxKaringContentItems(envelope *domain.AlarmQueueEnvelope) ([]iris.KaringContentItem, error) {
+func buildAlarmDispatchYouTubeOutboxKaringContentItems(ctx context.Context, messageStrings *messagestrings.Store, envelope *domain.AlarmQueueEnvelope) ([]iris.KaringContentItem, error) {
 	if envelope == nil || envelope.YouTubeOutbox == nil {
 		return nil, fmt.Errorf("build youtube outbox karing content list request: payload is nil")
 	}
@@ -42,7 +44,7 @@ func buildAlarmDispatchYouTubeOutboxKaringContentItems(envelope *domain.AlarmQue
 	}
 	items := make([]iris.KaringContentItem, 0, len(envelope.YouTubeOutbox.Items))
 	for _, item := range envelope.YouTubeOutbox.Items {
-		contentItem, err := buildAlarmDispatchYouTubeOutboxKaringContentItem(envelope.YouTubeOutbox, item)
+		contentItem, err := buildAlarmDispatchYouTubeOutboxKaringContentItem(ctx, messageStrings, envelope.YouTubeOutbox, item)
 		if err != nil {
 			return nil, err
 		}
@@ -52,6 +54,8 @@ func buildAlarmDispatchYouTubeOutboxKaringContentItems(envelope *domain.AlarmQue
 }
 
 func buildAlarmDispatchYouTubeOutboxKaringContentItem(
+	ctx context.Context,
+	messageStrings *messagestrings.Store,
 	payload *domain.YouTubeOutboxDispatchPayload,
 	item domain.YouTubeOutboxItem,
 ) (iris.KaringContentItem, error) {
@@ -60,9 +64,9 @@ func buildAlarmDispatchYouTubeOutboxKaringContentItem(
 	}
 	switch payload.Kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
-		return buildAlarmDispatchVideoOutboxKaringContentItem(payload, item)
+		return buildAlarmDispatchVideoOutboxKaringContentItem(ctx, messageStrings, payload, item)
 	case domain.OutboxKindCommunityPost:
-		return buildAlarmDispatchCommunityOutboxKaringContentItem(payload, item)
+		return buildAlarmDispatchCommunityOutboxKaringContentItem(ctx, messageStrings, payload, item)
 	case domain.OutboxKindMilestone:
 		return iris.KaringContentItem{}, fmt.Errorf("build youtube outbox karing content list request: milestone outbox is not supported")
 	default:
@@ -71,6 +75,8 @@ func buildAlarmDispatchYouTubeOutboxKaringContentItem(
 }
 
 func buildAlarmDispatchVideoOutboxKaringContentItem(
+	ctx context.Context,
+	messageStrings *messagestrings.Store,
 	payload *domain.YouTubeOutboxDispatchPayload,
 	item domain.YouTubeOutboxItem,
 ) (iris.KaringContentItem, error) {
@@ -79,11 +85,12 @@ func buildAlarmDispatchVideoOutboxKaringContentItem(
 		return iris.KaringContentItem{}, fmt.Errorf("build youtube video karing content list request: unmarshal payload: %w", err)
 	}
 	videoID := firstNonEmptyString(data.VideoID, item.ContentID)
+	memberName := resolveAlarmDispatchOutboxMemberName(ctx, messageStrings, payload)
 	return iris.KaringContentItem{
 		Title:        firstNonEmptyString(data.Title, "제목 없음"),
 		URL:          alarmDispatchVideoOutboxURL(payload.Kind, videoID),
-		MemberName:   resolveAlarmDispatchOutboxMemberName(payload),
-		ChannelName:  resolveAlarmDispatchOutboxMemberName(payload),
+		MemberName:   memberName,
+		ChannelName:  memberName,
 		Status:       alarmDispatchVideoOutboxStatus(payload.Kind, data),
 		StartAt:      alarmDispatchKaringTimeString(util.FirstNonNilTime(data.ScheduledStartAt, data.PublishedAt)),
 		ThumbnailURL: bestKaringThumbnailURL(data.Thumbnail),
@@ -109,6 +116,8 @@ func bestKaringThumbnailURL(thumbnails domain.ThumbnailsJSON) string {
 }
 
 func buildAlarmDispatchCommunityOutboxKaringContentItem(
+	ctx context.Context,
+	messageStrings *messagestrings.Store,
 	payload *domain.YouTubeOutboxDispatchPayload,
 	item domain.YouTubeOutboxItem,
 ) (iris.KaringContentItem, error) {
@@ -116,7 +125,7 @@ func buildAlarmDispatchCommunityOutboxKaringContentItem(
 	if err := json.Unmarshal([]byte(item.Payload), &data); err != nil {
 		return iris.KaringContentItem{}, fmt.Errorf("build youtube community karing content list request: unmarshal payload: %w", err)
 	}
-	memberName := resolveAlarmDispatchOutboxMemberName(payload)
+	memberName := resolveAlarmDispatchOutboxMemberName(ctx, messageStrings, payload)
 	postID := firstNonEmptyString(data.PostID, item.ContentID)
 	return iris.KaringContentItem{
 		Title:        firstNonEmptyString(cleanCommunityOutboxTitle(data.ContentText), "커뮤니티 알림"),
@@ -130,14 +139,14 @@ func buildAlarmDispatchCommunityOutboxKaringContentItem(
 	}, nil
 }
 
-func resolveAlarmDispatchOutboxMemberName(payload *domain.YouTubeOutboxDispatchPayload) string {
+func resolveAlarmDispatchOutboxMemberName(ctx context.Context, messageStrings *messagestrings.Store, payload *domain.YouTubeOutboxDispatchPayload) string {
 	if payload == nil {
-		return "VTuber"
+		return messageStrings.VTuberFallbackContext(ctx)
 	}
 	if memberName := strings.TrimSpace(payload.MemberName); memberName != "" {
 		return memberName
 	}
-	return "VTuber"
+	return messageStrings.VTuberFallbackContext(ctx)
 }
 
 func alarmDispatchVideoOutboxURL(kind domain.OutboxKind, videoID string) string {

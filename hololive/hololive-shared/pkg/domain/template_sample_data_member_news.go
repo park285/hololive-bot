@@ -30,7 +30,7 @@ func templateSampleMemberNewsData() map[TemplateKey]any {
 
 func templateMemberNewsDigestSample() map[string]any {
 	return map[string]any{
-		"Emoji":       map[string]string{"Brand": "🌸", "Link": "🔗"},
+		fieldEmoji:    map[string]string{"Brand": "🌸", "Link": "🔗"},
 		"Headline":    "🗞️ 이번주 구독 멤버 뉴스",
 		"TopItems":    templateMemberNewsDigestItems(),
 		"MoreSummary": "외 3건",
@@ -41,9 +41,9 @@ func templateMemberNewsDigestSample() map[string]any {
 func templateMemberNewsDigestItems() []map[string]any {
 	return []map[string]any{
 		{
-			"Member":    "사쿠라 미코",
+			"Member":    sampleMemberMiko,
 			"Category":  "birthday_live",
-			"Title":     "さくらみこ生誕ライブ2026",
+			fieldTitle:  "さくらみこ生誕ライブ2026",
 			"DateText":  "2026-02-20",
 			"Summary":   "생일 기념 라이브 진행 예정",
 			"SourceURL": "https://hololive.hololivepro.com/news/",
@@ -51,7 +51,7 @@ func templateMemberNewsDigestItems() []map[string]any {
 		{
 			"Member":    "시라카미 후부키",
 			"Category":  "event",
-			"Title":     "hololive SUPER EXPO 2026",
+			fieldTitle:  "hololive SUPER EXPO 2026",
 			"DateText":  "2026-03-07",
 			"Summary":   "엑스포 참여 소식",
 			"SourceURL": "https://hololive.hololivepro.com/events/",
@@ -61,30 +61,30 @@ func templateMemberNewsDigestItems() []map[string]any {
 
 func addTemplateMemberNewsSubscriptionSamples(data map[TemplateKey]any) {
 	data[TemplateKeyCmdMemberNewsNoMembers] = map[string]any{
-		"Emoji":  map[string]string{"Brand": "🌸"},
-		"Prefix": "!",
+		fieldEmoji:  map[string]string{"Brand": "🌸"},
+		fieldPrefix: "!",
 	}
 	data[TemplateKeyCmdMemberNewsSubscribed] = templateMemberNewsAlarmSuccessSample()
 	data[TemplateKeyCmdMemberNewsUnsubscribed] = templateMemberNewsAlarmSuccessSample()
 	data[TemplateKeyCmdMemberNewsAlreadySub] = templateMemberNewsAlarmInfoSample("🔔")
 	data[TemplateKeyCmdMemberNewsNotSub] = templateMemberNewsAlarmInfoSample("🔕")
 	data[TemplateKeyCmdMemberNewsStatus] = map[string]any{
-		"Emoji":        map[string]string{"Alarm": "🔔"},
-		"Prefix":       "!",
+		fieldEmoji:     map[string]string{fieldAlarm: "🔔"},
+		fieldPrefix:    "!",
 		"IsSubscribed": true,
 	}
 }
 
 func templateMemberNewsAlarmSuccessSample() map[string]any {
 	return map[string]any{
-		"Emoji":  map[string]string{"Alarm": "🔔", "Success": "✅"},
-		"Prefix": "!",
+		fieldEmoji:  map[string]string{fieldAlarm: "🔔", "Success": "✅"},
+		fieldPrefix: "!",
 	}
 }
 
 func templateMemberNewsAlarmInfoSample(alarmEmoji string) map[string]any {
 	return map[string]any{
-		"Emoji":  map[string]string{"Alarm": alarmEmoji, "Info": "ℹ️"},
-		"Prefix": "!",
+		fieldEmoji:  map[string]string{fieldAlarm: alarmEmoji, "Info": "ℹ️"},
+		fieldPrefix: "!",
 	}
 }

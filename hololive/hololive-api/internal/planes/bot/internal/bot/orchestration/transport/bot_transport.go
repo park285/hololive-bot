@@ -35,6 +35,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 const serviceNameIris = "iris"
@@ -325,11 +326,11 @@ func mediaPayloadDigest(kind string, payload []byte) []byte {
 	return sum[:]
 }
 
-func (t *CommandTransport) SendError(ctx context.Context, room, errorMsg string) error {
-	message := errorMsg
+func (t *CommandTransport) SendError(ctx context.Context, room, key string) error {
+	message := messagestrings.FallbackSentinel
 
 	if t != nil && t.formatter != nil {
-		message = t.formatter.FormatError(errorMsg)
+		message = t.formatter.ResolveError(key)
 	}
 
 	if err := t.SendMessage(ctx, room, message); err != nil {

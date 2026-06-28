@@ -8,6 +8,7 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/workerpool"
@@ -27,6 +28,7 @@ func BuildBotDependencyModules(
 	holodexService *holodex.Service,
 	messageAdapter *adapter.MessageAdapter,
 	formatter *adapter.ResponseFormatter,
+	messageStrings *messagestrings.Store,
 	irisClient iris.BotClient,
 	profileService *member.ProfileService,
 	memberMatcher *matcher.Matcher,
@@ -42,7 +44,7 @@ func BuildBotDependencyModules(
 ) BotDependencyModules {
 	return BotDependencyModules{
 		Core:      buildBotCoreModule(appConfig, logger),
-		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter),
+		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter, messageStrings),
 		Data:      buildBotDataModule(infra, alarmMode, profileService),
 		Stream:    buildBotStreamModule(alarmMode, holodexService, memberMatcher, youTubeStack),
 		Support:   buildBotSupportModule(activityLogger, settingsService, aclService, workerPool),
@@ -65,11 +67,13 @@ func buildBotMessagingModule(
 	irisClient iris.BotClient,
 	messageAdapter *adapter.MessageAdapter,
 	formatter *adapter.ResponseFormatter,
+	messageStrings *messagestrings.Store,
 ) BotMessagingModule {
 	return BotMessagingModule{
 		Client:         irisClient,
 		MessageAdapter: messageAdapter,
 		Formatter:      formatter,
+		MessageStrings: messageStrings,
 	}
 }
 

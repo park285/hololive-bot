@@ -82,7 +82,7 @@ func (d *SendEngine) formatGroupedMessage(
 
 	memberName, err := d.formatter.getMemberName(ctx, group.channelID)
 	if err != nil || memberName == "" {
-		memberName = "VTuber"
+		memberName = d.formatter.vtuberFallback(ctx)
 	}
 
 	message, err := d.formatter.formatGroupedMessage(ctx, memberName, group.channelID, group.kind, validOutboxes)

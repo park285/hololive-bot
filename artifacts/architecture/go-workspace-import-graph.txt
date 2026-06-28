@@ -48,6 +48,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/contracts/settings
+github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/providers/modules
@@ -63,6 +64,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/member
+github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/notification
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/twitch
@@ -161,6 +163,7 @@ github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/ka
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/server
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/service/system
+github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-api/internal/readiness
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-shared/pkg/applifecycle
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-shared/pkg/domain
@@ -189,6 +192,7 @@ github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/pa
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/park285/shared-go/pkg/runtime/bootstrap
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-api/internal/planes/admin/internal/app/http -> github.com/kapu/hololive-api/internal/planes/admin/internal/server
+github.com/kapu/hololive-api/internal/planes/admin/internal/app/http -> github.com/kapu/hololive-api/internal/readiness
 github.com/kapu/hololive-api/internal/planes/admin/internal/app/http -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-api/internal/planes/admin/internal/app/http -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/admin/internal/app/http -> github.com/kapu/hololive-shared/pkg/server
@@ -245,13 +249,16 @@ github.com/kapu/hololive-api/internal/planes/bot/cmd/warm_member_cache -> github
 github.com/kapu/hololive-api/internal/planes/bot/cmd/warm_member_cache -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter
+github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging
+github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/park285/shared-go/pkg/stringutil
-github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter -> github.com/kapu/hololive-shared/pkg/contracts/membernews
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter -> github.com/kapu/hololive-shared/pkg/templateview
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter -> github.com/kapu/hololive-shared/pkg/util
@@ -264,11 +271,13 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> githu
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-api/internal/planes/bot/internal/client/membernews
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-api/internal/planes/bot/internal/command
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-api/internal/readiness
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/contracts/settings
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/providers/modules
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/server
@@ -286,6 +295,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> githu
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/member/mocks
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/notification
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/settings
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/settings/mocks
@@ -306,6 +316,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> gith
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-api/internal/planes/bot/internal/bot
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-api/internal/planes/bot/internal/command
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-api/internal/readiness
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/applifecycle
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/contracts/membernews
@@ -329,6 +340,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> gith
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/service/database/mocks
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/service/member
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/service/notification
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/service/settings
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-shared/pkg/service/twitch
@@ -341,6 +353,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> gith
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/park285/shared-go/pkg/runtime/bootstrap
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/park285/shared-go/pkg/workerpool
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-api/internal/readiness
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/health
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/server
@@ -370,6 +383,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> g
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/contracts/membernews
+github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/server
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/acl
@@ -379,6 +393,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> g
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/chzzk
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/member
+github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/settings
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/twitch
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/youtube
@@ -396,14 +411,15 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/life
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle -> github.com/park285/shared-go/pkg/workerpool
-github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/kapu/hololive-api/internal/planes/bot/internal/command
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/kapu/hololive-shared/pkg/apperrors
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/kapu/hololive-shared/pkg/constants
+github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent -> github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent
 github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent -> github.com/kapu/hololive-shared/pkg/contracts/common
 github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent -> github.com/kapu/hololive-shared/pkg/contracts/majorevent
@@ -451,7 +467,9 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news 
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news -> github.com/kapu/hololive-shared/pkg/contracts/membernews
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-api/internal/planes/bot/internal/render -> github.com/kapu/hololive-api/internal/planes/bot/internal/assets/fonts
+github.com/kapu/hololive-api/internal/planes/bot/internal/render -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-api/internal/planes/bot/internal/render -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-api/internal/planes/bot/internal/render -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher -> github.com/kapu/hololive-shared/pkg/service/cache
@@ -481,6 +499,7 @@ github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer
+github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-api/internal/readiness
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/contracts/common
@@ -497,6 +516,7 @@ github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/service/member
+github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/kapu/hololive-shared/pkg/templateview
 github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime -> github.com/park285/shared-go/pkg/httputil
@@ -510,6 +530,7 @@ github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/park
 github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/park285/shared-go/pkg/llm
 github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/park285/shared-go/pkg/logging
+github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent -> github.com/kapu/hololive-shared/pkg/service/database
@@ -566,6 +587,10 @@ github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/sum
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer -> github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-api/internal/planes/llm/runtime -> github.com/kapu/hololive-api/internal/planes/llm/internal/app
+github.com/kapu/hololive-api/internal/readiness -> github.com/kapu/hololive-shared/pkg/health
+github.com/kapu/hololive-api/internal/readiness -> github.com/kapu/hololive-shared/pkg/service/cache
+github.com/kapu/hololive-api/internal/readiness -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-api/internal/readiness -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/internal/ctxutil -> github.com/kapu/hololive-shared/internal/ctxutil
 github.com/kapu/hololive-shared/internal/dbx -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-shared/internal/dbx -> github.com/park285/shared-go/pkg/backoff
@@ -578,6 +603,7 @@ github.com/kapu/hololive-shared/internal/testutil -> github.com/kapu/hololive-sh
 github.com/kapu/hololive-shared/internal/testutil -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/internal/testutil/cacheclient -> github.com/kapu/hololive-shared/internal/testredis
 github.com/kapu/hololive-shared/pkg/applifecycle -> github.com/kapu/hololive-shared/pkg/constants
+github.com/kapu/hololive-shared/pkg/applifecycle -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-shared/pkg/applifecycle -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-shared/pkg/config -> github.com/kapu/hololive-shared/pkg/config/internal/settings
 github.com/kapu/hololive-shared/pkg/config/internal/settings -> github.com/kapu/hololive-shared/pkg/constants
@@ -724,6 +750,7 @@ github.com/kapu/hololive-shared/pkg/service/chzzk -> github.com/park285/shared-g
 github.com/kapu/hololive-shared/pkg/service/chzzk -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/chzzk -> github.com/park285/shared-go/pkg/jsonutil
 github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/kapu/hololive-shared/pkg/contracts/settings
+github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/kapu/hololive-shared/pkg/service/configsub
 github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/database -> github.com/kapu/hololive-shared/internal/dbx
@@ -789,6 +816,8 @@ github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-s
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/member/mocks -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/service/messagestrings -> github.com/kapu/hololive-shared/pkg/dbtest
+github.com/kapu/hololive-shared/pkg/service/messagestrings -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-shared/pkg/service/notification -> github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmservice
 github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/service/notification/internal/alarmcache -> github.com/kapu/hololive-shared/pkg/domain
@@ -870,6 +899,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dis
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch -> github.com/kapu/hololive-shared/pkg/service/cache/claim
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch -> github.com/kapu/hololive-shared/pkg/service/delivery
+github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch -> github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch -> github.com/kapu/hololive-shared/pkg/service/youtube/logschema
@@ -889,8 +919,8 @@ github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dis
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate -> github.com/kapu/hololive-shared/pkg/service/youtube/timestamp
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/service/cache
+github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/service/template
-github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store -> github.com/kapu/hololive-shared/internal/dbx
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store -> github.com/kapu/hololive-shared/pkg/dbtest
@@ -932,6 +962,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> g
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/alarm/keys
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
+github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/youtube/livestatus
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/youtube/logschema
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox

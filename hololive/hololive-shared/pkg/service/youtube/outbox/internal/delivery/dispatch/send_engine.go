@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -35,7 +36,7 @@ func (m contextMutex) LockContext(ctx context.Context) error {
 	case <-m:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("lock context mutex: %w", ctx.Err())
 	}
 }
 

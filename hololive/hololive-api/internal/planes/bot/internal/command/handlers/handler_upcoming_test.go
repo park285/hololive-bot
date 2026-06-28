@@ -284,7 +284,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 }
 
 func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
-	sendErrorCalled := false
+	sendMessageCalled := false
 
 	memberProvider := newContextAwareMemberProvider(nil)
 
@@ -293,10 +293,10 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
+			sendMessageCalled = true
 			return nil
 		},
 		SendError: func(_ context.Context, _, _ string) error {
-			sendErrorCalled = true
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
@@ -309,8 +309,8 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	if !sendErrorCalled {
-		t.Fatal("expected SendError to be called for unknown member")
+	if !sendMessageCalled {
+		t.Fatal("expected SendMessage to be called for unknown member")
 	}
 }
 

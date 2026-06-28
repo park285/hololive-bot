@@ -16,6 +16,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/assets/fonts"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 var fontMu sync.Mutex
@@ -26,6 +27,7 @@ type CalendarCardRenderer struct {
 	cacheOrder   []calendarCacheKey
 	rendering    singleflight.Group
 	diskCacheDir string
+	strings      *messagestrings.Store
 }
 
 type CalendarCardRendererOption func(*CalendarCardRenderer)
@@ -33,6 +35,12 @@ type CalendarCardRendererOption func(*CalendarCardRenderer)
 func WithCalendarDiskCacheDir(dir string) CalendarCardRendererOption {
 	return func(r *CalendarCardRenderer) {
 		r.diskCacheDir = strings.TrimSpace(dir)
+	}
+}
+
+func WithCalendarStrings(store *messagestrings.Store) CalendarCardRendererOption {
+	return func(r *CalendarCardRenderer) {
+		r.strings = store
 	}
 }
 
@@ -138,6 +146,7 @@ func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []do
 		return nil, false, err
 	}
 	m.fonts = f
+	m.strings = r.strings
 
 	height := min(calculateCanvasHeight(&m, grouped), maxCanvasH)
 
@@ -172,10 +181,10 @@ func downscaleToOutputWidth(src *image.RGBA) image.Image {
 }
 
 func drawCalendarHeader(img *image.RGBA, m *calendarMetrics, month, year int, entries []domain.CalendarEntry) {
-	drawText(img, m.fonts.title, paddingX, int(42*m.sf), colSlate800, fmt.Sprintf("%d년 %d월 기념일", year, month))
+	drawText(img, m.fonts.title, paddingX, int(42*m.sf), colSlate800, m.headerText(year, month))
 
 	bc, ac := countByKind(entries)
-	statText := fmt.Sprintf("총 %d건 · 생일 %d · 데뷔주년 %d", len(entries), bc, ac)
+	statText := m.summaryText(len(entries), bc, ac)
 	drawText(img, m.fonts.stat, paddingX, int(68*m.sf), colSlate500, statText)
 
 	fillRect(img, image.Rect(paddingX, m.headerH, canvasWidth-paddingX, m.headerH+separatorH), colSlate200)
@@ -185,7 +194,7 @@ func drawCalendarBody(img *image.RGBA, m *calendarMetrics, month int, grouped []
 	y := m.headerH + separatorH + m.paddingY
 
 	if len(grouped) == 0 {
-		drawText(img, m.fonts.name, paddingX, y+int(24*m.sf), colSlate500, "등록된 기념일이 없습니다.")
+		drawText(img, m.fonts.name, paddingX, y+int(24*m.sf), colSlate500, m.emptyText())
 		return
 	}
 
@@ -198,7 +207,7 @@ func drawCalendarBody(img *image.RGBA, m *calendarMetrics, month int, grouped []
 }
 
 func drawDayGroup(img *image.RGBA, m *calendarMetrics, month int, group dayGroup, y int, photos map[string]image.Image) int {
-	drawText(img, m.fonts.date, paddingX, y+int(22*m.sf), colSlate500, fmt.Sprintf("%d월 %d일", month, group.day))
+	drawText(img, m.fonts.date, paddingX, y+int(22*m.sf), colSlate500, m.dayText(month, group.day))
 	fillRect(img, image.Rect(paddingX, y+m.dateHeaderH-separatorH, canvasWidth-paddingX, y+m.dateHeaderH), colSlate200)
 	y += m.dateHeaderH
 
@@ -217,20 +226,20 @@ type entryStyle struct {
 	badgeText       string
 }
 
-func resolveEntryStyle(entry domain.CalendarEntry) entryStyle {
+func resolveEntryStyle(m *calendarMetrics, entry domain.CalendarEntry) entryStyle {
 	switch entry.Kind {
 	case domain.CelebrationKindBirthday:
-		return entryStyle{colAmber600, colAmber50, "생일"}
+		return entryStyle{colAmber600, colAmber50, m.badgeBirthday()}
 	case domain.CelebrationKindAnniversary:
-		return entryStyle{colEmerald600, colEmerald50, fmt.Sprintf("데뷔 %d주년", entry.Ordinal)}
+		return entryStyle{colEmerald600, colEmerald50, m.anniversaryBadge(entry.Ordinal)}
 	default:
 		return entryStyle{colSlate500, colSlate100, ""}
 	}
 }
 
 func drawEntryRow(img *image.RGBA, m *calendarMetrics, x, y int, entry domain.CalendarEntry, photos map[string]image.Image) {
-	name := entryDisplayName(entry.Member)
-	style := resolveEntryStyle(entry)
+	name := entryDisplayName(m, entry.Member)
+	style := resolveEntryStyle(m, entry)
 
 	drawEntryAvatar(img, m, x, y, entry, style.accent, name, photos)
 
@@ -333,15 +342,47 @@ func calculateCanvasHeight(m *calendarMetrics, groups []dayGroup) int {
 	return h + m.paddingY
 }
 
-func entryDisplayName(m *domain.Member) string {
-	if m == nil {
-		return "알 수 없음"
+func entryDisplayName(m *calendarMetrics, member *domain.Member) string {
+	if member == nil {
+		return m.unknownName()
 	}
-	if m.ShortKoreanName != "" {
-		return m.ShortKoreanName
+	if member.ShortKoreanName != "" {
+		return member.ShortKoreanName
 	}
-	if m.NameKo != "" {
-		return m.NameKo
+	if member.NameKo != "" {
+		return member.NameKo
 	}
-	return m.Name
+	return member.Name
+}
+
+func (m *calendarMetrics) calStr(key, fallback string) string {
+	return m.strings.GetOr(messagestrings.NamespaceCalendar, key, fallback)
+}
+
+func (m *calendarMetrics) headerText(year, month int) string {
+	return fmt.Sprintf(m.calStr("header_month", "%d년 %d월 기념일"), year, month)
+}
+
+func (m *calendarMetrics) summaryText(total, birthday, anniversary int) string {
+	return fmt.Sprintf(m.calStr("summary", "총 %d건 · 생일 %d · 데뷔주년 %d"), total, birthday, anniversary)
+}
+
+func (m *calendarMetrics) emptyText() string {
+	return m.calStr("empty", "등록된 기념일이 없습니다.")
+}
+
+func (m *calendarMetrics) dayText(month, day int) string {
+	return fmt.Sprintf(m.calStr("day", "%d월 %d일"), month, day)
+}
+
+func (m *calendarMetrics) badgeBirthday() string {
+	return m.calStr("badge_birthday", "생일")
+}
+
+func (m *calendarMetrics) anniversaryBadge(ordinal int) string {
+	return fmt.Sprintf(m.calStr("badge_anniversary", "데뷔 %d주년"), ordinal)
+}
+
+func (m *calendarMetrics) unknownName() string {
+	return m.calStr("unknown", "알 수 없음")
 }

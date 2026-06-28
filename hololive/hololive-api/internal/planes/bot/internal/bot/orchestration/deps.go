@@ -30,6 +30,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
@@ -55,6 +56,7 @@ type Dependencies struct {
 	Client                 iris.BotClient
 	MessageAdapter         *adapter.MessageAdapter
 	Formatter              *adapter.ResponseFormatter
+	MessageStrings         *messagestrings.Store
 	Cache                  cache.Client
 	Postgres               database.Client
 	MemberRepository       *member.Repository
@@ -90,6 +92,7 @@ type messagingDependencies struct {
 	client         iris.BotClient
 	messageAdapter *adapter.MessageAdapter
 	formatter      *adapter.ResponseFormatter
+	messageStrings *messagestrings.Store
 }
 
 type dataDependencies struct {
@@ -148,6 +151,7 @@ func (d *Dependencies) messagingDeps() messagingDependencies {
 		client:         d.Client,
 		messageAdapter: d.MessageAdapter,
 		formatter:      d.Formatter,
+		messageStrings: d.MessageStrings,
 	}
 }
 

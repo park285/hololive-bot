@@ -29,16 +29,30 @@ import (
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
+const (
+	statsPeriodWeek    = "week"
+	statsPeriodMonth   = "month"
+	statsPeriodQuarter = "quarter"
+	statsPeriodYear    = "year"
+
+	statsUnitDays     = "days"
+	statsUnitWeeks    = "weeks"
+	statsUnitMonths   = "months"
+	statsUnitQuarters = "quarters"
+	statsUnitYears    = "years"
+	statsUnitHours    = "hours"
+)
+
 var (
 	statsNumericPattern = regexp.MustCompile(`(?i)^(?:최근|last)?\s*(\d+)\s*(일|days?|d|주|weeks?|w|개월|달|months?|m|분기|quarters?|q|년|연|years?|y|시간|hours?|h)(?:\s*(?:간|동안))?$`)
 
 	// 키워드 > 정규화된 값 매핑
 	periodKeywords = map[string]string{
 		"오늘": "today", "today": "today",
-		"주간": "week", "week": "week", "weekly": "week",
-		"월간": "month", "month": "month", "monthly": "month",
-		"분기": "quarter", "quarter": "quarter", "quarterly": "quarter",
-		"연간": "year", "년간": "year", "year": "year", "yearly": "year", "annual": "year", "annually": "year",
+		"주간": statsPeriodWeek, "week": statsPeriodWeek, "weekly": statsPeriodWeek,
+		"월간": statsPeriodMonth, "month": statsPeriodMonth, "monthly": statsPeriodMonth,
+		"분기": statsPeriodQuarter, "quarter": statsPeriodQuarter, "quarterly": statsPeriodQuarter,
+		"연간": statsPeriodYear, "년간": statsPeriodYear, "year": statsPeriodYear, "yearly": statsPeriodYear, "annual": statsPeriodYear, "annually": statsPeriodYear,
 	}
 
 	// prefix 정보
@@ -47,30 +61,30 @@ var (
 		length int
 		unit   string
 	}{
-		{"days:", 5, "days"},
-		{"weeks:", 6, "weeks"},
-		{"months:", 7, "months"},
-		{"quarters:", 9, "quarters"},
-		{"years:", 6, "years"},
-		{"hours:", 6, "hours"},
+		{"days:", 5, statsUnitDays},
+		{"weeks:", 6, statsUnitWeeks},
+		{"months:", 7, statsUnitMonths},
+		{"quarters:", 9, statsUnitQuarters},
+		{"years:", 6, statsUnitYears},
+		{"hours:", 6, statsUnitHours},
 	}
 
 	// 단위 별칭 > 정규화된 단위 매핑
 	periodUnits = map[string]string{
-		"일": "days", "day": "days", "days": "days", "d": "days",
-		"주": "weeks", "week": "weeks", "weeks": "weeks", "w": "weeks",
-		"개월": "months", "달": "months", "month": "months", "months": "months", "m": "months",
-		"분기": "quarters", "quarter": "quarters", "quarters": "quarters", "q": "quarters",
-		"년": "years", "연": "years", "year": "years", "years": "years", "y": "years",
-		"시간": "hours", "hour": "hours", "hours": "hours", "h": "hours",
+		"일": statsUnitDays, "day": statsUnitDays, "days": statsUnitDays, "d": statsUnitDays,
+		"주": statsUnitWeeks, "week": statsUnitWeeks, "weeks": statsUnitWeeks, "w": statsUnitWeeks,
+		"개월": statsUnitMonths, "달": statsUnitMonths, "month": statsUnitMonths, "months": statsUnitMonths, "m": statsUnitMonths,
+		"분기": statsUnitQuarters, "quarter": statsUnitQuarters, "quarters": statsUnitQuarters, "q": statsUnitQuarters,
+		"년": statsUnitYears, "연": statsUnitYears, "year": statsUnitYears, "years": statsUnitYears, "y": statsUnitYears,
+		"시간": statsUnitHours, "hour": statsUnitHours, "hours": statsUnitHours, "h": statsUnitHours,
 	}
 
 	namedStatsPeriods = map[string]namedStatsPeriod{
-		"today":   {label: "오늘", start: func(now time.Time) time.Time { return now.Add(-24 * time.Hour) }},
-		"week":    {label: "최근 7일", start: func(now time.Time) time.Time { return now.AddDate(0, 0, -7) }},
-		"month":   {label: "최근 1개월", start: func(now time.Time) time.Time { return now.AddDate(0, -1, 0) }},
-		"quarter": {label: "최근 1분기", start: func(now time.Time) time.Time { return now.AddDate(0, -3, 0) }},
-		"year":    {label: "최근 1년", start: func(now time.Time) time.Time { return now.AddDate(-1, 0, 0) }},
+		"today":            {label: "오늘", start: func(now time.Time) time.Time { return now.Add(-24 * time.Hour) }},
+		statsPeriodWeek:    {label: "최근 7일", start: func(now time.Time) time.Time { return now.AddDate(0, 0, -7) }},
+		statsPeriodMonth:   {label: "최근 1개월", start: func(now time.Time) time.Time { return now.AddDate(0, -1, 0) }},
+		statsPeriodQuarter: {label: "최근 1분기", start: func(now time.Time) time.Time { return now.AddDate(0, -3, 0) }},
+		statsPeriodYear:    {label: "최근 1년", start: func(now time.Time) time.Time { return now.AddDate(-1, 0, 0) }},
 	}
 )
 

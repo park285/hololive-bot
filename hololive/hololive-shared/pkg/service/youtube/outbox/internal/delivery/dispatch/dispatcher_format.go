@@ -22,10 +22,12 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/format"
 )
@@ -34,8 +36,8 @@ type MessageFormatter struct {
 	f *format.MessageFormatter
 }
 
-func newMessageFormatter(renderer *template.Renderer, cacheClient cache.Client, logger *slog.Logger) *MessageFormatter {
-	return &MessageFormatter{f: format.NewMessageFormatter(renderer, cacheClient, logger)}
+func newMessageFormatter(renderer *template.Renderer, cacheClient cache.Client, logger *slog.Logger, messageStrings *messagestrings.Store) *MessageFormatter {
+	return &MessageFormatter{f: format.NewMessageFormatter(renderer, cacheClient, logger, messageStrings)}
 }
 
 func (mf *MessageFormatter) inner() *format.MessageFormatter {
@@ -45,36 +47,48 @@ func (mf *MessageFormatter) inner() *format.MessageFormatter {
 	return &format.MessageFormatter{}
 }
 
+func (mf *MessageFormatter) vtuberFallback(ctx context.Context) string {
+	return mf.inner().MessageStrings.VTuberFallbackContext(ctx)
+}
+
 func (mf *MessageFormatter) formatMessage(ctx context.Context, item *domain.YouTubeNotificationOutbox) (string, error) {
-	return mf.inner().FormatMessage(ctx, item)
+	msg, err := mf.inner().FormatMessage(ctx, item)
+	if err != nil {
+		return "", fmt.Errorf("format message: %w", err)
+	}
+	return msg, nil
 }
 
 func (mf *MessageFormatter) buildTemplateData(memberName string, item *domain.YouTubeNotificationOutbox) (format.TemplateData, error) {
-	return mf.inner().BuildTemplateData(memberName, item)
-}
-
-func (mf *MessageFormatter) formatMessageFallback(memberName string, item *domain.YouTubeNotificationOutbox) (string, error) {
-	return mf.inner().FormatMessageFallback(memberName, item)
-}
-
-func (mf *MessageFormatter) formatVideoMessage(memberName, payload string, kind domain.OutboxKind) (string, error) {
-	return mf.inner().FormatVideoMessage(memberName, payload, kind)
+	data, err := mf.inner().BuildTemplateData(memberName, item)
+	if err != nil {
+		return format.TemplateData{}, fmt.Errorf("build template data: %w", err)
+	}
+	return data, nil
 }
 
 func (mf *MessageFormatter) getMemberName(ctx context.Context, channelID string) (string, error) {
-	return mf.inner().GetMemberName(ctx, channelID)
+	memberName, err := mf.inner().GetMemberName(ctx, channelID)
+	if err != nil {
+		return "", fmt.Errorf("get member name: %w", err)
+	}
+	return memberName, nil
 }
 
 func (mf *MessageFormatter) formatGroupedMessage(ctx context.Context, memberName, channelID string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) (string, error) {
-	return mf.inner().FormatGroupedMessage(ctx, memberName, channelID, kind, items)
-}
-
-func (mf *MessageFormatter) getGroupedTemplateKeyAndHeader(memberName string, kind domain.OutboxKind, count int) (templateKey domain.TemplateKey, header string) {
-	return mf.inner().GetGroupedTemplateKeyAndHeader(memberName, kind, count)
+	msg, err := mf.inner().FormatGroupedMessage(ctx, memberName, channelID, kind, items)
+	if err != nil {
+		return "", fmt.Errorf("format grouped message: %w", err)
+	}
+	return msg, nil
 }
 
 func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
-	return mf.inner().FormatYouTubeOutboxPayload(ctx, payload)
+	msg, err := mf.inner().FormatYouTubeOutboxPayload(ctx, payload)
+	if err != nil {
+		return "", fmt.Errorf("format youtube outbox payload: %w", err)
+	}
+	return msg, nil
 }
 
 func (mf *MessageFormatter) buildGroupedTemplateData(memberName string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) format.GroupedTemplateData {

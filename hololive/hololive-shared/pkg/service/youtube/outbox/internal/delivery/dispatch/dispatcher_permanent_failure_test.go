@@ -55,7 +55,7 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 				}
 			}()
 
-			dispatcher := NewDispatcher(nil, cache, sentinelFailureSender{err: tt.err}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
+			dispatcher := NewDispatcher(nil, cache, sentinelFailureSender{err: tt.err}, newSendTestRenderer(t), slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
 				DeliveryParallelism: 1,
 			})
 			rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}

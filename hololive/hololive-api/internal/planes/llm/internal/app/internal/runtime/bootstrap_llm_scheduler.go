@@ -42,6 +42,7 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
@@ -221,6 +222,7 @@ func buildLLMSchedulerComponents(
 
 	templateRenderer := template.NewRenderer(postgresService.GetPool(), logger)
 	formatter := newLLMSchedulerFormatter(schedulerConfig.Bot.Prefix, templateRenderer, logger)
+	formatter.store = messagestrings.NewStore(postgresService.GetPool(), logger)
 	majorEventRepository := buildMajorEventRepository(postgresService, logger)
 	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, logger)
 

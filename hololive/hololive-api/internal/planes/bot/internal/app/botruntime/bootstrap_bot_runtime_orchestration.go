@@ -44,9 +44,22 @@ func newBotReadyProbe(infra *appbootstrap.BotInfrastructure) *readiness.Probe {
 	)
 }
 
+func buildBotOptionalServers(appConfig *config.Config) (metricsServer, pprofServer *http.Server) {
+	if metricsAddr := strings.TrimSpace(appConfig.Server.MetricsAddr); metricsAddr != "" {
+		metricsServer = sharedserver.NewMetricsServer(metricsAddr, appConfig.Server.APIKey)
+	}
+	if pprofAddr := strings.TrimSpace(appConfig.Server.PprofAddr); pprofAddr != "" {
+		pprofServer = sharedserver.NewPprofServer(pprofAddr, appConfig.Server.APIKey)
+	}
+	return metricsServer, pprofServer
+}
+
 func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger, infra *appbootstrap.BotInfrastructure) (*BotRuntime, error) {
 	if appConfig == nil {
 		return nil, fmt.Errorf("build bot runtime: app config is nil")
+	}
+	if infra == nil {
+		return nil, fmt.Errorf("build bot runtime: infra is nil")
 	}
 
 	runtimeViews := buildBotRuntimeDependencyViews(infra)
@@ -80,15 +93,7 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 		}
 	}
 
-	var metricsServer *http.Server
-	if metricsAddr := strings.TrimSpace(appConfig.Server.MetricsAddr); metricsAddr != "" {
-		metricsServer = sharedserver.NewMetricsServer(metricsAddr, appConfig.Server.APIKey)
-	}
-
-	var pprofServer *http.Server
-	if pprofAddr := strings.TrimSpace(appConfig.Server.PprofAddr); pprofAddr != "" {
-		pprofServer = sharedserver.NewPprofServer(pprofAddr, appConfig.Server.APIKey)
-	}
+	metricsServer, pprofServer := buildBotOptionalServers(appConfig)
 
 	return &BotRuntime{
 		Config:               appConfig,

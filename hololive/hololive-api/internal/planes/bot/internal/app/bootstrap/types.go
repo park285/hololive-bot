@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -86,6 +87,7 @@ type BotMessagingModule struct {
 	Client         iris.BotClient
 	MessageAdapter *adapter.MessageAdapter
 	Formatter      *adapter.ResponseFormatter
+	MessageStrings *messagestrings.Store
 }
 
 type BotDataModule struct {

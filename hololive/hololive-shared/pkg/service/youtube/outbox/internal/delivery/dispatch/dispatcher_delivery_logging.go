@@ -91,9 +91,9 @@ func collectCommunityShortsDeliveryResultSummary(
 
 func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (result1, result2, result3, result4 int) {
 	switch strings.TrimSpace(sendResult) {
-	case "success":
+	case sendResultSuccess:
 		return alarmCount, 0, roomCount, 0
-	case "failure":
+	case sendResultFailure:
 		return 0, alarmCount, 0, roomCount
 	default:
 		return 0, 0, 0, 0

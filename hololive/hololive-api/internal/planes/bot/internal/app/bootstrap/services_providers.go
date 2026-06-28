@@ -64,6 +64,7 @@ func ProvideBotDependencies(modules *BotDependencyModules) *bot.Dependencies {
 		Client:                 modules.Messaging.Client,
 		MessageAdapter:         modules.Messaging.MessageAdapter,
 		Formatter:              modules.Messaging.Formatter,
+		MessageStrings:         modules.Messaging.MessageStrings,
 		Cache:                  modules.Data.Cache,
 		Postgres:               modules.Data.Postgres,
 		MemberRepository:       modules.Data.MemberRepository,
