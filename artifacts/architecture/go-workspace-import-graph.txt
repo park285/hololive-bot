@@ -78,6 +78,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park2
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
+github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/park285/shared-go/pkg/backoff
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/chzzk
@@ -718,6 +719,7 @@ github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/k
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/alarm/keys -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/alarm/keys -> github.com/park285/shared-go/pkg/stringutil

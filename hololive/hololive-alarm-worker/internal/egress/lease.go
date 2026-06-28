@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/backoff"
 )
 
@@ -73,11 +73,7 @@ func AcquireNotificationEgressLease(ctx context.Context, cacheClient cache.Clien
 }
 
 func notificationEgressLeaseOwner() string {
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		hostname = "unknown-host"
-	}
-	return fmt.Sprintf("alarm-worker:%s:%d", hostname, os.Getpid())
+	return util.InstanceID("alarm-worker")
 }
 
 func (l *NotificationEgressLease) RenewLoop(ctx context.Context) error {

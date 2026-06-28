@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type Consumer struct {
@@ -62,14 +62,9 @@ func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOpt
 	if logger == nil {
 		logger = slog.Default()
 	}
-	host, err := os.Hostname()
-	if err != nil {
-		logger.Warn("dispatch outbox hostname lookup failed", slog.Any("error", err))
-		host = "unknown"
-	}
 	consumer := &Consumer{
 		repository:        repository,
-		workerID:          "dispatcher-" + host,
+		workerID:          util.InstanceID("dispatcher"),
 		lease:             60 * time.Second,
 		recoveryBatchSize: 100,
 		recoveryInterval:  30 * time.Second,
