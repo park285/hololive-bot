@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -47,20 +48,28 @@ const (
 	NamespaceCalendar  = "calendar"
 )
 
-const lazyLoadRetryInterval = 30 * time.Second
+const (
+	lazyLoadRetryInterval = 30 * time.Second
+	lazyLoadTimeout       = 5 * time.Second
+)
+
+type queryRunner interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
 
 type Store struct {
-	pool        *pgxpool.Pool
+	pool        queryRunner
 	logger      *slog.Logger
 	mu          sync.RWMutex
 	cache       map[string]map[string]string
 	loaded      bool
 	reloadMu    sync.Mutex
 	nextRetryAt time.Time
+	loadTimeout time.Duration
 }
 
 func NewStore(pool *pgxpool.Pool, logger *slog.Logger) *Store {
-	return &Store{pool: pool, logger: logger}
+	return &Store{pool: pool, logger: logger, loadTimeout: lazyLoadTimeout}
 }
 
 func (s *Store) Load(ctx context.Context) error {
@@ -156,7 +165,14 @@ func (s *Store) ensureLoaded(ctx context.Context) {
 		return
 	}
 
-	if err := s.reload(ctx); err != nil {
+	timeout := s.loadTimeout
+	if timeout <= 0 {
+		timeout = lazyLoadTimeout
+	}
+	loadCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if err := s.reload(loadCtx); err != nil {
 		s.mu.Lock()
 		s.nextRetryAt = time.Now().Add(lazyLoadRetryInterval)
 		s.mu.Unlock()
