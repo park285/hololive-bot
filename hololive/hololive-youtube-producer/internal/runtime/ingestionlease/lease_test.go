@@ -25,18 +25,35 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/lease"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func newTestCacheForLock(t *testing.T) *cache.Service {
 	t.Helper()
 	return testutil.NewTestCacheService(t, context.Background())
+}
+
+func acquireTestLease(t *testing.T, cacheClient cache.Client, ttl, renewGap time.Duration) *Lease {
+	t.Helper()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	owner := newOwnerToken("bot")
+	inner, err := lease.Acquire(context.Background(), cacheClient, &lease.Spec{
+		Name:     "ingestion",
+		Key:      Key,
+		Owner:    owner,
+		TTL:      ttl,
+		RenewGap: renewGap,
+	}, logger)
+	if err != nil {
+		t.Fatalf("acquire test lease: %v", err)
+	}
+	return &Lease{inner: inner, key: Key, owner: owner, role: "bot", logger: logger}
 }
 
 func TestAcquireExclusive(t *testing.T) {
@@ -91,26 +108,13 @@ func TestAcquireExclusive(t *testing.T) {
 
 func TestLeaseRenewLoop(t *testing.T) {
 	cacheService := newTestCacheForLock(t)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ctx := context.Background()
+	l := acquireTestLease(t, cacheService, time.Second, 200*time.Millisecond)
 
-	lease, err := Acquire(ctx, cacheService, "bot", logger)
-	if err != nil {
-		t.Fatalf("acquire lease: %v", err)
-	}
-
-	lease.ttl = time.Second
-	lease.renewInterval = 200 * time.Millisecond
-	if err := cacheService.Expire(ctx, Key, lease.ttl); err != nil {
-		t.Fatalf("shorten ttl: %v", err)
-	}
-
-	renewCtx := t.Context()
-	go lease.StartRenewLoop(renewCtx, nil)
+	go l.StartRenewLoop(t.Context(), nil)
 
 	time.Sleep(1300 * time.Millisecond)
 
-	exists, err := cacheService.Exists(ctx, Key)
+	exists, err := cacheService.Exists(context.Background(), Key)
 	if err != nil {
 		t.Fatalf("exists check: %v", err)
 	}
@@ -119,104 +123,21 @@ func TestLeaseRenewLoop(t *testing.T) {
 	}
 }
 
-func TestLeaseRenewOwnershipLost(t *testing.T) {
-	cacheService := newTestCacheForLock(t)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ctx := context.Background()
-
-	lease, err := Acquire(ctx, cacheService, "bot", logger)
-	if err != nil {
-		t.Fatalf("acquire lease: %v", err)
-	}
-
-	if err := cacheService.GetClient().Do(ctx, cacheService.B().Set().Key(Key).Value("other-owner").Build()).Error(); err != nil {
-		t.Fatalf("override lock owner: %v", err)
-	}
-
-	err = lease.renew(ctx)
-	if err == nil {
-		t.Fatalf("expected ownership lost error")
-	}
-	if !errors.Is(err, errIngestionLeaseOwnershipLost) {
-		t.Fatalf("expected errIngestionLeaseOwnershipLost, got %v", err)
-	}
-}
-
-func TestLeaseRenewTransientFailure(t *testing.T) {
-	cacheService, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ctx := context.Background()
-
-	lease, err := Acquire(ctx, cacheService, "bot", logger)
-	if err != nil {
-		t.Fatalf("acquire lease: %v", err)
-	}
-	lease.retrySleep = func(_ context.Context, _ time.Duration) bool { return true }
-
-	mini.SetError("LOADING Redis is loading the dataset in memory")
-
-	var attempt atomic.Int32
-	origSleep := lease.retrySleep
-	lease.retrySleep = func(ctx context.Context, d time.Duration) bool {
-		if attempt.Add(1) >= 2 {
-			mini.SetError("")
-		}
-		return origSleep(ctx, d)
-	}
-
-	if err := lease.renew(ctx); err != nil {
-		t.Fatalf("renew should succeed after transient failures: %v", err)
-	}
-	if attempt.Load() < 1 {
-		t.Fatalf("expected at least 1 retry, got %d", attempt.Load())
-	}
-}
-
-func TestLeaseRenewTransientExhausted(t *testing.T) {
-	cacheService, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ctx := context.Background()
-
-	lease, err := Acquire(ctx, cacheService, "bot", logger)
-	if err != nil {
-		t.Fatalf("acquire lease: %v", err)
-	}
-	lease.retrySleep = func(_ context.Context, _ time.Duration) bool { return true }
-
-	mini.SetError("LOADING Redis is loading the dataset in memory")
-
-	err = lease.renew(ctx)
-	if err == nil {
-		t.Fatalf("renew should fail after exhausting retries")
-	}
-	if errors.Is(err, errIngestionLeaseOwnershipLost) {
-		t.Fatalf("transient error should not be classified as ownership lost")
-	}
-}
-
 func TestLeaseRenewLoopReportsOwnershipLost(t *testing.T) {
 	cacheService := newTestCacheForLock(t)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ctx := context.Background()
-
-	lease, err := Acquire(ctx, cacheService, "bot", logger)
-	if err != nil {
-		t.Fatalf("acquire lease: %v", err)
-	}
-	lease.renewInterval = 20 * time.Millisecond
+	l := acquireTestLease(t, cacheService, time.Second, 20*time.Millisecond)
 
 	errCh := make(chan error, 1)
-	renewCtx := t.Context()
-	go lease.StartRenewLoop(renewCtx, errCh)
+	go l.StartRenewLoop(t.Context(), errCh)
 
-	if err := cacheService.GetClient().Do(ctx, cacheService.B().Set().Key(Key).Value("other-owner").Build()).Error(); err != nil {
+	if err := cacheService.GetClient().Do(context.Background(), cacheService.B().Set().Key(Key).Value("other-owner").Build()).Error(); err != nil {
 		t.Fatalf("override lock owner: %v", err)
 	}
 
 	select {
 	case gotErr := <-errCh:
-		if !errors.Is(gotErr, errIngestionLeaseOwnershipLost) {
-			t.Fatalf("expected errIngestionLeaseOwnershipLost, got %v", gotErr)
+		if !errors.Is(gotErr, lease.ErrOwnershipLost) {
+			t.Fatalf("expected ownership lost error, got %v", gotErr)
 		}
 	case <-time.After(time.Second):
 		t.Fatalf("expected ownership lost error from renew loop")
