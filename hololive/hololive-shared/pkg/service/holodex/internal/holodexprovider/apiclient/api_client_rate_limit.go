@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/internal/ctxutil"
-	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/retry"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 

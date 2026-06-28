@@ -27,8 +27,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/retry"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/shared-go/pkg/backoff"
 )
 
 const (
@@ -164,7 +164,7 @@ func (l *Lease) reportRenewLoopError(errCh chan<- error, err error) {
 }
 
 func (l *Lease) renew(ctx context.Context) error {
-	err := withRetry(ctx, leaseRetryOptions{
+	err := retry.WithRetry(ctx, retry.RetryOptions{
 		MaxAttempts: 3,
 		BaseDelay:   1 * time.Second,
 		Jitter:      500 * time.Millisecond,
@@ -196,103 +196,6 @@ func (l *Lease) renew(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-type leaseRetryOptions struct {
-	MaxAttempts int
-	BaseDelay   time.Duration
-	Jitter      time.Duration
-	ShouldRetry func(error) bool
-	OnRetry     func(int, error, time.Duration)
-	Sleep       func(context.Context, time.Duration) bool
-}
-
-func withRetry(ctx context.Context, opts leaseRetryOptions, fn func(context.Context) error) error {
-	opts = normalizeLeaseRetryOptions(opts)
-
-	var lastErr error
-	for attempt := range opts.MaxAttempts {
-		err, done := leaseRetryAttempt(ctx, opts, attempt, lastErr, fn)
-		if done {
-			return err
-		}
-		lastErr = err
-	}
-	return lastErr
-}
-
-func leaseRetryAttempt(
-	ctx context.Context,
-	opts leaseRetryOptions,
-	attempt int,
-	lastErr error,
-	fn func(context.Context) error,
-) (error, bool) {
-	if err := leaseRetryContextError(ctx, lastErr); err != nil {
-		return err, true
-	}
-	err := fn(ctx)
-	if err == nil {
-		return nil, true
-	}
-	if leaseRetryFinished(opts, attempt, err) {
-		return err, true
-	}
-	if !leaseSleepBeforeRetry(ctx, opts, attempt, err) {
-		return err, true
-	}
-	return err, false
-}
-
-func leaseRetryFinished(opts leaseRetryOptions, attempt int, err error) bool {
-	return !leaseRetryShouldContinue(opts, err) || attempt >= opts.MaxAttempts-1
-}
-
-func normalizeLeaseRetryOptions(opts leaseRetryOptions) leaseRetryOptions {
-	if opts.MaxAttempts < 1 {
-		opts.MaxAttempts = 1
-	}
-	if opts.Sleep == nil {
-		opts.Sleep = sleepWithContext
-	}
-	return opts
-}
-
-func leaseRetryContextError(ctx context.Context, lastErr error) error {
-	if ctx.Err() == nil {
-		return nil
-	}
-	if lastErr != nil {
-		return lastErr
-	}
-	return fmt.Errorf("context error: %w", ctx.Err())
-}
-
-func leaseRetryShouldContinue(opts leaseRetryOptions, err error) bool {
-	return opts.ShouldRetry == nil || opts.ShouldRetry(err)
-}
-
-func leaseSleepBeforeRetry(ctx context.Context, opts leaseRetryOptions, attempt int, err error) bool {
-	delay := leaseBackoffDelay(attempt, opts.BaseDelay, opts.Jitter)
-	if opts.OnRetry != nil {
-		opts.OnRetry(attempt+1, err, delay)
-	}
-	return opts.Sleep(ctx, delay)
-}
-
-func leaseBackoffDelay(attempt int, baseDelay, jitter time.Duration) time.Duration {
-	return backoff.ComputeExponentialBackoff(attempt, baseDelay, 0, jitter)
-}
-
-func sleepWithContext(ctx context.Context, d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
 }
 
 func (l *Lease) Release(ctx context.Context) error {
