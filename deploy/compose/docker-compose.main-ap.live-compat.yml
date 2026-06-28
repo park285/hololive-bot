@@ -16,7 +16,7 @@ services:
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
     volumes: !override
       - ../../data:/app/data
-      - ../../logs:/app/logs
+      - ${HOL_AP_LOG_DIR:-../../logs}:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro

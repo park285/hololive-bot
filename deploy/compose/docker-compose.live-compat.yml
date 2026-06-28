@@ -47,7 +47,7 @@ services:
       - "127.0.0.1:30061:30061"
     volumes: !override
       - ../../data:/app/data
-      - ../../logs:/app/logs
+      - ${HOL_AP_LOG_DIR:-../../logs}:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
@@ -64,7 +64,7 @@ services:
       IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
     volumes: !override
       - ../../data:/app/data
-      - ../../logs:/app/logs
+      - ${HOL_AP_LOG_DIR:-../../logs}:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
@@ -77,7 +77,7 @@ services:
       <<: *live-postgres-env
     volumes: !override
       - ../../data:/app/data
-      - ../../logs:/app/logs
+      - ${HOL_AP_LOG_DIR:-../../logs}:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
