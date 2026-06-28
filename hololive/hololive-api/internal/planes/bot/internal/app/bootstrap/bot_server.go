@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/park285/iris-client-go/iris"
-	"github.com/quic-go/quic-go"
+	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	"github.com/quic-go/quic-go/http3"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
@@ -64,20 +63,10 @@ func buildBotHTTP3ServerWithReloaderOptions(
 		return nil, nil, fmt.Errorf("load h3 certificate: %w", err)
 	}
 
-	quicConfig := &quic.Config{
-		InitialPacketSize: 1200,
-		KeepAlivePeriod:   10 * time.Second,
-		MaxIdleTimeout:    60 * time.Second,
+	tlsConfig := &tls.Config{
+		MinVersion:     tls.VersionTLS13,
+		GetCertificate: certReloader.GetCertificate,
 	}
 
-	return &http3.Server{
-		Addr:    appConfig.Server.H3Addr,
-		Handler: botRouter,
-		TLSConfig: http3.ConfigureTLSConfig(&tls.Config{
-			MinVersion:     tls.VersionTLS13,
-			GetCertificate: certReloader.GetCertificate,
-		}),
-		QUICConfig:     quicConfig,
-		MaxHeaderBytes: http.DefaultMaxHeaderBytes,
-	}, certReloader.Start, nil
+	return sharedh3.NewServerWithTLSConfig(appConfig.Server.H3Addr, botRouter, tlsConfig), certReloader.Start, nil
 }

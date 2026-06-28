@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"strings"
+
+	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 func GenerateSessionID() (string, error) {
@@ -82,8 +84,5 @@ func ConstantTimeStringEqual(left, right string) bool {
 }
 
 func TruncateSessionID(sessionID string) string {
-	if len(sessionID) <= 8 {
-		return sessionID
-	}
-	return sessionID[:8] + "..."
+	return stringutil.TruncateString(sessionID, 8)
 }

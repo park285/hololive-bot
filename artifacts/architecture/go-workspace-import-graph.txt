@@ -19,6 +19,7 @@ github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/runtime/lifecycle
+github.com/kapu/admin-dashboard/internal/auth -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/admin-dashboard/internal/config -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/admin-dashboard/internal/docker -> github.com/kapu/admin-dashboard/internal/httpx
 github.com/kapu/admin-dashboard/internal/docker -> github.com/park285/shared-go/pkg/json
@@ -73,6 +74,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/backoff
+github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/runtime/bootstrap
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/runtime/lifecycle
@@ -309,6 +311,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> githu
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/testutil
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/park285/shared-go/pkg/h3
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/park285/shared-go/pkg/workerpool
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter
