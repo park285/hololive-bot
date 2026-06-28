@@ -5,6 +5,23 @@ import (
 	"time"
 )
 
+func TestHubHasSubscribersGatesIdlePolling(t *testing.T) {
+	hub := NewHub(nil)
+	if hub.hasSubscribers() {
+		t.Fatal("new hub must report no subscribers (idle poll gated)")
+	}
+
+	_, _, unsubscribe := hub.Subscribe()
+	if !hub.hasSubscribers() {
+		t.Fatal("after Subscribe hub must report subscribers")
+	}
+
+	unsubscribe()
+	if hub.hasSubscribers() {
+		t.Fatal("after unsubscribe hub must report no subscribers")
+	}
+}
+
 func TestSendDropOldestDropsOldestWhenFull(t *testing.T) {
 	ch := make(chan SystemStats, 2)
 	ch <- SystemStats{ThreadCount: 1}

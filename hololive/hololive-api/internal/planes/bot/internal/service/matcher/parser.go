@@ -25,12 +25,12 @@ import (
 	"strings"
 )
 
+var nameWithOrgRe = regexp.MustCompile(`^(.+?)\s*\(([^)]+)\)\s*$`)
+
 // Input: "미코 (Nijisanji)" → Output: name="미코", org="Nijisanji"
 // Input: "미코" → Output: name="미코", org="".
 func ParseNameWithOrg(input string) (name, org string) {
-	re := regexp.MustCompile(`^(.+?)\s*\(([^)]+)\)\s*$`)
-
-	matches := re.FindStringSubmatch(input)
+	matches := nameWithOrgRe.FindStringSubmatch(input)
 	if len(matches) == 3 {
 		name = strings.TrimSpace(matches[1])
 		org = strings.TrimSpace(matches[2])

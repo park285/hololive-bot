@@ -58,9 +58,17 @@ func (h *Hub) tick(ctx context.Context, tick <-chan time.Time) bool {
 	case <-h.stop:
 		return false
 	case <-tick:
-		h.broadcastSample(ctx)
+		if h.hasSubscribers() {
+			h.broadcastSample(ctx)
+		}
 		return true
 	}
+}
+
+func (h *Hub) hasSubscribers() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.subs) > 0
 }
 
 func (h *Hub) broadcastSample(parent context.Context) {
