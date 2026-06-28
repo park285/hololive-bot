@@ -23,6 +23,7 @@ package auth
 import (
 	"context"
 	stdErrors "errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -479,7 +480,7 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 	timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 
-	err = service.applyPasswordReset(timeoutCtx, &reset, "new-hash", time.Now().UTC())
+	_, err = service.applyPasswordReset(timeoutCtx, reset.TokenHash, "new-hash", time.Now().UTC())
 	if err == nil {
 		t.Fatalf("expected applyPasswordReset to fail")
 	}
@@ -495,6 +496,76 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 	}
 	if usedAt != nil {
 		t.Fatalf("token used_at should remain null after rollback")
+	}
+}
+
+func TestResetPassword_ConsumesTokenExactlyOnceUnderConcurrency(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	cacheClient := testutil.NewTestCacheService(t, ctx)
+
+	config := DefaultConfig()
+	config.BcryptCost = bcrypt.MinCost
+	config.LoginRateLimitPerMinute = 1000
+
+	service, err := NewService(ctx, db, cacheClient, sharedlogging.NewTestLogger(), config)
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	if _, err := service.Register(ctx, "user@example.com", "Password1", "User"); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	resetToken, err := service.RequestPasswordReset(ctx, "user@example.com", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("request password reset: %v", err)
+	}
+
+	const workers = 8
+	var (
+		wg        sync.WaitGroup
+		start     = make(chan struct{})
+		mu        sync.Mutex
+		successes int
+		failures  []error
+	)
+	wg.Add(workers)
+	for range workers {
+		go func() {
+			defer wg.Done()
+			<-start
+			err := service.ResetPassword(ctx, resetToken, "NewPassw0rd1")
+			mu.Lock()
+			defer mu.Unlock()
+			if err == nil {
+				successes++
+				return
+			}
+			failures = append(failures, err)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if successes != 1 {
+		t.Fatalf("expected exactly one concurrent reset to succeed, got %d", successes)
+	}
+	if len(failures) != workers-1 {
+		t.Fatalf("expected %d rejected resets, got %d", workers-1, len(failures))
+	}
+	for _, err := range failures {
+		assertAuthCode(t, err, CodeInvalidInput)
+	}
+
+	if err := service.ResetPassword(ctx, resetToken, "NewPassw0rd2"); err == nil {
+		t.Fatalf("expected reused token to be rejected after consumption")
+	} else {
+		assertAuthCode(t, err, CodeInvalidInput)
+	}
+
+	if _, _, err := service.Login(ctx, "user@example.com", "NewPassw0rd1", "127.0.0.1"); err != nil {
+		t.Fatalf("expected login with the winning new password: %v", err)
 	}
 }
 

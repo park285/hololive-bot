@@ -108,8 +108,8 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 	}
 
 	now := time.Now().UTC()
-	reset, err := s.findValidPasswordResetToken(ctx, sha256Hex(token), now)
-	if err != nil {
+	tokenHash := sha256Hex(token)
+	if _, err := s.findValidPasswordResetToken(ctx, tokenHash, now); err != nil {
 		return err
 	}
 
@@ -118,10 +118,11 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 		return newError(CodeInternal, "password hash failed", err)
 	}
 
-	if err := s.applyPasswordReset(ctx, &reset, string(passwordHash), now); err != nil {
+	userID, err := s.applyPasswordReset(ctx, tokenHash, string(passwordHash), now)
+	if err != nil {
 		return err
 	}
-	s.warnIfPasswordResetSessionRevokeFails(ctx, reset.UserID)
+	s.warnIfPasswordResetSessionRevokeFails(ctx, userID)
 	return nil
 }
 
@@ -154,37 +155,46 @@ func scanPasswordResetToken(row rowScanner) (passwordResetTokenModel, error) {
 
 func (s *Service) applyPasswordReset(
 	ctx context.Context,
-	reset *passwordResetTokenModel,
+	tokenHash string,
 	passwordHash string,
 	now time.Time,
-) error {
-	err := dbx.InPgxTx(ctx, s.db, func(tx dbx.Tx) error {
-		if _, err := tx.Exec(ctx, `
-			UPDATE auth_users
-			SET password_hash = $1, updated_at = $2
-			WHERE id = $3
-		`, passwordHash, now, reset.UserID); err != nil {
-			return newError(CodeInternal, "failed to update password", err)
-		}
-
-		if _, err := tx.Exec(ctx, `
-			UPDATE auth_password_reset_tokens
-			SET used_at = $1
-			WHERE token_hash = $2
-		`, now, reset.TokenHash); err != nil {
-			return newError(CodeInternal, "failed to mark token used", err)
-		}
-
-		return nil
+) (string, error) {
+	userID, err := dbx.InPgxTxWithResult(ctx, s.db, func(tx dbx.Tx) (string, error) {
+		return claimTokenAndUpdatePassword(ctx, tx, tokenHash, passwordHash, now)
 	})
 	if err != nil {
 		var authErr *Error
 		if stdErrors.As(err, &authErr) {
-			return authErr
+			return "", authErr
 		}
-		return newError(CodeInternal, "failed to apply password reset transaction", err)
+		return "", newError(CodeInternal, "failed to apply password reset transaction", err)
 	}
-	return nil
+	return userID, nil
+}
+
+func claimTokenAndUpdatePassword(ctx context.Context, tx dbx.Tx, tokenHash, passwordHash string, now time.Time) (string, error) {
+	var claimedUserID string
+	if err := tx.QueryRow(ctx, `
+		UPDATE auth_password_reset_tokens
+		SET used_at = $1
+		WHERE token_hash = $2 AND used_at IS NULL AND expires_at > $1
+		RETURNING user_id
+	`, now, tokenHash).Scan(&claimedUserID); err != nil {
+		if stdErrors.Is(err, pgx.ErrNoRows) {
+			return "", newError(CodeInvalidInput, "invalid reset token", nil)
+		}
+		return "", newError(CodeInternal, "failed to claim reset token", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE auth_users
+		SET password_hash = $1, updated_at = $2
+		WHERE id = $3
+	`, passwordHash, now, claimedUserID); err != nil {
+		return "", newError(CodeInternal, "failed to update password", err)
+	}
+
+	return claimedUserID, nil
 }
 
 func (s *Service) warnIfPasswordResetSessionRevokeFails(ctx context.Context, userID string) {
