@@ -8,10 +8,6 @@
 !scripts/deploy/
 !scripts/deploy/ap-rsync-files.txt
 
-!admin-dashboard/
-!admin-dashboard/backend/
-!admin-dashboard/backend/**
-
 !shared-go/
 !shared-go/go.mod
 !shared-go/go.sum

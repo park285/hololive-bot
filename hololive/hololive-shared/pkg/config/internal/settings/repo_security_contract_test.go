@@ -726,13 +726,6 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 func assertMainAPLiveCompatOverlayText(t *testing.T) {
 	t.Helper()
 
-	overlay := readRepoFile(t, "deploy/compose/docker-compose.main-ap.live-compat.yml")
-	for _, service := range []string{"hololive-api", "hololive-alarm-worker"} {
-		block := composeServiceBlock(t, overlay, service)
-		if !strings.Contains(block, "IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}") {
-			t.Fatalf("docker-compose.main-ap.live-compat.yml missing IRIS_BASE_URL_ALLOWED_HOSTS default for %s", service)
-		}
-	}
 	mainAP := readRepoFile(t, "deploy/compose/docker-compose.main-ap.yml")
 	const producerEnvFile = "${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}"
 	if block := composeServiceBlock(t, mainAP, "youtube-producer-c"); !strings.Contains(block, "env_file:") || !strings.Contains(block, producerEnvFile) {

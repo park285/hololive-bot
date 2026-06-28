@@ -35,3 +35,4 @@ services:
       resources:
         limits:
           memory: 768m
+          pids: 256
