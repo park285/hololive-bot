@@ -143,12 +143,27 @@ ledger_count="$(run_psql -tAc "SELECT count(*) FROM schema_migrations;" | tr -d 
 if [ "${ledger_count}" = "0" ]; then
   existing_schema="$(run_psql -tAc "SELECT (to_regclass('public.members') IS NOT NULL AND to_regclass('public.alarms') IS NOT NULL);" | tr -d '[:space:]')"
   if [ "${existing_schema}" = "t" ]; then
-    # ledger는 비었지만 핵심 테이블이 이미 있으면 schema_migrations 도입 이전부터 살아온 DB다.
-    # 전량 재적용(특히 012의 DELETE+reseed가 운영자 편집을 날림)을 피하려 SQL 재실행 없이 applied로만 마킹한다.
-    echo "==> existing schema detected with empty ledger; baselining manifest as already-applied (no SQL re-run)"
+    # 매니페스트 전체를 baseline 하면 아직 적용 안 된 신규 마이그레이션까지 SQL 없이 applied로 찍혀
+    # 스키마가 조용히 뒤처진다(073 DB에 074-082가 skip 된 실제 사고). watermark 이하만 baseline 한다.
+    baseline_through="${MIGRATION_BASELINE_THROUGH:-}"
+    if [ -z "${baseline_through}" ]; then
+      echo "ERROR: existing schema detected with empty schema_migrations ledger." >&2
+      echo "Refusing to baseline the whole manifest as applied — that would silently skip genuinely-pending migrations." >&2
+      echo "Set MIGRATION_BASELINE_THROUGH to the last manifest filename already applied to this DB" >&2
+      echo "(baseline through it, apply the remainder). If the ledger is unexpectedly empty, investigate before retrying." >&2
+      exit 1
+    fi
+    if ! grep -qxF "${baseline_through}" "${MANIFEST_SELECTED_ORDERED}"; then
+      echo "ERROR: MIGRATION_BASELINE_THROUGH='${baseline_through}' is not a selected manifest migration filename" >&2
+      exit 1
+    fi
+    echo "==> existing schema with empty ledger; baselining through ${baseline_through} (no SQL re-run), applying the remainder"
     while IFS= read -r baseline_file || [ -n "${baseline_file}" ]; do
       [ -n "${baseline_file}" ] || continue
       run_psql -q -c "INSERT INTO schema_migrations(filename) VALUES ('${baseline_file}') ON CONFLICT (filename) DO NOTHING;"
+      if [ "${baseline_file}" = "${baseline_through}" ]; then
+        break
+      fi
     done < "${MANIFEST_SELECTED_ORDERED}"
   fi
 fi

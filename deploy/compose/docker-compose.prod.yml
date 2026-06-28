@@ -318,6 +318,7 @@ services:
       POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
       HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
+      MIGRATION_BASELINE_THROUGH: ${MIGRATION_BASELINE_THROUGH:-}
     command:
       - /bin/sh
       - /migrations/bootstrap-and-apply.sh
