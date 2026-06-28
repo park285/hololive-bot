@@ -278,6 +278,10 @@ func (d *Dispatcher) sendMessage(ctx context.Context, item *domain.NotificationD
 	return d.sender.SendMessage(ctx, item.RoomID, message)
 }
 
+// MarkSent 실패나 lock 만료(LockTimeout)로 같은 행이 재전송돼도, 이 결정적 ID로 Iris
+// reply admission store가 멱등 처리해 실제 카톡 송출을 막는다. 이 안전망은 Iris의 admission
+// retention(현재 168h)이 LockTimeout(기본 5분)보다 훨씬 길 때만 성립한다 — 두 값의 대소를
+// 뒤집으면 재전송분이 dedup window를 벗어나 사용자에게 중복 알림이 전달된다.
 func notificationDeliveryClientRequestID(item *domain.NotificationDeliveryOutbox) string {
 	kind := ""
 	contentID := ""

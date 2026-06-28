@@ -149,9 +149,9 @@ func (r *OutboxRepository) MarkSent(ctx context.Context, id int64) error {
 	}
 	_, err := r.pool.Exec(ctx,
 		`UPDATE notification_delivery_outbox
-		 SET status = $1, sent_at = $2, error = NULL
-		 WHERE id = $3`,
-		domain.DeliveryStatusSent, time.Now(), id,
+		 SET status = $1, sent_at = $2, locked_at = NULL, error = NULL
+		 WHERE id = $3 AND status = $4`,
+		domain.DeliveryStatusSent, time.Now(), id, domain.DeliveryStatusPending,
 	)
 	return err
 }

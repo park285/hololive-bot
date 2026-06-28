@@ -73,9 +73,9 @@ func fetchLockedIDs(t *testing.T, repository *OutboxRepository, ctx context.Cont
 	return ids
 }
 
-func fetchAndLockItems(t *testing.T, repository *OutboxRepository, ctx context.Context, batchSize int) []domain.NotificationDeliveryOutbox {
+func fetchAndLockItems(t *testing.T, repository *OutboxRepository, ctx context.Context) []domain.NotificationDeliveryOutbox {
 	t.Helper()
-	items, err := repository.FetchAndLock(ctx, batchSize, 5*time.Minute)
+	items, err := repository.FetchAndLock(ctx, 1, 5*time.Minute)
 	if err != nil {
 		t.Fatalf("fetch and lock: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestMarkSent(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items := fetchAndLockItems(t, repository, ctx, 1)
+	items := fetchAndLockItems(t, repository, ctx)
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
@@ -214,6 +214,68 @@ func TestMarkSent(t *testing.T) {
 	}
 }
 
+func TestMarkSent_ClearsLock(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	items := fetchAndLockItems(t, repository, ctx)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+	if !items[0].LockedAt.Valid {
+		t.Fatal("expected locked_at set after FetchAndLock")
+	}
+
+	if err := repository.MarkSent(ctx, items[0].ID); err != nil {
+		t.Fatalf("mark sent: %v", err)
+	}
+
+	var clearedLocks int
+	if err := repository.pool.QueryRow(ctx,
+		"SELECT count(*) FROM notification_delivery_outbox WHERE id = $1 AND locked_at IS NULL",
+		items[0].ID,
+	).Scan(&clearedLocks); err != nil {
+		t.Fatalf("query locked_at: %v", err)
+	}
+	if clearedLocks != 1 {
+		t.Fatalf("MarkSent must clear locked_at, got %d cleared", clearedLocks)
+	}
+}
+
+func TestMarkSent_DoesNotResurrectFailedRow(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	items := fetchAndLockItems(t, repository, ctx)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+	id := items[0].ID
+
+	if _, err := repository.pool.Exec(ctx,
+		"UPDATE notification_delivery_outbox SET status = 'FAILED', locked_at = NULL WHERE id = $1", id,
+	); err != nil {
+		t.Fatalf("force failed: %v", err)
+	}
+
+	if err := repository.MarkSent(ctx, id); err != nil {
+		t.Fatalf("mark sent: %v", err)
+	}
+
+	if sent := countByStatus(t, repository, ctx, domain.DeliveryStatusSent); sent != 0 {
+		t.Fatalf("late MarkSent must not resurrect a FAILED row to SENT, sent=%d", sent)
+	}
+	if failed := countByStatus(t, repository, ctx, domain.DeliveryStatusFailed); failed != 1 {
+		t.Fatalf("row must remain FAILED, failed=%d", failed)
+	}
+}
+
 func TestMarkFailed_WithBackoff(t *testing.T) {
 	repository := testRepository(t)
 	ctx := context.Background()
@@ -222,7 +284,7 @@ func TestMarkFailed_WithBackoff(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items := fetchAndLockItems(t, repository, ctx, 1)
+	items := fetchAndLockItems(t, repository, ctx)
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
@@ -327,7 +389,7 @@ func TestCleanup(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items := fetchAndLockItems(t, repository, ctx, 1)
+	items := fetchAndLockItems(t, repository, ctx)
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
