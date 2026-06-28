@@ -81,18 +81,22 @@ x-deploy-512m: &deploy-512m
   resources:
     limits:
       memory: 512m
+      pids: 256
 x-deploy-384m: &deploy-384m
   resources:
     limits:
       memory: 384m
+      pids: 256
 x-deploy-128m: &deploy-128m
   resources:
     limits:
       memory: 128m
+      pids: 128
 x-deploy-32m: &deploy-32m
   resources:
     limits:
       memory: 32m
+      pids: 64
 
 x-cache-env: &cache-env
   CACHE_SOCKET_PATH: ${CACHE_SOCKET_PATH:-}
@@ -165,7 +169,7 @@ x-scraper-env: &scraper-env
 
 x-go-volumes: &go-volumes
   - ../../data:/app/data
-  - ${HOL_AP_LOG_DIR:-../../logs}:/app/logs
+  - ../../logs:/app/logs
   - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
   - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
@@ -173,7 +177,7 @@ x-go-volumes: &go-volumes
 
 x-hololive-api-volumes: &hololive-api-volumes
   - ../../data:/app/data
-  - ${HOL_AP_LOG_DIR:-../../logs}:/app/logs
+  - ../../logs:/app/logs
   - ../../runtime-config:/app/runtime-config:ro
   - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
   - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
@@ -183,7 +187,7 @@ x-hololive-api-volumes: &hololive-api-volumes
 
 x-alarm-worker-volumes: &alarm-worker-volumes
   - ../../data:/app/data
-  - ${HOL_AP_LOG_DIR:-../../logs}:/app/logs
+  - ../../logs:/app/logs
   - ../../runtime-config:/app/runtime-config:ro
   - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
   - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
@@ -578,7 +582,7 @@ services:
     ports:
       - "127.0.0.1:30190:30190"
     volumes:
-      - ${HOL_AP_LOG_DIR:-../../logs}:/app/logs
+      - ../../logs:/app/logs
       - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
     extra_hosts: *host-extra-hosts
     depends_on:

@@ -1,14 +1,8 @@
 # main-ap 확장 인스턴스의 사전 hardening 운영 동작을 보존하는 명시 opt-in overlay입니다.
+# youtube-producer-c 는 /opt 에서 동작해 ../../logs 가 700-root current/logs 로 갇히므로
+# /app/logs 만 repo logs/ 절대경로로 둔다(다른 로컬 서비스는 live-compat.yml 에서 동일 처리).
 
 services:
-  hololive-api:
-    environment:
-      IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
-
-  hololive-alarm-worker:
-    environment:
-      IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
-
   youtube-producer-c:
     environment:
       POSTGRES_HOST: holo-postgres
@@ -16,7 +10,7 @@ services:
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
     volumes: !override
       - ../../data:/app/data
-      - ${HOL_AP_LOG_DIR:-../../logs}:/app/logs
+      - /home/kapu/work/iris-stack/hololive-bot/logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
