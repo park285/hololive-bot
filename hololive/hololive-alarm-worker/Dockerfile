@@ -25,8 +25,8 @@ ARG ALPINE_VERSION=3.23
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 ARG VERSION=dev
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 # GOAMD64/UPX opt-in: 기본은 현 동작(v1, 압축 없음). 배포 호스트가 AVX2(2013+)면
 # --build-arg GOAMD64=v3, 이미지 축소가 필요하면 --build-arg UPX_ENABLE=1 로 활성. 빼면 즉시 비활성.
 ARG GOAMD64=v1
@@ -42,23 +42,29 @@ ENV GOWORK=off
 WORKDIR /workspace/hololive-bot
 
 COPY go.mod go.work go.work.sum ./
-COPY --from=shared_go_workspace . /workspace/shared-go
-COPY --from=iris_client_go_workspace . /workspace/iris-client-go
-COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
-COPY admin-dashboard/backend ./admin-dashboard/backend
+COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
+COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
+COPY --from=iris_client_go_workspace go.mod go.sum /workspace/iris-client-go/
+COPY --from=iris_client_go_workspace iris /workspace/iris-client-go/iris
+COPY --from=iris_client_go_workspace internal /workspace/iris-client-go/internal
+COPY --from=iris_client_go_workspace webhook /workspace/iris-client-go/webhook
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-alarm-worker ./hololive/hololive-alarm-worker
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-alarm-worker
 
+# Build against the same active sibling workspaces that build-all.sh resolves via additional_contexts.
+# This avoids fetching private/local shared modules from the network during container builds.
+RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go && \
+    go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go
+
 RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOAMD64=${GOAMD64} \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build ${GO_PGO_FILE:+-pgo=${GO_PGO_FILE}} -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/alarm-worker ./cmd/alarm-worker && \
-    ( cd ../hololive-youtube-producer && \
-      CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOAMD64=${GOAMD64} \
-      go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/runtime/healthcheck ) && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
+    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck && \
     if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/alarm-worker /dist/bin/healthcheck; fi && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/

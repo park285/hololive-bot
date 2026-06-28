@@ -14,11 +14,18 @@
 artifacts/
 BUNDLE_MANIFEST.txt
 
+.DS_Store
+.direnv/
+.cache/
+coverage.out
+
 **/.idea
 **/.vscode
 **/.gemini
 **/.omc
 **/.serena
+**/.direnv
+**/.cache
 **/.gomodcache
 **/.gocache
 **/.env*
@@ -37,9 +44,11 @@ BUNDLE_MANIFEST.txt
 **/dist
 **/coverage
 **/artifacts
+**/__pycache__
 **/*.log
 **/*.tmp
 **/*.out
+**/*.test
 **/*.md
 
 # Local build artifacts under module roots

@@ -46,7 +46,6 @@ COPY go.mod go.work go.work.sum ./
 COPY scripts/deploy/ap-rsync-files.txt ./scripts/deploy/ap-rsync-files.txt
 COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
 COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
-COPY admin-dashboard/backend ./admin-dashboard/backend
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
 RUN set -eu; \
@@ -56,6 +55,9 @@ RUN set -eu; \
       done
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-producer
+
+# Build against the same active shared-go workspace that build-all.sh resolves via additional_contexts.
+RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go
 
 RUN \
     --mount=type=cache,target=/go/pkg/mod \

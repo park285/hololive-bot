@@ -35,8 +35,8 @@ RUN npm run build
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 ARG VERSION=dev
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 ARG GOAMD64=v1
 ARG UPX_ENABLE=
 RUN apk add --no-cache git
@@ -50,17 +50,13 @@ WORKDIR /workspace/hololive-bot
 COPY go.mod go.work go.work.sum ./
 COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
 COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
-COPY --from=iris_client_go_workspace go.mod go.sum /workspace/iris-client-go/
-COPY --from=iris_client_go_workspace iris /workspace/iris-client-go/iris
-COPY --from=iris_client_go_workspace internal /workspace/iris-client-go/internal
-COPY --from=iris_client_go_workspace webhook /workspace/iris-client-go/webhook
-COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
 COPY admin-dashboard/backend ./admin-dashboard/backend
 COPY hololive/hololive-shared ./hololive/hololive-shared
-COPY hololive/hololive-api ./hololive/hololive-api
-COPY hololive/hololive-alarm-worker ./hololive/hololive-alarm-worker
 
 WORKDIR /workspace/hololive-bot/admin-dashboard/backend
+
+# Build against the same active shared-go workspace that build-all.sh resolves via additional_contexts.
+RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go
 
 COPY --from=frontend-builder /app/frontend/dist /frontend-dist
 RUN rm -rf internal/static/static/dist && \
@@ -69,9 +65,9 @@ RUN rm -rf internal/static/static/dist && \
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOAMD64=${GOAMD64} \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/admin-dashboard ./cmd/admin-dashboard && \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOAMD64=${GOAMD64} \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck && \
     if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/admin-dashboard /dist/bin/healthcheck; fi
 
