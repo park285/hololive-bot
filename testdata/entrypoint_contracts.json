@@ -18,6 +18,12 @@
     ]
   },
   {
+    "path": "hololive/hololive-alarm-worker/cmd/healthcheck/main.go",
+    "must_contain": [
+      "healthprobe.CheckURLInternal("
+    ]
+  },
+  {
     "path": "hololive/hololive-api/internal/planes/bot/cmd/test_db_integration/main.go",
     "must_contain": [
       "app.BuildDBIntegrationRuntime("
