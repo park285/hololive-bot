@@ -84,7 +84,14 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 	for _, roomID := range subscriberRooms {
 		recentlyUpcoming, err := c.roomHasRecentUpcomingNotification(ctx, roomID, channelID, stream)
 		if err != nil {
-			return nil, 0, err
+			if ctx.Err() != nil {
+				return nil, 0, err
+			}
+			c.logger.Warn("live catchup dedup check failed, skipping room",
+				slog.String("room_id", roomID),
+				slog.String("channel_id", channelID),
+				slog.String("error", err.Error()))
+			continue
 		}
 		if recentlyUpcoming {
 			suppressedRooms++

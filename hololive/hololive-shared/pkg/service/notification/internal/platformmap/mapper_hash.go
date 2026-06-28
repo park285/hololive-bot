@@ -3,6 +3,7 @@ package platformmap
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync/atomic"
 
@@ -140,8 +141,11 @@ func (m *Mapper) renameHashMappingKey(ctx context.Context, tmpKey, key string, f
 
 func (m *Mapper) rawEvalClient() (_ valkey.Client, _ valkey.Builder, ok bool) {
 	defer func() {
-		if recover() != nil {
+		if r := recover(); r != nil {
 			ok = false
+			if m.logger != nil {
+				m.logger.Warn("raw valkey eval client unavailable", slog.Any("panic", r))
+			}
 		}
 	}()
 

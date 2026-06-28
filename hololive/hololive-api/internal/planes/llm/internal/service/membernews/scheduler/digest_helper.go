@@ -105,7 +105,12 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 	)
 
 	for i := range rooms {
-		sem <- struct{}{}
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Wait()
+			return result
+		}
 		wg.Add(1)
 		go func(roomID string) {
 			defer wg.Done()

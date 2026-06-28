@@ -23,6 +23,7 @@ package acl
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync/atomic"
 
@@ -131,8 +132,11 @@ func (s *Service) renameRoomsKeyNative(ctx context.Context, client valkey.Client
 
 func (s *Service) rawCacheEvalClient() (_ valkey.Client, _ valkey.Builder, ok bool) {
 	defer func() {
-		if recover() != nil {
+		if r := recover(); r != nil {
 			ok = false
+			if s.logger != nil {
+				s.logger.Warn("raw valkey eval client unavailable", slog.Any("panic", r))
+			}
 		}
 	}()
 

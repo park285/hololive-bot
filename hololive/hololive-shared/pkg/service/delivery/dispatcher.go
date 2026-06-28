@@ -86,6 +86,9 @@ type Dispatcher struct {
 }
 
 func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, config DispatcherConfig) *Dispatcher {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	defaults := DefaultDispatcherConfig()
 	if config.BatchSize <= 0 {
 		config.BatchSize = defaults.BatchSize
@@ -124,7 +127,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 	if err := lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(ctx context.Context) error {
 		d.processOnce(ctx)
 		return nil
-	}); err != nil && d.logger != nil {
+	}); err != nil {
 		d.logger.Warn("Delivery dispatcher ticker stopped with error", slog.String("error", err.Error()))
 	}
 	d.logger.Info("Delivery dispatcher stopped")
