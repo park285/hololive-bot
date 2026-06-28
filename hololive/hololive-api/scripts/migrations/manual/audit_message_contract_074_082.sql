@@ -1,6 +1,3 @@
--- ledger엔 074-082가 applied인데 SQL은 실제로 안 돌던 2026-06-28 baseline-마킹 사고(apply-all.sh
--- 7a66082a에서 fix)로 오염된 DB를 찾는다. 읽기 전용이라 prod에 그대로 psql -f 해도 안전하다.
-
 DROP TABLE IF EXISTS _msg_contract_audit;
 CREATE TEMP TABLE _msg_contract_audit(
   ord              int  PRIMARY KEY,

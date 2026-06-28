@@ -19,9 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# DAMAGED migration(audit가 'ledger엔 applied인데 artifact 없음'으로 판정한 것)만 골라 원본 SQL을
-# 그대로 재실행한다. DAMAGED는 실제로 안 돌았던 것이라 덮어쓸 운영 데이터가 없고, 074-082 원본은 모두
-# 멱등(ON CONFLICT / NOT LIKE 가드)이라 재실행이 안전하다. 기본은 dry-run, 실제 적용은 두 env 모두 필요.
+# DAMAGED는 실제로 안 돈 것이라 덮어쓸 데이터가 없고, 074-082 원본이 멱등이라 재실행이 안전하다.
 
 set -eu
 
