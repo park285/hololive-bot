@@ -90,9 +90,9 @@ CREATE TABLE IF NOT EXISTS settlement_room_configs (
 );
 
 INSERT INTO settlement_room_configs (room_id) VALUES
-    ('18477992485199234'),
-    ('451788135895779'),
-    ('18476130232878491')
+    ('10000000000000001'),
+    ('200000000000002'),
+    ('10000000000000003')
 ON CONFLICT (room_id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS settlement_member_terms (

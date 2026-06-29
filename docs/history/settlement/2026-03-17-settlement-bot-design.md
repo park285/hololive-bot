@@ -7,7 +7,7 @@
 
 ## Requirements
 
-- **고정 멤버 4명**: 비포, 심심이, 돈이좋아요, 겜데브
+- **고정 멤버 4명**: 사용자A, 사용자B, 사용자C, 사용자D
 - **고정 금액**: 36,000원/월 (9,000원/인)
 - **갱신일**: 매달 18일
 - **알람**: 매달 17일 자동 알람 (미입금자 목록)
@@ -168,16 +168,16 @@ CREATE INDEX idx_sp_settlement_unpaid
 
 인당 9,000원 | 갱신일 18일
 
-[완료] 비포 (03/15)
-[완료] 심심이 (03/16)
-[미입금] 돈이좋아요
-[미입금] 겜데브
+[완료] 사용자A (03/15)
+[완료] 사용자B (03/16)
+[미입금] 사용자C
+[미입금] 사용자D
 ```
 
 #### 정산 완료 응답 (`@카푸봇 정산완료`)
 
 ```
-[정산] 비포님 정산 완료 (2/4)
+[정산] 사용자A님 정산 완료 (2/4)
 ```
 
 #### 미입금 알람 (17일 자동)
@@ -185,7 +185,7 @@ CREATE INDEX idx_sp_settlement_unpaid
 ```
 [정산] 내일(18일) 갱신일입니다.
 
-미입금: 돈이좋아요, 겜데브
+미입금: 사용자C, 사용자D
 인당 9,000원 | 총 36,000원
 ```
 
@@ -225,7 +225,7 @@ func (s *Scheduler) check(ctx context.Context) {
   → MessageAdapter.ParseMessage() → CommandSettlementPaid
   → SettlementCommand.Execute("paid")
   → Repository.EnsureCurrentCycle() + MarkPaid(userName)
-  → Formatter → "비포님 정산 완료 (2/4)"
+  → Formatter → "사용자A님 정산 완료 (2/4)"
   → Iris → 카카오톡
 ```
 
@@ -250,7 +250,7 @@ settlement_payments.member_name과 매칭해야 한다.
 CREATE TABLE IF NOT EXISTS settlement_members (
     id SERIAL PRIMARY KEY,
     room_id VARCHAR(100) NOT NULL,
-    member_name VARCHAR(100) NOT NULL,  -- 정산용 이름 (비포, 심심이 등)
+    member_name VARCHAR(100) NOT NULL,  -- 정산용 이름 (사용자A, 사용자B 등)
     kakao_user_id VARCHAR(100),         -- 카카오톡 user_id (최초 매칭 시 저장)
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (room_id, member_name)
