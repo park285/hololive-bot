@@ -167,9 +167,9 @@ func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, maxRetries 
                 status = CASE WHEN attempt_count + 1 >= $2 THEN 'FAILED' ELSE 'PENDING' END,
                 next_attempt_at = CASE WHEN attempt_count + 1 >= $3 THEN next_attempt_at ELSE $4 END,
                 locked_at = NULL
-            WHERE id = $5`
+            WHERE id = $5 AND status = $6`
 
-	_, err := r.pool.Exec(ctx, query, errMsg, maxRetries, maxRetries, now.Add(backoff), id)
+	_, err := r.pool.Exec(ctx, query, errMsg, maxRetries, maxRetries, now.Add(backoff), id, domain.DeliveryStatusPending)
 	return err
 }
 
@@ -205,8 +205,8 @@ func (r *OutboxRepository) MarkFailedBatch(ctx context.Context, ids []int64, rea
 	_, err := r.pool.Exec(ctx,
 		`UPDATE notification_delivery_outbox
 		 SET status = $1, error = $2, locked_at = NULL
-		 WHERE id = ANY($3)`,
-		domain.DeliveryStatusFailed, reason, ids,
+		 WHERE id = ANY($3) AND status = $4`,
+		domain.DeliveryStatusFailed, reason, ids, domain.DeliveryStatusPending,
 	)
 	if err != nil {
 		return fmt.Errorf("mark failed batch: %w", err)

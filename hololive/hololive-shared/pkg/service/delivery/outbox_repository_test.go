@@ -276,6 +276,37 @@ func TestMarkSent_DoesNotResurrectFailedRow(t *testing.T) {
 	}
 }
 
+func TestMarkFailed_DoesNotResurrectSentRow(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	items := fetchAndLockItems(t, repository, ctx)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+	id := items[0].ID
+
+	if _, err := repository.pool.Exec(ctx,
+		"UPDATE notification_delivery_outbox SET status = 'SENT', locked_at = NULL WHERE id = $1", id,
+	); err != nil {
+		t.Fatalf("force sent: %v", err)
+	}
+
+	if err := repository.MarkFailed(ctx, id, 3, time.Minute, "late failure"); err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+
+	if failed := countByStatus(t, repository, ctx, domain.DeliveryStatusFailed); failed != 0 {
+		t.Fatalf("late MarkFailed must not resurrect a SENT row, failed=%d", failed)
+	}
+	if sent := countByStatus(t, repository, ctx, domain.DeliveryStatusSent); sent != 1 {
+		t.Fatalf("row must remain SENT, sent=%d", sent)
+	}
+}
+
 func TestMarkFailed_WithBackoff(t *testing.T) {
 	repository := testRepository(t)
 	ctx := context.Background()
