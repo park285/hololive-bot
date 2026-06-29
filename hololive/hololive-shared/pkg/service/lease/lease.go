@@ -154,6 +154,9 @@ func (l *Lease) RenewLoop(ctx context.Context) error {
 	if l == nil {
 		return nil
 	}
+	if l.renewGap <= 0 {
+		return fmt.Errorf("renew loop %q: renew gap must be positive, got %v", l.name, l.renewGap)
+	}
 	ticker := time.NewTicker(l.renewGap)
 	defer ticker.Stop()
 

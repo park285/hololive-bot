@@ -180,6 +180,14 @@ func TestRenewLoopReturnsErrorOnOwnershipLost(t *testing.T) {
 	}
 }
 
+func TestRenewLoopRejectsNonPositiveRenewGap(t *testing.T) {
+	l := newTestLease(&cachemocks.Client{}, countingSleep(new(int)))
+	l.renewGap = 0
+	if err := l.RenewLoop(context.Background()); err == nil {
+		t.Fatal("RenewLoop() = nil, want error on non-positive renew gap")
+	}
+}
+
 func TestRenewLoopStopsGracefullyOnContextDone(t *testing.T) {
 	c := &cachemocks.Client{
 		CompareAndExpireFunc: func(context.Context, string, string, time.Duration) (bool, error) {
