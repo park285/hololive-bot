@@ -19,7 +19,11 @@ func (q *blockingQuerier) Query(ctx context.Context, _ string, _ ...any) (pgx.Ro
 	default:
 	}
 	<-ctx.Done()
-	return nil, ctx.Err()
+	err := ctx.Err()
+	if err == nil {
+		err = context.Canceled
+	}
+	return nil, err
 }
 
 func newBlockingStore(timeout time.Duration) (*Store, *blockingQuerier) {
