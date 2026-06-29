@@ -99,7 +99,7 @@ func buildIngestionRuntime(ctx context.Context, appConfig *config.Config, logger
 
 	youtubeDeps, err := buildIngestionRuntimeYouTubeDependencies(ctx, appConfig, logger, infra, features.youtubeEnabled, &youtubeState, readinessState)
 	if err != nil {
-		infra.cleanup()
+		cleanupIngestionRuntimeStartupFailure(ctx, infra, logger, spec.name, &youtubeState)
 		return nil, err
 	}
 
@@ -107,7 +107,7 @@ func buildIngestionRuntime(ctx context.Context, appConfig *config.Config, logger
 
 	httpServers, err := buildYouTubeProducerHTTPServers(ctx, appConfig, logger, spec.name, readinessState)
 	if err != nil {
-		infra.cleanup()
+		cleanupIngestionRuntimeStartupFailure(ctx, infra, logger, spec.name, &youtubeState)
 		return nil, err
 	}
 
@@ -160,6 +160,21 @@ func acquireIngestionLeaseIfEnabled(
 	}
 	state.ingestionLease = lease
 	return nil
+}
+
+func cleanupIngestionRuntimeStartupFailure(ctx context.Context, infra *youtubeProducerInfrastructure, logger *slog.Logger, runtimeName string, state *ingestionRuntimeYouTubeState) {
+	if state != nil && state.ingestionLease != nil {
+		if err := state.ingestionLease.Release(context.WithoutCancel(ctx)); err != nil && logger != nil {
+			logger.Error("Ingestion runtime startup lease release failed",
+				slog.String("runtime", runtimeName),
+				slog.Any("error", err),
+			)
+		}
+		state.ingestionLease = nil
+	}
+	if infra != nil && infra.cleanup != nil {
+		infra.cleanup()
+	}
 }
 
 func newYouTubeProducerRuntime(
