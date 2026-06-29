@@ -89,6 +89,7 @@ bash scripts/deploy/test-compose-security-defaults.sh
 bash scripts/runtime/set-iris-base-url_test.sh
 bash scripts/deploy/ap-host-native-deploy_test.sh
 bash scripts/ci/race-parallel-guard_test.sh
+bash hololive/hololive-api/scripts/migrations/manual/repair_message_contract_074_082_test.sh
 echo "[pre-push] shell syntax sweep"
 while IFS= read -r script; do
   bash -n "${script}"

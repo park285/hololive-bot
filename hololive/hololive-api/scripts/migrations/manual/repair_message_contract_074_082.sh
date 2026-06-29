@@ -59,7 +59,11 @@ run_psql() {
 ORDER="074_create_message_strings.sql 076_seed_new_command_templates.sql 077_seed_notification_celebration_templates.sql 078_unify_outbox_header_body_templates.sql 079_seed_error_strings.sql 080_refresh_help_and_ambiguous.sql 081_seed_canonical_alarm_templates.sql 082_seed_calendar_image_strings.sql"
 
 echo "==> auditing message/template contract on ${PGDATABASE}@${PGHOST}:${PGPORT}"
-findings="$(run_psql -qtAX -f "${AUDIT_SQL}" 2>/dev/null \
+if ! audit_rows="$(run_psql -qtAX -f "${AUDIT_SQL}")"; then
+  echo "ERROR: audit query failed; refusing to assume no repair is needed" >&2
+  exit 1
+fi
+findings="$(printf '%s\n' "${audit_rows}" \
   | awk -F'|' '$1 ~ /^[0-9][0-9][0-9]_.*\.sql$/ && ($4 == "DAMAGED" || $4 == "APPLIED_UNMARKED") { print $4 ":" $1 }')"
 
 if [ -z "${findings}" ]; then
