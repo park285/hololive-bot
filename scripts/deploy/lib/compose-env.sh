@@ -261,6 +261,13 @@ compose_postgres_runtime_network_mode() {
     "${cli}" inspect holo-postgres --format '{{.HostConfig.NetworkMode}}' 2>/dev/null || true
 }
 
+compose_postgres_runtime_published_host_ips() {
+    local cli="${CONTAINER_CLI:-docker}"
+    "${cli}" inspect holo-postgres \
+        --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostIp}}{{println}}{{end}}{{end}}' \
+        2>/dev/null || true
+}
+
 compose_env_assert_live_compat_for_host_networked_postgres() {
     local path=""
     for path in "$@"; do
@@ -271,21 +278,38 @@ compose_env_assert_live_compat_for_host_networked_postgres() {
         esac
     done
 
-    local pg_net=""
-    pg_net="$(compose_postgres_runtime_network_mode)"
-    if [[ "${pg_net}" != "host" ]]; then
+    # base prod.yml 은 holo-postgres 를 publish 하지 않는다. 따라서 host-network 이거나 non-loopback
+    # 으로 publish 돼 있으면 live-compat overlay 가 활성이라는 신호다(2026-06-27 host-net·2026-06-29
+    # published-port 사건). 활성인데 overlay 없이 배포하면 valkey/postgres 가 loopback 으로 되돌아가 AP 가 끊긴다.
+    local live_compat_active=""
+    if [[ "$(compose_postgres_runtime_network_mode)" == "host" ]]; then
+        live_compat_active="host-networked holo-postgres"
+    else
+        local ip=""
+        while IFS= read -r ip; do
+            case "${ip}" in
+                ""|127.0.0.1|::1) ;;
+                *)
+                    live_compat_active="holo-postgres published on ${ip}"
+                    break
+                    ;;
+            esac
+        done < <(compose_postgres_runtime_published_host_ips)
+    fi
+
+    if [[ -z "${live_compat_active}" ]]; then
         return 0
     fi
 
     if [[ "${ALLOW_POSTGRES_TOPOLOGY_CHANGE:-}" == "true" ]]; then
-        echo "[WARN] holo-postgres is host-networked but no live-compat overlay is set;" >&2
+        echo "[WARN] live-compat topology active (${live_compat_active}) but no live-compat overlay is set;" >&2
         echo "       proceeding because ALLOW_POSTGRES_TOPOLOGY_CHANGE=true." >&2
         return 0
     fi
 
-    echo "[ERROR] holo-postgres runs on host network (live-compat topology) but COMPOSE_FILE" >&2
-    echo "        has no live-compat overlay. Deploying now would recreate holo-postgres on a" >&2
-    echo "        bridge network and break host consumers." >&2
+    echo "[ERROR] live-compat topology is active (${live_compat_active}) but COMPOSE_FILE has no" >&2
+    echo "        live-compat overlay. Deploying now would recreate holo-postgres/valkey on loopback-only" >&2
+    echo "        bindings and drop AP (osaka/seoul/osaka2) off 100.100.1.3 valkey/postgres." >&2
     echo "        Add deploy/compose/docker-compose.live-compat.yml, or set" >&2
     echo "        ALLOW_POSTGRES_TOPOLOGY_CHANGE=true only for an intentional topology change." >&2
     return 1

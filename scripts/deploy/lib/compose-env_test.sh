@@ -9,19 +9,29 @@ failures=0
 record_fail() { echo "[FAIL] $*" >&2; failures=$((failures + 1)); }
 pass() { echo "[PASS] $*"; }
 
-# fake docker: `docker inspect holo-postgres ...` 가 FAKE_PG_NETWORK 값을 반환한다.
-# 값이 비어 있으면 컨테이너 미존재로 간주해 non-zero로 종료한다.
+# fake docker: `docker inspect holo-postgres` 의 --format 에 HostIp 가 있으면 published-port
+# 조회로 보고 FAKE_PG_PUBLISHED_IPS 를, 아니면 network-mode 조회로 보고 FAKE_PG_NETWORK 를 반환한다.
+# 둘 다 비어 있으면 컨테이너 미존재로 간주해 non-zero로 종료한다.
 FAKEBIN="${TMP_DIR}/bin"
 mkdir -p "${FAKEBIN}"
 cat >"${FAKEBIN}/docker" <<'EOF'
 #!/usr/bin/env bash
 set -u
 if [ "${1:-}" = "inspect" ]; then
-  if [ -n "${FAKE_PG_NETWORK:-}" ]; then
-    printf '%s\n' "${FAKE_PG_NETWORK}"
-    exit 0
-  fi
-  exit 1
+  case "$*" in
+    *HostIp*)
+      [ -n "${FAKE_PG_PUBLISHED_IPS:-}" ] && printf '%s\n' "${FAKE_PG_PUBLISHED_IPS}"
+      [ -n "${FAKE_PG_NETWORK:-}" ] || exit 1
+      exit 0
+      ;;
+    *)
+      if [ -n "${FAKE_PG_NETWORK:-}" ]; then
+        printf '%s\n' "${FAKE_PG_NETWORK}"
+        exit 0
+      fi
+      exit 1
+      ;;
+  esac
 fi
 exit 0
 EOF
@@ -74,6 +84,31 @@ if FAKE_PG_NETWORK=host ALLOW_POSTGRES_TOPOLOGY_CHANGE=true run_guard "${PROD}";
   pass "explicit ALLOW_POSTGRES_TOPOLOGY_CHANGE opt-out allowed"
 else
   record_fail "ALLOW_POSTGRES_TOPOLOGY_CHANGE=true should allow"
+fi
+
+if FAKE_PG_NETWORK=hololive-bot_hololive-net FAKE_PG_PUBLISHED_IPS=100.100.1.3 run_guard "${PROD}"; then
+  record_fail "bridge postgres published on routable IP without live-compat should be rejected"
+else
+  pass "bridge postgres published on routable IP without live-compat rejected"
+fi
+
+if FAKE_PG_NETWORK=hololive-bot_hololive-net FAKE_PG_PUBLISHED_IPS=100.100.1.3 run_guard "${PROD}" "${LIVE_COMPAT}"; then
+  pass "bridge postgres published on routable IP with live-compat allowed"
+else
+  record_fail "bridge postgres published on routable IP with live-compat should be allowed"
+fi
+
+if FAKE_PG_NETWORK=hololive-bot_hololive-net FAKE_PG_PUBLISHED_IPS=127.0.0.1 run_guard "${PROD}"; then
+  pass "bridge postgres published on loopback only allowed without overlay"
+else
+  record_fail "bridge postgres published on loopback only should be allowed"
+fi
+
+if FAKE_PG_NETWORK=hololive-bot_hololive-net FAKE_PG_PUBLISHED_IPS=100.100.1.3 \
+    ALLOW_POSTGRES_TOPOLOGY_CHANGE=true run_guard "${PROD}"; then
+  pass "routable-published opt-out via ALLOW_POSTGRES_TOPOLOGY_CHANGE allowed"
+else
+  record_fail "routable-published ALLOW_POSTGRES_TOPOLOGY_CHANGE=true should allow"
 fi
 
 run_dashboard_guard() {
