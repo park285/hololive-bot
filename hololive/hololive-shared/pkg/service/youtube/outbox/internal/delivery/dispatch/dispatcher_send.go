@@ -142,7 +142,7 @@ func (d *SendEngine) dispatchClaimedGroup(
 		return
 	}
 
-	d.dispatchGroupedClaimedRows(ctx, group, validRows, validOutboxes, message, claimSelection.claimTokens, result, mu)
+	d.dispatchGroupedClaimedRows(ctx, group, validRows, validOutboxes, message, formattedMessages, formatFailures, claimSelection.claimTokens, claimSelection.rowClaimTokens, result, mu)
 }
 
 func (d *SendEngine) dispatchDeliveryRow(
@@ -217,7 +217,10 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	message string,
+	formattedMessages map[int64]string,
+	formatFailures map[int64]bool,
 	claimTokens []dispatchstate.ClaimToken,
+	rowClaimTokens [][]dispatchstate.ClaimToken,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -230,6 +233,17 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 	attemptStartedAt := time.Now().UTC()
 	d.logCommunityShortsDeliveryAttemptStarted(validRows, validOutboxes, attemptStartedAt, "grouped")
 	if sendErr := d.sendDeliveryMessage(ctx, sendReq); sendErr != nil {
+		if shouldFallbackGroupedSend(sendErr) {
+			d.logger.Warn("Grouped delivery send failed, falling back to individual deliveries",
+				slog.String("room_id", group.roomID),
+				slog.String("channel_id", group.channelID),
+				slog.String("kind", string(group.kind)),
+				slog.Int("count", len(validRows)),
+				dedupeKeyLogAttr(sendReq.dedupeKeys),
+				slog.Any("error", sendErr))
+			d.dispatchClaimedRowsIndividually(ctx, validRows, validOutboxes, formattedMessages, formatFailures, rowClaimTokens, result, mu)
+			return
+		}
 		d.recordGroupedSendFailure(ctx, group, validRows, validOutboxes, sendReq, claimTokens, sendErr, result, mu)
 		return
 	}

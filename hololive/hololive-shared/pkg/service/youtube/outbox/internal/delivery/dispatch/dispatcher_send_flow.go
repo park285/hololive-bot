@@ -45,6 +45,7 @@ const (
 	deliveryReasonRateLimited = "rate-limited"
 	deliveryReasonTransport   = "transport"
 	deliveryReasonSendMessage = "send message"
+	deliveryReasonPermanent   = "http-permanent"
 )
 
 var deliveryFailureReasonBySentinel = []struct {
@@ -55,7 +56,7 @@ var deliveryFailureReasonBySentinel = []struct {
 	{err: iris.ErrAuthFailed, reason: deliveryReasonAuth, permanent: true},
 	{err: iris.ErrRateLimited, reason: deliveryReasonRateLimited},
 	{err: iris.ErrTransport, reason: deliveryReasonTransport},
-	{err: iris.ErrPermanent, reason: "http-permanent", permanent: true},
+	{err: iris.ErrPermanent, reason: deliveryReasonPermanent, permanent: true},
 }
 
 func buildDeliverySendRequest(roomID, message string, outboxes []domain.YouTubeNotificationOutbox) (deliverySendRequest, error) {
@@ -135,6 +136,10 @@ func deliveryFailureReasonIsPermanent(reason string) bool {
 		}
 	}
 	return false
+}
+
+func shouldFallbackGroupedSend(err error) bool {
+	return deliveryFailureReason(err) == deliveryReasonPermanent
 }
 
 const maxDeliveryRetryAfter = 5 * time.Minute
