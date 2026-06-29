@@ -604,23 +604,19 @@ services:
 
   docker-proxy:
     <<: *restart-logging
-    image: ${DOCKER_SOCKET_PROXY_IMAGE:-tecnativa/docker-socket-proxy@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476}
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:-wollomatic/socket-proxy:1.12.2@sha256:ad9df81849436b5ddae36396e2aefd6562d4cd587d1b65fcb5ac71e4578c9da3}
     container_name: docker-proxy
-    environment:
-      CONTAINERS: 1
-      POST: 1
-      LOGS: 1
-      BUILD: 0
-      EXEC: 0
-      IMAGES: 0
-      NETWORKS: 0
-      VOLUMES: 0
-      SWARM: 0
+    command:
+      - '-loglevel=info'
+      - '-listenip=0.0.0.0'
+      - '-proxyport=2375'
+      - '-allowfrom=0.0.0.0/0'
+      - '-allowGET=(/v1\.[0-9]+)?/(_ping|version|events(\?.*)?|containers/json(\?.*)?|containers/[^/]+/json(\?.*)?)'
+      - '-allowHEAD=(/v1\.[0-9]+)?/_ping'
+      - '-allowPOST=(/v1\.[0-9]+)?/containers/[^/]+/(start|stop|restart)(\?.*)?'
+    read_only: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    tmpfs:
-      - /run:size=16m,mode=1777
-      - /tmp:size=16m,mode=1777
     security_opt:
       - no-new-privileges:true
     cap_drop:
