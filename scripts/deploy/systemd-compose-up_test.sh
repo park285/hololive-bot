@@ -62,6 +62,15 @@ if (( failures == 0 )); then
   pass "root systemd units avoid mutable home/root-work paths"
 fi
 
+SYNC="${ROOT_DIR}/scripts/deploy/sync-opt-current.sh"
+if [[ ! -f "${SYNC}" ]]; then
+  record_fail "sync-opt-current.sh source is missing"
+elif grep -nE '^[[:space:]]*install[[:space:]].*\$REPO_ROOT.*(systemd-compose-(up|down)\.sh|hololive-compose\.service\.d)' "${SYNC}" >&2; then
+  record_fail "sync-opt-current.sh must install root systemd material from \$STAGING (git archive HEAD), not \$REPO_ROOT — working-tree untracked .conf injection is a root drop-in LPE"
+else
+  pass "sync-opt-current.sh installs root systemd material from the git archive snapshot, not the working tree"
+fi
+
 if (( failures > 0 )); then
   echo "systemd compose wrapper checks failed: ${failures}" >&2
   exit 1
