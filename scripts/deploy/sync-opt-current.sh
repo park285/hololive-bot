@@ -86,12 +86,16 @@ done
 chown root:root "$OPT_ROOT" "$(dirname "$OPT_ROOT")"
 log "ownership normalized (exec tree root, runtime data uid 1000)"
 
-install -m0755 -o root -g root "$REPO_ROOT/scripts/deploy/systemd-compose-up.sh" "$SBIN_DIR/hololive-compose-up"
-install -m0755 -o root -g root "$REPO_ROOT/scripts/deploy/systemd-compose-down.sh" "$SBIN_DIR/hololive-compose-down"
+# root 로 설치되는 systemd 자료(wrapper·drop-in)는 $REPO_ROOT(작업 트리)가 아니라 $STAGING(git
+# archive HEAD 스냅샷)에서만 가져온다. assert_clean 은 --untracked-files=no 라 작업 트리에 심어진
+# untracked .conf 를 못 잡는데, *.conf glob 은 그 파일까지 설치해 root systemd drop-in 주입(LPE)이
+# 된다. $STAGING 은 tracked HEAD 만 담으므로 untracked 주입과 assert_clean 이후 TOCTOU 를 함께 막는다.
+install -m0755 -o root -g root "$STAGING/scripts/deploy/systemd-compose-up.sh" "$SBIN_DIR/hololive-compose-up"
+install -m0755 -o root -g root "$STAGING/scripts/deploy/systemd-compose-down.sh" "$SBIN_DIR/hololive-compose-down"
 log "wrappers installed (opt-in live-compat + verifier self-check)"
 
 mkdir -p "$DROPIN_DIR"
-install -m0644 -o root -g root "$REPO_ROOT"/scripts/systemd/hololive-compose.service.d/*.conf "$DROPIN_DIR/"
+install -m0644 -o root -g root "$STAGING"/scripts/systemd/hololive-compose.service.d/*.conf "$DROPIN_DIR/"
 log "drop-ins installed -> $DROPIN_DIR"
 
 systemctl daemon-reload
