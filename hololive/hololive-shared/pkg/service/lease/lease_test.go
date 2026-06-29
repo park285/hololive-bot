@@ -53,6 +53,14 @@ func TestAcquireSetsOwnerAndTTL(t *testing.T) {
 	}
 }
 
+func TestNewLeaseDefaultsOmittedTuning(t *testing.T) {
+	l := newLease(&cachemocks.Client{}, &Spec{Key: "k", Owner: "o", TTL: time.Second}, slog.Default())
+	if l.maxAttempts != defaultRenewMaxAttempts || l.baseDelay != defaultRenewBaseDelay || l.jitter != defaultRenewJitter {
+		t.Fatalf("defaults maxAttempts=%d baseDelay=%v jitter=%v, want %d/%v/%v",
+			l.maxAttempts, l.baseDelay, l.jitter, defaultRenewMaxAttempts, defaultRenewBaseDelay, defaultRenewJitter)
+	}
+}
+
 func TestAcquireHeld(t *testing.T) {
 	c := &cachemocks.Client{
 		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) { return false, nil },

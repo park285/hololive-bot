@@ -79,7 +79,7 @@ func newLease(cacheClient cache.Client, spec *Spec, logger *slog.Logger) *Lease 
 		baseDelay = defaultRenewBaseDelay
 	}
 	jitter := spec.RenewJitter
-	if jitter < 0 {
+	if jitter <= 0 {
 		jitter = defaultRenewJitter
 	}
 	return &Lease{
