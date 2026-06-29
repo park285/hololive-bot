@@ -135,6 +135,25 @@ func TestSyncForChannel_ChangedLoginReplacesOwnedMapping(t *testing.T) {
 	)
 }
 
+func TestSyncForChannel_ChangedLoginPrunesLegacyMappingWithoutReverseIndex(t *testing.T) {
+	t.Parallel()
+
+	mapper, c := newTestMapper(t, &domain.Member{
+		ChannelID:    "UC_alpha",
+		TwitchUserID: "NewLogin",
+	})
+
+	registerChannel(t, c, "UC_alpha")
+	require.NoError(t, c.HSet(t.Context(), TwitchLoginMapKey, "oldlogin", "UC_alpha"))
+
+	require.NoError(t, mapper.SyncForChannel(t.Context(), "UC_alpha"))
+
+	assertTwitchHashes(t, c,
+		map[string]string{"newlogin": "UC_alpha"},
+		map[string]string{"UC_alpha": "newlogin"},
+	)
+}
+
 func TestSyncForChannel_UnregisteredRemovesOwnedTwitchMapping(t *testing.T) {
 	t.Parallel()
 
