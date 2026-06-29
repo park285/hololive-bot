@@ -109,7 +109,7 @@ assert_host_dir_writable_by_app() {
     if (( 0${mode} & 0002 )); then return 0; fi
 
     echo "[PREFLIGHT] ${dir} (owner=${owner} group=${group} mode=${mode}) not writable by app uid=${uid} gid=${gid}" >&2
-    echo "[PREFLIGHT] hololive-api/alarm-worker run as ${uid}:${gid}; chown ${uid}:${gid} '${dir}' or grant write" >&2
+    echo "[PREFLIGHT] app services run as ${uid}:${gid}; chown ${uid}:${gid} '${dir}' or grant write" >&2
     return 1
 }
 
@@ -132,6 +132,17 @@ cutover_bind_mount_preflight() {
         dirs+=("${root}/${name}")
     done
     assert_app_bind_mounts_writable "${dirs[@]}"
+}
+
+cutover_service_uses_app_writable_bind_mount() {
+    local service="$1"
+
+    case "${service}" in
+        hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|admin-dashboard)
+            return 0
+            ;;
+    esac
+    return 1
 }
 
 cutover_health_gate() {

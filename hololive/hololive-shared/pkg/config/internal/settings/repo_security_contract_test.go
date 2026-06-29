@@ -244,13 +244,15 @@ func assertProdRenderedEgressRuntimeKeys(t *testing.T, cfg renderedCompose) {
 			"KAKAO_ROOMS",
 			"KAKAO_ACL_ENABLED",
 			"KAKAO_ACL_MODE",
-			"API_SECRET_KEY",
 			"HOLODEX_API_KEY",
 			"HOLODEX_API_KEY_1",
 		} {
 			if _, ok := env[key]; !ok {
 				t.Fatalf("%s missing egress runtime key %s", service, key)
 			}
+		}
+		if env["API_SECRET_KEY"] != "dummy" {
+			t.Fatalf("%s API_SECRET_KEY = %q, want scoped env_file value", service, env["API_SECRET_KEY"])
 		}
 	}
 }
@@ -950,11 +952,12 @@ func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files .
 	defer cancel()
 	cmd := dockerComposeConfigCommand(t, ctx, files)
 	repoRoot := repoRootFromConfigTest(t)
+	appEnvFile := writeCentralAppEnvFile(t)
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
 		"COMPOSE_ENV_FILE="+composeEnvFile,
-		"HOLOLIVE_API_ENV_FILE="+composeEnvFile,
-		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+composeEnvFile,
+		"HOLOLIVE_API_ENV_FILE="+appEnvFile,
+		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+appEnvFile,
 		"HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="+writeAPProducerEnvFile(t),
 		"DB_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
@@ -1070,6 +1073,14 @@ func writeCentralComposeEnvFile(t *testing.T) string {
 		"IRIS_WEBHOOK_TOKEN=dummy",
 		"IRIS_BOT_TOKEN=dummy",
 		"SESSION_SECRET=dummy",
+	})
+}
+
+func writeCentralAppEnvFile(t *testing.T) string {
+	t.Helper()
+
+	return writeTempEnvFile(t, "central-app-*.env", []string{
+		"API_SECRET_KEY=dummy",
 	})
 }
 
