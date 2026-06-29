@@ -85,6 +85,29 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.ChannelSchedule(t.Context(), channel, streams, 7))
 }
 
+func TestStreamListFormattersCapRenderedViews(t *testing.T) {
+	t.Parallel()
+
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdLiveStreams:     "live count={{.Count}}\n{{range .Streams}}L {{.Title}}\n{{end}}",
+		domain.TemplateKeyCmdUpcomingStreams: "upcoming count={{.Count}}\n{{range .Streams}}U {{.Title}}\n{{end}}",
+	})
+	formatter := NewResponseFormatter("!", renderer)
+
+	streams := make([]*domain.Stream, streamListDisplayLimit+5)
+	for i := range streams {
+		streams[i] = &domain.Stream{ID: "stream", Title: "title", ChannelName: "channel"}
+	}
+
+	live := formatter.FormatLiveStreams(t.Context(), streams)
+	assert.Contains(t, live, "live count=105")
+	assert.Equal(t, streamListDisplayLimit, strings.Count(live, "L title"))
+
+	upcoming := formatter.UpcomingStreams(t.Context(), streams, 24)
+	assert.Contains(t, upcoming, "upcoming count=105")
+	assert.Equal(t, streamListDisplayLimit, strings.Count(upcoming, "U title"))
+}
+
 func TestStreamHelpers(t *testing.T) {
 	t.Parallel()
 

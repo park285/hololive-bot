@@ -38,6 +38,8 @@ type liveStreamView struct {
 	ViewerCount int
 }
 
+const streamListDisplayLimit = 100
+
 type liveStreamsTemplateData struct {
 	Count   int
 	Streams []liveStreamView
@@ -88,6 +90,7 @@ func (f *ResponseFormatter) liveStreamsTemplateData(ctx context.Context, streams
 }
 
 func (f *ResponseFormatter) liveStreamViews(ctx context.Context, streams []*domain.Stream) []liveStreamView {
+	streams = limitedStreamList(streams)
 	if len(streams) == 0 {
 		return nil
 	}
@@ -115,6 +118,7 @@ func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.S
 
 func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*domain.Stream, hours int) string {
 	data := upcomingStreamsTemplateData{Count: len(streams), Hours: hours}
+	streams = limitedStreamList(streams)
 	if len(streams) > 0 {
 		data.Streams = make([]upcomingStreamView, len(streams))
 		for i, stream := range streams {
@@ -133,6 +137,14 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 	}
 
 	return rendered
+}
+
+func limitedStreamList(streams []*domain.Stream) []*domain.Stream {
+	if len(streams) <= streamListDisplayLimit {
+		return streams
+	}
+
+	return streams[:streamListDisplayLimit]
 }
 
 func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) string {
