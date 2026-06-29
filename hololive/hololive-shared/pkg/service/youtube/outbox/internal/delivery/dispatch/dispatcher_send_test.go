@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -39,6 +42,27 @@ func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
 		RetryBackoff:        time.Minute,
 		DeliveryParallelism: 2,
 	})
+}
+
+type groupedPermanentFailureSender struct {
+	mu       sync.Mutex
+	messages []string
+}
+
+func (s *groupedPermanentFailureSender) SendMessage(_ context.Context, roomID, message string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.messages = append(s.messages, roomID+":"+message)
+	if strings.Contains(message, "쇼츠1") && strings.Contains(message, "쇼츠2") {
+		return fmt.Errorf("grouped send rejected: %w", iris.ErrPermanent)
+	}
+	return nil
+}
+
+func (s *groupedPermanentFailureSender) messageCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.messages)
 }
 
 func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
@@ -502,6 +526,42 @@ func TestDispatchDeliveryRows_GroupedSendFailureRetriesGroupedBatch(t *testing.T
 	}
 	if got := sender.messageCount(); got != 1 {
 		t.Fatalf("sender message count = %d, want 1 grouped attempt without per-room fallback", got)
+	}
+}
+
+func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *testing.T) {
+	t.Parallel()
+
+	renderer := newShortsGroupAndSingleTemplateRenderer(t)
+	sender := &groupedPermanentFailureSender{}
+	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), &Config{
+		BatchSize:           10,
+		LockTimeout:         time.Minute,
+		PollInterval:        time.Second,
+		MaxRetries:          3,
+		RetryBackoff:        time.Minute,
+		DeliveryParallelism: 2,
+	})
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+	}
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 102, OutboxID: 2, RoomID: "room1"},
+	}
+
+	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+
+	if result.FailedDeliveries != 0 {
+		t.Fatalf("failedDeliveries = %d, want 0", result.FailedDeliveries)
+	}
+	if len(result.SuccessDeliveryIDs) != 2 {
+		t.Fatalf("successDeliveryIDs = %#v, want 2 successes", result.SuccessDeliveryIDs)
+	}
+	if got := sender.messageCount(); got != 3 {
+		t.Fatalf("sender message count = %d, want grouped attempt plus 2 individual fallbacks", got)
 	}
 }
 
@@ -1257,6 +1317,34 @@ func newGroupedTemplateRenderer(t *testing.T, key domain.TemplateKey, body strin
 		DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
 	`, key, body); err != nil {
 		t.Fatalf("seed grouped template: %v", err)
+	}
+
+	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+func newShortsGroupAndSingleTemplateRenderer(t *testing.T) *template.Renderer {
+	t.Helper()
+
+	pool := dbtest.NewPool(t)
+	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
+		t.Fatalf("clear templates: %v", err)
+	}
+	templates := []struct {
+		key  domain.TemplateKey
+		body string
+	}{
+		{key: domain.TemplateKeyOutboxShorts, body: "{{.Title}}\n{{.URL}}"},
+		{key: domain.TemplateKeyOutboxShortsGroup, body: "{{range .Items}}{{.Title}} {{.URL}}\n{{end}}"},
+	}
+	for _, item := range templates {
+		if _, err := pool.Exec(t.Context(), `
+			INSERT INTO notification_templates(template_key, channel_id, body)
+			VALUES ($1, NULL, $2)
+			ON CONFLICT (template_key) WHERE channel_id IS NULL
+			DO UPDATE SET body = EXCLUDED.body, updated_at = NOW()
+		`, item.key, item.body); err != nil {
+			t.Fatalf("seed template %s: %v", item.key, err)
+		}
 	}
 
 	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))

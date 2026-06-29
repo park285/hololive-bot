@@ -22,6 +22,7 @@ package util
 
 import (
 	"math"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -30,6 +31,7 @@ import (
 // 시간 기반 reset 전용으로, HALF_OPEN 상태 없이 open→closed 직접 전이합니다.
 // 로그는 provider가 책임지므로 Breaker 내부에서 emit하지 않습니다.
 type Breaker struct {
+	transitionMu sync.Mutex
 	open         atomic.Bool
 	openedAt     atomic.Value // time.Time
 	failures     atomic.Int32
@@ -73,10 +75,16 @@ func (b *Breaker) Allow() bool {
 
 	openedAt := b.openedAtTime()
 	if time.Since(openedAt) > b.resetTimeout {
-		// CAS로 reset 전이를 원자화: 단일 goroutine만 failures를 0으로 만든다.
-		if b.open.CompareAndSwap(true, false) {
-			b.failures.Store(0)
+		b.transitionMu.Lock()
+		defer b.transitionMu.Unlock()
+		if !b.open.Load() {
+			return true
 		}
+		if time.Since(b.openedAtTime()) <= b.resetTimeout {
+			return false
+		}
+		b.failures.Store(0)
+		b.open.Store(false)
 		return true
 	}
 
@@ -106,12 +114,14 @@ func (b *Breaker) RecordFailure() bool {
 	}
 	count := b.failures.Add(1)
 	if count >= b.threshold {
-		// CAS로 open 전이를 원자화: 동시 진입해도 단 하나의 goroutine만
-		// openedAt을 설정하므로 타이머 밀림·중복 전이가 없다.
-		if b.open.CompareAndSwap(false, true) {
-			b.openedAt.Store(time.Now())
-			return true
+		b.transitionMu.Lock()
+		defer b.transitionMu.Unlock()
+		if b.open.Load() {
+			return false
 		}
+		b.openedAt.Store(time.Now())
+		b.open.Store(true)
+		return true
 	}
 	return false
 }
