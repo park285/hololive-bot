@@ -6,6 +6,7 @@ scripts/deploy/compose.sh
 scripts/deploy/ap-iris-h3-trust-preflight.sh
 scripts/deploy/lib/compose-env.sh
 scripts/deploy/lib/removed-runtimes.sh
+scripts/deploy/lib/health-gate.sh
 scripts/deploy/lib/ap-host.sh
 scripts/deploy/lib/require-quic-udp-buffer.sh
 scripts/deploy/ap-hosts/osaka.conf
