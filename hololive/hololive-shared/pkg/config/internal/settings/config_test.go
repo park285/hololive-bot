@@ -928,14 +928,28 @@ func TestLoad_ScraperSnapshotAndChannelHealthDefaults(t *testing.T) {
 	if !config.Scraper.ChannelHealth.Enabled {
 		t.Fatal("Scraper.ChannelHealth.Enabled = false, want default true")
 	}
-	if config.Scraper.ChannelHealth.Enforce {
-		t.Fatal("Scraper.ChannelHealth.Enforce = true, want default false")
+	if !config.Scraper.ChannelHealth.Enforce {
+		t.Fatal("Scraper.ChannelHealth.Enforce = false, want default true")
 	}
 	if config.Scraper.Snapshot.MaxBodyBytes != 512<<10 {
 		t.Fatalf("Scraper.Snapshot.MaxBodyBytes = %d, want %d", config.Scraper.Snapshot.MaxBodyBytes, 512<<10)
 	}
 	if config.Scraper.PollTiering.Enabled {
 		t.Fatal("Scraper.PollTiering.Enabled = true, want default false")
+	}
+}
+
+func TestLoad_ScraperChannelHealthEnforceCanBeDisabled(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_CHANNEL_HEALTH_ENFORCE", "false")
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if config.Scraper.ChannelHealth.Enforce {
+		t.Fatal("Scraper.ChannelHealth.Enforce = true, want explicit false override")
 	}
 }
 

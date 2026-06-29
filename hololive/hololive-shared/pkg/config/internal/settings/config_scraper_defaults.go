@@ -35,7 +35,7 @@ func DefaultScraperSnapshotConfig() ScraperSnapshotConfig {
 func DefaultScraperChannelHealthConfig() ScraperChannelHealthConfig {
 	return ScraperChannelHealthConfig{
 		Enabled:           true,
-		Enforce:           false,
+		Enforce:           true,
 		TTL:               24 * time.Hour,
 		ParserDriftBase:   10 * time.Minute,
 		ParserDriftMax:    6 * time.Hour,
