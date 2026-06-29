@@ -9,9 +9,6 @@ failures=0
 record_fail() { echo "[FAIL] $*" >&2; failures=$((failures + 1)); }
 pass() { echo "[PASS] $*"; }
 
-# fake docker: `docker inspect holo-postgres` 의 --format 에 HostIp 가 있으면 published-port
-# 조회로 보고 FAKE_PG_PUBLISHED_IPS 를, 아니면 network-mode 조회로 보고 FAKE_PG_NETWORK 를 반환한다.
-# 둘 다 비어 있으면 컨테이너 미존재로 간주해 non-zero로 종료한다.
 FAKEBIN="${TMP_DIR}/bin"
 mkdir -p "${FAKEBIN}"
 cat >"${FAKEBIN}/docker" <<'EOF'

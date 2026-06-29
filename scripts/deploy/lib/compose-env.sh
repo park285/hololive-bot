@@ -278,9 +278,8 @@ compose_env_assert_live_compat_for_host_networked_postgres() {
         esac
     done
 
-    # base prod.yml 은 holo-postgres 를 publish 하지 않는다. 따라서 host-network 이거나 non-loopback
-    # 으로 publish 돼 있으면 live-compat overlay 가 활성이라는 신호다(2026-06-27 host-net·2026-06-29
-    # published-port 사건). 활성인데 overlay 없이 배포하면 valkey/postgres 가 loopback 으로 되돌아가 AP 가 끊긴다.
+    # base prod.yml 은 holo-postgres 를 publish 하지 않으므로, host-network 이거나 non-loopback 으로
+    # publish 돼 있으면 live-compat overlay 가 활성이라는 신호다(2026-06-27·2026-06-29 사건).
     local live_compat_active=""
     if [[ "$(compose_postgres_runtime_network_mode)" == "host" ]]; then
         live_compat_active="host-networked holo-postgres"
