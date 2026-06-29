@@ -153,7 +153,10 @@ func warmChannelSubscriberCache(ctx context.Context, cacheClient cache.Client, a
 	if cacheClient == nil {
 		return
 	}
-	if _, err := WarmSubscriberCacheFromAlarms(ctx, cacheClient, alarms); err != nil {
+
+	subscribers := extractSubscriberIDsByType(alarms, alarmType)
+	key := sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
+	if err := writeWarmSet(ctx, cacheClient, key, subscribers, "channel subscribers"); err != nil {
 		observeAlarmSubscriberCacheError("warm")
 	}
 	if err := cacheClient.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)); err != nil {

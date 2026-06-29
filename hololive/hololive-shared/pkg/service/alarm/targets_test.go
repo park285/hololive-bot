@@ -87,6 +87,54 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheEmpty(t *testing.T
 	}
 }
 
+func TestResolveChannelSubscribersByType_DoesNotPoisonOtherTypeCacheFromDBFallback(t *testing.T) {
+	t.Parallel()
+
+	db := newAlarmTargetLookupTestDB(t)
+	requireAlarmRecord(t, db, &domain.Alarm{
+		RoomID:     "room-both",
+		ChannelID:  "UC_mixed_cache",
+		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeCommunity},
+	})
+	requireAlarmRecord(t, db, &domain.Alarm{
+		RoomID:     "room-community",
+		ChannelID:  "UC_mixed_cache",
+		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
+	})
+
+	sets := make(map[string]map[string]struct{})
+	cache := cachemocks.NewLenientClient()
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		members := sets[key]
+		if len(members) == 0 {
+			return nil, nil
+		}
+
+		result := make([]string, 0, len(members))
+		for member := range members {
+			result = append(result, member)
+		}
+		return result, nil
+	}
+	cache.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
+		if sets[key] == nil {
+			sets[key] = make(map[string]struct{}, len(members))
+		}
+		for _, member := range members {
+			sets[key][member] = struct{}{}
+		}
+		return int64(len(members)), nil
+	}
+
+	liveSubscribers, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_mixed_cache", domain.AlarmTypeLive)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"room-both"}, liveSubscribers)
+
+	communitySubscribers, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_mixed_cache", domain.AlarmTypeCommunity)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"room-both", "room-community"}, communitySubscribers)
+}
+
 func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheErrors(t *testing.T) {
 	t.Parallel()
 
