@@ -48,34 +48,50 @@ assert_present() {
 
 build_fixture() {
   local ctx="$1" dockerignore="$2"
-  mkdir -p "${ctx}/admin-dashboard/backend/config"
+  mkdir -p "${ctx}/admin-dashboard/backend/config" "${ctx}/admin-dashboard/backend/coverage" "${ctx}/admin-dashboard/backend/artifacts"
   cp "${dockerignore}" "${ctx}/.dockerignore"
   printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/credentials.json"
   printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/service-account.json"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/serviceaccount.json"
   printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/tls.key"
   printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/.env.production"
+  printf 'log\n' > "${ctx}/admin-dashboard/backend/config/debug.log"
+  printf 'coverage\n' > "${ctx}/admin-dashboard/backend/coverage/coverage.out"
+  printf 'artifact\n' > "${ctx}/admin-dashboard/backend/artifacts/stale.bin"
   printf 'package config\n' > "${ctx}/admin-dashboard/backend/config/loader.go"
+}
+
+assert_admin_backend_sensitive_excluded() {
+  local listing="$1" label="$2"
+  for secret in credentials.json service-account.json serviceaccount.json tls.key .env.production debug.log; do
+    assert_excluded "${listing}" "/ctx/admin-dashboard/backend/config/${secret}" "${label}/${secret}"
+  done
+  assert_excluded "${listing}" "/ctx/admin-dashboard/backend/coverage/coverage.out" "${label}/coverage"
+  assert_excluded "${listing}" "/ctx/admin-dashboard/backend/artifacts/stale.bin" "${label}/artifacts"
 }
 
 producer_ctx="${TMP_DIR}/producer"
 build_fixture "${producer_ctx}" "${ROOT_DIR}/hololive/hololive-youtube-producer/Dockerfile.dockerignore"
 producer_list="$(context_filelist "${producer_ctx}")" || fail "hb03: producer fixture build failed"
 
-for secret in credentials.json service-account.json tls.key .env.production; do
-  assert_excluded "${producer_list}" "/ctx/admin-dashboard/backend/config/${secret}" "producer/${secret}"
-done
-assert_present "${producer_list}" "/ctx/admin-dashboard/backend/config/loader.go" "producer source"
+assert_admin_backend_sensitive_excluded "${producer_list}" "producer"
+assert_excluded "${producer_list}" "/ctx/admin-dashboard/backend/config/loader.go" "producer admin source"
+
+api_ctx="${TMP_DIR}/api"
+build_fixture "${api_ctx}" "${ROOT_DIR}/hololive/hololive-api/Dockerfile.dockerignore"
+api_list="$(context_filelist "${api_ctx}")" || fail "hb03: hololive-api fixture build failed"
+
+assert_admin_backend_sensitive_excluded "${api_list}" "hololive-api"
+assert_present "${api_list}" "/ctx/admin-dashboard/backend/config/loader.go" "hololive-api source"
 
 root_ctx="${TMP_DIR}/root"
 build_fixture "${root_ctx}" "${ROOT_DIR}/.dockerignore"
 root_list="$(context_filelist "${root_ctx}")" || fail "hb03: root fixture build failed"
 
-for secret in credentials.json service-account.json tls.key .env.production; do
-  assert_excluded "${root_list}" "/ctx/admin-dashboard/backend/config/${secret}" "root/${secret}"
-done
+assert_admin_backend_sensitive_excluded "${root_list}" "root"
 assert_present "${root_list}" "/ctx/admin-dashboard/backend/config/loader.go" "root-context source"
 
-pass "hb03: admin backend secrets excluded from producer + root build context, sources retained (dd36cc1a, 3559884b)"
+pass "hb03: admin backend secrets excluded from producer + api + root build context, sources retained where required (dd36cc1a, 3559884b)"
 
 named_ctx="${TMP_DIR}/named"
 shared_ctx="${TMP_DIR}/shared"
