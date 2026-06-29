@@ -137,6 +137,7 @@ func (h *Service) runStreamScraperFallbackFetch(ctx context.Context, plan *strea
 	if plan.scraperFilter != nil {
 		scraperStreams = plan.scraperFilter(scraperStreams)
 	}
+	scraperStreams = limitStreamList(scraperStreams)
 	cacheStreamsByOrg(ctx, plan, scraperStreams)
 	state.replaceStreams(scraperStreams)
 	return fallback.SecondaryResult{

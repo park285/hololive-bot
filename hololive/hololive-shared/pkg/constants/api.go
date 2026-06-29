@@ -31,6 +31,7 @@ var HolodexAPIParams = struct {
 	TypeStream          string
 	TypeVtuber          string
 	MaxUpcomingHours    int
+	StreamListLimit     int
 	DefaultChannelLimit int
 	MaxPaginationOffset int
 	SyncTargetOrgs      []string
@@ -46,6 +47,7 @@ var HolodexAPIParams = struct {
 	TypeStream:          "stream",
 	TypeVtuber:          "vtuber",
 	MaxUpcomingHours:    168,
+	StreamListLimit:     50,
 	DefaultChannelLimit: 50,
 	MaxPaginationOffset: 500,
 	SyncTargetOrgs:      []string{"Hololive", "VSpo", "Stellive"},
