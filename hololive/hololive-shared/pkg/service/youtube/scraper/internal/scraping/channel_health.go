@@ -34,7 +34,7 @@ type ChannelHealthPolicy struct {
 
 func DefaultChannelHealthPolicy() ChannelHealthPolicy {
 	return ChannelHealthPolicy{
-		Enforce:           false,
+		Enforce:           true,
 		TTL:               24 * time.Hour,
 		ParserDriftBase:   10 * time.Minute,
 		ParserDriftMax:    6 * time.Hour,

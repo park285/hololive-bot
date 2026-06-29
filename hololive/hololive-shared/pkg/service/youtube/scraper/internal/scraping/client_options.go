@@ -128,11 +128,12 @@ func WithProxyFallbackPolicy(policy ProxyFallbackPolicy) ClientOption {
 
 func NewClient(opts ...ClientOption) *Client {
 	c := &Client{
-		uaProvider:     ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
-		rateLimiter:    NewRateLimiter(3 * time.Second),
-		backoffState:   NewBackoffState(),
-		fetcherEngine:  FetcherEngineNetHTTP,
-		snapshotPolicy: DefaultSnapshotPolicy(),
+		uaProvider:          ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
+		rateLimiter:         NewRateLimiter(3 * time.Second),
+		backoffState:        NewBackoffState(),
+		fetcherEngine:       FetcherEngineNetHTTP,
+		channelHealthPolicy: DefaultChannelHealthPolicy(),
+		snapshotPolicy:      DefaultSnapshotPolicy(),
 	}
 
 	// 옵션 적용 (프록시 설정 포함)
