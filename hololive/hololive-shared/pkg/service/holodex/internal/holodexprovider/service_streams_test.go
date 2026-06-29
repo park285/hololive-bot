@@ -34,6 +34,9 @@ func TestGetLiveStreamsByOrg_CachesFilteredResults(t *testing.T) {
 			if got := params.Get("status"); got != constants.HolodexAPIParams.StatusLive {
 				return nil, fmt.Errorf("status = %s, want %s", got, constants.HolodexAPIParams.StatusLive)
 			}
+			if got := params.Get("limit"); got != "50" {
+				return nil, fmt.Errorf("limit = %s, want 50", got)
+			}
 			body := mustMarshalStreamRawList(t, []StreamRaw{
 				{
 					ID:        "live-1",
@@ -96,6 +99,27 @@ func TestGetLiveStreamsByOrg_CachesFilteredResults(t *testing.T) {
 	}
 }
 
+func TestGetLiveStreamsByOrg_CapsProviderResults(t *testing.T) {
+	t.Parallel()
+
+	hololive := constants.HolodexAPIParams.OrgHololive
+	requester := &MockRequester{
+		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
+			return mustMarshalStreamRawList(t, streamRawList(55, hololive, domain.StreamStatusLive)), nil
+		},
+	}
+
+	service := newServiceForFallbackTest(requester)
+
+	streams, err := service.GetLiveStreamsByOrg(context.Background(), hololive)
+	if err != nil {
+		t.Fatalf("GetLiveStreamsByOrg() error = %v", err)
+	}
+	if len(streams) != 50 {
+		t.Fatalf("len(streams) = %d, want 50", len(streams))
+	}
+}
+
 func TestGetUpcomingStreamsByOrg_CachesFilteredResults(t *testing.T) {
 	t.Parallel()
 
@@ -119,6 +143,9 @@ func TestGetUpcomingStreamsByOrg_CachesFilteredResults(t *testing.T) {
 			}
 			if got := params.Get("max_upcoming_hours"); got != "24" {
 				return nil, fmt.Errorf("max_upcoming_hours = %s, want 24", got)
+			}
+			if got := params.Get("limit"); got != "50" {
+				return nil, fmt.Errorf("limit = %s, want 50", got)
 			}
 			body := mustMarshalStreamRawList(t, []StreamRaw{
 				{
@@ -169,6 +196,47 @@ func TestGetUpcomingStreamsByOrg_CachesFilteredResults(t *testing.T) {
 	if requestCount != 1 {
 		t.Fatalf("request count = %d, want 1", requestCount)
 	}
+}
+
+func TestGetUpcomingStreamsByOrg_CapsProviderResults(t *testing.T) {
+	t.Parallel()
+
+	hololive := constants.HolodexAPIParams.OrgHololive
+	requester := &MockRequester{
+		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
+			return mustMarshalStreamRawList(t, streamRawList(55, hololive, domain.StreamStatusUpcoming)), nil
+		},
+	}
+
+	service := newServiceForFallbackTest(requester)
+
+	streams, err := service.GetUpcomingStreamsByOrg(context.Background(), 24, hololive)
+	if err != nil {
+		t.Fatalf("GetUpcomingStreamsByOrg() error = %v", err)
+	}
+	if len(streams) != 50 {
+		t.Fatalf("len(streams) = %d, want 50", len(streams))
+	}
+}
+
+func streamRawList(count int, org string, status domain.StreamStatus) []StreamRaw {
+	streams := make([]StreamRaw, count)
+	for i := range streams {
+		id := fmt.Sprintf("stream-%d", i)
+		channelID := fmt.Sprintf("channel-%d", i)
+		streams[i] = StreamRaw{
+			ID:        id,
+			Title:     id,
+			Status:    status,
+			ChannelID: &channelID,
+			Channel: &ChannelRaw{
+				ID:   channelID,
+				Name: channelID,
+				Org:  &org,
+			},
+		}
+	}
+	return streams
 }
 
 func mustMarshalStreamRawList(t *testing.T, streams []StreamRaw) []byte {

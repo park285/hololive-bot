@@ -147,6 +147,7 @@ func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hou
 	params.Set("org", org)
 	params.Set("status", status)
 	params.Set("type", constants.HolodexAPIParams.TypeStream)
+	params.Set("limit", fmt.Sprintf("%d", constants.HolodexAPIParams.StreamListLimit))
 	if status == constants.HolodexAPIParams.StatusUpcoming {
 		params.Set("max_upcoming_hours", fmt.Sprintf("%d", util.Min(hours, constants.HolodexAPIParams.MaxUpcomingHours)))
 		params.Set("order", "asc")
@@ -163,7 +164,7 @@ func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hou
 		return nil, fmt.Errorf("unmarshal streams by org (%s): %w", org, err)
 	}
 
-	return h.mapper.MapStreamsResponse(rawStreams), nil
+	return limitStreamList(h.mapper.MapStreamsResponse(rawStreams)), nil
 }
 
 func resolveStreamOrg(org string) (string, error) {
@@ -234,6 +235,14 @@ func filterStreamsByStatus(streams []*domain.Stream, status domain.StreamStatus)
 	return filtered
 }
 
+func limitStreamList(streams []*domain.Stream) []*domain.Stream {
+	limit := constants.HolodexAPIParams.StreamListLimit
+	if limit < 1 || len(streams) <= limit {
+		return streams
+	}
+	return streams[:limit]
+}
+
 func supportsScraperFallback(org string) bool {
 	return org == constants.HolodexAPIParams.OrgHololive
 }
@@ -263,7 +272,7 @@ func (h *Service) fetchIndieStreams(ctx context.Context) ([]*domain.Stream, erro
 		return nil, fmt.Errorf("unmarshal indie streams: %w", err)
 	}
 
-	streams := h.mapper.MapStreamsResponse(rawStreams)
+	streams := limitStreamList(h.mapper.MapStreamsResponse(rawStreams))
 	h.hydrateIndieStreamChannels(streams, constants.IndieChannelIDs)
 
 	return streams, nil
