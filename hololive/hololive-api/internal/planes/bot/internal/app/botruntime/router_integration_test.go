@@ -21,11 +21,14 @@
 package botruntime
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/readiness"
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
@@ -104,6 +107,55 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 
 	if readyResp.StatusCode != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestProvideBotRouter_DependencyReadyProbeIsInternalOnly(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	probeCalls := 0
+	probe := readiness.NewProbe("bot", readiness.Check{
+		Name: "postgres",
+		Probe: func(context.Context) error {
+			probeCalls++
+			return errors.New("pool unavailable")
+		},
+	})
+
+	router, err := ProvideBotRouter(t.Context(), &config.Config{
+		Server: config.ServerConfig{APIKey: "test-key"},
+	}, logger, nil, nil, probe)
+	if err != nil {
+		t.Fatalf("ProvideBotRouter() error = %v", err)
+	}
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	readyResp := getRouterTestResponse(t, server.URL+"/ready")
+	require.NoError(t, readyResp.Body.Close())
+	if readyResp.StatusCode != http.StatusOK {
+		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
+	}
+	if probeCalls != 0 {
+		t.Fatalf("/ready invoked dependency probe %d time(s), want 0", probeCalls)
+	}
+
+	internalReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/internal/ready", http.NoBody)
+	if err != nil {
+		t.Fatalf("build /internal/ready request: %v", err)
+	}
+	internalReq.Header.Set(middleware.APIKeyHeader, "test-key")
+	internalResp, err := http.DefaultClient.Do(internalReq)
+	if err != nil {
+		t.Fatalf("GET /internal/ready: %v", err)
+	}
+	require.NotNil(t, internalResp)
+	require.NoError(t, internalResp.Body.Close())
+	if internalResp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("/internal/ready status = %d, want %d", internalResp.StatusCode, http.StatusServiceUnavailable)
+	}
+	if probeCalls != 1 {
+		t.Fatalf("/internal/ready invoked dependency probe %d time(s), want 1", probeCalls)
 	}
 }
 

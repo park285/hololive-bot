@@ -48,14 +48,14 @@ func validateAlarmServiceOrigin(baseURL string) error {
 	if parsed.Host == "" {
 		return fmt.Errorf("alarm service URL must include a host")
 	}
-	if alarmOriginHasDisallowedParts(parsed) {
+	if alarmOriginHasDisallowedParts(baseURL, parsed) {
 		return fmt.Errorf("alarm service URL must be an origin without credentials, path, query or fragment")
 	}
 	return nil
 }
 
-func alarmOriginHasDisallowedParts(parsed *url.URL) bool {
-	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+func alarmOriginHasDisallowedParts(raw string, parsed *url.URL) bool {
+	if parsed.User != nil || parsed.ForceQuery || parsed.RawQuery != "" || strings.Contains(raw, "#") {
 		return true
 	}
 	return parsed.Path != "" && parsed.Path != "/"

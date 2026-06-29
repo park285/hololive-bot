@@ -77,7 +77,7 @@ func (r *Runtime) handleSessionStatus(c *gin.Context) {
 		httpx.Abort(c, httpx.Unauthorized())
 		return
 	}
-	csrf, err := auth.NewCSRFToken(sessionID, r.cfg.SessionSecret)
+	csrf, err := r.sessionStatusCSRFToken(c.Request, sessionID)
 	if err != nil {
 		httpx.Abort(c, httpx.Internal(err))
 		return
@@ -97,6 +97,13 @@ func (r *Runtime) handleSessionStatus(c *gin.Context) {
 			AbsoluteWarningWindowMS: durationMillis(r.cfg.Session.AbsoluteWarningWindow),
 		},
 	})
+}
+
+func (r *Runtime) sessionStatusCSRFToken(req *http.Request, sessionID string) (string, error) {
+	if cookie, err := req.Cookie(auth.CSRFCookieName); err == nil && auth.ValidateCSRFToken(sessionID, cookie.Value, r.cfg.SessionSecret) {
+		return cookie.Value, nil
+	}
+	return auth.NewCSRFToken(sessionID, r.cfg.SessionSecret)
 }
 
 func (r *Runtime) handleLogout(c *gin.Context) {

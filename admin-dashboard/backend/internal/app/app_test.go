@@ -444,6 +444,33 @@ func TestSessionStatusIssuesCSRFTokenForBootstrap(t *testing.T) {
 		"the token issued by /auth/session must satisfy the CSRF gate on the next mutation")
 }
 
+func TestSessionStatusPreservesValidCSRFToken(t *testing.T) {
+	sess := liveSession("csrf-preserve-session")
+	rt := newTestRuntime(t, storeWith(sess), nil)
+	handler := rt.Handler()
+	csrf, err := auth.NewCSRFToken(sess.ID, testSecret)
+	require.NoError(t, err)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req.AddCookie(signedSessionCookie(sess.ID))
+	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	rec := doRequest(handler, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	payloadToken, ok := decodeBody(t, rec)["csrf_token"].(string)
+	require.True(t, ok)
+	require.Equal(t, csrf, payloadToken)
+
+	var csrfCookie *http.Cookie
+	for _, ck := range rec.Result().Cookies() {
+		if ck.Name == auth.CSRFCookieName {
+			csrfCookie = ck
+		}
+	}
+	require.NotNil(t, csrfCookie)
+	require.Equal(t, csrf, csrfCookie.Value)
+}
+
 func TestSPAFallbackServesIndexWith200(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
 	rt.static = static.NewHandlerFromFS(fstest.MapFS{

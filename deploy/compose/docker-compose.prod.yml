@@ -496,8 +496,10 @@ services:
       test:
         - CMD
         - ./bin/healthcheck
+        - --api-key-env
+        - API_SECRET_KEY
         - https://127.0.0.1:30001/health
-        - https://127.0.0.1:30003/ready
+        - https://127.0.0.1:30003/internal/ready
         - https://127.0.0.1:30006/health
     networks:
       hololive-net:
