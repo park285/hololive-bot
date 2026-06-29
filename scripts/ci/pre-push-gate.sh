@@ -82,6 +82,7 @@ bash scripts/ci/check-workflow-secrets.sh
 bash scripts/ci/check-workflow-secrets_test.sh
 echo "[pre-push] security regression shell tests"
 bash scripts/logs/daily-rollup-logs_test.sh
+bash scripts/logs/test-stream-mirror-retention.sh
 bash scripts/deploy/verify-exec-tree-ownership_test.sh
 bash scripts/deploy/systemd-compose-up_test.sh
 bash scripts/deploy/test-compose-security-defaults.sh

@@ -105,6 +105,51 @@ stream_mirror_append_line() {
   rm -f "${chunk_file}"
 }
 
+stream_mirror_chunk_bytes() {
+  local max_bytes=""
+  local chunk_bytes=""
+
+  max_bytes="$(stream_mirror_max_bytes)"
+  chunk_bytes="$(stream_mirror_positive_int "${STREAM_MIRROR_CHUNK_BYTES:-65536}" 65536)"
+  if [[ "${chunk_bytes}" -gt "${max_bytes}" ]]; then
+    chunk_bytes="${max_bytes}"
+  fi
+
+  printf '%s\n' "${chunk_bytes}"
+}
+
+stream_mirror_append_stream() {
+  local log_file="$1"
+  local chunk_dir=""
+  local chunk_file=""
+  local chunk_bytes=""
+  local chunk_size=0
+
+  chunk_dir="$(dirname "${log_file}")"
+  mkdir -p "${chunk_dir}"
+  chunk_bytes="$(stream_mirror_chunk_bytes)"
+
+  while true; do
+    chunk_file="$(mktemp "${chunk_dir}/.stream-chunk.XXXXXX")"
+    if ! dd bs="${chunk_bytes}" count=1 status=none of="${chunk_file}"; then
+      rm -f "${chunk_file}"
+      return 1
+    fi
+
+    chunk_size="$(stat -c%s "${chunk_file}" 2>/dev/null || echo 0)"
+    if [[ "${chunk_size}" -eq 0 ]]; then
+      rm -f "${chunk_file}"
+      return 0
+    fi
+
+    if ! stream_mirror_append_file "${log_file}" "${chunk_file}"; then
+      rm -f "${chunk_file}"
+      return 1
+    fi
+    rm -f "${chunk_file}"
+  done
+}
+
 run_stream_service_worker() {
   local svc="$1"
   local log_root="${REPO_ROOT}/logs"
@@ -112,20 +157,13 @@ run_stream_service_worker() {
   local pid_dir="${log_root}/runtime/pids"
   local log_file="${mirror_dir}/${svc}.log"
   local since="${STREAM_SINCE:-5m}"
-  local chunk_file=""
 
   mkdir -p "${mirror_dir}" "${pid_dir}"
 
   while true; do
-    chunk_file="$(mktemp "${mirror_dir}/.${svc}.stream.XXXXXX")"
-    if ! "${SCRIPT_PATH}" tail "${svc}" --since "${since}" --tail 50 > "${chunk_file}" 2>&1; then
-      stream_mirror_append_file "${log_file}" "${chunk_file}"
-      rm -f "${chunk_file}"
+    if ! "${SCRIPT_PATH}" tail "${svc}" --since "${since}" --tail 50 2>&1 | stream_mirror_append_stream "${log_file}"; then
       stream_mirror_append_line "${log_file}" "$(date '+%Y-%m-%d %H:%M:%S') ${svc}: log stream reconnect"
       sleep 1
-    else
-      stream_mirror_append_file "${log_file}" "${chunk_file}"
-      rm -f "${chunk_file}"
     fi
     since="1m"
   done
