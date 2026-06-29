@@ -297,6 +297,10 @@ func (m *Mapper) reconcileTwitchMappingsForChannel(ctx context.Context, channelI
 		return err
 	}
 
+	if err := m.removeOwnedTwitchLoginMappingsExcept(ctx, channelID, desiredLogin); err != nil {
+		return err
+	}
+
 	if desiredLogin == "" {
 		return nil
 	}
