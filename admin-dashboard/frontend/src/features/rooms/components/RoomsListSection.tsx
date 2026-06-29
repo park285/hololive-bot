@@ -161,7 +161,7 @@ export const RoomsListSection = ({
 										onAddRoom();
 									}
 								}}
-								placeholder="예: 451788135895779"
+								placeholder="예: 200000000000002"
 								className={clsx(
 									"font-mono focus-visible:ring-2",
 									isBlacklist

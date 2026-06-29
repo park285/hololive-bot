@@ -69,7 +69,7 @@ const settings = {
 
 const rooms = {
 	status: "ok",
-	rooms: ["451788135895779", "351222998118822"],
+	rooms: ["200000000000002", "200000000000004"],
 	aclEnabled: true,
 	aclMode: "blacklist",
 };
@@ -102,7 +102,7 @@ const alarms = {
 	status: "ok",
 	alarms: [
 		{
-			roomId: "451788135895779",
+			roomId: "200000000000002",
 			roomName: "운영 방",
 			userId: "user-1",
 			userName: "관리자",
