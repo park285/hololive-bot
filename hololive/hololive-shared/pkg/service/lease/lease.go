@@ -161,14 +161,20 @@ func (l *Lease) RenewLoop(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-ticker.C:
-			if err := l.Renew(ctx); err != nil {
-				return err
-			}
+		stop, err := l.renewOnTick(ctx, ticker.C)
+		if stop {
+			return err
 		}
+	}
+}
+
+func (l *Lease) renewOnTick(ctx context.Context, tick <-chan time.Time) (bool, error) {
+	select {
+	case <-ctx.Done():
+		return true, nil
+	case <-tick:
+		err := l.Renew(ctx)
+		return err != nil, err
 	}
 }
 

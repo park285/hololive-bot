@@ -89,32 +89,36 @@ func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *
 	if logger == nil {
 		logger = slog.Default()
 	}
+	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: config.withDefaults()}
+}
+
+func (c DispatcherConfig) withDefaults() DispatcherConfig {
 	defaults := DefaultDispatcherConfig()
-	if config.BatchSize <= 0 {
-		config.BatchSize = defaults.BatchSize
+	if c.BatchSize <= 0 {
+		c.BatchSize = defaults.BatchSize
 	}
-	if config.MaxConcurrent <= 0 {
-		config.MaxConcurrent = defaults.MaxConcurrent
+	if c.MaxConcurrent <= 0 {
+		c.MaxConcurrent = defaults.MaxConcurrent
 	}
-	if config.MaxRetries <= 0 {
-		config.MaxRetries = defaults.MaxRetries
+	if c.MaxRetries <= 0 {
+		c.MaxRetries = defaults.MaxRetries
 	}
-	if config.LockTimeout <= 0 {
-		config.LockTimeout = defaults.LockTimeout
+	if c.LockTimeout <= 0 {
+		c.LockTimeout = defaults.LockTimeout
 	}
-	if config.PollInterval <= 0 {
-		config.PollInterval = defaults.PollInterval
+	if c.PollInterval <= 0 {
+		c.PollInterval = defaults.PollInterval
 	}
-	if config.RetryBackoff <= 0 {
-		config.RetryBackoff = defaults.RetryBackoff
+	if c.RetryBackoff <= 0 {
+		c.RetryBackoff = defaults.RetryBackoff
 	}
-	if config.CleanupAfter <= 0 {
-		config.CleanupAfter = defaults.CleanupAfter
+	if c.CleanupAfter <= 0 {
+		c.CleanupAfter = defaults.CleanupAfter
 	}
-	if config.CleanupInterval <= 0 {
-		config.CleanupInterval = defaults.CleanupInterval
+	if c.CleanupInterval <= 0 {
+		c.CleanupInterval = defaults.CleanupInterval
 	}
-	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: config}
+	return c
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {

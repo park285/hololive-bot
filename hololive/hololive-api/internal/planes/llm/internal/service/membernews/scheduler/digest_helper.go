@@ -96,6 +96,15 @@ func processDigestForRoom(
 	return result
 }
 
+func acquireDigestSlot(ctx context.Context, sem chan struct{}) bool {
+	select {
+	case sem <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, config *digestDispatchConfig) delivery.SendResult {
 	var (
 		mu     sync.Mutex
@@ -105,9 +114,7 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 	)
 
 	for i := range rooms {
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
+		if !acquireDigestSlot(ctx, sem) {
 			wg.Wait()
 			return result
 		}
