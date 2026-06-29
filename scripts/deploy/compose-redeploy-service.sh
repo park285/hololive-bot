@@ -190,7 +190,7 @@ if [[ "${build_target}" == true ]]; then
     fi
 fi
 
-if [[ "${TARGET}" == "hololive-api" || "${TARGET}" == "hololive-alarm-worker" || -z "${TARGET}" ]]; then
+if [[ -z "${TARGET}" ]] || cutover_service_uses_app_writable_bind_mount "${TARGET}"; then
     echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID}:${HOLOLIVE_APP_GID}"
     if ! cutover_bind_mount_preflight "${ROOT_DIR}"; then
         echo "[ERROR] host bind-mount preflight failed before cutover; aborting (no containers changed)" >&2

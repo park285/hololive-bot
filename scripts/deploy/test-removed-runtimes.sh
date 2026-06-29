@@ -112,12 +112,15 @@ services:
   youtube-producer:
     image: example-producer
 EOF
+mkdir -p "${ROOT_DIR}/logs" "${ROOT_DIR}/data"
 
 : >"${MOCK_DOCKER_LOG}"
 MOCK_DOCKER_PRESENT_NAMES="hololive-kakao-bot-go hololive-admin-api hololive-llm-scheduler hololive-dispatcher-go" \
 COMPOSE_ENV_FILE="${env_file}" \
 SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
 IRIS_CLIENT_GO_WORKSPACE_PATH="${tmpdir}/iris-client-go" \
+HOLOLIVE_APP_UID="$(id -u)" \
+HOLOLIVE_APP_GID="$(id -g)" \
     "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build hololive-api
 
 config_line="$(grep -nE '^compose --env-file .* config --quiet$' "${MOCK_DOCKER_LOG}" | cut -d: -f1 | head -n1)"
@@ -139,21 +142,29 @@ unset IRIS_CLIENT_GO_WORKSPACE_PATH
 MOCK_DOCKER_PRESENT_NAMES="${retired_names}" \
 COMPOSE_ENV_FILE="${env_file}" \
 SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
-    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build youtube-producer
+HOLOLIVE_APP_UID="$(id -u)" \
+HOLOLIVE_APP_GID="$(id -g)" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build youtube-producer >"${tmpdir}/producer.out" 2>&1
 
 grep -Eq '^compose --env-file .* build --with-dependencies youtube-producer$' "${MOCK_DOCKER_LOG}" \
     || fail "producer-only start did not preserve targeted dependency build"
 if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
     fail "producer-only start must not stop retired central runtimes"
 fi
+grep -Fq "[PREFLIGHT] Verifying host bind-mount write access" "${tmpdir}/producer.out" \
+    || fail "producer-only start did not run writable bind-mount preflight"
 pass "producer-only AP start neither requires iris-client-go nor triggers central cutover cleanup"
 
 : >"${MOCK_DOCKER_LOG}"
 MOCK_DOCKER_PRESENT_NAMES="${retired_names}" \
 COMPOSE_ENV_FILE="${env_file}" \
 SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
-    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d hololive-alarm-worker
+HOLOLIVE_APP_UID="$(id -u)" \
+HOLOLIVE_APP_GID="$(id -g)" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d hololive-alarm-worker >"${tmpdir}/alarm-worker.out" 2>&1
 if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
     fail "alarm-worker-only start must not stop retired API-plane runtimes"
 fi
+grep -Fq "[PREFLIGHT] Verifying host bind-mount write access" "${tmpdir}/alarm-worker.out" \
+    || fail "alarm-worker-only start did not run writable bind-mount preflight"
 pass "alarm-worker-only start does not trigger API-plane cutover cleanup"

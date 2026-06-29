@@ -392,7 +392,6 @@ services:
       KAKAO_ROOMS: ${KAKAO_ROOMS:-}
       KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED:-true}
       KAKAO_ACL_MODE: ${KAKAO_ACL_MODE:-whitelist}
-      API_SECRET_KEY: ${API_SECRET_KEY:-}
       HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
       HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
     ports:
@@ -454,7 +453,6 @@ services:
       KAKAO_ROOMS: ${KAKAO_ROOMS:-}
       KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED:-true}
       KAKAO_ACL_MODE: ${KAKAO_ACL_MODE:-whitelist}
-      API_SECRET_KEY: ${API_SECRET_KEY:-}
       HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
       HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
       SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health

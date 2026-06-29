@@ -212,16 +212,22 @@ if [[ "${compose_invokes_up}" == true ]]; then
         esac
     done
 
-    cutover_required=false
+    bind_preflight_required=false
+    removed_runtime_cleanup_required=false
+    gate_targets=()
     if [[ ${#up_service_targets[@]} -eq 0 ]]; then
-        cutover_required=true
+        bind_preflight_required=true
+        removed_runtime_cleanup_required=true
+        gate_targets=(hololive-api hololive-alarm-worker admin-dashboard)
     else
         for service in "${up_service_targets[@]}"; do
-            case "${service}" in
-                hololive-api|admin-dashboard)
-                    cutover_required=true
-                    ;;
-            esac
+            if cutover_service_uses_app_writable_bind_mount "${service}"; then
+                bind_preflight_required=true
+                gate_targets+=("${service}")
+            fi
+            if [[ "${service}" == "hololive-api" || "${service}" == "admin-dashboard" ]]; then
+                removed_runtime_cleanup_required=true
+            fi
         done
     fi
 
@@ -238,26 +244,18 @@ if [[ "${compose_invokes_up}" == true ]]; then
         fi
     fi
 
-    if [[ "${cutover_required}" == true ]]; then
+    if [[ "${bind_preflight_required}" == true || "${removed_runtime_cleanup_required}" == true || ${#gate_targets[@]} -gt 0 ]]; then
         COMPOSE_FILE_ARGS=("${compose_prefix[@]}")
-        gate_targets=()
-        if [[ ${#up_service_targets[@]} -eq 0 ]]; then
-            gate_targets=(hololive-api hololive-alarm-worker admin-dashboard)
-        else
-            for service in "${up_service_targets[@]}"; do
-                case "${service}" in
-                    hololive-api|hololive-alarm-worker|admin-dashboard)
-                        gate_targets+=("${service}")
-                        ;;
-                esac
-            done
+        if [[ "${bind_preflight_required}" == true ]]; then
+            echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID}:${HOLOLIVE_APP_GID}"
+            if ! cutover_bind_mount_preflight "${ROOT_DIR}"; then
+                echo "[ERROR] host bind-mount preflight failed before cutover; aborting (no containers changed)" >&2
+                exit 1
+            fi
         fi
-        echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID}:${HOLOLIVE_APP_GID}"
-        if ! cutover_bind_mount_preflight "${ROOT_DIR}"; then
-            echo "[ERROR] host bind-mount preflight failed before cutover; aborting (no containers changed)" >&2
-            exit 1
+        if [[ "${removed_runtime_cleanup_required}" == true ]]; then
+            removed_runtime_cleanup_before_cutover
         fi
-        removed_runtime_cleanup_before_cutover
         if [[ ${#gate_targets[@]} -gt 0 ]]; then
             cutover_capture_restart_baseline "${gate_targets[@]}"
         fi
@@ -265,11 +263,9 @@ if [[ "${compose_invokes_up}" == true ]]; then
 
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_args[@]}"
 
-    if [[ "${cutover_required}" == true ]]; then
-        if [[ ${#gate_targets[@]} -gt 0 ]] && ! cutover_health_gate "${gate_targets[@]}"; then
-            echo "[ERROR] health gate failed after cutover up" >&2
-            exit 1
-        fi
+    if [[ ${#gate_targets[@]} -gt 0 ]] && ! cutover_health_gate "${gate_targets[@]}"; then
+        echo "[ERROR] health gate failed after cutover up" >&2
+        exit 1
     fi
     exit 0
 fi

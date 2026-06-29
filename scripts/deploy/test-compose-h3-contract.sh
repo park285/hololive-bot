@@ -31,6 +31,9 @@ SEOUL_CLIPROXY_BASE_URL=https://cliproxy.invalid
 SEOUL_METRICS_BIND_IP=100.100.1.5
 EOF
 cp "${STUB_COMPOSE_ENV}" "${STUB_APP_ENV}"
+cat >>"${STUB_APP_ENV}" <<'EOF'
+API_SECRET_KEY=stub
+EOF
 cat >"${STUB_YOUTUBE_PRODUCER_ENV}" <<'EOF'
 API_SECRET_KEY=stub
 HOLODEX_API_KEY=stub
@@ -132,6 +135,10 @@ for name, (urls, udp_port) in H3_HEALTH.items():
         check(f"{name} healthcheck includes {url}", url in test)
     if udp_port is not None:
         check(f"{name} publishes {udp_port}/udp", has_udp_published(svc, udp_port))
+
+for name in ("hololive-api", "hololive-alarm-worker"):
+    env = (main.get(name) or {}).get("environment") or {}
+    check(f"{name} receives API_SECRET_KEY from scoped env_file", env.get("API_SECRET_KEY") == "stub")
 
 def h3_addr_aligned(svc, port):
     return (svc.get("environment") or {}).get("HOLOLIVE_H3_ADDR") == f":{port}"
