@@ -173,7 +173,7 @@ func newAPIRouter(ctx context.Context, appConfig *config.Config, logger *slog.Lo
 		},
 	}
 	if probe := readiness.Pick(readyProbe...); probe != nil {
-		routerOptions.ReadyResponder = readiness.GinHandler(probe) //nolint:contextcheck // gin readiness 핸들러는 c.Request.Context()로 요청 컨텍스트를 전달(표준 HTTP 경계)
+		routerOptions.InternalReadyResponder = readiness.GinHandler(probe) //nolint:contextcheck // gin readiness 핸들러는 c.Request.Context()로 요청 컨텍스트를 전달(표준 HTTP 경계)
 	}
 
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, routerOptions)

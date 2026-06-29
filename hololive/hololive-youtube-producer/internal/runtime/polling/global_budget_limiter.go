@@ -99,7 +99,20 @@ func (l *globalBudgetLimiter) TryReserve(
 		return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: job must not be nil")
 	}
 	profile = normalizeGlobalBudgetProfile(profile)
+	return l.tryReserveNormalizedProfile(ctx, job, profile, ttl)
+}
 
+func (l *globalBudgetLimiter) tryReserveNormalizedProfile(
+	ctx context.Context,
+	job *poller.BudgetJob,
+	profile poller.BudgetProfile,
+	ttl time.Duration,
+) (reservation poller.BudgetReservation, decision poller.BudgetDecision, err error) {
+	if decision, denied, cooldownErr := l.fallbackSourceCooldownDecision(ctx, profile); cooldownErr != nil {
+		return nil, poller.BudgetDecision{}, cooldownErr
+	} else if denied {
+		return nil, decision, nil
+	}
 	ownerToken, err := l.newOwnerToken(job)
 	if err != nil {
 		return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: owner token: %w", err)

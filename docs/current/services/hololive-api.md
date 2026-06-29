@@ -9,7 +9,7 @@
 | Compose service | `hololive-api` |
 | Port | `30001` (bot) / `30003` (llm) / `30006` (admin) |
 | Health endpoint | `http://127.0.0.1:30001/health` |
-| Ready endpoint | `http://127.0.0.1:30003/ready` (llm plane) |
+| Ready endpoint | `http://127.0.0.1:30003/internal/ready` with `X-API-Key` (llm plane dependencies) |
 
 ## Role
 
@@ -71,7 +71,7 @@ bot/admin/llm plane을 한 프로세스에서 호스팅하는 통합 runtime입�
 
 - Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-api`
 - Health: `http://127.0.0.1:30001/health`, `http://127.0.0.1:30003/health`, `http://127.0.0.1:30006/health`
-- Ready: `http://127.0.0.1:30003/ready`
+- Ready: `http://127.0.0.1:30003/internal/ready` with `X-API-Key`
 - Metrics: 검토 필요
 
 ## Related documents

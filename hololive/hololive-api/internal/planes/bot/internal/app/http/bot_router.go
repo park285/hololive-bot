@@ -46,9 +46,9 @@ func ProvideBotRouter(
 	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
-		APIKey:         appConfig.Server.APIKey,
-		ReadyResponder: botReadyResponder(readiness.Pick(readyProbe...)), //nolint:contextcheck // gin readiness 핸들러는 c.Request.Context()로 요청 컨텍스트를 전달(표준 HTTP 경계)
-		RegisterRoutes: botRouteRegistrar(appConfig.Server.APIKey, webhookHandler, triggerHandler),
+		APIKey:                 appConfig.Server.APIKey,
+		InternalReadyResponder: botReadyResponder(readiness.Pick(readyProbe...)), //nolint:contextcheck // gin readiness 핸들러는 c.Request.Context()로 요청 컨텍스트를 전달(표준 HTTP 경계)
+		RegisterRoutes:         botRouteRegistrar(appConfig.Server.APIKey, webhookHandler, triggerHandler),
 	})
 }
 

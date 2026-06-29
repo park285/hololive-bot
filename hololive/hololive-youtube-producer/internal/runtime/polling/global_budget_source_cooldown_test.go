@@ -30,7 +30,7 @@ func TestGlobalBudgetLimiterMarkSourceCooldownDeniesSubsequentReserve(t *testing
 	require.Greater(t, decision.RetryAfter, time.Duration(0))
 }
 
-func TestGlobalBudgetLimiterAllowsLiveBatchHolodexAdmissionDuringYouTubeCooldown(t *testing.T) {
+func TestGlobalBudgetLimiterDeniesLiveBatchFallbackDuringYouTubeCooldown(t *testing.T) {
 	ctx := context.Background()
 	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
 	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
@@ -47,7 +47,11 @@ func TestGlobalBudgetLimiterAllowsLiveBatchHolodexAdmissionDuringYouTubeCooldown
 	reservation, decision, err := limiter.TryReserve(ctx, testBudgetJob("live-batch"), holodexLiveBatchBudgetProfile(30, poller.BudgetBurstPrimary, poller.BudgetPriorityHigh), time.Minute)
 
 	require.NoError(t, err)
-	require.True(t, decision.Allowed)
-	require.NotNil(t, reservation)
-	require.NoError(t, reservation.Release(ctx))
+	require.False(t, decision.Allowed)
+	require.Nil(t, reservation)
+	require.Equal(t, "source_cooldown", decision.Reason)
+	require.Equal(t, string(poller.BudgetSourceYouTubeScraper), decision.AffectedSource)
+	require.Greater(t, decision.RetryAfter, time.Duration(0))
+	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceHolodexLive)))
+	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourcePostgresWrite)))
 }

@@ -14,7 +14,7 @@
 |---|---|
 | Health (bot) | `http://127.0.0.1:30001/health` returns success |
 | Health (llm) | `http://127.0.0.1:30003/health` returns success |
-| Ready (llm) | `http://127.0.0.1:30003/ready` returns success |
+| Ready (llm) | `http://127.0.0.1:30003/internal/ready` with `X-API-Key` returns success |
 | Health (admin) | `http://127.0.0.1:30006/health` returns success |
 | Logs | no repeated webhook, Iris, DB, Valkey, LLM, or trigger errors |
 | Queue | produces `notification_delivery_outbox` rows; does not own dispatch queue draining |
@@ -149,7 +149,7 @@ Rollback:
 ```bash
 curl http://127.0.0.1:30001/health
 curl http://127.0.0.1:30003/health
-curl http://127.0.0.1:30003/ready
+curl -H "X-API-Key: $API_SECRET_KEY" http://127.0.0.1:30003/internal/ready
 curl http://127.0.0.1:30006/health
 ```
 
@@ -165,8 +165,8 @@ bot/admin/llm을 한 프로세스에 묶었으므로 평균값보다 동시 spik
 
 ### 단일 프로세스 blast-radius (먼저 인지할 것)
 
-- 3 plane이 한 프로세스이므로 **한 plane의 자원 폭주(OOM/goroutine leak/GC thrash)가 전체 컨테이너를 끌어내립니다.** healthcheck(`30001/health`·`30003/ready`·`30006/health`)는 각 URL을 순차 검사해 하나라도 실패하면 exit 1 → unhealthy → deunhealth가 컨테이너 전체를 재시작합니다.
-- 단, 현 healthcheck는 **liveness-only**(plane이 떠 있고 응답하는지)라 한 plane의 일시적 응답 실패가 곧바로 전체 재시작을 부르는 위험은 낮습니다. 위험이 현실화되는 경로는 process-wide 자원(메모리/goroutine/H3 listener hang)이며, 그때는 plane 구분 없이 동반 장애가 납니다.
+- 3 plane이 한 프로세스이므로 **한 plane의 자원 폭주(OOM/goroutine leak/GC thrash)가 전체 컨테이너를 끌어내립니다.** healthcheck(`30001/health`·`30003/internal/ready`·`30006/health`)는 각 URL을 순차 검사해 하나라도 실패하면 exit 1 → unhealthy → deunhealth가 컨테이너 전체를 재시작합니다.
+- `30003/internal/ready`는 인증된 dependency readiness(PostgreSQL/Valkey)를 포함합니다. 외부에서 접근 가능한 `/ready`는 dependency ping 없이 process health만 반환합니다.
 
 ### 경계값 (initial threshold — 실측으로 보정)
 

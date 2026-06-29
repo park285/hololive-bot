@@ -19,13 +19,14 @@ import (
 )
 
 type RuntimeRouterOptions struct {
-	APIKey         string
-	EnableGzip     bool
-	Operation      string
-	SkipLogPaths   []string
-	PreRouteUse    []gin.HandlerFunc
-	RegisterRoutes func(*gin.Engine) error
-	ReadyResponder func(*gin.Context)
+	APIKey                 string
+	EnableGzip             bool
+	Operation              string
+	SkipLogPaths           []string
+	PreRouteUse            []gin.HandlerFunc
+	RegisterRoutes         func(*gin.Engine) error
+	ReadyResponder         func(*gin.Context)
+	InternalReadyResponder func(*gin.Context)
 
 	// TrustRemoteAddrOnly가 true이면 c.ClientIP()가 TCP RemoteAddr만 반영하도록
 	// TrustedPlatform과 trusted proxy를 모두 비운다. CF-Connecting-IP/X-Forwarded-For 등
@@ -126,6 +127,7 @@ func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts *RuntimeRou
 		c.JSON(http.StatusOK, health.Get())
 	})
 	registerRuntimeReadyRoute(router, opts.ReadyResponder)
+	registerRuntimeInternalReadyRoute(router, opts.APIKey, opts.InternalReadyResponder)
 
 	metrics := router.Group("")
 	metrics.Use(middleware.APIKeyAuthMiddleware(opts.APIKey))
@@ -173,7 +175,7 @@ func installRuntimeMiddleware(router *gin.Engine, ctx context.Context, logger *s
 		opts = &RuntimeRouterOptions{}
 	}
 	ApplyBaseMiddleware(router, ctx, logger, BaseMiddlewareOptions{
-		SkipLogPaths: append([]string{"/health", "/ready", "/metrics"}, opts.SkipLogPaths...),
+		SkipLogPaths: append([]string{"/health", "/ready", "/internal/ready", "/metrics"}, opts.SkipLogPaths...),
 	})
 	if opts.EnableGzip {
 		router.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -193,4 +195,13 @@ func registerRuntimeReadyRoute(router *gin.Engine, readyResponder func(*gin.Cont
 	router.GET("/ready", func(c *gin.Context) {
 		c.JSON(http.StatusOK, health.Get())
 	})
+}
+
+func registerRuntimeInternalReadyRoute(router *gin.Engine, apiKey string, readyResponder func(*gin.Context)) {
+	if readyResponder == nil || strings.TrimSpace(apiKey) == "" {
+		return
+	}
+	internal := router.Group("/internal")
+	internal.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	internal.GET("/ready", readyResponder)
 }

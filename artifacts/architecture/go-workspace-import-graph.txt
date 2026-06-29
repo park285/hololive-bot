@@ -149,6 +149,7 @@ github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/notification
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/twitch
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/park285/shared-go/pkg/logging
+github.com/kapu/hololive-api/cmd/healthcheck -> github.com/kapu/hololive-shared/pkg/contracts/common
 github.com/kapu/hololive-api/cmd/healthcheck -> github.com/park285/shared-go/pkg/healthprobe
 github.com/kapu/hololive-api/cmd/hololive-api -> github.com/kapu/hololive-api/internal/app
 github.com/kapu/hololive-api/cmd/hololive-api -> github.com/kapu/hololive-shared/pkg/config

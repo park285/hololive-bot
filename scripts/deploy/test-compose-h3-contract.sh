@@ -113,7 +113,7 @@ H3_HEALTH = {
     "hololive-api": (
         [
             "https://127.0.0.1:30001/health",
-            "https://127.0.0.1:30003/ready",
+            "https://127.0.0.1:30003/internal/ready",
             "https://127.0.0.1:30006/health",
         ],
         30001,
