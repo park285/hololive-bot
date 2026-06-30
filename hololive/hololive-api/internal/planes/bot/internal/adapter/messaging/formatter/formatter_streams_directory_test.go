@@ -91,6 +91,7 @@ func TestStreamListFormattersCapRenderedViews(t *testing.T) {
 	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
 		domain.TemplateKeyCmdLiveStreams:     "live count={{.Count}}\n{{range .Streams}}L {{.Title}}\n{{end}}",
 		domain.TemplateKeyCmdUpcomingStreams: "upcoming count={{.Count}}\n{{range .Streams}}U {{.Title}}\n{{end}}",
+		domain.TemplateKeyCmdChannelSchedule: "schedule count={{.Count}}\n{{range .Streams}}S {{.Title}}\n{{end}}",
 	})
 	formatter := NewResponseFormatter("!", renderer)
 
@@ -106,6 +107,10 @@ func TestStreamListFormattersCapRenderedViews(t *testing.T) {
 	upcoming := formatter.UpcomingStreams(t.Context(), streams, 24)
 	assert.Contains(t, upcoming, "upcoming count=105")
 	assert.Equal(t, streamListDisplayLimit, strings.Count(upcoming, "U title"))
+
+	schedule := formatter.ChannelSchedule(t.Context(), &domain.Channel{Name: "channel"}, streams, 7)
+	assert.Contains(t, schedule, "schedule count=105")
+	assert.Equal(t, streamListDisplayLimit, strings.Count(schedule, "S title"))
 }
 
 func TestStreamHelpers(t *testing.T) {

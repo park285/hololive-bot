@@ -174,6 +174,7 @@ func channelScheduleName(channel *domain.Channel) string {
 }
 
 func (f *ResponseFormatter) scheduleEntryViews(ctx context.Context, streams []*domain.Stream) []scheduleEntryView {
+	streams = limitedStreamList(streams)
 	if len(streams) == 0 {
 		return nil
 	}
