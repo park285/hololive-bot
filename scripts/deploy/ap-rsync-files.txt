@@ -51,6 +51,7 @@ hololive/hololive-youtube-producer/internal/runtime/polling/job_run_guard_claime
 hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_budget.go
 hololive/hololive-youtube-producer/internal/runtime/polling/budget_validator.go
 hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter.go
+hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter_cooldown.go
 hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter_keys.go
 hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter_scripts.go
 hololive/hololive-youtube-producer/internal/runtime/polling/live_batch_poller.go
