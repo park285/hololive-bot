@@ -17,7 +17,7 @@ type streamFetchState struct {
 
 func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan *streamFetchPlan) ([]*domain.Stream, error) {
 	if cached, found := getCachedStreamsByOrg(ctx, plan); found {
-		return limitStreamList(cached), nil
+		return cached, nil
 	}
 
 	state := newStreamFetchState()
@@ -29,13 +29,12 @@ func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan *streamF
 
 	secondary, err := h.runStreamScraperFallback(ctx, plan, primary, state)
 	if err == nil && secondary.Outcome == "hit" {
-		return limitStreamList(state.streams()), nil
+		return state.streams(), nil
 	}
 
-	aggregated := limitStreamList(state.streams())
-	cacheStreamsByOrg(ctx, plan, aggregated)
+	cacheStreamsByOrg(ctx, plan, state.streams())
 
-	return aggregated, nil
+	return state.streams(), nil
 }
 
 func newStreamFetchState() *streamFetchState {

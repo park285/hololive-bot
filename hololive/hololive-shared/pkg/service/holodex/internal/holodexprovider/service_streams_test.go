@@ -219,60 +219,36 @@ func TestGetUpcomingStreamsByOrg_CapsProviderResults(t *testing.T) {
 	}
 }
 
-func TestGetChannelSchedule_CapsScheduleResults(t *testing.T) {
+func TestGetChannelsLiveStatus_DoesNotCapBatch(t *testing.T) {
 	t.Parallel()
 
 	hololive := constants.HolodexAPIParams.OrgHololive
+	const batch = 60
 	requester := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
 			if method != "GET" {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
-			if path != "/live" {
+			if path != "/users/live" {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
-			return mustMarshalStreamRawList(t, streamRawList(60, hololive, domain.StreamStatusLive)), nil
+			return mustMarshalStreamRawList(t, streamRawList(batch, hololive, domain.StreamStatusLive)), nil
 		},
 	}
 
 	service := newServiceForFallbackTest(requester)
 
-	streams, err := service.GetChannelSchedule(context.Background(), "channel-x", 168, true)
+	channelIDs := make([]string, batch)
+	for i := range channelIDs {
+		channelIDs[i] = fmt.Sprintf("channel-%d", i)
+	}
+
+	streams, err := service.GetChannelsLiveStatus(context.Background(), channelIDs)
 	if err != nil {
-		t.Fatalf("GetChannelSchedule() error = %v", err)
+		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}
-	if len(streams) != 50 {
-		t.Fatalf("len(streams) = %d, want 50", len(streams))
-	}
-}
-
-func TestGetLiveStreamsByOrgAll_CapsAggregatedResults(t *testing.T) {
-	t.Parallel()
-
-	requester := &MockRequester{
-		DoRequestFunc: func(_ context.Context, method, path string, params url.Values) ([]byte, error) {
-			if method != "GET" {
-				return nil, fmt.Errorf("unexpected method: %s", method)
-			}
-			if path == "/users/live" {
-				return mustMarshalStreamRawList(t, []StreamRaw{}), nil
-			}
-			if path != "/live" {
-				return nil, fmt.Errorf("unexpected path: %s", path)
-			}
-			org := params.Get("org")
-			return mustMarshalStreamRawList(t, prefixedStreamRawList(org, 50, org, domain.StreamStatusLive)), nil
-		},
-	}
-
-	service := newServiceForFallbackTest(requester)
-
-	streams, err := service.GetLiveStreamsByOrg(context.Background(), constants.HolodexAPIParams.OrgAll)
-	if err != nil {
-		t.Fatalf("GetLiveStreamsByOrg(all) error = %v", err)
-	}
-	if len(streams) != 50 {
-		t.Fatalf("len(streams) = %d, want 50 (org=all aggregation must be capped)", len(streams))
+	if len(streams) != batch {
+		t.Fatalf("len(streams) = %d, want %d (internal detection path must not be capped)", len(streams), batch)
 	}
 }
 
@@ -281,26 +257,6 @@ func streamRawList(count int, org string, status domain.StreamStatus) []StreamRa
 	for i := range streams {
 		id := fmt.Sprintf("stream-%d", i)
 		channelID := fmt.Sprintf("channel-%d", i)
-		streams[i] = StreamRaw{
-			ID:        id,
-			Title:     id,
-			Status:    status,
-			ChannelID: &channelID,
-			Channel: &ChannelRaw{
-				ID:   channelID,
-				Name: channelID,
-				Org:  &org,
-			},
-		}
-	}
-	return streams
-}
-
-func prefixedStreamRawList(prefix string, count int, org string, status domain.StreamStatus) []StreamRaw {
-	streams := make([]StreamRaw, count)
-	for i := range streams {
-		id := fmt.Sprintf("%s-stream-%d", prefix, i)
-		channelID := fmt.Sprintf("%s-channel-%d", prefix, i)
 		streams[i] = StreamRaw{
 			ID:        id,
 			Title:     id,

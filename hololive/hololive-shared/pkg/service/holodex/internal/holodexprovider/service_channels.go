@@ -118,7 +118,7 @@ func (h *Service) handleChannelScheduleRequestError(ctx context.Context, channel
 }
 
 func (h *Service) buildChannelSchedule(rawStreams []StreamRaw, includeLive bool) []*domain.Stream {
-	allStreams := limitStreamList(h.mapper.MapStreamsResponse(rawStreams))
+	allStreams := h.mapper.MapStreamsResponse(rawStreams)
 	hololiveOnly := h.filter.FilterHololiveStreams(allStreams)
 	sortStreamsByScheduledTime(hololiveOnly)
 	if includeLive {

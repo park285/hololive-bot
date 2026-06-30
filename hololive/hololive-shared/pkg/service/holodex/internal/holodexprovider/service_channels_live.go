@@ -279,7 +279,7 @@ func (h *Service) mapAndCacheChannelsLiveStatus(ctx context.Context, channelIDs 
 		return nil, fmt.Errorf("failed to unmarshal channels live status: %w", err)
 	}
 
-	streams := limitStreamList(h.mapper.MapStreamsResponse(rawStreams))
+	streams := h.mapper.MapStreamsResponse(rawStreams)
 	h.hydrateIndieStreamChannels(streams, channelIDs)
 	filtered := h.filter.FilterHololiveStreams(streams)
 
