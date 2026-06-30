@@ -103,6 +103,18 @@ if ! grep -Fq 'DELIVERY_DISPATCHER_ENABLED: ${DELIVERY_DISPATCHER_ENABLED:-true}
 else
   echo "[PASS] alarm-worker notification delivery outbox dispatcher is enabled by default"
 fi
+if ! grep -Fq 'ALARM_DISPATCH_CONSUMER_ENABLED: ${ALARM_DISPATCH_CONSUMER_ENABLED:-true}' <<< "${alarm_worker_block}"; then
+  echo "[FAIL] alarm-worker must enable the alarm dispatch consumer by default" >&2
+  fail=1
+else
+  echo "[PASS] alarm-worker alarm dispatch consumer is enabled by default"
+fi
+if ! grep -Fq 'YOUTUBE_OUTBOX_DISPATCHER_ENABLED: ${YOUTUBE_OUTBOX_DISPATCHER_ENABLED:-true}' <<< "${alarm_worker_block}"; then
+  echo "[FAIL] alarm-worker must enable the YouTube outbox dispatcher by default" >&2
+  fail=1
+else
+  echo "[PASS] alarm-worker YouTube outbox dispatcher is enabled by default"
+fi
 
 if [[ "${fail}" -ne 0 ]]; then
   exit 1

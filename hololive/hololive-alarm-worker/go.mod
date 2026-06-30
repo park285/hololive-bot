@@ -7,6 +7,7 @@ toolchain go1.26.4
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/georgysavva/scany/v2 v2.1.4
+	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/iris-client-go v0.23.0
@@ -68,7 +69,6 @@ require (
 	github.com/gaukas/godicttls v0.0.4 // indirect
 	github.com/gin-contrib/gzip v1.2.6 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
-	github.com/gin-gonic/gin v1.12.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect

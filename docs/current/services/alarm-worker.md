@@ -8,8 +8,8 @@
 | Binary | `alarm-worker` |
 | Compose service | `hololive-alarm-worker` |
 | Port | `30007` |
-| Health endpoint | `http://127.0.0.1:30007/health` |
-| Ready endpoint | 검토 필요 |
+| Health endpoint | `https://127.0.0.1:30007/health` over H3 |
+| Ready endpoint | `https://127.0.0.1:30007/ready`; diagnostic `https://127.0.0.1:30007/internal/ready` with `X-API-Key` |
 
 ## Role
 
@@ -58,6 +58,8 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - `NOTIFICATION_SCHEDULER_ROLE=worker`
 - `ALARM_WORKER_EGRESS_LEASE_ENABLED=true` for production proactive egress
 - `DELIVERY_DISPATCHER_ENABLED=true` for production generic notification delivery outbox egress
+- `ALARM_DISPATCH_CONSUMER_ENABLED=true` for production alarm dispatch outbox egress
+- `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true` for production YouTube outbox egress
 - Alarm timing/config env
 
 ## Shutdown behavior
@@ -69,7 +71,8 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 ## Observability
 
 - Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-alarm-worker`
-- Health: `http://127.0.0.1:30007/health`
+- Health: `https://127.0.0.1:30007/health`
+- Ready: `https://127.0.0.1:30007/ready`; authenticated `/internal/ready` reports PostgreSQL, Valkey, and egress flag readiness.
 - Queue: `alarm:dispatch:queue`
 - Metrics: 검토 필요
 

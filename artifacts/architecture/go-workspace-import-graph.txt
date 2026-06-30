@@ -42,9 +42,11 @@ github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/kapu/hololi
 github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/park285/shared-go/pkg/runtime/automaxprocs
 github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/park285/shared-go/pkg/runtime/bootstrap
+github.com/kapu/hololive-alarm-worker/cmd/healthcheck -> github.com/kapu/hololive-shared/pkg/contracts/common
 github.com/kapu/hololive-alarm-worker/cmd/healthcheck -> github.com/park285/shared-go/pkg/healthprobe
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-alarm-worker/internal/app/workerapp
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-alarm-worker/internal/egress
+github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-alarm-worker/internal/readiness
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/applifecycle
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/config
@@ -63,6 +65,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/chzzk
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/configsub
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/database/mocks
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/member
@@ -82,6 +85,11 @@ github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololiv
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/service/lease
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/kapu/hololive-shared/pkg/util
+github.com/kapu/hololive-alarm-worker/internal/readiness -> github.com/kapu/hololive-shared/pkg/health
+github.com/kapu/hololive-alarm-worker/internal/readiness -> github.com/kapu/hololive-shared/pkg/service/cache
+github.com/kapu/hololive-alarm-worker/internal/readiness -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
+github.com/kapu/hololive-alarm-worker/internal/readiness -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-alarm-worker/internal/readiness -> github.com/kapu/hololive-shared/pkg/service/database/mocks
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/chzzk
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier

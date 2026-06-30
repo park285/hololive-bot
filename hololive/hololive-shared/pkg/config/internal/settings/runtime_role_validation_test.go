@@ -132,6 +132,9 @@ func TestValidateAlarmWorkerRuntimeProductionAcceptsLeaseProtectedOwner(t *testi
 	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
 	t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
 	t.Setenv(alarmWorkerEgressLeaseEnabledEnv, "true")
+	t.Setenv(deliveryDispatcherEnabledEnv, "true")
+	t.Setenv(alarmDispatchConsumerEnabledEnv, "true")
+	t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
 
 	if err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime(); err != nil {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want nil", err)
@@ -143,9 +146,55 @@ func TestValidateAlarmWorkerRuntimeProductionRejectsDisabledLease(t *testing.T) 
 	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
 	t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
 	t.Setenv(alarmWorkerEgressLeaseEnabledEnv, "false")
+	t.Setenv(deliveryDispatcherEnabledEnv, "true")
+	t.Setenv(alarmDispatchConsumerEnabledEnv, "true")
+	t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
 
 	err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime()
 	if err == nil || !strings.Contains(err.Error(), "requires ALARM_WORKER_EGRESS_LEASE_ENABLED=true") {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want egress lease requirement", err)
+	}
+}
+
+func TestValidateAlarmWorkerRuntimeProductionRejectsDisabledDispatchers(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+	}{
+		{name: "delivery dispatcher", key: deliveryDispatcherEnabledEnv},
+		{name: "alarm dispatch consumer", key: alarmDispatchConsumerEnabledEnv},
+		{name: "youtube outbox dispatcher", key: youTubeOutboxDispatcherEnabledEnv},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearRuntimeRoleEnv(t)
+			t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
+			t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
+			t.Setenv(alarmWorkerEgressLeaseEnabledEnv, "true")
+			t.Setenv(deliveryDispatcherEnabledEnv, "true")
+			t.Setenv(alarmDispatchConsumerEnabledEnv, "true")
+			t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
+			t.Setenv(tt.key, "false")
+
+			err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime()
+			if err == nil || !strings.Contains(err.Error(), "requires "+tt.key+"=true") {
+				t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want %s requirement", err, tt.key)
+			}
+		})
+	}
+}
+
+func TestValidateAlarmWorkerRuntimeProductionRequiresYouTubeOutboxDispatcher(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
+	t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
+	t.Setenv(alarmWorkerEgressLeaseEnabledEnv, "true")
+	t.Setenv(deliveryDispatcherEnabledEnv, "true")
+	t.Setenv(alarmDispatchConsumerEnabledEnv, "true")
+
+	err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime()
+	if err == nil || !strings.Contains(err.Error(), "requires YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true") {
+		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want YouTube outbox dispatcher requirement", err)
 	}
 }

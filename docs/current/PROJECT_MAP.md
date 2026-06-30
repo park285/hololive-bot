@@ -23,7 +23,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | Runtime | Module | Binary | Compose service | Port | Health / Ready | Service doc | Runbook |
 |---|---|---|---|---:|---|---|---|
 | `hololive-api` | `hololive-api` | `hololive-api` | `hololive-api` | 30001/30003/30006 | `http://127.0.0.1:30001/health` | `services/hololive-api.md` | `runbooks/hololive-api.md` |
-| `alarm-worker` | `hololive-alarm-worker` | `alarm-worker` | `hololive-alarm-worker` | 30007 | `http://127.0.0.1:30007/health` | `services/alarm-worker.md` | `runbooks/alarm-worker.md` |
+| `alarm-worker` | `hololive-alarm-worker` | `alarm-worker` | `hololive-alarm-worker` | 30007 | `https://127.0.0.1:30007/health` | `services/alarm-worker.md` | `runbooks/alarm-worker.md` |
 | `youtube-producer` | `hololive-youtube-producer` | `youtube-producer` | `youtube-producer` | 30005/30015/30025/30035 | `http://127.0.0.1:30025/health` (main `c`; 원격 AP는 각 호스트 로컬 포트) | `services/youtube-producer.md` | `runbooks/youtube-producer.md` |
 
 ## Infra Services

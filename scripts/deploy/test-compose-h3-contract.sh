@@ -243,3 +243,12 @@ if grep -nE 'http://127\.0\.0\.1' "${AP_VERIFY_SCRIPTS[@]/#/${ROOT_DIR}/}"; then
     exit 1
 fi
 echo "[PASS] AP verify scripts are h3-only"
+
+SMOKE_SCRIPT="${ROOT_DIR}/scripts/smoke/smoke-runtime-health.sh"
+if grep -nE 'alarm-worker[^|]*\|http://127\.0\.0\.1:30007' "${SMOKE_SCRIPT}"; then
+    echo "[FAIL] alarm-worker smoke probes must use H3 healthcheck" >&2
+    exit 1
+fi
+grep -Fq 'alarm-worker|https://127.0.0.1:30007/health|compose-healthcheck:hololive-alarm-worker' "${SMOKE_SCRIPT}"
+grep -Fq 'alarm-worker-ready|https://127.0.0.1:30007/ready|compose-healthcheck:hololive-alarm-worker' "${SMOKE_SCRIPT}"
+echo "[PASS] alarm-worker smoke probes are h3-only"

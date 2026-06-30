@@ -9,8 +9,8 @@
 
 | Check | Expected |
 |---|---|
-| Health | `http://127.0.0.1:30007/health` returns success |
-| Ready | 검토 필요 |
+| Health | `https://127.0.0.1:30007/health` returns success over H3 |
+| Ready | `https://127.0.0.1:30007/ready` returns `status=ready`; `https://127.0.0.1:30007/internal/ready` with `X-API-Key` includes dependency and egress flag readiness |
 | Logs | scheduler/checker loops run without repeated DB/cache errors |
 | Queue | publishes to and consumes from `alarm:dispatch:queue` when alarm events are due |
 | Delivery outbox | consumes `notification_delivery_outbox` rows for major event/member news proactive sends |
@@ -33,6 +33,7 @@
 | `YOUTUBE_OUTBOX_DISPATCHER_ENABLED` | YouTube outbox egress enablement | production yes |
 | `YOUTUBE_OUTBOX_KARING_ENABLED` | YouTube outbox egress uses Karing content-list templates instead of text sends for supported kinds | no |
 | `DELIVERY_DISPATCHER_ENABLED` | generic notification delivery outbox egress enablement | production yes |
+| `ALARM_DISPATCH_CONSUMER_ENABLED` | alarm dispatch outbox egress enablement | production yes |
 | `ALARM_WORKER_EGRESS_LEASE_ENABLED` | single-owner proactive egress lease | production yes |
 | `ALARM_DISPATCH_KARING_ENABLED` | alarm dispatch queue egress uses Karing content-list templates instead of text sends | no |
 | `CACHE_*` | Valkey connection | yes |
@@ -43,6 +44,15 @@
 ```bash
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-alarm-worker
 ```
+
+## Readiness
+
+```bash
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/ready
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30007/internal/ready
+```
+
+`/ready` fails closed when PostgreSQL, Valkey, or required production egress flags are unavailable. `/internal/ready` reports `dependencies.postgres`, `dependencies.valkey`, and `egress_flags.*` booleans for diagnosis.
 
 ## Metrics
 
@@ -88,7 +98,8 @@ Rollback:
 ## Smoke test
 
 ```bash
-curl http://127.0.0.1:30007/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/ready
 ```
 
 ## Rollback

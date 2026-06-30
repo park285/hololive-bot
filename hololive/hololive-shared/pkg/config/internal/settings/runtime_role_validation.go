@@ -104,17 +104,27 @@ func validateAlarmWorkerOwnership(environment string) error {
 	if !isProductionEnvironment(environment) {
 		return nil
 	}
+	return validateProductionAlarmWorkerOwnership()
+}
 
-	if !strings.EqualFold(trimmedEnv(notificationEgressRoleEnv), notificationEgressRoleOwner) {
-		return fmt.Errorf("%s production requires %s=%s", runtimeAlarmWorker, notificationEgressRoleEnv, notificationEgressRoleOwner)
-	}
-	if !strings.EqualFold(trimmedEnv(notificationSchedulerRoleEnv), notificationSchedulerRoleWorker) {
-		return fmt.Errorf("%s production requires %s=%s", runtimeAlarmWorker, notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
-	}
-	if disabled, err := explicitBoolEnvIsFalse(alarmWorkerEgressLeaseEnabledEnv); err != nil {
+func validateProductionAlarmWorkerOwnership() error {
+	if err := requireNotificationRoleEnv(notificationEgressRoleEnv, notificationEgressRoleOwner); err != nil {
 		return err
-	} else if disabled {
-		return fmt.Errorf("%s production requires %s=true so proactive egress has a single owner lease", runtimeAlarmWorker, alarmWorkerEgressLeaseEnabledEnv)
+	}
+	if err := requireNotificationRoleEnv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker); err != nil {
+		return err
+	}
+	if err := requireBoolEnvNotFalse(alarmWorkerEgressLeaseEnabledEnv, "proactive egress has a single owner lease"); err != nil {
+		return err
+	}
+	if err := requireBoolEnvNotFalse(deliveryDispatcherEnabledEnv, "generic notification delivery outbox egress runs"); err != nil {
+		return err
+	}
+	if err := requireBoolEnvNotFalse(alarmDispatchConsumerEnabledEnv, "alarm dispatch outbox egress runs"); err != nil {
+		return err
+	}
+	if err := requireExplicitTrueBoolEnv(youTubeOutboxDispatcherEnabledEnv, "YouTube outbox egress runs"); err != nil {
+		return err
 	}
 
 	return nil
@@ -131,6 +141,13 @@ func validateKnownNotificationRoleEnv(key string, allowed ...string) error {
 		}
 	}
 	return fmt.Errorf("unsupported %s=%s", key, value)
+}
+
+func requireNotificationRoleEnv(key, expected string) error {
+	if strings.EqualFold(trimmedEnv(key), expected) {
+		return nil
+	}
+	return fmt.Errorf("%s production requires %s=%s", runtimeAlarmWorker, key, expected)
 }
 
 func rejectExplicitTrueEnv(runtime, key string) error {
@@ -150,6 +167,28 @@ func explicitBoolEnvIsFalse(key string) (bool, error) {
 		return false, err
 	}
 	return explicit && !value, nil
+}
+
+func requireBoolEnvNotFalse(key, purpose string) error {
+	disabled, err := explicitBoolEnvIsFalse(key)
+	if err != nil {
+		return err
+	}
+	if disabled {
+		return fmt.Errorf("%s production requires %s=true so %s", runtimeAlarmWorker, key, purpose)
+	}
+	return nil
+}
+
+func requireExplicitTrueBoolEnv(key, purpose string) error {
+	value, explicit, err := lookupExplicitBoolEnv(key)
+	if err != nil {
+		return err
+	}
+	if !explicit || !value {
+		return fmt.Errorf("%s production requires %s=true so %s", runtimeAlarmWorker, key, purpose)
+	}
+	return nil
 }
 
 func lookupExplicitBoolEnv(key string) (value, explicit bool, err error) {

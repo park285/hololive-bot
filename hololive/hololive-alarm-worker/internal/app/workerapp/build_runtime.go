@@ -30,6 +30,7 @@ import (
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
+	"github.com/kapu/hololive-alarm-worker/internal/readiness"
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
 )
 
@@ -110,8 +111,11 @@ func buildAlarmWorkerHTTPRuntime(
 	foundation *alarmFoundation,
 	logger *slog.Logger,
 ) (servers *sharedserver.RuntimeHTTPServers, scheduler runtimeAlarmScheduler, stage string, err error) {
+	readyProbe := newAlarmWorkerReadyProbe(infra)
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
-		APIKey: appConfig.Server.APIKey,
+		APIKey:                 appConfig.Server.APIKey,
+		ReadyResponder:         readiness.PublicGinHandler(ctx, readyProbe),
+		InternalReadyResponder: readiness.InternalGinHandler(ctx, readyProbe),
 		RegisterRoutes: sharedalarm.NewInternalRouteRegistrar(
 			appConfig.Server.APIKey,
 			foundation.AlarmCRUD,
@@ -134,6 +138,23 @@ func buildAlarmWorkerHTTPRuntime(
 	}
 
 	return servers, celebRunner, "", nil
+}
+
+func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *readiness.Probe {
+	var postgres database.Client
+	var cacheClient cache.Client
+	if infra != nil {
+		postgres = infra.Postgres
+		cacheClient = infra.Cache
+	}
+	return readiness.NewProbe("alarm-worker",
+		readiness.PostgresCheck(postgres),
+		readiness.ValkeyCheck(cacheClient),
+		readiness.BoolEnvNotFalseCheck("notification_egress_lease_enabled", "ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
+		readiness.BoolEnvNotFalseCheck("delivery_dispatcher_enabled", "DELIVERY_DISPATCHER_ENABLED", true),
+		readiness.BoolEnvNotFalseCheck("alarm_dispatch_consumer_enabled", "ALARM_DISPATCH_CONSUMER_ENABLED", true),
+		readiness.ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"),
+	)
 }
 
 func BuildAlarmWorkerConfigSubscriber(

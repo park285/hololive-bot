@@ -102,7 +102,7 @@ Equivalent manual checks:
 ```bash
 curl http://127.0.0.1:30001/health
 curl http://127.0.0.1:30006/health
-curl http://127.0.0.1:30007/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
 curl http://127.0.0.1:30003/health
 curl http://127.0.0.1:30025/health
 ```
