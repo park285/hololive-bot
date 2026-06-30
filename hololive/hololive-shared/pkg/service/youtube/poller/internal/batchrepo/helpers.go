@@ -30,3 +30,27 @@ func normalizeShortVideoResourceID(id string) string {
 	}
 	return normalized
 }
+
+func normalizeCommunityPostResourceID(id string) string {
+	normalized, err := ytcontentid.NormalizeCommunityPostID(id)
+	if err != nil {
+		return strings.TrimSpace(id)
+	}
+	return normalized
+}
+
+func appendValuesPlaceholders(sb *strings.Builder, rowCount, columnCount int) {
+	for i := range rowCount {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('(')
+		for j := range columnCount {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteByte('?')
+		}
+		sb.WriteByte(')')
+	}
+}

@@ -139,6 +139,48 @@ func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *t
 	require.False(t, skip, "admission defer should not cooldown the shared HTML source; wait=%s", wait)
 }
 
+func TestExtractCommunityPostsContentFallsBackToRendererType(t *testing.T) {
+	data := parseGJSONResultPtr(`{
+		"contents": {
+			"twoColumnBrowseResultsRenderer": {
+				"tabs": [{
+					"tabRenderer": {
+						"title": "게시물",
+						"content": {
+							"sectionListRenderer": {
+								"contents": [{
+									"itemSectionRenderer": {
+										"contents": [{
+											"backstagePostThreadRenderer": {
+												"post": {
+													"backstagePostRenderer": {
+														"postId": "UgkxLocalized123",
+														"authorEndpoint": {"browseEndpoint": {"browseId": "UC_TEST"}},
+														"authorText": {"runs": [{"text": "Author"}]},
+														"contentText": {"runs": [{"text": "hello"}]},
+														"publishedTimeText": {"simpleText": "2026-04-10T10:11:12+09:00"}
+													}
+												}
+											}
+										}]
+									}
+								}]
+							}
+						}
+					}
+				}]
+			}
+		}
+	}`)
+
+	content := extractCommunityPostsContent(data)
+	require.True(t, content.Exists())
+	posts := (&Client{}).parseCommunityPosts(&content, 5)
+	require.Len(t, posts, 1)
+	require.Equal(t, "UgkxLocalized123", posts[0].PostID)
+	require.Equal(t, "hello", posts[0].ContentText)
+}
+
 func TestParseBackstagePostIncludesUpstreamPostID(t *testing.T) {
 	client := &Client{}
 	post := client.parseBackstagePost(parseGJSONResultPtr(`{

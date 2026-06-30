@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -189,9 +190,11 @@ func (r *contextDeadlineReadCloser) Close() error {
 func TestClassifyFailureNewResponseReasons(t *testing.T) {
 	require.Equal(t, FailureReasonEmptyResponse, ClassifyFailure(ErrEmptyResponse, FailureSourceHTML).Reason)
 	require.Equal(t, FailureReasonBlockedResponse, ClassifyFailure(ErrBlockedResponse, FailureSourceHTML).Reason)
+	require.Equal(t, FailureReasonBlockedBody, ClassifyFailure(ErrBlockedBodySignature, FailureSourceHTML).Reason)
 	require.Equal(t, FailureReasonResponseTooLarge, ClassifyFailure(ErrResponseTooLarge, FailureSourceHTML).Reason)
 	require.True(t, shouldRetryFetchPage(ErrEmptyResponse))
 	require.False(t, shouldRetryFetchPage(ErrBlockedResponse))
+	require.False(t, shouldRetryFetchPage(ErrBlockedBodySignature))
 	require.False(t, shouldRetryFetchPage(ErrResponseTooLarge))
 	require.True(t, errors.Is(ErrBlockedResponse, ErrBlockedResponse))
 }
@@ -219,7 +222,7 @@ func TestBodyLooksBlockedByYouTubeIgnoresGenericContentWords(t *testing.T) {
 	}
 }
 
-func TestHB05BodySubstringDoesNotTriggerBlockCooldown_9e234216(t *testing.T) {
+func TestHB05BodySubstringRejectsParserInputWithoutBlockCooldown_9e234216(t *testing.T) {
 	spoofedBodies := []string{
 		`<a href="https://www.youtube.com/sorry/index">channel pinned comment link</a>`,
 		`location.replace("https://www.google.com/recaptcha/api")`,
@@ -231,10 +234,82 @@ func TestHB05BodySubstringDoesNotTriggerBlockCooldown_9e234216(t *testing.T) {
 			"https://www.youtube.com/@channel/videos",
 			[]byte(body),
 		)
-		require.NoError(t, err,
-			"spoofable body substring with a clean final URL must not produce ErrBlockedResponse (no 30m cooldown): %s", body)
+		require.ErrorIs(t, err, ErrBlockedBodySignature, body)
 		require.NotErrorIs(t, err, ErrBlockedResponse, body)
 	}
+}
+
+func TestFetchPageSuspiciousBlockedBodyDoesNotRetryOrHardCooldown(t *testing.T) {
+	var attempts atomic.Int32
+	client := NewClient(
+		WithHTTPClient(&http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				attempts.Add(1)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`location.replace("https://www.youtube.com/sorry/index?continue=...")`)),
+					Request:    req,
+				}, nil
+			}),
+		}),
+		WithRateLimiter(NewRateLimiter(0)),
+		WithUAProvider(ua.NewStaticProvider("test-agent")),
+	)
+
+	_, err := client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
+		MaxAttempts:       3,
+		PerAttemptTimeout: time.Second,
+		BaseDelay:         time.Millisecond,
+		MaxDelay:          time.Millisecond,
+	})
+
+	require.ErrorIs(t, err, ErrBlockedBodySignature)
+	require.NotErrorIs(t, err, ErrBlockedResponse)
+	require.Equal(t, int32(1), attempts.Load())
+	require.Zero(t, client.backoffState.HardCooldownRemaining())
+}
+
+func TestFetchPageSuspiciousBlockedBodyUsesBrowserSnapshotFallback(t *testing.T) {
+	var originAttempts atomic.Int32
+	var snapshotAttempts atomic.Int32
+	snapshotServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		snapshotAttempts.Add(1)
+		require.Equal(t, http.MethodPost, r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		mustWriteResponse(t, w, `{"status_code":200,"html":"<html>ytInitialData = {\"ok\":true};</html>"}`)
+	}))
+	defer snapshotServer.Close()
+
+	client := NewClient(
+		WithHTTPClient(&http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				originAttempts.Add(1)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`location.replace("https://www.youtube.com/sorry/index?continue=...")`)),
+					Request:    req,
+				}, nil
+			}),
+		}),
+		WithRateLimiter(NewRateLimiter(0)),
+		WithUAProvider(ua.NewStaticProvider("test-agent")),
+		WithBrowserSnapshotFetcher(NewBrowserSnapshotFetcher(snapshotServer.URL, time.Second)),
+	)
+
+	body, err := client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
+		MaxAttempts:       3,
+		PerAttemptTimeout: time.Second,
+		BaseDelay:         time.Millisecond,
+		MaxDelay:          time.Millisecond,
+	})
+
+	require.NoError(t, err)
+	require.Contains(t, body, "ytInitialData")
+	require.Equal(t, int32(1), originAttempts.Load())
+	require.Equal(t, int32(1), snapshotAttempts.Load())
+	require.Zero(t, client.backoffState.HardCooldownRemaining())
 }
 
 func TestHB05FinalURLSorryTriggersCooldown_9e234216(t *testing.T) {

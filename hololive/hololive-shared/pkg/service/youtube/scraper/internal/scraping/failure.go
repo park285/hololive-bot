@@ -23,6 +23,7 @@ const (
 	FailureReasonParserDrift        FailureReason = "parser_drift"
 	FailureReasonEmptyResponse      FailureReason = "empty_response"
 	FailureReasonBlockedResponse    FailureReason = "blocked_response"
+	FailureReasonBlockedBody        FailureReason = "suspicious_blocked_body"
 	FailureReasonResponseTooLarge   FailureReason = "response_too_large"
 	FailureReasonChannelNotFound    FailureReason = "channel_not_found"
 	FailureReasonChannelUnavailable FailureReason = "channel_unavailable"
@@ -103,6 +104,10 @@ func classifyYouTubeSentinelFailure(err error, detail *FailureDetail) bool {
 	}
 	if errors.Is(err, ErrBlockedResponse) {
 		detail.Reason = FailureReasonBlockedResponse
+		return true
+	}
+	if errors.Is(err, ErrBlockedBodySignature) {
+		detail.Reason = FailureReasonBlockedBody
 		return true
 	}
 	if errors.Is(err, ErrResponseTooLarge) {

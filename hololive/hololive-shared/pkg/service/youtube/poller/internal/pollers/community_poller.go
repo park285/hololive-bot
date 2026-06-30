@@ -55,7 +55,7 @@ func NewCommunityPoller(scraperClient *scraper.Client, db any, maxResults int, k
 		db:         querier,
 		repository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
 		maxResults: maxResults,
-		keywords:   keywords,
+		keywords:   normalizeCommunityKeywords(keywords),
 	}
 }
 
@@ -254,9 +254,29 @@ func (p *CommunityPoller) matchesKeywords(text string) bool {
 
 	lowerText := strings.ToLower(text)
 	for _, keyword := range p.keywords {
-		if strings.Contains(lowerText, strings.ToLower(keyword)) {
+		if strings.Contains(lowerText, keyword) {
 			return true
 		}
 	}
 	return false
+}
+
+func normalizeCommunityKeywords(keywords []string) []string {
+	if len(keywords) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(keywords))
+	seen := make(map[string]struct{}, len(keywords))
+	for i := range keywords {
+		keyword := strings.ToLower(strings.TrimSpace(keywords[i]))
+		if keyword == "" {
+			continue
+		}
+		if _, ok := seen[keyword]; ok {
+			continue
+		}
+		seen[keyword] = struct{}{}
+		normalized = append(normalized, keyword)
+	}
+	return normalized
 }

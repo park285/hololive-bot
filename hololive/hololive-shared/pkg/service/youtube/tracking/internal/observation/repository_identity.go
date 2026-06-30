@@ -38,31 +38,48 @@ func (r *identityRepository) findByIdentityRecords(
 	preferredContentID string,
 	candidates []string,
 ) ([]domain.YouTubeContentAlarmTracking, error) {
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	values, args := buildIdentityLookupValues(normalizedKind, preferredContentID, candidates)
 	var records []domain.YouTubeContentAlarmTracking
 	query := `
-		SELECT kind, content_id, canonical_content_id, channel_id, actual_published_at, detected_at,
-		       alarm_sent_at, alarm_latency_millis, alarm_latency_exceeded, delivery_status,
-		       COALESCE(latency_classification_status, '') AS latency_classification_status,
-		       COALESCE(delay_source, '') AS delay_source,
-		       COALESCE(internal_delay_cause, '') AS internal_delay_cause,
-		       created_at, updated_at
-		FROM youtube_content_alarm_tracking
-		WHERE kind = ?
-		  AND `
-	args := []any{normalizedKind}
-	if len(candidates) == 1 {
-		query += "(canonical_content_id = ? OR content_id = ?)"
-		args = append(args, preferredContentID, candidates[0])
-	} else {
-		query += "(canonical_content_id = ? OR content_id IN (" + dbx.InPlaceholders(len(candidates)) + "))"
-		args = append(args, preferredContentID)
-		args = append(args, dbx.AnyArgs(candidates)...)
-	}
+		WITH input(kind, preferred_content_id, candidate_content_id) AS (
+			VALUES ` + values + `
+		)
+		SELECT DISTINCT t.kind, t.content_id, t.canonical_content_id, t.channel_id, t.actual_published_at, t.detected_at,
+		       t.alarm_sent_at, t.alarm_latency_millis, t.alarm_latency_exceeded, t.delivery_status,
+		       COALESCE(t.latency_classification_status, '') AS latency_classification_status,
+		       COALESCE(t.delay_source, '') AS delay_source,
+		       COALESCE(t.internal_delay_cause, '') AS internal_delay_cause,
+		       t.created_at, t.updated_at
+		FROM youtube_content_alarm_tracking t
+		JOIN input i
+		  ON t.kind = i.kind
+		 AND (t.canonical_content_id = i.preferred_content_id OR t.content_id = i.candidate_content_id)`
 	if err := dbx.SelectSQL(ctx, r.db, &records, "find tracking by identity: query row", query, args...); err != nil {
 		return nil, err
 	}
 
 	return records, nil
+}
+
+func buildIdentityLookupValues(
+	normalizedKind domain.OutboxKind,
+	preferredContentID string,
+	candidates []string,
+) (query string, args []any) {
+	args = make([]any, 0, len(candidates)*3)
+	var values strings.Builder
+	for i := range candidates {
+		if i > 0 {
+			values.WriteByte(',')
+		}
+		values.WriteString("(?, ?, ?)")
+		args = append(args, normalizedKind, preferredContentID, candidates[i])
+	}
+	return values.String(), args
 }
 
 func preferTrackingIdentityRecord(

@@ -142,6 +142,7 @@ func shouldRetryFetchPage(err error) bool {
 	if errors.Is(err, ErrRateLimited) ||
 		errors.Is(err, ErrForbidden) ||
 		errors.Is(err, ErrBlockedResponse) ||
+		errors.Is(err, ErrBlockedBodySignature) ||
 		errors.Is(err, ErrResponseTooLarge) {
 		return false
 	}

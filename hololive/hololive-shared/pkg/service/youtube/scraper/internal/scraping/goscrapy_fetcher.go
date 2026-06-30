@@ -18,8 +18,6 @@ import (
 	goslogger "github.com/tech-engine/goscrapy/pkg/logger"
 )
 
-const goscrapyRunnerPollInterval = 10 * time.Millisecond
-
 type goscrapyRunner interface {
 	Run(ctx context.Context, client *Client, req pageFetchRequest) (pageFetchResponse, bool, error)
 }
@@ -44,7 +42,6 @@ type goscrapyWaitKind uint8
 
 const (
 	goscrapyWaitResult goscrapyWaitKind = iota
-	goscrapyWaitPoll
 	goscrapyWaitEngine
 	goscrapyWaitCanceled
 )
@@ -63,18 +60,15 @@ type goscrapyWaitOutcome struct {
 }
 
 type goscrapyWaitState struct {
-	ctx         context.Context
-	cancel      context.CancelFunc
-	activeCount func() int64
-	resultCh    <-chan goscrapyFetchResult
-	errCh       <-chan error
-	eventCh     <-chan goscrapyWaitEvent
-	poll        <-chan time.Time
+	ctx      context.Context
+	cancel   context.CancelFunc
+	resultCh <-chan goscrapyFetchResult
+	errCh    <-chan error
+	eventCh  <-chan goscrapyWaitEvent
 }
 
 var goscrapyWaitFinishers = []func(goscrapyWaitState, *goscrapyWaitEvent) goscrapyWaitOutcome{
 	finishGoScrapyResultEvent,
-	finishGoScrapyPollEvent,
 	finishGoScrapyEngineEvent,
 	finishGoScrapyCanceledEvent,
 }
@@ -110,8 +104,6 @@ func (defaultGoscrapyRunner) Run(ctx context.Context, client *Client, req pageFe
 	}
 
 	resultCh := make(chan goscrapyFetchResult, 1)
-	poll := time.NewTicker(goscrapyRunnerPollInterval)
-	defer poll.Stop()
 
 	appReq := app.Request(appCtx)
 	appReq.Url(req.URL).Method(http.MethodGet).Header(req.Header.Clone())
@@ -128,13 +120,11 @@ func (defaultGoscrapyRunner) Run(ctx context.Context, client *Client, req pageFe
 	defer signals.stopContextWatch()
 
 	waitState := goscrapyWaitState{
-		ctx:         ctx,
-		cancel:      cancel,
-		activeCount: app.Engine.ActiveCount,
-		resultCh:    resultCh,
-		errCh:       signals.errCh,
-		eventCh:     signals.eventCh,
-		poll:        poll.C,
+		ctx:      ctx,
+		cancel:   cancel,
+		resultCh: resultCh,
+		errCh:    signals.errCh,
+		eventCh:  signals.eventCh,
 	}
 	return waitForGoScrapyFetch(waitState)
 }
@@ -200,8 +190,6 @@ func nextGoScrapyWaitEvent(state goscrapyWaitState) goscrapyWaitEvent {
 	select {
 	case result := <-state.resultCh:
 		return goscrapyWaitEvent{kind: goscrapyWaitResult, result: result}
-	case <-state.poll:
-		return goscrapyWaitEvent{kind: goscrapyWaitPoll}
 	case event := <-state.eventCh:
 		return event
 	}
@@ -209,14 +197,6 @@ func nextGoScrapyWaitEvent(state goscrapyWaitState) goscrapyWaitEvent {
 
 func finishGoScrapyResultEvent(state goscrapyWaitState, event *goscrapyWaitEvent) goscrapyWaitOutcome {
 	response, gotResponse, err := finishGoScrapyResult(&event.result, state.cancel, state.errCh)
-	return goscrapyWaitOutcome{response: response, gotResponse: gotResponse, err: err, done: true}
-}
-
-func finishGoScrapyPollEvent(state goscrapyWaitState, _ *goscrapyWaitEvent) goscrapyWaitOutcome {
-	if state.activeCount() != 0 {
-		return goscrapyWaitOutcome{}
-	}
-	response, gotResponse, err := finishStoppedGoScrapy(state)
 	return goscrapyWaitOutcome{response: response, gotResponse: gotResponse, err: err, done: true}
 }
 
@@ -228,15 +208,6 @@ func finishGoScrapyEngineEvent(state goscrapyWaitState, event *goscrapyWaitEvent
 func finishGoScrapyCanceledEvent(state goscrapyWaitState, _ *goscrapyWaitEvent) goscrapyWaitOutcome {
 	response, gotResponse, err := finishCanceledGoScrapy(state)
 	return goscrapyWaitOutcome{response: response, gotResponse: gotResponse, err: err, done: true}
-}
-
-func finishStoppedGoScrapy(state goscrapyWaitState) (pageFetchResponse, bool, error) {
-	if result, ok := pollGoScrapyResult(state.resultCh); ok {
-		return finishGoScrapyResult(&result, state.cancel, state.errCh)
-	}
-	state.cancel()
-	waitGoScrapyEngine(state.errCh)
-	return pageFetchResponse{}, false, errors.New("goscrapy stopped before response")
 }
 
 func finishCanceledGoScrapy(state goscrapyWaitState) (pageFetchResponse, bool, error) {

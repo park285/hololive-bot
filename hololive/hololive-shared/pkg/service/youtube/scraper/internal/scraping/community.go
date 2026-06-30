@@ -114,6 +114,13 @@ func (c *Client) checkCommunityPostAlerts(ctx context.Context, channelID string,
 }
 
 func extractCommunityPostsContent(data *gjson.Result) gjson.Result {
+	if postsContent := extractCommunityPostsContentByTabTitle(data); postsContent.Exists() {
+		return postsContent
+	}
+	return extractCommunityPostsContentByRenderer(data)
+}
+
+func extractCommunityPostsContentByTabTitle(data *gjson.Result) gjson.Result {
 	tabPath := "contents.twoColumnBrowseResultsRenderer.tabs"
 	var postsContent gjson.Result
 	data.Get(tabPath).ForEach(func(_, tab gjson.Result) bool {
@@ -125,6 +132,49 @@ func extractCommunityPostsContent(data *gjson.Result) gjson.Result {
 		return true
 	})
 	return postsContent
+}
+
+const communityPostsContentSearchLimit = 4096
+
+func extractCommunityPostsContentByRenderer(data *gjson.Result) gjson.Result {
+	if data == nil {
+		return gjson.Result{}
+	}
+	remaining := communityPostsContentSearchLimit
+	return findCommunityPostsContentArray(data, &remaining)
+}
+
+func findCommunityPostsContentArray(node *gjson.Result, remaining *int) gjson.Result {
+	if node == nil || remaining == nil || *remaining <= 0 || !node.Exists() {
+		return gjson.Result{}
+	}
+	*remaining--
+
+	if node.IsArray() && communityPostsContentArrayContainsPost(node) {
+		return *node
+	}
+	if !node.IsArray() && !node.IsObject() {
+		return gjson.Result{}
+	}
+
+	var found gjson.Result
+	node.ForEach(func(_, child gjson.Result) bool {
+		found = findCommunityPostsContentArray(&child, remaining)
+		return !found.Exists()
+	})
+	return found
+}
+
+func communityPostsContentArrayContainsPost(contents *gjson.Result) bool {
+	if contents == nil {
+		return false
+	}
+	contains := false
+	contents.ForEach(func(_, content gjson.Result) bool {
+		contains = content.Get("backstagePostThreadRenderer.post.backstagePostRenderer").Exists()
+		return !contains
+	})
+	return contains
 }
 
 func (c *Client) parseCommunityPosts(postsContent *gjson.Result, maxResults int) []*CommunityPost {

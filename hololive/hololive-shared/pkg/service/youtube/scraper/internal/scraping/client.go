@@ -83,6 +83,8 @@ var ErrEmptyResponse = errors.New("youtube returned empty response")
 
 var ErrBlockedResponse = errors.New("youtube returned blocked or challenge response")
 
+var ErrBlockedBodySignature = errors.New("youtube response body contains blocked or challenge signature")
+
 var ErrResponseTooLarge = errors.New("youtube response body exceeds configured limit")
 
 var errFetchAttemptTimeout = errors.New("youtube fetch attempt timeout")

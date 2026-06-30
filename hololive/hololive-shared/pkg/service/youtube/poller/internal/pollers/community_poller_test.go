@@ -454,3 +454,12 @@ func TestCommunityPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) 
 	require.NoError(t, db.First(&watermark, "channel_id = ? AND watermark_type = ?", "UC_TEST", domain.WatermarkTypeCommunityPost).Error)
 	assert.Equal(t, "community:post-1", watermark.LastContentID)
 }
+
+func TestCommunityPollerMatchesKeywordsUsesNormalizedKeywords(t *testing.T) {
+	poller := &CommunityPoller{keywords: normalizeCommunityKeywords([]string{" HoloLive ", "", "STREAM", "stream"})}
+
+	require.Equal(t, []string{"hololive", "stream"}, poller.keywords)
+	require.True(t, poller.matchesKeywords("Tonight's HOLOLIVE schedule"))
+	require.True(t, poller.matchesKeywords("late night stream"))
+	require.False(t, poller.matchesKeywords("unrelated post"))
+}

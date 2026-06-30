@@ -30,8 +30,6 @@ import (
 
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
-	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 type failedNotificationOutboxRow struct {
@@ -40,35 +38,41 @@ type failedNotificationOutboxRow struct {
 	ContentID string            `db:"content_id"`
 }
 
-type completedNotificationIdentityCandidate struct {
-	notification *domain.YouTubeNotificationOutbox
-	contentID    string
-	identityKey  string
+type failedNotificationIdentityInput struct {
+	Kind      domain.OutboxKind
+	ContentID string
 }
 
 func loadFailedNotificationOutboxRows(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox) ([]failedNotificationOutboxRow, error) {
-	clauses, args := failedNotificationOutboxQueryArgs(notifications)
-	if len(clauses) == 0 {
+	inputs := collectFailedNotificationIdentityInputs(notifications)
+	if len(inputs) == 0 {
 		return nil, nil
 	}
 
+	args := make([]any, 0, len(inputs)*2+1)
+	var values strings.Builder
+	appendValuesPlaceholders(&values, len(inputs), 2)
+	for i := range inputs {
+		args = append(args, inputs[i].Kind, inputs[i].ContentID)
+	}
+	args = append(args, domain.OutboxStatusFailed)
+
 	var rows []failedNotificationOutboxRow
-	queryArgs := make([]any, 0, 1+len(args))
-	queryArgs = append(queryArgs, domain.OutboxStatusFailed)
-	queryArgs = append(queryArgs, args...)
 	if err := dbx.SelectSQL(ctx, tx, &rows, "query failed outbox rows", `
-		SELECT id, kind, content_id
-		FROM youtube_notification_outbox
-		WHERE status = ?
-		  AND (`+strings.Join(clauses, " OR ")+`)`, queryArgs...); err != nil {
+		WITH input(kind, content_id) AS (
+			VALUES `+values.String()+`
+		)
+		SELECT o.id, o.kind, o.content_id
+		FROM youtube_notification_outbox o
+		JOIN input i ON o.kind = i.kind AND o.content_id = i.content_id
+		WHERE o.status = ?`, args...); err != nil {
 		return nil, fmt.Errorf("query failed outbox rows: %w", err)
 	}
 	return rows, nil
 }
 
-func failedNotificationOutboxQueryArgs(notifications []*domain.YouTubeNotificationOutbox) (result1 []string, result2 []any) {
-	clauses := make([]string, 0, len(notifications))
-	args := make([]any, 0, len(notifications)*2)
+func collectFailedNotificationIdentityInputs(notifications []*domain.YouTubeNotificationOutbox) []failedNotificationIdentityInput {
+	inputs := make([]failedNotificationIdentityInput, 0, len(notifications))
 	seen := make(map[string]struct{}, len(notifications))
 	for i := range notifications {
 		notification := notifications[i]
@@ -84,98 +88,9 @@ func failedNotificationOutboxQueryArgs(notifications []*domain.YouTubeNotificati
 			continue
 		}
 		seen[identityKey] = struct{}{}
-		clauses = append(clauses, "(kind = ? AND content_id = ?)")
-		args = append(args, notification.Kind, contentID)
+		inputs = append(inputs, failedNotificationIdentityInput{Kind: notification.Kind, ContentID: contentID})
 	}
-	return clauses, args
-}
-
-func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox) (map[string]time.Time, error) {
-	completed := make(map[string]time.Time)
-	if len(notifications) == 0 || tx == nil {
-		return completed, nil
-	}
-
-	repository := trackingrepo.NewRepository(tx)
-	candidates := collectCompletedNotificationIdentityCandidates(notifications)
-	for i := range candidates {
-		if err := recordCompletedNotificationSentAtByCandidate(ctx, repository, completed, candidates[i]); err != nil {
-			return nil, err
-		}
-	}
-
-	return completed, nil
-}
-
-func recordCompletedNotificationSentAtByCandidate(
-	ctx context.Context,
-	repository *trackingrepo.PgxRepository,
-	completed map[string]time.Time,
-	candidate completedNotificationIdentityCandidate,
-) error {
-	trackingRow, err := repository.FindByIdentity(ctx, candidate.notification.Kind, candidate.contentID)
-	if err != nil {
-		return fmt.Errorf("load notification tracking row: %w", err)
-	}
-	recordCompletedNotificationTrackingSentAt(completed, candidate.identityKey, trackingRow)
-
-	postID := resolveNotificationReactivationPostID(candidate.notification.Kind, candidate.contentID, candidate.notification.Payload)
-	if postID == "" {
-		return nil
-	}
-	stateRow, err := repository.FindAlarmStateByPostID(ctx, candidate.notification.Kind, postID)
-	if err != nil {
-		return fmt.Errorf("load notification alarm state: %w", err)
-	}
-	recordCompletedNotificationAlarmStateSentAt(completed, candidate.identityKey, stateRow)
-	return nil
-}
-
-func collectCompletedNotificationIdentityCandidates(notifications []*domain.YouTubeNotificationOutbox) []completedNotificationIdentityCandidate {
-	candidates := make([]completedNotificationIdentityCandidate, 0, len(notifications))
-	seen := make(map[string]struct{}, len(notifications))
-	for i := range notifications {
-		notification := notifications[i]
-		candidate, ok := completedNotificationIdentityCandidateFor(notification)
-		if !ok {
-			continue
-		}
-		if _, ok := seen[candidate.identityKey]; ok {
-			continue
-		}
-		seen[candidate.identityKey] = struct{}{}
-		candidates = append(candidates, candidate)
-	}
-	return candidates
-}
-
-func completedNotificationIdentityCandidateFor(notification *domain.YouTubeNotificationOutbox) (completedNotificationIdentityCandidate, bool) {
-	if notification == nil || !isCommunityShortsOutboxKind(notification.Kind) {
-		return completedNotificationIdentityCandidate{}, false
-	}
-	contentID := strings.TrimSpace(notification.ContentID)
-	if contentID == "" {
-		return completedNotificationIdentityCandidate{}, false
-	}
-	return completedNotificationIdentityCandidate{
-		notification: notification,
-		contentID:    contentID,
-		identityKey:  notificationIdentityKey(notification.Kind, contentID),
-	}, true
-}
-
-func recordCompletedNotificationTrackingSentAt(completed map[string]time.Time, identityKey string, row *domain.YouTubeContentAlarmTracking) {
-	if row == nil || row.AlarmSentAt == nil || row.AlarmSentAt.IsZero() {
-		return
-	}
-	completed[identityKey] = yttimestamp.Normalize(*row.AlarmSentAt)
-}
-
-func recordCompletedNotificationAlarmStateSentAt(completed map[string]time.Time, identityKey string, row *domain.YouTubeCommunityShortsAlarmState) {
-	if row == nil || row.AlarmSentAt == nil || row.AlarmSentAt.IsZero() {
-		return
-	}
-	completed[identityKey] = selectEarlierSentAt(completed[identityKey], yttimestamp.Normalize(*row.AlarmSentAt))
+	return inputs
 }
 
 func partitionFailedNotificationOutboxRows(rows []failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) (result1, result2 []failedNotificationOutboxRow) {
@@ -190,74 +105,6 @@ func partitionFailedNotificationOutboxRows(rows []failedNotificationOutboxRow, c
 		reactivations = append(reactivations, rows[i])
 	}
 	return completed, reactivations
-}
-
-func finalizeCompletedFailedNotificationRows(ctx context.Context, tx batchDB, rows []failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) error {
-	for i := range rows {
-		if err := finalizeCompletedFailedNotificationRow(ctx, tx, rows[i], completedSentAtByIdentity); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func finalizeCompletedFailedNotificationRow(ctx context.Context, tx batchDB, row failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) error {
-	sentAt, ok := completedSentAtForFailedNotification(row, completedSentAtByIdentity)
-	if !ok {
-		return nil
-	}
-	if err := updateCompletedFailedNotificationOutboxRow(ctx, tx, row.ID, sentAt); err != nil {
-		return err
-	}
-	return updateCompletedFailedNotificationDeliveryRows(ctx, tx, row.ID, sentAt)
-}
-
-func completedSentAtForFailedNotification(row failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) (time.Time, bool) {
-	identityKey := notificationIdentityKey(row.Kind, row.ContentID)
-	sentAt, ok := completedSentAtByIdentity[identityKey]
-	if !ok || sentAt.IsZero() {
-		return time.Time{}, false
-	}
-	return yttimestamp.Normalize(sentAt), true
-}
-
-func updateCompletedFailedNotificationOutboxRow(ctx context.Context, tx batchDB, id int64, sentAt time.Time) error {
-	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("update completed outbox row %d", id), `
-		UPDATE youtube_notification_outbox
-		SET status = ?,
-		    locked_at = NULL,
-		    sent_at = CASE WHEN sent_at IS NULL OR sent_at > ? THEN ? ELSE sent_at END,
-		    error = ''
-		WHERE id = ? AND status = ?`,
-		domain.OutboxStatusSent,
-		sentAt,
-		sentAt,
-		id,
-		domain.OutboxStatusFailed,
-	); err != nil {
-		return fmt.Errorf("update completed outbox row %d: %w", id, err)
-	}
-	return nil
-}
-
-func updateCompletedFailedNotificationDeliveryRows(ctx context.Context, tx batchDB, outboxID int64, sentAt time.Time) error {
-	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("update completed delivery rows for outbox %d", outboxID), `
-		UPDATE youtube_notification_delivery
-		SET status = ?,
-		    locked_at = NULL,
-		    sent_at = CASE WHEN sent_at IS NULL OR sent_at > ? THEN ? ELSE sent_at END,
-		    error = ''
-		WHERE outbox_id = ? AND status = ?`,
-		domain.OutboxStatusSent,
-		sentAt,
-		sentAt,
-		outboxID,
-		domain.OutboxStatusFailed,
-	); err != nil {
-		return fmt.Errorf("update completed delivery rows for outbox %d: %w", outboxID, err)
-	}
-	return nil
 }
 
 func filterCompletedNotifications(notifications []*domain.YouTubeNotificationOutbox, completedSentAtByIdentity map[string]time.Time) []*domain.YouTubeNotificationOutbox {
@@ -337,19 +184,6 @@ func firstNonBlankNotificationPostID(values ...string) string {
 
 func notificationIdentityKey(kind domain.OutboxKind, contentID string) string {
 	return fmt.Sprintf("%s::%s", kind, strings.TrimSpace(contentID))
-}
-
-func selectEarlierSentAt(current, candidate time.Time) time.Time {
-	if current.IsZero() {
-		return candidate
-	}
-	if candidate.IsZero() {
-		return current
-	}
-	if candidate.Before(current) {
-		return candidate
-	}
-	return current
 }
 
 func rearmFailedDeliveryRows(ctx context.Context, tx batchDB, outboxIDs []int64, nextAttemptAt time.Time) error {

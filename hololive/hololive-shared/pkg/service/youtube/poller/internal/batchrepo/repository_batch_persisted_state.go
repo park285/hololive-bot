@@ -43,17 +43,22 @@ type persistedDeliverySentStateRow struct {
 	SentAt   *time.Time `db:"sent_at"`
 }
 
+type persistedOutboxSentStateInput struct {
+	Kind      domain.OutboxKind
+	ContentID string
+}
+
 func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx batchDB, trackingRows []*domain.YouTubeContentAlarmTracking) error {
 	if len(trackingRows) == 0 || tx == nil {
 		return nil
 	}
 
-	clauses, args := collectTrackingIdentityClauses(trackingRows)
-	if len(clauses) == 0 {
+	inputs := collectTrackingIdentityInputs(trackingRows)
+	if len(inputs) == 0 {
 		return nil
 	}
 
-	outboxRows, err := loadPersistedOutboxSentState(ctx, tx, clauses, args)
+	outboxRows, err := loadPersistedOutboxSentState(ctx, tx, inputs)
 	if err != nil {
 		return err
 	}
@@ -72,9 +77,8 @@ func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx batchDB
 	return nil
 }
 
-func collectTrackingIdentityClauses(trackingRows []*domain.YouTubeContentAlarmTracking) (result1 []string, result2 []any) {
-	clauses := make([]string, 0, len(trackingRows))
-	args := make([]any, 0, len(trackingRows)*2)
+func collectTrackingIdentityInputs(trackingRows []*domain.YouTubeContentAlarmTracking) []persistedOutboxSentStateInput {
+	inputs := make([]persistedOutboxSentStateInput, 0, len(trackingRows))
 	identitySeen := make(map[string]struct{}, len(trackingRows))
 	for i := range trackingRows {
 		row := trackingRows[i]
@@ -90,23 +94,31 @@ func collectTrackingIdentityClauses(trackingRows []*domain.YouTubeContentAlarmTr
 			continue
 		}
 		identitySeen[identityKey] = struct{}{}
-		clauses = append(clauses, "(kind = ? AND content_id = ?)")
-		args = append(args, row.Kind, contentID)
+		inputs = append(inputs, persistedOutboxSentStateInput{Kind: row.Kind, ContentID: contentID})
 	}
-	return clauses, args
+	return inputs
 }
 
 func loadPersistedOutboxSentState(
 	ctx context.Context,
 	tx batchDB,
-	clauses []string,
-	args []any,
+	inputs []persistedOutboxSentStateInput,
 ) ([]persistedOutboxSentStateRow, error) {
+	args := make([]any, 0, len(inputs)*2)
+	var values strings.Builder
+	appendValuesPlaceholders(&values, len(inputs), 2)
+	for i := range inputs {
+		args = append(args, inputs[i].Kind, inputs[i].ContentID)
+	}
+
 	var outboxRows []persistedOutboxSentStateRow
 	if err := dbx.SelectSQL(ctx, tx, &outboxRows, "query outbox rows", `
-		SELECT id, kind, content_id, sent_at
-		FROM youtube_notification_outbox
-		WHERE `+strings.Join(clauses, " OR "), args...); err != nil {
+		WITH input(kind, content_id) AS (
+			VALUES `+values.String()+`
+		)
+		SELECT o.id, o.kind, o.content_id, o.sent_at
+		FROM youtube_notification_outbox o
+		JOIN input i ON o.kind = i.kind AND o.content_id = i.content_id`, args...); err != nil {
 		return nil, fmt.Errorf("query outbox rows: %w", err)
 	}
 	return outboxRows, nil

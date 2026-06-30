@@ -89,12 +89,60 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string
 		return "", err
 	}
 
-	if err := validateSuccessfulFetchBody(pageURL, resp.FinalURL, resp.Body); err != nil {
+	bodyBytes, finalEngine, finalStatusCode, err := c.validatedFetchBody(ctx, req, engine, pageURL, resp)
+	engine = finalEngine
+	statusCode = finalStatusCode
+	if err != nil {
 		return "", err
 	}
 
 	c.recordFetchSuccess()
-	return string(resp.Body), nil
+	return string(bodyBytes), nil
+}
+
+func (c *Client) validatedFetchBody(
+	ctx context.Context,
+	req *http.Request,
+	engine FetcherEngine,
+	pageURL string,
+	resp pageFetchResponse,
+) (body []byte, finalEngine FetcherEngine, finalStatusCode int, err error) {
+	if err := validateSuccessfulFetchBody(pageURL, resp.FinalURL, resp.Body); err != nil {
+		fallbackResp, fallbackUsed, fallbackErr := c.fetchBlockedBodyBrowserSnapshotFallback(ctx, req, engine, pageURL, err)
+		if !fallbackUsed {
+			return nil, engine, resp.StatusCode, err
+		}
+		if fallbackErr != nil {
+			return nil, engine, resp.StatusCode, fallbackErr
+		}
+		return fallbackResp.Body, FetcherEngineBrowserSnapshot, fallbackResp.StatusCode, nil
+	}
+	return resp.Body, engine, resp.StatusCode, nil
+}
+
+func (c *Client) fetchBlockedBodyBrowserSnapshotFallback(
+	ctx context.Context,
+	req *http.Request,
+	engine FetcherEngine,
+	pageURL string,
+	cause error,
+) (pageFetchResponse, bool, error) {
+	if !errors.Is(cause, ErrBlockedBodySignature) || c == nil || c.browserSnapshotFetcher == nil || normalizeFetcherEngine(engine) == FetcherEngineBrowserSnapshot {
+		return pageFetchResponse{}, false, nil
+	}
+
+	observeScraperFetchFallback(engine, FetcherEngineBrowserSnapshot, cause)
+	resp, err := c.browserSnapshotFetcher.FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header.Clone()})
+	if err != nil {
+		return pageFetchResponse{}, true, fmt.Errorf("browser snapshot fallback after blocked body: %w", errors.Join(cause, err))
+	}
+	if err := c.handleFetchStatus(pageURL, resp); err != nil {
+		return pageFetchResponse{}, true, fmt.Errorf("browser snapshot fallback after blocked body: %w", errors.Join(cause, err))
+	}
+	if err := validateSuccessfulFetchBody(pageURL, resp.FinalURL, resp.Body); err != nil {
+		return pageFetchResponse{}, true, fmt.Errorf("browser snapshot fallback after blocked body: %w", errors.Join(cause, err))
+	}
+	return resp, true, nil
 }
 
 func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string, policy ...FetchPolicy) error {
@@ -233,9 +281,10 @@ func validateSuccessfulFetchBody(pageURL, finalURL string, body []byte) error {
 		return fmt.Errorf("%w: %s -> %s", ErrBlockedResponse, pageURL, finalURL)
 	}
 	if bodyLooksBlockedByYouTube(body) {
-		slog.Warn("YouTube block-page signature found in fetch body without a blocked final URL; treating as success (no cooldown)",
+		slog.Warn("YouTube block-page signature found in fetch body without a blocked final URL; rejecting parser input without global cooldown",
 			"url", pageURL,
 			"final_url", finalURL)
+		return fmt.Errorf("%w: %s -> %s", ErrBlockedBodySignature, pageURL, finalURL)
 	}
 	return nil
 }
