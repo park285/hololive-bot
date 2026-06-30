@@ -85,6 +85,7 @@ write_host_env() {
     printf 'CACHE_HOST=100.100.1.3\n'
     printf 'CACHE_PORT=6379\n'
     printf 'CACHE_SOCKET_PATH=\n'
+    printf 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings\n'
     printf 'CLIPROXY_BASE_URL=http://100.100.1.3:8787/v1\n'
     printf 'GOMEMLIMIT=384MiB\n'
     printf 'GOGC=100\n'
@@ -141,6 +142,7 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
 ReadWritePaths=/run/hololive-bot /var/log/hololive-bot /tmp
+ReadWritePaths=/var/lib/hololive-bot
 
 [Install]
 WantedBy=multi-user.target
@@ -214,6 +216,7 @@ sudo -n test -r /run/hololive-bot/certs/hololive-h3.key
 
 sudo -n install -d -m 0755 -o root -g root /opt/hololive-bot/youtube-producer/releases
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
+sudo -n install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-producer/settings
 sudo -n install -d -m 0750 -o root -g root /etc/hololive-bot
 sudo -n install -d -m 0755 -o root -g root /etc/sysctl.d
 sudo -n tee /etc/logrotate.d/hololive-bot >/dev/null <<'LOGROTATE'

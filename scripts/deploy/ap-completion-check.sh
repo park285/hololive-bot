@@ -45,6 +45,7 @@ sudo -n test -r /run/hololive-bot/certs/postgres-ca.pem
 sudo -n test -r /run/hololive-bot/certs/hololive-h3.crt
 sudo -n test -r /run/hololive-bot/certs/hololive-h3.key
 sudo -n test -r /etc/hololive-bot/youtube-producer-host.env
+sudo -n test -d /var/lib/hololive-bot/youtube-producer/settings
 sudo -n test -x "$current_link/bin/healthcheck"
 
 systemctl is-active --quiet "$unit"
@@ -63,6 +64,8 @@ if [[ -n "$change_started_at" ]]; then
 fi
 
 sudo -n grep -qx 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true' /etc/hololive-bot/youtube-producer-host.env
+sudo -n grep -qx 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings' /etc/hololive-bot/youtube-producer-host.env
+sudo -n -u hololive test -w /var/lib/hololive-bot/youtube-producer/settings
 
 sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \

@@ -20,6 +20,19 @@ else
   record_fail "ap-host-native H3 bind not narrowed to loopback (8c2e3ef9)"
 fi
 
+if grep -Fq 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings' "${DEPLOY}"; then
+  pass "ap-host-native settings dir uses persistent varlib path"
+else
+  record_fail "ap-host-native settings dir must not default to read-only release data"
+fi
+
+if grep -Fq 'ReadWritePaths=/var/lib/hololive-bot' "${DEPLOY}" &&
+   grep -Fq 'install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-producer/settings' "${DEPLOY}"; then
+  pass "ap-host-native settings dir is writable for hololive"
+else
+  record_fail "ap-host-native settings dir must be created and writable under systemd hardening"
+fi
+
 if (( failures > 0 )); then
   echo "FAILED: ${failures} check(s)"
   exit 1
