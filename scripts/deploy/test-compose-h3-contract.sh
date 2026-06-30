@@ -236,6 +236,7 @@ PY
 AP_VERIFY_SCRIPTS=(
     scripts/deploy/ap-deploy.sh
     scripts/deploy/ap-completion-check.sh
+    scripts/deploy/ap-rollback.sh
     scripts/logs/ap-smoke.sh
 )
 if grep -nE 'http://127\.0\.0\.1' "${AP_VERIFY_SCRIPTS[@]/#/${ROOT_DIR}/}"; then
@@ -243,6 +244,12 @@ if grep -nE 'http://127\.0\.0\.1' "${AP_VERIFY_SCRIPTS[@]/#/${ROOT_DIR}/}"; then
     exit 1
 fi
 echo "[PASS] AP verify scripts are h3-only"
+
+if ! grep -Eq 'bin/healthcheck.*https://127\.0\.0\.1[^"]*/health' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh"; then
+    echo "[FAIL] ap-rollback.sh must verify AP rollback health via H3 ./bin/healthcheck" >&2
+    exit 1
+fi
+echo "[PASS] ap-rollback.sh verifies rollback health via H3 healthcheck"
 
 SMOKE_SCRIPT="${ROOT_DIR}/scripts/smoke/smoke-runtime-health.sh"
 if grep -nE '(bot|admin-api|llm-scheduler|alarm-worker|alarm-worker-ready|youtube-producer-c)[^|]*\|http://127\.0\.0\.1:300(01|03|06|07|25)' "${SMOKE_SCRIPT}"; then
