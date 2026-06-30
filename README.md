@@ -112,7 +112,7 @@ COMPOSE_PROFILES=main-ap \
 | hololive-api (bot) | `http://127.0.0.1:30001/health` |
 | hololive-api (llm) | `http://127.0.0.1:30003/health` |
 | hololive-api (admin) | `http://127.0.0.1:30006/health` |
-| alarm-worker | `http://127.0.0.1:30007/health` |
+| alarm-worker | `https://127.0.0.1:30007/health` via container `./bin/healthcheck` |
 | youtube-producer | `http://127.0.0.1:30025/health` (Main 노드) |
 
 ```bash

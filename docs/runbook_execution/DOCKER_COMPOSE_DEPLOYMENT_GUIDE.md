@@ -192,7 +192,7 @@ runtime split 이후 역할:
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml ps
 curl -fsS http://127.0.0.1:30001/health
 curl -fsS http://127.0.0.1:30006/health
-curl -fsS http://127.0.0.1:30007/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
 curl -fsS http://127.0.0.1:30003/health
 curl -fsS http://127.0.0.1:30025/health
 ```
