@@ -614,6 +614,8 @@ services:
       - '-allowGET=(/v1\.[0-9]+)?/(_ping|version|events(\?.*)?|containers/json(\?.*)?|containers/[^/]+/json(\?.*)?)'
       - '-allowHEAD=(/v1\.[0-9]+)?/_ping'
       - '-allowPOST=(/v1\.[0-9]+)?/containers/[^/]+/(start|stop|restart)(\?.*)?'
+    group_add:
+      - "${DOCKER_SOCKET_GID:-107}"
     read_only: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
