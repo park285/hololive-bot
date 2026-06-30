@@ -640,6 +640,10 @@ def resolve_package(repo_root: Path, package: str) -> tuple[Path, str]:
     if not package.startswith("./"):
         return repo_root, package
     package_dir = (repo_root / package[2:]).resolve()
+    try:
+        package_dir.relative_to(repo_root)
+    except ValueError as exc:
+        raise PolicyError(f"benchmark package path must stay under repo root: {package}") from exc
     if not package_dir.exists():
         return repo_root, package
     current = package_dir
@@ -649,6 +653,8 @@ def resolve_package(repo_root: Path, package: str) -> tuple[Path, str]:
             module_dir = current
             break
         if current == repo_root:
+            break
+        if current == current.parent:
             break
         current = current.parent
     if module_dir is None or module_dir == repo_root:
