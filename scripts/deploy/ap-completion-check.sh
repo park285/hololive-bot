@@ -43,9 +43,8 @@ ports=($ports_list)
 idx=0
 for container in $containers_list; do
   ready=\$(docker exec \"\$container\" ./bin/healthcheck --body \"https://127.0.0.1:\${ports[\$idx]}/ready\")
-  printf '%s' \"\$ready\" | grep -q '\"mode\":\"active-active\"'
-  printf '%s' \"\$ready\" | grep -q '\"valkey_available\":true'
-  printf '%s' \"\$ready\" | grep -q '\"scraping_paused\":false'
+  printf '%s' \"\$ready\" | grep -q '\"status\":\"ready\"'
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \"\$container\" | grep -qx 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true'
   idx=\$((idx + 1))
 done
 

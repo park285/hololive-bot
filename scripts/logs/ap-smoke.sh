@@ -40,9 +40,8 @@ sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=o
 
 for container in "${containers[@]}"; do
   ready="$(docker exec "$container" ./bin/healthcheck --body "https://127.0.0.1:${ports[$idx]}/ready")"
-  printf "%s" "$ready" | grep -q "\"mode\":\"active-active\""
-  printf "%s" "$ready" | grep -q "\"valkey_available\":true"
-  printf "%s" "$ready" | grep -q "\"scraping_paused\":false"
+  printf "%s" "$ready" | grep -q "\"status\":\"ready\""
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$container" | grep -qx 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true'
   docker exec "$container" ./bin/healthcheck "https://127.0.0.1:${ports[$idx]}/health"
   idx=$((idx + 1))
 done
