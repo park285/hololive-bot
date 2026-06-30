@@ -106,7 +106,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-curl http://127.0.0.1:30006/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 hololive-api
 ```
 

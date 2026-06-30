@@ -8,7 +8,7 @@
 | Binary | `youtube-producer` |
 | Compose service | `youtube-producer` |
 | Port | `30005` (AP-A) / `30015` (AP-B) / `30025` (AP-C) / `30035` (AP-D) |
-| Health endpoint | remote AP local port; AP-C `30025` on the main host |
+| Health endpoint | remote AP local H3 port through `./bin/healthcheck`; AP-C `https://127.0.0.1:30025/health` on the main host |
 | Ready endpoint | remote AP local port; all active APs report `mode=active-active` |
 
 ## Role
@@ -32,7 +32,7 @@ as repo-side contract definitions and compose-path validation inputs.
 
 | Contract | Type | Path/Event/Queue | Consumers |
 |---|---|---|---|
-| YouTube producer health | HTTP | `/health` | Compose healthcheck |
+| YouTube producer health | H3 | `/health` | Compose healthcheck |
 
 ## Consumes
 
@@ -74,8 +74,8 @@ scraper-only by default with `PHOTO_SYNC_ENABLED=false`,
 ## Observability
 
 - Logs: `docker logs -f hololive-youtube-producer-c` (main), `SINCE=15m TAIL=600 ./scripts/logs/ap-logs.sh <ap-host> youtube-producer`
-- Health: remote AP local port (`30005`/`30015`/`30035`), AP-C `http://127.0.0.1:30025/health`
-- Ready: remote AP local port (`30005`/`30015`/`30035`), AP-C `http://127.0.0.1:30025/ready`, all with `mode=active-active`
+- Health: remote AP local H3 port (`30005`/`30015`/`30035`), AP-C `https://127.0.0.1:30025/health`
+- Ready: remote AP local H3 port (`30005`/`30015`/`30035`), AP-C `https://127.0.0.1:30025/ready`, all with `mode=active-active`
 - Metrics: `youtube_poller_job_claim_total`, `youtube_poller_job_lease_renew_total`, `youtube_poller_job_mark_completed_total`, `youtube_poller_job_release_total`, `youtube_poller_outbox_insert_total`
 
 ## Related documents

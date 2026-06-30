@@ -12,10 +12,10 @@
 
 | Check | Expected |
 |---|---|
-| Health (bot) | `http://127.0.0.1:30001/health` returns success |
-| Health (llm) | `http://127.0.0.1:30003/health` returns success |
-| Ready (llm) | `http://127.0.0.1:30003/internal/ready` with `X-API-Key` returns success |
-| Health (admin) | `http://127.0.0.1:30006/health` returns success |
+| Health (bot) | `https://127.0.0.1:30001/health` returns success through container `./bin/healthcheck` |
+| Health (llm) | `https://127.0.0.1:30003/health` returns success through container `./bin/healthcheck` |
+| Ready (llm) | `https://127.0.0.1:30003/internal/ready` with `X-API-Key` returns success through container `./bin/healthcheck` |
+| Health (admin) | `https://127.0.0.1:30006/health` returns success through container `./bin/healthcheck` |
 | Logs | no repeated webhook, Iris, DB, Valkey, LLM, or trigger errors |
 | Queue | produces `notification_delivery_outbox` rows; does not own dispatch queue draining |
 
@@ -113,9 +113,9 @@ Diagnosis:
 ```bash
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps hololive-api
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 hololive-api
-curl http://127.0.0.1:30001/health
-curl http://127.0.0.1:30003/health
-curl http://127.0.0.1:30006/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ```
 
 Mitigation:
@@ -134,7 +134,7 @@ Symptoms:
 Diagnosis:
 ```bash
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 hololive-api
-curl http://127.0.0.1:30003/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
 ```
 
 Mitigation:
@@ -147,10 +147,10 @@ Rollback:
 ## Smoke test
 
 ```bash
-curl http://127.0.0.1:30001/health
-curl http://127.0.0.1:30003/health
-curl -H "X-API-Key: $API_SECRET_KEY" http://127.0.0.1:30003/internal/ready
-curl http://127.0.0.1:30006/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30003/internal/ready
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ```
 
 ## Rollback

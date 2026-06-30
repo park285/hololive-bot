@@ -61,7 +61,7 @@ main 호스트 (`youtube-producer-c`):
 
 ```bash
 docker ps --filter name=hololive-youtube-producer-c --format '{{.Names}}\t{{.Status}}'
-curl -fsS http://127.0.0.1:30025/health
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml exec -T youtube-producer-c ./bin/healthcheck https://127.0.0.1:30025/health
 docker logs --tail 200 hololive-youtube-producer-c
 ```
 

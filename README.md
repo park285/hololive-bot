@@ -109,11 +109,11 @@ COMPOSE_PROFILES=main-ap \
 
 | 런타임 모듈 | 상태 검증 URI (Health Check) |
 |---|---|
-| hololive-api (bot) | `http://127.0.0.1:30001/health` |
-| hololive-api (llm) | `http://127.0.0.1:30003/health` |
-| hololive-api (admin) | `http://127.0.0.1:30006/health` |
+| hololive-api (bot) | `https://127.0.0.1:30001/health` via container `./bin/healthcheck` |
+| hololive-api (llm) | `https://127.0.0.1:30003/health` via container `./bin/healthcheck` |
+| hololive-api (admin) | `https://127.0.0.1:30006/health` via container `./bin/healthcheck` |
 | alarm-worker | `https://127.0.0.1:30007/health` via container `./bin/healthcheck` |
-| youtube-producer | `http://127.0.0.1:30025/health` (Main 노드) |
+| youtube-producer | `https://127.0.0.1:30025/health` via container `./bin/healthcheck` (Main 노드) |
 
 ```bash
 # Docker Compose 컨테이너 동작 상태 점검

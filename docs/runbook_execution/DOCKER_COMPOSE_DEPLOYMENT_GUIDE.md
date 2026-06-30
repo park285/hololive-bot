@@ -189,12 +189,12 @@ runtime split 이후 역할:
 ## 상태 확인
 
 ```bash
-./scripts/deploy/compose.sh -f docker-compose.prod.yml ps
-curl -fsS http://127.0.0.1:30001/health
-curl -fsS http://127.0.0.1:30006/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
-curl -fsS http://127.0.0.1:30003/health
-curl -fsS http://127.0.0.1:30025/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml exec -T youtube-producer-c ./bin/healthcheck https://127.0.0.1:30025/health
 ```
 
 Remote AP split-host 상태 확인:

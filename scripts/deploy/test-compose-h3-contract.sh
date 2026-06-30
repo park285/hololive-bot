@@ -245,10 +245,14 @@ fi
 echo "[PASS] AP verify scripts are h3-only"
 
 SMOKE_SCRIPT="${ROOT_DIR}/scripts/smoke/smoke-runtime-health.sh"
-if grep -nE 'alarm-worker[^|]*\|http://127\.0\.0\.1:30007' "${SMOKE_SCRIPT}"; then
-    echo "[FAIL] alarm-worker smoke probes must use H3 healthcheck" >&2
+if grep -nE '(bot|admin-api|llm-scheduler|alarm-worker|alarm-worker-ready|youtube-producer-c)[^|]*\|http://127\.0\.0\.1:300(01|03|06|07|25)' "${SMOKE_SCRIPT}"; then
+    echo "[FAIL] runtime smoke probes must use H3 healthcheck" >&2
     exit 1
 fi
+grep -Fq 'bot|https://127.0.0.1:30001/health|compose-healthcheck:hololive-api' "${SMOKE_SCRIPT}"
+grep -Fq 'admin-api|https://127.0.0.1:30006/health|compose-healthcheck:hololive-api' "${SMOKE_SCRIPT}"
+grep -Fq 'llm-scheduler|https://127.0.0.1:30003/health|compose-healthcheck:hololive-api' "${SMOKE_SCRIPT}"
 grep -Fq 'alarm-worker|https://127.0.0.1:30007/health|compose-healthcheck:hololive-alarm-worker' "${SMOKE_SCRIPT}"
 grep -Fq 'alarm-worker-ready|https://127.0.0.1:30007/ready|compose-healthcheck:hololive-alarm-worker' "${SMOKE_SCRIPT}"
-echo "[PASS] alarm-worker smoke probes are h3-only"
+grep -Fq 'youtube-producer-c|https://127.0.0.1:30025/health|compose-healthcheck:youtube-producer-c:main-ap' "${SMOKE_SCRIPT}"
+echo "[PASS] runtime smoke probes are h3-only"

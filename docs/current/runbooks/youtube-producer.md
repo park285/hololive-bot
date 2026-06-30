@@ -345,7 +345,7 @@ Diagnosis:
 ```bash
 ./scripts/logs/ap-status.sh seoul
 docker logs --tail 300 hololive-youtube-producer-c
-curl -fsS http://127.0.0.1:30025/ready
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml exec -T youtube-producer-c ./bin/healthcheck https://127.0.0.1:30025/ready
 ```
 
 Mitigation:
@@ -365,7 +365,7 @@ Diagnosis:
 ```bash
 # 각 AP 호스트 로컬에서 /ready 확인 (seoul 30015, main 30025)
 ./scripts/logs/ap-status.sh seoul
-curl -fsS http://127.0.0.1:30025/ready
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml exec -T youtube-producer-c ./bin/healthcheck https://127.0.0.1:30025/ready
 ```
 
 Mitigation:

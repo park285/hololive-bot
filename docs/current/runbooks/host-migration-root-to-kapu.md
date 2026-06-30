@@ -45,7 +45,7 @@
 - [ ] `systemctl list-timers hololive-*` → `hololive-main-log-mirror@osaka.timer`, `hololive-daily-log-rollup.timer` 다음 트리거 예약됨
 - [ ] kapu로 SSH 접속 가능, zsh + oh-my-zsh + p10k 정상 로드
 - [ ] `sudo -u kapu claude` 실행 시 `/home/kapu/.claude` 인식, 메모리/세션 유지
-- [ ] hololive prod 헬스체크 통과: `curl -fsS http://127.0.0.1:30001/healthz` (kakao-bot), `30006/healthz` (admin-api), `30007/healthz` (alarm-worker), `30003/healthz` (llm-scheduler), `30190` (admin-dashboard)
+- [ ] hololive prod 헬스체크 통과: `./scripts/smoke/smoke-runtime-health.sh`, `curl -fsS http://127.0.0.1:30190/health` (admin-dashboard)
 - [ ] 8시간 후 재확인: `docker ps` 동일 상태, `journalctl -u hololive-* --since=8h` 신규 에러 없음
 
 ---
