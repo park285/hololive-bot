@@ -51,6 +51,10 @@
 **/*.pub
 **/credentials*
 **/*-credentials*
+**/*serviceaccount*
 **/*service-account*
 **/*.p12
 **/*.pfx
+**/*secret*.json
+**/*secret*.yaml
+**/*secret*.yml
