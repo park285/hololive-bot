@@ -10,6 +10,7 @@
 - `repo-refactor-audit.md` - active refactor findings, completed cleanup, and deferred risk register
 - `app-bootstrap-boundary-guide.md` - Kakao bot bootstrap boundary guide
 - `review-bundles.md` - review source/full bundle export policy
+- `h3-runtime-smoke-cross-debate-20260630.md` - H3 runtime smoke cross-debate result and remaining closure checklist
 
 ## Gate Assets
 
