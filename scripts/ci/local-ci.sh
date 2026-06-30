@@ -348,6 +348,7 @@ run_go_package_step "Go vet" go_mod_readonly go vet
 check_staticcheck
 check_golangci_lint
 check_nilaway
+run_step "benchgate isolated tool gate" check_benchgate
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
 run_warning_step "PGO freshness gate" ./scripts/ci/check-pgo-freshness.sh
