@@ -125,8 +125,11 @@ for container in $containers_list; do
   started_epoch=\$(date -u -d \"\$started_at\" +%s)
   [[ \"\$started_epoch\" -ge \"\$since_epoch\" ]]
 done
-for port in $ports_list; do
-  curl -fsS \"http://127.0.0.1:\$port/health\" >/dev/null
+ports=($ports_list)
+idx=0
+for container in $containers_list; do
+  docker exec \"\$container\" ./bin/healthcheck \"https://127.0.0.1:\${ports[\$idx]}/health\" >/dev/null
+  idx=\$((idx + 1))
 done
 for container in $containers_list; do
   if docker logs --since \"\$since\" \"\$container\" 2>&1 | grep -E 'ERR|panic|permission denied|x509|no such file'; then

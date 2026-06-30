@@ -121,13 +121,13 @@ Required follow-up:
 
 Before marking the broader H3 smoke/ops alignment as complete:
 
-- [ ] Update `scripts/deploy/ap-rollback.sh` to use H3 healthcheck for AP
+- [x] Update `scripts/deploy/ap-rollback.sh` to use H3 healthcheck for AP
       rollback verification.
-- [ ] Extend `scripts/deploy/test-compose-h3-contract.sh` so rollback health
+- [x] Extend `scripts/deploy/test-compose-h3-contract.sh` so rollback health
       verification cannot regress to HTTP.
-- [ ] Update `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` for
+- [x] Update `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` for
       current `hololive-api` service naming and H3 health verification.
-- [ ] Re-run:
+- [x] Re-run:
 
 ```bash
 bash -n scripts/deploy/ap-rollback.sh scripts/deploy/test-compose-h3-contract.sh
@@ -142,6 +142,16 @@ git diff --check
 For any live AP rollback execution, keep the normal approval gate: do not run
 rollback, recreate, deploy, restart, or destructive remote operations without
 explicit scoped approval.
+
+## Closure (2026-07-01)
+
+위 closure 체크리스트 항목을 모두 반영했다.
+
+- `scripts/deploy/ap-rollback.sh`: AP 롤백 health 검증을 host-side HTTP `curl`에서 컨테이너 `./bin/healthcheck` H3 probe로 전환(컨테이너 health/StartedAt/에러 마커 검사는 유지).
+- `scripts/deploy/test-compose-h3-contract.sh`: AP H3-only 스캔에 `ap-rollback.sh`를 추가하고, 롤백 health가 HTTP로 회귀하지 못하도록 H3 healthcheck positive assertion을 추가.
+- `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`: retired split 서비스명(`hololive-bot`/`hololive-admin-api`/`llm-scheduler`)을 통합 `hololive-api` plane 네이밍으로 정리, 내부 HTTP health 예시를 H3 `./bin/healthcheck`로 교체, Iris webhook URL을 외부 HTTP/H3 경계로 명시.
+
+재검증(`test-compose-h3-contract.sh`, `smoke-compose-config.sh`, `smoke-runtime-health.sh`, `check-runbook-coverage.sh`, `check-doc-links-no-local-paths.sh`, `git diff --check`) 통과.
 
 ## Panel Summary
 
