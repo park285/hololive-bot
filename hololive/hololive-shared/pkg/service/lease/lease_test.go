@@ -61,6 +61,20 @@ func TestNewLeaseDefaultsOmittedTuning(t *testing.T) {
 	}
 }
 
+func TestAcquireRejectsNonPositiveTTL(t *testing.T) {
+	c := &cachemocks.Client{
+		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
+			t.Fatal("SetNX must not be called when TTL is non-positive")
+			return false, nil
+		},
+	}
+	for _, ttl := range []time.Duration{0, -time.Second} {
+		if _, err := Acquire(context.Background(), c, &Spec{Key: "k", Owner: "o", TTL: ttl}, slog.Default()); err == nil {
+			t.Fatalf("Acquire(TTL=%v) error = nil, want non-nil", ttl)
+		}
+	}
+}
+
 func TestAcquireHeld(t *testing.T) {
 	c := &cachemocks.Client{
 		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) { return false, nil },

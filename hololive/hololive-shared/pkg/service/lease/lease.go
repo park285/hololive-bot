@@ -54,6 +54,9 @@ func Acquire(ctx context.Context, cacheClient cache.Client, spec *Spec, logger *
 	if spec == nil || spec.Key == "" || spec.Owner == "" {
 		return nil, fmt.Errorf("acquire lease: key and owner are required")
 	}
+	if spec.TTL <= 0 {
+		return nil, fmt.Errorf("acquire lease: ttl must be positive, got %v", spec.TTL)
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
