@@ -32,7 +32,7 @@ type YouTubeChannelStatsSnapshot struct {
 	SubscriberCount int64     `json:"subscriber_count"`
 	ViewCount       int64     `json:"view_count"`
 	VideoCount      int64     `json:"video_count"`
-	JoinedDate      int64     `json:"joined_date,omitempty"` // Unix timestamp
+	JoinedDate      int64     `json:"joined_date,omitempty"` // Unix 타임스탬프
 	Description     string    `db:"description" json:"description,omitempty"`
 	Country         string    `db:"country" json:"country,omitempty"`
 	Handle          string    `db:"handle" json:"handle,omitempty"`

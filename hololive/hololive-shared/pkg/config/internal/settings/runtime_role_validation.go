@@ -28,16 +28,15 @@ const (
 	notificationSchedulerRoleOff    = "off"
 )
 
-// LoadBotRuntime loads the user-facing Kakao/Iris bot runtime config and rejects
-// proactive notification egress ownership. It intentionally keeps the legacy
-// Load function available for older callers, but binaries should use the
-// runtime-specific loader so ownership drift fails at startup.
+// proactive notification egress 소유를 거부하는 bot runtime config 로더다. 구버전
+// 호출부를 위해 legacy Load 함수를 의도적으로 남겨두지만, binary는 runtime별 로더를
+// 써야 ownership drift가 startup에서 실패한다.
 func LoadBotRuntime() (*Config, error) {
 	return loadConfigValidated((*Config).ValidateBotRuntime, configLoadOptions{FetchIrisWorkerProfile: true})
 }
 
-// LoadAlarmWorkerRuntime loads the alarm-worker config and validates that the
-// production runtime is the only notification egress owner.
+// alarm-worker config를 로드하고, production runtime이 유일한 notification egress
+// owner인지 검증한다.
 func LoadAlarmWorkerRuntime() (*Config, error) {
 	return loadConfigValidated((*Config).ValidateAlarmWorkerRuntime, configLoadOptions{FetchIrisWorkerProfile: true})
 }

@@ -20,17 +20,15 @@
 
 package settings
 
-// Reader defines the read-only settings API.
 type Reader interface {
 	Get() Settings
 }
 
-// Writer defines the write settings API.
 type Writer interface {
 	Update(newSettings Settings) error
 }
 
-// ReadWriter is a convenience interface for consumers that need both Get/Update.
+// ReadWriter는 Get/Update가 모두 필요한 소비자를 위한 convenience interface다.
 type ReadWriter interface {
 	Reader
 	Writer

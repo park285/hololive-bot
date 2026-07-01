@@ -1,5 +1,5 @@
-// Package outbox provides the public facade for YouTube notification outbox
-// delivery, telemetry, formatting, and dispatcher construction.
+// Package outbox는 YouTube notification outbox의 delivery·telemetry·formatting과
+// dispatcher 구성을 위한 공개 facade를 제공한다.
 //
 // 외부 surface 정책
 //

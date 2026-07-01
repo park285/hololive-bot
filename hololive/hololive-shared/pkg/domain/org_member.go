@@ -45,7 +45,7 @@ type Member struct {
 	Suborg          string     `json:"suborg,omitempty"`         // 서브그룹 (예: EN, JP, KR)
 	SyncSource      string     `json:"sync_source,omitempty"`    // 동기화 소스 (holodex, manual)
 	ChzzkChannelID  string     `json:"chzzkChannelId,omitempty"` // Chzzk 채널 ID
-	TwitchUserID    string     `json:"twitchUserId,omitempty"`   // Twitch User ID (immutable)
+	TwitchUserID    string     `json:"twitchUserId,omitempty"`   // Twitch 사용자 ID (불변)
 	Birthday        *time.Time `json:"birthday,omitempty"`
 	DebutDate       *time.Time `json:"debutDate,omitempty"`
 }

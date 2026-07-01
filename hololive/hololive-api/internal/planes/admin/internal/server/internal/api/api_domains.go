@@ -20,7 +20,7 @@
 
 package api
 
-// API domain handlers split API responsibilities by route group.
+// route group별로 API 책임을 나눈 domain handler들이다.
 type (
 	MemberHandler      struct{ *Handler }
 	AlarmHandler       struct{ *Handler }
@@ -35,7 +35,6 @@ type (
 	OAuthHandler       struct{ *Handler }
 )
 
-// DomainHandlers groups domain-scoped API handlers for route registration.
 type DomainHandlers struct {
 	Member     *MemberHandler
 	Alarm      *AlarmHandler

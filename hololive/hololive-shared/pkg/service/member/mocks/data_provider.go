@@ -26,7 +26,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// DataProvider is a manual mock for domain.MemberDataProvider (member.DataProvider alias).
 type DataProvider struct {
 	FindMemberByChannelIDFunc func(channelID string) *domain.Member
 	FindMemberByNameFunc      func(name string) *domain.Member

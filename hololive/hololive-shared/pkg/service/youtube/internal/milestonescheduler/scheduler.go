@@ -69,8 +69,8 @@ const (
 	MilestoneThresholdRatio   = youtube.MilestoneThresholdRatio
 	ApproachingThresholdRatio = youtube.ApproachingThresholdRatio
 
-	channelsPerBatch             = 30 // 30 channels × 100 units = 3,000 units per batch
-	batchesPerDay                = 2  // 2 batches × 3,000 = 6,000 units
+	channelsPerBatch             = 30 // 30 channel × 100 unit = batch당 3,000 unit
+	batchesPerDay                = 2  // batch 2회 × 3,000 = 6,000 unit
 	totalDailyQuota              = 6000
 	recentVideosFetchParallelism = 4
 )

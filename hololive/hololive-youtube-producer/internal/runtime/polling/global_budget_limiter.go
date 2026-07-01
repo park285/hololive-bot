@@ -19,9 +19,8 @@ type GlobalBudgetLimiterConfig struct {
 	ClassMaxInflight   map[poller.BudgetBurstClass]int
 	DeniedRetryAfter   time.Duration
 	WindowCheckEnabled bool
-	// CleanupLimit bounds expired reservation cleanup work inside a single
-	// Valkey Lua reserve execution. A non-positive value uses
-	// defaultGlobalBudgetCleanupLimit.
+	// CleanupLimit은 단일 Valkey Lua reserve 실행 안에서 만료된 reservation cleanup
+	// 작업량을 제한한다. 0 이하 값이면 defaultGlobalBudgetCleanupLimit을 사용한다.
 	CleanupLimit int
 }
 

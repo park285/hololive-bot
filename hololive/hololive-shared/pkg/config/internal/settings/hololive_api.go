@@ -16,10 +16,9 @@ const (
 	defaultAdminAPIPort = 30006
 )
 
-// HololiveAPIConfig contains the three logical planes hosted by the single
-// hololive-api process. Each plane retains its own bounded DB pool as an
-// explicit bulkhead, while process-wide logging, GC and signal handling are
-// owned by the parent runtime.
+// HololiveAPIConfig는 단일 hololive-api 프로세스가 호스팅하는 세 논리적 plane을 담는다.
+// 각 plane은 자체 bounded DB pool을 explicit bulkhead로 유지하고, 프로세스 전역의
+// logging·GC·signal 처리는 부모 runtime이 소유한다.
 type HololiveAPIConfig struct {
 	Bot     *Config
 	Admin   *Config

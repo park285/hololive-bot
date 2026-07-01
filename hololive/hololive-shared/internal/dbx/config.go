@@ -45,7 +45,7 @@ type Config struct {
 	Name        string // 데이터베이스 이름
 	SSLMode     string // sslmode (기본: "verify-full")
 	SSLRootCert string
-	// QueryExecMode: pgx default_query_exec_mode
+	// QueryExecMode: pgx의 default_query_exec_mode
 	// 허용값: cache_statement, cache_describe, describe_exec, exec, simple_protocol
 	QueryExecMode string
 }

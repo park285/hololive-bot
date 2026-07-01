@@ -591,7 +591,7 @@ func TestBackoffState_WithCooldownJitterStaysInRange(t *testing.T) {
 		bs.RecordError()
 		cd := bs.HardCooldownRemaining()
 		base := 30 * time.Minute
-		// jitter range [0.9, 1.1] base, with small wall-clock drift margin.
+		// jitter 범위 [0.9, 1.1] base에 wall-clock drift 여유를 더한 값이다.
 		assert.GreaterOrEqual(t, cd, time.Duration(float64(base)*0.85))
 		assert.LessOrEqual(t, cd, time.Duration(float64(base)*1.15))
 	}

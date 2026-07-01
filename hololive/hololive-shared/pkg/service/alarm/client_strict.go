@@ -10,10 +10,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
-// NewClientWithAPIKeyStrict constructs the alarm service client without the
-// transport fallback used by general-purpose internal clients. Big-bang runtime
-// assembly uses this constructor so a missing CA, invalid server name or broken
-// H3 transport fails before the bot/admin listeners accept traffic.
+// 범용 internal client가 쓰는 transport fallback 없이 alarm service client를 만든다.
+// big-bang runtime 조립이 이 생성자를 쓰는 이유는, CA 누락·잘못된 server name·손상된
+// H3 transport가 bot/admin listener가 트래픽을 받기 전에 실패하도록 하기 위해서다.
 func NewClientWithAPIKeyStrict(baseURL, apiKey string, logger *slog.Logger) (*Client, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {

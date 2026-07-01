@@ -163,7 +163,7 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 		nameKoPtr = &val
 	}
 
-	// Add default values for org/sync_source (Task 1 requirement)
+	// org/sync_source 기본값 설정 (Task 1 요구사항)
 	org := "Hololive" // 기존 API 호환을 위한 기본값
 	syncSource := "manual"
 

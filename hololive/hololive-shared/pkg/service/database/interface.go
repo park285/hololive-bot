@@ -26,9 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Client defines the behavior that *PostgresService provides.
-//
-// Goal: allow service consumers to depend on interfaces rather than concrete implementations.
+// 소비자가 구체 구현이 아니라 interface에 의존하도록 하려는 계약이다.
 type Client interface {
 	GetPool() *pgxpool.Pool
 	Ping(ctx context.Context) error

@@ -39,8 +39,8 @@ type Config struct {
 	DeliveryParallelism         int           // room/delivery send 제한 병렬성
 	DeliverySendTimeout         time.Duration // room 단위 메시지 발송 1회 최대 시간
 	SubscriberLookupParallelism int           // 채널별 구독자 조회 제한 병렬성
-	AggregateSyncInterval       time.Duration // aggregate sync maintenance interval
-	TelemetryPollInterval       time.Duration // telemetry loop polling interval
+	AggregateSyncInterval       time.Duration // aggregate 동기화 유지보수 주기
+	TelemetryPollInterval       time.Duration // telemetry loop 폴링 주기
 	TelemetryBackfillBatch      int           // delivery 상태에서 telemetry 버퍼로 역보강할 최대 건수
 	TelemetryFlushBatch         int           // telemetry 버퍼 플러시 최대 건수
 	TelemetryRetryBackoff       time.Duration // telemetry 플러시 실패 재시도 간격

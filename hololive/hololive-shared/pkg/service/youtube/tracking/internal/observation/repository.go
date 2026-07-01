@@ -85,7 +85,7 @@ func NewRepositoryContext(_ context.Context, db trackingDB) *PgxRepository {
 	return repo
 }
 
-// --- delegation: AlarmState ---
+// --- 위임: AlarmState ---
 
 func (r *PgxRepository) FindAlarmStateByPostID(ctx context.Context, kind domain.OutboxKind, postID string) (*domain.YouTubeCommunityShortsAlarmState, error) {
 	return r.alarm.FindAlarmStateByPostID(ctx, kind, postID)
@@ -107,13 +107,13 @@ func (r *PgxRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain.
 	return r.alarm.ReleaseAlarmStateClaim(ctx, kind, postID, authorizedAt)
 }
 
-// --- delegation: DeliveryState ---
+// --- 위임: DeliveryState ---
 
 func (r *PgxRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSentMark) error {
 	return r.delivery.MarkAlarmSentBatch(ctx, marks)
 }
 
-// --- delegation: Identity ---
+// --- 위임: Identity ---
 
 func (r *PgxRepository) FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error) {
 	return r.identity.FindByIdentity(ctx, kind, contentID)
@@ -127,7 +127,7 @@ func (r *PgxRepository) UpsertBatch(ctx context.Context, records []*domain.YouTu
 	return r.identity.UpsertBatch(ctx, records)
 }
 
-// --- delegation: SourcePost ---
+// --- 위임: SourcePost ---
 
 func (r *PgxRepository) UpsertSourcePost(ctx context.Context, record *domain.YouTubeCommunityShortsSourcePost) error {
 	return r.source.UpsertSourcePost(ctx, record)

@@ -58,14 +58,12 @@ func buildMilestoneWhereClause(filter MilestoneFilter) (result1 string, result2 
 func (r *StatsRepository) GetAllMilestones(ctx context.Context, filter MilestoneFilter) (*MilestoneResult, error) {
 	whereSQL, args, argIdx := buildMilestoneWhereClause(filter)
 
-	// 1. Count Total
 	countQuery := "SELECT COUNT(*) FROM youtube_milestones " + whereSQL
 	var totalCount int
 	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&totalCount); err != nil {
 		return nil, fmt.Errorf("failed to count milestones: %w", err)
 	}
 
-	// 2. Select Data
 	query := fmt.Sprintf(`
 		SELECT channel_id, member_name, type, value, achieved_at, notified
 		FROM youtube_milestones

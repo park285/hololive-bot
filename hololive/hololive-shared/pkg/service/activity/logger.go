@@ -34,7 +34,7 @@ import (
 
 type LogEntry struct {
 	Timestamp time.Time      `json:"timestamp"`
-	Type      string         `json:"type"` // e.g., "command", "auth", "system"
+	Type      string         `json:"type"` // 예: "command", "auth", "system"
 	Summary   string         `json:"summary"`
 	Details   map[string]any `json:"details,omitempty"`
 }

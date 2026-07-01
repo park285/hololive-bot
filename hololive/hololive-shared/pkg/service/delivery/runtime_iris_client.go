@@ -15,9 +15,9 @@ const (
 	// hololive는 reply 경로에서 이를 override하지 않으므로 grace 산정의 기준값이다.
 	runtimeIrisReplyAttemptTimeout = 10 * time.Second
 	staleClientCloseGraceMargin    = 10 * time.Second
-	// defaultStaleClientCloseGrace must outlast the worst-case in-flight reply on the
-	// rotated-out client (per-attempt timeout × retry + margin); reply retry is pinned to
-	// the captured old client, so a shorter grace would sever an in-flight reply on rotation.
+	// defaultStaleClientCloseGrace는 rotate-out된 client에서 최악의 경우 in-flight reply보다
+	// 오래 살아 있어야 한다(per-attempt timeout × retry + margin). reply retry는 캡처된 옛
+	// client에 고정되므로, grace가 더 짧으면 rotation 시 in-flight reply가 끊긴다.
 	defaultStaleClientCloseGrace = runtimeIrisReplyAttemptTimeout*runtimeIrisReplyRetryMax + staleClientCloseGraceMargin
 )
 

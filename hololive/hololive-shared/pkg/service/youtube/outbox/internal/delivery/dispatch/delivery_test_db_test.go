@@ -633,10 +633,10 @@ func deliveryTestSelectColumns(table string) string {
 	}
 }
 
-// insertDeliveryTestRowsGeneric is the reflection-based fallback for test-local
-// models (the deliveryTelemetryTest* structs) that the typed switch above does
-// not enumerate. It mirrors the read path's scany reflection: column names come
-// from `db`/`json` tags (snake_case fallback) and the table from TableName().
+// insertDeliveryTestRowsGeneric은 위의 typed switch가 열거하지 않는 test-local 모델
+// (deliveryTelemetryTest* 구조체)을 위한 reflection 기반 fallback이다. read 경로의 scany
+// reflection을 그대로 따라, 컬럼명은 `db`/`json` tag(없으면 snake_case)에서, 테이블명은
+// TableName()에서 가져온다.
 func insertDeliveryTestRowsGeneric(ctx context.Context, pool *pgxpool.Pool, value any) (int64, error) {
 	v, ok := deliveryTestCreateValue(value)
 	if !ok {

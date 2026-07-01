@@ -48,7 +48,7 @@ type Milestone struct {
 	ChannelID  string        `json:"channel_id"`
 	MemberName string        `json:"member_name"`
 	Type       MilestoneType `json:"type"`
-	Value      uint64        `json:"value"` // e.g., 1000000 for 1M subscribers
+	Value      uint64        `json:"value"` // 예: 1M 구독자면 1000000
 	AchievedAt time.Time     `json:"achieved_at"`
 	Notified   bool          `json:"notified"`
 }
@@ -76,8 +76,8 @@ type DailySummary struct {
 type RankEntry struct {
 	ChannelID          string `json:"channel_id"`
 	MemberName         string `json:"member_name"`
-	Value              int64  `json:"value"`               // subscriber change or video count
-	CurrentSubscribers uint64 `json:"current_subscribers"` // latest subscriber count (optional)
+	Value              int64  `json:"value"`               // 구독자 변화량 또는 영상 수
+	CurrentSubscribers uint64 `json:"current_subscribers"` // 최신 구독자 수 (선택)
 	Rank               int    `json:"rank"`
 }
 
@@ -86,7 +86,7 @@ type TrendData struct {
 	MemberName       string    `json:"member_name"`
 	Period           string    `json:"period"` // "daily", "weekly", "monthly"
 	SubscriberGrowth int64     `json:"subscriber_growth"`
-	VideoUploadRate  float64   `json:"video_upload_rate"` // videos per day
+	VideoUploadRate  float64   `json:"video_upload_rate"` // 하루당 영상 수
 	AvgViewsPerVideo uint64    `json:"avg_views_per_video"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }

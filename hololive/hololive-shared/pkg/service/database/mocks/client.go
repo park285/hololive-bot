@@ -29,9 +29,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-// Client is a manual mock for database.Client.
-//
-// Rationale: keep test dependencies minimal (no mockgen) while allowing interface-based injection.
+// mockgen 없이 test 의존성을 최소화하면서 interface 기반 injection을 허용하려고
+// database.Client를 손으로 구현한 mock이다.
 type Client struct {
 	GetPoolFunc func() *pgxpool.Pool
 	PingFunc    func(ctx context.Context) error

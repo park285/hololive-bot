@@ -13,7 +13,7 @@ import (
 
 const alarmLatencyExceededThresholdMillis = alarmtiming.LatencyExceededThresholdMillis
 
-// --- shared helpers ---
+// --- 공용 helper ---
 
 func normalizeRecord(record *domain.YouTubeContentAlarmTracking) (*domain.YouTubeContentAlarmTracking, error) {
 	if record == nil {

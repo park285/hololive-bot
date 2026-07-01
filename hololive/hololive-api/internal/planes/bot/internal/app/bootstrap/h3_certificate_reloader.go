@@ -216,13 +216,13 @@ func readTLSCertificatePairPEM(
 	readFile tlsCertificateFileReader,
 ) (tlsCertificatePairPEM, error) {
 	var pairPEM tlsCertificatePairPEM
-	// #nosec G304 -- H3 certificate path is operator-owned config, not user input.
+	// #nosec G304 -- H3 인증서 경로는 운영자가 소유한 설정이며 사용자 입력이 아니다.
 	certPEM, err := readFile(certFile)
 	if err != nil {
 		return pairPEM, fmt.Errorf("read h3 certificate file: %w", err)
 	}
 
-	// #nosec G304 -- H3 private key path is operator-owned config, not user input.
+	// #nosec G304 -- H3 개인키 경로는 운영자가 소유한 설정이며 사용자 입력이 아니다.
 	keyPEM, err := readFile(keyFile)
 	if err != nil {
 		return pairPEM, fmt.Errorf("read h3 key file: %w", err)

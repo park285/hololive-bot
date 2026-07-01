@@ -245,7 +245,7 @@ func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, e
 	transport := newScraperTransport(false)
 	transport.DialContext = newSOCKS5DialContext(dialer)
 
-	// #nosec G706 -- proxy host is loaded from trusted runtime configuration.
+	// #nosec G706 -- proxy host는 신뢰된 런타임 설정에서 로드된다.
 	slog.Info("Scraper using SOCKS5 proxy",
 		"host", parsedURL.Host,
 		"has_auth", auth != nil)

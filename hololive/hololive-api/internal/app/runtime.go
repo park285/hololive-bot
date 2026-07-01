@@ -16,8 +16,8 @@ import (
 	sharedlifecycle "github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
-// Runtime hosts the bot ingress, admin API and LLM scheduler planes in one Go
-// process while retaining explicit component lifecycle boundaries.
+// Runtime은 bot ingress, admin API, LLM scheduler plane을 하나의 Go 프로세스에서
+// 호스팅하되, 컴포넌트별 lifecycle 경계는 명시적으로 유지한다.
 type Runtime struct {
 	Config *config.HololiveAPIConfig
 	Logger *slog.Logger
@@ -112,9 +112,8 @@ func (r *Runtime) Run() {
 	}
 }
 
-// Close releases process resources after all listeners and background loops have
-// been drained by Run. Component cleanup is idempotent in the existing runtime
-// implementations, so this also safely handles partial bootstrap failures.
+// Close는 Run이 모든 listener와 background loop을 drain한 뒤 프로세스 자원을 해제한다.
+// 컴포넌트 cleanup은 멱등(idempotent)이라 부분 bootstrap 실패 상태에서 호출돼도 안전하다.
 func (r *Runtime) Close() {
 	if r == nil {
 		return

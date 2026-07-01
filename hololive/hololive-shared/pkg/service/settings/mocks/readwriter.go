@@ -26,7 +26,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
-// ReadWriter is a manual mock for settings.ReadWriter.
 type ReadWriter struct {
 	GetFunc    func() settings.Settings
 	UpdateFunc func(newSettings settings.Settings) error

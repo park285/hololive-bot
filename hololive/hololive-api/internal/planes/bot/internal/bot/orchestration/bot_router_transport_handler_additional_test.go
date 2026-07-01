@@ -443,7 +443,7 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 	require.NotNil(t, transport)
 	assert.Same(t, transport, b.ensureTransport())
 
-	// unknown command path: fallback message should be sent
+	// 알 수 없는 command 경로: fallback 메시지가 전송돼야 한다
 	sender := "user"
 	b.HandleMessage(t.Context(), &iris.Message{
 		Msg:    "!help",

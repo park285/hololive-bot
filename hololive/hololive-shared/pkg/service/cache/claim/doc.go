@@ -1,4 +1,4 @@
-// Package claim provides the reuse cache abstraction (ClaimKey, ClaimStatus, ReuseCache).
+// Package claim은 reuse cache abstraction(ClaimKey, ClaimStatus, ReuseCache)을 제공한다.
 //
 // 외부 surface
 //

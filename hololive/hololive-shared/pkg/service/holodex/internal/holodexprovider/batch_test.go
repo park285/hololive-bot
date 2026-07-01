@@ -27,7 +27,6 @@ import (
 	"testing"
 )
 
-// MockRequester simulates Holodex API interactions
 type MockRequester struct {
 	DoRequestFunc func(ctx context.Context, method, path string, params url.Values) ([]byte, error)
 }

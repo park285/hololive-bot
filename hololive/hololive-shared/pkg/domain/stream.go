@@ -69,15 +69,15 @@ type Stream struct {
 	// Chzzk 관련 필드
 	ChzzkChannelID string `json:"chzzk_channel_id,omitempty"` // Chzzk 채널 ID
 	ChzzkLiveID    int    `json:"chzzk_live_id,omitempty"`    // Chzzk 예약 방송 ID (0이면 예고 없는 OPEN)
-	ChzzkLiveURL   string `json:"chzzk_live_url,omitempty"`   // Chzzk Live URL
+	ChzzkLiveURL   string `json:"chzzk_live_url,omitempty"`   // Chzzk 라이브 URL
 	IsIntegrated   bool   `json:"is_integrated,omitempty"`    // 동시 송출 여부 (YouTube + Chzzk)
 	IsChzzkOnly    bool   `json:"is_chzzk_only,omitempty"`    // Chzzk 단독 여부
 
 	// Twitch 관련 필드
-	TwitchUserID    string `json:"twitch_user_id,omitempty"`    // Twitch User ID
-	TwitchUserLogin string `json:"twitch_user_login,omitempty"` // Twitch User Login (lowercase)
-	TwitchStreamID  string `json:"twitch_stream_id,omitempty"`  // Twitch Stream ID
-	TwitchLiveURL   string `json:"twitch_live_url,omitempty"`   // Twitch Live URL
+	TwitchUserID    string `json:"twitch_user_id,omitempty"`    // Twitch 사용자 ID
+	TwitchUserLogin string `json:"twitch_user_login,omitempty"` // Twitch 사용자 로그인 (소문자)
+	TwitchStreamID  string `json:"twitch_stream_id,omitempty"`  // Twitch 스트림 ID
+	TwitchLiveURL   string `json:"twitch_live_url,omitempty"`   // Twitch 라이브 URL
 	IsTwitchOnly    bool   `json:"is_twitch_only,omitempty"`    // Twitch 단독 여부
 }
 

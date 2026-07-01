@@ -28,19 +28,18 @@ import (
 	"strings"
 )
 
-// GroupComponent describes one logical runtime plane hosted inside a larger
-// process. Start must be non-blocking and should report asynchronous failures
-// through errCh, matching the existing runtime Start contract.
+// GroupComponent는 더 큰 프로세스 안에 호스팅되는 하나의 논리적 runtime plane이다.
+// Start는 non-blocking이어야 하며, 비동기 실패는 errCh로 보고해야 한다(기존 runtime
+// Start 계약과 동일).
 type GroupComponent struct {
 	Name     string
 	Start    func(context.Context, chan<- error)
 	Shutdown func(context.Context) error
 }
 
-// GroupRuntime coordinates several logical runtime planes in a single process.
-// Components start in declaration order and stop in reverse order. Put shared
-// dependency providers first and externally-facing listeners last when the
-// listener should drain before its dependencies are released.
+// GroupRuntime은 여러 runtime plane을 한 프로세스에서 조율한다. 컴포넌트는 선언 순서로
+// 시작하고 역순으로 정지한다. listener가 의존성보다 먼저 drain돼야 하면 공유 의존성
+// provider를 앞에, 외부 노출 listener를 뒤에 배치한다.
 type GroupRuntime struct {
 	Logger     *slog.Logger
 	Components []GroupComponent
