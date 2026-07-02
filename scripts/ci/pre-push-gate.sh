@@ -62,7 +62,7 @@ run_perf_budget_gate() {
   fi
   collect_args+=(--benchtime "${PERF_GATE_BENCHTIME:-100ms}")
 
-  echo "[pre-push] perf budget gate (warn)"
+  echo "[pre-push] perf budget gate (mode=perf-budget.yaml, baseline 부재·도구 실패 시 차단)"
   ./scripts/perf/check-bench-regression_test.sh
   ./scripts/perf/check-bench-regression.sh collect "${collect_args[@]}"
   ./scripts/perf/check-bench-regression.sh \
