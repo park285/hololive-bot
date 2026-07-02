@@ -176,13 +176,17 @@ func paginateDayGroups(m *calendarMetrics, groups []dayGroup) ([][]dayGroup, int
 	if len(pages) <= calendarMaxPages {
 		return pages, 0
 	}
+	return pages[:calendarMaxPages], countGroupEntries(pages[calendarMaxPages:])
+}
+
+func countGroupEntries(pages [][]dayGroup) int {
 	omitted := 0
-	for _, page := range pages[calendarMaxPages:] {
+	for _, page := range pages {
 		for _, g := range page {
 			omitted += len(g.entries)
 		}
 	}
-	return pages[:calendarMaxPages], omitted
+	return omitted
 }
 
 func encodeCalendarPage(m *calendarMetrics, month, year int, entries []domain.CalendarEntry, groups []dayGroup, footer string, photos map[string]image.Image) ([]byte, error) {

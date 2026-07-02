@@ -121,25 +121,32 @@ func (c *StatsCommand) trySendRankImage(ctx context.Context, room, periodLabel s
 func (c *StatsCommand) rankCardEntries(ctx context.Context, gainers []domain.RankEntry) []render.RankCardEntry {
 	entries := make([]render.RankCardEntry, 0, len(gainers))
 	for _, g := range gainers {
-		entry := render.RankCardEntry{
-			Rank:  g.Rank,
-			Name:  g.MemberName,
-			Delta: rankDeltaText(g.Value),
-		}
-		if g.CurrentSubscribers > 0 && g.CurrentSubscribers <= math.MaxInt64 {
-			entry.Total = util.FormatKoreanNumber(int64(g.CurrentSubscribers))
-		}
-		if c.deps.Matcher != nil {
-			if member := c.deps.Matcher.GetMemberByChannelID(ctx, g.ChannelID); member != nil {
-				entry.Photo = member.Photo
-				if member.ShortKoreanName != "" {
-					entry.Name = member.ShortKoreanName
-				}
-			}
-		}
-		entries = append(entries, entry)
+		entries = append(entries, c.rankCardEntry(ctx, g))
 	}
 	return entries
+}
+
+func (c *StatsCommand) rankCardEntry(ctx context.Context, g domain.RankEntry) render.RankCardEntry {
+	entry := render.RankCardEntry{
+		Rank:  g.Rank,
+		Name:  g.MemberName,
+		Delta: rankDeltaText(g.Value),
+	}
+	if g.CurrentSubscribers > 0 && g.CurrentSubscribers <= math.MaxInt64 {
+		entry.Total = util.FormatKoreanNumber(int64(g.CurrentSubscribers))
+	}
+	if c.deps.Matcher == nil {
+		return entry
+	}
+	member := c.deps.Matcher.GetMemberByChannelID(ctx, g.ChannelID)
+	if member == nil {
+		return entry
+	}
+	entry.Photo = member.Photo
+	if member.ShortKoreanName != "" {
+		entry.Name = member.ShortKoreanName
+	}
+	return entry
 }
 
 func rankDeltaText(value int64) string {

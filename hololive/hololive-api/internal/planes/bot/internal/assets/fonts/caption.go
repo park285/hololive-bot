@@ -71,16 +71,30 @@ func captionFace(weight string, size float64) (font.Face, error) {
 		return nil, err
 	}
 
-	primary := pretendardRegular
-	if weight == "semibold" {
-		primary = pretendardSemiBold
-	}
-
 	cacheKey := fmt.Sprintf("%s:%.2f", weight, size)
 	if face, ok := captionFaceCache.Load(cacheKey); ok {
 		if cached, ok := face.(font.Face); ok {
 			return cached, nil
 		}
+	}
+
+	combined, err := buildCaptionFace(weight, size)
+	if err != nil {
+		return nil, err
+	}
+
+	actual, _ := captionFaceCache.LoadOrStore(cacheKey, combined)
+	actualFace, ok := actual.(font.Face)
+	if !ok {
+		return nil, fmt.Errorf("caption font cache stored %T, want font.Face", actual)
+	}
+	return actualFace, nil
+}
+
+func buildCaptionFace(weight string, size float64) (font.Face, error) {
+	primary := pretendardRegular
+	if weight == "semibold" {
+		primary = pretendardSemiBold
 	}
 
 	opts := &opentype.FaceOptions{Size: size, DPI: 96, Hinting: font.HintingFull}
@@ -94,18 +108,11 @@ func captionFace(weight string, size float64) (font.Face, error) {
 		return nil, fmt.Errorf("create jp fallback face size %.2f: %w", size, err)
 	}
 
-	combined := font.Face(&fallbackFace{
+	return &fallbackFace{
 		primary:     primaryFace,
 		primarySFNT: primary,
 		fallback:    jpFace,
-	})
-
-	actual, _ := captionFaceCache.LoadOrStore(cacheKey, combined)
-	actualFace, ok := actual.(font.Face)
-	if !ok {
-		return nil, fmt.Errorf("caption font cache stored %T, want font.Face", actual)
-	}
-	return actualFace, nil
+	}, nil
 }
 
 func loadFonts() error {

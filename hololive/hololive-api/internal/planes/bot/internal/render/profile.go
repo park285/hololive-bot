@@ -29,6 +29,12 @@ type ProfileCardData struct {
 }
 
 func NewProfileCardData(member *domain.Member, raw *domain.TalentProfile, translated *domain.Translated) ProfileCardData {
+	data := baseProfileCardData(member, raw)
+	applyProfileTranslation(&data, translated)
+	return data
+}
+
+func baseProfileCardData(member *domain.Member, raw *domain.TalentProfile) ProfileCardData {
 	data := ProfileCardData{}
 	if member != nil {
 		data.Photo = member.Photo
@@ -42,25 +48,38 @@ func NewProfileCardData(member *domain.Member, raw *domain.TalentProfile, transl
 			data.Rows = appendProfileRow(data.Rows, entry.Label, entry.Value)
 		}
 	}
+	return data
+}
+
+func applyProfileTranslation(data *ProfileCardData, translated *domain.Translated) {
 	if translated == nil {
-		return data
+		return
 	}
-	if display := strings.TrimSpace(translated.DisplayName); display != "" {
-		if data.DisplayName != "" && display != data.DisplayName {
-			data.SubNames = append([]string{data.DisplayName}, data.SubNames...)
-		}
-		data.DisplayName = display
-	}
+	applyTranslatedDisplayName(data, strings.TrimSpace(translated.DisplayName))
 	if catch := strings.TrimSpace(translated.Catchphrase); catch != "" {
 		data.Catchphrase = catch
 	}
 	if len(translated.Data) > 0 {
-		data.Rows = nil
-		for _, row := range translated.Data {
-			data.Rows = appendProfileRow(data.Rows, row.Label, row.Value)
-		}
+		data.Rows = translatedProfileRows(translated.Data)
 	}
-	return data
+}
+
+func applyTranslatedDisplayName(data *ProfileCardData, display string) {
+	if display == "" {
+		return
+	}
+	if data.DisplayName != "" && display != data.DisplayName {
+		data.SubNames = append([]string{data.DisplayName}, data.SubNames...)
+	}
+	data.DisplayName = display
+}
+
+func translatedProfileRows(translated []domain.TranslatedProfileDataRow) []ProfileCardRow {
+	rows := make([]ProfileCardRow, 0, len(translated))
+	for _, row := range translated {
+		rows = appendProfileRow(rows, row.Label, row.Value)
+	}
+	return rows
 }
 
 func appendNonEmpty(names []string, name string) []string {

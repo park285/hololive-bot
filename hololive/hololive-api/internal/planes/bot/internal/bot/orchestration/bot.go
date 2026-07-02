@@ -103,38 +103,35 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	stream, support, feature := deps.streamDeps(), deps.supportDeps(), deps.featureDeps()
 
 	bot := &Bot{
-		botSelfUser:           core.botSelfUser,
-		irisBaseURL:           core.irisBaseURL,
-		notification:          core.notification,
-		logger:                core.logger,
-		irisClient:            messaging.client,
-		messageAdapter:        messaging.messageAdapter,
-		formatter:             messaging.formatter,
-		messageStrings:        messaging.messageStrings,
-		cache:                 data.cache,
-		postgres:              data.postgres,
-		holodex:               holodexRuntime,
-		chzzk:                 stream.chzzk,
-		twitch:                stream.twitch,
-		officialProfiles:      stream.profiles,
-		alarm:                 stream.alarm,
-		matcher:               stream.matcher,
-		statsRepository:       stream.youTubeStatsRepository,
-		acl:                   support.acl,
-		majorEventRepository:  feature.majorEventRepository,
-		memberNews:            feature.memberNews,
-		commandBuilders:       feature.commandBuilders,
-		membersData:           stream.membersData,
-		memberRepository:      newCelebrationCalendarFinder(data, &core),
-		calendarImageRenderer: render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(core.calendarImageCacheDir), render.WithCalendarStrings(messaging.messageStrings)),
-		liveImageRenderer:     render.NewLiveCardRenderer(render.WithLiveStrings(messaging.messageStrings)),
-		profileImageRenderer:  render.NewProfileCardRenderer(render.WithProfileStrings(messaging.messageStrings)),
-		rankImageRenderer:     render.NewRankCardRenderer(render.WithRankStrings(messaging.messageStrings)),
-		workerPool:            support.workerPool,
-		stopCh:                make(chan struct{}),
-		doneCh:                make(chan struct{}),
-		selfSender:            stringutil.Normalize(core.botSelfUser),
+		botSelfUser:          core.botSelfUser,
+		irisBaseURL:          core.irisBaseURL,
+		notification:         core.notification,
+		logger:               core.logger,
+		irisClient:           messaging.client,
+		messageAdapter:       messaging.messageAdapter,
+		formatter:            messaging.formatter,
+		messageStrings:       messaging.messageStrings,
+		cache:                data.cache,
+		postgres:             data.postgres,
+		holodex:              holodexRuntime,
+		chzzk:                stream.chzzk,
+		twitch:               stream.twitch,
+		officialProfiles:     stream.profiles,
+		alarm:                stream.alarm,
+		matcher:              stream.matcher,
+		statsRepository:      stream.youTubeStatsRepository,
+		acl:                  support.acl,
+		majorEventRepository: feature.majorEventRepository,
+		memberNews:           feature.memberNews,
+		commandBuilders:      feature.commandBuilders,
+		membersData:          stream.membersData,
+		memberRepository:     newCelebrationCalendarFinder(data, &core),
+		workerPool:           support.workerPool,
+		stopCh:               make(chan struct{}),
+		doneCh:               make(chan struct{}),
+		selfSender:           stringutil.Normalize(core.botSelfUser),
 	}
+	bot.initImageRenderers(core.calendarImageCacheDir, messaging.messageStrings)
 
 	bot.transport = transport.NewCommandTransport(bot.irisClient, bot.formatter)
 	bot.ingress = ingress.NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender)
@@ -153,6 +150,13 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	bot.initializeCommands()
 
 	return bot, nil
+}
+
+func (b *Bot) initImageRenderers(calendarCacheDir string, strings *messagestrings.Store) {
+	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(calendarCacheDir), render.WithCalendarStrings(strings))
+	b.liveImageRenderer = render.NewLiveCardRenderer(render.WithLiveStrings(strings))
+	b.profileImageRenderer = render.NewProfileCardRenderer(render.WithProfileStrings(strings))
+	b.rankImageRenderer = render.NewRankCardRenderer(render.WithRankStrings(strings))
 }
 
 func newCelebrationCalendarFinder(data dataDependencies, core *coreDependencies) command.CelebrationCalendarFinder {

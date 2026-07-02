@@ -16,23 +16,23 @@ const (
 
 var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 
+type diskCachePageStatus int
+
+const (
+	diskCachePageOK diskCachePageStatus = iota
+	diskCachePageMissing
+	diskCachePageInvalid
+)
+
 func (r *CalendarCardRenderer) diskCachedImages(key calendarCacheKey) ([][]byte, bool) {
 	var pages [][]byte
 	for page := 1; page <= calendarMaxPages; page++ {
-		path := r.diskCachePagePath(key, page)
-		if path == "" {
+		data, status := r.readDiskCachePage(key, page)
+		if status == diskCachePageInvalid {
 			return nil, false
 		}
-		info, err := os.Stat(path)
-		if err != nil {
+		if status == diskCachePageMissing {
 			break
-		}
-		if info.Size() <= 0 || info.Size() > calendarDiskCacheMaxBytes {
-			return nil, false
-		}
-		data, err := readCalendarDiskCacheFile(path)
-		if err != nil || !isPNGData(data) {
-			return nil, false
 		}
 		pages = append(pages, data)
 	}
@@ -40,6 +40,25 @@ func (r *CalendarCardRenderer) diskCachedImages(key calendarCacheKey) ([][]byte,
 		return nil, false
 	}
 	return pages, true
+}
+
+func (r *CalendarCardRenderer) readDiskCachePage(key calendarCacheKey, page int) ([]byte, diskCachePageStatus) {
+	path := r.diskCachePagePath(key, page)
+	if path == "" {
+		return nil, diskCachePageInvalid
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, diskCachePageMissing
+	}
+	if info.Size() <= 0 || info.Size() > calendarDiskCacheMaxBytes {
+		return nil, diskCachePageInvalid
+	}
+	data, err := readCalendarDiskCacheFile(path)
+	if err != nil || !isPNGData(data) {
+		return nil, diskCachePageInvalid
+	}
+	return data, diskCachePageOK
 }
 
 // p1을 마지막에 쓴다(커밋 마커): 읽기는 p1부터 시작하므로, 중간에 중단된 쓰기는
@@ -50,16 +69,28 @@ func (r *CalendarCardRenderer) storeDiskCachedImages(key calendarCacheKey, pages
 	}
 	written := make([]string, 0, len(pages))
 	for i := len(pages) - 1; i >= 0; i-- {
-		path := r.diskCachePagePath(key, i+1)
-		if path == "" || !isPNGData(pages[i]) || !writeCalendarDiskCachePage(path, pages[i]) {
-			for _, w := range written {
-				removeCalendarDiskCacheFile(w)
-			}
+		path, ok := r.writeDiskCachePage(key, i+1, pages[i])
+		if !ok {
+			removeCalendarDiskCacheFiles(written)
 			return
 		}
 		written = append(written, path)
 	}
 	r.pruneDiskCacheMonth(key)
+}
+
+func (r *CalendarCardRenderer) writeDiskCachePage(key calendarCacheKey, page int, data []byte) (string, bool) {
+	path := r.diskCachePagePath(key, page)
+	if path == "" || !isPNGData(data) || !writeCalendarDiskCachePage(path, data) {
+		return "", false
+	}
+	return path, true
+}
+
+func removeCalendarDiskCacheFiles(paths []string) {
+	for _, path := range paths {
+		removeCalendarDiskCacheFile(path)
+	}
 }
 
 func writeCalendarDiskCachePage(path string, data []byte) bool {
