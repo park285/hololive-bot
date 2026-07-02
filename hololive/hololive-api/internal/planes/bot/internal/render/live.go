@@ -1,15 +1,11 @@
 package render
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"image"
-	"image/png"
-	"strings"
 
-	"golang.org/x/image/font"
-
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/cardkit"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
@@ -118,10 +114,8 @@ func encodeLivePage(m *liveMetrics, total int, entries []LiveCardEntry, footer s
 	if footer != "" {
 		height += int(40 * m.sf)
 	}
-	height = min(height, maxCanvasH)
 
-	img := image.NewRGBA(image.Rect(0, 0, canvasWidth, height))
-	fillRect(img, img.Bounds(), colWhite)
+	img := cardkit.NewCanvas(canvasWidth, min(height, maxCanvasH), colWhite)
 
 	drawLiveHeader(img, m, total)
 	y := m.headerH + separatorH + m.paddingY
@@ -130,82 +124,58 @@ func encodeLivePage(m *liveMetrics, total int, entries []LiveCardEntry, footer s
 		y += m.rowH
 	}
 	if footer != "" {
-		drawText(img, m.fonts.date, paddingX, y+int(24*m.sf), colSlate500, footer)
+		cardkit.DrawText(img, m.fonts.date, paddingX, y+int(24*m.sf), colSlate500, footer)
 	}
 
-	out := downscaleToOutputWidth(img)
-
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, out); err != nil {
-		return nil, fmt.Errorf("encode live png: %w", err)
-	}
-	return buf.Bytes(), nil
+	return cardkit.EncodePNG(img, calendarOutputWidth)
 }
 
 func drawLiveHeader(img *image.RGBA, m *liveMetrics, total int) {
-	drawText(img, m.fonts.title, paddingX, int(42*m.sf), colSlate800, m.liveHeaderText())
-	drawText(img, m.fonts.stat, paddingX, int(68*m.sf), colSlate500, m.liveSummaryText(total))
-	fillRect(img, image.Rect(paddingX, m.headerH, canvasWidth-paddingX, m.headerH+separatorH), colSlate200)
+	cardkit.DrawText(img, m.fonts.title, paddingX, int(42*m.sf), colSlate800, m.liveHeaderText())
+	cardkit.DrawText(img, m.fonts.stat, paddingX, int(68*m.sf), colSlate500, m.liveSummaryText(total))
+	cardkit.FillRect(img, image.Rect(paddingX, m.headerH, canvasWidth-paddingX, m.headerH+separatorH), colSlate200)
 }
 
 func drawLiveRow(img *image.RGBA, m *liveMetrics, x, y int, e LiveCardEntry, photos map[string]image.Image) {
-	drawLiveAvatar(img, m, x, y, e, photos)
+	cardkit.AvatarCircle(img, x+m.avatarSize/2, y+m.rowH/2, m.avatarSize/2, photos[e.Photo], e.Name, m.avatarStyle())
 
 	nameX := x + m.avatarSize + m.avatarGap
 	badgeLeft := canvasWidth - paddingX
 	if e.Chzzk {
-		badgeLeft = drawLiveBadge(img, m, y, m.liveChzzkBadge())
+		by := y + (m.rowH-m.badgeH)/2
+		badgeLeft = cardkit.BadgeRightAligned(img, canvasWidth-paddingX, by, m.liveChzzkBadge(), m.chzzkBadgeStyle())
 	}
 
-	name := clampToWidth(m.fonts.name, dropUncoveredRunes(m.fonts.name, e.Name), badgeLeft-nameX-m.avatarGap)
-	drawText(img, m.fonts.name, nameX, y+int(48*m.sf), colSlate800, name)
+	name := cardkit.ClampToWidth(m.fonts.name, cardkit.DropUncoveredRunes(m.fonts.name, e.Name), badgeLeft-nameX-m.avatarGap)
+	cardkit.DrawText(img, m.fonts.name, nameX, y+int(48*m.sf), colSlate800, name)
 
-	title := clampToWidth(m.fonts.date, dropUncoveredRunes(m.fonts.date, e.Title), canvasWidth-paddingX-nameX)
-	drawText(img, m.fonts.date, nameX, y+int(80*m.sf), colSlate500, title)
+	title := cardkit.ClampToWidth(m.fonts.date, cardkit.DropUncoveredRunes(m.fonts.date, e.Title), canvasWidth-paddingX-nameX)
+	cardkit.DrawText(img, m.fonts.date, nameX, y+int(80*m.sf), colSlate500, title)
 }
 
-func drawLiveAvatar(img *image.RGBA, m *liveMetrics, x, y int, e LiveCardEntry, photos map[string]image.Image) {
-	cx := x + m.avatarSize/2
-	cy := y + m.rowH/2
-	r := m.avatarSize / 2
-
-	fillCircle(img, cx, cy, r+int(m.sf)+1, colSlate200)
-
-	if e.Photo != "" {
-		if photo, ok := photos[e.Photo]; ok {
-			drawCircularImage(img, photo, cx, cy, r, colWhite)
-			return
-		}
-	}
-
-	fillCircle(img, cx, cy, r, colAmber600)
-	initial := firstRune(dropUncoveredRunes(m.fonts.avatar, e.Name))
-	if initial != "" {
-		iw := measureText(m.fonts.avatar, initial)
-		drawText(img, m.fonts.avatar, cx-iw/2, cy+int(12*m.sf), colWhite, initial)
+func (m *liveMetrics) avatarStyle() cardkit.AvatarStyle {
+	return cardkit.AvatarStyle{
+		Ring:        colSlate200,
+		RingWidth:   int(m.sf) + 1,
+		Accent:      colAmber600,
+		Background:  colWhite,
+		Initials:    m.fonts.avatar,
+		TextColor:   colWhite,
+		InitialDrop: int(12 * m.sf),
 	}
 }
 
-func drawLiveBadge(img *image.RGBA, m *liveMetrics, y int, text string) (badgeLeft int) {
-	bw := measureText(m.fonts.badge, text)
-	bx := canvasWidth - paddingX - bw - m.badgePadX*2
-	by := y + (m.rowH-m.badgeH)/2
-	fillRoundedRect(img, image.Rect(bx, by, bx+bw+m.badgePadX*2, by+m.badgeH), m.badgeRadius, colEmerald50)
-	drawText(img, m.fonts.badge, bx+m.badgePadX, by+m.badgeH-m.badgePadY-int(2*m.sf), colEmerald600, text)
-	return bx
-}
-
-// 스트림 제목은 임의 유니코드(이모지 등)를 포함할 수 있고, 임베드 폰트 밖의
-// rune은 두부(notdef 박스)로 그려진다 — 그리기 전에 커버되지 않는 rune을 떨군다.
-func dropUncoveredRunes(face font.Face, s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		if _, ok := face.GlyphAdvance(r); ok {
-			b.WriteRune(r)
-		}
+func (m *liveMetrics) chzzkBadgeStyle() cardkit.BadgeStyle {
+	return cardkit.BadgeStyle{
+		Face:         m.fonts.badge,
+		Background:   colEmerald50,
+		Text:         colEmerald600,
+		PadX:         m.badgePadX,
+		PadY:         m.badgePadY,
+		Height:       m.badgeH,
+		Radius:       m.badgeRadius,
+		BaselineLift: int(2 * m.sf),
 	}
-	return strings.TrimSpace(b.String())
 }
 
 func (m *liveMetrics) liveStr(key, fallback string) string {

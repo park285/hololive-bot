@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/assets/fonts"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/cardkit"
 )
 
 func TestLiveCardRenderer_RenderLiveImages_EmptyEntries(t *testing.T) {
@@ -110,7 +111,7 @@ func TestDropUncoveredRunes(t *testing.T) {
 		t.Fatalf("CaptionFaceSized() error = %v", err)
 	}
 
-	got := dropUncoveredRunes(face, "🎮페코라 東京 ライブ🔴")
+	got := cardkit.DropUncoveredRunes(face, "🎮페코라 東京 ライブ🔴")
 	if strings.ContainsRune(got, '🎮') || strings.ContainsRune(got, '🔴') {
 		t.Errorf("dropUncoveredRunes() = %q, want emoji removed", got)
 	}

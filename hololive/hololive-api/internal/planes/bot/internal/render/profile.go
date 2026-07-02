@@ -5,15 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"image"
-	"image/color"
-	"image/png"
 	"strings"
 	"sync"
 
-	"golang.org/x/image/font"
-
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/cardkit"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -205,22 +201,28 @@ func (r *ProfileCardRenderer) renderProfileImage(data ProfileCardData) ([]byte, 
 	m.fonts = f
 	m.strings = r.strings
 
-	height := profileCardHeight(&m, data)
-	img := image.NewRGBA(image.Rect(0, 0, canvasWidth, min(height, maxCanvasH)))
-	fillRect(img, img.Bounds(), colWhite)
+	img := cardkit.NewCanvas(canvasWidth, min(profileCardHeight(&m, data), maxCanvasH), colWhite)
 
 	y := drawProfileIdentity(img, &m, data, photos)
 	drawProfileRows(img, &m, data.Rows, y)
 	if data.Graduated {
-		drawProfileGraduatedBadge(img, &m)
+		cardkit.BadgeRightAligned(img, canvasWidth-paddingX, int(30*m.sf), m.profileGraduatedBadge(), m.graduatedBadgeStyle())
 	}
 
-	out := downscaleToOutputWidth(img)
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, out); err != nil {
-		return nil, fmt.Errorf("encode profile png: %w", err)
+	return cardkit.EncodePNG(img, calendarOutputWidth)
+}
+
+func (m *profileMetrics) graduatedBadgeStyle() cardkit.BadgeStyle {
+	return cardkit.BadgeStyle{
+		Face:         m.fonts.badge,
+		Background:   colAmber50,
+		Text:         colAmber600,
+		PadX:         m.badgePadX,
+		PadY:         m.badgePadY,
+		Height:       m.badgeH,
+		Radius:       m.badgeRadius,
+		BaselineLift: int(2 * m.sf),
 	}
-	return buf.Bytes(), nil
 }
 
 func profileCardHeight(m *profileMetrics, data ProfileCardData) int {
@@ -239,68 +241,50 @@ func profileCardHeight(m *profileMetrics, data ProfileCardData) int {
 func drawProfileIdentity(img *image.RGBA, m *profileMetrics, data ProfileCardData, photos map[string]image.Image) int {
 	cx := canvasWidth / 2
 	cy := int(30*m.sf) + m.avatarR
-	drawProfileAvatar(img, m, cx, cy, data, photos)
+	cardkit.AvatarCircle(img, cx, cy, m.avatarR, photos[data.Photo], data.DisplayName, m.profileAvatarStyle())
 
 	y := cy + m.avatarR + int(45*m.sf)
-	drawCenteredText(img, m.fonts.title, cx, y, colSlate800, dropUncoveredRunes(m.fonts.title, data.DisplayName))
+	cardkit.DrawCenteredText(img, m.fonts.title, cx, y, colSlate800, cardkit.DropUncoveredRunes(m.fonts.title, data.DisplayName))
 
 	if len(data.SubNames) > 0 {
 		y += int(30 * m.sf)
-		sub := dropUncoveredRunes(m.fonts.stat, strings.Join(data.SubNames, " · "))
-		drawCenteredText(img, m.fonts.stat, cx, y, colSlate500, clampToWidth(m.fonts.stat, sub, canvasWidth-paddingX*2))
+		sub := cardkit.DropUncoveredRunes(m.fonts.stat, strings.Join(data.SubNames, " · "))
+		cardkit.DrawCenteredText(img, m.fonts.stat, cx, y, colSlate500, cardkit.ClampToWidth(m.fonts.stat, sub, canvasWidth-paddingX*2))
 	}
 	if data.Catchphrase != "" {
 		y += int(36 * m.sf)
-		catch := dropUncoveredRunes(m.fonts.date, data.Catchphrase)
-		drawCenteredText(img, m.fonts.date, cx, y, colAmber600, clampToWidth(m.fonts.date, catch, canvasWidth-paddingX*2))
+		catch := cardkit.DropUncoveredRunes(m.fonts.date, data.Catchphrase)
+		cardkit.DrawCenteredText(img, m.fonts.date, cx, y, colAmber600, cardkit.ClampToWidth(m.fonts.date, catch, canvasWidth-paddingX*2))
 	}
 
 	y += int(26 * m.sf)
-	fillRect(img, image.Rect(paddingX, y-separatorH, canvasWidth-paddingX, y), colSlate200)
+	cardkit.FillRect(img, image.Rect(paddingX, y-separatorH, canvasWidth-paddingX, y), colSlate200)
 	return y
 }
 
-func drawProfileAvatar(img *image.RGBA, m *profileMetrics, cx, cy int, data ProfileCardData, photos map[string]image.Image) {
-	fillCircle(img, cx, cy, m.avatarR+int(m.sf)+1, colSlate200)
-	if data.Photo != "" {
-		if photo, ok := photos[data.Photo]; ok {
-			drawCircularImage(img, photo, cx, cy, m.avatarR, colWhite)
-			return
-		}
-	}
-	fillCircle(img, cx, cy, m.avatarR, colAmber600)
-	initial := firstRune(dropUncoveredRunes(m.fonts.title, data.DisplayName))
-	if initial != "" {
-		iw := measureText(m.fonts.title, initial)
-		drawText(img, m.fonts.title, cx-iw/2, cy+int(12*m.sf), colWhite, initial)
+func (m *profileMetrics) profileAvatarStyle() cardkit.AvatarStyle {
+	return cardkit.AvatarStyle{
+		Ring:        colSlate200,
+		RingWidth:   int(m.sf) + 1,
+		Accent:      colAmber600,
+		Background:  colWhite,
+		Initials:    m.fonts.title,
+		TextColor:   colWhite,
+		InitialDrop: int(12 * m.sf),
 	}
 }
 
 func drawProfileRows(img *image.RGBA, m *profileMetrics, rows []ProfileCardRow, y int) {
 	for _, row := range rows {
 		baseline := y + int(30*m.sf)
-		label := clampToWidth(m.fonts.date, dropUncoveredRunes(m.fonts.date, row.Label), m.labelCol-int(12*m.sf))
-		drawText(img, m.fonts.date, paddingX, baseline, colSlate500, label)
+		label := cardkit.ClampToWidth(m.fonts.date, cardkit.DropUncoveredRunes(m.fonts.date, row.Label), m.labelCol-int(12*m.sf))
+		cardkit.DrawText(img, m.fonts.date, paddingX, baseline, colSlate500, label)
 
 		valueX := paddingX + m.labelCol
-		value := clampToWidth(m.fonts.name, dropUncoveredRunes(m.fonts.name, row.Value), canvasWidth-paddingX-valueX)
-		drawText(img, m.fonts.name, valueX, baseline, colSlate800, value)
+		value := cardkit.ClampToWidth(m.fonts.name, cardkit.DropUncoveredRunes(m.fonts.name, row.Value), canvasWidth-paddingX-valueX)
+		cardkit.DrawText(img, m.fonts.name, valueX, baseline, colSlate800, value)
 		y += m.rowH
 	}
-}
-
-func drawProfileGraduatedBadge(img *image.RGBA, m *profileMetrics) {
-	text := m.profileGraduatedBadge()
-	bw := measureText(m.fonts.badge, text)
-	bx := canvasWidth - paddingX - bw - m.badgePadX*2
-	by := int(30 * m.sf)
-	fillRoundedRect(img, image.Rect(bx, by, bx+bw+m.badgePadX*2, by+m.badgeH), m.badgeRadius, colAmber50)
-	drawText(img, m.fonts.badge, bx+m.badgePadX, by+m.badgeH-m.badgePadY-int(2*m.sf), colAmber600, text)
-}
-
-func drawCenteredText(img *image.RGBA, face font.Face, cx, y int, col color.Color, text string) {
-	w := measureText(face, text)
-	drawText(img, face, cx-w/2, y, col, text)
 }
 
 func (m *profileMetrics) profileGraduatedBadge() string {
