@@ -38,8 +38,8 @@ import (
 // mockDeliveryRepository: deliveryRepository mock 구현
 type mockDeliveryRepository struct {
 	fetchAndLockFn  func(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error)
-	markSentFn      func(ctx context.Context, id int64) error
-	markFailedFn    func(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error
+	markSentFn      func(ctx context.Context, id int64, lockedAt time.Time) (bool, error)
+	markFailedFn    func(ctx context.Context, id int64, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 	countByStatusFn func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	cleanupFn       func(ctx context.Context, olderThan time.Duration) (int64, error)
 }
@@ -51,18 +51,18 @@ func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, batchSize int
 	return nil, nil
 }
 
-func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64) error {
+func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, lockedAt time.Time) (bool, error) {
 	if m.markSentFn != nil {
-		return m.markSentFn(ctx, id)
+		return m.markSentFn(ctx, id, lockedAt)
 	}
-	return nil
+	return true, nil
 }
 
-func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error {
+func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
 	if m.markFailedFn != nil {
-		return m.markFailedFn(ctx, id, maxRetries, backoff, errMsg)
+		return m.markFailedFn(ctx, id, lockedAt, maxRetries, backoff, errMsg)
 	}
-	return nil
+	return true, nil
 }
 
 func (m *mockDeliveryRepository) CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error) {
@@ -162,11 +162,11 @@ func TestProcessOnce_E2E(t *testing.T) {
 				{ID: 2, RoomID: "room-b", Payload: makePayload(t, "hello-b")},
 			}, nil
 		},
-		markSentFn: func(_ context.Context, id int64) error {
+		markSentFn: func(_ context.Context, id int64, _ time.Time) (bool, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			sentIDs = append(sentIDs, id)
-			return nil
+			return true, nil
 		},
 		countByStatusFn: func(_ context.Context, _ domain.DeliveryOutboxStatus) (int64, error) {
 			return 0, nil
@@ -206,10 +206,10 @@ func TestProcessOnce_UnmarshalFailure_MarkFailed(t *testing.T) {
 				{ID: 10, RoomID: "room-x", Payload: "invalid-json{{{"},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ int, _ time.Duration, errMsg string) error {
+		markFailedFn: func(_ context.Context, id int64, _ time.Time, _ int, _ time.Duration, errMsg string) (bool, error) {
 			failedID = id
 			failedMsg = errMsg
-			return nil
+			return true, nil
 		},
 		countByStatusFn: func(_ context.Context, _ domain.DeliveryOutboxStatus) (int64, error) {
 			return 0, nil
@@ -241,9 +241,9 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 				{ID: 20, RoomID: "room-y", Payload: makePayload(t, "hello")},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ int, _ time.Duration, _ string) error {
+		markFailedFn: func(_ context.Context, id int64, _ time.Time, _ int, _ time.Duration, _ string) (bool, error) {
 			failedID = id
-			return nil
+			return true, nil
 		},
 		countByStatusFn: func(_ context.Context, _ domain.DeliveryOutboxStatus) (int64, error) {
 			return 0, nil
@@ -412,9 +412,9 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 				{ID: 4, RoomID: "room-d", Payload: makePayload(t, "hello-d")},
 			}, nil
 		},
-		markSentFn: func(_ context.Context, _ int64) error {
+		markSentFn: func(_ context.Context, _ int64, _ time.Time) (bool, error) {
 			sentCount.Add(1)
-			return nil
+			return true, nil
 		},
 		countByStatusFn: func(_ context.Context, _ domain.DeliveryOutboxStatus) (int64, error) {
 			return 0, nil

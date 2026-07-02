@@ -143,22 +143,25 @@ func (r *OutboxRepository) FetchAndLock(ctx context.Context, batchSize int, lock
 	return items, nil
 }
 
-func (r *OutboxRepository) MarkSent(ctx context.Context, id int64) error {
+func (r *OutboxRepository) MarkSent(ctx context.Context, id int64, lockedAt time.Time) (bool, error) {
 	if err := r.ensurePool(); err != nil {
-		return err
+		return false, err
 	}
-	_, err := r.pool.Exec(ctx,
+	tag, err := r.pool.Exec(ctx,
 		`UPDATE notification_delivery_outbox
 		 SET status = $1, sent_at = $2, locked_at = NULL, error = NULL
-		 WHERE id = $3 AND status = $4`,
-		domain.DeliveryStatusSent, time.Now(), id, domain.DeliveryStatusPending,
+		 WHERE id = $3 AND status = $4 AND locked_at = $5`,
+		domain.DeliveryStatusSent, time.Now(), id, domain.DeliveryStatusPending, lockedAt,
 	)
-	return err
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
-func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error {
+func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
 	if err := r.ensurePool(); err != nil {
-		return err
+		return false, err
 	}
 	now := time.Now()
 	query := `UPDATE notification_delivery_outbox
@@ -167,10 +170,13 @@ func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, maxRetries 
                 status = CASE WHEN attempt_count + 1 >= $2 THEN 'FAILED' ELSE 'PENDING' END,
                 next_attempt_at = CASE WHEN attempt_count + 1 >= $3 THEN next_attempt_at ELSE $4 END,
                 locked_at = NULL
-            WHERE id = $5 AND status = $6`
+            WHERE id = $5 AND status = $6 AND locked_at = $7`
 
-	_, err := r.pool.Exec(ctx, query, errMsg, maxRetries, maxRetries, now.Add(backoff), id, domain.DeliveryStatusPending)
-	return err
+	tag, err := r.pool.Exec(ctx, query, errMsg, maxRetries, maxRetries, now.Add(backoff), id, domain.DeliveryStatusPending, lockedAt)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 func (r *OutboxRepository) MarkSentBatch(ctx context.Context, ids []int64) error {

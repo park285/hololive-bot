@@ -45,8 +45,8 @@ type ClientRequestMessageSender interface {
 
 type deliveryRepository interface {
 	FetchAndLock(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error)
-	MarkSent(ctx context.Context, id int64) error
-	MarkFailed(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error
+	MarkSent(ctx context.Context, id int64, lockedAt time.Time) (bool, error)
+	MarkFailed(ctx context.Context, id int64, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 	CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	Cleanup(ctx context.Context, olderThan time.Duration) (int64, error)
 }
@@ -252,7 +252,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		d.logger.Error("Failed to unmarshal outbox payload",
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))
-		d.markItemFailed(ctx, item.ID, "payload unmarshal: "+err.Error())
+		d.markItemFailed(ctx, item.ID, item.LockedAt.Time, "payload unmarshal: "+err.Error())
 		return
 	}
 
@@ -261,20 +261,32 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 			slog.Int64("id", item.ID),
 			slog.String("room_id", item.RoomID),
 			slog.String("error", err.Error()))
-		d.markItemFailed(ctx, item.ID, err.Error())
+		d.markItemFailed(ctx, item.ID, item.LockedAt.Time, err.Error())
 		return
 	}
 
-	if err := d.repository.MarkSent(ctx, item.ID); err != nil {
-		d.logger.Error("Failed to mark outbox item as sent",
-			slog.Int64("id", item.ID),
-			slog.String("error", err.Error()))
+	d.markItemSent(ctx, item.ID, item.LockedAt.Time)
+}
+
+func (d *Dispatcher) markItemSent(ctx context.Context, id int64, lockedAt time.Time) {
+	fenced, err := d.repository.MarkSent(ctx, id, lockedAt)
+	if err != nil {
+		d.logger.Error("Failed to mark outbox item as sent", slog.Int64("id", id), slog.String("error", err.Error()))
+		return
+	}
+	if !fenced {
+		d.logger.Warn("Outbox item re-claimed before mark sent; fence skipped transition", slog.Int64("id", id))
 	}
 }
 
-func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, reason string) {
-	if err := d.repository.MarkFailed(ctx, id, d.config.MaxRetries, d.config.RetryBackoff, reason); err != nil {
+func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, lockedAt time.Time, reason string) {
+	fenced, err := d.repository.MarkFailed(ctx, id, lockedAt, d.config.MaxRetries, d.config.RetryBackoff, reason)
+	if err != nil {
 		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", id), slog.String("error", err.Error()))
+		return
+	}
+	if !fenced {
+		d.logger.Warn("Outbox item re-claimed before mark failed; fence skipped transition", slog.Int64("id", id))
 	}
 }
 
