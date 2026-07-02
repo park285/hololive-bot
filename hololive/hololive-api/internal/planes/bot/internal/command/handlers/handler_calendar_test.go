@@ -50,12 +50,12 @@ func (s *calendarRepoStub) FindMembersWithCelebrationsInMonth(_ context.Context,
 }
 
 type calendarImageRendererStub struct {
-	data []byte
-	err  error
+	pages [][]byte
+	err   error
 }
 
-func (s *calendarImageRendererStub) RenderCalendarImage(_, _ int, _ []domain.CalendarEntry) ([]byte, error) {
-	return s.data, s.err
+func (s *calendarImageRendererStub) RenderCalendarImages(_, _ int, _ []domain.CalendarEntry) ([][]byte, error) {
+	return s.pages, s.err
 }
 
 func TestCalendarCommand_Name(t *testing.T) {
@@ -121,7 +121,7 @@ func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
 			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "페코라"}, Day: 15},
 		},
 	}
-	renderer := &calendarImageRendererStub{data: []byte("png-data")}
+	renderer := &calendarImageRendererStub{pages: [][]byte{[]byte("png-data")}}
 
 	cmd := NewCalendarCommand(deps, repo, renderer)
 	cmdCtx := &domain.CommandContext{Room: "test-room"}
@@ -133,6 +133,42 @@ func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
 
 	if sentImage == nil {
 		t.Error("expected image to be sent")
+	}
+}
+
+func TestCalendarCommand_Execute_MultiPageUsesSendMultipleImages(t *testing.T) {
+	var sentImages [][]byte
+	deps := &Dependencies{
+		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
+		SendMessage: func(_ context.Context, _, _ string) error { return nil },
+		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+			t.Error("SendImage should not be called for multi-page renders")
+			return nil
+		},
+		SendMultipleImages: func(_ context.Context, _ string, images [][]byte, _ ...iris.SendOption) error {
+			sentImages = images
+			return nil
+		},
+		SendError: func(_ context.Context, _, _ string) error { return nil },
+		Logger:    slog.Default(),
+	}
+
+	repo := &calendarRepoStub{
+		entries: []domain.CalendarEntry{
+			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "페코라"}, Day: 15},
+		},
+	}
+	renderer := &calendarImageRendererStub{pages: [][]byte{[]byte("p1"), []byte("p2"), []byte("p3")}}
+
+	cmd := NewCalendarCommand(deps, repo, renderer)
+
+	err := cmd.Execute(context.Background(), &domain.CommandContext{Room: "test-room"}, map[string]any{"month": 6})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if len(sentImages) != 3 {
+		t.Fatalf("SendMultipleImages pages = %d, want 3", len(sentImages))
 	}
 }
 
@@ -324,7 +360,7 @@ func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5},
 		},
 	}
-	renderer := &calendarImageRendererStub{data: []byte("png-data")}
+	renderer := &calendarImageRendererStub{pages: [][]byte{[]byte("png-data")}}
 
 	cmd := NewCalendarCommand(deps, repo, renderer)
 	cmdCtx := &domain.CommandContext{Room: "test-room"}

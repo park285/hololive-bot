@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,12 +22,15 @@ func TestCalendarCardRenderer_RenderCalendarImage_EmptyEntries(t *testing.T) {
 	t.Parallel()
 
 	r := NewCalendarCardRenderer()
-	data, err := r.RenderCalendarImage(6, 2026, nil)
+	pages, err := r.RenderCalendarImages(6, 2026, nil)
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImages() error = %v", err)
 	}
 
-	assertValidPNG(t, data)
+	if len(pages) != 1 {
+		t.Fatalf("len(pages) = %d, want 1", len(pages))
+	}
+	assertValidPNG(t, pages[0])
 }
 
 func TestCalendarCardRenderer_RenderCalendarImage_WithEntries(t *testing.T) {
@@ -39,14 +43,17 @@ func TestCalendarCardRenderer_RenderCalendarImage_WithEntries(t *testing.T) {
 		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{NameKo: "스이세이"}, Day: 22},
 	}
 
-	data, err := r.RenderCalendarImage(6, 2026, entries)
+	pages, err := r.RenderCalendarImages(6, 2026, entries)
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImages() error = %v", err)
 	}
 
-	assertValidPNG(t, data)
+	if len(pages) != 1 {
+		t.Fatalf("len(pages) = %d, want 1", len(pages))
+	}
+	assertValidPNG(t, pages[0])
 
-	img, decErr := png.Decode(bytes.NewReader(data))
+	img, decErr := png.Decode(bytes.NewReader(pages[0]))
 	if decErr != nil {
 		t.Fatalf("png.Decode() error = %v", decErr)
 	}
@@ -55,7 +62,7 @@ func TestCalendarCardRenderer_RenderCalendarImage_WithEntries(t *testing.T) {
 	if bounds.Dx() != calendarOutputWidth {
 		t.Errorf("width = %d, want %d", bounds.Dx(), calendarOutputWidth)
 	}
-	outputHeaderH := newCalendarMetrics(1).headerH * calendarOutputWidth / canvasWidth
+	outputHeaderH := newCalendarMetrics().headerH * calendarOutputWidth / canvasWidth
 	if bounds.Dy() <= outputHeaderH {
 		t.Error("height should be larger than header for entries")
 	}
@@ -65,14 +72,14 @@ func TestCalendarCardRenderer_RenderCalendarImage_UsesTransportFriendlyCanvas(t 
 	t.Parallel()
 
 	r := NewCalendarCardRenderer()
-	data, err := r.RenderCalendarImage(6, 2026, []domain.CalendarEntry{
+	pages, err := r.RenderCalendarImages(6, 2026, []domain.CalendarEntry{
 		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "페코라"}, Day: 15},
 	})
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImages() error = %v", err)
 	}
 
-	img, decErr := png.Decode(bytes.NewReader(data))
+	img, decErr := png.Decode(bytes.NewReader(pages[0]))
 	if decErr != nil {
 		t.Fatalf("png.Decode() error = %v", decErr)
 	}
@@ -89,7 +96,7 @@ func TestDrawCircularImageAvoidsLegacySoftBilinearDownsample(t *testing.T) {
 	t.Parallel()
 
 	src := detailedAvatarSource()
-	r := newCalendarMetrics(1).avatarSize / 2
+	r := newCalendarMetrics().avatarSize / 2
 	size := r*2 + 8
 	got := image.NewRGBA(image.Rect(0, 0, size, size))
 	legacy := image.NewRGBA(image.Rect(0, 0, size, size))
@@ -120,18 +127,18 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesMonthlyCache(t *testing.
 		},
 	}
 
-	first, err := r.RenderCalendarImage(6, 2026, entries)
+	first, err := r.RenderCalendarImages(6, 2026, entries)
 	if err != nil {
-		t.Fatalf("first RenderCalendarImage() error = %v", err)
+		t.Fatalf("first RenderCalendarImages() error = %v", err)
 	}
-	first[0] = 0
+	first[0][0] = 0
 
-	second, err := r.RenderCalendarImage(6, 2026, entries)
+	second, err := r.RenderCalendarImages(6, 2026, entries)
 	if err != nil {
-		t.Fatalf("second RenderCalendarImage() error = %v", err)
+		t.Fatalf("second RenderCalendarImages() error = %v", err)
 	}
 
-	assertValidPNG(t, second)
+	assertValidPNG(t, second[0])
 	if got, want := requests.Load(), int32(1); got != want {
 		t.Fatalf("photo requests = %d, want %d", got, want)
 	}
@@ -152,18 +159,18 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers
 	}
 
 	firstRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
-	first, err := firstRenderer.RenderCalendarImage(6, 2026, entries)
+	first, err := firstRenderer.RenderCalendarImages(6, 2026, entries)
 	if err != nil {
-		t.Fatalf("first RenderCalendarImage() error = %v", err)
+		t.Fatalf("first RenderCalendarImages() error = %v", err)
 	}
-	assertValidPNG(t, first)
+	assertValidPNG(t, first[0])
 
 	secondRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
-	second, err := secondRenderer.RenderCalendarImage(6, 2026, entries)
+	second, err := secondRenderer.RenderCalendarImages(6, 2026, entries)
 	if err != nil {
-		t.Fatalf("second RenderCalendarImage() error = %v", err)
+		t.Fatalf("second RenderCalendarImages() error = %v", err)
 	}
-	assertValidPNG(t, second)
+	assertValidPNG(t, second[0])
 
 	if got, want := requests.Load(), int32(1); got != want {
 		t.Fatalf("photo requests = %d, want %d", got, want)
@@ -179,18 +186,34 @@ func TestStoreDiskCachedImage_PrunesStaleMonthHashes(t *testing.T) {
 	fresh := calendarCacheKey{year: 2026, month: 6, entriesHash: "new"}
 	otherMonth := calendarCacheKey{year: 2026, month: 7, entriesHash: "keep"}
 
-	r.storeDiskCachedImage(old, pngBytes)
-	r.storeDiskCachedImage(otherMonth, pngBytes)
-	r.storeDiskCachedImage(fresh, pngBytes)
+	r.storeDiskCachedImages(old, [][]byte{pngBytes, pngBytes})
+	r.storeDiskCachedImages(otherMonth, [][]byte{pngBytes})
+	r.storeDiskCachedImages(fresh, [][]byte{pngBytes, pngBytes})
 
-	if _, ok := r.diskCachedImage(old); ok {
+	if _, ok := r.diskCachedImages(old); ok {
 		t.Fatal("stale same-month hash should be pruned")
 	}
-	if _, ok := r.diskCachedImage(fresh); !ok {
-		t.Fatal("latest same-month hash should remain")
+	if pages, ok := r.diskCachedImages(fresh); !ok || len(pages) != 2 {
+		t.Fatalf("latest same-month hash should remain with 2 pages, got ok=%v len=%d", ok, len(pages))
 	}
-	if _, ok := r.diskCachedImage(otherMonth); !ok {
+	if _, ok := r.diskCachedImages(otherMonth); !ok {
 		t.Fatal("other-month entry must not be pruned")
+	}
+}
+
+func TestStoreDiskCachedImages_PartialWriteIsFullMiss(t *testing.T) {
+	dir := t.TempDir()
+	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+	pngBytes := tinyPNG(t)
+
+	key := calendarCacheKey{year: 2026, month: 6, entriesHash: "abc"}
+	r.storeDiskCachedImages(key, [][]byte{pngBytes, pngBytes})
+
+	if err := os.Remove(r.diskCachePagePath(key, 1)); err != nil {
+		t.Fatalf("remove p1: %v", err)
+	}
+	if _, ok := r.diskCachedImages(key); ok {
+		t.Fatal("missing p1 (commit marker) must invalidate the whole page set")
 	}
 }
 
@@ -217,12 +240,12 @@ func TestCalendarCardRenderer_RenderCalendarImage_CoalescesConcurrentMonthlyCach
 		go func() {
 			defer wg.Done()
 			<-start
-			data, err := r.RenderCalendarImage(6, 2026, entries)
+			pages, err := r.RenderCalendarImages(6, 2026, entries)
 			if err != nil {
 				errs <- err
 				return
 			}
-			if !bytes.HasPrefix(data, []byte{0x89, 'P', 'N', 'G'}) {
+			if len(pages) == 0 || !bytes.HasPrefix(pages[0], []byte{0x89, 'P', 'N', 'G'}) {
 				errs <- errors.New("rendered data is not a valid PNG")
 			}
 		}()
@@ -262,11 +285,11 @@ func TestCalendarCardRenderer_RenderCalendarImage_RefreshesCacheWhenEntriesChang
 		},
 	}
 
-	if _, err := r.RenderCalendarImage(6, 2026, entries); err != nil {
-		t.Fatalf("first RenderCalendarImage() error = %v", err)
+	if _, err := r.RenderCalendarImages(6, 2026, entries); err != nil {
+		t.Fatalf("first RenderCalendarImages() error = %v", err)
 	}
-	if _, err := r.RenderCalendarImage(6, 2026, changedEntries); err != nil {
-		t.Fatalf("changed RenderCalendarImage() error = %v", err)
+	if _, err := r.RenderCalendarImages(6, 2026, changedEntries); err != nil {
+		t.Fatalf("changed RenderCalendarImages() error = %v", err)
 	}
 
 	if got, want := requests.Load(), int32(2); got != want {
@@ -369,15 +392,15 @@ func TestCalendarCardRenderer_RenderCalendarImage_NilMember(t *testing.T) {
 		{Kind: domain.CelebrationKindBirthday, Member: nil, Day: 1},
 	}
 
-	data, err := r.RenderCalendarImage(1, 2026, entries)
+	pages, err := r.RenderCalendarImages(1, 2026, entries)
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImages() error = %v", err)
 	}
 
-	assertValidPNG(t, data)
+	assertValidPNG(t, pages[0])
 }
 
-func TestCalendarCardRenderer_CanvasHeightCapped(t *testing.T) {
+func TestCalendarCardRenderer_PaginatesAndCapsPageCount(t *testing.T) {
 	t.Parallel()
 
 	r := NewCalendarCardRenderer()
@@ -386,22 +409,122 @@ func TestCalendarCardRenderer_CanvasHeightCapped(t *testing.T) {
 		entries[i] = domain.CalendarEntry{
 			Kind:   domain.CelebrationKindBirthday,
 			Member: &domain.Member{Name: "Test"},
-			Day:    (i % 28) + 1,
+			Day:    (i / 8) + 1,
 		}
 	}
 
-	data, err := r.RenderCalendarImage(6, 2026, entries)
+	pages, err := r.RenderCalendarImages(6, 2026, entries)
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImages() error = %v", err)
 	}
 
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		t.Fatalf("Decode() error = %v", err)
+	if len(pages) != calendarMaxPages {
+		t.Fatalf("len(pages) = %d, want cap %d", len(pages), calendarMaxPages)
 	}
-	if img.Bounds().Dy() > maxCanvasH {
-		t.Errorf("canvas height %d exceeds max %d", img.Bounds().Dy(), maxCanvasH)
+	for i, page := range pages {
+		img, decErr := png.Decode(bytes.NewReader(page))
+		if decErr != nil {
+			t.Fatalf("page %d Decode() error = %v", i+1, decErr)
+		}
+		if img.Bounds().Dx() != calendarOutputWidth {
+			t.Errorf("page %d width = %d, want %d", i+1, img.Bounds().Dx(), calendarOutputWidth)
+		}
+		if img.Bounds().Dy() > maxCanvasH {
+			t.Errorf("page %d height %d exceeds max %d", i+1, img.Bounds().Dy(), maxCanvasH)
+		}
 	}
+}
+
+func TestPaginateDayGroups(t *testing.T) {
+	t.Parallel()
+
+	m := newCalendarMetrics()
+
+	t.Run("empty month yields single empty page", func(t *testing.T) {
+		t.Parallel()
+		pages, omitted := paginateDayGroups(&m, nil)
+		if len(pages) != 1 || len(pages[0]) != 0 || omitted != 0 {
+			t.Fatalf("pages = %d, first len = %d, omitted = %d; want 1 empty page", len(pages), len(pages[0]), omitted)
+		}
+	})
+
+	t.Run("splits only at day boundaries within budget", func(t *testing.T) {
+		t.Parallel()
+		groups := make([]dayGroup, 12)
+		for i := range groups {
+			groups[i] = dayGroup{day: i + 1, entries: []domain.CalendarEntry{{Day: i + 1}}}
+		}
+		pages, omitted := paginateDayGroups(&m, groups)
+		if omitted != 0 {
+			t.Fatalf("omitted = %d, want 0", omitted)
+		}
+		if len(pages) < 2 {
+			t.Fatalf("len(pages) = %d, want >= 2 for 12 single-entry groups", len(pages))
+		}
+		var total, prevDay int
+		for _, page := range pages {
+			h := m.headerH + separatorH + m.paddingY
+			for _, g := range page {
+				if g.day <= prevDay {
+					t.Fatalf("day order broken: %d after %d", g.day, prevDay)
+				}
+				prevDay = g.day
+				total += len(g.entries)
+				h += m.dateHeaderH + len(g.entries)*m.entryRowH + m.dateSectGap
+			}
+			if len(page) > 1 && h+m.paddingY > calendarPageInnerH {
+				t.Fatalf("multi-group page height %d exceeds budget %d", h, calendarPageInnerH)
+			}
+		}
+		if total != 12 {
+			t.Fatalf("total entries across pages = %d, want 12", total)
+		}
+	})
+
+	t.Run("single oversized group gets its own page", func(t *testing.T) {
+		t.Parallel()
+		big := dayGroup{day: 1, entries: make([]domain.CalendarEntry, 20)}
+		small := dayGroup{day: 2, entries: []domain.CalendarEntry{{Day: 2}}}
+		pages, omitted := paginateDayGroups(&m, []dayGroup{big, small})
+		if omitted != 0 {
+			t.Fatalf("omitted = %d, want 0", omitted)
+		}
+		if len(pages) != 2 || len(pages[0]) != 1 || len(pages[1]) != 1 {
+			t.Fatalf("pages layout = %v, want oversized group isolated", pageShape(pages))
+		}
+	})
+
+	t.Run("caps pages and reports omitted entries", func(t *testing.T) {
+		t.Parallel()
+		groups := make([]dayGroup, 28)
+		for i := range groups {
+			groups[i] = dayGroup{day: i + 1, entries: make([]domain.CalendarEntry, 8)}
+		}
+		pages, omitted := paginateDayGroups(&m, groups)
+		if len(pages) != calendarMaxPages {
+			t.Fatalf("len(pages) = %d, want %d", len(pages), calendarMaxPages)
+		}
+		rendered := 0
+		for _, page := range pages {
+			for _, g := range page {
+				rendered += len(g.entries)
+			}
+		}
+		if rendered+omitted != 28*8 {
+			t.Fatalf("rendered %d + omitted %d != total %d", rendered, omitted, 28*8)
+		}
+		if omitted == 0 {
+			t.Fatal("omitted = 0, want > 0 for capped pagination")
+		}
+	})
+}
+
+func pageShape(pages [][]dayGroup) []int {
+	shape := make([]int, len(pages))
+	for i, page := range pages {
+		shape[i] = len(page)
+	}
+	return shape
 }
 
 func TestGroupEntriesByDay(t *testing.T) {
@@ -440,7 +563,7 @@ func TestEntryDisplayName(t *testing.T) {
 		{"english name fallback", &domain.Member{Name: "Pekora"}, "Pekora"},
 	}
 
-	m := newCalendarMetrics(1)
+	m := newCalendarMetrics()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

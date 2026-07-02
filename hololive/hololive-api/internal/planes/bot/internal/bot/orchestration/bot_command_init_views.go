@@ -50,6 +50,7 @@ type commandInitView struct {
 	formatter             *adapter.ResponseFormatter
 	sendMessage           func(ctx context.Context, room, message string) error
 	sendImage             func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
+	sendMultipleImages    func(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error
 	sendError             func(ctx context.Context, room, message string) error
 	logger                *slog.Logger
 	majorEventRepository  command.MajorEventRepository
@@ -76,6 +77,7 @@ func (b *Bot) commandInitView() commandInitView {
 		formatter:             b.formatter,
 		sendMessage:           b.sendMessage,
 		sendImage:             b.sendImage,
+		sendMultipleImages:    b.sendMultipleImages,
 		sendError:             b.sendError,
 		logger:                b.logger,
 		majorEventRepository:  b.majorEventRepository,
@@ -87,20 +89,21 @@ func (b *Bot) commandInitView() commandInitView {
 
 func (v *commandInitView) toCommandDependencies(registry *command.Registry) *command.Dependencies {
 	deps := &command.Dependencies{
-		Holodex:          v.holodex,
-		Chzzk:            v.chzzk,
-		Cache:            v.cache,
-		Alarm:            v.alarm,
-		Matcher:          v.matcher,
-		OfficialProfiles: v.officialProfiles,
-		StatsRepository:  v.statsRepository,
-		MemberNews:       v.memberNews,
-		MembersData:      v.membersData,
-		Formatter:        v.formatter,
-		SendMessage:      v.sendMessage,
-		SendImage:        v.sendImage,
-		SendError:        v.sendError,
-		Logger:           v.logger,
+		Holodex:            v.holodex,
+		Chzzk:              v.chzzk,
+		Cache:              v.cache,
+		Alarm:              v.alarm,
+		Matcher:            v.matcher,
+		OfficialProfiles:   v.officialProfiles,
+		StatsRepository:    v.statsRepository,
+		MemberNews:         v.memberNews,
+		MembersData:        v.membersData,
+		Formatter:          v.formatter,
+		SendMessage:        v.sendMessage,
+		SendImage:          v.sendImage,
+		SendMultipleImages: v.sendMultipleImages,
+		SendError:          v.sendError,
+		Logger:             v.logger,
 	}
 
 	deps.Dispatcher = command.NewSequentialDispatcher(registry, orchcmd.NormalizeCommandKey)

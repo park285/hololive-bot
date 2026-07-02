@@ -20,18 +20,18 @@ const (
 	maxCanvasPixels = 48_000_000
 	// 최종 출력 크기(카카오 인라인 표시 근사). 내부는 canvasWidth(고해상도)로 그린 뒤
 	// calendarOutputWidth로 다운스케일해 전송한다 = SSAA + 카카오 재압축 손실 최소화.
-	// 항목이 많으면 compact<1로 비례 축소해 출력이 1024x1536 비율 안에 들어오게 한다.
+	// 항목이 많으면 축소 대신 calendarPageInnerH 예산으로 페이지를 나눈다.
 	calendarOutputWidth  = 1024
 	calendarOutputHeight = 1536
-	maxCanvasH           = min(4000*scaleFactor, maxCanvasPixels/canvasWidth)
-	// 가로 고정 치수(compact 영향 없음)
-	paddingX    = 28 * scaleFactor
-	entryIndent = 20 * scaleFactor
-	separatorH  = 1 * scaleFactor
+	calendarPageInnerH   = canvasWidth * calendarOutputHeight / calendarOutputWidth
+	// iris SendMultipleImages 상한
+	calendarMaxPages = 8
+	maxCanvasH       = min(4000*scaleFactor, maxCanvasPixels/canvasWidth)
+	paddingX         = 28 * scaleFactor
+	entryIndent      = 20 * scaleFactor
+	separatorH       = 1 * scaleFactor
 )
 
-// calendarMetrics는 compact 비율이 반영된 수직 밀도·아바타·배지·폰트 치수다.
-// 자연 높이가 1024x1536 비율을 넘으면 compact<1로 전체를 비례 축소한다.
 type calendarMetrics struct {
 	sf                                                     float64
 	paddingY, headerH, dateSectGap, dateHeaderH, entryRowH int
@@ -41,8 +41,8 @@ type calendarMetrics struct {
 	strings                                                *messagestrings.Store
 }
 
-func newCalendarMetrics(compact float64) calendarMetrics {
-	sf := float64(scaleFactor) * compact
+func newCalendarMetrics() calendarMetrics {
+	sf := float64(scaleFactor)
 	return calendarMetrics{
 		sf:          sf,
 		paddingY:    int(20 * sf),
