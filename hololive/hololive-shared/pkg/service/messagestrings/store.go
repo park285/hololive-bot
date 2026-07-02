@@ -38,17 +38,18 @@ import (
 const FallbackSentinel = "요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
 
 const (
-	NamespaceOrg       = "org"
-	NamespaceAlarmType = "alarmtype"
-	NamespaceNewsCat   = "newscat"
-	NamespaceSocial    = "social"
-	NamespaceMisc      = "misc"
-	NamespaceError     = "error"
-	NamespaceNotify    = "notify"
-	NamespaceCalendar  = "calendar"
-	NamespaceLiveCard  = "livecard"
-	NamespaceTimeFmt   = "timefmt"
-	NamespaceKaring    = "karing"
+	NamespaceOrg         = "org"
+	NamespaceAlarmType   = "alarmtype"
+	NamespaceNewsCat     = "newscat"
+	NamespaceSocial      = "social"
+	NamespaceMisc        = "misc"
+	NamespaceError       = "error"
+	NamespaceNotify      = "notify"
+	NamespaceCalendar    = "calendar"
+	NamespaceLiveCard    = "livecard"
+	NamespaceProfileCard = "profilecard"
+	NamespaceTimeFmt     = "timefmt"
+	NamespaceKaring      = "karing"
 )
 
 const (

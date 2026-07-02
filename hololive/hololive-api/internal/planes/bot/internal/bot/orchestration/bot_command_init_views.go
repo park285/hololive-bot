@@ -57,6 +57,7 @@ type commandInitView struct {
 	memberRepository      command.CelebrationCalendarFinder
 	calendarImageRenderer command.CalendarImageRenderer
 	liveImageRenderer     command.LiveImageRenderer
+	profileImageRenderer  command.ProfileImageRenderer
 	commandBuilders       []orchcmd.CommandBuilder
 }
 
@@ -85,6 +86,7 @@ func (b *Bot) commandInitView() commandInitView {
 		memberRepository:      b.memberRepository,
 		calendarImageRenderer: b.calendarImageRenderer,
 		liveImageRenderer:     b.liveImageRenderer,
+		profileImageRenderer:  b.profileImageRenderer,
 		commandBuilders:       orchcmd.CloneCommandBuilders(b.commandBuilders),
 	}
 }
@@ -120,7 +122,7 @@ func (v *commandInitView) buildCommands(deps *command.Dependencies) []command.Co
 		command.NewUpcomingCommand(deps),
 		command.NewScheduleCommand(deps),
 		command.NewAlarmCommand(deps),
-		command.NewMemberInfoCommand(deps),
+		command.NewMemberInfoCommand(deps, v.profileImageRenderer),
 		command.NewSubscriberCommand(deps),
 		command.NewStatsCommand(deps),
 	}

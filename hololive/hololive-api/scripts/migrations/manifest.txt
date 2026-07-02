@@ -86,3 +86,4 @@
 086 090_seed_timefmt_karing_strings.sql
 087 091_seed_calendar_overflow_string.sql
 088 092_seed_livecard_strings.sql
+089 093_seed_profilecard_strings.sql

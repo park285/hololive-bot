@@ -77,6 +77,10 @@ type LiveImageRenderer interface {
 	RenderLiveImages(entries []render.LiveCardEntry) ([][]byte, error)
 }
 
+type ProfileImageRenderer interface {
+	RenderProfileImage(data render.ProfileCardData) ([]byte, error)
+}
+
 type Dependencies struct {
 	Holodex            domain.StreamProvider
 	Chzzk              *chzzk.Client
