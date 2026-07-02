@@ -286,7 +286,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 			return nil
 		},
 		Logger: newCommandTestLogger(),
-	})
+	}, nil)
 
 	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"member": "Aqua",
@@ -326,7 +326,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 			return nil
 		},
 		Logger: newCommandTestLogger(),
-	})
+	}, nil)
 
 	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: "room-1"}, map[string]any{})
 	require.NoError(t, err)

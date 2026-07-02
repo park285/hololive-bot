@@ -790,9 +790,9 @@ func TestRenderAlarmDispatchNotificationGroupMatchesLegacyValkeyRenderer(t *test
 	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, group)
 
 	require.NoError(t, err)
-	assert.Equal(t, "⏰ 방송 1분 전 알림\n\n"+
-		"⏰ Member1 방송 3분 전\n📺 Title1\n🔗 https://youtube.com/watch?v=abc\n\n"+
-		"⏰ Member2 방송 예정\n📺 Title2\n🔗 https://youtube.com/watch?v=def", message)
+	assert.Equal(t, "⏰ 방송 1분 전\n\n"+
+		"⏰ Member1 방송 3분 전\n  Title1\n  https://youtube.com/watch?v=abc\n\n"+
+		"⏰ Member2 방송 예정\n  Title2\n  https://youtube.com/watch?v=def", message)
 }
 
 func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(t *testing.T) {
@@ -809,7 +809,7 @@ func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(
 
 	require.NoError(t, err)
 	assert.Equal(t,
-		"⏰ Member 방송 5분 전\n📺 Live Title\n🔗 https://youtube.com/watch?v=live-1",
+		"⏰ Member 방송 5분 전\n  Live Title\n  https://youtube.com/watch?v=live-1",
 		got,
 	)
 }

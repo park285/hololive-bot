@@ -84,26 +84,26 @@ func TestFormatMajorEventCommandMessages_Fallback(t *testing.T) {
 }
 
 const cmdProfileTestBody = `{{- if eq (len .Names) 0 -}}
-📘 멤버 정보
+👤 멤버 정보
 {{- else -}}
-📘 {{index .Names 0}}{{if gt (len .Names) 1}} ({{join (slice .Names 1) " / "}}){{end}}
+👤 {{index .Names 0}}{{if gt (len .Names) 1}} ({{join (slice .Names 1) " / "}}){{end}}
 {{- end}}
 {{- if .Catchphrase}}
-🗣️ {{.Catchphrase}}
+"{{.Catchphrase}}"
 {{- end}}
 {{- if .Summary}}
 {{.Summary}}
 {{- end}}
 {{- if .Highlights}}
 
-✨ 하이라이트
+[하이라이트]
 {{- range .Highlights}}
 - {{.}}
 {{- end}}
 {{- end}}
 {{- if .DataRows}}
 
-📋 프로필 데이터
+[프로필]
 {{- range .DataRows}}
 {{- if .Multiline}}
 - {{.Label}}:
@@ -115,35 +115,35 @@ const cmdProfileTestBody = `{{- if eq (len .Names) 0 -}}
 {{- end}}
 {{- if .SocialLinks}}
 
-🔗 링크
+[링크]
 {{- range .SocialLinks}}
 - {{.Label}}: {{.URL}}
 {{- end}}
 {{- end}}
 {{- if .OfficialURL}}
 
-🌐 공식 프로필: {{.OfficialURL}}
+공식 프로필: {{.OfficialURL}}
 {{- end -}}`
 
-const cmdProfileGolden = `📘 Shirakami Fubuki (시라카미 후부키 / 白上フブキ)
-🗣️ 친구야!
+const cmdProfileGolden = `👤 Shirakami Fubuki (시라카미 후부키 / 白上フブキ)
+"친구야!"
 홀로라이브 1기생
 
-✨ 하이라이트
+[하이라이트]
 - 고양이 아님
 - FOX
 
-📋 프로필 데이터
+[프로필]
 - 생일: 10월 5일
 - 특기:
   노래
   게임
 
-🔗 링크
+[링크]
 - 음악 플레이리스트: https://yt.example/playlist
 - Twitter: https://x.example/fubuki
 
-🌐 공식 프로필: https://hololive.example/fubuki`
+공식 프로필: https://hololive.example/fubuki`
 
 func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 	t.Parallel()

@@ -74,7 +74,7 @@ func (f *ResponseFormatter) MemberDirectory(ctx context.Context, groups []Member
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func prepareMemberDirectoryGroups(groups []MemberDirectoryGroup) []memberDirectoryGroupView {

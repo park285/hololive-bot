@@ -25,10 +25,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
+)
+
+const (
+	DeliveryStatusSending     domain.OutboxStatus = "SENDING"
+	DeliveryStatusQuarantined domain.OutboxStatus = "QUARANTINED"
 )
 
 type LockToken struct {
@@ -38,6 +45,52 @@ type LockToken struct {
 
 func NewLockToken(id int64, lockedAt *time.Time) LockToken {
 	return LockToken{id: id, lockedAt: lockedAt}
+}
+
+func (r *DeliveryRepository) MarkSendingBatchIfLocked(ctx context.Context, tokens []LockToken) ([]domain.YouTubeNotificationDelivery, error) {
+	uniqueTokens := uniqueDeliveryLockTokens(tokens)
+	if len(uniqueTokens) == 0 {
+		return nil, nil
+	}
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("mark delivery rows sending: db is nil")
+	}
+
+	ids, lockedAts := deliveryLockTokenArrays(uniqueTokens)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	sendingStartedAt := time.Now().UTC()
+	rows, err := r.db.Query(ctx, `
+		WITH input AS (
+			SELECT *
+			FROM unnest($1::bigint[], $2::timestamptz[]) WITH ORDINALITY AS t(id, locked_at, ord)
+		), updated AS (
+			UPDATE youtube_notification_delivery d
+			SET status = $3, locked_at = $4
+			FROM input i
+			WHERE d.id = i.id
+			  AND d.status = $5
+			  AND d.locked_at = i.locked_at
+			RETURNING i.ord, d.id, d.outbox_id, d.room_id, d.status, d.attempt_count,
+			          d.next_attempt_at, d.created_at, d.locked_at, d.sent_at, COALESCE(d.error, '') AS error
+		)
+		SELECT id, outbox_id, room_id, status, attempt_count,
+		       next_attempt_at, created_at, locked_at, sent_at, error
+		FROM updated
+		ORDER BY ord ASC
+	`, ids, lockedAts, DeliveryStatusSending, sendingStartedAt, domain.OutboxStatusPending)
+	if err != nil {
+		return nil, fmt.Errorf("mark delivery rows sending: %w", err)
+	}
+	defer rows.Close()
+
+	updated, err := pgx.CollectRows(rows, deliverysql.ScanDeliveryRow)
+	if err != nil {
+		return nil, fmt.Errorf("mark delivery rows sending: %w", err)
+	}
+	return updated, nil
 }
 
 func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens []LockToken, claimTokens ...dispatchstate.ClaimToken) error {
@@ -51,10 +104,11 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 
 	sentAt := dispatchstate.CanonicalSentAtNow()
 	if err := deliverysql.InDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
-		if _, err := updateSentDeliveryRowsIfLocked(ctx, tx, uniqueTokens, sentAt); err != nil {
+		updatedIDs, err := updateSentDeliveryRowsIfLocked(ctx, tx, uniqueTokens, sentAt)
+		if err != nil {
 			return err
 		}
-		trackingMarks, err := LoadAlarmSentMarksForDeliveryIDs(ctx, tx, deliveryLockTokenIDs(uniqueTokens), sentAt, claimTokens)
+		trackingMarks, err := LoadAlarmSentMarksForDeliveryIDs(ctx, tx, updatedIDs, sentAt, claimTokens)
 		if err != nil {
 			return fmt.Errorf("load tracking marks: %w", err)
 		}
@@ -79,11 +133,6 @@ func deliveryLockTokenArrays(tokens []LockToken) ([]int64, []time.Time) {
 	return ids, lockedAts
 }
 
-func deliveryLockTokenIDs(tokens []LockToken) []int64 {
-	ids, _ := deliveryLockTokenArrays(tokens)
-	return ids
-}
-
 func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens []LockToken, sentAt time.Time) ([]int64, error) {
 	ids, lockedAts := deliveryLockTokenArrays(tokens)
 	if len(ids) == 0 {
@@ -104,7 +153,7 @@ func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens 
 			RETURNING d.id
 		)
 		SELECT id FROM updated
-	`, ids, lockedAts, domain.OutboxStatusSent, sentAt, domain.OutboxStatusPending)
+	`, ids, lockedAts, domain.OutboxStatusSent, sentAt, DeliveryStatusSending)
 	if err != nil {
 		return nil, fmt.Errorf("batch update sent delivery rows: %w", err)
 	}
@@ -153,7 +202,7 @@ func (r *DeliveryRepository) MarkFailedRetryBatchIfLocked(ctx context.Context, t
 		WHERE d.id = i.id
 		  AND d.status = $8
 		  AND d.locked_at = i.locked_at
-	`, ids, lockedAts, deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, nextAttempt, domain.OutboxStatusPending)
+	`, ids, lockedAts, deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, nextAttempt, DeliveryStatusSending)
 	if err != nil {
 		return fmt.Errorf("batch mark failed retry delivery rows: %w", err)
 	}
@@ -186,12 +235,55 @@ func (r *DeliveryRepository) MarkPermanentFailureBatchIfLocked(ctx context.Conte
 		WHERE d.id = i.id
 		  AND d.status = $6
 		  AND d.locked_at = i.locked_at
-	`, ids, lockedAts, maxRetries, deliverysql.TruncateString(errMsg, 500), domain.OutboxStatusFailed, domain.OutboxStatusPending)
+	`, ids, lockedAts, maxRetries, deliverysql.TruncateString(errMsg, 500), domain.OutboxStatusFailed, DeliveryStatusSending)
 	if err != nil {
 		return fmt.Errorf("batch mark permanent failure delivery rows: %w", err)
 	}
 
 	return nil
+}
+
+func (r *DeliveryRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (outboxIDs []int64, quarantined int, err error) {
+	if r == nil || r.db == nil || limit <= 0 {
+		return nil, 0, nil
+	}
+	if olderThan <= 0 {
+		olderThan = 5 * time.Minute
+	}
+
+	cutoff := time.Now().UTC().Add(-olderThan)
+	rows, err := r.db.Query(ctx, `
+		WITH picked AS (
+			SELECT id
+			FROM youtube_notification_delivery
+			WHERE status = $1
+			  AND locked_at IS NOT NULL
+			  AND locked_at < $2
+			ORDER BY locked_at ASC, id ASC
+			LIMIT $3
+			FOR UPDATE SKIP LOCKED
+		), updated AS (
+			UPDATE youtube_notification_delivery d
+			SET status = $4,
+			    attempt_count = attempt_count + 1,
+			    locked_at = NULL,
+			    error = $5
+			FROM picked
+			WHERE d.id = picked.id
+			RETURNING d.outbox_id
+		)
+		SELECT outbox_id FROM updated
+	`, DeliveryStatusSending, cutoff, limit, DeliveryStatusQuarantined, "stale sending; external send outcome unknown")
+	if err != nil {
+		return nil, 0, fmt.Errorf("quarantine stale sending delivery rows: %w", err)
+	}
+
+	outboxIDs, err = pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return nil, 0, fmt.Errorf("collect quarantined delivery outbox ids: %w", err)
+	}
+
+	return deliverysql.UniqueInt64s(outboxIDs), len(outboxIDs), nil
 }
 
 func uniqueDeliveryLockTokens(tokens []LockToken) []LockToken {

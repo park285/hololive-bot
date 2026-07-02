@@ -26,6 +26,7 @@ func templateSampleCoreData() map[TemplateKey]any {
 	addTemplateOutboxGroups(data)
 	addTemplateCommandStreamSamples(data)
 	addTemplateCommandAlarmSamples(data)
+	addTemplateAlarmDispatchSamples(data)
 	addTemplateDirectoryMilestoneSamples(data)
 	addTemplateStatsCalendarSamples(data)
 	addTemplateMemberLookupSamples(data)
@@ -242,6 +243,26 @@ func addTemplateCommandAlarmSamples(data map[TemplateKey]any) {
 	}
 }
 
+func addTemplateAlarmDispatchSamples(data map[TemplateKey]any) {
+	data[TemplateKeyAlarmDispatchNotification] = map[string]any{
+		"IsStarting":      false,
+		"IsScheduled":     false,
+		fieldMemberName:   sampleMemberMiko,
+		"MinutesUntil":    5,
+		fieldTitle:        "마인크래프트 건축",
+		"ScheduleMessage": "",
+		fieldURL:          "https://youtu.be/stream123",
+	}
+	data[TemplateKeyAlarmDispatchNotificationGroup] = map[string]any{
+		"IsStarting":   false,
+		"MinutesUntil": 5,
+		"Entries": []map[string]any{
+			{"IsStarting": false, "IsScheduled": false, fieldMemberName: sampleMemberMiko, "MinutesUntil": 5, fieldTitle: "마인크래프트 건축", "ScheduleMessage": "", fieldURL: "https://youtu.be/stream123"},
+			{"IsStarting": false, "IsScheduled": true, fieldMemberName: "호시마치 스이세이", "MinutesUntil": 0, fieldTitle: "노래 방송", "ScheduleMessage": "21:00 시작 예정", fieldURL: ""},
+		},
+	}
+}
+
 func templateAlarmListItem() map[string]any {
 	return map[string]any{
 		fieldMemberName: sampleMemberMiko,
@@ -300,6 +321,7 @@ func addTemplateDirectoryMilestoneSamples(data map[TemplateKey]any) {
 	data[TemplateKeyCmdMilestoneApproach] = map[string]any{
 		fieldMemberName:   sampleMemberMiko,
 		"CurrentSubs":     1990000,
+		"Milestone":       sampleSubs200Man,
 		"TargetMilestone": sampleSubs200Man,
 		"Remaining":       10000,
 		fieldEmoji:        map[string]string{"Rocket": "🚀"},

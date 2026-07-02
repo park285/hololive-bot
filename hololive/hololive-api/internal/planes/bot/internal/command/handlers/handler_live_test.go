@@ -27,8 +27,10 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
@@ -174,6 +176,116 @@ func TestCollectChzzkLiveStreams_ReturnsEmptySliceWhenNoStreams(t *testing.T) {
 	}
 }
 
+type liveImageRendererStub struct {
+	pages   [][]byte
+	err     error
+	entries []render.LiveCardEntry
+}
+
+func (s *liveImageRendererStub) RenderLiveImages(entries []render.LiveCardEntry) ([][]byte, error) {
+	s.entries = entries
+	return s.pages, s.err
+}
+
+func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *Dependencies, multi *[][]byte, single *[]byte, text *string) {
+	t.Helper()
+
+	var multiSent [][]byte
+	var singleSent []byte
+	var textSent string
+	deps = &Dependencies{
+		Holodex:   &liveStreamProviderStub{},
+		Matcher:   matcher.NewMatcher(nilBaseContext(), newContextAwareMemberProvider(members), nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Formatter: adapter.NewResponseFormatter("!", nil),
+		SendMessage: func(_ context.Context, _, msg string) error {
+			textSent = msg
+			return nil
+		},
+		SendImage: func(_ context.Context, _ string, data []byte, _ ...iris.SendOption) error {
+			singleSent = data
+			return nil
+		},
+		SendMultipleImages: func(_ context.Context, _ string, images [][]byte, _ ...iris.SendOption) error {
+			multiSent = images
+			return nil
+		},
+		SendError: func(context.Context, string, string) error { return nil },
+		Logger:    slog.New(slog.DiscardHandler),
+	}
+	return deps, &multiSent, &singleSent, &textSent
+}
+
+func TestLiveCommand_Execute_MultiPageCardUsesSendMultipleImages(t *testing.T) {
+	t.Parallel()
+
+	deps, multiSent, singleSent, textSent := liveCardTestDeps(t, []*domain.Member{
+		{ChannelID: "ch-pekora", Name: "Usada Pekora", ShortKoreanName: "페코라", Photo: "https://yt3.googleusercontent.com/p=s88-c"},
+	})
+	deps.Holodex = &liveStreamProviderStub{liveStreams: []*domain.Stream{
+		{ChannelID: "ch-pekora", ChannelName: "Usada Pekora", Title: "건축 방송"},
+	}}
+	renderer := &liveImageRendererStub{pages: [][]byte{[]byte("p1"), []byte("p2")}}
+
+	err := NewLiveCommand(deps, renderer).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if len(*multiSent) != 2 {
+		t.Fatalf("SendMultipleImages pages = %d, want 2", len(*multiSent))
+	}
+	if *singleSent != nil || *textSent != "" {
+		t.Fatalf("single/text paths used: single=%v text=%q", *singleSent != nil, *textSent)
+	}
+	if len(renderer.entries) != 1 || renderer.entries[0].Name != "페코라" || renderer.entries[0].Photo == "" {
+		t.Fatalf("card entries = %#v, want member-resolved name/photo", renderer.entries)
+	}
+}
+
+func TestLiveCommand_Execute_SinglePageCardUsesSendImage(t *testing.T) {
+	t.Parallel()
+
+	deps, multiSent, singleSent, _ := liveCardTestDeps(t, nil)
+	deps.Holodex = &liveStreamProviderStub{liveStreams: []*domain.Stream{
+		{ChannelID: "ch-x", ChannelName: "Member X", Title: "방송"},
+	}}
+	renderer := &liveImageRendererStub{pages: [][]byte{[]byte("p1")}}
+
+	err := NewLiveCommand(deps, renderer).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if *singleSent == nil {
+		t.Fatal("SendImage not called for single page")
+	}
+	if *multiSent != nil {
+		t.Fatal("SendMultipleImages should not be called for single page")
+	}
+}
+
+func TestLiveCommand_Execute_CardRenderFailureFallsBackToText(t *testing.T) {
+	t.Parallel()
+
+	deps, multiSent, singleSent, textSent := liveCardTestDeps(t, nil)
+	deps.Holodex = &liveStreamProviderStub{liveStreams: []*domain.Stream{
+		{ChannelID: "ch-x", ChannelName: "Member X", Title: "방송"},
+	}}
+	renderer := &liveImageRendererStub{err: errors.New("render blew up")}
+
+	err := NewLiveCommand(deps, renderer).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if *textSent == "" {
+		t.Fatal("expected text fallback message")
+	}
+	if *singleSent != nil || *multiSent != nil {
+		t.Fatal("image paths should not be used on render failure")
+	}
+}
+
 func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T) {
 	t.Parallel()
 
@@ -197,7 +309,7 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 
 	ctx := context.WithValue(t.Context(), testContextKey("request-id"), "live-propagation")
 
-	err := NewLiveCommand(deps).Execute(ctx, &domain.CommandContext{Room: "room-1"}, map[string]any{
+	err := NewLiveCommand(deps, nil).Execute(ctx, &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"member": "Aqua",
 	})
 	if err != nil {

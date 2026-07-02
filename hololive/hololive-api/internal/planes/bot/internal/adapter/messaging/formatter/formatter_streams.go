@@ -79,7 +79,7 @@ func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*do
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func (f *ResponseFormatter) liveStreamsTemplateData(ctx context.Context, streams []*domain.Stream) liveStreamsTemplateData {
@@ -136,7 +136,7 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func limitedStreamList(streams []*domain.Stream) []*domain.Stream {
@@ -154,7 +154,7 @@ func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func (f *ResponseFormatter) channelScheduleTemplateData(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) channelScheduleTemplateData {
@@ -222,11 +222,11 @@ func (f *ResponseFormatter) streamTimeInfo(ctx context.Context, stream *domain.S
 	switch {
 	case hoursUntil > 24:
 		daysUntil := hoursUntil / 24
-		return fmt.Sprintf("%s (%d일 후)", kstTime, daysUntil)
+		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "stream_time_days", "%s (%d일 후)"), kstTime, daysUntil)
 	case hoursUntil > 0:
-		return fmt.Sprintf("%s (%d시간 %d분 후)", kstTime, hoursUntil, minutesRem)
+		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "stream_time_hours_minutes", "%s (%d시간 %d분 후)"), kstTime, hoursUntil, minutesRem)
 	default:
-		return fmt.Sprintf("%s (%d분 후)", kstTime, minutesRem)
+		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "stream_time_minutes", "%s (%d분 후)"), kstTime, minutesRem)
 	}
 }
 
@@ -252,7 +252,7 @@ func (f *ResponseFormatter) streamDisplayOrg(ctx context.Context, stream *domain
 }
 
 func (f *ResponseFormatter) formatStreamOrg(ctx context.Context, org string) string {
-	if org == "" {
+	if org == "" || org == constants.HolodexAPIParams.OrgHololive {
 		return ""
 	}
 

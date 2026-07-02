@@ -77,3 +77,14 @@
 077 081_seed_canonical_alarm_templates.sql
 078 082_seed_calendar_image_strings.sql
 079 083_add_lease_to_notification_delivery_outbox.sql
+080 084_extend_hot_outbox_autovacuum.sql
+081 085_add_ycat_kind_content_index.sql
+082 086_add_sending_stale_indexes.sql
+083 087_reseed_command_templates_minimal_tone.sql
+084 088_reseed_notification_templates_minimal_tone.sql
+085 089_reseed_error_notify_strings_minimal_tone.sql
+086 090_seed_timefmt_karing_strings.sql
+087 091_seed_calendar_overflow_string.sql
+088 092_seed_livecard_strings.sql
+089 093_seed_profilecard_strings.sql
+090 094_seed_rankcard_strings.sql

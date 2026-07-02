@@ -21,73 +21,161 @@
 package fonts
 
 import (
-	_ "embed" // 폰트 임베드를 위한 블랭크 임포트
+	_ "embed"
+	"errors"
 	"fmt"
+	"image"
 	"sync"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/font/sfnt"
+	"golang.org/x/image/math/fixed"
 )
 
-//go:embed D2Coding-Ver1.3.2-20180524.ttf
-var captionFontData []byte
+//go:embed Pretendard-Regular.ttf
+var pretendardRegularData []byte
+
+//go:embed Pretendard-SemiBold.ttf
+var pretendardSemiBoldData []byte
+
+//go:embed NotoSansJP-Regular-subset.ttf
+var notoSansJPData []byte
 
 var (
-	captionFontOnce sync.Once
-	captionFont     *opentype.Font
-	errCaptionFont  error
+	fontsOnce sync.Once
+	fontsErr  error
+
+	pretendardRegular  *opentype.Font
+	pretendardSemiBold *opentype.Font
+	notoSansJP         *opentype.Font
 
 	captionFaceCache sync.Map
 )
 
-// 생성된 Face는 sync.Map으로 캐시되어 재사용됩니다.
+// 반환되는 Face는 내부 sfnt.Buffer와 래스터 상태를 공유해 동시 사용에 안전하지 않다 —
+// 호출자는 render.fontMu처럼 렌더 전 구간을 단일 뮤텍스로 직렬화해야 한다(기존 계약).
 func CaptionFaceSized(size float64) (font.Face, error) {
+	return captionFace("regular", size)
+}
+
+func CaptionBoldFaceSized(size float64) (font.Face, error) {
+	return captionFace("semibold", size)
+}
+
+func captionFace(weight string, size float64) (font.Face, error) {
 	if size <= 0 {
 		size = 24
 	}
+	if err := loadFonts(); err != nil {
+		return nil, err
+	}
 
-	fontData, err := loadCaptionFont()
+	cacheKey := fmt.Sprintf("%s:%.2f", weight, size)
+	if face, ok := captionFaceCache.Load(cacheKey); ok {
+		if cached, ok := face.(font.Face); ok {
+			return cached, nil
+		}
+	}
+
+	combined, err := buildCaptionFace(weight, size)
 	if err != nil {
 		return nil, err
 	}
 
-	cacheKey := fmt.Sprintf("%.2f", size)
-	if face, ok := captionFaceCache.Load(cacheKey); ok {
-		cachedFace, ok := face.(font.Face)
-		if ok {
-			return cachedFace, nil
-		}
-	}
-
-	face, err := opentype.NewFace(fontData, &opentype.FaceOptions{
-		Size:    size,
-		DPI:     96,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create caption font size %.2f: %w", size, err)
-	}
-
-	actual, _ := captionFaceCache.LoadOrStore(cacheKey, face)
-
+	actual, _ := captionFaceCache.LoadOrStore(cacheKey, combined)
 	actualFace, ok := actual.(font.Face)
 	if !ok {
 		return nil, fmt.Errorf("caption font cache stored %T, want font.Face", actual)
 	}
-
 	return actualFace, nil
 }
 
-func loadCaptionFont() (*opentype.Font, error) {
-	captionFontOnce.Do(func() {
-		fnt, err := opentype.Parse(captionFontData)
-		if err != nil {
-			errCaptionFont = fmt.Errorf("parse caption font: %w", err)
-			return
+func buildCaptionFace(weight string, size float64) (font.Face, error) {
+	primary := pretendardRegular
+	if weight == "semibold" {
+		primary = pretendardSemiBold
+	}
+
+	opts := &opentype.FaceOptions{Size: size, DPI: 96, Hinting: font.HintingFull}
+
+	primaryFace, err := opentype.NewFace(primary, opts)
+	if err != nil {
+		return nil, fmt.Errorf("create %s caption face size %.2f: %w", weight, size, err)
+	}
+	jpFace, err := opentype.NewFace(notoSansJP, opts)
+	if err != nil {
+		return nil, fmt.Errorf("create jp fallback face size %.2f: %w", size, err)
+	}
+
+	return &fallbackFace{
+		primary:     primaryFace,
+		primarySFNT: primary,
+		fallback:    jpFace,
+	}, nil
+}
+
+func loadFonts() error {
+	fontsOnce.Do(func() {
+		parse := func(name string, data []byte) *opentype.Font {
+			if fontsErr != nil {
+				return nil
+			}
+			parsed, err := opentype.Parse(data)
+			if err != nil {
+				fontsErr = fmt.Errorf("parse %s font: %w", name, err)
+				return nil
+			}
+			return parsed
 		}
-
-		captionFont = fnt
+		pretendardRegular = parse("pretendard-regular", pretendardRegularData)
+		pretendardSemiBold = parse("pretendard-semibold", pretendardSemiBoldData)
+		notoSansJP = parse("noto-sans-jp", notoSansJPData)
 	})
+	return fontsErr
+}
 
-	return captionFont, errCaptionFont
+// fallbackFace는 rune 단위로 primary(Pretendard) cmap에 글리프가 없을 때만
+// NotoSansJP로 라우팅한다(일본어 한자·가나 두부 방지).
+type fallbackFace struct {
+	primary     font.Face
+	fallback    font.Face
+	primarySFNT *opentype.Font
+	buf         sfnt.Buffer
+}
+
+func (f *fallbackFace) pick(r rune) font.Face {
+	gi, err := f.primarySFNT.GlyphIndex(&f.buf, r)
+	if err != nil || gi == 0 {
+		return f.fallback
+	}
+	return f.primary
+}
+
+func (f *fallbackFace) Close() error {
+	return errors.Join(f.primary.Close(), f.fallback.Close())
+}
+
+func (f *fallbackFace) Glyph(dot fixed.Point26_6, r rune) (image.Rectangle, image.Image, image.Point, fixed.Int26_6, bool) {
+	return f.pick(r).Glyph(dot, r)
+}
+
+func (f *fallbackFace) GlyphBounds(r rune) (fixed.Rectangle26_6, fixed.Int26_6, bool) {
+	return f.pick(r).GlyphBounds(r)
+}
+
+func (f *fallbackFace) GlyphAdvance(r rune) (fixed.Int26_6, bool) {
+	return f.pick(r).GlyphAdvance(r)
+}
+
+func (f *fallbackFace) Kern(r0, r1 rune) fixed.Int26_6 {
+	first, second := f.pick(r0), f.pick(r1)
+	if first == second {
+		return first.Kern(r0, r1)
+	}
+	return 0
+}
+
+func (f *fallbackFace) Metrics() font.Metrics {
+	return f.primary.Metrics()
 }

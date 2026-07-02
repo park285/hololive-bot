@@ -205,19 +205,35 @@ func recoverSuccessfulCommunityShortsSentStateTx(
 	if err != nil {
 		return fmt.Errorf("load sent-state recovery marks: %w", err)
 	}
-	if len(marks) == 0 {
-		return nil
+	if len(marks) > 0 {
+		if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, marks); err != nil {
+			return fmt.Errorf("persist sent-state recovery marks: %w", err)
+		}
+
+		identities := alarmSentMarkIdentities(marks)
+		if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+			return fmt.Errorf("persist sent-state recovery latency classifications: %w", err)
+		}
 	}
 
-	if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, marks); err != nil {
-		return fmt.Errorf("persist sent-state recovery marks: %w", err)
+	if err := markRecoveredSentDeliveryRows(ctx, tx, uniqueIDs, sentAt); err != nil {
+		return err
 	}
 
-	identities := alarmSentMarkIdentities(marks)
-	if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
-		return fmt.Errorf("persist sent-state recovery latency classifications: %w", err)
-	}
+	return nil
+}
 
+func markRecoveredSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int64, sentAt time.Time) error {
+	args := []any{domain.OutboxStatusSent, sentAt}
+	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+	args = append(args, store.DeliveryStatusSending)
+	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "mark recovered sent delivery rows", `
+		UPDATE youtube_notification_delivery
+		SET status = ?, sent_at = ?, locked_at = NULL, error = ''
+		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
+	`, args...); err != nil {
+		return fmt.Errorf("mark recovered sent delivery rows: %w", err)
+	}
 	return nil
 }
 

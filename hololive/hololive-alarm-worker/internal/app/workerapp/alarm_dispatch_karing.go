@@ -40,7 +40,7 @@ func buildAlarmDispatchKaringContentListRequests(ctx context.Context, messageStr
 		req := iris.KaringContentListRequest{
 			ClientRequestID: new(alarmDispatchClientRequestID(group, start, end)),
 			Items:           chunk,
-			ExtraArgs:       buildAlarmDispatchKaringExtraArgs(group, len(chunk)),
+			ExtraArgs:       buildAlarmDispatchKaringExtraArgs(ctx, messageStrings, group, len(chunk)),
 			TemplateID:      alarmDispatchKaringTemplateID(len(chunk)),
 		}
 		applyAlarmDispatchKaringReceiver(&req, group.roomID)
@@ -129,57 +129,60 @@ func buildAlarmDispatchNotificationKaringContentItem(ctx context.Context, store 
 	}
 }
 
-func buildAlarmDispatchKaringExtraArgs(group alarmDispatchGroup, itemCount int) iris.KaringTemplateArgs {
+func buildAlarmDispatchKaringExtraArgs(ctx context.Context, store *messagestrings.Store, group alarmDispatchGroup, itemCount int) iris.KaringTemplateArgs {
 	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return buildAlarmDispatchOutboxKaringExtraArgs(&group.envelopes[0], itemCount)
+		return buildAlarmDispatchOutboxKaringExtraArgs(ctx, store, &group.envelopes[0], itemCount)
 	}
 	args := iris.KaringTemplateArgs{}
 	if group.minutesUntil > 0 {
-		args["alarm_title"] = fmt.Sprintf("방송 %d분 전 알림", group.minutesUntil)
-		args["time_left"] = fmt.Sprintf("%d분 후 시작", group.minutesUntil)
+		args["alarm_title"] = fmt.Sprintf(store.GetOrContext(ctx, messagestrings.NamespaceKaring, "alarm_title_prelive", "방송 %d분 전 알림"), group.minutesUntil)
+		args["time_left"] = fmt.Sprintf(store.GetOrContext(ctx, messagestrings.NamespaceKaring, "time_left_prelive", "%d분 후 시작"), group.minutesUntil)
 		return args
 	}
-	args["alarm_title"] = "라이브 시작"
-	args["time_left"] = "지금 시작"
+	args["alarm_title"] = store.GetOrContext(ctx, messagestrings.NamespaceKaring, "alarm_title_live", "라이브 시작")
+	args["time_left"] = store.GetOrContext(ctx, messagestrings.NamespaceKaring, "time_left_live", "지금 시작")
 	return args
 }
 
-func buildAlarmDispatchOutboxKaringExtraArgs(envelope *domain.AlarmQueueEnvelope, itemCount int) iris.KaringTemplateArgs {
+func buildAlarmDispatchOutboxKaringExtraArgs(ctx context.Context, store *messagestrings.Store, envelope *domain.AlarmQueueEnvelope, itemCount int) iris.KaringTemplateArgs {
 	if envelope == nil || envelope.YouTubeOutbox == nil {
 		return nil
 	}
-	baseTitle, timeLeft := alarmDispatchOutboxKaringLabels(envelope.YouTubeOutbox.Kind)
+	baseTitle, timeLeft := alarmDispatchOutboxKaringLabels(ctx, store, envelope.YouTubeOutbox.Kind)
 	return iris.KaringTemplateArgs{
-		"alarm_title": alarmDispatchKaringTitleWithCount(baseTitle, itemCount),
+		"alarm_title": alarmDispatchKaringTitleWithCount(ctx, store, baseTitle, itemCount),
 		"time_left":   timeLeft,
 	}
 }
 
 type alarmDispatchKaringLabel struct {
-	alarmTitle string
-	timeLeft   string
+	alarmTitleKey      string
+	alarmTitleFallback string
+	timeLeftKey        string
+	timeLeftFallback   string
 }
 
 var alarmDispatchOutboxKaringLabelsByKind = map[domain.OutboxKind]alarmDispatchKaringLabel{
-	domain.OutboxKindCommunityPost: {alarmTitle: "커뮤니티 알림", timeLeft: "새 커뮤니티"},
-	domain.OutboxKindNewShort:      {alarmTitle: "쇼츠 알림", timeLeft: "새 쇼츠"},
-	domain.OutboxKindNewVideo:      {alarmTitle: "새 영상", timeLeft: "새 영상"},
-	domain.OutboxKindLiveStream:    {alarmTitle: "방송 알림", timeLeft: "방송 알림"},
+	domain.OutboxKindCommunityPost: {alarmTitleKey: "outbox_title_community", alarmTitleFallback: "커뮤니티 알림", timeLeftKey: "outbox_time_community", timeLeftFallback: "새 커뮤니티"},
+	domain.OutboxKindNewShort:      {alarmTitleKey: "outbox_title_shorts", alarmTitleFallback: "쇼츠 알림", timeLeftKey: "outbox_time_shorts", timeLeftFallback: "새 쇼츠"},
+	domain.OutboxKindNewVideo:      {alarmTitleKey: "outbox_title_video", alarmTitleFallback: "새 영상", timeLeftKey: "outbox_time_video", timeLeftFallback: "새 영상"},
+	domain.OutboxKindLiveStream:    {alarmTitleKey: "outbox_title_live", alarmTitleFallback: "방송 알림", timeLeftKey: "outbox_time_live", timeLeftFallback: "방송 알림"},
 }
 
-func alarmDispatchOutboxKaringLabels(kind domain.OutboxKind) (alarmTitle, timeLeft string) {
+func alarmDispatchOutboxKaringLabels(ctx context.Context, store *messagestrings.Store, kind domain.OutboxKind) (alarmTitle, timeLeft string) {
 	label, ok := alarmDispatchOutboxKaringLabelsByKind[kind]
 	if !ok {
-		label = alarmDispatchKaringLabel{alarmTitle: "알림", timeLeft: "새 알림"}
+		label = alarmDispatchKaringLabel{alarmTitleKey: "title_fallback", alarmTitleFallback: "알림", timeLeftKey: "time_fallback", timeLeftFallback: "새 알림"}
 	}
-	return label.alarmTitle, label.timeLeft
+	return store.GetOrContext(ctx, messagestrings.NamespaceKaring, label.alarmTitleKey, label.alarmTitleFallback),
+		store.GetOrContext(ctx, messagestrings.NamespaceKaring, label.timeLeftKey, label.timeLeftFallback)
 }
 
-func alarmDispatchKaringTitleWithCount(title string, itemCount int) string {
+func alarmDispatchKaringTitleWithCount(ctx context.Context, store *messagestrings.Store, title string, itemCount int) string {
 	if itemCount <= 1 {
 		return title
 	}
-	return fmt.Sprintf("%s · %d건", title, itemCount)
+	return fmt.Sprintf(store.GetOrContext(ctx, messagestrings.NamespaceKaring, "count_suffix", "%s · %d건"), title, itemCount)
 }
 
 func resolveAlarmDispatchKaringChannelName(notification *domain.AlarmNotification, fallback string) string {

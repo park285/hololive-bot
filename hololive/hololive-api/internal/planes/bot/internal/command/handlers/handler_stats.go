@@ -25,20 +25,24 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 )
 
 type StatsCommand struct {
-	deps *Dependencies
+	deps          *Dependencies
+	imageRenderer RankImageRenderer
 }
 
-func NewStatsCommand(deps *Dependencies) *StatsCommand {
-	return &StatsCommand{deps: deps}
+func NewStatsCommand(deps *Dependencies, imageRenderer RankImageRenderer) *StatsCommand {
+	return &StatsCommand{deps: deps, imageRenderer: imageRenderer}
 }
 
 func (c *StatsCommand) Name() string {
@@ -82,9 +86,75 @@ func (c *StatsCommand) showTopGainers(ctx context.Context, cmdCtx *domain.Comman
 		return c.deps.SendError(ctx, cmdCtx.Room, adapter.MsgNoStatsData)
 	}
 
+	if c.trySendRankImage(ctx, cmdCtx.Room, periodLabel, gainers) {
+		return nil
+	}
+
 	message := c.deps.Formatter.FormatStatsTopGainers(ctx, periodLabel, gainers)
 
 	return c.deps.SendMessage(ctx, cmdCtx.Room, message)
+}
+
+func (c *StatsCommand) trySendRankImage(ctx context.Context, room, periodLabel string, gainers []domain.RankEntry) bool {
+	if c.imageRenderer == nil {
+		return false
+	}
+
+	imgData, err := c.imageRenderer.RenderRankImage(periodLabel, c.rankCardEntries(ctx, gainers))
+	if err != nil {
+		c.deps.Logger.Warn("rank image render failed, falling back to text",
+			slog.Any("error", err),
+		)
+		return false
+	}
+
+	if err := c.deps.SendImage(ctx, room, imgData); err != nil {
+		c.deps.Logger.Warn("rank image send failed, falling back to text",
+			slog.Any("error", err),
+		)
+		return false
+	}
+
+	return true
+}
+
+func (c *StatsCommand) rankCardEntries(ctx context.Context, gainers []domain.RankEntry) []render.RankCardEntry {
+	entries := make([]render.RankCardEntry, 0, len(gainers))
+	for _, g := range gainers {
+		entries = append(entries, c.rankCardEntry(ctx, g))
+	}
+	return entries
+}
+
+func (c *StatsCommand) rankCardEntry(ctx context.Context, g domain.RankEntry) render.RankCardEntry {
+	entry := render.RankCardEntry{
+		Rank:  g.Rank,
+		Name:  g.MemberName,
+		Delta: rankDeltaText(g.Value),
+	}
+	if g.CurrentSubscribers > 0 && g.CurrentSubscribers <= math.MaxInt64 {
+		entry.Total = util.FormatKoreanNumber(int64(g.CurrentSubscribers))
+	}
+	if c.deps.Matcher == nil {
+		return entry
+	}
+	member := c.deps.Matcher.GetMemberByChannelID(ctx, g.ChannelID)
+	if member == nil {
+		return entry
+	}
+	entry.Photo = member.Photo
+	if member.ShortKoreanName != "" {
+		entry.Name = member.ShortKoreanName
+	}
+	return entry
+}
+
+func rankDeltaText(value int64) string {
+	formatted := util.FormatKoreanNumber(value)
+	if value > 0 {
+		return "+" + formatted
+	}
+	return formatted
 }
 
 func (c *StatsCommand) ensureDeps() error {

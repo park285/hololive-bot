@@ -273,10 +273,7 @@ func runRetryAfterPostSendFinalizeFailureKeepsSingleDeliveredAlarm(
 	require.NoError(t, sender.hookError())
 	require.Len(t, sender.sentMessages(), 1)
 
-	assertRetryFinalizeOncePendingState(t, db, item.ID, delivery.ID)
-
-	retryAt := time.Now().UTC().Add(-time.Second)
-	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{"next_attempt_at": retryAt, "locked_at": nil}, "id = ?", delivery.ID).Error)
+	assertRetryFinalizeOnceSentState(t, db, &item, delivery.ID, postID)
 
 	dispatcher.ProcessOnceForTest(ctx)
 
@@ -362,20 +359,6 @@ func staleRetryFinalizeOnceClaim(
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-}
-
-func assertRetryFinalizeOncePendingState(t *testing.T, db *pgxpool.Pool, outboxID, deliveryID int64) {
-	t.Helper()
-
-	var pendingDelivery deliveryTestDeliveryModel
-	require.NoError(t, firstDeliveryTestRow(db, &pendingDelivery, deliveryID).Error)
-	assert.Equal(t, string(domain.OutboxStatusPending), pendingDelivery.Status)
-	assert.Nil(t, pendingDelivery.SentAt)
-
-	var pendingOutbox deliveryTestOutboxModel
-	require.NoError(t, firstDeliveryTestRow(db, &pendingOutbox, outboxID).Error)
-	assert.Equal(t, string(domain.OutboxStatusPending), pendingOutbox.Status)
-	assert.Nil(t, pendingOutbox.SentAt)
 }
 
 func assertRetryFinalizeOnceSentState(

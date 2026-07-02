@@ -46,8 +46,10 @@ type ClientRequestMessageSender interface {
 
 type deliveryRepository interface {
 	FetchAndLock(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
+	MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
 	MarkSent(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error)
 	MarkFailed(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
 	CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	Cleanup(ctx context.Context, olderThan time.Duration) (int64, error)
 }
@@ -55,74 +57,79 @@ type deliveryRepository interface {
 const deliveryLease = 60 * time.Second
 
 type DispatcherConfig struct {
-	BatchSize       int
-	MaxConcurrent   int
-	MaxRetries      int
-	LockTimeout     time.Duration
-	PollInterval    time.Duration
-	RetryBackoff    time.Duration
-	CleanupAfter    time.Duration
-	CleanupInterval time.Duration // cleanup 실행 주기 (기본: 1시간)
-	CleanupEnabled  bool
+	BatchSize                 int
+	MaxConcurrent             int
+	MaxRetries                int
+	LockTimeout               time.Duration
+	PollInterval              time.Duration
+	RetryBackoff              time.Duration
+	CleanupAfter              time.Duration
+	CleanupInterval           time.Duration // cleanup 실행 주기 (기본: 1시간)
+	CleanupEnabled            bool
+	StaleSendingAfter         time.Duration
+	StaleSendingSweepInterval time.Duration
+	StaleSendingSweepLimit    int
 }
 
 func DefaultDispatcherConfig() DispatcherConfig {
 	return DispatcherConfig{
-		BatchSize:       50,
-		MaxConcurrent:   4,
-		MaxRetries:      3,
-		LockTimeout:     5 * time.Minute,
-		PollInterval:    30 * time.Second,
-		RetryBackoff:    1 * time.Minute,
-		CleanupAfter:    7 * 24 * time.Hour,
-		CleanupInterval: 1 * time.Hour,
-		CleanupEnabled:  true,
+		BatchSize:                 50,
+		MaxConcurrent:             4,
+		MaxRetries:                3,
+		LockTimeout:               5 * time.Minute,
+		PollInterval:              30 * time.Second,
+		RetryBackoff:              1 * time.Minute,
+		CleanupAfter:              7 * 24 * time.Hour,
+		CleanupInterval:           1 * time.Hour,
+		CleanupEnabled:            true,
+		StaleSendingAfter:         deliveryLease,
+		StaleSendingSweepInterval: deliveryLease,
+		StaleSendingSweepLimit:    defaultStaleSendingSweepLimit,
 	}
 }
 
 type Dispatcher struct {
-	repository    deliveryRepository
-	sender        MessageSender
-	logger        *slog.Logger
-	config        DispatcherConfig
-	workerID      string
-	lastCleanupAt time.Time
+	repository              deliveryRepository
+	sender                  MessageSender
+	logger                  *slog.Logger
+	config                  DispatcherConfig
+	workerID                string
+	lastCleanupAt           time.Time
+	lastStaleSendingSweepAt time.Time
 }
 
-func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, config DispatcherConfig) *Dispatcher {
+func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, config *DispatcherConfig) *Dispatcher {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: config.withDefaults(), workerID: util.InstanceID("delivery-dispatcher")}
+	cfg := DispatcherConfig{}
+	if config != nil {
+		cfg = *config
+	}
+	cfg.applyDefaults()
+	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: cfg, workerID: util.InstanceID("delivery-dispatcher")}
 }
 
-func (c DispatcherConfig) withDefaults() DispatcherConfig {
+func (c *DispatcherConfig) applyDefaults() {
 	defaults := DefaultDispatcherConfig()
-	if c.BatchSize <= 0 {
-		c.BatchSize = defaults.BatchSize
+	c.BatchSize = positiveOr(c.BatchSize, defaults.BatchSize)
+	c.MaxConcurrent = positiveOr(c.MaxConcurrent, defaults.MaxConcurrent)
+	c.MaxRetries = positiveOr(c.MaxRetries, defaults.MaxRetries)
+	c.LockTimeout = positiveOr(c.LockTimeout, defaults.LockTimeout)
+	c.PollInterval = positiveOr(c.PollInterval, defaults.PollInterval)
+	c.RetryBackoff = positiveOr(c.RetryBackoff, defaults.RetryBackoff)
+	c.CleanupAfter = positiveOr(c.CleanupAfter, defaults.CleanupAfter)
+	c.CleanupInterval = positiveOr(c.CleanupInterval, defaults.CleanupInterval)
+	c.StaleSendingAfter = positiveOr(c.StaleSendingAfter, defaults.StaleSendingAfter)
+	c.StaleSendingSweepInterval = positiveOr(c.StaleSendingSweepInterval, defaults.StaleSendingSweepInterval)
+	c.StaleSendingSweepLimit = positiveOr(c.StaleSendingSweepLimit, defaults.StaleSendingSweepLimit)
+}
+
+func positiveOr[T ~int | ~int64](value, fallback T) T {
+	if value <= 0 {
+		return fallback
 	}
-	if c.MaxConcurrent <= 0 {
-		c.MaxConcurrent = defaults.MaxConcurrent
-	}
-	if c.MaxRetries <= 0 {
-		c.MaxRetries = defaults.MaxRetries
-	}
-	if c.LockTimeout <= 0 {
-		c.LockTimeout = defaults.LockTimeout
-	}
-	if c.PollInterval <= 0 {
-		c.PollInterval = defaults.PollInterval
-	}
-	if c.RetryBackoff <= 0 {
-		c.RetryBackoff = defaults.RetryBackoff
-	}
-	if c.CleanupAfter <= 0 {
-		c.CleanupAfter = defaults.CleanupAfter
-	}
-	if c.CleanupInterval <= 0 {
-		c.CleanupInterval = defaults.CleanupInterval
-	}
-	return c
+	return value
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
@@ -142,6 +149,8 @@ func (d *Dispatcher) run(ctx context.Context) {
 }
 
 func (d *Dispatcher) processOnce(ctx context.Context) {
+	d.quarantineStaleSendingIfDue(ctx)
+
 	items, err := d.repository.FetchAndLock(ctx, d.workerID, d.config.BatchSize, d.config.LockTimeout, deliveryLease)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.String("error", err.Error()))
@@ -177,6 +186,19 @@ func (d *Dispatcher) cleanupIfDue(ctx context.Context) {
 		}
 		d.lastCleanupAt = time.Now()
 	}
+}
+
+func (d *Dispatcher) quarantineStaleSendingIfDue(ctx context.Context) {
+	if !d.lastStaleSendingSweepAt.IsZero() && time.Since(d.lastStaleSendingSweepAt) < d.config.StaleSendingSweepInterval {
+		return
+	}
+	quarantined, err := d.repository.QuarantineStaleSending(ctx, d.config.StaleSendingAfter, d.config.StaleSendingSweepLimit)
+	if err != nil {
+		d.logger.Warn("Stale sending outbox sweep failed", slog.String("error", err.Error()))
+	} else if quarantined > 0 {
+		d.logger.Warn("Stale sending outbox rows quarantined", slog.Int64("count", quarantined))
+	}
+	d.lastStaleSendingSweepAt = time.Now()
 }
 
 func (d *Dispatcher) processBatch(ctx context.Context, items []domain.NotificationDeliveryOutbox) {
@@ -260,6 +282,10 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		return
 	}
 
+	if !d.markItemSending(ctx, item.ID) {
+		return
+	}
+
 	if err := d.sendMessage(ctx, item, p.Message); err != nil {
 		d.logger.Error("Failed to send outbox message",
 			slog.Int64("id", item.ID),
@@ -270,6 +296,19 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 	}
 
 	d.markItemSent(ctx, item.ID, item.LockedAt.Time)
+}
+
+func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
+	fenced, err := d.repository.MarkSending(ctx, id, d.workerID, deliveryLease)
+	if err != nil {
+		d.logger.Error("Failed to mark outbox item sending", slog.Int64("id", id), slog.String("error", err.Error()))
+		return false
+	}
+	if !fenced {
+		d.logger.Warn("Outbox item fence skipped sending transition", slog.Int64("id", id))
+		return false
+	}
+	return true
 }
 
 func (d *Dispatcher) markItemSent(ctx context.Context, id int64, lockedAt time.Time) {

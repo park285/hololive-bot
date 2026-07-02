@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,6 +88,17 @@ func fetchAndLockItems(t *testing.T, repository *OutboxRepository, ctx context.C
 		t.Fatalf("fetch and lock: %v", err)
 	}
 	return items
+}
+
+func markOutboxSending(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
+	t.Helper()
+	ok, err := repository.MarkSending(ctx, item.ID, testWorkerA, testLease)
+	if err != nil {
+		t.Fatalf("mark sending: %v", err)
+	}
+	if !ok {
+		t.Fatal("mark sending fenced unexpectedly")
+	}
 }
 
 func countByStatus(t *testing.T, repository *OutboxRepository, ctx context.Context, status domain.DeliveryOutboxStatus) int64 {
@@ -221,6 +233,35 @@ func TestMarkSent(t *testing.T) {
 	}
 }
 
+func TestMarkSent_FromSending(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(t, repository, ctx)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+	markOutboxSending(t, repository, ctx, &items[0])
+
+	ok, err := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time)
+	if err != nil {
+		t.Fatalf("mark sent: %v", err)
+	}
+	if !ok {
+		t.Fatal("MarkSent must accept SENDING owner transition")
+	}
+	if sent := countByStatus(t, repository, ctx, domain.DeliveryStatusSent); sent != 1 {
+		t.Fatalf("expected 1 sent, got %d", sent)
+	}
+	if sending := countByStatus(t, repository, ctx, deliveryStatusSending); sending != 0 {
+		t.Fatalf("expected 0 sending after sent, got %d", sending)
+	}
+}
+
 func TestMarkSent_ClearsLock(t *testing.T) {
 	repository := testRepository(t)
 	ctx := context.Background()
@@ -335,6 +376,35 @@ func TestMarkFailed_WithBackoff(t *testing.T) {
 	pending := countByStatus(t, repository, ctx, domain.DeliveryStatusPending)
 	if pending != 1 {
 		t.Fatalf("expected 1 pending after first failure, got %d", pending)
+	}
+}
+
+func TestMarkFailed_FromSending(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(t, repository, ctx)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+	markOutboxSending(t, repository, ctx, &items[0])
+
+	ok, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time, 3, time.Minute, "send error")
+	if err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+	if !ok {
+		t.Fatal("MarkFailed must accept SENDING owner transition")
+	}
+	if pending := countByStatus(t, repository, ctx, domain.DeliveryStatusPending); pending != 1 {
+		t.Fatalf("expected 1 pending after retry, got %d", pending)
+	}
+	if sending := countByStatus(t, repository, ctx, deliveryStatusSending); sending != 0 {
+		t.Fatalf("expected 0 sending after retry, got %d", sending)
 	}
 }
 
@@ -706,6 +776,69 @@ func TestMarkFailed_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
 	}
 }
 
+func TestMarkSending_Fenced(t *testing.T) {
+	tests := []struct {
+		name   string
+		worker string
+		mutate func(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox)
+	}{
+		{
+			name:   "foreign worker locked_by",
+			worker: testWorkerB,
+			mutate: func(*testing.T, *OutboxRepository, context.Context, *domain.NotificationDeliveryOutbox) {},
+		},
+		{
+			name:   "expired lease",
+			worker: testWorkerA,
+			mutate: func(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
+				expireLease(t, repository, ctx, item.ID)
+			},
+		},
+		{
+			name:   "non-pending sending",
+			worker: testWorkerA,
+			mutate: func(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
+				markOutboxSending(t, repository, ctx, item)
+			},
+		},
+		{
+			name:   "non-pending failed",
+			worker: testWorkerA,
+			mutate: func(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
+				if _, err := repository.pool.Exec(ctx,
+					"UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE id = $1", item.ID,
+				); err != nil {
+					t.Fatalf("force failed: %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repository := testRepository(t)
+			ctx := context.Background()
+
+			if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+				t.Fatalf("enqueue: %v", err)
+			}
+			items := fetchAndLockItems(t, repository, ctx)
+			if len(items) == 0 {
+				t.Fatal("no items fetched")
+			}
+			tc.mutate(t, repository, ctx, &items[0])
+
+			ok, err := repository.MarkSending(ctx, items[0].ID, tc.worker, testLease)
+			if err != nil {
+				t.Fatalf("mark sending: %v", err)
+			}
+			if ok {
+				t.Fatalf("MarkSending must be fenced for %q", tc.name)
+			}
+		})
+	}
+}
+
 func TestFetchAndLock_ReclaimsExpiredLease(t *testing.T) {
 	repository := testRepository(t)
 	ctx := context.Background()
@@ -734,6 +867,89 @@ func TestFetchAndLock_ReclaimsExpiredLease(t *testing.T) {
 	owner := lockedByOf(t, repository, ctx, id)
 	if owner == nil || *owner != testWorkerB {
 		t.Fatalf("expired-lease reclaim must set locked_by=%s, got %v", testWorkerB, owner)
+	}
+}
+
+func TestFetchAndLock_DoesNotReclaimSendingAfterLeaseExpiry(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(t, repository, ctx)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+	id := itemsA[0].ID
+	markOutboxSending(t, repository, ctx, &itemsA[0])
+	expireLease(t, repository, ctx, id)
+
+	got, err := repository.FetchAndLock(ctx, testWorkerB, 1, testLockTTL, testLease)
+	if err != nil {
+		t.Fatalf("worker B fetch after sending lease expiry: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("SENDING row must not be reclaimable, got %d", len(got))
+	}
+	if sending := countByStatus(t, repository, ctx, deliveryStatusSending); sending != 1 {
+		t.Fatalf("row must remain SENDING, sending=%d", sending)
+	}
+}
+
+func TestQuarantineStaleSending(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(t, repository, ctx)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+	markOutboxSending(t, repository, ctx, &items[0])
+
+	if _, err := repository.pool.Exec(ctx,
+		"UPDATE notification_delivery_outbox SET sending_started_at = $1 WHERE id = $2",
+		time.Now().Add(-2*time.Minute), items[0].ID,
+	); err != nil {
+		t.Fatalf("backdate sending_started_at: %v", err)
+	}
+
+	quarantined, err := repository.QuarantineStaleSending(ctx, time.Minute, 10)
+	if err != nil {
+		t.Fatalf("quarantine stale sending: %v", err)
+	}
+	if quarantined != 1 {
+		t.Fatalf("quarantined = %d, want 1", quarantined)
+	}
+	if failed := countByStatus(t, repository, ctx, domain.DeliveryStatusFailed); failed != 1 {
+		t.Fatalf("stale SENDING must move to FAILED, failed=%d", failed)
+	}
+	if pending := countByStatus(t, repository, ctx, domain.DeliveryStatusPending); pending != 0 {
+		t.Fatalf("stale SENDING must not be rescheduled as PENDING, pending=%d", pending)
+	}
+
+	var status string
+	var errText string
+	var locksCleared bool
+	if err := repository.pool.QueryRow(ctx,
+		`SELECT status, error, locked_at IS NULL AND locked_by IS NULL AND lock_expires_at IS NULL
+		 FROM notification_delivery_outbox WHERE id = $1`, items[0].ID,
+	).Scan(&status, &errText, &locksCleared); err != nil {
+		t.Fatalf("query quarantined row: %v", err)
+	}
+	if status != string(domain.DeliveryStatusFailed) {
+		t.Fatalf("status = %s, want FAILED", status)
+	}
+	if !strings.Contains(errText, "stale sending") {
+		t.Fatalf("error = %q, want stale sending marker", errText)
+	}
+	if !locksCleared {
+		t.Fatal("stale SENDING quarantine must clear locks")
 	}
 }
 

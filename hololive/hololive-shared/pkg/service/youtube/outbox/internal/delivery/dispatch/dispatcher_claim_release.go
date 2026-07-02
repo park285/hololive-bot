@@ -94,6 +94,34 @@ func (d *ClaimManager) orphanPendingCutoff() time.Duration {
 	return max(d.config.CleanupAfter, d.config.ClaimFreshnessWindow)
 }
 
+func (d *ClaimManager) quarantineStaleSendingDeliveries(ctx context.Context) {
+	if d == nil || d.delivery == nil {
+		return
+	}
+
+	outboxIDs, quarantined, err := d.delivery.QuarantineStaleSending(ctx, d.config.LockTimeout, d.config.BatchSize)
+	if err != nil {
+		d.logger.Warn("Failed to quarantine stale sending delivery rows", slog.Any("error", err))
+		return
+	}
+	if quarantined == 0 {
+		return
+	}
+
+	if err := d.delivery.UpdateOutboxAggregateStatuses(ctx, outboxIDs); err != nil {
+		d.logger.Warn("Failed to update outbox statuses after stale sending quarantine", slog.Any("error", err))
+		return
+	}
+	if err := d.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs); err != nil {
+		d.logger.Warn("Failed to log finalized community/shorts outbox results after stale sending quarantine", slog.Any("error", err))
+	}
+
+	d.logger.Warn("Quarantined stale sending delivery rows",
+		slog.Int("delivery_count", quarantined),
+		slog.Int("outbox_count", len(outboxIDs)),
+		slog.Duration("older_than", d.config.LockTimeout))
+}
+
 func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error {
 	if d == nil || d.db == nil || len(claims) == 0 {
 		return nil

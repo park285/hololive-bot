@@ -106,7 +106,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 	row := domain.YouTubeNotificationDelivery{
 		OutboxID:      10,
 		RoomID:        "room-relocked",
-		Status:        domain.OutboxStatusPending,
+		Status:        store.DeliveryStatusSending,
 		AttemptCount:  0,
 		NextAttemptAt: time.Now().UTC(),
 		LockedAt:      &currentLockedAt,
@@ -119,7 +119,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 
 	var got domain.YouTubeNotificationDelivery
 	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
-	require.Equal(t, domain.OutboxStatusPending, got.Status)
+	require.Equal(t, store.DeliveryStatusSending, got.Status)
 	require.Equal(t, 0, got.AttemptCount)
 	require.NotNil(t, got.LockedAt)
 	require.True(t, got.LockedAt.Equal(currentLockedAt), "locked_at = %s, want %s", got.LockedAt, currentLockedAt)
@@ -167,7 +167,7 @@ func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
 	row := domain.YouTubeNotificationDelivery{
 		OutboxID:      10,
 		RoomID:        "room-rate-limited",
-		Status:        domain.OutboxStatusPending,
+		Status:        store.DeliveryStatusSending,
 		AttemptCount:  0,
 		NextAttemptAt: time.Now().UTC().Add(-time.Hour),
 		LockedAt:      &lockedAt,

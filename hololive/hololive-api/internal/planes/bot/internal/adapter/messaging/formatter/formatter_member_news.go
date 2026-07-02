@@ -69,7 +69,7 @@ func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) string {

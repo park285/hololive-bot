@@ -60,7 +60,8 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 
 	live := formatter.FormatLiveStreams(t.Context(), streams)
 	assert.Contains(t, live, "라이브 목록")
-	assert.Contains(t, live, "[Holo] 사쿠라 미코")
+	assert.Contains(t, live, "사쿠라 미코")
+	assert.NotContains(t, live, "[Holo]")
 	assert.Contains(t, live, "https://youtube.com/watch?v=abc123")
 	assert.NotContains(t, live, "\u200b")
 
@@ -240,14 +241,14 @@ func TestFormatChannelName_IndependentsOrg(t *testing.T) {
 			want: "[개인세] 유우키 사쿠나",
 		},
 		{
-			name: "Hololive org shows Holo tag",
+			name: "Hololive org suppresses tag",
 			stream: &domain.Stream{
 				ChannelName: "사쿠라 미코",
 				Channel: &domain.Channel{
 					Org: new("Hololive"),
 				},
 			},
-			want: "[Holo] 사쿠라 미코",
+			want: "사쿠라 미코",
 		},
 		{
 			name:   "nil stream returns empty",

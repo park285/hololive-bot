@@ -20,9 +20,34 @@
 
 package util
 
+import (
+	"strings"
+	"unicode/utf8"
+)
+
 // 카카오 메시지 관련 상수 목록.
 const (
 	// KakaoSeeMorePadding: 카카오톡 '전체 보기' 기능을 위한 패딩 길이
-	KakaoSeeMorePadding = 500
-	KakaoZeroWidthSpace = "\u200b"
+	KakaoSeeMorePadding   = 500
+	KakaoSeeMoreThreshold = 250
+	KakaoZeroWidthSpace   = "\u200b"
 )
+
+// FoldForSeeMore는 첫 줄 뒤에 zero-width space 패딩을 삽입해 KakaoTalk이
+// 본문을 '전체보기'로 접게 만든다. 임계 이하·한 줄짜리·이미 패딩된 텍스트는
+// 그대로 반환한다(멱등).
+func FoldForSeeMore(text string, threshold int) string {
+	if threshold <= 0 || utf8.RuneCountInString(text) <= threshold {
+		return text
+	}
+	if strings.Contains(text, KakaoZeroWidthSpace) {
+		return text
+	}
+
+	head, rest, found := strings.Cut(text, "\n")
+	if !found || strings.TrimSpace(rest) == "" {
+		return text
+	}
+
+	return head + "\n" + strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding) + "\n" + rest
+}

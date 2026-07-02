@@ -808,6 +808,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/runtime/lifecycle/skeleton.go
 ../shared-go/pkg/runtime/lifecycle/loop.go
 ../shared-go/pkg/runtime/lifecycle/close.go
+../shared-go/pkg/runtime/lifecycle/doc.go
 ../shared-go/pkg/stringutil/stringutil.go
 ../shared-go/pkg/telemetry/doc.go
 ../shared-go/pkg/telemetry/telemetry.go

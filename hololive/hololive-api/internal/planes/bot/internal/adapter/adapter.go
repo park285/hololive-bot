@@ -63,3 +63,4 @@ const (
 var NewMessageAdapter = messaging.NewMessageAdapter
 var NewResponseFormatter = formatter.NewResponseFormatter
 var WithMessageStrings = formatter.WithMessageStrings
+var WithSeeMoreFold = formatter.WithSeeMoreFold

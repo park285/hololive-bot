@@ -328,7 +328,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
 	require.Len(t, sender.messages, 1)
-	assert.Contains(t, sender.messages[0], "room-community:📝 VTuber 커뮤니티 알림")
+	assert.Contains(t, sender.messages[0], "room-community:🔔 VTuber 커뮤니티 글")
 	assert.Contains(t, sender.messages[0], "community-title")
 	assert.Contains(t, sender.messages[0], "https://www.youtube.com/post/post-community-sent-at")
 }

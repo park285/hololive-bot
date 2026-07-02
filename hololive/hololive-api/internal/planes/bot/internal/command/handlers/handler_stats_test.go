@@ -49,14 +49,14 @@ func (s *statsRepoStub) GetSubscriberGraph(_ context.Context, _ string, _ int) (
 }
 
 func TestStatsCommand_Name(t *testing.T) {
-	cmd := NewStatsCommand(nil)
+	cmd := NewStatsCommand(nil, nil)
 	if cmd.Name() != "stats" {
 		t.Fatalf("Name() = %q, want %q", cmd.Name(), "stats")
 	}
 }
 
 func TestStatsCommand_Description(t *testing.T) {
-	cmd := NewStatsCommand(nil)
+	cmd := NewStatsCommand(nil, nil)
 	if cmd.Description() == "" {
 		t.Fatal("Description() should not be empty")
 	}
@@ -83,7 +83,7 @@ func TestStatsCommand_Execute_TopGainers_GoldenPath(t *testing.T) {
 		Logger:    slog.New(slog.DiscardHandler),
 	}
 
-	cmd := NewStatsCommand(deps)
+	cmd := NewStatsCommand(deps, nil)
 	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"action": "gainers",
 	})
@@ -116,7 +116,7 @@ func TestStatsCommand_Execute_DefaultActionIsGainers(t *testing.T) {
 		Logger:    slog.New(slog.DiscardHandler),
 	}
 
-	cmd := NewStatsCommand(deps)
+	cmd := NewStatsCommand(deps, nil)
 	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -143,7 +143,7 @@ func TestStatsCommand_Execute_UnknownAction(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	cmd := NewStatsCommand(deps)
+	cmd := NewStatsCommand(deps, nil)
 	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"action": "invalid_action",
 	})
@@ -176,7 +176,7 @@ func TestStatsCommand_Execute_RepoError(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	cmd := NewStatsCommand(deps)
+	cmd := NewStatsCommand(deps, nil)
 	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"action": "gainers",
 	})
@@ -207,7 +207,7 @@ func TestStatsCommand_Execute_NoData(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	cmd := NewStatsCommand(deps)
+	cmd := NewStatsCommand(deps, nil)
 	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"action": "gainers",
 	})
@@ -221,7 +221,7 @@ func TestStatsCommand_Execute_NoData(t *testing.T) {
 }
 
 func TestStatsCommand_Execute_NilDeps(t *testing.T) {
-	cmd := NewStatsCommand(nil)
+	cmd := NewStatsCommand(nil, nil)
 
 	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, nil)
 	if err == nil {
@@ -239,7 +239,7 @@ func TestStatsCommand_Execute_NilStatsRepo(t *testing.T) {
 		Logger:    slog.New(slog.DiscardHandler),
 	}
 
-	cmd := NewStatsCommand(deps)
+	cmd := NewStatsCommand(deps, nil)
 
 	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, nil)
 	if err == nil {
@@ -267,7 +267,7 @@ func TestStatsCommand_Execute_WithPeriodParam(t *testing.T) {
 		Logger:    slog.New(slog.DiscardHandler),
 	}
 
-	cmd := NewStatsCommand(deps)
+	cmd := NewStatsCommand(deps, nil)
 	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"action": "gainers",
 		"period": "monthly",

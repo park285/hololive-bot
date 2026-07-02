@@ -53,28 +53,28 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	var b strings.Builder
 	switch {
 	case n.MinutesUntil <= 0:
-		fmt.Fprintf(&b, "🔔 %s 방송 시작!\n", member)
+		fmt.Fprintf(&b, "🔴 %s 방송 시작", member)
 	case groupMinutesUntil > 0 && n.MinutesUntil == groupMinutesUntil:
-		fmt.Fprintf(&b, "⏰ %s 방송 예정\n", member)
+		fmt.Fprintf(&b, "⏰ %s 방송 예정", member)
 	default:
-		fmt.Fprintf(&b, "⏰ %s 방송 %d분 전\n", member, n.MinutesUntil)
+		fmt.Fprintf(&b, "⏰ %s 방송 %d분 전", member, n.MinutesUntil)
 	}
-	fmt.Fprintf(&b, "📺 %s\n", title)
+	fmt.Fprintf(&b, "\n  %s", title)
 	if scheduleMessage := strings.TrimSpace(n.ScheduleChangeMessage); scheduleMessage != "" {
-		fmt.Fprintf(&b, "📅 %s\n", scheduleMessage)
+		fmt.Fprintf(&b, "\n  %s", scheduleMessage)
 	}
 	if url != "" {
-		fmt.Fprintf(&b, "🔗 %s", url)
+		fmt.Fprintf(&b, "\n  %s", url)
 	}
-	return strings.TrimSpace(b.String())
+	return b.String()
 }
 
 func goldenAlarmDispatchGroup(group alarmDispatchGroup) string {
 	var b strings.Builder
 	if group.minutesUntil <= 0 {
-		b.WriteString("🔔 방송 시작 알림")
+		b.WriteString("🔴 방송 시작")
 	} else {
-		fmt.Fprintf(&b, "⏰ 방송 %d분 전 알림", group.minutesUntil)
+		fmt.Fprintf(&b, "⏰ 방송 %d분 전", group.minutesUntil)
 	}
 	for i := range group.notifications {
 		b.WriteString("\n\n")

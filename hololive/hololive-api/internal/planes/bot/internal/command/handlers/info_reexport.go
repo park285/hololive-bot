@@ -4,6 +4,6 @@ import "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handle
 
 type MemberInfoCommand = info.MemberInfoCommand
 
-func NewMemberInfoCommand(deps *Dependencies) *MemberInfoCommand {
-	return info.NewMemberInfoCommand(deps)
+func NewMemberInfoCommand(deps *Dependencies, imageRenderer ProfileImageRenderer) *MemberInfoCommand {
+	return info.NewMemberInfoCommand(deps, imageRenderer)
 }

@@ -33,7 +33,7 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 		processed[idx] = alarmListEntryView{
 			MemberName: alarm.MemberName,
 			TypesLabel: f.formatAlarmTypesLabel(ctx, alarm.AlarmTypes),
-			NextStream: buildNextStreamInfoView(summarizeNextStreamInfo(alarm.NextStream)),
+			NextStream: f.buildNextStreamInfoView(ctx, summarizeNextStreamInfo(alarm.NextStream)),
 		}
 	}
 
@@ -48,7 +48,7 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) string {

@@ -82,7 +82,7 @@ func setupFormatterRendererMulti(t *testing.T, bodies map[domain.TemplateKey]str
 func TestNewLLMSchedulerFormatter_Defaults(t *testing.T) {
 	t.Parallel()
 
-	formatter := newLLMSchedulerFormatter("   ", nil, nil)
+	formatter := newLLMSchedulerFormatter("   ", nil, nil, false)
 	require.NotNil(t, formatter)
 
 	assert.Equal(t, "!", formatter.prefix)
@@ -96,7 +96,7 @@ func TestNewLLMSchedulerFormatter_UsesProvidedValues(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "안내\n본문")
 
-	formatter := newLLMSchedulerFormatter("?", renderer, logger)
+	formatter := newLLMSchedulerFormatter("?", renderer, logger, false)
 	require.NotNil(t, formatter)
 
 	assert.Equal(t, "?", formatter.prefix)
@@ -131,7 +131,7 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		t.Parallel()
 
 		renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "안내\n본문: {{.name}}\n")
-		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), false)
 
 		rendered, err := formatter.render(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, map[string]string{"name": "미코"})
 		require.NoError(t, err)
@@ -142,7 +142,7 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		t.Parallel()
 
 		renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "{{.MissingField}}")
-		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), false)
 
 		rendered, err := formatter.render(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, struct{}{})
 		require.Error(t, err)
@@ -154,7 +154,7 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		t.Parallel()
 
 		renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "안내")
-		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), false)
 
 		rendered, err := formatter.render(context.Background(), domain.TemplateKeyCmdMajorEventWeeklySummary, nil)
 		require.Error(t, err)

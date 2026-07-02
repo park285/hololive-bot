@@ -13,6 +13,7 @@ mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
 mapfile -t WORKSPACE_GO_PACKAGES < <(go_workspace_package_patterns)
 GO_PACKAGES=()
 source "${SCRIPT_DIR}/local-ci-packages.sh"
+source "${SCRIPT_DIR}/local-ci-gofix.sh"
 
 LOCAL_CI_GO_SCOPE="${LOCAL_CI_GO_SCOPE:-all}"
 RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-true}"
@@ -105,108 +106,6 @@ check_gofmt() {
     fi
 }
 
-check_go_fix() {
-    local tmp_dir
-    local tmp_parent
-    tmp_parent="${LOCAL_CI_TMPDIR:-${ROOT_DIR}/.tmp/local-ci}"
-    local iris_client_go_dir
-    iris_client_go_dir="${IRIS_CLIENT_GO_WORKSPACE_PATH:-${ROOT_DIR}/../iris-client-go}"
-    local tar_excludes=(
-        --exclude=.git
-        --exclude=.worktrees
-        --exclude=.tasklists
-        --exclude=.runlogs
-        --exclude=.codex
-        --exclude=.claude
-        --exclude=.serena
-        --exclude=.gemini
-        --exclude=.tmp
-        --exclude=./artifacts
-        --exclude=./artifacts/*
-        --exclude=./backups
-        --exclude=./backups/*
-        --exclude=./data
-        --exclude=./data/*
-        --exclude=./logs
-        --exclude=./logs/*
-        --exclude=./runtime-config
-        --exclude=./runtime-config/*
-        --exclude=target
-        --exclude='*/target'
-        --exclude='*/target/*'
-        --exclude=node_modules
-        --exclude='*/node_modules'
-        --exclude='*/node_modules/*'
-        --exclude='*.key'
-        --exclude='*.pem'
-        --exclude='*.p12'
-        --exclude=.env
-        --exclude='.env.*'
-    )
-
-    if ! has_go_packages; then
-        echo "[LOCAL CI] Skip go fix drift: no Go packages in scope"
-        return 0
-    fi
-
-    mkdir -p "${tmp_parent}"
-    find "${tmp_parent}" -mindepth 1 -maxdepth 1 -type d -name 'go-fix.*' -mmin +60 -exec rm -rf {} +
-    tmp_dir="$(mktemp -d "${tmp_parent%/}/go-fix.XXXXXX")"
-
-    cleanup_go_fix_tmp() {
-        [[ -n "${tmp_dir:-}" ]] && rm -rf "${tmp_dir}"
-        trap - RETURN
-    }
-    trap cleanup_go_fix_tmp RETURN
-
-    mkdir -p "${tmp_dir}/repo"
-    if ! tar "${tar_excludes[@]}" -C "${ROOT_DIR}" -cf - . | tar -C "${tmp_dir}/repo" -xf -; then
-        return 1
-    fi
-
-    local shared_go_dir
-    shared_go_dir="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/../shared-go}"
-    if grep -q '../shared-go' "${ROOT_DIR}/go.work"; then
-        if [[ ! -d "${shared_go_dir}" ]]; then
-            echo "active shared-go workspace not found: ${shared_go_dir}" >&2
-            return 1
-        fi
-        mkdir -p "${tmp_dir}/shared-go"
-        if ! tar "${tar_excludes[@]}" -C "${shared_go_dir}" -cf - . | tar -C "${tmp_dir}/shared-go" -xf -; then
-            return 1
-        fi
-    fi
-
-    if grep -q '../iris-client-go' "${ROOT_DIR}/go.work"; then
-        if [[ ! -d "${iris_client_go_dir}" ]]; then
-            echo "active iris-client-go workspace not found: ${iris_client_go_dir}" >&2
-            return 1
-        fi
-        mkdir -p "${tmp_dir}/iris-client-go"
-        if ! tar "${tar_excludes[@]}" -C "${iris_client_go_dir}" -cf - . | tar -C "${tmp_dir}/iris-client-go" -xf -; then
-            return 1
-        fi
-    fi
-
-    if ! (cd "${tmp_dir}/repo" && go fix "${GO_PACKAGES[@]}"); then
-        return 1
-    fi
-
-    local changed=()
-    local file
-    while IFS= read -r file; do
-        if [[ -f "${tmp_dir}/repo/${file}" ]] && ! cmp -s "${ROOT_DIR}/${file}" "${tmp_dir}/repo/${file}"; then
-            changed+=("${file}")
-        fi
-    done < <(go_source_files)
-
-    if (( ${#changed[@]} > 0 )); then
-        echo "go fix would update modern Go compatibility rewrites:" >&2
-        printf ' - %s\n' "${changed[@]}" >&2
-        echo "Run go fix on the listed packages/files and commit the result." >&2
-        return 1
-    fi
-}
 
 check_go_mod_tidy() {
     local before
@@ -312,12 +211,42 @@ check_nilaway() {
     local nilaway_bin
     nilaway_bin="$(ensure_nilaway)"
 
+    # 동시 3개 제한은 NilAway 프로세스가 내부 병렬이라 코어 과점유를 막기 위함.
+    local nilaway_parallel="${NILAWAY_PARALLEL:-3}"
+    local nilaway_tmp_parent="${LOCAL_CI_TMPDIR:-${ROOT_DIR}/.tmp/local-ci}"
+    mkdir -p "${nilaway_tmp_parent}"
+    local nilaway_tmp
+    nilaway_tmp="$(mktemp -d "${nilaway_tmp_parent%/}/nilaway.XXXXXX")"
+
+    local nilaway_fail=0
+    local running=0
     local package_pattern
     for package_pattern in "${packages[@]}"; do
-        run_step "NilAway: ${package_pattern}" \
-            env GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" \
-            "${nilaway_bin}" -pretty-print "${package_pattern}"
+        env GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" \
+            "${nilaway_bin}" -pretty-print "${package_pattern}" \
+            >"${nilaway_tmp}/$(printf '%s' "${package_pattern}" | tr './' '__').log" 2>&1 &
+        running=$(( running + 1 ))
+        if (( running >= nilaway_parallel )); then
+            wait -n || nilaway_fail=1
+            running=$(( running - 1 ))
+        fi
     done
+    while (( running > 0 )); do
+        wait -n || nilaway_fail=1
+        running=$(( running - 1 ))
+    done
+
+    for package_pattern in "${packages[@]}"; do
+        echo "[LOCAL CI] NilAway: ${package_pattern}"
+        cat "${nilaway_tmp}/$(printf '%s' "${package_pattern}" | tr './' '__').log"
+        echo
+    done
+    rm -rf "${nilaway_tmp}"
+
+    if (( nilaway_fail != 0 )); then
+        echo "NilAway failed or reported issues for at least one package pattern" >&2
+        return 1
+    fi
 }
 
 run_step "local-ci package scope tests" ./scripts/ci/test-local-ci-packages.sh

@@ -22,6 +22,7 @@ package runtime
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,10 +35,77 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
+const seedBodyMajorEventWeeklySummary = `📅 이번 주 행사 ({{.Count}})
+{{- if .LLMSummary}}
+
+{{.LLMSummary}}
+{{- end}}
+{{range $index, $event := .Events}}
+{{- if gt $index 0}}
+
+{{- end}}
+{{add $index 1}}. {{$event.Title}}
+{{- if $event.DateStr}}
+   ⏰ {{$event.DateStr}}
+{{- end}}
+{{- if $event.Members}}
+   {{$event.Members}}
+{{- end}}
+{{- if $event.Link}}
+   {{$event.Link}}
+{{- end}}
+{{- end}}`
+
+const seedBodyMajorEventMonthlySummary = `📅 이번 달 행사 ({{.Count}})
+{{- if .LLMSummary}}
+
+{{.LLMSummary}}
+{{- end}}
+{{range $index, $event := .Events}}
+{{- if gt $index 0}}
+
+{{- end}}
+{{add $index 1}}. {{$event.Title}}
+{{- if $event.DateStr}}
+   ⏰ {{$event.DateStr}}
+{{- end}}
+{{- if $event.Members}}
+   {{$event.Members}}
+{{- end}}
+{{- if $event.Link}}
+   {{$event.Link}}
+{{- end}}
+{{- end}}`
+
+const seedBodyMemberNewsDigest = `{{- if .Headline -}}
+{{.Headline}}
+{{- else -}}
+📰 멤버 뉴스
+{{- end -}}
+{{- if eq (len .TopItems) 0 }}
+표시할 뉴스가 없습니다.
+{{- else }}
+{{range $index, $item := .TopItems}}
+{{- if gt $index 0 }}
+
+{{- end -}}
+{{add $index 1}}. [{{$item.DateText}}] {{$item.Member}} · {{$item.Category}}
+   {{$item.Title}}
+   {{- if $item.Summary}}
+   {{$item.Summary}}
+   {{- end}}
+   {{$item.SourceURL}}
+{{- end}}
+{{- if .MoreSummary }}
+
+{{.MoreSummary}}
+{{- end }}
+{{- end }}`
+
 func TestFormatMajorEventWeeklySummary_EmptyEvents(t *testing.T) {
 	t.Parallel()
 
-	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	got := formatter.FormatMajorEventWeeklySummary(context.Background(), nil, "")
 	assert.Equal(t, "", got)
 }
@@ -48,9 +116,9 @@ func TestFormatMajorEventWeeklySummary_NoSeeMorePadding(t *testing.T) {
 	renderer := setupFormatterRenderer(
 		t,
 		domain.TemplateKeyCmdMajorEventWeeklySummary,
-		"주간 행사 안내\n이벤트 수: {{.Count}}",
+		seedBodyMajorEventWeeklySummary,
 	)
-	formatter := newLLMSchedulerFormatter("!", renderer, nil)
+	formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 
 	events := []domain.MajorEvent{
 		{Title: "Holo Expo"},
@@ -58,8 +126,9 @@ func TestFormatMajorEventWeeklySummary_NoSeeMorePadding(t *testing.T) {
 	}
 
 	got := formatter.FormatMajorEventWeeklySummary(context.Background(), events, "")
-	assert.Contains(t, got, "주간 행사 안내")
-	assert.Contains(t, got, "이벤트 수: 2")
+	assert.Contains(t, got, "📅 이번 주 행사 (2)")
+	assert.Contains(t, got, "1. Holo Expo")
+	assert.Contains(t, got, "2. Holo Fes")
 	assert.NotContains(t, got, "\u200b")
 }
 
@@ -69,20 +138,21 @@ func TestFormatMajorEventWeeklySummary_UsesLLMSummaryWithoutFallbackList(t *test
 	renderer := setupFormatterRenderer(
 		t,
 		domain.TemplateKeyCmdMajorEventWeeklySummary,
-		"주간 행사 안내\n요약={{.LLMSummary}}\n뷰수={{len .Events}}",
+		seedBodyMajorEventWeeklySummary,
 	)
-	formatter := newLLMSchedulerFormatter("!", renderer, nil)
+	formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 
 	events := []domain.MajorEvent{{Title: "A"}}
 	got := formatter.FormatMajorEventWeeklySummary(context.Background(), events, "요약 본문")
-	assert.Contains(t, got, "요약=요약 본문")
-	assert.Contains(t, got, "뷰수=0")
+	assert.Contains(t, got, "📅 이번 주 행사 (1)")
+	assert.Contains(t, got, "요약 본문")
+	assert.NotContains(t, got, "1. A")
 }
 
 func TestFormatMajorEventMonthlySummary_RenderFailFallback(t *testing.T) {
 	t.Parallel()
 
-	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	events := []domain.MajorEvent{{Title: "A"}}
 	got := formatter.FormatMajorEventMonthlySummary(context.Background(), events, "")
 	assert.Equal(t, messagestrings.FallbackSentinel, got)
@@ -91,7 +161,7 @@ func TestFormatMajorEventMonthlySummary_RenderFailFallback(t *testing.T) {
 func TestFormatMajorEventWeeklySummary_RenderFailFallback(t *testing.T) {
 	t.Parallel()
 
-	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	events := []domain.MajorEvent{{Title: "A"}}
 	got := formatter.FormatMajorEventWeeklySummary(context.Background(), events, "")
 	assert.Equal(t, messagestrings.FallbackSentinel, got)
@@ -100,19 +170,19 @@ func TestFormatMajorEventWeeklySummary_RenderFailFallback(t *testing.T) {
 func TestFormatMajorEventSummary_WeeklyMonthlyParity(t *testing.T) {
 	t.Parallel()
 
-	const body = "행사 안내\n수={{.Count}}\n요약={{.LLMSummary}}\n뷰수={{len .Events}}"
 	renderer := setupFormatterRendererMulti(t, map[domain.TemplateKey]string{
-		domain.TemplateKeyCmdMajorEventWeeklySummary:  body,
-		domain.TemplateKeyCmdMajorEventMonthlySummary: body,
+		domain.TemplateKeyCmdMajorEventWeeklySummary:  seedBodyMajorEventWeeklySummary,
+		domain.TemplateKeyCmdMajorEventMonthlySummary: seedBodyMajorEventMonthlySummary,
 	})
-	formatter := newLLMSchedulerFormatter("!", renderer, nil)
+	formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 
 	events := []domain.MajorEvent{{Title: "A"}, {Title: "B"}}
 
 	for _, llmSummary := range []string{"", "요약 본문"} {
 		weekly := formatter.FormatMajorEventWeeklySummary(context.Background(), events, llmSummary)
 		monthly := formatter.FormatMajorEventMonthlySummary(context.Background(), events, llmSummary)
-		assert.Equal(t, weekly, monthly, "weekly/monthly must be identical modulo template key (llmSummary=%q)", llmSummary)
+		normalizedWeekly := strings.Replace(weekly, "이번 주 행사", "이번 달 행사", 1)
+		assert.Equal(t, normalizedWeekly, monthly, "weekly/monthly must be identical modulo header word (llmSummary=%q)", llmSummary)
 	}
 }
 
@@ -167,7 +237,7 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 	t.Run("nil digest", func(t *testing.T) {
 		t.Parallel()
 
-		formatter := newLLMSchedulerFormatter("!", nil, nil)
+		formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 		got := formatter.FormatMemberNewsDigest(context.Background(), nil)
 		assert.Equal(t, messagestrings.FallbackSentinel, got)
 	})
@@ -178,9 +248,9 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 		renderer := setupFormatterRenderer(
 			t,
 			domain.TemplateKeyCmdMemberNewsDigest,
-			"{{.Headline}}\n{{range .TopItems}}{{.Category}}|{{.Title}}\n{{end}}",
+			seedBodyMemberNewsDigest,
 		)
-		formatter := newLLMSchedulerFormatter("!", renderer, nil)
+		formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 		formatter.store = setupMemberNewsStore(t)
 
 		digest := &membernews.Digest{
@@ -193,8 +263,9 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 
 		got := formatter.FormatMemberNewsDigest(context.Background(), digest)
 		assert.Contains(t, got, "이번주 뉴스")
-		assert.Contains(t, got, "콜라보|합방")
-		assert.Contains(t, got, "기타|기타")
+		assert.Contains(t, got, "· 콜라보")
+		assert.Contains(t, got, "· 기타")
+		assert.Contains(t, got, "합방")
 	})
 }
 
@@ -208,7 +279,7 @@ func TestLocalizeMemberNewsItemsAndCategoryLabel(t *testing.T) {
 		{Category: "unknown_code", Title: "D"},
 	}
 
-	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	formatter.store = setupMemberNewsStore(t)
 
 	localized := formatter.localizeMemberNewsItems(t.Context(), items)
