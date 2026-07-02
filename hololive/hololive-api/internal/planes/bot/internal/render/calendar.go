@@ -244,11 +244,12 @@ func drawEntryRow(img *image.RGBA, m *calendarMetrics, x, y int, entry domain.Ca
 	drawEntryAvatar(img, m, x, y, entry, style.accent, name, photos)
 
 	nameX := x + m.avatarSize + m.avatarGap
-	drawText(img, m.fonts.name, nameX, y+m.entryRowH/2+int(8*m.sf), colSlate800, name)
-
+	badgeLeft := canvasWidth - paddingX
 	if style.badgeText != "" {
-		drawEntryBadge(img, m, y, style)
+		badgeLeft = drawEntryBadge(img, m, y, style)
 	}
+	name = clampToWidth(m.fonts.name, name, badgeLeft-nameX-m.avatarGap)
+	drawText(img, m.fonts.name, nameX, y+m.entryRowH/2+int(8*m.sf), colSlate800, name)
 }
 
 func drawEntryAvatar(img *image.RGBA, m *calendarMetrics, x, y int, entry domain.CalendarEntry, accent color.RGBA, name string, photos map[string]image.Image) {
@@ -273,12 +274,13 @@ func drawEntryAvatar(img *image.RGBA, m *calendarMetrics, x, y int, entry domain
 	}
 }
 
-func drawEntryBadge(img *image.RGBA, m *calendarMetrics, y int, s entryStyle) {
+func drawEntryBadge(img *image.RGBA, m *calendarMetrics, y int, s entryStyle) (badgeLeft int) {
 	bw := measureText(m.fonts.badge, s.badgeText)
 	bx := canvasWidth - paddingX - bw - m.badgePadX*2
 	by := y + (m.entryRowH-m.badgeH)/2
 	fillRoundedRect(img, image.Rect(bx, by, bx+bw+m.badgePadX*2, by+m.badgeH), m.badgeRadius, s.badgeBg)
 	drawText(img, m.fonts.badge, bx+m.badgePadX, by+m.badgeH-m.badgePadY-int(2*m.sf), s.accent, s.badgeText)
+	return bx
 }
 
 func firstRune(s string) string {

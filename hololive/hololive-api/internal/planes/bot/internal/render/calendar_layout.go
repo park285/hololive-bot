@@ -5,6 +5,7 @@ import (
 	"image/color"
 	stddraw "image/draw"
 	"math"
+	"strings"
 
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
@@ -71,11 +72,6 @@ var (
 )
 
 func drawText(img *image.RGBA, face font.Face, x, y int, col color.Color, text string) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			return
-		}
-	}()
 	d := &font.Drawer{
 		Dst:  img,
 		Src:  image.NewUniform(col),
@@ -86,13 +82,30 @@ func drawText(img *image.RGBA, face font.Face, x, y int, col color.Color, text s
 }
 
 func measureText(face font.Face, text string) int {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			return
-		}
-	}()
 	d := &font.Drawer{Face: face}
 	return d.MeasureString(text).Ceil()
+}
+
+func clampToWidth(face font.Face, s string, maxPx int) string {
+	if maxPx <= 0 {
+		return ""
+	}
+	if measureText(face, s) <= maxPx {
+		return s
+	}
+	const ellipsis = "…"
+	runes := []rune(s)
+	for len(runes) > 0 {
+		runes = runes[:len(runes)-1]
+		trimmed := strings.TrimRight(string(runes), " ")
+		if trimmed == "" {
+			break
+		}
+		if measureText(face, trimmed+ellipsis) <= maxPx {
+			return trimmed + ellipsis
+		}
+	}
+	return ""
 }
 
 func fillRect(img *image.RGBA, rect image.Rectangle, col color.Color) {
