@@ -320,24 +320,37 @@ func (r *Repository) refreshLockedRows(
 		return fmt.Errorf("refresh locked delivery telemetry rows: %w", err)
 	}
 
+	ids := make([]int64, 0, len(enriched))
+	actualPublishedAt := make([]*time.Time, 0, len(enriched))
+	alarmSentAt := make([]*time.Time, 0, len(enriched))
+	alarmLatencyMillis := make([]*int64, 0, len(enriched))
+	detectedAt := make([]*time.Time, 0, len(enriched))
 	for i := range enriched {
-		if !deliveryTelemetryTrackingContextChanged(&rows[i], &enriched[i]) {
-			rows[i] = enriched[i]
-			continue
-		}
-
-		if _, err := r.db.Exec(ctx, `
-			UPDATE youtube_notification_delivery_telemetry
-			SET actual_published_at = $1,
-			    alarm_sent_at = $2,
-			    alarm_latency_millis = $3,
-			    detected_at = $4
-			WHERE id = $5
-		`, enriched[i].ActualPublishedAt, enriched[i].AlarmSentAt, enriched[i].AlarmLatencyMillis, enriched[i].DetectedAt,
-			enriched[i].ID); err != nil {
-			return fmt.Errorf("refresh locked delivery telemetry rows: update row %d: %w", enriched[i].ID, err)
+		if deliveryTelemetryTrackingContextChanged(&rows[i], &enriched[i]) {
+			ids = append(ids, enriched[i].ID)
+			actualPublishedAt = append(actualPublishedAt, enriched[i].ActualPublishedAt)
+			alarmSentAt = append(alarmSentAt, enriched[i].AlarmSentAt)
+			alarmLatencyMillis = append(alarmLatencyMillis, enriched[i].AlarmLatencyMillis)
+			detectedAt = append(detectedAt, enriched[i].DetectedAt)
 		}
 		rows[i] = enriched[i]
+	}
+
+	if len(ids) == 0 {
+		return nil
+	}
+
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "refresh locked delivery telemetry rows", `
+		UPDATE youtube_notification_delivery_telemetry AS t
+		SET actual_published_at = v.actual_published_at,
+		    alarm_sent_at = v.alarm_sent_at,
+		    alarm_latency_millis = v.alarm_latency_millis,
+		    detected_at = v.detected_at
+		FROM unnest(?::bigint[], ?::timestamptz[], ?::timestamptz[], ?::bigint[], ?::timestamptz[])
+			AS v(id, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at)
+		WHERE t.id = v.id
+	`, ids, actualPublishedAt, alarmSentAt, alarmLatencyMillis, detectedAt); err != nil {
+		return err
 	}
 
 	return nil
