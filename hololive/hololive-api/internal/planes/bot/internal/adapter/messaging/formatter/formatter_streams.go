@@ -79,7 +79,7 @@ func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*do
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func (f *ResponseFormatter) liveStreamsTemplateData(ctx context.Context, streams []*domain.Stream) liveStreamsTemplateData {
@@ -136,7 +136,7 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func limitedStreamList(streams []*domain.Stream) []*domain.Stream {
@@ -154,7 +154,7 @@ func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func (f *ResponseFormatter) channelScheduleTemplateData(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) channelScheduleTemplateData {

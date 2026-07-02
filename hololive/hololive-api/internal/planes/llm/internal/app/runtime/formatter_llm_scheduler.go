@@ -35,18 +35,20 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	templateview "github.com/kapu/hololive-shared/pkg/templateview"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 // llmSchedulerFormatter는 llm-scheduler가 사용하는 최소 메시지 포맷터 구현이다.
 // bot 전용 adapter에 의존하지 않고 template.Renderer만으로 필요한 formatter 계약만 맞춘다.
 type llmSchedulerFormatter struct {
-	prefix   string
-	renderer *template.Renderer
-	store    *messagestrings.Store
-	logger   *slog.Logger
+	prefix      string
+	renderer    *template.Renderer
+	store       *messagestrings.Store
+	logger      *slog.Logger
+	seeMoreFold bool
 }
 
-func newLLMSchedulerFormatter(prefix string, renderer *template.Renderer, logger *slog.Logger) *llmSchedulerFormatter {
+func newLLMSchedulerFormatter(prefix string, renderer *template.Renderer, logger *slog.Logger, seeMoreFold bool) *llmSchedulerFormatter {
 	if stringutil.TrimSpace(prefix) == "" {
 		prefix = "!"
 	}
@@ -54,9 +56,10 @@ func newLLMSchedulerFormatter(prefix string, renderer *template.Renderer, logger
 		logger = slog.Default()
 	}
 	return &llmSchedulerFormatter{
-		prefix:   prefix,
-		renderer: renderer,
-		logger:   logger,
+		prefix:      prefix,
+		renderer:    renderer,
+		logger:      logger,
+		seeMoreFold: seeMoreFold,
 	}
 }
 
@@ -77,6 +80,9 @@ func (f *llmSchedulerFormatter) renderOrError(ctx context.Context, key domain.Te
 	if err != nil {
 		f.logger.Warn(warnMsg, slog.Any("error", err))
 		return messagestrings.FallbackSentinel
+	}
+	if f.seeMoreFold {
+		return util.FoldForSeeMore(rendered, util.KakaoSeeMoreThreshold)
 	}
 	return rendered
 }

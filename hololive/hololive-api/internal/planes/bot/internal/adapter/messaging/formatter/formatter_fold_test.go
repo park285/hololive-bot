@@ -21,43 +21,23 @@
 package formatter
 
 import (
-	"context"
+	"strings"
+	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/stretchr/testify/assert"
 )
 
-func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmListEntry) string {
-	processed := make([]alarmListEntryView, len(alarms))
-	for idx, alarm := range alarms {
-		processed[idx] = alarmListEntryView{
-			MemberName: alarm.MemberName,
-			TypesLabel: f.formatAlarmTypesLabel(ctx, alarm.AlarmTypes),
-			NextStream: f.buildNextStreamInfoView(ctx, summarizeNextStreamInfo(alarm.NextStream)),
-		}
-	}
+func TestFormatHelp_SeeMoreFoldToggle(t *testing.T) {
+	longBody := "도움말 헤더\n" + strings.Repeat("명령 설명 행입니다\n", 40)
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdHelp: longBody,
+	})
 
-	data := alarmListTemplateData{
-		Count:  len(processed),
-		Prefix: f.prefix,
-		Alarms: processed,
-	}
+	folded := NewResponseFormatter("!", renderer, WithSeeMoreFold(true)).FormatHelp(t.Context())
+	assert.True(t, strings.HasPrefix(folded, "도움말 헤더\n"))
+	assert.Contains(t, folded, "​")
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmList, data)
-	if err != nil {
-		return messagestrings.FallbackSentinel
-	}
-
-	return f.foldSeeMore(rendered)
-}
-
-func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) string {
-	data := alarmClearedTemplateData{Count: count}
-
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmCleared, data)
-	if err != nil {
-		return messagestrings.FallbackSentinel
-	}
-
-	return rendered
+	plain := NewResponseFormatter("!", renderer).FormatHelp(t.Context())
+	assert.NotContains(t, plain, "​")
 }

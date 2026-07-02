@@ -39,5 +39,5 @@ func (f *ResponseFormatter) FormatHelp(ctx context.Context) string {
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }

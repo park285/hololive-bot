@@ -18,46 +18,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package formatter
+package runtime
 
 import (
 	"context"
+	"strings"
+	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/stretchr/testify/assert"
 )
 
-func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmListEntry) string {
-	processed := make([]alarmListEntryView, len(alarms))
-	for idx, alarm := range alarms {
-		processed[idx] = alarmListEntryView{
-			MemberName: alarm.MemberName,
-			TypesLabel: f.formatAlarmTypesLabel(ctx, alarm.AlarmTypes),
-			NextStream: f.buildNextStreamInfoView(ctx, summarizeNextStreamInfo(alarm.NextStream)),
-		}
-	}
+func TestRenderOrError_SeeMoreFoldToggle(t *testing.T) {
+	t.Parallel()
 
-	data := alarmListTemplateData{
-		Count:  len(processed),
-		Prefix: f.prefix,
-		Alarms: processed,
-	}
+	longBody := "다이제스트 헤더\n" + strings.Repeat("뉴스 항목 행입니다\n", 40)
+	renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, longBody)
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmList, data)
-	if err != nil {
-		return messagestrings.FallbackSentinel
-	}
+	on := newLLMSchedulerFormatter("!", renderer, nil, true)
+	folded := on.renderOrError(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn")
+	assert.True(t, strings.HasPrefix(folded, "다이제스트 헤더\n"))
+	assert.Contains(t, folded, "​")
 
-	return f.foldSeeMore(rendered)
-}
-
-func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) string {
-	data := alarmClearedTemplateData{Count: count}
-
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmCleared, data)
-	if err != nil {
-		return messagestrings.FallbackSentinel
-	}
-
-	return rendered
+	off := newLLMSchedulerFormatter("!", renderer, nil, false)
+	assert.NotContains(t, off.renderOrError(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn"), "​")
 }

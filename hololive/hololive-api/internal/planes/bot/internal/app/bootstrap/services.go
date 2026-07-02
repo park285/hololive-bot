@@ -44,7 +44,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 		logger.WarnContext(ctx, "message_strings 초기 적재 실패, lazy 재시도로 진행", "error", err)
 	}
 	messageAdapter := adapter.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
-	formatter := adapter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, adapter.WithMessageStrings(messageStrings))
+	formatter := adapter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, adapter.WithMessageStrings(messageStrings), adapter.WithSeeMoreFold(appConfig.Bot.SeeMoreFold))
 
 	foundation, err := InitScraperHolodexProfileFoundation(ctx, appConfig, infra, logger)
 	if err != nil {

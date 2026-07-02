@@ -105,7 +105,7 @@ const seedBodyMemberNewsDigest = `{{- if .Headline -}}
 func TestFormatMajorEventWeeklySummary_EmptyEvents(t *testing.T) {
 	t.Parallel()
 
-	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	got := formatter.FormatMajorEventWeeklySummary(context.Background(), nil, "")
 	assert.Equal(t, "", got)
 }
@@ -118,7 +118,7 @@ func TestFormatMajorEventWeeklySummary_NoSeeMorePadding(t *testing.T) {
 		domain.TemplateKeyCmdMajorEventWeeklySummary,
 		seedBodyMajorEventWeeklySummary,
 	)
-	formatter := newLLMSchedulerFormatter("!", renderer, nil)
+	formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 
 	events := []domain.MajorEvent{
 		{Title: "Holo Expo"},
@@ -140,7 +140,7 @@ func TestFormatMajorEventWeeklySummary_UsesLLMSummaryWithoutFallbackList(t *test
 		domain.TemplateKeyCmdMajorEventWeeklySummary,
 		seedBodyMajorEventWeeklySummary,
 	)
-	formatter := newLLMSchedulerFormatter("!", renderer, nil)
+	formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 
 	events := []domain.MajorEvent{{Title: "A"}}
 	got := formatter.FormatMajorEventWeeklySummary(context.Background(), events, "요약 본문")
@@ -152,7 +152,7 @@ func TestFormatMajorEventWeeklySummary_UsesLLMSummaryWithoutFallbackList(t *test
 func TestFormatMajorEventMonthlySummary_RenderFailFallback(t *testing.T) {
 	t.Parallel()
 
-	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	events := []domain.MajorEvent{{Title: "A"}}
 	got := formatter.FormatMajorEventMonthlySummary(context.Background(), events, "")
 	assert.Equal(t, messagestrings.FallbackSentinel, got)
@@ -161,7 +161,7 @@ func TestFormatMajorEventMonthlySummary_RenderFailFallback(t *testing.T) {
 func TestFormatMajorEventWeeklySummary_RenderFailFallback(t *testing.T) {
 	t.Parallel()
 
-	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	events := []domain.MajorEvent{{Title: "A"}}
 	got := formatter.FormatMajorEventWeeklySummary(context.Background(), events, "")
 	assert.Equal(t, messagestrings.FallbackSentinel, got)
@@ -174,7 +174,7 @@ func TestFormatMajorEventSummary_WeeklyMonthlyParity(t *testing.T) {
 		domain.TemplateKeyCmdMajorEventWeeklySummary:  seedBodyMajorEventWeeklySummary,
 		domain.TemplateKeyCmdMajorEventMonthlySummary: seedBodyMajorEventMonthlySummary,
 	})
-	formatter := newLLMSchedulerFormatter("!", renderer, nil)
+	formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 
 	events := []domain.MajorEvent{{Title: "A"}, {Title: "B"}}
 
@@ -237,7 +237,7 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 	t.Run("nil digest", func(t *testing.T) {
 		t.Parallel()
 
-		formatter := newLLMSchedulerFormatter("!", nil, nil)
+		formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 		got := formatter.FormatMemberNewsDigest(context.Background(), nil)
 		assert.Equal(t, messagestrings.FallbackSentinel, got)
 	})
@@ -250,7 +250,7 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 			domain.TemplateKeyCmdMemberNewsDigest,
 			seedBodyMemberNewsDigest,
 		)
-		formatter := newLLMSchedulerFormatter("!", renderer, nil)
+		formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 		formatter.store = setupMemberNewsStore(t)
 
 		digest := &membernews.Digest{
@@ -279,7 +279,7 @@ func TestLocalizeMemberNewsItemsAndCategoryLabel(t *testing.T) {
 		{Category: "unknown_code", Title: "D"},
 	}
 
-	formatter := newLLMSchedulerFormatter("!", nil, nil)
+	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	formatter.store = setupMemberNewsStore(t)
 
 	localized := formatter.localizeMemberNewsItems(t.Context(), items)

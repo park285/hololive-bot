@@ -28,6 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
@@ -35,12 +36,24 @@ type ResponseFormatter struct {
 	prefix         string
 	renderer       *template.Renderer
 	messageStrings *messagestrings.Store
+	seeMoreFold    bool
 }
 
 type Option func(*ResponseFormatter)
 
 func WithMessageStrings(store *messagestrings.Store) Option {
 	return func(f *ResponseFormatter) { f.messageStrings = store }
+}
+
+func WithSeeMoreFold(enabled bool) Option {
+	return func(f *ResponseFormatter) { f.seeMoreFold = enabled }
+}
+
+func (f *ResponseFormatter) foldSeeMore(s string) string {
+	if f == nil || !f.seeMoreFold {
+		return s
+	}
+	return util.FoldForSeeMore(s, util.KakaoSeeMoreThreshold)
 }
 
 func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, data any) (string, error) {

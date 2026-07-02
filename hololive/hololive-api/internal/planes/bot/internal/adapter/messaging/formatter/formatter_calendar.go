@@ -60,7 +60,7 @@ func (f *ResponseFormatter) CelebrationCalendar(ctx context.Context, month, year
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func calendarDayViews(month int, entries []domain.CalendarEntry) []calendarDayView {
