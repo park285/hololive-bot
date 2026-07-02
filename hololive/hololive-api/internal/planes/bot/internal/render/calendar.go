@@ -1,20 +1,17 @@
 package render
 
 import (
-	"bytes"
 	"fmt"
 	"image"
 	"image/color"
-	"image/png"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
-	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/assets/fonts"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/cardkit"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -193,56 +190,33 @@ func encodeCalendarPage(m *calendarMetrics, month, year int, entries []domain.Ca
 	if footer != "" {
 		height += int(40 * m.sf)
 	}
-	height = min(height, maxCanvasH)
 
-	img := image.NewRGBA(image.Rect(0, 0, canvasWidth, height))
-	fillRect(img, img.Bounds(), colWhite)
+	img := cardkit.NewCanvas(canvasWidth, min(height, maxCanvasH), colWhite)
 
 	drawCalendarHeader(img, m, month, year, entries)
 	y := drawCalendarBody(img, m, month, groups, photos)
 	if footer != "" {
-		drawText(img, m.fonts.date, paddingX, y+int(24*m.sf), colSlate500, footer)
+		cardkit.DrawText(img, m.fonts.date, paddingX, y+int(24*m.sf), colSlate500, footer)
 	}
 
-	out := downscaleToOutputWidth(img)
-
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, out); err != nil {
-		return nil, fmt.Errorf("encode calendar png: %w", err)
-	}
-	return buf.Bytes(), nil
-}
-
-// 고해상도 캔버스를 카카오 표시폭(calendarOutputWidth)으로 다운스케일한다.
-// 큰 캔버스→작은 출력 = 슈퍼샘플링(SSAA)이라 텍스트·아바타가 선명해지고,
-// 카카오가 인라인 표시 시 추가 다운스케일/재압축을 거의 하지 않아 화질 손실이 작다.
-func downscaleToOutputWidth(src *image.RGBA) image.Image {
-	b := src.Bounds()
-	if b.Dx() <= calendarOutputWidth {
-		return src
-	}
-	nw := calendarOutputWidth
-	nh := b.Dy() * nw / b.Dx()
-	dst := image.NewRGBA(image.Rect(0, 0, nw, nh))
-	xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, b, xdraw.Src, nil)
-	return dst
+	return cardkit.EncodePNG(img, calendarOutputWidth)
 }
 
 func drawCalendarHeader(img *image.RGBA, m *calendarMetrics, month, year int, entries []domain.CalendarEntry) {
-	drawText(img, m.fonts.title, paddingX, int(42*m.sf), colSlate800, m.headerText(year, month))
+	cardkit.DrawText(img, m.fonts.title, paddingX, int(42*m.sf), colSlate800, m.headerText(year, month))
 
 	bc, ac := countByKind(entries)
 	statText := m.summaryText(len(entries), bc, ac)
-	drawText(img, m.fonts.stat, paddingX, int(68*m.sf), colSlate500, statText)
+	cardkit.DrawText(img, m.fonts.stat, paddingX, int(68*m.sf), colSlate500, statText)
 
-	fillRect(img, image.Rect(paddingX, m.headerH, canvasWidth-paddingX, m.headerH+separatorH), colSlate200)
+	cardkit.FillRect(img, image.Rect(paddingX, m.headerH, canvasWidth-paddingX, m.headerH+separatorH), colSlate200)
 }
 
 func drawCalendarBody(img *image.RGBA, m *calendarMetrics, month int, grouped []dayGroup, photos map[string]image.Image) int {
 	y := m.headerH + separatorH + m.paddingY
 
 	if len(grouped) == 0 {
-		drawText(img, m.fonts.name, paddingX, y+int(24*m.sf), colSlate500, m.emptyText())
+		cardkit.DrawText(img, m.fonts.name, paddingX, y+int(24*m.sf), colSlate500, m.emptyText())
 		return y + int(60*m.sf)
 	}
 
@@ -253,8 +227,8 @@ func drawCalendarBody(img *image.RGBA, m *calendarMetrics, month int, grouped []
 }
 
 func drawDayGroup(img *image.RGBA, m *calendarMetrics, month int, group dayGroup, y int, photos map[string]image.Image) int {
-	drawText(img, m.fonts.date, paddingX, y+int(22*m.sf), colSlate500, m.dayText(month, group.day))
-	fillRect(img, image.Rect(paddingX, y+m.dateHeaderH-separatorH, canvasWidth-paddingX, y+m.dateHeaderH), colSlate200)
+	cardkit.DrawText(img, m.fonts.date, paddingX, y+int(22*m.sf), colSlate500, m.dayText(month, group.day))
+	cardkit.FillRect(img, image.Rect(paddingX, y+m.dateHeaderH-separatorH, canvasWidth-paddingX, y+m.dateHeaderH), colSlate200)
 	y += m.dateHeaderH
 
 	for _, entry := range group.entries {
@@ -284,57 +258,45 @@ func drawEntryRow(img *image.RGBA, m *calendarMetrics, x, y int, entry domain.Ca
 	name := entryDisplayName(m, entry.Member)
 	style := resolveEntryStyle(m, entry)
 
-	drawEntryAvatar(img, m, x, y, entry, style.accent, name, photos)
+	var photo image.Image
+	if entry.Member != nil {
+		photo = photos[entry.Member.Photo]
+	}
+	cardkit.AvatarCircle(img, x+m.avatarSize/2, y+m.entryRowH/2, m.avatarSize/2, photo, name, m.entryAvatarStyle(style.accent))
 
 	nameX := x + m.avatarSize + m.avatarGap
 	badgeLeft := canvasWidth - paddingX
 	if style.badgeText != "" {
-		badgeLeft = drawEntryBadge(img, m, y, style)
+		by := y + (m.entryRowH-m.badgeH)/2
+		badgeLeft = cardkit.BadgeRightAligned(img, canvasWidth-paddingX, by, style.badgeText, m.entryBadgeStyle(style))
 	}
-	name = clampToWidth(m.fonts.name, name, badgeLeft-nameX-m.avatarGap)
-	drawText(img, m.fonts.name, nameX, y+m.entryRowH/2+int(8*m.sf), colSlate800, name)
+	name = cardkit.ClampToWidth(m.fonts.name, name, badgeLeft-nameX-m.avatarGap)
+	cardkit.DrawText(img, m.fonts.name, nameX, y+m.entryRowH/2+int(8*m.sf), colSlate800, name)
 }
 
-func drawEntryAvatar(img *image.RGBA, m *calendarMetrics, x, y int, entry domain.CalendarEntry, accent color.RGBA, name string, photos map[string]image.Image) {
-	cx := x + m.avatarSize/2
-	cy := y + m.entryRowH/2
-	r := m.avatarSize / 2
-
-	fillCircle(img, cx, cy, r+int(m.sf)+1, colSlate200)
-
-	if entry.Member != nil && entry.Member.Photo != "" {
-		if photo, ok := photos[entry.Member.Photo]; ok {
-			drawCircularImage(img, photo, cx, cy, r, colWhite)
-			return
-		}
-	}
-
-	fillCircle(img, cx, cy, r, accent)
-	initial := firstRune(name)
-	if initial != "" {
-		iw := measureText(m.fonts.avatar, initial)
-		drawText(img, m.fonts.avatar, cx-iw/2, cy+int(12*m.sf), colWhite, initial)
+func (m *calendarMetrics) entryAvatarStyle(accent color.RGBA) cardkit.AvatarStyle {
+	return cardkit.AvatarStyle{
+		Ring:        colSlate200,
+		RingWidth:   int(m.sf) + 1,
+		Accent:      accent,
+		Background:  colWhite,
+		Initials:    m.fonts.avatar,
+		TextColor:   colWhite,
+		InitialDrop: int(12 * m.sf),
 	}
 }
 
-func drawEntryBadge(img *image.RGBA, m *calendarMetrics, y int, s entryStyle) (badgeLeft int) {
-	bw := measureText(m.fonts.badge, s.badgeText)
-	bx := canvasWidth - paddingX - bw - m.badgePadX*2
-	by := y + (m.entryRowH-m.badgeH)/2
-	fillRoundedRect(img, image.Rect(bx, by, bx+bw+m.badgePadX*2, by+m.badgeH), m.badgeRadius, s.badgeBg)
-	drawText(img, m.fonts.badge, bx+m.badgePadX, by+m.badgeH-m.badgePadY-int(2*m.sf), s.accent, s.badgeText)
-	return bx
-}
-
-func firstRune(s string) string {
-	if s == "" {
-		return ""
+func (m *calendarMetrics) entryBadgeStyle(s entryStyle) cardkit.BadgeStyle {
+	return cardkit.BadgeStyle{
+		Face:         m.fonts.badge,
+		Background:   s.badgeBg,
+		Text:         s.accent,
+		PadX:         m.badgePadX,
+		PadY:         m.badgePadY,
+		Height:       m.badgeH,
+		Radius:       m.badgeRadius,
+		BaselineLift: int(2 * m.sf),
 	}
-	r, _ := utf8.DecodeRuneInString(s)
-	if r == utf8.RuneError {
-		return ""
-	}
-	return string(r)
 }
 
 func countByKind(entries []domain.CalendarEntry) (birthday, anniversary int) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/assets/fonts"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/cardkit"
 )
 
 func TestClampToWidth(t *testing.T) {
@@ -18,20 +19,20 @@ func TestClampToWidth(t *testing.T) {
 
 	t.Run("fits unchanged", func(t *testing.T) {
 		s := "페코라"
-		limit := measureText(face, s) + 1
-		if got := clampToWidth(face, s, limit); got != s {
-			t.Errorf("clampToWidth() = %q, want unchanged %q", got, s)
+		limit := cardkit.MeasureText(face, s) + 1
+		if got := cardkit.ClampToWidth(face, s, limit); got != s {
+			t.Errorf("cardkit.ClampToWidth() = %q, want unchanged %q", got, s)
 		}
 	})
 
 	t.Run("overflow clamps with ellipsis", func(t *testing.T) {
 		s := "우사다 페코라 우사다 페코라 우사다 페코라"
-		limit := measureText(face, s) / 2
-		got := clampToWidth(face, s, limit)
+		limit := cardkit.MeasureText(face, s) / 2
+		got := cardkit.ClampToWidth(face, s, limit)
 		if !strings.HasSuffix(got, "…") {
-			t.Fatalf("clampToWidth() = %q, want ellipsis suffix", got)
+			t.Fatalf("cardkit.ClampToWidth() = %q, want ellipsis suffix", got)
 		}
-		if w := measureText(face, got); w > limit {
+		if w := cardkit.MeasureText(face, got); w > limit {
 			t.Errorf("clamped width = %d, want <= %d", w, limit)
 		}
 		if !strings.HasPrefix(s, strings.TrimSuffix(got, "…")) {
@@ -41,34 +42,34 @@ func TestClampToWidth(t *testing.T) {
 
 	t.Run("mixed KR JP overflow", func(t *testing.T) {
 		s := "시라카미 후부키 白上フブキ 호쇼 마린 宝鐘マリン"
-		limit := measureText(face, s) / 3
-		got := clampToWidth(face, s, limit)
+		limit := cardkit.MeasureText(face, s) / 3
+		got := cardkit.ClampToWidth(face, s, limit)
 		if got == "" || !strings.HasSuffix(got, "…") {
-			t.Fatalf("clampToWidth() = %q, want non-empty with ellipsis", got)
+			t.Fatalf("cardkit.ClampToWidth() = %q, want non-empty with ellipsis", got)
 		}
-		if w := measureText(face, got); w > limit {
+		if w := cardkit.MeasureText(face, got); w > limit {
 			t.Errorf("clamped width = %d, want <= %d", w, limit)
 		}
 	})
 
 	t.Run("trailing space trimmed before ellipsis", func(t *testing.T) {
 		s := "우사다 페코라페코라"
-		limit := measureText(face, "우사다 ") + measureText(face, "…")/2
-		got := clampToWidth(face, s, limit)
+		limit := cardkit.MeasureText(face, "우사다 ") + cardkit.MeasureText(face, "…")/2
+		got := cardkit.ClampToWidth(face, s, limit)
 		if strings.Contains(got, " …") {
-			t.Errorf("clampToWidth() = %q, want no space before ellipsis", got)
+			t.Errorf("cardkit.ClampToWidth() = %q, want no space before ellipsis", got)
 		}
 	})
 
 	t.Run("non-positive limit", func(t *testing.T) {
-		if got := clampToWidth(face, "페코라", 0); got != "" {
-			t.Errorf("clampToWidth(0) = %q, want empty", got)
+		if got := cardkit.ClampToWidth(face, "페코라", 0); got != "" {
+			t.Errorf("cardkit.ClampToWidth(0) = %q, want empty", got)
 		}
 	})
 
 	t.Run("limit below single rune", func(t *testing.T) {
-		if got := clampToWidth(face, "페코라", 1); got != "" {
-			t.Errorf("clampToWidth(1) = %q, want empty", got)
+		if got := cardkit.ClampToWidth(face, "페코라", 1); got != "" {
+			t.Errorf("cardkit.ClampToWidth(1) = %q, want empty", got)
 		}
 	})
 }
