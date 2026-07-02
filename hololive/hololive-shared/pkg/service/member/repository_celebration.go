@@ -23,7 +23,7 @@ func (r *Repository) FindMembersWithCelebrationsInMonth(ctx context.Context, mon
 		WHERE EXTRACT(MONTH FROM debut_date) = $1
 		  AND EXTRACT(YEAR FROM debut_date) < $2
 		  AND status = 'active'
-		ORDER BY celebration_day, celebration_kind
+		ORDER BY celebration_day, celebration_kind, id
 	`, celebrationMemberColumns, celebrationMemberColumns)
 
 	rows, err := r.pool.Query(ctx, query, month, referenceYear)

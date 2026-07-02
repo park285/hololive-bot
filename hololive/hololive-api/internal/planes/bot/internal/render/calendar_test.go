@@ -194,6 +194,38 @@ func TestStoreDiskCachedImages_PartialWriteIsFullMiss(t *testing.T) {
 	}
 }
 
+func TestDiskCache_ConcurrentCrossHashStoreNeverServesTruncatedSet(t *testing.T) {
+	t.Parallel()
+
+	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(t.TempDir()))
+	pngBytes := tinyPNG(t)
+
+	jobs := []struct {
+		key   calendarCacheKey
+		pages [][]byte
+	}{
+		{calendarCacheKey{year: 2026, month: 6, entriesHash: strings.Repeat("a", 64)}, [][]byte{pngBytes, pngBytes, pngBytes}},
+		{calendarCacheKey{year: 2026, month: 6, entriesHash: strings.Repeat("b", 64)}, [][]byte{pngBytes}},
+	}
+
+	var wg sync.WaitGroup
+	for _, job := range jobs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 40 {
+				r.storeDiskCachedImages(job.key, job.pages)
+				got, ok := r.diskCachedImages(job.key)
+				if ok && len(got) != len(job.pages) {
+					t.Errorf("truncated set for hash %s: got %d pages, want %d or full miss", job.key.entriesHash[:4], len(got), len(job.pages))
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}
+
 func TestCalendarCardRenderer_RenderCalendarImage_CoalescesConcurrentMonthlyCacheMisses(t *testing.T) {
 	var requests atomic.Int32
 	server := newDelayedPNGServer(t, &requests, 25*time.Millisecond)

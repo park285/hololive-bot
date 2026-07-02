@@ -25,6 +25,9 @@ const (
 )
 
 func (r *CalendarCardRenderer) diskCachedImages(key calendarCacheKey) ([][]byte, bool) {
+	r.diskMu.Lock()
+	defer r.diskMu.Unlock()
+
 	var pages [][]byte
 	for page := 1; page <= calendarMaxPages; page++ {
 		data, status := r.readDiskCachePage(key, page)
@@ -63,10 +66,15 @@ func (r *CalendarCardRenderer) readDiskCachePage(key calendarCacheKey, page int)
 
 // p1을 마지막에 쓴다(커밋 마커): 읽기는 p1부터 시작하므로, 중간에 중단된 쓰기는
 // p1 부재로 전체 미스가 되고 부분 페이지 셋이 유효한 짧은 셋으로 오독되지 않는다.
+// diskMu는 같은 월·다른 해시의 store/prune/read 인터리브를 직렬화한다 — 없으면
+// 타 키의 prune이 커밋 중인 페이지 뒷부분을 지워 {p1}만 남은 잘린 셋이 유효 히트가 된다.
 func (r *CalendarCardRenderer) storeDiskCachedImages(key calendarCacheKey, pages [][]byte) {
 	if len(pages) == 0 || len(pages) > calendarMaxPages {
 		return
 	}
+
+	r.diskMu.Lock()
+	defer r.diskMu.Unlock()
 	written := make([]string, 0, len(pages))
 	for i := len(pages) - 1; i >= 0; i-- {
 		path, ok := r.writeDiskCachePage(key, i+1, pages[i])

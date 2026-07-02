@@ -23,6 +23,7 @@ type CalendarCardRenderer struct {
 	cache        map[calendarCacheKey][][]byte
 	cacheOrder   []calendarCacheKey
 	rendering    singleflight.Group
+	diskMu       sync.Mutex
 	diskCacheDir string
 	strings      *messagestrings.Store
 }
