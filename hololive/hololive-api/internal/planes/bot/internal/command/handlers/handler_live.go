@@ -25,21 +25,24 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
 type LiveCommand struct {
 	BaseCommand
+	imageRenderer LiveImageRenderer
 }
 
-func NewLiveCommand(deps *Dependencies) *LiveCommand {
-	return &LiveCommand{BaseCommand: NewBaseCommand(deps)}
+func NewLiveCommand(deps *Dependencies, imageRenderer LiveImageRenderer) *LiveCommand {
+	return &LiveCommand{BaseCommand: NewBaseCommand(deps), imageRenderer: imageRenderer}
 }
 
 func (c *LiveCommand) Name() string {
@@ -125,9 +128,69 @@ func (c *LiveCommand) executeAllLive(ctx context.Context, cmdCtx *domain.Command
 
 	streams = append(streams, chzzkStreams...)
 
+	if len(streams) > 0 && c.trySendLiveImage(ctx, cmdCtx.Room, streams) {
+		return nil
+	}
+
 	message := c.Deps().Formatter.FormatLiveStreams(ctx, streams)
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+}
+
+func (c *LiveCommand) trySendLiveImage(ctx context.Context, room string, streams []*domain.Stream) bool {
+	if c.imageRenderer == nil {
+		return false
+	}
+
+	pages, err := c.imageRenderer.RenderLiveImages(c.liveCardEntries(ctx, streams))
+	if err != nil || len(pages) == 0 {
+		c.Deps().Logger.Warn("live image render failed, falling back to text",
+			slog.Any("error", err),
+		)
+		return false
+	}
+
+	if err := c.sendLivePages(ctx, room, pages); err != nil {
+		c.Deps().Logger.Warn("live image send failed, falling back to text",
+			slog.Any("error", err),
+		)
+		return false
+	}
+
+	return true
+}
+
+func (c *LiveCommand) sendLivePages(ctx context.Context, room string, pages [][]byte) error {
+	if len(pages) == 1 {
+		return c.Deps().SendImage(ctx, room, pages[0])
+	}
+	return c.Deps().SendMultipleImages(ctx, room, pages)
+}
+
+func (c *LiveCommand) liveCardEntries(ctx context.Context, streams []*domain.Stream) []render.LiveCardEntry {
+	entries := make([]render.LiveCardEntry, 0, len(streams))
+	for _, stream := range streams {
+		if stream == nil {
+			continue
+		}
+		entries = append(entries, c.liveCardEntry(ctx, stream))
+	}
+	return entries
+}
+
+func (c *LiveCommand) liveCardEntry(ctx context.Context, stream *domain.Stream) render.LiveCardEntry {
+	entry := render.LiveCardEntry{Name: stream.ChannelName, Title: stream.Title, Chzzk: stream.IsChzzkOnly}
+	member := c.Deps().Matcher.GetMemberByChannelID(ctx, stream.ChannelID)
+	if member == nil {
+		return entry
+	}
+	entry.Photo = member.Photo
+	if member.ShortKoreanName != "" {
+		entry.Name = member.ShortKoreanName
+	} else if member.NameKo != "" {
+		entry.Name = member.NameKo
+	}
+	return entry
 }
 
 // checkChzzkLive: 특정 멤버의 Chzzk 방송 상태를 확인합니다.

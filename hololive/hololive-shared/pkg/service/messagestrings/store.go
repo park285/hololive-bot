@@ -46,6 +46,7 @@ const (
 	NamespaceError     = "error"
 	NamespaceNotify    = "notify"
 	NamespaceCalendar  = "calendar"
+	NamespaceLiveCard  = "livecard"
 	NamespaceTimeFmt   = "timefmt"
 	NamespaceKaring    = "karing"
 )

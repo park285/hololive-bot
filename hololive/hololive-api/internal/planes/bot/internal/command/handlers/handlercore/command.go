@@ -32,6 +32,7 @@ import (
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
@@ -70,6 +71,10 @@ type CelebrationCalendarFinder interface {
 
 type CalendarImageRenderer interface {
 	RenderCalendarImages(month, year int, entries []domain.CalendarEntry) ([][]byte, error)
+}
+
+type LiveImageRenderer interface {
+	RenderLiveImages(entries []render.LiveCardEntry) ([][]byte, error)
 }
 
 type Dependencies struct {
