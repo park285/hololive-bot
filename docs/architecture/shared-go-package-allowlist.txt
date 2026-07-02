@@ -1,4 +1,6 @@
 backoff
+db/pgxdb
+db/sqldb
 envutil
 ginjson
 h3
