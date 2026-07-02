@@ -80,11 +80,12 @@ func buildDeliveryOutboxDispatcher(
 	if infra == nil || infra.Postgres == nil {
 		return nil, fmt.Errorf("postgres is required")
 	}
+	dispatcherConfig := delivery.DefaultDispatcherConfig()
 	dispatcher := delivery.NewDispatcher(
 		delivery.NewOutboxRepository(infra.Postgres, logger),
 		sender,
 		logger,
-		delivery.DefaultDispatcherConfig(),
+		&dispatcherConfig,
 	)
 	return deliveryOutboxDispatcherRunner{
 		dispatcher: dispatcher,

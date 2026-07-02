@@ -98,49 +98,38 @@ type Dispatcher struct {
 	lastStaleSendingSweepAt time.Time
 }
 
-func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, config DispatcherConfig) *Dispatcher {
+func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, config *DispatcherConfig) *Dispatcher {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: config.withDefaults(), workerID: util.InstanceID("delivery-dispatcher")}
+	cfg := DispatcherConfig{}
+	if config != nil {
+		cfg = *config
+	}
+	cfg.applyDefaults()
+	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: cfg, workerID: util.InstanceID("delivery-dispatcher")}
 }
 
-func (c DispatcherConfig) withDefaults() DispatcherConfig {
+func (c *DispatcherConfig) applyDefaults() {
 	defaults := DefaultDispatcherConfig()
-	if c.BatchSize <= 0 {
-		c.BatchSize = defaults.BatchSize
+	c.BatchSize = positiveOr(c.BatchSize, defaults.BatchSize)
+	c.MaxConcurrent = positiveOr(c.MaxConcurrent, defaults.MaxConcurrent)
+	c.MaxRetries = positiveOr(c.MaxRetries, defaults.MaxRetries)
+	c.LockTimeout = positiveOr(c.LockTimeout, defaults.LockTimeout)
+	c.PollInterval = positiveOr(c.PollInterval, defaults.PollInterval)
+	c.RetryBackoff = positiveOr(c.RetryBackoff, defaults.RetryBackoff)
+	c.CleanupAfter = positiveOr(c.CleanupAfter, defaults.CleanupAfter)
+	c.CleanupInterval = positiveOr(c.CleanupInterval, defaults.CleanupInterval)
+	c.StaleSendingAfter = positiveOr(c.StaleSendingAfter, defaults.StaleSendingAfter)
+	c.StaleSendingSweepInterval = positiveOr(c.StaleSendingSweepInterval, defaults.StaleSendingSweepInterval)
+	c.StaleSendingSweepLimit = positiveOr(c.StaleSendingSweepLimit, defaults.StaleSendingSweepLimit)
+}
+
+func positiveOr[T ~int | ~int64](value, fallback T) T {
+	if value <= 0 {
+		return fallback
 	}
-	if c.MaxConcurrent <= 0 {
-		c.MaxConcurrent = defaults.MaxConcurrent
-	}
-	if c.MaxRetries <= 0 {
-		c.MaxRetries = defaults.MaxRetries
-	}
-	if c.LockTimeout <= 0 {
-		c.LockTimeout = defaults.LockTimeout
-	}
-	if c.PollInterval <= 0 {
-		c.PollInterval = defaults.PollInterval
-	}
-	if c.RetryBackoff <= 0 {
-		c.RetryBackoff = defaults.RetryBackoff
-	}
-	if c.CleanupAfter <= 0 {
-		c.CleanupAfter = defaults.CleanupAfter
-	}
-	if c.CleanupInterval <= 0 {
-		c.CleanupInterval = defaults.CleanupInterval
-	}
-	if c.StaleSendingAfter <= 0 {
-		c.StaleSendingAfter = defaults.StaleSendingAfter
-	}
-	if c.StaleSendingSweepInterval <= 0 {
-		c.StaleSendingSweepInterval = defaults.StaleSendingSweepInterval
-	}
-	if c.StaleSendingSweepLimit <= 0 {
-		c.StaleSendingSweepLimit = defaults.StaleSendingSweepLimit
-	}
-	return c
+	return value
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {

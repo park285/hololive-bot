@@ -250,11 +250,7 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 
 	outboxByID, err := d.loadOutboxItemsByIDs(ctx, collectDeliveryOutboxIDs(sendRows))
 	if err != nil {
-		d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
-		observeOutboxDeliveryProcessed("failed", len(sendRows))
-		if markErr := d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(sendRows, collectDeliveryIDs(sendRows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows"); markErr != nil {
-			d.logger.Error("Failed to mark delivery rows failed after outbox load failure", slog.Any("error", markErr))
-		}
+		d.failSendingRowsAfterOutboxLoadError(ctx, sendRows, err)
 		return len(sendRows)
 	}
 
@@ -266,6 +262,14 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	d.recordOutboxDispatchResult(len(sendRows), &result, touchedOutboxIDs, aggregateFailures)
 
 	return len(sendRows)
+}
+
+func (d *ClaimManager) failSendingRowsAfterOutboxLoadError(ctx context.Context, sendRows []domain.YouTubeNotificationDelivery, err error) {
+	d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
+	observeOutboxDeliveryProcessed("failed", len(sendRows))
+	if markErr := d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(sendRows, collectDeliveryIDs(sendRows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows"); markErr != nil {
+		d.logger.Error("Failed to mark delivery rows failed after outbox load failure", slog.Any("error", markErr))
+	}
 }
 
 func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result *dispatchstate.DispatchResult) {

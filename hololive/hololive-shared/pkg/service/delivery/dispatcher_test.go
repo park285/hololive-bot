@@ -137,7 +137,7 @@ func TestProcessItemPassesStableClientRequestID(t *testing.T) {
 		},
 	}
 	repository := &mockDeliveryRepository{}
-	dispatcher := NewDispatcher(repository, sender, dispatcherLogger(), DispatcherConfig{})
+	dispatcher := NewDispatcher(repository, sender, dispatcherLogger(), &DispatcherConfig{})
 	item := &domain.NotificationDeliveryOutbox{
 		ID:        42,
 		Kind:      domain.DeliveryKindMemberNewsWeekly,
@@ -201,7 +201,9 @@ func TestProcessOnce_E2E(t *testing.T) {
 		},
 	}
 
-	d := NewDispatcher(repository, sender, dispatcherLogger(), DefaultDispatcherConfig())
+	defaultCfg := DefaultDispatcherConfig()
+
+	d := NewDispatcher(repository, sender, dispatcherLogger(), &defaultCfg)
 	d.processOnce(context.Background())
 
 	if len(sentIDs) != 2 {
@@ -237,7 +239,9 @@ func TestProcessOnce_UnmarshalFailure_MarkFailed(t *testing.T) {
 
 	sender := &mockSender{}
 
-	d := NewDispatcher(repository, sender, dispatcherLogger(), DefaultDispatcherConfig())
+	defaultCfg := DefaultDispatcherConfig()
+
+	d := NewDispatcher(repository, sender, dispatcherLogger(), &defaultCfg)
 	d.processOnce(context.Background())
 
 	if failedID != 10 {
@@ -275,7 +279,9 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 		},
 	}
 
-	d := NewDispatcher(repository, sender, dispatcherLogger(), DefaultDispatcherConfig())
+	defaultCfg := DefaultDispatcherConfig()
+
+	d := NewDispatcher(repository, sender, dispatcherLogger(), &defaultCfg)
 	d.processOnce(context.Background())
 
 	if failedID != 20 {
@@ -307,7 +313,7 @@ func TestProcessItem_MarkSendingFenceSkipsSend(t *testing.T) {
 			return nil
 		},
 	}
-	dispatcher := NewDispatcher(repository, sender, dispatcherLogger(), DispatcherConfig{})
+	dispatcher := NewDispatcher(repository, sender, dispatcherLogger(), &DispatcherConfig{})
 	item := &domain.NotificationDeliveryOutbox{ID: 42, RoomID: "room-1", Payload: makePayload(t, "hello")}
 
 	dispatcher.processItem(context.Background(), item)
@@ -344,7 +350,9 @@ func TestProcessOnce_QuarantinesStaleSendingBeforeFetch(t *testing.T) {
 		},
 	}
 
-	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), DefaultDispatcherConfig())
+	defaultCfg := DefaultDispatcherConfig()
+
+	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), &defaultCfg)
 	d.processOnce(context.Background())
 
 	if quarantineCalls.Load() != 1 {
@@ -371,7 +379,7 @@ func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
 	config.PollInterval = 10 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
-	d := NewDispatcher(repository, sender, dispatcherLogger(), config)
+	d := NewDispatcher(repository, sender, dispatcherLogger(), &config)
 	d.Start(ctx)
 
 	// 초기 실행 + ticker 몇 회 대기
@@ -419,7 +427,7 @@ func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {
 	config.PollInterval = 10 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
-	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), config)
+	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), &config)
 	done := make(chan struct{})
 	go func() {
 		d.run(ctx)
@@ -469,7 +477,7 @@ func TestDispatcher_StartProcessesOnceBeforeFirstTick(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), config)
+	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), &config)
 	d.Start(ctx)
 
 	select {
@@ -530,7 +538,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 	config := DefaultDispatcherConfig()
 	config.MaxConcurrent = 2
 
-	d := NewDispatcher(repository, sender, dispatcherLogger(), config)
+	d := NewDispatcher(repository, sender, dispatcherLogger(), &config)
 	d.processOnce(context.Background())
 
 	if sentCount.Load() != 4 {

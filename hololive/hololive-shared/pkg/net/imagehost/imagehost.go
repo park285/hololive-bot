@@ -13,7 +13,7 @@ type Policy struct {
 	suffixes []string
 }
 
-func NewPolicy(hosts []string, suffixes []string) Policy {
+func NewPolicy(hosts, suffixes []string) Policy {
 	exact := make(map[string]struct{}, len(hosts))
 	for _, h := range hosts {
 		exact[NormalizeHost(h)] = struct{}{}

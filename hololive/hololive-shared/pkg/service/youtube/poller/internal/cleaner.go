@@ -60,12 +60,19 @@ type viewerSampleConnAcquirer interface {
 }
 
 func NewViewerSampleCleaner(db any, config ViewerSampleCleanerConfig) *ViewerSampleCleaner {
-	acquirer, _ := db.(viewerSampleConnAcquirer)
 	return &ViewerSampleCleaner{
 		db:       asViewerSampleQuerier(db),
-		acquirer: acquirer,
+		acquirer: asViewerSampleConnAcquirer(db),
 		config:   config,
 	}
+}
+
+func asViewerSampleConnAcquirer(db any) viewerSampleConnAcquirer {
+	acquirer, ok := db.(viewerSampleConnAcquirer)
+	if !ok {
+		return nil
+	}
+	return acquirer
 }
 
 func asViewerSampleQuerier(db any) dbx.Querier {
@@ -103,7 +110,7 @@ func (c *ViewerSampleCleaner) cleanupLocked(ctx context.Context, db dbx.Querier)
 	if !locked {
 		return 0, nil
 	}
-	defer releaseViewerSampleCleanupLock(db)
+	defer releaseViewerSampleCleanupLock(ctx, db)
 	return c.cleanupBatches(ctx, db)
 }
 
@@ -115,9 +122,9 @@ func acquireViewerSampleCleanupLock(ctx context.Context, db dbx.Querier) (bool, 
 	return locked, nil
 }
 
-func releaseViewerSampleCleanupLock(db dbx.Querier) {
+func releaseViewerSampleCleanupLock(ctx context.Context, db dbx.Querier) {
 	// ctx가 취소돼도 세션 락은 반드시 해제돼야 한다. 안 하면 conn이 락을 쥔 채 pool로 반환된다.
-	if _, err := db.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", viewerSampleCleanupLockKey); err != nil {
+	if _, err := db.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", viewerSampleCleanupLockKey); err != nil {
 		slog.Warn("release viewer sample cleanup lock failed", "error", err)
 	}
 }
@@ -128,19 +135,13 @@ func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier
 
 	var totalRowsAffected int64
 	for {
-		if err := ctx.Err(); err != nil {
-			return totalRowsAffected, err
-		}
-		rowsAffected, err := deleteViewerSampleCleanupBatch(ctx, db, cutoff, batchSize)
+		rowsAffected, more, err := runViewerSampleCleanupBatch(ctx, db, cutoff, batchSize)
+		totalRowsAffected += rowsAffected
 		if err != nil {
 			return totalRowsAffected, err
 		}
-		totalRowsAffected += rowsAffected
-		if rowsAffected < int64(batchSize) {
+		if !more {
 			break
-		}
-		if err := yieldViewerSampleCleanup(ctx); err != nil {
-			return totalRowsAffected, err
 		}
 	}
 
@@ -152,6 +153,23 @@ func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier
 	}
 
 	return totalRowsAffected, nil
+}
+
+func runViewerSampleCleanupBatch(ctx context.Context, db dbx.Querier, cutoff time.Time, batchSize int) (rowsAffected int64, more bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return 0, false, err
+	}
+	rowsAffected, err = deleteViewerSampleCleanupBatch(ctx, db, cutoff, batchSize)
+	if err != nil {
+		return 0, false, err
+	}
+	if rowsAffected < int64(batchSize) {
+		return rowsAffected, false, nil
+	}
+	if err := yieldViewerSampleCleanup(ctx); err != nil {
+		return rowsAffected, false, err
+	}
+	return rowsAffected, true, nil
 }
 
 func deleteViewerSampleCleanupBatch(ctx context.Context, db dbx.Querier, cutoff time.Time, batchSize int) (int64, error) {

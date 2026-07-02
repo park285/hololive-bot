@@ -90,7 +90,7 @@ func fetchAndLockItems(t *testing.T, repository *OutboxRepository, ctx context.C
 	return items
 }
 
-func markOutboxSending(t *testing.T, repository *OutboxRepository, ctx context.Context, item domain.NotificationDeliveryOutbox) {
+func markOutboxSending(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
 	t.Helper()
 	ok, err := repository.MarkSending(ctx, item.ID, testWorkerA, testLease)
 	if err != nil {
@@ -245,7 +245,7 @@ func TestMarkSent_FromSending(t *testing.T) {
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
-	markOutboxSending(t, repository, ctx, items[0])
+	markOutboxSending(t, repository, ctx, &items[0])
 
 	ok, err := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time)
 	if err != nil {
@@ -391,7 +391,7 @@ func TestMarkFailed_FromSending(t *testing.T) {
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
-	markOutboxSending(t, repository, ctx, items[0])
+	markOutboxSending(t, repository, ctx, &items[0])
 
 	ok, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time, 3, time.Minute, "send error")
 	if err != nil {
@@ -780,31 +780,31 @@ func TestMarkSending_Fenced(t *testing.T) {
 	tests := []struct {
 		name   string
 		worker string
-		mutate func(t *testing.T, repository *OutboxRepository, ctx context.Context, item domain.NotificationDeliveryOutbox)
+		mutate func(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox)
 	}{
 		{
 			name:   "foreign worker locked_by",
 			worker: testWorkerB,
-			mutate: func(*testing.T, *OutboxRepository, context.Context, domain.NotificationDeliveryOutbox) {},
+			mutate: func(*testing.T, *OutboxRepository, context.Context, *domain.NotificationDeliveryOutbox) {},
 		},
 		{
 			name:   "expired lease",
 			worker: testWorkerA,
-			mutate: func(t *testing.T, repository *OutboxRepository, ctx context.Context, item domain.NotificationDeliveryOutbox) {
+			mutate: func(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
 				expireLease(t, repository, ctx, item.ID)
 			},
 		},
 		{
 			name:   "non-pending sending",
 			worker: testWorkerA,
-			mutate: func(t *testing.T, repository *OutboxRepository, ctx context.Context, item domain.NotificationDeliveryOutbox) {
+			mutate: func(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
 				markOutboxSending(t, repository, ctx, item)
 			},
 		},
 		{
 			name:   "non-pending failed",
 			worker: testWorkerA,
-			mutate: func(t *testing.T, repository *OutboxRepository, ctx context.Context, item domain.NotificationDeliveryOutbox) {
+			mutate: func(t *testing.T, repository *OutboxRepository, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
 				if _, err := repository.pool.Exec(ctx,
 					"UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE id = $1", item.ID,
 				); err != nil {
@@ -826,7 +826,7 @@ func TestMarkSending_Fenced(t *testing.T) {
 			if len(items) == 0 {
 				t.Fatal("no items fetched")
 			}
-			tc.mutate(t, repository, ctx, items[0])
+			tc.mutate(t, repository, ctx, &items[0])
 
 			ok, err := repository.MarkSending(ctx, items[0].ID, tc.worker, testLease)
 			if err != nil {
@@ -883,7 +883,7 @@ func TestFetchAndLock_DoesNotReclaimSendingAfterLeaseExpiry(t *testing.T) {
 		t.Fatal("worker A fetched no items")
 	}
 	id := itemsA[0].ID
-	markOutboxSending(t, repository, ctx, itemsA[0])
+	markOutboxSending(t, repository, ctx, &itemsA[0])
 	expireLease(t, repository, ctx, id)
 
 	got, err := repository.FetchAndLock(ctx, testWorkerB, 1, testLockTTL, testLease)
@@ -910,7 +910,7 @@ func TestQuarantineStaleSending(t *testing.T) {
 	if len(items) == 0 {
 		t.Fatal("no items fetched")
 	}
-	markOutboxSending(t, repository, ctx, items[0])
+	markOutboxSending(t, repository, ctx, &items[0])
 
 	if _, err := repository.pool.Exec(ctx,
 		"UPDATE notification_delivery_outbox SET sending_started_at = $1 WHERE id = $2",

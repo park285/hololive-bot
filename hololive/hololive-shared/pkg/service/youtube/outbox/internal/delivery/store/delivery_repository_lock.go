@@ -133,11 +133,6 @@ func deliveryLockTokenArrays(tokens []LockToken) ([]int64, []time.Time) {
 	return ids, lockedAts
 }
 
-func deliveryLockTokenIDs(tokens []LockToken) []int64 {
-	ids, _ := deliveryLockTokenArrays(tokens)
-	return ids
-}
-
 func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens []LockToken, sentAt time.Time) ([]int64, error) {
 	ids, lockedAts := deliveryLockTokenArrays(tokens)
 	if len(ids) == 0 {
@@ -248,7 +243,7 @@ func (r *DeliveryRepository) MarkPermanentFailureBatchIfLocked(ctx context.Conte
 	return nil
 }
 
-func (r *DeliveryRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) ([]int64, int, error) {
+func (r *DeliveryRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (outboxIDs []int64, quarantined int, err error) {
 	if r == nil || r.db == nil || limit <= 0 {
 		return nil, 0, nil
 	}
@@ -282,18 +277,10 @@ func (r *DeliveryRepository) QuarantineStaleSending(ctx context.Context, olderTh
 	if err != nil {
 		return nil, 0, fmt.Errorf("quarantine stale sending delivery rows: %w", err)
 	}
-	defer rows.Close()
 
-	outboxIDs := make([]int64, 0, limit)
-	for rows.Next() {
-		var outboxID int64
-		if err := rows.Scan(&outboxID); err != nil {
-			return nil, 0, fmt.Errorf("scan quarantined delivery outbox id: %w", err)
-		}
-		outboxIDs = append(outboxIDs, outboxID)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("iterate quarantined delivery outbox ids: %w", err)
+	outboxIDs, err = pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return nil, 0, fmt.Errorf("collect quarantined delivery outbox ids: %w", err)
 	}
 
 	return deliverysql.UniqueInt64s(outboxIDs), len(outboxIDs), nil
