@@ -37,11 +37,13 @@ import (
 
 // mockDeliveryRepository: deliveryRepository mock 구현
 type mockDeliveryRepository struct {
-	fetchAndLockFn  func(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
-	markSentFn      func(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error)
-	markFailedFn    func(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
-	countByStatusFn func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
-	cleanupFn       func(ctx context.Context, olderThan time.Duration) (int64, error)
+	fetchAndLockFn           func(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
+	markSendingFn            func(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
+	markSentFn               func(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error)
+	markFailedFn             func(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	quarantineStaleSendingFn func(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
+	countByStatusFn          func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
+	cleanupFn                func(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
 func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
@@ -49,6 +51,13 @@ func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, workerID stri
 		return m.fetchAndLockFn(ctx, workerID, batchSize, lockTimeout, lease)
 	}
 	return nil, nil
+}
+
+func (m *mockDeliveryRepository) MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error) {
+	if m.markSendingFn != nil {
+		return m.markSendingFn(ctx, id, workerID, lease)
+	}
+	return true, nil
 }
 
 func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error) {
@@ -63,6 +72,13 @@ func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, worke
 		return m.markFailedFn(ctx, id, workerID, lockedAt, maxRetries, backoff, errMsg)
 	}
 	return true, nil
+}
+
+func (m *mockDeliveryRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error) {
+	if m.quarantineStaleSendingFn != nil {
+		return m.quarantineStaleSendingFn(ctx, olderThan, limit)
+	}
+	return 0, nil
 }
 
 func (m *mockDeliveryRepository) CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error) {
@@ -264,6 +280,78 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 
 	if failedID != 20 {
 		t.Fatalf("expected failed ID=20, got %d", failedID)
+	}
+}
+
+func TestProcessItem_MarkSendingFenceSkipsSend(t *testing.T) {
+	var sendCalled bool
+	var markSentCalled bool
+	var markFailedCalled bool
+
+	repository := &mockDeliveryRepository{
+		markSendingFn: func(_ context.Context, _ int64, _ string, _ time.Duration) (bool, error) {
+			return false, nil
+		},
+		markSentFn: func(_ context.Context, _ int64, _ string, _ time.Time) (bool, error) {
+			markSentCalled = true
+			return true, nil
+		},
+		markFailedFn: func(_ context.Context, _ int64, _ string, _ time.Time, _ int, _ time.Duration, _ string) (bool, error) {
+			markFailedCalled = true
+			return true, nil
+		},
+	}
+	sender := &mockSender{
+		sendFn: func(_ context.Context, _, _ string) error {
+			sendCalled = true
+			return nil
+		},
+	}
+	dispatcher := NewDispatcher(repository, sender, dispatcherLogger(), DispatcherConfig{})
+	item := &domain.NotificationDeliveryOutbox{ID: 42, RoomID: "room-1", Payload: makePayload(t, "hello")}
+
+	dispatcher.processItem(context.Background(), item)
+
+	if sendCalled {
+		t.Fatal("sender must not be called when MarkSending fence fails")
+	}
+	if markSentCalled {
+		t.Fatal("MarkSent must not be called when MarkSending fence fails")
+	}
+	if markFailedCalled {
+		t.Fatal("MarkFailed must not be called when MarkSending fence fails")
+	}
+}
+
+func TestProcessOnce_QuarantinesStaleSendingBeforeFetch(t *testing.T) {
+	var quarantineCalls atomic.Int32
+	var fetchCalls atomic.Int32
+
+	repository := &mockDeliveryRepository{
+		quarantineStaleSendingFn: func(_ context.Context, olderThan time.Duration, limit int) (int64, error) {
+			quarantineCalls.Add(1)
+			if olderThan != deliveryLease {
+				t.Fatalf("olderThan = %v, want %v", olderThan, deliveryLease)
+			}
+			if limit != defaultStaleSendingSweepLimit {
+				t.Fatalf("limit = %d, want %d", limit, defaultStaleSendingSweepLimit)
+			}
+			return 1, nil
+		},
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+			fetchCalls.Add(1)
+			return nil, nil
+		},
+	}
+
+	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), DefaultDispatcherConfig())
+	d.processOnce(context.Background())
+
+	if quarantineCalls.Load() != 1 {
+		t.Fatalf("quarantine calls = %d, want 1", quarantineCalls.Load())
+	}
+	if fetchCalls.Load() != 1 {
+		t.Fatalf("fetch calls = %d, want 1", fetchCalls.Load())
 	}
 }
 
