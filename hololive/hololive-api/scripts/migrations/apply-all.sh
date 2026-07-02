@@ -50,6 +50,10 @@ run_psql() {
     "$@"
 }
 
+list_invalid_indexes() {
+  run_psql -tAc "SELECT format('%I.%I', n.nspname, c.relname) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE NOT i.indisvalid ORDER BY 1;"
+}
+
 if [ -z "${PGPASSWORD}" ]; then
   echo "PGPASSWORD is required" >&2
   exit 1
@@ -183,7 +187,32 @@ while IFS= read -r filename || [ -n "${filename}" ]; do
 
   echo "==> apply ${file}"
   run_psql -f "${file}"
+  # CONCURRENTLY 실패 잔재(invalid index)는 이름을 점유해 다음 실행의 IF NOT EXISTS를 no-op으로
+  # 만들고, 그 no-op이 ledger에 applied로 기록되면 잔재를 DROP해도 재빌드 경로가 사라진다.
+  # 그래서 ledger 기록 전에 감지·DROP하고 실패시켜, 재실행이 같은 파일을 다시 적용하게 한다.
+  if grep -qiE 'CREATE[[:space:]]+(UNIQUE[[:space:]]+)?INDEX[[:space:]]+CONCURRENTLY' "${file}"; then
+    invalid_after_file="$(list_invalid_indexes)"
+    if [ -n "${invalid_after_file}" ]; then
+      echo "ERROR: invalid index(es) present after applying ${filename}; dropping them so a rerun rebuilds:" >&2
+      printf '%s\n' "${invalid_after_file}" >&2
+      printf '%s\n' "${invalid_after_file}" | while IFS= read -r bad_index; do
+        [ -n "${bad_index}" ] || continue
+        run_psql -q -c "DROP INDEX IF EXISTS ${bad_index};"
+      done
+      echo "${filename} was NOT recorded in schema_migrations; rerun apply-all.sh to rebuild." >&2
+      exit 1
+    fi
+  fi
   run_psql -q -c "INSERT INTO schema_migrations(filename) VALUES ('${filename}') ON CONFLICT (filename) DO NOTHING;"
 done < "${MANIFEST_SELECTED_ORDERED}"
+
+echo "==> checking for invalid indexes"
+invalid_indexes="$(list_invalid_indexes)"
+if [ -n "${invalid_indexes}" ]; then
+  echo "ERROR: invalid PostgreSQL indexes remain after migrations (left by something outside this runner):" >&2
+  printf '%s\n' "${invalid_indexes}" >&2
+  echo "Drop the invalid indexes (DROP INDEX IF EXISTS <name>) and recreate them from their owning DDL, then rerun." >&2
+  exit 1
+fi
 
 echo "==> hololive migrations applied"

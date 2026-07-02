@@ -77,3 +77,5 @@
 077 081_seed_canonical_alarm_templates.sql
 078 082_seed_calendar_image_strings.sql
 079 083_add_lease_to_notification_delivery_outbox.sql
+080 084_extend_hot_outbox_autovacuum.sql
+081 085_add_ycat_kind_content_index.sql
