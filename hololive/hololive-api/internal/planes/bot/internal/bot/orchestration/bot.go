@@ -82,6 +82,7 @@ type Bot struct {
 	calendarImageRenderer command.CalendarImageRenderer
 	liveImageRenderer     command.LiveImageRenderer
 	profileImageRenderer  command.ProfileImageRenderer
+	rankImageRenderer     command.RankImageRenderer
 	stopCh                chan struct{}
 	doneCh                chan struct{}
 	selfSender            string
@@ -128,6 +129,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		calendarImageRenderer: render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(core.calendarImageCacheDir), render.WithCalendarStrings(messaging.messageStrings)),
 		liveImageRenderer:     render.NewLiveCardRenderer(render.WithLiveStrings(messaging.messageStrings)),
 		profileImageRenderer:  render.NewProfileCardRenderer(render.WithProfileStrings(messaging.messageStrings)),
+		rankImageRenderer:     render.NewRankCardRenderer(render.WithRankStrings(messaging.messageStrings)),
 		workerPool:            support.workerPool,
 		stopCh:                make(chan struct{}),
 		doneCh:                make(chan struct{}),

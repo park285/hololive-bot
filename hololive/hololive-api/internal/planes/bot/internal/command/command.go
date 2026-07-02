@@ -28,6 +28,7 @@ type CalendarImageRenderer = handlers.CalendarImageRenderer
 type CelebrationCalendarFinder = handlers.CelebrationCalendarFinder
 type LiveImageRenderer = handlers.LiveImageRenderer
 type ProfileImageRenderer = handlers.ProfileImageRenderer
+type RankImageRenderer = handlers.RankImageRenderer
 
 var ErrUnknownCommand = handlers.ErrUnknownCommand
 

@@ -15,3 +15,4 @@ type CelebrationCalendarFinder = handlercore.CelebrationCalendarFinder
 type CalendarImageRenderer = handlercore.CalendarImageRenderer
 type LiveImageRenderer = handlercore.LiveImageRenderer
 type ProfileImageRenderer = handlercore.ProfileImageRenderer
+type RankImageRenderer = handlercore.RankImageRenderer
