@@ -11,17 +11,14 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/net/imagehost"
 )
 
 const (
 	calendarPhotoRequestTimeout = 5 * time.Second
 	calendarPhotoMaxRedirects   = 2
 )
-
-var calendarPhotoAllowedHosts = map[string]struct{}{
-	"yt3.ggpht.com":             {},
-	"yt3.googleusercontent.com": {},
-}
 
 var calendarPhotoAllowedContentTypes = map[string]struct{}{
 	"image/jpeg": {},
@@ -65,22 +62,8 @@ func newCalendarPhotoTransport() *http.Transport {
 }
 
 func validateCalendarPhotoURL(rawURL string) error {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("parse calendar photo url: %w", err)
-	}
-	if parsed.Scheme != "https" {
-		return fmt.Errorf("calendar photo url scheme %q is not allowed", parsed.Scheme)
-	}
-	host := normalizedCalendarPhotoHost(parsed)
-	if host == "" {
-		return errors.New("calendar photo url host is empty")
-	}
-	if port := parsed.Port(); port != "" && port != "443" {
-		return fmt.Errorf("calendar photo url port %q is not allowed", port)
-	}
-	if _, ok := calendarPhotoAllowedHosts[host]; !ok {
-		return fmt.Errorf("calendar photo host %q is not allowed", host)
+	if err := imagehost.AvatarHosts.ValidateURL(rawURL); err != nil {
+		return fmt.Errorf("calendar photo url: %w", err)
 	}
 	return nil
 }
