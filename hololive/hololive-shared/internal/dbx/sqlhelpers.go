@@ -23,6 +23,7 @@ package dbx
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
@@ -31,12 +32,13 @@ import (
 func PostgresPlaceholders(query string) string {
 	var out strings.Builder
 	index := 1
-	for i := 0; i < len(query); i++ {
+	for i := range len(query) {
 		if query[i] != '?' {
 			out.WriteByte(query[i])
 			continue
 		}
-		out.WriteString(fmt.Sprintf("$%d", index))
+		out.WriteByte('$')
+		out.WriteString(strconv.Itoa(index))
 		index++
 	}
 	return out.String()

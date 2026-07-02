@@ -21,80 +21,10 @@
 package llm
 
 import (
-	"errors"
 	"fmt"
-	"net"
-	"net/http"
-	"strings"
-	"syscall"
 
-	"github.com/openai/openai-go/v3"
 	json "github.com/park285/shared-go/pkg/json"
 )
-
-func shouldFallbackToChatCompletions(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, errOpenAIRefusalOutput) {
-		return false
-	}
-	if errors.Is(err, errOpenAIEmptyOutput) {
-		return true
-	}
-
-	if shouldFallbackOpenAIError(err) {
-		return true
-	}
-
-	return shouldFallbackNetworkError(err)
-}
-
-func shouldFallbackOpenAIError(err error) bool {
-	var apiErr *openai.Error
-	if errors.As(err, &apiErr) {
-		if shouldFallbackOpenAIStatus(apiErr.StatusCode) {
-			return true
-		}
-
-		return shouldFallbackOpenAICode(apiErr.Code)
-	}
-
-	return false
-}
-
-func shouldFallbackOpenAICode(code string) bool {
-	switch strings.ToLower(code) {
-	case "unsupported", "unsupported_endpoint", "unsupported_api", "not_implemented":
-		return true
-	default:
-		return false
-	}
-}
-
-func shouldFallbackNetworkError(err error) bool {
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		return true
-	}
-
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return true
-	}
-
-	return false
-}
-
-func shouldFallbackOpenAIStatus(statusCode int) bool {
-	switch statusCode {
-	case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented:
-		return true
-	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return true
-	default:
-		return false
-	}
-}
 
 func suppressFallbackDiscoveredEvents(rawJSON string) (string, error) {
 	var payload map[string]any

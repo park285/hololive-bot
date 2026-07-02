@@ -21,44 +21,41 @@
 package llm
 
 import (
-	"testing"
+	"log/slog"
 
-	json "github.com/park285/shared-go/pkg/json"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/park285/shared-go/pkg/llm/openaipreset"
 )
 
-func TestSuppressFallbackDiscoveredEvents(t *testing.T) {
-	t.Parallel()
+func NewPresetClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) (Client, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 
-	t.Run("clears discovered events", func(t *testing.T) {
-		t.Parallel()
+	o := &Options{}
+	for _, opt := range opts {
+		opt(o)
+	}
 
-		got, err := suppressFallbackDiscoveredEvents(`{"summary":"ok","discovered_events":[{"id":"a"}]}`)
-		require.NoError(t, err)
+	presetOpts := []openaipreset.Option{
+		openaipreset.WithHTTPClient(newLLMHTTPClient()),
+		openaipreset.WithLogger(logger),
+		openaipreset.WithWebSearch(resolveWebSearch(o)),
+	}
+	if o.SchemaName != "" {
+		presetOpts = append(presetOpts, openaipreset.WithSchemaName(o.SchemaName))
+	}
+	if o.Temperature != nil {
+		presetOpts = append(presetOpts, openaipreset.WithTemperature(*o.Temperature))
+	}
+	if o.ReasoningEffort != "" {
+		presetOpts = append(presetOpts, openaipreset.WithReasoningEffort(o.ReasoningEffort))
+	}
+	if o.ChatCompletions {
+		presetOpts = append(presetOpts, openaipreset.WithChatCompletions())
+	}
+	if o.CostTracker != nil {
+		presetOpts = append(presetOpts, openaipreset.WithUsageReporter(costTrackerUsageReporter{tracker: o.CostTracker}))
+	}
 
-		var payload map[string]any
-		require.NoError(t, json.Unmarshal([]byte(got), &payload))
-		assert.Equal(t, "ok", payload["summary"])
-		assert.Empty(t, payload["discovered_events"])
-	})
-
-	t.Run("no-op when key absent", func(t *testing.T) {
-		t.Parallel()
-
-		raw := `{"summary":"ok"}`
-		got, err := suppressFallbackDiscoveredEvents(raw)
-
-		require.NoError(t, err)
-		assert.Equal(t, raw, got)
-	})
-
-	t.Run("invalid json returns error", func(t *testing.T) {
-		t.Parallel()
-
-		_, err := suppressFallbackDiscoveredEvents(`{"summary":`)
-
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "parse fallback json")
-	})
+	return openaipreset.New(baseURL, apiKey, model, presetOpts...)
 }

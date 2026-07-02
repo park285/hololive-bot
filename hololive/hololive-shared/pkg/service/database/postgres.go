@@ -24,16 +24,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/pkg/db/pgxdb"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// 내부적으로 hololive-shared/internal/dbx.Client를 사용한다.
 type PostgresService struct {
-	client *dbx.Client
+	pool   *pgxpool.Pool
 	logger *slog.Logger
 }
 
@@ -50,21 +50,18 @@ type PostgresConfig struct {
 	PoolMaxConns  int
 }
 
-// hololive-shared/internal/dbx.Client를 사용하여 pgxpool 기반 PostgreSQL 연결을 제공한다.
 func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
 	if config == nil {
 		return nil, fmt.Errorf("postgres config is nil")
 	}
-	dbxConfig := dbx.Config{
-		Host:          config.Host,
-		Port:          config.Port,
-		SocketPath:    config.SocketPath,
-		User:          config.User,
-		Password:      config.Password,
-		Name:          config.Database,
-		SSLMode:       config.SSLMode,
-		QueryExecMode: config.QueryExecMode,
+
+	// pgxdb는 빈 sslmode를 거부(fail-closed)하므로, 예전 dbx가 DSN 생성 시 적용하던
+	// verify-full 기본값을 호출측인 여기서 명시적으로 해소한다. TLS posture는 절대 낮추지 않는다.
+	sslMode := strings.TrimSpace(config.SSLMode)
+	if sslMode == "" {
+		sslMode = "verify-full"
 	}
+
 	minConns := config.PoolMinConns
 	if minConns <= 0 {
 		minConns = constants.DatabaseConfig.MaxIdleConns
@@ -73,46 +70,54 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 	if maxConns <= 0 {
 		maxConns = constants.DatabaseConfig.MaxOpenConns
 	}
-	poolConfig := dbx.PoolConfig{
-		MaxConns:        maxConns,
-		MinConns:        minConns,
-		ConnMaxLifetime: constants.DatabaseConfig.ConnMaxLifetime,
-	}
 
-	retryConfig := dbx.RetryConfig{
-		PingTimeout: constants.RequestTimeout.DatabasePing,
-	}
-
-	client, err := dbx.Open(ctx, dbxConfig, dbx.OpenOptions{
+	pool, err := pgxdb.OpenPool(ctx, pgxdb.Config{
+		Host:          config.Host,
+		Port:          config.Port,
+		SocketPath:    config.SocketPath,
+		User:          config.User,
+		Password:      config.Password,
+		Name:          config.Database,
+		SSLMode:       sslMode,
+		QueryExecMode: config.QueryExecMode,
+	}, pgxdb.Options{
 		Logger: logger,
-		Pool:   poolConfig,
-		Retry:  retryConfig,
+		Pool: pgxdb.PoolConfig{
+			MinConns:        minConns,
+			MaxConns:        maxConns,
+			ConnMaxLifetime: constants.DatabaseConfig.ConnMaxLifetime,
+		},
+		Retry: pgxdb.RetryConfig{
+			PingTimeout: constants.RequestTimeout.DatabasePing,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
 	return &PostgresService{
-		client: client,
+		pool:   pool,
 		logger: logger,
 	}, nil
 }
 
 func (ps *PostgresService) GetPool() *pgxpool.Pool {
-	return ps.client.Pool()
+	return ps.pool
 }
 
 func (ps *PostgresService) Close() error {
-	if ps.client != nil {
-		if err := ps.client.Close(); err != nil {
-			return fmt.Errorf("close database: %w", err)
-		}
+	if ps.pool != nil {
+		ps.pool.Close()
+		ps.pool = nil
 	}
 	return nil
 }
 
 func (ps *PostgresService) Ping(ctx context.Context) error {
-	if err := ps.client.Ping(ctx); err != nil {
+	if ps.pool == nil {
+		return fmt.Errorf("ping database: pool is nil")
+	}
+	if err := ps.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)
 	}
 	return nil

@@ -544,6 +544,7 @@ github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/kapu
 github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/park285/shared-go/pkg/llm
+github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/park285/shared-go/pkg/llm/openaipreset
 github.com/kapu/hololive-api/internal/planes/llm/internal/llm -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit -> github.com/kapu/hololive-shared/pkg/service/delivery
@@ -608,8 +609,6 @@ github.com/kapu/hololive-api/internal/readiness -> github.com/kapu/hololive-shar
 github.com/kapu/hololive-api/internal/readiness -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/internal/ctxutil -> github.com/kapu/hololive-shared/internal/ctxutil
 github.com/kapu/hololive-shared/internal/dbx -> github.com/kapu/hololive-shared/pkg/dbtest
-github.com/kapu/hololive-shared/internal/dbx -> github.com/park285/shared-go/pkg/backoff
-github.com/kapu/hololive-shared/internal/dbx -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/hololive-shared/internal/dbx -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/internal/testutil -> github.com/kapu/hololive-shared/internal/testredis
 github.com/kapu/hololive-shared/internal/testutil -> github.com/kapu/hololive-shared/pkg/service/cache
@@ -769,13 +768,14 @@ github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/kapu/hololiv
 github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/kapu/hololive-shared/pkg/service/configsub
 github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/park285/shared-go/pkg/json
-github.com/kapu/hololive-shared/pkg/service/database -> github.com/kapu/hololive-shared/internal/dbx
 github.com/kapu/hololive-shared/pkg/service/database -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/service/database -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-shared/pkg/service/database -> github.com/park285/shared-go/pkg/db/pgxdb
 github.com/kapu/hololive-shared/pkg/service/database/mocks -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/park285/shared-go/pkg/runtime/lifecycle

@@ -38,6 +38,11 @@ var (
 
 const maxCursorTokenLength = 4096
 
+const (
+	directionASC  = "ASC"
+	directionDESC = "DESC"
+)
+
 var cursorFieldRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$`)
 
 type CursorData struct {
@@ -106,7 +111,7 @@ func BuildKeysetCondition(cursor *CursorData, paramIndex int) (condition string,
 	}
 
 	var op string
-	if normalizeDirection(cursor.Direction) == "ASC" {
+	if normalizeDirection(cursor.Direction) == directionASC {
 		op = ">"
 	} else {
 		op = "<"
@@ -117,10 +122,10 @@ func BuildKeysetCondition(cursor *CursorData, paramIndex int) (condition string,
 }
 
 func normalizeDirection(direction string) string {
-	if strings.EqualFold(strings.TrimSpace(direction), "ASC") {
-		return "ASC"
+	if strings.EqualFold(strings.TrimSpace(direction), directionASC) {
+		return directionASC
 	}
-	return "DESC"
+	return directionDESC
 }
 
 func isSafeCursorField(field string) bool {

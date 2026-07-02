@@ -95,7 +95,11 @@ func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig *confi
 		opts = append(opts, llm.WithTemperature(llmConfig.MemberNewsTemperature))
 	}
 
-	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger, opts...)
+	client, err := llm.NewPresetClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger, opts...)
+	if err != nil {
+		logger.Error("Member news LLM initialization failed", slog.Any("error", err))
+		return nil
+	}
 	tempApplied := llmConfig.MemberNewsTemperature > 0
 	logger.Info("Member news LLM enabled",
 		slog.String("model", model),
@@ -105,14 +109,11 @@ func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmConfig *confi
 	return client
 }
 
-// consensusClientSpec는 reviewer/adjudicator client 빌더가 함수별로 달라지는 축(enabled
-// 결정, model fallback 결과, incomplete 경고 문구, NewClient 옵션, 성공 로그)만 주입받는다.
-// guard·completeness·NewClient boilerplate는 buildConsensusLLMClient가 처리한다.
 type consensusClientSpec struct {
 	enabled        bool
 	model          string
 	incompleteWarn string
-	options        []llm.Option
+	newClient      func(baseURL, apiKey, model string, logger *slog.Logger) (llm.Client, error)
 	onSuccess      func(model string)
 }
 
@@ -125,7 +126,11 @@ func buildConsensusLLMClient(cliproxy config.CliproxyConfig, logger *slog.Logger
 		return nil
 	}
 
-	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, spec.model, logger, spec.options...)
+	client, err := spec.newClient(cliproxy.BaseURL, cliproxy.APIKey, spec.model, logger)
+	if err != nil {
+		logger.Error(spec.incompleteWarn, slog.Any("error", err))
+		return nil
+	}
 	if spec.onSuccess != nil {
 		spec.onSuccess(spec.model)
 	}
@@ -149,13 +154,15 @@ func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmConfig *
 		enabled:        llmConfig.MemberNews.Enabled,
 		model:          model,
 		incompleteWarn: "Consensus reviewer LLM configuration incomplete, skipping",
-		options: []llm.Option{
-			llm.WithSchemaName("member_news_review"),
-			llm.WithTemperature(0.1),
-			llm.WithWebSearch(false),
-			llm.WithChatCompletions(),
-			llm.WithReasoningEffort(cliproxy.ReasoningEffort),
-			llm.WithCostTracker(tracker),
+		newClient: func(baseURL, apiKey, model string, logger *slog.Logger) (llm.Client, error) {
+			return llm.NewPresetClient(baseURL, apiKey, model, logger,
+				llm.WithSchemaName("member_news_review"),
+				llm.WithTemperature(0.1),
+				llm.WithWebSearch(false),
+				llm.WithChatCompletions(),
+				llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+				llm.WithCostTracker(tracker),
+			)
 		},
 		onSuccess: func(m string) {
 			logger.Info("Consensus reviewer LLM enabled", slog.String("model", m))
@@ -176,11 +183,13 @@ func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmConfig *
 		enabled:        llmConfig.MajorEvent.Enabled,
 		model:          model,
 		incompleteWarn: "Major event consensus reviewer LLM configuration incomplete, skipping",
-		options: []llm.Option{
-			llm.WithSchemaName("event_summary_review"),
-			llm.WithWebSearch(false),
-			llm.WithReasoningEffort(cliproxy.ReasoningEffort),
-			llm.WithCostTracker(tracker),
+		newClient: func(baseURL, apiKey, model string, logger *slog.Logger) (llm.Client, error) {
+			return llm.NewPresetClient(baseURL, apiKey, model, logger,
+				llm.WithSchemaName("event_summary_review"),
+				llm.WithWebSearch(false),
+				llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+				llm.WithCostTracker(tracker),
+			)
 		},
 	})
 }
@@ -198,11 +207,15 @@ func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfi
 		enabled:        llmConfig.MajorEvent.Enabled,
 		model:          model,
 		incompleteWarn: "Major event consensus adjudicator LLM configuration incomplete, skipping",
-		options: []llm.Option{
-			llm.WithSchemaName("event_summary"),
-			llm.WithWebSearch(false),
-			llm.WithReasoningEffort(cliproxy.ReasoningEffort),
-			llm.WithCostTracker(tracker),
+		// event_summary 스키마는 fallback 발생 시 discovered_events 억제가 필요하고, 그 판정에는
+		// openaipreset이 감추는 FallbackUsed 신호가 있어야 하므로 hololive OpenAIClient를 유지한다.
+		newClient: func(baseURL, apiKey, model string, logger *slog.Logger) (llm.Client, error) {
+			return llm.NewClient(baseURL, apiKey, model, logger,
+				llm.WithSchemaName("event_summary"),
+				llm.WithWebSearch(false),
+				llm.WithReasoningEffort(cliproxy.ReasoningEffort),
+				llm.WithCostTracker(tracker),
+			), nil
 		},
 	})
 }
@@ -235,7 +248,9 @@ func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmConfi
 		enabled:        llmConfig.MemberNews.Enabled,
 		model:          model,
 		incompleteWarn: "Consensus adjudicator LLM configuration incomplete, skipping",
-		options:        opts,
+		newClient: func(baseURL, apiKey, model string, logger *slog.Logger) (llm.Client, error) {
+			return llm.NewPresetClient(baseURL, apiKey, model, logger, opts...)
+		},
 		onSuccess: func(m string) {
 			logger.Info("Consensus adjudicator LLM enabled", slog.String("model", m))
 		},

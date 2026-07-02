@@ -386,6 +386,7 @@ github.com/openai/openai-go/v3 v3.34.0/go.mod h1:cdufnVK14cWcT9qA1rRtrXx4FTRsgbD
 github.com/park285/iris-client-go v0.7.0 h1:qcLmv5xswuDHSlS6PNDt3yUUuxfTujumV3z6loEFYaQ=
 github.com/park285/iris-client-go v0.7.0/go.mod h1:aLJfWCul+PisKSuLSEbuPkPay5LhSKnMu2FKU87879s=
 github.com/park285/iris-client-go v0.12.3/go.mod h1:LBcqi9eYTEsHhyUrqs90y1KOmzH1Z3nB8inSbms/rCQ=
+github.com/park285/shared-go v1.24.0/go.mod h1:SvwdqgSBzkrZWnfz8baXXFjB7mTfwqQyUIxZJ7aiU5c=
 github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
 github.com/patrickmn/go-cache v2.1.0+incompatible/go.mod h1:3Qf8kWWT7OJRJbdiICTKqZju1ZixQ/KpMGzzAfe6+WQ=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 h1:onHthvaw9LFnH4t2DcNVpwGmV9E1BkGknEliJkfwQj0=

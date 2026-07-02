@@ -22,7 +22,6 @@ package dbx
 
 import (
 	"errors"
-	"net"
 	"strings"
 
 	"github.com/jackc/pgerrcode"
@@ -51,45 +50,4 @@ func hasPGCode(err error, code string) bool {
 		return pgErr.Code == code
 	}
 	return false
-}
-
-func IsDNSError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
-		return true
-	}
-	lower := strings.ToLower(err.Error())
-	return strings.Contains(lower, "no such host")
-}
-
-// host가 "postgres"이고 DNS 에러인 경우에만 true 반환 (Docker 환경에서 로컬 실행 시)
-func ShouldFallbackToLocalhost(err error, host string) bool {
-	if err == nil {
-		return false
-	}
-	if !isFallbackEligibleHost(host) {
-		return false
-	}
-
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
-		return strings.EqualFold(dnsErr.Name, host)
-	}
-
-	lower := strings.ToLower(err.Error())
-	hostLower := strings.ToLower(host)
-	if strings.Contains(lower, "lookup "+hostLower) && strings.Contains(lower, "no such host") {
-		return true
-	}
-	return strings.Contains(lower, "no such host") && strings.Contains(lower, hostLower)
-}
-
-func isFallbackEligibleHost(host string) bool {
-	if host == "" || host == "127.0.0.1" || strings.EqualFold(host, "localhost") {
-		return false
-	}
-	return strings.EqualFold(host, "postgres")
 }

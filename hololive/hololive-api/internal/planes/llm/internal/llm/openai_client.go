@@ -26,6 +26,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -60,15 +61,6 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		logger = slog.Default()
 	}
 
-	// HTTP/2 비활성화: Cloudflare가 Go HTTP/2 fingerprint를 차단하는 문제 방지
-	httpClient := httputil.NewProfiledClient(httputil.TransportProfile{
-		Timeout:               constants.LLMHTTPTimeout.Request,
-		DialTimeout:           constants.LLMHTTPTimeout.Dial,
-		TLSHandshakeTimeout:   constants.LLMHTTPTimeout.TLSHandshake,
-		ResponseHeaderTimeout: constants.LLMHTTPTimeout.ResponseHeader,
-		IdleConnTimeout:       constants.LLMHTTPTimeout.IdleConn,
-		DisableHTTP2:          true,
-	})
 	o := &Options{
 		SchemaName: "event_summary",
 	}
@@ -76,20 +68,11 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		opt(o)
 	}
 
-	webSearch := true // 기본값: 활성화 (majorevent 이벤트 요약 등)
-	if o.WebSearch != nil {
-		webSearch = *o.WebSearch
-	}
-	// Chat Completions 모드에서는 Responses API의 web_search tool 미지원
-	if o.ChatCompletions {
-		webSearch = false
-	}
-
 	var generator sharedllm.JSONGenerator
 	generator, err := sharedllm.NewOpenAICompatibleJSONGenerator(sharedllm.OpenAICompatibleConfig{
 		BaseURL:                      baseURL,
 		APIKey:                       apiKey,
-		HTTPClient:                   httpClient,
+		HTTPClient:                   newLLMHTTPClient(),
 		AllowChatCompletionsFallback: true,
 	})
 	if err != nil {
@@ -102,11 +85,34 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		schemaName:      o.SchemaName,
 		temperature:     o.Temperature,
 		reasoningEffort: o.ReasoningEffort,
-		webSearch:       webSearch,
+		webSearch:       resolveWebSearch(o),
 		chatCompletions: o.ChatCompletions,
 		logger:          logger,
 		costTracker:     o.CostTracker,
 	}
+}
+
+// Cloudflare가 Go HTTP/2 fingerprint를 차단하므로 HTTP/2를 끈 프로파일을 쓴다.
+func newLLMHTTPClient() *http.Client {
+	return httputil.NewProfiledClient(httputil.TransportProfile{
+		Timeout:               constants.LLMHTTPTimeout.Request,
+		DialTimeout:           constants.LLMHTTPTimeout.Dial,
+		TLSHandshakeTimeout:   constants.LLMHTTPTimeout.TLSHandshake,
+		ResponseHeaderTimeout: constants.LLMHTTPTimeout.ResponseHeader,
+		IdleConnTimeout:       constants.LLMHTTPTimeout.IdleConn,
+		DisableHTTP2:          true,
+	})
+}
+
+func resolveWebSearch(o *Options) bool {
+	webSearch := true
+	if o.WebSearch != nil {
+		webSearch = *o.WebSearch
+	}
+	if o.ChatCompletions {
+		webSearch = false
+	}
+	return webSearch
 }
 
 // recordUsage는 provider 응답의 토큰 사용량을 cost tracker에 누적한다. tracker 미주입·토큰 0이면 no-op.

@@ -78,12 +78,8 @@ hololive/hololive-youtube-producer/internal/communityshorts/operational_channels
 hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go
 hololive/hololive-youtube-producer/internal/communityshorts/target_baseline_routes.go
 hololive/hololive-shared/internal/ctxutil/sleep.go
-hololive/hololive-shared/internal/dbx/client.go
-hololive/hololive-shared/internal/dbx/config.go
-hololive/hololive-shared/internal/dbx/doc.go
 hololive/hololive-shared/internal/dbx/errors.go
 hololive/hololive-shared/internal/dbx/pagination.go
-hololive/hololive-shared/internal/dbx/retry.go
 hololive/hololive-shared/internal/dbx/sqlhelpers.go
 hololive/hololive-shared/internal/dbx/tx.go
 hololive/hololive-shared/pkg/apperrors/errors.go
@@ -767,6 +763,10 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/Makefile
 ../shared-go/pkg/backoff/backoff.go
 ../shared-go/pkg/backoff/doc.go
+../shared-go/pkg/db/pgxdb/config.go
+../shared-go/pkg/db/pgxdb/doc.go
+../shared-go/pkg/db/pgxdb/errors.go
+../shared-go/pkg/db/pgxdb/pool.go
 ../shared-go/pkg/envutil/env.go
 ../shared-go/pkg/envutil/file.go
 ../shared-go/pkg/envutil/file_nofollow_unix.go
@@ -795,6 +795,8 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/logging/archive/permissions.go
 ../shared-go/pkg/logging/operation.go
 ../shared-go/pkg/logging/sanitize.go
+../shared-go/pkg/retry/doc.go
+../shared-go/pkg/retry/retry.go
 ../shared-go/pkg/runtime/automaxprocs/automaxprocs.go
 ../shared-go/pkg/runtime/bootstrap/bootstrap.go
 ../shared-go/pkg/runtime/bootstrap/inputs.go
@@ -806,6 +808,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/runtime/lifecycle/managed.go
 ../shared-go/pkg/runtime/lifecycle/skeleton.go
 ../shared-go/pkg/runtime/lifecycle/loop.go
+../shared-go/pkg/runtime/lifecycle/close.go
 ../shared-go/pkg/stringutil/stringutil.go
 ../shared-go/pkg/telemetry/doc.go
 ../shared-go/pkg/telemetry/telemetry.go

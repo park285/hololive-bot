@@ -28,16 +28,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/responses"
 	json "github.com/park285/shared-go/pkg/json"
 	sharedllm "github.com/park285/shared-go/pkg/llm"
 )
@@ -338,179 +335,6 @@ func (f *fakeJSONGenerator) GenerateJSON(context.Context, sharedllm.JSONRequest)
 	return f.resp, f.err
 }
 
-func TestShouldFallbackToChat_NilError(t *testing.T) {
-	if shouldFallbackToChatCompletions(nil) {
-		t.Error("nil error should not trigger fallback")
-	}
-}
-
-func TestShouldFallbackToChat_OpenAIStatusAndCode(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "responses_not_supported_404",
-			err:  wrappedResponsesAPIError(http.StatusNotFound, ""),
-			want: true,
-		},
-		{
-			name: "responses_not_supported_405",
-			err:  wrappedResponsesAPIError(http.StatusMethodNotAllowed, ""),
-			want: true,
-		},
-		{
-			name: "temporary_server_error_503",
-			err:  wrappedResponsesAPIError(http.StatusServiceUnavailable, ""),
-			want: true,
-		},
-		{
-			name: "unsupported_code_400",
-			err:  wrappedResponsesAPIError(http.StatusBadRequest, "unsupported_endpoint"),
-			want: true,
-		},
-		{
-			name: "invalid_request_400",
-			err:  wrappedResponsesAPIError(http.StatusBadRequest, "invalid_request_error"),
-			want: false,
-		},
-		{
-			name: "unauthorized_401",
-			err:  wrappedResponsesAPIError(http.StatusUnauthorized, "invalid_api_key"),
-			want: false,
-		},
-		{
-			name: "rate_limit_429",
-			err:  wrappedResponsesAPIError(http.StatusTooManyRequests, "rate_limit_exceeded"),
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := shouldFallbackToChatCompletions(tt.err); got != tt.want {
-				t.Fatalf("shouldFallbackToChatCompletions() = %v, want %v (err=%v)", got, tt.want, tt.err)
-			}
-		})
-	}
-}
-
-func TestShouldFallbackToChat_ContextCanceled_NoFallback(t *testing.T) {
-	err := fmt.Errorf("openai responses API: %w", context.Canceled)
-	if shouldFallbackToChatCompletions(err) {
-		t.Fatal("context canceled should not fallback")
-	}
-}
-
-func TestShouldFallbackToChat_HTTPClientDeadlineExceeded_Fallback(t *testing.T) {
-	err := fmt.Errorf("openai responses API: %w", &url.Error{
-		Op:  "POST",
-		URL: "https://example.com/v1/responses",
-		Err: context.DeadlineExceeded,
-	})
-	if !shouldFallbackToChatCompletions(err) {
-		t.Fatal("http client deadline exceeded should fallback")
-	}
-}
-
-func TestShouldFallbackToChat_EmptyResponsesOutput(t *testing.T) {
-	err := fmt.Errorf("openai responses API: %w", errOpenAIEmptyOutput)
-	if !shouldFallbackToChatCompletions(err) {
-		t.Fatal("empty responses output should fallback")
-	}
-}
-
-func TestShouldFallbackToChat_NetworkErrors(t *testing.T) {
-	timeoutErr := fmt.Errorf("openai responses API: %w", &url.Error{
-		Op:  "POST",
-		URL: "https://example.com/v1/responses",
-		Err: &net.DNSError{IsTimeout: true},
-	})
-	if !shouldFallbackToChatCompletions(timeoutErr) {
-		t.Fatal("timeout network error should fallback")
-	}
-
-	connRefusedErr := fmt.Errorf("openai responses API: %w", &net.OpError{
-		Op:  "dial",
-		Net: "tcp",
-		Err: syscall.ECONNREFUSED,
-	})
-	if !shouldFallbackToChatCompletions(connRefusedErr) {
-		t.Fatal("connection refused error should fallback")
-	}
-
-	nonRetryableNetErr := fmt.Errorf("openai responses API: %w", &url.Error{
-		Op:  "POST",
-		URL: "https://example.com/v1/responses",
-		Err: errors.New("tls handshake failed"),
-	})
-	if shouldFallbackToChatCompletions(nonRetryableNetErr) {
-		t.Fatal("non-timeout/non-conn-refused network error should not fallback")
-	}
-}
-
-func TestExtractResponsesOutputText_ReturnsOutputText(t *testing.T) {
-	resp := responses.Response{
-		Status: responses.ResponseStatusCompleted,
-		Output: []responses.ResponseOutputItemUnion{
-			{
-				Type:   "message",
-				Status: string(responses.ResponseOutputMessageStatusCompleted),
-				Content: []responses.ResponseOutputMessageContentUnion{
-					{
-						Type: "output_text",
-						Text: `{"summary":"ok"}`,
-					},
-				},
-			},
-		},
-	}
-
-	got, err := extractResponsesOutputText(&resp)
-	if err != nil {
-		t.Fatalf("extractResponsesOutputText() error = %v", err)
-	}
-	if got != `{"summary":"ok"}` {
-		t.Fatalf("extractResponsesOutputText() = %q, want %q", got, `{"summary":"ok"}`)
-	}
-}
-
-func TestExtractResponsesOutputText_EmptyOutputIncludesDiagnostic(t *testing.T) {
-	resp := responses.Response{
-		Status: responses.ResponseStatusCompleted,
-		Output: []responses.ResponseOutputItemUnion{
-			{
-				Type:   "message",
-				Status: string(responses.ResponseOutputMessageStatusCompleted),
-				Content: []responses.ResponseOutputMessageContentUnion{
-					{
-						Type:    "refusal",
-						Refusal: "safety refusal",
-					},
-				},
-			},
-		},
-	}
-
-	_, err := extractResponsesOutputText(&resp)
-	if err == nil {
-		t.Fatal("extractResponsesOutputText() error = nil, want error")
-	}
-	if !errors.Is(err, errOpenAIEmptyOutput) {
-		t.Fatalf("extractResponsesOutputText() error = %v, want errOpenAIEmptyOutput", err)
-	}
-	if !strings.Contains(err.Error(), "status=completed") {
-		t.Fatalf("error = %q, want status diagnostic", err.Error())
-	}
-	if strings.Contains(err.Error(), "safety refusal") {
-		t.Fatalf("error = %q, want refusal text redacted", err.Error())
-	}
-	if !strings.Contains(err.Error(), "refusal=true") {
-		t.Fatalf("error = %q, want refusal presence diagnostic", err.Error())
-	}
-}
-
 func TestSafeLLMProviderError_RedactsEmptyOutputDiagnostics(t *testing.T) {
 	rawErr := fmt.Errorf("%w: status=completed refusal=private raw provider response output=message/completed", errOpenAIEmptyOutput)
 
@@ -593,26 +417,4 @@ func TestApplyFallbackPostProcess_SanitizesEventSummary(t *testing.T) {
 	if events, ok := payload["discovered_events"].([]any); !ok || len(events) != 0 {
 		t.Fatalf("discovered_events = %#v, want empty array", payload["discovered_events"])
 	}
-}
-
-func wrappedResponsesAPIError(statusCode int, code string) error {
-	requestURL := &url.URL{
-		Scheme: "https",
-		Host:   "example.com",
-		Path:   "/v1/responses",
-	}
-
-	apiErr := &openai.Error{
-		Code:       code,
-		StatusCode: statusCode,
-		Request: &http.Request{
-			Method: http.MethodPost,
-			URL:    requestURL,
-		},
-		Response: &http.Response{
-			StatusCode: statusCode,
-			Status:     fmt.Sprintf("%d %s", statusCode, http.StatusText(statusCode)),
-		},
-	}
-	return fmt.Errorf("openai responses API: %w", apiErr)
 }
