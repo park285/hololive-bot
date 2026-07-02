@@ -28,7 +28,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -771,9 +771,7 @@ func TestRateLimiter_ConcurrentSlots(t *testing.T) {
 	}
 
 	wg.Wait()
-	sort.Slice(elapsed, func(i, j int) bool {
-		return elapsed[i] < elapsed[j]
-	})
+	slices.Sort(elapsed)
 
 	// time.Timer는 지정 시각 이전에 발화하지 않으므로 k번째 완료 시각의 하한 k*interval은 CPU 경합과 무관하게 성립한다. 상한은 스케줄링 지터에 취약해 검증하지 않는다.
 	for i := range elapsed {
