@@ -376,10 +376,10 @@ func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Co
 		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
 		WHERE o.status = ?
 		GROUP BY d.outbox_id
-		HAVING SUM(CASE WHEN d.status = ? THEN 1 ELSE 0 END) = 0
+		HAVING SUM(CASE WHEN d.status IN (?, ?) THEN 1 ELSE 0 END) = 0
 		ORDER BY d.outbox_id ASC
 		LIMIT ?
-	`, domain.OutboxStatusPending, domain.OutboxStatusPending, batchSize); err != nil {
+	`, domain.OutboxStatusPending, domain.OutboxStatusPending, DeliveryStatusSending, batchSize); err != nil {
 		return nil, fmt.Errorf("find pending outbox ids for aggregate sync: %w", err)
 	}
 

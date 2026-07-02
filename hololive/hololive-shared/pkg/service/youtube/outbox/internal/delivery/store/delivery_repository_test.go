@@ -75,13 +75,15 @@ func TestParseStatusCounts(t *testing.T) {
 
 	counts := []deliveryStatusCount{
 		{Status: domain.OutboxStatusPending, Count: 3},
+		{Status: DeliveryStatusSending, Count: 2},
 		{Status: domain.OutboxStatusSent, Count: 5},
 		{Status: domain.OutboxStatusFailed, Count: 1},
+		{Status: DeliveryStatusQuarantined, Count: 4},
 	}
 
 	pending, sent, failed := parseStatusCounts(counts)
-	if pending != 3 || sent != 5 || failed != 1 {
-		t.Fatalf("parseStatusCounts() = (%d,%d,%d), want (3,5,1)", pending, sent, failed)
+	if pending != 5 || sent != 5 || failed != 5 {
+		t.Fatalf("parseStatusCounts() = (%d,%d,%d), want (5,5,5)", pending, sent, failed)
 	}
 }
 
@@ -90,9 +92,9 @@ func TestGroupOutboxIDsByAggregateStatus(t *testing.T) {
 
 	grouped := groupOutboxIDsByAggregateStatus([]int64{1, 2, 3}, []deliveryStatusCount{
 		{OutboxID: 1, Status: domain.OutboxStatusSent, Count: 2},
-		{OutboxID: 2, Status: domain.OutboxStatusPending, Count: 1},
+		{OutboxID: 2, Status: DeliveryStatusSending, Count: 1},
 		{OutboxID: 2, Status: domain.OutboxStatusSent, Count: 1},
-		{OutboxID: 3, Status: domain.OutboxStatusFailed, Count: 1},
+		{OutboxID: 3, Status: DeliveryStatusQuarantined, Count: 1},
 	})
 
 	if !reflect.DeepEqual(grouped[domain.OutboxStatusSent], []int64{1}) {

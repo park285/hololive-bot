@@ -153,6 +153,7 @@ func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
 }
 
 func (d *Dispatcher) aggregateSyncOnce(ctx context.Context) {
+	d.claim.quarantineStaleSendingDeliveries(ctx)
 	d.claim.reconcileTerminalOutboxStatuses(ctx)
 	d.testHooks.fireAggregateSync()
 }

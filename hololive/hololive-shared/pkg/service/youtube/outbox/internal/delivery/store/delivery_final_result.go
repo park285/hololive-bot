@@ -153,9 +153,9 @@ func terminalCommunityShortsDeliveryStatusCounts(status domain.OutboxStatus) (re
 	switch status {
 	case domain.OutboxStatusSent:
 		return 1, 0
-	case domain.OutboxStatusFailed:
+	case domain.OutboxStatusFailed, DeliveryStatusQuarantined:
 		return 0, 1
-	case domain.OutboxStatusPending:
+	case domain.OutboxStatusPending, DeliveryStatusSending:
 		return 0, 0
 	default:
 		return 0, 0

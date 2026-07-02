@@ -43,6 +43,9 @@ import (
 //   - created_at >= now-freshnessWindow: 콘텐츠가 아직 신선할 때만(철 지난 알림 스팸 방지). created_at은
 //     poller가 콘텐츠를 감지한 시각 ≈ 발행 직후라 freshness proxy로 적합하다.
 //   - locked_at 만료: 처리 중(in-flight) 행은 건드리지 않음.
+//   - 리셋 가능성: FAILED delivery가 1개 이상이거나(재전송 대상 존재) delivery가 전무할 때(fan-out 전 실패)만
+//     선택한다. 전량 QUARANTINED로 FAILED가 0개인 outbox를 넣으면 resetFailedDeliveryRows가 리셋할 행이 없어
+//     aggregate sync가 즉시 FAILED로 되돌리고 revive 메트릭만 오르는 무한 flap이 되므로 제외한다.
 //
 // freshness window가 재시도 횟수를 자연 bound한다.
 //
@@ -104,16 +107,27 @@ func reviveStaleFailedOutboxTx(ctx context.Context, tx dbx.Querier, freshCutoff,
 func selectStaleFailedOutboxIDs(ctx context.Context, tx dbx.Querier, freshCutoff, lockCutoff time.Time, batchSize int) ([]int64, error) {
 	var ids []int64
 	if err := deliverysql.SelectDeliverySQL(ctx, tx, &ids, "revive: select stale failed outbox", `
-		SELECT id
-		FROM youtube_notification_outbox
-		WHERE status = ?
-		  AND sent_at IS NULL
-		  AND created_at >= ?
-		  AND (locked_at IS NULL OR locked_at < ?)
-		ORDER BY id
+		SELECT o.id
+		FROM youtube_notification_outbox o
+		WHERE o.status = ?
+		  AND o.sent_at IS NULL
+		  AND o.created_at >= ?
+		  AND (o.locked_at IS NULL OR o.locked_at < ?)
+		  AND (
+			EXISTS (
+			  SELECT 1 FROM youtube_notification_delivery d
+			  WHERE d.outbox_id = o.id
+				AND d.status = ?
+			)
+			OR NOT EXISTS (
+			  SELECT 1 FROM youtube_notification_delivery d
+			  WHERE d.outbox_id = o.id
+			)
+		  )
+		ORDER BY o.id
 		LIMIT ?
 		FOR UPDATE SKIP LOCKED
-	`, string(domain.OutboxStatusFailed), freshCutoff, lockCutoff, batchSize); err != nil {
+	`, string(domain.OutboxStatusFailed), freshCutoff, lockCutoff, string(domain.OutboxStatusFailed), batchSize); err != nil {
 		return nil, fmt.Errorf("revive: select stale failed outbox: %w", err)
 	}
 	return ids, nil

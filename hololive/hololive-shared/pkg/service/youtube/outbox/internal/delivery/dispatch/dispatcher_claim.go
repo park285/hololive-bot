@@ -239,24 +239,33 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	observeOutboxDeliveryClaimed(len(rows))
 	observeOutboxDispatchBatchSize(len(rows))
 
-	outboxByID, err := d.loadOutboxItemsByIDs(ctx, collectDeliveryOutboxIDs(rows))
+	sendRows, err := d.delivery.MarkSendingBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, collectDeliveryIDs(rows)))
 	if err != nil {
-		d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
-		observeOutboxDeliveryProcessed("failed", len(rows))
-		if markErr := d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, collectDeliveryIDs(rows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows"); markErr != nil {
-			d.logger.Error("Failed to mark delivery rows failed after outbox load failure", slog.Any("error", markErr))
-		}
+		d.logger.Error("Failed to mark delivery rows sending", slog.Any("error", err))
+		return len(rows)
+	}
+	if len(sendRows) == 0 {
 		return len(rows)
 	}
 
-	result := d.dispatchDeliveryRows(ctx, rows, outboxByID)
-	d.markDispatchResult(ctx, rows, &result)
+	outboxByID, err := d.loadOutboxItemsByIDs(ctx, collectDeliveryOutboxIDs(sendRows))
+	if err != nil {
+		d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
+		observeOutboxDeliveryProcessed("failed", len(sendRows))
+		if markErr := d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(sendRows, collectDeliveryIDs(sendRows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows"); markErr != nil {
+			d.logger.Error("Failed to mark delivery rows failed after outbox load failure", slog.Any("error", markErr))
+		}
+		return len(sendRows)
+	}
+
+	result := d.dispatchDeliveryRows(ctx, sendRows, outboxByID)
+	d.markDispatchResult(ctx, sendRows, &result)
 
 	touchedOutboxIDs := deliverysql.UniqueInt64s(result.TouchedOutboxIDs)
 	aggregateFailures := d.reconcileTouchedOutboxes(ctx, touchedOutboxIDs)
-	d.recordOutboxDispatchResult(len(rows), &result, touchedOutboxIDs, aggregateFailures)
+	d.recordOutboxDispatchResult(len(sendRows), &result, touchedOutboxIDs, aggregateFailures)
 
-	return len(rows)
+	return len(sendRows)
 }
 
 func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result *dispatchstate.DispatchResult) {
