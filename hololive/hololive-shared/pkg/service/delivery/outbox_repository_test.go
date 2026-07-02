@@ -34,6 +34,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const (
+	testWorkerA = "test-worker-A"
+	testWorkerB = "test-worker-B"
+	testLockTTL = 5 * time.Minute
+	testLease   = 60 * time.Second
+)
+
 func setupTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
@@ -62,7 +69,7 @@ func buildOutboxBatchItems(count int) []OutboxItem {
 
 func fetchLockedIDs(t *testing.T, repository *OutboxRepository, ctx context.Context, batchSize int) []int64 {
 	t.Helper()
-	locked, err := repository.FetchAndLock(ctx, batchSize, 5*time.Minute)
+	locked, err := repository.FetchAndLock(ctx, testWorkerA, batchSize, testLockTTL, testLease)
 	if err != nil {
 		t.Fatalf("fetch and lock: %v", err)
 	}
@@ -75,7 +82,7 @@ func fetchLockedIDs(t *testing.T, repository *OutboxRepository, ctx context.Cont
 
 func fetchAndLockItems(t *testing.T, repository *OutboxRepository, ctx context.Context) []domain.NotificationDeliveryOutbox {
 	t.Helper()
-	items, err := repository.FetchAndLock(ctx, 1, 5*time.Minute)
+	items, err := repository.FetchAndLock(ctx, testWorkerA, 1, testLockTTL, testLease)
 	if err != nil {
 		t.Fatalf("fetch and lock: %v", err)
 	}
@@ -175,7 +182,7 @@ func TestFetchAndLock(t *testing.T) {
 		}
 	}
 
-	items, err := repository.FetchAndLock(ctx, 2, 5*time.Minute)
+	items, err := repository.FetchAndLock(ctx, testWorkerA, 2, testLockTTL, testLease)
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -204,7 +211,7 @@ func TestMarkSent(t *testing.T) {
 		t.Fatal("no items fetched")
 	}
 
-	if _, err := repository.MarkSent(ctx, items[0].ID, items[0].LockedAt.Time); err != nil {
+	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time); err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
 
@@ -229,7 +236,7 @@ func TestMarkSent_ClearsLock(t *testing.T) {
 		t.Fatal("expected locked_at set after FetchAndLock")
 	}
 
-	if _, err := repository.MarkSent(ctx, items[0].ID, items[0].LockedAt.Time); err != nil {
+	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time); err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
 
@@ -264,7 +271,7 @@ func TestMarkSent_DoesNotResurrectFailedRow(t *testing.T) {
 		t.Fatalf("force failed: %v", err)
 	}
 
-	if _, err := repository.MarkSent(ctx, id, items[0].LockedAt.Time); err != nil {
+	if _, err := repository.MarkSent(ctx, id, testWorkerA, items[0].LockedAt.Time); err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
 
@@ -295,7 +302,7 @@ func TestMarkFailed_DoesNotResurrectSentRow(t *testing.T) {
 		t.Fatalf("force sent: %v", err)
 	}
 
-	if _, err := repository.MarkFailed(ctx, id, items[0].LockedAt.Time, 3, time.Minute, "late failure"); err != nil {
+	if _, err := repository.MarkFailed(ctx, id, testWorkerA, items[0].LockedAt.Time, 3, time.Minute, "late failure"); err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
 
@@ -321,7 +328,7 @@ func TestMarkFailed_WithBackoff(t *testing.T) {
 	}
 
 	// maxRetries=3, 첫 실패 → 아직 PENDING 유지
-	if _, err := repository.MarkFailed(ctx, items[0].ID, items[0].LockedAt.Time, 3, time.Minute, "send error"); err != nil {
+	if _, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time, 3, time.Minute, "send error"); err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
 
@@ -425,7 +432,7 @@ func TestCleanup(t *testing.T) {
 		t.Fatal("no items fetched")
 	}
 
-	if _, err := repository.MarkSent(ctx, items[0].ID, items[0].LockedAt.Time); err != nil {
+	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time); err != nil {
 		t.Fatalf("mark sent: %v", err)
 	}
 
@@ -497,21 +504,51 @@ func TestCountByStatus(t *testing.T) {
 	}
 }
 
-func backdateLock(t *testing.T, repository *OutboxRepository, ctx context.Context, id int64, by time.Duration) time.Time {
+func expireLease(t *testing.T, repository *OutboxRepository, ctx context.Context, id int64) {
+	t.Helper()
+	if _, err := repository.pool.Exec(ctx,
+		"UPDATE notification_delivery_outbox SET lock_expires_at = $1 WHERE id = $2",
+		time.Now().Add(-time.Minute), id,
+	); err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+}
+
+func setLegacyLock(t *testing.T, repository *OutboxRepository, ctx context.Context, id int64, lockedAtAge time.Duration) time.Time {
 	t.Helper()
 	var lockedAt time.Time
 	if err := repository.pool.QueryRow(ctx,
-		"UPDATE notification_delivery_outbox SET locked_at = $1 WHERE id = $2 RETURNING locked_at",
-		time.Now().Add(-by), id,
+		"UPDATE notification_delivery_outbox SET locked_at = $1, locked_by = NULL, lock_expires_at = NULL WHERE id = $2 RETURNING locked_at",
+		time.Now().Add(-lockedAtAge), id,
 	).Scan(&lockedAt); err != nil {
-		t.Fatalf("backdate lock: %v", err)
+		t.Fatalf("set legacy lock: %v", err)
 	}
 	return lockedAt
 }
 
+func onlyRowID(t *testing.T, repository *OutboxRepository, ctx context.Context) int64 {
+	t.Helper()
+	var id int64
+	if err := repository.pool.QueryRow(ctx, "SELECT id FROM notification_delivery_outbox").Scan(&id); err != nil {
+		t.Fatalf("query row id: %v", err)
+	}
+	return id
+}
+
+func lockedByOf(t *testing.T, repository *OutboxRepository, ctx context.Context, id int64) *string {
+	t.Helper()
+	var lockedBy *string
+	if err := repository.pool.QueryRow(ctx,
+		"SELECT locked_by FROM notification_delivery_outbox WHERE id = $1", id,
+	).Scan(&lockedBy); err != nil {
+		t.Fatalf("query locked_by: %v", err)
+	}
+	return lockedBy
+}
+
 func reclaimByWorkerB(t *testing.T, repository *OutboxRepository, ctx context.Context, id int64) domain.NotificationDeliveryOutbox {
 	t.Helper()
-	items, err := repository.FetchAndLock(ctx, 1, 5*time.Minute)
+	items, err := repository.FetchAndLock(ctx, testWorkerB, 1, testLockTTL, testLease)
 	if err != nil {
 		t.Fatalf("worker B fetch and lock: %v", err)
 	}
@@ -534,11 +571,12 @@ func TestMarkSent_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 		t.Fatal("worker A fetched no items")
 	}
 	id := itemsA[0].ID
+	staleLockedAt := itemsA[0].LockedAt.Time
 
-	staleLockedAt := backdateLock(t, repository, ctx, id, 10*time.Minute)
+	expireLease(t, repository, ctx, id)
 	itemB := reclaimByWorkerB(t, repository, ctx, id)
 
-	fenced, err := repository.MarkSent(ctx, id, staleLockedAt)
+	fenced, err := repository.MarkSent(ctx, id, testWorkerA, staleLockedAt)
 	if err != nil {
 		t.Fatalf("stale worker A mark sent: %v", err)
 	}
@@ -549,15 +587,15 @@ func TestMarkSent_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 		t.Fatalf("stale MarkSent must not mark SENT, sent=%d", sent)
 	}
 	if pending := countByStatus(t, repository, ctx, domain.DeliveryStatusPending); pending != 1 {
-		t.Fatalf("row must stay PENDING under B's lock, pending=%d", pending)
+		t.Fatalf("row must stay PENDING under B's lease, pending=%d", pending)
 	}
 
-	okFenced, err := repository.MarkSent(ctx, id, itemB.LockedAt.Time)
+	okFenced, err := repository.MarkSent(ctx, id, testWorkerB, itemB.LockedAt.Time)
 	if err != nil {
 		t.Fatalf("worker B mark sent: %v", err)
 	}
 	if !okFenced {
-		t.Fatal("current lock holder B MarkSent must succeed")
+		t.Fatal("current lease holder B MarkSent must succeed")
 	}
 	if sent := countByStatus(t, repository, ctx, domain.DeliveryStatusSent); sent != 1 {
 		t.Fatalf("B MarkSent must mark SENT, sent=%d", sent)
@@ -577,11 +615,12 @@ func TestMarkFailed_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 		t.Fatal("worker A fetched no items")
 	}
 	id := itemsA[0].ID
+	staleLockedAt := itemsA[0].LockedAt.Time
 
-	staleLockedAt := backdateLock(t, repository, ctx, id, 10*time.Minute)
+	expireLease(t, repository, ctx, id)
 	reclaimByWorkerB(t, repository, ctx, id)
 
-	fenced, err := repository.MarkFailed(ctx, id, staleLockedAt, 3, time.Minute, "stale worker A failure")
+	fenced, err := repository.MarkFailed(ctx, id, testWorkerA, staleLockedAt, 3, time.Minute, "stale worker A failure")
 	if err != nil {
 		t.Fatalf("stale worker A mark failed: %v", err)
 	}
@@ -597,5 +636,163 @@ func TestMarkFailed_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 	}
 	if attemptCount != 0 {
 		t.Fatalf("fenced MarkFailed must not bump attempt_count, got %d", attemptCount)
+	}
+}
+
+func TestMarkSent_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(t, repository, ctx)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+	id := itemsA[0].ID
+
+	fenced, err := repository.MarkSent(ctx, id, testWorkerB, itemsA[0].LockedAt.Time)
+	if err != nil {
+		t.Fatalf("foreign worker mark sent: %v", err)
+	}
+	if fenced {
+		t.Fatal("foreign worker MarkSent must be fenced even with a matching locked_at")
+	}
+	if sent := countByStatus(t, repository, ctx, domain.DeliveryStatusSent); sent != 0 {
+		t.Fatalf("foreign MarkSent must not mark SENT, sent=%d", sent)
+	}
+
+	okFenced, err := repository.MarkSent(ctx, id, testWorkerA, itemsA[0].LockedAt.Time)
+	if err != nil {
+		t.Fatalf("owner mark sent: %v", err)
+	}
+	if !okFenced {
+		t.Fatal("owner A MarkSent must succeed")
+	}
+}
+
+func TestMarkFailed_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(t, repository, ctx)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+	id := itemsA[0].ID
+
+	fenced, err := repository.MarkFailed(ctx, id, testWorkerB, itemsA[0].LockedAt.Time, 3, time.Minute, "foreign failure")
+	if err != nil {
+		t.Fatalf("foreign worker mark failed: %v", err)
+	}
+	if fenced {
+		t.Fatal("foreign worker MarkFailed must be fenced even with a matching locked_at")
+	}
+
+	var attemptCount int
+	if err := repository.pool.QueryRow(ctx,
+		"SELECT attempt_count FROM notification_delivery_outbox WHERE id = $1", id,
+	).Scan(&attemptCount); err != nil {
+		t.Fatalf("query attempt_count: %v", err)
+	}
+	if attemptCount != 0 {
+		t.Fatalf("fenced MarkFailed must not bump attempt_count, got %d", attemptCount)
+	}
+}
+
+func TestFetchAndLock_ReclaimsExpiredLease(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(t, repository, ctx)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+	id := itemsA[0].ID
+
+	got, err := repository.FetchAndLock(ctx, testWorkerB, 1, testLockTTL, testLease)
+	if err != nil {
+		t.Fatalf("worker B fetch under valid lease: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("a valid lease must not be reclaimable, got %d", len(got))
+	}
+
+	expireLease(t, repository, ctx, id)
+	reclaimByWorkerB(t, repository, ctx, id)
+
+	owner := lockedByOf(t, repository, ctx, id)
+	if owner == nil || *owner != testWorkerB {
+		t.Fatalf("expired-lease reclaim must set locked_by=%s, got %v", testWorkerB, owner)
+	}
+}
+
+func TestMarkSent_FallbackFenceForLegacyRow(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	id := onlyRowID(t, repository, ctx)
+
+	legacyLockedAt := setLegacyLock(t, repository, ctx, id, 0)
+
+	fenced, err := repository.MarkSent(ctx, id, testWorkerA, legacyLockedAt.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("legacy mismatch mark sent: %v", err)
+	}
+	if fenced {
+		t.Fatal("legacy fallback must fence a mismatched locked_at")
+	}
+
+	okFenced, err := repository.MarkSent(ctx, id, testWorkerA, legacyLockedAt)
+	if err != nil {
+		t.Fatalf("legacy match mark sent: %v", err)
+	}
+	if !okFenced {
+		t.Fatal("legacy fallback MarkSent with a matching locked_at must succeed")
+	}
+	if sent := countByStatus(t, repository, ctx, domain.DeliveryStatusSent); sent != 1 {
+		t.Fatalf("legacy fallback MarkSent must mark SENT, sent=%d", sent)
+	}
+}
+
+func TestFetchAndLock_ReclaimsLegacyRowViaLockTimeout(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	id := onlyRowID(t, repository, ctx)
+
+	setLegacyLock(t, repository, ctx, id, 0)
+	got, err := repository.FetchAndLock(ctx, testWorkerB, 1, testLockTTL, testLease)
+	if err != nil {
+		t.Fatalf("worker B fetch under fresh legacy lock: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("a fresh legacy lock must not be reclaimable within lock timeout, got %d", len(got))
+	}
+
+	setLegacyLock(t, repository, ctx, id, 10*time.Minute)
+	itemB := reclaimByWorkerB(t, repository, ctx, id)
+	if !itemB.LockedAt.Valid {
+		t.Fatal("legacy-timeout reclaim must set locked_at")
+	}
+	owner := lockedByOf(t, repository, ctx, id)
+	if owner == nil || *owner != testWorkerB {
+		t.Fatalf("legacy-timeout reclaim must set locked_by=%s, got %v", testWorkerB, owner)
 	}
 }

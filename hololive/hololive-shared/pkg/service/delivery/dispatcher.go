@@ -33,6 +33,7 @@ import (
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type MessageSender interface {
@@ -44,12 +45,14 @@ type ClientRequestMessageSender interface {
 }
 
 type deliveryRepository interface {
-	FetchAndLock(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error)
-	MarkSent(ctx context.Context, id int64, lockedAt time.Time) (bool, error)
-	MarkFailed(ctx context.Context, id int64, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	FetchAndLock(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
+	MarkSent(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error)
+	MarkFailed(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 	CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	Cleanup(ctx context.Context, olderThan time.Duration) (int64, error)
 }
+
+const deliveryLease = 60 * time.Second
 
 type DispatcherConfig struct {
 	BatchSize       int
@@ -82,6 +85,7 @@ type Dispatcher struct {
 	sender        MessageSender
 	logger        *slog.Logger
 	config        DispatcherConfig
+	workerID      string
 	lastCleanupAt time.Time
 }
 
@@ -89,7 +93,7 @@ func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: config.withDefaults()}
+	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: config.withDefaults(), workerID: util.InstanceID("delivery-dispatcher")}
 }
 
 func (c DispatcherConfig) withDefaults() DispatcherConfig {
@@ -138,7 +142,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 }
 
 func (d *Dispatcher) processOnce(ctx context.Context) {
-	items, err := d.repository.FetchAndLock(ctx, d.config.BatchSize, d.config.LockTimeout)
+	items, err := d.repository.FetchAndLock(ctx, d.workerID, d.config.BatchSize, d.config.LockTimeout, deliveryLease)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.String("error", err.Error()))
 		return
@@ -269,7 +273,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 }
 
 func (d *Dispatcher) markItemSent(ctx context.Context, id int64, lockedAt time.Time) {
-	fenced, err := d.repository.MarkSent(ctx, id, lockedAt)
+	fenced, err := d.repository.MarkSent(ctx, id, d.workerID, lockedAt)
 	if err != nil {
 		d.logger.Error("Failed to mark outbox item as sent", slog.Int64("id", id), slog.String("error", err.Error()))
 		return
@@ -280,7 +284,7 @@ func (d *Dispatcher) markItemSent(ctx context.Context, id int64, lockedAt time.T
 }
 
 func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, lockedAt time.Time, reason string) {
-	fenced, err := d.repository.MarkFailed(ctx, id, lockedAt, d.config.MaxRetries, d.config.RetryBackoff, reason)
+	fenced, err := d.repository.MarkFailed(ctx, id, d.workerID, lockedAt, d.config.MaxRetries, d.config.RetryBackoff, reason)
 	if err != nil {
 		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", id), slog.String("error", err.Error()))
 		return

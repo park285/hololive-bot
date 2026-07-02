@@ -37,30 +37,30 @@ import (
 
 // mockDeliveryRepository: deliveryRepository mock 구현
 type mockDeliveryRepository struct {
-	fetchAndLockFn  func(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error)
-	markSentFn      func(ctx context.Context, id int64, lockedAt time.Time) (bool, error)
-	markFailedFn    func(ctx context.Context, id int64, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	fetchAndLockFn  func(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
+	markSentFn      func(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error)
+	markFailedFn    func(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 	countByStatusFn func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	cleanupFn       func(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
-func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 	if m.fetchAndLockFn != nil {
-		return m.fetchAndLockFn(ctx, batchSize, lockTimeout)
+		return m.fetchAndLockFn(ctx, workerID, batchSize, lockTimeout, lease)
 	}
 	return nil, nil
 }
 
-func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, lockedAt time.Time) (bool, error) {
+func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error) {
 	if m.markSentFn != nil {
-		return m.markSentFn(ctx, id, lockedAt)
+		return m.markSentFn(ctx, id, workerID, lockedAt)
 	}
 	return true, nil
 }
 
-func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
+func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
 	if m.markFailedFn != nil {
-		return m.markFailedFn(ctx, id, lockedAt, maxRetries, backoff, errMsg)
+		return m.markFailedFn(ctx, id, workerID, lockedAt, maxRetries, backoff, errMsg)
 	}
 	return true, nil
 }
@@ -156,13 +156,13 @@ func TestProcessOnce_E2E(t *testing.T) {
 	var sentRooms []string
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
 				{ID: 1, RoomID: "room-a", Payload: makePayload(t, "hello-a")},
 				{ID: 2, RoomID: "room-b", Payload: makePayload(t, "hello-b")},
 			}, nil
 		},
-		markSentFn: func(_ context.Context, id int64, _ time.Time) (bool, error) {
+		markSentFn: func(_ context.Context, id int64, _ string, _ time.Time) (bool, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			sentIDs = append(sentIDs, id)
@@ -201,12 +201,12 @@ func TestProcessOnce_UnmarshalFailure_MarkFailed(t *testing.T) {
 	var failedMsg string
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
 				{ID: 10, RoomID: "room-x", Payload: "invalid-json{{{"},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ time.Time, _ int, _ time.Duration, errMsg string) (bool, error) {
+		markFailedFn: func(_ context.Context, id int64, _ string, _ time.Time, _ int, _ time.Duration, errMsg string) (bool, error) {
 			failedID = id
 			failedMsg = errMsg
 			return true, nil
@@ -236,12 +236,12 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 	var failedID int64
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
 				{ID: 20, RoomID: "room-y", Payload: makePayload(t, "hello")},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ time.Time, _ int, _ time.Duration, _ string) (bool, error) {
+		markFailedFn: func(_ context.Context, id int64, _ string, _ time.Time, _ int, _ time.Duration, _ string) (bool, error) {
 			failedID = id
 			return true, nil
 		},
@@ -271,7 +271,7 @@ func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
 	var fetchCount atomic.Int32
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			fetchCount.Add(1)
 			return nil, nil
 		},
@@ -312,7 +312,7 @@ func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {
 	var closeSecondFetch sync.Once
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			switch fetchCount.Add(1) {
 			case 1:
 				closeFirstFetch.Do(func() {
@@ -366,7 +366,7 @@ func TestDispatcher_StartProcessesOnceBeforeFirstTick(t *testing.T) {
 	var closeFirstFetch sync.Once
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			fetchCount.Add(1)
 			closeFirstFetch.Do(func() {
 				close(firstFetch)
@@ -404,7 +404,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 	var sentCount atomic.Int32
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
 				{ID: 1, RoomID: "room-a", Payload: makePayload(t, "hello-a")},
 				{ID: 2, RoomID: "room-b", Payload: makePayload(t, "hello-b")},
@@ -412,7 +412,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 				{ID: 4, RoomID: "room-d", Payload: makePayload(t, "hello-d")},
 			}, nil
 		},
-		markSentFn: func(_ context.Context, _ int64, _ time.Time) (bool, error) {
+		markSentFn: func(_ context.Context, _ int64, _ string, _ time.Time) (bool, error) {
 			sentCount.Add(1)
 			return true, nil
 		},
