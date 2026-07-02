@@ -11,6 +11,7 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/theme"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
@@ -60,15 +61,16 @@ func newCalendarMetrics() calendarMetrics {
 }
 
 var (
-	colWhite      = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	colSlate100   = color.RGBA{R: 241, G: 245, B: 249, A: 255}
-	colSlate200   = color.RGBA{R: 226, G: 232, B: 240, A: 255}
-	colSlate500   = color.RGBA{R: 100, G: 116, B: 139, A: 255}
-	colSlate800   = color.RGBA{R: 30, G: 41, B: 59, A: 255}
-	colAmber50    = color.RGBA{R: 255, G: 251, B: 235, A: 255}
-	colAmber600   = color.RGBA{R: 217, G: 119, B: 6, A: 255}
-	colEmerald50  = color.RGBA{R: 236, G: 253, B: 245, A: 255}
-	colEmerald600 = color.RGBA{R: 5, G: 150, B: 105, A: 255}
+	palette       = theme.Minimal()
+	colWhite      = palette.Background
+	colSlate100   = palette.SurfaceMuted
+	colSlate200   = palette.Border
+	colSlate500   = palette.TextMuted
+	colSlate800   = palette.TextPrimary
+	colAmber50    = palette.AccentWarmBg
+	colAmber600   = palette.AccentWarm
+	colEmerald50  = palette.AccentCoolBg
+	colEmerald600 = palette.AccentCool
 )
 
 func drawText(img *image.RGBA, face font.Face, x, y int, col color.Color, text string) {
