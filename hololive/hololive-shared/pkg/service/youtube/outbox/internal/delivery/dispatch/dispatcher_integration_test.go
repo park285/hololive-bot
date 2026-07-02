@@ -615,7 +615,7 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			roomID:          "room-community-race",
 			memberName:      "ConcurrentCommunityMember",
 			contentPrefix:   "community_race",
-			messageFragment: "커뮤니티 알림",
+			messageFragment: "커뮤니티 글",
 			postID: func(contentID string) string {
 				return "community:" + contentID
 			},
@@ -636,7 +636,7 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			roomID:          "room-short-race",
 			memberName:      "ConcurrentShortMember",
 			contentPrefix:   "short_race",
-			messageFragment: "쇼츠 알림",
+			messageFragment: "새 쇼츠",
 			postID: func(contentID string) string {
 				return "short:" + contentID
 			},

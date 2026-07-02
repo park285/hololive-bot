@@ -30,12 +30,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const cmdAlarmNotificationGroupBody = `🔔 방송 알림 ({{.Count}}개)
-
-{{if le .MinutesUntil 0}}⏰ 여러 방송이 시작되었습니다.{{else if eq (len .ScheduledTimes) 0}}⏰ 여러 방송이 곧 시작됩니다.{{else if eq (len .ScheduledTimes) 1}}⏰ {{index .ScheduledTimes 0}} 방송예정{{else}}⏰ 방송예정: {{join .ScheduledTimes ", "}}{{end}}
+const cmdAlarmNotificationGroupBody = `🔔 방송 알림 ({{.Count}})
+{{if le .MinutesUntil 0}}방송이 시작되었습니다.{{else if eq (len .ScheduledTimes) 0}}곧 시작합니다.{{else if eq (len .ScheduledTimes) 1}}⏰ {{index .ScheduledTimes 0}}{{else}}⏰ {{join .ScheduledTimes ", "}}{{end}}
 
 {{range $i, $e := .Entries}}{{if $i}}
-{{end}}{{$e.Index}}. {{$e.ChannelName | default "알 수 없는 채널"}}{{if $e.ScheduledKST}}{{if gt $.MinutesUntil 0}} ({{$e.ScheduledKST}} 방송예정){{else}} ({{$e.ScheduledKST}} 방송 시작){{end}}{{else}}{{if gt $.MinutesUntil 0}} (방송예정){{end}}{{end}}
+{{end}}{{$e.Index}}. {{$e.ChannelName | default "알 수 없는 채널"}}{{if $e.ScheduledKST}} ({{$e.ScheduledKST}}){{end}}
 {{if $e.Title}}   {{$e.Title}}
 {{end}}{{if $e.URL}}   {{$e.URL}}
 {{end}}{{end}}`
@@ -304,7 +303,7 @@ func TestAlarmNotificationGroup_WithScheduledTime(t *testing.T) {
 	}
 
 	assert.Equal(t,
-		"🔔 방송 알림 (2개)\n\n⏰ 21:00 방송예정\n\n1. 채널A (21:00 방송예정)\n   방송 A\n   https://youtube.com/watch?v=stream-a\n\n2. 채널B (방송예정)\n   방송 B\n   https://youtube.com/watch?v=stream-b",
+		"🔔 방송 알림 (2)\n⏰ 21:00\n\n1. 채널A (21:00)\n   방송 A\n   https://youtube.com/watch?v=stream-a\n\n2. 채널B\n   방송 B\n   https://youtube.com/watch?v=stream-b",
 		formatter.AlarmNotificationGroup(t.Context(), 5, notifications))
 }
 
@@ -327,7 +326,7 @@ func TestAlarmNotificationGroup_LiveStartedLabel(t *testing.T) {
 	}
 
 	assert.Equal(t,
-		"🔔 방송 알림 (1개)\n\n⏰ 여러 방송이 시작되었습니다.\n\n1. 채널A (21:00 방송 시작)\n   방송 A\n   https://youtube.com/watch?v=stream-a",
+		"🔔 방송 알림 (1)\n방송이 시작되었습니다.\n\n1. 채널A (21:00)\n   방송 A\n   https://youtube.com/watch?v=stream-a",
 		formatter.AlarmNotificationGroup(t.Context(), 0, notifications))
 }
 
@@ -361,6 +360,6 @@ func TestAlarmNotificationGroup_HeaderWithMultipleScheduledTimes(t *testing.T) {
 	}
 
 	assert.Equal(t,
-		"🔔 방송 알림 (2개)\n\n⏰ 방송예정: 21:00, 21:30\n\n1. 채널A (21:00 방송예정)\n   방송 A\n   https://youtube.com/watch?v=stream-a\n\n2. 채널B (21:30 방송예정)\n   방송 B\n   https://youtube.com/watch?v=stream-b",
+		"🔔 방송 알림 (2)\n⏰ 21:00, 21:30\n\n1. 채널A (21:00)\n   방송 A\n   https://youtube.com/watch?v=stream-a\n\n2. 채널B (21:30)\n   방송 B\n   https://youtube.com/watch?v=stream-b",
 		formatter.AlarmNotificationGroup(t.Context(), 5, notifications))
 }

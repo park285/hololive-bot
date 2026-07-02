@@ -28,13 +28,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const cmdCalendarBody = `{{if eq .Count 0}}📅 {{.Year}}년 {{.Month}}월 기념일
-
-등록된 기념일이 없습니다.{{else}}📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}}건)
-━━━━━━━━━━━━━━━━
+const cmdCalendarBody = `{{if eq .Count 0}}📅 {{.Year}}년 {{.Month}}월 등록된 기념일이 없습니다.{{else}}📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}})
 {{range $i, $day := .Days}}{{if $i}}
 {{end}}
-📌 {{$day.Month}}월 {{$day.Day}}일
+[{{printf "%02d/%02d" $day.Month $day.Day}}]
 {{range $day.Entries}}{{if .IsBirthday}}  🎂 {{.Name}} 생일{{else}}  🎉 {{.Name}} 데뷔 {{.Years}}주년{{end}}
 {{end}}{{end}}{{end}}`
 
@@ -56,7 +53,7 @@ func TestCelebrationCalendar(t *testing.T) {
 		t.Parallel()
 
 		assert.Equal(t,
-			"📅 2026년 6월 기념일\n\n등록된 기념일이 없습니다.",
+			"📅 2026년 6월 등록된 기념일이 없습니다.",
 			f.CelebrationCalendar(t.Context(), 6, 2026, nil))
 	})
 
@@ -68,7 +65,7 @@ func TestCelebrationCalendar(t *testing.T) {
 		}
 
 		assert.Equal(t,
-			"📅 2026년 6월 기념일 (1건)\n━━━━━━━━━━━━━━━━\n\n📌 6월 15일\n  🎂 페코라 생일",
+			"📅 2026년 6월 기념일 (1)\n\n[06/15]\n  🎂 페코라 생일",
 			f.CelebrationCalendar(t.Context(), 6, 2026, entries))
 	})
 
@@ -80,7 +77,7 @@ func TestCelebrationCalendar(t *testing.T) {
 		}
 
 		assert.Equal(t,
-			"📅 2026년 6월 기념일 (1건)\n━━━━━━━━━━━━━━━━\n\n📌 6월 5일\n  🎉 미코 데뷔 3주년",
+			"📅 2026년 6월 기념일 (1)\n\n[06/05]\n  🎉 미코 데뷔 3주년",
 			f.CelebrationCalendar(t.Context(), 6, 2026, entries))
 	})
 
@@ -94,7 +91,7 @@ func TestCelebrationCalendar(t *testing.T) {
 		}
 
 		assert.Equal(t,
-			"📅 2026년 6월 기념일 (3건)\n━━━━━━━━━━━━━━━━\n\n📌 6월 10일\n  🎂 라미 생일\n  🎉 라미 데뷔 2주년\n\n\n📌 6월 20일\n  🎂 보탄 생일",
+			"📅 2026년 6월 기념일 (3)\n\n[06/10]\n  🎂 라미 생일\n  🎉 라미 데뷔 2주년\n\n\n[06/20]\n  🎂 보탄 생일",
 			f.CelebrationCalendar(t.Context(), 6, 2026, entries))
 	})
 
@@ -106,7 +103,7 @@ func TestCelebrationCalendar(t *testing.T) {
 		}
 
 		assert.Equal(t,
-			"📅 2026년 1월 기념일 (1건)\n━━━━━━━━━━━━━━━━\n\n📌 1월 1일\n  🎂 Pekora 생일",
+			"📅 2026년 1월 기념일 (1)\n\n[01/01]\n  🎂 Pekora 생일",
 			f.CelebrationCalendar(t.Context(), 1, 2026, entries))
 	})
 
@@ -118,7 +115,7 @@ func TestCelebrationCalendar(t *testing.T) {
 		}
 
 		assert.Equal(t,
-			"📅 2026년 1월 기념일\n\n등록된 기념일이 없습니다.",
+			"📅 2026년 1월 등록된 기념일이 없습니다.",
 			f.CelebrationCalendar(t.Context(), 1, 2026, entries))
 	})
 }

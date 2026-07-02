@@ -28,15 +28,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const cmdStatsCountBody = `📘 {{.MemberName}}
-
-📊 현재 구독자: {{.Subscribers}}명`
+const cmdStatsCountBody = `📊 {{.MemberName}} 구독자 {{.Subscribers}}명`
 
 const cmdStatsGainersBody = `📊 구독자 증가 순위{{if .Period}} ({{.Period}}){{end}}
 {{range .Gainers}}
-{{.Rank}}위. {{.MemberName}}
-    +{{.Delta}}명{{if .Current}} (현재 {{.Current}}명){{end}}
-{{end}}`
+{{.Rank}}. {{.MemberName}} +{{.Delta}}명{{if .Current}} (현재 {{.Current}}명){{end}}
+{{- end}}`
 
 func TestFormatStatsTopGainers(t *testing.T) {
 	t.Parallel()
@@ -52,11 +49,11 @@ func TestFormatStatsTopGainers(t *testing.T) {
 	}
 
 	assert.Equal(t,
-		"📊 구독자 증가 순위 (주간)\n\n1위. 사쿠라 미코\n    +1만 2345명 (현재 200만명)\n\n2위. 시라카미 후부키\n    +2100명",
+		"📊 구독자 증가 순위 (주간)\n\n1. 사쿠라 미코 +1만 2345명 (현재 200만명)\n2. 시라카미 후부키 +2100명",
 		formatter.FormatStatsTopGainers(t.Context(), "주간", gainers))
 
 	assert.Equal(t,
-		"📊 구독자 증가 순위\n\n1위. 사쿠라 미코\n    +1만 2345명 (현재 200만명)\n\n2위. 시라카미 후부키\n    +2100명",
+		"📊 구독자 증가 순위\n\n1. 사쿠라 미코 +1만 2345명 (현재 200만명)\n2. 시라카미 후부키 +2100명",
 		formatter.FormatStatsTopGainers(t.Context(), "", gainers))
 
 	assert.Equal(t,
@@ -83,7 +80,7 @@ func TestFormatSubscriberCount(t *testing.T) {
 	formatter := NewResponseFormatter("!", renderer)
 
 	assert.Equal(t,
-		"📘 호시마치 스이세이\n\n📊 현재 구독자: 205만명",
+		"📊 호시마치 스이세이 구독자 205만명",
 		formatter.FormatSubscriberCount(t.Context(), "호시마치 스이세이", 2050000))
 }
 

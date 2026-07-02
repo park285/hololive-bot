@@ -80,3 +80,6 @@
 080 084_extend_hot_outbox_autovacuum.sql
 081 085_add_ycat_kind_content_index.sql
 082 086_add_sending_stale_indexes.sql
+083 087_reseed_command_templates_minimal_tone.sql
+084 088_reseed_notification_templates_minimal_tone.sql
+085 089_reseed_error_notify_strings_minimal_tone.sql

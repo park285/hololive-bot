@@ -24,16 +24,16 @@ var outboxRenderFuncs = template.FuncMap{
 }
 
 const (
-	outboxBodyVideo     = "{{if eq .Kind \"LIVE_STREAM\"}}📺 {{.MemberName}} 방송 알림{{else}}📺 {{.MemberName}} 새 영상{{end}}\n{{.Title | truncate 50}}\n{{.URL}}"
-	outboxBodyShorts    = "📱 {{.MemberName}} 쇼츠 알림\n{{.Title | truncate 50}}\n{{.URL}}"
-	outboxBodyCommunity = "📝 {{.MemberName}} 커뮤니티 알림\n{{.ContentText | truncate 100}}\n{{.URL}}"
-	outboxBodyMilestone = "🎉 {{.MemberName}} 마일스톤 알림\n{{.MemberName}} {{.Milestone}} 돌파!"
+	outboxBodyVideo     = "{{if eq .Kind \"LIVE_STREAM\"}}🔴 {{.MemberName}} 방송 시작{{else}}🔔 {{.MemberName}} 새 영상{{end}}\n{{.Title | truncate 50}}\n{{.URL}}"
+	outboxBodyShorts    = "🔔 {{.MemberName}} 새 쇼츠\n{{.Title | truncate 50}}\n{{.URL}}"
+	outboxBodyCommunity = "🔔 {{.MemberName}} 커뮤니티 글\n{{.ContentText | truncate 100}}\n{{.URL}}"
+	outboxBodyMilestone = "🎉 {{.MemberName}} {{.Milestone}} 달성"
 
-	outboxBodyVideoGroup = "{{if eq .Kind \"LIVE_STREAM\"}}📺 {{.MemberName}} 방송 알림 ({{.Count}}개){{else if eq .Kind \"NEW_VIDEO\"}}📺 {{.MemberName}} 새 영상 ({{.Count}}개){{else}}🔔 {{.MemberName}} 알림 ({{.Count}}개){{end}}\n" +
+	outboxBodyVideoGroup = "{{if eq .Kind \"LIVE_STREAM\"}}🔴 {{.MemberName}} 방송 시작 ({{.Count}}){{else if eq .Kind \"NEW_VIDEO\"}}🔔 {{.MemberName}} 새 영상 ({{.Count}}){{else}}🔔 {{.MemberName}} 알림 ({{.Count}}){{end}}\n" +
 		"{{range $idx, $item := .Items}}{{if gt $idx 0}}\n\n{{end}}{{add $idx 1}}. {{$item.Title | truncate 40}}\n   {{$item.URL}}{{end}}"
-	outboxBodyShortsGroup = "📱 {{.MemberName}} 쇼츠 알림 ({{.Count}}개)\n" +
+	outboxBodyShortsGroup = "🔔 {{.MemberName}} 새 쇼츠 ({{.Count}})\n" +
 		"{{range $idx, $item := .Items}}{{if gt $idx 0}}\n\n{{end}}{{add $idx 1}}. {{$item.Title | truncate 40}}\n   {{$item.URL}}{{end}}"
-	outboxBodyCommunityGroup = "📝 {{.MemberName}} 커뮤니티 알림 ({{.Count}}개)\n" +
+	outboxBodyCommunityGroup = "🔔 {{.MemberName}} 커뮤니티 글 ({{.Count}})\n" +
 		"{{range $idx, $item := .Items}}{{if gt $idx 0}}\n\n{{end}}{{add $idx 1}}. {{$item.ContentText | truncate 40}}\n   {{$item.URL}}{{end}}"
 )
 
@@ -75,61 +75,61 @@ func TestOutboxHeaderBodyRenderGoldens(t *testing.T) {
 			name: "single/new_video",
 			body: outboxBodyVideo,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxVideo, "NEW_VIDEO"),
-			want: "📺 사쿠라 미코 새 영상\n마인크래프트 건축 배틀 #미코라이브\nhttps://youtu.be/video123xyz",
+			want: "🔔 사쿠라 미코 새 영상\n마인크래프트 건축 배틀 #미코라이브\nhttps://youtu.be/video123xyz",
 		},
 		{
 			name: "single/live_stream",
 			body: outboxBodyVideo,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxVideo, "LIVE_STREAM"),
-			want: "📺 사쿠라 미코 방송 알림\n마인크래프트 건축 배틀 #미코라이브\nhttps://youtu.be/video123xyz",
+			want: "🔴 사쿠라 미코 방송 시작\n마인크래프트 건축 배틀 #미코라이브\nhttps://youtu.be/video123xyz",
 		},
 		{
 			name: "single/shorts",
 			body: outboxBodyShorts,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxShorts, "NEW_SHORT"),
-			want: "📱 사쿠라 미코 쇼츠 알림\n새 쇼츠 제목 - 귀여운 미코치\nhttps://www.youtube.com/shorts/abc123xyz",
+			want: "🔔 사쿠라 미코 새 쇼츠\n새 쇼츠 제목 - 귀여운 미코치\nhttps://www.youtube.com/shorts/abc123xyz",
 		},
 		{
 			name: "single/community",
 			body: outboxBodyCommunity,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxCommunity, "COMMUNITY_POST"),
-			want: "📝 사쿠라 미코 커뮤니티 알림\n오늘 밤 10시에 방송합니다! 많이 놀러오세요~\nhttps://www.youtube.com/post/Ugkxyz123",
+			want: "🔔 사쿠라 미코 커뮤니티 글\n오늘 밤 10시에 방송합니다! 많이 놀러오세요~\nhttps://www.youtube.com/post/Ugkxyz123",
 		},
 		{
 			name: "single/milestone",
 			body: outboxBodyMilestone,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxMilestone, "MILESTONE"),
-			want: "🎉 사쿠라 미코 마일스톤 알림\n사쿠라 미코 200만 돌파!",
+			want: "🎉 사쿠라 미코 200만 달성",
 		},
 		{
 			name: "group/new_video",
 			body: outboxBodyVideoGroup,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxVideoGroup, "NEW_VIDEO"),
-			want: "📺 사쿠라 미코 새 영상 (2개)\n1. 마인크래프트 건축 배틀 #1\n   https://youtu.be/group-video-1\n\n2. 마인크래프트 건축 배틀 #2\n   https://youtu.be/group-video-2",
+			want: "🔔 사쿠라 미코 새 영상 (2)\n1. 마인크래프트 건축 배틀 #1\n   https://youtu.be/group-video-1\n\n2. 마인크래프트 건축 배틀 #2\n   https://youtu.be/group-video-2",
 		},
 		{
 			name: "group/live_stream",
 			body: outboxBodyVideoGroup,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxVideoGroup, "LIVE_STREAM"),
-			want: "📺 사쿠라 미코 방송 알림 (2개)\n1. 마인크래프트 건축 배틀 #1\n   https://youtu.be/group-video-1\n\n2. 마인크래프트 건축 배틀 #2\n   https://youtu.be/group-video-2",
+			want: "🔴 사쿠라 미코 방송 시작 (2)\n1. 마인크래프트 건축 배틀 #1\n   https://youtu.be/group-video-1\n\n2. 마인크래프트 건축 배틀 #2\n   https://youtu.be/group-video-2",
 		},
 		{
 			name: "group/default_milestone",
 			body: outboxBodyVideoGroup,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxVideoGroup, "MILESTONE"),
-			want: "🔔 사쿠라 미코 알림 (2개)\n1. 마인크래프트 건축 배틀 #1\n   https://youtu.be/group-video-1\n\n2. 마인크래프트 건축 배틀 #2\n   https://youtu.be/group-video-2",
+			want: "🔔 사쿠라 미코 알림 (2)\n1. 마인크래프트 건축 배틀 #1\n   https://youtu.be/group-video-1\n\n2. 마인크래프트 건축 배틀 #2\n   https://youtu.be/group-video-2",
 		},
 		{
 			name: "group/shorts",
 			body: outboxBodyShortsGroup,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxShortsGroup, "NEW_SHORT"),
-			want: "📱 사쿠라 미코 쇼츠 알림 (2개)\n1. 오늘의 쇼츠 #1\n   https://www.youtube.com/shorts/group-1\n\n2. 오늘의 쇼츠 #2\n   https://www.youtube.com/shorts/group-2",
+			want: "🔔 사쿠라 미코 새 쇼츠 (2)\n1. 오늘의 쇼츠 #1\n   https://www.youtube.com/shorts/group-1\n\n2. 오늘의 쇼츠 #2\n   https://www.youtube.com/shorts/group-2",
 		},
 		{
 			name: "group/community",
 			body: outboxBodyCommunityGroup,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxCommunityGroup, "COMMUNITY_POST"),
-			want: "📝 사쿠라 미코 커뮤니티 알림 (2개)\n1. 오늘 밤 10시 방송 공지\n   https://www.youtube.com/post/group-community-1\n\n2. 굿즈 판매 시작 안내\n   https://www.youtube.com/post/group-community-2",
+			want: "🔔 사쿠라 미코 커뮤니티 글 (2)\n1. 오늘 밤 10시 방송 공지\n   https://www.youtube.com/post/group-community-1\n\n2. 굿즈 판매 시작 안내\n   https://www.youtube.com/post/group-community-2",
 		},
 	}
 
