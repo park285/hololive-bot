@@ -79,3 +79,4 @@
 079 083_add_lease_to_notification_delivery_outbox.sql
 080 084_extend_hot_outbox_autovacuum.sql
 081 085_add_ycat_kind_content_index.sql
+082 086_add_sending_stale_indexes.sql
