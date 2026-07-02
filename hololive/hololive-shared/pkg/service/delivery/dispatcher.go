@@ -302,7 +302,7 @@ func (d *Dispatcher) sendMessage(ctx context.Context, item *domain.NotificationD
 }
 
 // 이 결정적 ID는 Iris reply admission store의 멱등 키라, 재전송돼도 카톡 중복 송출이 막힌다.
-// 단 이 안전망은 Iris admission retention(168h) > outbox LockTimeout(5분)일 때만 성립하며,
+// 단 이 안전망은 Iris admission retention(168h) > outbox lease(lock_expires_at, 60s)일 때만 성립하며,
 // 대소가 뒤집히면 재전송분이 dedup window 밖이라 사용자에게 중복 알림이 간다.
 func notificationDeliveryClientRequestID(item *domain.NotificationDeliveryOutbox) string {
 	kind := ""
