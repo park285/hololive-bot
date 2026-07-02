@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	calendarDiskCacheVersion  = "v1"
+	calendarDiskCacheVersion  = "v2"
 	calendarDiskCacheMaxBytes = 8 << 20
 )
 
