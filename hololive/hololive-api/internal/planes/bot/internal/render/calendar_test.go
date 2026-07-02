@@ -210,9 +210,7 @@ func TestDiskCache_ConcurrentCrossHashStoreNeverServesTruncatedSet(t *testing.T)
 
 	var wg sync.WaitGroup
 	for _, job := range jobs {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 40 {
 				r.storeDiskCachedImages(job.key, job.pages)
 				got, ok := r.diskCachedImages(job.key)
@@ -221,7 +219,7 @@ func TestDiskCache_ConcurrentCrossHashStoreNeverServesTruncatedSet(t *testing.T)
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
