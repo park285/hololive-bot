@@ -1,9 +1,7 @@
 package workerapp
 
 import (
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/park285/shared-go/pkg/envutil"
@@ -14,7 +12,7 @@ func parseBoolEnv(key string, def bool) bool {
 }
 
 func parsePositiveIntEnv(key string, def int) int {
-	raw := strings.TrimSpace(os.Getenv(key))
+	raw := envutil.String(key, "")
 	if raw == "" {
 		return def
 	}
@@ -26,7 +24,7 @@ func parsePositiveIntEnv(key string, def int) int {
 }
 
 func parseNonNegativeIntEnv(key string, def int) int {
-	raw := strings.TrimSpace(os.Getenv(key))
+	raw := envutil.String(key, "")
 	if raw == "" {
 		return def
 	}
@@ -38,7 +36,7 @@ func parseNonNegativeIntEnv(key string, def int) int {
 }
 
 func parsePositiveDurationMSEnv(key string, def time.Duration) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(key))
+	raw := envutil.String(key, "")
 	if raw == "" {
 		return def
 	}
@@ -50,7 +48,7 @@ func parsePositiveDurationMSEnv(key string, def time.Duration) time.Duration {
 }
 
 func parsePositiveDurationSecondsEnv(key string, def time.Duration) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(key))
+	raw := envutil.String(key, "")
 	if raw == "" {
 		return def
 	}

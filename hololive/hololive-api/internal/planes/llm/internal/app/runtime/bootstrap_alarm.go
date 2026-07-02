@@ -36,6 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/park285/shared-go/pkg/envutil"
 )
 
 func initMemberNewsService(
@@ -110,7 +111,7 @@ func initMemberNewsSourceValidator(membersData member.DataProvider, logger *slog
 }
 
 func resolveMemberNewsXAllowlistPath() string {
-	if envPath := os.Getenv("MEMBER_NEWS_X_ALLOWLIST_PATH"); strings.TrimSpace(envPath) != "" {
+	if envPath := envutil.StringRaw("MEMBER_NEWS_X_ALLOWLIST_PATH", ""); strings.TrimSpace(envPath) != "" {
 		return envPath
 	}
 

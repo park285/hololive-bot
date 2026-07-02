@@ -345,7 +345,6 @@ hololive/hololive-shared/pkg/server/settings/scraper_proxy_toggle.go
 hololive/hololive-shared/pkg/server/settings/settings_applier_local.go
 hololive/hololive-shared/pkg/server/settings/settings_result.go
 hololive/hololive-shared/pkg/server/settings/types.go
-hololive/hololive-shared/pkg/retry/retry.go
 hololive/hololive-shared/pkg/service/lease/lease.go
 hololive/hololive-shared/pkg/service/acl/service.go
 hololive/hololive-shared/pkg/service/acl/service_cache_sync.go

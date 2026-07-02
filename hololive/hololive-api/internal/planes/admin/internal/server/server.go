@@ -1,6 +1,6 @@
 package server
 
-import api "github.com/kapu/hololive-api/internal/planes/admin/internal/server/internal/api"
+import api "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 
 type Handler = api.Handler
 type HandlerDeps = api.HandlerDeps

@@ -7,8 +7,8 @@ import (
 
 	"github.com/kapu/hololive-shared/internal/ctxutil"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/retry"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {

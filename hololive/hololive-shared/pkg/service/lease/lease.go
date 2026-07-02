@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/retry"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 const (

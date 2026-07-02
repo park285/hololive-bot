@@ -27,7 +27,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/retry"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 // fetchPage: YouTube 페이지 HTML 가져오기 (5xx 에러 시 재시도 포함)

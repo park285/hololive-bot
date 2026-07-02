@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -281,7 +280,7 @@ func parseAllowedOrigins(env string, allowLocalhostInProd bool) []string {
 }
 
 func configuredOrigins() []string {
-	raw := strings.TrimSpace(os.Getenv("ALLOWED_ORIGINS"))
+	raw := envutil.String("ALLOWED_ORIGINS", "")
 	if raw == "" {
 		return fallbackOrigins()
 	}

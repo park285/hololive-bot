@@ -1,6 +1,6 @@
 package app
 
-import runtime "github.com/kapu/hololive-api/internal/planes/llm/internal/app/internal/runtime"
+import runtime "github.com/kapu/hololive-api/internal/planes/llm/internal/app/runtime"
 
 type DeliveryModule = runtime.DeliveryModule
 type LLMSchedulerRuntime = runtime.LLMSchedulerRuntime

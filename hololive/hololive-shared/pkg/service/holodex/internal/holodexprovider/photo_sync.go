@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/ctxutil"
-	"github.com/kapu/hololive-shared/pkg/retry"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/park285/shared-go/pkg/retry"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 

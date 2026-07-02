@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/park285/shared-go/pkg/envutil"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
@@ -76,7 +76,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		return failAlarmWorkerBuild(infra, "alarm foundation", err)
 	}
 
-	scheduler, err := buildRuntimeScheduler(appConfig, infra.Cache, foundation, logger, os.Getenv(notificationSchedulerRoleEnv))
+	scheduler, err := buildRuntimeScheduler(appConfig, infra.Cache, foundation, logger, envutil.String(notificationSchedulerRoleEnv, ""))
 	if err != nil {
 		return failAlarmWorkerBuild(infra, "scheduler", err)
 	}
@@ -333,13 +333,13 @@ func loadAlarmDispatchPublishConfig() (queue.PublishConfig, error) {
 }
 
 func rejectRemovedAlarmDispatchModeEnv() error {
-	publishMode := strings.ToLower(strings.TrimSpace(os.Getenv("ALARM_DISPATCH_PUBLISH_MODE")))
+	publishMode := strings.ToLower(envutil.String("ALARM_DISPATCH_PUBLISH_MODE", ""))
 	switch publishMode {
 	case "", "pg_first":
 	default:
 		return fmt.Errorf("ALARM_DISPATCH_PUBLISH_MODE=%q is no longer supported; the PG dispatch outbox is the only publish path (unset the variable)", publishMode)
 	}
-	consumerMode := strings.ToLower(strings.TrimSpace(os.Getenv("ALARM_DISPATCH_CONSUMER_MODE")))
+	consumerMode := strings.ToLower(envutil.String("ALARM_DISPATCH_CONSUMER_MODE", ""))
 	switch consumerMode {
 	case "", "pg":
 		return nil

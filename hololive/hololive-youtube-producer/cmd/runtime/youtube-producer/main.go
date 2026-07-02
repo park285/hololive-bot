@@ -28,6 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/park285/shared-go/pkg/envutil"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
@@ -70,7 +71,7 @@ func main() {
 }
 
 func youtubeProducerLogFileName() string {
-	fileName := strings.TrimSpace(os.Getenv("YOUTUBE_PRODUCER_LOG_FILE_NAME"))
+	fileName := envutil.String("YOUTUBE_PRODUCER_LOG_FILE_NAME", "")
 	if fileName == "" || strings.Contains(fileName, "/") || strings.Contains(fileName, "\\") {
 		return "youtube-producer.log"
 	}
