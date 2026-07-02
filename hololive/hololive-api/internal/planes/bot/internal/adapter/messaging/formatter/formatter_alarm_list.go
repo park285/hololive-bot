@@ -33,7 +33,7 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 		processed[idx] = alarmListEntryView{
 			MemberName: alarm.MemberName,
 			TypesLabel: f.formatAlarmTypesLabel(ctx, alarm.AlarmTypes),
-			NextStream: buildNextStreamInfoView(summarizeNextStreamInfo(alarm.NextStream)),
+			NextStream: f.buildNextStreamInfoView(ctx, summarizeNextStreamInfo(alarm.NextStream)),
 		}
 	}
 

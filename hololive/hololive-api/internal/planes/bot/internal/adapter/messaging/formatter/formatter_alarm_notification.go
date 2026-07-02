@@ -22,7 +22,6 @@ package formatter
 
 import (
 	"context"
-	"fmt"
 	"slices"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -37,7 +36,7 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 		return ""
 	}
 
-	channelName := alarmChannelName(notification)
+	channelName := f.alarmChannelName(ctx, notification)
 	stream := notification.Stream
 	data := alarmNotificationTemplateData{
 		ChannelName:      channelName,
@@ -60,13 +59,13 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 
 func alarmNotificationURLText(stream *domain.Stream) string {
 	if stream.IsTwitchOnly {
-		return fmt.Sprintf("📺 Twitch: %s", stream.GetTwitchLiveURL())
+		return stream.GetTwitchLiveURL()
 	}
 	if isIntegratedYouTubeChzzkStream(stream) {
-		return fmt.Sprintf("📺 YouTube: %s\n📺 치지직: %s", stream.GetYouTubeURL(), stream.GetChzzkLiveURL())
+		return stream.GetYouTubeURL() + "\n" + stream.GetChzzkLiveURL()
 	}
 	if isChzzkOnlyAlarmStream(stream) {
-		return fmt.Sprintf("📺 치지직: %s", stream.GetChzzkLiveURL())
+		return stream.GetChzzkLiveURL()
 	}
 
 	return stream.GetYouTubeURL()
@@ -116,7 +115,7 @@ func (f *ResponseFormatter) AlarmNotificationGroup(ctx context.Context, minutesU
 		return ""
 	}
 
-	entries := alarmNotificationGroupEntries(notifications)
+	entries := f.alarmNotificationGroupEntries(ctx, notifications)
 	if len(entries) == 0 {
 		return ""
 	}
@@ -175,7 +174,7 @@ func alarmGroupEntryViews(entries []alarmNotificationGroupEntry) []alarmGroupEnt
 	return views
 }
 
-func alarmNotificationGroupEntries(notifications []*domain.AlarmNotification) []alarmNotificationGroupEntry {
+func (f *ResponseFormatter) alarmNotificationGroupEntries(ctx context.Context, notifications []*domain.AlarmNotification) []alarmNotificationGroupEntry {
 	entries := make([]alarmNotificationGroupEntry, 0, len(notifications))
 	for _, notification := range notifications {
 		if notification == nil || notification.Stream == nil {
@@ -189,7 +188,7 @@ func alarmNotificationGroupEntries(notifications []*domain.AlarmNotification) []
 		}
 
 		entries = append(entries, alarmNotificationGroupEntry{
-			ChannelName:  alarmChannelName(notification),
+			ChannelName:  f.alarmChannelName(ctx, notification),
 			Title:        stringutil.TruncateString(stringutil.TrimSpace(notification.Stream.Title), constants.StringLimits.StreamTitle),
 			URL:          stringutil.TrimSpace(notification.Stream.GetYouTubeURL()),
 			ScheduledKST: scheduledKST,

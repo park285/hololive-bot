@@ -87,11 +87,11 @@ func buildAlarmDispatchVideoOutboxKaringContentItem(
 	videoID := firstNonEmptyString(data.VideoID, item.ContentID)
 	memberName := resolveAlarmDispatchOutboxMemberName(ctx, messageStrings, payload)
 	return iris.KaringContentItem{
-		Title:        firstNonEmptyString(data.Title, "제목 없음"),
+		Title:        firstNonEmptyString(data.Title, alarmDispatchMessageString(ctx, messageStrings, "alarm_no_title", "제목 없음")),
 		URL:          alarmDispatchVideoOutboxURL(payload.Kind, videoID),
 		MemberName:   memberName,
 		ChannelName:  memberName,
-		Status:       alarmDispatchVideoOutboxStatus(payload.Kind, data),
+		Status:       alarmDispatchVideoOutboxStatus(ctx, messageStrings, payload.Kind, data),
 		StartAt:      alarmDispatchKaringTimeString(util.FirstNonNilTime(data.ScheduledStartAt, data.PublishedAt)),
 		ThumbnailURL: bestKaringThumbnailURL(data.Thumbnail),
 		Platform:     "youtube",
@@ -128,11 +128,11 @@ func buildAlarmDispatchCommunityOutboxKaringContentItem(
 	memberName := resolveAlarmDispatchOutboxMemberName(ctx, messageStrings, payload)
 	postID := firstNonEmptyString(data.PostID, item.ContentID)
 	return iris.KaringContentItem{
-		Title:        firstNonEmptyString(cleanCommunityOutboxTitle(data.ContentText), "커뮤니티 알림"),
+		Title:        firstNonEmptyString(cleanCommunityOutboxTitle(data.ContentText), messageStrings.GetOrContext(ctx, messagestrings.NamespaceKaring, "item_title_community_fallback", "커뮤니티 알림")),
 		URL:          fmt.Sprintf("https://www.youtube.com/post/%s", postID),
 		MemberName:   memberName,
 		ChannelName:  memberName,
-		Status:       iris.KaringStreamStatus("커뮤니티"),
+		Status:       iris.KaringStreamStatus(messageStrings.GetOrContext(ctx, messagestrings.NamespaceKaring, "status_community", "커뮤니티")),
 		StartAt:      alarmDispatchKaringTimeString(data.PublishedAt),
 		ThumbnailURL: communityOutboxThumbnailURL(&data),
 		Platform:     "youtube",
@@ -156,17 +156,22 @@ func alarmDispatchVideoOutboxURL(kind domain.OutboxKind, videoID string) string 
 	return domain.YouTubeWatchURL(videoID)
 }
 
-var alarmDispatchVideoOutboxStatusByKind = map[domain.OutboxKind]iris.KaringStreamStatus{
-	domain.OutboxKindNewShort: iris.KaringStreamStatus("쇼츠"),
-	domain.OutboxKindNewVideo: iris.KaringStreamStatus("새 영상"),
+type alarmDispatchVideoOutboxStatusLabel struct {
+	key      string
+	fallback string
 }
 
-func alarmDispatchVideoOutboxStatus(kind domain.OutboxKind, data alarmDispatchKaringVideoPayload) iris.KaringStreamStatus {
-	if status, ok := alarmDispatchVideoOutboxStatusByKind[kind]; ok {
-		return status
+var alarmDispatchVideoOutboxStatusByKind = map[domain.OutboxKind]alarmDispatchVideoOutboxStatusLabel{
+	domain.OutboxKindNewShort: {key: "status_shorts", fallback: "쇼츠"},
+	domain.OutboxKindNewVideo: {key: "status_video", fallback: "새 영상"},
+}
+
+func alarmDispatchVideoOutboxStatus(ctx context.Context, messageStrings *messagestrings.Store, kind domain.OutboxKind, data alarmDispatchKaringVideoPayload) iris.KaringStreamStatus {
+	if label, ok := alarmDispatchVideoOutboxStatusByKind[kind]; ok {
+		return iris.KaringStreamStatus(messageStrings.GetOrContext(ctx, messagestrings.NamespaceKaring, label.key, label.fallback))
 	}
 	if kind != domain.OutboxKindLiveStream {
-		return iris.KaringStreamStatus("알림")
+		return iris.KaringStreamStatus(messageStrings.GetOrContext(ctx, messagestrings.NamespaceKaring, "status_fallback", "알림"))
 	}
 	return alarmDispatchLiveOutboxStatus(data.PublishedAt)
 }

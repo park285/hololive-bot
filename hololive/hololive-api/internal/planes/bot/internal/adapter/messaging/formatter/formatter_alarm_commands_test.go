@@ -130,25 +130,25 @@ func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 	assert.Nil(t, summarizeNextStreamInfo(&domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming}))
 	require.NotNil(t, summarizeNextStreamInfo(&domain.NextStreamInfo{Status: domain.NextStreamStatusLive}))
 
-	assert.Nil(t, buildNextStreamInfoView(nil))
-	assert.Nil(t, buildNextStreamInfoView(&domain.NextStreamInfo{Status: "invalid"}))
+	assert.Nil(t, formatter.buildNextStreamInfoView(t.Context(), nil))
+	assert.Nil(t, formatter.buildNextStreamInfoView(t.Context(), &domain.NextStreamInfo{Status: "invalid"}))
 
 	future := time.Now().Add(90 * time.Minute)
-	view := buildNextStreamInfoView(&domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, VideoID: "v1", Title: strings.Repeat("A", 10), StartScheduled: &future})
+	view := formatter.buildNextStreamInfoView(t.Context(), &domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, VideoID: "v1", Title: strings.Repeat("A", 10), StartScheduled: &future})
 	require.NotNil(t, view)
 	assert.Equal(t, "upcoming", view.Status)
 	assert.NotEmpty(t, view.ScheduledKST)
 	assert.NotEmpty(t, view.TimeDetail)
 
 	past := time.Now().Add(-2 * time.Minute)
-	soon := buildNextStreamInfoView(&domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, VideoID: "v2", Title: "soon", StartScheduled: &past})
+	soon := formatter.buildNextStreamInfoView(t.Context(), &domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, VideoID: "v2", Title: "soon", StartScheduled: &past})
 	require.NotNil(t, soon)
 	assert.True(t, soon.StartingSoon)
 
-	assert.Empty(t, formatUpcomingTimeDetail(-time.Minute))
-	assert.Equal(t, "30분 후", formatUpcomingTimeDetail(30*time.Minute))
-	assert.Equal(t, "2시간 0분 후", formatUpcomingTimeDetail(2*time.Hour))
-	assert.Equal(t, "1일 후", formatUpcomingTimeDetail(26*time.Hour))
+	assert.Empty(t, formatter.formatUpcomingTimeDetail(t.Context(), -time.Minute))
+	assert.Equal(t, "30분 후", formatter.formatUpcomingTimeDetail(t.Context(), 30*time.Minute))
+	assert.Equal(t, "2시간 0분 후", formatter.formatUpcomingTimeDetail(t.Context(), 2*time.Hour))
+	assert.Equal(t, "1일 후", formatter.formatUpcomingTimeDetail(t.Context(), 26*time.Hour))
 
 	assert.Equal(t, "전체", formatter.formatAlarmTypesLabel(t.Context(), nil))
 	assert.Equal(t, "전체", formatter.formatAlarmTypesLabel(t.Context(), domain.AlarmTypes(domain.AllAlarmTypes)))

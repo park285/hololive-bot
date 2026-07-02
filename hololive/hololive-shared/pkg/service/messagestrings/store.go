@@ -46,6 +46,8 @@ const (
 	NamespaceError     = "error"
 	NamespaceNotify    = "notify"
 	NamespaceCalendar  = "calendar"
+	NamespaceTimeFmt   = "timefmt"
+	NamespaceKaring    = "karing"
 )
 
 const (

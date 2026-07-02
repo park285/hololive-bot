@@ -115,9 +115,11 @@ func TestAlarmChannelName_WithStelliveOrg(t *testing.T) {
 		},
 	}
 
+	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}), WithMessageStrings(setupFormatterTestStore(t)))
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := alarmChannelName(tt.notification)
+			got := formatter.alarmChannelName(t.Context(), tt.notification)
 			if got != tt.want {
 				t.Errorf("alarmChannelName() = %q, want %q", got, tt.want)
 			}
@@ -143,10 +145,11 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 				IsIntegrated:   true,
 			},
 			wantContains: []string{
-				"📺 YouTube:",
 				"https://youtube.com/watch?v=abc123",
-				"📺 치지직:",
 				"https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
+			},
+			wantNotContains: []string{
+				"📺",
 			},
 		},
 		{
@@ -159,11 +162,11 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 				IsChzzkOnly:    true,
 			},
 			wantContains: []string{
-				"📺 치지직:",
 				"https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
 			},
 			wantNotContains: []string{
-				"YouTube:",
+				"youtube.com",
+				"📺",
 			},
 		},
 		{
@@ -177,7 +180,8 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 				"https://youtube.com/watch?v=xyz789",
 			},
 			wantNotContains: []string{
-				"치지직:",
+				"chzzk.naver.com",
+				"📺",
 			},
 		},
 		{
@@ -189,11 +193,11 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 				ChzzkLiveURL:   "https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
 			},
 			wantContains: []string{
-				"📺 치지직:",
 				"https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
 			},
 			wantNotContains: []string{
-				"YouTube:",
+				"youtube.com",
+				"📺",
 			},
 		},
 	}

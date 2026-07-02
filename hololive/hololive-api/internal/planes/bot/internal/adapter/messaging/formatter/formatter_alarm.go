@@ -91,7 +91,7 @@ type alarmNotificationGroupEntry struct {
 	ScheduledKST string // "21:00" 형식
 }
 
-func alarmChannelName(notification *domain.AlarmNotification) string {
+func (f *ResponseFormatter) alarmChannelName(ctx context.Context, notification *domain.AlarmNotification) string {
 	if notification == nil {
 		return ""
 	}
@@ -101,7 +101,7 @@ func alarmChannelName(notification *domain.AlarmNotification) string {
 		return ""
 	}
 
-	return alarmChannelNameWithOrg(name, notification.Channel)
+	return f.alarmChannelNameWithOrg(ctx, name, notification.Channel)
 }
 
 func alarmBaseChannelName(notification *domain.AlarmNotification) string {
@@ -118,12 +118,12 @@ func alarmBaseChannelName(notification *domain.AlarmNotification) string {
 	return stringutil.TrimSpace(notification.Stream.ChannelName)
 }
 
-func alarmChannelNameWithOrg(name string, channel *domain.Channel) string {
+func (f *ResponseFormatter) alarmChannelNameWithOrg(ctx context.Context, name string, channel *domain.Channel) string {
 	if channel == nil || channel.Org == nil {
 		return name
 	}
 
-	displayOrg := displayAlarmOrg(*channel.Org)
+	displayOrg := f.formatStreamOrg(ctx, *channel.Org)
 	if displayOrg == "" {
 		return name
 	}
@@ -131,28 +131,11 @@ func alarmChannelNameWithOrg(name string, channel *domain.Channel) string {
 	return fmt.Sprintf("[%s] %s", displayOrg, name)
 }
 
-func displayAlarmOrg(org string) string {
-	if org == "" || org == "Hololive" {
-		return ""
-	}
-
-	labels := map[string]string{
-		"Nijisanji":    "니지산지",
-		"Independents": "개인세",
-		"Stellive":     "스텔라이브",
-	}
-	if label, ok := labels[org]; ok {
-		return label
-	}
-
-	return org
-}
-
 func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName string, added bool, nextStreamInfo *domain.NextStreamInfo) string {
 	data := alarmAddedTemplateData{
 		MemberName: memberName,
 		Added:      added,
-		NextStream: buildNextStreamInfoView(nextStreamInfo),
+		NextStream: f.buildNextStreamInfoView(ctx, nextStreamInfo),
 		Prefix:     f.prefix,
 	}
 
@@ -188,7 +171,7 @@ func summarizeNextStreamInfo(info *domain.NextStreamInfo) *domain.NextStreamInfo
 	return info
 }
 
-func buildNextStreamInfoView(info *domain.NextStreamInfo) *nextStreamInfoView {
+func (f *ResponseFormatter) buildNextStreamInfoView(ctx context.Context, info *domain.NextStreamInfo) *nextStreamInfoView {
 	if info == nil || !info.Status.IsValid() {
 		return nil
 	}
@@ -206,7 +189,7 @@ func buildNextStreamInfoView(info *domain.NextStreamInfo) *nextStreamInfoView {
 	}
 
 	if info.Status.IsUpcoming() {
-		if !populateUpcomingNextStreamView(view, info) {
+		if !f.populateUpcomingNextStreamView(ctx, view, info) {
 			return nil
 		}
 	}
@@ -214,7 +197,7 @@ func buildNextStreamInfoView(info *domain.NextStreamInfo) *nextStreamInfoView {
 	return view
 }
 
-func populateUpcomingNextStreamView(view *nextStreamInfoView, info *domain.NextStreamInfo) bool {
+func (f *ResponseFormatter) populateUpcomingNextStreamView(ctx context.Context, view *nextStreamInfoView, info *domain.NextStreamInfo) bool {
 	if info.StartScheduled == nil || view.URL == "" {
 		return false
 	}
@@ -228,11 +211,11 @@ func populateUpcomingNextStreamView(view *nextStreamInfoView, info *domain.NextS
 		return true
 	}
 
-	view.TimeDetail = formatUpcomingTimeDetail(timeLeft)
+	view.TimeDetail = f.formatUpcomingTimeDetail(ctx, timeLeft)
 	return true
 }
 
-func formatUpcomingTimeDetail(timeLeft time.Duration) string {
+func (f *ResponseFormatter) formatUpcomingTimeDetail(ctx context.Context, timeLeft time.Duration) string {
 	if timeLeft <= 0 {
 		return ""
 	}
@@ -242,10 +225,10 @@ func formatUpcomingTimeDetail(timeLeft time.Duration) string {
 
 	switch {
 	case hoursLeft >= 24:
-		return fmt.Sprintf("%d일 후", hoursLeft/24)
+		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "relative_days", "%d일 후"), hoursLeft/24)
 	case hoursLeft > 0:
-		return fmt.Sprintf("%d시간 %d분 후", hoursLeft, minutesLeft)
+		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "relative_hours_minutes", "%d시간 %d분 후"), hoursLeft, minutesLeft)
 	default:
-		return fmt.Sprintf("%d분 후", int(timeLeft.Minutes()))
+		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "relative_minutes", "%d분 후"), int(timeLeft.Minutes()))
 	}
 }

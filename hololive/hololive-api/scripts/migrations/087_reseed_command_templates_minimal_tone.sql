@@ -249,7 +249,7 @@ INSERT INTO notification_templates(template_key, channel_id, body) VALUES
   {{.ScheduleMessage}}
 {{- end}}
   {{.Title}}
-  {{.URL}}')
+{{.URL}}')
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();
 
 INSERT INTO notification_templates(template_key, channel_id, body) VALUES
@@ -258,7 +258,7 @@ INSERT INTO notification_templates(template_key, channel_id, body) VALUES
   {{.ScheduledTimeKST}} 시작
 {{- end}}
   {{.Title}}
-  {{.URL}}')
+{{.URL}}')
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();
 
 INSERT INTO notification_templates(template_key, channel_id, body) VALUES

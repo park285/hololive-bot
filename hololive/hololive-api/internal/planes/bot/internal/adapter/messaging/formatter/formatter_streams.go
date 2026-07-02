@@ -222,11 +222,11 @@ func (f *ResponseFormatter) streamTimeInfo(ctx context.Context, stream *domain.S
 	switch {
 	case hoursUntil > 24:
 		daysUntil := hoursUntil / 24
-		return fmt.Sprintf("%s (%d일 후)", kstTime, daysUntil)
+		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "stream_time_days", "%s (%d일 후)"), kstTime, daysUntil)
 	case hoursUntil > 0:
-		return fmt.Sprintf("%s (%d시간 %d분 후)", kstTime, hoursUntil, minutesRem)
+		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "stream_time_hours_minutes", "%s (%d시간 %d분 후)"), kstTime, hoursUntil, minutesRem)
 	default:
-		return fmt.Sprintf("%s (%d분 후)", kstTime, minutesRem)
+		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "stream_time_minutes", "%s (%d분 후)"), kstTime, minutesRem)
 	}
 }
 
@@ -252,7 +252,7 @@ func (f *ResponseFormatter) streamDisplayOrg(ctx context.Context, stream *domain
 }
 
 func (f *ResponseFormatter) formatStreamOrg(ctx context.Context, org string) string {
-	if org == "" {
+	if org == "" || org == constants.HolodexAPIParams.OrgHololive {
 		return ""
 	}
 
