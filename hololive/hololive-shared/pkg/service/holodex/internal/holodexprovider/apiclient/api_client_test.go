@@ -301,7 +301,7 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 		perAttemptTimeout: 5 * time.Second,
 		breaker: util.NewBreaker(
 			constants.CircuitBreakerConfig.FailureThreshold,
-			10*time.Millisecond,
+			constants.CircuitBreakerConfig.ResetTimeout,
 		),
 	}
 
@@ -313,8 +313,7 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 		t.Fatal("should be open after threshold")
 	}
 
-	// timeout 경과 → reset
-	time.Sleep(20 * time.Millisecond)
+	client.forceOpenedAtForTest(time.Now().Add(-constants.CircuitBreakerConfig.ResetTimeout - time.Second))
 	if !client.breaker.Allow() {
 		t.Fatal("should allow after timeout")
 	}

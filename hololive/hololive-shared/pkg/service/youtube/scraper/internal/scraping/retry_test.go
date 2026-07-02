@@ -753,32 +753,32 @@ func TestFetchPageOnce_HardCooldownOnly(t *testing.T) {
 }
 
 func TestRateLimiter_ConcurrentSlots(t *testing.T) {
-	rl := NewRateLimiter(100 * time.Millisecond)
+	const interval = 100 * time.Millisecond
+	rl := NewRateLimiter(interval)
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
-	completionTimes := make([]time.Time, 3)
+	elapsed := make([]time.Duration, 3)
+	start := time.Now()
 
 	for i := range 3 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
 			require.NoError(t, rl.Wait(ctx))
-			completionTimes[idx] = time.Now()
+			elapsed[idx] = time.Since(start)
 		}(i)
 	}
 
 	wg.Wait()
-	sort.Slice(completionTimes, func(i, j int) bool {
-		return completionTimes[i].Before(completionTimes[j])
+	sort.Slice(elapsed, func(i, j int) bool {
+		return elapsed[i] < elapsed[j]
 	})
 
-	totalSpan := completionTimes[2].Sub(completionTimes[0])
-	assert.GreaterOrEqual(t, totalSpan, 180*time.Millisecond, "total span should be at least 180ms")
-
-	for i := 1; i < len(completionTimes); i++ {
-		gap := completionTimes[i].Sub(completionTimes[i-1])
-		assert.GreaterOrEqual(t, gap, 80*time.Millisecond, "adjacent gap should be at least 80ms")
+	// time.Timer는 지정 시각 이전에 발화하지 않으므로 k번째 완료 시각의 하한 k*interval은 CPU 경합과 무관하게 성립한다. 상한은 스케줄링 지터에 취약해 검증하지 않는다.
+	for i := range elapsed {
+		assert.GreaterOrEqualf(t, elapsed[i], time.Duration(i)*interval,
+			"completion #%d should be at least %d interval(s) after start", i, i)
 	}
 }
 
