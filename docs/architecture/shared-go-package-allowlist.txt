@@ -7,11 +7,13 @@ httputil
 json
 jsonutil
 llm
+llm/openaipreset
 logging
 logging/archive
 obsmetrics
 outputguard
 promptguard
+retry
 runtime/automaxprocs
 runtime/bootstrap
 runtime/httpserver
