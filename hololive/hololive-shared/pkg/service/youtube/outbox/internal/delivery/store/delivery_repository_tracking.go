@@ -171,12 +171,12 @@ func parseStatusCounts(counts []deliveryStatusCount) (pending, sent, failed int6
 
 func applyStatusCount(item deliveryStatusCount, pending, sent, failed *int64) {
 	switch item.Status {
-	case domain.OutboxStatusPending:
-		*pending = item.Count
+	case domain.OutboxStatusPending, DeliveryStatusSending:
+		*pending += item.Count
 	case domain.OutboxStatusSent:
-		*sent = item.Count
-	case domain.OutboxStatusFailed:
-		*failed = item.Count
+		*sent += item.Count
+	case domain.OutboxStatusFailed, DeliveryStatusQuarantined:
+		*failed += item.Count
 	}
 }
 

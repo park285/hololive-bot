@@ -251,6 +251,84 @@ func TestReviveStaleFailedOutbox_RevivesCommunityAndShorts(t *testing.T) {
 	require.NotNil(t, commSentDelivery.SentAt)
 }
 
+func TestReviveStaleFailedOutbox_ExcludesAllQuarantinedOutbox(t *testing.T) {
+	db := newDeliveryPool(t)
+	cm := reviveTestClaimManager(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	freshCreatedAt := now.Add(-5 * time.Minute)
+	oldNextAttempt := now.Add(-30 * time.Minute)
+
+	outbox := &domain.YouTubeNotificationOutbox{
+		Kind: domain.OutboxKindNewVideo, ChannelID: "ch-q", ContentID: "video-all-quarantined",
+		Payload: `{"id":"video-all-quarantined"}`, Status: domain.OutboxStatusFailed,
+		AttemptCount: 3, NextAttemptAt: oldNextAttempt, CreatedAt: freshCreatedAt, Error: "per-room delivery failed",
+	}
+	require.NoError(t, insertDeliveryTestRows(db, outbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
+		OutboxID: outbox.ID, RoomID: "room-q", Status: store.DeliveryStatusQuarantined,
+		AttemptCount: 1, NextAttemptAt: oldNextAttempt, Error: "mid-send crash",
+	}).Error)
+
+	revived, err := cm.reviveStaleFailedOutbox(ctx, 60*time.Minute, 50)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), revived, "전량 QUARANTINED outbox는 revive 대상이 아님(flap 종료)")
+
+	var gotOutbox domain.YouTubeNotificationOutbox
+	require.NoError(t, firstDeliveryTestRowWhere(db, &gotOutbox, "id = ?", outbox.ID).Error)
+	assert.Equal(t, domain.OutboxStatusFailed, gotOutbox.Status, "outbox는 FAILED 유지(PENDING으로 flap 안 함)")
+
+	var gotDelivery domain.YouTubeNotificationDelivery
+	require.NoError(t, firstDeliveryTestRowWhere(db, &gotDelivery, "outbox_id = ?", outbox.ID).Error)
+	assert.Equal(t, store.DeliveryStatusQuarantined, gotDelivery.Status, "QUARANTINED delivery는 불변")
+}
+
+func TestReviveStaleFailedOutbox_MixedFailedAndQuarantinedResetsFailedOnly(t *testing.T) {
+	db := newDeliveryPool(t)
+	cm := reviveTestClaimManager(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	freshCreatedAt := now.Add(-5 * time.Minute)
+	oldNextAttempt := now.Add(-30 * time.Minute)
+
+	outbox := &domain.YouTubeNotificationOutbox{
+		Kind: domain.OutboxKindNewVideo, ChannelID: "ch-mix", ContentID: "video-mixed",
+		Payload: `{"id":"video-mixed"}`, Status: domain.OutboxStatusFailed,
+		AttemptCount: 3, NextAttemptAt: oldNextAttempt, CreatedAt: freshCreatedAt, Error: "per-room delivery failed",
+	}
+	require.NoError(t, insertDeliveryTestRows(db, outbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
+		OutboxID: outbox.ID, RoomID: "room-failed", Status: domain.OutboxStatusFailed,
+		AttemptCount: 3, NextAttemptAt: oldNextAttempt, Error: "send failed",
+	}).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
+		OutboxID: outbox.ID, RoomID: "room-quarantined", Status: store.DeliveryStatusQuarantined,
+		AttemptCount: 1, NextAttemptAt: oldNextAttempt, Error: "mid-send crash",
+	}).Error)
+
+	revived, err := cm.reviveStaleFailedOutbox(ctx, 60*time.Minute, 50)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), revived, "FAILED delivery가 있는 혼재 outbox는 revive 대상")
+
+	var gotOutbox domain.YouTubeNotificationOutbox
+	require.NoError(t, firstDeliveryTestRowWhere(db, &gotOutbox, "id = ?", outbox.ID).Error)
+	assert.Equal(t, domain.OutboxStatusPending, gotOutbox.Status, "혼재 outbox는 PENDING으로 revive")
+	assert.Zero(t, gotOutbox.AttemptCount, "revive 시 attempt 리셋")
+	assert.Nil(t, gotOutbox.LockedAt)
+
+	var failedDelivery domain.YouTubeNotificationDelivery
+	require.NoError(t, firstDeliveryTestRowWhere(db, &failedDelivery, "outbox_id = ? AND room_id = ?", outbox.ID, "room-failed").Error)
+	assert.Equal(t, domain.OutboxStatusPending, failedDelivery.Status, "FAILED delivery만 재시도 대상으로 리셋")
+	assert.Zero(t, failedDelivery.AttemptCount)
+
+	var quarantinedDelivery domain.YouTubeNotificationDelivery
+	require.NoError(t, firstDeliveryTestRowWhere(db, &quarantinedDelivery, "outbox_id = ? AND room_id = ?", outbox.ID, "room-quarantined").Error)
+	assert.Equal(t, store.DeliveryStatusQuarantined, quarantinedDelivery.Status, "QUARANTINED delivery는 리셋하지 않고 유지")
+	assert.Equal(t, 1, quarantinedDelivery.AttemptCount, "QUARANTINED delivery attempt 불변")
+}
+
 func senderMessages(s *testSender) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

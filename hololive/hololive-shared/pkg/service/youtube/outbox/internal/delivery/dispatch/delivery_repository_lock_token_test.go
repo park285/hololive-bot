@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 )
 
@@ -25,7 +24,7 @@ func TestDeliveryRepositoryMarkPermanentFailureBatchIfLockedSkipsRowsRelockedByA
 	row := deliveryTestDeliveryModel{
 		OutboxID:      1,
 		RoomID:        "room-relocked-permanent-failure",
-		Status:        string(domain.OutboxStatusPending),
+		Status:        string(store.DeliveryStatusSending),
 		AttemptCount:  0,
 		NextAttemptAt: now,
 		CreatedAt:     now,
@@ -34,7 +33,7 @@ func TestDeliveryRepositoryMarkPermanentFailureBatchIfLockedSkipsRowsRelockedByA
 	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
 
 	require.NoError(t, updateDeliveryTestRowsWhere(db,
-		&domain.YouTubeNotificationDelivery{},
+		&deliveryTestDeliveryModel{},
 		map[string]any{"locked_at": replacementLockedAt},
 		"id = ?", row.ID,
 	).Error)
@@ -47,7 +46,7 @@ func TestDeliveryRepositoryMarkPermanentFailureBatchIfLockedSkipsRowsRelockedByA
 
 	var updated deliveryTestDeliveryModel
 	require.NoError(t, firstDeliveryTestRow(db, &updated, row.ID).Error)
-	require.Equal(t, string(domain.OutboxStatusPending), updated.Status)
+	require.Equal(t, string(store.DeliveryStatusSending), updated.Status)
 	require.Equal(t, 0, updated.AttemptCount)
 	require.NotNil(t, updated.LockedAt)
 	require.Equal(t, replacementLockedAt, updated.LockedAt.UTC())

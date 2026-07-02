@@ -56,7 +56,7 @@ func (r *Repository) loadBackfillCandidates(
 ) ([]deliveryTelemetryBackfillCandidate, error) {
 	var candidates []deliveryTelemetryBackfillCandidate
 	postKinds := []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}
-	retryStatuses := []domain.OutboxStatus{domain.OutboxStatusPending, domain.OutboxStatusFailed}
+	retryStatuses := []domain.OutboxStatus{domain.OutboxStatusPending, domain.OutboxStatusFailed, domain.OutboxStatus("QUARANTINED")}
 	query := `
 		SELECT ` + strings.Join([]string{
 		"d.id AS delivery_id",
