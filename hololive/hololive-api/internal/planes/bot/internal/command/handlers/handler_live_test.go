@@ -187,13 +187,13 @@ func (s *liveImageRendererStub) RenderLiveImages(entries []render.LiveCardEntry)
 	return s.pages, s.err
 }
 
-func liveCardTestDeps(t *testing.T, members []*domain.Member) (*Dependencies, *[][]byte, *[]byte, *string) {
+func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *Dependencies, multi *[][]byte, single *[]byte, text *string) {
 	t.Helper()
 
 	var multiSent [][]byte
 	var singleSent []byte
 	var textSent string
-	deps := &Dependencies{
+	deps = &Dependencies{
 		Holodex:   &liveStreamProviderStub{},
 		Matcher:   matcher.NewMatcher(nilBaseContext(), newContextAwareMemberProvider(members), nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),

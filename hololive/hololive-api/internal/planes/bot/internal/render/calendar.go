@@ -150,16 +150,14 @@ func (r *CalendarCardRenderer) renderCalendarPages(month, year int, entries []do
 	return pages, diskCacheable, nil
 }
 
-// 일자 그룹 경계에서만 페이지를 나눈다. 단일 그룹이 페이지 예산을 넘으면 그 그룹만으로
-// 예산 초과 페이지를 만들며(축소·행 드롭 대신 세로로 긴 출력 허용), 페이지 수가
-// calendarMaxPages를 넘으면 초과분을 잘라 생략 건수를 반환한다(마지막 페이지 푸터용).
-func paginateDayGroups(m *calendarMetrics, groups []dayGroup) ([][]dayGroup, int) {
+// 단일 그룹이 페이지 예산을 넘으면 축소·행 드롭 대신 예산 초과(세로로 긴) 페이지를
+// 의도적으로 허용한다 — 버그가 아니라 구 compact 축소를 대체하는 트레이드.
+func paginateDayGroups(m *calendarMetrics, groups []dayGroup) (pages [][]dayGroup, omitted int) {
 	if len(groups) == 0 {
 		return [][]dayGroup{nil}, 0
 	}
 
 	base := m.headerH + separatorH + m.paddingY
-	var pages [][]dayGroup
 	var current []dayGroup
 	h := base
 	for _, g := range groups {

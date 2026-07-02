@@ -72,7 +72,8 @@ func TestNewProfileCardData_RawFallback(t *testing.T) {
 func TestProfileCardRenderer_RenderProfileImage(t *testing.T) {
 	t.Parallel()
 
-	pages, err := NewProfileCardRenderer().RenderProfileImage(profileFixture())
+	data := profileFixture()
+	pages, err := NewProfileCardRenderer().RenderProfileImage(&data)
 	if err != nil {
 		t.Fatalf("RenderProfileImage() error = %v", err)
 	}
@@ -90,7 +91,7 @@ func TestProfileCardRenderer_RenderProfileImage(t *testing.T) {
 func TestProfileCardRenderer_RenderProfileImage_EmptyNameErrors(t *testing.T) {
 	t.Parallel()
 
-	if _, err := NewProfileCardRenderer().RenderProfileImage(ProfileCardData{}); err == nil {
+	if _, err := NewProfileCardRenderer().RenderProfileImage(&ProfileCardData{}); err == nil {
 		t.Fatal("RenderProfileImage(empty) error = nil, want error")
 	}
 }
@@ -101,13 +102,13 @@ func TestProfileCardRenderer_CachesByContent(t *testing.T) {
 	r := NewProfileCardRenderer()
 	data := profileFixture()
 
-	first, err := r.RenderProfileImage(data)
+	first, err := r.RenderProfileImage(&data)
 	if err != nil {
 		t.Fatalf("first render: %v", err)
 	}
 	first[0] = 0
 
-	second, err := r.RenderProfileImage(data)
+	second, err := r.RenderProfileImage(&data)
 	if err != nil {
 		t.Fatalf("second render: %v", err)
 	}
@@ -115,7 +116,7 @@ func TestProfileCardRenderer_CachesByContent(t *testing.T) {
 
 	changed := data
 	changed.Graduated = true
-	if profileCardCacheKey(changed) == profileCardCacheKey(data) {
+	if profileCardCacheKey(&changed) == profileCardCacheKey(&data) {
 		t.Fatal("cache key must change when content changes")
 	}
 }

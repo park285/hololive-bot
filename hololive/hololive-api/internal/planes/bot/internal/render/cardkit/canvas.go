@@ -39,17 +39,16 @@ func downscaleToWidth(src *image.RGBA, outputWidth int) image.Image {
 }
 
 type BadgeStyle struct {
-	Face       font.Face
-	Background color.RGBA
-	Text       color.RGBA
-	PadX, PadY int
-	Height     int
-	Radius     int
-	// 텍스트 baseline 미세 보정(하단 패딩에서 추가로 올리는 픽셀)
+	Face         font.Face
+	Background   color.RGBA
+	Text         color.RGBA
+	PadX, PadY   int
+	Height       int
+	Radius       int
 	BaselineLift int
 }
 
-// 우측 정렬 배지를 그리고 배지 좌측 경계 x를 반환한다(이름 폭 예산 산출용).
+// badgeLeft는 장식용이 아니다 — 호출자가 이 값으로 이름 폭 예산을 잘라야 배지와 겹치지 않는다.
 func BadgeRightAligned(img *image.RGBA, rightX, y int, text string, s BadgeStyle) (badgeLeft int) {
 	bw := MeasureText(s.Face, text)
 	bx := rightX - bw - s.PadX*2

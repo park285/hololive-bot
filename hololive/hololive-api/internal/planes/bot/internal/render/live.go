@@ -91,18 +91,17 @@ func livePhotoURLs(entries []LiveCardEntry) []string {
 	return urls
 }
 
-func paginateLiveEntries(m *liveMetrics, entries []LiveCardEntry) ([][]LiveCardEntry, int) {
+func paginateLiveEntries(m *liveMetrics, entries []LiveCardEntry) (pages [][]LiveCardEntry, omitted int) {
 	base := m.headerH + separatorH + m.paddingY
 	perPage := max(1, (calendarPageInnerH-base-m.paddingY)/m.rowH)
 
-	pages := make([][]LiveCardEntry, 0, (len(entries)+perPage-1)/perPage)
+	pages = make([][]LiveCardEntry, 0, (len(entries)+perPage-1)/perPage)
 	for start := 0; start < len(entries); start += perPage {
 		pages = append(pages, entries[start:min(start+perPage, len(entries))])
 	}
 	if len(pages) <= calendarMaxPages {
 		return pages, 0
 	}
-	omitted := 0
 	for _, page := range pages[calendarMaxPages:] {
 		omitted += len(page)
 	}

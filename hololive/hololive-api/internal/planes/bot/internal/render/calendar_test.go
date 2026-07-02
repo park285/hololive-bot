@@ -412,88 +412,99 @@ func TestCalendarCardRenderer_PaginatesAndCapsPageCount(t *testing.T) {
 	}
 }
 
-func TestPaginateDayGroups(t *testing.T) {
+func TestPaginateDayGroups_EmptyMonthYieldsSingleEmptyPage(t *testing.T) {
 	t.Parallel()
 
 	m := newCalendarMetrics()
+	pages, omitted := paginateDayGroups(&m, nil)
+	if len(pages) != 1 || len(pages[0]) != 0 || omitted != 0 {
+		t.Fatalf("pages = %d, first len = %d, omitted = %d; want 1 empty page", len(pages), len(pages[0]), omitted)
+	}
+}
 
-	t.Run("empty month yields single empty page", func(t *testing.T) {
-		t.Parallel()
-		pages, omitted := paginateDayGroups(&m, nil)
-		if len(pages) != 1 || len(pages[0]) != 0 || omitted != 0 {
-			t.Fatalf("pages = %d, first len = %d, omitted = %d; want 1 empty page", len(pages), len(pages[0]), omitted)
-		}
-	})
+func TestPaginateDayGroups_SplitsOnlyAtDayBoundariesWithinBudget(t *testing.T) {
+	t.Parallel()
 
-	t.Run("splits only at day boundaries within budget", func(t *testing.T) {
-		t.Parallel()
-		groups := make([]dayGroup, 12)
-		for i := range groups {
-			groups[i] = dayGroup{day: i + 1, entries: []domain.CalendarEntry{{Day: i + 1}}}
-		}
-		pages, omitted := paginateDayGroups(&m, groups)
-		if omitted != 0 {
-			t.Fatalf("omitted = %d, want 0", omitted)
-		}
-		if len(pages) < 2 {
-			t.Fatalf("len(pages) = %d, want >= 2 for 12 single-entry groups", len(pages))
-		}
-		var total, prevDay int
-		for _, page := range pages {
-			h := m.headerH + separatorH + m.paddingY
-			for _, g := range page {
-				if g.day <= prevDay {
-					t.Fatalf("day order broken: %d after %d", g.day, prevDay)
-				}
-				prevDay = g.day
-				total += len(g.entries)
-				h += m.dateHeaderH + len(g.entries)*m.entryRowH + m.dateSectGap
+	m := newCalendarMetrics()
+	groups := make([]dayGroup, 12)
+	for i := range groups {
+		groups[i] = dayGroup{day: i + 1, entries: []domain.CalendarEntry{{Day: i + 1}}}
+	}
+
+	pages, omitted := paginateDayGroups(&m, groups)
+	if omitted != 0 {
+		t.Fatalf("omitted = %d, want 0", omitted)
+	}
+	if len(pages) < 2 {
+		t.Fatalf("len(pages) = %d, want >= 2 for 12 single-entry groups", len(pages))
+	}
+	if total := assertPageOrderAndBudget(t, &m, pages); total != 12 {
+		t.Fatalf("total entries across pages = %d, want 12", total)
+	}
+}
+
+func assertPageOrderAndBudget(t *testing.T, m *calendarMetrics, pages [][]dayGroup) int {
+	t.Helper()
+
+	var total, prevDay int
+	for _, page := range pages {
+		h := m.headerH + separatorH + m.paddingY
+		for _, g := range page {
+			if g.day <= prevDay {
+				t.Fatalf("day order broken: %d after %d", g.day, prevDay)
 			}
-			if len(page) > 1 && h+m.paddingY > calendarPageInnerH {
-				t.Fatalf("multi-group page height %d exceeds budget %d", h, calendarPageInnerH)
-			}
+			prevDay = g.day
+			total += len(g.entries)
+			h += m.dateHeaderH + len(g.entries)*m.entryRowH + m.dateSectGap
 		}
-		if total != 12 {
-			t.Fatalf("total entries across pages = %d, want 12", total)
+		if len(page) > 1 && h+m.paddingY > calendarPageInnerH {
+			t.Fatalf("multi-group page height %d exceeds budget %d", h, calendarPageInnerH)
 		}
-	})
+	}
+	return total
+}
 
-	t.Run("single oversized group gets its own page", func(t *testing.T) {
-		t.Parallel()
-		big := dayGroup{day: 1, entries: make([]domain.CalendarEntry, 20)}
-		small := dayGroup{day: 2, entries: []domain.CalendarEntry{{Day: 2}}}
-		pages, omitted := paginateDayGroups(&m, []dayGroup{big, small})
-		if omitted != 0 {
-			t.Fatalf("omitted = %d, want 0", omitted)
-		}
-		if len(pages) != 2 || len(pages[0]) != 1 || len(pages[1]) != 1 {
-			t.Fatalf("pages layout = %v, want oversized group isolated", pageShape(pages))
-		}
-	})
+func TestPaginateDayGroups_SingleOversizedGroupGetsOwnPage(t *testing.T) {
+	t.Parallel()
 
-	t.Run("caps pages and reports omitted entries", func(t *testing.T) {
-		t.Parallel()
-		groups := make([]dayGroup, 28)
-		for i := range groups {
-			groups[i] = dayGroup{day: i + 1, entries: make([]domain.CalendarEntry, 8)}
+	m := newCalendarMetrics()
+	big := dayGroup{day: 1, entries: make([]domain.CalendarEntry, 20)}
+	small := dayGroup{day: 2, entries: []domain.CalendarEntry{{Day: 2}}}
+
+	pages, omitted := paginateDayGroups(&m, []dayGroup{big, small})
+	if omitted != 0 {
+		t.Fatalf("omitted = %d, want 0", omitted)
+	}
+	if len(pages) != 2 || len(pages[0]) != 1 || len(pages[1]) != 1 {
+		t.Fatalf("pages layout = %v, want oversized group isolated", pageShape(pages))
+	}
+}
+
+func TestPaginateDayGroups_CapsPagesAndReportsOmitted(t *testing.T) {
+	t.Parallel()
+
+	m := newCalendarMetrics()
+	groups := make([]dayGroup, 28)
+	for i := range groups {
+		groups[i] = dayGroup{day: i + 1, entries: make([]domain.CalendarEntry, 8)}
+	}
+
+	pages, omitted := paginateDayGroups(&m, groups)
+	if len(pages) != calendarMaxPages {
+		t.Fatalf("len(pages) = %d, want %d", len(pages), calendarMaxPages)
+	}
+	rendered := 0
+	for _, page := range pages {
+		for _, g := range page {
+			rendered += len(g.entries)
 		}
-		pages, omitted := paginateDayGroups(&m, groups)
-		if len(pages) != calendarMaxPages {
-			t.Fatalf("len(pages) = %d, want %d", len(pages), calendarMaxPages)
-		}
-		rendered := 0
-		for _, page := range pages {
-			for _, g := range page {
-				rendered += len(g.entries)
-			}
-		}
-		if rendered+omitted != 28*8 {
-			t.Fatalf("rendered %d + omitted %d != total %d", rendered, omitted, 28*8)
-		}
-		if omitted == 0 {
-			t.Fatal("omitted = 0, want > 0 for capped pagination")
-		}
-	})
+	}
+	if rendered+omitted != 28*8 {
+		t.Fatalf("rendered %d + omitted %d != total %d", rendered, omitted, 28*8)
+	}
+	if omitted == 0 {
+		t.Fatal("omitted = 0, want > 0 for capped pagination")
+	}
 }
 
 func pageShape(pages [][]dayGroup) []int {

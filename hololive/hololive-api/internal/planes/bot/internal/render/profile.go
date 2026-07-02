@@ -124,7 +124,7 @@ func NewProfileCardRenderer(options ...ProfileCardRendererOption) *ProfileCardRe
 	return r
 }
 
-func (r *ProfileCardRenderer) RenderProfileImage(data ProfileCardData) ([]byte, error) {
+func (r *ProfileCardRenderer) RenderProfileImage(data *ProfileCardData) ([]byte, error) {
 	if data.DisplayName == "" {
 		return nil, errors.New("profile card: display name is empty")
 	}
@@ -142,7 +142,7 @@ func (r *ProfileCardRenderer) RenderProfileImage(data ProfileCardData) ([]byte, 
 	return rendered, nil
 }
 
-func profileCardCacheKey(data ProfileCardData) string {
+func profileCardCacheKey(data *ProfileCardData) string {
 	hash := sha256.New()
 	writeCacheString(hash, data.DisplayName)
 	writeCacheString(hash, data.Catchphrase)
@@ -206,7 +206,7 @@ func newProfileMetrics() profileMetrics {
 	}
 }
 
-func (r *ProfileCardRenderer) renderProfileImage(data ProfileCardData) ([]byte, error) {
+func (r *ProfileCardRenderer) renderProfileImage(data *ProfileCardData) ([]byte, error) {
 	photos := fetchPhotosByURL([]string{data.Photo})
 
 	fontMu.Lock()
@@ -244,7 +244,7 @@ func (m *profileMetrics) graduatedBadgeStyle() cardkit.BadgeStyle {
 	}
 }
 
-func profileCardHeight(m *profileMetrics, data ProfileCardData) int {
+func profileCardHeight(m *profileMetrics, data *ProfileCardData) int {
 	h := int(30*m.sf) + m.avatarR*2 + int(50*m.sf)
 	if len(data.SubNames) > 0 {
 		h += int(30 * m.sf)
@@ -257,7 +257,7 @@ func profileCardHeight(m *profileMetrics, data ProfileCardData) int {
 	return h + m.paddingY + int(10*m.sf)
 }
 
-func drawProfileIdentity(img *image.RGBA, m *profileMetrics, data ProfileCardData, photos map[string]image.Image) int {
+func drawProfileIdentity(img *image.RGBA, m *profileMetrics, data *ProfileCardData, photos map[string]image.Image) int {
 	cx := canvasWidth / 2
 	cy := int(30*m.sf) + m.avatarR
 	cardkit.AvatarCircle(img, cx, cy, m.avatarR, photos[data.Photo], data.DisplayName, m.profileAvatarStyle())

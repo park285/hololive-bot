@@ -38,8 +38,8 @@ func TestRenderOrError_SeeMoreFoldToggle(t *testing.T) {
 	on := newLLMSchedulerFormatter("!", renderer, nil, true)
 	folded := on.renderOrError(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn")
 	assert.True(t, strings.HasPrefix(folded, "다이제스트 헤더\n"))
-	assert.Contains(t, folded, "​")
+	assert.Contains(t, folded, "\u200b")
 
 	off := newLLMSchedulerFormatter("!", renderer, nil, false)
-	assert.NotContains(t, off.renderOrError(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn"), "​")
+	assert.NotContains(t, off.renderOrError(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn"), "\u200b")
 }

@@ -36,8 +36,8 @@ func TestFormatHelp_SeeMoreFoldToggle(t *testing.T) {
 
 	folded := NewResponseFormatter("!", renderer, WithSeeMoreFold(true)).FormatHelp(t.Context())
 	assert.True(t, strings.HasPrefix(folded, "도움말 헤더\n"))
-	assert.Contains(t, folded, "​")
+	assert.Contains(t, folded, "\u200b")
 
 	plain := NewResponseFormatter("!", renderer).FormatHelp(t.Context())
-	assert.NotContains(t, plain, "​")
+	assert.NotContains(t, plain, "\u200b")
 }

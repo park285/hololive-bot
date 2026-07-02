@@ -101,7 +101,8 @@ func (c *MemberInfoCommand) trySendProfileImage(ctx context.Context, room string
 		return false
 	}
 
-	imgData, err := c.imageRenderer.RenderProfileImage(render.NewProfileCardData(member, rawProfile, translated))
+	data := render.NewProfileCardData(member, rawProfile, translated)
+	imgData, err := c.imageRenderer.RenderProfileImage(&data)
 	if err != nil {
 		c.log().Warn("profile image render failed, falling back to text",
 			slog.Any("error", err),

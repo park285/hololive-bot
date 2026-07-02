@@ -78,7 +78,7 @@ type LiveImageRenderer interface {
 }
 
 type ProfileImageRenderer interface {
-	RenderProfileImage(data render.ProfileCardData) ([]byte, error)
+	RenderProfileImage(data *render.ProfileCardData) ([]byte, error)
 }
 
 type RankImageRenderer interface {
