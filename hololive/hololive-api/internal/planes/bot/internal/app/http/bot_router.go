@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 
 	"github.com/kapu/hololive-api/internal/readiness"
 )
@@ -41,7 +41,7 @@ func ProvideBotRouter(
 	ctx context.Context,
 	appConfig *config.Config,
 	logger *slog.Logger,
-	webhookHandler *iris.WebhookHandler,
+	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {
@@ -63,7 +63,7 @@ func botReadyResponder(probe *readiness.Probe) func(*gin.Context) {
 
 func botRouteRegistrar(
 	apiKey string,
-	webhookHandler *iris.WebhookHandler,
+	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 ) func(*gin.Engine) error {
 	return func(router *gin.Engine) error {
@@ -72,7 +72,7 @@ func botRouteRegistrar(
 	}
 }
 
-func registerWebhookRoute(router *gin.Engine, webhookHandler *iris.WebhookHandler) {
+func registerWebhookRoute(router *gin.Engine, webhookHandler *webhook.Handler) {
 	if webhookHandler == nil {
 		return
 	}

@@ -24,12 +24,12 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 )
 
 func TestParseMessage_CompactAlarmAdd(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!알람설정 미즈미야"}
+	msg := &webhook.Message{Msg: "!알람설정 미즈미야"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -52,7 +52,7 @@ func TestParseMessage_CompactAlarmAdd(t *testing.T) {
 
 func TestParseMessage_CompactAlarmList(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!알람목록"}
+	msg := &webhook.Message{Msg: "!알람목록"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -66,7 +66,7 @@ func TestParseMessage_CompactAlarmList(t *testing.T) {
 
 func TestParseMessage_InvalidAlarmCommand(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!알람 설정123"}
+	msg := &webhook.Message{Msg: "!알람 설정123"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -85,7 +85,7 @@ func TestParseMessage_InvalidAlarmCommand(t *testing.T) {
 
 func TestParseMessage_UsesConfiguredPrefixOnly(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "/도움"}
+	msg := &webhook.Message{Msg: "/도움"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -99,7 +99,7 @@ func TestParseMessage_UsesConfiguredPrefixOnly(t *testing.T) {
 
 func TestParseMessage_LeadingZeroWidthBeforePrefix(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "\u200b!도움"}
+	msg := &webhook.Message{Msg: "\u200b!도움"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -113,7 +113,7 @@ func TestParseMessage_LeadingZeroWidthBeforePrefix(t *testing.T) {
 
 func TestParseMessage_UpcomingAll(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!예정 전체"}
+	msg := &webhook.Message{Msg: "!예정 전체"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -136,7 +136,7 @@ func TestParseMessage_UpcomingAll(t *testing.T) {
 
 func TestParseMessage_UpcomingLimit(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!예정 30"}
+	msg := &webhook.Message{Msg: "!예정 30"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -155,7 +155,7 @@ func TestParseMessage_UpcomingLimit(t *testing.T) {
 
 func TestParseMessage_UpcomingLimitAndMember(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!예정 30 페코라"}
+	msg := &webhook.Message{Msg: "!예정 30 페코라"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -179,7 +179,7 @@ func TestParseMessage_UpcomingLimitAndMember(t *testing.T) {
 
 func TestParseMessage_MemberNewsDefaultPeriod(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!뉴스"}
+	msg := &webhook.Message{Msg: "!뉴스"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -198,7 +198,7 @@ func TestParseMessage_MemberNewsDefaultPeriod(t *testing.T) {
 
 func TestParseMessage_MemberNewsMonthlyPeriod(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!뉴스 이번달"}
+	msg := &webhook.Message{Msg: "!뉴스 이번달"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -217,7 +217,7 @@ func TestParseMessage_MemberNewsMonthlyPeriod(t *testing.T) {
 
 func TestParseMessage_MemberNewsSubscriptionOn(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!뉴스알림 켜기"}
+	msg := &webhook.Message{Msg: "!뉴스알림 켜기"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -236,7 +236,7 @@ func TestParseMessage_MemberNewsSubscriptionOn(t *testing.T) {
 
 func TestParseMessage_MemberNewsSubscriptionOff(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!뉴스알림 끄기"}
+	msg := &webhook.Message{Msg: "!뉴스알림 끄기"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -255,7 +255,7 @@ func TestParseMessage_MemberNewsSubscriptionOff(t *testing.T) {
 
 func TestParseMessage_MemberNewsSubscriptionStatus(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!뉴스알림 상태"}
+	msg := &webhook.Message{Msg: "!뉴스알림 상태"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -274,7 +274,7 @@ func TestParseMessage_MemberNewsSubscriptionStatus(t *testing.T) {
 
 func TestParseMessage_MajorEventNotMisclassifiedAsNews(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!행사알림 상태"}
+	msg := &webhook.Message{Msg: "!행사알림 상태"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -302,7 +302,7 @@ func TestParseMessage_MemberNewsMonthlyWithSpace(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		msg := &iris.Message{Msg: tt.input}
+		msg := &webhook.Message{Msg: tt.input}
 
 		result := adapter.ParseMessage(msg)
 		if result == nil {
@@ -322,7 +322,7 @@ func TestParseMessage_MemberNewsMonthlyWithSpace(t *testing.T) {
 
 func TestParseMessage_ParserPriority_MemberInfoOverScheduleWhenNoArgs(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!멤버"}
+	msg := &webhook.Message{Msg: "!멤버"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -336,7 +336,7 @@ func TestParseMessage_ParserPriority_MemberInfoOverScheduleWhenNoArgs(t *testing
 
 func TestParseMessage_ParserPriority_NewsSubscriptionOverNews(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &iris.Message{Msg: "!뉴스알림"}
+	msg := &webhook.Message{Msg: "!뉴스알림"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -367,7 +367,7 @@ func TestParseMessage_SettlementCommandsIgnoredByMainBot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := adapter.ParseMessage(&iris.Message{Msg: tt.input})
+			result := adapter.ParseMessage(&webhook.Message{Msg: tt.input})
 			if result == nil {
 				t.Fatal("expected parsed command, got nil")
 			}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	"github.com/quic-go/quic-go/http3"
 
@@ -20,7 +20,7 @@ import (
 func BuildBotServer(
 	ctx context.Context,
 	appConfig *config.Config,
-	webhookHandler *iris.WebhookHandler,
+	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	logger *slog.Logger,
 ) (*http.Server, error) {
@@ -36,7 +36,7 @@ func BuildBotServer(
 func BuildBotHTTP3Server(
 	ctx context.Context,
 	appConfig *config.Config,
-	webhookHandler *iris.WebhookHandler,
+	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	logger *slog.Logger,
 	readyProbe ...*readiness.Probe,
@@ -47,7 +47,7 @@ func BuildBotHTTP3Server(
 func buildBotHTTP3ServerWithReloaderOptions(
 	ctx context.Context,
 	appConfig *config.Config,
-	webhookHandler *iris.WebhookHandler,
+	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	logger *slog.Logger,
 	reloaderOptions reloadingTLSCertificateOptions,

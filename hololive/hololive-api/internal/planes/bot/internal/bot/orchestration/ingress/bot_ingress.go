@@ -26,7 +26,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/stringutil"
 
@@ -67,7 +67,7 @@ func NewMessageIngress(
 	}
 }
 
-func (i *MessageIngress) Prepare(ctx context.Context, message *iris.Message) (*Envelope, bool) {
+func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) (*Envelope, bool) {
 	if !i.canHandleMessage(ctx, message) {
 		return nil, false
 	}
@@ -101,7 +101,7 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *iris.Message) (*E
 	}, true
 }
 
-func (i *MessageIngress) canHandleMessage(ctx context.Context, message *iris.Message) bool {
+func (i *MessageIngress) canHandleMessage(ctx context.Context, message *webhook.Message) bool {
 	if message == nil {
 		i.logWarn(ctx, "Nil message received")
 		return false
@@ -119,7 +119,7 @@ func (i *MessageIngress) canHandleMessage(ctx context.Context, message *iris.Mes
 	return true
 }
 
-func (i *MessageIngress) shouldSkipSender(ctx context.Context, message *iris.Message, chatID, userName string) bool {
+func (i *MessageIngress) shouldSkipSender(ctx context.Context, message *webhook.Message, chatID, userName string) bool {
 	if !i.isSelfSender(userName) {
 		return false
 	}
@@ -149,7 +149,7 @@ func (i *MessageIngress) isRoomBlocked(ctx context.Context, roomName, chatID, us
 	return true
 }
 
-func (i *MessageIngress) parseCommand(ctx context.Context, message *iris.Message, chatID, userName string) *adapter.ParsedCommand {
+func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Message, chatID, userName string) *adapter.ParsedCommand {
 	parsed := i.messageAdapter.ParseMessage(message)
 	if parsed == nil {
 		i.logWarn(ctx, "Parsed command is nil", slog.String("room", chatID))

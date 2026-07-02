@@ -748,7 +748,7 @@ func TestRuntimeIrisClient_SendKaringHololive_ForwardsRequest(t *testing.T) {
 		iris.WithHTTPClient(server.Client()),
 	)
 	resp, err := client.SendKaringHololive(context.Background(), iris.KaringHololiveRequest{
-		Streams: []iris.KaringHololiveStream{{
+		Streams: []iris.KaringContentItem{{
 			Title:  "test stream",
 			URL:    "https://www.youtube.com/watch?v=video000001",
 			Status: iris.KaringStreamStatusUpcoming,

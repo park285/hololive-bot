@@ -37,7 +37,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +56,7 @@ import (
 
 type stubWebhookMessageHandler struct{}
 
-func (stubWebhookMessageHandler) HandleMessage(context.Context, *iris.Message) {}
+func (stubWebhookMessageHandler) HandleMessage(context.Context, *webhook.Message) {}
 
 func testBootstrapGuardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 func canceledContext() context.Context {

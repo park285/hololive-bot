@@ -28,6 +28,7 @@ import (
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 	json "github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 
@@ -139,11 +140,11 @@ func handleHelpMessage(t *testing.T, b *Bot, messageID string) {
 
 	threadID := "12345"
 	sender := "user"
-	b.HandleMessage(t.Context(), &iris.Message{
+	b.HandleMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
-		JSON: &iris.MessageJSON{
+		JSON: &webhook.MessageJSON{
 			UserID:    "user-1",
 			ChatID:    "room-1",
 			MessageID: messageID,

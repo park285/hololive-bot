@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,7 +63,7 @@ func TestBuildBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *testing.T
 			DedupTimeout:   500 * time.Millisecond,
 		},
 	}
-	messageHandler := &recordingWebhookMessageHandler{messages: make(chan *iris.Message, 1)}
+	messageHandler := &recordingWebhookMessageHandler{messages: make(chan *webhook.Message, 1)}
 	webhookPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 8})
 	t.Cleanup(webhookPool.StopAndWait)
 
@@ -105,10 +105,10 @@ func TestBuildBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *testing.T
 }
 
 type recordingWebhookMessageHandler struct {
-	messages chan *iris.Message
+	messages chan *webhook.Message
 }
 
-func (h *recordingWebhookMessageHandler) HandleMessage(_ context.Context, msg *iris.Message) {
+func (h *recordingWebhookMessageHandler) HandleMessage(_ context.Context, msg *webhook.Message) {
 	select {
 	case h.messages <- msg:
 	default:
@@ -118,8 +118,8 @@ func (h *recordingWebhookMessageHandler) HandleMessage(_ context.Context, msg *i
 func newBotWebhookTestRequest(ctx context.Context, token, messageID, body string) *http.Request {
 	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/webhook/iris", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(iris.HeaderIrisToken, token)
-	request.Header.Set(iris.HeaderIrisMessageID, messageID)
+	request.Header.Set(webhook.HeaderIrisToken, token)
+	request.Header.Set(webhook.HeaderIrisMessageID, messageID)
 
 	return request
 }

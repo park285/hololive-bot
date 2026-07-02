@@ -30,12 +30,12 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 )
 
 // HTTP webhook 핸들러에서 호출하기 위해 public으로 노출됩니다.
-func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
+func (b *Bot) HandleMessage(ctx context.Context, message *webhook.Message) {
 	commandType := "unknown"
 
 	defer func() {
@@ -79,7 +79,7 @@ func newCommandContextFromIngress(envelope *ingress.Envelope) *domain.CommandCon
 	)
 }
 
-func messageThreadID(message *iris.Message) *string {
+func messageThreadID(message *webhook.Message) *string {
 	if message == nil || message.JSON == nil || message.JSON.ThreadID == nil {
 		return nil
 	}
@@ -91,7 +91,7 @@ func messageThreadID(message *iris.Message) *string {
 	return &trimmed
 }
 
-func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext, message *iris.Message) context.Context {
+func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext, message *webhook.Message) context.Context {
 	if identity := messageReplyIdentity(message); identity != "" {
 		ctx = transport.WithReplyIdentity(ctx, identity)
 	}
@@ -101,7 +101,7 @@ func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext, m
 	return ctx
 }
 
-func messageReplyIdentity(message *iris.Message) string {
+func messageReplyIdentity(message *webhook.Message) string {
 	if message == nil || message.JSON == nil {
 		return ""
 	}

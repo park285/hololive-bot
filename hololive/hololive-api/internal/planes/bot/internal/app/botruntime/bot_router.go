@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
 	"github.com/kapu/hololive-api/internal/readiness"
@@ -17,7 +17,7 @@ func ProvideBotRouter(
 	ctx context.Context,
 	appConfig *config.Config,
 	logger *slog.Logger,
-	webhookHandler *iris.WebhookHandler,
+	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {

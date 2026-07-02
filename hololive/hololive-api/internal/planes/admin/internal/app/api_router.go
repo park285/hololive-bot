@@ -28,7 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/app/http"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
@@ -41,7 +41,7 @@ func ProvideAPIRouter(
 	logger *slog.Logger,
 	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
-	webhookHandler *iris.WebhookHandler,
+	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	cacheClient cache.Client,
 	readyProbe ...*readiness.Probe,

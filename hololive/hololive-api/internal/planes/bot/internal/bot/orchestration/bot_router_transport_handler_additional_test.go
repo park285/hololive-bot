@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -445,11 +446,11 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 
 	// 알 수 없는 command 경로: fallback 메시지가 전송돼야 한다
 	sender := "user"
-	b.HandleMessage(t.Context(), &iris.Message{
+	b.HandleMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
-		JSON: &iris.MessageJSON{
+		JSON: &webhook.MessageJSON{
 			UserID: "user-1",
 			ChatID: "room-1",
 		},
@@ -488,11 +489,11 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	}
 
 	sender := "user"
-	b.HandleMessage(t.Context(), &iris.Message{
+	b.HandleMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
-		JSON: &iris.MessageJSON{
+		JSON: &webhook.MessageJSON{
 			UserID: "user-1",
 			ChatID: "room-1",
 		},

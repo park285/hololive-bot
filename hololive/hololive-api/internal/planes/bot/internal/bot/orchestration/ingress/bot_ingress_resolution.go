@@ -23,12 +23,12 @@ package ingress
 import (
 	"regexp"
 
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 )
 
 var numericRoomIDRegex = regexp.MustCompile(`^\d+$`)
 
-func resolveRoom(message *iris.Message) (chatID, roomName string) {
+func resolveRoom(message *webhook.Message) (chatID, roomName string) {
 	isNumericRoom := message.Room != "" && numericRoomIDRegex.MatchString(message.Room)
 
 	chatID = message.Room
@@ -41,7 +41,7 @@ func resolveRoom(message *iris.Message) (chatID, roomName string) {
 	return chatID, roomName
 }
 
-func resolveUser(message *iris.Message) (userID, userName string) {
+func resolveUser(message *webhook.Message) (userID, userName string) {
 	userID = "unknown"
 	userName = userID
 

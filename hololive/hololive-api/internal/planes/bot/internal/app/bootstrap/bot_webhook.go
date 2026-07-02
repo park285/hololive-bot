@@ -5,27 +5,28 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 )
 
 func BuildBotWebhookHandler(
 	appConfig *config.Config,
-	messageHandler iris.MessageHandler,
+	messageHandler webhook.MessageHandler,
 	deps BotWebhookRuntimeDependencies,
-	webhookPool iris.TaskPool,
+	webhookPool webhook.TaskPool,
 	logger *slog.Logger,
-) (*iris.WebhookHandler, error) {
+) (*webhook.Handler, error) {
 	return iris.NewWebhookHandler(messageHandler,
-		iris.WithWebhookLogger(logger),
+		webhook.WithWebhookLogger(logger),
 		iris.WithValkeyDedup(deps.Cache.GetClient()),
-		iris.WithDedupMode(iris.WebhookDedupModeAfterDecode),
-		iris.WithTaskPool(webhookPool),
-		iris.WithWorkerCount(appConfig.Webhook.WorkerCount),
-		iris.WithQueueSize(appConfig.Webhook.QueueSize),
-		iris.WithEnqueueTimeout(appConfig.Webhook.EnqueueTimeout),
-		iris.WithHandlerTimeout(appConfig.Webhook.HandlerTimeout),
-		iris.WithMaxBodyBytes(appConfig.Webhook.MaxBodyBytes),
-		iris.WithDedupTTL(appConfig.Webhook.DedupTTL),
-		iris.WithDedupTimeout(appConfig.Webhook.DedupTimeout),
-		iris.WithRequireHTTP2(appConfig.Webhook.RequireHTTP2),
+		webhook.WithDedupMode(webhook.DedupModeAfterDecode),
+		webhook.WithTaskPool(webhookPool),
+		webhook.WithWorkerCount(appConfig.Webhook.WorkerCount),
+		webhook.WithQueueSize(appConfig.Webhook.QueueSize),
+		webhook.WithEnqueueTimeout(appConfig.Webhook.EnqueueTimeout),
+		webhook.WithHandlerTimeout(appConfig.Webhook.HandlerTimeout),
+		webhook.WithMaxBodyBytes(appConfig.Webhook.MaxBodyBytes),
+		webhook.WithDedupTTL(appConfig.Webhook.DedupTTL),
+		webhook.WithDedupTimeout(appConfig.Webhook.DedupTimeout),
+		webhook.WithRequireHTTP2(appConfig.Webhook.RequireHTTP2),
 	)
 }

@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 	"github.com/park285/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
@@ -43,7 +43,7 @@ func TestMessageIngressPrepare_SkipsSelfSender(t *testing.T) {
 	)
 
 	sender := "봇계정"
-	msg := &iris.Message{
+	msg := &webhook.Message{
 		Msg:    "!help",
 		Room:   "테스트방",
 		Sender: &sender,
@@ -71,11 +71,11 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 	)
 
 	sender := "사용자"
-	msg := &iris.Message{
+	msg := &webhook.Message{
 		Msg:    "!help",
 		Room:   "홀로라이브",
 		Sender: &sender,
-		JSON: &iris.MessageJSON{
+		JSON: &webhook.MessageJSON{
 			UserID: "user-1",
 			ChatID: "chat-123",
 		},
@@ -118,9 +118,9 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 func TestResolveRoom_NumericRoomPrefersRoomID(t *testing.T) {
 	t.Parallel()
 
-	message := &iris.Message{
+	message := &webhook.Message{
 		Room: "123456",
-		JSON: &iris.MessageJSON{ChatID: "json-chat-id"},
+		JSON: &webhook.MessageJSON{ChatID: "json-chat-id"},
 	}
 
 	chatID, roomName := resolveRoom(message)

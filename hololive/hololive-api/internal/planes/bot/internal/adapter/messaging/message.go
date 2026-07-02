@@ -25,7 +25,7 @@ import (
 	"unicode"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/webhook"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
@@ -105,7 +105,7 @@ type ParsedCommand struct {
 	RawMessage string
 }
 
-func (ma *MessageAdapter) ParseMessage(message *iris.Message) *ParsedCommand {
+func (ma *MessageAdapter) ParseMessage(message *webhook.Message) *ParsedCommand {
 	text, commandText, ok := ma.commandTextFromMessage(message)
 	if !ok {
 		return ma.createUnknownCommand(text)
@@ -128,7 +128,7 @@ func (ma *MessageAdapter) ParseMessage(message *iris.Message) *ParsedCommand {
 	return ma.createUnknownCommand(text)
 }
 
-func (ma *MessageAdapter) commandTextFromMessage(message *iris.Message) (text, commandText string, ok bool) {
+func (ma *MessageAdapter) commandTextFromMessage(message *webhook.Message) (text, commandText string, ok bool) {
 	if message == nil || message.Msg == "" {
 		return "", "", false
 	}
