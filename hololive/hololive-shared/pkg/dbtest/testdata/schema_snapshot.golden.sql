@@ -217,7 +217,7 @@ TABLE members
   COLUMN english_name character varying(200) NOT NULL
   COLUMN japanese_name character varying(200)
   COLUMN korean_name character varying(200)
-  COLUMN status character varying(20) NOT NULL DEFAULT 'active'::character varying
+  COLUMN status text NOT NULL DEFAULT 'active'::character varying
   COLUMN is_graduated boolean NOT NULL DEFAULT false
   COLUMN aliases jsonb
   COLUMN photo text
@@ -230,8 +230,8 @@ TABLE members
   COLUMN short_korean_name character varying(64)
   COLUMN birthday date
   COLUMN debut_date date
-  CONSTRAINT chk_members_graduated_sync CHECK ((is_graduated = ((status)::text = 'graduated'::text)))
-  CONSTRAINT chk_members_status_vocab CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'graduated'::character varying])::text[])))
+  CONSTRAINT chk_members_graduated_sync CHECK ((is_graduated = (status = 'graduated'::text)))
+  CONSTRAINT chk_members_status_vocab CHECK ((status = ANY (ARRAY[('active'::character varying)::text, ('graduated'::character varying)::text])))
   CONSTRAINT members_pkey PRIMARY KEY (id)
   INDEX CREATE INDEX idx_members_active_channel ON public.members USING btree (channel_id) WHERE ((is_graduated = false) AND (channel_id IS NOT NULL))
   INDEX CREATE INDEX idx_members_aliases_ja_gin ON public.members USING gin (((aliases -> 'ja'::text)))
@@ -262,7 +262,7 @@ TABLE notification_delivery_outbox
   COLUMN room_id character varying(100) NOT NULL
   COLUMN content_id character varying(200) NOT NULL
   COLUMN payload jsonb NOT NULL DEFAULT '{}'::jsonb
-  COLUMN status character varying(20) NOT NULL DEFAULT 'PENDING'::character varying
+  COLUMN status text NOT NULL DEFAULT 'PENDING'::character varying
   COLUMN attempt_count integer NOT NULL DEFAULT 0
   COLUMN next_attempt_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
@@ -273,13 +273,13 @@ TABLE notification_delivery_outbox
   COLUMN lock_expires_at timestamp with time zone
   COLUMN sending_started_at timestamp with time zone
   CONSTRAINT chk_notification_delivery_outbox_kind_vocab CHECK ((kind = ANY (ARRAY['MAJOR_EVENT_WEEKLY'::text, 'MAJOR_EVENT_MONTHLY'::text, 'MEMBER_NEWS_WEEKLY'::text, 'MEMBER_NEWS_MONTHLY'::text])))
-  CONSTRAINT chk_notification_delivery_outbox_status_vocab CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'SENDING'::character varying, 'SENT'::character varying, 'FAILED'::character varying])::text[])))
+  CONSTRAINT chk_notification_delivery_outbox_status_vocab CHECK ((status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text])))
   CONSTRAINT notification_delivery_outbox_pkey PRIMARY KEY (id)
   INDEX CREATE UNIQUE INDEX idx_ndo_kind_content ON public.notification_delivery_outbox USING btree (kind, content_id)
-  INDEX CREATE INDEX idx_ndo_lease_expired ON public.notification_delivery_outbox USING btree (lock_expires_at) WHERE (((status)::text = 'PENDING'::text) AND (lock_expires_at IS NOT NULL))
-  INDEX CREATE INDEX idx_ndo_pending_due_created_id ON public.notification_delivery_outbox USING btree (next_attempt_at, created_at, id) WHERE ((status)::text = 'PENDING'::text)
-  INDEX CREATE INDEX idx_ndo_sending_stale ON public.notification_delivery_outbox USING btree (sending_started_at, id) WHERE ((status)::text = 'SENDING'::text)
-  INDEX CREATE INDEX idx_ndo_sent_cleanup ON public.notification_delivery_outbox USING btree (COALESCE(sent_at, created_at)) WHERE ((status)::text = ANY ((ARRAY['SENT'::character varying, 'FAILED'::character varying])::text[]))
+  INDEX CREATE INDEX idx_ndo_lease_expired ON public.notification_delivery_outbox USING btree (lock_expires_at) WHERE ((status = 'PENDING'::text) AND (lock_expires_at IS NOT NULL))
+  INDEX CREATE INDEX idx_ndo_pending_due_created_id ON public.notification_delivery_outbox USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
+  INDEX CREATE INDEX idx_ndo_sending_stale ON public.notification_delivery_outbox USING btree (sending_started_at, id) WHERE (status = 'SENDING'::text)
+  INDEX CREATE INDEX idx_ndo_sent_cleanup ON public.notification_delivery_outbox USING btree (COALESCE(sent_at, created_at)) WHERE (status = ANY (ARRAY[('SENT'::character varying)::text, ('FAILED'::character varying)::text]))
 
 TABLE notification_template_revisions
   COLUMN id bigint NOT NULL DEFAULT nextval('notification_template_revisions_id_seq'::regclass)
@@ -357,10 +357,10 @@ TABLE youtube_community_shorts_alarm_states
   COLUMN detected_at timestamp with time zone NOT NULL
   COLUMN authorized_at timestamp with time zone
   COLUMN alarm_sent_at timestamp with time zone
-  COLUMN delivery_status character varying(20) NOT NULL DEFAULT 'DETECTED'::character varying
+  COLUMN delivery_status text NOT NULL DEFAULT 'DETECTED'::character varying
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_youtube_community_shorts_alarm_states_delivery_status_vocab CHECK (((delivery_status)::text = ANY ((ARRAY['DETECTED'::character varying, 'ENQUEUED'::character varying, 'SENT'::character varying])::text[])))
+  CONSTRAINT chk_youtube_community_shorts_alarm_states_delivery_status_vocab CHECK ((delivery_status = ANY (ARRAY[('DETECTED'::character varying)::text, ('ENQUEUED'::character varying)::text, ('SENT'::character varying)::text])))
   CONSTRAINT chk_youtube_community_shorts_alarm_states_kind_vocab CHECK ((kind = ANY (ARRAY['NEW_VIDEO'::text, 'NEW_SHORT'::text, 'LIVE_STREAM'::text, 'COMMUNITY_POST'::text, 'MILESTONE'::text])))
   CONSTRAINT youtube_community_shorts_alarm_states_pkey PRIMARY KEY (kind, post_id)
   INDEX CREATE INDEX idx_ycsas_alarm_sent_at ON public.youtube_community_shorts_alarm_states USING btree (alarm_sent_at DESC) WHERE (alarm_sent_at IS NOT NULL)
@@ -392,14 +392,14 @@ TABLE youtube_content_alarm_tracking
   COLUMN alarm_sent_at timestamp with time zone
   COLUMN alarm_latency_millis bigint
   COLUMN alarm_latency_exceeded boolean
-  COLUMN delivery_status character varying(20) NOT NULL DEFAULT 'PENDING'::character varying
+  COLUMN delivery_status text NOT NULL DEFAULT 'PENDING'::character varying
   COLUMN latency_classification_status character varying(40)
   COLUMN delay_source character varying(40)
   COLUMN internal_delay_cause character varying(40)
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN canonical_content_id character varying(50) NOT NULL
-  CONSTRAINT chk_youtube_content_alarm_tracking_delivery_status_vocab CHECK (((delivery_status)::text = ANY ((ARRAY['PENDING'::character varying, 'SENT'::character varying])::text[])))
+  CONSTRAINT chk_youtube_content_alarm_tracking_delivery_status_vocab CHECK ((delivery_status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENT'::character varying)::text])))
   CONSTRAINT chk_youtube_content_alarm_tracking_kind_vocab CHECK ((kind = ANY (ARRAY['NEW_VIDEO'::text, 'NEW_SHORT'::text, 'LIVE_STREAM'::text, 'COMMUNITY_POST'::text, 'MILESTONE'::text])))
   CONSTRAINT youtube_content_alarm_tracking_pkey PRIMARY KEY (kind, canonical_content_id)
   INDEX CREATE INDEX idx_ycat_alarm_sent_at ON public.youtube_content_alarm_tracking USING btree (alarm_sent_at) WHERE (alarm_sent_at IS NOT NULL)
@@ -419,18 +419,18 @@ TABLE youtube_content_watermarks
 TABLE youtube_live_sessions
   COLUMN video_id character varying(20) NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
-  COLUMN status character varying(20) NOT NULL
+  COLUMN status text NOT NULL
   COLUMN title character varying(500)
   COLUMN scheduled_start_time timestamp with time zone
   COLUMN started_at timestamp with time zone
   COLUMN ended_at timestamp with time zone
   COLUMN last_seen_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN live_first_seen_at timestamp with time zone
-  CONSTRAINT chk_youtube_live_sessions_status_vocab CHECK (((status)::text = ANY ((ARRAY['UPCOMING'::character varying, 'LIVE'::character varying, 'ENDED'::character varying])::text[])))
+  CONSTRAINT chk_youtube_live_sessions_status_vocab CHECK ((status = ANY (ARRAY[('UPCOMING'::character varying)::text, ('LIVE'::character varying)::text, ('ENDED'::character varying)::text])))
   CONSTRAINT youtube_live_sessions_pkey PRIMARY KEY (video_id)
   INDEX CREATE INDEX idx_yls_channel_last_seen ON public.youtube_live_sessions USING btree (channel_id, last_seen_at DESC)
-  INDEX CREATE INDEX idx_yls_ended_cleanup ON public.youtube_live_sessions USING btree (ended_at, video_id) WHERE (((status)::text = 'ENDED'::text) AND (ended_at IS NOT NULL))
-  INDEX CREATE INDEX idx_yls_live_first_seen ON public.youtube_live_sessions USING btree (live_first_seen_at, channel_id) WHERE ((status)::text = 'LIVE'::text)
+  INDEX CREATE INDEX idx_yls_ended_cleanup ON public.youtube_live_sessions USING btree (ended_at, video_id) WHERE ((status = 'ENDED'::text) AND (ended_at IS NOT NULL))
+  INDEX CREATE INDEX idx_yls_live_first_seen ON public.youtube_live_sessions USING btree (live_first_seen_at, channel_id) WHERE (status = 'LIVE'::text)
   INDEX CREATE INDEX idx_yls_status_last_seen ON public.youtube_live_sessions USING btree (status, last_seen_at DESC)
 
 TABLE youtube_live_viewer_samples
@@ -470,20 +470,20 @@ TABLE youtube_notification_delivery
   COLUMN id bigint NOT NULL DEFAULT nextval('youtube_notification_delivery_id_seq'::regclass)
   COLUMN outbox_id bigint NOT NULL
   COLUMN room_id character varying(100) NOT NULL
-  COLUMN status character varying(20) NOT NULL DEFAULT 'PENDING'::character varying
+  COLUMN status text NOT NULL DEFAULT 'PENDING'::character varying
   COLUMN attempt_count integer NOT NULL DEFAULT 0
   COLUMN next_attempt_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN locked_at timestamp with time zone
   COLUMN sent_at timestamp with time zone
   COLUMN error text
-  CONSTRAINT chk_youtube_notification_delivery_status_vocab CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'SENDING'::character varying, 'SENT'::character varying, 'FAILED'::character varying, 'QUARANTINED'::character varying])::text[])))
+  CONSTRAINT chk_youtube_notification_delivery_status_vocab CHECK ((status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text, ('QUARANTINED'::character varying)::text])))
   CONSTRAINT youtube_notification_delivery_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES youtube_notification_outbox(id) ON DELETE CASCADE
   CONSTRAINT youtube_notification_delivery_pkey PRIMARY KEY (id)
   INDEX CREATE UNIQUE INDEX idx_ynd_outbox_room ON public.youtube_notification_delivery USING btree (outbox_id, room_id)
-  INDEX CREATE INDEX idx_ynd_pending_due_created_id ON public.youtube_notification_delivery USING btree (next_attempt_at, created_at, id) WHERE ((status)::text = 'PENDING'::text)
-  INDEX CREATE INDEX idx_ynd_sending_stale ON public.youtube_notification_delivery USING btree (locked_at, id) WHERE ((status)::text = 'SENDING'::text)
-  INDEX CREATE INDEX idx_ynd_sent_cleanup ON public.youtube_notification_delivery USING btree (COALESCE(sent_at, created_at)) WHERE ((status)::text = ANY ((ARRAY['SENT'::character varying, 'FAILED'::character varying])::text[]))
+  INDEX CREATE INDEX idx_ynd_pending_due_created_id ON public.youtube_notification_delivery USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
+  INDEX CREATE INDEX idx_ynd_sending_stale ON public.youtube_notification_delivery USING btree (locked_at, id) WHERE (status = 'SENDING'::text)
+  INDEX CREATE INDEX idx_ynd_sent_cleanup ON public.youtube_notification_delivery USING btree (COALESCE(sent_at, created_at)) WHERE (status = ANY (ARRAY[('SENT'::character varying)::text, ('FAILED'::character varying)::text]))
 
 TABLE youtube_notification_delivery_telemetry
   COLUMN id bigint NOT NULL DEFAULT nextval('youtube_notification_delivery_telemetry_id_seq'::regclass)
@@ -493,7 +493,7 @@ TABLE youtube_notification_delivery_telemetry
   COLUMN channel_id character varying(64) NOT NULL
   COLUMN content_id character varying(50) NOT NULL
   COLUMN room_id character varying(100) NOT NULL
-  COLUMN alarm_type character varying(20) NOT NULL
+  COLUMN alarm_type text NOT NULL
   COLUMN dedupe_key text NOT NULL
   COLUMN delivery_mode character varying(20) NOT NULL
   COLUMN send_result character varying(20) NOT NULL
@@ -512,7 +512,7 @@ TABLE youtube_notification_delivery_telemetry
   COLUMN detected_at timestamp with time zone
   COLUMN alarm_sent_at timestamp with time zone
   COLUMN alarm_latency_millis bigint
-  CONSTRAINT chk_youtube_notification_delivery_telemetry_alarm_type_vocab CHECK (((alarm_type)::text = ANY ((ARRAY['LIVE'::character varying, 'COMMUNITY'::character varying, 'SHORTS'::character varying, 'BIRTHDAY'::character varying, 'ANNIVERSARY'::character varying])::text[])))
+  CONSTRAINT chk_youtube_notification_delivery_telemetry_alarm_type_vocab CHECK ((alarm_type = ANY (ARRAY[('LIVE'::character varying)::text, ('COMMUNITY'::character varying)::text, ('SHORTS'::character varying)::text, ('BIRTHDAY'::character varying)::text, ('ANNIVERSARY'::character varying)::text])))
   CONSTRAINT youtube_notification_delivery_telemetry_pkey PRIMARY KEY (id)
   INDEX CREATE INDEX idx_ydt_channel_path_event ON public.youtube_notification_delivery_telemetry USING btree (channel_id, delivery_path, event_at)
   INDEX CREATE UNIQUE INDEX idx_ydt_delivery_attempt ON public.youtube_notification_delivery_telemetry USING btree (delivery_id, attempt_ordinal)
@@ -527,7 +527,7 @@ TABLE youtube_notification_outbox
   COLUMN channel_id character varying(64) NOT NULL
   COLUMN content_id character varying(50) NOT NULL
   COLUMN payload jsonb NOT NULL
-  COLUMN status character varying(20) NOT NULL DEFAULT 'PENDING'::character varying
+  COLUMN status text NOT NULL DEFAULT 'PENDING'::character varying
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN locked_at timestamp with time zone
   COLUMN sent_at timestamp with time zone
@@ -535,11 +535,11 @@ TABLE youtube_notification_outbox
   COLUMN attempt_count integer NOT NULL DEFAULT 0
   COLUMN next_attempt_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_youtube_notification_outbox_kind_vocab CHECK ((kind = ANY (ARRAY['NEW_VIDEO'::text, 'NEW_SHORT'::text, 'LIVE_STREAM'::text, 'COMMUNITY_POST'::text, 'MILESTONE'::text])))
-  CONSTRAINT chk_youtube_notification_outbox_status_vocab CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'SENT'::character varying, 'FAILED'::character varying])::text[])))
+  CONSTRAINT chk_youtube_notification_outbox_status_vocab CHECK ((status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text])))
   CONSTRAINT youtube_notification_outbox_pkey PRIMARY KEY (id)
   INDEX CREATE UNIQUE INDEX idx_yno_kind_content ON public.youtube_notification_outbox USING btree (kind, content_id)
-  INDEX CREATE INDEX idx_yno_pending_due_created_id ON public.youtube_notification_outbox USING btree (next_attempt_at, created_at, id) WHERE ((status)::text = 'PENDING'::text)
-  INDEX CREATE INDEX idx_yno_sent_cleanup ON public.youtube_notification_outbox USING btree (sent_at) WHERE ((status)::text = 'SENT'::text)
+  INDEX CREATE INDEX idx_yno_pending_due_created_id ON public.youtube_notification_outbox USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
+  INDEX CREATE INDEX idx_yno_sent_cleanup ON public.youtube_notification_outbox USING btree (sent_at) WHERE (status = 'SENT'::text)
   INDEX CREATE INDEX idx_yno_status_created ON public.youtube_notification_outbox USING btree (status, created_at)
 
 TABLE youtube_stats_changes
