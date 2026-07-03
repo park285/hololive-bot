@@ -25,9 +25,13 @@ func TestMonorepoModuleSuites(t *testing.T) {
 		ctx,
 		"go",
 		"test",
+		"./",
 		"../shared-go/...",
+		"../iris-client-go/...",
+		"./admin-dashboard/backend/...",
 		"./hololive/hololive-shared/...",
 		"./hololive/hololive-api/...",
+		"./hololive/hololive-alarm-worker/...",
 		"./hololive/hololive-youtube-producer/...",
 	)
 	cmd.Env = append(os.Environ(), "HOLOLIVE_WORKSPACE_MONOREPO_TEST=1")

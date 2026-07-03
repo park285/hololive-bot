@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
@@ -101,7 +102,7 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
 	sender := &fakeSender{}
@@ -173,7 +174,7 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
 	sender := &fakeSender{}
@@ -246,7 +247,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
 	sender := &fakeSender{}
@@ -308,7 +309,7 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
 	sender := &fakeSender{}
@@ -379,7 +380,7 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
 	sender := &fakeSender{}
@@ -459,7 +460,7 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 	}
 
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
 	sender := &fakeSender{}
@@ -522,7 +523,7 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 	}
 
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
 	sender := &fakeSender{}
@@ -655,8 +656,8 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			dbPrimary := setupTestDB(t)
-			dbSecondary := setupTestDB(t)
+			dbPrimary := dbtest.NewPool(t)
+			dbSecondary := dbtest.NewPool(t)
 			cleanupOutbox(t, dbPrimary)
 
 			sender := &fakeSender{}
@@ -752,7 +753,7 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	db := setupTestDB(t)
+	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
 	sender := &fakeSender{}
@@ -818,12 +819,6 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 	if recentCount != 1 {
 		t.Fatalf("Expected recent failed item to remain, count=%d", recentCount)
 	}
-}
-
-func setupTestDB(t *testing.T) *deliveryTestDB {
-	t.Helper()
-
-	return newDeliveryIntegrationPool(t)
 }
 
 func cleanupOutbox(t *testing.T, db *deliveryTestDB) {

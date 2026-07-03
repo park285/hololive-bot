@@ -32,7 +32,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func SupportedStreamOrgParams() []string {
@@ -149,7 +148,7 @@ func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hou
 	params.Set("type", constants.HolodexAPIParams.TypeStream)
 	params.Set("limit", fmt.Sprintf("%d", constants.HolodexAPIParams.StreamListLimit))
 	if status == constants.HolodexAPIParams.StatusUpcoming {
-		params.Set("max_upcoming_hours", fmt.Sprintf("%d", util.Min(hours, constants.HolodexAPIParams.MaxUpcomingHours)))
+		params.Set("max_upcoming_hours", fmt.Sprintf("%d", min(hours, constants.HolodexAPIParams.MaxUpcomingHours)))
 		params.Set("order", "asc")
 		params.Set("sort", "start_scheduled")
 	}

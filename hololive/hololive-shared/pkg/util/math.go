@@ -22,20 +22,6 @@ package util
 
 import "fmt"
 
-func Max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func Min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func Unique(nums []int) []int {
 	seen := make(map[int]struct{})
 	result := make([]int, 0, len(nums))

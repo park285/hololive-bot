@@ -29,8 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -42,15 +40,9 @@ const (
 	testLease   = 60 * time.Second
 )
 
-func setupTestDB(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-
-	return dbtest.NewPool(t)
-}
-
 func testRepository(t *testing.T) *OutboxRepository {
 	t.Helper()
-	db := setupTestDB(t)
+	db := dbtest.NewPool(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return NewOutboxRepositoryFromPool(db, logger)
 }

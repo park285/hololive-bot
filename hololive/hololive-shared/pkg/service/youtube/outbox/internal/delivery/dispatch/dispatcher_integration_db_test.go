@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 )
@@ -22,11 +21,6 @@ type deliveryTestSQLResult struct {
 }
 
 type deliveryTestDB = pgxpool.Pool
-
-func newDeliveryIntegrationPool(t testing.TB) *pgxpool.Pool {
-	t.Helper()
-	return dbtest.NewPool(t)
-}
 
 func insertDeliveryTestRows(pool *pgxpool.Pool, value any) deliveryTestSQLResult {
 	rows, err := insertDeliveryIntegrationRows(context.Background(), pool, value)
