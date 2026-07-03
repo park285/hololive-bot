@@ -5,6 +5,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/valkeydedup"
 	"github.com/park285/iris-client-go/webhook"
 )
 
@@ -17,7 +18,7 @@ func BuildBotWebhookHandler(
 ) (*webhook.Handler, error) {
 	return iris.NewWebhookHandler(messageHandler,
 		webhook.WithWebhookLogger(logger),
-		iris.WithValkeyDedup(deps.Cache.GetClient()),
+		valkeydedup.Option(deps.Cache.GetClient()),
 		webhook.WithDedupMode(webhook.DedupModeAfterDecode),
 		webhook.WithTaskPool(webhookPool),
 		webhook.WithWorkerCount(appConfig.Webhook.WorkerCount),
