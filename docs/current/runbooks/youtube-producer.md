@@ -57,6 +57,12 @@ live_sessions 365d). The a/b/d instances keep the process default `0` so hourly
 batch DELETEs never cross Tailscale; the advisory lock only serializes concurrent
 runs, it does not deduplicate per-instance schedules.
 
+To override the four values, set them in `/run/hololive-bot/compose.env` (the
+`--env-file` source) and redeploy `youtube-producer-c`. Do NOT export them as
+shell variables around `compose-redeploy-service.sh` — the compose-env shadow
+guard (`compose_env_assert_no_shell_shadow_for_compose_files`) aborts the deploy
+when a compose interpolation key is set in the shell but absent from the env file.
+
 ## Logs
 
 ```bash
