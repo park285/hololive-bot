@@ -49,6 +49,7 @@
 | `YOUTUBE_PRODUCER_RETENTION_STATS_HISTORY_DAYS` | delete `youtube_stats_history` rows older than N days; `0` (default) disables cleanup (infinite retention) | no |
 | `YOUTUBE_PRODUCER_RETENTION_CHANNEL_SNAPSHOTS_DAYS` | delete `youtube_channel_stats_snapshots` rows older than N days; `0` (default) disables cleanup | no |
 | `YOUTUBE_PRODUCER_RETENTION_LIVE_SESSIONS_DAYS` | delete `ENDED` `youtube_live_sessions` rows whose `ended_at` is older than N days; `0` (default) disables cleanup | no |
+| `YOUTUBE_PRODUCER_RETENTION_VIEWER_SAMPLES_DAYS` | delete `youtube_live_viewer_samples` rows older than N days; `0` (default) disables cleanup. live_sessions cleanup only removes sessions with no remaining samples, so enable this together with `LIVE_SESSIONS_DAYS` to actually reclaim sessions | no |
 
 ## Logs
 
