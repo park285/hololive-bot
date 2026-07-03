@@ -72,6 +72,7 @@ hololive/hololive-youtube-producer/internal/runtime/polltarget/youtube_poll_targ
 hololive/hololive-youtube-producer/internal/runtime/polltarget/youtube_poll_targets.go
 hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_budget_admission.go
 hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_runtime_readiness.go
+hololive/hololive-youtube-producer/internal/runtime/retention/retention.go
 hololive/hololive-youtube-producer/internal/runtime/runtime.go
 hololive/hololive-youtube-producer/internal/communityshorts/constants.go
 hololive/hololive-youtube-producer/internal/communityshorts/operational_channels.go

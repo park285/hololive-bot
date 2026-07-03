@@ -181,6 +181,13 @@ case "${TARGET}" in
 esac
 
 if [[ "${build_target}" == true ]]; then
+    # producer Dockerfile은 빌드 컨텍스트를 ap-rsync 매니페스트로 프루닝하므로,
+    # 매니페스트 누락은 원격 rsync뿐 아니라 이 로컬 빌드도 깨뜨린다.
+    case "${TARGET}" in
+        youtube-producer|youtube-producer-c|"")
+            bash "${ROOT_DIR}/scripts/deploy/check-ap-rsync-manifest.sh"
+            ;;
+    esac
     if [[ -n "${TARGET}" ]]; then
         echo "[BUILD] ${TARGET}"
         "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build "${TARGET}"
