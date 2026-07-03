@@ -51,6 +51,12 @@
 | `YOUTUBE_PRODUCER_RETENTION_LIVE_SESSIONS_DAYS` | delete `ENDED` `youtube_live_sessions` rows whose `ended_at` is older than N days; `0` (default) disables cleanup | no |
 | `YOUTUBE_PRODUCER_RETENTION_VIEWER_SAMPLES_DAYS` | delete `youtube_live_viewer_samples` rows older than N days; `0` (default) disables cleanup. live_sessions cleanup only removes sessions with no remaining samples, so enable this together with `LIVE_SESSIONS_DAYS` to actually reclaim sessions | no |
 
+Retention deletion runs on `youtube-producer-c` only — the `main-ap` overlay sets
+compose-level defaults (viewer_samples 30d, stats_history/channel_snapshots 180d,
+live_sessions 365d). The a/b/d instances keep the process default `0` so hourly
+batch DELETEs never cross Tailscale; the advisory lock only serializes concurrent
+runs, it does not deduplicate per-instance schedules.
+
 ## Logs
 
 ```bash
