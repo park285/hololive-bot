@@ -210,6 +210,45 @@ func TestFetchAndLock(t *testing.T) {
 	}
 }
 
+func TestFetchAndLock_OrdersDueBeforeCreatedAt(t *testing.T) {
+	repository := testRepository(t)
+	ctx := context.Background()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "older-created", "msg"); err != nil {
+		t.Fatalf("enqueue older-created: %v", err)
+	}
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "earlier-due", "msg"); err != nil {
+		t.Fatalf("enqueue earlier-due: %v", err)
+	}
+
+	now := time.Now()
+	if _, err := repository.pool.Exec(ctx, `
+		UPDATE notification_delivery_outbox
+		SET created_at = $1, next_attempt_at = $2
+		WHERE room_id = 'older-created'
+	`, now.Add(-2*time.Hour), now.Add(-5*time.Minute)); err != nil {
+		t.Fatalf("shape older-created due fixture: %v", err)
+	}
+	if _, err := repository.pool.Exec(ctx, `
+		UPDATE notification_delivery_outbox
+		SET created_at = $1, next_attempt_at = $2
+		WHERE room_id = 'earlier-due'
+	`, now.Add(-1*time.Hour), now.Add(-10*time.Minute)); err != nil {
+		t.Fatalf("shape earlier-due fixture: %v", err)
+	}
+
+	items, err := repository.FetchAndLock(ctx, testWorkerA, 1, testLockTTL, testLease)
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(items))
+	}
+	if items[0].RoomID != "earlier-due" {
+		t.Fatalf("claimed room = %q, want earlier-due", items[0].RoomID)
+	}
+}
+
 func TestMarkSent(t *testing.T) {
 	repository := testRepository(t)
 	ctx := context.Background()

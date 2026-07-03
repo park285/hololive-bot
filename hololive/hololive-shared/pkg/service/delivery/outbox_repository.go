@@ -135,7 +135,7 @@ func (r *OutboxRepository) FetchAndLock(ctx context.Context, workerID string, ba
              OR lock_expires_at < $2
              OR (lock_expires_at IS NULL AND locked_at < $1)
           )
-        ORDER BY created_at ASC LIMIT $3
+        ORDER BY next_attempt_at ASC, created_at ASC, id ASC LIMIT $3
         FOR UPDATE SKIP LOCKED
     )
 	    UPDATE notification_delivery_outbox o

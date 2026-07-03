@@ -94,7 +94,8 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, a
 func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduated bool) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE members
-		SET is_graduated = $2
+		SET is_graduated = $2,
+			status = CASE WHEN $2 THEN 'graduated' ELSE 'active' END
 		WHERE id = $1
 	`, memberID, isGraduated)
 	if err != nil {
@@ -166,14 +167,18 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	// org/sync_source 기본값 설정 (Task 1 요구사항)
 	org := "Hololive" // 기존 API 호환을 위한 기본값
 	syncSource := "manual"
+	status := "active"
+	if member.IsGraduated {
+		status = "graduated"
+	}
 
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO members (
 			slug, channel_id, english_name, japanese_name, korean_name,
 			status, is_graduated, aliases, org, suborg, sync_source
 		)
-		VALUES ($1, $2, $3, $4, $5, 'active', $6, $7::jsonb, $8, NULL, $9)
-	`, slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, member.IsGraduated, string(aliasesJSON), org, syncSource)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, NULL, $10)
+	`, slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, status, member.IsGraduated, string(aliasesJSON), org, syncSource)
 	if err != nil {
 		return fmt.Errorf("failed to create member: %w", err)
 	}

@@ -35,6 +35,7 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/retention"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
@@ -49,6 +50,7 @@ type YouTubeProducerRuntime struct {
 	PhotoSync           photoSyncService
 	ConfigSubscriber    *configsub.Subscriber
 	PollTargetRefresher *polltarget.Refresher
+	RetentionCleaner    *retention.Cleaner
 
 	ServerAddr  string
 	HTTPServers *sharedserver.RuntimeHTTPServers
@@ -118,4 +120,19 @@ func (r *YouTubeProducerRuntime) handleRuntimeError(err error) {
 func (r *YouTubeProducerRuntime) shutdownRuntime(ctx context.Context) error {
 	r.shutdown(ctx)
 	return nil
+}
+
+func buildRetentionCleaner(infra *youtubeProducerInfrastructure, logger *slog.Logger) *retention.Cleaner {
+	if infra == nil || infra.postgresService == nil {
+		return nil
+	}
+	pool := infra.postgresService.GetPool()
+	if pool == nil {
+		return nil
+	}
+	cfg := retention.LoadConfig()
+	if !cfg.Enabled() {
+		return nil
+	}
+	return retention.NewCleaner(pool, cfg, logger)
 }

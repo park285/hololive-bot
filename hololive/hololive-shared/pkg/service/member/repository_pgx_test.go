@@ -71,6 +71,29 @@ func TestRepositoryPGXMutationsPreserveMemberSemantics(t *testing.T) {
 		t.Fatalf("aliases = %s, want created aliases", aliasesLiteral)
 	}
 
+	if err := repository.SetGraduation(ctx, memberID, true); err != nil {
+		t.Fatalf("SetGraduation(true) error = %v, want nil", err)
+	}
+	assertMemberGraduationState(t, pool, ctx, memberID, "graduated", true)
+	if err := repository.SetGraduation(ctx, memberID, false); err != nil {
+		t.Fatalf("SetGraduation(false) error = %v, want nil", err)
+	}
+	assertMemberGraduationState(t, pool, ctx, memberID, "active", false)
+
+	graduated := &domain.Member{
+		Name:        "Phase Two Graduated",
+		IsGraduated: true,
+		Aliases:     &domain.Aliases{Ko: []string{}, Ja: []string{}},
+	}
+	if err := repository.CreateMember(ctx, graduated); err != nil {
+		t.Fatalf("CreateMember(graduated) error = %v, want nil", err)
+	}
+	var graduatedID int
+	if err := pool.QueryRow(ctx, `SELECT id FROM members WHERE slug = $1`, graduated.Name).Scan(&graduatedID); err != nil {
+		t.Fatalf("query graduated member id: %v", err)
+	}
+	assertMemberGraduationState(t, pool, ctx, graduatedID, "graduated", true)
+
 	if err := repository.AddAlias(ctx, memberID, "ko", "슬라이스"); err != nil {
 		t.Fatalf("AddAlias() error = %v, want nil", err)
 	}
@@ -103,6 +126,25 @@ func TestRepositoryPGXMutationsPreserveMemberSemantics(t *testing.T) {
 		"InvalidRemoveType": func() error { return repository.RemoveAlias(ctx, memberID, "en", "phase") },
 	} {
 		assertMemberMutationError(t, name, run())
+	}
+}
+
+func assertMemberGraduationState(t *testing.T, pool *pgxpool.Pool, ctx context.Context, memberID int, wantStatus string, wantGraduated bool) {
+	t.Helper()
+
+	var (
+		status      string
+		isGraduated bool
+	)
+	if err := pool.QueryRow(ctx, `
+		SELECT status, is_graduated
+		FROM members
+		WHERE id = $1
+	`, memberID).Scan(&status, &isGraduated); err != nil {
+		t.Fatalf("query graduation state: %v", err)
+	}
+	if status != wantStatus || isGraduated != wantGraduated {
+		t.Fatalf("graduation state = status:%q is_graduated:%v, want %s/%v", status, isGraduated, wantStatus, wantGraduated)
 	}
 }
 

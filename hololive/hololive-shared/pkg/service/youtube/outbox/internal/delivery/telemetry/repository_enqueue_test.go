@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,7 +62,7 @@ func makeEnqueueTestRow(outboxID, deliveryID int64, ordinal int) domain.YouTubeN
 		ContentID:          "content-1",
 		PostID:             "post-1",
 		RoomID:             "room-1",
-		AlarmType:          domain.AlarmType("community"),
+		AlarmType:          domain.AlarmTypeCommunity,
 		AlarmSentAt:        &sentAt,
 		AlarmLatencyMillis: &latency,
 		DedupeKey:          "dedupe-key",
@@ -178,6 +179,33 @@ func TestEnqueuePreparedSkipsDuplicateWithinSingleBatch(t *testing.T) {
 	}
 }
 
+func TestTelemetrySurvivesOutboxRetentionDelete(t *testing.T) {
+	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
+	ctx := context.Background()
+
+	if err := repo.EnqueuePrepared(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
+		makeEnqueueTestRow(outboxID, 401, 1),
+	}); err != nil {
+		t.Fatalf("EnqueuePrepared() error = %v", err)
+	}
+
+	if _, err := counting.inner.Exec(ctx, `DELETE FROM youtube_notification_outbox WHERE id = $1`, outboxID); err != nil {
+		t.Fatalf("delete source outbox row: %v", err)
+	}
+
+	var count int
+	if err := counting.inner.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM youtube_notification_delivery_telemetry
+		WHERE outbox_id = $1
+	`, outboxID).Scan(&count); err != nil {
+		t.Fatalf("count telemetry rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("telemetry rows after source outbox delete = %d, want 1", count)
+	}
+}
+
 // chunk 단위 원자성은 의도된 계약이다: chunk 내 비-conflict 오류는 해당 chunk를
 // 통째로 롤백하고(이미 영속된 이전 chunk는 유지) 즉시 반환한다.
 func TestEnqueuePreparedChunkFailureRollsBackOnlyThatChunk(t *testing.T) {
@@ -189,10 +217,10 @@ func TestEnqueuePreparedChunkFailureRollsBackOnlyThatChunk(t *testing.T) {
 	for i := range size {
 		rows = append(rows, makeEnqueueTestRow(outboxID, int64(2000+i), 1))
 	}
-	rows[size-1].OutboxID = outboxID + 1_000_000
+	rows[size-1].ContentID = strings.Repeat("x", 51)
 
 	if err := repo.EnqueuePrepared(ctx, rows); err == nil {
-		t.Fatal("EnqueuePrepared with FK-violating row = nil error, want error")
+		t.Fatal("EnqueuePrepared with overlong content_id row = nil error, want error")
 	}
 
 	var count int

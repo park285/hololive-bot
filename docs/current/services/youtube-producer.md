@@ -27,6 +27,24 @@ as repo-side contract definitions and compose-path validation inputs.
 - Holodex photo sync on AP-C (`PHOTO_SYNC_ENABLED=true`), guarded by a global Valkey singleton lease with TTL failover. AP-B (`PHOTO_SYNC_ENABLED=false`) is a scraping/polling failover peer only and does not participate in PhotoSync.
 - Community/shorts/live/stats polling configuration
 - `youtube_notification_outbox` production paths for YouTube-derived events
+- Time-series retention cleanup for `youtube_stats_history`, `youtube_channel_stats_snapshots`, `youtube_live_sessions`, and `youtube_live_viewer_samples` (bounded batch deletes, advisory-locked single-runner, default off)
+
+## Retention cleanup
+
+App-level retention job (`internal/runtime/retention`) deletes rows older than a per-table cutoff in bounded batches, guarded by a single Postgres advisory lock so only one AP runs it at a time. It is opt-in and defaults to off. Within one tick the runner cleans `youtube_live_viewer_samples` first (delegating to the shared `poller.ViewerSampleCleaner`, which holds its own advisory lock), then the three table passes.
+
+| Env key | Default | Effect |
+|---|---|---|
+| `YOUTUBE_PRODUCER_RETENTION_STATS_HISTORY_DAYS` | `0` | `youtube_stats_history` rows with `time < now - N days` are batch-deleted; `0`/negative disables. |
+| `YOUTUBE_PRODUCER_RETENTION_CHANNEL_SNAPSHOTS_DAYS` | `0` | `youtube_channel_stats_snapshots` rows with `captured_at < now - N days`; `0`/negative disables. |
+| `YOUTUBE_PRODUCER_RETENTION_LIVE_SESSIONS_DAYS` | `0` | `youtube_live_sessions` rows with `status='ENDED' AND ended_at < now - N days`; `0`/negative disables. |
+| `YOUTUBE_PRODUCER_RETENTION_VIEWER_SAMPLES_DAYS` | `0` | `youtube_live_viewer_samples` for ENDED sessions older than N days (shared `ViewerSampleCleaner`); `0`/negative disables. |
+
+Default `0` on every key is the safety contract: with all keys unset the runner is not even started, so no production rows are deleted until an operator explicitly opts in. Every key clamps negative values to `0` so a misconfiguration cannot push the cutoff into the future and delete the whole history.
+
+`youtube_live_sessions` deletion is intentionally conservative: a session row is deleted only once it has no remaining `youtube_live_viewer_samples`, because the viewer-sample cleanup uses the session row as its join gate (there is no FK/cascade between the two tables). Running viewer-sample cleanup first in the same tick opens that gate. Consequently, enabling `..._LIVE_SESSIONS_DAYS` while `..._VIEWER_SAMPLES_DAYS` stays `0` leaves sessions that still have samples uncleaned — enable `..._VIEWER_SAMPLES_DAYS` as well to reclaim them.
+
+Batch size and interval default to `1000` rows/batch and `1h`.
 
 ## Provides
 

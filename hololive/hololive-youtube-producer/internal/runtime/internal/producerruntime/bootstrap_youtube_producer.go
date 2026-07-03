@@ -202,6 +202,7 @@ func newYouTubeProducerRuntime(
 		PhotoSync:           buildRuntimePhotoSyncService(appConfig, features, infra, logger),
 		ConfigSubscriber:    configSubscriber,
 		PollTargetRefresher: youtubeDeps.pollTargetRefresher,
+		RetentionCleaner:    buildRetentionCleaner(infra, logger),
 		ServerAddr:          httpServers.Addr(),
 		HTTPServers:         httpServers,
 		Readiness:           readinessState,

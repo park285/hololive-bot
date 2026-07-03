@@ -23,11 +23,17 @@ CREATE INDEX IF NOT EXISTS idx_members_org ON members(org);
 CREATE INDEX IF NOT EXISTS idx_members_org_english_name ON members(org, english_name);
 
 -- Step 5: 개인세 VTuber 멤버 삽입 (sync_source='manual')
+-- 대상 없는 ON CONFLICT DO NOTHING은 slug UNIQUE가 008에서 사라진 뒤 아무것도 막지 못했다
+-- (id는 매번 새로 채번되어 충돌 불발) — 064/068과 같은 NOT EXISTS 가드로 멱등을 보장한다.
 INSERT INTO members (slug, channel_id, english_name, japanese_name, korean_name, org, sync_source, status, is_graduated, aliases)
-VALUES 
+SELECT v.slug, v.channel_id, v.english_name, v.japanese_name, v.korean_name, v.org, v.sync_source, v.status, v.is_graduated, v.aliases::jsonb
+FROM (VALUES
   ('yuuki-sakuna', 'UCrV1Hf5r8P148idjoSfrGEQ', 'Yuuki Sakuna', '結城さくな', '유우키 사쿠나', 'Indie', 'manual', 'active', false, '{"ko":["사쿠나","사쿠탄"],"ja":["さくな","さくたん"]}'),
   ('sameko-saba', 'UCxsZ6NCzjU_t4YSxQLBcM5A', 'Sameko Saba', '鮫子サバ', '사메코 사바', 'Indie', 'manual', 'active', false, '{"ko":["사바","사메코"],"ja":["サバ","鮫子"]}')
-ON CONFLICT DO NOTHING;
+) AS v(slug, channel_id, english_name, japanese_name, korean_name, org, sync_source, status, is_graduated, aliases)
+WHERE NOT EXISTS (
+  SELECT 1 FROM members m WHERE m.channel_id = v.channel_id OR m.slug = v.slug
+);
 
 COMMENT ON COLUMN members.org IS '소속 조직 (Hololive, Indie 등)';
 COMMENT ON COLUMN members.suborg IS '하위 조직 또는 그룹 (Gen1, EN, JP 등)';

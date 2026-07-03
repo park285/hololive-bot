@@ -134,7 +134,11 @@ func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string,
 	query := `
 		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at
 		FROM alarms
-		WHERE channel_id = $1 AND $2 = ANY(alarm_types)
+		WHERE channel_id = $1
+		  AND (
+		        alarm_types @> ARRAY[$2::alarm_type]
+		     OR cardinality(alarm_types) = 0
+		  )
 		ORDER BY created_at ASC
 	`
 
@@ -150,16 +154,26 @@ func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string,
 func (r *Repository) GetMemberName(ctx context.Context, channelID string) (string, error) {
 	query := `
 		WITH latest_alarm_name AS (
-			SELECT channel_id, member_name
+			SELECT member_name
 			FROM alarms
 			WHERE channel_id = $1
+			  AND member_name IS NOT NULL
+			  AND member_name <> ''
 			ORDER BY created_at DESC
 			LIMIT 1
+		),
+		member_display_name AS (
+			SELECT COALESCE(NULLIF(short_korean_name, ''), NULLIF(korean_name, ''), '') AS member_name
+			FROM members
+			WHERE channel_id = $1
+			ORDER BY id ASC
+			LIMIT 1
 		)
-		SELECT COALESCE(NULLIF(m.short_korean_name, ''), NULLIF(m.korean_name, ''), NULLIF(a.member_name, ''), '')
-		FROM latest_alarm_name a
-		LEFT JOIN members m ON m.channel_id = a.channel_id
-		LIMIT 1
+		SELECT COALESCE(
+			NULLIF((SELECT member_name FROM member_display_name), ''),
+			(SELECT member_name FROM latest_alarm_name),
+			''
+		)
 	`
 
 	var memberName string
@@ -215,18 +229,34 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 
 func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, error) {
 	query := `
-		WITH latest_alarm_names AS (
+		WITH alarm_channels AS (
+			SELECT DISTINCT channel_id
+			FROM alarms
+			WHERE channel_id IS NOT NULL AND channel_id != ''
+		),
+		latest_alarm_names AS (
 			SELECT DISTINCT ON (channel_id) channel_id, member_name
 			FROM alarms
 			WHERE channel_id IS NOT NULL AND channel_id != ''
+			  AND member_name IS NOT NULL
+			  AND member_name <> ''
 			ORDER BY channel_id, created_at DESC
+		),
+		member_display_names AS (
+			SELECT DISTINCT ON (channel_id)
+			       channel_id,
+			       COALESCE(NULLIF(short_korean_name, ''), NULLIF(korean_name, ''), '') AS member_name
+			FROM members
+			WHERE channel_id IS NOT NULL AND channel_id != ''
+			ORDER BY channel_id, id ASC
 		)
-		SELECT a.channel_id,
-		       COALESCE(NULLIF(m.short_korean_name, ''), NULLIF(m.korean_name, ''), NULLIF(a.member_name, ''), '') AS member_name
-		FROM latest_alarm_names a
-		LEFT JOIN members m ON m.channel_id = a.channel_id
-		WHERE COALESCE(NULLIF(m.short_korean_name, ''), NULLIF(m.korean_name, ''), NULLIF(a.member_name, ''), '') != ''
-		ORDER BY a.channel_id
+		SELECT c.channel_id,
+		       COALESCE(NULLIF(m.member_name, ''), a.member_name, '') AS member_name
+		FROM alarm_channels c
+		LEFT JOIN latest_alarm_names a ON a.channel_id = c.channel_id
+		LEFT JOIN member_display_names m ON m.channel_id = c.channel_id
+		WHERE COALESCE(NULLIF(m.member_name, ''), a.member_name, '') != ''
+		ORDER BY c.channel_id
 	`
 
 	rows, err := r.pool.Query(ctx, query)

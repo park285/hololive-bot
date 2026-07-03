@@ -189,7 +189,10 @@ func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID
 		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at
 		FROM alarms
 		WHERE channel_id = $1
-		  AND $2::alarm_type = ANY(CASE WHEN cardinality(alarm_types) = 0 THEN ARRAY['LIVE', 'COMMUNITY', 'SHORTS']::alarm_type[] ELSE alarm_types END)
+		  AND (
+		        alarm_types @> ARRAY[$2::alarm_type]
+		     OR cardinality(alarm_types) = 0
+		  )
 		ORDER BY created_at ASC
 	`, channelID, string(alarmType))
 	if err != nil {

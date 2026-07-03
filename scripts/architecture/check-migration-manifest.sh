@@ -74,4 +74,30 @@ if [[ "${manifest_file_sorted}" != "${sql_joined}" ]]; then
   exit 1
 fi
 
+# 과거 브랜치 병행으로 이미 존재하는 번호 충돌(045/051/053)만 예외 — 신규 충돌은 차단한다.
+grandfathered_dup_prefixes="045 051 053"
+dup_prefixes="$(printf '%s\n' "${sql_files[@]}" | sed -E 's/^([0-9]+).*/\1/' | sort | uniq -d)"
+for prefix in ${dup_prefixes}; do
+  if [[ " ${grandfathered_dup_prefixes} " != *" ${prefix} "* ]]; then
+    echo "FAIL: duplicate migration number prefix ${prefix} (새 파일은 마지막 번호+1을 사용)" >&2
+    exit 1
+  fi
+done
+
+# 무방비 SET NOT NULL은 ACCESS EXCLUSIVE 락을 쥔 채 전 행을 스캔한다.
+# 유효한 CHECK가 선재하면 PG가 스캔을 생략하므로, NOT VALID → VALIDATE CONSTRAINT 레시피를
+# 같은 파일에서 강제한다 (레시피: scripts/migrations/CONVENTIONS.md). 아래는 레시피 도입 전 파일들.
+grandfathered_set_not_null="016-add-multi-group-support.sql 022-add-auth-acl-major-event-tables.sql 034_add_major_event_link_check_columns.sql 045_add_delivery_path_to_youtube_delivery_telemetry.sql 047_add_post_id_to_youtube_delivery_telemetry.sql 050_add_observation_window_to_youtube_delivery_telemetry.sql 053_add_canonical_content_identity_to_youtube_content_alarm_tracking.sql 069_normalize_youtube_delivery_telemetry_observation_runtime.sql"
+for file in "${sql_files[@]}"; do
+  if grep -qE 'SET[[:space:]]+NOT[[:space:]]+NULL' "${MIGRATIONS_DIR}/${file}"; then
+    if [[ " ${grandfathered_set_not_null} " == *" ${file} "* ]]; then
+      continue
+    fi
+    if ! grep -q 'NOT VALID' "${MIGRATIONS_DIR}/${file}" || ! grep -q 'VALIDATE CONSTRAINT' "${MIGRATIONS_DIR}/${file}"; then
+      echo "FAIL: ${file} 에 무방비 SET NOT NULL — NOT VALID CHECK + VALIDATE CONSTRAINT 선행 필요 (CONVENTIONS.md 참고)" >&2
+      exit 1
+    fi
+  fi
+done
+
 echo "OK: migration manifest matches SQL files"

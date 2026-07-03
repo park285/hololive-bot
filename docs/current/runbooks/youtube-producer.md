@@ -46,6 +46,9 @@
 | `SCRAPER_BACKFILL_ENABLED=false` | optional secondary poller identities for coverage; disabled by default | no |
 | `SCRAPER_BACKFILL_*_INTERVAL_SECONDS` | backfill poller intervals for shorts/community/live when enabled | no |
 | `SCRAPER_BACKFILL_TARGET_GROUP=notification` | initial backfill target group; only `notification` is accepted | no |
+| `YOUTUBE_PRODUCER_RETENTION_STATS_HISTORY_DAYS` | delete `youtube_stats_history` rows older than N days; `0` (default) disables cleanup (infinite retention) | no |
+| `YOUTUBE_PRODUCER_RETENTION_CHANNEL_SNAPSHOTS_DAYS` | delete `youtube_channel_stats_snapshots` rows older than N days; `0` (default) disables cleanup | no |
+| `YOUTUBE_PRODUCER_RETENTION_LIVE_SESSIONS_DAYS` | delete `ENDED` `youtube_live_sessions` rows whose `ended_at` is older than N days; `0` (default) disables cleanup | no |
 
 ## Logs
 

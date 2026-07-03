@@ -51,6 +51,10 @@ func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, er
 		go r.PhotoSync.Start(ctx)
 		r.Logger.Info("Photo sync service started", slog.String("runtime", r.runtimeName()))
 	}
+	if r.RetentionCleaner != nil {
+		go r.RetentionCleaner.Start(ctx)
+		r.Logger.Info("YouTube retention cleaner started", slog.String("runtime", r.runtimeName()))
+	}
 }
 
 func (r *YouTubeProducerRuntime) startHTTPServer(errCh chan<- error) {

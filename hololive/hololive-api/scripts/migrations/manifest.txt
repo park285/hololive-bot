@@ -88,3 +88,7 @@
 088 092_seed_livecard_strings.sql
 089 093_seed_profilecard_strings.sql
 090 094_seed_rankcard_strings.sql
+091 095_cleanup_redundant_indexes.sql
+092 096_sql_integrity_retention_followups.sql
+093 097_integrity_and_type_unification.sql
+094 098_type_philosophy_unification.sql

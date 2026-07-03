@@ -10,8 +10,10 @@ BEGIN;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS chzzk_channel_id VARCHAR(32);
 
 -- Step 2: 스텔라이브 멤버 삽입
+-- 대상 없는 ON CONFLICT DO NOTHING은 slug UNIQUE 부재 상태에서 무방비 — NOT EXISTS 가드로 멱등 보장(064/068 관례).
 INSERT INTO members (slug, channel_id, english_name, japanese_name, korean_name, org, sync_source, status, is_graduated, aliases, chzzk_channel_id)
-VALUES 
+SELECT v.slug, v.channel_id, v.english_name, v.japanese_name, v.korean_name, v.org, v.sync_source, v.status, v.is_graduated, v.aliases::jsonb, v.chzzk_channel_id
+FROM (VALUES
   ('airi-kanna', 'UC6YnTqZidFg4WUiXpiCtSSQ', 'Airi Kanna', '藍里かんな', '아이리 칸나', 'Stellive', 'holodex', 'graduated', true, '{"ko":["칸나","대장용","락용","간나"],"ja":["藍里","かんな"]}', '82136e09328ffc9143924707293a566d'),
   ('ayatsuno-yuni', 'UClbYIn9LDbbFZ9w2shX3K0g', 'Ayatsuno Yuni', '純角ユニ', '아야츠노 유니', 'Stellive', 'holodex', 'active', false, '{"ko":["유니","유니링","유니찌","정윤희"],"ja":["純角","ユニ"]}', 'f997979606554ef4827038e244845582'),
   ('arahashi-tabi', 'UCq-U-D8O6_6e4X6r-z9V0w', 'Arahashi Tabi', '荒橋タビ', '아라하시 타비', 'Stellive', 'holodex', 'active', false, '{"ko":["타비","뿡댕이","댕댕이","닌자타비"],"ja":["荒橋","タビ"]}', '264b3c95982881a7b6cf09e46a6f1d17'),
@@ -20,7 +22,10 @@ VALUES
   ('akane-lize', 'UC9m5xP6u69zXpD7MscY-uYQ', 'Akane Lize', '朱音リゼ', '아카네 리제', 'Stellive', 'holodex', 'active', false, '{"ko":["리제","리제황녀","피엔나","저챗퀸","천마"],"ja":["朱音","リゼ"]}', '0013898687707470f1a547781b046043'),
   ('tenko-shibuki', 'UCYxLMfeX1CbMBll9MsGlzmw', 'Tenko Shibuki', '天鼓紫吹', '텐코 시부키', 'Stellive', 'holodex', 'active', false, '{"ko":["시부키","부키","북대장","땡코 시부키"],"ja":["天鼓","紫吹"]}', '0009623253b7c4d51965f7c3554e2f9d'),
   ('hanako-nana', 'UCcA21_PzN1EhNe7xS4MJGsQ', 'Hanako Nana', '華子ナナ', '하나코 나나', 'Stellive', 'holodex', 'active', false, '{"ko":["나나","나교수님","77년생","쌍칠아재","굴리트"],"ja":["華子","ナナ"]}', 'd0b98f2192780362c12b7754d92911b6')
-ON CONFLICT DO NOTHING;
+) AS v(slug, channel_id, english_name, japanese_name, korean_name, org, sync_source, status, is_graduated, aliases, chzzk_channel_id)
+WHERE NOT EXISTS (
+  SELECT 1 FROM members m WHERE m.channel_id = v.channel_id OR m.slug = v.slug
+);
 
 COMMIT;
 

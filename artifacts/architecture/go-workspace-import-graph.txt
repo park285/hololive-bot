@@ -1152,6 +1152,7 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerrunt
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/kapu/hololive-youtube-producer/internal/runtime/polling
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/kapu/hololive-youtube-producer/internal/runtime/readiness
+github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/kapu/hololive-youtube-producer/internal/runtime/retention
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-youtube-producer/internal/runtime/internal/producerruntime -> github.com/park285/shared-go/pkg/runtime/lifecycle
@@ -1179,6 +1180,9 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-youtube-producer/internal/communityshorts
 github.com/kapu/hololive-youtube-producer/internal/runtime/readiness -> github.com/kapu/hololive-shared/pkg/health
+github.com/kapu/hololive-youtube-producer/internal/runtime/retention -> github.com/kapu/hololive-shared/pkg/dbtest
+github.com/kapu/hololive-youtube-producer/internal/runtime/retention -> github.com/kapu/hololive-shared/pkg/service/youtube/poller
+github.com/kapu/hololive-youtube-producer/internal/runtime/retention -> github.com/park285/shared-go/pkg/envutil
 github.com/park285/shared-go/pkg/db/pgxdb -> github.com/park285/shared-go/pkg/envutil
 github.com/park285/shared-go/pkg/db/pgxdb -> github.com/park285/shared-go/pkg/retry
 github.com/park285/shared-go/pkg/ginjson -> github.com/park285/shared-go/pkg/ginjson
@@ -1186,8 +1190,10 @@ github.com/park285/shared-go/pkg/ginjson -> github.com/park285/shared-go/pkg/jso
 github.com/park285/shared-go/pkg/healthprobe -> github.com/park285/shared-go/pkg/h3
 github.com/park285/shared-go/pkg/httputil -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/jsonutil -> github.com/park285/shared-go/pkg/json
+github.com/park285/shared-go/pkg/llm -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/llm -> github.com/park285/shared-go/pkg/jsonutil
 github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/httputil
+github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/llm
 github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/llm/openaipreset
 github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/logging

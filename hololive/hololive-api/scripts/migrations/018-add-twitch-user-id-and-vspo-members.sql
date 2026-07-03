@@ -44,14 +44,19 @@ UPDATE members SET twitch_user_id = 'moonahoshinova' WHERE english_name = 'Moona
 UPDATE members SET twitch_user_id = 'vestiazeta_hololive' WHERE english_name = 'Vestia Zeta' AND twitch_user_id IS NULL;
 
 -- Step 4: VSPO 멤버 삽입
+-- 대상 없는 ON CONFLICT DO NOTHING은 slug UNIQUE 부재 상태에서 무방비 — NOT EXISTS 가드로 멱등 보장(064/068 관례).
 INSERT INTO members (slug, channel_id, english_name, japanese_name, korean_name, org, sync_source, status, is_graduated, aliases, twitch_user_id)
-VALUES
+SELECT v.slug, v.channel_id, v.english_name, v.japanese_name, v.korean_name, v.org, v.sync_source, v.status, v.is_graduated, v.aliases::jsonb, v.twitch_user_id
+FROM (VALUES
   ('tachibana-hinano', 'UCvUc0m317LWTTPZoBQV479A', 'Tachibana Hinano', '橘ひなの', '타치바나 히나노', 'VSPO', 'manual', 'active', false, '{"ko":["타치바나 히나노","히나노","히나땅"],"ja":["橘ひなの","ひなの"]}', 'hinanotachiba7'),
   ('ichinose-uruha', 'UC5LyYg6cCA4yHEYvtUsir3g', 'Ichinose Uruha', '一ノ瀬うるは', '이치노세 우루하', 'VSPO', 'manual', 'active', false, '{"ko":["이치노세 우루하","우루하"],"ja":["一ノ瀬うるは","うるは"]}', 'uruhaichinose'),
   ('kaga-nazuna', 'UCiMG6VdScBabPhJ1ZtaVmbw', 'Kaga Nazuna', '花芽なずな', '카가 나즈나', 'VSPO', 'manual', 'active', false, '{"ko":["카가 나즈나","나즈나"],"ja":["花芽なずな","なずな"]}', 'nazunakaga'),
   ('kaminari-qpi', 'UCMp55EbT_ZlqiMS3lCj01BQ', 'Kaminari Qpi', '神成きゅぴ', '카미나리 큐피', 'VSPO', 'manual', 'active', false, '{"ko":["카미나리 큐피","큐피"],"ja":["神成きゅぴ","きゅぴ"]}', 'kaminariqpi'),
   ('yakumo-beni', 'UCjXBuHmWkieBApgBhDuJMMQ', 'Yakumo Beni', '八雲べに', '야쿠모 베니', 'VSPO', 'manual', 'active', false, '{"ko":["야쿠모 베니","베니"],"ja":["八雲べに","べに"]}', 'yakumobeni')
-ON CONFLICT DO NOTHING;
+) AS v(slug, channel_id, english_name, japanese_name, korean_name, org, sync_source, status, is_graduated, aliases, twitch_user_id)
+WHERE NOT EXISTS (
+  SELECT 1 FROM members m WHERE m.channel_id = v.channel_id OR m.slug = v.slug
+);
 
 COMMIT;
 
