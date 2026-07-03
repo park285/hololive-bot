@@ -790,9 +790,9 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/logging/log_and_wrap.go
 ../shared-go/pkg/logging/log_warn.go
 ../shared-go/pkg/logging/logging.go
-../shared-go/pkg/logging/archive/archive.go
-../shared-go/pkg/logging/archive/backups.go
-../shared-go/pkg/logging/archive/permissions.go
+../shared-go/pkg/logging/internal/archive/archive.go
+../shared-go/pkg/logging/internal/archive/backups.go
+../shared-go/pkg/logging/internal/archive/permissions.go
 ../shared-go/pkg/logging/operation.go
 ../shared-go/pkg/logging/sanitize.go
 ../shared-go/pkg/retry/doc.go

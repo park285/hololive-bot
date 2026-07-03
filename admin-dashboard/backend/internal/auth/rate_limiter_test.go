@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,67 +36,62 @@ func TestRateLimiterSuccessClearsFailures(t *testing.T) {
 	require.Equal(t, 1, limiter.RecordFailure("203.0.113.3"))
 }
 
-func TestRateLimiterCleanupDropsStaleEntries(t *testing.T) {
-	limiter := NewLoginRateLimiter()
-	limiter.RecordFailure("203.0.113.4")
-	for range 5 {
-		limiter.RecordFailure("203.0.113.5")
-	}
+func TestRateLimiterWindowExpiryStartsFreshAttempt(t *testing.T) {
+	now := time.Now()
+	limiter := httputil.NewLoginFailureRateLimiter(httputil.LoginFailureRateLimiterOptions{
+		Now: func() time.Time { return now },
+	})
+	ip := "203.0.113.4"
 
-	limiter.cleanup(time.Now().Add(time.Hour))
-
-	limiter.mu.Lock()
-	defer limiter.mu.Unlock()
-	require.Empty(t, limiter.attempts)
+	require.Equal(t, 1, limiter.RecordFailure(ip))
+	now = now.Add(6 * time.Minute)
+	require.Equal(t, 1, limiter.RecordFailure(ip))
 }
 
-func TestRateLimiterCleanupKeepsActiveLockoutAfterWindowExpires(t *testing.T) {
-	limiter := NewLoginRateLimiter()
+func TestRateLimiterKeepsActiveLockoutAfterWindowExpires(t *testing.T) {
 	now := time.Now()
-	limiter.now = func() time.Time { return now }
+	limiter := httputil.NewLoginFailureRateLimiter(httputil.LoginFailureRateLimiterOptions{
+		Now: func() time.Time { return now },
+	})
 	ip := "203.0.113.6"
-	limiter.attempts[ip] = attemptInfo{
-		count:        limiter.maxAttempts,
-		firstAttempt: now.Add(-10 * time.Minute),
-		lockedUntil:  now.Add(10 * time.Minute),
-	}
 
-	limiter.cleanup(now)
+	for range 5 {
+		limiter.RecordFailure(ip)
+	}
+	now = now.Add(10 * time.Minute)
 
 	allowed, retryAfter := limiter.IsAllowed(ip)
 	require.False(t, allowed)
 	require.Greater(t, retryAfter, time.Duration(0))
-
-	limiter.mu.Lock()
-	defer limiter.mu.Unlock()
-	require.Contains(t, limiter.attempts, ip)
 }
 
-func TestRateLimiterCleanupDropsExpiredLockoutAndAllowsLogin(t *testing.T) {
-	limiter := NewLoginRateLimiter()
+func TestRateLimiterExpiredLockoutAllowsLogin(t *testing.T) {
 	now := time.Now()
-	limiter.now = func() time.Time { return now }
+	limiter := httputil.NewLoginFailureRateLimiter(httputil.LoginFailureRateLimiterOptions{
+		Now: func() time.Time { return now },
+	})
 	ip := "203.0.113.7"
-	limiter.attempts[ip] = attemptInfo{
-		count:        limiter.maxAttempts,
-		firstAttempt: now.Add(-10 * time.Minute),
-		lockedUntil:  now.Add(-time.Minute),
+
+	for range 5 {
+		limiter.RecordFailure(ip)
 	}
-
-	limiter.cleanup(now)
-
-	limiter.mu.Lock()
-	require.NotContains(t, limiter.attempts, ip)
-	limiter.mu.Unlock()
+	now = now.Add(16 * time.Minute)
 
 	allowed, retryAfter := limiter.IsAllowed(ip)
 	require.True(t, allowed)
 	require.Zero(t, retryAfter)
+	require.Equal(t, 1, limiter.RecordFailure(ip))
 }
 
 func TestRateLimiterStartStop(t *testing.T) {
 	limiter := NewLoginRateLimiter()
 	limiter.Start()
+	limiter.Stop()
+	limiter.Stop()
+}
+
+func TestRateLimiterStopBeforeStart(t *testing.T) {
+	limiter := NewLoginRateLimiter()
 	limiter.Stop()
 	limiter.Stop()
 }

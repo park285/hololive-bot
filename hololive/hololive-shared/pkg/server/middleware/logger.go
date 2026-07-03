@@ -146,8 +146,8 @@ func requestDeviceInfo(c *gin.Context) string {
 }
 
 func appendOptionalHeaderAttr(attrs []slog.Attr, key, value string) []slog.Attr {
-	if value := strings.TrimSpace(value); value != "" {
-		return append(attrs, slog.String(key, truncateHeader(value)))
+	if trimmed := strings.TrimSpace(value); trimmed != "" {
+		return append(attrs, slog.String(key, truncateHeader(trimmed)))
 	}
 	return attrs
 }

@@ -40,12 +40,12 @@ trap cleanup EXIT
 find "${SHARED_GO_PKG_DIR}" -type f -name '*.go' ! -name '*_test.go' -print \
   | sed "s#^${SHARED_GO_PKG_DIR}/##" \
   | xargs -r -n1 dirname \
-  | sort -u > "${tmp_found}"
+  | LC_ALL=C sort -u > "${tmp_found}"
 
-grep -vE '^\s*(#|$)' "${ALLOWLIST_FILE}" | sort -u > "${tmp_allowed}"
+grep -vE '^\s*(#|$)' "${ALLOWLIST_FILE}" | LC_ALL=C sort -u > "${tmp_allowed}"
 
-new_packages="$(comm -13 "${tmp_allowed}" "${tmp_found}" || true)"
-stale_allowlist="$(comm -23 "${tmp_allowed}" "${tmp_found}" || true)"
+new_packages="$(LC_ALL=C comm -13 "${tmp_allowed}" "${tmp_found}" || true)"
+stale_allowlist="$(LC_ALL=C comm -23 "${tmp_allowed}" "${tmp_found}" || true)"
 
 if [[ -n "${new_packages}" ]]; then
   echo "FAIL: new shared-go packages detected (not in allowlist)" >&2

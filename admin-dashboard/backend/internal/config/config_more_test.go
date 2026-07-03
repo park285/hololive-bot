@@ -1,7 +1,7 @@
 package config
 
 import (
-	"net"
+	"net/netip"
 	"testing"
 	"time"
 )
@@ -15,7 +15,7 @@ func TestHB04ParseTrustedProxyCIDRs_e8fc8b7d(t *testing.T) {
 		if len(got) != 2 {
 			t.Fatalf("len = %d, want 2", len(got))
 		}
-		if !got[0].Contains(net.ParseIP("10.5.5.5")) {
+		if !got[0].Contains(netip.MustParseAddr("10.5.5.5")) {
 			t.Fatal("first cidr must contain 10.5.5.5")
 		}
 	})

@@ -49,7 +49,7 @@
 
 ```bash
 go work sync
-go build ./shared-go/... \
+go build ../shared-go/... \
   ./hololive/hololive-shared/... \
   ./hololive/hololive-api/... \
   ./hololive/hololive-alarm-worker/... \
@@ -59,7 +59,7 @@ go build ./shared-go/... \
 ### 2. 전체 단위 테스트 실행 (Test)
 
 ```bash
-go test ./shared-go/... \
+go test ../shared-go/... \
   ./hololive/hololive-shared/... \
   ./hololive/hololive-api/... \
   ./hololive/hololive-alarm-worker/... \

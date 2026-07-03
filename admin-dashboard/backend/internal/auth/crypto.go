@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"strings"
 
+	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
@@ -66,21 +67,7 @@ func ValidateCSRFToken(sessionID, token, secret string) bool {
 }
 
 func ConstantTimeStringEqual(left, right string) bool {
-	lb := []byte(left)
-	rb := []byte(right)
-	maxLen := max(len(lb), len(rb))
-	diff := len(lb) ^ len(rb)
-	for idx := range maxLen {
-		var l, r byte
-		if idx < len(lb) {
-			l = lb[idx]
-		}
-		if idx < len(rb) {
-			r = rb[idx]
-		}
-		diff |= int(l ^ r)
-	}
-	return diff == 0
+	return httputil.ConstantTimeStringEqual(left, right)
 }
 
 func TruncateSessionID(sessionID string) string {

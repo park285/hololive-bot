@@ -1432,8 +1432,8 @@
   "info": {
     "description": "",
     "license": {
-      "identifier": "MIT",
-      "name": "MIT"
+      "identifier": "Apache-2.0",
+      "name": "Apache-2.0"
     },
     "title": "admin-dashboard",
     "version": "0.1.0-go"

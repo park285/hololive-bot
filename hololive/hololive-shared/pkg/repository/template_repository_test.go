@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB(t *testing.T) *repository.TemplateRepository {
+func newTemplateRepository(t *testing.T) *repository.TemplateRepository {
 	t.Helper()
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -42,7 +42,7 @@ func setupTestDB(t *testing.T) *repository.TemplateRepository {
 }
 
 func TestTemplateRepository_List(t *testing.T) {
-	repo := setupTestDB(t)
+	repo := newTemplateRepository(t)
 	ctx := context.Background()
 
 	t.Run("empty when key filter has no rows", func(t *testing.T) {
@@ -76,7 +76,7 @@ func TestTemplateRepository_List(t *testing.T) {
 }
 
 func TestTemplateRepository_Upsert(t *testing.T) {
-	repo := setupTestDB(t)
+	repo := newTemplateRepository(t)
 	ctx := context.Background()
 
 	t.Run("insert default", func(t *testing.T) {
@@ -151,7 +151,7 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 }
 
 func TestTemplateRepository_DeleteOverride(t *testing.T) {
-	repo := setupTestDB(t)
+	repo := newTemplateRepository(t)
 	ctx := context.Background()
 
 	channelID := "room_del"
@@ -167,7 +167,7 @@ func TestTemplateRepository_DeleteOverride(t *testing.T) {
 }
 
 func TestTemplateRepository_GetByKey(t *testing.T) {
-	repo := setupTestDB(t)
+	repo := newTemplateRepository(t)
 	ctx := context.Background()
 
 	_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxVideo, nil, "default video")
@@ -191,7 +191,7 @@ func TestTemplateRepository_GetByKey(t *testing.T) {
 }
 
 func TestTemplateRepository_Revisions(t *testing.T) {
-	repo := setupTestDB(t)
+	repo := newTemplateRepository(t)
 	ctx := context.Background()
 
 	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyOutboxMilestone, nil, "v1")
@@ -212,7 +212,7 @@ func TestTemplateRepository_Revisions(t *testing.T) {
 }
 
 func TestTemplateRepository_PruneOldRevisions(t *testing.T) {
-	repo := setupTestDB(t)
+	repo := newTemplateRepository(t)
 	ctx := context.Background()
 
 	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyCmdHelp, nil, "help")
@@ -232,7 +232,7 @@ func TestTemplateRepository_PruneOldRevisions(t *testing.T) {
 }
 
 func TestTemplateRepository_PruneOldRevisions_KeepZeroNoop(t *testing.T) {
-	repo := setupTestDB(t)
+	repo := newTemplateRepository(t)
 	ctx := context.Background()
 
 	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyCmdHelp, nil, "help")

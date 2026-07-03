@@ -9,7 +9,6 @@ import (
 	"github.com/park285/shared-go/pkg/jsonutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func (c *APIClient) DoRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error) {
@@ -22,7 +21,7 @@ func (c *APIClient) DoRequest(ctx context.Context, method, path string, params u
 	}
 
 	state := holodexRequestRetryState{
-		maxAttempts:       util.Min(1+constants.RetryConfig.MaxAttempts, 10),
+		maxAttempts:       min(1+constants.RetryConfig.MaxAttempts, 10),
 		maxTimeoutRetries: 3,
 	}
 

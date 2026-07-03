@@ -28,28 +28,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 )
 
-func TestMax(t *testing.T) {
-	t.Parallel()
-
-	if got := Max(10, 3); got != 10 {
-		t.Fatalf("Max(10, 3) = %d, want 10", got)
-	}
-	if got := Max(-1, 5); got != 5 {
-		t.Fatalf("Max(-1, 5) = %d, want 5", got)
-	}
-}
-
-func TestMin(t *testing.T) {
-	t.Parallel()
-
-	if got := Min(10, 3); got != 3 {
-		t.Fatalf("Min(10, 3) = %d, want 3", got)
-	}
-	if got := Min(-1, 5); got != -1 {
-		t.Fatalf("Min(-1, 5) = %d, want -1", got)
-	}
-}
-
 func TestUnique(t *testing.T) {
 	t.Parallel()
 

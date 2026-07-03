@@ -15,12 +15,15 @@ github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/
 github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/internal/static
 github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/internal/status
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/ginjson
+github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/json
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/runtime/lifecycle
+github.com/kapu/admin-dashboard/internal/auth -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/admin-dashboard/internal/auth -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/admin-dashboard/internal/config -> github.com/park285/shared-go/pkg/envutil
+github.com/kapu/admin-dashboard/internal/config -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/admin-dashboard/internal/docker -> github.com/kapu/admin-dashboard/internal/httpx
 github.com/kapu/admin-dashboard/internal/docker -> github.com/park285/shared-go/pkg/json
 github.com/kapu/admin-dashboard/internal/holo -> github.com/kapu/admin-dashboard/internal/httpx
@@ -697,6 +700,7 @@ github.com/kapu/hololive-shared/pkg/server/internal/httpserver -> github.com/par
 github.com/kapu/hololive-shared/pkg/server/internal/httpserver -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/kapu/hololive-shared/pkg/contracts/common
+github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/httputil/ginauth
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/stringutil
@@ -803,7 +807,6 @@ github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> 
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/service/ratelimit
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/service/youtube/livestatus
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
-github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/holodex/internal/holodexprovider -> github.com/park285/shared-go/pkg/logging
@@ -1189,6 +1192,8 @@ github.com/park285/shared-go/pkg/ginjson -> github.com/park285/shared-go/pkg/gin
 github.com/park285/shared-go/pkg/ginjson -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/healthprobe -> github.com/park285/shared-go/pkg/h3
 github.com/park285/shared-go/pkg/httputil -> github.com/park285/shared-go/pkg/json
+github.com/park285/shared-go/pkg/httputil/ginauth -> github.com/park285/shared-go/pkg/httputil
+github.com/park285/shared-go/pkg/httputil/ginauth -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/jsonutil -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/llm -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/llm -> github.com/park285/shared-go/pkg/jsonutil
@@ -1197,7 +1202,7 @@ github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-g
 github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/llm
 github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/llm/openaipreset
 github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/logging
-github.com/park285/shared-go/pkg/logging -> github.com/park285/shared-go/pkg/logging/archive
+github.com/park285/shared-go/pkg/logging -> github.com/park285/shared-go/pkg/logging/internal/archive
 github.com/park285/shared-go/pkg/promptguard -> github.com/park285/shared-go/pkg/promptguard
 github.com/park285/shared-go/pkg/retry -> github.com/park285/shared-go/pkg/backoff
 github.com/park285/shared-go/pkg/runtime/bootstrap -> github.com/park285/shared-go/pkg/logging

@@ -36,6 +36,9 @@ func main() {
 				Compress:   appConfig.Logging.Compress,
 			}, "hololive-api.log", sharedlogging.Options{AsyncStdout: true})
 			logCloser = closer
+			if err == nil {
+				slog.SetDefault(logger)
+			}
 			return logger, err
 		},
 		LoggerLevel: func(appConfig *config.HololiveAPIConfig) string {

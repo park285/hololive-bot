@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strconv"
 	"strings"
 	"testing"
@@ -629,17 +630,17 @@ func TestOpenAPIToggle(t *testing.T) {
 	require.Contains(t, decodeBody(t, rec), "paths")
 }
 
-func mustCIDR(t *testing.T, cidr string) *net.IPNet {
+func mustCIDR(t *testing.T) netip.Prefix {
 	t.Helper()
-	_, network, err := net.ParseCIDR(cidr)
+	prefix, err := netip.ParsePrefix("10.0.0.0/8")
 	require.NoError(t, err)
-	return network
+	return prefix.Masked()
 }
 
 func TestHB04ForwardedHeaderIgnoredFromUntrustedPeer_e8fc8b7d(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, func(cfg *config.Config) {
 		cfg.TrustedForwarders = true
-		cfg.TrustedProxyCIDRs = []*net.IPNet{mustCIDR(t, "10.0.0.0/8")}
+		cfg.TrustedProxyCIDRs = []netip.Prefix{mustCIDR(t)}
 	})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
 	req.RemoteAddr = "203.0.113.50:4321"
@@ -651,7 +652,7 @@ func TestHB04ForwardedHeaderIgnoredFromUntrustedPeer_e8fc8b7d(t *testing.T) {
 func TestHB04ForwardedHeaderRotationDoesNotResetRateLimit_e8fc8b7d(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, func(cfg *config.Config) {
 		cfg.TrustedForwarders = true
-		cfg.TrustedProxyCIDRs = []*net.IPNet{mustCIDR(t, "10.0.0.0/8")}
+		cfg.TrustedProxyCIDRs = []netip.Prefix{mustCIDR(t)}
 	})
 	keys := make(map[string]struct{})
 	for i := range 8 {
@@ -669,7 +670,7 @@ func TestHB04ForwardedHeaderRotationDoesNotResetRateLimit_e8fc8b7d(t *testing.T)
 func TestHB04TrustedProxyXFFAcceptedFromAllowlistedPeer_e8fc8b7d(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, func(cfg *config.Config) {
 		cfg.TrustedForwarders = true
-		cfg.TrustedProxyCIDRs = []*net.IPNet{mustCIDR(t, "10.0.0.0/8")}
+		cfg.TrustedProxyCIDRs = []netip.Prefix{mustCIDR(t)}
 	})
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
 	req.RemoteAddr = "10.0.0.9:4321"
