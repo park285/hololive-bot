@@ -4,11 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/park285/shared-go/pkg/envutil"
+	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -70,7 +72,7 @@ type Config struct {
 	Session           SessionConfig
 	RuntimeVersion    string
 	TrustedForwarders bool
-	TrustedProxyCIDRs []*net.IPNet
+	TrustedProxyCIDRs []netip.Prefix
 }
 
 func Load() (*Config, error) {
@@ -127,19 +129,10 @@ func Load() (*Config, error) {
 	}, nil
 }
 
-func parseTrustedProxyCIDRs(raw string) ([]*net.IPNet, error) {
-	fields := strings.Split(raw, ",")
-	cidrs := make([]*net.IPNet, 0, len(fields))
-	for _, field := range fields {
-		entry := strings.TrimSpace(field)
-		if entry == "" {
-			continue
-		}
-		_, network, err := net.ParseCIDR(entry)
-		if err != nil {
-			return nil, fmt.Errorf("config: invalid TRUSTED_PROXY_CIDRS entry %q: %w", entry, err)
-		}
-		cidrs = append(cidrs, network)
+func parseTrustedProxyCIDRs(raw string) ([]netip.Prefix, error) {
+	cidrs, err := httputil.ParseTrustedProxyCSV(raw)
+	if err != nil {
+		return nil, fmt.Errorf("config: invalid TRUSTED_PROXY_CIDRS: %w", err)
 	}
 	return cidrs, nil
 }

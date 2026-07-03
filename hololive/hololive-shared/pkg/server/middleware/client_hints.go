@@ -195,7 +195,7 @@ func formatArchitecture(arch, bitness string) string {
 	}
 
 	// x86 + 64비트 = x64 (일반적인 표기)
-	if strings.EqualFold(arch, "x86") && bitness == "64" {
+	if strings.EqualFold(arch, clientHintArchX86) && bitness == "64" {
 		return "x64"
 	}
 
@@ -205,8 +205,8 @@ func formatArchitecture(arch, bitness string) string {
 	}
 
 	// 32비트 x86은 그냥 x86
-	if strings.EqualFold(arch, "x86") && bitness == "32" {
-		return "x86"
+	if strings.EqualFold(arch, clientHintArchX86) && bitness == "32" {
+		return clientHintArchX86
 	}
 
 	// 그 외는 조합
@@ -218,6 +218,8 @@ func formatArchitecture(arch, bitness string) string {
 const clientHintsToRequest = "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, " +
 	"Sec-CH-UA-Platform-Version, Sec-CH-UA-Model, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, " +
 	"Sec-CH-UA-Full-Version-List"
+
+const clientHintArchX86 = "x86"
 
 // 브라우저에게 Client Hints를 요청하는 미들웨어입니다.
 //

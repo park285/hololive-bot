@@ -3,13 +3,13 @@ package app
 import (
 	"hash/fnv"
 	"log/slog"
-	"net"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/pkg/httputil"
 
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/config"
@@ -213,58 +213,9 @@ func (r *Runtime) verifyWSOrigin(origin string) error {
 }
 
 func (r *Runtime) clientIP(req *http.Request) string {
-	peer := peerHost(req.RemoteAddr)
-	if r.cfg.TrustedForwarders && ipInTrustedProxy(peer, r.cfg.TrustedProxyCIDRs) {
-		if ip := forwardedClientIP(req, r.cfg.TrustedProxyCIDRs); ip != "" {
-			return ip
-		}
-	}
-	return peer
-}
-
-func peerHost(remoteAddr string) string {
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		return remoteAddr
-	}
-	return host
-}
-
-func ipInTrustedProxy(ip string, cidrs []*net.IPNet) bool {
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
-		return false
-	}
-	for _, cidr := range cidrs {
-		if cidr != nil && cidr.Contains(parsed) {
-			return true
-		}
-	}
-	return false
-}
-
-func forwardedClientIP(req *http.Request, trusted []*net.IPNet) string {
-	if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
-		return clientIPFromXFF(xff, trusted)
-	}
-	candidate := strings.TrimSpace(req.Header.Get("X-Real-IP"))
-	if net.ParseIP(candidate) != nil && !ipInTrustedProxy(candidate, trusted) {
-		return candidate
-	}
-	return ""
-}
-
-func clientIPFromXFF(xff string, trusted []*net.IPNet) string {
-	hops := strings.Split(xff, ",")
-	for i := len(hops) - 1; i >= 0; i-- {
-		candidate := strings.TrimSpace(hops[i])
-		if net.ParseIP(candidate) == nil {
-			continue
-		}
-		if ipInTrustedProxy(candidate, trusted) {
-			continue
-		}
-		return candidate
-	}
-	return ""
+	return httputil.ClientIP(req, httputil.ClientIPOptions{
+		TrustForwarded: r.cfg.TrustedForwarders,
+		TrustedProxies: r.cfg.TrustedProxyCIDRs,
+		ForwardedMode:  httputil.ForwardedHeaderRightmostNonTrusted,
+	})
 }

@@ -52,6 +52,7 @@ func main() {
 		slog.Error("init_logger_failed", slog.Any("error", err))
 		return
 	}
+	slog.SetDefault(logger)
 
 	logger.Info("Manual member list cache refresh started")
 
