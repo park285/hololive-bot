@@ -164,7 +164,6 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 	assert.Equal(t, int64(appConfig.Webhook.QueueSize), options.FieldByName("QueueSize").Int())
 	assert.Equal(t, int64(appConfig.Webhook.EnqueueTimeout), options.FieldByName("EnqueueTimeout").Int())
 	assert.Equal(t, int64(appConfig.Webhook.HandlerTimeout), options.FieldByName("HandlerTimeout").Int())
-	assert.Equal(t, appConfig.Webhook.RequireHTTP2, options.FieldByName("RequireHTTP2").Bool())
 
 	taskPoolField := reflect.ValueOf(handler).Elem().FieldByName("taskPool")
 	require.True(t, taskPoolField.IsValid(), "reflect: field 'taskPool' not found on Handler")

@@ -83,7 +83,6 @@ type WebhookConfig struct {
 	MaxBodyBytes   int64
 	DedupTTL       time.Duration
 	DedupTimeout   time.Duration
-	RequireHTTP2   bool
 }
 
 type WorkerPoolConfig struct {

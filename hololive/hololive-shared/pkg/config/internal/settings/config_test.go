@@ -1660,19 +1660,6 @@ func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 	}
 }
 
-func TestLoad_WebhookRequireHTTP2(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("WEBHOOK_REQUIRE_HTTP2", "true")
-
-	config, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if !config.Webhook.RequireHTTP2 {
-		t.Fatal("Webhook.RequireHTTP2 = false, want true")
-	}
-}
-
 func TestLoad_ScraperSchedulerDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 

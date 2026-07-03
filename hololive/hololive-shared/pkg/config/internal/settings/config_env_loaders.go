@@ -233,7 +233,7 @@ func loadWorkerPoolConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) Wor
 
 func loadWebhookConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) WebhookConfig {
 	if profile == nil {
-		return WebhookConfig{RequireHTTP2: sharedenv.Bool("WEBHOOK_REQUIRE_HTTP2", false)}
+		return WebhookConfig{}
 	}
 	return WebhookConfig{
 		WorkerCount:    profile.Receive.Workers,
@@ -243,7 +243,6 @@ func loadWebhookConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) Webhoo
 		MaxBodyBytes:   profile.Receive.MaxBodyBytes,
 		DedupTTL:       profile.Receive.DedupTTL,
 		DedupTimeout:   profile.Receive.DedupTimeout,
-		RequireHTTP2:   sharedenv.Bool("WEBHOOK_REQUIRE_HTTP2", false),
 	}
 }
 
