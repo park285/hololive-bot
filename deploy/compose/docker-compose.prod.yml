@@ -140,10 +140,6 @@ x-cliproxy-env: &cliproxy-env
   CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
   CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
 
-x-majorevent-env: &majorevent-env
-  MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
-  MAJOREVENT_SCRAPE_HOUR_KST: "4"
-
 x-scraper-env: &scraper-env
   SCRAPER_FETCHER_ENGINE: "${YOUTUBE_PRODUCER_FETCHER_ENGINE:-nethttp}"
   SCRAPER_SCHEDULER_WORKER_COUNT: "${SCRAPER_SCHEDULER_WORKER_COUNT:-0}"
@@ -425,7 +421,7 @@ services:
     env_file:
       - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/bot.env}
     environment:
-      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
+      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *cliproxy-env]
       APP_VERSION: ${HOLO_API_VERSION:-2.0.0}
       APP_ENV: "production"
       SERVER_PORT: 30001
@@ -516,7 +512,7 @@ services:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
     container_name: hololive-youtube-producer
     environment:
-      <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
+      <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env, *scraper-env, *cliproxy-env]
       NOTIFICATION_EGRESS_ROLE: "producer"
       YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "false"

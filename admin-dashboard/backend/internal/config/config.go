@@ -114,7 +114,7 @@ func Load() (*Config, error) {
 		SessionSecret:     sessionSecret,
 		ValkeyURL:         valkeyURL,
 		DockerHost:        envutil.String("DOCKER_HOST", "tcp://docker-proxy:2375"),
-		HoloAdminAPIURL:   aliasOrDefault("http://hololive-admin-api:30006", "HOLO_ADMIN_API_URL", "HOLO_BOT_URL"),
+		HoloAdminAPIURL:   aliasOrDefault("https://hololive-api:30006", "HOLO_ADMIN_API_URL", "HOLO_BOT_URL"),
 		HoloBotAPIKey:     aliasOrDefault("", "HOLO_BOT_API_KEY", "API_SECRET_KEY"),
 		EnableOpenAPI:     enableOpenAPI,
 		EnableSwaggerUI:   enableSwagger,
