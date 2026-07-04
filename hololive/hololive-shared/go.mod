@@ -1,8 +1,6 @@
 module github.com/kapu/hololive-shared
 
-go 1.26.2
-
-toolchain go1.26.4
+go 1.26.4
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
@@ -15,7 +13,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.1.3 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/park285/shared-go v1.28.0
+	github.com/park285/shared-go v1.28.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.19.0
@@ -36,8 +34,8 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/quic-go/quic-go v0.60.0
 	github.com/tech-engine/goscrapy v0.27.17
-	github.com/testcontainers/testcontainers-go v0.42.0
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
+	github.com/testcontainers/testcontainers-go v0.43.0
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -139,7 +137,7 @@ require (
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
-	github.com/shirou/gopsutil/v4 v4.26.5 // indirect
+	github.com/shirou/gopsutil/v4 v4.26.6 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
