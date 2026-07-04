@@ -10,6 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/dbmigrate"
+
+	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
 
 const AdvisoryLockKey int64 = 0x484F4C4F41504901
@@ -19,10 +21,19 @@ var createIndexConcurrentlyPattern = regexp.MustCompile(`(?is)\bCREATE\s+(?:UNIQ
 type Config struct {
 	BaselineThrough string
 	LockKey         int64
+	Logf            func(format string, args ...any)
 }
 
 type Result struct {
 	Applied int
+	Skipped int
+	Total   int
+}
+
+func (c Config) logf(format string, args ...any) {
+	if c.Logf != nil {
+		c.Logf(format, args...)
+	}
 }
 
 func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Result, error) {
@@ -33,10 +44,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 		return Result{}, fmt.Errorf("migration fs is nil")
 	}
 
-	exec, err := newGuardedExecer(pool, fsys)
-	if err != nil {
-		return Result{}, err
-	}
+	exec := &guardedExecer{pool: pool}
 
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
@@ -45,33 +53,133 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 	defer conn.Release()
 
 	lockSession := pgxAdvisoryLockSession{conn: conn}
+	var result Result
 	err = dbmigrate.WithAdvisoryLock(ctx, lockSession, dbmigrate.LockConfig{Key: lockKey(cfg)}, func(lockCtx context.Context) error {
-		return applyLocked(lockCtx, pool, fsys, exec, cfg)
+		var applyErr error
+		result, applyErr = applyLocked(lockCtx, pool, fsys, exec, cfg)
+		return applyErr
 	})
 	if err != nil {
 		return Result{}, err
 	}
 
-	return Result{Applied: exec.applied}, nil
+	return result, nil
 }
 
-func applyLocked(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guardedExecer, cfg Config) error {
+func applyLocked(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guardedExecer, cfg Config) (Result, error) {
 	ledger := dbmigrate.Ledger{}
 	if err := ledger.Ensure(ctx, exec.Exec); err != nil {
-		return err
+		return Result{}, err
 	}
 
-	baselineThrough := strings.TrimSpace(cfg.BaselineThrough)
-	if baselineThrough != "" {
-		if err := dbmigrate.Baseline(ctx, fsys, exec.Exec, baselineThrough, ledger); err != nil {
-			return fmt.Errorf("baseline migrations: %w", err)
+	entries, err := dbmigrate.Manifest(fsys)
+	if err != nil {
+		return Result{}, fmt.Errorf("dbmigrate: %w", err)
+	}
+
+	if err := reconcileBaseline(ctx, pool, fsys, exec, ledger, entries, cfg); err != nil {
+		return Result{}, err
+	}
+
+	querier := pgxRowQuerier{pool: pool}
+	result := Result{Total: len(entries)}
+	for _, name := range entries {
+		alreadyApplied, appliedErr := ledger.Applied(ctx, querier, name)
+		if appliedErr != nil {
+			return Result{}, appliedErr
+		}
+		if alreadyApplied {
+			cfg.logf("skip %s (already applied)", name)
+			result.Skipped++
+			continue
+		}
+
+		cfg.logf("apply %s", name)
+		if err := applyEntry(ctx, fsys, exec, ledger, name); err != nil {
+			return Result{}, err
+		}
+		result.Applied++
+	}
+
+	if err := assertNoInvalidIndexes(ctx, pool); err != nil {
+		return Result{}, err
+	}
+	return result, nil
+}
+
+func applyEntry(ctx context.Context, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, name string) error {
+	content, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		return fmt.Errorf("read migration %s: %w", name, err)
+	}
+	if err := exec.execFile(ctx, name, string(content)); err != nil {
+		return err
+	}
+	return ledger.Record(ctx, exec.Exec, name)
+}
+
+// reconcileBaseline은 apply-all.sh의 ledger 결정 블록을 포팅한다. 핵심 제약: 기존
+// 스키마 + 빈 ledger + watermark 미지정이면 전체 manifest를 applied로 stamp해 아직
+// 미적용인 마이그레이션이 조용히 skip되는 사고(073 DB에 074-082 유실)가 나므로 거부한다.
+func reconcileBaseline(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) error {
+	count, err := ledgerCount(ctx, pool)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	baseSchema, err := baseSchemaPresent(ctx, pool)
+	if err != nil {
+		return err
+	}
+	if !baseSchema {
+		return nil
+	}
+
+	through := strings.TrimSpace(cfg.BaselineThrough)
+	if through == "" {
+		return errors.New(
+			"existing schema detected with an empty schema_migrations ledger; " +
+				"refusing to stamp the whole manifest as applied (that would silently skip genuinely-pending migrations). " +
+				"set MIGRATION_BASELINE_THROUGH to the last manifest migration already applied to this database, then rerun")
+	}
+	if !containsEntry(entries, through) {
+		return fmt.Errorf("MIGRATION_BASELINE_THROUGH=%q is not a manifest migration filename", through)
+	}
+
+	cfg.logf("existing schema with empty ledger; baselining through %s (no SQL re-run), applying the remainder", through)
+	if err := dbmigrate.Baseline(ctx, fsys, exec.Exec, through, ledger); err != nil {
+		return fmt.Errorf("baseline migrations: %w", err)
+	}
+	return nil
+}
+
+func containsEntry(entries []string, target string) bool {
+	for _, name := range entries {
+		if name == target {
+			return true
 		}
 	}
+	return false
+}
 
-	if err := dbmigrate.Apply(ctx, fsys, exec.Exec, dbmigrate.WithLedger(ledger, pgxRowQuerier{pool: pool})); err != nil {
-		return err
+func ledgerCount(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	var count int64
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil {
+		return 0, fmt.Errorf("count schema_migrations: %w", err)
 	}
-	return assertNoInvalidIndexes(ctx, pool)
+	return count, nil
+}
+
+func baseSchemaPresent(ctx context.Context, pool *pgxpool.Pool) (bool, error) {
+	var present bool
+	query := "SELECT to_regclass('public.members') IS NOT NULL AND to_regclass('public.alarms') IS NOT NULL"
+	if err := pool.QueryRow(ctx, query).Scan(&present); err != nil {
+		return false, fmt.Errorf("detect base schema: %w", err)
+	}
+	return present, nil
 }
 
 func lockKey(cfg Config) int64 {
@@ -82,50 +190,26 @@ func lockKey(cfg Config) int64 {
 }
 
 type guardedExecer struct {
-	pool         *pgxpool.Pool
-	migrationSQL map[string]bool
-	applied      int
-}
-
-func newGuardedExecer(pool *pgxpool.Pool, fsys fs.FS) (*guardedExecer, error) {
-	migrationSQL, err := migrationSQLByContent(fsys)
-	if err != nil {
-		return nil, err
-	}
-	return &guardedExecer{pool: pool, migrationSQL: migrationSQL}, nil
-}
-
-func migrationSQLByContent(fsys fs.FS) (map[string]bool, error) {
-	entries, err := dbmigrate.Manifest(fsys)
-	if err != nil {
-		return nil, fmt.Errorf("dbmigrate: %w", err)
-	}
-
-	queries := make(map[string]bool, len(entries))
-	for _, name := range entries {
-		content, readErr := fs.ReadFile(fsys, name)
-		if readErr != nil {
-			return nil, fmt.Errorf("read migration %s: %w", name, readErr)
-		}
-		queries[string(content)] = true
-	}
-	return queries, nil
+	pool *pgxpool.Pool
 }
 
 func (e *guardedExecer) Exec(ctx context.Context, query string) error {
-	if _, err := e.pool.Exec(ctx, query); err != nil {
-		return err
-	}
+	_, err := e.pool.Exec(ctx, query)
+	return err
+}
 
-	if !e.migrationSQL[query] {
-		return nil
-	}
-	if createIndexConcurrentlyPattern.MatchString(query) {
-		if err := dropInvalidIndexes(ctx, e.pool); err != nil {
-			return err
+// CONCURRENTLY 실패가 남긴 invalid index는 이름을 점유해 다음 실행의 IF NOT EXISTS를
+// no-op으로 만들고, 그 no-op이 ledger에 applied로 굳으면 재빌드 경로가 사라진다. 따라서
+// ledger 기록(호출자) 전에 감지·DROP하고 에러로 실패시켜 재실행이 같은 파일을 다시 적용하게 한다.
+func (e *guardedExecer) execFile(ctx context.Context, name, content string) error {
+	for _, stmt := range sqlsplit.Statements(content) {
+		if _, err := e.pool.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("exec %s: %w", name, err)
 		}
 	}
-	e.applied++
+	if createIndexConcurrentlyPattern.MatchString(content) {
+		return dropInvalidIndexes(ctx, e.pool)
+	}
 	return nil
 }
 
