@@ -396,7 +396,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 	t.Run("send error resolves key via formatter", func(t *testing.T) {
 		client := &testIrisClient{}
-		store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler)) //nolint:contextcheck // dbtest 전용 pool 생성자라 t.Cleanup으로 자체 lifecycle을 관리하며 prod ctx 경로와 무관(호출처 69곳). 멀티모듈 게이트 스코프에서만 발화하는 call-graph 아티팩트.
+		store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 		require.NoError(t, store.Load(ctx))
 		formatter := adapter.NewResponseFormatter("!", nil, adapter.WithMessageStrings(store))
 		transport := NewCommandTransport(client, formatter)
