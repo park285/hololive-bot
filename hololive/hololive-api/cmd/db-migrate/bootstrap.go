@@ -38,12 +38,20 @@ func ensureScraperRole(ctx context.Context, connString, scraperUser, scraperPass
 	if err != nil {
 		return fmt.Errorf("bootstrap: connect admin: %w", err)
 	}
-	defer func() {
-		if closeErr := conn.Close(ctx); closeErr != nil && err == nil {
-			err = fmt.Errorf("bootstrap: close admin: %w", closeErr)
-		}
-	}()
+	defer func() { err = closeConn(ctx, conn, "admin", err) }()
 
+	if err := upsertScraperRole(ctx, conn, scraperUser, scraperPassword); err != nil {
+		return err
+	}
+
+	grant := fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", pgx.Identifier{database}.Sanitize(), pgx.Identifier{scraperUser}.Sanitize())
+	if _, err := conn.Exec(ctx, grant); err != nil {
+		return fmt.Errorf("bootstrap: grant connect: %w", err)
+	}
+	return nil
+}
+
+func upsertScraperRole(ctx context.Context, conn *pgx.Conn, scraperUser, scraperPassword string) error {
 	var exists bool
 	if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)", scraperUser).Scan(&exists); err != nil {
 		return fmt.Errorf("bootstrap: check scraper role: %w", err)
@@ -64,11 +72,6 @@ func ensureScraperRole(ctx context.Context, connString, scraperUser, scraperPass
 	if _, err := conn.Exec(ctx, alter); err != nil {
 		return fmt.Errorf("bootstrap: alter scraper role: %w", err)
 	}
-
-	grant := fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", pgx.Identifier{database}.Sanitize(), roleIdent)
-	if _, err := conn.Exec(ctx, grant); err != nil {
-		return fmt.Errorf("bootstrap: grant connect: %w", err)
-	}
 	return nil
 }
 
@@ -77,17 +80,20 @@ func grantScraperSchemaUsage(ctx context.Context, connString, scraperUser string
 	if err != nil {
 		return fmt.Errorf("bootstrap: connect database: %w", err)
 	}
-	defer func() {
-		if closeErr := conn.Close(ctx); closeErr != nil && err == nil {
-			err = fmt.Errorf("bootstrap: close database: %w", closeErr)
-		}
-	}()
+	defer func() { err = closeConn(ctx, conn, "database", err) }()
 
 	stmt := fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", pgx.Identifier{scraperUser}.Sanitize())
 	if _, err := conn.Exec(ctx, stmt); err != nil {
 		return fmt.Errorf("bootstrap: grant schema usage: %w", err)
 	}
 	return nil
+}
+
+func closeConn(ctx context.Context, conn *pgx.Conn, label string, err error) error {
+	if closeErr := conn.Close(ctx); closeErr != nil && err == nil {
+		return fmt.Errorf("bootstrap: close %s: %w", label, closeErr)
+	}
+	return err
 }
 
 func adminConnString(database, user, password string) string {

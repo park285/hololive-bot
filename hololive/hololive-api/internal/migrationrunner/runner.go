@@ -81,6 +81,18 @@ func applyLocked(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guar
 		return Result{}, err
 	}
 
+	result, err := applyManifest(ctx, pool, fsys, exec, ledger, entries, cfg)
+	if err != nil {
+		return Result{}, err
+	}
+
+	if err := assertNoInvalidIndexes(ctx, pool); err != nil {
+		return Result{}, err
+	}
+	return result, nil
+}
+
+func applyManifest(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (Result, error) {
 	querier := pgxRowQuerier{pool: pool}
 	result := Result{Total: len(entries)}
 	for _, name := range entries {
@@ -99,10 +111,6 @@ func applyLocked(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guar
 			return Result{}, err
 		}
 		result.Applied++
-	}
-
-	if err := assertNoInvalidIndexes(ctx, pool); err != nil {
-		return Result{}, err
 	}
 	return result, nil
 }
