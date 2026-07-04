@@ -24,22 +24,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
+
+	"github.com/park285/shared-go/pkg/netguard"
 )
 
 var errBlockedLink = errors.New("parse link: blocked host")
 
 func (c *LinkChecker) validateRequestTarget(ctx context.Context, rawURL string) error {
-	parsed, err := parseAndValidateLink(rawURL)
-	if err != nil {
-		return err
-	}
-	return validateResolvedHost(ctx, c.resolver, c.config.Timeout, parsed)
+	_, err := linkCheckerNetguardPolicy(c.resolver, c.config.Timeout).ValidateURL(ctx, rawURL)
+	return linkCheckerGuardError(err)
 }
 
 func parseAndValidateLink(rawURL string) (*url.URL, error) {
@@ -52,58 +49,7 @@ func parseAndValidateLink(rawURL string) (*url.URL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse link: %w", err)
 	}
-	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
-	if scheme != "http" && scheme != "https" {
-		return nil, fmt.Errorf("parse link: unsupported scheme %q", parsed.Scheme)
-	}
-	hostname := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
-	if hostname == "" {
-		return nil, fmt.Errorf("parse link: empty host")
-	}
-	if hostname == "localhost" {
-		return nil, fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
-	}
-	if ip := net.ParseIP(hostname); ip != nil && isPrivateOrInternalIP(ip) {
-		return nil, fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
-	}
 	return parsed, nil
-}
-
-func validateResolvedHost(ctx context.Context, resolver hostResolver, timeout time.Duration, parsed *url.URL) error {
-	if resolver == nil || parsed == nil {
-		return nil
-	}
-
-	ips, err := lookupResolvedIPs(ctx, resolver, timeout, parsed.Hostname())
-	if err != nil {
-		return err
-	}
-	if slices.ContainsFunc(ips, isPrivateOrInternalIP) {
-		return fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
-	}
-	return nil
-}
-
-func lookupResolvedIPs(ctx context.Context, resolver hostResolver, timeout time.Duration, host string) ([]net.IP, error) {
-	if resolver == nil {
-		return []net.IP{}, nil
-	}
-
-	lookupCtx := ctx
-	cancel := func() {}
-	if timeout > 0 {
-		lookupCtx, cancel = context.WithTimeout(ctx, timeout)
-	}
-	defer cancel()
-
-	ips, err := resolver.LookupIP(lookupCtx, "ip", host)
-	if err != nil {
-		return nil, fmt.Errorf("resolve link host: %w", err)
-	}
-	if len(ips) == 0 {
-		return nil, fmt.Errorf("resolve link host: no addresses for %q", host)
-	}
-	return ips, nil
 }
 
 func isBlockedLinkError(err error) bool {
@@ -113,7 +59,10 @@ func isBlockedLinkError(err error) bool {
 	if errors.Is(err, errBlockedLink) {
 		return true
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "unsupported scheme")
+	return errors.Is(err, netguard.ErrBlockedIP) ||
+		errors.Is(err, netguard.ErrHostNotAllowed) ||
+		errors.Is(err, netguard.ErrUnsupportedScheme) ||
+		strings.Contains(strings.ToLower(err.Error()), "unsupported scheme")
 }
 
 func withValidatedDialPolicy(client *http.Client, resolver hostResolver, timeout time.Duration) *http.Client {
@@ -127,14 +76,7 @@ func withValidatedDialPolicy(client *http.Client, resolver hostResolver, timeout
 	}
 
 	clonedClient := *client
-	baseDialContext := clonedTransport.DialContext
-	if baseDialContext == nil {
-		dialer := &net.Dialer{}
-		baseDialContext = dialer.DialContext
-	}
-	clonedTransport.DialContext = validatedDialContext(baseDialContext, resolver, timeout)
-	withValidatedDialTLSPolicy(clonedTransport, resolver, timeout)
-	clonedClient.Transport = clonedTransport
+	clonedClient.Transport = netguard.GuardedTransport(clonedTransport, linkCheckerNetguardPolicy(resolver, timeout))
 	return &clonedClient
 }
 
@@ -150,82 +92,37 @@ func cloneHTTPTransport(transport http.RoundTripper) (*http.Transport, bool) {
 	return baseTransport.Clone(), true
 }
 
-func validatedDialContext(
-	baseDialContext func(context.Context, string, string) (net.Conn, error),
-	resolver hostResolver,
-	timeout time.Duration,
-) func(context.Context, string, string) (net.Conn, error) {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		resolvedAddr, err := resolveDialAddress(ctx, resolver, timeout, addr)
-		if err != nil {
-			return nil, err
-		}
-		return baseDialContext(ctx, network, resolvedAddr)
-	}
-}
-
-func withValidatedDialTLSPolicy(transport *http.Transport, resolver hostResolver, timeout time.Duration) {
-	if transport.DialTLSContext == nil {
-		return
-	}
-	transport.DialTLSContext = validatedDialContext(transport.DialTLSContext, resolver, timeout)
-}
-
-func resolveDialAddress(ctx context.Context, resolver hostResolver, timeout time.Duration, addr string) (string, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", fmt.Errorf("resolve dial target: split host/port: %w", err)
-	}
-
-	if ip := net.ParseIP(host); ip != nil {
-		if isPrivateOrInternalIP(ip) {
-			return "", fmt.Errorf("%w %q", errBlockedLink, addr)
-		}
-		return addr, nil
-	}
-	if resolver == nil {
-		return addr, nil
-	}
-
-	ips, err := lookupResolvedIPs(ctx, resolver, timeout, host)
-	if err != nil {
-		return "", err
-	}
-	if slices.ContainsFunc(ips, isPrivateOrInternalIP) {
-		return "", fmt.Errorf("%w %q", errBlockedLink, addr)
-	}
-	return net.JoinHostPort(ips[0].String(), port), nil
-}
-
 func withBlockedRedirectPolicy(client *http.Client, resolver hostResolver, timeout time.Duration) *http.Client {
 	if client == nil {
 		return nil
 	}
 
 	cloned := *client
-	original := client.CheckRedirect
 	cloned.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if err := validateResolvedHost(req.Context(), resolver, timeout, req.URL); err != nil {
-			return err
-		}
-		if original != nil {
-			return original(req, via)
-		}
-		return nil
+		return linkCheckerGuardError(netguard.RedirectPolicy(netguard.RedirectConfig{
+			Policy:        linkCheckerNetguardPolicy(resolver, timeout),
+			CheckRedirect: client.CheckRedirect,
+		})(req, via))
 	}
 	return &cloned
 }
 
-func isPrivateOrInternalIP(ip net.IP) bool {
-	if ip == nil {
-		return false
+func linkCheckerNetguardPolicy(resolver hostResolver, timeout time.Duration) netguard.Policy {
+	return netguard.Policy{
+		Resolver: resolver,
+		Timeout:  timeout,
+		Schemes:  []string{"http", "https"},
 	}
-	return ip.IsLoopback() ||
-		ip.IsPrivate() ||
-		ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() ||
-		ip.IsMulticast() ||
-		ip.IsUnspecified()
+}
+
+func linkCheckerGuardError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, netguard.ErrBlockedIP) || errors.Is(err, netguard.ErrHostNotAllowed) {
+		return fmt.Errorf("%w: %w", errBlockedLink, err)
+	}
+	return err
 }
 
 func redactLinkForLog(rawURL string) string {

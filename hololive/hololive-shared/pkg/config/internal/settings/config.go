@@ -213,6 +213,7 @@ func fetchIrisBotWebhookWorkerProfile(config *IrisConfig) (profile workerconfig.
 		iris.WithTimeout(config.HTTPTimeout),
 		iris.WithDialTimeout(config.HTTPDialTimeout),
 		iris.WithResponseHeaderTimeout(config.HTTPResponseHeaderTimeout),
+		iris.WithH3DialGuard(newSettingsIrisH3DialGuard(baseURL, config.HTTPDialTimeout)),
 	)
 	if err != nil {
 		return profile, err

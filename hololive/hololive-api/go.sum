@@ -249,8 +249,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/park285/iris-client-go v0.27.0 h1:Ai17izYTKm85llBbucTFynlk1ssHj4zjXN+0FsN8fXo=
 github.com/park285/iris-client-go v0.27.0/go.mod h1:GplT0qwOsCStl+rZtfQHp9T7YMF3lQCKfmxOq7V3+20=
-github.com/park285/shared-go v1.27.0 h1:HVJQeSf4RSWQ4r6Qi+8YNC9lpN1rMXV/83RJYJC2cjY=
-github.com/park285/shared-go v1.27.0/go.mod h1:SvwdqgSBzkrZWnfz8baXXFjB7mTfwqQyUIxZJ7aiU5c=
+github.com/park285/shared-go v1.28.0 h1:BskIUJh8QZk/hCNjs/C2fEJeOHGwTH/roLKWIvlrLPM=
+github.com/park285/shared-go v1.28.0/go.mod h1:SvwdqgSBzkrZWnfz8baXXFjB7mTfwqQyUIxZJ7aiU5c=
 github.com/pelletier/go-toml/v2 v2.3.1 h1:MYEvvGnQjeNkRF1qUuGolNtNExTDwct51yp7olPtrEc=
 github.com/pelletier/go-toml/v2 v2.3.1/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

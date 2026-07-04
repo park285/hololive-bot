@@ -37,15 +37,19 @@ func NewRuntimeIrisClient(
 		logger = slog.Default()
 	}
 
-	clientOpts := make([]iris.ClientOption, 0, len(opts)+2)
-	clientOpts = append(clientOpts, iris.WithLogger(logger), iris.WithReplyRetry(runtimeIrisReplyRetryMax))
-	clientOpts = append(clientOpts, opts...)
-
 	resolver := &runtimeIrisBaseURLResolver{
 		fallbackBaseURL: strings.TrimSpace(fallbackBaseURL),
 		baseURLFilePath: strings.TrimSpace(baseURLFilePath),
 		logger:          logger,
 	}
+
+	clientOpts := make([]iris.ClientOption, 0, len(opts)+3)
+	clientOpts = append(clientOpts,
+		iris.WithLogger(logger),
+		iris.WithReplyRetry(runtimeIrisReplyRetryMax),
+		iris.WithH3DialGuard(newRuntimeIrisH3DialGuard(resolver.resolve)),
+	)
+	clientOpts = append(clientOpts, opts...)
 
 	rc := iris.NewRebindingClient(iris.RebindingClientConfig{
 		ResolveBaseURL:  resolver.resolve,
