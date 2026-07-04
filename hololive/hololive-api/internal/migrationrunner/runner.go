@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -165,12 +166,7 @@ func reconcileBaseline(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec
 }
 
 func containsEntry(entries []string, target string) bool {
-	for _, name := range entries {
-		if name == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(entries, target)
 }
 
 func ledgerCount(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
