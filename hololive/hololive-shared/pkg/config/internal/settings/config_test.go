@@ -1636,6 +1636,9 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 	if config.Webhook.DedupTTL != 2*time.Minute || config.Webhook.DedupTimeout != 300*time.Millisecond {
 		t.Fatalf("Webhook dedup = (%v,%v), want (2m,300ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
 	}
+	if config.Webhook.RequireHMAC {
+		t.Fatalf("Webhook.RequireHMAC = true, want false")
+	}
 	if config.WorkerPool.Workers != 15 || config.WorkerPool.QueueSize != 200 {
 		t.Fatalf("WorkerPool = (%d,%d), want (15,200)", config.WorkerPool.Workers, config.WorkerPool.QueueSize)
 	}
@@ -1644,6 +1647,19 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 	}
 	if config.WorkerProfile.Hash == "" {
 		t.Fatal("WorkerProfile.Hash is empty")
+	}
+}
+
+func TestLoad_WebhookRequireHMACEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("IRIS_WEBHOOK_REQUIRE_HMAC", "true")
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !config.Webhook.RequireHMAC {
+		t.Fatalf("Webhook.RequireHMAC = false, want true")
 	}
 }
 
