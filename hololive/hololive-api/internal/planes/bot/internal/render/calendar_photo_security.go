@@ -2,6 +2,7 @@ package render
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime"
 	"net"
@@ -68,6 +69,9 @@ func validateCalendarPhotoURL(rawURL string) error {
 }
 
 func checkCalendarPhotoRedirect(req *http.Request, via []*http.Request) error {
+	if req.URL.User != nil {
+		return errors.New("calendar photo redirect url must not carry userinfo")
+	}
 	return netguard.RedirectPolicy(netguard.RedirectConfig{
 		Policy:       calendarPhotoNetguardPolicy(),
 		MaxRedirects: calendarPhotoMaxRedirects,

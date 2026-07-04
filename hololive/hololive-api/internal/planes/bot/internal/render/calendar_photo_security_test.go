@@ -186,6 +186,32 @@ func TestFetchMemberPhotoBlocksRedirectToPrivateHost(t *testing.T) {
 	}
 }
 
+func TestFetchMemberPhotoBlocksRedirectWithUserinfo(t *testing.T) {
+	pngData := tinyPNG(t)
+	var requests atomic.Int32
+	client := newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requests.Add(1)
+		if req.URL.User == nil {
+			return calendarPhotoRedirectResponse(req, "https://user:pass@yt3.googleusercontent.com/private=s88-c"), nil
+		}
+		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+	}))
+	withCalendarPhotoClient(t, client)
+
+	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+	photos := make(map[string]image.Image)
+	fetchMemberPhoto(domain.CalendarEntry{
+		Member: &domain.Member{Photo: photoURL},
+	}, photos)
+
+	if _, ok := photos[photoURL]; ok {
+		t.Fatal("redirect to userinfo url was stored")
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("redirect target requests = %d, want only the initial request", got)
+	}
+}
+
 func TestFetchMemberPhotoBlocksRedirectToNon443Port(t *testing.T) {
 	pngData := tinyPNG(t)
 	var requests atomic.Int32
