@@ -28,5 +28,6 @@ func BuildBotWebhookHandler(
 		webhook.WithMaxBodyBytes(appConfig.Webhook.MaxBodyBytes),
 		webhook.WithDedupTTL(appConfig.Webhook.DedupTTL),
 		webhook.WithDedupTimeout(appConfig.Webhook.DedupTimeout),
+		webhook.WithRequireHMAC(appConfig.Webhook.RequireHMAC),
 	)
 }

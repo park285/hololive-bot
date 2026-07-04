@@ -104,6 +104,56 @@ func TestBuildBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *testing.T
 	}
 }
 
+func TestBuildBotWebhookHandlerRequiresHMACWhenConfigured(t *testing.T) {
+	const token = "test-token"
+
+	t.Setenv("IRIS_WEBHOOK_TOKEN", token)
+
+	valkeyClient, _ := sharedtestutil.NewTestValkeyClient(t)
+	cacheClient := cachemocks.NewLenientClient()
+	cacheClient.GetClientFunc = func() valkey.Client { return valkeyClient }
+
+	appConfig := &config.Config{
+		Iris: config.IrisConfig{WebhookToken: token},
+		Webhook: config.WebhookConfig{
+			WorkerCount:    1,
+			QueueSize:      8,
+			EnqueueTimeout: 100 * time.Millisecond,
+			HandlerTimeout: time.Second,
+			MaxBodyBytes:   1024,
+			DedupTTL:       time.Minute,
+			DedupTimeout:   500 * time.Millisecond,
+			RequireHMAC:    true,
+		},
+	}
+	messageHandler := &recordingWebhookMessageHandler{messages: make(chan *webhook.Message, 1)}
+	webhookPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 8})
+	t.Cleanup(webhookPool.StopAndWait)
+
+	handler, err := BuildBotWebhookHandler(
+		appConfig,
+		messageHandler,
+		BotWebhookRuntimeDependencies{Cache: cacheClient},
+		webhookPool,
+		slog.New(slog.DiscardHandler),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, handler.Close())
+	})
+
+	request := newBotWebhookTestRequest(
+		t.Context(),
+		token,
+		"message-id-require-hmac",
+		`{"text":"hello","room":"room-1","sender":"tester","userId":"user-1"}`,
+	)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusUnauthorized, response.Code)
+}
+
 type recordingWebhookMessageHandler struct {
 	messages chan *webhook.Message
 }
