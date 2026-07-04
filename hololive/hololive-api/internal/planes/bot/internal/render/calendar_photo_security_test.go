@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -216,6 +215,9 @@ func TestFetchMemberPhotoBlocksRedirectToNon443Port(t *testing.T) {
 func TestFetchMemberPhotoBlocksThirdRedirect(t *testing.T) {
 	pngData := tinyPNG(t)
 	var requests atomic.Int32
+	withCalendarPhotoResolver(t, &fakeCalendarPhotoResolver{
+		addrs: []net.IP{net.ParseIP("93.184.216.34")},
+	})
 	client := newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(1)
 		switch req.URL.Path {
@@ -262,7 +264,7 @@ func TestFetchMemberPhotoBlocksAllowlistedHostResolvingToBlockedIPs(t *testing.T
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resolver := &fakeCalendarPhotoResolver{
-				addrs: []netip.Addr{netip.MustParseAddr(tt.addr)},
+				addrs: []net.IP{net.ParseIP(tt.addr)},
 			}
 			dialer := &recordingCalendarPhotoDialer{}
 			withCalendarPhotoResolver(t, resolver)
@@ -390,11 +392,11 @@ func withCalendarPhotoClient(t *testing.T, client *http.Client) {
 
 type fakeCalendarPhotoResolver struct {
 	requests atomic.Int32
-	addrs    []netip.Addr
+	addrs    []net.IP
 	err      error
 }
 
-func (r *fakeCalendarPhotoResolver) LookupNetIP(context.Context, string, string) ([]netip.Addr, error) {
+func (r *fakeCalendarPhotoResolver) LookupIP(context.Context, string, string) ([]net.IP, error) {
 	r.requests.Add(1)
 	if r.err != nil {
 		return nil, r.err
