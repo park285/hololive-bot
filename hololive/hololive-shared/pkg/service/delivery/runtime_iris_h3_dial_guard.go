@@ -55,11 +55,18 @@ func resolveRuntimeIrisH3DialGuardIPs(baseURL string) (string, []net.IP, error) 
 	if literal := net.ParseIP(host); literal != nil {
 		return host, []net.IP{literal}, nil
 	}
-	ips, err := runtimeLookupIrisBaseURLHostIPs(host)
+	// H3DialGuard 콜백(func(net.IP) error)에는 dial ctx가 전달되지 않으므로 여기서 자체
+	// timeout ctx를 root한다. build ctx를 threading하면 build timeout 후 모든 dial이 거부된다.
+	ctx, cancel := context.WithTimeout(context.Background(), runtimeIrisH3DialGuardResolveTimeout)
+	defer cancel()
+	ipAddrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("resolve iris base url host %q for h3 egress guard: %w", host, err)
 	}
-	return host, ips, nil
+	if len(ipAddrs) == 0 {
+		return "", nil, fmt.Errorf("iris base url host %q resolved to no addresses for h3 egress guard", host)
+	}
+	return host, runtimeIPAddrsToIPs(ipAddrs), nil
 }
 
 func runtimeHostFromIrisBaseURL(baseURL string) (string, error) {
@@ -72,20 +79,6 @@ func runtimeHostFromIrisBaseURL(baseURL string) (string, error) {
 		return "", fmt.Errorf("iris base url has no host for h3 egress guard")
 	}
 	return host, nil
-}
-
-func runtimeLookupIrisBaseURLHostIPs(host string) ([]net.IP, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), runtimeIrisH3DialGuardResolveTimeout)
-	defer cancel()
-
-	ipAddrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return nil, fmt.Errorf("resolve iris base url host %q for h3 egress guard: %w", host, err)
-	}
-	if len(ipAddrs) == 0 {
-		return nil, fmt.Errorf("iris base url host %q resolved to no addresses for h3 egress guard", host)
-	}
-	return runtimeIPAddrsToIPs(ipAddrs), nil
 }
 
 func runtimeIPAddrsToIPs(ipAddrs []net.IPAddr) []net.IP {
