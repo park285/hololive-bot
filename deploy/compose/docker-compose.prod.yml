@@ -303,7 +303,12 @@ services:
       - hololive-net
 
   hololive-db-migrate:
-    image: ${POSTGRES_IMAGE:-postgres:18}
+    image: hololive-api:prod
+    build:
+      <<: *go-build-base
+      dockerfile: hololive/hololive-api/Dockerfile
+      args:
+        VERSION: ${HOLO_API_VERSION:-2.0.0}
     container_name: hololive-db-migrate
     restart: "no"
     environment:
@@ -319,9 +324,8 @@ services:
       HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
       HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
       MIGRATION_BASELINE_THROUGH: ${MIGRATION_BASELINE_THROUGH:-}
-    command:
-      - /bin/sh
-      - /migrations/bootstrap-and-apply.sh
+    entrypoint:
+      - /app/bin/db-migrate
     volumes:
       - ../../hololive/hololive-api/scripts/migrations:/migrations:ro
       - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
