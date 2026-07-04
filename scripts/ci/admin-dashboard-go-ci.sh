@@ -34,7 +34,7 @@ run_step "go vet" bash -c 'cd admin-dashboard/backend && GOFLAGS=-mod=readonly g
 run_step "staticcheck" bash -c "cd admin-dashboard/backend && GOFLAGS=-mod=readonly '$(ensure_staticcheck)' ./..."
 run_step "golangci-lint" bash -c "cd admin-dashboard/backend && '$(ensure_golangci_lint)' run -c ../../.golangci.yml ./..."
 if [[ "${RUN_NILAWAY}" == "true" ]]; then
-  run_step "NilAway" bash -c "cd admin-dashboard/backend && GOFLAGS=-mod=readonly '$(ensure_nilaway)' -pretty-print ./..."
+  run_step "NilAway" bash -c "cd admin-dashboard/backend && GOMEMLIMIT=${NILAWAY_GOMEMLIMIT:-10GiB} GOFLAGS=-mod=readonly '$(ensure_nilaway)' -pretty-print ./..."
 else
   echo "[ADMIN DASHBOARD GO CI] Skip NilAway: RUN_NILAWAY=${RUN_NILAWAY}"
   echo

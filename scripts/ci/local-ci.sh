@@ -211,8 +211,9 @@ check_nilaway() {
     local nilaway_bin
     nilaway_bin="$(ensure_nilaway)"
 
-    # 동시 3개 제한은 NilAway 프로세스가 내부 병렬이라 코어 과점유를 막기 위함.
-    local nilaway_parallel="${NILAWAY_PARALLEL:-3}"
+    # NilAway는 패턴당 10~16GB RSS까지 자란다 — 3병렬이 2026-07-04 호스트 global OOM(~40GB 스파이크)을 냈다.
+    local nilaway_parallel="${NILAWAY_PARALLEL:-1}"
+    local nilaway_gomemlimit="${NILAWAY_GOMEMLIMIT:-10GiB}"
     local nilaway_tmp_parent="${LOCAL_CI_TMPDIR:-${ROOT_DIR}/.tmp/local-ci}"
     mkdir -p "${nilaway_tmp_parent}"
     local nilaway_tmp
@@ -222,7 +223,7 @@ check_nilaway() {
     local running=0
     local package_pattern
     for package_pattern in "${packages[@]}"; do
-        env GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" \
+        env GOMEMLIMIT="${nilaway_gomemlimit}" GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" \
             "${nilaway_bin}" -pretty-print "${package_pattern}" \
             >"${nilaway_tmp}/$(printf '%s' "${package_pattern}" | tr './' '__').log" 2>&1 &
         running=$(( running + 1 ))

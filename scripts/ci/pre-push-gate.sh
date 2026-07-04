@@ -13,6 +13,17 @@ cd "${ROOT_DIR}"
 # 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
 
+# 게이트(특히 NilAway)가 호스트 램을 전역 고갈시킨 2026-07-04 OOM의 재발 방지.
+if [[ -z "${PRE_PUSH_GATE_SCOPED:-}" ]] && command -v systemd-run >/dev/null 2>&1 \
+  && systemd-run --user --scope --quiet -p MemoryHigh=1G true >/dev/null 2>&1; then
+  echo "[pre-push] memory scope: MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G} MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}"
+  export PRE_PUSH_GATE_SCOPED=1
+  exec systemd-run --user --scope --quiet \
+    -p "MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G}" \
+    -p "MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}" \
+    "${SCRIPT_DIR}/pre-push-gate.sh" "$@"
+fi
+
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate"
 echo "════════════════════════════════════════"
