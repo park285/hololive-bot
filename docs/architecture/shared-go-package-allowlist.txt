@@ -14,6 +14,7 @@ llm
 llm/openaipreset
 logging
 logging/internal/archive
+netguard
 obsmetrics
 outputguard
 promptguard
