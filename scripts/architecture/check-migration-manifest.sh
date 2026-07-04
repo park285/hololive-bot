@@ -68,9 +68,9 @@ fi
 if [[ "${manifest_file_sorted}" != "${sql_joined}" ]]; then
   echo "FAIL: migration manifest and actual SQL files differ" >&2
   echo "--- manifest only" >&2
-  comm -23 <(printf '%s\n' "${manifest_files[@]}" | sort) <(printf '%s\n' "${sql_files[@]}" | sort) >&2 || true
+  LC_ALL=C comm -23 <(printf '%s\n' "${manifest_files[@]}" | LC_ALL=C sort) <(printf '%s\n' "${sql_files[@]}" | LC_ALL=C sort) >&2 || true
   echo "--- sql only" >&2
-  comm -13 <(printf '%s\n' "${manifest_files[@]}" | sort) <(printf '%s\n' "${sql_files[@]}" | sort) >&2 || true
+  LC_ALL=C comm -13 <(printf '%s\n' "${manifest_files[@]}" | LC_ALL=C sort) <(printf '%s\n' "${sql_files[@]}" | LC_ALL=C sort) >&2 || true
   exit 1
 fi
 
