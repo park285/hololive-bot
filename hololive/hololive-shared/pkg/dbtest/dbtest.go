@@ -80,14 +80,24 @@ var dbSeq atomic.Uint64
 func NewPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 
-	baseDSN := acquireBaseDSN(t)
-
 	ctx := context.Background()
+	pool := NewBlankPool(t)
 
+	if err := ApplyMigrations(ctx, pool); err != nil {
+		t.Fatalf("dbtest: apply migrations: %v", err)
+	}
+
+	return pool
+}
+
+func NewBlankPool(t testing.TB) *pgxpool.Pool {
+	t.Helper()
+
+	baseDSN := acquireBaseDSN(t)
+	ctx := context.Background()
 	dbName := fmt.Sprintf("test_%d_%d", time.Now().UnixNano(), dbSeq.Add(1))
 
 	createIsolatedDatabase(t, ctx, baseDSN, dbName)
-
 	pool := openTestPool(t, ctx, baseDSN, dbName)
 
 	t.Cleanup(func() {
@@ -96,10 +106,6 @@ func NewPool(t testing.TB) *pgxpool.Pool {
 		}
 	})
 	t.Cleanup(pool.Close)
-
-	if err := ApplyMigrations(ctx, pool); err != nil {
-		t.Fatalf("dbtest: apply migrations to database %s: %v", dbName, err)
-	}
 
 	return pool
 }

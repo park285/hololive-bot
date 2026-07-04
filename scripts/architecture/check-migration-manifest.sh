@@ -6,6 +6,88 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MIGRATIONS_DIR="${ROOT_DIR}/hololive/hololive-api/scripts/migrations"
 MANIFEST="${MIGRATIONS_DIR}/manifest.txt"
 
+sql_statement_count() {
+  python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+count = 0
+buf = []
+i = 0
+
+def flush():
+    global count, buf
+    if "".join(buf).strip():
+        count += 1
+    buf = []
+
+def dollar_tag(pos):
+    if text[pos] != "$":
+        return None
+    j = pos + 1
+    while j < len(text):
+        ch = text[j]
+        if ch == "$":
+            return text[pos : j + 1]
+        if not (ch == "_" or ch.isalnum()):
+            return None
+        j += 1
+    return None
+
+while i < len(text):
+    if text.startswith("--", i):
+        end = text.find("\n", i)
+        if end < 0:
+            break
+        buf.append(" ")
+        i = end
+        continue
+    if text.startswith("/*", i):
+        end = text.find("*/", i + 2)
+        if end < 0:
+            break
+        buf.append(" ")
+        i = end + 2
+        continue
+    if text[i] in ("'", '"'):
+        quote = text[i]
+        buf.append(text[i])
+        i += 1
+        while i < len(text):
+            buf.append(text[i])
+            if text[i] == quote:
+                if i + 1 < len(text) and text[i + 1] == quote:
+                    buf.append(text[i + 1])
+                    i += 2
+                    continue
+                i += 1
+                break
+            i += 1
+        continue
+    if text[i] == "$":
+        tag = dollar_tag(i)
+        if tag is not None:
+            end = text.find(tag, i + len(tag))
+            if end < 0:
+                buf.append(text[i:])
+                i = len(text)
+            else:
+                buf.append(text[i : end + len(tag)])
+                i = end + len(tag)
+            continue
+    if text[i] == ";":
+        flush()
+        i += 1
+        continue
+    buf.append(text[i])
+    i += 1
+
+flush()
+print(count)
+PY
+}
+
 if [[ ! -f "${MANIFEST}" ]]; then
   echo "FAIL: migration manifest missing: ${MANIFEST}" >&2
   exit 1
@@ -98,6 +180,23 @@ for file in "${sql_files[@]}"; do
       exit 1
     fi
   fi
+done
+
+grandfathered_concurrently_multi="060_add_alarm_dispatch_events_live_stream_index.sql 061_add_youtube_live_first_seen_guardrail.sql 067_align_claim_index_due_first.sql 086_add_sending_stale_indexes.sql 095_cleanup_redundant_indexes.sql 096_sql_integrity_retention_followups.sql 097_integrity_and_type_unification.sql"
+for file in "${sql_files[@]}"; do
+  path="${MIGRATIONS_DIR}/${file}"
+  if ! grep -qiE '\bCONCURRENTLY\b' "${path}"; then
+    continue
+  fi
+  statement_count="$(sql_statement_count "${path}")"
+  if [[ "${statement_count}" == "1" ]]; then
+    continue
+  fi
+  if [[ " ${grandfathered_concurrently_multi} " == *" ${file} "* ]]; then
+    continue
+  fi
+  echo "FAIL: ${file} uses CONCURRENTLY with ${statement_count} SQL statements; keep CONCURRENTLY migrations single-statement" >&2
+  exit 1
 done
 
 echo "OK: migration manifest matches SQL files"
