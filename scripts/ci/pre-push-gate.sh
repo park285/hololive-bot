@@ -9,6 +9,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}"
 
+# GOTOOLCHAIN auto면 go 명령이 워크스페이스 멤버(sibling repo 포함) go.mod에 toolchain
+# 라인을 스탬프해 sync/tidy/boundary-check의 정본 관점끼리 영구 진동한다. CI와 동일하게 local 고정.
+export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
+
 # hook이 주입한 GIT_DIR 등이 남으면 linked worktree나 tmp 레포 대상 git 호출이
 # 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
