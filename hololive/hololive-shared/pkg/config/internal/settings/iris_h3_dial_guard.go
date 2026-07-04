@@ -44,29 +44,50 @@ func newSettingsIrisH3DialGuard(baseURL string, timeout time.Duration) func(net.
 		if resolveErr != nil {
 			return resolveErr
 		}
-		for _, candidate := range allowed {
-			if candidate.Equal(ip) {
-				return nil
-			}
+		if ipInSettingsAllowset(ip, allowed) {
+			return nil
 		}
 		return fmt.Errorf("iris h3 egress denied: dial ip %s not in allowset derived from iris base url host %q", ip, host)
 	}
 }
 
-func resolveSettingsIrisH3DialGuardIPs(baseURL string, timeout time.Duration) (string, []net.IP, error) {
-	parsed, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil {
-		return "", nil, fmt.Errorf("parse iris base url for h3 egress guard: %w", err)
+func ipInSettingsAllowset(ip net.IP, allowed []net.IP) bool {
+	for _, candidate := range allowed {
+		if candidate.Equal(ip) {
+			return true
+		}
 	}
-	host := parsed.Hostname()
-	if host == "" {
-		return "", nil, fmt.Errorf("iris base url has no host for h3 egress guard")
-	}
+	return false
+}
 
+func resolveSettingsIrisH3DialGuardIPs(baseURL string, timeout time.Duration) (string, []net.IP, error) {
+	host, err := settingsHostFromIrisBaseURL(baseURL)
+	if err != nil {
+		return "", nil, err
+	}
 	if literal := net.ParseIP(host); literal != nil {
 		return host, []net.IP{literal}, nil
 	}
+	ips, err := settingsLookupIrisBaseURLHostIPs(host, timeout)
+	if err != nil {
+		return "", nil, err
+	}
+	return host, ips, nil
+}
 
+func settingsHostFromIrisBaseURL(baseURL string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", fmt.Errorf("parse iris base url for h3 egress guard: %w", err)
+	}
+	host := parsed.Hostname()
+	if host == "" {
+		return "", fmt.Errorf("iris base url has no host for h3 egress guard")
+	}
+	return host, nil
+}
+
+func settingsLookupIrisBaseURLHostIPs(host string, timeout time.Duration) ([]net.IP, error) {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
@@ -75,15 +96,18 @@ func resolveSettingsIrisH3DialGuardIPs(baseURL string, timeout time.Duration) (s
 
 	ipAddrs, err := settingsIrisH3DialResolver.LookupIPAddr(ctx, host)
 	if err != nil {
-		return "", nil, fmt.Errorf("resolve iris base url host %q for h3 egress guard: %w", host, err)
+		return nil, fmt.Errorf("resolve iris base url host %q for h3 egress guard: %w", host, err)
 	}
 	if len(ipAddrs) == 0 {
-		return "", nil, fmt.Errorf("iris base url host %q resolved to no addresses for h3 egress guard", host)
+		return nil, fmt.Errorf("iris base url host %q resolved to no addresses for h3 egress guard", host)
 	}
+	return settingsIPAddrsToIPs(ipAddrs), nil
+}
 
+func settingsIPAddrsToIPs(ipAddrs []net.IPAddr) []net.IP {
 	allowed := make([]net.IP, 0, len(ipAddrs))
 	for _, ipAddr := range ipAddrs {
 		allowed = append(allowed, ipAddr.IP)
 	}
-	return host, allowed, nil
+	return allowed
 }
