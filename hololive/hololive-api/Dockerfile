@@ -42,6 +42,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -o /dist/bin/hololive-api ./hololive/hololive-api/cmd/hololive-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
+      -o /dist/bin/db-migrate ./hololive/hololive-api/cmd/db-migrate && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
+    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
       -o /dist/bin/healthcheck ./hololive/hololive-api/cmd/healthcheck && \
     if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/hololive-api /dist/bin/healthcheck; fi && \
     mkdir -p /dist/internal/domain && \
