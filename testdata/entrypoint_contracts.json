@@ -64,5 +64,11 @@
     "must_contain": [
       "bootstrap.Run("
     ]
+  },
+  {
+    "path": "hololive/hololive-api/cmd/db-migrate/main.go",
+    "must_contain": [
+      "migrationrunner.Run("
+    ]
   }
 ]
