@@ -29,15 +29,20 @@ import (
 	"time"
 )
 
+type settingsIrisH3Resolver interface {
+	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
+}
+
+var settingsIrisH3DialResolver settingsIrisH3Resolver = net.DefaultResolver
+
 func newSettingsIrisH3DialGuard(baseURL string, timeout time.Duration) func(net.IP) error {
+	host, allowed, resolveErr := resolveSettingsIrisH3DialGuardIPs(baseURL, timeout)
 	return func(ip net.IP) error {
 		if ip == nil {
 			return fmt.Errorf("iris h3 egress denied: nil dial ip")
 		}
-
-		host, allowed, err := resolveSettingsIrisH3DialGuardIPs(baseURL, timeout)
-		if err != nil {
-			return err
+		if resolveErr != nil {
+			return resolveErr
 		}
 		for _, candidate := range allowed {
 			if candidate.Equal(ip) {
@@ -68,7 +73,7 @@ func resolveSettingsIrisH3DialGuardIPs(baseURL string, timeout time.Duration) (s
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	ipAddrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	ipAddrs, err := settingsIrisH3DialResolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return "", nil, fmt.Errorf("resolve iris base url host %q for h3 egress guard: %w", host, err)
 	}
