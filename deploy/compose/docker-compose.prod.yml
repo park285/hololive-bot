@@ -92,6 +92,11 @@ x-deploy-128m: &deploy-128m
     limits:
       memory: 128m
       pids: 128
+x-deploy-64m: &deploy-64m
+  resources:
+    limits:
+      memory: 64m
+      pids: 64
 x-deploy-32m: &deploy-32m
   resources:
     limits:
@@ -208,6 +213,7 @@ services:
     <<: *db-service
     image: ${POSTGRES_IMAGE:-postgres:18}
     container_name: holo-postgres
+    oom_score_adj: -300
     shm_size: 256mb
     command:
       - postgres
@@ -281,6 +287,7 @@ services:
     <<: *db-service
     image: valkey/valkey:9.1.0-alpine3.23
     container_name: valkey-cache
+    oom_score_adj: -300
     environment:
       CACHE_PASSWORD: ${CACHE_PASSWORD:?CACHE_PASSWORD is required}
     ports:
@@ -625,7 +632,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    deploy: *deploy-32m
+    deploy: *deploy-64m
     networks:
       - docker-proxy-net
 

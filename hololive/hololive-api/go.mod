@@ -1,8 +1,6 @@
 module github.com/kapu/hololive-api
 
-go 1.26.2
-
-toolchain go1.26.4
+go 1.26.4
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
@@ -15,10 +13,10 @@ require (
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go/v3 v3.41.0
 	github.com/park285/iris-client-go v0.28.0
-	github.com/park285/shared-go v1.28.0
+	github.com/park285/shared-go v1.28.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/quic-go/quic-go v0.60.0
-	github.com/shirou/gopsutil/v4 v4.26.5
+	github.com/shirou/gopsutil/v4 v4.26.6
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.76
 	golang.org/x/crypto v0.53.0
@@ -135,8 +133,8 @@ require (
 	github.com/segmentio/fasthash v1.0.3 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/tech-engine/goscrapy v0.27.17 // indirect
-	github.com/testcontainers/testcontainers-go v0.42.0 // indirect
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0 // indirect
+	github.com/testcontainers/testcontainers-go v0.43.0 // indirect
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect

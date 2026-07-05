@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
 cd "${ROOT_DIR}"
@@ -63,11 +64,33 @@ ensure_go_mod_toolchains() {
     # 버전 하강 없이 최신 추종은 그대로 유지된다.
     local module
     local pin="${GO_TOOLCHAIN_PIN:-go1.26.4}"
+    local pin_version="${pin#go}"
 
-    go work edit -toolchain="${pin}"
-    go mod edit -toolchain="${pin}"
+    # go directive가 핀 이상이면 directive 자체가 하한이고, 그때의 toolchain 라인은
+    # 중복이라 GOWORK=off 정본 검사(boundary/export의 go list)가 "go mod tidy 필요"로
+    # 거부한다 — 핀이 directive보다 높을 때만 라인을 심어야 두 검사와 공존한다.
+    stamp_toolchain_if_below_pin() {
+        local mod_dir="$1"
+        local go_directive
+        go_directive="$(awk '$1 == "go" {print $2; exit}' "${mod_dir}/go.mod")"
+        [[ -z "${go_directive}" ]] && return 0
+        if [[ "$(printf '%s\n%s\n' "${go_directive}" "${pin_version}" | sort -V | head -1)" == "${go_directive}" \
+            && "${go_directive}" != "${pin_version}" ]]; then
+            (cd "${mod_dir}" && go mod edit -toolchain="${pin}")
+        fi
+    }
+
+    local work_go_directive
+    work_go_directive="$(awk '$1 == "go" {print $2; exit}' go.work)"
+    if [[ -n "${work_go_directive}" && "${work_go_directive}" != "${pin_version}" \
+        && "$(printf '%s\n%s\n' "${work_go_directive}" "${pin_version}" | sort -V | head -1)" == "${work_go_directive}" ]]; then
+        go work edit -toolchain="${pin}"
+    fi
+    stamp_toolchain_if_below_pin .
     for module in "${GO_MODULES[@]}"; do
-        (cd "${module}" && go mod edit -toolchain="${pin}")
+        # sibling repo(../shared-go)의 go.mod는 그 repo 소유 — 스탬프하면 그쪽 정본 검사와 충돌.
+        case "${module}" in ../*) continue ;; esac
+        stamp_toolchain_if_below_pin "${module}"
     done
 }
 
@@ -211,8 +234,9 @@ check_nilaway() {
     local nilaway_bin
     nilaway_bin="$(ensure_nilaway)"
 
-    # 동시 3개 제한은 NilAway 프로세스가 내부 병렬이라 코어 과점유를 막기 위함.
-    local nilaway_parallel="${NILAWAY_PARALLEL:-3}"
+    # NilAway는 패턴당 10~16GB RSS까지 자란다 — 3병렬이 2026-07-04 호스트 global OOM(~40GB 스파이크)을 냈다.
+    local nilaway_parallel="${NILAWAY_PARALLEL:-1}"
+    local nilaway_gomemlimit="${NILAWAY_GOMEMLIMIT:-10GiB}"
     local nilaway_tmp_parent="${LOCAL_CI_TMPDIR:-${ROOT_DIR}/.tmp/local-ci}"
     mkdir -p "${nilaway_tmp_parent}"
     local nilaway_tmp
@@ -222,7 +246,7 @@ check_nilaway() {
     local running=0
     local package_pattern
     for package_pattern in "${packages[@]}"; do
-        env GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" \
+        env GOMEMLIMIT="${nilaway_gomemlimit}" GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" \
             "${nilaway_bin}" -pretty-print "${package_pattern}" \
             >"${nilaway_tmp}/$(printf '%s' "${package_pattern}" | tr './' '__').log" 2>&1 &
         running=$(( running + 1 ))

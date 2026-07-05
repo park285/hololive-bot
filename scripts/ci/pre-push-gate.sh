@@ -9,9 +9,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}"
 
+# GOTOOLCHAIN auto면 go 명령이 워크스페이스 멤버(sibling repo 포함) go.mod에 toolchain
+# 라인을 스탬프해 sync/tidy/boundary-check의 정본 관점끼리 영구 진동한다. CI와 동일하게 local 고정.
+export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
+
 # hook이 주입한 GIT_DIR 등이 남으면 linked worktree나 tmp 레포 대상 git 호출이
 # 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
+
+# 게이트(특히 NilAway)가 호스트 램을 전역 고갈시킨 2026-07-04 OOM의 재발 방지.
+if [[ -z "${PRE_PUSH_GATE_SCOPED:-}" ]] && command -v systemd-run >/dev/null 2>&1 \
+  && systemd-run --user --scope --quiet -p MemoryHigh=1G true >/dev/null 2>&1; then
+  echo "[pre-push] memory scope: MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G} MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}"
+  export PRE_PUSH_GATE_SCOPED=1
+  exec systemd-run --user --scope --quiet \
+    -p "MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G}" \
+    -p "MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}" \
+    "${SCRIPT_DIR}/pre-push-gate.sh" "$@"
+fi
 
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate"
