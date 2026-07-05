@@ -93,7 +93,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 	rateLimiter := auth.NewLoginRateLimiter()
 	rateLimiter.Start()
 	statsHub := status.NewHub(endpoints)
-	startStatsHub(ctx, statsHub)
+	startStatsHub(statsHub) //nolint:contextcheck // New의 ctx는 기동 후 취소되므로 hub 수명을 의도적으로 분리한다
 	return &Runtime{
 		cfg:             *cfg,
 		logger:          logger,
@@ -112,7 +112,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 	}, nil
 }
 
-func startStatsHub(_ context.Context, hub *status.Hub) {
+func startStatsHub(hub *status.Hub) {
 	hub.Start()
 }
 

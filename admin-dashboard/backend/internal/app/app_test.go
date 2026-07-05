@@ -644,11 +644,8 @@ func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
 }
 
 func TestStatsHubOutlivesBuildContext(t *testing.T) {
-	buildCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-
 	hub := status.NewHub(nil)
-	startStatsHub(buildCtx, hub)
+	startStatsHub(hub)
 	defer hub.Stop()
 
 	_, updates, unsubscribe := hub.Subscribe()
