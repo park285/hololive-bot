@@ -16,7 +16,6 @@ export const queryKeys = {
 
 	stats: {
 		summary: ["stats"] as const,
-		channels: ["stats", "channels"] as const,
 	},
 
 	streams: {
@@ -36,12 +35,6 @@ export const queryKeys = {
 	calendar: {
 		monthly: (month: number, year: number) =>
 			["calendar", month, year] as const,
-	},
-
-	milestones: {
-		all: ["milestones"] as const,
-		near: ["milestones", "near"] as const,
-		stats: ["milestones", "stats"] as const,
 	},
 
 	status: {

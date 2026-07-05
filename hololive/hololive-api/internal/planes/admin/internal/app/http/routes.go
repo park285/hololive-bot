@@ -54,12 +54,6 @@ func registerMajorEventRoutes(holoAPI *gin.RouterGroup, handler *server.MajorEve
 	holoAPI.POST("/majorevent/monthly-trigger", handler.TriggerMajorEventMonthlyNotification)
 }
 
-func registerMilestoneRoutes(holoAPI *gin.RouterGroup, handler *server.MilestoneHandler) {
-	holoAPI.GET("/milestones", handler.GetMilestones)
-	holoAPI.GET("/milestones/near", handler.GetNearMilestoneMembers)
-	holoAPI.GET("/milestones/stats", handler.GetMilestoneStats)
-}
-
 func registerProfileRoutes(holoAPI *gin.RouterGroup, handler *server.ProfileHandler) {
 	holoAPI.GET("/profiles", handler.GetProfile)
 	holoAPI.GET("/profiles/name", handler.GetProfileByName)
@@ -77,7 +71,6 @@ func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *server.SettingsAP
 func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *server.StatsHandler, streamHandler *server.StreamHandler) {
 	holoAPI.GET("/stats", statsHandler.GetStats)
 	holoAPI.GET("/stats/system", statsHandler.StreamSystemStats)
-	holoAPI.GET("/stats/channels", streamHandler.GetChannelStats)
 	holoAPI.GET("/stats/youtube/community-shorts", statsHandler.GetYouTubeCommunityShortsOps)
 	holoAPI.GET("/channels", streamHandler.GetChannel)
 	holoAPI.GET("/channels/search", streamHandler.SearchChannels)

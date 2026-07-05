@@ -79,15 +79,6 @@ func (h *ProfileHandler) requireProfiles(c *gin.Context) bool {
 	return true
 }
 
-func (h *MilestoneHandler) requireStatsRepository(c *gin.Context) bool {
-	if h == nil || h.Handler == nil || h.statsRepository == nil {
-		respondServiceUnavailable(c, "Stats repository not available")
-		return false
-	}
-
-	return true
-}
-
 func (h *TemplateHandler) requireTemplateAdmin(c *gin.Context) bool {
 	if h == nil || h.Handler == nil || h.templateAdmin == nil {
 		respondServiceUnavailable(c, "template service not available")

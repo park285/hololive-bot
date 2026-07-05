@@ -35,10 +35,6 @@ func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, er
 	if r.ingestionLease != nil {
 		go r.ingestionLease.StartRenewLoop(ctx, errCh)
 	}
-	if r.Scheduler != nil {
-		r.Scheduler.Start(ctx)
-		r.Logger.Info("YouTube ingestion scheduler started", slog.String("runtime", r.runtimeName()))
-	}
 	if r.ScraperScheduler != nil {
 		r.ScraperScheduler.Start(ctx)
 		r.Logger.Info("Scraper scheduler started", slog.String("runtime", r.runtimeName()))
@@ -82,9 +78,6 @@ func (r *YouTubeProducerRuntime) shutdown(ctx context.Context) {
 }
 
 func (r *YouTubeProducerRuntime) stopSchedulers() {
-	if r.Scheduler != nil {
-		r.Scheduler.Stop()
-	}
 	if r.ScraperScheduler != nil {
 		r.ScraperScheduler.Stop()
 	}

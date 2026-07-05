@@ -1,8 +1,4 @@
-export type {
-	ChannelStat,
-	ChannelStatsResponse,
-	StatsResponse,
-} from "@/api/generated/data-contracts";
+export type { StatsResponse } from "@/api/generated/data-contracts";
 
 export type RuntimeMetricKind = "goroutine" | "thread";
 

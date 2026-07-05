@@ -53,7 +53,6 @@ func (h *StreamHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 		handler.Holodex = api.holodex
 		handler.YouTube = api.youtube
 		handler.ValkeyCache = api.valkeyCache
-		handler.StatsRepository = api.statsRepository
 		handler.MemberRepository = api.repository
 		handler.MemberIndexLoader = api.memberIndexLoader
 	}
@@ -67,10 +66,6 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 
 func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 	h.sharedStreamHandler().GetUpcomingStreams(c)
-}
-
-func (h *StreamHandler) GetChannelStats(c *gin.Context) {
-	h.sharedStreamHandler().GetChannelStats(c)
 }
 
 func (h *StreamHandler) getActiveMemberIndex(ctx context.Context) (ids []string, names map[string]string, err error) {

@@ -67,14 +67,6 @@ func (f *fakeYouTubeService) GetRecentVideos(context.Context, string, int64) ([]
 	return []string{}, nil
 }
 
-type fakeScheduler struct {
-	startCalls int
-	stopCalls  int
-}
-
-func (f *fakeScheduler) Start(context.Context) { f.startCalls++ }
-func (f *fakeScheduler) Stop()                 { f.stopCalls++ }
-
 var testLogger = sharedlogging.NewLogger
 
 func schedulerJobKeys(t *testing.T, scheduler any) []string {
@@ -137,21 +129,6 @@ func TestYouTubeProducerRuntimeClose(t *testing.T) {
 	})
 }
 
-func TestYouTubeProducerRuntimeShutdown(t *testing.T) {
-	t.Parallel()
-
-	scheduler := &fakeScheduler{}
-	runtime := &YouTubeProducerRuntime{
-		Logger:    testLogger(),
-		Scheduler: scheduler,
-	}
-
-	runtime.shutdown(context.Background())
-	if scheduler.stopCalls != 1 {
-		t.Fatalf("scheduler Stop calls = %d, want 1", scheduler.stopCalls)
-	}
-}
-
 func TestYouTubeProducerRuntimeStartHTTPServerSendsListenError(t *testing.T) {
 	t.Parallel()
 
@@ -177,27 +154,18 @@ func TestYouTubeProducerRuntimeStartHTTPServerSendsListenError(t *testing.T) {
 func TestYouTubeProducerRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 	t.Parallel()
 
-	scheduler := &fakeScheduler{}
 	readiness := newReadinessState(ingestionRuntimeFeatures{
 		youtubeEnabled:   true,
 		photoSyncEnabled: false,
 	})
 	runtime := &YouTubeProducerRuntime{
 		Logger:      testLogger(),
-		Scheduler:   scheduler,
 		ServerAddr:  "invalid-address",
 		HTTPServers: &sharedserver.RuntimeHTTPServers{H3: &http3.Server{Addr: "invalid-address"}},
 		Readiness:   readiness,
 	}
 
 	runtime.Run()
-
-	if scheduler.startCalls != 1 {
-		t.Fatalf("scheduler Start calls = %d, want 1", scheduler.startCalls)
-	}
-	if scheduler.stopCalls != 1 {
-		t.Fatalf("scheduler Stop calls = %d, want 1", scheduler.stopCalls)
-	}
 
 	statusCode, payload := readiness.Response()
 	if statusCode != http.StatusServiceUnavailable {
@@ -210,4 +178,3 @@ func TestYouTubeProducerRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 }
 
 var _ youtube.Service = (*fakeYouTubeService)(nil)
-var _ youtube.Scheduler = (*fakeScheduler)(nil)

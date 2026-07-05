@@ -21,7 +21,6 @@ type HolodexLiveStatusFallbackConfig struct {
 }
 
 type YouTubeConfig struct {
-	EnableQuotaBuilding          bool
 	CacheExpiration              time.Duration
 	MaxPageBodyBytes             int64
 	ScraperHTTPTimeout           time.Duration

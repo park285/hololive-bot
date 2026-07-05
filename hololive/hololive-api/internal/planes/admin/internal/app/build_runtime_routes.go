@@ -47,10 +47,9 @@ func buildAdminHandler(
 			Profiles:   foundation.ProfileService,
 		},
 		Stream: server.StreamDeps{
-			Holodex:         foundation.HolodexService,
-			YouTube:         ytStack.GetService(),
-			ValkeyCache:     infra.Cache,
-			StatsRepository: ytStack.GetStatsRepository(),
+			Holodex:     foundation.HolodexService,
+			YouTube:     ytStack.GetService(),
+			ValkeyCache: infra.Cache,
 		},
 		Stats: server.StatsDeps{
 			Alarm:       alarmMode.AlarmCRUD,

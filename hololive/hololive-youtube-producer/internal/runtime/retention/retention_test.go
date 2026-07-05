@@ -58,19 +58,16 @@ func TestCleanupDeletesOnlyBeforeCutoffInBatches(t *testing.T) {
 	now := time.Now().UTC()
 
 	for i := range 5 {
-		insertStatsHistory(t, ctx, pool, fmt.Sprintf("sh-old-%d", i), now.AddDate(0, 0, -40).Add(time.Duration(i)*time.Minute))
 		insertChannelSnapshot(t, ctx, pool, fmt.Sprintf("cs-old-%d", i), now.AddDate(0, 0, -40).Add(time.Duration(i)*time.Minute))
 	}
 	for i := range 2 {
-		insertStatsHistory(t, ctx, pool, fmt.Sprintf("sh-recent-%d", i), now.AddDate(0, 0, -1))
 		insertChannelSnapshot(t, ctx, pool, fmt.Sprintf("cs-recent-%d", i), now.AddDate(0, 0, -1))
 	}
 
-	cleaner := NewCleaner(pool, Config{StatsHistoryDays: 30, ChannelSnapshotsDays: 30, BatchSize: 2}, nil)
+	cleaner := NewCleaner(pool, Config{ChannelSnapshotsDays: 30, BatchSize: 2}, nil)
 	deleted, err := cleaner.Cleanup(ctx)
 	require.NoError(t, err)
-	require.EqualValues(t, 10, deleted)
-	require.EqualValues(t, 2, countRows(t, ctx, pool, "youtube_stats_history"))
+	require.EqualValues(t, 5, deleted)
 	require.EqualValues(t, 2, countRows(t, ctx, pool, "youtube_channel_stats_snapshots"))
 }
 
@@ -131,7 +128,7 @@ func TestCleanupViewerSamplesUnlocksLiveSessionsInSameTick(t *testing.T) {
 func TestStartStopsOnContextCancel(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	cleaner := NewCleaner(pool, Config{StatsHistoryDays: 30, BatchSize: 10, Interval: time.Hour}, nil)
+	cleaner := NewCleaner(pool, Config{ChannelSnapshotsDays: 30, BatchSize: 10, Interval: time.Hour}, nil)
 
 	loopCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})

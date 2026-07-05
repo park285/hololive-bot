@@ -35,7 +35,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/stringutil"
 	"github.com/park285/shared-go/pkg/workerpool"
@@ -72,7 +71,6 @@ type Bot struct {
 	alarm                 domain.AlarmCRUD
 	matcher               *matcher.Matcher
 	commandRegistry       *command.Registry
-	statsRepository       stats.StatsCommandRepository
 	acl                   *acl.Service
 	majorEventRepository  command.MajorEventRepository
 	memberNews            command.MemberNewsService
@@ -80,7 +78,6 @@ type Bot struct {
 	membersData           member.DataProvider
 	memberRepository      command.CelebrationCalendarFinder
 	calendarImageRenderer command.CalendarImageRenderer
-	rankImageRenderer     command.RankImageRenderer
 	stopCh                chan struct{}
 	doneCh                chan struct{}
 	selfSender            string
@@ -117,7 +114,6 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		officialProfiles:     stream.profiles,
 		alarm:                stream.alarm,
 		matcher:              stream.matcher,
-		statsRepository:      stream.youTubeStatsRepository,
 		acl:                  support.acl,
 		majorEventRepository: feature.majorEventRepository,
 		memberNews:           feature.memberNews,
@@ -152,7 +148,6 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 
 func (b *Bot) initImageRenderers(calendarCacheDir string, strings *messagestrings.Store) {
 	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(calendarCacheDir), render.WithCalendarStrings(strings))
-	b.rankImageRenderer = render.NewRankCardRenderer(render.WithRankStrings(strings))
 }
 
 func newCelebrationCalendarFinder(data dataDependencies, core *coreDependencies) command.CelebrationCalendarFinder {
@@ -176,8 +171,6 @@ func (b *Bot) initializeCommands() {
 
 	view := b.commandInitView()
 	deps := view.toCommandDependencies(registry)
-
-	b.logger.Info("Stats repository detected", slog.Bool("available", deps.StatsRepository != nil))
 
 	commandsList := view.buildCommands(deps)
 	for _, cmd := range commandsList {

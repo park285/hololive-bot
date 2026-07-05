@@ -41,8 +41,6 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 		domain.TemplateKeyCmdAlarmCleared:      "CLEAR {{.Count}}",
 		domain.TemplateKeyCmdAlarmNotification: "NOTIFY {{.ChannelName}} {{.ScheduledTimeKST}} {{.URL}}",
 		domain.TemplateKeyCmdAlarmLiveStarted:  "LIVE {{.ChannelName}} {{.ScheduledTimeKST}} {{.URL}}",
-		domain.TemplateKeyCmdMilestoneAchieved: "MILESTONE {{.MemberName}} {{.Milestone}}",
-		domain.TemplateKeyCmdMilestoneApproach: "APPROACH {{.MemberName}} {{.Milestone}} {{.Remaining}}",
 		domain.TemplateKeyCmdAmbiguousMember:   "동일한 이름의 멤버가 여러 명 있습니다:\n\n{{range .Candidates}}{{.Index}}. {{.Name}}\n{{end}}\n정확한 멤버를 지정하려면 다음과 같이 입력해주세요:\n{{.Prefix}}{{.CommandExample}} {{.FirstName}}",
 	})
 	formatter := NewResponseFormatter("!", renderer, WithMessageStrings(setupFormatterTestStore(t)))
@@ -97,14 +95,6 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 		MinutesUntil: 0,
 	})
 	assert.Contains(t, liveStarted, "LIVE")
-
-	milestoneMsg, err := formatter.FormatMilestoneAchieved(t.Context(), "미코", "100만")
-	require.NoError(t, err)
-	assert.Equal(t, "MILESTONE 미코 100만", milestoneMsg)
-
-	approachMsg, err := formatter.FormatMilestoneApproaching(t.Context(), "미코", "100만", "5천")
-	require.NoError(t, err)
-	assert.Equal(t, "APPROACH 미코 100만 5천", approachMsg)
 
 	ambiguous := formatter.FormatAmbiguousMembers(t.Context(), []*domain.Member{{Name: "미코", Org: "Hololive"}, {Name: "미코", Org: "Nijisanji"}}, "라이브")
 	assert.Contains(t, ambiguous, "동일한 이름의 멤버가 여러 명")

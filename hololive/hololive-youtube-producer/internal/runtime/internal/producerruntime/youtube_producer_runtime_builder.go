@@ -35,7 +35,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
 )
 
@@ -115,11 +114,6 @@ func buildYouTubeProducerResources(ctx context.Context, appConfig *config.Config
 		YouTubeConfig:   appConfig.YouTube,
 		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,
-		HolodexService:  holodexService,
-		Members:         memberServiceAdapter,
-		StatsRepository: ytstats.NewYouTubeStatsRepository(infra.Postgres, logger),
-		AlarmState:      nil,
-		Formatter:       nil,
 		SharedRateLimit: sharedRL,
 		Logger:          logger,
 	})

@@ -36,7 +36,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 const (
@@ -105,7 +104,6 @@ type StreamHandler struct {
 	Holodex              *holodex.Service
 	YouTube              youtube.Service
 	ValkeyCache          cache.KeyValueCache
-	StatsRepository      ytstats.StatsDashboardRepository
 	MemberRepository     StreamMemberRepository
 	MemberIndexLoader    func(context.Context) ([]*domain.Member, error)
 	State                *StreamState

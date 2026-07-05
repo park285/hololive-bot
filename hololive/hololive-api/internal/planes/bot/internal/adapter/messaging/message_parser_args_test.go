@@ -121,59 +121,6 @@ func TestParseScheduleArgs(t *testing.T) {
 	}
 }
 
-func TestParseStatsArgs(t *testing.T) {
-	t.Parallel()
-
-	adapter := NewMessageAdapter("!", "")
-	tests := []struct {
-		name string
-		args []string
-		want map[string]any
-	}{
-		{
-			name: "default action only",
-			args: nil,
-			want: map[string]any{"action": "gainers"},
-		},
-		{
-			name: "token period keyword",
-			args: []string{"today"},
-			want: map[string]any{"action": "gainers", "period": "today"},
-		},
-		{
-			name: "explicit key and canonical value",
-			args: []string{"period=7d"},
-			want: map[string]any{"action": "gainers", "period": "days:7"},
-		},
-		{
-			name: "korean period key with keyword value",
-			args: []string{"기간=week"},
-			want: map[string]any{"action": "gainers", "period": "week"},
-		},
-		{
-			name: "unknown key with canonical value",
-			args: []string{"foo=last 2 weeks"},
-			want: map[string]any{"action": "gainers", "period": "weeks:2"},
-		},
-		{
-			name: "period key with unknown value keeps raw",
-			args: []string{"period=??"},
-			want: map[string]any{"action": "gainers", "period": "??"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := adapter.parseStatsArgs(tt.args)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("parseStatsArgs() = %#v, want %#v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestNormalizeCompactAlarmTokens(t *testing.T) {
 	t.Parallel()
 

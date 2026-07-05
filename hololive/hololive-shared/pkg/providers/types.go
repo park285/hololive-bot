@@ -22,14 +22,11 @@ package providers
 
 import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 // YouTubeStack - YouTube 관련 서비스 묶음 (선택적 활성화)
 type YouTubeStack struct {
-	Service         youtube.Service
-	Scheduler       youtube.Scheduler
-	StatsRepository *ytstats.StatsRepository
+	Service youtube.Service
 }
 
 func (s *YouTubeStack) GetService() youtube.Service {
@@ -37,18 +34,4 @@ func (s *YouTubeStack) GetService() youtube.Service {
 		return nil
 	}
 	return s.Service
-}
-
-func (s *YouTubeStack) GetScheduler() youtube.Scheduler {
-	if s == nil {
-		return nil
-	}
-	return s.Scheduler
-}
-
-func (s *YouTubeStack) GetStatsRepository() *ytstats.StatsRepository {
-	if s == nil {
-		return nil
-	}
-	return s.StatsRepository
 }

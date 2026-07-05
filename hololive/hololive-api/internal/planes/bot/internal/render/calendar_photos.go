@@ -56,28 +56,6 @@ func newCalendarPhotoFetchState() *calendarPhotoFetchState {
 	}
 }
 
-func fetchPhotosByURL(urls []string) map[string]image.Image {
-	ctx, cancel := context.WithTimeout(context.Background(), photoFetchBudget)
-	defer cancel()
-
-	photos := make(map[string]image.Image)
-	state := newCalendarPhotoFetchState()
-	for _, u := range urls {
-		if state.shouldStop(ctx) {
-			break
-		}
-		if u == "" || state.alreadyFetchedOrAttempted(u, photos) {
-			continue
-		}
-		state.attempted[u] = struct{}{}
-		state.fetches++
-		if img, err := fetchImageWithContext(ctx, thumbnailURL(u, calendarPhotoThumbnailSize)); err == nil {
-			photos[u] = img
-		}
-	}
-	return photos
-}
-
 func (s *calendarPhotoFetchState) shouldStop(ctx context.Context) bool {
 	return ctx.Err() != nil || s.fetches >= calendarPhotoMaxFetches
 }

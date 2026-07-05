@@ -33,7 +33,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,27 +102,23 @@ func TestProvideBotDependenciesMapsOptionalYouTubeStack(t *testing.T) {
 
 		require.NotNil(t, deps)
 		assert.Nil(t, deps.Service)
-		assert.Nil(t, deps.YouTubeStatsRepository)
 	})
 
 	t.Run("populated stack wires YouTube dependencies", func(t *testing.T) {
 		t.Parallel()
 
 		youTubeService := &stubYouTubeService{}
-		statsRepository := &ytstats.StatsRepository{}
 
 		deps := ProvideBotDependencies(&BotDependencyModules{
 			Stream: BotStreamModule{
 				YTStack: &providers.YouTubeStack{
-					Service:         youTubeService,
-					StatsRepository: statsRepository,
+					Service: youTubeService,
 				},
 			},
 		})
 
 		require.NotNil(t, deps)
 		assert.Same(t, youTubeService, deps.Service)
-		assert.Same(t, statsRepository, deps.YouTubeStatsRepository)
 	})
 }
 

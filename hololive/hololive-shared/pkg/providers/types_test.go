@@ -34,12 +34,6 @@ func TestYouTubeStackNilSafeAccessors(t *testing.T) {
 	if stack.GetService() != nil {
 		t.Fatal("GetService() must return nil for nil receiver")
 	}
-	if stack.GetScheduler() != nil {
-		t.Fatal("GetScheduler() must return nil for nil receiver")
-	}
-	if stack.GetStatsRepository() != nil {
-		t.Fatal("GetStatsRepository() must return nil for nil receiver")
-	}
 }
 
 func TestChannelPollerRegistrationWithBudgetProfileCopiesSourceUnits(t *testing.T) {

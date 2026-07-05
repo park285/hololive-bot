@@ -28,7 +28,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
@@ -44,7 +43,6 @@ type commandInitView struct {
 	alarm                 domain.AlarmCRUD
 	matcher               *matcher.Matcher
 	officialProfiles      *member.ProfileService
-	statsRepository       stats.StatsCommandRepository
 	memberNews            command.MemberNewsService
 	membersData           member.DataProvider
 	formatter             *adapter.ResponseFormatter
@@ -55,7 +53,6 @@ type commandInitView struct {
 	majorEventRepository  command.MajorEventRepository
 	memberRepository      command.CelebrationCalendarFinder
 	calendarImageRenderer command.CalendarImageRenderer
-	rankImageRenderer     command.RankImageRenderer
 	commandBuilders       []orchcmd.CommandBuilder
 }
 
@@ -71,7 +68,6 @@ func (b *Bot) commandInitView() commandInitView {
 		alarm:                 b.alarm,
 		matcher:               b.matcher,
 		officialProfiles:      b.officialProfiles,
-		statsRepository:       b.statsRepository,
 		memberNews:            b.memberNews,
 		membersData:           b.membersData,
 		formatter:             b.formatter,
@@ -82,7 +78,6 @@ func (b *Bot) commandInitView() commandInitView {
 		majorEventRepository:  b.majorEventRepository,
 		memberRepository:      b.memberRepository,
 		calendarImageRenderer: b.calendarImageRenderer,
-		rankImageRenderer:     b.rankImageRenderer,
 		commandBuilders:       orchcmd.CloneCommandBuilders(b.commandBuilders),
 	}
 }
@@ -95,7 +90,6 @@ func (v *commandInitView) toCommandDependencies(registry *command.Registry) *com
 		Alarm:            v.alarm,
 		Matcher:          v.matcher,
 		OfficialProfiles: v.officialProfiles,
-		StatsRepository:  v.statsRepository,
 		MemberNews:       v.memberNews,
 		MembersData:      v.membersData,
 		Formatter:        v.formatter,
@@ -119,7 +113,6 @@ func (v *commandInitView) buildCommands(deps *command.Dependencies) []command.Co
 		command.NewAlarmCommand(deps),
 		command.NewMemberInfoCommand(deps),
 		command.NewSubscriberCommand(deps),
-		command.NewStatsCommand(deps, v.rankImageRenderer),
 	}
 
 	if v.memberRepository != nil {

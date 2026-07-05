@@ -28,11 +28,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
@@ -73,10 +71,6 @@ type CalendarImageRenderer interface {
 	RenderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error)
 }
 
-type RankImageRenderer interface {
-	RenderRankImage(periodLabel string, entries []render.RankCardEntry) ([]byte, error)
-}
-
 type Dependencies struct {
 	Holodex          domain.StreamProvider
 	Chzzk            *chzzk.Client
@@ -84,7 +78,6 @@ type Dependencies struct {
 	Alarm            domain.AlarmCRUD
 	Matcher          *matcher.Matcher
 	OfficialProfiles *member.ProfileService
-	StatsRepository  stats.StatsCommandRepository
 	MemberNews       MemberNewsService
 	MembersData      member.DataProvider
 	Formatter        *adapter.ResponseFormatter

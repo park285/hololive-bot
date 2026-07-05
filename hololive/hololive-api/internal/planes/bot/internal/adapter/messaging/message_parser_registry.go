@@ -40,7 +40,6 @@ func defaultCommandParsers(ma *MessageAdapter) []CommandParser {
 			return ma.tryHelpCommand(command, raw)
 		}),
 		commandParserFunc(ma.trySubscriberCommand),
-		commandParserFunc(ma.tryStatsCommand),
 		commandParserFunc(ma.tryMemberInfoCommand),
 		commandParserFunc(ma.tryMemberNewsSubscriptionCommand),
 		commandParserFunc(ma.tryMemberNewsCommand),

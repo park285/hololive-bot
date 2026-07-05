@@ -1,4 +1,3 @@
 # File-level LOC thresholds for architecture gate.
 # Format:
 # relative/path/to/file.go:MAX_LINES
-hololive/hololive-shared/pkg/service/youtube/internal/milestonescheduler/scheduler_alerts.go:320

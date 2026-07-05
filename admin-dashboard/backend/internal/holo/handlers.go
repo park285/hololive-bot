@@ -4,8 +4,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -14,8 +12,6 @@ import (
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
 )
-
-const MaxChannelStatsLimit = 500
 
 type Handler struct {
 	Client *Client
@@ -78,29 +74,6 @@ func (h Handler) ProxyMemberMutation(method, suffix string) gin.HandlerFunc {
 	}
 }
 
-func (h Handler) ChannelStats(c *gin.Context) {
-	query := c.Request.URL.Query()
-	limit, err := validateChannelStatsLimit(query.Get("limit"))
-	if err != nil {
-		httpx.Abort(c, err)
-		return
-	}
-	query.Del("limit")
-	resp, err := h.Client.Proxy(c.Request.Context(), http.MethodGet, "/api/holo/stats/channels", query, nil)
-	if err != nil {
-		httpx.Abort(c, err)
-		return
-	}
-	if limit > 0 {
-		resp.Body, err = TrimChannelStats(resp.Body, limit)
-		if err != nil {
-			httpx.Abort(c, err)
-			return
-		}
-	}
-	writeProxyJSON(c, resp)
-}
-
 const maxRequestBodyBytes = 2 << 20
 
 func readJSONBody(r *http.Request) ([]byte, error) {
@@ -147,75 +120,6 @@ func filterQuery(query url.Values, allowed map[string]struct{}) url.Values {
 		}
 	}
 	return filtered
-}
-
-func validateChannelStatsLimit(raw string) (int, error) {
-	if strings.TrimSpace(raw) == "" {
-		return 0, nil
-	}
-	limit, err := strconv.Atoi(raw)
-	if err != nil || limit < 0 {
-		return 0, httpx.BadRequest("invalid channel stats limit")
-	}
-	if limit > MaxChannelStatsLimit {
-		return 0, httpx.BadRequest("channel stats limit is too large")
-	}
-	return limit, nil
-}
-
-func TrimChannelStats(body []byte, limit int) ([]byte, error) {
-	if limit <= 0 {
-		return body, nil
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, httpx.BadGateway()
-	}
-	statsRaw, ok := raw["stats"]
-	if !ok {
-		return body, nil
-	}
-	var stats map[string]json.RawMessage
-	if err := json.Unmarshal(statsRaw, &stats); err != nil {
-		return nil, httpx.BadGateway()
-	}
-	if len(stats) <= limit {
-		return body, nil
-	}
-	encoded, err := json.Marshal(topChannelStats(stats, limit))
-	if err != nil {
-		return nil, err
-	}
-	raw["stats"] = encoded
-	return json.Marshal(raw)
-}
-
-func topChannelStats(stats map[string]json.RawMessage, limit int) map[string]json.RawMessage {
-	type item struct {
-		key string
-		sub int64
-	}
-	items := make([]item, 0, len(stats))
-	for key, payload := range stats {
-		var value struct {
-			SubscriberCount int64 `json:"SubscriberCount"`
-		}
-		if err := json.Unmarshal(payload, &value); err != nil {
-			continue
-		}
-		items = append(items, item{key: key, sub: value.SubscriberCount})
-	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].sub == items[j].sub {
-			return items[i].key < items[j].key
-		}
-		return items[i].sub > items[j].sub
-	})
-	trimmed := make(map[string]json.RawMessage, limit)
-	for _, item := range items[:limit] {
-		trimmed[item.key] = stats[item.key]
-	}
-	return trimmed
 }
 
 func closeRequestBody(body interface{ Close() error }) {

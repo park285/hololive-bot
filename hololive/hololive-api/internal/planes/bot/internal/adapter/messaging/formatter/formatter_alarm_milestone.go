@@ -28,36 +28,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
-type milestoneAchievedTemplateData struct {
-	MemberName string
-	Milestone  string
-}
-
-type milestoneApproachingTemplateData struct {
-	MemberName string
-	Milestone  string
-	Remaining  string
-}
-
-func (f *ResponseFormatter) FormatMilestoneAchieved(ctx context.Context, memberName, milestone string) (string, error) {
-	data := milestoneAchievedTemplateData{
-		MemberName: memberName,
-		Milestone:  milestone,
-	}
-
-	return f.render(ctx, domain.TemplateKeyCmdMilestoneAchieved, data)
-}
-
-func (f *ResponseFormatter) FormatMilestoneApproaching(ctx context.Context, memberName, milestone, remaining string) (string, error) {
-	data := milestoneApproachingTemplateData{
-		MemberName: memberName,
-		Milestone:  milestone,
-		Remaining:  remaining,
-	}
-
-	return f.render(ctx, domain.TemplateKeyCmdMilestoneApproach, data)
-}
-
 func (f *ResponseFormatter) formatAlarmTypesLabel(ctx context.Context, types domain.AlarmTypes) string {
 	if len(types) == 0 || len(types) == len(domain.AllAlarmTypes) {
 		return f.messageStrings.GetContext(ctx, messagestrings.NamespaceAlarmType, "ALL")

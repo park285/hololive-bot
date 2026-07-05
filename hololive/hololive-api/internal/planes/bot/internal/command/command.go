@@ -19,14 +19,12 @@ type MemberNewsSubscriptionCommand = handlers.MemberNewsSubscriptionCommand
 type NormalizeFunc = handlers.NormalizeFunc
 type Registry = handlers.Registry
 type ScheduleCommand = handlers.ScheduleCommand
-type StatsCommand = handlers.StatsCommand
 type SubscriberCommand = handlers.SubscriberCommand
 type UpcomingCommand = handlers.UpcomingCommand
 
 type CalendarCommand = handlers.CalendarCommand
 type CalendarImageRenderer = handlers.CalendarImageRenderer
 type CelebrationCalendarFinder = handlers.CelebrationCalendarFinder
-type RankImageRenderer = handlers.RankImageRenderer
 
 var ErrUnknownCommand = handlers.ErrUnknownCommand
 
@@ -45,6 +43,5 @@ var NewMemberNewsCommand = handlers.NewMemberNewsCommand
 var NewMemberNewsSubscriptionCommand = handlers.NewMemberNewsSubscriptionCommand
 var NewRegistry = handlers.NewRegistry
 var NewScheduleCommand = handlers.NewScheduleCommand
-var NewStatsCommand = handlers.NewStatsCommand
 var NewSubscriberCommand = handlers.NewSubscriberCommand
 var NewUpcomingCommand = handlers.NewUpcomingCommand

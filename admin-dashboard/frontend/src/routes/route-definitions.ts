@@ -36,15 +36,6 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
 			})),
 	},
 	{
-		id: "milestones",
-		path: "milestones",
-		absolutePath: "/dashboard/milestones",
-		load: () =>
-			import("@/features/milestones/pages/MilestonesPage").then((module) => ({
-				default: module.MilestonesPage,
-			})),
-	},
-	{
 		id: "calendar",
 		path: "calendar",
 		absolutePath: "/dashboard/calendar",

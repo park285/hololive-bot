@@ -28,18 +28,18 @@ import (
 )
 
 func TestRetentionDaysEnvClampsNegativeToZero(t *testing.T) {
-	t.Setenv(statsHistoryDaysEnv, "-5")
-	require.Equal(t, 0, retentionDaysEnv(statsHistoryDaysEnv))
+	t.Setenv(channelSnapshotsDaysEnv, "-5")
+	require.Equal(t, 0, retentionDaysEnv(channelSnapshotsDaysEnv))
 }
 
 func TestRetentionDaysEnvParseFailureIsZero(t *testing.T) {
-	t.Setenv(statsHistoryDaysEnv, "not-a-number")
-	require.Equal(t, 0, retentionDaysEnv(statsHistoryDaysEnv))
+	t.Setenv(channelSnapshotsDaysEnv, "not-a-number")
+	require.Equal(t, 0, retentionDaysEnv(channelSnapshotsDaysEnv))
 }
 
 func TestRetentionDaysEnvPositivePassesThrough(t *testing.T) {
-	t.Setenv(statsHistoryDaysEnv, "30")
-	require.Equal(t, 30, retentionDaysEnv(statsHistoryDaysEnv))
+	t.Setenv(channelSnapshotsDaysEnv, "30")
+	require.Equal(t, 30, retentionDaysEnv(channelSnapshotsDaysEnv))
 }
 
 func TestCutoffBoundaryPreservesRowAtCutoff(t *testing.T) {
@@ -55,7 +55,6 @@ func TestCutoffBoundaryPreservesRowAtCutoff(t *testing.T) {
 
 func TestConfigEnabled(t *testing.T) {
 	require.False(t, Config{}.Enabled())
-	require.True(t, Config{StatsHistoryDays: 1}.Enabled())
 	require.True(t, Config{ChannelSnapshotsDays: 1}.Enabled())
 	require.True(t, Config{LiveSessionsDays: 1}.Enabled())
 	require.True(t, Config{ViewerSamplesDays: 1}.Enabled())

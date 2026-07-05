@@ -1,24 +1,9 @@
-import Activity from "lucide-react/dist/esm/icons/activity.mjs";
 import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
-import { lazy, Suspense } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatsHero } from "@/features/stats/components/StatsHero";
 import { StatsOverviewSection } from "@/features/stats/components/StatsOverviewSection";
 import { StatsServicesSection } from "@/features/stats/components/StatsServicesSection";
 import { useStatsPage } from "@/features/stats/hooks/useStatsPage";
-
-const ChannelStatsTable = lazy(() =>
-	import("@/components/dashboard/ChannelStatsTable").then((m) => ({
-		default: m.ChannelStatsTable,
-	})),
-);
-
-const StatsSectionLoader = () => (
-	<div className="flex items-center justify-center h-48 text-subtle-foreground w-full bg-muted/50 rounded-lg">
-		<Loader2 className="w-6 h-6 animate-spin mr-2" />
-		<span className="text-sm">로딩 중…</span>
-	</div>
-);
 
 export const StatsPage = () => {
 	const {
@@ -72,16 +57,6 @@ export const StatsPage = () => {
 				onSelectService={setSelectedService}
 				onNavigate={go}
 			/>
-
-			<div className="bg-card rounded-2xl border border-border p-6 shadow-sm animate-fade-in-up stagger-5">
-				<h3 className="text-lg font-display font-bold text-foreground mb-6 flex items-center gap-2">
-					<Activity size={20} className="text-rose-500" />
-					채널 통계 (구독자 순 상위 10등)
-				</h3>
-				<Suspense fallback={<StatsSectionLoader />}>
-					<ChannelStatsTable />
-				</Suspense>
-			</div>
 		</div>
 	);
 };

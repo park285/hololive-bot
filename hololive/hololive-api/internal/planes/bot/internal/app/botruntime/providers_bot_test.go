@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
@@ -99,8 +98,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	memberMatcher := &matcher.Matcher{}
 
 	var ytService youtube.Service = &mockYouTubeService{}
-	ytStatsRepository := &stats.StatsRepository{}
-	ytStack := &providers.YouTubeStack{Service: ytService, StatsRepository: ytStatsRepository}
+	ytStack := &providers.YouTubeStack{Service: ytService}
 	activityLogger := &activity.Logger{}
 	settingsService := &settings.Service{}
 	aclService := &acl.Service{}
@@ -172,7 +170,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	if deps.Holodex != holodexService || deps.Chzzk != chzzkClient || deps.Twitch != twitchClient {
 		t.Fatal("stream client wiring mismatch")
 	}
-	if deps.Service != ytService || deps.YouTubeStatsRepository != ytStatsRepository {
+	if deps.Service != ytService {
 		t.Fatal("youtube stack wiring mismatch")
 	}
 	if deps.Activity != activityLogger || deps.Settings != settingsService || deps.ACL != aclService {
@@ -200,8 +198,5 @@ func TestProvideBotDependencies_NilYouTubeStackIsSafe(t *testing.T) {
 	}
 	if deps.Service != nil {
 		t.Fatal("Service must be nil when ytStack is nil")
-	}
-	if deps.YouTubeStatsRepository != nil {
-		t.Fatal("YouTubeStatsRepository must be nil when ytStack is nil")
 	}
 }

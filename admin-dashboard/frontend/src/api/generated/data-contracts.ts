@@ -85,22 +85,6 @@ export interface CalendarResponse {
   year: number;
 }
 
-export interface ChannelStat {
-  ChannelID: string;
-  ChannelTitle: string;
-  /** @format int64 */
-  SubscriberCount: number;
-  /** @format int64 */
-  VideoCount: number;
-  /** @format int64 */
-  ViewCount: number;
-}
-
-export interface ChannelStatsResponse {
-  stats: Partial<Record<string, ChannelStat>>;
-  status: string;
-}
-
 export interface Container {
   /** @format int64 */
   created: number;
@@ -186,65 +170,6 @@ export interface Member {
 export interface MembersResponse {
   members: Member[];
   status: string;
-}
-
-export interface Milestone {
-  achievedAt: string;
-  channelId: string;
-  memberName: string;
-  notified: boolean;
-  type: string;
-  /** @format int64 */
-  value: number;
-}
-
-export interface MilestoneStats {
-  /** @format int64 */
-  notNotifiedCount: number;
-  /** @format int64 */
-  recentAchievements: number;
-  /** @format int64 */
-  totalAchieved: number;
-  /** @format int64 */
-  totalNearMilestone: number;
-}
-
-export interface MilestoneStatsResponse {
-  stats: MilestoneStats;
-  status: string;
-}
-
-export interface MilestonesResponse {
-  /** @format int64 */
-  limit: number;
-  milestones: Milestone[];
-  /** @format int64 */
-  offset: number;
-  status: string;
-  /** @format int64 */
-  total: number;
-}
-
-export interface NearMilestone {
-  channelId: string;
-  /** @format int64 */
-  currentSubs: number;
-  memberName: string;
-  /** @format int64 */
-  nextMilestone: number;
-  /** @format double */
-  progressPct: number;
-  /** @format int64 */
-  remaining: number;
-}
-
-export interface NearMilestonesResponse {
-  /** @format int64 */
-  count: number;
-  members: NearMilestone[];
-  status: string;
-  /** @format double */
-  threshold: number;
 }
 
 export interface PortMapping {

@@ -273,7 +273,6 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			}
 
 			youtubeService := &fakeYouTubeService{}
-			youtubeScheduler := &fakeScheduler{}
 			memberData := &fakeMemberDataProvider{
 				members: []*domain.Member{
 					{ChannelID: "active-channel", Name: "active", IsGraduated: false},
@@ -289,8 +288,7 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 				settingsService: settingsService,
 				holodexService:  &holodex.Service{},
 				ytStack: &providers.YouTubeStack{
-					Service:   youtubeService,
-					Scheduler: youtubeScheduler,
+					Service: youtubeService,
 				},
 				photoSync: &holodex.PhotoSyncService{},
 				cleanup:   func() { cleanupCalls++ },
@@ -363,7 +361,6 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			runtime := &YouTubeProducerRuntime{
 				Config:           ingestionConfig,
 				Logger:           testLogger(),
-				Scheduler:        youtubeScheduler,
 				ScraperScheduler: scraperScheduler,
 				PhotoSync:        infra.photoSync,
 				ConfigSubscriber: configSubscriber,
@@ -374,7 +371,6 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 
 			require.NotNil(t, runtime)
 			assert.Equal(t, ":30123", runtime.ServerAddr)
-			assert.NotNil(t, runtime.Scheduler)
 			assert.NotNil(t, runtime.ScraperScheduler)
 			assert.NotNil(t, runtime.ConfigSubscriber)
 			assert.NotNil(t, runtime.PhotoSync)

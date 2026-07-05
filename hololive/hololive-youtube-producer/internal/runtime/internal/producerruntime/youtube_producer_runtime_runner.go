@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
@@ -45,7 +44,6 @@ type YouTubeProducerRuntime struct {
 	Config      *config.Config
 	Logger      *slog.Logger
 
-	Scheduler           youtube.Scheduler
 	ScraperScheduler    *poller.Scheduler
 	PhotoSync           photoSyncService
 	ConfigSubscriber    *configsub.Subscriber
@@ -92,7 +90,7 @@ func (r *YouTubeProducerRuntime) startRuntime(ctx context.Context, errCh chan<- 
 	}
 	sharedlog.Info(ctx, r.Logger, EventIngestionRuntimeStarted, "ingestion runtime started",
 		sharedlog.Runtime(r.runtimeName()),
-		slog.Bool("youtube_scheduler_enabled", r.Scheduler != nil || r.ScraperScheduler != nil),
+		slog.Bool("youtube_scheduler_enabled", r.ScraperScheduler != nil),
 		slog.Bool("photo_sync_enabled", r.PhotoSync != nil),
 	)
 }

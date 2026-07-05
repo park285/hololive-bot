@@ -48,7 +48,7 @@ func TestDependenciesViews_NilSafety(t *testing.T) {
 	if got := deps.dataDeps(); got.cache != nil || got.postgres != nil || got.memberRepository != nil || got.memberCache != nil {
 		t.Fatal("dataDeps nil-safety failed")
 	}
-	if got := deps.streamDeps(); got.holodex != nil || got.youTubeStatsRepository != nil {
+	if got := deps.streamDeps(); got.holodex != nil {
 		t.Fatal("streamDeps nil-safety failed")
 	}
 	if got := deps.supportDeps(); got.acl != nil || got.workerPool != nil {

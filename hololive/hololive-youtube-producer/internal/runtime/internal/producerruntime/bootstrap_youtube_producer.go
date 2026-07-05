@@ -197,7 +197,6 @@ func newYouTubeProducerRuntime(
 		RuntimeName:         runtimeName,
 		Config:              appConfig,
 		Logger:              logger,
-		Scheduler:           youtubeDeps.youtubeScheduler,
 		ScraperScheduler:    youtubeDeps.scraperScheduler,
 		PhotoSync:           buildRuntimePhotoSyncService(appConfig, features, infra, logger),
 		ConfigSubscriber:    configSubscriber,

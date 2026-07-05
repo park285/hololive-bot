@@ -2,12 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import type { AggregatedStatus } from "../../api/core";
-import {
-	buildCurrentServiceStats,
-	buildMainStats,
-	selectTopChannelStats,
-} from "./selectors";
-import type { ChannelStatsResponse, StatsResponse } from "./types";
+import { buildCurrentServiceStats, buildMainStats } from "./selectors";
+import type { StatsResponse } from "./types";
 
 (globalThis as { React?: typeof React }).React = React;
 
@@ -47,31 +43,4 @@ test("buildMainStats maps summary counts", () => {
 		cards.map((card) => card.value),
 		[11, 22, 33],
 	);
-});
-
-test("selectTopChannelStats sorts subscribers descending and trims to top 10", () => {
-	const stats = Object.fromEntries(
-		Array.from({ length: 12 }, (_, index) => {
-			const subscriberCount = 1_000 + index;
-			return [
-				`channel-${index + 1}`,
-				{
-					ChannelID: `channel-${index + 1}`,
-					ChannelTitle: `Channel ${index + 1}`,
-					SubscriberCount: subscriberCount,
-					ViewCount: subscriberCount * 10,
-					VideoCount: index + 1,
-				},
-			];
-		}),
-	) as ChannelStatsResponse["stats"];
-
-	const topStats = selectTopChannelStats({
-		status: "ok",
-		stats,
-	});
-
-	assert.equal(topStats.length, 10);
-	assert.equal(topStats[0]?.ChannelID, "channel-12");
-	assert.equal(topStats[9]?.ChannelID, "channel-3");
 });

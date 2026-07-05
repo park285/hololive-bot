@@ -194,7 +194,6 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 		"alarm",
 		"member_info",
 		"subscriber",
-		"stats",
 		"major_event",
 		"member_news",
 		"news_subscription",

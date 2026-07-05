@@ -37,24 +37,12 @@ const (
 	defaultInterval        = time.Hour
 	batchYield             = 10 * time.Millisecond
 
-	statsHistoryDaysEnv     = "YOUTUBE_PRODUCER_RETENTION_STATS_HISTORY_DAYS"
 	channelSnapshotsDaysEnv = "YOUTUBE_PRODUCER_RETENTION_CHANNEL_SNAPSHOTS_DAYS"
 	liveSessionsDaysEnv     = "YOUTUBE_PRODUCER_RETENTION_LIVE_SESSIONS_DAYS"
 	viewerSamplesDaysEnv    = "YOUTUBE_PRODUCER_RETENTION_VIEWER_SAMPLES_DAYS"
 )
 
 // BRIN(time/captured_at)은 정렬을 제공하지 않아 ORDER BY 시 매 배치가 cutoff 미만 잔여 전량을 스캔+정렬한다. cutoff 미만 전량 삭제라 순서 무관 → 생략(live_sessions는 btree idx_yls_ended_cleanup이라 ORDER BY 유지).
-const deleteStatsHistorySQL = `
-WITH picked AS (
-	SELECT time, channel_id
-	FROM youtube_stats_history
-	WHERE time < $1
-	LIMIT $2
-)
-DELETE FROM youtube_stats_history t
-USING picked
-WHERE t.time = picked.time AND t.channel_id = picked.channel_id`
-
 const deleteChannelSnapshotsSQL = `
 WITH picked AS (
 	SELECT channel_id, captured_at
@@ -85,7 +73,6 @@ USING picked
 WHERE l.video_id = picked.video_id`
 
 type Config struct {
-	StatsHistoryDays     int
 	ChannelSnapshotsDays int
 	LiveSessionsDays     int
 	ViewerSamplesDays    int
@@ -95,7 +82,6 @@ type Config struct {
 
 func LoadConfig() Config {
 	return Config{
-		StatsHistoryDays:     retentionDaysEnv(statsHistoryDaysEnv),
 		ChannelSnapshotsDays: retentionDaysEnv(channelSnapshotsDaysEnv),
 		LiveSessionsDays:     retentionDaysEnv(liveSessionsDaysEnv),
 		ViewerSamplesDays:    retentionDaysEnv(viewerSamplesDaysEnv),
@@ -115,7 +101,7 @@ func retentionDaysEnv(key string) int {
 }
 
 func (c Config) Enabled() bool {
-	return c.StatsHistoryDays > 0 || c.ChannelSnapshotsDays > 0 || c.LiveSessionsDays > 0 || c.ViewerSamplesDays > 0
+	return c.ChannelSnapshotsDays > 0 || c.LiveSessionsDays > 0 || c.ViewerSamplesDays > 0
 }
 
 func (c Config) effectiveBatchSize() int {
@@ -220,7 +206,6 @@ type target struct {
 
 func (c *Cleaner) targets() []target {
 	return []target{
-		{name: "youtube_stats_history", retentionDays: c.config.StatsHistoryDays, deleteSQL: deleteStatsHistorySQL},
 		{name: "youtube_channel_stats_snapshots", retentionDays: c.config.ChannelSnapshotsDays, deleteSQL: deleteChannelSnapshotsSQL},
 		{name: "youtube_live_sessions", retentionDays: c.config.LiveSessionsDays, deleteSQL: deleteLiveSessionsSQL},
 	}

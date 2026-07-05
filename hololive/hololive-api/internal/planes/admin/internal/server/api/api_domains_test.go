@@ -20,7 +20,6 @@ func TestDomainHandlers_FromValidHandler(t *testing.T) {
 	assertDomainHandlerInitialized(t, "Stats", domains.Stats)
 	assertDomainHandlerInitialized(t, "Settings", domains.Settings)
 	assertDomainHandlerInitialized(t, "Template", domains.Template)
-	assertDomainHandlerInitialized(t, "Milestone", domains.Milestone)
 	assertDomainHandlerInitialized(t, "Profile", domains.Profile)
 	assertDomainHandlerInitialized(t, "MajorEvent", domains.MajorEvent)
 	assertDomainHandlerInitialized(t, "OAuth", domains.OAuth)

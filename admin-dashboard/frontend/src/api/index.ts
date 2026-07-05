@@ -3,11 +3,6 @@ export {
 	namesApi,
 } from "../features/alarms/api";
 export { membersApi } from "../features/members/api";
-export {
-	type GetMilestonesParams,
-	milestonesApi,
-} from "../features/milestones/api";
-
 export { roomsApi } from "../features/rooms/api";
 export { settingsApi } from "../features/settings/api";
 export { statsApi } from "../features/stats/api";
