@@ -9,6 +9,7 @@
 | Check | Expected |
 |---|---|
 | Health | `http://127.0.0.1:30190/health` returns `{"status":"ok"}` |
+| Public ingress | Seoul Caddy proxies `admin.holo-oshi.com` to `100.100.1.3:30191`; central `admin-dashboard-ingress.socket` bridges that to loopback `127.0.0.1:30190` |
 | Container | `admin-dashboard` healthy (`./bin/healthcheck` 기반 compose healthcheck) |
 | Auth | 미인증 `/admin/api/*` 호출이 401 JSON 반환 |
 | Logs | no repeated valkey/session/relay errors |
@@ -77,6 +78,30 @@ cd admin-dashboard/frontend && npm ci && npm run lint && npm run build
 - 이미지 버전 스탬프는 `HOLO_BOT_VERSION` → `-X main.Version` 으로 주입됩니다.
 - compose 정의: `deploy/compose/docker-compose.prod.yml`의 `admin-dashboard` 서비스, Dockerfile: `admin-dashboard/Dockerfile`.
 - `--build`가 의존성 `hololive-api` 이미지도 재빌드하므로 `hololive-api` 컨테이너가 함께 재생성됩니다(수 초 단절). 동반 재기동을 피해야 하면 사전 빌드 후 `up -d --no-deps admin-dashboard`를 사용합니다.
+
+## Public ingress
+
+`admin-dashboard`는 중앙 호스트에서 `127.0.0.1:30190` loopback-only로 유지합니다. 공개 도메인
+`admin.holo-oshi.com`은 Seoul Caddy가 종료점을 맡고, 중앙 호스트의
+`admin-dashboard-ingress.socket`이 Tailscale 전용 포트 `100.100.1.3:30191`에서 받아
+`127.0.0.1:30190`으로 전달합니다.
+
+중앙 호스트 source 제한은 `admin-dashboard-ingress-firewall.service`가
+`/etc/nftables.d/admin-dashboard-ingress.nft`를 로드해서 적용합니다. 허용 source는 Seoul gateway
+`100.100.1.5`와 로컬 loopback뿐입니다.
+
+설치/재적용:
+
+```bash
+sudo scripts/deploy/sync-opt-current.sh
+sudo systemctl enable --now admin-dashboard-ingress-firewall.service admin-dashboard-ingress.socket
+```
+
+Seoul Caddy upstream:
+
+```text
+reverse_proxy 100.100.1.3:30191
+```
 
 ## Logs
 
@@ -158,6 +183,8 @@ Mitigation:
 
 ```bash
 curl -s http://127.0.0.1:30190/health
+curl -fsS http://100.100.1.3:30191/health   # central 또는 Seoul gateway에서 실행
+curl -fsS https://admin.holo-oshi.com/health
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30190/admin/api/auth/session   # 401
 curl -sI http://127.0.0.1:30190/health | grep -i x-content-type-options                  # nosniff
 ```

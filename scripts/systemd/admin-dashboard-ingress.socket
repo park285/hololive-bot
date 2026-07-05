@@ -1,0 +1,15 @@
+[Unit]
+Description=Hololive admin-dashboard Seoul gateway ingress socket
+Documentation=file:/opt/hololive-bot/compose/current/docs/current/runbooks/admin-dashboard.md
+Requires=admin-dashboard-ingress-firewall.service
+After=network-online.target tailscaled.service admin-dashboard-ingress-firewall.service
+Wants=network-online.target
+
+[Socket]
+ListenStream=100.100.1.3:30191
+FreeBind=yes
+NoDelay=true
+Service=admin-dashboard-ingress.service
+
+[Install]
+WantedBy=sockets.target

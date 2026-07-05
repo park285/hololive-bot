@@ -1,0 +1,18 @@
+[Unit]
+Description=Hololive admin-dashboard loopback bridge
+Documentation=file:/opt/hololive-bot/compose/current/docs/current/runbooks/admin-dashboard.md
+Requires=admin-dashboard-ingress.socket
+After=hololive-compose.service admin-dashboard-ingress.socket
+
+[Service]
+ExecStart=/lib/systemd/systemd-socket-proxyd 127.0.0.1:30190
+Restart=on-failure
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=127.0.0.0/8
+IPAddressAllow=100.100.1.3/32
+IPAddressAllow=100.100.1.5/32
