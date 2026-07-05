@@ -18,6 +18,7 @@ func (r *Runtime) Handler() http.Handler {
 
 	engine.GET("/health", r.handleHealth)
 	engine.GET("/favicon.svg", gin.WrapF(r.static.ServeFavicon))
+	engine.GET("/theme-init.js", gin.WrapF(r.static.ServeThemeInit))
 	engine.GET("/assets/*filepath", gin.WrapF(r.static.ServeAsset))
 
 	api := engine.Group("/admin/api")

@@ -38,6 +38,10 @@ func (h Handler) ServeFavicon(w http.ResponseWriter, r *http.Request) {
 	h.serveFile(w, r, "favicon.svg", "public, max-age=86400")
 }
 
+func (h Handler) ServeThemeInit(w http.ResponseWriter, r *http.Request) {
+	h.serveFile(w, r, "theme-init.js", "no-cache")
+}
+
 func (h Handler) ServeIndex(w http.ResponseWriter, r *http.Request) {
 	h.serveFile(w, r, "index.html", "no-cache")
 }

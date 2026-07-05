@@ -14,6 +14,7 @@ func testHandler() Handler {
 	return Handler{dist: fstest.MapFS{
 		"index.html":    {Data: []byte("<html>app</html>")},
 		"favicon.svg":   {Data: []byte("<svg/>")},
+		"theme-init.js": {Data: []byte("(function(){})()")},
 		"assets/app.js": {Data: []byte("console.log(1)")},
 	}}
 }
@@ -26,6 +27,16 @@ func TestServeIndex(t *testing.T) {
 	require.Equal(t, "text/html; charset=utf-8", rec.Header().Get("Content-Type"))
 	require.Equal(t, "no-cache", rec.Header().Get("Cache-Control"))
 	require.Contains(t, rec.Body.String(), "app")
+}
+
+func TestServeThemeInit(t *testing.T) {
+	rec := httptest.NewRecorder()
+	testHandler().ServeThemeInit(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/theme-init.js", http.NoBody))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Header().Get("Content-Type"), "javascript")
+	require.Equal(t, "no-cache", rec.Header().Get("Cache-Control"))
+	require.Contains(t, rec.Body.String(), "(function(){})()")
 }
 
 func TestServeAssetImmutableCache(t *testing.T) {

@@ -585,6 +585,19 @@ func TestSPAFallbackServesIndexWith200(t *testing.T) {
 	}
 }
 
+func TestThemeInitServedAsScriptNotSPAFallback(t *testing.T) {
+	rt := newTestRuntime(t, &fakeSessions{}, nil)
+	rt.static = static.NewHandlerFromFS(fstest.MapFS{
+		"index.html":    &fstest.MapFile{Data: []byte("<!doctype html><html lang=\"ko\"></html>")},
+		"theme-init.js": &fstest.MapFile{Data: []byte("(function(){})()")},
+	})
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/theme-init.js", http.NoBody))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Header().Get("Content-Type"), "javascript")
+	require.NotContains(t, rec.Body.String(), "<!doctype html>")
+}
+
 func TestUnknownAdminAPIRouteIs404JSON(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
 	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/does-not-exist", http.NoBody))
