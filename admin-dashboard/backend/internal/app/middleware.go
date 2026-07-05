@@ -96,7 +96,7 @@ func (r *Runtime) securityHeaders() gin.HandlerFunc {
 		header.Set("X-Frame-Options", "DENY")
 		header.Set("X-XSS-Protection", "1; mode=block")
 		header.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.ytimg.com https://*.ggpht.com; connect-src 'self' ws: wss:; frame-ancestors 'none'")
+		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https://*.ytimg.com https://*.ggpht.com; connect-src 'self' ws: wss:; frame-ancestors 'none'")
 		if r.cfg.Security.ForceHTTPS {
 			header.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}

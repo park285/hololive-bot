@@ -169,7 +169,9 @@ func TestHealthAndSecurityHeaders(t *testing.T) {
 	require.Equal(t, "ok", decodeBody(t, rec)["status"])
 	require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
 	require.Equal(t, "DENY", rec.Header().Get("X-Frame-Options"))
-	require.NotEmpty(t, rec.Header().Get("Content-Security-Policy"))
+	csp := rec.Header().Get("Content-Security-Policy")
+	require.NotEmpty(t, csp)
+	require.Contains(t, csp, "font-src 'self' data:")
 	require.NotEmpty(t, rec.Header().Get("Strict-Transport-Security"))
 }
 
