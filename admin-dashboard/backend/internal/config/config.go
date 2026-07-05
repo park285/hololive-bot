@@ -28,9 +28,6 @@ type SecurityConfig struct {
 	CSRFMode             SecurityMode
 	WSOriginMode         SecurityMode
 	ForceHTTPS           bool
-	TLSEnabled           bool
-	TLSCertPath          string
-	TLSKeyPath           string
 }
 
 type SessionConfig struct {
@@ -237,6 +234,9 @@ func (c *SessionConfig) validateTTLWindows() error {
 	if c.RotationInterval < c.GracePeriod {
 		return fmt.Errorf("rotation_interval must be greater than or equal to grace_period")
 	}
+	if c.RotationInterval >= c.ExpiryDuration {
+		return fmt.Errorf("rotation_interval must be less than expiry_duration")
+	}
 	return nil
 }
 
@@ -247,10 +247,14 @@ func LoadSecurityConfig(env string, allowLocalhostInProd bool) SecurityConfig {
 		CSRFMode:             parseSecurityMode(envutil.String("CSRF_MODE", string(SecurityEnforce))),
 		WSOriginMode:         parseSecurityMode(envutil.String("WS_ORIGIN_MODE", string(SecurityEnforce))),
 		ForceHTTPS:           envutil.Bool("FORCE_HTTPS", true),
-		TLSEnabled:           envutil.Bool("TLS_ENABLED", false),
-		TLSCertPath:          envutil.String("TLS_CERT_PATH", "/certs/localhost.crt"),
-		TLSKeyPath:           envutil.String("TLS_KEY_PATH", "/certs/localhost.key"),
 	}
+}
+
+func (c *Config) ForwardedTrustWarning() string {
+	if c.Security.ForceHTTPS && !c.TrustedForwarders {
+		return "FORCE_HTTPS is on but TRUST_FORWARDED_HEADERS is off: behind a reverse proxy every client resolves to the proxy IP, so the login rate limiter shares one bucket and a scanner can lock out real admins; set TRUST_FORWARDED_HEADERS and TRUSTED_PROXY_CIDRS"
+	}
+	return ""
 }
 
 func parseSecurityMode(value string) SecurityMode {

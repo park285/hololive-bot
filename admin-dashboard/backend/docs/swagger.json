@@ -332,6 +332,9 @@
           "image": {
             "type": "string"
           },
+          "managed": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -346,6 +349,9 @@
           },
           "status": {
             "type": "string"
+          },
+          "stopBlocked": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -355,7 +361,9 @@
           "status",
           "state",
           "created",
-          "ports"
+          "ports",
+          "managed",
+          "stopBlocked"
         ],
         "type": "object"
       },
@@ -1682,6 +1690,9 @@
               }
             },
             "description": "Container stopped"
+          },
+          "403": {
+            "description": "Infrastructure container stop is not allowed"
           },
           "404": {
             "description": "Container is not managed"

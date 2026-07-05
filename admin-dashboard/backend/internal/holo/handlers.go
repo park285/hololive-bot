@@ -198,7 +198,7 @@ func topChannelStats(stats map[string]json.RawMessage, limit int) map[string]jso
 	items := make([]item, 0, len(stats))
 	for key, payload := range stats {
 		var value struct {
-			SubscriberCount int64 `json:"subscriberCount"`
+			SubscriberCount int64 `json:"SubscriberCount"`
 		}
 		if err := json.Unmarshal(payload, &value); err != nil {
 			continue

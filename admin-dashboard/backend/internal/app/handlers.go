@@ -80,6 +80,12 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 		httpx.Abort(c, err)
 		return
 	}
+	sessionID, _ := sessionIDFrom(c)
+	if !r.acquireSessionStream(sessionID) {
+		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams for this session", Details: map[string]int{"limit": maxStreamsPerSession}}})
+		return
+	}
+	defer r.releaseSessionStream(sessionID)
 	select {
 	case r.wsStreams <- struct{}{}:
 		defer func() { <-r.wsStreams }()

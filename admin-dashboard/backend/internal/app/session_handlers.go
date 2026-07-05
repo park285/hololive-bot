@@ -67,13 +67,8 @@ func (r *Runtime) handleSessionStatus(c *gin.Context) {
 		httpx.Abort(c, httpx.Unauthorized())
 		return
 	}
-	sess, err := r.sessions.Get(c.Request.Context(), sessionID)
-	if err != nil {
-		r.logger.Error("session lookup failed", slog.Any("error", err))
-		httpx.Abort(c, httpx.StoreUnavailable())
-		return
-	}
-	if sess == nil {
+	sess, ok := sessionFrom(c)
+	if !ok {
 		httpx.Abort(c, httpx.Unauthorized())
 		return
 	}
@@ -205,6 +200,8 @@ func (r *Runtime) heartbeatRefreshed(c *gin.Context, sessionID string, result se
 			return
 		}
 	}
+	maxAge := max(time.Until(result.Session.ExpiresAt), time.Second)
+	auth.SetSessionCookie(c.Writer, auth.SignSessionID(sessionID, r.cfg.SessionSecret), maxAge, r.cfg.Security.ForceHTTPS)
 	ginjson.Respond(c, http.StatusOK, heartbeatOKResponse{Status: "ok", AbsoluteExpiresAt: result.Session.AbsoluteExpiresAt.Unix()})
 }
 

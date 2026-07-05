@@ -16,14 +16,16 @@ import (
 )
 
 type Container struct {
-	ID      string        `json:"id"`
-	Name    string        `json:"name"`
-	Image   string        `json:"image"`
-	Status  string        `json:"status"`
-	State   string        `json:"state"`
-	Health  *string       `json:"health,omitempty"`
-	Created int64         `json:"created"`
-	Ports   []PortMapping `json:"ports"`
+	ID          string        `json:"id"`
+	Name        string        `json:"name"`
+	Image       string        `json:"image"`
+	Status      string        `json:"status"`
+	State       string        `json:"state"`
+	Health      *string       `json:"health,omitempty"`
+	Created     int64         `json:"created"`
+	Ports       []PortMapping `json:"ports"`
+	Managed     bool          `json:"managed"`
+	StopBlocked bool          `json:"stopBlocked"`
 }
 
 type PortMapping struct {
@@ -32,15 +34,20 @@ type PortMapping struct {
 	PortType    string  `json:"port_type"`
 }
 
+const stopGraceSeconds = 30
+
 type Client struct {
-	baseURL         string
-	http            *http.Client
-	managedPrefixes []string
-	excludeSuffixes []string
-	mu              sync.RWMutex
-	cachedAt        time.Time
-	cached          []Container
-	cacheTTL        time.Duration
+	baseURL             string
+	http                *http.Client
+	managedPrefixes     []string
+	stopBlockedPrefixes []string
+	excludeSuffixes     []string
+	listTimeout         time.Duration
+	actionTimeout       time.Duration
+	mu                  sync.RWMutex
+	cachedAt            time.Time
+	cached              []Container
+	cacheTTL            time.Duration
 }
 
 func NewClient(dockerHost string) (*Client, error) {
@@ -51,16 +58,20 @@ func NewClient(dockerHost string) (*Client, error) {
 	return &Client{
 		baseURL: baseURL,
 		http: &http.Client{
-			Timeout:   10 * time.Second,
 			Transport: transport,
 		},
-		managedPrefixes: []string{"hololive", "valkey", "postgres", "deunhealth", "admin"},
-		excludeSuffixes: []string{"-init"},
-		cacheTTL:        5 * time.Second,
+		managedPrefixes:     []string{"hololive", "valkey", "postgres", "deunhealth", "admin"},
+		stopBlockedPrefixes: []string{"valkey", "postgres", "deunhealth", "admin"},
+		excludeSuffixes:     []string{"-init"},
+		listTimeout:         10 * time.Second,
+		actionTimeout:       (stopGraceSeconds + 10) * time.Second,
+		cacheTTL:            5 * time.Second,
 	}, nil
 }
 
 func (c *Client) Available(ctx context.Context) bool {
+	ctx, cancel := context.WithTimeout(ctx, c.listTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/_ping", http.NoBody)
 	if err != nil {
 		return false
@@ -109,6 +120,8 @@ func (c *Client) cachedContainers() ([]Container, bool) {
 }
 
 func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummary, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.listTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/containers/json?all=true", http.NoBody)
 	if err != nil {
 		return nil, httpx.Internal(err)
@@ -143,15 +156,30 @@ func (c *Client) storeCache(containers []Container) {
 }
 
 func (c *Client) RestartContainer(ctx context.Context, name string) error {
-	return c.action(ctx, name, "restart?t=30")
+	return c.action(ctx, name, fmt.Sprintf("restart?t=%d", stopGraceSeconds), c.actionTimeout)
 }
 
 func (c *Client) StopContainer(ctx context.Context, name string) error {
-	return c.action(ctx, name, "stop?t=30")
+	if !c.IsManaged(name) {
+		return httpx.NewError(http.StatusNotFound, "container not found")
+	}
+	if c.stopBlocked(name) {
+		return httpx.NewError(http.StatusForbidden, "stopping infrastructure container is not allowed; use restart")
+	}
+	return c.action(ctx, name, fmt.Sprintf("stop?t=%d", stopGraceSeconds), c.actionTimeout)
 }
 
 func (c *Client) StartContainer(ctx context.Context, name string) error {
-	return c.action(ctx, name, "start")
+	return c.action(ctx, name, "start", c.listTimeout)
+}
+
+func (c *Client) stopBlocked(name string) bool {
+	for _, prefix := range c.stopBlockedPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) IsManaged(name string) bool {
@@ -173,10 +201,12 @@ func (c *Client) IsManaged(name string) bool {
 	return true
 }
 
-func (c *Client) action(ctx context.Context, name, action string) error {
+func (c *Client) action(ctx context.Context, name, action string, timeout time.Duration) error {
 	if !c.IsManaged(name) {
 		return httpx.NewError(http.StatusNotFound, "container not found")
 	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	resp, err := c.doAction(ctx, name, action)
 	if err != nil {
 		return err
@@ -241,14 +271,16 @@ func (c *Client) mapContainer(summary *containerSummary) (Container, bool) {
 	}
 	health := parseHealth(summary.Status)
 	return Container{
-		ID:      summary.ID,
-		Name:    name,
-		Image:   summary.Image,
-		Status:  summary.Status,
-		State:   summary.State,
-		Health:  health,
-		Created: summary.Created,
-		Ports:   ports,
+		ID:          summary.ID,
+		Name:        name,
+		Image:       summary.Image,
+		Status:      summary.Status,
+		State:       summary.State,
+		Health:      health,
+		Created:     summary.Created,
+		Ports:       ports,
+		Managed:     true,
+		StopBlocked: c.stopBlocked(name),
 	}, true
 }
 

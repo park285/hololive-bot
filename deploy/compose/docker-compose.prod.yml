@@ -602,6 +602,8 @@ services:
       PORT: "30190"
       ENV: "production"
       FORCE_HTTPS: "true"
+      TRUST_FORWARDED_HEADERS: "true"
+      TRUSTED_PROXY_CIDRS: "172.16.0.0/12"
       LOG_LEVEL: "info"
       ALLOWED_ORIGINS: "https://admin.holo-oshi.com,https://admin.capu.blog"
       ADMIN_USER: ${ADMIN_USER:-admin}

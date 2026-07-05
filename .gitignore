@@ -242,5 +242,6 @@ scripts/export-closeout-packet.sh
 
 # Build outputs
 admin-dashboard/backend/admin
+admin-dashboard/backend/admin-dashboard
 
 .worktrees/

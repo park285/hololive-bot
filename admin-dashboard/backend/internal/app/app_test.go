@@ -361,6 +361,49 @@ func TestHeartbeatResultContract(t *testing.T) {
 	}
 }
 
+func TestPlainHeartbeatReissuesSessionCookie(t *testing.T) {
+	cases := []struct {
+		name            string
+		rotationEnabled bool
+	}{
+		{"rotation_disabled", false},
+		{"rotation_enabled_not_due", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sess := liveSession("hb-cookie-session")
+			store := storeWith(sess)
+			store.refreshFn = func(context.Context, string, bool) (session.RefreshResult, error) {
+				return session.RefreshResult{Kind: session.RefreshRefreshed, Session: sess}, nil
+			}
+			store.rotateFn = func(context.Context, string) (*session.Session, error) {
+				return nil, nil
+			}
+			rt := newTestRuntime(t, store, func(cfg *config.Config) {
+				cfg.Security.CSRFMode = config.SecurityOff
+				cfg.Session.TokenRotationEnabled = tc.rotationEnabled
+			})
+
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader(`{"idle":false}`))
+			req.AddCookie(signedSessionCookie(sess.ID))
+			rec := doRequest(rt.Handler(), req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			payload := decodeBody(t, rec)
+			require.Contains(t, payload, "absolute_expires_at")
+			require.NotContains(t, payload, "csrf_token")
+			var sessionCookie *http.Cookie
+			for _, cookie := range rec.Result().Cookies() {
+				if cookie.Name == auth.SessionCookieName {
+					sessionCookie = cookie
+				}
+			}
+			require.NotNil(t, sessionCookie, "plain heartbeat must re-issue the session cookie")
+			require.Positive(t, sessionCookie.MaxAge)
+		})
+	}
+}
+
 func TestHeartbeatInvalidPayload(t *testing.T) {
 	sess := liveSession("hb-bad-payload")
 	rt := newTestRuntime(t, storeWith(sess), func(cfg *config.Config) {
@@ -412,6 +455,61 @@ func TestETagRoundTrip(t *testing.T) {
 	rec = doRequest(handler, req)
 	require.Equal(t, http.StatusNotModified, rec.Code)
 	require.Empty(t, rec.Body.String())
+}
+
+func TestETagSkippedForLargeBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	writer := &etagWriter{ResponseWriter: c.Writer, limit: 8}
+
+	_, err := writer.WriteString("hello")
+	require.NoError(t, err)
+	large := strings.Repeat("x", 100)
+	_, err = writer.WriteString(large)
+	require.NoError(t, err)
+	writer.flush(httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/status", http.NoBody))
+
+	require.True(t, writer.overflow)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Empty(t, rec.Header().Get("ETag"))
+	require.Equal(t, "hello"+large, rec.Body.String())
+}
+
+func TestSystemStatsWSPerSessionCap(t *testing.T) {
+	sess := liveSession("ws-cap-session")
+	rt := newTestRuntime(t, storeWith(sess), nil)
+
+	server := httptest.NewServer(rt.Handler())
+	defer server.Close()
+
+	header := http.Header{}
+	header.Set("Origin", "https://ok.test")
+	header.Set("Cookie", signedSessionCookie(sess.ID).String())
+	dialURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/admin/api/ws/system-stats"
+
+	conns := make([]*websocket.Conn, 0, maxStreamsPerSession)
+	defer func() {
+		for _, conn := range conns {
+			if cerr := conn.Close(); cerr != nil {
+				continue
+			}
+		}
+	}()
+	for range maxStreamsPerSession {
+		conn, resp, err := websocket.DefaultDialer.Dial(dialURL, header)
+		require.NoError(t, err)
+		if resp != nil {
+			require.NoError(t, resp.Body.Close())
+		}
+		conns = append(conns, conn)
+	}
+
+	_, resp, err := websocket.DefaultDialer.Dial(dialURL, header)
+	require.Error(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 }
 
 func TestSessionStatusIssuesCSRFTokenForBootstrap(t *testing.T) {

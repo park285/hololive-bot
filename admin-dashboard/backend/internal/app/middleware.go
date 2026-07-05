@@ -14,11 +14,12 @@ import (
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/config"
 	"github.com/kapu/admin-dashboard/internal/httpx"
+	"github.com/kapu/admin-dashboard/internal/session"
 )
 
 func (r *Runtime) auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sessionID, clearCookies, err := r.resolveSession(c.Request)
+		sessionID, sess, clearCookies, err := r.resolveSession(c.Request)
 		if err != nil {
 			if clearCookies {
 				auth.ClearAuthCookies(c.Writer, r.cfg.Security.ForceHTTPS)
@@ -27,28 +28,29 @@ func (r *Runtime) auth() gin.HandlerFunc {
 			return
 		}
 		c.Set(sessionIDKey, sessionID)
+		c.Set(sessionObjKey, sess)
 		c.Next()
 	}
 }
 
-func (r *Runtime) resolveSession(req *http.Request) (sessionID string, clearCookies bool, err error) {
+func (r *Runtime) resolveSession(req *http.Request) (sessionID string, sess *session.Session, clearCookies bool, err error) {
 	cookie, err := req.Cookie(auth.SessionCookieName)
 	if err != nil {
-		return "", false, httpx.Unauthorized()
+		return "", nil, false, httpx.Unauthorized()
 	}
 	sessionID, ok := auth.ValidateSessionSignature(cookie.Value, r.cfg.SessionSecret)
 	if !ok {
-		return "", true, httpx.Unauthorized()
+		return "", nil, true, httpx.Unauthorized()
 	}
-	sess, err := r.sessions.Get(req.Context(), sessionID)
+	sess, err = r.sessions.Get(req.Context(), sessionID)
 	if err != nil {
 		r.logger.Error("session lookup failed", slog.Any("error", err))
-		return "", false, httpx.StoreUnavailable()
+		return "", nil, false, httpx.StoreUnavailable()
 	}
 	if sess == nil || (sess.RotatedTo != nil && req.URL.Path != "/admin/api/auth/heartbeat") {
-		return "", true, httpx.Unauthorized()
+		return "", nil, true, httpx.Unauthorized()
 	}
-	return sessionID, false, nil
+	return sessionID, sess, false, nil
 }
 
 func (r *Runtime) csrf() gin.HandlerFunc {
@@ -102,13 +104,21 @@ func (r *Runtime) securityHeaders() gin.HandlerFunc {
 	}
 }
 
+const etagMaxBufferBytes = 64 << 10
+
 type etagWriter struct {
 	gin.ResponseWriter
-	body   strings.Builder
-	status int
+	body     strings.Builder
+	status   int
+	limit    int
+	overflow bool
 }
 
 func (w *etagWriter) WriteHeader(status int) {
+	if w.overflow {
+		w.ResponseWriter.WriteHeader(status)
+		return
+	}
 	w.status = status
 }
 
@@ -118,6 +128,12 @@ func (w *etagWriter) Write(data []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
+	if !w.overflow && w.body.Len()+len(data) > w.limit {
+		w.startOverflow()
+	}
+	if w.overflow {
+		return w.ResponseWriter.Write(data)
+	}
 	return w.body.Write(data)
 }
 
@@ -125,7 +141,20 @@ func (w *etagWriter) WriteString(s string) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
+	if !w.overflow && w.body.Len()+len(s) > w.limit {
+		w.startOverflow()
+	}
+	if w.overflow {
+		return w.ResponseWriter.WriteString(s)
+	}
 	return w.body.WriteString(s)
+}
+
+func (w *etagWriter) startOverflow() {
+	w.overflow = true
+	w.ResponseWriter.WriteHeader(w.status)
+	writeBufferedString(w.ResponseWriter, w.body.String())
+	w.body.Reset()
 }
 
 func (w *etagWriter) Status() int {
@@ -136,6 +165,9 @@ func (w *etagWriter) Status() int {
 }
 
 func (w *etagWriter) Size() int {
+	if w.overflow {
+		return w.ResponseWriter.Size()
+	}
 	return w.body.Len()
 }
 
@@ -144,6 +176,9 @@ func (w *etagWriter) Written() bool {
 }
 
 func (w *etagWriter) flush(req *http.Request) {
+	if w.overflow {
+		return
+	}
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
@@ -182,7 +217,7 @@ func (r *Runtime) etag() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		writer := &etagWriter{ResponseWriter: c.Writer}
+		writer := &etagWriter{ResponseWriter: c.Writer, limit: etagMaxBufferBytes}
 		c.Writer = writer
 		c.Next()
 		writer.flush(c.Request)
