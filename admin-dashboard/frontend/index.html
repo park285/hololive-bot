@@ -7,28 +7,11 @@
   <meta name="theme-color" content="#0ea5e9" />
   <meta name="description" content="통합 봇 관리 시스템" />
 
-  <!-- Preconnect for faster font loading -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-
-  <!-- Outfit (display) + Plus Jakarta Sans (body) -->
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>Bot Admin Console</title>
 
-  <!-- 첫 페인트 전에 .dark를 세팅해야 FOUC가 없다. 번들은 module(defer)이라 늦는다. src/lib/theme.ts와 동일 로직. -->
-  <script>
-    (function () {
-      var pref = "system";
-      try {
-        var stored = localStorage.getItem("theme");
-        if (stored === "light" || stored === "dark" || stored === "system") pref = stored;
-      } catch (e) { }
-      var dark = pref === "dark" || (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-      document.documentElement.classList.toggle("dark", dark);
-    })();
-  </script>
+  <!-- CSP script-src 'self'가 인라인을 차단하므로 외부 파일이어야 하고, module(defer)은 첫 페인트 뒤라 FOUC가 생기므로 classic script로 paint 전에 실행한다. 로직은 src/lib/theme.ts와 동일. -->
+  <script src="/theme-init.js"></script>
 </head>
 
 <body>

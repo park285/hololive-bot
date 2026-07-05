@@ -4,8 +4,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-	--font-display: "Outfit", "system-ui", "sans-serif";
-	--font-body: "Plus Jakarta Sans", "system-ui", "sans-serif";
+	--font-display: "Outfit Variable", "system-ui", "sans-serif";
+	--font-body: "Plus Jakarta Sans Variable", "system-ui", "sans-serif";
 
 	--color-background: hsl(var(--background));
 	--color-foreground: hsl(var(--foreground));

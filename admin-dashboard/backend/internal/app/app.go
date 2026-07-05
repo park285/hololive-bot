@@ -93,7 +93,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 	rateLimiter := auth.NewLoginRateLimiter()
 	rateLimiter.Start()
 	statsHub := status.NewHub(endpoints)
-	statsHub.StartContext(ctx)
+	startStatsHub(statsHub) //nolint:contextcheck // New의 ctx는 기동 후 취소되므로 hub 수명을 의도적으로 분리한다
 	return &Runtime{
 		cfg:             *cfg,
 		logger:          logger,
@@ -110,6 +110,10 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 		wsPingPeriod:    defaultWSPingPeriod,
 		openapiJSON:     openapiJSON,
 	}, nil
+}
+
+func startStatsHub(hub *status.Hub) {
+	hub.Start()
 }
 
 func (r *Runtime) Run() {
