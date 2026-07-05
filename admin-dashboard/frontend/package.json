@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
-    "test": "npx tsx --tsconfig tsconfig.app.json --test src/features/alarms/selectors.test.ts src/features/members/selectors.test.ts src/features/members/members-page.performance.test.ts src/features/stats/selectors.test.ts src/features/stats/lib/systemStats.test.ts src/features/streams/lib/media.test.mjs src/api/blueprint-section-8.test.ts src/api/msw.integration.test.ts src/routes/route-definitions.test.ts src/hooks/useHeartbeat.test.ts src/lib/polling.test.ts src/lib/queryState.test.ts src/lib/theme.test.ts",
+    "test": "npx tsx --tsconfig tsconfig.app.json --test src/features/alarms/selectors.test.ts src/features/members/selectors.test.ts src/features/members/members-page.performance.test.ts src/features/stats/selectors.test.ts src/features/stats/lib/systemStats.test.ts src/features/streams/lib/media.test.mjs src/api/blueprint-section-8.test.ts src/api/msw.integration.test.ts src/routes/route-definitions.test.ts src/hooks/useHeartbeat.test.ts src/lib/queryState.test.ts src/lib/theme.test.ts",
     "preview": "vite preview",
     "generate:api": "mkdir -p ../backend/docs && (cd ../backend && go run ./cmd/export-openapi > docs/swagger.json) && swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular"
   },

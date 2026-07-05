@@ -6,7 +6,6 @@ import { Progress } from "@/components/ui/Progress";
 import { QuerySection } from "@/components/ui/QuerySection";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { milestonesApi } from "@/features/milestones/api";
-import { visibleRefetchInterval } from "@/lib/polling";
 import { sectionStateProps } from "@/lib/queryState";
 
 const normalizePercent = (value: number) => {
@@ -27,7 +26,7 @@ export const NearMilestonesSection = () => {
 		queryKey: queryKeys.milestones.near,
 		queryFn: () => milestonesApi.getNear(0.9),
 		staleTime: 30000,
-		refetchInterval: visibleRefetchInterval(60000),
+		refetchInterval: 60000,
 	});
 
 	const nearData = query.data;

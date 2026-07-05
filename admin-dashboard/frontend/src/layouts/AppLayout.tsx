@@ -3,7 +3,7 @@ import LogOut from "lucide-react/dist/esm/icons/log-out.mjs";
 import Menu from "lucide-react/dist/esm/icons/menu.mjs";
 import Play from "lucide-react/dist/esm/icons/play.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "@/api/core";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
@@ -24,6 +24,8 @@ export const AppLayout = () => {
 			? window.matchMedia("(min-width: 768px)").matches
 			: true,
 	);
+	const asideRef = useRef<HTMLElement>(null);
+	const menuButtonRef = useRef<HTMLButtonElement>(null);
 
 	const handleLogout = () => {
 		if (isLoggingOut) {
@@ -79,6 +81,18 @@ export const AppLayout = () => {
 		};
 	}, [isMobileNavOpen]);
 
+	const mobileDrawerOpen = !isDesktop && isMobileNavOpen;
+	const wasDrawerOpen = useRef(false);
+
+	useEffect(() => {
+		if (mobileDrawerOpen) {
+			asideRef.current?.querySelector<HTMLElement>("nav a[href]")?.focus();
+		} else if (wasDrawerOpen.current) {
+			menuButtonRef.current?.focus();
+		}
+		wasDrawerOpen.current = mobileDrawerOpen;
+	}, [mobileDrawerOpen]);
+
 	const expanded = isDesktop ? isSidebarOpen : true;
 
 	const navGroups = NAV_GROUPS;
@@ -115,6 +129,12 @@ export const AppLayout = () => {
 			)}
 
 			<aside
+				ref={asideRef}
+				id="app-sidebar"
+				inert={!isDesktop && !isMobileNavOpen}
+				role={mobileDrawerOpen ? "dialog" : undefined}
+				aria-modal={mobileDrawerOpen || undefined}
+				aria-label="주 내비게이션"
 				className={clsx(
 					"fixed inset-y-0 left-0 z-40 w-[260px] flex flex-col bg-card/80 backdrop-blur-xl border-r border-border shadow-sm transition-transform duration-300 md:relative md:translate-x-0 md:transition-[width]",
 					isMobileNavOpen ? "translate-x-0" : "-translate-x-full",
@@ -257,10 +277,14 @@ export const AppLayout = () => {
 				</div>
 			</aside>
 
-			<main className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
+			<main
+				inert={mobileDrawerOpen}
+				className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10"
+			>
 				<header className="h-20 bg-card/60 backdrop-blur-md border-b border-border/50 flex items-center justify-between px-4 md:px-8 sticky top-0 z-20">
 					<div className="flex items-center gap-3 min-w-0">
 						<Button
+							ref={menuButtonRef}
 							type="button"
 							variant="ghost"
 							size="icon"
@@ -269,6 +293,8 @@ export const AppLayout = () => {
 								setIsMobileNavOpen((prev) => !prev);
 							}}
 							aria-label="메뉴 열기"
+							aria-expanded={mobileDrawerOpen}
+							aria-controls="app-sidebar"
 						>
 							<Menu aria-hidden="true" />
 						</Button>

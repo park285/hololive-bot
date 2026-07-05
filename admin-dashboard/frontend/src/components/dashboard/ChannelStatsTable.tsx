@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/api/queryKeys";
-import { visibleRefetchInterval } from "@/lib/polling";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { statsApi } from "@/features/stats/api";
 import { selectTopChannelStats } from "@/features/stats/selectors";
@@ -24,7 +23,7 @@ export const ChannelStatsTable = () => {
 	} = useQuery({
 		queryKey: queryKeys.stats.channels,
 		queryFn: statsApi.getChannels,
-		refetchInterval: visibleRefetchInterval(60000),
+		refetchInterval: 60000,
 		select: selectTopChannelStats,
 	});
 

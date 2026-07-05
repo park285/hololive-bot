@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/Badge";
 import { QuerySection } from "@/components/ui/QuerySection";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { milestonesApi } from "@/features/milestones/api";
-import { visibleRefetchInterval } from "@/lib/polling";
 import { sectionStateProps } from "@/lib/queryState";
 
 const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
@@ -32,7 +31,7 @@ export const AchievedMilestonesSection = () => {
 		queryKey: queryKeys.milestones.all,
 		queryFn: () => milestonesApi.getAchieved({ limit: 20 }),
 		staleTime: 60000,
-		refetchInterval: visibleRefetchInterval(120000),
+		refetchInterval: 120000,
 	});
 
 	const achievedData = query.data;

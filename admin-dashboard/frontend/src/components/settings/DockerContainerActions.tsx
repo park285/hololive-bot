@@ -6,7 +6,6 @@ import {
 	type StatusOnlyResponse,
 } from "@/api/core";
 import { queryKeys } from "@/api/queryKeys";
-import { visibleRefetchInterval } from "@/lib/polling";
 import toast from "@/lib/toast-api";
 import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
 
@@ -40,7 +39,7 @@ export function useDockerContainerActions({
 	const { data: dockerHealth } = useQuery({
 		queryKey: queryKeys.docker.health,
 		queryFn: dockerApi.checkHealth,
-		refetchInterval: visibleRefetchInterval(30000),
+		refetchInterval: 30000,
 		retry: 1,
 		initialData: initialHealth,
 	});
@@ -60,7 +59,7 @@ export function useDockerContainerActions({
 		queryKey: queryKeys.docker.containers,
 		queryFn: dockerApi.getContainers,
 		enabled: dockerHealth?.available === true,
-		refetchInterval: visibleRefetchInterval(15000),
+		refetchInterval: 15000,
 		initialData: safeInitialContainers,
 	});
 

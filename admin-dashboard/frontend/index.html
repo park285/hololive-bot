@@ -16,6 +16,19 @@
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>Bot Admin Console</title>
+
+  <!-- 첫 페인트 전에 .dark를 세팅해야 FOUC가 없다. 번들은 module(defer)이라 늦는다. src/lib/theme.ts와 동일 로직. -->
+  <script>
+    (function () {
+      var pref = "system";
+      try {
+        var stored = localStorage.getItem("theme");
+        if (stored === "light" || stored === "dark" || stored === "system") pref = stored;
+      } catch (e) { }
+      var dark = pref === "dark" || (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.classList.toggle("dark", dark);
+    })();
+  </script>
 </head>
 
 <body>

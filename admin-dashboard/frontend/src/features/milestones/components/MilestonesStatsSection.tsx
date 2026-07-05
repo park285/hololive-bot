@@ -9,7 +9,6 @@ import { QuerySection } from "@/components/ui/QuerySection";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatCard } from "@/components/ui/StatCard";
 import { milestonesApi } from "@/features/milestones/api";
-import { visibleRefetchInterval } from "@/lib/polling";
 import { sectionStateProps } from "@/lib/queryState";
 
 interface MilestonesStatCard {
@@ -34,7 +33,7 @@ export const MilestonesStatsSection = () => {
 		queryKey: queryKeys.milestones.stats,
 		queryFn: milestonesApi.getStats,
 		staleTime: 30000,
-		refetchInterval: visibleRefetchInterval(60000),
+		refetchInterval: 60000,
 	});
 
 	const stats = query.data;

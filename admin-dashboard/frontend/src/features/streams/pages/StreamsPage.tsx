@@ -5,7 +5,6 @@ import { streamsApi } from "@/features/streams/api";
 import { LiveStreamsSection } from "@/features/streams/components/LiveStreamsSection";
 import { UpcomingStreamsSection } from "@/features/streams/components/UpcomingStreamsSection";
 import type { StreamOrg } from "@/features/streams/types";
-import { visibleRefetchInterval } from "@/lib/polling";
 import { type SectionStateProps, sectionStateProps } from "@/lib/queryState";
 
 export const StreamsPage = () => {
@@ -22,7 +21,7 @@ export const StreamsPage = () => {
 	const liveQuery = useQuery({
 		queryKey: queryKeys.streams.live(selectedOrg),
 		queryFn: () => streamsApi.getLive(selectedOrg),
-		refetchInterval: visibleRefetchInterval(60 * 1000),
+		refetchInterval: 60 * 1000,
 		staleTime: 1000 * 45,
 		placeholderData: keepPreviousData,
 	});
@@ -30,7 +29,7 @@ export const StreamsPage = () => {
 	const upcomingQuery = useQuery({
 		queryKey: queryKeys.streams.upcoming(selectedOrg),
 		queryFn: () => streamsApi.getUpcoming(selectedOrg),
-		refetchInterval: visibleRefetchInterval(60 * 1000 * 5),
+		refetchInterval: 60 * 1000 * 5,
 		staleTime: 1000 * 60 * 4,
 		placeholderData: keepPreviousData,
 	});
