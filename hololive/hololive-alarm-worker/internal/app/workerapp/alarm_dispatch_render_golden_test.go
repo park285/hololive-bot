@@ -46,13 +46,26 @@ func goldenAlarmDispatchTitle(n *domain.AlarmNotification) string {
 	return "제목 없음"
 }
 
+func goldenAlarmDispatchNotificationIsStarting(n *domain.AlarmNotification) bool {
+	if n == nil {
+		return false
+	}
+	if n.MinutesUntil <= 0 {
+		return true
+	}
+	if n.Stream == nil {
+		return false
+	}
+	return n.Stream.Status == domain.StreamStatusLive || n.Stream.StartActual != nil
+}
+
 func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int) string {
 	member := goldenAlarmDispatchMember(n)
 	title := goldenAlarmDispatchTitle(n)
 	url := resolveAlarmDispatchURL(n)
 	var b strings.Builder
 	switch {
-	case n.MinutesUntil <= 0:
+	case goldenAlarmDispatchNotificationIsStarting(n):
 		fmt.Fprintf(&b, "🔴 %s 방송 시작", member)
 	case groupMinutesUntil > 0 && n.MinutesUntil == groupMinutesUntil:
 		fmt.Fprintf(&b, "⏰ %s 방송 예정", member)
@@ -69,9 +82,21 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	return b.String()
 }
 
+func goldenAlarmDispatchGroupAllStarting(group alarmDispatchGroup) bool {
+	if len(group.notifications) == 0 {
+		return group.minutesUntil <= 0
+	}
+	for i := range group.notifications {
+		if !goldenAlarmDispatchNotificationIsStarting(&group.notifications[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func goldenAlarmDispatchGroup(group alarmDispatchGroup) string {
 	var b strings.Builder
-	if group.minutesUntil <= 0 {
+	if goldenAlarmDispatchGroupAllStarting(group) {
 		b.WriteString("🔴 방송 시작")
 	} else {
 		fmt.Fprintf(&b, "⏰ 방송 %d분 전", group.minutesUntil)
@@ -103,6 +128,7 @@ func alarmGoldenNotification(name string, minutesUntil int, stream *domain.Strea
 
 func TestRenderAlarmDispatchNotificationByteEqualsLegacyHardcoded(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
 	twitch := alarmGoldenStream("tw-1", "Twitch 방송")
 	twitch.IsTwitchOnly = true
@@ -116,12 +142,24 @@ func TestRenderAlarmDispatchNotificationByteEqualsLegacyHardcoded(t *testing.T) 
 	integrated.IsIntegrated = true
 	integrated.ChzzkLiveURL = "https://chzzk.naver.com/live/zzz"
 
+	liveStatus := alarmGoldenStream("yt-live-status", "LIVE 상태 방송")
+	liveStatus.Status = domain.StreamStatusLive
+
+	startActual := alarmGoldenStream("yt-start-actual", "실제 시작 방송")
+	startActual.StartActual = &start
+
+	upcomingStatus := alarmGoldenStream("yt-upcoming", "예정 방송")
+	upcomingStatus.Status = domain.StreamStatusUpcoming
+
 	cases := []struct {
 		name         string
 		notification domain.AlarmNotification
 	}{
 		{"single-start-youtube", alarmGoldenNotification("스이세이", 0, alarmGoldenStream("yt-1", "방송 제목"))},
 		{"single-nbefore-youtube", alarmGoldenNotification("스이세이", 5, alarmGoldenStream("yt-1", "방송 제목"))},
+		{"single-live-status-youtube", alarmGoldenNotification("스이세이", 5, liveStatus)},
+		{"single-start-actual-youtube", alarmGoldenNotification("스이세이", 5, startActual)},
+		{"single-upcoming-status-youtube", alarmGoldenNotification("스이세이", 5, upcomingStatus)},
 		{"single-twitch-only", alarmGoldenNotification("멤버", 3, twitch)},
 		{"single-chzzk-only", alarmGoldenNotification("멤버", 3, chzzk)},
 		{"single-integrated", alarmGoldenNotification("멤버", 3, integrated)},
@@ -179,6 +217,11 @@ func TestRenderAlarmDispatchNotificationGroupByteEqualsLegacyHardcoded(t *testin
 	startingA := alarmGoldenNotification("Member1", 0, alarmGoldenStream("s-a", "Title A"))
 	startingB := alarmGoldenNotification("Member2", 0, alarmGoldenStream("s-b", "Title B"))
 
+	catchupA := alarmGoldenNotification("Member1", 5, alarmGoldenStream("c-a", "Title A"))
+	catchupA.Stream.StartActual = &scheduled
+	catchupB := alarmGoldenNotification("Member2", 5, alarmGoldenStream("c-b", "Title B"))
+	catchupB.Stream.StartActual = &scheduled
+
 	mixedA := alarmGoldenNotification("Member1", 3, alarmGoldenStream("m-a", "Title1"))
 	mixedA.Stream.StartScheduled = &scheduled
 	mixedB := alarmGoldenNotification("Member2", 1, alarmGoldenStream("m-b", "Title2"))
@@ -195,6 +238,14 @@ func TestRenderAlarmDispatchNotificationGroupByteEqualsLegacyHardcoded(t *testin
 				roomID:        "room-golden",
 				minutesUntil:  0,
 				notifications: []domain.AlarmNotification{startingA, startingB},
+			},
+		},
+		{
+			name: "group-all-live-catchup",
+			group: alarmDispatchGroup{
+				roomID:        "room-golden",
+				minutesUntil:  5,
+				notifications: []domain.AlarmNotification{catchupA, catchupB},
 			},
 		},
 		{

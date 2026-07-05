@@ -114,6 +114,18 @@ func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
 			},
 		},
+		{
+			name:          "karing enabled splits live catchup and prelive",
+			karingEnabled: true,
+			envelopes: []domain.AlarmQueueEnvelope{
+				alarmDispatchGroupTestStartedEnvelope(domain.AlarmTypeLive, 5, firstStart),
+				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
+			},
+			want: []alarmDispatchGroupSummary{
+				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -178,6 +190,7 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 func TestAlarmDispatchKaringGroupKey(t *testing.T) {
 	t.Parallel()
 
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	youtubeOutbox := alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeCommunity, 0)
 	youtubeOutbox.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 	youtubeOutbox.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
@@ -203,7 +216,12 @@ func TestAlarmDispatchKaringGroupKey(t *testing.T) {
 		{
 			name:     "non-outbox uses karing format",
 			envelope: alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeCommunity, 3),
-			want:     "room-1|karing|COMMUNITY|minutes|3",
+			want:     "room-1|karing|COMMUNITY|prelive|minutes|3",
+		},
+		{
+			name:     "live catchup includes starting phase",
+			envelope: alarmDispatchGroupTestStartedEnvelope(domain.AlarmTypeLive, 5, start),
+			want:     "room-1|karing|LIVE|starting|minutes|5",
 		},
 	}
 
@@ -274,5 +292,15 @@ func alarmDispatchGroupTestScheduledEnvelope(
 ) domain.AlarmQueueEnvelope {
 	envelope := alarmDispatchGroupTestEnvelope("room-1", alarmType, minutesUntil)
 	envelope.Notification.Stream.StartScheduled = &start
+	return envelope
+}
+
+func alarmDispatchGroupTestStartedEnvelope(
+	alarmType domain.AlarmType,
+	minutesUntil int,
+	start time.Time,
+) domain.AlarmQueueEnvelope {
+	envelope := alarmDispatchGroupTestEnvelope("room-1", alarmType, minutesUntil)
+	envelope.Notification.Stream.StartActual = &start
 	return envelope
 }

@@ -102,10 +102,15 @@ func alarmDispatchKaringGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		return alarmDispatchGroupKey(envelope)
 	}
+	phase := "prelive"
+	if alarmDispatchNotificationIsStarting(&envelope.Notification) {
+		phase = "starting"
+	}
 	return fmt.Sprintf(
-		"%s|karing|%s|minutes|%d",
+		"%s|karing|%s|%s|minutes|%d",
 		envelope.Notification.RoomID,
 		envelope.Notification.AlarmType,
+		phase,
 		envelope.Notification.MinutesUntil,
 	)
 }

@@ -188,6 +188,31 @@ func TestAlarmDispatchRunnerUpcomingKaringRequestPreservesMinuteWindow(t *testin
 	assert.Equal(t, "05/16 21:10", item.StartAt)
 }
 
+func TestAlarmDispatchRunnerKaringSplitsMixedLiveCatchupAndPrelive(t *testing.T) {
+	start := time.Date(2026, 5, 16, 12, 10, 0, 0, time.UTC)
+	live := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	upcoming := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	live.Notification.MinutesUntil = 5
+	upcoming.Notification.MinutesUntil = 5
+	live.Notification.Stream.ID = "live"
+	upcoming.Notification.Stream.ID = "upcoming"
+	live.Notification.Stream.StartActual = &start
+	upcoming.Notification.Stream.StartScheduled = &start
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{live, upcoming}}}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, sender.karingRequests, 2)
+	assert.Equal(t, "라이브 시작", sender.karingRequests[0].ExtraArgs["alarm_title"])
+	assert.Equal(t, "지금 시작", sender.karingRequests[0].ExtraArgs["time_left"])
+	assert.Equal(t, "방송 5분 전 알림", sender.karingRequests[1].ExtraArgs["alarm_title"])
+	assert.Equal(t, "5분 후 시작", sender.karingRequests[1].ExtraArgs["time_left"])
+}
+
 func TestAlarmDispatchRunnerKaringRequestPreservesConfiguredNickname(t *testing.T) {
 	englishName := "Yuuki Sakuna"
 	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
@@ -795,6 +820,62 @@ func TestRenderAlarmDispatchNotificationGroupMatchesLegacyValkeyRenderer(t *test
 		"⏰ Member2 방송 예정\n  Title2\n  https://youtube.com/watch?v=def", message)
 }
 
+func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t *testing.T) {
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	first := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	second := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	first.Notification.MinutesUntil = 5
+	second.Notification.MinutesUntil = 5
+	first.Notification.Channel.Name = "Member1"
+	second.Notification.Channel.Name = "Member2"
+	first.Notification.Stream.ID = "abc"
+	second.Notification.Stream.ID = "def"
+	first.Notification.Stream.Title = "Title1"
+	second.Notification.Stream.Title = "Title2"
+	first.Notification.Stream.StartActual = &start
+	second.Notification.Stream.StartActual = &start
+	group := alarmDispatchGroup{
+		roomID:        "room-1",
+		minutesUntil:  5,
+		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
+	}
+
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, group)
+
+	require.NoError(t, err)
+	assert.Equal(t, "🔴 방송 시작\n\n"+
+		"🔴 Member1 방송 시작\n  Title1\n  https://youtube.com/watch?v=abc\n\n"+
+		"🔴 Member2 방송 시작\n  Title2\n  https://youtube.com/watch?v=def", message)
+}
+
+func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader(t *testing.T) {
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	first := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	second := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	first.Notification.MinutesUntil = 5
+	second.Notification.MinutesUntil = 5
+	first.Notification.Channel.Name = "LiveMember"
+	second.Notification.Channel.Name = "UpcomingMember"
+	first.Notification.Stream.ID = "live"
+	second.Notification.Stream.ID = "upcoming"
+	first.Notification.Stream.Title = "Live Title"
+	second.Notification.Stream.Title = "Upcoming Title"
+	first.Notification.Stream.StartActual = &start
+	second.Notification.Stream.StartScheduled = &start
+	group := alarmDispatchGroup{
+		roomID:        "room-1",
+		minutesUntil:  5,
+		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
+	}
+
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, group)
+
+	require.NoError(t, err)
+	assert.Equal(t, "⏰ 방송 5분 전\n\n"+
+		"🔴 LiveMember 방송 시작\n  Live Title\n  https://youtube.com/watch?v=live\n\n"+
+		"⏰ UpcomingMember 방송 예정\n  Upcoming Title\n  https://youtube.com/watch?v=upcoming", message)
+}
+
 func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(t *testing.T) {
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	notification := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
@@ -809,7 +890,41 @@ func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(
 
 	require.NoError(t, err)
 	assert.Equal(t,
-		"⏰ Member 방송 5분 전\n  Live Title\n  https://youtube.com/watch?v=live-1",
+		"🔴 Member 방송 시작\n  Live Title\n  https://youtube.com/watch?v=live-1",
+		got,
+	)
+}
+
+func TestRenderAlarmDispatchNotificationLiveStatusUsesStartingMessage(t *testing.T) {
+	notification := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	notification.MinutesUntil = 5
+	notification.Channel.Name = "Member"
+	notification.Stream.ID = "live-status-1"
+	notification.Stream.Title = "Live Title"
+	notification.Stream.Status = domain.StreamStatusLive
+
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, &notification)
+
+	require.NoError(t, err)
+	assert.Equal(t,
+		"🔴 Member 방송 시작\n  Live Title\n  https://youtube.com/watch?v=live-status-1",
+		got,
+	)
+}
+
+func TestRenderAlarmDispatchNotificationUpcomingKeepsPreliveMessage(t *testing.T) {
+	notification := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	notification.MinutesUntil = 5
+	notification.Channel.Name = "Member"
+	notification.Stream.ID = "upcoming-1"
+	notification.Stream.Title = "Upcoming Title"
+	notification.Stream.Status = domain.StreamStatusUpcoming
+
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, &notification)
+
+	require.NoError(t, err)
+	assert.Equal(t,
+		"⏰ Member 방송 5분 전\n  Upcoming Title\n  https://youtube.com/watch?v=upcoming-1",
 		got,
 	)
 }

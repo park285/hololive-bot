@@ -167,6 +167,27 @@ func TestBuildAlarmDispatchKaringContentItems(t *testing.T) {
 	assert.Equal(t, "05/16 22:00", items[1].StartAt)
 }
 
+func TestBuildAlarmDispatchKaringContentListRequestsLiveCatchupUsesLiveLabels(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope.Notification.MinutesUntil = 5
+	envelope.Notification.Stream.StartActual = &start
+
+	requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, alarmDispatchGroup{
+		roomID:        "room-1",
+		minutesUntil:  5,
+		envelopes:     []domain.AlarmQueueEnvelope{envelope},
+		notifications: []domain.AlarmNotification{envelope.Notification},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "라이브 시작", requests[0].ExtraArgs["alarm_title"])
+	assert.Equal(t, "지금 시작", requests[0].ExtraArgs["time_left"])
+}
+
 func TestAlarmDispatchEnvelopeClientRequestIDParts(t *testing.T) {
 	t.Parallel()
 

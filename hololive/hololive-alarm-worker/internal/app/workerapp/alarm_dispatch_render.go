@@ -48,15 +48,41 @@ type alarmDispatchGroupView struct {
 }
 
 func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store, notification *domain.AlarmNotification, groupMinutesUntil int) alarmDispatchItemView {
+	starting := alarmDispatchNotificationIsStarting(notification)
 	return alarmDispatchItemView{
 		MemberName:      resolveAlarmDispatchMemberName(ctx, store, notification),
 		Title:           resolveAlarmDispatchTitle(ctx, store, notification),
 		URL:             resolveAlarmDispatchURL(notification),
 		ScheduleMessage: strings.TrimSpace(notification.ScheduleChangeMessage),
 		MinutesUntil:    notification.MinutesUntil,
-		IsStarting:      notification.MinutesUntil <= 0,
-		IsScheduled:     groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil,
+		IsStarting:      starting,
+		IsScheduled:     !starting && groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil,
 	}
+}
+
+func alarmDispatchNotificationIsStarting(notification *domain.AlarmNotification) bool {
+	if notification == nil {
+		return false
+	}
+	if notification.MinutesUntil <= 0 {
+		return true
+	}
+	if notification.Stream == nil {
+		return false
+	}
+	return notification.Stream.IsLive() || notification.Stream.StartActual != nil
+}
+
+func alarmDispatchGroupAllStarting(group alarmDispatchGroup) bool {
+	if len(group.notifications) == 0 {
+		return group.minutesUntil <= 0
+	}
+	for i := range group.notifications {
+		if !alarmDispatchNotificationIsStarting(&group.notifications[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, group alarmDispatchGroup) (string, error) {
@@ -66,7 +92,7 @@ func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *templat
 	}
 	view := alarmDispatchGroupView{
 		MinutesUntil: group.minutesUntil,
-		IsStarting:   group.minutesUntil <= 0,
+		IsStarting:   alarmDispatchGroupAllStarting(group),
 		Entries:      entries,
 	}
 	message, err := renderer.Render(ctx, domain.TemplateKeyAlarmDispatchNotificationGroup, "", view)
