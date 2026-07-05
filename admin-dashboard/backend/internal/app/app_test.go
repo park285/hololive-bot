@@ -641,6 +641,24 @@ func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
 	}
 }
 
+func TestStatsHubOutlivesBuildContext(t *testing.T) {
+	buildCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	hub := status.NewHub(nil)
+	startStatsHub(buildCtx, hub)
+	defer hub.Stop()
+
+	_, updates, unsubscribe := hub.Subscribe()
+	defer unsubscribe()
+
+	select {
+	case <-updates:
+	case <-time.After(3 * time.Second):
+		t.Fatal("stats hub did not publish after build context cancellation")
+	}
+}
+
 func TestSystemStatsWSReapsSilentPeer(t *testing.T) {
 	sess := liveSession("ws-reap-session")
 	rt := newTestRuntime(t, storeWith(sess), nil)
