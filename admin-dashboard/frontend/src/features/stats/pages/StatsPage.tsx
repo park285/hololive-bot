@@ -14,7 +14,7 @@ const ChannelStatsTable = lazy(() =>
 );
 
 const StatsSectionLoader = () => (
-	<div className="flex items-center justify-center h-48 text-slate-400 w-full bg-slate-50/50 rounded-lg">
+	<div className="flex items-center justify-center h-48 text-subtle-foreground w-full bg-muted/50 rounded-lg">
 		<Loader2 className="w-6 h-6 animate-spin mr-2" />
 		<span className="text-sm">로딩 중…</span>
 	</div>
@@ -33,7 +33,7 @@ export const StatsPage = () => {
 
 	if (holoQuery.isLoading && statusQuery.isLoading) {
 		return (
-			<div className="flex justify-center items-center h-64 text-slate-400">
+			<div className="flex justify-center items-center h-64 text-subtle-foreground">
 				<div className="animate-spin mr-2">
 					<Loader2 />
 				</div>
@@ -73,8 +73,8 @@ export const StatsPage = () => {
 				onNavigate={go}
 			/>
 
-			<div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm animate-fade-in-up stagger-5">
-				<h3 className="text-lg font-display font-bold text-slate-800 mb-6 flex items-center gap-2">
+			<div className="bg-card rounded-2xl border border-border p-6 shadow-sm animate-fade-in-up stagger-5">
+				<h3 className="text-lg font-display font-bold text-foreground mb-6 flex items-center gap-2">
 					<Activity size={20} className="text-rose-500" />
 					채널 통계 (구독자 순 상위 10등)
 				</h3>

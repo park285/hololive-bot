@@ -23,8 +23,8 @@ function displayName(entry: CalendarEntry): string {
 export const CalendarGrid = ({ entries, month }: CalendarGridProps) => {
 	if (entries.length === 0) {
 		return (
-			<div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-300 p-12">
-				<p className="text-slate-500">이 달에 등록된 기념일이 없습니다.</p>
+			<div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 p-12">
+				<p className="text-muted-foreground">이 달에 등록된 기념일이 없습니다.</p>
 			</div>
 		);
 	}
@@ -36,17 +36,17 @@ export const CalendarGrid = ({ entries, month }: CalendarGridProps) => {
 			{[...grouped.entries()].map(([day, dayEntries]) => (
 				<div
 					key={day}
-					className="relative rounded-2xl border border-slate-200 p-4 overflow-hidden hover:shadow-md transition-shadow"
+					className="relative rounded-2xl border border-border p-4 overflow-hidden hover:shadow-md transition-shadow"
 				>
 					<div className="absolute top-0 left-0 right-0 h-0.5 bg-linear-to-r from-rose-300 to-amber-300 opacity-60" />
-					<h3 className="mb-3 text-sm font-bold text-slate-600">
+					<h3 className="mb-3 text-sm font-bold text-muted-foreground">
 						{month}월 {day}일
 					</h3>
 					<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
 						{dayEntries.map((entry) => (
 							<div
 								key={`${entry.kind}-${entry.member.channelId}`}
-								className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 hover:bg-linear-to-r hover:from-rose-50/40 hover:to-transparent transition-colors"
+								className="flex items-center gap-3 rounded-xl bg-muted p-3 hover:bg-linear-to-r hover:from-rose-50/40 hover:to-transparent transition-colors"
 							>
 								{entry.member.photo && (
 									<img
@@ -56,10 +56,10 @@ export const CalendarGrid = ({ entries, month }: CalendarGridProps) => {
 									/>
 								)}
 								<div className="min-w-0 flex-1">
-									<p className="truncate text-sm font-medium text-slate-800">
+									<p className="truncate text-sm font-medium text-foreground">
 										{displayName(entry)}
 									</p>
-									<p className="text-xs text-slate-500">
+									<p className="text-xs text-muted-foreground">
 										{entry.kind === "birthday"
 											? "🎂 생일"
 											: `🎉 데뷔 ${entry.ordinal != null && entry.ordinal > 0 ? `${String(entry.ordinal)}주년` : ""}`}

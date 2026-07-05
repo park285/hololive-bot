@@ -94,19 +94,19 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 	return (
 		<Card className="relative overflow-hidden">
 			<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-sky-400 to-cyan-400" />
-			<Card.Header className="flex flex-row items-center gap-2 border-b border-slate-100 pb-4">
+			<Card.Header className="flex flex-row items-center gap-2 border-b border-border-subtle pb-4">
 				<span className="flex items-center justify-center w-9 h-9 rounded-xl bg-linear-to-br from-sky-400 to-cyan-400 text-white shadow-sm shadow-sky-200/50"><SettingsIcon size={18} aria-hidden="true" /></span>
-				<h3 className="text-lg font-bold text-slate-800">시스템 설정</h3>
+				<h3 className="text-lg font-bold text-foreground">시스템 설정</h3>
 			</Card.Header>
 
 			<Card.Body className="space-y-6 pt-6">
 				<form onSubmit={onSubmit} className="space-y-6">
 					<div>
-						<h4 className="mb-4 border-l-4 border-sky-400 pl-3 text-sm font-bold text-slate-900">
+						<h4 className="mb-4 border-l-4 border-sky-400 pl-3 text-sm font-bold text-foreground">
 							알림 옵션
 						</h4>
 
-						<div className="rounded-lg border border-slate-100 bg-slate-50 p-5 transition-colors hover:border-slate-200 focus-within:ring-2 focus-within:ring-sky-100">
+						<div className="rounded-lg border border-border-subtle bg-muted p-5 transition-colors hover:border-border focus-within:ring-2 focus-within:ring-sky-100">
 							<div className="space-y-2">
 								<Label htmlFor="alarm-advance-minutes">
 									알람 사전 알림 시간
@@ -124,14 +124,14 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 											setAlarmAdvanceMinutes(event.target.value);
 											setError("");
 										}}
-										className="w-24 bg-white text-center font-bold tabular-nums focus-visible:ring-2 focus-visible:ring-sky-200"
+										className="w-24 bg-card text-center font-bold tabular-nums focus-visible:ring-2 focus-visible:ring-sky-200"
 										hasError={!!error}
 									/>
-									<span className="text-sm font-medium text-slate-600">
+									<span className="text-sm font-medium text-muted-foreground">
 										분 전 알림
 									</span>
 								</div>
-								<p className="text-[0.8rem] text-slate-500">
+								<p className="text-[0.8rem] text-muted-foreground">
 									방송 시작 몇 분 전에 채팅방으로 알람을 전송할지 설정합니다.
 								</p>
 								{error && (

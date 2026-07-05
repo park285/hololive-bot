@@ -69,11 +69,11 @@ const LoginPage = () => {
 	};
 
 	return (
-		<div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-50 font-body selection:bg-sky-200">
-			<div className="absolute inset-0 bg-white z-0">
-				<div className="absolute top-0 left-0 right-0 h-[500px] bg-linear-to-b from-sky-100/50 to-transparent"></div>
-				<div className="absolute -top-24 right-0 w-[500px] h-[500px] bg-sky-200/30 rounded-full blur-[100px] animate-pulse"></div>
-				<div className="absolute top-1/2 -left-24 w-[400px] h-[400px] bg-cyan-100/40 rounded-full blur-[80px]"></div>
+		<div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-background font-body selection:bg-sky-200">
+			<div className="absolute inset-0 bg-card z-0">
+				<div className="absolute top-0 left-0 right-0 h-[500px] bg-linear-to-b from-sky-100/50 to-transparent dark:from-sky-950/30"></div>
+				<div className="absolute -top-24 right-0 w-[500px] h-[500px] bg-sky-200/30 rounded-full blur-[100px] animate-pulse dark:bg-sky-900/20"></div>
+				<div className="absolute top-1/2 -left-24 w-[400px] h-[400px] bg-cyan-100/40 rounded-full blur-[80px] dark:bg-cyan-900/20"></div>
 				<div
 					className="absolute inset-0 opacity-[0.015]"
 					style={{
@@ -93,7 +93,7 @@ const LoginPage = () => {
 							/>
 						</div>
 
-						<h1 className="text-2xl font-display font-bold text-slate-800 tracking-tight">
+						<h1 className="text-2xl font-display font-bold text-foreground tracking-tight">
 							Hololive Bot <span className="text-sky-500">콘솔</span>
 						</h1>
 					</div>
@@ -107,7 +107,7 @@ const LoginPage = () => {
 								<Label htmlFor="username" className="sr-only">
 									아이디
 								</Label>
-								<div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-sky-500 transition-colors z-10">
+								<div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-subtle-foreground group-focus-within:text-sky-500 transition-colors z-10">
 									<User size={18} aria-hidden="true" />
 								</div>
 								<Input
@@ -119,7 +119,7 @@ const LoginPage = () => {
 									onChange={(e) => {
 										setUsername(e.target.value);
 									}}
-									className="pl-11 pr-4 py-6 bg-white border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus-visible:border-sky-400 focus-visible:ring-4 focus-visible:ring-sky-100 transition-colors shadow-sm font-medium"
+									className="pl-11 pr-4 py-6 bg-card border-border rounded-xl text-foreground placeholder-subtle-foreground focus-visible:border-sky-400 focus-visible:ring-4 focus-visible:ring-sky-100 transition-colors shadow-sm font-medium"
 									placeholder="아이디"
 								/>
 							</div>
@@ -128,7 +128,7 @@ const LoginPage = () => {
 								<Label htmlFor="password" className="sr-only">
 									비밀번호
 								</Label>
-								<div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-sky-500 transition-colors z-10">
+								<div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-subtle-foreground group-focus-within:text-sky-500 transition-colors z-10">
 									<Lock size={18} aria-hidden="true" />
 								</div>
 								<Input
@@ -140,7 +140,7 @@ const LoginPage = () => {
 									onChange={(e) => {
 										setPassword(e.target.value);
 									}}
-									className="pl-11 pr-4 py-6 bg-white border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus-visible:border-sky-400 focus-visible:ring-4 focus-visible:ring-sky-100 transition-colors shadow-sm font-medium"
+									className="pl-11 pr-4 py-6 bg-card border-border rounded-xl text-foreground placeholder-subtle-foreground focus-visible:border-sky-400 focus-visible:ring-4 focus-visible:ring-sky-100 transition-colors shadow-sm font-medium"
 									placeholder="비밀번호"
 								/>
 							</div>
@@ -160,7 +160,7 @@ const LoginPage = () => {
 						<Button
 							type="submit"
 							disabled={loginMutation.isPending}
-							className="w-full relative overflow-hidden flex justify-center items-center py-6 px-4 bg-linear-to-r from-slate-800 to-slate-900 rounded-xl text-sm font-display font-bold text-white hover:from-slate-700 hover:to-slate-800 focus-visible:ring-4 focus-visible:ring-slate-200 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 shadow-xl shadow-slate-300/60 hover:shadow-2xl hover:shadow-sky-300/40 hover:-translate-y-0.5 group"
+							className="w-full relative overflow-hidden flex justify-center items-center py-6 px-4 bg-linear-to-r from-slate-800 to-slate-900 rounded-xl text-sm font-display font-bold text-white hover:from-slate-700 hover:to-slate-800 dark:from-slate-100 dark:to-slate-300 dark:text-slate-900 dark:hover:from-white dark:hover:to-slate-200 focus-visible:ring-4 focus-visible:ring-border disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 shadow-xl shadow-slate-300/60 dark:shadow-black/40 hover:shadow-2xl hover:shadow-sky-300/40 dark:hover:shadow-sky-900/40 hover:-translate-y-0.5 group"
 						>
 							<div className="relative z-10 flex items-center justify-center">
 								{loginMutation.isPending ? (

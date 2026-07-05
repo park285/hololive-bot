@@ -53,7 +53,7 @@ const ErrorPage = () => {
 				<div className="mb-8 flex justify-center">
 					<div className="relative group">
 						<div className="absolute inset-0 bg-linear-to-tr from-rose-400 to-orange-400 rounded-full blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-500"></div>
-						<div className="relative w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg border border-rose-50 group-hover:scale-105 transition-transform duration-300">
+						<div className="relative w-20 h-20 bg-card rounded-full flex items-center justify-center shadow-lg border border-rose-50 group-hover:scale-105 transition-transform duration-300">
 							{isRouteErrorResponse(error) && error.status === 401 ? (
 								<ShieldAlert
 									className="w-10 h-10 text-rose-500"
@@ -70,10 +70,10 @@ const ErrorPage = () => {
 				</div>
 
 				<div className="space-y-3 mb-8">
-					<h1 className="text-3xl font-bold text-slate-800 tracking-tight">
+					<h1 className="text-3xl font-bold text-foreground tracking-tight">
 						{errorTitle}
 					</h1>
-					<p className="text-slate-500 text-base leading-relaxed break-keep">
+					<p className="text-muted-foreground text-base leading-relaxed break-keep">
 						{errorMessage}
 					</p>
 				</div>
@@ -81,7 +81,7 @@ const ErrorPage = () => {
 				<div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
 					<button
 						onClick={handleReload}
-						className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl border border-slate-200 shadow-sm transition-all duration-200 active:scale-95 group"
+						className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-card hover:bg-accent text-foreground font-semibold rounded-xl border border-border shadow-sm transition-all duration-200 active:scale-95 group"
 					>
 						<RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
 						<span>다시 시도</span>
@@ -116,7 +116,7 @@ const ErrorPage = () => {
 			</div>
 
 			<div className="absolute bottom-6 text-center w-full z-10">
-				<span className="text-xs font-medium text-slate-400/80 tracking-wide uppercase">
+				<span className="text-xs font-medium text-subtle-foreground/80 tracking-wide uppercase">
 					Hololive Kakao Bot Admin
 				</span>
 			</div>

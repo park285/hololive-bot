@@ -28,7 +28,7 @@ export const RuntimeUnitsChart = ({
 
 	return (
 		<div className="w-full">
-			<div className="relative h-[160px] w-full overflow-hidden rounded-lg border border-slate-100 bg-white">
+			<div className="relative h-[160px] w-full overflow-hidden rounded-lg border border-border-subtle bg-card">
 				<svg
 					viewBox={`0 0 ${String(CHART_WIDTH)} ${String(GOROUTINE_CHART_HEIGHT)}`}
 					className="h-full w-full"
@@ -45,10 +45,15 @@ export const RuntimeUnitsChart = ({
 									y1={y}
 									x2={CHART_WIDTH - CHART_PADDING_X}
 									y2={y}
-									stroke="#e2e8f0"
+									style={{ stroke: "hsl(var(--chart-grid))" }}
 									strokeDasharray="4 4"
 								/>
-								<text x={6} y={y + 4} fill="#94a3b8" fontSize="10">
+								<text
+									x={6}
+									y={y + 4}
+									style={{ fill: "hsl(var(--chart-axis))" }}
+									fontSize="10"
+								>
 									{labelValue}
 								</text>
 							</g>
@@ -92,7 +97,7 @@ export const RuntimeUnitsChart = ({
 				</svg>
 			</div>
 
-			<div className="mt-3 flex items-center justify-between font-mono text-[11px] text-slate-400">
+			<div className="mt-3 flex items-center justify-between font-mono text-[11px] text-subtle-foreground">
 				{labels.map((label) => (
 					<span
 						key={label.key}

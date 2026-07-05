@@ -29,8 +29,8 @@ export const RoomsAclSection = ({
 			className={clsx(
 				"relative transition-all duration-300 border overflow-hidden",
 				aclEnabled
-					? "bg-white border-blue-100 shadow-sm"
-					: "bg-slate-50 border-slate-200",
+					? "bg-card border-blue-100 shadow-sm"
+					: "bg-muted border-border",
 			)}
 		>
 			<div className="p-6 space-y-5">
@@ -44,12 +44,12 @@ export const RoomsAclSection = ({
 									? isBlacklist
 										? "bg-rose-50"
 										: "bg-blue-50"
-									: "bg-slate-200",
+									: "bg-border",
 							)}
 							aria-hidden="true"
 						>
 							{!aclEnabled ? (
-								<ShieldAlert className="text-slate-500" size={24} />
+								<ShieldAlert className="text-muted-foreground" size={24} />
 							) : isBlacklist ? (
 								<ShieldBan className="text-rose-600" size={24} />
 							) : (
@@ -57,10 +57,10 @@ export const RoomsAclSection = ({
 							)}
 						</div>
 						<div>
-							<h3 className="text-lg font-display font-bold text-slate-900 mb-1">
+							<h3 className="text-lg font-display font-bold text-foreground mb-1">
 								방 접근 제어 (ACL)
 							</h3>
-							<p className="text-sm text-slate-500 max-w-lg leading-relaxed">
+							<p className="text-sm text-muted-foreground max-w-lg leading-relaxed">
 								{description}
 							</p>
 						</div>
@@ -70,7 +70,7 @@ export const RoomsAclSection = ({
 						<span
 							className={clsx(
 								"text-sm font-bold",
-								aclEnabled ? "text-blue-600" : "text-slate-500",
+								aclEnabled ? "text-blue-600" : "text-muted-foreground",
 							)}
 						>
 							{aclEnabled ? "활성화됨" : "비활성화됨"}
@@ -83,13 +83,15 @@ export const RoomsAclSection = ({
 							aria-label="방 접근 제어 토글"
 							className={clsx(
 								"relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500",
-								aclEnabled ? "bg-linear-to-r from-sky-500 to-cyan-500" : "bg-slate-300",
+								aclEnabled
+								? "bg-linear-to-r from-sky-500 to-cyan-500"
+								: "bg-slate-300 dark:bg-slate-600",
 								isPending && "opacity-50 cursor-wait",
 							)}
 						>
 							<span
 								className={clsx(
-									"inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform",
+									"inline-block h-5 w-5 transform rounded-full bg-card shadow transition-transform",
 									aclEnabled ? "translate-x-6" : "translate-x-1",
 								)}
 							/>
@@ -98,12 +100,12 @@ export const RoomsAclSection = ({
 				</div>
 
 				{aclEnabled && (
-					<div className="flex items-center gap-3 pt-3 border-t border-slate-100">
-						<span className="text-sm font-semibold text-slate-600 mr-1">
+					<div className="flex flex-wrap items-center gap-3 pt-3 border-t border-border-subtle">
+						<span className="text-sm font-semibold text-muted-foreground mr-1">
 							모드
 						</span>
 						<div
-							className="inline-flex rounded-lg bg-slate-100 p-0.5"
+							className="inline-flex rounded-lg bg-muted p-0.5"
 							role="radiogroup"
 							aria-label="ACL 모드 선택"
 						>
@@ -117,8 +119,8 @@ export const RoomsAclSection = ({
 								className={clsx(
 									"px-4 py-1.5 rounded-md text-sm font-semibold transition-all",
 									!isBlacklist
-										? "bg-white text-blue-700 shadow-sm"
-										: "text-slate-500 hover:text-slate-700",
+										? "bg-card text-blue-700 shadow-sm"
+										: "text-muted-foreground hover:text-foreground",
 									isPending && "opacity-50 cursor-wait",
 								)}
 							>
@@ -134,8 +136,8 @@ export const RoomsAclSection = ({
 								className={clsx(
 									"px-4 py-1.5 rounded-md text-sm font-semibold transition-all",
 									isBlacklist
-										? "bg-white text-rose-700 shadow-sm"
-										: "text-slate-500 hover:text-slate-700",
+										? "bg-card text-rose-700 shadow-sm"
+										: "text-muted-foreground hover:text-foreground",
 									isPending && "opacity-50 cursor-wait",
 								)}
 							>

@@ -17,10 +17,10 @@ export const SystemServiceStatusBadges = ({
 	services,
 	getServiceColor,
 }: SystemServiceStatusBadgesProps) => (
-	<div className="px-4 py-3 bg-slate-50/50 border-t border-slate-100">
+	<div className="px-4 py-3 bg-muted/50 border-t border-border-subtle">
 		<div className="flex items-center gap-2 mb-2">
-			<Server size={14} className="text-slate-400" />
-			<span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+			<Server size={14} className="text-subtle-foreground" />
+			<span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
 				Service Status
 			</span>
 		</div>
@@ -29,7 +29,7 @@ export const SystemServiceStatusBadges = ({
 				<Badge
 					key={service.name}
 					variant="outline"
-					className="text-[10px] py-0.5 px-2.5 h-6 font-mono bg-white border-slate-200 shadow-sm hover:border-slate-300 transition-colors"
+					className="text-[10px] py-0.5 px-2.5 h-6 font-mono bg-card border-border shadow-sm hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
 				>
 					<span
 						className={cn(
@@ -52,7 +52,7 @@ export const SystemServiceStatusBadges = ({
 					>
 						{service.name}
 					</span>
-					<span className="text-slate-600 ml-1">
+					<span className="text-muted-foreground ml-1">
 						: {service.available
 							? formatRuntimeLabel(service.count, service.metricKind)
 							: service.error

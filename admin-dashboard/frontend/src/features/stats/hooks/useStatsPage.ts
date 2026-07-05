@@ -8,6 +8,7 @@ import {
 	buildCurrentServiceStats,
 	buildMainStats,
 } from "@/features/stats/selectors";
+import { visibleRefetchInterval } from "@/lib/polling";
 
 export function useStatsPage() {
 	const navigate = useNavigate();
@@ -17,16 +18,14 @@ export function useStatsPage() {
 		queryKey: queryKeys.stats.summary,
 		queryFn: statsApi.get,
 		staleTime: 1000 * 30,
-		refetchInterval: () =>
-			document.visibilityState === "visible" ? 30000 : false,
+		refetchInterval: visibleRefetchInterval(30000),
 	});
 
 	const statusQuery = useQuery({
 		queryKey: queryKeys.status.aggregated,
 		queryFn: statusApi.get,
 		staleTime: 1000 * 15,
-		refetchInterval: () =>
-			document.visibilityState === "visible" ? 15000 : false,
+		refetchInterval: visibleRefetchInterval(15000),
 	});
 
 	useEffect(() => {

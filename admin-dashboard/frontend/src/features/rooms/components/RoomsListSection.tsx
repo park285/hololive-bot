@@ -45,20 +45,20 @@ export const RoomsListSection = ({
 	<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 		<div className="lg:col-span-2 space-y-6">
 			<div className="flex items-center justify-between">
-				<h3 className="text-lg font-display font-bold text-slate-900">
+				<h3 className="text-lg font-display font-bold text-foreground">
 					{listTitle}
 				</h3>
-				<Badge variant="secondary" className="text-slate-600 tabular-nums">
+				<Badge variant="secondary" className="text-muted-foreground tabular-nums">
 					{numberFormatter.format(rooms.length)}개
 				</Badge>
 			</div>
 
 			<div
-				className="relative bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden"
+				className="relative bg-card rounded-2xl border border-border shadow-sm divide-y divide-border-subtle overflow-hidden"
 			>
 				<div className={clsx("absolute top-0 left-0 right-0 h-1", isBlacklist ? "bg-linear-to-r from-rose-400 to-rose-500" : "bg-linear-to-r from-sky-400 to-cyan-400")} />
 				{rooms.length === 0 ? (
-					<div className="text-slate-400 text-center py-12 flex flex-col items-center gap-2">
+					<div className="text-subtle-foreground text-center py-12 flex flex-col items-center gap-2">
 						<Info size={32} className="opacity-20" aria-hidden="true" />
 						<p>{emptyText}</p>
 					</div>
@@ -69,19 +69,19 @@ export const RoomsListSection = ({
 						getItemKey={(room) => room}
 						recomputeKey={removePending}
 						className="max-h-[32rem]"
-						itemClassName="border-b border-slate-100"
+						itemClassName="border-b border-border-subtle"
 						renderItem={(room) => (
 							<div
 								key={room}
 								role="listitem"
-								className="flex items-center justify-between px-6 py-4 hover:bg-linear-to-r hover:from-sky-50/40 hover:to-transparent transition-colors group focus-within:bg-sky-50/40 bg-white"
+								className="flex items-center justify-between px-6 py-4 hover:bg-linear-to-r hover:from-sky-50/40 hover:to-transparent transition-colors group focus-within:bg-sky-50/40 bg-card"
 							>
 								<div className="flex items-center gap-3">
 									<div
 										className={clsx("w-2 h-2 rounded-full", indicatorClassName)}
 										aria-hidden="true"
 									/>
-									<span className="font-mono text-slate-700 font-medium select-all">
+									<span className="font-mono text-foreground font-medium select-all">
 										{room}
 									</span>
 								</div>
@@ -92,7 +92,7 @@ export const RoomsListSection = ({
 										onDeleteRoom(room);
 									}}
 									disabled={removePending}
-									className="text-slate-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all focus-visible:ring-2 focus-visible:ring-red-200"
+									className="text-subtle-foreground hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all focus-visible:ring-2 focus-visible:ring-red-200"
 									aria-label={`${room} 방 삭제`}
 								>
 									<Trash2 size={16} aria-hidden="true" />
@@ -107,7 +107,7 @@ export const RoomsListSection = ({
 		<div>
 			<Card className="sticky top-6">
 				<div className="p-5 space-y-4">
-					<h3 className="font-display font-bold text-slate-900 flex items-center gap-2">
+					<h3 className="font-display font-bold text-foreground flex items-center gap-2">
 						<Plus
 							className={isBlacklist ? "text-rose-500" : "text-blue-500"}
 							size={18}
@@ -146,7 +146,7 @@ export const RoomsListSection = ({
 						<div className="space-y-1.5">
 							<Label
 								htmlFor="new-room-id"
-								className="text-xs font-semibold text-slate-500"
+								className="text-xs font-semibold text-muted-foreground"
 							>
 								채팅방 ID (RoomID)
 							</Label>

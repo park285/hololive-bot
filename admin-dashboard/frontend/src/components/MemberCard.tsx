@@ -60,7 +60,7 @@ const MemberCard = memo(
 		};
 
 		return (
-		<Card className="relative group flex flex-col h-full overflow-hidden border-slate-200 [content-visibility:auto] contain-intrinsic-size-[350px] focus-within:ring-2 focus-within:ring-sky-100 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:shadow-sky-100/50">
+		<Card className="relative group flex flex-col h-full overflow-hidden border-border [content-visibility:auto] contain-intrinsic-size-[350px] focus-within:ring-2 focus-within:ring-sky-100 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:shadow-sky-100/50">
 			{/* 상단 그라데이션 액센트 바 - 활성 멤버 sky, 졸업 멤버 slate */}
 			<div className={clsx(
 				"absolute top-0 left-0 right-0 h-1",
@@ -68,31 +68,31 @@ const MemberCard = memo(
 					? "bg-linear-to-r from-slate-300 to-slate-400"
 					: "bg-linear-to-r from-sky-400 to-cyan-400",
 			)} />
-				<Card.Header className="pb-3 border-b border-slate-50">
+				<Card.Header className="pb-3 border-b border-slate-50 dark:border-slate-800">
 					<div className="flex items-start justify-between">
 						<div>
 							<div className="mb-1 flex items-center gap-2">
-								<span className="text-xs font-mono text-slate-400">
+								<span className="text-xs font-mono text-subtle-foreground">
 									#{String(member.id).padStart(3, "0")}
 								</span>
 								{member.isGraduated && (
 									<Badge
 										color="gray"
-										className="text-[10px] px-1.5 py-0.5 shadow-none ring-1 ring-slate-200"
+										className="text-[10px] px-1.5 py-0.5 shadow-none ring-1 ring-border"
 									>
 										졸업 멤버
 									</Badge>
 								)}
 							</div>
 							<div className="flex items-center gap-1.5">
-								<h3 className="text-lg font-display font-bold leading-tight text-slate-800">
+								<h3 className="text-lg font-display font-bold leading-tight text-foreground">
 									{member.name}
 								</h3>
 								<button
 									onClick={() => {
 										onEditName(member.id, member.name);
 									}}
-									className="rounded p-1 text-slate-400 opacity-0 transition-all hover:text-sky-600 group-hover:opacity-100 outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sky-200"
+									className="rounded p-1 text-subtle-foreground opacity-0 transition-all hover:text-sky-600 group-hover:opacity-100 outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sky-200"
 									title="이름 수정"
 									aria-label={`${member.name} 이름 수정`}
 								>
@@ -107,8 +107,8 @@ const MemberCard = memo(
 							}}
 							className={`rounded-lg p-2 outline-none transition-all focus-visible:ring-2 ${
 								member.isGraduated
-									? "text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 focus-visible:ring-emerald-200"
-									: "text-slate-300 hover:bg-rose-50 hover:text-rose-600 focus-visible:ring-rose-200"
+									? "text-subtle-foreground hover:bg-emerald-50 hover:text-emerald-600 focus-visible:ring-emerald-200"
+									: "text-subtle-foreground hover:bg-rose-50 hover:text-rose-600 focus-visible:ring-rose-200"
 							}`}
 							title={member.isGraduated ? "졸업 해제 (복귀)" : "졸업 처리"}
 							aria-label={
@@ -125,7 +125,7 @@ const MemberCard = memo(
 						</button>
 					</div>
 
-					<div className="mt-3 flex items-center gap-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-500">
+					<div className="mt-3 flex items-center gap-2 rounded-lg bg-muted p-2 text-xs text-muted-foreground">
 						<span
 							className="flex-1 truncate font-mono select-all"
 							title={member.channelId}
@@ -137,7 +137,7 @@ const MemberCard = memo(
 								event.stopPropagation();
 								onEditChannel(member.id, member.name, member.channelId);
 							}}
-							className="rounded p-1 text-sky-600 shadow-sm outline-none transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-sky-200"
+							className="rounded p-1 text-sky-600 shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-sky-200"
 							title="채널 ID 수정"
 							aria-label={`${member.name} 채널 ID 수정`}
 						>
@@ -147,7 +147,7 @@ const MemberCard = memo(
 							href={`https://youtube.com/channel/${member.channelId}`}
 							target="_blank"
 							rel="noopener noreferrer"
-							className="rounded p-1 text-slate-400 shadow-sm outline-none transition-colors hover:bg-white hover:text-red-500 focus-visible:ring-2 focus-visible:ring-red-200"
+							className="rounded p-1 text-subtle-foreground shadow-sm outline-none transition-colors hover:bg-card hover:text-red-500 focus-visible:ring-2 focus-visible:ring-red-200"
 							title="유튜브 채널 이동"
 							aria-label={`${member.name} 유튜브 채널로 이동`}
 						>
@@ -160,7 +160,7 @@ const MemberCard = memo(
 					<section aria-labelledby={`ko-aliases-${String(member.id)}`}>
 						<div
 							id={`ko-aliases-${String(member.id)}`}
-							className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-400"
+							className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-subtle-foreground"
 						>
 							<span
 								className="h-1.5 w-1.5 rounded-full bg-linear-to-br from-sky-400 to-cyan-400"
@@ -186,7 +186,7 @@ const MemberCard = memo(
 								</Badge>
 							))}
 							{koAliases.length === 0 && (
-								<span className="text-xs italic text-slate-300">
+								<span className="text-xs italic text-subtle-foreground">
 									등록된 별명이 없습니다
 								</span>
 							)}
@@ -198,7 +198,7 @@ const MemberCard = memo(
 									setKoInput(event.target.value);
 								}}
 								placeholder="별명 추가…"
-								className="h-8 flex-1 border-slate-200 bg-slate-50 text-xs focus-visible:ring-2 focus-visible:ring-sky-200"
+								className="h-8 flex-1 border-border bg-muted text-xs focus-visible:ring-2 focus-visible:ring-sky-200"
 								onKeyDown={(event) => {
 									if (event.key === "Enter") {
 										event.preventDefault();
@@ -224,7 +224,7 @@ const MemberCard = memo(
 					>
 						<div
 							id={`ja-aliases-${String(member.id)}`}
-							className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-400"
+							className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-subtle-foreground"
 						>
 							<span
 								className="h-1.5 w-1.5 rounded-full bg-linear-to-br from-rose-400 to-rose-500"
@@ -250,7 +250,7 @@ const MemberCard = memo(
 								</Badge>
 							))}
 							{jaAliases.length === 0 && (
-								<span className="text-xs italic text-slate-300">
+								<span className="text-xs italic text-subtle-foreground">
 									등록된 별명이 없습니다
 								</span>
 							)}
@@ -262,7 +262,7 @@ const MemberCard = memo(
 									setJaInput(event.target.value);
 								}}
 								placeholder="일본어 별명 추가…"
-								className="h-8 flex-1 border-slate-200 bg-slate-50 text-xs focus-visible:ring-2 focus-visible:ring-rose-200"
+								className="h-8 flex-1 border-border bg-muted text-xs focus-visible:ring-2 focus-visible:ring-rose-200"
 								onKeyDown={(event) => {
 									if (event.key === "Enter") {
 										event.preventDefault();

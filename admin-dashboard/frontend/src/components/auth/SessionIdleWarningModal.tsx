@@ -97,7 +97,7 @@ export const SessionIdleWarningModal = () => {
 			}
 		>
 			<div className="space-y-4">
-				<p className="text-slate-600">
+				<p className="text-muted-foreground">
 					장시간 활동이 없어 잠시 후 보안을 위해 자동으로 로그아웃됩니다.
 					계속해서 서비스를 이용하시려면 세션을 연장해주세요.
 				</p>
@@ -117,7 +117,7 @@ export const SessionIdleWarningModal = () => {
 				<div className="flex gap-3 pt-2">
 					<Button
 						variant="outline"
-						className="flex-1 border-slate-200 text-slate-600 hover:bg-slate-50"
+						className="flex-1 border-border text-muted-foreground hover:bg-accent"
 						onClick={() => {
 							void handleLogout();
 						}}

@@ -35,9 +35,9 @@ export const DockerContainerConfirmModal = ({
 					<div className="bg-amber-100 p-2.5 rounded-full shrink-0">
 						<AlertTriangle className="text-amber-600" size={24} />
 					</div>
-					<p className="text-slate-600">
+					<p className="text-muted-foreground">
 						'
-						<span className="font-bold text-slate-800">
+						<span className="font-bold text-foreground">
 							{confirmModal.containerName}
 						</span>
 						'을(를) {label}하시겠습니까?

@@ -73,11 +73,11 @@ export default function EditNameModal({
 			showHeaderBorder
 		>
 			<form onSubmit={handleSubmit} className="space-y-4">
-				<div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
-					<div className="mb-1 text-xs font-medium text-slate-500">
+				<div className="mb-4 rounded-lg border border-border-subtle bg-muted p-3">
+					<div className="mb-1 text-xs font-medium text-muted-foreground">
 						ID (변경 불가)
 					</div>
-					<div className="text-sm font-mono text-slate-700">{id}</div>
+					<div className="text-sm font-mono text-foreground">{id}</div>
 				</div>
 
 				{showIdWarning && (

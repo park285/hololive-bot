@@ -65,15 +65,15 @@ export const BaseModal = ({
 					role="dialog"
 					aria-modal="true"
 					className={clsx(
-						"w-full overflow-hidden rounded-2xl border border-slate-100 bg-white p-6 text-left shadow-xl",
+						"w-full overflow-hidden rounded-2xl border border-border-subtle bg-card p-6 text-left shadow-xl",
 						maxWidthClasses[maxWidth],
 					)}
 				>
 					{title && (
 						<h3
 							className={clsx(
-								"text-lg font-bold leading-6 text-slate-900",
-								showHeaderBorder && "mb-4 border-b border-slate-100 pb-4",
+								"text-lg font-bold leading-6 text-foreground",
+								showHeaderBorder && "mb-4 border-b border-border-subtle pb-4",
 								titleClassName,
 							)}
 						>

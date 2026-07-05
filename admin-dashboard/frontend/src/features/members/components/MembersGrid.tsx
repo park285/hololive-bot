@@ -50,8 +50,8 @@ export const MembersGrid = ({
 	return (
 		<>
 			{totalCount === 0 ? (
-				<div className="py-16 flex flex-col items-center text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-					<p className="text-slate-400 font-medium">검색 결과가 없습니다.</p>
+				<div className="py-16 flex flex-col items-center text-center bg-muted/50 rounded-2xl border border-dashed border-border">
+					<p className="text-subtle-foreground font-medium">검색 결과가 없습니다.</p>
 				</div>
 			) : (
 				<div className="space-y-6">

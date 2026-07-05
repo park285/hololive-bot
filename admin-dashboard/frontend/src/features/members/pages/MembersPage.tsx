@@ -89,7 +89,7 @@ export const MembersPage = () => {
 	if (query.isLoading) {
 		return (
 			<div
-				className="text-center py-24 text-slate-500"
+				className="text-center py-24 text-muted-foreground"
 				aria-busy="true"
 				aria-label="데이터를 불러오는 중입니다…"
 			>
@@ -139,7 +139,7 @@ export const MembersPage = () => {
 						confirmText="삭제"
 						confirmColor="danger"
 					>
-						<div className="mt-2 rounded-lg bg-slate-50 p-3 text-center font-bold text-slate-700">
+						<div className="mt-2 rounded-lg bg-muted p-3 text-center font-bold text-foreground">
 							{modal.alias}
 						</div>
 					</ConfirmModal>

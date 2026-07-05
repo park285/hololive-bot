@@ -6,6 +6,7 @@ import {
 	type StatusOnlyResponse,
 } from "@/api/core";
 import { queryKeys } from "@/api/queryKeys";
+import { visibleRefetchInterval } from "@/lib/polling";
 import toast from "@/lib/toast-api";
 import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
 
@@ -39,7 +40,7 @@ export function useDockerContainerActions({
 	const { data: dockerHealth } = useQuery({
 		queryKey: queryKeys.docker.health,
 		queryFn: dockerApi.checkHealth,
-		refetchInterval: 30000,
+		refetchInterval: visibleRefetchInterval(30000),
 		retry: 1,
 		initialData: initialHealth,
 	});
@@ -52,13 +53,14 @@ export function useDockerContainerActions({
 	const {
 		data: containersData,
 		isLoading: containersLoading,
+		isError: containersError,
 		isRefetching: containersRefetching,
 		refetch: refetchContainers,
 	} = useQuery({
 		queryKey: queryKeys.docker.containers,
 		queryFn: dockerApi.getContainers,
 		enabled: dockerHealth?.available === true,
-		refetchInterval: 15000,
+		refetchInterval: visibleRefetchInterval(15000),
 		initialData: safeInitialContainers,
 	});
 
@@ -69,8 +71,8 @@ export function useDockerContainerActions({
 		setActionInProgress(null);
 		toast.success(
 			<span>
-				<span className="font-bold text-slate-800">{containerName}</span>
-				<span className="text-slate-600"> {message}</span>
+				<span className="font-bold text-foreground">{containerName}</span>
+				<span className="text-muted-foreground"> {message}</span>
 			</span>,
 		);
 		void queryClient.invalidateQueries({
@@ -165,6 +167,7 @@ export function useDockerContainerActions({
 		dockerHealth,
 		containers,
 		containersLoading,
+		containersError,
 		containersRefetching,
 		isManualRefetching,
 		actionInProgress,
