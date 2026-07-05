@@ -163,9 +163,7 @@ func assertProdComposeNonEgressIsolation(t *testing.T, content string) {
 	nonEgress := []string{"youtube-producer", "admin-dashboard"}
 	for _, service := range nonEgress {
 		block := composeServiceBlock(t, content, service)
-		if strings.Contains(block, "env_file:") {
-			t.Fatalf("%s must not define env_file in hardened docker-compose.prod.yml", service)
-		}
+		assertNonEgressEnvFilePolicy(t, service, block)
 		for _, pattern := range []string{"*iris-env", "IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if strings.Contains(block, pattern) {
 				t.Fatalf("%s contains Iris egress pattern %q", service, pattern)
@@ -178,6 +176,23 @@ func assertProdComposeNonEgressIsolation(t *testing.T, content string) {
 				}
 			}
 		}
+	}
+}
+
+func assertNonEgressEnvFilePolicy(t *testing.T, service, block string) {
+	t.Helper()
+
+	if service != "admin-dashboard" {
+		if strings.Contains(block, "env_file:") {
+			t.Fatalf("%s must not define env_file in hardened docker-compose.prod.yml", service)
+		}
+		return
+	}
+	if !strings.Contains(block, "${ADMIN_DASHBOARD_ENV_FILE:-/run/hololive-bot/admin-dashboard.env}") {
+		t.Fatalf("admin-dashboard must inject its secrets via the scoped admin-dashboard.env env_file")
+	}
+	if strings.Contains(block, "/run/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
+		t.Fatalf("admin-dashboard must not consume monolithic COMPOSE_ENV_FILE as env_file")
 	}
 }
 
@@ -965,6 +980,7 @@ func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files .
 		"IRIS_BOT_TOKEN=dummy",
 		"ADMIN_PASS_BCRYPT=dummy",
 		"SESSION_SECRET=dummy",
+		"LIVE_LOGS_PATH=/srv/hololive-logs-dummy",
 	)
 
 	output, err := cmd.CombinedOutput()

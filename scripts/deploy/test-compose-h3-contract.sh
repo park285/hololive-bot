@@ -8,23 +8,21 @@ STUB_COMPOSE_ENV="$(mktemp)"
 STUB_AP_COMPOSE_ENV="$(mktemp)"
 STUB_APP_ENV="$(mktemp)"
 STUB_YOUTUBE_PRODUCER_ENV="$(mktemp)"
+STUB_ADMIN_DASHBOARD_ENV="$(mktemp)"
 cleanup() {
-    rm -f "${STUB_COMPOSE_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}"
+    rm -f "${STUB_COMPOSE_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}" "${STUB_ADMIN_DASHBOARD_ENV}"
 }
 trap cleanup EXIT
 cat >"${STUB_COMPOSE_ENV}" <<'EOF'
-ADMIN_PASS_BCRYPT=stub
 CACHE_PASSWORD=stub
 DB_PASSWORD=stub
 IRIS_BOT_TOKEN=stub
 IRIS_WEBHOOK_TOKEN=stub
-SESSION_SECRET=stub
+LIVE_LOGS_PATH=/srv/hololive-logs-stub
 EOF
 cat >"${STUB_AP_COMPOSE_ENV}" <<'EOF'
-ADMIN_PASS_BCRYPT=stub
 CACHE_PASSWORD=stub
 DB_PASSWORD=stub
-SESSION_SECRET=stub
 SEOUL_CACHE_HOST=stub
 SEOUL_POSTGRES_HOST=stub
 SEOUL_CLIPROXY_BASE_URL=https://cliproxy.invalid
@@ -46,6 +44,12 @@ SCRAPER_PROXY_ENABLED=false
 SCRAPER_PROXY_URL=http://proxy.invalid
 YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT=2026-04-10T01:11:12Z
 YOUTUBE_ENABLE_QUOTA_BUILDING=true
+EOF
+cat >"${STUB_ADMIN_DASHBOARD_ENV}" <<'EOF'
+ADMIN_PASS_HASH=stub
+SESSION_SECRET=stub
+VALKEY_URL=:stub@valkey-cache:6379
+HOLO_BOT_API_KEY=stub
 EOF
 
 PROD_OVERLAYS=(
@@ -70,6 +74,7 @@ render() {
         HOLOLIVE_API_ENV_FILE="${STUB_APP_ENV}" \
         HOLOLIVE_ALARM_WORKER_ENV_FILE="${STUB_APP_ENV}" \
         HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="${STUB_YOUTUBE_PRODUCER_ENV}" \
+        ADMIN_DASHBOARD_ENV_FILE="${STUB_ADMIN_DASHBOARD_ENV}" \
         COMPOSE_PROFILES="${profiles}" \
         "${ROOT_DIR}/scripts/deploy/compose.sh" "$@" config --format json
 }
@@ -139,6 +144,9 @@ for name, (urls, udp_port) in H3_HEALTH.items():
 for name in ("hololive-api", "hololive-alarm-worker"):
     env = (main.get(name) or {}).get("environment") or {}
     check(f"{name} receives API_SECRET_KEY from scoped env_file", env.get("API_SECRET_KEY") == "stub")
+
+admin_env = (main.get("admin-dashboard") or {}).get("environment") or {}
+check("admin-dashboard receives ADMIN_PASS_HASH from scoped env_file", admin_env.get("ADMIN_PASS_HASH") == "stub")
 
 def h3_addr_aligned(svc, port):
     return (svc.get("environment") or {}).get("HOLOLIVE_H3_ADDR") == f":{port}"

@@ -24,6 +24,8 @@
 
 ## Key environment variables
 
+시크릿 4종(`ADMIN_PASS_HASH`/`SESSION_SECRET`/`VALKEY_URL`/`HOLO_BOT_API_KEY`)은 2026-07-05부터 compose 보간이 아니라 scoped env_file `${ADMIN_DASHBOARD_ENV_FILE:-/run/hololive-bot/admin-dashboard.env}`(OpenBao Agent 렌더, `0600 root`)로 주입됩니다. env_file 값은 compose 보간을 거치지 않으므로 bcrypt 해시를 이스케이프 없이 원문 그대로 넣습니다.
+
 | Env | Purpose | Required |
 |---|---|---|
 | `PORT` | HTTP port (기본 30190) | no |
@@ -138,7 +140,7 @@ Diagnosis:
 ```
 
 Mitigation:
-- `ADMIN_PASS_BCRYPT`/`SESSION_SECRET` env 주입과 해시 형식(`$2b$...`, compose의 `$$` 이스케이프) 확인.
+- `/run/hololive-bot/admin-dashboard.env`의 `ADMIN_PASS_HASH`/`SESSION_SECRET` 주입과 해시 형식(`$2b$...`, env_file은 이스케이프 없는 원문) 확인.
 
 ### 5. 시스템 리소스(인프라) 패널 미동작
 

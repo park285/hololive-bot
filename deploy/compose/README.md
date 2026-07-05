@@ -62,3 +62,12 @@ at `/run/hololive-bot/certs/postgres-ca.pem`: the five central Go runtimes,
 Osaka2 `youtube-producer-d`, and Seoul `youtube-producer-b`. The retired
 insecure downgrade ledger stays closed by preserving production paths with
 verified TLS and the CA bundle above.
+
+## Requirements
+
+- Docker Compose v2.24.4+ — 오버레이의 `!override` YAML 태그가 이 버전부터 지원된다.
+  (`additional_contexts`는 v2.17+, build `provenance`/`sbom` 속성은 그보다 최신을 요구)
+- BuildKit 활성 Docker Engine — Dockerfile들의 `# syntax=docker/dockerfile:1.7`
+  (cache mount, `COPY --link`, per-Dockerfile `.dockerignore`) 전제.
+- 호스트 호환성 확인: `docker compose -f deploy/compose/docker-compose.prod.yml config` 가
+  에러 없이 렌더되는지로 검증한다.

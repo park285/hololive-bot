@@ -59,6 +59,8 @@ build_fixture() {
   printf 'coverage\n' > "${ctx}/admin-dashboard/backend/coverage/coverage.out"
   printf 'artifact\n' > "${ctx}/admin-dashboard/backend/artifacts/stale.bin"
   printf 'package config\n' > "${ctx}/admin-dashboard/backend/config/loader.go"
+  mkdir -p "${ctx}/hololive/hololive-api/internal"
+  printf 'package api\n' > "${ctx}/hololive/hololive-api/internal/source.go"
 }
 
 assert_admin_backend_sensitive_excluded() {
@@ -82,7 +84,8 @@ build_fixture "${api_ctx}" "${ROOT_DIR}/hololive/hololive-api/Dockerfile.dockeri
 api_list="$(context_filelist "${api_ctx}")" || fail "hb03: hololive-api fixture build failed"
 
 assert_admin_backend_sensitive_excluded "${api_list}" "hololive-api"
-assert_present "${api_list}" "/ctx/admin-dashboard/backend/config/loader.go" "hololive-api source"
+assert_excluded "${api_list}" "/ctx/admin-dashboard/backend/config/loader.go" "hololive-api admin source (module-standalone build)"
+assert_present "${api_list}" "/ctx/hololive/hololive-api/internal/source.go" "hololive-api module source"
 
 root_ctx="${TMP_DIR}/root"
 build_fixture "${root_ctx}" "${ROOT_DIR}/.dockerignore"

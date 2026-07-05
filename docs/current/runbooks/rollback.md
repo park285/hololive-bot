@@ -34,7 +34,7 @@ Runtime service names:
 
 - **DB schema 호환**: 통합 PR은 신규 migration을 추가하지 않았습니다(`a04f3c54`는 코드 경로 이동만). 따라서 현재 schema == 컷오버 이전 schema이며, 구 bot/admin/llm이 그대로 붙습니다. down-migration 불필요.
 - **구 이미지 로컬 보존**: `hololive-kakao-bot-go:prod`, `hololive-admin-api:prod`, `hololive-llm-scheduler:prod`.
-- **데이터 보존**: named volume(`holo-pg-data`, `valkey-cache-data`)은 컨테이너 재생성과 무관하게 보존됩니다.
+- **데이터 보존**: named volume(`holo-pg-data`)은 컨테이너 재생성과 무관하게 보존됩니다. (`valkey-cache-data`는 2026-07-05에 제거 — valkey는 `appendonly no` 순수 캐시라 영속 볼륨이 없습니다.)
 
 ### Step 0 — preconditions
 

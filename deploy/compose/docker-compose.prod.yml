@@ -33,6 +33,7 @@ x-security-hardening: &security-hardening
 
 x-app-service: &app-service
   <<: [*autoheal-service, *security-hardening]
+  # 의도된 차등: 앱은 수동 정지를 존중(unless-stopped), DB/인프라는 x-restart-logging의 always를 유지한다.
   restart: unless-stopped
 
 x-public-dns: &public-dns
@@ -48,6 +49,9 @@ x-iris-extra-hosts: &iris-extra-hosts
   - "vnic-kapu-iris-seoul-fk.tail742dd8.ts.net:100.100.1.5"
 
 x-db-security: &db-security
+  # postgres entrypoint의 root->postgres 강하는 setuid 비트가 아닌 CAP_SETUID 기반이라 NNP와 공존 가능.
+  security_opt:
+    - no-new-privileges:true
   cap_drop:
     - ALL
   cap_add:
@@ -115,7 +119,8 @@ x-postgres-env: &postgres-env
   POSTGRES_SOCKET_PATH: ""
   POSTGRES_DB: hololive
   POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
-  POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+  # 런타임 유저 전용 키(HOLOLIVE_DB_PASSWORD)가 있으면 우선, 없으면 기존 DB_PASSWORD 폴백(하위호환).
+  POSTGRES_PASSWORD: ${HOLOLIVE_DB_PASSWORD:-${DB_PASSWORD}}
   POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
   POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-/run/hololive-bot/certs/postgres-ca.pem}
   POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
@@ -211,7 +216,8 @@ x-db-cache-depends: &db-cache-depends
 services:
   holo-postgres:
     <<: *db-service
-    image: ${POSTGRES_IMAGE:-postgres:18}
+    # postgres 18.4의 2026-06-26 빌드 digest(실행 중이던 구빌드 7aba8c66 대체). 이후 갱신은 Renovate PR로만 올린다.
+    image: ${POSTGRES_IMAGE:-postgres:18@sha256:4aabea78cf39b90e834caf3af7d602a18565f6fe2508705c8d01aa63245c2e20}
     container_name: holo-postgres
     oom_score_adj: -300
     shm_size: 256mb
@@ -259,8 +265,11 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
       POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      # 역할별 전용 비밀번호(비우면 init-db가 DB_PASSWORD로 폴백) — admin 열쇠와 분리 권장.
       HOLOLIVE_DB_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      HOLOLIVE_DB_PASSWORD: ${HOLOLIVE_DB_PASSWORD:-}
       HOLOLIVE_MIGRATOR_USER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
+      HOLOLIVE_MIGRATOR_PASSWORD: ${HOLOLIVE_MIGRATOR_PASSWORD:-}
       HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
       HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
       PGDATA: /var/lib/postgresql/data/pgdata
@@ -279,21 +288,28 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    deploy: *deploy-512m
+    # shm_size 256mb는 tmpfs라 컨테이너 메모리 cgroup에 합산된다:
+    # shared_buffers 128MB + shm 최대 256MB + work_mem/maintenance 여유분 → 512m은 OOM-kill 산수.
+    # 상한을 1g로 상향(대안: shm_size 128mb 축소). valkey는 기존 *deploy-512m 유지.
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 256
     networks:
       - hololive-net
 
   valkey-cache:
     <<: *db-service
-    image: valkey/valkey:9.1.0-alpine3.23
+    image: ${VALKEY_IMAGE:-valkey/valkey:9.1.0-alpine3.23@sha256:a35428eba9043cc0b79dbe54100f0c92784f2de00ad09b01182bfb1c5c83d1bd}
     container_name: valkey-cache
     oom_score_adj: -300
     environment:
       CACHE_PASSWORD: ${CACHE_PASSWORD:?CACHE_PASSWORD is required}
     ports:
       - "127.0.0.1:6379:6379"
+    # appendonly no + save "" 순수 캐시 구성이라 /data 영속 볼륨은 실사용이 없어 제거했다.
     volumes:
-      - valkey-cache-data:/data
       - valkey-cache-socket:/var/run/valkey
     command:
       - /bin/sh
@@ -317,6 +333,7 @@ services:
       dockerfile: hololive/hololive-api/Dockerfile
       args:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
+        GO_PGO_FILE: ${HOLOLIVE_API_GO_PGO_FILE:-cmd/hololive-api/default.pgo}
     container_name: hololive-db-migrate
     restart: "no"
     environment:
@@ -324,7 +341,7 @@ services:
       PGPORT: "5432"
       PGDATABASE: hololive
       PGUSER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
-      PGPASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      PGPASSWORD: ${HOLOLIVE_MIGRATOR_PASSWORD:-${DB_PASSWORD}}
       PGSSLMODE: ${PGSSLMODE:-verify-full}
       PGSSLROOTCERT: /run/hololive-bot/certs/postgres-ca.pem
       POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
@@ -356,6 +373,8 @@ services:
         VERSION: ${HOLO_ALARM_WORKER_VERSION:-${HOLO_API_VERSION:-2.0.0}}
         GO_PGO_FILE: ${HOLOLIVE_ALARM_WORKER_GO_PGO_FILE:-cmd/alarm-worker/default.pgo}
     container_name: hololive-alarm-worker
+    # 배치 디스패치/전송 도중 SIGKILL을 피하기 위한 우아한 종료 여유(api와 동일 기준).
+    stop_grace_period: 45s
     env_file:
       - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}
     environment:
@@ -428,6 +447,7 @@ services:
       dockerfile: hololive/hololive-api/Dockerfile
       args:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
+        GO_PGO_FILE: ${HOLOLIVE_API_GO_PGO_FILE:-cmd/hololive-api/default.pgo}
     container_name: hololive-api
     stop_grace_period: 45s
     env_file:
@@ -570,6 +590,14 @@ services:
       args:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
     container_name: admin-dashboard
+    # 시크릿(ADMIN_PASS_HASH/SESSION_SECRET/VALKEY_URL/HOLO_BOT_API_KEY)은 다른 앱과 동일하게
+    # /run 하위 env_file로 이동 — 호스트 .env와 `compose config` 렌더 결과에서 시크릿을 제거한다.
+    # (docker inspect의 Config.Env 노출까지 없애려면 앱의 *_FILE 로딩 지원이 필요 — 후속 과제)
+    # required:false — admin-dashboard는 central 전용인데 AP 배포도 전체 모델을 `config`로 검증하므로
+    # AP 호스트의 파일 부재를 허용해야 한다. central 실재는 systemd-compose-up wait_for_file이 보장한다.
+    env_file:
+      - path: ${ADMIN_DASHBOARD_ENV_FILE:-/run/hololive-bot/admin-dashboard.env}
+        required: false
     environment:
       PORT: "30190"
       ENV: "production"
@@ -577,14 +605,10 @@ services:
       LOG_LEVEL: "info"
       ALLOWED_ORIGINS: "https://admin.holo-oshi.com,https://admin.capu.blog"
       ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASS_HASH: ${ADMIN_PASS_BCRYPT:?ADMIN_PASS_BCRYPT is required}
-      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       SESSION_TOKEN_ROTATION: "true"
-      VALKEY_URL: :${CACHE_PASSWORD:?CACHE_PASSWORD is required}@valkey-cache:6379
       DOCKER_HOST: tcp://docker-proxy:2375
       HOLO_ADMIN_API_URL: https://hololive-api:30006
       HOLO_BOT_URL: https://hololive-api:30006
-      HOLO_BOT_API_KEY: ${HOLO_BOT_API_KEY:-}
       HOLOLIVE_INTERNAL_H3_CA_CERT_FILE: ${HOLOLIVE_INTERNAL_H3_CA_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
       HOLOLIVE_INTERNAL_H3_SERVER_NAME: ${HOLOLIVE_INTERNAL_H3_SERVER_NAME:-127.0.0.1}
       LOG_DIR: /app/logs
@@ -604,6 +628,7 @@ services:
     deploy: *deploy-128m
     healthcheck:
       <<: *go-healthcheck
+      # 코드 확인: FORCE_HTTPS는 쿠키 Secure/HSTS만 제어하고 리다이렉트하지 않으므로 HTTP /health 직검사가 안전하다.
       test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30190/health"]
     networks:
       hololive-net:
@@ -619,9 +644,13 @@ services:
       - '-loglevel=info'
       - '-listenip=0.0.0.0'
       - '-proxyport=2375'
+      # allowfrom 전체 허용: 접근 통제는 internal 네트워크(docker-proxy-net) 멤버십이 담당한다.
+      # 고정 서브넷+allowfrom 축소는 호스트의 기존 브리지 풀과 충돌 위험이 있어 적용하지 않는다.
       - '-allowfrom=0.0.0.0/0'
       - '-allowGET=(/v1\.[0-9]+)?/(_ping|version|events(\?.*)?|containers/json(\?.*)?|containers/[^/]+/json(\?.*)?)'
       - '-allowHEAD=(/v1\.[0-9]+)?/_ping'
+      # 컨테이너 "이름 접두사" 스코핑을 하지 않는 이유: deunhealth는 이벤트의 컨테이너 ID로 restart를
+      # 호출하고, 허용된 GET containers/json이 이미 전체 ID를 노출하므로 이름 제한은 실효가 없다.
       - '-allowPOST=(/v1\.[0-9]+)?/containers/[^/]+/(start|stop|restart)(\?.*)?'
     group_add:
       - "${DOCKER_SOCKET_GID:-107}"
@@ -653,7 +682,6 @@ services:
 
 volumes:
   holo-pg-data:
-  valkey-cache-data:
   valkey-cache-socket:
     driver: local
     driver_opts:
