@@ -488,7 +488,6 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handl
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore -> github.com/kapu/hololive-shared/pkg/service/youtube/stats
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info -> github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore
-github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info -> github.com/kapu/hololive-api/internal/planes/bot/internal/render
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter

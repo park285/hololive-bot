@@ -118,7 +118,7 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewLiveCommand(deps, nil).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
+	err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"member": "Aqua",
 	})
 	require.NoError(t, err)

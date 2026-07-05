@@ -119,28 +119,25 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
-	pages, err := r.RenderCalendarImages(6, 2026, entries)
+	data, err := r.RenderCalendarImage(6, 2026, entries)
 	if err != nil {
-		t.Fatalf("RenderCalendarImages() error = %v", err)
+		t.Fatalf("RenderCalendarImage() error = %v", err)
 	}
-	if len(pages) != 1 {
-		t.Fatalf("len(pages) = %d, want 1", len(pages))
-	}
-	assertValidPNG(t, pages[0])
+	assertValidPNG(t, data)
 	if got := recorder.requests.Load(); got != 0 {
 		t.Fatalf("blocked photo URL was fetched %d times, want 0", got)
 	}
 
-	fallbackPages, err := NewCalendarCardRenderer().RenderCalendarImages(6, 2026, fallbackEntries)
+	fallbackData, err := NewCalendarCardRenderer().RenderCalendarImage(6, 2026, fallbackEntries)
 	if err != nil {
-		t.Fatalf("fallback RenderCalendarImages() error = %v", err)
+		t.Fatalf("fallback RenderCalendarImage() error = %v", err)
 	}
-	if len(fallbackPages) != 1 || !bytes.Equal(pages[0], fallbackPages[0]) {
+	if !bytes.Equal(data, fallbackData) {
 		t.Fatal("blocked photo render should match default-avatar fallback")
 	}
 
 	cacheKey := newCalendarCacheKey(6, 2026, entries)
-	if _, ok := r.diskCachedImages(cacheKey); ok {
+	if _, ok := r.diskCachedImage(cacheKey); ok {
 		t.Fatal("blocked photo fallback was stored in disk cache")
 	}
 	if entries, readErr := os.ReadDir(filepath.Join(dir, calendarDiskCacheVersion)); readErr != nil {
@@ -150,7 +147,7 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 	} else if len(entries) != 0 {
 		t.Fatalf("disk cache entries = %d, want 0", len(entries))
 	}
-	if _, ok := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir)).diskCachedImages(cacheKey); ok {
+	if _, ok := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir)).diskCachedImage(cacheKey); ok {
 		t.Fatal("blocked photo fallback was served from disk cache")
 	}
 }

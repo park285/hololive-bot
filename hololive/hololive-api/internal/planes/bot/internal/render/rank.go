@@ -110,7 +110,7 @@ type rankMetrics struct {
 }
 
 func newRankMetrics() rankMetrics {
-	base := newCalendarMetrics()
+	base := newCalendarMetrics(1)
 	return rankMetrics{
 		calendarMetrics: base,
 		rowH:            int(112 * base.sf),

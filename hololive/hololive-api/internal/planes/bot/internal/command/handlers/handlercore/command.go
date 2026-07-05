@@ -70,15 +70,7 @@ type CelebrationCalendarFinder interface {
 }
 
 type CalendarImageRenderer interface {
-	RenderCalendarImages(month, year int, entries []domain.CalendarEntry) ([][]byte, error)
-}
-
-type LiveImageRenderer interface {
-	RenderLiveImages(entries []render.LiveCardEntry) ([][]byte, error)
-}
-
-type ProfileImageRenderer interface {
-	RenderProfileImage(data *render.ProfileCardData) ([]byte, error)
+	RenderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error)
 }
 
 type RankImageRenderer interface {
@@ -86,22 +78,21 @@ type RankImageRenderer interface {
 }
 
 type Dependencies struct {
-	Holodex            domain.StreamProvider
-	Chzzk              *chzzk.Client
-	Cache              cache.Client
-	Alarm              domain.AlarmCRUD
-	Matcher            *matcher.Matcher
-	OfficialProfiles   *member.ProfileService
-	StatsRepository    stats.StatsCommandRepository
-	MemberNews         MemberNewsService
-	MembersData        member.DataProvider
-	Formatter          *adapter.ResponseFormatter
-	SendMessage        func(ctx context.Context, room, message string) error
-	SendImage          func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
-	SendMultipleImages func(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error
-	SendError          func(ctx context.Context, room, message string) error
-	Dispatcher         Dispatcher
-	Logger             *slog.Logger
+	Holodex          domain.StreamProvider
+	Chzzk            *chzzk.Client
+	Cache            cache.Client
+	Alarm            domain.AlarmCRUD
+	Matcher          *matcher.Matcher
+	OfficialProfiles *member.ProfileService
+	StatsRepository  stats.StatsCommandRepository
+	MemberNews       MemberNewsService
+	MembersData      member.DataProvider
+	Formatter        *adapter.ResponseFormatter
+	SendMessage      func(ctx context.Context, room, message string) error
+	SendImage        func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
+	SendError        func(ctx context.Context, room, message string) error
+	Dispatcher       Dispatcher
+	Logger           *slog.Logger
 }
 
 type NormalizeFunc func(domain.CommandType, map[string]any) (string, map[string]any)

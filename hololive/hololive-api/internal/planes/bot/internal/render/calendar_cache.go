@@ -23,7 +23,7 @@ func (key calendarCacheKey) string() string {
 	return fmt.Sprintf("%04d-%02d-%s", key.year, key.month, key.entriesHash)
 }
 
-func (r *CalendarCardRenderer) cachedImages(key calendarCacheKey) ([][]byte, bool) {
+func (r *CalendarCardRenderer) cachedImage(key calendarCacheKey) ([]byte, bool) {
 	if r == nil {
 		return nil, false
 	}
@@ -31,14 +31,14 @@ func (r *CalendarCardRenderer) cachedImages(key calendarCacheKey) ([][]byte, boo
 	r.cacheMu.Lock()
 	defer r.cacheMu.Unlock()
 
-	pages, ok := r.cache[key]
+	data, ok := r.cache[key]
 	if !ok {
 		return nil, false
 	}
-	return clonePages(pages), true
+	return bytes.Clone(data), true
 }
 
-func (r *CalendarCardRenderer) storeCachedImages(key calendarCacheKey, pages [][]byte) {
+func (r *CalendarCardRenderer) storeCachedImage(key calendarCacheKey, data []byte) {
 	if r == nil {
 		return
 	}
@@ -47,25 +47,17 @@ func (r *CalendarCardRenderer) storeCachedImages(key calendarCacheKey, pages [][
 	defer r.cacheMu.Unlock()
 
 	if r.cache == nil {
-		r.cache = make(map[calendarCacheKey][][]byte)
+		r.cache = make(map[calendarCacheKey][]byte)
 	}
 	if _, ok := r.cache[key]; !ok {
 		r.cacheOrder = append(r.cacheOrder, key)
 	}
-	r.cache[key] = clonePages(pages)
+	r.cache[key] = bytes.Clone(data)
 	for len(r.cacheOrder) > calendarImageCacheLimit {
 		oldest := r.cacheOrder[0]
 		r.cacheOrder = r.cacheOrder[1:]
 		delete(r.cache, oldest)
 	}
-}
-
-func clonePages(pages [][]byte) [][]byte {
-	cloned := make([][]byte, len(pages))
-	for i, page := range pages {
-		cloned[i] = bytes.Clone(page)
-	}
-	return cloned
 }
 
 func newCalendarCacheKey(month, year int, entries []domain.CalendarEntry) calendarCacheKey {

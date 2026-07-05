@@ -31,16 +31,14 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 )
 
 type MemberInfoCommand struct {
 	handlercore.BaseCommand
-	imageRenderer handlercore.ProfileImageRenderer
 }
 
-func NewMemberInfoCommand(deps *handlercore.Dependencies, imageRenderer handlercore.ProfileImageRenderer) *MemberInfoCommand {
-	return &MemberInfoCommand{BaseCommand: handlercore.NewBaseCommand(deps), imageRenderer: imageRenderer}
+func NewMemberInfoCommand(deps *handlercore.Dependencies) *MemberInfoCommand {
+	return &MemberInfoCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
 }
 
 func (c *MemberInfoCommand) Name() string {
@@ -80,10 +78,6 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberProfileLoadFailed)
 	}
 
-	if c.trySendProfileImage(ctx, cmdCtx.Room, member, rawProfile, translated) {
-		return nil
-	}
-
 	message := c.Deps().Formatter.FormatTalentProfile(ctx, rawProfile, translated)
 	if message == "" {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberProfileBuildFailed)
@@ -94,30 +88,6 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	}
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
-}
-
-func (c *MemberInfoCommand) trySendProfileImage(ctx context.Context, room string, member *domain.Member, rawProfile *domain.TalentProfile, translated *domain.Translated) bool {
-	if c.imageRenderer == nil {
-		return false
-	}
-
-	data := render.NewProfileCardData(member, rawProfile, translated)
-	imgData, err := c.imageRenderer.RenderProfileImage(&data)
-	if err != nil {
-		c.log().Warn("profile image render failed, falling back to text",
-			slog.Any("error", err),
-		)
-		return false
-	}
-
-	if err := c.Deps().SendImage(ctx, room, imgData); err != nil {
-		c.log().Warn("profile image send failed, falling back to text",
-			slog.Any("error", err),
-		)
-		return false
-	}
-
-	return true
 }
 
 func hasNoMemberInfoQuery(rawQuery, englishCandidate, channelID string) bool {

@@ -115,13 +115,13 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 | `error` ns | 37 | bot | messages_seed_parity(글리프·키셋) | — |
 | `notify` ns | 8 | bot | messages_seed_parity(키셋) | — |
 | `org`/`alarmtype`/`newscat`/`social`/`misc` | 25 | bot + llm + worker + outbox | store_test.go 값 핀, 라벨 lookup 테스트 | — |
-| `calendar` ns | 8 | bot(render) | calendar_strings_test.go (fallback byte-parity) | — |
+| `calendar` ns | 8(코드 사용 7 — `overflow_footer`는 단일 페이지 전환으로 미사용 시드 잔존) | bot(render) | calendar_strings_test.go (fallback byte-parity) | — |
 | `timefmt`/`karing` ns (신규) | 087에서 시드 | bot / alarm-worker | `%d` 포맷 계약 테스트(087 co-commit) | — |
-| `livecard` ns (092) | 4 | bot(render 라이브 카드) | live_strings_test.go (fallback byte-parity) | — |
-| `profilecard` ns (093) | 1 | bot(render 프로필 카드) | profile_test.go parity | — |
+| `livecard` ns (092) | 4 — **미사용 시드 잔존** (라이브 카드 제거, `!라이브` 텍스트 회귀) | — | — | — |
+| `profilecard` ns (093) | 1 — **미사용 시드 잔존** (프로필 카드 제거, `!멤버` 텍스트 회귀) | — | — | — |
 | `rankcard` ns (094) | 3 | bot(render 순위 카드) | rank_test.go parity | — |
 
-이미지 카드 표면(092~094에서 신설): `!라이브`(멀티페이지, iris 8장 캡), `!멤버 <이름>`(단일, 졸업 배지), `!구독자순위`(단일, top-N) — 전부 렌더·전송 실패 시 기존 텍스트로 폴백하며, 카드 문자열은 위 ns가 SSOT다. 캘린더 포함 4개 카드의 드로잉 프리미티브는 `render/cardkit`, 팔레트는 `render/theme`이 단일 소스.
+이미지 카드 표면: `!캘린더`(단일 이미지, 자연 높이 초과 시 compact 비례 축소로 1024x1536 안에 수용)와 `!구독자순위`(단일, top-N)만 유지 — 렌더·전송 실패 시 기존 텍스트로 폴백하며, 카드 문자열은 위 ns가 SSOT다. `!라이브`·`!멤버`는 카카오에서 이미지 내 URL 클릭이 불가해 텍스트 전송으로 회귀했다(라이브·프로필 카드 렌더러 및 SendMultipleImages 배선 제거). 드로잉 프리미티브는 `render/cardkit`, 팔레트는 `render/theme`이 단일 소스.
 
 부록 — 알려진 정합 이슈(개편에서 해소):
 - `GetAllTemplateKeys()`/sample data가 `ALARM_DISPATCH_NOTIFICATION{,_GROUP}` 2키를 누락(시드·상수 48 vs 키셋 46) → 키셋·샘플 보강으로 seed-render 게이트에 편입.

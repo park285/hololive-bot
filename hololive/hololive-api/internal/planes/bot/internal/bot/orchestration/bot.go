@@ -80,8 +80,6 @@ type Bot struct {
 	membersData           member.DataProvider
 	memberRepository      command.CelebrationCalendarFinder
 	calendarImageRenderer command.CalendarImageRenderer
-	liveImageRenderer     command.LiveImageRenderer
-	profileImageRenderer  command.ProfileImageRenderer
 	rankImageRenderer     command.RankImageRenderer
 	stopCh                chan struct{}
 	doneCh                chan struct{}
@@ -154,8 +152,6 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 
 func (b *Bot) initImageRenderers(calendarCacheDir string, strings *messagestrings.Store) {
 	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(calendarCacheDir), render.WithCalendarStrings(strings))
-	b.liveImageRenderer = render.NewLiveCardRenderer(render.WithLiveStrings(strings))
-	b.profileImageRenderer = render.NewProfileCardRenderer(render.WithProfileStrings(strings))
 	b.rankImageRenderer = render.NewRankCardRenderer(render.WithRankStrings(strings))
 }
 
