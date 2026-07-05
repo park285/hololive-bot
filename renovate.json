@@ -1,0 +1,16 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "docker:pinDigests"],
+  "enabledManagers": ["dockerfile", "docker-compose", "github-actions"],
+  "docker-compose": {
+    "fileMatch": ["deploy/compose/docker-compose.*\\.ya?ml$"]
+  },
+  "packageRules": [
+    {
+      "description": "베이스/인프라 이미지 major 자동 갱신 금지 (postgres 18 GUC 등 커플링 보호)",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ]
+}

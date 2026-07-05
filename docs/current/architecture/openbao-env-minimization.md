@@ -71,7 +71,7 @@ ChatBotGo:
 
 채널 정의(혼동 방지):
 
-1. **Compose interpolation 입력**(`compose.env`): `${VAR}`/`${VAR:?}` 보간용. 보간은 각 서비스 `environment:` 블록이 참조한 key만 컨테이너에 들어가므로 per-container 최소화와 양립한다. 단 `DB_PASSWORD`, `CACHE_PASSWORD`, `IRIS_*_TOKEN`, `ADMIN_PASS_BCRYPT`, `SESSION_SECRET`, `API_SECRET_KEY` 등 **secret이 계속 포함되는 파일**이다. "compose.env = non-secret"이 아님을 전제로 perms 0600 유지.
+1. **Compose interpolation 입력**(`compose.env`): `${VAR}`/`${VAR:?}` 보간용. 보간은 각 서비스 `environment:` 블록이 참조한 key만 컨테이너에 들어가므로 per-container 최소화와 양립한다. 단 `DB_PASSWORD`, `CACHE_PASSWORD`, `IRIS_*_TOKEN`, `API_SECRET_KEY` 등 **secret이 계속 포함되는 파일**이다 (`ADMIN_PASS_BCRYPT`/`SESSION_SECRET`/`HOLO_BOT_API_KEY`는 2026-07-05부터 `admin-dashboard.env`로 이동). "compose.env = non-secret"이 아님을 전제로 perms 0600 유지.
 2. **AP Compose interpolation 입력**(`ap-compose.env`): Osaka/Seoul AP host 전용 보간 파일이다. AP producer에 필요한 DB/cache/API/H3/Iris endpoint key는 유지하지만 `IRIS_WEBHOOK_TOKEN`/`IRIS_BOT_TOKEN`은 넣지 않는다.
 3. **Per-service env_file**: compose `environment:` 블록에 없는 앱 전용 key만 담는다 (예: bot의 `KAKAO_REST_API_KEY`/`NAVER_*`/`KASI_*`/`TOKEN_ENCRYPTION_KEY`, alarm-worker의 `ALARM_HOLODEX_API_KEYS`/`HOLOLIVE_ALARM_*`, youtube-producer의 `HOLODEX_API_KEY_2..5`/`SCRAPER_PROXY_*`/`YOUTUBE_*` 계열).
 
@@ -169,13 +169,13 @@ Ownership matrix rule: 아래 목록에 없는 key는 Phase 3 template/KV 분배
 | `bot.env` | `hololive-bot` 앱 전용 key. compose `environment:`가 이미 주입하는 DB/Cache/Iris/H3/API/Kakao key는 넣지 않는다. |
 | `alarm-worker.env` | `hololive-alarm-worker` 앱 전용 key. egress 공통 key와 `config.Load` 필수 key는 compose `environment:`로 유지한다. |
 | `youtube-producer.env` | AP `youtube-producer` 전용 key. `IRIS_WEBHOOK_TOKEN`/`IRIS_BOT_TOKEN`은 절대 넣지 않는다. |
+| `admin-dashboard.env` | `admin-dashboard` 전용 시크릿. 2026-07-05에 compose 보간(`ADMIN_PASS_BCRYPT`/`SESSION_SECRET`/`HOLO_BOT_API_KEY`)에서 scoped env_file로 이동. `VALKEY_URL`은 템플릿이 `CACHE_PASSWORD`로 조립해 렌더한다. |
 | `제거` | repo reader가 없거나 compose가 literal/generated env로 직접 만드는 alias, shell control override, legacy checkout-only key. Certificate material처럼 env가 아닌 파일 렌더로 유지되는 항목은 env matrix에서만 제외한다. 실제 KV 폐기는 Phase 5에서 보존 스냅샷 뒤 별도 판단한다. |
 
 `compose.env keys`:
 
 ```text
 ADMIN_ALLOWED_IPS
-ADMIN_PASS_BCRYPT
 ADMIN_USER
 ALARM_TWITCH_ENABLED
 API_SECRET_KEY
@@ -198,18 +198,17 @@ HOLOLIVE_INTERNAL_H3_SERVER_NAME
 HOLOLIVE_MIGRATOR_USER
 HOLOLIVE_SCRAPER_PASSWORD
 HOLOLIVE_SCRAPER_USER
-HOLO_BOT_API_KEY
 IRIS_BASE_URL
 IRIS_BOT_TOKEN
 IRIS_H3_CA_CERT_FILE
 IRIS_H3_SERVER_NAME
 IRIS_TRANSPORT
 IRIS_WEBHOOK_TOKEN
+LIVE_LOGS_PATH
 LOG_LEVEL
 MAJOREVENT_SCRAPER_ENABLED
 POSTGRES_ADMIN_USER
 POSTGRES_SSLMODE
-SESSION_SECRET
 VALKEY_PORT_BIND_IP
 YOUTUBE_API_KEY
 ```
@@ -218,7 +217,6 @@ YOUTUBE_API_KEY
 
 ```text
 ADMIN_ALLOWED_IPS
-ADMIN_PASS_BCRYPT
 ADMIN_USER
 ALARM_TWITCH_ENABLED
 API_SECRET_KEY
@@ -241,7 +239,6 @@ HOLOLIVE_INTERNAL_H3_SERVER_NAME
 HOLOLIVE_MIGRATOR_USER
 HOLOLIVE_SCRAPER_PASSWORD
 HOLOLIVE_SCRAPER_USER
-HOLO_BOT_API_KEY
 IRIS_BASE_URL
 IRIS_H3_CA_CERT_FILE
 IRIS_H3_SERVER_NAME
@@ -250,7 +247,6 @@ LOG_LEVEL
 MAJOREVENT_SCRAPER_ENABLED
 POSTGRES_ADMIN_USER
 POSTGRES_SSLMODE
-SESSION_SECRET
 VALKEY_PORT_BIND_IP
 YOUTUBE_API_KEY
 ```
@@ -282,6 +278,15 @@ SCRAPER_PROXY_ENABLED
 SCRAPER_PROXY_URL
 YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT
 YOUTUBE_ENABLE_QUOTA_BUILDING
+```
+
+`admin-dashboard.env keys` (2026-07-05 compose 보간 이동분):
+
+```text
+ADMIN_PASS_HASH
+HOLO_BOT_API_KEY
+SESSION_SECRET
+VALKEY_URL
 ```
 
 `제거 / 렌더 제외 keys`:

@@ -1,15 +1,9 @@
 *
 
-!go.mod
-!go.sum
-!go.work
-!go.work.sum
-
-!hololive/
-!hololive/**
-
-!admin-dashboard/backend/
-!admin-dashboard/backend/**
+!hololive/hololive-shared/
+!hololive/hololive-shared/**
+!hololive/hololive-api/
+!hololive/hololive-api/**
 
 **/*_test.go
 **/testdata/

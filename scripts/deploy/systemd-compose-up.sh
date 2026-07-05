@@ -88,6 +88,7 @@ for file in \
   /run/hololive-bot/bot.env \
   /run/hololive-bot/alarm-worker.env \
   /run/hololive-bot/youtube-producer.env \
+  /run/hololive-bot/admin-dashboard.env \
   /run/hololive-bot/certs/hololive-h3.crt \
   /run/hololive-bot/certs/hololive-h3.key \
   /run/hololive-bot/certs/iris-ca.pem \
