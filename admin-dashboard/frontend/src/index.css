@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
 	--font-display: "Outfit", "system-ui", "sans-serif";
 	--font-body: "Plus Jakarta Sans", "system-ui", "sans-serif";
@@ -32,6 +34,23 @@
 	--color-border: hsl(var(--border));
 	--color-input: hsl(var(--input));
 	--color-ring: hsl(var(--ring));
+
+	--color-subtle-foreground: hsl(var(--subtle-foreground));
+	--color-border-subtle: hsl(var(--border-subtle));
+
+	--color-success: hsl(var(--success));
+	--color-success-soft: hsl(var(--success-soft));
+	--color-warning: hsl(var(--warning));
+	--color-warning-soft: hsl(var(--warning-soft));
+	--color-info: hsl(var(--info));
+	--color-info-soft: hsl(var(--info-soft));
+	--color-danger: hsl(var(--danger));
+	--color-danger-soft: hsl(var(--danger-soft));
+
+	--color-chart-grid: hsl(var(--chart-grid));
+	--color-chart-axis: hsl(var(--chart-axis));
+	--color-chart-cpu: hsl(var(--chart-cpu));
+	--color-chart-memory: hsl(var(--chart-memory));
 
 	--radius-lg: var(--radius);
 	--radius-md: calc(var(--radius) - 2px);
@@ -67,7 +86,71 @@
 	--input: 214.3 31.8% 91.4%;
 	--ring: 221 83% 53%;
 
+	--subtle-foreground: 215 20% 65%;
+	--border-subtle: 210 40% 96.1%;
+
+	--success: 161 94% 30%;
+	--success-soft: 152 81% 96%;
+	--warning: 32 95% 44%;
+	--warning-soft: 48 100% 96%;
+	--info: 200 98% 39%;
+	--info-soft: 204 100% 97%;
+	--danger: 347 77% 50%;
+	--danger-soft: 356 100% 97%;
+
+	--chart-grid: 214.3 31.8% 91.4%;
+	--chart-axis: 215 20% 65%;
+	--chart-cpu: 199 89% 48%;
+	--chart-memory: 258 90% 66%;
+
 	--radius: 1rem;
+}
+
+.dark {
+	--background: 222 47% 8%;
+	--foreground: 210 40% 96%;
+
+	--card: 222 40% 12%;
+	--card-foreground: 210 40% 96%;
+
+	--popover: 222 40% 12%;
+	--popover-foreground: 210 40% 96%;
+
+	--primary: 199 89% 55%;
+	--primary-foreground: 222 47% 11%;
+
+	--secondary: 217 33% 17%;
+	--secondary-foreground: 210 40% 96%;
+
+	--muted: 217 33% 17%;
+	--muted-foreground: 215 20% 62%;
+
+	--accent: 217 33% 17%;
+	--accent-foreground: 210 40% 96%;
+
+	--destructive: 0 63% 45%;
+	--destructive-foreground: 210 40% 96%;
+
+	--border: 215 28% 22%;
+	--input: 215 28% 22%;
+	--ring: 199 89% 55%;
+
+	--subtle-foreground: 215 16% 52%;
+	--border-subtle: 215 25% 18%;
+
+	--success: 158 64% 52%;
+	--success-soft: 161 45% 13%;
+	--warning: 43 96% 56%;
+	--warning-soft: 36 45% 14%;
+	--info: 198 93% 60%;
+	--info-soft: 202 60% 15%;
+	--danger: 351 95% 71%;
+	--danger-soft: 350 45% 16%;
+
+	--chart-grid: 215 28% 22%;
+	--chart-axis: 215 16% 52%;
+	--chart-cpu: 199 89% 48%;
+	--chart-memory: 258 90% 66%;
 }
 
 @layer base {
@@ -113,7 +196,7 @@
 
 /* Glassmorphism Utilities */
 .glass {
-	@apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-xl;
+	@apply bg-card/70 backdrop-blur-lg border border-white/20 shadow-xl;
 }
 
 .glass-dark {
@@ -215,6 +298,14 @@
 
 ::-webkit-scrollbar-thumb:hover {
 	@apply bg-gray-400;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+	@apply bg-gray-600;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+	@apply bg-gray-500;
 }
 
 /* P2: Long list rendering 최적화 (content-visibility) */

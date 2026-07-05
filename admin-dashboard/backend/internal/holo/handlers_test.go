@@ -7,7 +7,7 @@ import (
 )
 
 func TestTrimChannelStats(t *testing.T) {
-	body := []byte(`{"status":"ok","stats":{"b":{"subscriberCount":20},"a":{"subscriberCount":20},"c":{"subscriberCount":10}}}`)
+	body := []byte(`{"status":"ok","stats":{"b":{"SubscriberCount":30},"a":{"SubscriberCount":20},"c":{"SubscriberCount":10}}}`)
 	trimmed, err := TrimChannelStats(body, 2)
 	if err != nil {
 		t.Fatal(err)
@@ -21,7 +21,10 @@ func TestTrimChannelStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(stats) != 2 || stats["a"] == nil || stats["b"] == nil {
-		t.Fatalf("unexpected trim result: %s", trimmed)
+		t.Fatalf("top-N by subscriber count must keep b and a: %s", trimmed)
+	}
+	if stats["c"] != nil {
+		t.Fatalf("lowest subscriber channel must be trimmed: %s", trimmed)
 	}
 }
 

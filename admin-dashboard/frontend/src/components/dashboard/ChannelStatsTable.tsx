@@ -34,10 +34,10 @@ export const ChannelStatsTable = () => {
 				aria-busy="true"
 				aria-label="채널 통계 로딩 중…"
 			>
-				<div className="rounded-2xl border border-slate-100 overflow-hidden">
-					<div className="bg-slate-50 h-10 w-full mb-1" />
+				<div className="rounded-2xl border border-border-subtle overflow-hidden">
+					<div className="bg-muted h-10 w-full mb-1" />
 					{Array.from({ length: 5 }, (_, i) => (
-						<div key={i} className="flex gap-4 p-4 border-b border-slate-50">
+						<div key={i} className="flex gap-4 p-4 border-b border-slate-50 dark:border-slate-800">
 							<Skeleton className="h-4 w-8" />
 							<Skeleton className="h-4 flex-1" />
 							<Skeleton className="h-4 w-20" />
@@ -68,20 +68,20 @@ export const ChannelStatsTable = () => {
 
 	if (!topStats || topStats.length === 0) {
 		return (
-			<div className="text-center text-slate-400 py-12 bg-white rounded-2xl border border-slate-100">
+			<div className="text-center text-subtle-foreground py-12 bg-card rounded-2xl border border-border-subtle">
 				표시할 채널 통계가 없습니다
 			</div>
 		);
 	}
 
 	return (
-		<div className="rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+		<div className="rounded-2xl border border-border-subtle shadow-sm overflow-hidden">
 			<div className="overflow-x-auto">
 				<table
 					className="w-full text-sm text-left"
 					aria-label="상위 10개 채널 통계"
 				>
-					<thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+					<thead className="text-xs text-muted-foreground uppercase bg-muted border-b border-border">
 						<tr>
 							<th
 								scope="col"
@@ -103,11 +103,11 @@ export const ChannelStatsTable = () => {
 							</th>
 						</tr>
 					</thead>
-					<tbody className="divide-y divide-slate-100">
+					<tbody className="divide-y divide-border-subtle">
 						{topStats.map((stat, idx) => (
 							<tr
 								key={stat.ChannelID}
-								className="bg-white hover:bg-linear-to-r hover:from-sky-50/50 hover:to-transparent transition-colors duration-200 group"
+								className="bg-card hover:bg-linear-to-r hover:from-sky-50/50 hover:to-transparent transition-colors duration-200 group"
 							>
 								<td className="px-4 py-4 text-center">
 									{idx < 3 ? (
@@ -120,21 +120,21 @@ export const ChannelStatsTable = () => {
 											{idx + 1}
 										</span>
 									) : (
-										<span className="text-slate-400 font-bold">
+										<span className="text-subtle-foreground font-bold">
 											{idx + 1}
 										</span>
 									)}
 								</td>
-								<td className="px-4 py-4 font-medium text-slate-900 group-hover:text-sky-700 transition-colors">
+								<td className="px-4 py-4 font-medium text-foreground group-hover:text-sky-700 transition-colors">
 									{stat.ChannelTitle}
 								</td>
-								<td className="px-4 py-4 text-right text-slate-700 font-medium tabular-nums font-mono">
+								<td className="px-4 py-4 text-right text-foreground font-medium tabular-nums font-mono">
 									{numberFormatter.format(stat.SubscriberCount)}
 								</td>
-								<td className="px-4 py-4 text-right text-slate-500 tabular-nums font-mono">
+								<td className="px-4 py-4 text-right text-muted-foreground tabular-nums font-mono">
 									{numberFormatter.format(stat.ViewCount)}
 								</td>
-								<td className="px-4 py-4 text-right text-slate-500 tabular-nums font-mono">
+								<td className="px-4 py-4 text-right text-muted-foreground tabular-nums font-mono">
 									{numberFormatter.format(stat.VideoCount)}
 								</td>
 							</tr>

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
 )
@@ -117,6 +118,123 @@ func TestRestartContainerRejectsUnmanagedBeforeRequest(t *testing.T) {
 	}
 	if called {
 		t.Fatal("unmanaged action reached the docker server; gate must fail-closed before the request")
+	}
+}
+
+func TestStopContainerRejectsInfraBeforeRequest(t *testing.T) {
+	called := false
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	err := client.StopContainer(context.Background(), "valkey-cache")
+	if err == nil {
+		t.Fatal("StopContainer on infra name error = nil, want 403 gate")
+	}
+	var appErr *httpx.AppError
+	if !errors.As(err, &appErr) || appErr.Status != http.StatusForbidden {
+		t.Fatalf("error = %v (%T), want httpx.AppError 403", err, err)
+	}
+	if called {
+		t.Fatal("infra stop reached the docker server; gate must fail-closed before the request")
+	}
+}
+
+func TestRestartInfraAllowed(t *testing.T) {
+	var gotPath string
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	if err := client.RestartContainer(context.Background(), "valkey-cache"); err != nil {
+		t.Fatalf("RestartContainer on infra name error = %v, want success", err)
+	}
+	if gotPath != "/containers/valkey-cache/restart" {
+		t.Fatalf("action path = %q, want /containers/valkey-cache/restart", gotPath)
+	}
+}
+
+func TestStopAppContainerAllowed(t *testing.T) {
+	var gotPath, gotQuery string
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	if err := client.StopContainer(context.Background(), "hololive-admin-api"); err != nil {
+		t.Fatalf("StopContainer on app container error = %v, want success", err)
+	}
+	if gotPath != "/containers/hololive-admin-api/stop" || gotQuery != "t=30" {
+		t.Fatalf("action = %q?%q, want /containers/hololive-admin-api/stop?t=30", gotPath, gotQuery)
+	}
+}
+
+func TestListContainersSetsManagedAndStopBlocked(t *testing.T) {
+	const body = `[
+		{"Id":"1","Names":["/hololive-admin-api"],"Image":"img","Status":"Up","State":"running","Created":1},
+		{"Id":"2","Names":["/valkey-cache"],"Image":"img","Status":"Up","State":"running","Created":2}
+	]`
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(body)); err != nil {
+			t.Errorf("write docker response: %v", err)
+		}
+	}))
+
+	containers, err := client.ListContainers(context.Background())
+	if err != nil {
+		t.Fatalf("ListContainers error = %v", err)
+	}
+	byName := make(map[string]Container, len(containers))
+	for _, c := range containers {
+		byName[c.Name] = c
+	}
+	app, ok := byName["hololive-admin-api"]
+	if !ok || !app.Managed || app.StopBlocked {
+		t.Fatalf("hololive-admin-api = %+v, want Managed=true StopBlocked=false", app)
+	}
+	infra, ok := byName["valkey-cache"]
+	if !ok || !infra.Managed || !infra.StopBlocked {
+		t.Fatalf("valkey-cache = %+v, want Managed=true StopBlocked=true", infra)
+	}
+}
+
+func TestActionBudgetExceedsListBudget(t *testing.T) {
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(300 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`[]`)); err != nil {
+			t.Errorf("write docker response: %v", err)
+		}
+	}))
+	client.listTimeout = 80 * time.Millisecond
+	client.actionTimeout = 2 * time.Second
+
+	if _, err := client.ListContainers(context.Background()); err == nil {
+		t.Fatal("ListContainers error = nil, want timeout with short list budget")
+	}
+	if err := client.RestartContainer(context.Background(), "hololive-admin-api"); err != nil {
+		t.Fatalf("RestartContainer error = %v, want success within action budget", err)
+	}
+}
+
+func TestActionTimesOutOnHungDocker(t *testing.T) {
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(300 * time.Millisecond)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	client.actionTimeout = 50 * time.Millisecond
+
+	err := client.RestartContainer(context.Background(), "hololive-admin-api")
+	if err == nil {
+		t.Fatal("RestartContainer error = nil, want timeout on hung docker")
+	}
+	var appErr *httpx.AppError
+	if !errors.As(err, &appErr) || appErr.Status != http.StatusServiceUnavailable {
+		t.Fatalf("error = %v (%T), want httpx.AppError 503", err, err)
 	}
 }
 

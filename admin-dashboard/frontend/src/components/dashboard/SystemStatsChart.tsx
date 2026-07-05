@@ -21,10 +21,10 @@ export const SystemStatsChart = () => {
 
 	return (
 		<Card className="overflow-hidden">
-			<Card.Header className="flex flex-row items-center justify-between border-b border-slate-100 bg-slate-50/50 pb-4">
+			<Card.Header className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-border-subtle bg-muted/50 pb-4">
 				<div className="flex items-center gap-2">
-					<Activity className="text-slate-500" size={20} />
-					<h3 className="text-lg font-display font-bold text-slate-800">
+					<Activity className="text-muted-foreground" size={20} />
+					<h3 className="text-lg font-display font-bold text-foreground">
 						시스템 리소스
 					</h3>
 					{isConnected ? (
@@ -33,33 +33,33 @@ export const SystemStatsChart = () => {
 							<span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
 						</span>
 					) : (
-						<span className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
+						<span className="ml-2 h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-600" />
 					)}
 				</div>
 
 				{currentStats && (
 					<div className="flex gap-4 font-mono text-xs">
-						<div className="flex items-center gap-1.5 rounded border border-slate-100 bg-white px-2 py-1 shadow-sm">
+						<div className="flex items-center gap-1.5 rounded border border-border-subtle bg-card px-2 py-1 shadow-sm">
 							<Cpu size={14} className="text-sky-500" />
-							<span className="font-bold text-slate-700">
+							<span className="font-bold text-foreground">
 								{currentStats.cpuUsage.toFixed(1)}%
 							</span>
 						</div>
-						<div className="flex items-center gap-1.5 rounded border border-slate-100 bg-white px-2 py-1 shadow-sm">
+						<div className="flex items-center gap-1.5 rounded border border-border-subtle bg-card px-2 py-1 shadow-sm">
 							<Layers size={14} className="text-violet-500" />
-							<span className="font-bold text-slate-700">
+							<span className="font-bold text-foreground">
 								{currentStats.memoryUsage.toFixed(1)}%
 							</span>
 						</div>
-						<div className="hidden items-center gap-1.5 rounded border border-slate-100 bg-white px-2 py-1 shadow-sm sm:flex">
-							<CircuitBoard size={14} className="text-slate-400" />
-							<span className="font-bold text-slate-500">
+						<div className="hidden items-center gap-1.5 rounded border border-border-subtle bg-card px-2 py-1 shadow-sm sm:flex">
+							<CircuitBoard size={14} className="text-subtle-foreground" />
+							<span className="font-bold text-muted-foreground">
 								Go {currentStats.totalGoGoroutines}
 							</span>
 						</div>
-						<div className="hidden items-center gap-1.5 rounded border border-slate-100 bg-white px-2 py-1 shadow-sm sm:flex">
-							<CircuitBoard size={14} className="text-slate-400" />
-							<span className="font-bold text-slate-500">
+						<div className="hidden items-center gap-1.5 rounded border border-border-subtle bg-card px-2 py-1 shadow-sm sm:flex">
+							<CircuitBoard size={14} className="text-subtle-foreground" />
+							<span className="font-bold text-muted-foreground">
 								Threads {currentStats.threadCount}
 							</span>
 						</div>
@@ -74,16 +74,16 @@ export const SystemStatsChart = () => {
 					<ResourceChart history={statsHistory} />
 				</div>
 
-				<div className="border-t border-slate-100 px-4 py-3">
+				<div className="border-t border-border-subtle px-4 py-3">
 					<div className="mb-4 flex items-center justify-between gap-3">
 						<div className="flex items-center gap-2">
-							<CircuitBoard size={16} className="text-slate-400" />
-							<h4 className="text-sm font-bold text-slate-700">
+							<CircuitBoard size={16} className="text-subtle-foreground" />
+							<h4 className="text-sm font-bold text-foreground">
 								서비스별 런타임 단위
 							</h4>
 						</div>
 						{latestPoint && (
-							<span className="font-mono text-[11px] text-slate-400">
+							<span className="font-mono text-[11px] text-subtle-foreground">
 								latest {latestPoint.time}
 							</span>
 						)}

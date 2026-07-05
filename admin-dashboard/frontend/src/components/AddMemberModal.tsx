@@ -150,7 +150,7 @@ export default function AddMemberModal({
 
 				<div className="grid grid-cols-2 gap-4">
 					<div className="space-y-2">
-						<Label htmlFor="add-member-name-ko" className="text-slate-500">
+						<Label htmlFor="add-member-name-ko" className="text-muted-foreground">
 							한국어 이름 (선택)
 						</Label>
 						<Input
@@ -165,7 +165,7 @@ export default function AddMemberModal({
 					</div>
 
 					<div className="space-y-2">
-						<Label htmlFor="add-member-name-ja" className="text-slate-500">
+						<Label htmlFor="add-member-name-ja" className="text-muted-foreground">
 							일본어 이름 (선택)
 						</Label>
 						<Input
@@ -185,7 +185,7 @@ export default function AddMemberModal({
 						type="button"
 						variant="outline"
 						onClick={onClose}
-						className="focus-visible:ring-2 focus-visible:ring-slate-200"
+						className="focus-visible:ring-2 focus-visible:ring-border"
 					>
 						취소
 					</Button>

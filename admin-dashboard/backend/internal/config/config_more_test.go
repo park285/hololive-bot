@@ -107,6 +107,32 @@ func TestSessionConfigValidateFailureBranches(t *testing.T) {
 	}
 }
 
+func TestForwardedTrustWarning(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name       string
+		forceHTTPS bool
+		trusted    bool
+		wantEmpty  bool
+	}{
+		{"https without trust warns", true, false, false},
+		{"https with trust silent", true, true, true},
+		{"plain http silent", false, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Config{Security: SecurityConfig{ForceHTTPS: tc.forceHTTPS}, TrustedForwarders: tc.trusted}
+			got := cfg.ForwardedTrustWarning()
+			if tc.wantEmpty && got != "" {
+				t.Fatalf("ForwardedTrustWarning() = %q, want empty", got)
+			}
+			if !tc.wantEmpty && got == "" {
+				t.Fatal("ForwardedTrustWarning() = empty, want warning")
+			}
+		})
+	}
+}
+
 func TestSessionConfigValidateDefaultPasses(t *testing.T) {
 	t.Parallel()
 	cfg := DefaultSessionConfig()
@@ -125,6 +151,7 @@ func TestValidateTTLWindowsFailureBranches(t *testing.T) {
 		{"ttl at or above idle timeout", func(c *SessionConfig) { c.IdleSessionTTL = c.IdleTimeout }},
 		{"absolute warning at absolute timeout", func(c *SessionConfig) { c.AbsoluteWarningWindow = c.AbsoluteTimeout }},
 		{"rotation below grace", func(c *SessionConfig) { c.RotationInterval = c.GracePeriod - time.Second }},
+		{"rotation at or above expiry", func(c *SessionConfig) { c.RotationInterval = c.ExpiryDuration }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

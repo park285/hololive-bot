@@ -18,7 +18,7 @@ export const AlarmsToolbar = ({
 	groupCount,
 	alarmCount,
 }: AlarmsToolbarProps) => (
-	<Card className="relative p-4 bg-white shadow-sm border-slate-200 overflow-hidden">
+	<Card className="relative p-4 bg-card shadow-sm border-border overflow-hidden">
 		<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-rose-400 to-amber-400" />
 		<div className="flex flex-col md:flex-row items-center gap-4">
 			<div className="relative w-full md:w-96">
@@ -26,7 +26,7 @@ export const AlarmsToolbar = ({
 					알람 검색
 				</Label>
 				<Search
-					className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+					className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle-foreground"
 					size={18}
 					aria-hidden="true"
 				/>
@@ -40,13 +40,13 @@ export const AlarmsToolbar = ({
 					className="pl-10 focus-visible:ring-2 focus-visible:ring-sky-200"
 				/>
 			</div>
-			<div className="text-sm text-slate-500 font-medium tabular-nums">
+			<div className="text-sm text-muted-foreground font-medium tabular-nums">
 				총{" "}
-				<span className="text-slate-900 font-bold">
+				<span className="text-foreground font-bold">
 					{numberFormatter.format(groupCount)}
 				</span>
 				개 그룹 /{" "}
-				<span className="text-slate-900 font-bold">
+				<span className="text-foreground font-bold">
 					{numberFormatter.format(alarmCount)}
 				</span>
 				개 알람

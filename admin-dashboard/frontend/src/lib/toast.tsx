@@ -1,7 +1,7 @@
 import CircleAlert from "lucide-react/dist/esm/icons/circle-alert.mjs";
 import CheckCircle2 from "lucide-react/dist/esm/icons/circle-check-big.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
-import { type CSSProperties, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import toastApi, {
 	getToastItems,
 	subscribeToToasts,
@@ -15,7 +15,6 @@ interface ToasterProps {
 	reverseOrder?: boolean;
 	toastOptions?: {
 		className?: string;
-		style?: CSSProperties;
 		success?: {
 			iconTheme?: { primary?: string; secondary?: string };
 		};
@@ -73,8 +72,7 @@ export const Toaster = ({
 				return (
 					<div
 						key={item.id}
-						className={`pointer-events-auto flex items-start gap-3 rounded-xl border bg-white p-4 shadow-lg ${toastOptions?.className ?? ""}`}
-						style={toastOptions?.style}
+						className={`pointer-events-auto flex items-start gap-3 rounded-xl border border-border-subtle bg-card px-4 py-3 text-card-foreground shadow-lg ${toastOptions?.className ?? ""}`}
 						role="status"
 						aria-live="polite"
 					>
@@ -84,12 +82,10 @@ export const Toaster = ({
 							className="mt-0.5 shrink-0"
 							aria-hidden="true"
 						/>
-						<div className="min-w-0 flex-1 text-sm text-slate-700">
-							{item.message}
-						</div>
+						<div className="min-w-0 flex-1 text-sm">{item.message}</div>
 						<button
 							type="button"
-							className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+							className="rounded p-1 text-subtle-foreground transition-colors hover:bg-muted hover:text-muted-foreground"
 							onClick={() => {
 								toastApi.dismiss(item.id);
 							}}

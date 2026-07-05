@@ -60,14 +60,14 @@ export default function ChannelEditModal({
 	return (
 		<BaseModal isOpen={isOpen} onClose={onClose} title={title} showHeaderBorder>
 			<form onSubmit={handleSubmit} className="space-y-4">
-				<div className="mb-4 space-y-2 rounded-lg border border-slate-100 bg-slate-50 p-3">
+				<div className="mb-4 space-y-2 rounded-lg border border-border-subtle bg-muted p-3">
 					<div className="flex justify-between text-sm">
-						<span className="text-slate-500">멤버 이름</span>
-						<span className="font-bold text-slate-800">{memberName}</span>
+						<span className="text-muted-foreground">멤버 이름</span>
+						<span className="font-bold text-foreground">{memberName}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-slate-500">멤버 ID</span>
-						<span className="font-mono text-slate-600">{memberId}</span>
+						<span className="text-muted-foreground">멤버 ID</span>
+						<span className="font-mono text-muted-foreground">{memberId}</span>
 					</div>
 				</div>
 

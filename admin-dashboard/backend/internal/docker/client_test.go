@@ -23,3 +23,20 @@ func TestIsManaged(t *testing.T) {
 		t.Fatal("random container should not be managed")
 	}
 }
+
+func TestStopBlocked(t *testing.T) {
+	client := &Client{stopBlockedPrefixes: []string{"valkey", "postgres", "deunhealth", "admin"}}
+	cases := map[string]bool{
+		"valkey-cache":       true,
+		"postgres":           true,
+		"admin-dashboard":    true,
+		"deunhealth":         true,
+		"hololive-admin-api": false,
+		"docker-proxy":       false,
+	}
+	for name, want := range cases {
+		if got := client.stopBlocked(name); got != want {
+			t.Fatalf("stopBlocked(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

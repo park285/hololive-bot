@@ -107,10 +107,12 @@ export interface Container {
   health?: string | null;
   id: string;
   image: string;
+  managed: boolean;
   name: string;
   ports: PortMapping[];
   state: string;
   status: string;
+  stopBlocked: boolean;
 }
 
 export interface DeleteAlarmRequest {

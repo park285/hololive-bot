@@ -39,7 +39,7 @@ const ReactQueryDevtools = import.meta.env.DEV
 	: null;
 
 const TabLoader = () => (
-	<div className="flex h-64 items-center justify-center text-slate-400">
+	<div className="flex h-64 items-center justify-center text-subtle-foreground">
 		<div className="animate-spin mr-2">
 			<Loader2 className="h-6 w-6" />
 		</div>
@@ -48,7 +48,7 @@ const TabLoader = () => (
 );
 
 const FullPageLoader = () => (
-	<div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-400">
+	<div className="flex min-h-screen items-center justify-center bg-background text-subtle-foreground">
 		<div className="animate-spin mr-2">
 			<Loader2 className="h-6 w-6" />
 		</div>
@@ -166,15 +166,6 @@ const router = createBrowserRouter([
 
 const toastOptions = {
 	className: "text-sm font-medium",
-	style: {
-		background: "#ffffff",
-		color: "#334155",
-		padding: "12px 16px",
-		borderRadius: "12px",
-		boxShadow:
-			"0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-		border: "1px solid #f1f5f9",
-	},
 	success: {
 		iconTheme: { primary: "#0ea5e9", secondary: "#ffffff" },
 	},

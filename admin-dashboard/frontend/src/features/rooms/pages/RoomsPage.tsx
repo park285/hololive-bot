@@ -28,7 +28,7 @@ export const RoomsPage = () => {
 	if (query.isLoading) {
 		return (
 			<div
-				className="text-center py-24 text-slate-500"
+				className="text-center py-24 text-muted-foreground"
 				aria-busy="true"
 				aria-label="데이터를 불러오는 중입니다…"
 			>
@@ -114,7 +114,7 @@ export const RoomsPage = () => {
 				confirmColor="danger"
 			>
 				{deleteModal.room && (
-					<div className="bg-slate-50 p-3 rounded-lg mt-2 text-center font-mono font-bold text-slate-800 border border-slate-200">
+					<div className="bg-muted p-3 rounded-lg mt-2 text-center font-mono font-bold text-foreground border border-border">
 						{deleteModal.room}
 					</div>
 				)}

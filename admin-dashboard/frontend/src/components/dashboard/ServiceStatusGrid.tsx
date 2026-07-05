@@ -15,23 +15,23 @@ const ServiceIcon = ({ name }: { name: string }) => {
 		return <Cpu className="text-amber-500" size={20} aria-hidden="true" />;
 	if (name.includes("admin"))
 		return (
-			<ShieldCheck className="text-slate-500" size={20} aria-hidden="true" />
+			<ShieldCheck className="text-muted-foreground" size={20} aria-hidden="true" />
 		);
-	return <Server className="text-slate-400" size={20} aria-hidden="true" />;
+	return <Server className="text-subtle-foreground" size={20} aria-hidden="true" />;
 };
 
 export const ServiceStatusGrid = ({ services }: ServiceStatusGridProps) => (
 	<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 		{services.map((service) => (
 			<div key={service.name} className="group">
-				<div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-all duration-200 focus-within:ring-2 focus-within:ring-sky-100">
+				<div className="bg-card rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition-all duration-200 focus-within:ring-2 focus-within:ring-sky-100">
 					<div className="flex items-start justify-between">
 						<div className="flex items-center gap-3">
-							<div className="p-2.5 bg-slate-50 rounded-xl group-hover:bg-sky-50 transition-colors">
+							<div className="p-2.5 bg-muted rounded-xl group-hover:bg-sky-50 transition-colors">
 								<ServiceIcon name={service.name} />
 							</div>
 							<div>
-								<h4 className="font-bold text-slate-700 text-sm">
+								<h4 className="font-bold text-foreground text-sm">
 									{service.name}
 								</h4>
 								<div
@@ -68,10 +68,10 @@ export const ServiceStatusGrid = ({ services }: ServiceStatusGridProps) => (
 
 						{service.available && (
 							<div className="text-right">
-								<div className="text-[10px] uppercase text-slate-400 font-bold tracking-wider mb-0.5">
+								<div className="text-[10px] uppercase text-subtle-foreground font-bold tracking-wider mb-0.5">
 									Response
 								</div>
-								<div className="text-xs font-mono font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+								<div className="text-xs font-mono font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
 									{service.response_time_ms != null
 										? `${String(service.response_time_ms)}ms`
 										: "-"}
@@ -81,15 +81,15 @@ export const ServiceStatusGrid = ({ services }: ServiceStatusGridProps) => (
 					</div>
 
 					{(service.available || service.error) && (
-						<div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-							<div className="text-slate-500 font-medium">
-								<span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-mono mr-1">
+						<div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between text-xs">
+							<div className="text-muted-foreground font-medium">
+								<span className="bg-muted text-muted-foreground px-1.5 py-0.5 rounded text-[10px] font-mono mr-1">
 									ERR
 								</span>
 								{service.error || "none"}
 							</div>
-							<div className="flex items-center gap-1.5 text-slate-500 font-medium">
-								<Cpu size={14} className="text-slate-400" aria-hidden="true" />
+							<div className="flex items-center gap-1.5 text-muted-foreground font-medium">
+								<Cpu size={14} className="text-subtle-foreground" aria-hidden="true" />
 								<span className="font-mono">
 									{service.available ? "OK" : "DOWN"}
 								</span>

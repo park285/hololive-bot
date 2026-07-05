@@ -5,6 +5,7 @@ import { streamsApi } from "@/features/streams/api";
 import { LiveStreamsSection } from "@/features/streams/components/LiveStreamsSection";
 import { UpcomingStreamsSection } from "@/features/streams/components/UpcomingStreamsSection";
 import type { StreamOrg } from "@/features/streams/types";
+import { type SectionStateProps, sectionStateProps } from "@/lib/queryState";
 
 export const StreamsPage = () => {
 	const [selectedOrg, setSelectedOrg] = useState<StreamOrg>("hololive");
@@ -17,7 +18,7 @@ export const StreamsPage = () => {
 		{ value: "all", label: "All" },
 	];
 
-	const { data: liveData, isLoading: liveLoading } = useQuery({
+	const liveQuery = useQuery({
 		queryKey: queryKeys.streams.live(selectedOrg),
 		queryFn: () => streamsApi.getLive(selectedOrg),
 		refetchInterval: 60 * 1000,
@@ -25,7 +26,7 @@ export const StreamsPage = () => {
 		placeholderData: keepPreviousData,
 	});
 
-	const { data: upcomingData, isLoading: upcomingLoading } = useQuery({
+	const upcomingQuery = useQuery({
 		queryKey: queryKeys.streams.upcoming(selectedOrg),
 		queryFn: () => streamsApi.getUpcoming(selectedOrg),
 		refetchInterval: 60 * 1000 * 5,
@@ -33,8 +34,17 @@ export const StreamsPage = () => {
 		placeholderData: keepPreviousData,
 	});
 
-	const liveStreams = liveData?.streams ?? [];
-	const upcomingStreams = upcomingData?.streams ?? [];
+	const liveStreams = liveQuery.data?.streams ?? [];
+	const upcomingStreams = upcomingQuery.data?.streams ?? [];
+
+	const liveState: SectionStateProps = {
+		...sectionStateProps(liveQuery),
+		isError: liveQuery.isError && liveStreams.length === 0,
+	};
+	const upcomingState: SectionStateProps = {
+		...sectionStateProps(upcomingQuery),
+		isError: upcomingQuery.isError && upcomingStreams.length === 0,
+	};
 
 	const handleThumbnailError = (event: SyntheticEvent<HTMLImageElement>) => {
 		const element = event.currentTarget;
@@ -57,13 +67,13 @@ export const StreamsPage = () => {
 				selectedOrg={selectedOrg}
 				orgOptions={orgOptions}
 				liveStreams={liveStreams}
-				liveLoading={liveLoading}
+				state={liveState}
 				onOrgChange={setSelectedOrg}
 				onThumbnailError={handleThumbnailError}
 			/>
 			<UpcomingStreamsSection
 				upcomingStreams={upcomingStreams}
-				upcomingLoading={upcomingLoading}
+				state={upcomingState}
 				onThumbnailError={handleThumbnailError}
 			/>
 		</div>

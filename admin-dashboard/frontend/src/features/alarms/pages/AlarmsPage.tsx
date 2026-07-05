@@ -59,7 +59,7 @@ export const AlarmsPage = () => {
 	if (query.isLoading) {
 		return (
 			<div
-				className="text-center py-24 text-slate-500"
+				className="text-center py-24 text-muted-foreground"
 				aria-busy="true"
 				aria-label="알람 데이터를 불러오는 중입니다…"
 			>
@@ -71,12 +71,12 @@ export const AlarmsPage = () => {
 
 	if (groupedAlarms.length === 0) {
 		return (
-			<div className="text-center py-12 bg-white rounded-2xl border border-slate-100 shadow-sm">
+			<div className="text-center py-12 bg-card rounded-2xl border border-border-subtle shadow-sm">
 				<Bell
-					className="mx-auto h-12 w-12 text-slate-200 mb-4"
+					className="mx-auto h-12 w-12 text-slate-200 dark:text-slate-700 mb-4"
 					aria-hidden="true"
 				/>
-				<p className="text-slate-500 font-medium">등록된 알람이 없습니다</p>
+				<p className="text-muted-foreground font-medium">등록된 알람이 없습니다</p>
 			</div>
 		);
 	}
@@ -130,16 +130,16 @@ export const AlarmsPage = () => {
 				confirmColor="danger"
 			>
 				{alarmToDelete && (
-					<div className="bg-slate-50 p-4 rounded-lg mt-2 border border-slate-100 flex flex-col gap-2">
+					<div className="bg-muted p-4 rounded-lg mt-2 border border-border-subtle flex flex-col gap-2">
 						<div className="flex justify-between items-center text-sm">
-							<span className="text-slate-500">멤버</span>
-							<span className="font-bold text-slate-800">
+							<span className="text-muted-foreground">멤버</span>
+							<span className="font-bold text-foreground">
 								{alarmToDelete.memberName || "이름 없음"}
 							</span>
 						</div>
 						<div className="flex justify-between items-center text-sm">
-							<span className="text-slate-500">채널 ID</span>
-							<span className="font-mono text-slate-600 text-xs">
+							<span className="text-muted-foreground">채널 ID</span>
+							<span className="font-mono text-muted-foreground text-xs">
 								{alarmToDelete.channelId}
 							</span>
 						</div>

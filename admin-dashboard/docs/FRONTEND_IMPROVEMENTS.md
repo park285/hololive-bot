@@ -45,8 +45,8 @@ children: [
 ## 2. 성능 최적화 (Performance)
 
 ### 코드 분할 (Code Splitting)
-무거운 라이브러리(Recharts 등)를 사용하는 컴포넌트를 `lazy` 및 `Suspense`로 분리하여 초기 번들 사이즈를 최적화했습니다.
-- **적용 대상**: `StatsTab` 내 `SystemStatsChart`, `ChannelStatsTable`.
+차트는 별도 차트 라이브러리 없이 손으로 작성한 SVG(`frontend/src/features/stats/components/ResourceChart.tsx`, `RuntimeUnitsChart.tsx`)로 렌더링하며, 이런 무거운 컴포넌트를 `lazy` 및 `Suspense`로 분리하여 초기 번들 사이즈를 최적화했습니다.
+- **적용 대상**: `ResourceChart`, `RuntimeUnitsChart` 등 stats 차트 컴포넌트.
 - **효과**: 메인 번들 크기가 감소하였으며, **TBT(Total Blocking Time)**가 유의미하게 개선되었습니다.
 
 ### 하트비트 및 활동 감지 최적화

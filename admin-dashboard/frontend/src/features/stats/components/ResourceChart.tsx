@@ -47,7 +47,7 @@ export const ResourceChart = ({ history }: ResourceChartProps) => {
 
 	return (
 		<div className="w-full">
-			<div className="relative h-[200px] w-full overflow-hidden rounded-lg border border-slate-100 bg-white">
+			<div className="relative h-[200px] w-full overflow-hidden rounded-lg border border-border-subtle bg-card">
 				<svg
 					viewBox={`0 0 ${String(CHART_WIDTH)} ${String(CHART_HEIGHT)}`}
 					className="h-full w-full"
@@ -56,12 +56,28 @@ export const ResourceChart = ({ history }: ResourceChartProps) => {
 				>
 					<defs>
 						<linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
-							<stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.28" />
-							<stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.02" />
+							<stop
+								offset="0%"
+								style={{ stopColor: "hsl(var(--chart-cpu))" }}
+								stopOpacity="0.28"
+							/>
+							<stop
+								offset="100%"
+								style={{ stopColor: "hsl(var(--chart-cpu))" }}
+								stopOpacity="0.02"
+							/>
 						</linearGradient>
 						<linearGradient id="memoryGradient" x1="0" y1="0" x2="0" y2="1">
-							<stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.22" />
-							<stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.02" />
+							<stop
+								offset="0%"
+								style={{ stopColor: "hsl(var(--chart-memory))" }}
+								stopOpacity="0.22"
+							/>
+							<stop
+								offset="100%"
+								style={{ stopColor: "hsl(var(--chart-memory))" }}
+								stopOpacity="0.02"
+							/>
 						</linearGradient>
 					</defs>
 
@@ -76,10 +92,15 @@ export const ResourceChart = ({ history }: ResourceChartProps) => {
 									y1={y}
 									x2={CHART_WIDTH - CHART_PADDING_X}
 									y2={y}
-									stroke="#e2e8f0"
+									style={{ stroke: "hsl(var(--chart-grid))" }}
 									strokeDasharray="4 4"
 								/>
-								<text x={6} y={y + 4} fill="#94a3b8" fontSize="10">
+								<text
+									x={6}
+									y={y + 4}
+									style={{ fill: "hsl(var(--chart-axis))" }}
+									fontSize="10"
+								>
 									{tick}%
 								</text>
 							</g>
@@ -95,7 +116,7 @@ export const ResourceChart = ({ history }: ResourceChartProps) => {
 						<path
 							d={memoryLinePath}
 							fill="none"
-							stroke="#8b5cf6"
+							style={{ stroke: "hsl(var(--chart-memory))" }}
 							strokeWidth="3"
 							strokeLinejoin="round"
 							strokeLinecap="round"
@@ -105,7 +126,7 @@ export const ResourceChart = ({ history }: ResourceChartProps) => {
 						<path
 							d={cpuLinePath}
 							fill="none"
-							stroke="#0ea5e9"
+							style={{ stroke: "hsl(var(--chart-cpu))" }}
 							strokeWidth="3"
 							strokeLinejoin="round"
 							strokeLinecap="round"
@@ -114,7 +135,7 @@ export const ResourceChart = ({ history }: ResourceChartProps) => {
 				</svg>
 			</div>
 
-			<div className="mt-3 flex items-center justify-between font-mono text-[11px] text-slate-400">
+			<div className="mt-3 flex items-center justify-between font-mono text-[11px] text-subtle-foreground">
 				{labels.map((label) => (
 					<span
 						key={label.key}
@@ -131,11 +152,11 @@ export const ResourceChart = ({ history }: ResourceChartProps) => {
 			</div>
 
 			<div className="mt-3 flex flex-wrap gap-3 text-xs">
-				<div className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1 font-medium text-sky-700">
+				<div className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1 font-medium text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
 					<span className="h-2 w-2 rounded-full bg-sky-500" />
 					CPU
 				</div>
-				<div className="inline-flex items-center gap-2 rounded-full bg-violet-50 px-3 py-1 font-medium text-violet-700">
+				<div className="inline-flex items-center gap-2 rounded-full bg-violet-50 px-3 py-1 font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
 					<span className="h-2 w-2 rounded-full bg-violet-500" />
 					Memory
 				</div>

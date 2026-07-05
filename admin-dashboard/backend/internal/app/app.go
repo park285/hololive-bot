@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,10 @@ import (
 	"github.com/kapu/admin-dashboard/internal/status"
 )
 
-const maxSystemStatsStreams = 16
+const (
+	maxSystemStatsStreams = 16
+	maxStreamsPerSession  = 4
+)
 
 const (
 	wsWriteWait         = 5 * time.Second
@@ -30,7 +34,10 @@ const (
 	defaultWSPingPeriod = (defaultWSPongWait * 9) / 10
 )
 
-const sessionIDKey = "admin-session-id"
+const (
+	sessionIDKey  = "admin-session-id"
+	sessionObjKey = "admin-session"
+)
 
 type sessionStore interface {
 	Create(ctx context.Context) (session.Session, error)
@@ -52,12 +59,17 @@ type Runtime struct {
 	statsHub        *status.Hub
 	static          static.Handler
 	wsStreams       chan struct{}
+	wsMu            sync.Mutex
+	wsPerSession    map[string]int
 	wsPongWait      time.Duration
 	wsPingPeriod    time.Duration
 	openapiJSON     []byte
 }
 
 func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime, error) {
+	if msg := cfg.ForwardedTrustWarning(); msg != "" {
+		logger.Warn(msg)
+	}
 	store, err := session.NewStore(ctx, cfg.ValkeyURL, &cfg.Session)
 	if err != nil {
 		return nil, err
@@ -93,6 +105,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 		statsHub:        statsHub,
 		static:          static.NewHandler(),
 		wsStreams:       make(chan struct{}, maxSystemStatsStreams),
+		wsPerSession:    make(map[string]int),
 		wsPongWait:      defaultWSPongWait,
 		wsPingPeriod:    defaultWSPingPeriod,
 		openapiJSON:     openapiJSON,
@@ -105,7 +118,7 @@ func (r *Runtime) Run() {
 		Handler:           r.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 	}
@@ -139,4 +152,36 @@ func (r *Runtime) Close() {
 func sessionIDFrom(c *gin.Context) (string, bool) {
 	value := c.GetString(sessionIDKey)
 	return value, value != ""
+}
+
+func sessionFrom(c *gin.Context) (*session.Session, bool) {
+	value, exists := c.Get(sessionObjKey)
+	if !exists {
+		return nil, false
+	}
+	sess, ok := value.(*session.Session)
+	return sess, ok && sess != nil
+}
+
+func (r *Runtime) acquireSessionStream(sessionID string) bool {
+	r.wsMu.Lock()
+	defer r.wsMu.Unlock()
+	if r.wsPerSession == nil {
+		r.wsPerSession = make(map[string]int)
+	}
+	if r.wsPerSession[sessionID] >= maxStreamsPerSession {
+		return false
+	}
+	r.wsPerSession[sessionID]++
+	return true
+}
+
+func (r *Runtime) releaseSessionStream(sessionID string) {
+	r.wsMu.Lock()
+	defer r.wsMu.Unlock()
+	if r.wsPerSession[sessionID] <= 1 {
+		delete(r.wsPerSession, sessionID)
+		return
+	}
+	r.wsPerSession[sessionID]--
 }

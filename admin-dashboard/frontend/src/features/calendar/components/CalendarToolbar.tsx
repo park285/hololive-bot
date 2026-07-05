@@ -16,25 +16,25 @@ export const CalendarToolbar = ({
 	onNext,
 	onToday,
 }: CalendarToolbarProps) => (
-	<div className="relative flex items-center justify-between bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4 overflow-hidden">
+	<div className="relative flex flex-wrap items-center justify-between gap-2 bg-card rounded-2xl border border-border-subtle shadow-sm px-5 py-4 overflow-hidden">
 		<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-rose-400 to-amber-400" />
 		<div className="flex items-center gap-2">
 			<button
 				type="button"
 				onClick={onPrevious}
 				aria-label="이전 월"
-				className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-sky-600 transition-colors"
+				className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-sky-600 transition-colors"
 			>
 				<ChevronLeft className="h-5 w-5" />
 			</button>
-			<h2 className="text-xl font-display font-bold min-w-[140px] text-center text-slate-800">
+			<h2 className="text-xl font-display font-bold min-w-[140px] text-center text-foreground">
 				{year}년 {month}월
 			</h2>
 			<button
 				type="button"
 				onClick={onNext}
 				aria-label="다음 월"
-				className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-sky-600 transition-colors"
+				className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-sky-600 transition-colors"
 			>
 				<ChevronRight className="h-5 w-5" />
 			</button>

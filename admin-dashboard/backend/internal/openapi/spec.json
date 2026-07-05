@@ -256,6 +256,9 @@
               }
             }
           },
+          "403": {
+            "description": "Infrastructure container stop is not allowed"
+          },
           "404": {
             "description": "Container is not managed"
           },
@@ -2237,7 +2240,9 @@
           "status",
           "state",
           "created",
-          "ports"
+          "ports",
+          "managed",
+          "stopBlocked"
         ],
         "properties": {
           "created": {
@@ -2256,6 +2261,9 @@
           "image": {
             "type": "string"
           },
+          "managed": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -2270,6 +2278,9 @@
           },
           "status": {
             "type": "string"
+          },
+          "stopBlocked": {
+            "type": "boolean"
           }
         }
       },

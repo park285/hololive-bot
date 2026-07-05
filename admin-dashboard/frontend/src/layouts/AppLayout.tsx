@@ -3,10 +3,12 @@ import LogOut from "lucide-react/dist/esm/icons/log-out.mjs";
 import Menu from "lucide-react/dist/esm/icons/menu.mjs";
 import Play from "lucide-react/dist/esm/icons/play.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "@/api/core";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
+import { Button } from "@/components/ui/Button";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { broadcastSessionLogout } from "@/hooks/useActivityDetection";
 import { clearClientSession } from "@/lib/sessionLifecycle";
 import { NAV_GROUPS, prefetchRoute, ROUTE_MANIFEST } from "@/routes/manifest";
@@ -15,7 +17,15 @@ export const AppLayout = () => {
 	const navigate = useNavigate();
 	const location = useLocation();
 	const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+	const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 	const [isLoggingOut, setIsLoggingOut] = useState(false);
+	const [isDesktop, setIsDesktop] = useState(() =>
+		typeof window !== "undefined" && typeof window.matchMedia === "function"
+			? window.matchMedia("(min-width: 768px)").matches
+			: true,
+	);
+	const asideRef = useRef<HTMLElement>(null);
+	const menuButtonRef = useRef<HTMLButtonElement>(null);
 
 	const handleLogout = () => {
 		if (isLoggingOut) {
@@ -37,6 +47,54 @@ export const AppLayout = () => {
 		})();
 	};
 
+	useEffect(() => {
+		if (typeof window.matchMedia !== "function") {
+			return;
+		}
+		const query = window.matchMedia("(min-width: 768px)");
+		const onChange = (event: MediaQueryListEvent) => {
+			setIsDesktop(event.matches);
+		};
+		setIsDesktop(query.matches);
+		query.addEventListener("change", onChange);
+		return () => {
+			query.removeEventListener("change", onChange);
+		};
+	}, []);
+
+	useEffect(() => {
+		setIsMobileNavOpen(false);
+	}, [location.pathname]);
+
+	useEffect(() => {
+		if (!isMobileNavOpen) {
+			return;
+		}
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				setIsMobileNavOpen(false);
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => {
+			window.removeEventListener("keydown", onKeyDown);
+		};
+	}, [isMobileNavOpen]);
+
+	const mobileDrawerOpen = !isDesktop && isMobileNavOpen;
+	const wasDrawerOpen = useRef(false);
+
+	useEffect(() => {
+		if (mobileDrawerOpen) {
+			asideRef.current?.querySelector<HTMLElement>("nav a[href]")?.focus();
+		} else if (wasDrawerOpen.current) {
+			menuButtonRef.current?.focus();
+		}
+		wasDrawerOpen.current = mobileDrawerOpen;
+	}, [mobileDrawerOpen]);
+
+	const expanded = isDesktop ? isSidebarOpen : true;
+
 	const navGroups = NAV_GROUPS;
 
 	const activeRoute = ROUTE_MANIFEST.find((r) => {
@@ -47,9 +105,9 @@ export const AppLayout = () => {
 	});
 
 	return (
-		<div className="flex h-screen bg-slate-50 overflow-hidden font-body selection:bg-sky-200">
+		<div className="flex h-screen bg-background overflow-hidden font-body selection:bg-sky-200">
 			<div className="absolute inset-0 z-0 pointer-events-none">
-				<div className="absolute top-0 left-0 w-full h-96 bg-linear-to-b from-sky-50/50 to-transparent"></div>
+				<div className="absolute top-0 left-0 w-full h-96 bg-linear-to-b from-sky-50/50 to-transparent dark:from-sky-950/30"></div>
 				<div
 					className="absolute inset-0 opacity-[0.012]"
 					style={{
@@ -59,17 +117,37 @@ export const AppLayout = () => {
 				/>
 			</div>
 
+			{isMobileNavOpen && (
+				<button
+					type="button"
+					aria-label="메뉴 닫기"
+					onClick={() => {
+						setIsMobileNavOpen(false);
+					}}
+					className="md:hidden fixed inset-0 z-30 bg-black/40 backdrop-blur-sm"
+				/>
+			)}
+
 			<aside
-				style={{ width: isSidebarOpen ? 260 : 80 }}
-				className="bg-white/80 backdrop-blur-xl border-r border-slate-200 z-20 flex flex-col transition-[width] duration-300 relative shadow-sm"
+				ref={asideRef}
+				id="app-sidebar"
+				inert={!isDesktop && !isMobileNavOpen}
+				role={mobileDrawerOpen ? "dialog" : undefined}
+				aria-modal={mobileDrawerOpen || undefined}
+				aria-label="주 내비게이션"
+				className={clsx(
+					"fixed inset-y-0 left-0 z-40 w-[260px] flex flex-col bg-card/80 backdrop-blur-xl border-r border-border shadow-sm transition-transform duration-300 md:relative md:translate-x-0 md:transition-[width]",
+					isMobileNavOpen ? "translate-x-0" : "-translate-x-full",
+					isSidebarOpen ? "md:w-[260px]" : "md:w-20",
+				)}
 			>
-				<div className="h-20 flex items-center justify-between px-6 border-b border-slate-100">
-					{isSidebarOpen ? (
+				<div className="h-20 flex items-center justify-between px-6 border-b border-border-subtle">
+					{expanded ? (
 						<div className="flex items-center gap-3">
 							<div className="w-8 h-8 bg-linear-to-br from-sky-400 to-cyan-400 rounded-lg flex items-center justify-center shadow-md shadow-sky-200">
 								<Play className="w-4 h-4 text-white fill-white ml-0.5" />
 							</div>
-							<span className="text-lg font-display font-bold text-slate-800 tracking-tight">
+							<span className="text-lg font-display font-bold text-foreground tracking-tight">
 								관리자 콘솔
 							</span>
 						</div>
@@ -78,30 +156,36 @@ export const AppLayout = () => {
 							<Play className="w-4 h-4 text-white fill-white ml-0.5" />
 						</div>
 					)}
-					{isSidebarOpen && (
-						<button
+					{expanded && (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
 							onClick={() => {
 								setIsSidebarOpen(false);
 							}}
-							className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+							className="hidden md:inline-flex rounded-lg text-subtle-foreground hover:text-muted-foreground"
 							aria-label="사이드바 닫기"
 						>
-							<X size={18} />
-						</button>
+							<X />
+						</Button>
 					)}
 				</div>
 
-				{!isSidebarOpen && (
-					<div className="py-4 flex justify-center border-b border-slate-100">
-						<button
+				{!expanded && (
+					<div className="py-4 flex justify-center border-b border-border-subtle">
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
 							onClick={() => {
 								setIsSidebarOpen(true);
 							}}
-							className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+							className="rounded-lg text-subtle-foreground hover:text-muted-foreground"
 							aria-label="사이드바 열기"
 						>
-							<Menu size={20} />
-						</button>
+							<Menu />
+						</Button>
 					</div>
 				)}
 
@@ -112,9 +196,9 @@ export const AppLayout = () => {
 								className="mb-6 last:mb-0 animate-slide-in-left"
 								style={{ animationDelay: `${String(groupIndex * 80)}ms` }}
 							>
-								{isSidebarOpen && (
+								{expanded && (
 									<div className="px-3 mb-2">
-										<h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+										<h3 className="text-xs font-semibold text-subtle-foreground uppercase tracking-wider">
 											{group.title}
 									</h3>
 								</div>
@@ -129,10 +213,10 @@ export const AppLayout = () => {
 												"flex items-center px-3 py-3.5 rounded-xl transition-all duration-200 group relative overflow-hidden",
 												isActive
 													? "bg-linear-to-r from-sky-500 to-cyan-500 text-white shadow-lg shadow-sky-300/40 scale-[1.02]"
-													: "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
+													: "text-muted-foreground hover:bg-accent hover:text-foreground",
 											)
 										}
-										title={!isSidebarOpen ? item.label : undefined}
+										title={!expanded ? item.label : undefined}
 										aria-label={item.label}
 										onMouseEnter={() => {
 											prefetchRoute(item.id);
@@ -147,16 +231,16 @@ export const AppLayout = () => {
 														"shrink-0 transition-colors",
 														isActive
 															? "text-white"
-															: "text-slate-400 group-hover:text-slate-600",
+															: "text-subtle-foreground group-hover:text-muted-foreground",
 													)}
 												/>
-												{isSidebarOpen && (
+												{expanded && (
 													<span className="ml-3 font-medium whitespace-nowrap">
 														{item.label}
 													</span>
 												)}
 												{isActive && (
-													<div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-linear-to-b from-white to-cyan-200/50" />
+													<div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-linear-to-b from-white to-cyan-200/50 dark:from-slate-800 dark:to-cyan-900/40" />
 												)}
 											</>
 										)}
@@ -167,14 +251,16 @@ export const AppLayout = () => {
 					))}
 				</nav>
 
-				<div className="p-4 border-t border-slate-100">
-					<button
+				<div className="p-4 border-t border-border-subtle">
+					<Button
 						type="button"
+						variant="ghost"
+						fullWidth
 						onClick={handleLogout}
 						disabled={isLoggingOut}
 						className={clsx(
-							"flex items-center w-full p-3.5 rounded-xl hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition-colors group",
-							!isSidebarOpen && "justify-center",
+							"group h-auto gap-0 p-3.5 rounded-xl text-muted-foreground hover:bg-rose-50 hover:text-rose-600",
+							expanded ? "justify-start" : "justify-center",
 						)}
 						aria-label="로그아웃"
 					>
@@ -182,36 +268,57 @@ export const AppLayout = () => {
 							size={20}
 							className="group-hover:stroke-rose-600 transition-colors"
 						/>
-						{isSidebarOpen && (
+						{expanded && (
 							<span className="ml-3 font-medium">
 									{isLoggingOut ? "로그아웃 중…" : "로그아웃"}
 								</span>
 						)}
-					</button>
+					</Button>
 				</div>
 			</aside>
 
-			<main className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
-				<header className="h-20 bg-white/60 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-8 sticky top-0 z-20">
-					<div className="animate-fade-in-up flex items-center gap-3">
-						<div className="w-1 h-10 rounded-full bg-linear-to-b from-sky-400 to-cyan-400 shrink-0" />
-						<div>
-							<h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">
-								{activeRoute?.label || "대시보드"}
-							</h2>
-							<p className="text-xs text-slate-400 font-medium mt-0.5 tracking-wide">
-								통합 봇 관리 시스템
-							</p>
+			<main
+				inert={mobileDrawerOpen}
+				className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10"
+			>
+				<header className="h-20 bg-card/60 backdrop-blur-md border-b border-border/50 flex items-center justify-between px-4 md:px-8 sticky top-0 z-20">
+					<div className="flex items-center gap-3 min-w-0">
+						<Button
+							ref={menuButtonRef}
+							type="button"
+							variant="ghost"
+							size="icon"
+							className="md:hidden shrink-0"
+							onClick={() => {
+								setIsMobileNavOpen((prev) => !prev);
+							}}
+							aria-label="메뉴 열기"
+							aria-expanded={mobileDrawerOpen}
+							aria-controls="app-sidebar"
+						>
+							<Menu aria-hidden="true" />
+						</Button>
+						<div className="animate-fade-in-up flex items-center gap-3 min-w-0">
+							<div className="w-1 h-10 rounded-full bg-linear-to-b from-sky-400 to-cyan-400 shrink-0" />
+							<div className="min-w-0">
+								<h2 className="text-2xl font-display font-bold text-foreground tracking-tight truncate">
+									{activeRoute?.label || "대시보드"}
+								</h2>
+								<p className="text-xs text-subtle-foreground font-medium mt-0.5 tracking-wide hidden sm:block">
+									통합 봇 관리 시스템
+								</p>
+							</div>
 						</div>
 					</div>
 
-					<div className="flex items-center space-x-4">
-						<div className="flex items-center space-x-3 px-1 py-1 bg-white border border-slate-200 rounded-full shadow-sm pr-4">
+					<div className="flex items-center space-x-4 shrink-0">
+						<ThemeToggle />
+						<div className="flex items-center space-x-3 px-1 py-1 bg-card border border-border rounded-full shadow-sm pr-4">
 							<div className="w-8 h-8 rounded-full bg-linear-to-tr from-sky-400 to-cyan-400 flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white">
 								A
 							</div>
 							<div className="flex flex-col justify-center">
-								<span className="text-sm font-display font-bold text-slate-700 leading-none">
+								<span className="text-sm font-display font-bold text-foreground leading-none">
 									관리자
 								</span>
 							</div>

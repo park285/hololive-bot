@@ -62,14 +62,14 @@ export const AlarmGroups = ({
 
 	if (groups.length === 0) {
 		return (
-			<div className="py-16 flex flex-col items-center text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+			<div className="py-16 flex flex-col items-center text-center bg-muted/50 rounded-2xl border border-dashed border-border">
 				<div className="flex items-center justify-center w-16 h-16 rounded-full bg-linear-to-br from-slate-300 to-slate-400 text-white mb-4 ring-4 ring-white shadow-sm">
 					<Bell size={32} aria-hidden="true" />
 				</div>
-				<h3 className="text-lg font-bold text-slate-800 tracking-tight">
+				<h3 className="text-lg font-bold text-foreground tracking-tight">
 					알람이 없습니다
 				</h3>
-				<p className="text-sm text-slate-500 mt-1">
+				<p className="text-sm text-muted-foreground mt-1">
 					새로운 알람을 등록하거나 검색어를 변경해보세요.
 				</p>
 			</div>
@@ -104,7 +104,7 @@ export const AlarmGroups = ({
 								<div
 									key={groupKey}
 									role="listitem"
-									className="relative flex flex-col bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:border-sky-200/50 transition-all duration-300 focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500"
+									className="relative flex flex-col bg-card border border-border/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:border-sky-200/50 transition-all duration-300 focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500"
 								>
 								<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-indigo-400 to-sky-400 z-10" />
 									<div
@@ -120,18 +120,18 @@ export const AlarmGroups = ({
 												onToggleGroup(groupKey);
 											}
 										}}
-										className="group bg-slate-50/50 px-5 py-4 cursor-pointer hover:bg-sky-50/50 transition-colors border-b border-slate-100 outline-none focus-visible:bg-sky-50"
+										className="group bg-muted/50 px-5 py-4 cursor-pointer hover:bg-sky-50/50 transition-colors border-b border-border-subtle outline-none focus-visible:bg-sky-50"
 									>
 										<div className="flex items-center justify-between mb-3">
 											<div className="flex items-center gap-3">
 												<div className="flex items-center justify-center w-8 h-8 rounded-full bg-linear-to-br from-indigo-400 to-indigo-500 text-white font-black text-sm ring-2 ring-white shadow-sm shadow-indigo-200/50">
 													{group.roomName.charAt(0) || "?"}
 												</div>
-												<span className="text-xs font-bold text-slate-500 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-sm tabular-nums">
+												<span className="text-xs font-bold text-muted-foreground bg-card px-2.5 py-1 rounded-md border border-border shadow-sm tabular-nums">
 													총 {numberFormatter.format(group.alarms.length)}개
 												</span>
 											</div>
-											<div className="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-slate-200 text-slate-400 group-hover:text-sky-600 group-hover:border-sky-200 shadow-sm transition-all">
+											<div className="w-8 h-8 flex items-center justify-center rounded-full bg-card border border-border text-subtle-foreground group-hover:text-sky-600 group-hover:border-sky-200 shadow-sm transition-all">
 												{isExpanded ? (
 													<ChevronUp size={18} aria-hidden="true" />
 												) : (
@@ -152,7 +152,7 @@ export const AlarmGroups = ({
 												<Button
 													variant="ghost"
 													size="icon"
-													className="h-7 w-7 text-slate-300 hover:text-sky-600 hover:bg-sky-100 focus-visible:ring-2 focus-visible:ring-sky-500 transition-colors"
+													className="h-7 w-7 text-subtle-foreground hover:text-sky-600 hover:bg-sky-100 focus-visible:ring-2 focus-visible:ring-sky-500 transition-colors"
 													onClick={(event) => {
 														event.stopPropagation();
 														onEditName("room", group.roomId, group.roomName);
@@ -174,7 +174,7 @@ export const AlarmGroups = ({
 												<Button
 													variant="ghost"
 													size="icon"
-													className="h-7 w-7 text-slate-300 hover:text-indigo-600 hover:bg-indigo-100 focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
+													className="h-7 w-7 text-subtle-foreground hover:text-indigo-600 hover:bg-indigo-100 focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
 													onClick={(event) => {
 														event.stopPropagation();
 														onEditName("user", group.userId, group.userName);
@@ -187,25 +187,25 @@ export const AlarmGroups = ({
 										</div>
 									</div>
 
-									<div className="divide-y divide-slate-100 flex-1 flex flex-col bg-white" role="list">
+									<div className="divide-y divide-border-subtle flex-1 flex flex-col bg-card" role="list">
 										{displayAlarms.map((alarm) => (
 											<div
 												key={`${groupKey}:${alarm.channelId}`}
 												role="listitem"
-												className="px-5 py-3.5 hover:bg-slate-50 flex items-center justify-between group/alarm transition-colors"
+												className="px-5 py-3.5 hover:bg-accent flex items-center justify-between group/alarm transition-colors"
 											>
 												<div className="flex items-center gap-3.5 min-w-0">
 													<div
-														className="h-9 w-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-black text-sm ring-2 ring-white shadow-sm shrink-0"
+														className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-black text-sm ring-2 ring-white shadow-sm shrink-0"
 														aria-hidden="true"
 													>
 														{alarm.memberName.charAt(0) || "?"}
 													</div>
 													<div className="truncate">
-														<div className="font-bold text-slate-800 text-sm truncate group-hover/alarm:text-sky-700 transition-colors">
+														<div className="font-bold text-foreground text-sm truncate group-hover/alarm:text-sky-700 transition-colors">
 															{alarm.memberName || "이름 없음"}
 														</div>
-														<div className="text-[11px] text-slate-400 font-mono mt-0.5 truncate tracking-tight">
+														<div className="text-[11px] text-subtle-foreground font-mono mt-0.5 truncate tracking-tight">
 															{alarm.channelId}
 														</div>
 													</div>
@@ -227,14 +227,14 @@ export const AlarmGroups = ({
 										))}
 
 										{!isExpanded && hasMore && (
-											<div className="mt-auto bg-slate-50/50 p-3 text-center border-t border-slate-100">
+											<div className="mt-auto bg-muted/50 p-3 text-center border-t border-border-subtle">
 												<button
 													type="button"
 													onClick={(event) => {
 														event.stopPropagation();
 														onToggleGroup(groupKey);
 													}}
-													className="inline-flex items-center justify-center text-xs font-bold text-slate-500 hover:text-sky-600 bg-white border border-slate-200 px-4 py-1.5 rounded-full shadow-sm hover:shadow transition-all focus-visible:ring-2 focus-visible:ring-sky-500 outline-none"
+													className="inline-flex items-center justify-center text-xs font-bold text-muted-foreground hover:text-sky-600 bg-card border border-border px-4 py-1.5 rounded-full shadow-sm hover:shadow transition-all focus-visible:ring-2 focus-visible:ring-sky-500 outline-none"
 												>
 													+ {numberFormatter.format(group.alarms.length - displayAlarms.length)}개 더보기
 												</button>

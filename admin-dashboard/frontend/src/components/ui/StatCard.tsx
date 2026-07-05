@@ -22,44 +22,44 @@ const VARIANTS: Record<
 	}
 > = {
 	blue: {
-		bg: "bg-blue-50",
-		text: "text-blue-600",
-		ring: "ring-blue-100",
+		bg: "bg-blue-50 dark:bg-blue-950/40",
+		text: "text-blue-600 dark:text-blue-300",
+		ring: "ring-blue-100 dark:ring-blue-900/40",
 		gradient: "from-blue-400 to-blue-500",
 		glow: "hover:shadow-blue-200/50",
 	},
 	green: {
-		bg: "bg-emerald-50",
-		text: "text-emerald-600",
-		ring: "ring-emerald-100",
+		bg: "bg-emerald-50 dark:bg-emerald-950/40",
+		text: "text-emerald-600 dark:text-emerald-300",
+		ring: "ring-emerald-100 dark:ring-emerald-900/40",
 		gradient: "from-emerald-400 to-emerald-500",
 		glow: "hover:shadow-emerald-200/50",
 	},
 	yellow: {
-		bg: "bg-amber-50",
-		text: "text-amber-600",
-		ring: "ring-amber-100",
+		bg: "bg-amber-50 dark:bg-amber-950/40",
+		text: "text-amber-600 dark:text-amber-300",
+		ring: "ring-amber-100 dark:ring-amber-900/40",
 		gradient: "from-amber-400 to-amber-500",
 		glow: "hover:shadow-amber-200/50",
 	},
 	rose: {
-		bg: "bg-rose-50",
-		text: "text-rose-600",
-		ring: "ring-rose-100",
+		bg: "bg-rose-50 dark:bg-rose-950/40",
+		text: "text-rose-600 dark:text-rose-300",
+		ring: "ring-rose-100 dark:ring-rose-900/40",
 		gradient: "from-rose-400 to-rose-500",
 		glow: "hover:shadow-rose-200/50",
 	},
 	indigo: {
-		bg: "bg-indigo-50",
-		text: "text-indigo-600",
-		ring: "ring-indigo-100",
+		bg: "bg-indigo-50 dark:bg-indigo-950/40",
+		text: "text-indigo-600 dark:text-indigo-300",
+		ring: "ring-indigo-100 dark:ring-indigo-900/40",
 		gradient: "from-indigo-400 to-indigo-500",
 		glow: "hover:shadow-indigo-200/50",
 	},
 	cyan: {
-		bg: "bg-cyan-50",
-		text: "text-cyan-600",
-		ring: "ring-cyan-100",
+		bg: "bg-cyan-50 dark:bg-cyan-950/40",
+		text: "text-cyan-600 dark:text-cyan-300",
+		ring: "ring-cyan-100 dark:ring-cyan-900/40",
 		gradient: "from-cyan-400 to-cyan-500",
 		glow: "hover:shadow-cyan-200/50",
 	},
@@ -77,7 +77,7 @@ export function StatCard({
 	return (
 		<div
 			className={cn(
-				"relative overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg",
+				"relative overflow-hidden rounded-2xl border border-border-subtle bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg",
 				style.glow,
 				className,
 			)}
@@ -93,8 +93,8 @@ export function StatCard({
 			<div className="p-6">
 				<div className="flex items-center justify-between">
 					<div>
-						<p className="text-sm font-medium text-slate-500 mb-1">{label}</p>
-						<h3 className="text-3xl font-display font-bold text-slate-800 tracking-tight tabular-nums">
+						<p className="text-sm font-medium text-muted-foreground mb-1">{label}</p>
+						<h3 className="text-3xl font-display font-bold text-foreground tracking-tight tabular-nums">
 							{typeof value === "number" ? value.toLocaleString() : value}
 						</h3>
 					</div>

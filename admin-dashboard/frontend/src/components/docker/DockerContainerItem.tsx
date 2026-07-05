@@ -27,13 +27,13 @@ export const DockerContainerItem = ({
 	const isAnyActionPending = actionInProgress !== null;
 
 	return (
-		<div className="group flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white hover:shadow-md hover:border-slate-200 transition-all duration-200 focus-within:ring-2 focus-within:ring-sky-100">
+		<div className="group flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-muted rounded-xl border border-border-subtle hover:bg-card hover:shadow-md hover:border-border transition-all duration-200 focus-within:ring-2 focus-within:ring-sky-100">
 			<div
 				className={clsx(
 					"w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 shadow-sm transition-colors",
 					container.state === "running"
 						? "bg-linear-to-br from-sky-400 to-cyan-400 border-transparent text-white shadow-sm shadow-sky-200/50"
-						: "bg-slate-100 border-slate-200 text-slate-400",
+						: "bg-muted border-border text-subtle-foreground",
 				)}
 				aria-hidden="true"
 			>
@@ -50,7 +50,7 @@ export const DockerContainerItem = ({
 
 			<div className="flex-1 min-w-0 flex flex-col gap-1 w-full">
 				<div className="flex items-center justify-between sm:justify-start gap-2">
-					<span className="font-bold text-slate-800 text-base truncate">
+					<span className="font-bold text-foreground text-base truncate">
 						{container.name}
 					</span>
 					{container.managed && <Badge color="sky">관리됨</Badge>}
@@ -74,14 +74,14 @@ export const DockerContainerItem = ({
 					)}
 
 					<span
-						className="hidden sm:inline text-slate-300 pointer-events-none shrink-0"
+						className="hidden sm:inline text-subtle-foreground pointer-events-none shrink-0"
 						aria-hidden="true"
 					>
 						•
 					</span>
 
 					<span
-						className="font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded text-[10px] truncate max-w-[200px]"
+						className="font-mono text-subtle-foreground bg-muted px-1.5 py-0.5 rounded text-[10px] truncate max-w-[200px]"
 						title={container.image}
 					>
 						{container.image.split(":")[0]?.split("/").pop() ?? "unknown"}
@@ -123,10 +123,18 @@ export const DockerContainerItem = ({
 							onClick={() => {
 								onAction(container.name, "stop");
 							}}
-							disabled={isAnyActionPending}
+							disabled={isAnyActionPending || container.stopBlocked}
 							className="h-9 px-3 gap-1.5 font-bold hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 focus-visible:ring-2 focus-visible:ring-rose-200"
-							title="중지"
-							aria-label={`${container.name} 컨테이너 중지`}
+							title={
+								container.stopBlocked
+									? "인프라 컨테이너는 중지할 수 없습니다"
+									: "중지"
+							}
+							aria-label={
+								container.stopBlocked
+									? "인프라 컨테이너는 중지할 수 없습니다"
+									: `${container.name} 컨테이너 중지`
+							}
 						>
 							<StopCircle size={14} aria-hidden="true" />
 							<span className="sm:hidden lg:inline">중지</span>

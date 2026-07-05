@@ -1,46 +1,69 @@
 # OpenAPI Pipeline
 
-현재 admin-dashboard는 Rust backend의 `utoipa` 스키마를 SSOT로 사용합니다. 프런트 generated client는 이 스키마에서만 생성합니다.
+admin-dashboard의 OpenAPI SSOT는 **손으로 관리하는** `backend/internal/openapi/spec.json`입니다. 이 파일이 embed되어 런타임 노출과 프런트 generated client의 단일 출처가 됩니다.
+
+## 흐름
+
+```
+backend/internal/openapi/spec.json   (SSOT, 수동 편집)
+        │  go:embed
+        ▼
+backend/cmd/export-openapi           (spec을 stdout으로 export)
+        │  go run ./cmd/export-openapi
+        ▼
+backend/docs/swagger.json            (미러; generated client 입력)
+        │  swagger-typescript-api
+        ▼
+frontend/src/api/generated/*         (generated output — 수동 수정 금지)
+```
 
 ## 규칙
 
-- `backend/src/openapi.rs`가 export 대상 경로와 schema를 소유합니다.
-- `backend/src/bin/export-openapi.rs`가 OpenAPI JSON을 stdout으로 내보냅니다.
-- `frontend/src/api/generated/*`는 generated output이므로 수동 수정하지 않습니다.
-- `frontend/src/api/adminClient.ts`가 generated `Admin` singleton을 소유합니다.
-- `frontend/src/api/core.ts`는 compatibility wrapper이며, 별도의 `holoClient.ts` 레이어는 사용하지 않습니다.
-- `/admin/api/holo/*`는 backend가 소유하는 typed contract만 유지합니다.
-- runtime OpenAPI/Swagger 노출은 build-time export와 분리되며, 필요한 경우 인증 뒤에서만 활성화합니다.
+- `backend/internal/openapi/spec.json`이 유일한 SSOT입니다. path/schema 변경은 이 파일을 직접 편집합니다.
+- `backend/internal/openapi/spec.go`가 `spec.json`을 `go:embed`로 담고 `version`만 주입합니다.
+- `backend/cmd/export-openapi`가 spec을 stdout으로 내보냅니다.
+- `backend/docs/swagger.json`은 `spec.json`의 미러이므로 직접 편집하지 않고 export로만 갱신합니다.
+- `frontend/src/api/generated/*`(`Admin.ts`, `data-contracts.ts`, `http-client.ts`)는 generated output이므로 수동 수정하지 않습니다.
+- runtime 노출은 build-time export와 분리됩니다. `EnableOpenAPI`일 때 `GET /admin/api/openapi.json`, `EnableSwaggerUI`일 때 `GET /admin/docs`(인증 뒤)로만 열립니다.
 
 ## 생성 명령
 
+프런트 `package.json`의 `generate:api` 스크립트가 export와 client 생성을 한 번에 수행합니다.
+
 ```bash
 cd admin-dashboard/frontend
-mkdir -p ../backend/docs
-(cd ../backend && cargo run --quiet --bin export-openapi > docs/swagger.json)
-npm exec -- swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular
+npm run generate:api
 ```
 
-`npm run generate:api`는 위 명령을 래핑합니다.
+`generate:api`가 실제로 실행하는 것:
+
+```bash
+mkdir -p ../backend/docs \
+  && (cd ../backend && go run ./cmd/export-openapi > docs/swagger.json) \
+  && swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular
+```
 
 ## 검증 순서
 
 ```bash
+# 1. 미러가 SSOT와 일치하는지 확인 (backend/ 기준)
 cd admin-dashboard/backend
-cargo test
+go run ./cmd/export-openapi | diff - docs/swagger.json
 
+# 2. generated client 재생성 후 drift 확인 (frontend/ 기준)
 cd ../frontend
 npm run generate:api
-npm test
 git diff --exit-code -- ../backend/docs/swagger.json src/api/generated
+
+# 3. 빌드/테스트
 npm run build
+npm test
 ```
 
 ## 변경 시 체크리스트
 
-1. backend handler와 `openapi.rs`를 같이 수정합니다.
-2. `npm run generate:api`로 generated client를 갱신합니다.
-3. 생성된 `Admin` client는 `src/api/adminClient.ts` singleton 하나로만 연결합니다.
-4. generated wrapper는 `src/api/adminClient.ts`를 단일 transport entry로 사용하고, 필요 시 `src/api/core.ts`에서만 compatibility 레이어를 둡니다.
-5. `git diff --exit-code -- ../backend/docs/swagger.json src/api/generated`로 drift가 없는지 확인합니다.
-6. 테스트와 빌드를 다시 돌려 contract drift가 없는지 확인합니다.
+1. handler나 schema를 바꾸면 `backend/internal/openapi/spec.json`을 같이 수정합니다.
+2. `go run ./cmd/export-openapi | diff - docs/swagger.json`로 미러 drift가 없는지 확인하고, 필요하면 미러를 다시 export합니다.
+3. 프런트가 새 계약을 써야 하면 `npm run generate:api`로 `swagger.json` 미러와 generated client를 재생성합니다.
+4. `git diff --exit-code -- ../backend/docs/swagger.json src/api/generated`로 drift가 없는지 확인합니다.
+5. backend `make test`와 프런트 `npm run build`를 다시 돌려 contract drift가 없는지 확인합니다.

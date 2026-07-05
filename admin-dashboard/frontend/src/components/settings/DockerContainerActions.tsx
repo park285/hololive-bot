@@ -52,6 +52,7 @@ export function useDockerContainerActions({
 	const {
 		data: containersData,
 		isLoading: containersLoading,
+		isError: containersError,
 		isRefetching: containersRefetching,
 		refetch: refetchContainers,
 	} = useQuery({
@@ -69,8 +70,8 @@ export function useDockerContainerActions({
 		setActionInProgress(null);
 		toast.success(
 			<span>
-				<span className="font-bold text-slate-800">{containerName}</span>
-				<span className="text-slate-600"> {message}</span>
+				<span className="font-bold text-foreground">{containerName}</span>
+				<span className="text-muted-foreground"> {message}</span>
 			</span>,
 		);
 		void queryClient.invalidateQueries({
@@ -165,6 +166,7 @@ export function useDockerContainerActions({
 		dockerHealth,
 		containers,
 		containersLoading,
+		containersError,
 		containersRefetching,
 		isManualRefetching,
 		actionInProgress,

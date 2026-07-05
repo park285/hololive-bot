@@ -27,7 +27,7 @@ export function ConfirmModal({
 	return (
 		<BaseModal isOpen={isOpen} onClose={onClose} title={title}>
 			<div className="mt-2">
-				<div className="text-sm text-slate-500 whitespace-pre-wrap">
+				<div className="text-sm text-muted-foreground whitespace-pre-wrap">
 					{message}
 				</div>
 				{children && <div className="mt-4">{children}</div>}

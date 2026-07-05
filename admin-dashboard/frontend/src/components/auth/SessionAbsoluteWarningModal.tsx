@@ -51,16 +51,16 @@ export const SessionAbsoluteWarningModal = () => {
 					</p>
 				</div>
 
-				<p className="text-slate-600 text-sm">
+				<p className="text-muted-foreground text-sm">
 					절대 만료 시간은 보안을 위해 연장할 수 없습니다. 만료 시 자동으로 로그아웃 페이지로 이동합니다.
 				</p>
 
-				<div className="flex items-center justify-center rounded-xl bg-slate-50 p-6 border border-slate-100">
+				<div className="flex items-center justify-center rounded-xl bg-muted p-6 border border-border-subtle">
 					<div className="text-center">
-						<div className="text-sm font-medium text-slate-500">
+						<div className="text-sm font-medium text-muted-foreground">
 							강제 로그아웃까지 남은 시간
 						</div>
-						<div className="mt-1 font-mono text-4xl font-bold text-slate-800">
+						<div className="mt-1 font-mono text-4xl font-bold text-foreground">
 							{Math.floor(remainingSeconds / 60)}:
 							{String(remainingSeconds % 60).padStart(2, "0")}
 						</div>
@@ -71,7 +71,7 @@ export const SessionAbsoluteWarningModal = () => {
 					<Button
 						variant="secondary"
 						fullWidth
-						className="bg-slate-800 text-white hover:bg-slate-900"
+						className="bg-slate-800 text-white hover:bg-slate-900 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
 						onClick={dismissAbsoluteWarning}
 					>
 						확인했습니다
