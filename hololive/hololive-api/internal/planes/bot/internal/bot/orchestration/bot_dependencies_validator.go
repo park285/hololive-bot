@@ -22,7 +22,6 @@ package orchestration
 
 import (
 	"errors"
-	"log/slog"
 )
 
 func validateBotDependencies(deps *Dependencies) (streamRuntime, error) {
@@ -38,7 +37,6 @@ func validateBotDependencies(deps *Dependencies) (streamRuntime, error) {
 	if err := validateCoreDependencies(&core); err != nil {
 		return nil, err
 	}
-	core.logger.Info("Bot dependency snapshot", slog.Bool("stats_repo", stream.youTubeStatsRepository != nil))
 
 	if err := validateMessagingDependencies(messaging); err != nil {
 		return nil, err
@@ -104,9 +102,6 @@ func validateStreamDependencies(stream *streamDependencies) error {
 	}
 	if stream.membersData == nil {
 		return errors.New("member data dependency is required")
-	}
-	if stream.youTubeStatsRepository == nil {
-		return errors.New("youtube stats repository dependency is required")
 	}
 	return nil
 }

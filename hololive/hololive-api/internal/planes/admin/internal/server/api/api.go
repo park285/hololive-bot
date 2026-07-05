@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
@@ -59,7 +58,6 @@ type Handler struct {
 	alarm                      domain.AlarmCRUD
 	holodex                    *holodex.Service
 	youtube                    youtube.Service
-	statsRepository            stats.StatsDashboardRepository
 	communityShortsOps         YouTubeCommunityShortsOpsRepository
 	activity                   *activity.Logger
 	settings                   settings.ReadWriter
@@ -133,10 +131,9 @@ type MemberDeps struct {
 }
 
 type StreamDeps struct {
-	Holodex         *holodex.Service
-	YouTube         youtube.Service
-	ValkeyCache     cache.Client
-	StatsRepository stats.StatsDashboardRepository
+	Holodex     *holodex.Service
+	YouTube     youtube.Service
+	ValkeyCache cache.Client
 }
 
 type StatsDeps struct {
@@ -193,7 +190,6 @@ func NewHandler(deps *HandlerDeps) *Handler {
 		alarm:                      deps.Stats.Alarm,
 		holodex:                    deps.Stream.Holodex,
 		youtube:                    deps.Stream.YouTube,
-		statsRepository:            deps.Stream.StatsRepository,
 		communityShortsOps:         deps.YouTubeOps.CommunityShortsOps,
 		activity:                   deps.Common.Activity,
 		settings:                   deps.Settings.Settings,

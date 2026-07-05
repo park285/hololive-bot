@@ -2,37 +2,6 @@ import { http, HttpResponse } from "msw";
 
 const nowUnix = () => Math.floor(Date.now() / 1000);
 
-const channelStats = [
-	{
-		ChannelID: "UC1",
-		ChannelTitle: "Hoshimachi Suisei",
-		SubscriberCount: 2500000,
-		ViewCount: 420000000,
-		VideoCount: 980,
-	},
-	{
-		ChannelID: "UC2",
-		ChannelTitle: "Shirakami Fubuki",
-		SubscriberCount: 2400000,
-		ViewCount: 390000000,
-		VideoCount: 1100,
-	},
-	{
-		ChannelID: "UC3",
-		ChannelTitle: "Inugami Korone",
-		SubscriberCount: 2300000,
-		ViewCount: 365000000,
-		VideoCount: 870,
-	},
-	{
-		ChannelID: "UC4",
-		ChannelTitle: "Usada Pekora",
-		SubscriberCount: 2800000,
-		ViewCount: 510000000,
-		VideoCount: 1020,
-	},
-];
-
 const dockerContainers = [
 	{
 		id: "container-1",
@@ -148,23 +117,6 @@ const upcomingStreams = {
 	],
 };
 
-const milestones = {
-	status: "ok",
-	milestones: [
-		{
-			channelId: "UC4",
-			memberName: "Usada Pekora",
-			type: "subs",
-			value: 3000000,
-			achievedAt: "2026-01-01T00:00:00Z",
-			notified: true,
-		},
-	],
-	total: 1,
-	limit: 20,
-	offset: 0,
-};
-
 export const handlers = [
 	http.get("*/admin/api/auth/session", () =>
 		HttpResponse.json({
@@ -215,19 +167,6 @@ export const handlers = [
 			uptime: "3h 40m",
 		}),
 	),
-	http.get("*/admin/api/holo/stats/channels", ({ request }) => {
-		const url = new URL(request.url);
-		const limit = Number(url.searchParams.get("limit") ?? channelStats.length);
-		const stats = Object.fromEntries(
-			channelStats
-				.slice()
-				.sort((left, right) => right.SubscriberCount - left.SubscriberCount)
-				.slice(0, limit)
-				.map((channel) => [channel.ChannelID, channel]),
-		);
-
-		return HttpResponse.json({ status: "ok", stats });
-	}),
 	http.get("*/admin/api/docker/health", () =>
 		HttpResponse.json({ status: "ok", available: true }),
 	),
@@ -269,34 +208,5 @@ export const handlers = [
 	http.get("*/admin/api/holo/streams/live", () => HttpResponse.json(liveStreams)),
 	http.get("*/admin/api/holo/streams/upcoming", () =>
 		HttpResponse.json(upcomingStreams),
-	),
-	http.get("*/admin/api/holo/milestones", () => HttpResponse.json(milestones)),
-	http.get("*/admin/api/holo/milestones/near", () =>
-		HttpResponse.json({
-			status: "ok",
-			members: [
-				{
-					channelId: "UC4",
-					memberName: "Usada Pekora",
-					currentSubs: 2950000,
-					nextMilestone: 3000000,
-					remaining: 50000,
-					progressPct: 0.9833,
-				},
-			],
-			count: 1,
-			threshold: 0.9,
-		}),
-	),
-	http.get("*/admin/api/holo/milestones/stats", () =>
-		HttpResponse.json({
-			status: "ok",
-			stats: {
-				totalAchieved: 12,
-				totalNearMilestone: 3,
-				recentAchievements: 2,
-				notNotifiedCount: 1,
-			},
-		}),
 	),
 ];

@@ -47,7 +47,6 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 		"GET /api/holo/streams/live",
 		"POST /api/holo/settings/llm",
 		"POST /api/holo/templates/:key/preview",
-		"GET /api/holo/milestones/near",
 		"GET /api/holo/profiles/name",
 		"POST /api/holo/majorevent/monthly-trigger",
 	}
@@ -106,7 +105,6 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 		{name: "stats", mutate: func(h *server.DomainHandlers) { h.Stats = nil }, wantErr: "stats handler must not be nil"},
 		{name: "settings", mutate: func(h *server.DomainHandlers) { h.Settings = nil }, wantErr: "settings handler must not be nil"},
 		{name: "template", mutate: func(h *server.DomainHandlers) { h.Template = nil }, wantErr: "template handler must not be nil"},
-		{name: "milestone", mutate: func(h *server.DomainHandlers) { h.Milestone = nil }, wantErr: "milestone handler must not be nil"},
 		{name: "profile", mutate: func(h *server.DomainHandlers) { h.Profile = nil }, wantErr: "profile handler must not be nil"},
 		{name: "major event", mutate: func(h *server.DomainHandlers) { h.MajorEvent = nil }, wantErr: "major event handler must not be nil"},
 		{name: "oauth", mutate: func(h *server.DomainHandlers) { h.OAuth = nil }, wantErr: "oauth handler must not be nil"},

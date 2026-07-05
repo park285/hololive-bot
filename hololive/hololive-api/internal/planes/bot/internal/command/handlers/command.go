@@ -13,4 +13,3 @@ type NormalizeFunc = handlercore.NormalizeFunc
 
 type CelebrationCalendarFinder = handlercore.CelebrationCalendarFinder
 type CalendarImageRenderer = handlercore.CalendarImageRenderer
-type RankImageRenderer = handlercore.RankImageRenderer

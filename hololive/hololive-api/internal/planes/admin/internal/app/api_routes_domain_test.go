@@ -96,7 +96,6 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 		"stats_stream": {
 			{method: "GET", path: "/api/holo/stats"},
 			{method: "GET", path: "/api/holo/stats/system"},
-			{method: "GET", path: "/api/holo/stats/channels"},
 			{method: "GET", path: "/api/holo/stats/youtube/community-shorts"},
 			{method: "GET", path: "/api/holo/streams/live"},
 			{method: "GET", path: "/api/holo/streams/upcoming"},
@@ -119,11 +118,6 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 			{method: "POST", path: "/api/holo/templates/:key/preview"},
 			{method: "GET", path: "/api/holo/templates/:key/revisions"},
 			{method: "GET", path: "/api/holo/templates/:key/revisions/:id"},
-		},
-		"milestone": {
-			{method: "GET", path: "/api/holo/milestones"},
-			{method: "GET", path: "/api/holo/milestones/near"},
-			{method: "GET", path: "/api/holo/milestones/stats"},
 		},
 		"profile": {
 			{method: "GET", path: "/api/holo/profiles"},

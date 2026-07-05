@@ -27,12 +27,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 func schedulerLogger(logger *slog.Logger) *slog.Logger {
@@ -61,14 +59,6 @@ func ProvideScraperServiceWithYouTubeProducer(
 	logger *slog.Logger,
 ) *holodex.ScraperService {
 	return holodex.NewScraperServiceWithYouTubeProducer(cacheClient, members, youtubeProducer, logger)
-}
-
-// ProvideYouTubeStatsRepository - YouTube 통계 저장소 생성
-func ProvideYouTubeStatsRepository(
-	postgres database.Client,
-	logger *slog.Logger,
-) *ytstats.StatsRepository {
-	return ytstats.NewYouTubeStatsRepository(postgres, logger)
 }
 
 // ProvideScraperScheduler - YouTube HTML 스크래퍼 기반 폴러 스케줄러 생성

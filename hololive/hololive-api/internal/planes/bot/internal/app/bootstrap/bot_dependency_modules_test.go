@@ -20,7 +20,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
@@ -49,7 +48,6 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 		},
 	}
 	youTubeService := &stubYouTubeService{}
-	statsRepository := &ytstats.StatsRepository{}
 	commandBuilders := []bot.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo}
 
 	appConfig := &config.Config{
@@ -82,7 +80,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 		irisClient,
 		nil,
 		nil,
-		&sharedproviders.YouTubeStack{Service: youTubeService, StatsRepository: statsRepository},
+		&sharedproviders.YouTubeStack{Service: youTubeService},
 		activityLogger,
 		settingsService,
 		nil,
@@ -97,7 +95,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	assertBotDependencyModulesWireRuntimeObjects(t, &modules, cacheClient, postgres, memberData, alarmCRUD, irisClient, messageAdapter, formatter)
 
 	deps := ProvideBotDependencies(&modules)
-	assertBotDependenciesWireRuntimeObjects(t, deps, cacheClient, postgres, memberData, alarmCRUD, youTubeService, statsRepository, activityLogger, settingsService)
+	assertBotDependenciesWireRuntimeObjects(t, deps, cacheClient, postgres, memberData, alarmCRUD, youTubeService, activityLogger, settingsService)
 }
 
 func assertBotDependencyModulesWireRuntimeObjects(
@@ -160,7 +158,6 @@ func assertBotDependenciesWireRuntimeObjects(
 	memberData *membermocks.DataProvider,
 	alarmCRUD *stubAlarmCRUD,
 	youTubeService *stubYouTubeService,
-	statsRepository *ytstats.StatsRepository,
 	activityLogger *activity.Logger,
 	settingsService *settingsmocks.ReadWriter,
 ) {
@@ -187,9 +184,6 @@ func assertBotDependenciesWireRuntimeObjects(
 	if deps.Service != youtube.Service(youTubeService) {
 		t.Fatal("Dependencies.Service did not preserve the YouTube service from the stack")
 	}
-	if deps.YouTubeStatsRepository != statsRepository {
-		t.Fatal("Dependencies.YouTubeStatsRepository did not preserve the YouTube stats repository from the stack")
-	}
 	if deps.Activity != activityLogger {
 		t.Fatal("Dependencies.Activity did not preserve the activity logger")
 	}
@@ -207,9 +201,6 @@ func TestProvideBotDependenciesAcceptsDisabledYouTubeStack(t *testing.T) {
 	})
 	if deps.Service != nil {
 		t.Fatalf("Service = %T, want nil for disabled YouTube stack", deps.Service)
-	}
-	if deps.YouTubeStatsRepository != nil {
-		t.Fatalf("YouTubeStatsRepository = %T, want nil for disabled YouTube stack", deps.YouTubeStatsRepository)
 	}
 }
 

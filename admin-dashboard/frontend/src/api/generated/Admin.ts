@@ -17,7 +17,6 @@ import {
   AggregatedStatus,
   AlarmsResponse,
   CalendarResponse,
-  ChannelStatsResponse,
   DeleteAlarmRequest,
   DockerActionResponse,
   DockerContainerListResponse,
@@ -28,9 +27,6 @@ import {
   LoginRequest,
   LoginResponse,
   MembersResponse,
-  MilestoneStatsResponse,
-  MilestonesResponse,
-  NearMilestonesResponse,
   RemoveAliasRequest,
   RemoveRoomRequest,
   RoomNameUpdateRequest,
@@ -370,66 +366,6 @@ export class Admin<
    * No description
    *
    * @tags holo
-   * @name HoloGetMilestones
-   * @request GET:/admin/api/holo/milestones
-   */
-  holoGetMilestones = (
-    query?: {
-      /** @format int64 */
-      limit?: number | null;
-      /** @format int64 */
-      offset?: number | null;
-      channelId?: string | null;
-      memberName?: string | null;
-    },
-    params: RequestParams = {},
-  ) =>
-    this.request<MilestonesResponse, ErrorResponse>({
-      path: `/admin/api/holo/milestones`,
-      method: "GET",
-      query: query,
-      format: "json",
-      ...params,
-    });
-  /**
-   * No description
-   *
-   * @tags holo
-   * @name HoloGetNearMilestones
-   * @request GET:/admin/api/holo/milestones/near
-   */
-  holoGetNearMilestones = (
-    query?: {
-      /** @format double */
-      threshold?: number | null;
-    },
-    params: RequestParams = {},
-  ) =>
-    this.request<NearMilestonesResponse, ErrorResponse>({
-      path: `/admin/api/holo/milestones/near`,
-      method: "GET",
-      query: query,
-      format: "json",
-      ...params,
-    });
-  /**
-   * No description
-   *
-   * @tags holo
-   * @name HoloGetMilestoneStats
-   * @request GET:/admin/api/holo/milestones/stats
-   */
-  holoGetMilestoneStats = (params: RequestParams = {}) =>
-    this.request<MilestoneStatsResponse, ErrorResponse>({
-      path: `/admin/api/holo/milestones/stats`,
-      method: "GET",
-      format: "json",
-      ...params,
-    });
-  /**
-   * No description
-   *
-   * @tags holo
    * @name HoloSetRoomName
    * @request POST:/admin/api/holo/names/room
    */
@@ -561,30 +497,6 @@ export class Admin<
     this.request<StatsResponse, ErrorResponse>({
       path: `/admin/api/holo/stats`,
       method: "GET",
-      format: "json",
-      ...params,
-    });
-  /**
-   * No description
-   *
-   * @tags holo
-   * @name HoloGetChannelStats
-   * @request GET:/admin/api/holo/stats/channels
-   */
-  holoGetChannelStats = (
-    query?: {
-      /**
-       * @min 0
-       * @max 500
-       */
-      limit?: number | null;
-    },
-    params: RequestParams = {},
-  ) =>
-    this.request<ChannelStatsResponse, ErrorResponse>({
-      path: `/admin/api/holo/stats/channels`,
-      method: "GET",
-      query: query,
       format: "json",
       ...params,
     });

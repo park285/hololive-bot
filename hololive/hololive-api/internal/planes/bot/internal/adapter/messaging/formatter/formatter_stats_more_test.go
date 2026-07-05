@@ -30,47 +30,6 @@ import (
 
 const cmdStatsCountBody = `📊 {{.MemberName}} 구독자 {{.Subscribers}}명`
 
-const cmdStatsGainersBody = `📊 구독자 증가 순위{{if .Period}} ({{.Period}}){{end}}
-{{range .Gainers}}
-{{.Rank}}. {{.MemberName}} +{{.Delta}}명{{if .Current}} (현재 {{.Current}}명){{end}}
-{{- end}}`
-
-func TestFormatStatsTopGainers(t *testing.T) {
-	t.Parallel()
-
-	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
-		domain.TemplateKeyCmdStatsGainers: cmdStatsGainersBody,
-	})
-	formatter := NewResponseFormatter("!", renderer)
-
-	gainers := []domain.RankEntry{
-		{Rank: 1, MemberName: "사쿠라 미코", Value: 12345, CurrentSubscribers: 2000000},
-		{Rank: 2, MemberName: "시라카미 후부키", Value: 2100, CurrentSubscribers: 0},
-	}
-
-	assert.Equal(t,
-		"📊 구독자 증가 순위 (주간)\n\n1. 사쿠라 미코 +1만 2345명 (현재 200만명)\n2. 시라카미 후부키 +2100명",
-		formatter.FormatStatsTopGainers(t.Context(), "주간", gainers))
-
-	assert.Equal(t,
-		"📊 구독자 증가 순위\n\n1. 사쿠라 미코 +1만 2345명 (현재 200만명)\n2. 시라카미 후부키 +2100명",
-		formatter.FormatStatsTopGainers(t.Context(), "", gainers))
-
-	assert.Equal(t,
-		"📊 구독자 증가 순위 (주간)",
-		formatter.FormatStatsTopGainers(t.Context(), "주간", nil))
-}
-
-func TestFormatStatsTopGainers_Fallback(t *testing.T) {
-	t.Parallel()
-
-	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
-
-	assert.Equal(t,
-		messagestrings.FallbackSentinel,
-		formatter.FormatStatsTopGainers(t.Context(), "주간", nil))
-}
-
 func TestFormatSubscriberCount(t *testing.T) {
 	t.Parallel()
 

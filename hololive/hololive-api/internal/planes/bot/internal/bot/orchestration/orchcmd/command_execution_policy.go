@@ -34,7 +34,6 @@ func ShouldExecuteAsync(cmdType domain.CommandType) bool {
 		domain.CommandUpcoming,
 		domain.CommandSchedule,
 		domain.CommandMemberInfo,
-		domain.CommandStats,
 		domain.CommandSubscriber,
 		domain.CommandCalendar:
 		return true
@@ -48,6 +47,8 @@ func ShouldExecuteAsync(cmdType domain.CommandType) bool {
 		domain.CommandMajorEvent,
 		domain.CommandUnknown:
 		// 상태형(알람/구독/뉴스 다이제스트 등)은 room 순서를 보장해야 하므로 직렬 실행합니다.
+		return false
+	case domain.CommandStats:
 		return false
 	default:
 		return false

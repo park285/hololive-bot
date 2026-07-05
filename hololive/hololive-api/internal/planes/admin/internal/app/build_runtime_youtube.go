@@ -8,7 +8,6 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
@@ -20,12 +19,10 @@ func buildAdminAPIYouTubeStack(
 	foundation *scraperHolodexProfileFoundation,
 	logger *slog.Logger,
 ) *providers.YouTubeStack {
-	statsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
 	return sharedmodules.BuildYouTubeAPIStack(ctx, &sharedmodules.YouTubeAPIStackParams{
 		YouTubeConfig:   appConfig.YouTube,
 		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,
-		StatsRepository: statsRepository,
 		SharedRateLimit: foundation.SharedRL,
 		Logger:          logger,
 	})

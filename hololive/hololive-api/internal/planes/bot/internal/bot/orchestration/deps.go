@@ -33,7 +33,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/workerpool"
 
@@ -47,36 +46,35 @@ import (
 )
 
 type Dependencies struct {
-	BotSelfUser            string
-	IrisBaseURL            string
-	Notification           config.NotificationConfig
-	CalendarImageCacheDir  string
-	CalendarEntryCacheTTL  time.Duration
-	Logger                 *slog.Logger
-	Client                 iris.BotClient
-	MessageAdapter         *adapter.MessageAdapter
-	Formatter              *adapter.ResponseFormatter
-	MessageStrings         *messagestrings.Store
-	Cache                  cache.Client
-	Postgres               database.Client
-	MemberRepository       *member.Repository
-	MemberCache            *member.Cache
-	Holodex                domain.StreamProvider
-	Chzzk                  *chzzk.Client
-	Twitch                 *twitch.Client
-	Profiles               *member.ProfileService
-	Alarm                  domain.AlarmCRUD
-	Matcher                *matcher.Matcher
-	MembersData            member.DataProvider
-	Service                youtube.Service
-	YouTubeStatsRepository stats.StatsCommandRepository
-	Activity               *activity.Logger
-	Settings               settings.ReadWriter
-	ACL                    *acl.Service
-	MajorEventRepository   command.MajorEventRepository
-	MemberNews             command.MemberNewsService
-	CommandBuilders        []orchcmd.CommandBuilder
-	WorkerPool             *workerpool.QueuedPool
+	BotSelfUser           string
+	IrisBaseURL           string
+	Notification          config.NotificationConfig
+	CalendarImageCacheDir string
+	CalendarEntryCacheTTL time.Duration
+	Logger                *slog.Logger
+	Client                iris.BotClient
+	MessageAdapter        *adapter.MessageAdapter
+	Formatter             *adapter.ResponseFormatter
+	MessageStrings        *messagestrings.Store
+	Cache                 cache.Client
+	Postgres              database.Client
+	MemberRepository      *member.Repository
+	MemberCache           *member.Cache
+	Holodex               domain.StreamProvider
+	Chzzk                 *chzzk.Client
+	Twitch                *twitch.Client
+	Profiles              *member.ProfileService
+	Alarm                 domain.AlarmCRUD
+	Matcher               *matcher.Matcher
+	MembersData           member.DataProvider
+	Service               youtube.Service
+	Activity              *activity.Logger
+	Settings              settings.ReadWriter
+	ACL                   *acl.Service
+	MajorEventRepository  command.MajorEventRepository
+	MemberNews            command.MemberNewsService
+	CommandBuilders       []orchcmd.CommandBuilder
+	WorkerPool            *workerpool.QueuedPool
 }
 
 type coreDependencies struct {
@@ -103,15 +101,14 @@ type dataDependencies struct {
 }
 
 type streamDependencies struct {
-	holodex                domain.StreamProvider
-	chzzk                  *chzzk.Client
-	twitch                 *twitch.Client
-	profiles               *member.ProfileService
-	alarm                  domain.AlarmCRUD
-	matcher                *matcher.Matcher
-	membersData            member.DataProvider
-	service                youtube.Service
-	youTubeStatsRepository stats.StatsCommandRepository
+	holodex     domain.StreamProvider
+	chzzk       *chzzk.Client
+	twitch      *twitch.Client
+	profiles    *member.ProfileService
+	alarm       domain.AlarmCRUD
+	matcher     *matcher.Matcher
+	membersData member.DataProvider
+	service     youtube.Service
 }
 
 type supportDependencies struct {
@@ -174,15 +171,14 @@ func (d *Dependencies) streamDeps() streamDependencies {
 	}
 
 	return streamDependencies{
-		holodex:                d.Holodex,
-		chzzk:                  d.Chzzk,
-		twitch:                 d.Twitch,
-		profiles:               d.Profiles,
-		alarm:                  d.Alarm,
-		matcher:                d.Matcher,
-		membersData:            d.MembersData,
-		service:                d.Service,
-		youTubeStatsRepository: d.YouTubeStatsRepository,
+		holodex:     d.Holodex,
+		chzzk:       d.Chzzk,
+		twitch:      d.Twitch,
+		profiles:    d.Profiles,
+		alarm:       d.Alarm,
+		matcher:     d.Matcher,
+		membersData: d.MembersData,
+		service:     d.Service,
 	}
 }
 

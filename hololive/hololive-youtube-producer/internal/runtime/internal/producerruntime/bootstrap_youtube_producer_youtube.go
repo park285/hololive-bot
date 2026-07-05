@@ -11,7 +11,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
@@ -33,7 +32,6 @@ type ingestionRuntimeYouTubeDependencies struct {
 	scraperScheduler    *poller.Scheduler
 	pollerRegistrations []providers.ChannelPollerRegistration
 	pollTargetRefresher *polltarget.Refresher
-	youtubeScheduler    youtube.Scheduler
 }
 
 func resolveIngestionRuntimeYouTubeState(
@@ -111,7 +109,6 @@ func buildIngestionRuntimeYouTubeDependencies(
 	}
 	startActiveActiveRecoveryLoopIfEnabled(ctx, appConfig, jobClaimer, readinessState, deps.scraperScheduler, logger)
 	deps.pollTargetRefresher = buildPollTargetRefresher(appConfig, infra, deps, state, logger)
-	deps.youtubeScheduler = infra.ytStack.Scheduler
 	return deps, nil
 }
 

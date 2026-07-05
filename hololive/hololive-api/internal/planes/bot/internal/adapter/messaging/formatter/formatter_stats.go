@@ -26,24 +26,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 type statsCountTemplateData struct {
 	MemberName  string
 	Subscribers string
-}
-
-type statsGainerView struct {
-	Rank       int
-	MemberName string
-	Delta      string
-	Current    string
-}
-
-type statsGainersTemplateData struct {
-	Period  string
-	Gainers []statsGainerView
 }
 
 func (f *ResponseFormatter) FormatSubscriberCount(ctx context.Context, memberName string, subscribers uint64) string {
@@ -58,43 +45,6 @@ func (f *ResponseFormatter) FormatSubscriberCount(ctx context.Context, memberNam
 	}
 
 	return rendered
-}
-
-func (f *ResponseFormatter) FormatStatsTopGainers(ctx context.Context, periodLabel string, gainers []domain.RankEntry) string {
-	data := statsGainersTemplateData{
-		Period:  stringutil.TrimSpace(periodLabel),
-		Gainers: statsGainerViews(gainers),
-	}
-
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdStatsGainers, data)
-	if err != nil {
-		return messagestrings.FallbackSentinel
-	}
-
-	return rendered
-}
-
-func statsGainerViews(gainers []domain.RankEntry) []statsGainerView {
-	if len(gainers) == 0 {
-		return nil
-	}
-
-	views := make([]statsGainerView, len(gainers))
-	for i, entry := range gainers {
-		view := statsGainerView{
-			Rank:       entry.Rank,
-			MemberName: entry.MemberName,
-			Delta:      util.FormatKoreanNumber(entry.Value),
-		}
-
-		if entry.CurrentSubscribers > 0 {
-			view.Current = util.FormatKoreanNumber(uint64ToInt64(entry.CurrentSubscribers))
-		}
-
-		views[i] = view
-	}
-
-	return views
 }
 
 func uint64ToInt64(value uint64) int64 {

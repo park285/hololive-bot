@@ -17,7 +17,6 @@ type AuthHandler = api.AuthHandler
 type DomainHandlers = api.DomainHandlers
 type MajorEventHandler = api.MajorEventHandler
 type MemberHandler = api.MemberHandler
-type MilestoneHandler = api.MilestoneHandler
 type ProfileHandler = api.ProfileHandler
 type RoomHandler = api.RoomHandler
 type SettingsAPIHandler = api.SettingsAPIHandler

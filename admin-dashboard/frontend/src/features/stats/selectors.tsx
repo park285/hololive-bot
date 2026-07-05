@@ -3,13 +3,7 @@ import MessageSquare from "lucide-react/dist/esm/icons/message-square.mjs";
 import Users from "lucide-react/dist/esm/icons/users.mjs";
 import type { AggregatedStatus } from "@/api/core";
 import type { StatsOverviewCard } from "@/features/stats/components/StatsOverviewSection";
-import type {
-	ChannelStat,
-	ChannelStatsResponse,
-	StatsResponse,
-} from "@/features/stats/types";
-
-const DEFAULT_TOP_CHANNEL_LIMIT = 10;
+import type { StatsResponse } from "@/features/stats/types";
 
 export function buildCurrentServiceStats(
 	statusData: AggregatedStatus | undefined,
@@ -68,15 +62,4 @@ export function buildMainStats(
 			icon: <MessageSquare size={24} />,
 		},
 	];
-}
-
-export function selectTopChannelStats(
-	response: ChannelStatsResponse | undefined,
-	limit = DEFAULT_TOP_CHANNEL_LIMIT,
-): ChannelStat[] {
-	const stats = response?.stats ?? {};
-	return Object.values(stats)
-		.filter((stat): stat is NonNullable<typeof stat> => stat != null)
-		.sort((first, second) => second.SubscriberCount - first.SubscriberCount)
-		.slice(0, limit);
 }

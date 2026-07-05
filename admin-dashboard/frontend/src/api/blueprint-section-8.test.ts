@@ -47,12 +47,11 @@ test("critical-path api wrappers stay on the root axios client without an extra 
 	assert.equal(existsSync(path.join(dirname, "holoClient.ts")), false);
 });
 
-test("stats api keeps dashboard reads on the root axios client and requests top-limited channels", () => {
+test("stats api keeps dashboard reads on the root axios client", () => {
 	const statsSource = readSource("../features/stats/api.ts");
 
 	assert.equal(statsSource.includes("adminClient"), false);
 	assert.match(statsSource, /from ["']@\/api\/client["']/);
-	assert.match(statsSource, /limit:\s*TOP_CHANNEL_LIMIT/);
 });
 
 test("vite dev proxy forwards websocket upgrades for admin api routes", () => {

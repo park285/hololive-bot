@@ -20,11 +20,6 @@ const featureRoutes = [
 		"@/features/members/pages/MembersPage",
 		"@/components/MembersTab",
 	],
-	[
-		"MilestonesPage",
-		"@/features/milestones/pages/MilestonesPage",
-		"@/components/MilestonesTab",
-	],
 	["AlarmsPage", "@/features/alarms/pages/AlarmsPage", "@/components/AlarmsTab"],
 	["RoomsPage", "@/features/rooms/pages/RoomsPage", "@/components/RoomsTab"],
 	[

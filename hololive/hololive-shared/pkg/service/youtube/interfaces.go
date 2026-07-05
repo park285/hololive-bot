@@ -28,13 +28,3 @@ type Service interface {
 	GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error)
 	GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error)
 }
-
-type Scheduler interface {
-	Start(ctx context.Context)
-	Stop()
-}
-
-type MilestoneMessageFormatter interface {
-	FormatMilestoneAchieved(ctx context.Context, memberName, milestone string) (string, error)
-	FormatMilestoneApproaching(ctx context.Context, memberName, milestone, remaining string) (string, error)
-}

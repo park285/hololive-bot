@@ -123,14 +123,11 @@ test("msw serves settings updates through the generated admin client path", asyn
 	assert.equal(response.settings.alarmAdvanceMinutes, 12);
 });
 
-test("msw serves stats queries for summary and top channels", async () => {
+test("msw serves the stats summary query", async () => {
 	const summary = await statsApi.get();
-	const channels = await statsApi.getChannels();
 
 	assert.equal(summary.status, "ok");
 	assert.equal(summary.members, 2);
-	assert.equal(channels.status, "ok");
-	assert.equal(Object.keys(channels.stats).length, 4);
 });
 
 test("msw serves generated-client collection endpoints", async () => {
