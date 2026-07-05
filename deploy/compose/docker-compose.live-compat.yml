@@ -96,3 +96,18 @@ services:
       - "${ADMIN_DASHBOARD_PORT_BIND_IP:-127.0.0.1}:30190:30190"
     volumes:
       - ${LIVE_LOGS_PATH:?LIVE_LOGS_PATH is required for live-compat overlays}:/app/logs
+
+networks:
+  # 게이트웨이 고정: admin-dashboard TRUSTED_PROXY_CIDRS(172.23.0.1/32)의 전제. down→up 재생성에서
+  # 두 네트워크가 대역을 서로 맞바꿔 잡은 사례(2026-07-05)가 있어 둘 다 핀한다. central/main-ap
+  # 전용 오버레이라 AP 호스트의 동적 할당에는 영향 없다.
+  hololive-net:
+    ipam:
+      config:
+        - subnet: 172.23.0.0/16
+          gateway: 172.23.0.1
+  docker-proxy-net:
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+          gateway: 172.22.0.1
