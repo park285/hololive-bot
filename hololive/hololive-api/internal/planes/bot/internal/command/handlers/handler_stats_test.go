@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
@@ -35,17 +34,12 @@ func setupStatsTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 }
 
 type statsRepoStub struct {
-	gainers  []domain.RankEntry
-	gainErr  error
-	graphErr error
+	gainers []domain.RankEntry
+	gainErr error
 }
 
 func (s *statsRepoStub) GetTopGainers(_ context.Context, _ time.Time, _ int) ([]domain.RankEntry, error) {
 	return s.gainers, s.gainErr
-}
-
-func (s *statsRepoStub) GetSubscriberGraph(_ context.Context, _ string, _ int) (*stats.SubscriberGraphData, error) {
-	return nil, s.graphErr
 }
 
 func TestStatsCommand_Name(t *testing.T) {

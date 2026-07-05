@@ -89,15 +89,15 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 		return false
 	}
 
-	pages, err := c.imageRenderer.RenderCalendarImages(month, year, entries)
-	if err != nil || len(pages) == 0 {
+	data, err := c.imageRenderer.RenderCalendarImage(month, year, entries)
+	if err != nil || len(data) == 0 {
 		c.Deps().Logger.Warn("calendar image render failed, falling back to text",
 			slog.Any("error", err),
 		)
 		return false
 	}
 
-	if err := c.sendCalendarPages(ctx, room, pages); err != nil {
+	if err := c.Deps().SendImage(ctx, room, data); err != nil {
 		c.Deps().Logger.Warn("calendar image send failed, falling back to text",
 			slog.Any("error", err),
 		)
@@ -105,13 +105,6 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 	}
 
 	return true
-}
-
-func (c *CalendarCommand) sendCalendarPages(ctx context.Context, room string, pages [][]byte) error {
-	if len(pages) == 1 {
-		return c.Deps().SendImage(ctx, room, pages[0])
-	}
-	return c.Deps().SendMultipleImages(ctx, room, pages)
 }
 
 func (c *CalendarCommand) ensureDeps() error {

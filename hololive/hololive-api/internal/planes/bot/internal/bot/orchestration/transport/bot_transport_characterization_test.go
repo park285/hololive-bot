@@ -634,61 +634,6 @@ func TestCommandTransportSendImage(t *testing.T) {
 	})
 }
 
-func TestCommandTransportSendMultipleImages(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	t.Run("nil transport returns configuration error", func(t *testing.T) {
-		var tr *CommandTransport
-		err := tr.SendMultipleImages(ctx, "room", [][]byte{[]byte("x")})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "iris client is not configured")
-	})
-
-	t.Run("nil client returns configuration error", func(t *testing.T) {
-		tr := NewCommandTransport(nil, nil)
-		err := tr.SendMultipleImages(ctx, "room", [][]byte{[]byte("x")})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "iris client is not configured")
-	})
-
-	t.Run("empty batch is rejected", func(t *testing.T) {
-		err := tr(&stubBotClient{}).SendMultipleImages(ctx, "room", nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "images must not be empty")
-	})
-
-	t.Run("client error is wrapped with room", func(t *testing.T) {
-		c := &stubBotClient{multiErr: errors.New("multi down")}
-		err := tr(c).SendMultipleImages(ctx, "room", [][]byte{[]byte("x")})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send multiple images to room room")
-		assert.Contains(t, err.Error(), "multi down")
-	})
-
-	t.Run("success forwards image slices", func(t *testing.T) {
-		c := &stubBotClient{}
-		images := [][]byte{{1, 2}, {3, 4}}
-		require.NoError(t, tr(c).SendMultipleImages(ctx, "room", images))
-		require.Len(t, c.lastImages, 2)
-		assert.Equal(t, images[0], c.lastImages[0])
-		assert.Equal(t, images[1], c.lastImages[1])
-	})
-
-	t.Run("failed reply status is wrapped with detail", func(t *testing.T) {
-		detail := "image lease last modified mismatch"
-		c := &stubBotClient{
-			multiAccepted: &iris.ReplyAcceptedResponse{RequestID: "r-multi"},
-			statuses:      []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}}},
-		}
-		err := tr(c).SendMultipleImages(ctx, "room", [][]byte{[]byte("x")})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send multiple images to room room")
-		assert.Contains(t, err.Error(), "image lease last modified mismatch")
-	})
-}
-
 func TestCommandTransportSendError(t *testing.T) {
 	t.Parallel()
 

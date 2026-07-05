@@ -24,14 +24,13 @@ func calendarStringCases() []calendarStringCase {
 		{"badge_birthday", func(m *calendarMetrics) string { return m.badgeBirthday() }, "생일"},
 		{"badge_anniversary", func(m *calendarMetrics) string { return m.anniversaryBadge(3) }, "데뷔 3주년"},
 		{"unknown", func(m *calendarMetrics) string { return m.unknownName() }, "알 수 없음"},
-		{"overflow_footer", func(m *calendarMetrics) string { return m.overflowText(4) }, "외 4건 생략"},
 	}
 }
 
 func TestCalendarStrings_NilStoreFallbackByteEqual(t *testing.T) {
 	t.Parallel()
 
-	m := newCalendarMetrics()
+	m := newCalendarMetrics(1)
 	for _, c := range calendarStringCases() {
 		if got := c.got(&m); got != c.want {
 			t.Errorf("%s nil-store = %q, want %q", c.name, got, c.want)
@@ -45,7 +44,7 @@ func TestCalendarStrings_SeededStoreByteEqual(t *testing.T) {
 		t.Fatalf("load message_strings: %v", err)
 	}
 
-	m := newCalendarMetrics()
+	m := newCalendarMetrics(1)
 	m.strings = store
 
 	for _, c := range calendarStringCases() {
@@ -72,7 +71,6 @@ func TestCalendarStrings_SeededRowsMatchFallbackLiterals(t *testing.T) {
 		{"badge_birthday", "생일"},
 		{"badge_anniversary", "데뷔 %d주년"},
 		{"unknown", "알 수 없음"},
-		{"overflow_footer", "외 %d건 생략"},
 	}
 	for _, c := range cases {
 		got := store.Get(messagestrings.NamespaceCalendar, c.key)

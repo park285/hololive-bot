@@ -55,7 +55,6 @@ type StatsSchedulerRepository interface {
 
 type StatsCommandRepository interface {
 	GetTopGainers(ctx context.Context, since time.Time, limit int) ([]domain.RankEntry, error)
-	GetSubscriberGraph(ctx context.Context, channelID string, days int) (*SubscriberGraphData, error)
 }
 
 type StatsDashboardRepository interface {

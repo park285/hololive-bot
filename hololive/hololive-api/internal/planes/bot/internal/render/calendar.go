@@ -1,6 +1,7 @@
 package render
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/color"
@@ -16,7 +17,7 @@ import (
 
 type CalendarCardRenderer struct {
 	cacheMu      sync.Mutex
-	cache        map[calendarCacheKey][][]byte
+	cache        map[calendarCacheKey][]byte
 	cacheOrder   []calendarCacheKey
 	rendering    singleflight.Group
 	diskMu       sync.Mutex
@@ -40,7 +41,7 @@ func WithCalendarStrings(store *messagestrings.Store) CalendarCardRendererOption
 
 func NewCalendarCardRenderer(options ...CalendarCardRendererOption) *CalendarCardRenderer {
 	r := &CalendarCardRenderer{
-		cache: make(map[calendarCacheKey][][]byte),
+		cache: make(map[calendarCacheKey][]byte),
 	}
 	for _, option := range options {
 		if option != nil {
@@ -50,51 +51,53 @@ func NewCalendarCardRenderer(options ...CalendarCardRendererOption) *CalendarCar
 	return r
 }
 
-func (r *CalendarCardRenderer) RenderCalendarImages(month, year int, entries []domain.CalendarEntry) ([][]byte, error) {
+func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error) {
 	cacheKey := newCalendarCacheKey(month, year, entries)
-	if pages, ok := r.cachedImages(cacheKey); ok {
-		return pages, nil
+	if data, ok := r.cachedImage(cacheKey); ok {
+		return data, nil
 	}
 
 	result, err, _ := r.rendering.Do(cacheKey.string(), func() (any, error) {
-		return r.renderCalendarPagesOnce(cacheKey, month, year, entries)
+		return r.renderCalendarImageOnce(cacheKey, month, year, entries)
 	})
 	if err != nil {
 		return nil, err
 	}
-	pages, ok := result.([][]byte)
+	data, ok := result.([]byte)
 	if !ok {
 		return nil, fmt.Errorf("calendar render cache returned %T", result)
 	}
-	return clonePages(pages), nil
+	return bytes.Clone(data), nil
 }
 
-func (r *CalendarCardRenderer) renderCalendarPagesOnce(cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) (any, error) {
-	if pages, ok := r.cachedImages(cacheKey); ok {
-		return pages, nil
+func (r *CalendarCardRenderer) renderCalendarImageOnce(cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) (any, error) {
+	if data, ok := r.cachedImage(cacheKey); ok {
+		return data, nil
 	}
-	if pages, ok := r.diskCachedImages(cacheKey); ok {
-		r.storeCachedImages(cacheKey, pages)
-		return pages, nil
+	if data, ok := r.diskCachedImage(cacheKey); ok {
+		r.storeCachedImage(cacheKey, data)
+		return data, nil
 	}
-	pages, diskCacheable, err := r.renderCalendarPages(month, year, entries)
+	data, diskCacheable, err := r.renderCalendarImage(month, year, entries)
 	if err != nil {
 		return nil, err
 	}
-	r.storeCachedImages(cacheKey, pages)
+	r.storeCachedImage(cacheKey, data)
 	if diskCacheable {
-		r.storeDiskCachedImages(cacheKey, pages)
+		r.storeDiskCachedImage(cacheKey, data)
 	}
-	return pages, nil
+	return data, nil
 }
 
-func (r *CalendarCardRenderer) renderCalendarPages(month, year int, entries []domain.CalendarEntry) (pages [][]byte, diskCacheable bool, err error) {
+func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []domain.CalendarEntry) (data []byte, diskCacheable bool, err error) {
 	photos, diskCacheable := fetchMemberPhotos(entries)
 
 	fontMu.Lock()
 	defer fontMu.Unlock()
 
-	m := newCalendarMetrics()
+	grouped := groupEntriesByDay(entries)
+
+	m := newCalendarMetrics(calendarCompactRatio(grouped))
 	f, err := loadCalendarFonts(m.sf)
 	if err != nil {
 		return nil, false, err
@@ -102,75 +105,25 @@ func (r *CalendarCardRenderer) renderCalendarPages(month, year int, entries []do
 	m.fonts = f
 	m.strings = r.strings
 
-	pageGroups, omitted := paginateDayGroups(&m, groupEntriesByDay(entries))
+	img := cardkit.NewCanvas(canvasWidth, min(calculateCanvasHeight(&m, grouped), maxCanvasH), colWhite)
 
-	pages = make([][]byte, 0, len(pageGroups))
-	for i, groups := range pageGroups {
-		footer := ""
-		if omitted > 0 && i == len(pageGroups)-1 {
-			footer = m.overflowText(omitted)
-		}
-		data, encErr := encodeCalendarPage(&m, month, year, entries, groups, footer, photos)
-		if encErr != nil {
-			return nil, false, encErr
-		}
-		pages = append(pages, data)
+	drawCalendarHeader(img, &m, month, year, entries)
+	drawCalendarBody(img, &m, month, grouped, photos)
+
+	data, err = cardkit.EncodePNG(img, calendarOutputWidth)
+	if err != nil {
+		return nil, false, err
 	}
-	return pages, diskCacheable, nil
+	return data, diskCacheable, nil
 }
 
-// 단일 그룹이 페이지 예산을 넘으면 축소·행 드롭 대신 예산 초과(세로로 긴) 페이지를
-// 의도적으로 허용한다 — 버그가 아니라 구 compact 축소를 대체하는 트레이드.
-func paginateDayGroups(m *calendarMetrics, groups []dayGroup) (pages [][]dayGroup, omitted int) {
-	if len(groups) == 0 {
-		return [][]dayGroup{nil}, 0
+func calendarCompactRatio(grouped []dayGroup) float64 {
+	m := newCalendarMetrics(1)
+	naturalH := calculateCanvasHeight(&m, grouped)
+	if naturalH <= calendarTargetInnerH {
+		return 1
 	}
-
-	base := m.headerH + separatorH + m.paddingY
-	var current []dayGroup
-	h := base
-	for _, g := range groups {
-		gh := m.dateHeaderH + len(g.entries)*m.entryRowH + m.dateSectGap
-		if len(current) > 0 && h+gh+m.paddingY > calendarPageInnerH {
-			pages = append(pages, current)
-			current, h = nil, base
-		}
-		current = append(current, g)
-		h += gh
-	}
-	pages = append(pages, current)
-
-	if len(pages) <= calendarMaxPages {
-		return pages, 0
-	}
-	return pages[:calendarMaxPages], countGroupEntries(pages[calendarMaxPages:])
-}
-
-func countGroupEntries(pages [][]dayGroup) int {
-	omitted := 0
-	for _, page := range pages {
-		for _, g := range page {
-			omitted += len(g.entries)
-		}
-	}
-	return omitted
-}
-
-func encodeCalendarPage(m *calendarMetrics, month, year int, entries []domain.CalendarEntry, groups []dayGroup, footer string, photos map[string]image.Image) ([]byte, error) {
-	height := calculateCanvasHeight(m, groups)
-	if footer != "" {
-		height += int(40 * m.sf)
-	}
-
-	img := cardkit.NewCanvas(canvasWidth, min(height, maxCanvasH), colWhite)
-
-	drawCalendarHeader(img, m, month, year, entries)
-	y := drawCalendarBody(img, m, month, groups, photos)
-	if footer != "" {
-		cardkit.DrawText(img, m.fonts.date, paddingX, y+int(24*m.sf), colSlate500, footer)
-	}
-
-	return cardkit.EncodePNG(img, calendarOutputWidth)
+	return float64(calendarTargetInnerH) / float64(naturalH)
 }
 
 func drawCalendarHeader(img *image.RGBA, m *calendarMetrics, month, year int, entries []domain.CalendarEntry) {
@@ -359,10 +312,6 @@ func (m *calendarMetrics) badgeBirthday() string {
 
 func (m *calendarMetrics) anniversaryBadge(ordinal int) string {
 	return fmt.Sprintf(m.calStr("badge_anniversary", "데뷔 %d주년"), ordinal)
-}
-
-func (m *calendarMetrics) overflowText(omitted int) string {
-	return fmt.Sprintf(m.calStr("overflow_footer", "외 %d건 생략"), omitted)
 }
 
 func (m *calendarMetrics) unknownName() string {

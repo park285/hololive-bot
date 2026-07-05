@@ -260,56 +260,11 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	return nil
 }
 
-func (t *CommandTransport) SendMultipleImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error {
-	if t == nil || t.irisClient == nil {
-		return errors.New("send multiple images: iris client is not configured")
-	}
-	if len(images) == 0 {
-		return errors.New("send multiple images: images must not be empty")
-	}
-
-	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
-	defer cancel()
-
-	opts = appendMultipleImageClientRequestOptions(sendCtx, opts, room, images)
-	accepted, err := t.irisClient.SendMultipleImages(sendCtx, room, images, opts...)
-	if err == nil {
-		err = waitForAcceptedReplyHandoff(sendCtx, t.irisClient, accepted)
-	}
-	if err != nil {
-		serviceErr := appErrors.NewServiceError("failed to send multiple images", serviceNameIris, "send_multiple_images", err)
-		return fmt.Errorf("send multiple images to room %s: %w", room, serviceErr)
-	}
-
-	return nil
-}
-
 func appendMediaClientRequestOptions(ctx context.Context, opts []iris.SendOption, kind, room string, payload []byte) []iris.SendOption {
 	threadID, _ := ThreadIDFromContext(ctx)
 	base := commandReplyClientRequestIDBase(
 		room,
 		string(mediaPayloadDigest(kind, payload)),
-		commandReplyIdentity(ctx),
-	)
-	next := make([]iris.SendOption, 0, len(opts)+2)
-	next = append(next, iris.WithClientRequestID(fmt.Sprintf("%s:a1", base)))
-	if threadID != "" {
-		next = append(next, iris.WithThreadID(threadID))
-	}
-	next = append(next, opts...)
-	return next
-}
-
-func appendMultipleImageClientRequestOptions(ctx context.Context, opts []iris.SendOption, room string, images [][]byte) []iris.SendOption {
-	digest := sha256.New()
-	for _, image := range images {
-		digest.Write([]byte{0})
-		digest.Write(mediaPayloadDigest("image", image))
-	}
-	threadID, _ := ThreadIDFromContext(ctx)
-	base := commandReplyClientRequestIDBase(
-		room,
-		hex.EncodeToString(digest.Sum(nil)),
 		commandReplyIdentity(ctx),
 	)
 	next := make([]iris.SendOption, 0, len(opts)+2)

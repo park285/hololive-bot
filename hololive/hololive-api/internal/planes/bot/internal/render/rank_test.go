@@ -5,8 +5,11 @@ import (
 	"context"
 	"image/png"
 	"log/slog"
+	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/assets/fonts"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/cardkit"
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -100,5 +103,25 @@ func TestRankStrings_SeededRowsMatchFallbackLiterals(t *testing.T) {
 	}
 	if got := m.rankTotalText("260만"); got != "구독자 260만" {
 		t.Errorf("nil-store total = %q", got)
+	}
+}
+
+func TestDropUncoveredRunes(t *testing.T) {
+	fontMu.Lock()
+	defer fontMu.Unlock()
+
+	face, err := fonts.CaptionFaceSized(22 * scaleFactor)
+	if err != nil {
+		t.Fatalf("CaptionFaceSized() error = %v", err)
+	}
+
+	got := cardkit.DropUncoveredRunes(face, "🎮페코라 東京 ライブ🔴")
+	if strings.ContainsRune(got, '🎮') || strings.ContainsRune(got, '🔴') {
+		t.Errorf("dropUncoveredRunes() = %q, want emoji removed", got)
+	}
+	for _, keep := range []string{"페코라", "東京", "ライブ"} {
+		if !strings.Contains(got, keep) {
+			t.Errorf("dropUncoveredRunes() = %q, want %q kept", got, keep)
+		}
 	}
 }
