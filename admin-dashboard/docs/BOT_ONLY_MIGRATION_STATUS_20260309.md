@@ -1,5 +1,7 @@
 # Admin Dashboard Bot-Only 전환 상태 문서 — 2026-03-09
 
+> **[superseded]** 이 문서는 Rust 백엔드 시절의 시점 기록이며, 이후 Go 재작성으로 여기 적힌 `backend/src/**` 등 파일 경로는 더 이상 유효하지 않습니다. 현재 구조는 `README.md`와 `openapi-pipeline.md`를 참조하세요. 아래 본문은 당시 기록으로 보존합니다.
+
 ## 목적
 
 이 문서는 `admin-dashboard`가 현재 monorepo로 편입된 뒤, **bot-only 운영 기준**으로 어떻게 정리되었는지와

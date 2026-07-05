@@ -520,21 +520,35 @@ useSessionWarnings(isIdle)
 
 ## 10. 백엔드 구현 위치
 
-- `backend/src/config/session.rs`
-- `backend/src/auth/middleware.rs`
-- `backend/src/auth/session.rs`
-- `backend/src/handlers/auth.rs`
-- `backend/docs/swagger.json`
+- `backend/internal/config/config.go` — `SessionConfig`: heartbeat/idle/absolute/rotation 정책과 검증
+- `backend/internal/app/middleware.go` — auth / CSRF 미들웨어
+- `backend/internal/app/session_handlers.go` — login / logout / heartbeat / session 핸들러
+- `backend/internal/session/session.go`, `backend/internal/session/lifecycle.go` — Valkey 세션 store, Lua CAS 기반 refresh/rotate
+- `backend/internal/openapi/spec.json` → `backend/docs/swagger.json` — OpenAPI SSOT와 미러
 
 ---
 
 ## 11. 백엔드 검증 근거
 
-- `cargo test test_session_status_includes_warning_policy_and_absolute_expiry -- --nocapture`
-- `cargo test test_login_sets_session_cookie_max_age_from_session_expiry -- --nocapture`
-- `cargo test test_idle_heartbeat_ -- --nocapture`
-- `cargo test test_rotated_heartbeat_includes_absolute_expiry_in_response -- --nocapture`
-- `cargo test test_absolute_expired_heartbeat_returns_json_and_clears_cookies -- --nocapture`
+핸들러 계약 (`backend/internal/app/app_test.go`):
+
+- `go test ./internal/app/ -run TestSessionStatusAuthenticated` — `GET /auth/session`가 `authenticated`/`username`/`session_policy`를 반환
+- `go test ./internal/app/ -run TestHeartbeatResultContract` — heartbeat의 refreshed / rotated / idle / absolute-expired / missing 계약 (`absolute_expires_at`, `csrf_token`, `idle_rejected`, `absolute_expired`)
+- `go test ./internal/app/ -run TestPlainHeartbeatReissuesSessionCookie` — 회전이 없는 일반 heartbeat도 세션 쿠키를 재발급하고 `absolute_expires_at`를 반환하며 `csrf_token`은 내리지 않음
+- `go test ./internal/app/ -run TestRotatedSessionOnlyAllowsHeartbeat` — 회전된 구 세션은 heartbeat만 허용하고 새 CSRF 토큰을 발급
+- `go test ./internal/app/ -run TestHeartbeatInvalidPayload` — malformed heartbeat body는 HTTP 400
+- `go test ./internal/app/ -run TestLoginSuccessSetsCookies` — 로그인 성공 시 session/CSRF 쿠키 설정
+
+세션 store 동작 (`backend/internal/session/store_integration_test.go`, Valkey 컨테이너 필요):
+
+- `TestStoreRefreshExtendsSession`, `TestStoreRefreshIdleShortens` — refresh 연장 / idle TTL 단축
+- `TestStoreRotateBeforeIntervalIsNoop`, `TestStoreRotateAfterIntervalCreatesReplacement` — rotation interval 경계
+- `TestStoreGetDropsAbsolutelyExpired` — 절대 만료 세션 제거
+
+세션 정책 검증 (`backend/internal/config/config_test.go`, `config_more_test.go`):
+
+- `TestSessionConfigValidation`, `TestSessionConfigValidateFailureBranches` — `rotation_interval < expiry_duration` 등 세션 정책 제약
+- `TestForwardedTrustWarning`, `TestHB04ParseTrustedProxyCIDRs_e8fc8b7d` — forwarded-header 신뢰 경고 / `TRUSTED_PROXY_CIDRS` 파싱
 
 이 문서 기준으로 프론트팀은 추가 백엔드 변경 없이 바로 구현을 시작할 수 있습니다.
 
