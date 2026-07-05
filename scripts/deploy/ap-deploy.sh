@@ -159,7 +159,7 @@ sudo -n test -r /run/hololive-bot/youtube-producer.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 prechange_config_err=\$(mktemp)
 if ! sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet 2>\"\$prechange_config_err\"; then
-  if grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|/run/hololive-bot/(bot|alarm-worker)\.env' \"\$prechange_config_err\"; then
+  if grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HOLO_BOT_API_KEY|/run/hololive-bot/(bot|alarm-worker)\.env' \"\$prechange_config_err\"; then
     echo 'AP prechange compose config skipped: token-free ap-compose.env is incompatible with pre-rsync compose; post-rsync config remains required' >&2
   else
     cat \"\$prechange_config_err\" >&2
