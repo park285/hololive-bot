@@ -184,6 +184,7 @@ github.com/kapu/hololive-api/internal/migrationrunner -> github.com/kapu/hololiv
 github.com/kapu/hololive-api/internal/migrationrunner -> github.com/kapu/hololive-shared/pkg/sqlsplit
 github.com/kapu/hololive-api/internal/migrationrunner -> github.com/park285/shared-go/pkg/dbmigrate
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/app/http
+github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/client/botrooms
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/server
 github.com/kapu/hololive-api/internal/planes/admin/internal/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/service/system
@@ -223,6 +224,10 @@ github.com/kapu/hololive-api/internal/planes/admin/internal/app/http -> github.c
 github.com/kapu/hololive-api/internal/planes/admin/internal/app/http -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-api/internal/planes/admin/internal/app/http -> github.com/kapu/hololive-shared/pkg/service/ratelimit
 github.com/kapu/hololive-api/internal/planes/admin/internal/app/http -> github.com/park285/shared-go/pkg/json
+github.com/kapu/hololive-api/internal/planes/admin/internal/client/botrooms -> github.com/kapu/hololive-shared/pkg/contracts/common
+github.com/kapu/hololive-api/internal/planes/admin/internal/client/botrooms -> github.com/kapu/hololive-shared/pkg/contracts/irisrooms
+github.com/kapu/hololive-api/internal/planes/admin/internal/client/botrooms -> github.com/kapu/hololive-shared/pkg/service/internalhttp
+github.com/kapu/hololive-api/internal/planes/admin/internal/client/botrooms -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger -> github.com/kapu/hololive-shared/pkg/contracts/common
 github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger -> github.com/kapu/hololive-shared/pkg/contracts/trigger
 github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger -> github.com/kapu/hololive-shared/pkg/service/internalhttp
@@ -272,6 +277,7 @@ github.com/kapu/hololive-api/internal/planes/bot/cmd/warm_member_cache -> github
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging
+github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/kapu/hololive-shared/pkg/dbtest
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging -> github.com/kapu/hololive-shared/pkg/service/messagestrings
@@ -376,8 +382,12 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> gith
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/botruntime -> github.com/park285/shared-go/pkg/workerpool
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-api/internal/readiness
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/config
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/contracts/common
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/contracts/irisrooms
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/health
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/server
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/server/middleware
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/park285/shared-go/pkg/ginjson
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/runtime -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/wiring -> github.com/kapu/hololive-api/internal/planes/bot/internal/bot
@@ -459,6 +469,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/client/membernews -> g
 github.com/kapu/hololive-api/internal/planes/bot/internal/command -> github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers -> github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter
+github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers -> github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers -> github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers -> github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info
 github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers -> github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news
