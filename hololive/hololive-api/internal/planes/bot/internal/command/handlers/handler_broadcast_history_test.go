@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 )
 
 type stubBroadcastHistoryRepository struct {
@@ -131,6 +133,47 @@ func TestBroadcastHistoryCommandInvalidType(t *testing.T) {
 	want := "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류"
 	if sent != want {
 		t.Fatalf("invalid type message = %q, want %q", sent, want)
+	}
+}
+
+func TestBroadcastHistoryCommandMemberAliasAndTypeQuery(t *testing.T) {
+	repo := &stubBroadcastHistoryRepository{}
+	memberProvider := newTrackedMemberProvider(&domain.Member{
+		ChannelID: "ch-miko",
+		Name:      "사쿠라 미코",
+		Org:       "Hololive",
+		Aliases:   &domain.Aliases{Ko: []string{"미코치"}},
+	})
+	var sent string
+	deps := &Dependencies{
+		BroadcastHistory: repo,
+		Formatter:        adapter.NewResponseFormatter("!", nil),
+		Matcher:          matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		SendMessage: func(_ context.Context, _, message string) error {
+			sent = message
+			return nil
+		},
+		SendError: func(_ context.Context, _, _ string) error { return nil },
+	}
+
+	err := NewBroadcastHistoryCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{
+		"member": "미코치",
+		"type":   "게임",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if repo.listCalls != 1 {
+		t.Fatalf("ListEndedBroadcasts calls = %d, want 1", repo.listCalls)
+	}
+	if repo.listQuery.ChannelID != "ch-miko" {
+		t.Fatalf("ChannelID = %q, want ch-miko", repo.listQuery.ChannelID)
+	}
+	if repo.listQuery.Type != string(BroadcastTypeGame) {
+		t.Fatalf("Type = %q, want %q", repo.listQuery.Type, BroadcastTypeGame)
+	}
+	if !strings.Contains(sent, "멤버: 사쿠라 미코") || !strings.Contains(sent, "타입: 게임") {
+		t.Fatalf("sent message = %q, want resolved member and type filters", sent)
 	}
 }
 
@@ -274,6 +317,53 @@ func TestPgBroadcastHistoryRepositoryUsesLiveEventMetadataFallback(t *testing.T)
 	}
 	if entry.BroadcastType != string(BroadcastTypeGame) || entry.BroadcastTypeSource != "topic" {
 		t.Fatalf("classification = {%q %q}, want {game topic}", entry.BroadcastType, entry.BroadcastTypeSource)
+	}
+}
+
+func TestPgBroadcastHistoryRepositoryDeduplicatesSharedChannelMembers(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx, `DELETE FROM youtube_live_sessions`); err != nil {
+		t.Fatalf("clear live sessions: %v", err)
+	}
+
+	channelID := "shared-channel-history-test"
+	if _, err := pool.Exec(ctx, `DELETE FROM members WHERE channel_id = $1`, channelID); err != nil {
+		t.Fatalf("clear test members: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO members(slug, channel_id, english_name, korean_name, short_korean_name, status, is_graduated, org, sync_source)
+		VALUES
+			('history-shared-fuwawa', $1, 'Fuwawa Abyssgard', '후와와 어비스가드', '후와와', 'active', false, 'Hololive', 'manual'),
+			('history-shared-mococo', $1, 'Mococo Abyssgard', '모코코 어비스가드', '모코코', 'active', false, 'Hololive', 'manual')
+	`, channelID); err != nil {
+		t.Fatalf("insert shared channel members: %v", err)
+	}
+
+	endedAt := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
+		VALUES ('shared001', $1, 'ENDED', '【雑談】test', $2, $2)
+	`, channelID, endedAt); err != nil {
+		t.Fatalf("insert shared channel session: %v", err)
+	}
+
+	repo := &pgBroadcastHistoryRepository{pool: pool}
+	entries, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
+		ChannelID: channelID,
+		Limit:     10,
+		Since:     endedAt.Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("ListEndedBroadcasts() error = %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %d, want 1: %#v", len(entries), entries)
+	}
+	if entries[0].MemberName != "후와와 / 모코코" {
+		t.Fatalf("MemberName = %q, want 후와와 / 모코코", entries[0].MemberName)
 	}
 }
 

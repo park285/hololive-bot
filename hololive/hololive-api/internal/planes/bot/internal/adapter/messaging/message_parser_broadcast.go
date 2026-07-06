@@ -67,7 +67,7 @@ func parseBroadcastHistoryArgs(args []string) map[string]any {
 		i += consumed
 	}
 
-	if member := stringutil.TrimSpace(strings.Join(memberTokens, " ")); member != "" {
+	if member := stringutil.TrimSpace(strings.Join(memberTokens, " ")); member != "" && params["member"] == nil {
 		params["member"] = member
 	}
 	return params
@@ -111,6 +111,12 @@ func applyBroadcastHistoryFilterArg(params map[string]any, token string, rest []
 	consumed := 0
 	if value == "" {
 		value, consumed = consumeBroadcastHistoryFilterValue(key, rest)
+	} else if broadcastHistoryFilterKinds[key] == "member" {
+		var tail string
+		tail, consumed = consumeMemberBroadcastHistoryFilterValue(rest)
+		if tail != "" {
+			value += " " + tail
+		}
 	}
 	applyBroadcastHistoryFilter(params, key, value)
 	return consumed, true

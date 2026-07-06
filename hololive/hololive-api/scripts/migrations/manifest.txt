@@ -99,3 +99,4 @@
 099 103_add_youtube_live_session_topic_index.sql
 100 104_update_broadcast_history_help.sql
 101 105_reseed_broadcast_history_help.sql
+102 106_seed_member_search_aliases.sql

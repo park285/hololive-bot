@@ -245,6 +245,44 @@ func TestParseMessage_BroadcastHistorySeparatedFilters(t *testing.T) {
 	}
 }
 
+func TestParseMessage_BroadcastHistoryAttachedMemberFilterConsumesNameUntilType(t *testing.T) {
+	adapter := NewMessageAdapter("!", "")
+	msg := &webhook.Message{Msg: "!방송기록 멤버:사쿠라 미코 게임"}
+
+	result := adapter.ParseMessage(msg)
+	if result == nil {
+		t.Fatal("expected parsed command, got nil")
+	}
+	if result.Type != domain.CommandBroadcastHistory {
+		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
+	}
+	if got := result.Params["member"]; got != "사쿠라 미코" {
+		t.Fatalf("member = %v, want 사쿠라 미코", got)
+	}
+	if got := result.Params["type"]; got != "게임" {
+		t.Fatalf("type = %v, want 게임", got)
+	}
+}
+
+func TestParseMessage_BroadcastHistoryExplicitMemberFilterWinsOverTrailingBareToken(t *testing.T) {
+	adapter := NewMessageAdapter("!", "")
+	msg := &webhook.Message{Msg: "!방송기록 멤버:페코라 타입:게임 미코"}
+
+	result := adapter.ParseMessage(msg)
+	if result == nil {
+		t.Fatal("expected parsed command, got nil")
+	}
+	if result.Type != domain.CommandBroadcastHistory {
+		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
+	}
+	if got := result.Params["member"]; got != "페코라" {
+		t.Fatalf("member = %v, want 페코라", got)
+	}
+	if got := result.Params["type"]; got != "게임" {
+		t.Fatalf("type = %v, want 게임", got)
+	}
+}
+
 func TestParseMessage_BroadcastThumbnail(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
 	msg := &webhook.Message{Msg: "!방송이력 썸네일 AqxEw3kXcgU"}

@@ -83,6 +83,7 @@ Migrations:
 - `hololive/hololive-api/scripts/migrations/103_add_youtube_live_session_topic_index.sql`
 - `hololive/hololive-api/scripts/migrations/104_update_broadcast_history_help.sql`
 - `hololive/hololive-api/scripts/migrations/105_reseed_broadcast_history_help.sql`
+- `hololive/hololive-api/scripts/migrations/106_seed_member_search_aliases.sql`
 - `hololive/hololive-api/scripts/migrations/manifest.txt`
 - `hololive/hololive-shared/pkg/dbtest/testdata/schema_snapshot.golden.sql`
 
@@ -110,6 +111,8 @@ Resolution in this working tree:
 - Replaced bounded prefetch with keyset pagination and added `TestPgBroadcastHistoryRepositoryListEndedBroadcastsScansPastFirstPageForTypeFilter`.
 - Reserved bare `멤버` for member-name parsing, kept membership type filtering on `멤버십`, and added command-alias/member-name/type regression coverage.
 - Added `105_reseed_broadcast_history_help.sql` so already-applied databases receive the corrected help text instead of relying on a modified `104` migration.
+- Added `미코치` as a Sakura Miko search alias and covered alias-based member+type history lookup at handler level.
+- Collapsed shared-channel member joins into one history row so channels such as FUWAMOCO do not duplicate ended sessions.
 - Added strong title override policy and source tests for members-only/watchalong while preserving game-topic priority over generic talk.
 - Moved broadcast type rules into embedded `broadcast_type_rules.json`, added `경마`/`horse_racing`, and covered JRA G1/J-G1 race-name classification without matching bare `G1` or `的中` alone.
 - Refined the title classifier with strict hard/generic rule phases, NFKC normalization, ASCII token-boundary matching, shared broadcast type aliases, and regression coverage for `nte` false positives, broad event overmatching, and observed game false negatives.
