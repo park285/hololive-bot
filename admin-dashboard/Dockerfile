@@ -43,13 +43,25 @@ WORKDIR /workspace/hololive-bot
 
 COPY go.mod go.work go.work.sum ./
 COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
+COPY admin-dashboard/backend/go.mod admin-dashboard/backend/go.sum ./admin-dashboard/backend/
+COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
+
+WORKDIR /workspace/hololive-bot/admin-dashboard/backend
+
+# Build against the same active shared-go workspace that build-all.sh resolves via additional_contexts.
+RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+WORKDIR /workspace/hololive-bot
+
 COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
 COPY admin-dashboard/backend ./admin-dashboard/backend
 COPY hololive/hololive-shared ./hololive/hololive-shared
 
 WORKDIR /workspace/hololive-bot/admin-dashboard/backend
 
-# Build against the same active shared-go workspace that build-all.sh resolves via additional_contexts.
 RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go
 
 COPY --from=frontend-builder /app/frontend/dist /frontend-dist

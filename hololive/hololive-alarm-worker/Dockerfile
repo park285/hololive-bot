@@ -37,8 +37,23 @@ WORKDIR /workspace/hololive-bot
 
 COPY go.mod go.work go.work.sum ./
 COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
-COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
 COPY --from=iris_client_go_workspace go.mod go.sum /workspace/iris-client-go/
+COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
+COPY hololive/hololive-alarm-worker/go.mod hololive/hololive-alarm-worker/go.sum ./hololive/hololive-alarm-worker/
+
+WORKDIR /workspace/hololive-bot/hololive/hololive-alarm-worker
+
+# Build against the same active sibling workspaces that build-all.sh resolves via additional_contexts.
+# This avoids fetching private/local shared modules from the network during container builds.
+RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go && \
+    go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+WORKDIR /workspace/hololive-bot
+
+COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
 COPY --from=iris_client_go_workspace iris /workspace/iris-client-go/iris
 COPY --from=iris_client_go_workspace internal /workspace/iris-client-go/internal
 COPY --from=iris_client_go_workspace webhook /workspace/iris-client-go/webhook
@@ -47,8 +62,6 @@ COPY hololive/hololive-alarm-worker ./hololive/hololive-alarm-worker
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-alarm-worker
 
-# Build against the same active sibling workspaces that build-all.sh resolves via additional_contexts.
-# This avoids fetching private/local shared modules from the network during container builds.
 RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go && \
     go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go
 
