@@ -279,6 +279,7 @@ docker logs -f hololive-youtube-producer-c
 ## DB migration
 
 초기화/마이그레이션은 `hololive-db-migrate`가 담당합니다.
+`./scripts/deploy/compose-redeploy-service.sh`로 app runtime(`hololive-api`, `hololive-alarm-worker`, `youtube-producer`, `youtube-producer-c`, `all`)을 재배포하면 runtime cutover 전에 `hololive-db-migrate`를 먼저 실행합니다.
 
 ```bash
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml up --build hololive-db-migrate

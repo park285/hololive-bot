@@ -81,7 +81,6 @@ func assertProdComposeDisallowedPatterns(t *testing.T, content string) {
 		"${ADMIN_DASHBOARD_PORT_BIND_IP:-100.100.1.3}:30190:30190",
 		"${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001",
 		"network_mode: host",
-		"--unixsocketperm 777",
 		"/run/hololive-bot/certs:/run/hololive-bot/certs:ro",
 		"POSTGRES_HOST: host.docker.internal",
 		"POSTGRES_PORT: \"5433\"",
@@ -122,6 +121,7 @@ func assertProdComposeRequiredPatterns(t *testing.T, content string) {
 		"  POSTGRES_PORT: \"5432\"",
 		"  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}",
 		"  IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-}",
+		"--unixsocketperm 777",
 	}
 	for _, pattern := range required {
 		if !strings.Contains(content, pattern) {
@@ -398,6 +398,10 @@ func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 		if strings.Contains(block, "env_file:") {
 			t.Fatalf("live overlay must keep nonEgress %s scoped without env_file", service)
 		}
+	}
+	valkeyBlock := composeServiceBlock(t, overlay, "valkey-cache")
+	if strings.Contains(valkeyBlock, "command:") {
+		t.Fatalf("live overlay must inherit valkey command from prod")
 	}
 	for _, service := range []string{"hololive-api", "hololive-alarm-worker"} {
 		block := composeServiceBlock(t, overlay, service)

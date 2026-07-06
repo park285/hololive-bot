@@ -56,6 +56,32 @@ usage() {
     compose_service_redeploy_usage_lines
 }
 
+target_requires_db_migration() {
+    case "${TARGET}" in
+        hololive-api|hololive-alarm-worker|youtube-producer-c|"")
+            return 0
+            ;;
+        youtube-producer)
+            if contains_compose_file docker-compose.osaka.yml \
+               || contains_compose_file docker-compose.osaka2.yml \
+               || contains_compose_file docker-compose.seoul.yml; then
+                return 1
+            fi
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+run_db_migration_before_cutover() {
+    echo "[BUILD] hololive-db-migrate"
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build hololive-db-migrate
+    echo "[MIGRATE] hololive-db-migrate"
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" run --rm hololive-db-migrate
+}
+
 if [[ $# -ne 1 ]]; then
     usage
     exit 1
@@ -203,6 +229,10 @@ if [[ -z "${TARGET}" ]] || cutover_service_uses_app_writable_bind_mount "${TARGE
         echo "[ERROR] host bind-mount preflight failed before cutover; aborting (no containers changed)" >&2
         exit 1
     fi
+fi
+
+if target_requires_db_migration; then
+    run_db_migration_before_cutover
 fi
 
 if [[ "${TARGET}" == "hololive-api" || -z "${TARGET}" ]]; then

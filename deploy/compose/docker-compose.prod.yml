@@ -311,10 +311,12 @@ services:
     # appendonly no + save "" 순수 캐시 구성이라 /data 영속 볼륨은 실사용이 없어 제거했다.
     volumes:
       - valkey-cache-socket:/var/run/valkey
+    # unixsocketperm 777: 앱(uid 1000)과 valkey 유저의 그룹이 달라 770이면 소켓 접근이 막힌다.
+    # 소켓 볼륨은 신뢰된 앱 컨테이너에만 ro 마운트되고 requirepass가 인증 경계다.
     command:
       - /bin/sh
       - -c
-      - exec valkey-server --unixsocket /var/run/valkey/valkey-cache.sock --unixsocketperm 770 --port 6379 --requirepass "$$CACHE_PASSWORD" --appendonly no --save "" --maxmemory 384mb --maxmemory-policy allkeys-lfu --loglevel notice --io-threads 4 --io-threads-do-reads yes --activedefrag yes --active-defrag-threshold-lower 10 --active-defrag-cycle-min 1 --active-defrag-cycle-max 25
+      - exec valkey-server --unixsocket /var/run/valkey/valkey-cache.sock --unixsocketperm 777 --port 6379 --requirepass "$$CACHE_PASSWORD" --appendonly no --save "" --maxmemory 384mb --maxmemory-policy allkeys-lfu --loglevel notice --io-threads 4 --io-threads-do-reads yes --activedefrag yes --active-defrag-threshold-lower 10 --active-defrag-cycle-min 1 --active-defrag-cycle-max 25
     sysctls:
       - net.core.somaxconn=1024
     healthcheck:
