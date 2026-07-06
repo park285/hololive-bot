@@ -188,7 +188,7 @@ func thumbnailPathContainsVideoID(escapedPath, videoID string) bool {
 	if escapedPath == "" {
 		return false
 	}
-	for _, segment := range strings.Split(escapedPath, "/") {
+	for segment := range strings.SplitSeq(escapedPath, "/") {
 		unescaped, err := url.PathUnescape(segment)
 		if err != nil {
 			unescaped = segment

@@ -21,6 +21,7 @@
 package handlers
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -214,25 +215,20 @@ func titleLooksLikeGameBroadcast(normalized, leadTag string) bool {
 }
 
 func firstBroadcastTitleTag(title string) string {
-	start := strings.Index(title, "【")
-	if start < 0 {
+	_, after, ok := strings.Cut(title, "【")
+	if !ok {
 		return ""
 	}
-	rest := title[start+len("【"):]
-	end := strings.Index(rest, "】")
-	if end < 0 {
+	rest := after
+	before, _, ok := strings.Cut(rest, "】")
+	if !ok {
 		return ""
 	}
-	return strings.TrimSpace(rest[:end])
+	return strings.TrimSpace(before)
 }
 
 func containsExactBroadcastKeyword(value string, keywords []string) bool {
-	for _, keyword := range keywords {
-		if value == keyword {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(keywords, value)
 }
 
 func containsAnyBroadcastKeyword(value string, keywords []string) bool {
@@ -313,12 +309,7 @@ func broadcastTopicMatches(topicID, wanted string) bool {
 	if wanted == "" {
 		return true
 	}
-	for _, topic := range broadcastTopics(topicID) {
-		if topic == wanted {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(broadcastTopics(topicID), wanted)
 }
 
 func normalizeBroadcastTopic(value string) string {

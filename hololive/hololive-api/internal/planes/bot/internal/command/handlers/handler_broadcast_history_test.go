@@ -236,7 +236,7 @@ func TestPgBroadcastHistoryRepositoryListEndedBroadcastsScansPastFirstPageForTyp
 	}
 
 	base := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
-	for i := 0; i < broadcastHistoryPageSize; i++ {
+	for i := range broadcastHistoryPageSize {
 		endedAt := base.Add(-time.Duration(i) * time.Minute)
 		if _, err := pool.Exec(ctx, `
 			INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
