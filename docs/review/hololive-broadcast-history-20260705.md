@@ -20,9 +20,11 @@ YouTube ended/live session rows do not contain a stable first-class "broadcast t
 2. Title-based classification from the embedded rule file when the topic is missing or unknown.
 3. `unknown` when neither source gives enough evidence.
 
-The stored type is not persisted as a separate enum because the classification rules are heuristic and may improve over time. The rule data is versioned in `broadcast_type_rules.json` and embedded at build time so classification is reviewable without adding runtime network/config dependencies. The repository returns both the computed type and the source (`topic`, `title`, or `unknown`) so reviewers can see which evidence drove a result.
+The stored type is not persisted as a separate enum because the classification rules are heuristic and may improve over time. The rule data is versioned in `broadcast_type_rules.json` and embedded at build time so classification is reviewable without adding runtime network/config dependencies. The classifier normalizes titles with NFKC, lowercasing, zero-width removal, and whitespace collapse before matching. The repository returns both the computed type and the source (`topic`, `title`, or `unknown`) so reviewers can see which evidence drove a result.
 
-Topic classification is preferred for known non-game topics. Strong title signals such as members-only, watchalong, singing, ASMR, event, horse racing, and news can override `game` or `other` topics because those cases represent access or format information that often matters more than the game category. Generic `talk` does not override a known game topic because game streams often contain talk wording in the title.
+Topic classification is preferred for known non-game topics. Strong title signals such as members-only, watchalong, singing, ASMR, concrete event identity, horse racing, and news can override `game` or `other` topics because those cases represent access or format information that often matters more than the game category. Generic event words (`大会`, `リーグ`, `本配信`, `耐久`, etc.), generic `talk`, and generic `other` run after game evidence so ordinary game streams are not hidden by broad wording. Official event identity markers such as `ホロマリオテニス大会`, `ポケモンチャンピオンズ大会`, and `漢義リーグ` remain event-first policy cases.
+
+Game matching no longer uses raw whole-title substring matching for ASCII aliases. ASCII aliases require token boundaries after normalization, while CJK and mixed title aliases can still match compact Japanese title text. This prevents short aliases such as `nte` from matching unrelated words like `CONTENT` while preserving titles such as `【NTE】`, `【バイオハザードRE4】`, and `【リトルナイトメア２】`.
 
 The history repository uses keyset pagination over the whole requested date/member window. This is intentional: filtering by computed type after a single SQL `LIMIT` can miss valid broadcasts if the latest page is filled with non-matching rows. The command still limits the final response size to `maxBroadcastHistoryLimit`.
 
@@ -51,6 +53,7 @@ Bot command and parser:
 
 - `hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_broadcast_history.go`
 - `hololive/hololive-api/internal/planes/bot/internal/command/handlers/broadcast_history_repository.go`
+- `hololive/hololive-api/internal/planes/bot/internal/broadcasttype/broadcasttype.go`
 - `hololive/hololive-api/internal/planes/bot/internal/command/handlers/broadcast_type.go`
 - `hololive/hololive-api/internal/planes/bot/internal/command/handlers/broadcast_type_rules.json`
 - `hololive/hololive-api/internal/planes/bot/internal/command/handlers/broadcast_thumbnail_downloader.go`
@@ -101,6 +104,7 @@ Resolution in this working tree:
 - Added bare `멤버` parser support and `TestParseMessage_BroadcastHistoryMembershipAlias`.
 - Added strong title override policy and source tests for members-only/watchalong while preserving game-topic priority over generic talk.
 - Moved broadcast type rules into embedded `broadcast_type_rules.json`, added `경마`/`horse_racing`, and covered JRA G1/J-G1 race-name classification without matching bare `G1` or `的中` alone.
+- Refined the title classifier with strict hard/generic rule phases, NFKC normalization, ASCII token-boundary matching, shared broadcast type aliases, and regression coverage for `nte` false positives, broad event overmatching, and observed game false negatives.
 - Removed the one-shot backfill migration and kept query-time event fallback for historical rows.
 
 ## Read-only production data evidence
@@ -164,6 +168,7 @@ curl -fsSI --max-time 10 https://i.ytimg.com/vi/AqxEw3kXcgU/maxresdefault.jpg
 
 - Type classification is heuristic. It is grounded in observed topics and title markers, not a YouTube-authoritative type taxonomy.
 - Horse-racing classification uses concrete race/project names (`大阪杯`, `有馬記念`, `ホロ的中バトル`, etc.) and the general `競馬` marker; generic `G1` or `的中` alone is intentionally not enough evidence.
+- The command still returns one primary type. Game-centered official events are handled by explicit policy markers; broader analytics such as `secondary_types` or confidence scores are intentionally outside this change.
 - Historical `topic_id` coverage is limited to rows that have compatible alarm event payloads. Future rows improve because the poller now persists metadata directly.
 - No live deploy, restart, production schema migration, or production data mutation was performed in this task.
 - A thumbnail can still be unavailable at `maxresdefault.jpg`; fallback candidates handle that case.
