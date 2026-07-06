@@ -1,6 +1,10 @@
 package broadcasttype
 
-import "strings"
+import (
+	"strings"
+
+	"golang.org/x/text/unicode/norm"
+)
 
 type Type string
 
@@ -82,6 +86,7 @@ func Known(typ Type) bool {
 }
 
 func NormalizeToken(value string) string {
+	value = norm.NFKC.String(value)
 	value = strings.ToLower(strings.TrimSpace(value))
 	value = strings.TrimPrefix(value, "#")
 	return strings.ReplaceAll(value, " ", "_")

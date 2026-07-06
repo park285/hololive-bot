@@ -61,8 +61,9 @@ var broadcastTypeRulesJSON []byte
 var broadcastRules = mustLoadBroadcastRules(broadcastTypeRulesJSON)
 
 type broadcastTitleRule struct {
-	Type     BroadcastType `json:"type"`
-	Keywords []string      `json:"keywords"`
+	Type           BroadcastType `json:"type"`
+	Keywords       []string      `json:"keywords"`
+	RejectKeywords []string      `json:"reject_keywords,omitempty"`
 }
 
 type broadcastGameTagRules struct {
@@ -152,30 +153,47 @@ func classifyBroadcastTopic(topicID string) BroadcastType {
 func classifyBroadcastTitle(title string) broadcastTitleClassification {
 	normalized := normalizeBroadcastText(title)
 	leadTag := normalizeBroadcastTitleTag(firstBroadcastTitleTag(title))
-	if typ, ok := classifyBroadcastTitleByKeyword(normalized, broadcastRules.TitleRules); ok {
+	rejectScope := leadTag
+	if rejectScope == "" {
+		rejectScope = normalized
+	}
+	if typ, ok := classifyBroadcastTitleByKeyword(normalized, rejectScope, broadcastRules.TitleRules); ok {
 		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthStrong}
 	}
 	if leadTag != "" {
-		if typ, ok := classifyBroadcastTitleByKeyword(leadTag, broadcastRules.Generic); ok {
+		if typ, ok := classifyBroadcastTitleByKeyword(leadTag, rejectScope, broadcastRules.Generic); ok {
 			return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthLead}
 		}
 	}
 	if titleLooksLikeGameBroadcast(normalized, leadTag) {
 		return broadcastTitleClassification{Type: BroadcastTypeGame, Strength: broadcastTitleStrengthStrong}
 	}
-	if typ, ok := classifyBroadcastTitleByKeyword(normalized, broadcastRules.Generic); ok {
+	if typ, ok := classifyBroadcastTitleByKeyword(normalized, rejectScope, broadcastRules.Generic); ok {
 		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthGeneric}
 	}
 	return broadcastTitleClassification{Type: BroadcastTypeUnknown, Strength: broadcastTitleStrengthUnknown}
 }
 
-func classifyBroadcastTitleByKeyword(normalized string, rules []broadcastTitleRule) (BroadcastType, bool) {
+func classifyBroadcastTitleByKeyword(normalized, rejectScope string, rules []broadcastTitleRule) (BroadcastType, bool) {
 	for _, rule := range rules {
+		if broadcastRejectScopeMatches(rejectScope, rule.RejectKeywords) {
+			continue
+		}
 		if containsAnyBroadcastKeyword(normalized, rule.Keywords) {
 			return rule.Type, true
 		}
 	}
 	return BroadcastTypeUnknown, false
+}
+
+// reject는 boundary 없는 substring 검사라 «Winning Post10»처럼 숫자가 붙은 표기도 걸러낸다.
+func broadcastRejectScopeMatches(rejectScope string, keywords []string) bool {
+	for _, keyword := range keywords {
+		if keyword != "" && strings.Contains(rejectScope, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func titleLooksLikeGameBroadcast(normalized, leadTag string) bool {
@@ -371,9 +389,11 @@ func normalizeBroadcastRules(rules *broadcastTypeRules) {
 	rules.Topics = topics
 	for i := range rules.TitleRules {
 		rules.TitleRules[i].Keywords = normalizeBroadcastKeywords(rules.TitleRules[i].Keywords)
+		rules.TitleRules[i].RejectKeywords = normalizeBroadcastKeywords(rules.TitleRules[i].RejectKeywords)
 	}
 	for i := range rules.Generic {
 		rules.Generic[i].Keywords = normalizeBroadcastKeywords(rules.Generic[i].Keywords)
+		rules.Generic[i].RejectKeywords = normalizeBroadcastKeywords(rules.Generic[i].RejectKeywords)
 	}
 	rules.GameTag.RejectKeywords = normalizeBroadcastKeywords(rules.GameTag.RejectKeywords)
 	rules.GameTag.Exact = normalizeBroadcastTitleTags(rules.GameTag.Exact)
@@ -381,12 +401,18 @@ func normalizeBroadcastRules(rules *broadcastTypeRules) {
 }
 
 func normalizeBroadcastKeywords(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
 	normalized := make([]string, 0, len(values))
 	for _, value := range values {
 		value = normalizeBroadcastText(value)
-		if value != "" {
-			normalized = append(normalized, value)
+		if value == "" {
+			continue
 		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
 	}
 	return normalized
 }

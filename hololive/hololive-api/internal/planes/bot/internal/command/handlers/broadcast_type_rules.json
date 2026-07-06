@@ -1,8 +1,10 @@
 {
-  "version": "2026-07-06",
+  "version": "2026-07-06.1",
   "source_notes": [
     "JRA 2026 G1/J-G1 race names plus observed production broadcast titles",
-    "Use concrete race/project names for horse_racing; do not classify by bare G1 or 的中"
+    "NAR dirt graded races and major international races commonly covered by prediction streams",
+    "Use concrete race/project names for horse_racing; do not classify by bare G1 or 的中",
+    "reject_keywords keep horse-racing game titles (ウマ娘, ウイニングポスト, ダビスタ) in game instead of horse_racing/event"
   ],
   "topics": {
     "3d_stream": "event",
@@ -112,6 +114,15 @@
     },
     {
       "type": "horse_racing",
+      "reject_keywords": [
+        "ウマ娘",
+        "umamusume",
+        "ウイニングポスト",
+        "winning post",
+        "ダービースタリオン",
+        "ダビスタ",
+        "スターホース"
+      ],
       "keywords": [
         "競馬",
         "フェブラリーS",
@@ -121,7 +132,6 @@
         "桜花賞",
         "中山グランドジャンプ",
         "皐月賞",
-        "天皇賞（春）",
         "天皇賞(春)",
         "天皇賞・春",
         "NHKマイルC",
@@ -137,7 +147,6 @@
         "スプリンターズステークス",
         "秋華賞",
         "菊花賞",
-        "天皇賞（秋）",
         "天皇賞(秋)",
         "天皇賞・秋",
         "エリザベス女王杯",
@@ -168,9 +177,33 @@
         "東京新聞杯",
         "きさらぎ賞",
         "根岸S",
+        "根岸ステークス",
         "シルクロードS",
+        "シルクロードステークス",
         "アメリカJCC",
         "プロキオンS",
+        "プロキオンステークス",
+        "スプリングステークス",
+        "帝王賞",
+        "東京大賞典",
+        "かしわ記念",
+        "JBCクラシック",
+        "JBCスプリント",
+        "JBCレディスクラシック",
+        "全日本2歳優駿",
+        "ジャパンダートクラシック",
+        "羽田盃",
+        "東京ダービー",
+        "凱旋門賞",
+        "ドバイワールドカップ",
+        "ドバイターフ",
+        "ドバイシーマクラシック",
+        "ブリーダーズカップ",
+        "ケンタッキーダービー",
+        "香港カップ",
+        "香港マイル",
+        "香港スプリント",
+        "香港ヴァーズ",
         "ホロ的中バトル",
         "的中チャレンジバトル"
       ]
@@ -180,9 +213,6 @@
       "keywords": [
         "生誕",
         "birthday",
-        "anniversary",
-        "周年",
-        "記念",
         "3d live",
         "3dlive",
         "新衣装",
@@ -204,6 +234,23 @@
         "ホロ新春ゲーム祭",
         "ポケモンチャンピオンズ大会",
         "漢義リーグ"
+      ]
+    },
+    {
+      "type": "event",
+      "reject_keywords": [
+        "ウマ娘",
+        "umamusume",
+        "ウイニングポスト",
+        "winning post",
+        "ダービースタリオン",
+        "ダビスタ",
+        "スターホース"
+      ],
+      "keywords": [
+        "anniversary",
+        "周年",
+        "記念"
       ]
     },
     {
@@ -510,6 +557,15 @@
       "エターナルリターン",
       "エスケープシミュレーター",
       "ウマ娘",
+      "umamusume",
+      "ウイニングポスト",
+      "winning post",
+      "winning post10",
+      "winning post 10",
+      "winningpost10",
+      "ダービースタリオン",
+      "ダビスタ",
+      "スターホース",
       "ウミガリ",
       "ガンダム",
       "ガンダムuc",
@@ -518,7 +574,6 @@
       "ゼルダ",
       "ゼンレスゾーンゼロ",
       "スト6",
-      "スト６",
       "スーパーマリオ",
       "スイカゲーム",
       "スレイザスパイア",

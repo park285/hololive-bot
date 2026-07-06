@@ -105,6 +105,11 @@ Resolution in this working tree:
 - Added strong title override policy and source tests for members-only/watchalong while preserving game-topic priority over generic talk.
 - Moved broadcast type rules into embedded `broadcast_type_rules.json`, added `경마`/`horse_racing`, and covered JRA G1/J-G1 race-name classification without matching bare `G1` or `的中` alone.
 - Refined the title classifier with strict hard/generic rule phases, NFKC normalization, ASCII token-boundary matching, shared broadcast type aliases, and regression coverage for `nte` false positives, broad event overmatching, and observed game false negatives.
+- Added per-rule `reject_keywords` so horse-racing game titles (`ウマ娘`, `ウイニングポスト`, `ダビスタ` families) classify as `game` even when they contain real race names such as `有馬記念`. The reject scope is the lead `【…】` tag when present (whole title otherwise), so a real prediction stream that merely mentions `ウマ娘` in its body stays `horse_racing`. Rejects match without ASCII token boundaries so compact spellings like `Winning Post10` are still caught.
+- Split the event rule so the guard only covers race-name-ambiguous words (`記念`, `周年`, `anniversary`); personal event markers (`生誕`, `birthday`, `卒業`, `新衣装`, etc.) are never rejected and keep their topic-override strength.
+- Extended `horse_racing` coverage with NAR dirt graded races (`帝王賞`, `東京大賞典`, `かしわ記念`, JBC races, `羽田盃`, `東京ダービー`, etc.), major international races (`凱旋門賞`, Dubai, Breeders' Cup, Hong Kong G1s, `ケンタッキーダービー`), and `ステークス` long forms for existing `S` abbreviations.
+- Deduplicated keywords after NFKC normalization and removed now-redundant full-width JSON entries (`天皇賞（春）`/`（秋）`, `スト６`); regression tests keep the full-width titles classifying correctly.
+- Applied NFKC to `broadcasttype.NormalizeToken` so full-width user category input (`ＡＳＭＲ`, `ｇａｍｅ`, `＃競馬`) parses to the same aliases.
 - Removed the one-shot backfill migration and kept query-time event fallback for historical rows.
 
 ## Read-only production data evidence
@@ -168,6 +173,7 @@ curl -fsSI --max-time 10 https://i.ytimg.com/vi/AqxEw3kXcgU/maxresdefault.jpg
 
 - Type classification is heuristic. It is grounded in observed topics and title markers, not a YouTube-authoritative type taxonomy.
 - Horse-racing classification uses concrete race/project names (`大阪杯`, `有馬記念`, `ホロ的中バトル`, etc.) and the general `競馬` marker; generic `G1` or `的中` alone is intentionally not enough evidence.
+- The horse-racing game guard scopes to the lead `【…】` tag when one exists and to the whole title otherwise. A bracket-less real prediction title that mentions `ウマ娘` still downgrades to `game`; this residual trade-off favors the far more common case where race names appear inside horse-racing game titles.
 - The command still returns one primary type. Game-centered official events are handled by explicit policy markers; broader analytics such as `secondary_types` or confidence scores are intentionally outside this change.
 - Historical `topic_id` coverage is limited to rows that have compatible alarm event payloads. Future rows improve because the poller now persists metadata directly.
 - No live deploy, restart, production schema migration, or production data mutation was performed in this task.
