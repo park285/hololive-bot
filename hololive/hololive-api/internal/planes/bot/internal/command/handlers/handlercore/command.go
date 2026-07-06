@@ -101,12 +101,12 @@ type BroadcastHistoryEntry struct {
 }
 
 type BroadcastHistoryRepository interface {
-	ListEndedBroadcasts(ctx context.Context, query BroadcastHistoryQuery) ([]BroadcastHistoryEntry, error)
+	ListEndedBroadcasts(ctx context.Context, query *BroadcastHistoryQuery) ([]BroadcastHistoryEntry, error)
 	GetEndedBroadcast(ctx context.Context, query BroadcastThumbnailQuery) (*BroadcastHistoryEntry, error)
 }
 
 type BroadcastThumbnailDownloader interface {
-	Download(ctx context.Context, entry BroadcastHistoryEntry) ([]byte, string, error)
+	Download(ctx context.Context, entry *BroadcastHistoryEntry) ([]byte, string, error)
 }
 
 type Dependencies struct {

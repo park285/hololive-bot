@@ -21,7 +21,7 @@ func TestBroadcastThumbnailCandidatesPromoteMaxres(t *testing.T) {
 		ThumbnailURL: "https://i.ytimg.com/vi/AqxEw3kXcgU/hqdefault.jpg",
 	}
 
-	got := broadcastThumbnailCandidates(entry)
+	got := broadcastThumbnailCandidates(&entry)
 	if len(got) == 0 {
 		t.Fatal("expected candidates")
 	}
@@ -36,7 +36,7 @@ func TestBroadcastThumbnailCandidatesRejectMismatchedStoredURL(t *testing.T) {
 		ThumbnailURL: "https://i.ytimg.com/vi/OtherVideo1/hqdefault.jpg",
 	}
 
-	got := broadcastThumbnailCandidates(entry)
+	got := broadcastThumbnailCandidates(&entry)
 	if len(got) == 0 {
 		t.Fatal("expected fallback candidates")
 	}
@@ -69,7 +69,7 @@ func TestYouTubeThumbnailDownloaderFallsBack(t *testing.T) {
 	})}
 	downloader := NewYouTubeThumbnailDownloader(client)
 
-	body, contentType, err := downloader.Download(t.Context(), handlercore.BroadcastHistoryEntry{VideoID: "AqxEw3kXcgU"})
+	body, contentType, err := downloader.Download(t.Context(), &handlercore.BroadcastHistoryEntry{VideoID: "AqxEw3kXcgU"})
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}

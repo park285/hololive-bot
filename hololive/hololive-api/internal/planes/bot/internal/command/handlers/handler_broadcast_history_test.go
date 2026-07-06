@@ -26,8 +26,8 @@ type stubBroadcastHistoryRepository struct {
 	getErr    error
 }
 
-func (s *stubBroadcastHistoryRepository) ListEndedBroadcasts(_ context.Context, query handlercore.BroadcastHistoryQuery) ([]handlercore.BroadcastHistoryEntry, error) {
-	s.listQuery = query
+func (s *stubBroadcastHistoryRepository) ListEndedBroadcasts(_ context.Context, query *handlercore.BroadcastHistoryQuery) ([]handlercore.BroadcastHistoryEntry, error) {
+	s.listQuery = *query
 	s.listCalls++
 	if s.listErr != nil {
 		return nil, s.listErr
@@ -48,8 +48,8 @@ type stubBroadcastThumbnailDownloader struct {
 	err   error
 }
 
-func (s *stubBroadcastThumbnailDownloader) Download(_ context.Context, entry handlercore.BroadcastHistoryEntry) ([]byte, string, error) {
-	s.entry = entry
+func (s *stubBroadcastThumbnailDownloader) Download(_ context.Context, entry *handlercore.BroadcastHistoryEntry) (image []byte, contentType string, err error) {
+	s.entry = *entry
 	if s.err != nil {
 		return nil, "", s.err
 	}
@@ -208,7 +208,7 @@ func TestPgBroadcastHistoryRepositoryListEndedBroadcastsScansPastFirstPageForTyp
 	}
 
 	repo := &pgBroadcastHistoryRepository{pool: pool}
-	entries, err := repo.ListEndedBroadcasts(ctx, handlercore.BroadcastHistoryQuery{
+	entries, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
 		Type:  string(BroadcastTypeGame),
 		Limit: 1,
 		Since: base.Add(-24 * time.Hour),

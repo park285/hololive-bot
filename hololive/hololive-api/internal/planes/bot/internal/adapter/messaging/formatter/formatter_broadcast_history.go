@@ -61,17 +61,17 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 		b.WriteByte('\n')
 	}
 
-	for i, entry := range entries {
+	for i := range entries {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		f.writeBroadcastHistoryEntry(ctx, &b, i+1, entry)
+		f.writeBroadcastHistoryEntry(ctx, &b, i+1, &entries[i])
 	}
 
 	return f.foldSeeMore(strings.TrimRight(b.String(), "\n"))
 }
 
-func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, entry BroadcastHistoryEntry) {
+func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, entry *BroadcastHistoryEntry) {
 	fmt.Fprintf(b, "%d. [%s] %s\n", index, entry.TypeLabel, entry.MemberName)
 	writeBroadcastHistoryTitle(b, entry.Title)
 	writeBroadcastHistoryTime(ctx, f, b, entry)
@@ -85,7 +85,7 @@ func writeBroadcastHistoryTitle(b *strings.Builder, title string) {
 	}
 }
 
-func writeBroadcastHistoryTime(ctx context.Context, f *ResponseFormatter, b *strings.Builder, entry BroadcastHistoryEntry) {
+func writeBroadcastHistoryTime(ctx context.Context, f *ResponseFormatter, b *strings.Builder, entry *BroadcastHistoryEntry) {
 	fmt.Fprintf(b, "   %s", broadcastHistoryTime(ctx, f, entry.Time))
 	if entry.TopicID != "" {
 		fmt.Fprintf(b, " | topic: %s", entry.TopicID)
@@ -99,7 +99,7 @@ func writeBroadcastHistoryURL(b *strings.Builder, url string) {
 	}
 }
 
-func writeBroadcastHistoryThumbnail(b *strings.Builder, prefix string, entry BroadcastHistoryEntry) {
+func writeBroadcastHistoryThumbnail(b *strings.Builder, prefix string, entry *BroadcastHistoryEntry) {
 	if entry.HasThumbnail && entry.VideoID != "" {
 		fmt.Fprintf(b, "   썸네일: %s방송이력 썸네일 %s\n", prefix, entry.VideoID)
 	}

@@ -92,7 +92,7 @@ func applyBroadcastHistoryArg(params map[string]any, memberTokens *[]string, arg
 	return 0
 }
 
-func applyBroadcastHistorySimpleToken(params map[string]any, _ string, normalized string) bool {
+func applyBroadcastHistorySimpleToken(params map[string]any, _, normalized string) bool {
 	if normalized == "최근" {
 		return true
 	}
@@ -148,14 +148,14 @@ func splitBroadcastHistoryFilter(token string) (key, value string, ok bool) {
 	return key, value, true
 }
 
-func consumeBroadcastHistoryFilterValue(key string, args []string) (string, int) {
+func consumeBroadcastHistoryFilterValue(key string, args []string) (value string, consumed int) {
 	if broadcastHistoryFilterKinds[key] != "member" {
 		return consumeSingleBroadcastHistoryFilterValue(args)
 	}
 	return consumeMemberBroadcastHistoryFilterValue(args)
 }
 
-func consumeSingleBroadcastHistoryFilterValue(args []string) (string, int) {
+func consumeSingleBroadcastHistoryFilterValue(args []string) (value string, consumed int) {
 	for i, arg := range args {
 		value := stringutil.TrimSpace(arg)
 		if value != "" {
@@ -165,9 +165,8 @@ func consumeSingleBroadcastHistoryFilterValue(args []string) (string, int) {
 	return "", len(args)
 }
 
-func consumeMemberBroadcastHistoryFilterValue(args []string) (string, int) {
+func consumeMemberBroadcastHistoryFilterValue(args []string) (value string, consumed int) {
 	values := make([]string, 0, len(args))
-	consumed := 0
 	for _, arg := range args {
 		value := stringutil.TrimSpace(arg)
 		if value == "" {

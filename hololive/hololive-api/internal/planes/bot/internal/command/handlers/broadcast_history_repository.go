@@ -54,7 +54,7 @@ func NewPgBroadcastHistoryRepository(postgres database.Client) BroadcastHistoryR
 	return &pgBroadcastHistoryRepository{pool: postgres.GetPool()}
 }
 
-func (r *pgBroadcastHistoryRepository) ListEndedBroadcasts(ctx context.Context, query handlercore.BroadcastHistoryQuery) ([]handlercore.BroadcastHistoryEntry, error) {
+func (r *pgBroadcastHistoryRepository) ListEndedBroadcasts(ctx context.Context, query *handlercore.BroadcastHistoryQuery) ([]handlercore.BroadcastHistoryEntry, error) {
 	if r == nil || r.pool == nil {
 		return nil, errors.New("broadcast history repository not configured")
 	}
@@ -64,7 +64,7 @@ func (r *pgBroadcastHistoryRepository) ListEndedBroadcasts(ctx context.Context, 
 	return r.collectEndedBroadcasts(ctx, query, since, limit)
 }
 
-func (r *pgBroadcastHistoryRepository) collectEndedBroadcasts(ctx context.Context, query handlercore.BroadcastHistoryQuery, since *time.Time, limit int) ([]handlercore.BroadcastHistoryEntry, error) {
+func (r *pgBroadcastHistoryRepository) collectEndedBroadcasts(ctx context.Context, query *handlercore.BroadcastHistoryQuery, since *time.Time, limit int) ([]handlercore.BroadcastHistoryEntry, error) {
 	entries := make([]handlercore.BroadcastHistoryEntry, 0, limit)
 	var cursorAt *time.Time
 	cursorVideoID := ""
@@ -85,7 +85,7 @@ func (r *pgBroadcastHistoryRepository) collectEndedBroadcasts(ctx context.Contex
 	return entries, nil
 }
 
-func broadcastHistorySinceCursor(query handlercore.BroadcastHistoryQuery) *time.Time {
+func broadcastHistorySinceCursor(query *handlercore.BroadcastHistoryQuery) *time.Time {
 	if query.IncludeAll || query.Since.IsZero() {
 		return nil
 	}
@@ -93,12 +93,12 @@ func broadcastHistorySinceCursor(query handlercore.BroadcastHistoryQuery) *time.
 	return &value
 }
 
-func appendMatchingBroadcastHistoryEntries(entries, page []handlercore.BroadcastHistoryEntry, query handlercore.BroadcastHistoryQuery, limit int) []handlercore.BroadcastHistoryEntry {
-	for _, entry := range page {
-		if !broadcastHistoryEntryMatches(query, entry) {
+func appendMatchingBroadcastHistoryEntries(entries, page []handlercore.BroadcastHistoryEntry, query *handlercore.BroadcastHistoryQuery, limit int) []handlercore.BroadcastHistoryEntry {
+	for i := range page {
+		if !broadcastHistoryEntryMatches(query, &page[i]) {
 			continue
 		}
-		entries = append(entries, entry)
+		entries = append(entries, page[i])
 		if len(entries) >= limit {
 			break
 		}
@@ -139,7 +139,7 @@ func (r *pgBroadcastHistoryRepository) listEndedBroadcastPage(ctx context.Contex
 		if err != nil {
 			return nil, nil, "", err
 		}
-		sortAt := broadcastHistorySortTime(entry)
+		sortAt := broadcastHistorySortTime(&entry)
 		nextCursorAt = &sortAt
 		nextCursorVideoID = entry.VideoID
 		entries = append(entries, entry)
@@ -225,7 +225,7 @@ func scanBroadcastHistoryRow(row broadcastHistoryScanner) (handlercore.Broadcast
 	return entry, nil
 }
 
-func broadcastHistoryEntryMatches(query handlercore.BroadcastHistoryQuery, entry handlercore.BroadcastHistoryEntry) bool {
+func broadcastHistoryEntryMatches(query *handlercore.BroadcastHistoryQuery, entry *handlercore.BroadcastHistoryEntry) bool {
 	if query.TopicID != "" && !broadcastTopicMatches(entry.TopicID, query.TopicID) {
 		return false
 	}
@@ -235,7 +235,7 @@ func broadcastHistoryEntryMatches(query handlercore.BroadcastHistoryQuery, entry
 	return true
 }
 
-func broadcastHistorySortTime(entry handlercore.BroadcastHistoryEntry) time.Time {
+func broadcastHistorySortTime(entry *handlercore.BroadcastHistoryEntry) time.Time {
 	switch {
 	case entry.EndedAt != nil:
 		return entry.EndedAt.UTC()

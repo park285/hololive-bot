@@ -76,7 +76,7 @@ func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *domain.Co
 		return nil
 	}
 
-	entries, err := c.Deps().BroadcastHistory.ListEndedBroadcasts(ctx, *query)
+	entries, err := c.Deps().BroadcastHistory.ListEndedBroadcasts(ctx, query)
 	if err != nil {
 		c.Deps().Logger.Error("broadcast history query failed", slog.Any("error", err))
 		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "방송 이력 조회 중 오류가 발생했습니다."); sendErr != nil {
@@ -100,9 +100,9 @@ func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *domain
 	return &query, &filter, nil
 }
 
-func newBroadcastHistoryQuery(params map[string]any) (handlercore.BroadcastHistoryQuery, adapter.BroadcastHistoryFilter) {
+func newBroadcastHistoryQuery(params map[string]any) (query handlercore.BroadcastHistoryQuery, filter adapter.BroadcastHistoryFilter) {
 	days := normalizeBroadcastHistoryDays(intBroadcastHistoryParam(params, "days", defaultBroadcastHistoryDays))
-	query := handlercore.BroadcastHistoryQuery{
+	query = handlercore.BroadcastHistoryQuery{
 		Limit:      intBroadcastHistoryParam(params, "limit", defaultBroadcastHistoryLimit),
 		TopicID:    stringParam(params, "topic"),
 		IncludeAll: boolParam(params, "all"),
@@ -188,7 +188,7 @@ func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *domain.
 	if handled || err != nil {
 		return err
 	}
-	image, contentType, handled, err := c.downloadBroadcastThumbnail(ctx, cmdCtx, *entry)
+	image, contentType, handled, err := c.downloadBroadcastThumbnail(ctx, cmdCtx, entry)
 	if handled || err != nil {
 		return err
 	}
@@ -211,8 +211,8 @@ func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Co
 	return entry, false, nil
 }
 
-func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Context, cmdCtx *domain.CommandContext, entry handlercore.BroadcastHistoryEntry) ([]byte, string, bool, error) {
-	image, contentType, err := c.Deps().ThumbnailDownloader.Download(ctx, entry)
+func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Context, cmdCtx *domain.CommandContext, entry *handlercore.BroadcastHistoryEntry) (image []byte, contentType string, handled bool, err error) {
+	image, contentType, err = c.Deps().ThumbnailDownloader.Download(ctx, entry)
 	if err == nil {
 		return image, contentType, false, nil
 	}
@@ -235,7 +235,8 @@ func (c *BroadcastThumbnailCommand) ensureDeps() error {
 
 func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntry) []adapter.BroadcastHistoryEntry {
 	result := make([]adapter.BroadcastHistoryEntry, 0, len(entries))
-	for _, entry := range entries {
+	for i := range entries {
+		entry := &entries[i]
 		result = append(result, adapter.BroadcastHistoryEntry{
 			VideoID:      entry.VideoID,
 			MemberName:   entry.MemberName,
@@ -250,7 +251,7 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 	return result
 }
 
-func broadcastHistoryEntryTime(entry handlercore.BroadcastHistoryEntry) time.Time {
+func broadcastHistoryEntryTime(entry *handlercore.BroadcastHistoryEntry) time.Time {
 	for _, candidate := range []*time.Time{entry.EndedAt, entry.StartedAt, entry.ScheduledStartTime} {
 		if candidate != nil && !candidate.IsZero() {
 			return *candidate

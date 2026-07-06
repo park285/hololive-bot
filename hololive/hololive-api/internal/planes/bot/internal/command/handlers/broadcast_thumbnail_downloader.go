@@ -60,17 +60,18 @@ func NewYouTubeThumbnailDownloader(client *http.Client) BroadcastThumbnailDownlo
 	return &youTubeThumbnailDownloader{client: client}
 }
 
-func (d *youTubeThumbnailDownloader) Download(ctx context.Context, entry handlercore.BroadcastHistoryEntry) ([]byte, string, error) {
+func (d *youTubeThumbnailDownloader) Download(ctx context.Context, entry *handlercore.BroadcastHistoryEntry) (image []byte, contentType string, err error) {
 	if d == nil || d.client == nil {
 		return nil, "", errors.New("thumbnail downloader not configured")
 	}
-	entry.VideoID = strings.TrimSpace(entry.VideoID)
-	if !validYouTubeVideoID(entry.VideoID) {
-		return nil, "", fmt.Errorf("invalid youtube video id: %q", entry.VideoID)
+	target := *entry
+	target.VideoID = strings.TrimSpace(target.VideoID)
+	if !validYouTubeVideoID(target.VideoID) {
+		return nil, "", fmt.Errorf("invalid youtube video id: %q", target.VideoID)
 	}
 
 	var lastErr error
-	for _, candidate := range broadcastThumbnailCandidates(entry) {
+	for _, candidate := range broadcastThumbnailCandidates(&target) {
 		image, contentType, err := d.downloadCandidate(ctx, candidate)
 		if err == nil {
 			return image, contentType, nil
@@ -83,12 +84,12 @@ func (d *youTubeThumbnailDownloader) Download(ctx context.Context, entry handler
 	return nil, "", lastErr
 }
 
-func (d *youTubeThumbnailDownloader) downloadCandidate(ctx context.Context, rawURL string) ([]byte, string, error) {
+func (d *youTubeThumbnailDownloader) downloadCandidate(ctx context.Context, rawURL string) (image []byte, contentType string, err error) {
 	if err := imagehost.ThumbnailHosts.ValidateURL(rawURL); err != nil {
 		return nil, "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		return nil, "", fmt.Errorf("create thumbnail request: %w", err)
 	}
@@ -96,13 +97,17 @@ func (d *youTubeThumbnailDownloader) downloadCandidate(ctx context.Context, rawU
 	if err != nil {
 		return nil, "", fmt.Errorf("request thumbnail: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close thumbnail body: %w", closeErr)
+		}
+	}()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, "", fmt.Errorf("thumbnail status %d", resp.StatusCode)
 	}
 
-	contentType := normalizeThumbnailContentType(resp.Header.Get("Content-Type"))
+	contentType = normalizeThumbnailContentType(resp.Header.Get("Content-Type"))
 	if contentType == "" {
 		return nil, "", fmt.Errorf("unsupported thumbnail content type %q", resp.Header.Get("Content-Type"))
 	}
@@ -127,7 +132,7 @@ func readBroadcastThumbnailBody(body io.Reader) ([]byte, error) {
 	return data, nil
 }
 
-func broadcastThumbnailCandidates(entry handlercore.BroadcastHistoryEntry) []string {
+func broadcastThumbnailCandidates(entry *handlercore.BroadcastHistoryEntry) []string {
 	candidates := make([]string, 0, 6)
 	if thumbnailURLMatchesVideo(entry.ThumbnailURL, entry.VideoID) {
 		if promoted := promoteYouTubeThumbnailURL(entry.ThumbnailURL, "maxresdefault.jpg"); promoted != "" {
