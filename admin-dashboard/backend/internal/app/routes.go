@@ -56,6 +56,7 @@ func registerHoloReads(group *gin.RouterGroup, h holo.Handler) {
 	group.GET("/holo/alarms", h.ProxyGet("/api/holo/alarms", nil))
 	group.GET("/holo/members", h.ProxyGet("/api/holo/members", nil))
 	group.GET("/holo/rooms", h.ProxyGet("/api/holo/rooms", nil))
+	group.GET("/holo/rooms/joined", h.ProxyGet("/api/holo/rooms/joined", nil))
 	group.GET("/holo/settings", h.ProxyGet("/api/holo/settings", nil))
 	group.GET("/holo/stats", h.ProxyGet("/api/holo/stats", nil))
 	group.GET("/holo/stats/youtube/community-shorts", h.ProxyGet("/api/holo/stats/youtube/community-shorts", nil))

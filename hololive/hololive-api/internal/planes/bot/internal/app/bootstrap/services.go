@@ -69,10 +69,23 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 		Deps:           deps,
 		AlarmCRUD:      alarmYouTubeStack.AlarmMode.AlarmCRUD,
 		HolodexService: foundation.HolodexService,
+		IrisRoomLister: buildBotIrisRoomLister(irisClient, logger),
 		Postgres:       infra.Postgres,
 		Cache:          infra.Cache,
 		Cleanup:        composeBotInfrastructureCleanup(infra.Cleanup, irisClient, logger),
 	}, nil
+}
+
+func buildBotIrisRoomLister(irisClient iris.Client, logger *slog.Logger) IrisRoomLister {
+	roomLister, ok := irisClient.(IrisRoomLister)
+	if !ok {
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Warn("bot iris client cannot list joined rooms")
+		return nil
+	}
+	return roomLister
 }
 
 func provideBotDependenciesFromStacks(

@@ -247,6 +247,7 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		settingsApplier,
 		buildAdminAPISystemCollector(appConfig),
 		nil,

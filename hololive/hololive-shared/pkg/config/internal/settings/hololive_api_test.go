@@ -53,6 +53,32 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 	assert.Contains(t, err.Error(), "shared by bot and admin")
 }
 
+func TestConfigureHololiveAPIPlanesSetsBotInternalURL(t *testing.T) {
+	t.Setenv("SERVER_PORT", "31001")
+	t.Setenv("HOLOLIVE_BOT_INTERNAL_URL", "")
+
+	botConfig := &Config{}
+	adminConfig := &Config{}
+	llmConfig := &LLMSchedulerConfig{}
+
+	configureHololiveAPIPlanes(botConfig, adminConfig, llmConfig)
+
+	require.Equal(t, 31001, botConfig.Server.Port)
+	require.Equal(t, "https://127.0.0.1:31001", adminConfig.BotInternalURL)
+}
+
+func TestConfigureHololiveAPIPlanesPreservesBotInternalURLOverride(t *testing.T) {
+	t.Setenv("SERVER_PORT", "31001")
+
+	botConfig := &Config{}
+	adminConfig := &Config{BotInternalURL: "https://bot.internal:3443"}
+	llmConfig := &LLMSchedulerConfig{}
+
+	configureHololiveAPIPlanes(botConfig, adminConfig, llmConfig)
+
+	require.Equal(t, "https://bot.internal:3443", adminConfig.BotInternalURL)
+}
+
 func TestValidatePlanePool(t *testing.T) {
 	t.Parallel()
 

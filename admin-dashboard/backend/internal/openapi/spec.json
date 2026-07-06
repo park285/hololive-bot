@@ -1224,6 +1224,56 @@
         }
       }
     },
+    "/admin/api/holo/rooms/joined": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetRoomsJoined",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinedRoomsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/api/holo/rooms/acl": {
       "post": {
         "tags": [
@@ -2281,6 +2331,47 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "JoinedRoom": {
+        "type": "object",
+        "required": [
+          "chatId",
+          "name",
+          "type",
+          "memberCount"
+        ],
+        "properties": {
+          "chatId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "memberCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "JoinedRoomsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "rooms"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JoinedRoom"
+            }
           }
         }
       },

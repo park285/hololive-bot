@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -33,9 +34,14 @@ type BotInfrastructure struct {
 	Deps           *bot.Dependencies
 	AlarmCRUD      domain.AlarmCRUD
 	HolodexService *holodex.Service
+	IrisRoomLister IrisRoomLister
 	Postgres       database.Client
 	Cache          cache.Client
 	Cleanup        func()
+}
+
+type IrisRoomLister interface {
+	GetRooms(ctx context.Context) (*iris.RoomListResponse, error)
 }
 
 type AlarmModeComponents struct {

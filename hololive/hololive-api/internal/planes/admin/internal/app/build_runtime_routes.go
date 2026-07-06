@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -16,6 +17,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/app/http"
+	botroomsclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/botrooms"
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
@@ -28,6 +30,7 @@ func buildAdminHandler(
 	foundation *scraperHolodexProfileFoundation,
 	alarmMode *alarmModeComponents,
 	aclService *acl.Service,
+	irisRoomClient server.IrisRoomLister,
 	ytStack *providers.YouTubeStack,
 	communityShortsOpsRepository server.YouTubeCommunityShortsOpsRepository,
 	settingsApplier sharedsettings.SettingsApplier,
@@ -54,6 +57,7 @@ func buildAdminHandler(
 		Stats: server.StatsDeps{
 			Alarm:       alarmMode.AlarmCRUD,
 			ACL:         aclService,
+			Iris:        irisRoomClient,
 			SystemStats: systemCollector,
 		},
 		Settings: server.SettingsDeps{
@@ -71,6 +75,23 @@ func buildAdminHandler(
 			CommunityShortsOps: communityShortsOpsRepository,
 		},
 	})
+}
+
+func buildAdminAPIBotRoomLister(appConfig *config.Config, logger *slog.Logger) server.IrisRoomLister {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if appConfig == nil {
+		logger.Warn("admin api bot room client unavailable; config is nil")
+		return nil
+	}
+	botURL := strings.TrimSpace(appConfig.BotInternalURL)
+	if botURL == "" {
+		logger.Warn("admin api bot room client unavailable; joined-rooms endpoint disabled")
+		return nil
+	}
+
+	return botroomsclient.NewClient(botURL, appConfig.Server.APIKey, logger)
 }
 
 func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.Logger) *template.AdminService {

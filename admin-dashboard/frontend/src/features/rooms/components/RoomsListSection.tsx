@@ -5,9 +5,9 @@ import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import { VirtualList } from "@/components/ui/VirtualList";
+import { RoomPicker } from "@/features/rooms/components/RoomPicker";
+import type { JoinedRoom } from "@/features/rooms/types";
 
 const numberFormatter = new Intl.NumberFormat("ko-KR");
 
@@ -22,9 +22,14 @@ interface RoomsListSectionProps {
 	newRoom: string;
 	onNewRoomChange: (value: string) => void;
 	onAddRoom: () => void;
+	onAddRoomId: (chatId: string) => void;
 	onDeleteRoom: (room: string) => void;
 	addPending: boolean;
 	removePending: boolean;
+	joinedRooms: JoinedRoom[];
+	joinedRoomsMap: Map<string, JoinedRoom>;
+	joinedLoading: boolean;
+	joinedUnavailable: boolean;
 }
 
 export const RoomsListSection = ({
@@ -38,9 +43,14 @@ export const RoomsListSection = ({
 	newRoom,
 	onNewRoomChange,
 	onAddRoom,
+	onAddRoomId,
 	onDeleteRoom,
 	addPending,
 	removePending,
+	joinedRooms,
+	joinedRoomsMap,
+	joinedLoading,
+	joinedUnavailable,
 }: RoomsListSectionProps) => (
 	<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 		<div className="lg:col-span-2 space-y-6">
@@ -70,35 +80,53 @@ export const RoomsListSection = ({
 						recomputeKey={removePending}
 						className="max-h-[32rem]"
 						itemClassName="border-b border-border-subtle"
-						renderItem={(room) => (
-							<div
-								key={room}
-								role="listitem"
-								className="flex items-center justify-between px-6 py-4 hover:bg-linear-to-r hover:from-sky-50/40 hover:to-transparent transition-colors group focus-within:bg-sky-50/40 bg-card"
-							>
-								<div className="flex items-center gap-3">
-									<div
-										className={clsx("w-2 h-2 rounded-full", indicatorClassName)}
-										aria-hidden="true"
-									/>
-									<span className="font-mono text-foreground font-medium select-all">
-										{room}
-									</span>
-								</div>
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => {
-										onDeleteRoom(room);
-									}}
-									disabled={removePending}
-									className="text-subtle-foreground hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all focus-visible:ring-2 focus-visible:ring-red-200"
-									aria-label={`${room} 방 삭제`}
+						renderItem={(room) => {
+							const joined = joinedRoomsMap.get(room);
+							const displayName =
+								joined && joined.name.trim() !== "" ? joined.name : null;
+							return (
+								<div
+									key={room}
+									role="listitem"
+									className="flex items-center justify-between px-6 py-4 hover:bg-linear-to-r hover:from-sky-50/40 hover:to-transparent transition-colors group focus-within:bg-sky-50/40 bg-card"
 								>
-									<Trash2 size={16} aria-hidden="true" />
-								</Button>
-							</div>
-						)}
+									<div className="flex items-center gap-3 min-w-0">
+										<div
+											className={clsx("w-2 h-2 rounded-full shrink-0", indicatorClassName)}
+											aria-hidden="true"
+										/>
+										<div className="min-w-0">
+											{displayName ? (
+												<>
+													<div className="text-foreground font-medium truncate">
+														{displayName}
+													</div>
+													<div className="font-mono text-xs text-subtle-foreground truncate select-all">
+														{room}
+													</div>
+												</>
+											) : (
+												<span className="font-mono text-foreground font-medium select-all">
+													{room}
+												</span>
+											)}
+										</div>
+									</div>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											onDeleteRoom(room);
+										}}
+										disabled={removePending}
+										className="text-subtle-foreground hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all focus-visible:ring-2 focus-visible:ring-red-200 shrink-0 ml-2"
+										aria-label={`${displayName ?? room} 방 삭제`}
+									>
+										<Trash2 size={16} aria-hidden="true" />
+									</Button>
+								</div>
+							);
+						}}
 					/>
 				)}
 			</div>
@@ -142,49 +170,18 @@ export const RoomsListSection = ({
 						</p>
 					</div>
 
-					<div className="space-y-3">
-						<div className="space-y-1.5">
-							<Label
-								htmlFor="new-room-id"
-								className="text-xs font-semibold text-muted-foreground"
-							>
-								채팅방 ID (RoomID)
-							</Label>
-							<Input
-								id="new-room-id"
-								value={newRoom}
-								onChange={(event) => {
-									onNewRoomChange(event.target.value);
-								}}
-								onKeyDown={(event) => {
-									if (event.key === "Enter") {
-										onAddRoom();
-									}
-								}}
-								placeholder="예: 200000000000002"
-								className={clsx(
-									"font-mono focus-visible:ring-2",
-									isBlacklist
-										? "focus-visible:ring-rose-200"
-										: "focus-visible:ring-blue-200",
-								)}
-								disabled={addPending}
-							/>
-						</div>
-						<Button
-							onClick={onAddRoom}
-							disabled={addPending || !newRoom.trim()}
-							className={clsx(
-								"w-full shadow-sm",
-								isBlacklist
-									? "bg-linear-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-rose-200"
-									: "bg-linear-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 shadow-sky-200",
-							)}
-							aria-label="채팅방 추가하기"
-						>
-							{addPending ? "추가 중…" : "추가하기"}
-						</Button>
-					</div>
+					<RoomPicker
+						joinedRooms={joinedRooms}
+						existingRooms={rooms}
+						isBlacklist={isBlacklist}
+						loading={joinedLoading}
+						unavailable={joinedUnavailable}
+						onAddRoom={onAddRoomId}
+						addPending={addPending}
+						newRoom={newRoom}
+						onNewRoomChange={onNewRoomChange}
+						onAddManualRoom={onAddRoom}
+					/>
 				</div>
 			</Card>
 		</div>

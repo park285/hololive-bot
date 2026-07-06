@@ -19,7 +19,8 @@ func ProvideBotRouter(
 	logger *slog.Logger,
 	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
+	irisRoomLister apphttp.IrisRoomLister,
 	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {
-	return apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, readyProbe...)
+	return apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, irisRoomLister, readyProbe...)
 }

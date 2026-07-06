@@ -459,6 +459,47 @@
         ],
         "type": "object"
       },
+      "JoinedRoom": {
+        "properties": {
+          "chatId": {
+            "type": "string"
+          },
+          "memberCount": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chatId",
+          "name",
+          "type",
+          "memberCount"
+        ],
+        "type": "object"
+      },
+      "JoinedRoomsResponse": {
+        "properties": {
+          "rooms": {
+            "items": {
+              "$ref": "#/components/schemas/JoinedRoom"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "rooms"
+        ],
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "password": {
@@ -2486,6 +2527,56 @@
             "description": ""
           },
           "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "holo"
+        ]
+      }
+    },
+    "/admin/api/holo/rooms/joined": {
+      "get": {
+        "operationId": "holoGetRoomsJoined",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinedRoomsResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "503": {
             "content": {
               "application/json": {
                 "schema": {

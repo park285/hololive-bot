@@ -87,7 +87,7 @@ func buildBotRuntime(ctx context.Context, appConfig *config.Config, logger *slog
 	var h3Server *http3.Server
 	var h3CertReloadStart func(context.Context)
 	if appConfig.ServerTransportEnabled("h3") {
-		h3Server, h3CertReloadStart, err = appbootstrap.BuildBotHTTP3Server(ctx, appConfig, webhookHandler, nil, logger, readyProbe)
+		h3Server, h3CertReloadStart, err = appbootstrap.BuildBotHTTP3Server(ctx, appConfig, webhookHandler, nil, infra.IrisRoomLister, logger, readyProbe)
 		if err != nil {
 			return nil, err
 		}

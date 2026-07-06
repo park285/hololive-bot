@@ -24,6 +24,7 @@ import {
   ErrorResponse,
   HeartbeatRequest,
   HeartbeatResponse,
+  JoinedRoomsResponse,
   LoginRequest,
   LoginResponse,
   MembersResponse,
@@ -453,6 +454,20 @@ export class Admin<
       method: "POST",
       body: data,
       type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetRoomsJoined
+   * @request GET:/admin/api/holo/rooms/joined
+   */
+  holoGetRoomsJoined = (params: RequestParams = {}) =>
+    this.request<JoinedRoomsResponse, ErrorResponse>({
+      path: `/admin/api/holo/rooms/joined`,
+      method: "GET",
       format: "json",
       ...params,
     });

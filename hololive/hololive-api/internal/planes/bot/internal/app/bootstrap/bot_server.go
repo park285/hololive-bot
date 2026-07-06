@@ -22,9 +22,10 @@ func BuildBotServer(
 	appConfig *config.Config,
 	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
+	irisRoomLister IrisRoomLister,
 	logger *slog.Logger,
 ) (*http.Server, error) {
-	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler)
+	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, irisRoomLister)
 	if err != nil {
 		return nil, fmt.Errorf("build bot server: provide bot router: %w", err)
 	}
@@ -38,10 +39,11 @@ func BuildBotHTTP3Server(
 	appConfig *config.Config,
 	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
+	irisRoomLister IrisRoomLister,
 	logger *slog.Logger,
 	readyProbe ...*readiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
-	return buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, logger, reloadingTLSCertificateOptions{}, readyProbe...)
+	return buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, irisRoomLister, logger, reloadingTLSCertificateOptions{}, readyProbe...)
 }
 
 func buildBotHTTP3ServerWithReloaderOptions(
@@ -49,11 +51,12 @@ func buildBotHTTP3ServerWithReloaderOptions(
 	appConfig *config.Config,
 	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
+	irisRoomLister IrisRoomLister,
 	logger *slog.Logger,
 	reloaderOptions reloadingTLSCertificateOptions,
 	readyProbe ...*readiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
-	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, readyProbe...)
+	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, irisRoomLister, readyProbe...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build bot h3 server: provide bot router: %w", err)
 	}

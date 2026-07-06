@@ -145,6 +145,18 @@ export interface HeartbeatResponse {
   status: string;
 }
 
+export interface JoinedRoom {
+  chatId: string;
+  memberCount: number;
+  name: string;
+  type: string;
+}
+
+export interface JoinedRoomsResponse {
+  rooms: JoinedRoom[];
+  status: string;
+}
+
 export interface LoginRequest {
   password: string;
   username: string;

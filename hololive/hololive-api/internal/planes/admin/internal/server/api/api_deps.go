@@ -61,6 +61,15 @@ func (h *RoomHandler) requireACL(c *gin.Context) bool {
 	return true
 }
 
+func (h *RoomHandler) requireIris(c *gin.Context) bool {
+	if h == nil || h.Handler == nil || h.iris == nil {
+		respondServiceUnavailable(c, "iris room listing not available")
+		return false
+	}
+
+	return true
+}
+
 func (h *StatsHandler) requireStatsDeps(c *gin.Context) bool {
 	if h == nil || h.Handler == nil || h.repository == nil || h.alarm == nil {
 		respondServiceUnavailable(c, "stats dependencies not available")

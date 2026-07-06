@@ -85,7 +85,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 func TestProvideBotRouter_Integration(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
-	router, err := ProvideBotRouter(t.Context(), &config.Config{}, logger, nil, nil)
+	router, err := ProvideBotRouter(t.Context(), &config.Config{}, logger, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}
@@ -123,7 +123,7 @@ func TestProvideBotRouter_DependencyReadyProbeIsInternalOnly(t *testing.T) {
 
 	router, err := ProvideBotRouter(t.Context(), &config.Config{
 		Server: config.ServerConfig{APIKey: "test-key"},
-	}, logger, nil, nil, probe)
+	}, logger, nil, nil, nil, probe)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}
@@ -163,7 +163,7 @@ func TestProvideBotRouter_FailsClosedWhenTriggerAPIKeyMissing(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
-	router, err := ProvideBotRouter(t.Context(), &config.Config{}, logger, nil, triggerHandler)
+	router, err := ProvideBotRouter(t.Context(), &config.Config{}, logger, nil, triggerHandler, nil)
 	if err == nil {
 		t.Fatal("ProvideBotRouter() error = nil, want non-nil")
 	}

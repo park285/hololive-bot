@@ -12,6 +12,7 @@ export const queryKeys = {
 
 	rooms: {
 		all: ["rooms"] as const,
+		joined: ["rooms", "joined"] as const,
 	},
 
 	stats: {

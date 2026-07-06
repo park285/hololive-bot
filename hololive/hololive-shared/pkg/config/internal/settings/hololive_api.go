@@ -77,9 +77,13 @@ func configureHololiveAPIPlanes(botConfig, adminConfig *Config, llmConfig *LLMSc
 	llmConfig.Postgres.PoolMinConns = sharedenv.Int("LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS", 1)
 	llmConfig.Postgres.PoolMaxConns = sharedenv.Int("LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS", 4)
 
-	botConfig.Server.Port = sharedenv.Int("SERVER_PORT", defaultBotPort)
+	botPort := sharedenv.Int("SERVER_PORT", defaultBotPort)
+	botConfig.Server.Port = botPort
 	botConfig.Postgres.PoolMinConns = sharedenv.Int("BOT_POSTGRES_POOL_MIN_CONNS", 1)
 	botConfig.Postgres.PoolMaxConns = sharedenv.Int("BOT_POSTGRES_POOL_MAX_CONNS", 4)
+	if strings.TrimSpace(adminConfig.BotInternalURL) == "" {
+		adminConfig.BotInternalURL = fmt.Sprintf("https://127.0.0.1:%d", botPort)
+	}
 
 	llmLoopbackURL := fmt.Sprintf("https://127.0.0.1:%d", llmPort)
 	botConfig.LLMSchedulerURL = llmLoopbackURL

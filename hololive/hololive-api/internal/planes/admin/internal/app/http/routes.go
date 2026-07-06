@@ -44,6 +44,7 @@ func registerMemberRoutes(holoAPI *gin.RouterGroup, handler *server.MemberHandle
 
 func registerRoomRoutes(holoAPI *gin.RouterGroup, handler *server.RoomHandler) {
 	holoAPI.GET("/rooms", handler.GetRooms)
+	holoAPI.GET("/rooms/joined", handler.GetJoinedRooms)
 	holoAPI.POST("/rooms", handler.AddRoom)
 	holoAPI.DELETE("/rooms", handler.RemoveRoom)
 	holoAPI.POST("/rooms/acl", handler.SetACL)

@@ -19,7 +19,12 @@ export const RoomsPage = () => {
 		aclMode,
 		labels,
 		isBlacklist,
+		joinedRooms,
+		joinedRoomsMap,
+		joinedLoading,
+		joinedUnavailable,
 		handleAddRoom,
+		handleAddRoomId,
 		confirmDelete,
 		handleToggleACL,
 		handleModeChange,
@@ -95,11 +100,16 @@ export const RoomsPage = () => {
 				newRoom={newRoom}
 				onNewRoomChange={setNewRoom}
 				onAddRoom={handleAddRoom}
+				onAddRoomId={handleAddRoomId}
 				onDeleteRoom={(room) => {
 					setDeleteModal({ isOpen: true, room });
 				}}
 				addPending={addRoomMutation.isPending}
 				removePending={removeRoomMutation.isPending}
+				joinedRooms={joinedRooms}
+				joinedRoomsMap={joinedRoomsMap}
+				joinedLoading={joinedLoading}
+				joinedUnavailable={joinedUnavailable}
 			/>
 
 			<ConfirmModal

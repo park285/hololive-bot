@@ -38,6 +38,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
+	"github.com/park285/iris-client-go/iris"
 )
 
 // Admin Dashboard와 Tauri 앱 모두에서 사용됩니다.
@@ -63,6 +64,7 @@ type Handler struct {
 	settings                   settings.ReadWriter
 	settingsApplier            sharedsettings.SettingsApplier
 	acl                        *acl.Service
+	iris                       IrisRoomLister
 	logger                     *slog.Logger
 	systemStats                *system.Collector
 	templateAdmin              *template.AdminService
@@ -76,6 +78,10 @@ type Handler struct {
 type statusMessageResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
+}
+
+type IrisRoomLister interface {
+	GetRooms(ctx context.Context) (*iris.RoomListResponse, error)
 }
 
 func newStreamState() *sharedserver.StreamState {
@@ -139,6 +145,7 @@ type StreamDeps struct {
 type StatsDeps struct {
 	Alarm       domain.AlarmCRUD
 	ACL         *acl.Service
+	Iris        IrisRoomLister
 	SystemStats *system.Collector
 }
 
@@ -195,6 +202,7 @@ func NewHandler(deps *HandlerDeps) *Handler {
 		settings:                   deps.Settings.Settings,
 		settingsApplier:            deps.Settings.Applier,
 		acl:                        deps.Stats.ACL,
+		iris:                       deps.Stats.Iris,
 		systemStats:                deps.Stats.SystemStats,
 		templateAdmin:              deps.Template.Admin,
 		majorEventScheduler:        deps.MajorEvent.Scheduler,

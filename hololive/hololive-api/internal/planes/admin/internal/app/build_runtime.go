@@ -79,8 +79,9 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *config.Config, logger 
 	settingsApplier, majorEventTriggerClient := buildAdminAPISettingsApplier(appConfig, foundation, alarmMode, ytStack, logger)
 	systemCollector := buildAdminAPISystemCollector(appConfig)
 	communityShortsOpsRepository := buildAdminAPICommunityShortsOpsRepository(infra)
+	irisRoomClient := buildAdminAPIBotRoomLister(appConfig, logger)
 	handler := buildAdminHandler(
-		appConfig, infra, foundation, alarmMode, aclService, ytStack,
+		appConfig, infra, foundation, alarmMode, aclService, irisRoomClient, ytStack,
 		communityShortsOpsRepository, settingsApplier, systemCollector,
 		templateAdmin, majorEventTriggerClient, logger,
 	)

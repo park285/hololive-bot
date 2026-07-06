@@ -22,12 +22,14 @@ package api
 
 import (
 	"fmt"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/ginjson"
 )
 
@@ -62,6 +64,64 @@ func (h *RoomHandler) GetRooms(c *gin.Context) {
 		ACLEnabled: aclEnabled,
 		ACLMode:    string(mode),
 	})
+}
+
+type joinedRoom struct {
+	ChatID      string `json:"chatId"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	MemberCount int    `json:"memberCount"`
+}
+
+type joinedRoomListResponse struct {
+	Status string       `json:"status"`
+	Rooms  []joinedRoom `json:"rooms"`
+}
+
+func (h *RoomHandler) GetJoinedRooms(c *gin.Context) {
+	if !h.requireIris(c) {
+		return
+	}
+
+	resp, err := h.iris.GetRooms(c.Request.Context())
+	if err != nil {
+		h.safeLogger().Error("Failed to list joined rooms from Iris", slog.Any("error", err))
+		sharedserver.RespondError(c, 502, "Failed to list joined rooms", nil)
+
+		return
+	}
+	if resp == nil {
+		h.safeLogger().Error("Failed to list joined rooms from Iris", slog.String("error", "nil response"))
+		sharedserver.RespondError(c, 502, "Failed to list joined rooms", nil)
+
+		return
+	}
+
+	ginjson.Respond(c, 200, joinedRoomListResponse{Status: "ok", Rooms: joinedRoomsFromIris(resp.Rooms)})
+}
+
+func joinedRoomsFromIris(summaries []iris.RoomSummary) []joinedRoom {
+	rooms := make([]joinedRoom, 0, len(summaries))
+	for _, summary := range summaries {
+		rooms = append(rooms, joinedRoomFromIris(summary))
+	}
+
+	return rooms
+}
+
+func joinedRoomFromIris(summary iris.RoomSummary) joinedRoom {
+	room := joinedRoom{ChatID: strconv.FormatInt(summary.ChatID, 10)}
+	if summary.LinkName != nil {
+		room.Name = *summary.LinkName
+	}
+	if summary.Type != nil {
+		room.Type = *summary.Type
+	}
+	if summary.ActiveMembersCount != nil {
+		room.MemberCount = *summary.ActiveMembersCount
+	}
+
+	return room
 }
 
 //

@@ -32,7 +32,7 @@ func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 
 	buildCtx, buildCancel := context.WithCancel(t.Context())
 	server, startCertReload, err := buildBotHTTP3ServerWithReloaderOptions(
-		buildCtx, appConfig, nil, nil, nil,
+		buildCtx, appConfig, nil, nil, nil, nil,
 		reloadingTLSCertificateOptions{reloadInterval: 10 * time.Millisecond},
 	)
 	if err != nil {
@@ -80,7 +80,7 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 		},
 	}
 
-	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
+	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}
@@ -120,7 +120,7 @@ func TestBuildBotHTTP3ServerServesCachedCertificateFiles(t *testing.T) {
 		},
 	}
 
-	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
+	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}
@@ -162,7 +162,7 @@ func TestBuildBotHTTP3ServerKeepsPreviousCertificateWhenReloadFails(t *testing.T
 		},
 	}
 
-	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil)
+	server, _, err := BuildBotHTTP3Server(t.Context(), appConfig, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}

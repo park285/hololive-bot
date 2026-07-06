@@ -69,7 +69,7 @@ func TestBuildBotServer_IsIngressOnly(t *testing.T) {
 		Server: config.ServerConfig{Port: 30001},
 	}
 
-	server, err := appbootstrap.BuildBotServer(t.Context(), appConfig, nil, nil, logger)
+	server, err := appbootstrap.BuildBotServer(t.Context(), appConfig, nil, nil, nil, logger)
 	if err != nil {
 		t.Fatalf("buildBotServer() error = %v", err)
 	}

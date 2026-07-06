@@ -24,6 +24,7 @@ type StatsHandler = api.StatsHandler
 type StreamHandler = api.StreamHandler
 type TemplateHandler = api.TemplateHandler
 type YouTubeCommunityShortsOpsRepository = api.YouTubeCommunityShortsOpsRepository
+type IrisRoomLister = api.IrisRoomLister
 
 var NewHandler = api.NewHandler
 var NewAuthHandler = api.NewAuthHandler

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { queryKeys } from "@/api/queryKeys";
 import { roomsApi } from "@/features/rooms/api";
-import type { ACLMode } from "@/features/rooms/types";
+import type { ACLMode, JoinedRoom } from "@/features/rooms/types";
 
 export const MODE_LABELS: Record<
 	ACLMode,
@@ -51,6 +51,13 @@ export function useRoomsPage() {
 		queryFn: roomsApi.getAll,
 	});
 
+	const joinedQuery = useQuery({
+		queryKey: queryKeys.rooms.joined,
+		queryFn: roomsApi.getJoined,
+		retry: false,
+		staleTime: 1000 * 60,
+	});
+
 	const addRoomMutation = useMutation({
 		mutationFn: roomsApi.add,
 		onSuccess: () => {
@@ -79,8 +86,23 @@ export function useRoomsPage() {
 	const labels = MODE_LABELS[aclMode];
 	const isBlacklist = aclMode === "blacklist";
 
+	const joinedRooms = joinedQuery.data?.rooms ?? [];
+	const joinedRoomsMap = useMemo(() => {
+		const map = new Map<string, JoinedRoom>();
+		for (const room of joinedQuery.data?.rooms ?? []) {
+			map.set(room.chatId, room);
+		}
+		return map;
+	}, [joinedQuery.data]);
+
 	const handleAddRoom = () => {
 		const room = newRoom.trim();
+		if (!room) return;
+		void addRoomMutation.mutateAsync({ room });
+	};
+
+	const handleAddRoomId = (chatId: string) => {
+		const room = chatId.trim();
 		if (!room) return;
 		void addRoomMutation.mutateAsync({ room });
 	};
@@ -115,7 +137,12 @@ export function useRoomsPage() {
 		aclMode,
 		labels,
 		isBlacklist,
+		joinedRooms,
+		joinedRoomsMap,
+		joinedLoading: joinedQuery.isLoading,
+		joinedUnavailable: joinedQuery.isError,
 		handleAddRoom,
+		handleAddRoomId,
 		confirmDelete,
 		handleToggleACL,
 		handleModeChange,

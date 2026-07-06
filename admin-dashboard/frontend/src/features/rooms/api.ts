@@ -3,6 +3,7 @@ import type { AddRoomRequest, RemoveRoomRequest, SetACLRequest } from "./types";
 
 export const roomsApi = {
 	getAll: async () => (await adminClient.holoGetRooms()).data,
+	getJoined: async () => (await adminClient.holoGetRoomsJoined()).data,
 	add: async (request: AddRoomRequest) =>
 		(await adminClient.holoAddRoom(request)).data,
 	remove: async (request: RemoveRoomRequest) =>
